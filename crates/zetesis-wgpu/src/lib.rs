@@ -345,6 +345,7 @@ impl GpuOracle {
             pipeline_label: "zetesis static batch",
             shader: SHADER.into(),
             entry_point: "check",
+            dense_entry_point: None,
             kernel: crate::kernel::Kernel::Fixed,
             validate_limits: check_adapter_limits,
         }

@@ -90,12 +90,16 @@ pub enum TightUpdateAvailability {
     Work,
     /// The route was declined.
     Declined,
+    /// The device oracle's runtime guard declined the route for the batch,
+    /// after a recent batch's slowest update path exceeded dense
+    /// evaluation's.
+    GuardDeclined,
 }
 
 impl TightUpdateAvailability {
     /// The serialized name: `pending`, `admitted`, `serial_schedule`,
-    /// `narrow_schedule`, `candidate_ceiling`, `index_bounds`, `bytes`, `work`
-    /// or `declined`.
+    /// `narrow_schedule`, `candidate_ceiling`, `index_bounds`, `bytes`, `work`,
+    /// `declined` or `guard_declined`.
     #[must_use]
     pub const fn label(self) -> &'static str {
         match self {
@@ -108,6 +112,7 @@ impl TightUpdateAvailability {
             Self::Bytes => "bytes",
             Self::Work => "work",
             Self::Declined => "declined",
+            Self::GuardDeclined => "guard_declined",
         }
     }
 }
@@ -127,6 +132,9 @@ pub struct TightUpdateStatistics {
     /// A decoded batch held reuse authority, so the availability is the run's
     /// steady state rather than the report of a batch without authority.
     pub steady_state: bool,
+    /// Decoded batches the device oracle's runtime guard declined the route
+    /// for, so a run that declined and then re-engaged shows both.
+    pub guard_declined_batches: u64,
 }
 
 /// Actual formula GPU work and explicitly retained candidate results.
@@ -732,23 +740,26 @@ pub(super) fn record_tight_routes(
             .get_or_insert_with(Default::default),
         batch.original_truth_reused,
         batch.updates,
-    );
-    Ok(())
+    )
 }
 
 /// Fold one decoded batch's update availability into the run's. A batch
 /// holding reuse authority sets the steady state, which a later batch without
 /// authority leaves standing: such a batch cannot update whatever its limits.
-/// Until a batch holds authority, each batch's report replaces the last.
+/// Until a batch holds authority, each batch's report replaces the last. Every
+/// batch the runtime guard declined is counted, whatever its authority.
 #[cfg(feature = "gpu")]
 fn record_update_availability(
     updates: &mut TightUpdateStatistics,
     authority: bool,
     report: zetesis_wgpu::TightGpuUpdates,
-) {
+) -> Result<(), Failure> {
     use zetesis_wgpu::{TightGpuUpdateUnavailable as Reason, TightGpuUpdates};
+    if report == TightGpuUpdates::Unavailable(Reason::GuardDeclined) {
+        add(&mut updates.guard_declined_batches, 1)?;
+    }
     if updates.steady_state && !authority {
-        return;
+        return Ok(());
     }
     updates.steady_state = authority;
     (updates.availability, updates.count_bits) = match report {
@@ -764,6 +775,7 @@ fn record_update_availability(
                 Reason::Bytes => TightUpdateAvailability::Bytes,
                 Reason::Work => TightUpdateAvailability::Work,
                 Reason::Declined => TightUpdateAvailability::Declined,
+                Reason::GuardDeclined => TightUpdateAvailability::GuardDeclined,
                 // Every reason the library names is mapped above. One it
                 // adds later reports `pending`, which names no reason,
                 // until this statistic names it too.
@@ -773,6 +785,7 @@ fn record_update_availability(
         ),
         _ => (TightUpdateAvailability::Pending, None),
     };
+    Ok(())
 }
 
 /// Record the workgroup size a decoded batch dispatched: the size of the one

@@ -74,15 +74,29 @@ Notable changes by release. Versions follow Semantic Versioning.
   again only the formulas the change reaches; larger changes keep evaluating
   every formula. It engages only for programs whose dependency levels are wide
   enough that evaluating every formula takes several passes per level; other
-  programs keep evaluating every formula. Each slot's retained state counts
-  toward the batch's memory allowance, so adaptive slates can settle at a
-  smaller device prefix, never below the batch size. Answer sets are unchanged.
+  programs, and every batch the route cannot run, keep evaluating every
+  formula, on a kernel compiled without the route, which binds no retained
+  state. Each slot's retained state counts toward the batch's memory
+  allowance, so adaptive slates can settle at a smaller device prefix, never
+  below the batch size. Answer sets are unchanged.
 - In the GPU library, tight checks report the work their route performed, and
   `TightGpuLimits` gains `min_update_candidates`. `TightGpuBatchStats` reports
   routes and the update route's availability, and
   `GpuTightOracle::UPDATE_ENGAGEMENT_STRIDES` names the strides per dependency
   level from which the route engages. The tight kernel requires eight storage
-  buffers per shader stage.
+  buffers per shader stage and 48 bytes of workgroup storage.
+- GPU tight checking guards its update route while it runs: after a batch
+  whose slowest update costs more than evaluating every formula, both measured
+  by the busiest invocation's operations under one cost table, the route waits
+  for 1, 2, 4 and up to 32 batches, which run the kernel without the update
+  route, before it is tried again. An update's cost includes rebuilding its
+  slot's support summaries after a change too large to update. Answer sets are
+  unchanged. In the GPU library, `TightGpuUpdateUnavailable::GuardDeclined`
+  reports a declined batch, `TightGpuCheck::critical_path` an update's path,
+  and `TightGpuBatchStats` gains `update_critical_path`, the batch's slowest,
+  and `dense_critical_path`. The solver's `TightUpdateAvailability` gains
+  `GuardDeclined` (`guard_declined`) and `TightUpdateStatistics` the count
+  `guard_declined_batches`, which the statistics JSON and both views report.
 - Command-line GPU solves begin adapter enumeration once their configuration is
   validated, while the program is read and admitted, and on the formula routes
   grounded, so the device is ready sooner; CPU solves start none.

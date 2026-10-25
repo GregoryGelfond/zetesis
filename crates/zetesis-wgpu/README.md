@@ -117,10 +117,18 @@ and the false-root and unsupported sets. The route engages only for a schedule
 whose dense evaluation takes at least `GpuTightOracle::UPDATE_ENGAGEMENT_STRIDES`
 workgroup strides per dependency level, decided once per resident theory and
 workgroup size; narrower schedules report `NarrowSchedule` and keep the dense
-routes. Each slot's state counts in
-the batch's byte allowance; `TightGpuLimits::min_update_candidates` keeps it from
+routes. On an engaged schedule a runtime guard compares each batch's slowest
+update critical path, its costliest invocation per phase by one cost table,
+with dense evaluation's least path by the same table, and after a batch whose
+slowest update costs more declines the route for 1, 2, 4 and up to 32 batches,
+which report `GuardDeclined`; the guard changes no verdict. A batch runs the
+kernel with the update route only when the route is allowed. Every other batch
+runs its dense twin, compiled without the route, which binds no state and leaves
+a state the batch admitted allocated. Each slot's state counts in the
+batch's byte allowance; `TightGpuLimits::min_update_candidates` keeps it from
 shrinking a prefix below the caller's floor, and zero declines the route. Batch
-statistics report the slots per route and the route's availability.
+statistics report the slots per route, the route's availability and the guard's
+two paths.
 
 `GpuKernelOptions` keeps physical choices below the semantic interface. Formula
 and tight profiles choose their cooperating invocations through

@@ -423,6 +423,7 @@ fn tight_statistics_report_routes_and_update_availability() {
     execution.gpu_tight_routes = Some(routes);
     let mut updates = zetesis_solve::TightUpdateStatistics::default();
     updates.availability = zetesis_solve::TightUpdateAvailability::Bytes;
+    updates.guard_declined_batches = 2;
     execution.gpu_tight_updates = Some(updates);
     report.formula_execution = Some(execution);
     let text = every_prefix(&options, &Ok(report));
@@ -432,7 +433,7 @@ fn tight_statistics_report_routes_and_update_availability() {
         "tight GPU routes: complete=4; dense reuse=3 (beyond update threshold=1); update=9; nodes evaluated by update=85"
     ));
     assert!(
-        text.contains("tight GPU update route: bytes; count width=unavailable; steady state=false")
+        text.contains("tight GPU update route: bytes; count width=unavailable; steady state=false; guard declined batches=2")
     );
 }
 

@@ -1264,6 +1264,7 @@ fn tight_routes(
     } else {
         "false"
     })?;
+    out.number_field("guard_declined_batches", updates.guard_declined_batches)?;
     out.text("}")
 }
 

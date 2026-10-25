@@ -8,7 +8,7 @@ use super::{
     SHADER, TightGpuActivity, TightGpuBatchStats, TightGpuCheck, TightGpuError, TightGpuLimits,
     TightGpuUpdateUnavailable, TightGpuUpdates, TightSupport, poll,
 };
-use crate::runtime::{DeviceProfile, ErrorScopes, Runtime};
+use crate::runtime::{DeviceProfile, ErrorScopes, Runtime, Variant};
 use crate::timing::{BatchTiming, ComputeTimer};
 use crate::{GpuDeviceSource, GpuError, GpuErrorKind, GpuInfo, GpuOptions, GpuSelection};
 use std::time::Duration;
@@ -74,6 +74,9 @@ struct PreparedCall {
     stats: TightGpuBatchStats,
     /// A readers index to install before dispatch.
     build: Option<Built>,
+    /// The kernel the batch runs: the full kernel exactly when its plan allows
+    /// the update route.
+    variant: Variant,
 }
 
 /// The update route's per-batch admission before the dense charges are known.
@@ -81,24 +84,39 @@ enum Updates {
     /// No state is bound; the route is unavailable or not yet possible.
     Stateless(TightGpuUpdates),
     /// A state-inclusive plan was selected under `index`, which `build`
-    /// installs first when this batch builds it.
-    State { index: Index, build: Option<Built> },
+    /// installs first when this batch builds it. The runtime guard `allows`
+    /// the route, or declines it with the state allocated, unwritten and
+    /// unbound.
+    State {
+        index: Index,
+        build: Option<Built>,
+        allows: bool,
+    },
 }
 
 impl GpuTightOracle {
     /// Workgroup strides per dependency level that dense evaluation of a
     /// resident schedule must take, on average, at its dispatched workgroup
-    /// size before the update route engages. Narrower schedules report
+    /// size before the update route engages: before the theory builds the
+    /// route's readers index. Narrower schedules report
     /// [`TightGpuUpdateUnavailable::NarrowSchedule`].
     ///
     /// An execution choice that changes no verdict, calibrated by measurement
-    /// on an Apple M4 Pro GPU under Metal; another device or backend can break
-    /// even at a different factor. The choice is asymmetric: a declined
-    /// schedule keeps dense evaluation, so a factor set high only forgoes
-    /// gains, while one set low slows the schedules it engages. The rule sees
-    /// only the schedule's shape: a change that reaches many nodes of one
-    /// queued word can still make an engaged update slower than dense
-    /// evaluation.
+    /// on an Apple M4 Pro GPU under Metal: the factor covers the change
+    /// patterns measured there, their per-level chains included, scattered
+    /// changes and clustered changes of up to 64 atoms with one reader per
+    /// input. Another device or backend can break even at a different factor.
+    /// The choice is asymmetric: a declined schedule keeps dense evaluation, so
+    /// a factor set high only forgoes gains, while one set low slows the
+    /// schedules it engages. A change beyond those patterns whose critical path
+    /// makes an engaged update dearer than dense evaluation, such as one
+    /// reaching many nodes of one queued word, is the runtime guard's: it
+    /// compares each batch's slowest update path with dense evaluation's and
+    /// declines the route for a few batches at a time
+    /// ([`TightGpuUpdateUnavailable::GuardDeclined`]). The factor still decides
+    /// whether a theory builds the index at all, which spares narrow theories
+    /// the index, the state and every losing probe, and covers the update's
+    /// extra synchronization, which the guard cannot see.
     pub const UPDATE_ENGAGEMENT_STRIDES: u64 = update::ENGAGEMENT_STRIDES;
 
     /// Create an independently owned device and kernel using hard adapter
@@ -231,6 +249,12 @@ impl GpuTightOracle {
         self.runtime.compiled_sizes()
     }
 
+    /// The pipelines this oracle's runtime has compiled, by size and variant.
+    #[cfg(test)]
+    pub(crate) fn compiled_pipelines(&self) -> Vec<(crate::GpuWorkgroupSize, Variant)> {
+        self.runtime.compiled()
+    }
+
     /// Physical options retained by this kernel; no device operation.
     ///
     /// # Panics
@@ -265,6 +289,10 @@ impl GpuTightOracle {
                 TightSupport::Atomic => "check",
                 TightSupport::Grouped => "check_grouped",
             },
+            dense_entry_point: Some(match support {
+                TightSupport::Atomic => "check_dense",
+                TightSupport::Grouped => "check_grouped_dense",
+            }),
             validate_limits: check_limits,
             kernel: crate::kernel::Kernel::Tight(crate::GpuKernelOptions::default()),
         }
@@ -387,11 +415,12 @@ impl GpuTightOracle {
     /// unsupported sets. Both reuse routes are optional: change detection runs
     /// only when its work allowance fits, otherwise the complete evaluation runs
     /// without new storage; the update route runs only on a schedule wide enough
-    /// to engage it and when its per-slot state and its reservation are
-    /// admitted, otherwise the dense routes run. A later
-    /// call that cannot admit a held state releases it and keeps its truth and
-    /// result authority; a built readers index stays resident and accounted,
-    /// like a retained schedule.
+    /// to engage it, when its per-slot state and its reservation are admitted
+    /// and while the runtime guard has not declined it after a batch whose
+    /// slowest update's critical path exceeded dense evaluation's, otherwise
+    /// the dense routes run. A later call that cannot admit a held state
+    /// releases it and keeps its truth and result authority; a built readers
+    /// index stays resident and accounted, like a retained schedule.
     /// Host upload words reuse initialized scratch for that same subject/count.
     /// Their actual capacity is charged, and an oversized optional allocation is
     /// replaced when a smaller allowance fits fresh storage. Replacement drops
@@ -416,7 +445,16 @@ impl GpuTightOracle {
     /// pipeline. A failure to compile it is reported before any dispatch and
     /// invalidates the context; the size stays uncompiled, and no theory stays
     /// resident, because only a freshly prepared theory can need a size first
-    /// and its cold preparation released the previous one.
+    /// and its cold preparation released the previous one. Each size has two
+    /// kernels: one with the update route, which runs exactly the batches that
+    /// allow it, and one without, which runs every other batch. A freshly
+    /// prepared theory's first batch never allows the route, so the kernel
+    /// without it is the one a size needs first. The kernel with the route is
+    /// compiled with the oracle under fixed sizing, and otherwise at the first
+    /// batch that allows it, which only a resident theory reaches. A failure to
+    /// compile it there also invalidates the context; the theory stays
+    /// resident, and its retained truth is invalidated, as after every failed
+    /// call.
     pub fn check_batch(
         &mut self,
         certificate: &TightPlan,
@@ -511,13 +549,15 @@ impl GpuTightOracle {
             plan,
             mut stats,
             build,
+            variant,
         } = self.prepare(certificate, candidates, limits, cancellation, size)?;
         poll(cancellation)?;
-        // The dispatched size's pipeline is compiled at first need, before this
-        // call's scopes and before the fresh graph becomes resident. Only a
-        // freshly prepared graph can need a size first, and its preparation has
-        // released any previous resident, so a refusal leaves none, as a
-        // cold-preparation failure does.
+        // The batch's pipeline, its size and kernel, is compiled at first need,
+        // before this call's scopes and before a fresh graph becomes resident.
+        // A fresh graph's preparation has released any previous resident, so a
+        // refusal leaves none, as a cold-preparation failure does; a resident
+        // theory needing its other kernel first stays resident, its retained
+        // truth invalidated by `check`.
         let workgroup_size = fresh
             .as_ref()
             .map(|(graph, _)| graph.workgroup_size)
@@ -527,7 +567,7 @@ impl GpuTightOracle {
                     .map(|resident| resident.graph.workgroup_size)
             })
             .ok_or_else(|| GpuError::new(GpuErrorKind::Device, "missing resident tight graph"))?;
-        self.runtime.ensure_pipeline(workgroup_size)?;
+        self.runtime.ensure_pipeline(workgroup_size, variant)?;
         let scopes = ErrorScopes::new(self.runtime.device());
         if let Some((mut graph, packed)) = fresh {
             graph.rows.release();
@@ -553,12 +593,15 @@ impl GpuTightOracle {
             .as_mut()
             .ok_or_else(|| GpuError::new(GpuErrorKind::Device, "missing resident tight graph"))
             .and_then(|resident| {
-                let pipeline = self.runtime.pipeline_for(resident.graph.workgroup_size)?;
+                let pipeline = self
+                    .runtime
+                    .pipeline_for(resident.graph.workgroup_size, variant)?;
                 resident.dispatch(
                     &Execution {
                         device: self.runtime.device(),
                         queue: self.runtime.queue(),
                         pipeline,
+                        variant,
                         timeout: limits.timeout,
                         cancellation,
                         timer: self.timer.as_ref(),
@@ -585,9 +628,15 @@ impl GpuTightOracle {
         let decoded = result?;
         if let Some(resident) = self.resident.as_mut() {
             resident.complete_original_truth();
+            // Reuse authority is re-established: the guard settles the batch,
+            // and its judgment governs the batches planned next.
+            resident
+                .guard
+                .settle(decoded.slowest_update_path, resident.graph.dense_path);
         }
         stats.routes = decoded.routes;
         stats.nodes_evaluated = decoded.nodes_evaluated;
+        stats.update_critical_path = decoded.slowest_update_path.unwrap_or(0);
         stats.work = decoded.work;
         self.last = Some(stats);
         Ok(decoded.checks)
@@ -683,6 +732,8 @@ impl GpuTightOracle {
             updates,
             admitted_limits.max_work_per_candidate,
         );
+        // The kernel follows whether the route is allowed.
+        let variant = plan.variant();
         planned_stats(&mut stats, &plan, availability, timed);
         stats.accounted_bytes = plan.pack(
             graph,
@@ -696,6 +747,7 @@ impl GpuTightOracle {
             plan,
             stats,
             build,
+            variant,
         })
     }
 
@@ -803,7 +855,13 @@ impl GpuTightOracle {
             !resident.matches_count(plan.worlds as usize),
         );
         admission.plan = plan;
-        Ok(Updates::State { index, build })
+        // The runtime guard acts last, on a built index only; an engaged
+        // guard allows the batch that builds it.
+        Ok(Updates::State {
+            index,
+            build,
+            allows: resident.guard.allows(),
+        })
     }
     fn select_prefix(
         &self,
@@ -851,8 +909,9 @@ impl GpuTightOracle {
 
 /// Complete `stats` with what `plan` decides once its update state is bound:
 /// its routes' reservation, the update route's availability, and its transport
-/// and download, which under timing carry the 16-byte readback tail. The timer
-/// is the oracle's, so its storage counts in the batch's bytes alone.
+/// and download, which under timing carry the 16-byte readback tail. A plan
+/// that holds the state keeps its bytes whichever kernel runs. The timer is the
+/// oracle's, so its storage counts in the batch's bytes alone.
 fn planned_stats(
     stats: &mut TightGpuBatchStats,
     plan: &Plan,
@@ -943,7 +1002,10 @@ fn state_layout(
     Ok((layout, Some(bounds)))
 }
 
-/// Bind the batch's update state, once the dense charges are known.
+/// Bind the batch's update state, once the dense charges are known. The route
+/// is allowed when its reservation fits `ceiling` and then the runtime guard
+/// allows it; a batch either declines keeps the state allocated, unwritten
+/// and unbound, on the dense twin.
 fn bind_updates(
     plan: &mut Plan,
     graph: &Graph,
@@ -952,14 +1014,17 @@ fn bind_updates(
 ) -> (TightGpuUpdates, Option<Built>) {
     match updates {
         Updates::Stateless(availability) => (availability, None),
-        Updates::State { index, build } => {
-            let availability = if plan.bind_state(graph, &index, ceiling) {
-                TightGpuUpdates::Admitted {
+        Updates::State {
+            index,
+            build,
+            allows,
+        } => {
+            let availability = match plan.bind_state(graph, &index, ceiling, allows) {
+                None => TightGpuUpdates::Admitted {
                     count_bits: index.count_bits,
                     index_built: build.is_some(),
-                }
-            } else {
-                TightGpuUpdates::Unavailable(TightGpuUpdateUnavailable::Work)
+                },
+                Some(reason) => TightGpuUpdates::Unavailable(reason),
             };
             (availability, build)
         }
@@ -1010,7 +1075,7 @@ fn check_limits(limits: &wgpu::Limits) -> Result<(), GpuError> {
         ("workgroup width", 64, limits.max_compute_workgroup_size_x),
         (
             "workgroup storage",
-            40,
+            48,
             limits.max_compute_workgroup_storage_size,
         ),
         (

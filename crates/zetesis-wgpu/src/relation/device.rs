@@ -72,6 +72,7 @@ impl GpuRelationExecutor {
             pipeline_label: "zetesis relation row tiles",
             shader: SHADER.into(),
             entry_point: "select_rows",
+            dense_entry_point: None,
             kernel: crate::kernel::Kernel::Fixed,
             validate_limits: adapter_limits,
         }

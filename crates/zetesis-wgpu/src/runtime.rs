@@ -13,8 +13,21 @@ pub(crate) struct DeviceProfile {
     pub(crate) pipeline_label: &'static str,
     pub(crate) shader: std::borrow::Cow<'static, str>,
     pub(crate) entry_point: &'static str,
+    /// The entry point of a sized kernel's dense twin, which evaluates without
+    /// the update route and so binds no update state: the tight kernel's, for
+    /// every batch whose update route is not allowed. `None` for every other
+    /// kernel.
+    pub(crate) dense_entry_point: Option<&'static str>,
     pub(crate) validate_limits: fn(&wgpu::Limits) -> Result<(), GpuError>,
     pub(crate) kernel: crate::kernel::Kernel,
+}
+
+/// Which of a sized kernel's entry points a pipeline compiles: the full
+/// kernel, or its dense twin ([`DeviceProfile::dense_entry_point`]).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Variant {
+    Full,
+    Dense,
 }
 
 // Compiled immutable resources, plus a fitted kernel's write-once pipeline
@@ -30,47 +43,67 @@ pub(crate) struct Runtime {
 enum Pipelines {
     /// A static kernel's one pipeline.
     Static(wgpu::ComputePipeline),
-    /// A fixed formula or tight kernel's size and its pipeline, compiled when
-    /// the kernel is created.
-    Fixed(crate::GpuWorkgroupSize, wgpu::ComputePipeline),
-    /// A fitted formula or tight kernel, whose sizes are compiled at first need.
-    Fitted(Fitted),
+    /// A formula or tight kernel, compiled by workgroup size.
+    Sized(Sized),
 }
 
-/// A fitted kernel's shader module, created and validated with the kernel,
-/// and one write-once slot for each fitted size the context grants. A slot is
-/// written by the first check that dispatches its size, under the context
-/// lease, which is exclusive across every primitive on the context; reads
-/// take no lock.
-struct Fitted {
+/// A sized kernel's shader module, created and validated with the kernel, and
+/// one slot for each size it can dispatch: its fixed size, whose full pipeline
+/// is compiled when the kernel is created, or each fitted size the context
+/// grants. Every other pipeline is compiled by the first check that dispatches
+/// it, under the context lease, which is exclusive across every primitive on
+/// the context; reads take no lock.
+struct Sized {
     shader: wgpu::ShaderModule,
     entry_point: &'static str,
+    dense_entry_point: Option<&'static str>,
     label: &'static str,
-    slots: Vec<(
-        crate::GpuWorkgroupSize,
-        std::sync::OnceLock<wgpu::ComputePipeline>,
-    )>,
+    slots: Vec<(crate::GpuWorkgroupSize, Slot)>,
     /// Test seam: the invocation count compiled for the next first need,
     /// standing in for a compilation the device refuses.
     #[cfg(test)]
     refused: std::sync::Mutex<Option<u32>>,
 }
 
-impl Fitted {
+/// One size's write-once pipelines, one per variant.
+#[derive(Default)]
+struct Slot {
+    full: std::sync::OnceLock<wgpu::ComputePipeline>,
+    dense: std::sync::OnceLock<wgpu::ComputePipeline>,
+}
+
+impl Slot {
+    const fn of(&self, variant: Variant) -> &std::sync::OnceLock<wgpu::ComputePipeline> {
+        match variant {
+            Variant::Full => &self.full,
+            Variant::Dense => &self.dense,
+        }
+    }
+}
+
+impl Sized {
+    /// The slot of `size` and `variant`'s entry point, or a validation failure
+    /// for a size the kernel cannot dispatch or a variant it lacks.
     fn slot(
         &self,
         size: crate::GpuWorkgroupSize,
-    ) -> Result<&std::sync::OnceLock<wgpu::ComputePipeline>, GpuError> {
+        variant: Variant,
+    ) -> Result<(&std::sync::OnceLock<wgpu::ComputePipeline>, &'static str), GpuError> {
+        let entry_point = match variant {
+            Variant::Full => self.entry_point,
+            Variant::Dense => self.dense_entry_point.ok_or_else(|| unavailable(size))?,
+        };
         self.slots
             .iter()
             .find(|(fitted, _)| *fitted == size)
-            .map(|(_, slot)| slot)
+            .map(|(_, slot)| (slot.of(variant), entry_point))
             .ok_or_else(|| unavailable(size))
     }
 }
 
-/// A size this runtime cannot provide: a static kernel, another fixed size, or
-/// a fitted size the context does not grant or has not compiled.
+/// A size this runtime cannot provide: a static kernel, another fixed size, a
+/// fitted size the context does not grant or has not compiled, or a dense
+/// variant of a kernel without one.
 fn unavailable(size: crate::GpuWorkgroupSize) -> GpuError {
     GpuError::new(
         GpuErrorKind::Validation,
@@ -164,19 +197,29 @@ impl Runtime {
             .map(|options| options.workgroup_sizing)
         {
             None => Pipelines::Static(compile(None)),
-            Some(crate::GpuWorkgroupSizing::Fixed(size)) => {
-                Pipelines::Fixed(size, compile(Some(size.invocations())))
+            Some(sizing) => {
+                let slots = match sizing {
+                    crate::GpuWorkgroupSizing::Fixed(size) => {
+                        let slot = Slot::default();
+                        let _ = slot.full.set(compile(Some(size.invocations())));
+                        vec![(size, slot)]
+                    }
+                    crate::GpuWorkgroupSizing::Fitted => {
+                        crate::kernel::candidate_sizes(sizing, context.limits())
+                            .map(|size| (size, Slot::default()))
+                            .collect()
+                    }
+                };
+                Pipelines::Sized(Sized {
+                    slots,
+                    shader,
+                    entry_point: profile.entry_point,
+                    dense_entry_point: profile.dense_entry_point,
+                    label: profile.pipeline_label,
+                    #[cfg(test)]
+                    refused: std::sync::Mutex::new(None),
+                })
             }
-            Some(sizing @ crate::GpuWorkgroupSizing::Fitted) => Pipelines::Fitted(Fitted {
-                slots: crate::kernel::candidate_sizes(sizing, context.limits())
-                    .map(|size| (size, std::sync::OnceLock::new()))
-                    .collect(),
-                shader,
-                entry_point: profile.entry_point,
-                label: profile.pipeline_label,
-                #[cfg(test)]
-                refused: std::sync::Mutex::new(None),
-            }),
         };
         context.complete(scopes.finish().await, Ok(()), Effects::MayBeLive)?;
         Ok(Self {
@@ -194,38 +237,46 @@ impl Runtime {
     pub(crate) fn static_pipeline(&self) -> Result<&wgpu::ComputePipeline, GpuError> {
         match &self.pipelines {
             Pipelines::Static(pipeline) => Ok(pipeline),
-            Pipelines::Fixed(..) | Pipelines::Fitted(_) => Err(GpuError::new(
+            Pipelines::Sized(_) => Err(GpuError::new(
                 GpuErrorKind::Validation,
                 "this kernel's pipelines are chosen by workgroup size",
             )),
         }
     }
 
-    /// Make the pipeline of `size` available to the check about to dispatch
-    /// it. A fixed kernel's own size, and a fitted size already compiled,
-    /// return at once. Otherwise the fitted size is compiled now, inside its own
-    /// error scopes settled as at construction, and its slot written. The
-    /// caller holds the context lease, has finished preparing its batch and has
-    /// not opened its dispatch scopes. Only a freshly prepared graph can need a
-    /// size first, and its cold preparation has already released any previous
-    /// resident, so a failure leaves no resident theory, the slot unwritten and
-    /// the context invalidated.
+    /// Make the pipeline of `size` and `variant` available to the check about
+    /// to dispatch it. A pipeline already compiled, a fixed kernel's full
+    /// pipeline included, returns at once. Otherwise it is compiled now, inside
+    /// its own error scopes settled as at construction, and its slot written.
+    /// The caller holds the context lease, has finished preparing its batch and
+    /// has not opened its dispatch scopes. A freshly prepared graph can need a
+    /// size's first pipeline: for a tight theory the dense twin, since a fresh
+    /// theory's first batch never allows the update route. A resident tight
+    /// theory can need only the full kernel first, at its first batch allowing
+    /// the route, and only under fitted sizing: a fixed size compiles its full
+    /// pipeline at construction. A fresh graph's cold preparation has already
+    /// released any previous resident; a resident theory stays, and its oracle
+    /// invalidates its retained truth as after every failed call. Either way a
+    /// failure leaves the slot unwritten and the context invalidated.
     ///
     /// # Errors
-    /// A size this runtime cannot provide is a validation failure. A
+    /// A size or variant this runtime cannot provide is a validation failure. A
     /// compilation failure is the scope's typed error and invalidates the
     /// context, as the same failure at construction did; the slot stays
     /// unwritten and is never retried.
-    pub(crate) fn ensure_pipeline(&self, size: crate::GpuWorkgroupSize) -> Result<(), GpuError> {
+    pub(crate) fn ensure_pipeline(
+        &self,
+        size: crate::GpuWorkgroupSize,
+        variant: Variant,
+    ) -> Result<(), GpuError> {
         match &self.pipelines {
-            Pipelines::Fixed(compiled, _) if *compiled == size => Ok(()),
-            Pipelines::Fitted(fitted) => {
-                let slot = fitted.slot(size)?;
+            Pipelines::Sized(sized) => {
+                let (slot, entry_point) = sized.slot(size, variant)?;
                 if slot.get().is_some() {
                     return Ok(());
                 }
                 #[cfg(test)]
-                let invocations = fitted
+                let invocations = sized
                     .refused
                     .lock()
                     .unwrap_or_else(std::sync::PoisonError::into_inner)
@@ -233,30 +284,32 @@ impl Runtime {
                     .unwrap_or(size.invocations());
                 #[cfg(not(test))]
                 let invocations = size.invocations();
-                let pipeline = self.compile_fitted(fitted, invocations)?;
+                let pipeline = self.compile_sized(sized, entry_point, invocations)?;
                 // Every write happens under the context lease, so the slot is
                 // still empty here; a lost race could only store an equal pipeline.
                 let _ = slot.set(pipeline);
                 Ok(())
             }
-            Pipelines::Static(_) | Pipelines::Fixed(..) => Err(unavailable(size)),
+            Pipelines::Static(_) => Err(unavailable(size)),
         }
     }
 
-    /// Compile `fitted` with `invocations` per workgroup, settling its own
-    /// error scopes through the context's completion, as construction does.
-    fn compile_fitted(
+    /// Compile `sized`'s `entry_point` with `invocations` per workgroup,
+    /// settling its own error scopes through the context's completion, as
+    /// construction does.
+    fn compile_sized(
         &self,
-        fitted: &Fitted,
+        sized: &Sized,
+        entry_point: &'static str,
         invocations: u32,
     ) -> Result<wgpu::ComputePipeline, GpuError> {
         let device = self.device();
         let scopes = ErrorScopes::new(device);
         let pipeline = create_pipeline(
             device,
-            &fitted.shader,
-            fitted.entry_point,
-            fitted.label,
+            &sized.shader,
+            entry_point,
+            sized.label,
             Some(invocations),
         );
         self.context.complete(
@@ -267,35 +320,55 @@ impl Runtime {
         Ok(pipeline)
     }
 
-    /// The pipeline of `size`, compiled at construction for a fixed kernel or
-    /// by `ensure_pipeline` for a fitted one.
+    /// The pipeline of `size` and `variant`, compiled at construction for a
+    /// fixed kernel's full pipeline or by `ensure_pipeline` otherwise.
     ///
     /// # Errors
-    /// A size this runtime has not compiled, including any size of a static
-    /// kernel, is a validation failure.
+    /// A pipeline this runtime has not compiled, including any size of a
+    /// static kernel, is a validation failure.
     pub(crate) fn pipeline_for(
         &self,
         size: crate::GpuWorkgroupSize,
+        variant: Variant,
     ) -> Result<&wgpu::ComputePipeline, GpuError> {
         match &self.pipelines {
-            Pipelines::Fixed(compiled, pipeline) if *compiled == size => Ok(pipeline),
-            Pipelines::Fitted(fitted) => fitted.slot(size)?.get().ok_or_else(|| unavailable(size)),
-            Pipelines::Static(_) | Pipelines::Fixed(..) => Err(unavailable(size)),
+            Pipelines::Sized(sized) => sized
+                .slot(size, variant)?
+                .0
+                .get()
+                .ok_or_else(|| unavailable(size)),
+            Pipelines::Static(_) => Err(unavailable(size)),
         }
     }
 
-    /// The sizes whose pipelines exist: a fixed kernel's size, or a fitted
-    /// kernel's written slots, ascending.
+    /// The sizes with a compiled pipeline of either variant, ascending.
     #[cfg(test)]
     pub(crate) fn compiled_sizes(&self) -> Vec<crate::GpuWorkgroupSize> {
+        self.compiled()
+            .into_iter()
+            .map(|(size, _)| size)
+            .fold(Vec::new(), |mut sizes, size| {
+                if sizes.last() != Some(&size) {
+                    sizes.push(size);
+                }
+                sizes
+            })
+    }
+
+    /// The compiled pipelines, by size ascending and then variant, full first.
+    #[cfg(test)]
+    pub(crate) fn compiled(&self) -> Vec<(crate::GpuWorkgroupSize, Variant)> {
         match &self.pipelines {
             Pipelines::Static(_) => Vec::new(),
-            Pipelines::Fixed(size, _) => vec![*size],
-            Pipelines::Fitted(fitted) => fitted
+            Pipelines::Sized(sized) => sized
                 .slots
                 .iter()
-                .filter(|(_, slot)| slot.get().is_some())
-                .map(|(size, _)| *size)
+                .flat_map(|(size, slot)| {
+                    [Variant::Full, Variant::Dense]
+                        .into_iter()
+                        .filter(|variant| slot.of(*variant).get().is_some())
+                        .map(|variant| (*size, variant))
+                })
                 .collect(),
         }
     }
@@ -304,8 +377,8 @@ impl Runtime {
     /// standing in for a compilation the device refuses.
     #[cfg(test)]
     pub(crate) fn refuse_next_compilation(&self, invocations: u32) {
-        if let Pipelines::Fitted(fitted) = &self.pipelines {
-            *fitted
+        if let Pipelines::Sized(sized) = &self.pipelines {
+            *sized
                 .refused
                 .lock()
                 .unwrap_or_else(std::sync::PoisonError::into_inner) = Some(invocations);
