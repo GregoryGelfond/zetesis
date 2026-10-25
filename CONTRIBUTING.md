@@ -159,13 +159,16 @@ Family Crossing (`examples/family-crossing/integrated.lp`), or on the tight
 kernel, measured on the original wide Mastermind program
 (`examples/wide-mastermind/68/mm-68-examples.lp`, not
 `examples/scalability/mastermind.lp`), each under eager and lazy grounding and
-beside the corpus cases that dispatch it. The least-model oracle, aggregate
-and relation kernels, which no measured workload dispatched, keep the fill
-undecided. The decision covers each kernel as it stood at that commit: once a
-kernel's code changes, beyond its comments, its decision is open again, which
-obliges nothing while the kernel keeps the fill. The rule stays in force with
-the fill on: a kernel whose result depended on the fill would rely on an
-initialization its code does not state, and the rule is what lets the fill be
+beside the corpus cases that dispatch it. At the measured allowance
+(`--memory 24GiB`), the wide Mastermind runs took both of the tight kernel's
+paths, the eager runs its update route and the lazy runs its declined route; a
+later measurement confirms each path from its runs' statistics. The least-model
+oracle, aggregate and relation kernels, which no measured workload dispatched,
+keep the fill undecided. The decision covers each kernel as it stood at that
+commit: once a kernel's code changes, beyond its comments, its decision is open
+again, which obliges nothing while the kernel keeps the fill. The rule stays in
+force with the fill on: a kernel whose result depended on the fill would rely on
+an initialization its code does not state, and the rule is what lets the fill be
 removed from a kernel without a new argument. The fill is removed from a kernel
 only where a kernel-time gain, measured on that kernel at the commit that
 removes the fill, repays it, and only once, at that commit, the kernel is
