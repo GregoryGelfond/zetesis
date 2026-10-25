@@ -160,6 +160,7 @@ impl Driver {
                 }
                 Step::Candidate(candidate) => slate.emit(candidate),
                 Step::Refuted => panic!("tautologies refute no region"),
+                Step::Deferred => panic!("a slate of 64 has room for the leaves taken first"),
             }
         }
     }
@@ -177,6 +178,8 @@ impl Driver {
             frontier: &self.proposals.frontier,
             maximum,
             remaining: u64::MAX,
+            hand_limit: super::slate_hands(maximum, self.proposals.pool.current_num_threads()),
+            hands: AtomicUsize::new(0),
             output_slots: AtomicUsize::new(0),
             outcome: Mutex::new(Outcome {
                 candidates: Vec::with_capacity(maximum),
@@ -213,6 +216,10 @@ fn slots(slate: &SlateFill<'_, '_>) -> usize {
     slate.output_slots.load(Ordering::Acquire)
 }
 
+fn hands(slate: &SlateFill<'_, '_>) -> usize {
+    slate.hands.load(Ordering::Acquire)
+}
+
 fn stopped(slate: &SlateFill<'_, '_>) -> Option<Incomplete> {
     slate.outcome().stopped
 }
@@ -235,18 +242,70 @@ fn filled(driver: &Driver) -> SlateFill<'_, '_> {
 }
 
 #[test]
-fn admission_never_exceeds_the_slates_output_slots() {
+fn admission_never_exceeds_the_slates_hands() {
     let driver = driver(tautologies(3), 3);
     let slate = driver.slate(2);
     for index in 1..3 {
-        slate.frontier.requeue(index, open(3));
+        slate
+            .frontier
+            .requeue(index, open(3), reserve_regions)
+            .unwrap();
     }
     let lease = driver.allowance.lease(&driver.cancellation);
     let admitted = (0..3)
         .filter_map(|index| slate.admit(index, Attempt::Outside, &lease))
         .count();
     assert_eq!(admitted, 2);
-    assert_eq!(slots(&slate), 2);
+    assert_eq!(hands(&slate), 2);
+}
+
+#[test]
+fn a_slate_of_more_candidates_than_producers_admits_every_producer() {
+    let driver = driver(tautologies(3), 3);
+    let slate = driver.slate(64);
+    for index in 1..3 {
+        slate
+            .frontier
+            .requeue(index, open(3), reserve_regions)
+            .unwrap();
+    }
+    let lease = driver.allowance.lease(&driver.cancellation);
+    let admitted = (0..3)
+        .filter_map(|index| slate.admit(index, Attempt::Outside, &lease))
+        .count();
+    assert_eq!(admitted, 3);
+}
+
+/// At a slate's end, admission does not wait for output slots: three of four
+/// are reserved, as three leaf steps leave them, and both producers still take
+/// a region.
+#[test]
+fn admission_ignores_the_output_slots_already_reserved() {
+    let driver = driver(tautologies(3), 2);
+    let slate = driver.slate(4);
+    for _ in 0..3 {
+        assert!(slate.reserve_output_slot());
+    }
+    slate.frontier.requeue(1, open(3), reserve_regions).unwrap();
+    let lease = driver.allowance.lease(&driver.cancellation);
+    let admitted = (0..2)
+        .filter_map(|index| slate.admit(index, Attempt::Outside, &lease))
+        .count();
+    assert_eq!(admitted, 2);
+}
+
+/// A slate of one candidate is one walk: while one producer holds its one
+/// hand no peer takes a region, and the hand passes once it is released.
+#[test]
+fn a_slate_of_one_candidate_admits_one_producer_at_a_time() {
+    let driver = driver(tautologies(1), 2);
+    let slate = driver.slate(1);
+    slate.frontier.requeue(1, open(1), reserve_regions).unwrap();
+    let lease = driver.allowance.lease(&driver.cancellation);
+    let _root = slate.admit(0, Attempt::Outside, &lease).unwrap();
+    assert!(slate.admit(1, Attempt::Outside, &lease).is_none());
+    slate.release_hand();
+    assert!(slate.admit(1, Attempt::Outside, &lease).is_some());
 }
 
 #[test]
@@ -255,8 +314,109 @@ fn the_emission_that_fills_the_slate_closes_it_without_a_stop() {
     let slate = filled(&driver);
     assert!(slate.frontier.termination.is_closed());
     assert!(stopped(&slate).is_none());
-    // Every output slot is a candidate's, so no producer holds a region.
+    // Every output slot is a candidate's. The slate's one hand was its
+    // emitter's, so no other producer holds a region.
     assert_eq!(slots(&slate), emitted(&slate));
+}
+
+/// A leaf step that finds the output spoken for defers its leaf: it neither
+/// emits nor resolves its region, and counts no leaf.
+#[test]
+fn a_leaf_finding_the_output_spoken_for_stays_unresolved() {
+    let driver = driver(tautologies(0), 2);
+    let slate = driver.slate(1);
+    let lease = driver.allowance.lease(&driver.cancellation);
+    let mut root = slate.admit(0, Attempt::Outside, &lease).unwrap();
+    // Another leaf step reserved the slate's one output slot.
+    assert!(slate.reserve_output_slot());
+    let mut counts = super::RegionCounts::default();
+    let mut budget = Budget {
+        quota: slate.allowance.lease(slate.cancellation),
+        limits: slate.limits,
+        cancellation: slate.cancellation,
+        statistics: SearchStatistics::default(),
+    };
+    let result = slate
+        .step(
+            &mut root,
+            &mut Workspace::default(),
+            &mut budget,
+            &mut counts,
+        )
+        .unwrap();
+    assert!(matches!(result, Step::Deferred));
+    assert_eq!(counts.leaves, 0);
+    assert_eq!(slate.frontier.termination.unresolved(), 1);
+    assert_eq!(emitted(&slate), 0);
+}
+
+/// Once the output is spoken for the slate is about to close, and a region
+/// taken before the close is returned unstepped.
+#[test]
+fn a_region_taken_once_the_output_is_spoken_for_is_returned_unstepped() {
+    let driver = driver(tautologies(1), 2);
+    let slate = driver.slate(1);
+    let root = slate.frontier.take_local(0).unwrap();
+    assert!(slate.reserve_output_slot());
+    assert!(!slate.frontier.termination.is_closed());
+    assert!(slate.ready(root).is_err());
+}
+
+#[test]
+fn a_deferred_leaf_is_emitted_by_the_next_slate() {
+    let mut driver = driver(tautologies(0), 2);
+    {
+        let slate = driver.slate(1);
+        let lease = driver.allowance.lease(&driver.cancellation);
+        let mut root = slate.admit(0, Attempt::Outside, &lease).unwrap();
+        assert!(slate.reserve_output_slot());
+        assert!(matches!(step(&slate, &mut root), Step::Deferred));
+        slate.leave(0, Some(root));
+    }
+    driver.proposals.frontier.termination =
+        Termination::resuming(driver.proposals.frontier.termination.unresolved());
+    let slate = driver.slate(1);
+    let lease = driver.allowance.lease(&driver.cancellation);
+    let mut root = slate.admit(0, Attempt::Outside, &lease).unwrap();
+    let Step::Candidate(candidate) = step(&slate, &mut root) else {
+        panic!("the returned leaf is a leaf");
+    };
+    slate.emit(candidate);
+    assert_eq!(emitted(&slate), 1);
+    assert!(slate.frontier.termination.is_resolved());
+}
+
+/// In a slate of more than one candidate a step can be under way when the
+/// slate fills. If it fails, its stop is recorded beside the full output,
+/// which the batch keeps and checks before it reports the stop.
+#[test]
+fn a_step_failing_after_the_filling_emission_keeps_the_full_output() {
+    let driver = driver(tautologies(2), 2);
+    let slate = driver.slate(2);
+    let lease = driver.allowance.lease(&driver.cancellation);
+    let mut root = slate.admit(0, Attempt::Outside, &lease).unwrap();
+    let Step::Split(cut, held) = step(&slate, &mut root) else {
+        panic!("a tautology's root splits");
+    };
+    let mut first = slate.hand_over(0, (cut, held), reserve_regions).unwrap();
+    // The peer steals the published child and is under way when the slate
+    // fills from the other child's two leaves.
+    let under_way = slate.admit(1, Attempt::Outside, &lease).unwrap();
+    let Step::Split(cut, held) = step(&slate, &mut first) else {
+        panic!("a region with an open atom splits");
+    };
+    let mut newer = slate.hand_over(0, (cut, held), reserve_regions).unwrap();
+    let mut older = slate.frontier.take_local(0).unwrap();
+    for leaf in [&mut newer, &mut older] {
+        let Step::Candidate(candidate) = step(&slate, leaf) else {
+            panic!("a decided tautology is a leaf");
+        };
+        slate.emit(candidate);
+    }
+    assert!(slate.frontier.termination.is_closed());
+    slate.fail(1, under_way, Incomplete::WorkLimit);
+    assert_eq!(stopped(&slate), Some(Incomplete::WorkLimit));
+    assert_eq!(emitted(&slate), 2);
 }
 
 #[test]
@@ -291,33 +451,35 @@ fn a_split_keeps_the_newer_child_in_hand_and_publishes_the_older() {
     assert!(hand.0.is_held(0));
     assert!(slate.frontier.take_local(0).unwrap().0.is_cut(0));
     assert_eq!(slate.frontier.termination.unresolved(), 2);
-    assert_eq!(slots(&slate), 1, "the hand kept the parent's output slot");
+    assert_eq!(hands(&slate), 1, "the newer child kept the parent's hand");
 }
 
+/// After a refutation or an emission, the region's resolution, the producer
+/// keeps its hand while it finds work.
 #[test]
-fn a_refutation_keeps_its_slot_only_while_work_can_be_found() {
+fn a_resolution_keeps_its_hand_only_while_work_can_be_found() {
     let driver = driver(tautologies(1), 2);
     let slate = driver.slate(2);
     let lease = driver.allowance.lease(&driver.cancellation);
-    let _refuted = slate.admit(0, Attempt::Outside, &lease).unwrap();
+    let _resolved = slate.admit(0, Attempt::Outside, &lease).unwrap();
     // Local work: the producer takes its own newest region.
-    slate.frontier.requeue(0, open(1));
-    assert!(slate.after_refutation(0, &lease).is_some());
-    assert_eq!(slots(&slate), 1);
-    slate.frontier.requeue(1, open(1));
+    slate.frontier.requeue(0, open(1), reserve_regions).unwrap();
+    assert!(slate.after_resolution(0, &lease).is_some());
+    assert_eq!(hands(&slate), 1);
+    slate.frontier.requeue(1, open(1), reserve_regions).unwrap();
     // An empty own deque: the producer steals its peer's region.
-    assert!(slate.after_refutation(0, &lease).is_some());
-    assert_eq!(slots(&slate), 1);
-    // Nothing anywhere: the slot is released.
-    assert!(slate.after_refutation(0, &lease).is_none());
-    assert_eq!(slots(&slate), 0);
+    assert!(slate.after_resolution(0, &lease).is_some());
+    assert_eq!(hands(&slate), 1);
+    // Nothing anywhere: the hand is released.
+    assert!(slate.after_resolution(0, &lease).is_none());
+    assert_eq!(hands(&slate), 0);
 }
 
 #[test]
 fn a_producer_whose_deque_is_busy_under_the_gate_does_not_steal() {
     let driver = driver(tautologies(1), 2);
     let slate = driver.slate(1);
-    slate.frontier.requeue(1, open(1));
+    slate.frontier.requeue(1, open(1), reserve_regions).unwrap();
     let lease = driver.allowance.lease(&driver.cancellation);
     // A thief holds producer 0's deque, which still holds the root.
     let thief = slate.frontier.queue(0);
@@ -331,14 +493,53 @@ fn a_producer_whose_deque_is_busy_under_the_gate_does_not_steal() {
 }
 
 #[test]
-fn a_busy_attempt_under_the_gate_releases_its_output_slot() {
+fn a_busy_attempt_under_the_gate_releases_its_hand() {
     let driver = driver(tautologies(1), 2);
     let slate = driver.slate(1);
     let lease = driver.allowance.lease(&driver.cancellation);
     let thief = slate.frontier.queue(0);
     assert!(slate.admit(0, Attempt::UnderGate, &lease).is_none());
     drop(thief);
-    assert_eq!(slots(&slate), 0);
+    assert_eq!(hands(&slate), 0);
+}
+
+/// Once the output is spoken for, a resolution takes no further region, even
+/// with one in the producer's own deque, and releases its hand.
+#[test]
+fn a_resolution_takes_nothing_once_the_output_is_spoken_for() {
+    let driver = driver(tautologies(1), 2);
+    let slate = driver.slate(1);
+    let lease = driver.allowance.lease(&driver.cancellation);
+    let _resolved = slate.admit(0, Attempt::Outside, &lease).unwrap();
+    slate.frontier.requeue(0, open(1), reserve_regions).unwrap();
+    assert!(slate.reserve_output_slot());
+    assert!(slate.after_resolution(0, &lease).is_none());
+    assert_eq!(slate.frontier.queue(0).len(), 1);
+    assert_eq!(hands(&slate), 0);
+}
+
+#[test]
+fn admission_takes_nothing_once_the_output_is_spoken_for() {
+    let driver = driver(tautologies(1), 2);
+    let slate = driver.slate(1);
+    assert!(slate.reserve_output_slot());
+    let lease = driver.allowance.lease(&driver.cancellation);
+    assert!(slate.admit(0, Attempt::Outside, &lease).is_none());
+    assert_eq!(slate.frontier.queue(0).len(), 1);
+    assert_eq!(hands(&slate), 0);
+}
+
+/// A region returned to a deque that refuses entry capacity is dropped, and
+/// the refusal becomes the slate's stop, so the run never claims coverage of
+/// a region it lost.
+#[test]
+fn a_return_refused_entry_capacity_records_an_allocation_stop() {
+    let driver = driver(tautologies(1), 2);
+    let slate = driver.slate(1);
+    let root = slate.frontier.take_local(0).unwrap();
+    slate.give_back(0, root, |queue, _| reserve_regions(queue, usize::MAX));
+    assert_eq!(stopped(&slate), Some(Incomplete::Allocation));
+    assert!(slate.frontier.termination.is_closed());
 }
 
 #[test]
@@ -405,7 +606,7 @@ fn a_failed_region_is_taken_only_from_a_closed_slate() {
             if !closed {
                 early += 1;
             }
-            slate.frontier.requeue(0, entry);
+            slate.frontier.requeue(0, entry, reserve_regions).unwrap();
         });
     }
     assert_eq!(
@@ -483,7 +684,7 @@ fn a_shared_order_resumes_with_the_region_published_last() {
     let published_last = slate.frontier.queue(0).back().unwrap().0.clone();
     // Producer 1 published its region before producer 0 published this one,
     // so after a refutation producer 1 takes producer 0's.
-    let next = slate.after_refutation(1, &lease).unwrap();
+    let next = slate.after_resolution(1, &lease).unwrap();
     assert_eq!(next.0, published_last);
 }
 
@@ -568,7 +769,7 @@ fn a_closed_stream_refuses_candidate_bounds() {
 }
 
 #[test]
-fn an_idle_producer_holds_no_permits() {
+fn an_idle_producer_holds_no_work_permits() {
     let driver = driver(tautologies(1), 1);
     let slate = driver.slate(1);
     // The only region is held elsewhere, so no attempt can find one.
@@ -576,7 +777,7 @@ fn an_idle_producer_holds_no_permits() {
     let lease = driver.allowance.lease(&driver.cancellation);
     lease.tick().unwrap();
     assert!(slate.admit(0, Attempt::Outside, &lease).is_none());
-    // Every permit but the one spent is available again.
+    // Every work permit but the one spent is available again.
     driver
         .allowance
         .charge(SearchLimits::default().max_work - 1)

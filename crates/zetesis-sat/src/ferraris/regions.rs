@@ -61,13 +61,16 @@ impl SearchMethod {
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 #[non_exhaustive]
 pub struct RegionCounts {
-    /// Regions narrowed, the root included.
+    /// Regions narrowed, the root included. A producer's leaf that finds its
+    /// slate's output spoken for is narrowed, and counted, again by the slate
+    /// that proposes it.
     pub regions: usize,
     /// Regions refuted by readings or an original-candidate filter. Frozen
     /// proper-subset queries use only their reduct readings.
     pub refuted: usize,
-    /// Regions with every atom decided: the classical candidates proposed,
-    /// or the proper-subset models and the candidate itself.
+    /// The classical candidates proposed, or the proper-subset models and the
+    /// candidate itself: regions with every atom decided, each counted once,
+    /// when it is proposed.
     pub leaves: usize,
     /// Propagation events: nodes and atoms learned and their neighbours
     /// revisited, support rechecks, and fresh source-consequence mask updates.

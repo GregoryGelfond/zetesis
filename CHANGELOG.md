@@ -124,10 +124,19 @@ Notable changes by release. Versions follow Semantic Versioning.
   only when a worker is waiting for one. Answer sets are unchanged.
 - GPU-route candidate producers keep a deque each, continue depth first on their
   own regions and steal a peer's oldest region only with an empty deque,
-  holding one work lease per slate instead of one per region. An optimizing
-  search's producers instead share one deque and take the region published most
-  recently, so regions far from the current work wait for tighter bounds.
-  Proposal order remains schedule-dependent, and answer sets are unchanged.
+  holding one work lease per slate instead of one per region. A producer
+  reserves a candidate's output slot only when it reaches a leaf, so the end of
+  a slate no longer leaves one producer to find its last candidates. In a slate
+  of more than one candidate a step under way when the slate fills finishes
+  after it, so a step's stop, or a returned region's refused entry capacity,
+  can then follow the filling emission; the slate's
+  candidates are still checked and committed before the stop is reported. A
+  leaf the slate cannot take is narrowed again by a later one, so the regions
+  count can exceed the tree's regions. An
+  optimizing search's producers instead share one deque and take the region
+  published most recently, so regions far from the current work wait for
+  tighter bounds. Proposal order remains schedule-dependent, and answer sets are
+  unchanged.
 
 ### Fixed
 

@@ -1202,8 +1202,10 @@ impl Proposer {
                         .original_validation
                         .merge(produced.original_validation);
                 }
-                // With one reserved slot no second producer can stop after
-                // the first emits. Batched calls retain that richer outcome.
+                // A slate of one candidate has one hand, which a peer reserves
+                // only after the first producer emits, and then finds the
+                // output spoken for, so no second producer can stop after the
+                // first emits. Batched calls retain that richer outcome.
                 if let Some(error) = produced.stopped {
                     return Err(error);
                 }
@@ -1214,7 +1216,9 @@ impl Proposer {
     }
 
     /// Exclude a proposed candidate from every later proposal. Regions need
-    /// nothing: a leaf is never visited twice.
+    /// nothing: each region proposer proposes a leaf once, since only the
+    /// leaf's emission resolves its region. A producer's leaf that finds the
+    /// slate's output spoken for returns unresolved and is proposed later.
     fn exclude(
         &mut self,
         candidate: &Interpretation,

@@ -446,11 +446,19 @@ while candidate_frontier is unfinished:
     yield answers
 ```
 
-One output slot is reserved for every region a producer holds. A split keeps
-the reservation for the child the producer continues and publishes the other
-child, where an idle producer can steal it; a refutation keeps it only when the
-producer finds another region at once, and otherwise returns it; an emitted
-leaf consumes it. The slate is bounded even when producers finish together.
+A producer holds a region only in one of the slate's hands, as many as the
+slate admits candidates and never more than there are producers. A split keeps
+the hand for the child the producer continues and publishes the other child,
+where an idle producer can steal it; a refutation or an emission keeps it only
+when the producer finds another region at once, and otherwise releases it. A
+step reserves an output slot only when it reaches a leaf, so the slate is
+bounded even when producers finish together, and its end does not leave the
+search for its last candidates to the producers that have found none. Once
+every output slot is reserved the output is spoken for. A producer reads it
+after reserving its hand, and once it has read it so it takes no region and
+begins no step; a producer that has not yet read it holds one of the slate's
+other hands, and its step ends as a step under way does. A leaf that finds the
+output spoken for returns its region, unresolved, for a later slate.
 The producers keep one deque each, retained between slates, and share the
 region walker's frontier protocols: the count of unresolved regions, split
 publication and the idle back-off. A producer steals only with an empty deque,

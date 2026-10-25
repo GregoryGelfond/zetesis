@@ -7,19 +7,33 @@
 //!
 //! A slate is the candidates the stream proposes together for one membership
 //! check and commit, filled by one bounded run of the producers. A producer
-//! holds a region only under a reserved output slot, so the regions in hand
-//! plus the emitted candidates never exceed the slate's allowance and the
-//! output never reallocates. A producer works depth first: a split publishes
-//! the older child on its own deque, where an idle peer can steal it, and keeps
-//! the newer child in hand under the same output slot. After a refutation it
-//! keeps the slot while it finds another region at once, its own newest or,
-//! with an empty deque, a peer's oldest; otherwise it releases the slot. A
-//! leaf's slot becomes its candidate's, and the emission that fills the slate
-//! closes it. A producer steals only with an empty deque: under the idle gate,
-//! where its own deque is only tried, a busy deque ends the attempt instead.
-//! The deques, the count of unresolved regions, the idle gate and the idle
-//! back-off are the frontier protocols the CPU walker shares
-//! (`region_frontier`).
+//! holds a region only in one of the slate's hands, as many as the slate
+//! admits candidates and never more than there are producers. A step that
+//! reaches a leaf reserves an output slot for its candidate, so the emitted
+//! candidates never exceed the slate's allowance and the output never
+//! reallocates. A slate of at least as many candidates as producers therefore
+//! keeps every producer working until its last candidate is found. Were each
+//! region in hand to hold an
+//! output slot, every emission near the end would retire its producer, and the
+//! slate's last candidates would be sought by the producers whose regions
+//! yield none.
+//!
+//! A producer works depth first: a split publishes the older child on its own
+//! deque, where an idle peer can steal it, and keeps the newer child in the
+//! same hand. After a refutation or an emission it keeps the hand while it
+//! finds another region at once, its own newest or, with an empty deque, a
+//! peer's oldest; otherwise it releases the hand. The emission that fills the
+//! slate closes it. Once every output slot is reserved the output is spoken
+//! for, and the slate is about to close. A producer reads the output after
+//! reserving its hand, and once it has read it spoken for it takes no region
+//! and begins no step. A producer that has not yet read it holds one of the
+//! slate's other hands, and its step ends as a step under way does. A leaf
+//! step that finds the output spoken for defers its leaf: the region returns
+//! unresolved for a later slate, and its producer leaves. A producer steals
+//! only with an empty deque: under the idle gate, where its own deque is only
+//! tried, a busy deque ends the attempt instead. The deques, the count of
+//! unresolved regions, the idle gate and the idle back-off are the frontier
+//! protocols the CPU walker shares (`region_frontier`).
 //!
 //! That is the order for an enumeration, which visits every region whatever the
 //! order: producers work apart and steal rarely. A caller that tightens
@@ -37,10 +51,18 @@
 //!
 //! A slate ends full, stopped or with every region resolved, after finitely
 //! many steps. Each step consumes the one region it took: it refutes it, emits
-//! its leaf, or splits it on an atom the region leaves open, so no region is
-//! stepped twice, and the regions of `n` atoms form a tree of at most
-//! `2^(n+1) - 1` regions; a step that fails stops the slate. Idle producers
-//! then leave within one bounded wait.
+//! its leaf, or splits it on an atom the region leaves open. The exception is
+//! a deferred leaf, which only a step begun before its producer read the
+//! output spoken for can produce. Such steps hold hands other than the last
+//! reserver's, so a slate defers fewer leaves than it has hands. A deferred
+//! region returns to a deque only after its producer has read the output
+//! spoken for, and the deque's lock makes any producer that takes it again
+//! read that too and return it unstepped. So no region is stepped twice in a
+//! slate, the regions of `n` atoms form a tree of at most
+//! `2^(n+1) - 1` regions, and a step that fails stops the slate. Idle
+//! producers then leave within one bounded wait. A deferred leaf is stepped
+//! again by a later slate, under the conditions then in force; every slate
+//! before the last ends full, and each candidate is a leaf emitted once.
 //!
 //! All producers join before the next stage runs. Each holds one work lease
 //! for the slate, settled before it steals, before it waits and at its exit,
@@ -48,17 +70,28 @@
 //! failed attempts. A stop closes the slate before the stopping producer
 //! returns its region to a deque, and every producer checks for the close
 //! after it takes a region and before it steps it. So a region returned after
-//! a stop, a failed region included, is never stepped again, and every region
-//! in hand but a panicking producer's returns to a deque, unless the deque's
-//! entry capacity is refused: the region is then dropped under the recorded
-//! stop, which keeps the run incomplete. A stop never establishes coverage. A
-//! cancellation or deadline that a producer observes once the slate is full is
-//! left to the next slate's first poll, which observes it again, so no polled
-//! stop follows the emission that fills a slate. Each producer retains its
-//! checker and worklists between slates. These are scratch for the same
-//! immutable source, not knowledge about a candidate: the latter travels with
-//! its frontier region. Candidate order depends on scheduling, while identity
-//! and coverage do not.
+//! a stop, a failed region included, is never stepped again. Every region in
+//! hand but a panicking producer's returns to a deque. A return refused entry
+//! capacity drops its region and records an allocation stop, unless a stop is
+//! already recorded, so a lost region always leaves the run incomplete. A stop
+//! never establishes coverage. A cancellation or deadline that a producer
+//! observes once the slate is full is left to the next slate's first poll,
+//! which observes it again, so no polled stop follows the emission that fills
+//! a slate. In a slate of more than one candidate, a step under way when that
+//! emission comes finishes after it, and the regions in hand return after it.
+//! A step that fails, or a return refused entry capacity, then records its
+//! stop beside the full output; the batch keeps that output and reports the
+//! stop after it. A slate of one candidate has one hand, which a peer wins
+//! only after the holder's emission, and then finds the output spoken for, so
+//! no peer takes, returns or stops after that emission. A producer leaves with
+//! its hand still reserved: it leaves only once the slate is closed, resolved
+//! or spoken for, and each of these ends every other producer's search for a
+//! region.
+//!
+//! Each producer retains its checker and worklists between slates. These are
+//! scratch for the same immutable source, not knowledge about a candidate: the
+//! latter travels with its frontier region. Candidate order depends on
+//! scheduling, while identity and coverage do not.
 
 use std::collections::VecDeque;
 use std::num::NonZeroUsize;
@@ -324,6 +357,7 @@ impl RegionProposals {
                 workspace.counts = RegionCounts::default();
                 workspace.timings = timed.then(SearchPhaseTimings::default);
             }
+            let maximum = maximum.min(usize::try_from(remaining).unwrap_or(usize::MAX).max(1));
             let slate = SlateFill {
                 theory,
                 filter: filter.as_ref(),
@@ -334,8 +368,10 @@ impl RegionProposals {
                 limits: budget.limits,
                 cancellation: budget.cancellation,
                 frontier: &self.frontier,
-                maximum: maximum.min(usize::try_from(remaining).unwrap_or(usize::MAX).max(1)),
+                maximum,
                 remaining,
+                hand_limit: slate_hands(maximum, workspaces.len()),
+                hands: AtomicUsize::new(0),
                 output_slots: AtomicUsize::new(0),
                 outcome: Mutex::new(Outcome {
                     candidates: std::mem::take(output),
@@ -417,6 +453,12 @@ impl Drop for RegionProposals {
 #[cfg(test)]
 mod tests;
 
+/// The hands of a slate of `maximum` candidates filled by `producers`: as many
+/// as it admits candidates, and never more than there are producers.
+fn slate_hands(maximum: usize, producers: usize) -> usize {
+    maximum.min(producers)
+}
+
 /// What a slate has produced: its emitted candidates and its first stop. One
 /// lock guards both, so a stop that polling control observed is recorded only
 /// while the slate is not yet full.
@@ -425,7 +467,7 @@ struct Outcome {
     stopped: Option<Incomplete>,
 }
 
-/// One slate's shared state: the slate's allowance of output slots and its
+/// One slate's shared state: its hands, its allowance of output slots and its
 /// outcome.
 struct SlateFill<'a, 'filter> {
     theory: &'a Theory,
@@ -439,8 +481,17 @@ struct SlateFill<'a, 'filter> {
     frontier: &'a RegionFrontier,
     maximum: usize,
     remaining: u64,
-    /// Output slots reserved: the regions producers hold plus the emitted
-    /// candidates, never more than `maximum`.
+    /// The slate's hands, the regions producers may hold at once: `maximum`,
+    /// or the number of producers if smaller. One hand makes a slate of one
+    /// candidate a single walk, which no peer's step follows after its
+    /// emission, and under the shared order the hands bound the regions held
+    /// at once.
+    hand_limit: usize,
+    /// Hands reserved, never more than `hand_limit`.
+    hands: AtomicUsize,
+    /// Output slots reserved by steps that reached a leaf, never more than
+    /// `maximum`. Each becomes its candidate's at once. Once every slot is
+    /// reserved the output is spoken for.
     output_slots: AtomicUsize,
     /// A leaf lock: the slate closes only after it is released.
     outcome: Mutex<Outcome>,
@@ -451,6 +502,9 @@ enum Step {
     Refuted,
     Split(Entry, Entry),
     Candidate(Interpretation),
+    /// A leaf that found the output spoken for: unresolved, its region waits
+    /// for a later slate.
+    Deferred,
 }
 
 impl<'filter> SlateFill<'_, 'filter> {
@@ -493,30 +547,68 @@ impl<'filter> SlateFill<'_, 'filter> {
         }
     }
 
-    /// Reserve one output slot, if the slate has one left.
-    fn reserve_slot(&self) -> bool {
-        self.output_slots
-            .fetch_update(Ordering::AcqRel, Ordering::Acquire, |held| {
-                (held < self.maximum).then_some(held + 1)
+    /// Reserve one hand, if the slate has one left.
+    fn reserve_hand(&self) -> bool {
+        self.hands
+            .fetch_update(Ordering::AcqRel, Ordering::Acquire, |reserved| {
+                (reserved < self.hand_limit).then_some(reserved + 1)
             })
             .is_ok()
     }
 
-    /// Return an output slot whose holder found no region. It wakes nobody: a
-    /// producer waiting for a slot sees it within its bounded wait.
-    fn release_slot(&self) {
-        self.output_slots.fetch_sub(1, Ordering::AcqRel);
+    /// Return a hand that found no region. It wakes nobody: a producer waiting
+    /// for a hand sees it within its bounded wait.
+    fn release_hand(&self) {
+        self.hands.fetch_sub(1, Ordering::AcqRel);
     }
 
-    /// One attempt to take a region under a newly reserved output slot: the
-    /// newest region of the producer's home deque, or, with that deque empty,
-    /// another deque's oldest. Under the gate only `try_lock` is used, and a
-    /// home deque found busy ends the attempt without a steal: another producer
-    /// holds it, and it may still hold regions, which the next attempt outside
-    /// the gate waits for. Every failed attempt settles the lease, so the
-    /// back-off never waits holding permits.
+    /// Reserve the output slot of a leaf's candidate, if the slate has one
+    /// left. A reserved slot is never returned: its candidate is emitted at
+    /// once, or its producer's failure stops the slate.
+    fn reserve_output_slot(&self) -> bool {
+        self.output_slots
+            .fetch_update(Ordering::AcqRel, Ordering::Acquire, |reserved| {
+                (reserved < self.maximum).then_some(reserved + 1)
+            })
+            .is_ok()
+    }
+
+    /// Whether the output is spoken for, every output slot reserved: each
+    /// reservation's emission or stop then closes the slate at once, so the
+    /// slate can use no further step. The load acquires, so a read after a
+    /// hand's reservation sees every slot reserved before the hand's last
+    /// release (see [`Self::admit`]).
+    fn spoken_for(&self) -> bool {
+        self.output_slots.load(Ordering::Acquire) == self.maximum
+    }
+
+    /// One attempt to take a region in a newly reserved hand: the newest region
+    /// of the producer's home deque, or, with that deque empty, another deque's
+    /// oldest. Nothing is taken once the output is spoken for. Under the gate
+    /// only `try_lock` is used, and a home deque found busy ends the attempt
+    /// without a steal: another producer holds it, and it may still hold
+    /// regions, which the next attempt outside the gate waits for. Every failed
+    /// attempt settles the lease, so the back-off never waits holding work
+    /// permits.
+    ///
+    /// The output is read once the hand is reserved, never before. A slate of
+    /// one candidate has one hand, which a peer reserves only by reading its
+    /// holder's release, and the holder reserved its output slot before that
+    /// release. Both are acquire-release read-modify-writes, so the peer's read
+    /// finds the output spoken for, and no peer takes a region after the
+    /// slate's emission. With more hands, a producer whose reservation did not
+    /// read the last reserver's release can take, and step, a region before it
+    /// reads the output spoken for. It holds one of the other `k - 1` hands, so
+    /// no more than that many such steps, and deferred leaves, follow the last
+    /// reservation. No sequential test tells this order from the reverse; the
+    /// argument is what keeps it.
     fn admit(&self, index: usize, attempt: Attempt, lease: &WorkLease<'_>) -> Option<Entry> {
-        if !self.reserve_slot() {
+        if !self.reserve_hand() {
+            lease.settle();
+            return None;
+        }
+        if self.spoken_for() {
+            self.release_hand();
             lease.settle();
             return None;
         }
@@ -537,13 +629,13 @@ impl<'filter> SlateFill<'_, 'filter> {
             }
         };
         if entry.is_none() {
-            self.release_slot();
+            self.release_hand();
         }
         entry
     }
 
-    /// A region under a reserved output slot, waiting while any remains;
-    /// `None` when the slate ended.
+    /// A region in a reserved hand, waiting while any remains; `None` when the
+    /// slate ended.
     fn acquire(&self, index: usize, lease: &WorkLease<'_>) -> Option<Entry> {
         self.frontier.find_work(
             CONTROL_WAIT,
@@ -553,8 +645,8 @@ impl<'filter> SlateFill<'_, 'filter> {
         )
     }
 
-    /// Publish a split's older child and keep its newer one in hand under the
-    /// same output slot. A refused publication drops the older child
+    /// Publish a split's older child and keep its newer one in the same hand.
+    /// A refused publication drops the older child
     /// unpublished, leaving the count unchanged, and fails the newer child
     /// (see [`Self::fail`]).
     fn hand_over(
@@ -581,19 +673,37 @@ impl<'filter> SlateFill<'_, 'filter> {
     /// becomes visible, so a producer that takes it acquires the deque after
     /// the close, sees the close in [`Self::ready`] and returns it unstepped.
     /// The recorded stop keeps the run incomplete whether or not the region is
-    /// retained.
+    /// retained; a refused return records its own stop, which this first stop
+    /// precedes.
     fn fail(&self, index: usize, entry: Entry, error: Incomplete) {
         self.stop(error);
-        self.frontier.requeue(self.home(index), entry);
+        self.give_back(index, entry, reserve_regions);
+    }
+
+    /// Return `entry` to producer `index`'s home deque, reserving its entry
+    /// capacity through `reserve`. A refused return drops the region and
+    /// records the refusal as a stop, unless one is recorded, so no region is
+    /// lost while the run could still claim coverage.
+    fn give_back(
+        &self,
+        index: usize,
+        entry: Entry,
+        reserve: impl FnOnce(&mut VecDeque<Entry>, usize) -> Result<(), Incomplete>,
+    ) {
+        if let Err(error) = self.frontier.requeue(self.home(index), entry, reserve) {
+            self.stop(error);
+        }
     }
 
     /// Whether `entry`, a region the producer has just taken, may be stepped.
     /// Not once the slate has closed: the close is read after the take, so a
-    /// region a stopping producer returned is never stepped again. Nor when
-    /// control requests a stop, which is recorded. A refused region comes back
-    /// for the producer to return to its deque.
+    /// region a stopping producer returned is never stepped again. Nor once
+    /// the output is spoken for, since the slate is then about to close and a
+    /// leaf could not be emitted; so a deferred leaf is not stepped again in
+    /// this slate. Nor when control requests a stop, which is recorded. A
+    /// refused region comes back for the producer to return to its deque.
     fn ready(&self, entry: Entry) -> Result<Entry, Entry> {
-        if self.frontier.termination.is_closed() {
+        if self.frontier.termination.is_closed() || self.spoken_for() {
             return Err(entry);
         }
         if let Err(error) = self.cancellation.poll() {
@@ -603,25 +713,30 @@ impl<'filter> SlateFill<'_, 'filter> {
         Ok(entry)
     }
 
-    /// After a refutation the producer keeps its output slot when it finds
-    /// another region at once: its home deque's newest, or, with that deque
-    /// empty, another deque's oldest after settling its lease. Otherwise the
-    /// slot is released.
-    fn after_refutation(&self, index: usize, lease: &WorkLease<'_>) -> Option<Entry> {
+    /// After a refutation or an emission the producer keeps its hand when it
+    /// finds another region at once: its home deque's newest, or, with that
+    /// deque empty, another deque's oldest after settling its lease. It takes
+    /// nothing once the output is spoken for, the filling emission's case
+    /// included. Otherwise the hand is released.
+    fn after_resolution(&self, index: usize, lease: &WorkLease<'_>) -> Option<Entry> {
         let home = self.home(index);
-        let next = self.frontier.take_local(home).or_else(|| {
-            lease.settle();
-            self.frontier.steal(home)
-        });
+        let next = if self.spoken_for() {
+            None
+        } else {
+            self.frontier.take_local(home).or_else(|| {
+                lease.settle();
+                self.frontier.steal(home)
+            })
+        };
         if next.is_none() {
-            self.release_slot();
+            self.release_hand();
         }
         next
     }
 
-    /// The leaf's region is resolved and its output slot becomes its
-    /// candidate's. The emission that fills the slate closes it, a normal end
-    /// with no stop, after the outcome lock is released.
+    /// The leaf's region is resolved and the output slot its step reserved
+    /// becomes its candidate's. The emission that fills the slate closes it, a
+    /// normal end with no stop, after the outcome lock is released.
     fn emit(&self, candidate: Interpretation) {
         self.frontier.termination.resolve();
         let full = {
@@ -635,18 +750,22 @@ impl<'filter> SlateFill<'_, 'filter> {
     }
 
     /// Leaving the slate, producer `index` returns the region it holds, if
-    /// any, to its home deque, so the region stays queued for the next slate.
+    /// any, to its home deque, so the region stays queued for the next slate;
+    /// a refused return records an allocation stop. Its hand stays reserved:
+    /// a producer leaves only once the slate is closed, resolved or spoken
+    /// for, and none of these lets another producer take a region.
     /// [`Self::produce`] leaves through this one transition on every exit.
     fn leave(&self, index: usize, hand: Option<Entry>) {
         if let Some(entry) = hand {
-            self.frontier.requeue(self.home(index), entry);
+            self.give_back(index, entry, reserve_regions);
         }
     }
 
     /// Producer `index`'s part of the slate. It holds one lease throughout,
     /// checks the slate and polls control after it takes each region and
     /// before it steps it, keeps the newer child of each split in hand, and
-    /// leaves through [`Self::leave`] when the slate ends.
+    /// leaves through [`Self::leave`] when the slate ends or its leaf is
+    /// deferred.
     fn produce(&self, index: usize, workspace: &mut Workspace<'filter>) {
         let mut lease = self.allowance.lease(self.cancellation);
         let mut search = SearchStatistics::default();
@@ -686,7 +805,7 @@ impl<'filter> SlateFill<'_, 'filter> {
             match result {
                 Ok(Step::Refuted) => {
                     self.frontier.termination.resolve();
-                    hand = self.after_refutation(index, &lease);
+                    hand = self.after_resolution(index, &lease);
                 }
                 Ok(Step::Split(cut, held)) => {
                     match self.hand_over(index, (cut, held), reserve_regions) {
@@ -694,7 +813,15 @@ impl<'filter> SlateFill<'_, 'filter> {
                         None => break,
                     }
                 }
-                Ok(Step::Candidate(candidate)) => self.emit(candidate),
+                Ok(Step::Candidate(candidate)) => {
+                    self.emit(candidate);
+                    hand = self.after_resolution(index, &lease);
+                }
+                Ok(Step::Deferred) => {
+                    // The output stays spoken for, so `ready` refuses the
+                    // unresolved leaf and the producer returns it as it leaves.
+                    hand = Some(entry);
+                }
                 Err(error) => {
                     // This region remains unresolved.
                     self.fail(index, entry, error);
@@ -746,7 +873,11 @@ impl<'filter> SlateFill<'_, 'filter> {
         if self.remaining == 0 {
             return Err(Incomplete::CandidateLimit);
         }
+        if !self.reserve_output_slot() {
+            return Ok(Step::Deferred);
+        }
+        let candidate = regions::leaf_interpretation(self.theory, region)?;
         counts.leaves = 1;
-        regions::leaf_interpretation(self.theory, region).map(Step::Candidate)
+        Ok(Step::Candidate(candidate))
     }
 }
