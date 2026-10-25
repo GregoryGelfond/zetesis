@@ -72,6 +72,7 @@ impl MembershipExecution for Injected {
             gpu_lookahead: None,
             gpu_lookahead_device_ns: 0,
             gpu_lookahead_finish_wait_ns: 0,
+            first_answer_ns: None,
             gpu_candidates: 0,
             gpu_work: 0,
             gpu_rounds: 0,

@@ -360,6 +360,36 @@ fn slate_json_reports_committed_slates_their_largest_and_resets() {
 }
 
 #[test]
+fn lookahead_json_reports_slates_ahead_the_decision_and_hidden_device_time() {
+    let mut statistics = crate::FormulaExecutionStatistics::default();
+    statistics.gpu_lookahead_slates = 6;
+    statistics.gpu_lookahead = Some(zetesis_solve::GpuLookahead::Declined(
+        zetesis_solve::GpuLookaheadDeclined::RequestedAnswers,
+    ));
+    statistics.gpu_lookahead_device_ns = 900;
+    statistics.gpu_lookahead_finish_wait_ns = 300;
+    statistics.first_answer_ns = Some(1_234);
+    let mut out = Buffer::new(4096);
+    super::execution_statistics(&mut out, Some(&statistics)).unwrap();
+    let value: serde_json::Value = serde_json::from_slice(&out.bytes).unwrap();
+    assert_eq!(value["gpu_lookahead_slates"], 6);
+    assert_eq!(value["gpu_lookahead"], "requested_answers");
+    assert_eq!(value["gpu_lookahead_device_ns"], 900);
+    assert_eq!(value["gpu_lookahead_finish_wait_ns"], 300);
+    assert_eq!(value["first_answer_ns"], 1_234);
+    let mut out = Buffer::new(4096);
+    super::execution_statistics(
+        &mut out,
+        Some(&crate::FormulaExecutionStatistics::default()),
+    )
+    .unwrap();
+    let value: serde_json::Value = serde_json::from_slice(&out.bytes).unwrap();
+    // On CPU routes, and before a device session's first slate, nothing was decided.
+    assert!(value["gpu_lookahead"].is_null());
+    assert!(value["first_answer_ns"].is_null());
+}
+
+#[test]
 fn tight_json_distinguishes_scheduled_and_completed_work() {
     let mut statistics = crate::FormulaExecutionStatistics::default();
     statistics.tight_work_per_candidate = Some(123);

@@ -11,8 +11,10 @@ use std::sync::{
 ///
 /// Clones retain the same context. Primitives prepared from separate clones can
 /// retain their own subjects simultaneously; each operation takes a nonblocking
-/// exclusive execution lease. Overlap returns [`GpuErrorKind::Busy`] without
-/// submitting work or invalidating the context. This is serialized composition,
+/// exclusive execution lease; an overlapping check is one operation, whose lease
+/// also spans the production it runs while its submission is in flight. Overlap
+/// returns [`GpuErrorKind::Busy`] without submitting work or invalidating the
+/// context. This is serialized composition,
 /// not concurrent GPU scheduling.
 ///
 /// Device loss, scope/readback failure or panic unwinding during an operation

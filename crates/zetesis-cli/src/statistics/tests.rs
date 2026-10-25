@@ -377,6 +377,11 @@ fn hybrid_statistics_preserve_reported_fields() {
         execution.gpu_slates = 9;
         execution.gpu_largest_slate = Some(256);
         execution.gpu_slate_resets = 5;
+        execution.gpu_lookahead_slates = 3;
+        execution.gpu_lookahead = Some(zetesis_solve::GpuLookahead::Engaged);
+        execution.gpu_lookahead_device_ns = 700;
+        execution.gpu_lookahead_finish_wait_ns = 200;
+        execution.first_answer_ns = Some(4_000);
         report.formula_execution = Some(execution);
         if !completed {
             report.completion = Completion::Interrupted;
@@ -393,6 +398,10 @@ fn hybrid_statistics_preserve_reported_fields() {
         )));
         assert!(text.contains("peak authored GPU bytes=456"));
         assert!(text.contains("workgroup size=128"));
+        assert!(text.contains(
+            "formula GPU lookahead: slates proposed ahead=3; last decision=engaged; overlapped device compute=700ns; finish waits=200ns"
+        ));
+        assert!(text.contains("formula GPU first answer: 4000ns after the device execution began"));
         assert!(text.contains("adaptive slates; initial and reset slate size=64"));
         assert!(text.contains("formula GPU slates: committed=9; largest=256; feedback resets=5"));
         assert!(text.contains("GPU compute passes: status=not_requested; elapsed_ns=unavailable"));

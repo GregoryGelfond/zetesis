@@ -63,6 +63,11 @@ pub(crate) struct BatchQueue {
     /// interval with the next submission, or at the settlement's flush.
     #[cfg(feature = "gpu")]
     previous_overlapped: bool,
+    /// When this queue was built, and when it released its first answer.
+    #[cfg(feature = "gpu")]
+    created: Option<Instant>,
+    #[cfg(feature = "gpu")]
+    first_answer: Option<std::time::Duration>,
 }
 
 #[derive(Default)]
@@ -96,6 +101,7 @@ impl BatchQueue {
         let mut queue = Self::with_completion_workers(options, workers)?;
         queue.original_check = OriginalCheck::Joint;
         queue.batching = batching::Batching::new(options);
+        queue.created = Some(Instant::now());
         Ok(queue)
     }
 
@@ -173,6 +179,22 @@ impl BatchQueue {
         self.lookahead
     }
 
+    /// Elapsed time from this queue's construction to its first answer.
+    #[cfg(feature = "gpu")]
+    pub(crate) fn first_answer_ns(&self) -> Option<u64> {
+        self.first_answer.map(nanos)
+    }
+
+    /// Record the release of an answer: the first fixes the time to first answer.
+    #[cfg(feature = "gpu")]
+    fn released(&mut self) {
+        if self.first_answer.is_none()
+            && let Some(created) = self.created
+        {
+            self.first_answer = Some(created.elapsed());
+        }
+    }
+
     /// Attribute the settlement's flushed interval, which belongs to the last
     /// submission, if that submission was overlapped.
     #[cfg(feature = "gpu")]
@@ -203,6 +225,7 @@ impl BatchQueue {
                 return Some(Err(Failure::Search(error.into())));
             }
             if let Some(model) = self.ready.pop_front() {
+                self.released();
                 return Some(Ok(model));
             }
             match self.check_slate(models, options, cancellation, phases, device) {
@@ -388,6 +411,8 @@ impl BatchQueue {
                 return Some(Err(Failure::Search(error.into())));
             }
             if let Some(model) = self.ready.pop_front() {
+                #[cfg(feature = "gpu")]
+                self.released();
                 return Some(Ok(model));
             }
             if models.exhausted() {

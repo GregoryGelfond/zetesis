@@ -1188,6 +1188,19 @@ fn execution_statistics(
         None => out.text(",\"gpu_largest_slate\":null")?,
     }
     out.number_field("gpu_slate_resets", stats.gpu_slate_resets)?;
+    out.number_field("gpu_lookahead_slates", stats.gpu_lookahead_slates)?;
+    out.text(",\"gpu_lookahead\":")?;
+    match stats.gpu_lookahead {
+        Some(decision) => out.string(decision.label())?,
+        None => out.text("null")?,
+    }
+    out.number_field("gpu_lookahead_device_ns", stats.gpu_lookahead_device_ns)?;
+    out.number_field(
+        "gpu_lookahead_finish_wait_ns",
+        stats.gpu_lookahead_finish_wait_ns,
+    )?;
+    out.text(",\"first_answer_ns\":")?;
+    out.optional_number(stats.first_answer_ns)?;
     out.number_field("gpu_candidates", stats.gpu_candidates)?;
     out.number_field("gpu_work", stats.gpu_work)?;
     out.number_field("gpu_rounds", stats.gpu_rounds)?;

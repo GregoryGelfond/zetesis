@@ -464,7 +464,7 @@ region walker's frontier protocols: the count of unresolved regions, split
 publication and the idle back-off. A producer steals only with an empty deque,
 so its deque holds at most one sibling per atom split along its current path.
 That order suits an enumeration, which visits every region whatever the order.
-An optimizing search tightens the candidate bound as it commits answers, so its
+An optimizing search that generates candidate bounds tightens the bound as it commits answers, so its
 producers instead share one deque and each takes the region any of them
 published most recently. Production then stays where the latest splits are,
 and older, shallower regions wait for the tighter bounds that refute them near
@@ -475,8 +475,12 @@ the producers used before. Each holds one work lease for the slate. A cancellati
 once the slate is full is left to the next slate's first poll. A stopped
 validation retains its admitted prefix and reports the unfinished suffix
 explicitly. Every producer joins and settles its work before membership begins.
-Original validation has its own per-candidate work allowance. This schedule
-does not overlap production with device execution. Pending-byte limits cover
+Original validation has its own per-candidate work allowance. On a device
+route, an enumeration produces its next slate while the device checks the
+current slate's last submission, within one call; optimizing searches and the
+CPU routes do not overlap production with device execution. The slate's own
+producers still join and settle before its device check begins, and the next
+slate is submitted only after the current one commits. Pending-byte limits cover
 pending/result storage and original-validation scratch, not the entire region
 frontier, thread stacks or process memory.
 
@@ -490,6 +494,8 @@ receipts report validation work and retained bytes.
 
 Device execution uses the explicit joint-check protocol. A successful
 `CheckedBatch` binds decoded results to the exact theory and candidate slice;
+an overlapped check's `CheckedSlate` binds them to the theory, the slate's
+identity, and the submission's offset and count;
 all non-`NotModel` results establish original satisfaction, including residuals.
 The coordinator consumes these receipts in order and commits only after the
 entire pending batch succeeds. A failed device call retains pending candidates;
@@ -873,8 +879,11 @@ leave this record absent. Aggregate sweep totals alone cannot identify the
 reason for each residual.
 
 With several requested workers, the region proposer produces a bounded batch
-in parallel and joins before its device checker starts. CPU production and
-device checking do not overlap. Membership, scoring and objective feedback keep
+in parallel and joins before its own slate's device check starts. On an
+enumeration, the next slate's production overlaps the current slate's last
+submission; nothing else overlaps. A control stop during that production leaves
+the slate under check pending and undelivered, claims nothing for it, and lets
+the device observe its submission's completion. Membership, scoring and objective feedback keep
 the same original-theory and completed-batch boundaries. Failed device execution
 never triggers a hidden CPU replacement.
 
@@ -883,16 +892,21 @@ check and commit; the device checks a slate in one or more submissions. GPU
 formula sessions size their slates adaptively by default
 (`GpuBatching::Adaptive` in `SolveConfig`). Slates start at `batch_size`. The
 next slate is sized when it is selected, after the previous slate committed
-completely and its answers were scored. It returns to `batch_size` when those
+completely and its answers were scored. On an enumeration on a device route,
+the next slate is selected while the previous one is checked, from that slate's
+proposal and its submissions' admitted prefixes; an enumeration declares no
+bounds, so scoring cannot move its size. It returns to `batch_size` when those
 answers tightened the objective bound, doubles after a filled slate that left
 the bound unchanged, and otherwise keeps its size. The session's last selection
 follows its last non-empty slate and precedes the empty proposal that
-establishes exhaustion. Growth stops at the smallest device prefix observed,
+establishes exhaustion; on an enumeration, that proposal runs during the last
+slate's check, and exhaustion is established after its commit. Growth stops at the smallest device prefix observed,
 never below `batch_size`, and the pending-memory allowance bounds every slate.
 Under either policy a device submission takes as much of a slate as the device
 admits. Failed checks retain the same pending candidates and size. Larger
 slates mean fewer slates and submissions, but release their answers only after
-the whole slate is checked, and are produced under the bound as it stood when
+the whole slate is checked and, on an enumeration, after the next slate is
+produced, and are produced under the bound as it stood when
 they started. `GpuBatching::Fixed` keeps every slate at `batch_size` for
 controlled comparisons. Adaptive sizing is not a performance or allocation
 guarantee, and it never changes answer sets, optima or ties.

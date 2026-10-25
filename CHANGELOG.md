@@ -6,6 +6,21 @@ Notable changes by release. Versions follow Semantic Versioning.
 
 ### Added
 
+- GPU formula and tight sessions that enumerate answers can check a slate while
+  the stream produces the next one, through a two-phase slate protocol:
+  `StableModels::propose_slate`, `propose_lookahead`, `slate` and `commit_slate`,
+  with `SlateTicket`, `SlateProposal`, `Lookahead`, `LookaheadDeclined` and
+  `BatchError::SlateOrder` in zetesis-sat, and `lookahead_capacity` to size the
+  slate proposed ahead. zetesis-ferraris adds `SlateId` and `SlateRef`, the
+  identity that binds a slate's results to it. The general and tight GPU oracles
+  add `prepare`, returning a `PreparedFormulaSubmission` or
+  `PreparedTightSubmission` that holds its oracle until checked, with a
+  synchronous `check` and a `check_overlapping` that runs a closure while the
+  submission is in flight, both returning a `CheckedSlate`.
+- `FormulaExecutionStatistics` reports `gpu_lookahead_slates`, the last
+  `gpu_lookahead` decision (`GpuLookahead`, `GpuLookaheadDeclined`),
+  `gpu_lookahead_device_ns`, `gpu_lookahead_finish_wait_ns` and
+  `first_answer_ns`, in the JSON and the human statistics.
 - The regular benchmark corpus includes integrated Family Crossing, checking all
   eight optimal answers alongside the existing 94 cases.
 - Requested GPU statistics include compute-pass time when the device supports
@@ -49,6 +64,14 @@ Notable changes by release. Versions follow Semantic Versioning.
 
 ### Changed
 
+- GPU formula and tight sessions that enumerate answers produce the next slate
+  of candidates while the device checks the current slate, with one device
+  submission in flight. Answer families, membership checks, failure and
+  exhaustion semantics and the release of answers in proposal order are
+  unchanged; a stop that arrives while the next slate is produced can leave the
+  slate under check undelivered, and claims nothing for it. Optimizing searches
+  still check one slate at a time. The physical qualification has 75 exact
+  tests per backend.
 - Numeric grounding joins combine certified divisibility and range filters before
   producing tuples; equal-size sources prefer the bindings needed by those filters.
 - Repeated support checks consume initial support seeds directly after resetting
@@ -162,6 +185,13 @@ Notable changes by release. Versions follow Semantic Versioning.
 
 ### Compatibility
 
+- `BatchError` gains `SlateOrder`. `BatchError` is not non-exhaustive, so an
+  exhaustive match by a library caller must add the variant. The new public
+  enums are non-exhaustive.
+- An overlapping check holds the context's lease while the production it runs
+  is under way, so another operation on a shared context is refused with
+  `Busy` for that span. The synchronous device forms and their `CheckedBatch`
+  receipts are unchanged.
 - `FormulaBatchStats`, `TightGpuBatchStats` and `FormulaExecutionStatistics`
   report the workgroup size each device batch dispatched. These statistics
   structs are now non-exhaustive: read their fields by name, and build a

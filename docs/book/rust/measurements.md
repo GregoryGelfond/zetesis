@@ -211,6 +211,28 @@ All three are zero or absent on CPU routes. Slate sizes change search and
 device work, so compare runs with matching policies, or report these
 statistics beside them.
 
+A GPU enumeration proposes its next slate while the device checks the current
+slate's last submission. Four statistics, in `FormulaExecutionStatistics`, the
+JSON and the human "formula GPU lookahead" line, describe that overlap:
+
+- `gpu_lookahead_slates` ("slates proposed ahead"): slates proposed while their
+  predecessor's last submission was checked.
+- `gpu_lookahead` ("last decision"): `engaged`, or why the next slate waited:
+  `optimizing` (the session selects optimal answers), `requested_answers` (the
+  answers still owed fit the slate under check), or the stream's own reason,
+  such as `candidate_bounds`, `pending_bytes` or `pending_stop`. It is absent on
+  CPU routes and before a GPU session's first slate.
+- `gpu_lookahead_device_ns` ("overlapped device compute"): the measured device
+  compute of those submissions, from `gpu_compute_timing`'s intervals; an
+  unavailable interval adds nothing.
+- `gpu_lookahead_finish_wait_ns` ("finish waits"): the finish's waits on those
+  submissions, from the end of the production run beside each to the check's
+  return. The device time hidden behind production is at most the difference.
+
+`first_answer_ns` (the "formula GPU first answer" line) is the elapsed time from
+the device execution's construction to the release of its first answer. It is
+reported beside the wall time, never judged.
+
 ## Tight GPU routes
 
 Tight support checking reports which route evaluated each decoded slot.

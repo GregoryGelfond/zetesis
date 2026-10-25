@@ -224,6 +224,21 @@ pub enum LookaheadDeclined {
     PendingStop,
 }
 
+impl LookaheadDeclined {
+    /// A stable snake-case name for reports.
+    #[must_use]
+    pub const fn label(self) -> &'static str {
+        match self {
+            Self::CandidateBounds => "candidate_bounds",
+            Self::IndependentCheck => "independent_check",
+            Self::NoPendingSlate => "no_pending_slate",
+            Self::AlreadyProposed => "already_proposed",
+            Self::PendingBytes => "pending_bytes",
+            Self::PendingStop => "pending_stop",
+        }
+    }
+}
+
 #[derive(Debug, Default)]
 pub(super) struct State {
     pub(super) pending: Vec<Interpretation>,
@@ -360,7 +375,8 @@ impl StableModels {
     /// This is a proposal-sizing bound, not a reservation: allocation can fail
     /// or return excess capacity, which the batch operation still checks. It
     /// does not admit independent original evaluation, checker-private storage,
-    /// exact completion, or additional search work.
+    /// exact completion, or additional search work. Beside a slate proposed
+    /// ahead ([`Self::propose_lookahead`]) it counts both slates' retained rows.
     #[must_use]
     pub fn joint_batch_capacity(&self, max_pending_bytes: u64) -> usize {
         let Some(available) =
@@ -478,7 +494,11 @@ impl StableModels {
     ///
     /// A device coordinator can discharge this contract with subject-bound
     /// results from a joint original/reduct operation. Arbitrary verdict data
-    /// alone is not evidence that the obligation was checked.
+    /// alone is not evidence that the obligation was checked. The two-phase form,
+    /// [`Self::propose_slate`] and [`Self::commit_slate`], carries the same
+    /// obligation: who decides membership is unchanged, and a slate's identity
+    /// binds its verdicts to it against a correct caller's misordering, not
+    /// against fabricated verdicts.
     ///
     /// # Errors
     /// Uses the same failures and retry rules as [`Self::next_batch`]. A

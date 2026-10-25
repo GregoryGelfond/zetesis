@@ -18,8 +18,10 @@
 /// fails; it never discovers a replacement. Resource ownership does not
 /// override the session's selected backend.
 ///
-/// Context operations are serialized through nonblocking leases. Busy refuses
-/// an overlapping operation without poisoning the owner; device invalidation is
+/// Context operations are serialized through nonblocking leases; an overlapping
+/// check is one operation, whose lease also spans the production it runs while
+/// its submission is in flight. Busy refuses an overlapping operation without
+/// poisoning the owner; device invalidation is
 /// shared by every client. Per-primitive limits do not bound all simultaneously
 /// live sessions or the context's driver storage. Cloning only retains ownership;
 /// it does not copy device contents or provide concurrent GPU scheduling.

@@ -669,8 +669,10 @@ request the named API. A GPU request uses the supplied adapter only if it matche
 that API and the hardware-GPU requirement. A mismatch is refused; the session
 does not discover a replacement device.
 
-Operations sharing a context are serialized through nonblocking leases. A busy
-context refuses the overlapping operation; no hidden queue is created. Device
+Operations sharing a context are serialized through nonblocking leases; an
+overlapping check is one operation, whose lease also spans the production it
+runs while its submission is in flight. A busy context refuses the overlapping
+operation; no hidden queue is created. Device
 invalidation affects its other clients, while input and observer refusals do
 not invalidate it. Sessions retain separate work budgets and semantic evidence.
 Per-primitive allocation limits do not impose a combined context or process

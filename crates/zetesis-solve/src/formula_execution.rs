@@ -205,6 +205,10 @@ pub struct FormulaExecutionStatistics {
     /// device time hidden behind production is at most the difference from
     /// [`Self::gpu_lookahead_device_ns`].
     pub gpu_lookahead_finish_wait_ns: u64,
+    /// Elapsed time from the device execution's construction to the release of
+    /// its first answer, in nanoseconds; reported, never a criterion. Absent
+    /// before the first answer and for CPU routes.
+    pub first_answer_ns: Option<u64>,
     /// Candidate worlds returned by successful GPU dispatches.
     pub gpu_candidates: u64,
     /// Charged primitive work from successfully decoded results; not time or
@@ -261,6 +265,30 @@ pub enum GpuLookaheadDeclined {
     RequestedAnswers,
     /// The candidate stream declined it.
     Stream(zetesis_sat::LookaheadDeclined),
+}
+
+impl GpuLookahead {
+    /// A stable snake-case name for reports: `engaged`, or the reason it
+    /// was declined.
+    #[must_use]
+    pub const fn label(self) -> &'static str {
+        match self {
+            Self::Engaged => "engaged",
+            Self::Declined(reason) => reason.label(),
+        }
+    }
+}
+
+impl GpuLookaheadDeclined {
+    /// A stable snake-case name for reports.
+    #[must_use]
+    pub const fn label(self) -> &'static str {
+        match self {
+            Self::Optimizing => "optimizing",
+            Self::RequestedAnswers => "requested_answers",
+            Self::Stream(reason) => reason.label(),
+        }
+    }
 }
 
 pub(crate) enum Failure {
@@ -757,6 +785,7 @@ pub(crate) fn record_slates(
     statistics.gpu_lookahead = lookahead.decision;
     statistics.gpu_lookahead_device_ns = lookahead.device_ns;
     statistics.gpu_lookahead_finish_wait_ns = lookahead.finish_wait_ns;
+    statistics.first_answer_ns = queue.first_answer_ns();
 }
 
 /// Device limits for a slate of `offered` candidates. Under either batching
