@@ -1,0 +1,13 @@
+  formula joins: requested=indexed; scope=completed_eager_support
+  completion: exhausted
+  effective execution: backend=hybrid GPU propagation + exact CPU residual search; oracle=countermodel; grounder=eager; CPU completion requested workers=1; peak preflight workers=1; adapter=format fixture adapter, Metal; vendor=0x106b
+  formula completion: entered=2; residuals entered=2; completed before commit=2; failed=0; peak requested scratch bytes=1600; peak shared owner, query and transient/result scratch bytes=2400; scratch limit=134217728; counters overflowed=false
+  formula residual completion: completed locally=2; failed=0
+  formula accounting: pending candidates=0; queued verified models=0
+  formula batch limits: adaptive slates; initial and reset slate size=64; pending bytes=33554432
+  formula GPU decoded: batches=1; candidates=2; primitive work=24; completed sweeps=4; GPU-decided committed=0; CPU residuals completed=2
+  formula GPU submitted: batches=1; candidates=2; completed work/sweeps for unreturned results=unavailable
+  formula GPU slates: committed=1; largest=2; feedback resets=0; each slate takes one or more submitted batches
+  formula GPU limits: propagation sweeps/candidate=64; propagation work/candidate=100000
+  formula GPU resources: peak authored GPU bytes=4096; workgroup size=64
+  countermodel: search work=918; decisions=1; candidates=2; queries=2; witnesses=0; candidate restrictions=0; verified stable models=2

@@ -320,6 +320,82 @@ fn tight_statistics_report_routes_and_update_availability() {
     );
 }
 
+/// The lines validation reads from a formula run: exhaustion, the execution
+/// route, the countermodel counters and every formula line.
+fn validation_section(text: &str) -> String {
+    let mut section = String::new();
+    for line in text.lines().filter(|line| {
+        [
+            "  completion: ",
+            "  effective execution: ",
+            "  countermodel: ",
+            "  formula ",
+        ]
+        .iter()
+        .any(|prefix| line.starts_with(prefix))
+    }) {
+        section.push_str(line);
+        section.push('\n');
+    }
+    section
+}
+
+#[test]
+fn gpu_formula_statistics_render_the_shared_validation_fixture() {
+    // Validation qualifies the shared fixture, so this rendering cannot change
+    // without validation's own test seeing the change. The search counters are
+    // a real solve's; the device counters are authored to agree with them,
+    // under a format-fixture adapter: no physical execution is claimed. The
+    // allowance is explicit so that no derived limit depends on the host.
+    let options = options(&["--oracle", "countermodel", "--memory", "1GiB"]);
+    let mut report = actual("a | b.", &options, &Cancellation::default()).unwrap();
+    let search = report.countermodel_statistics.unwrap();
+    let candidates = search.candidates;
+    let residuals = search.countermodel_queries;
+    let mut execution = crate::FormulaExecutionStatistics::default();
+    "format fixture adapter, Metal; vendor=0x106b".clone_into(&mut execution.adapter);
+    execution.completion.requested_workers = 1;
+    execution.completion.effective_workers = usize::from(residuals > 0);
+    execution.completion.requested_scratch_bytes = 1_600;
+    execution.completion.peak_scratch_bytes = 2_400;
+    execution.completion.entered = candidates;
+    execution.completion.residuals = residuals;
+    execution.completion.completed = candidates;
+    execution.completion.residual_completed = residuals;
+    execution.gpu_batches = 1;
+    execution.gpu_candidates = candidates;
+    execution.gpu_work = 12 * candidates;
+    execution.gpu_rounds = 2 * candidates;
+    execution.gpu_decided = candidates - residuals;
+    execution.cpu_residuals = residuals;
+    execution.gpu_submitted_batches = 1;
+    execution.gpu_submitted_candidates = candidates;
+    execution.gpu_slates = 1;
+    execution.gpu_largest_slate = Some(usize::try_from(candidates).unwrap());
+    execution.gpu_limits = Some(crate::FormulaDeviceLimits {
+        work_per_candidate: 100_000,
+        rounds_per_candidate: 64,
+    });
+    execution.peak_accounted_bytes = 4_096;
+    execution.gpu_workgroup_size = Some(64);
+    report.formula_execution = Some(execution);
+    let mut rendered = Vec::new();
+    super::write_detailed(
+        &mut rendered,
+        &options,
+        Ok(&report),
+        Duration::from_micros(1),
+    )
+    .unwrap();
+    let section = validation_section(std::str::from_utf8(&rendered).unwrap());
+    assert!(
+        section == zetesis_test_support::fixtures::FORMULA_GPU_STATISTICS,
+        "the formula statistics differ from zetesis-test-support's \
+         fixtures/formula_gpu_statistics.txt; if the change is intended, record \
+         this rendering and make validation qualify it:\n{section}"
+    );
+}
+
 #[test]
 fn failed_statistics_preserve_missing_completion() {
     let options = options(&["--grounder", "lazy"]);

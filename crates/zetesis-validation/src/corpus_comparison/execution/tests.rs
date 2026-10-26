@@ -393,7 +393,9 @@ fn truncated_or_nonnumeric_resource_records_never_supply_missing_allowances() {
     assert!(super::formula(GOOD, Backend::Gpu(Some(GpuApi::Metal)), 64, &answer()).is_ok());
 }
 
-const CURRENT: &str = include_str!("../../../tests/fixtures/formula_statistics_completion.txt");
+/// The 2026-09-12 checkpoints' bounded-completion statistics. No tagged
+/// release prints them; released records are tested from the shared fixture.
+const CHECKPOINT: &str = include_str!("../../../tests/fixtures/formula_statistics_completion.txt");
 
 fn request(workers: usize, max_scratch_bytes: u64) -> super::CompletionRequest {
     super::CompletionRequest {
@@ -403,7 +405,7 @@ fn request(workers: usize, max_scratch_bytes: u64) -> super::CompletionRequest {
 }
 
 #[test]
-fn current_completion_telemetry_preserves_legacy_without_inventing_bounded_history() {
+fn checkpoint_completion_telemetry_preserves_legacy_without_inventing_bounded_history() {
     let legacy = super::formula(GOOD, Backend::Gpu(Some(GpuApi::Metal)), 64, &answer()).unwrap();
     assert!(legacy.completion.is_none());
     for settings in [request(4, 268_435_456), request(1, 512)] {
@@ -419,7 +421,7 @@ fn current_completion_telemetry_preserves_legacy_without_inventing_bounded_histo
         );
     }
     let record = super::formula_for_request(
-        CURRENT,
+        CHECKPOINT,
         Backend::Gpu(Some(GpuApi::Metal)),
         64,
         request(4, 268_435_456),
@@ -447,13 +449,13 @@ fn current_completion_telemetry_preserves_legacy_without_inventing_bounded_histo
         ),
         (1, 1, 0)
     );
-    assert_eq!(completion.peak_admitted_logical_scratch_bytes, 512);
+    assert_eq!(completion.peak_admitted_logical_scratch_bytes, Some(512));
     assert_eq!(completion.max_logical_scratch_bytes, 268_435_456);
     assert_eq!(record.peak_authored_gpu_bytes, 128);
     for settings in [request(2, 268_435_456), request(4, 4096)] {
         assert!(
             super::formula_for_request(
-                CURRENT,
+                CHECKPOINT,
                 Backend::Gpu(Some(GpuApi::Metal)),
                 64,
                 settings,
@@ -465,8 +467,8 @@ fn current_completion_telemetry_preserves_legacy_without_inventing_bounded_histo
 }
 
 #[test]
-fn current_residual_and_outer_unsat_accounting_reconcile_with_native_models() {
-    let mixed = CURRENT
+fn checkpoint_residual_and_outer_unsat_accounting_reconcile_with_native_models() {
+    let mixed = CHECKPOINT
         .replace("peak effective workers=0", "peak effective workers=2")
         .replace(
             "entered=1; residuals entered=0; completed before commit=1",
@@ -499,7 +501,7 @@ fn current_residual_and_outer_unsat_accounting_reconcile_with_native_models() {
         ),
         (2, 2, 0)
     );
-    let unsat = CURRENT.replace("entered=1; residuals entered=0; completed before commit=1", "entered=0; residuals entered=0; completed before commit=0")
+    let unsat = CHECKPOINT.replace("entered=1; residuals entered=0; completed before commit=1", "entered=0; residuals entered=0; completed before commit=0")
         .replace("peak admitted logical scratch bytes=512", "peak admitted logical scratch bytes=0")
         .replace("batches=1; candidates=1; propagation work=12; completed sweeps=1; GPU-decided committed=1", "batches=0; candidates=0; propagation work=0; completed sweeps=0; GPU-decided committed=0")
         .replace("peak authored GPU bytes=128", "peak authored GPU bytes=0")
@@ -518,7 +520,7 @@ fn current_residual_and_outer_unsat_accounting_reconcile_with_native_models() {
             .completion
             .unwrap()
             .peak_admitted_logical_scratch_bytes,
-        0
+        Some(0)
     );
     assert!(
         super::formula(
@@ -532,7 +534,7 @@ fn current_residual_and_outer_unsat_accounting_reconcile_with_native_models() {
 }
 
 #[test]
-fn current_partial_duplicate_mixed_and_contradictory_statistics_are_not_qualification() {
+fn checkpoint_partial_duplicate_mixed_and_contradictory_statistics_are_not_qualification() {
     for (from, to) in [
         (
             "CPU completion requested workers=4",
@@ -570,7 +572,7 @@ fn current_partial_duplicate_mixed_and_contradictory_statistics_are_not_qualific
     ] {
         assert!(
             super::formula(
-                &CURRENT.replace(from, to),
+                &CHECKPOINT.replace(from, to),
                 Backend::Gpu(Some(GpuApi::Metal)),
                 64,
                 &answer()
@@ -586,11 +588,11 @@ fn current_partial_duplicate_mixed_and_contradictory_statistics_are_not_qualific
         "  formula GPU limits: ",
         "  formula batch limits: ",
     ] {
-        let record = CURRENT.lines().find(|l| l.starts_with(prefix)).unwrap();
+        let record = CHECKPOINT.lines().find(|l| l.starts_with(prefix)).unwrap();
         for altered in [
-            CURRENT.replace(record, ""),
-            format!("{CURRENT}{record}\n"),
-            CURRENT.replace(record, prefix),
+            CHECKPOINT.replace(record, ""),
+            format!("{CHECKPOINT}{record}\n"),
+            CHECKPOINT.replace(record, prefix),
         ] {
             assert!(
                 super::formula(&altered, Backend::Gpu(Some(GpuApi::Metal)), 64, &answer()).is_err(),
@@ -603,7 +605,7 @@ fn current_partial_duplicate_mixed_and_contradictory_statistics_are_not_qualific
 #[test]
 fn ordinary_policy_qualifies_observed_internal_limits() {
     let value = super::formula_for_policy(
-        CURRENT,
+        CHECKPOINT,
         Backend::Gpu(Some(GpuApi::Metal)),
         4.try_into().unwrap(),
         Some(268_435_456),
@@ -619,7 +621,7 @@ fn ordinary_policy_qualifies_observed_internal_limits() {
 fn ordinary_policy_refuses_excess_completion_threads() {
     assert!(
         super::formula_for_policy(
-            CURRENT,
+            CHECKPOINT,
             Backend::Gpu(Some(GpuApi::Metal)),
             3.try_into().unwrap(),
             None,
@@ -633,7 +635,7 @@ fn ordinary_policy_refuses_excess_completion_threads() {
 fn ordinary_policy_refuses_excess_reported_memory() {
     assert!(
         super::formula_for_policy(
-            CURRENT,
+            CHECKPOINT,
             Backend::Gpu(Some(GpuApi::Metal)),
             4.try_into().unwrap(),
             Some(268_435_455),
@@ -653,6 +655,308 @@ fn legacy_telemetry_does_not_certify_explicit_memory() {
             Some(268_435_456),
             &answer()
         )
+        .is_err()
+    );
+}
+
+/// Every tagged release from v0.1.7 on: the command line's own rendering, as
+/// the shared fixture its test compares against records it.
+const RELEASED: &str = zetesis_test_support::fixtures::FORMULA_GPU_STATISTICS;
+
+/// The fixture's slate line, which adaptive slates require.
+const SLATES: &str = "  formula GPU slates: committed=1; largest=2; feedback resets=0; each slate takes one or more submitted batches\n";
+
+fn two_models() -> Answer {
+    normalize::native(
+        "Answer: 1\na\nAnswer: 2\nb\nSATISFIABLE\nCoverage: exhausted\nModels: 2\n",
+        false,
+    )
+    .unwrap()
+}
+
+fn released(text: &str) -> Result<super::FormulaExecution, String> {
+    super::formula_for_policy(
+        text,
+        Backend::Gpu(Some(GpuApi::Metal)),
+        1.try_into().unwrap(),
+        Some(1 << 30),
+        &two_models(),
+    )
+}
+
+#[test]
+fn the_command_lines_rendering_qualifies_as_released_statistics() {
+    let record = released(RELEASED).unwrap();
+    assert_eq!(record.status, super::Status::GpuExercised);
+    assert_eq!(
+        record.adapter,
+        "format fixture adapter, Metal; vendor=0x106b"
+    );
+    assert_eq!(
+        (
+            record.gpu_batches,
+            record.gpu_candidates,
+            record.gpu_decided,
+            record.cpu_residuals
+        ),
+        (1, 2, 0, 2)
+    );
+    assert_eq!(
+        (
+            record.gpu_work,
+            record.gpu_sweeps,
+            record.peak_authored_gpu_bytes,
+            record.verified_stable_models
+        ),
+        (24, 4, 4096, 2)
+    );
+    let completion = record.completion.unwrap();
+    assert_eq!(completion.profile, "bounded_completion_v2");
+    assert_eq!(
+        (
+            completion.requested_workers,
+            completion.peak_effective_workers
+        ),
+        (1, 1)
+    );
+    assert_eq!(
+        (
+            completion.peak_requested_scratch_bytes,
+            completion.peak_retained_scratch_bytes,
+            completion.peak_admitted_logical_scratch_bytes
+        ),
+        (Some(1_600), Some(2_400), None)
+    );
+    assert_eq!(completion.max_logical_scratch_bytes, 134_217_728);
+}
+
+#[test]
+fn released_fixed_batching_and_earlier_resource_lines_qualify() {
+    // Through qualified baseline 5816005a, slates were fixed and unreported;
+    // the resources line ended at the peak bytes in 5816005a, and with the
+    // kernel timing from v0.1.7 to v0.6.0.
+    let fixed = RELEASED
+        .replace(
+            "adaptive slates; initial and reset slate size=64",
+            "candidates=64",
+        )
+        .replace(SLATES, "");
+    for resources in [
+        "",
+        "; GPU kernel timing=unavailable",
+        "; workgroup size=unavailable",
+    ] {
+        let text = fixed.replace(
+            "peak authored GPU bytes=4096; workgroup size=64",
+            &format!("peak authored GPU bytes=4096{resources}"),
+        );
+        assert_eq!(
+            released(&text).unwrap().status,
+            super::Status::GpuExercised,
+            "{resources:?}"
+        );
+    }
+}
+
+#[test]
+fn reported_fixed_slates_cannot_exceed_the_batch_size() {
+    let reported = RELEASED.replace(
+        "adaptive slates; initial and reset slate size=64",
+        "candidates=64",
+    );
+    assert!(released(&reported).is_ok());
+    let small = reported.replace("candidates=64;", "candidates=1;");
+    assert_ne!(small, reported);
+    assert!(released(&small).is_err());
+}
+
+#[test]
+fn adaptive_submissions_are_bounded_by_the_largest_slate() {
+    for (from, to) in [
+        ("largest=2;", "largest=1;"),
+        ("committed=1; largest=2", "committed=0; largest=none"),
+        ("committed=1; largest=2", "committed=2; largest=2"),
+        ("largest=2;", "largest=3;"),
+    ] {
+        let text = RELEASED.replace(from, to);
+        assert_ne!(text, RELEASED);
+        assert!(released(&text).is_err(), "{from} -> {to}");
+    }
+    assert!(
+        released(&RELEASED.replace(SLATES, "")).is_err(),
+        "adaptive slates report their sizes"
+    );
+}
+
+#[test]
+fn released_completion_scratch_fits_its_retained_peak_and_limit() {
+    for (from, to) in [
+        (
+            "peak requested scratch bytes=1600",
+            "peak requested scratch bytes=2401",
+        ),
+        (
+            "transient/result scratch bytes=2400",
+            "transient/result scratch bytes=134217729",
+        ),
+        (
+            "peak requested scratch bytes=1600",
+            "peak requested scratch bytes=0",
+        ),
+    ] {
+        let text = RELEASED.replace(from, to);
+        assert_ne!(text, RELEASED);
+        assert!(released(&text).is_err(), "{from} -> {to}");
+    }
+}
+
+#[test]
+fn released_submissions_cover_their_decoded_results() {
+    for (from, to) in [
+        (
+            "submitted: batches=1; candidates=2",
+            "submitted: batches=0; candidates=2",
+        ),
+        (
+            "submitted: batches=1; candidates=2",
+            "submitted: batches=1; candidates=1",
+        ),
+    ] {
+        assert!(released(&RELEASED.replace(from, to)).is_err(), "{to}");
+    }
+    // A retried submission is submitted again without a decoded result.
+    assert!(
+        released(&RELEASED.replace(
+            "submitted: batches=1; candidates=2",
+            "submitted: batches=2; candidates=4"
+        ))
+        .is_ok()
+    );
+}
+
+#[test]
+fn released_missing_duplicate_or_malformed_lines_cannot_qualify() {
+    for prefix in [
+        "  completion: ",
+        "  effective execution: ",
+        "  formula completion: ",
+        "  formula residual completion: ",
+        "  formula accounting: ",
+        "  formula batch limits: ",
+        "  formula GPU decoded: ",
+        "  formula GPU submitted: ",
+        "  formula GPU slates: ",
+        "  formula GPU limits: ",
+        "  formula GPU resources: ",
+        "  countermodel: ",
+    ] {
+        let record = RELEASED
+            .lines()
+            .find(|line| line.starts_with(prefix))
+            .unwrap();
+        for altered in [
+            RELEASED.replace(&format!("{record}\n"), ""),
+            format!("{RELEASED}{record}\n"),
+            RELEASED.replace(record, prefix),
+        ] {
+            assert!(released(&altered).is_err(), "{prefix}");
+        }
+    }
+    for (from, to) in [
+        ("peak preflight workers=1", "peak preflight workers=2"),
+        ("workgroup size=64", "workgroup size=sixty-four"),
+        ("workgroup size=64", "workgroup size=64; extra=1"),
+        ("; each slate takes one or more submitted batches", ""),
+        ("feedback resets=0", "feedback resets=0; extra=1"),
+        (
+            "; completed work/sweeps for unreturned results=unavailable",
+            "",
+        ),
+        (
+            "initial and reset slate size=64",
+            "initial and reset slate size=0",
+        ),
+        (
+            "propagation work/candidate=100000",
+            "propagation work/candidate=4294967296",
+        ),
+        ("primitive work=24", "propagation work=24"),
+    ] {
+        let text = RELEASED.replace(from, to);
+        assert_ne!(text, RELEASED);
+        assert!(released(&text).is_err(), "{from} -> {to}");
+    }
+}
+
+#[test]
+fn released_outer_unsat_qualifies_without_device_dispatch() {
+    let unsat = RELEASED
+        .replace("peak preflight workers=1", "peak preflight workers=0")
+        .replace(
+            "entered=2; residuals entered=2; completed before commit=2",
+            "entered=0; residuals entered=0; completed before commit=0",
+        )
+        .replace(
+            "peak requested scratch bytes=1600",
+            "peak requested scratch bytes=0",
+        )
+        .replace(
+            "transient/result scratch bytes=2400",
+            "transient/result scratch bytes=0",
+        )
+        .replace("completed locally=2", "completed locally=0")
+        .replace(
+            "batches=1; candidates=2; primitive work=24; completed sweeps=4; GPU-decided committed=0; CPU residuals completed=2",
+            "batches=0; candidates=0; primitive work=0; completed sweeps=0; GPU-decided committed=0; CPU residuals completed=0",
+        )
+        .replace(
+            "submitted: batches=1; candidates=2",
+            "submitted: batches=0; candidates=0",
+        )
+        .replace("committed=1; largest=2", "committed=0; largest=none")
+        .replace(
+            "peak authored GPU bytes=4096; workgroup size=64",
+            "peak authored GPU bytes=0; workgroup size=unavailable",
+        )
+        .replace("candidates=2; queries=2", "candidates=0; queries=0")
+        .replace("verified stable models=2", "verified stable models=0");
+    let none = normalize::native("UNSATISFIABLE\nCoverage: exhausted\nModels: 0\n", false).unwrap();
+    let qualify = |text: &str| {
+        super::formula_for_policy(
+            text,
+            Backend::Gpu(Some(GpuApi::Metal)),
+            1.try_into().unwrap(),
+            Some(1 << 30),
+            &none,
+        )
+    };
+    assert_eq!(
+        qualify(&unsat).unwrap().status,
+        super::Status::OuterUnsatWithoutMembership
+    );
+    let authored = unsat.replace("peak authored GPU bytes=0", "peak authored GPU bytes=16");
+    assert!(qualify(&authored).unwrap_err().contains("zero-dispatch"));
+}
+
+#[test]
+fn released_policy_refuses_plans_beyond_the_public_controls() {
+    // The scratch limit, 128 MiB, must fit the memory allowance; the requested
+    // completion workers must fit the threads.
+    assert!(
+        super::formula_for_policy(
+            RELEASED,
+            Backend::Gpu(Some(GpuApi::Metal)),
+            1.try_into().unwrap(),
+            Some(134_217_727),
+            &two_models(),
+        )
+        .is_err()
+    );
+    assert!(
+        released(&RELEASED.replace(
+            "CPU completion requested workers=1",
+            "CPU completion requested workers=2"
+        ))
         .is_err()
     );
 }

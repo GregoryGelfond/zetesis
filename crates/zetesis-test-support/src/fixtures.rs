@@ -7,6 +7,15 @@ pub const PHASE_STATISTICS: &str = include_str!("../fixtures/phase_statistics.tx
 /// [`PHASE_STATISTICS`].
 pub const STAGE_STATISTICS: &str = include_str!("../fixtures/stage_statistics.txt");
 
+/// The statistics validation qualifies from a GPU formula run, as the command
+/// line renders them: the exhaustion, route, completion, batching, device and
+/// countermodel lines. The search counters come from a real solve of `a | b.`;
+/// the device counters are authored to agree with them under a format-fixture
+/// adapter, and claim no physical execution. The command line's tests fail
+/// when its rendering leaves this text, and validation's tests fail when it
+/// cannot qualify it, so neither side can change alone.
+pub const FORMULA_GPU_STATISTICS: &str = include_str!("../fixtures/formula_gpu_statistics.txt");
+
 /// A program one of whose rule instances divides by zero, which admission
 /// reports as a zero-divisor warning.
 pub const ZERO_DIVISOR: &str = "d(0..2).\np(X) :- d(X), 1/X=1.\n";
