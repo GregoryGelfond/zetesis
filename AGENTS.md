@@ -33,8 +33,10 @@ agents. Apply the same standards to implementation, tests, proofs and tooling.
   masks, reductions and fixed-point rounds. Eager or lazy grounding, Rayon and
   wgpu are execution choices that must preserve the semantic contract.
 - Develop new candidate and membership algorithms by composing those primitives
-  around the reduct. Do not introduce DPLL/CDNL or migrate these operations to
-  a SAT/CDNL solver architecture. Existing optional clause-search support does
+  around the reduct. Do not migrate these operations to a SAT/CDNL solver
+  architecture. Candidate generation may learn from conflicts when what it learns
+  is a sound consequence of the program, applied with those primitives, and kept
+  out of membership certificates. Existing optional clause-search support does
   not authorize expanding that architecture.
 - Reuse themelios for source representation and analysis. Keep `themelios`
   lowercase, preserve provenance and typed logical values, and retain the

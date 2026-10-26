@@ -136,14 +136,18 @@ State an optimization's applicability and preservation law before its physical
 schedule. A class certificate may justify a specialized check; candidate
 restrictions never replace the original theory whose stable models are sought.
 
-New solving algorithms must compose reduct operations from reusable joins,
-maps, masks, reductions and fixed-point computations. Do not introduce DPLL/CDNL
-or migrate candidate generation or reduct checking to a SAT/CDNL architecture.
-The existing optional clauses route is documented as an existing implementation;
-its presence is not a design precedent for new work. Semantic planning precedes
-physical scheduling: a checked class certificate has the same original-theory
-meaning on CPU and GPU. State the actual host/device work and completion
-requirements separately from the requested backend.
+New solving algorithms, for candidate generation and membership alike, must
+compose reduct operations from reusable joins, maps, masks, reductions and
+fixed-point computations. Do not migrate candidate generation or reduct checking
+to a SAT/CDNL architecture; the reduct alone decides membership. Candidate
+generation may learn from conflicts, such as a region that narrows to empty or a
+rejected candidate, when what it learns is a sound consequence of the program,
+is represented and applied with those same primitives, and never enters a
+membership certificate. The existing optional clauses route is documented as an
+existing implementation; its presence is not a design precedent for new work.
+Semantic planning precedes physical scheduling: a checked class certificate has
+the same original-theory meaning on CPU and GPU. State the actual host/device
+work and completion requirements separately from the requested backend.
 
 GPU kernels read only workgroup memory they have written. Every workgroup
 location an invocation reads was written earlier in that workgroup, by the same
