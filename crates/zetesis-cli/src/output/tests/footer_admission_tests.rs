@@ -10,7 +10,7 @@ use std::io::{self, Write};
 use zetesis_cpu::Cancellation;
 use zetesis_themelios::observation::ViewError;
 
-const PREFIX: &[u8] = b"{\"schema\":2,\"format\":\"zetesis\",\"models\":[";
+const PREFIX: &[u8] = b"{\"schema\":3,\"format\":\"zetesis\",\"models\":[";
 const FIXTURE_BYTES: usize = 32_768;
 
 fn options(oracle: &str) -> Options {

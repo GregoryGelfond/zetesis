@@ -279,7 +279,7 @@ fn partial_publication_is_not_complete_enumeration() {
 #[test]
 fn unknown_schema_is_refused() {
     let mut value = one();
-    value["schema"] = 3.into();
+    value["schema"] = 4.into();
     assert!(matches!(
         parse(&value),
         Err(Error::Invalid {
@@ -287,6 +287,22 @@ fn unknown_schema_is_refused() {
             ..
         })
     ));
+}
+
+#[test]
+fn a_schema_three_document_reads_as_schema_two() {
+    // Schema 3 keeps schema 2's records and drops only statistics, so the
+    // same records decode to the same answers under either number.
+    let two = one();
+    let mut three = two.clone();
+    three["schema"] = 3.into();
+    let two = parse(&two).unwrap();
+    let three = parse(&three).unwrap();
+    assert_eq!(three.records().len(), 1);
+    assert_eq!(
+        format!("{:?}", three.records()),
+        format!("{:?}", two.records())
+    );
 }
 
 #[test]

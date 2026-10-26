@@ -360,6 +360,13 @@ Notable changes by release. Versions follow Semantic Versioning.
   timing section, in text and in JSON, is schema 6, without
   `reduct_preparation`; zetesis-validation reads schema 6 and every earlier
   schema.
+- The JSON document is schema 3. Its model records are unchanged from schema
+  2; its statistics drop the keys of the removed routes: the clause search's
+  `search.candidate_queries`, `search.projection_history` and
+  `search.necessary_support`, and the closure route's `closure_execution`,
+  `lazy_execution`, `shared_execution`, `candidate_restrictions`,
+  `query_execution` and `expansion`. zetesis-validation reads schemas 1 to 3,
+  so documents of earlier executables can still be compared.
 - zetesis-sat is renamed zetesis-stable, and its library `zetesis_sat` is now
   `zetesis_stable`, with no alias and no deprecation period: depend on
   `zetesis-stable` and import from `zetesis_stable`. With the clause search

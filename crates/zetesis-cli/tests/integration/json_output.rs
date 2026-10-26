@@ -278,7 +278,7 @@ fn model_numbers_follow_publication_order() {
 fn json_documents_identify_the_schema() {
     for oracle in ["auto", "countermodel"] {
         let (_, value) = hidden_choices(oracle);
-        assert_eq!(value["schema"], 2);
+        assert_eq!(value["schema"], 3);
     }
 }
 

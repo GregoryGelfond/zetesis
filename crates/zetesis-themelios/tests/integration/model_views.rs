@@ -635,7 +635,7 @@ fn detailed_encoding_preserves_record_bytes() {
     assert!(encoded.statistics().work > 0);
     assert_eq!(view.observation_statistics(), observations);
     assert_eq!(view.statistics(), observations);
-    assert_eq!(json::RECORD_SCHEMA_VERSION, 2);
+    assert_eq!(json::RECORD_SCHEMA_VERSION, 3);
 }
 
 #[test]
