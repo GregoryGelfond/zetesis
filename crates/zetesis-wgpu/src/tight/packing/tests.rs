@@ -356,9 +356,9 @@ fn cold_bytes_include_simultaneous_host_graph_packing() {
     let cold = plan(&graph, 2, true);
     let hot = plan(&graph, 2, false);
     assert_eq!(graph.bytes, 9 * 16 + 4 * 4 + 3 * 16);
-    // Parameters, candidates, truth, support, results and their readback, and
-    // the placeholder bound in the update state's place.
-    assert_eq!(hot.transport, 64 + 8 + 72 + 8 + 72 + 72 + 16);
+    // Parameters, candidates, truth, support, and results and their readback;
+    // a plan without update state binds nothing in its place.
+    assert_eq!(hot.transport, 64 + 8 + 72 + 8 + 72 + 72);
     assert_eq!(cold.accounted - hot.accounted, graph.bytes);
     assert_eq!(
         hot.accounted,

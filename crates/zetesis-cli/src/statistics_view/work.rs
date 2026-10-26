@@ -416,6 +416,11 @@ fn device(rows: &mut Vec<Row>, execution: &crate::FormulaExecutionStatistics) {
                 |bits| format!("{bits}-bit support counts; {source}"),
             ),
         ]));
+        rows.push(count(
+            "Tight GPU guard declines",
+            updates.guard_declined_batches,
+            "decoded batches the runtime guard declined the update route for",
+        ));
     }
     rows.push(Row::new(compute_passes(&execution.gpu_compute_timing)));
 }
@@ -544,6 +549,7 @@ mod tests {
         updates.availability = zetesis_solve::TightUpdateAvailability::Admitted;
         updates.count_bits = Some(16);
         updates.steady_state = true;
+        updates.guard_declined_batches = 7;
         execution.gpu_tight_updates = Some(updates);
         let mut rows = Vec::new();
         device(&mut rows, &execution);
@@ -555,6 +561,7 @@ mod tests {
             "Tight GPU update route",
             "admitted",
             "16-bit support counts; as the last batch with reuse authority reported",
+            r#"["Tight GPU guard declines", "7", "decoded batches the runtime guard declined the update route for"]"#,
         ] {
             assert!(text.contains(expected), "{expected}: {text}");
         }

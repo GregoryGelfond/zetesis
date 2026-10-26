@@ -337,6 +337,9 @@ and the owner's re-reduction of a numeric row, which writes the row's followers
 in its own round, are WGSL and Rust obligations: `TightEvaluation`'s node type
 does not model row re-reduction. Differential physical tests compare every
 update with the scalar certificate and assert each slot's route and receipts.
+Which route evaluates a batch, including the runtime guard's choice between the
+update and the dense routes, is an execution choice: every route returns the
+same verdict.
 All original roots and producers remain covered. On the complete route support
 is reset before reuse, and the final check intersects each candidate word with
 the complement of its support word, returning the first unsupported atom; an
@@ -3764,10 +3767,17 @@ barriers and conservative work accounting remain Rust/WGSL obligations. Existing
 host and physical checks supply evidence at those boundaries; the reuse law does
 not establish full executable refinement or a performance improvement.
 
-The device coordinator uses `StableModels::next_batch_with_joint_completion`:
+The device coordinator uses `StableModels::next_batch_with_joint_completion`
+for optimizing searches, and its two-phase form (`propose_slate`, `slate`,
+`commit_slate`) for enumerations, which runs the same certification and commit:
 its checker establishes original satisfaction and the reduct verdict together.
 An opaque `CheckedBatch` retains the exact theory and ordered candidate slice
-until the coordinator consumes it. `BatchAccounting` still requires exact
+until the coordinator consumes it; on the two-phase form a `CheckedSlate` binds
+each submission's results to the theory, the slate's identity and the
+submission's offset and count, and the commit refuses any slate but the oldest
+pending one. A slate proposed ahead of its predecessor's commit is what
+`BatchAccounting.Ledger` already permits: `propose` appends a slate to the
+pending ledger before `commit` takes the older prefix. `BatchAccounting` still requires exact
 classification before commit; moving original evaluation to the device does
 not weaken that premise. The generic callback API retains independent host
 validation, including a retry after a failed joint check. Receipt construction,

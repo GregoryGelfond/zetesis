@@ -218,7 +218,7 @@ fn cancelled_shape_preserves_residency(
     // Shape admission observes cancellation before releasing the old residency.
     // Enter preparation directly to bypass the public pre-poll.
     let error = oracle
-        .prepare(
+        .prepare_call(
             next,
             inputs,
             FormulaLimits::default(),
@@ -750,17 +750,20 @@ fn submitted_interruption(
     )
     .unwrap();
     let scopes = ErrorScopes::new(runtime.device());
+    let submitted = resident
+        .submit(runtime, oracle.candidates.words(), &plan, None)
+        .unwrap();
+    assert_eq!(submitted.candidates, 2);
     let dispatched = resident
-        .dispatch(
+        .finish(
             runtime,
-            oracle.candidates.words(),
+            submitted,
+            crate::runtime::Observation::Polled,
             &plan,
             limits.timeout,
             cancelled,
-            None,
         )
         .unwrap();
-    assert_eq!(dispatched.candidates, 2);
     let failure = runtime
         .complete(scopes, Ok(dispatched.completion))
         .unwrap_err();

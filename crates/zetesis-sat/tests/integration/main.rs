@@ -9,6 +9,7 @@ mod certified;
 mod cnf;
 mod completion;
 mod ferraris;
+mod lookahead;
 mod ordering;
 mod parallel_region_receipts;
 mod parallel_regions;

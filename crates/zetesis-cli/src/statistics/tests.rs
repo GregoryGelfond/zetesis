@@ -377,6 +377,12 @@ fn hybrid_statistics_preserve_reported_fields() {
         execution.gpu_slates = 9;
         execution.gpu_largest_slate = Some(256);
         execution.gpu_slate_resets = 5;
+        execution.gpu_lookahead_slates = 3;
+        execution.gpu_lookahead = Some(zetesis_solve::GpuLookahead::Engaged);
+        execution.gpu_lookahead_device_ns = 700;
+        execution.gpu_lookahead_finish_wait_ns = 200;
+        execution.gpu_lookahead_unmeasured = 1;
+        execution.first_answer_ns = Some(4_000);
         report.formula_execution = Some(execution);
         if !completed {
             report.completion = Completion::Interrupted;
@@ -393,6 +399,10 @@ fn hybrid_statistics_preserve_reported_fields() {
         )));
         assert!(text.contains("peak authored GPU bytes=456"));
         assert!(text.contains("workgroup size=128"));
+        assert!(text.contains(
+            "formula GPU lookahead: slates proposed ahead=3; last decision=engaged; overlapped device compute=700ns; finish waits=200ns; unmeasured submissions=1; device time hidden behind production is the compute less the waits, paired over the measured submissions"
+        ));
+        assert!(text.contains("formula GPU first answer: 4000ns after the device execution began"));
         assert!(text.contains("adaptive slates; initial and reset slate size=64"));
         assert!(text.contains("formula GPU slates: committed=9; largest=256; feedback resets=5"));
         assert!(text.contains("GPU compute passes: status=not_requested; elapsed_ns=unavailable"));
@@ -423,6 +433,7 @@ fn tight_statistics_report_routes_and_update_availability() {
     execution.gpu_tight_routes = Some(routes);
     let mut updates = zetesis_solve::TightUpdateStatistics::default();
     updates.availability = zetesis_solve::TightUpdateAvailability::Bytes;
+    updates.guard_declined_batches = 2;
     execution.gpu_tight_updates = Some(updates);
     report.formula_execution = Some(execution);
     let text = every_prefix(&options, &Ok(report));
@@ -432,7 +443,7 @@ fn tight_statistics_report_routes_and_update_availability() {
         "tight GPU routes: complete=4; dense reuse=3 (beyond update threshold=1); update=9; nodes evaluated by update=85"
     ));
     assert!(
-        text.contains("tight GPU update route: bytes; count width=unavailable; steady state=false")
+        text.contains("tight GPU update route: bytes; count width=unavailable; steady state=false; guard declined batches=2")
     );
 }
 

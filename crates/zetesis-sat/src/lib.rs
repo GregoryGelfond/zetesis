@@ -42,9 +42,10 @@ pub use ferraris::{
     BatchError, BatchLimits, BatchStatistics, BatchVerdict, CertificateError, CertificateLimits,
     CertificateOrder, CertificatePlanStatistics, CertifiedStatistics, Check, CompletionExecutor,
     CompletionScratch, CompletionStatistics, Engagement, FrontierOrder, GeneratorOrderStatistics,
-    GeneratorOrderStatus, Limits, RegionCounts, RegionFrontierStatistics, RegionSearchStatistics,
-    RegionWalkEngagement, RegionWorkerStatistics, SearchMethod, StableModels, Statistics,
-    SupportStatistics, SupportStatus, check, check_with,
+    GeneratorOrderStatus, Limits, Lookahead, LookaheadDeclined, RegionCounts,
+    RegionFrontierStatistics, RegionSearchStatistics, RegionWalkEngagement, RegionWorkerStatistics,
+    SearchMethod, SlateProposal, SlateTicket, StableModels, Statistics, SupportStatistics,
+    SupportStatus, check, check_with,
 };
 pub use projection::{ProjectionLimits, ProjectionResource, ProjectionStatistics};
 pub use search::{SearchLimits, SearchStatistics, Solve, solve, solve_with_statistics};

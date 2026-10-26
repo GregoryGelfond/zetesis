@@ -4,13 +4,13 @@ use super::packing::Plan;
 use super::preparation::{Preparation, PreparedGraph};
 use super::transport::Resident;
 use super::{FormulaBatchStats, FormulaCheck, FormulaLimits, GateProjection, GpuFormulaProfile};
-use crate::runtime::ErrorScopes;
+use crate::runtime::{ErrorScopes, Observation, Scopes};
 use crate::timing::{BatchTiming, ComputeTimer};
-use crate::{GpuError, GpuErrorKind, GpuInfo, GpuOptions, GpuSelection};
-use std::time::Duration;
+use crate::{CheckedSlate, GpuError, GpuErrorKind, GpuInfo, GpuOptions, GpuSelection};
+use std::time::{Duration, Instant};
 use zetesis_backend::{BatchComputeTime, ComputeTimingStatus};
 use zetesis_cpu::Cancellation;
-use zetesis_ferraris::{Interpretation, Theory};
+use zetesis_ferraris::{Interpretation, SlateId, SlateRef, Theory};
 
 /// GPU original-truth evaluation and sound frozen-query propagation.
 ///
@@ -39,6 +39,7 @@ pub struct GpuFormulaOracle {
 
 struct PreparedCall {
     fresh: Option<PreparedGraph>,
+    /// The batch's plan, which carries the epoch it commits when submitted.
     plan: Plan,
     stats: FormulaBatchStats,
 }
@@ -379,6 +380,67 @@ impl GpuFormulaOracle {
         ))
     }
 
+    /// Prepare the next submission of `slate`: admit the largest nonempty
+    /// prefix of its candidates from `offset` on, as
+    /// [`Self::propagate_prefix_with_cancellation`] admits a prefix, pack it
+    /// into this oracle's reused upload storage, and plan it at the next epoch.
+    /// Nothing is submitted, and the epoch is committed only by the check.
+    ///
+    /// The returned submission holds this oracle's mutable borrow until a
+    /// check consumes it, so no other operation on the oracle, and no second
+    /// preparation, can run between the plan and its check. Dropping it submits
+    /// nothing and releases the borrow; any retained state its preparation
+    /// replaced stays released, and the next check prepares again. That can be
+    /// the host staging, the resident graph on a fresh admission, and the
+    /// transport when the preparation allocates one. The context's lease is
+    /// taken by the check, not here; this polls control and context health
+    /// before preparing.
+    ///
+    /// # Errors
+    /// Refuses an offset that leaves no candidate, and every refusal and
+    /// failure of [`Self::propagate_prefix_with_cancellation`]'s preparation,
+    /// with its rules for residency.
+    pub fn prepare<'o>(
+        &'o mut self,
+        slate: SlateRef<'_>,
+        offset: usize,
+        limits: FormulaLimits,
+        cancellation: &Cancellation,
+    ) -> Result<PreparedFormulaSubmission<'o>, GpuError> {
+        self.last = None;
+        self.last_submission_candidates = None;
+        self.reported = None;
+        let candidates = slate
+            .candidates()
+            .get(offset..)
+            .filter(|rest| !rest.is_empty())
+            .ok_or_else(|| {
+                GpuError::new(
+                    GpuErrorKind::Capacity,
+                    "no candidate of the slate remains at the offset",
+                )
+            })?;
+        cancellation.poll().map_err(GpuError::interrupted)?;
+        self.profile.runtime.check_health()?;
+        let call = self.prepare_epoch(
+            slate.theory(),
+            candidates,
+            limits,
+            cancellation,
+            crate::candidates::BatchSize::Prefix(candidates.len()),
+        )?;
+        cancellation.poll().map_err(GpuError::interrupted)?;
+        Ok(PreparedFormulaSubmission {
+            count: call.plan.worlds as usize,
+            oracle: self,
+            call,
+            theory: slate.theory().clone(),
+            slate: slate.id(),
+            offset,
+            timeout: limits.timeout,
+        })
+    }
+
     fn propagate(
         &mut self,
         theory: &Theory,
@@ -397,12 +459,51 @@ impl GpuFormulaOracle {
         if candidates.is_empty() {
             return Ok(Vec::new());
         }
+        let call = self.prepare_epoch(theory, candidates, limits, cancellation, size)?;
+        cancellation.poll().map_err(GpuError::interrupted)?;
+        self.run(call, limits.timeout, cancellation, None)
+            .map(|(checks, _)| checks)
+    }
+
+    /// Prepare a batch at the next epoch, which it commits only when it is
+    /// submitted.
+    fn prepare_epoch(
+        &mut self,
+        theory: &Theory,
+        candidates: &[Interpretation],
+        limits: FormulaLimits,
+        cancellation: &Cancellation,
+        size: crate::candidates::BatchSize,
+    ) -> Result<PreparedCall, GpuError> {
         let epoch = self.epoch.checked_add(1).ok_or_else(|| {
             GpuError::new(GpuErrorKind::Capacity, "formula epoch counter exhausted")
         })?;
-        let PreparedCall { fresh, plan, stats } =
-            self.prepare(theory, candidates, limits, cancellation, epoch, size)?;
-        cancellation.poll().map_err(GpuError::interrupted)?;
+        self.prepare_call(theory, candidates, limits, cancellation, epoch, size)
+    }
+
+    /// Run a prepared batch under the caller's lease: compile its pipeline at
+    /// first need, install a fresh graph, submit, run `during` while the
+    /// submission is in flight, finish and settle.
+    ///
+    /// Without `during`, the error scopes close after the readback and the
+    /// wait polls the control, as every synchronous query does. With it, they
+    /// close right after the submission, so they capture none of `during`'s
+    /// device calls; a submission that fails before it is made runs no
+    /// `during`. When the control has fired by the time `during` returns, the
+    /// finish observes the submission's completion without polling the
+    /// control, within the batch's timeout, and reports the stop without
+    /// decoding: a completed, released readback leaves the context reusable.
+    /// Beside the checks it returns the finish's wait after `during`: from
+    /// `during`'s return to the observed completion, before mapping and
+    /// decoding; absent without `during`.
+    fn run(
+        &mut self,
+        call: PreparedCall,
+        timeout: Duration,
+        cancellation: &Cancellation,
+        during: Option<&mut dyn FnMut()>,
+    ) -> Result<(Vec<FormulaCheck>, Option<Duration>), GpuError> {
+        let PreparedCall { fresh, plan, stats } = call;
         // The dispatched size's pipeline is compiled at first need, before this
         // call's scopes and before the fresh graph becomes resident. Only a
         // freshly prepared graph can need a size first, and its preparation has
@@ -424,51 +525,80 @@ impl GpuFormulaOracle {
         if let Some(prepared) = fresh {
             self.resident = Some(Resident::new(self.profile.runtime.device(), prepared));
         }
-        let status = context.compute_timing();
+        let status = self.profile.runtime.context.compute_timing();
         if status == ComputeTimingStatus::Enabled && self.timer.is_none() {
             self.timer = Some(ComputeTimer::new(self.profile.runtime.device()));
         }
-        self.epoch = epoch;
-        let dispatched = self
+        self.epoch = plan.epoch;
+        let runtime = &self.profile.runtime;
+        let mut scopes = Scopes::Open(scopes);
+        let submitted = self
             .resident
             .as_mut()
             .ok_or_else(|| GpuError::new(GpuErrorKind::Device, "missing resident formula"))
             .and_then(|resident| {
-                resident.dispatch(
-                    &self.profile.runtime,
-                    self.candidates.words(),
-                    &plan,
-                    limits.timeout,
-                    cancellation,
-                    self.timer.as_ref(),
-                )
+                resident.submit(runtime, self.candidates.words(), &plan, self.timer.as_ref())
             });
-        let (outcome, timing) = match dispatched {
-            Ok(dispatched) => {
-                self.last_submission_candidates = Some(dispatched.candidates);
-                (Ok(dispatched.completion), dispatched.timing)
-            }
+        let mut finish_wait = None;
+        let (completion, timing) = match submitted {
             Err(error) => (Err(error), BatchTiming::default()),
+            Ok(submitted) => {
+                self.last_submission_candidates = Some(submitted.candidates);
+                let mut during_ended = None;
+                let observation = match during {
+                    None => Observation::Polled,
+                    Some(during) => {
+                        scopes.settle();
+                        during();
+                        during_ended = Some(Instant::now());
+                        cancellation.poll().map_or_else(
+                            |stop| Observation::AfterStop(GpuError::interrupted(stop)),
+                            |()| Observation::Polled,
+                        )
+                    }
+                };
+                match self
+                    .resident
+                    .as_ref()
+                    .ok_or_else(|| GpuError::new(GpuErrorKind::Device, "missing resident formula"))
+                    .and_then(|resident| {
+                        resident.finish(
+                            runtime,
+                            submitted,
+                            observation,
+                            &plan,
+                            timeout,
+                            cancellation,
+                        )
+                    }) {
+                    Ok(dispatched) => {
+                        finish_wait = during_ended
+                            .and_then(|ended| dispatched.completion.window_since(ended));
+                        (Ok(dispatched.completion), dispatched.timing)
+                    }
+                    Err(error) => (Err(error), BatchTiming::default()),
+                }
+            }
         };
-        let checks = self.profile.runtime.complete(scopes, outcome);
+        let outcome = runtime.complete_scopes(scopes, completion);
         if self.last_submission_candidates.is_some() {
             self.reported = crate::timing::settle_call(
                 status,
                 &mut self.timer,
-                checks.is_ok(),
+                outcome.is_ok(),
                 &timing,
                 self.profile.runtime.queue().get_timestamp_period(),
             );
         }
-        let checks = checks?;
+        let checks = outcome?;
         self.last = Some(stats);
-        Ok(checks)
+        Ok((checks, finish_wait))
     }
 
     // All cold staging is owned and admitted before device effects. Minimum
     // shape/identity refusals preserve residency; later cold failures leave a
     // healthy context without a resident subject or a committed epoch.
-    fn prepare(
+    fn prepare_call(
         &mut self,
         theory: &Theory,
         candidates: &[Interpretation],
@@ -643,6 +773,165 @@ impl GpuFormulaOracle {
             }
             Err(error) => Err(error),
         }
+    }
+}
+
+/// One submission of a slate that a [`GpuFormulaOracle`] admitted, packed and
+/// planned but has not submitted ([`GpuFormulaOracle::prepare`]).
+///
+/// It holds its oracle's mutable borrow until [`Self::check`] or
+/// [`Self::check_overlapping`] consumes it, so what is resident and the epoch
+/// are those its check runs on. It carries copies of its slate's identity, its
+/// offset and its count, and no borrow of the slate's candidates, so the
+/// slate's stream can be borrowed again while it runs. A second preparation
+/// cannot begin while one exists:
+///
+/// ```compile_fail,E0499
+/// # use zetesis_wgpu::{FormulaLimits, GpuFormulaOracle};
+/// # fn second(oracle: &mut GpuFormulaOracle, slate: zetesis_ferraris::SlateRef<'_>,
+/// #     control: &zetesis_cpu::Cancellation) {
+/// let first = oracle.prepare(slate, 0, FormulaLimits::default(), control);
+/// let second = oracle.prepare(slate, 0, FormulaLimits::default(), control);
+/// drop((first, second));
+/// # }
+/// ```
+///
+/// Nor can any other operation on the oracle run between a preparation and its
+/// check:
+///
+/// ```compile_fail,E0499
+/// # use zetesis_wgpu::{FormulaLimits, GpuFormulaOracle};
+/// # fn between(oracle: &mut GpuFormulaOracle, slate: zetesis_ferraris::SlateRef<'_>,
+/// #     control: &zetesis_cpu::Cancellation) {
+/// let prepared = oracle.prepare(slate, 0, FormulaLimits::default(), control).unwrap();
+/// oracle.clear_residency();
+/// let _ = prepared.check(control);
+/// # }
+/// ```
+///
+/// And a prepared submission is checked only by its own oracle: the oracle has
+/// no public operation that takes a prepared submission, so one prepared
+/// elsewhere has nowhere to go.
+///
+/// ```compile_fail,E0624
+/// # use zetesis_wgpu::{FormulaLimits, GpuFormulaOracle};
+/// # fn elsewhere(one: &mut GpuFormulaOracle, other: &mut GpuFormulaOracle,
+/// #     slate: zetesis_ferraris::SlateRef<'_>, control: &zetesis_cpu::Cancellation) {
+/// let prepared = one.prepare(slate, 0, FormulaLimits::default(), control).unwrap();
+/// let _ = other.propagate(prepared, control);
+/// # }
+/// ```
+///
+/// One after the other, they compile:
+///
+/// ```no_run
+/// # use zetesis_wgpu::{FormulaLimits, GpuFormulaOracle};
+/// # fn in_order(oracle: &mut GpuFormulaOracle, slate: zetesis_ferraris::SlateRef<'_>,
+/// #     control: &zetesis_cpu::Cancellation) {
+/// let first = oracle.prepare(slate, 0, FormulaLimits::default(), control).unwrap();
+/// let _ = first.check(control);
+/// let second = oracle.prepare(slate, 0, FormulaLimits::default(), control).unwrap();
+/// let (_, during) = second.check_overlapping(control, || 1);
+/// assert_eq!(during, Some(1));
+/// # }
+/// ```
+#[must_use = "a prepared submission submits nothing until it is checked"]
+pub struct PreparedFormulaSubmission<'o> {
+    oracle: &'o mut GpuFormulaOracle,
+    call: PreparedCall,
+    theory: Theory,
+    slate: SlateId,
+    offset: usize,
+    count: usize,
+    timeout: Duration,
+}
+
+impl PreparedFormulaSubmission<'_> {
+    /// The identity of the slate this submission belongs to.
+    #[must_use]
+    pub const fn slate(&self) -> SlateId {
+        self.slate
+    }
+
+    /// The position of the submission's first candidate in its slate.
+    #[must_use]
+    pub const fn offset(&self) -> usize {
+        self.offset
+    }
+
+    /// The candidates the submission admitted: at least one, and at most the
+    /// rest of the slate from its offset.
+    #[must_use]
+    pub const fn count(&self) -> usize {
+        self.count
+    }
+
+    /// Submit the prepared batch and wait for it, as
+    /// [`GpuFormulaOracle::propagate_prefix_with_cancellation`] checks a
+    /// prefix: the context's lease is taken, control and health are polled,
+    /// and the wait polls control between waits of at most 50 ms.
+    ///
+    /// # Errors
+    /// Has [`GpuFormulaOracle::propagate_prefix_with_cancellation`]'s typed
+    /// failures after preparation, with its rules for context reuse; `Busy`
+    /// contention submits nothing.
+    pub fn check(
+        self,
+        cancellation: &Cancellation,
+    ) -> Result<CheckedSlate<FormulaCheck>, GpuError> {
+        self.run(cancellation, None)
+    }
+
+    /// Submit the prepared batch, run `during` while the device checks it,
+    /// then finish: wait for the submission, map, decode and settle it. One
+    /// submission is in flight while `during` runs, and none when this
+    /// returns; nothing this returns names the submission.
+    ///
+    /// The context's lease is held from before the submission to the finish,
+    /// including `during`, so another operation on the shared context is
+    /// refused with `Busy` meanwhile, and an operation on the same context
+    /// inside `during` is refused too. The error scopes close right after the
+    /// submission, before `during`. When the control has fired by the time
+    /// `during` returns, the finish observes the submission's completion
+    /// without polling the control, within the batch's timeout, so a completed
+    /// and released readback leaves the context reusable, and the stop is
+    /// reported without decoding. A panic in `during` unwinds through this
+    /// operation and invalidates the context, since its submission's
+    /// completion is then unobserved.
+    ///
+    /// Returns the check's outcome and `during`'s result. A successful
+    /// outcome's receipt carries the finish's wait after `during`
+    /// ([`CheckedSlate::finish_wait`]). The result is absent only when the
+    /// check failed before submitting, in which case `during` did not run.
+    pub fn check_overlapping<R>(
+        self,
+        cancellation: &Cancellation,
+        during: impl FnOnce() -> R,
+    ) -> (Result<CheckedSlate<FormulaCheck>, GpuError>, Option<R>) {
+        crate::runtime::overlapping(during, |run| self.run(cancellation, Some(run)))
+    }
+
+    fn run(
+        self,
+        cancellation: &Cancellation,
+        during: Option<&mut dyn FnMut()>,
+    ) -> Result<CheckedSlate<FormulaCheck>, GpuError> {
+        let Self {
+            oracle,
+            call,
+            theory,
+            slate,
+            offset,
+            count,
+            timeout,
+        } = self;
+        let context = oracle.profile.runtime.context.clone();
+        let (checks, finish_wait) = context.lease().and_then(|_lease| {
+            cancellation.poll().map_err(GpuError::interrupted)?;
+            oracle.profile.runtime.check_health()?;
+            oracle.run(call, timeout, cancellation, during)
+        })?;
+        Ok(CheckedSlate::new(theory, slate, offset, count, checks).with_finish_wait(finish_wait))
     }
 }
 

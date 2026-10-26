@@ -933,6 +933,13 @@ impl Theory {
     pub fn same_instance(&self, other: &Self) -> bool {
         Arc::ptr_eq(&self.0, &other.0)
     }
+
+    /// The instance's address, which clones share. Only instances alive
+    /// together have distinct keys; a slate identity keeps it beside a stream
+    /// number that is never reused.
+    pub(crate) fn instance_key(&self) -> usize {
+        Arc::as_ptr(&self.0).addr()
+    }
 }
 
 fn admit(

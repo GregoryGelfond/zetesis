@@ -9,11 +9,11 @@ use crate::support::physical;
 use zetesis_backend::GpuApi;
 use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{
-    FrozenReduct, Interpretation, Limits, Node, NodeView, Theory, Verdict, check,
+    FrozenReduct, Interpretation, Limits, Node, NodeView, SlateId, SlateRef, Theory, Verdict, check,
 };
 use zetesis_theory_support::theories::theory;
 use zetesis_wgpu::{
-    FormulaLimits, FormulaVerdict, GateProjection, GpuErrorKind, GpuFormulaOracle,
+    FormulaCheck, FormulaLimits, FormulaVerdict, GateProjection, GpuErrorKind, GpuFormulaOracle,
     GpuFormulaProfile, GpuKernelOptions, GpuOptions, GpuPropagation, GpuSelection,
     GpuWorkgroupSize, GpuWorkgroupSizing, ResidualReason,
 };
@@ -208,6 +208,67 @@ fn metal_formula_queries_preserve_exact_frozen_semantics_and_residency() {
     for projection in GateProjection::ALL {
         qualify_frozen_queries(GpuApi::Metal, projection);
     }
+}
+
+#[test]
+#[ignore = "requires Metal: an overlapped formula query matches the sequential query"]
+fn metal_formula_overlapped_query_matches_sequential_query() {
+    for projection in GateProjection::ALL {
+        qualify_overlapped(GpuApi::Metal, projection);
+    }
+}
+
+#[test]
+#[ignore = "requires Vulkan: an overlapped formula query matches the sequential query"]
+fn vulkan_formula_overlapped_query_matches_sequential_query() {
+    for projection in GateProjection::ALL {
+        qualify_overlapped(GpuApi::Vulkan, projection);
+    }
+}
+
+/// Every frozen fixture's exhaustive candidates, checked as one slate by
+/// overlapping queries in prefix order, give the verdicts a synchronous query
+/// gives on a second oracle of the same projection. Each overlapping query's
+/// production returns its offset, so the comparison isolates the schedule.
+fn qualify_overlapped(backend: GpuApi, projection: GateProjection) {
+    let mut synchronous = oracle(backend, projection);
+    let mut overlapped = oracle(backend, projection);
+    let control = Cancellation::default();
+    let mut compared = 0;
+    for theory in frozen_theories() {
+        let inputs = candidates(&theory);
+        let expected = synchronous
+            .propagate_batch(&theory, &inputs, FormulaLimits::default())
+            .unwrap();
+        let slate = SlateId::first(&theory).unwrap();
+        let view = SlateRef::new(slate, &theory, &inputs).unwrap();
+        let mut checks = Vec::new();
+        while checks.len() < inputs.len() {
+            let prepared = overlapped
+                .prepare(view, checks.len(), FormulaLimits::default(), &control)
+                .unwrap();
+            let offset = prepared.offset();
+            let (checked, produced) = prepared.check_overlapping(&control, || offset);
+            assert_eq!(produced, Some(offset));
+            checks.extend(
+                checked
+                    .unwrap()
+                    .into_checks(&theory, slate, offset)
+                    .unwrap(),
+            );
+        }
+        assert!(
+            expected
+                .iter()
+                .map(FormulaCheck::verdict)
+                .eq(checks.iter().map(FormulaCheck::verdict))
+        );
+        compared += inputs.len();
+    }
+    println!(
+        "formula overlapped queries projection={} candidates={compared}",
+        projection.label()
+    );
 }
 
 fn frozen_theories() -> Vec<Theory> {

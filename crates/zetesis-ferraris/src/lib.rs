@@ -24,6 +24,7 @@ pub mod partition;
 mod positive;
 mod reduct;
 mod regions;
+mod slate;
 mod stratified;
 mod support;
 #[cfg(test)]
@@ -60,6 +61,7 @@ pub use regions::{
     NarrowingAttempt, NarrowingQuota, NarrowingScratch, NarrowingStatistics, OriginalSubject,
     PreferenceAttempt, Producers, RegionLimits, SupportExplanationStatistics, producers,
 };
+pub use slate::{SlateId, SlateRef};
 pub use theory::{
     AdmissionError, AdmissionLimits, ContributionRow, ExtremumCutDescriptor, FormulaParts,
     FormulaSuffix, FormulaTransaction, FormulaView, Interpretation, InterpretationWords, Node,

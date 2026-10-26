@@ -1115,6 +1115,31 @@ fn formula(
     }
 }
 
+/// The slates a GPU enumeration proposed ahead, and its time to first answer.
+fn formula_gpu_lookahead(
+    sink: &mut impl Write,
+    execution: &crate::FormulaExecutionStatistics,
+) -> io::Result<()> {
+    if let Some(decision) = execution.gpu_lookahead {
+        writeln!(
+            sink,
+            "  formula GPU lookahead: slates proposed ahead={}; last decision={}; overlapped device compute={}ns; finish waits={}ns; unmeasured submissions={}; device time hidden behind production is the compute less the waits, paired over the measured submissions",
+            execution.gpu_lookahead_slates,
+            decision.label(),
+            execution.gpu_lookahead_device_ns,
+            execution.gpu_lookahead_finish_wait_ns,
+            execution.gpu_lookahead_unmeasured,
+        )?;
+    }
+    if let Some(first) = execution.first_answer_ns {
+        writeln!(
+            sink,
+            "  formula GPU first answer: {first}ns after the device execution began; reported, not judged"
+        )?;
+    }
+    Ok(())
+}
+
 fn formula_gpu(
     sink: &mut impl Write,
     execution: &crate::FormulaExecutionStatistics,
@@ -1143,6 +1168,7 @@ fn formula_gpu(
             .map_or_else(|| "none".to_owned(), |largest| largest.to_string()),
         execution.gpu_slate_resets
     )?;
+    formula_gpu_lookahead(sink, execution)?;
     if let Some(residuals) = execution.gpu_residuals {
         writeln!(
             sink,
@@ -1176,12 +1202,13 @@ fn formula_gpu(
     if let Some(updates) = execution.gpu_tight_updates {
         writeln!(
             sink,
-            "  tight GPU update route: {}; count width={}; steady state={}",
+            "  tight GPU update route: {}; count width={}; steady state={}; guard declined batches={}",
             updates.availability.label(),
             updates
                 .count_bits
                 .map_or_else(|| "unavailable".to_owned(), |bits| bits.to_string()),
-            updates.steady_state
+            updates.steady_state,
+            updates.guard_declined_batches
         )?;
     }
     if let Some(limits) = execution.gpu_limits {

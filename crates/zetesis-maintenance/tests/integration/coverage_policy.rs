@@ -136,8 +136,8 @@ fn physical_selection_is_a_fixed_contract() {
             ),
         TABLE
             .replace(
+                "session-resources|integration|14|",
                 "session-resources|integration|13|",
-                "session-resources|integration|12|",
             )
             .replace(
                 " session_resources_gpu::metal_terminal_sessions_preserve_complete_families",
@@ -384,7 +384,7 @@ fn physical_metadata_keeps_floor_populations_separate() {
         record["floor_profiles"],
         serde_json::json!(["workspace", "cli-cpu"])
     );
-    assert_eq!(record["expected_physical_tests"], 70);
+    assert_eq!(record["expected_physical_tests"], 75);
     assert_eq!(record["physical_test_groups"].as_array().unwrap().len(), 14);
     assert_eq!(
         record["project_added_filename_filters"],
@@ -411,17 +411,17 @@ fn physical_metadata_retains_the_reviewed_schedule() {
         identities,
         serde_json::json!([
             ["wgpu-lib", "lib", "workspace libraries", 20],
-            ["tight", "test", "integration", 4],
-            ["formula", "test", "integration", 2],
+            ["tight", "test", "integration", 5],
+            ["formula", "test", "integration", 3],
             ["aggregate", "test", "integration", 3],
             ["lazy", "test", "integration", 4],
             ["cli-lazy", "test", "integration", 5],
             ["cli-formula", "test", "integration", 3],
             ["world-views", "test", "integration", 4],
             ["relation", "test", "integration", 2],
-            ["context", "test", "integration", 2],
+            ["context", "test", "integration", 4],
             ["solve-context", "lib", "workspace libraries", 4],
-            ["session-resources", "test", "integration", 13],
+            ["session-resources", "test", "integration", 14],
             ["language-consumers", "test", "integration", 2],
             ["static", "test", "integration", 2]
         ])
@@ -435,7 +435,7 @@ fn physical_metadata_retains_the_reviewed_schedule() {
     ]);
     assert_eq!(groups[12]["tests"], language_tests);
     let tests = record["physical_tests"].as_array().unwrap();
-    assert_eq!(tests.len(), 70);
+    assert_eq!(tests.len(), 75);
     let formula_tests = serde_json::json!([
         "formula_gpu::physical::ordinary_metal_formula_batches_match_complete_cpu_models_costs_and_displays",
         "formula_gpu::physical::ordinary_metal_formula_limits_preserve_partial_coverage_and_writer_errors",
@@ -452,6 +452,7 @@ fn physical_metadata_retains_the_reviewed_schedule() {
         "session_resources_gpu::metal_general_formulas_keep_device_execution",
         "session_resources_gpu::metal_tight_refusal_preserves_pending_coverage",
         "session_resources_gpu::metal_terminal_sessions_preserve_complete_families",
+        "session_resources_gpu::metal_enumeration_looks_ahead_with_the_same_family",
         "hybrid_gpu::metal_hybrid_preserves_complete_scored_families",
         "hybrid_gpu::metal_hybrid_source_failure_preserves_pending_acceptance",
         "hybrid_gpu::metal_hybrid_cancellation_stops_queued_core_models",
@@ -469,7 +470,7 @@ fn physical_metadata_retains_the_reviewed_schedule() {
         .collect();
     assert_eq!(tests.iter().collect::<Vec<_>>(), grouped_tests);
     let scope = record["physical_scope"].as_str().unwrap();
-    assert!(scope.starts_with("70 exact Metal tests: "));
+    assert!(scope.starts_with("75 exact Metal tests: "));
     assert!(scope.contains("complete tight families, the general device route for non-tight theories, and tight work refusal before dispatch"));
     assert!(scope.contains("completed-support table joins with actual GPU candidates and complete CPU/Metal answer families"));
     assert!(scope.contains("static constructor and complete closure/reference checks"));
@@ -579,9 +580,9 @@ fn each_physical_stage_names_its_backend() {
             record["workspace_stages"],
             serde_json::json!(["portable", label])
         );
-        assert_eq!(record["expected_physical_tests"], 70);
+        assert_eq!(record["expected_physical_tests"], 75);
         let scope = record["physical_scope"].as_str().unwrap();
-        assert!(scope.starts_with(&format!("70 exact {} tests: ", api.name())));
+        assert!(scope.starts_with(&format!("75 exact {} tests: ", api.name())));
         assert!(scope.contains(&format!("complete CPU/{} answer families", api.name())));
     }
 }

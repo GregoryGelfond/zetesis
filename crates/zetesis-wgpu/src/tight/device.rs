@@ -2,19 +2,21 @@
 
 use super::admission::Admission;
 use super::packing::{Graph, Packed, Packing, Plan, StateLayout};
-use super::transport::{Execution, Resident};
+use super::transport::{Call, Execution, Resident};
 use super::update::{self, Bounds, Built, Index, Stage};
 use super::{
     SHADER, TightGpuActivity, TightGpuBatchStats, TightGpuCheck, TightGpuError, TightGpuLimits,
     TightGpuUpdateUnavailable, TightGpuUpdates, TightSupport, poll,
 };
-use crate::runtime::{DeviceProfile, ErrorScopes, Runtime, Variant};
+use crate::runtime::{DeviceProfile, ErrorScopes, Observation, Runtime, Scopes, Variant};
 use crate::timing::{BatchTiming, ComputeTimer};
-use crate::{GpuDeviceSource, GpuError, GpuErrorKind, GpuInfo, GpuOptions, GpuSelection};
-use std::time::Duration;
+use crate::{
+    CheckedSlate, GpuDeviceSource, GpuError, GpuErrorKind, GpuInfo, GpuOptions, GpuSelection,
+};
+use std::time::{Duration, Instant};
 use zetesis_backend::{BatchComputeTime, ComputeTimingStatus};
 use zetesis_cpu::Cancellation;
-use zetesis_ferraris::{Interpretation, TightPlan};
+use zetesis_ferraris::{Interpretation, SlateId, SlateRef, Theory, TightPlan};
 
 /// Real-device original satisfaction and ranked producer support checking.
 ///
@@ -74,7 +76,8 @@ struct PreparedCall {
     stats: TightGpuBatchStats,
     /// A readers index to install before dispatch.
     build: Option<Built>,
-    /// The kernel the batch runs, from the stage its preparation leaves.
+    /// The kernel the batch runs: the full kernel exactly when its plan allows
+    /// the update route.
     variant: Variant,
 }
 
@@ -83,24 +86,39 @@ enum Updates {
     /// No state is bound; the route is unavailable or not yet possible.
     Stateless(TightGpuUpdates),
     /// A state-inclusive plan was selected under `index`, which `build`
-    /// installs first when this batch builds it.
-    State { index: Index, build: Option<Built> },
+    /// installs first when this batch builds it. The runtime guard `allows`
+    /// the route, or declines it with the state allocated, unwritten and
+    /// unbound.
+    State {
+        index: Index,
+        build: Option<Built>,
+        allows: bool,
+    },
 }
 
 impl GpuTightOracle {
     /// Workgroup strides per dependency level that dense evaluation of a
     /// resident schedule must take, on average, at its dispatched workgroup
-    /// size before the update route engages. Narrower schedules report
+    /// size before the update route engages: before the theory builds the
+    /// route's readers index. Narrower schedules report
     /// [`TightGpuUpdateUnavailable::NarrowSchedule`].
     ///
     /// An execution choice that changes no verdict, calibrated by measurement
-    /// on an Apple M4 Pro GPU under Metal; another device or backend can break
-    /// even at a different factor. The choice is asymmetric: a declined
-    /// schedule keeps dense evaluation, so a factor set high only forgoes
-    /// gains, while one set low slows the schedules it engages. The rule sees
-    /// only the schedule's shape: a change that reaches many nodes of one
-    /// queued word can still make an engaged update slower than dense
-    /// evaluation.
+    /// on an Apple M4 Pro GPU under Metal: the factor covers the change
+    /// patterns measured there, their per-level chains included, scattered
+    /// changes and clustered changes of up to 64 atoms with one reader per
+    /// input. Another device or backend can break even at a different factor.
+    /// The choice is asymmetric: a declined schedule keeps dense evaluation, so
+    /// a factor set high only forgoes gains, while one set low slows the
+    /// schedules it engages. A change beyond those patterns whose critical path
+    /// makes an engaged update dearer than dense evaluation, such as one
+    /// reaching many nodes of one queued word, is the runtime guard's: it
+    /// compares each batch's slowest update path with dense evaluation's and
+    /// declines the route for a few batches at a time
+    /// ([`TightGpuUpdateUnavailable::GuardDeclined`]). The factor still decides
+    /// whether a theory builds the index at all, which spares narrow theories
+    /// the index, the state and every losing probe, and covers the update's
+    /// extra synchronization, which the guard cannot see.
     pub const UPDATE_ENGAGEMENT_STRIDES: u64 = update::ENGAGEMENT_STRIDES;
 
     /// Create an independently owned device and kernel using hard adapter
@@ -399,11 +417,12 @@ impl GpuTightOracle {
     /// unsupported sets. Both reuse routes are optional: change detection runs
     /// only when its work allowance fits, otherwise the complete evaluation runs
     /// without new storage; the update route runs only on a schedule wide enough
-    /// to engage it and when its per-slot state and its reservation are
-    /// admitted, otherwise the dense routes run. A later
-    /// call that cannot admit a held state releases it and keeps its truth and
-    /// result authority; a built readers index stays resident and accounted,
-    /// like a retained schedule.
+    /// to engage it, when its per-slot state and its reservation are admitted
+    /// and while the runtime guard has not declined it after a batch whose
+    /// slowest update's critical path exceeded dense evaluation's, otherwise
+    /// the dense routes run. A later call that cannot admit a held state
+    /// releases it and keeps its truth and result authority; a built readers
+    /// index stays resident and accounted, like a retained schedule.
     /// Host upload words reuse initialized scratch for that same subject/count.
     /// Their actual capacity is charged, and an oversized optional allocation is
     /// replaced when a smaller allowance fits fresh storage. Replacement drops
@@ -428,7 +447,16 @@ impl GpuTightOracle {
     /// pipeline. A failure to compile it is reported before any dispatch and
     /// invalidates the context; the size stays uncompiled, and no theory stays
     /// resident, because only a freshly prepared theory can need a size first
-    /// and its cold preparation released the previous one.
+    /// and its cold preparation released the previous one. Each size has two
+    /// kernels: one with the update route, which runs exactly the batches that
+    /// allow it, and one without, which runs every other batch. A freshly
+    /// prepared theory's first batch never allows the route, so the kernel
+    /// without it is the one a size needs first. The kernel with the route is
+    /// compiled with the oracle under fixed sizing, and otherwise at the first
+    /// batch that allows it, which only a resident theory reaches. A failure to
+    /// compile it there also invalidates the context; the theory stays
+    /// resident, and its retained truth is invalidated, as after every failed
+    /// call.
     pub fn check_batch(
         &mut self,
         certificate: &TightPlan,
@@ -486,6 +514,85 @@ impl GpuTightOracle {
         ))
     }
 
+    /// Prepare the next submission of `slate`: admit the largest nonempty
+    /// prefix of its candidates from `offset` on, as [`Self::check_prefix`]
+    /// admits a prefix, pack it into this oracle's reused upload storage, and
+    /// plan it: reuse authority, the update route's engagement under the
+    /// runtime guard, the kernel and the epoch. Nothing is submitted.
+    ///
+    /// The returned submission holds this oracle's mutable borrow until a
+    /// check consumes it, so no other operation on the oracle, and no second
+    /// preparation, can run between the plan and its check: the state it was
+    /// planned from is the state it runs on. Dropping it submits nothing and
+    /// releases the borrow; any retained state its preparation replaced stays
+    /// released, and the next check prepares again. The context's lease is
+    /// taken by the check, not here, and this polls control and context health
+    /// before preparing.
+    ///
+    /// # Errors
+    /// Refuses a slate whose theory is not the certificate's instance, an
+    /// offset that leaves no candidate, and every refusal and failure of
+    /// [`Self::check_prefix`]'s preparation, which leaves the oracle reusable
+    /// and its retained truth invalidated, as after every failed call.
+    pub fn prepare<'o>(
+        &'o mut self,
+        certificate: &TightPlan,
+        slate: SlateRef<'_>,
+        offset: usize,
+        limits: TightGpuLimits,
+        cancellation: &Cancellation,
+    ) -> Result<PreparedTightSubmission<'o>, TightGpuError> {
+        self.last = None;
+        self.activity = TightGpuActivity::default();
+        self.reported = None;
+        let prepared = (|| {
+            if !certificate.theory().same_instance(slate.theory()) {
+                return Err(GpuError::new(
+                    GpuErrorKind::Seed,
+                    "the slate does not belong to this tight certificate's theory",
+                ));
+            }
+            let candidates = slate
+                .candidates()
+                .get(offset..)
+                .filter(|rest| !rest.is_empty())
+                .ok_or_else(|| {
+                    GpuError::new(
+                        GpuErrorKind::Capacity,
+                        "no candidate of the slate remains at the offset",
+                    )
+                })?;
+            poll(cancellation)?;
+            self.runtime.check_health()?;
+            let call = self.prepare_call(
+                certificate,
+                candidates,
+                limits,
+                cancellation,
+                crate::candidates::BatchSize::Prefix(candidates.len()),
+            )?;
+            poll(cancellation)?;
+            Ok(call)
+        })();
+        match prepared {
+            Ok(call) => Ok(PreparedTightSubmission {
+                count: call.plan.worlds as usize,
+                oracle: self,
+                call,
+                theory: slate.theory().clone(),
+                slate: slate.id(),
+                offset,
+                timeout: limits.timeout,
+            }),
+            Err(error) => {
+                if let Some(resident) = self.resident.as_mut() {
+                    resident.invalidate_original_truth();
+                }
+                Err(error.into())
+            }
+        }
+    }
+
     fn check(
         &mut self,
         certificate: &TightPlan,
@@ -518,19 +625,47 @@ impl GpuTightOracle {
         if candidates.is_empty() {
             return Ok(Vec::new());
         }
+        let call = self.prepare_call(certificate, candidates, limits, cancellation, size)?;
+        poll(cancellation)?;
+        self.run(call, limits.timeout, cancellation, None)
+            .map(|(checks, _)| checks)
+    }
+
+    /// Run a prepared batch under the caller's lease: compile its pipeline at
+    /// first need, install a fresh graph or readers index, submit, run
+    /// `during` while the submission is in flight, finish and settle.
+    ///
+    /// Without `during`, the error scopes close after the readback and the
+    /// wait polls the control, as every synchronous check does. With it, they
+    /// close right after the submission, so they capture none of `during`'s
+    /// device calls; a submission that fails before it is made runs no
+    /// `during`. When the control has fired by the time `during` returns, the
+    /// finish observes the submission's completion without polling the
+    /// control, within the batch's timeout, and reports the stop without
+    /// decoding: a completed, released readback leaves the context reusable.
+    /// Beside the checks it returns the finish's wait after `during`: from
+    /// `during`'s return to the observed completion, before mapping and
+    /// decoding; absent without `during`.
+    fn run(
+        &mut self,
+        call: PreparedCall,
+        timeout: Duration,
+        cancellation: &Cancellation,
+        during: Option<&mut dyn FnMut()>,
+    ) -> Result<(Vec<TightGpuCheck>, Option<Duration>), GpuError> {
         let PreparedCall {
             fresh,
             plan,
             mut stats,
             build,
             variant,
-        } = self.prepare(certificate, candidates, limits, cancellation, size)?;
-        poll(cancellation)?;
-        // The dispatched size's pipeline is compiled at first need, before this
-        // call's scopes and before the fresh graph becomes resident. Only a
-        // freshly prepared graph can need a size first, and its preparation has
-        // released any previous resident, so a refusal leaves none, as a
-        // cold-preparation failure does.
+        } = call;
+        // The batch's pipeline, its size and kernel, is compiled at first need,
+        // before this call's scopes and before a fresh graph becomes resident.
+        // A fresh graph's preparation has released any previous resident, so a
+        // refusal leaves none, as a cold-preparation failure does; a resident
+        // theory needing its other kernel first stays resident, its retained
+        // truth invalidated by `check`.
         let workgroup_size = fresh
             .as_ref()
             .map(|(graph, _)| graph.workgroup_size)
@@ -542,50 +677,60 @@ impl GpuTightOracle {
             .ok_or_else(|| GpuError::new(GpuErrorKind::Device, "missing resident tight graph"))?;
         self.runtime.ensure_pipeline(workgroup_size, variant)?;
         let scopes = ErrorScopes::new(self.runtime.device());
-        if let Some((mut graph, packed)) = fresh {
-            graph.rows.release();
-            self.activity.uploaded_bytes = graph.bytes;
-            self.resident = Some(Resident::new(self.runtime.device(), graph, &packed));
-        }
-        if let Some(built) = build
-            && let Some(resident) = self.resident.as_mut()
-        {
-            let bytes = resident.install_index(self.runtime.device(), &built);
-            self.activity.uploaded_bytes += bytes;
-            stats.uploaded_bytes += bytes;
-            stats.resident_theory_bytes = resident.graph.bytes;
-        }
-        let status = context.compute_timing();
+        self.install(fresh, build, &mut stats);
+        let status = self.runtime.context.compute_timing();
         if status == ComputeTimingStatus::Enabled && self.timer.is_none() {
             self.timer = Some(ComputeTimer::new(self.runtime.device()));
         }
         self.epoch = plan.epoch;
         let mut timing = BatchTiming::default();
+        let runtime = &self.runtime;
+        let mut scopes = Scopes::Open(scopes);
+        let mut finish_wait = None;
         let outcome = self
             .resident
             .as_mut()
             .ok_or_else(|| GpuError::new(GpuErrorKind::Device, "missing resident tight graph"))
             .and_then(|resident| {
-                let pipeline = self
-                    .runtime
-                    .pipeline_for(resident.graph.workgroup_size, variant)?;
-                resident.dispatch(
-                    &Execution {
-                        device: self.runtime.device(),
-                        queue: self.runtime.queue(),
-                        pipeline,
-                        variant,
-                        timeout: limits.timeout,
-                        cancellation,
-                        timer: self.timer.as_ref(),
-                    },
-                    self.candidates.words(),
-                    &plan,
+                let pipeline = runtime.pipeline_for(resident.graph.workgroup_size, variant)?;
+                let execution = Execution {
+                    device: runtime.device(),
+                    queue: runtime.queue(),
+                    pipeline,
+                    variant,
+                    timeout,
+                    cancellation,
+                    timer: self.timer.as_ref(),
+                };
+                let call = Call {
+                    seeds: self.candidates.words(),
+                    plan: &plan,
+                };
+                let submitted = resident.submit(&execution, &call, &mut self.activity)?;
+                let mut during_ended = None;
+                let observation = match during {
+                    None => Observation::Polled,
+                    Some(during) => {
+                        scopes.settle();
+                        during();
+                        during_ended = Some(Instant::now());
+                        poll(cancellation)
+                            .map_or_else(Observation::AfterStop, |()| Observation::Polled)
+                    }
+                };
+                let completion = resident.finish(
+                    &execution,
+                    submitted,
+                    observation,
+                    &call,
                     &mut self.activity,
                     &mut timing,
-                )
+                )?;
+                finish_wait = during_ended.and_then(|ended| completion.window_since(ended));
+                Ok(completion)
             });
-        let result = self.runtime.complete(scopes, outcome).and_then(|decoded| {
+        let settled = runtime.complete_scopes(scopes, outcome);
+        let result = settled.and_then(|decoded| {
             poll(cancellation)?;
             Ok(decoded)
         });
@@ -601,15 +746,44 @@ impl GpuTightOracle {
         let decoded = result?;
         if let Some(resident) = self.resident.as_mut() {
             resident.complete_original_truth();
+            // Reuse authority is re-established: the guard settles the batch,
+            // and its judgment governs the batches planned next.
+            resident
+                .guard
+                .settle(decoded.slowest_update_path, resident.graph.dense_path);
         }
         stats.routes = decoded.routes;
         stats.nodes_evaluated = decoded.nodes_evaluated;
+        stats.update_critical_path = decoded.slowest_update_path.unwrap_or(0);
         stats.work = decoded.work;
         self.last = Some(stats);
-        Ok(decoded.checks)
+        Ok((decoded.checks, finish_wait))
     }
 
-    fn prepare(
+    /// Make a freshly prepared graph resident, or install the readers index
+    /// a batch builds, counting the bytes either uploads.
+    fn install(
+        &mut self,
+        fresh: Option<(Graph, Packed)>,
+        build: Option<Built>,
+        stats: &mut TightGpuBatchStats,
+    ) {
+        if let Some((mut graph, packed)) = fresh {
+            graph.rows.release();
+            self.activity.uploaded_bytes = graph.bytes;
+            self.resident = Some(Resident::new(self.runtime.device(), graph, &packed));
+        }
+        if let Some(built) = build
+            && let Some(resident) = self.resident.as_mut()
+        {
+            let bytes = resident.install_index(self.runtime.device(), &built);
+            self.activity.uploaded_bytes += bytes;
+            stats.uploaded_bytes += bytes;
+            stats.resident_theory_bytes = resident.graph.bytes;
+        }
+    }
+
+    fn prepare_call(
         &mut self,
         certificate: &TightPlan,
         candidates: &[Interpretation],
@@ -699,17 +873,9 @@ impl GpuTightOracle {
             updates,
             admitted_limits.max_work_per_candidate,
         );
-        // The stage the admission leaves decides the kernel: a fresh graph's
-        // starting stage, or the resident's, which a refusal of the index's
-        // bounds has just made final for its residency.
-        let variant = match fresh.as_ref() {
-            Some(graph) => kernel_variant(&Stage::of(graph)),
-            None => self
-                .resident
-                .as_ref()
-                .map_or(Variant::Full, |resident| kernel_variant(&resident.updates)),
-        };
-        planned_stats(&mut stats, &plan, availability, timed, variant);
+        // The kernel follows whether the route is allowed.
+        let variant = plan.variant();
+        planned_stats(&mut stats, &plan, availability, timed);
         stats.accounted_bytes = plan.pack(
             graph,
             &candidates[..plan.worlds as usize],
@@ -830,7 +996,13 @@ impl GpuTightOracle {
             !resident.matches_count(plan.worlds as usize),
         );
         admission.plan = plan;
-        Ok(Updates::State { index, build })
+        // The runtime guard acts last, on a built index only; an engaged
+        // guard allows the batch that builds it.
+        Ok(Updates::State {
+            index,
+            build,
+            allows: resident.guard.allows(),
+        })
     }
     fn select_prefix(
         &self,
@@ -876,45 +1048,204 @@ impl GpuTightOracle {
     }
 }
 
+/// One submission of a slate that a [`GpuTightOracle`] admitted, packed and
+/// planned but has not submitted ([`GpuTightOracle::prepare`]).
+///
+/// It holds its oracle's mutable borrow until [`Self::check`] or
+/// [`Self::check_overlapping`] consumes it, so the plan's inputs (the
+/// retained truth's reuse authority, the runtime guard's state, the epoch and
+/// what is resident) are those its check runs on. It carries copies of its
+/// slate's identity, its offset and its count, and no borrow of the slate's
+/// candidates, so the slate's stream can be borrowed again while it runs.
+///
+/// A second preparation cannot begin while one exists:
+///
+/// ```compile_fail,E0499
+/// # use zetesis_wgpu::{GpuTightOracle, TightGpuLimits};
+/// # fn second(oracle: &mut GpuTightOracle, plan: &zetesis_ferraris::TightPlan,
+/// #     slate: zetesis_ferraris::SlateRef<'_>, control: &zetesis_cpu::Cancellation) {
+/// let first = oracle.prepare(plan, slate, 0, TightGpuLimits::default(), control);
+/// let second = oracle.prepare(plan, slate, 0, TightGpuLimits::default(), control);
+/// drop((first, second));
+/// # }
+/// ```
+///
+/// Nor can any other operation on the oracle run between a preparation and its
+/// check:
+///
+/// ```compile_fail,E0499
+/// # use zetesis_wgpu::{GpuTightOracle, TightGpuLimits};
+/// # fn between(oracle: &mut GpuTightOracle, plan: &zetesis_ferraris::TightPlan,
+/// #     slate: zetesis_ferraris::SlateRef<'_>, control: &zetesis_cpu::Cancellation) {
+/// let prepared = oracle.prepare(plan, slate, 0, TightGpuLimits::default(), control).unwrap();
+/// oracle.clear_residency();
+/// let _ = prepared.check(control);
+/// # }
+/// ```
+///
+/// And a prepared submission is checked only by its own oracle: the oracle has
+/// no public operation that takes a prepared submission, so one prepared
+/// elsewhere has nowhere to go.
+///
+/// ```compile_fail,E0624
+/// # use zetesis_wgpu::{GpuTightOracle, TightGpuLimits};
+/// # fn elsewhere(one: &mut GpuTightOracle, other: &mut GpuTightOracle,
+/// #     plan: &zetesis_ferraris::TightPlan, slate: zetesis_ferraris::SlateRef<'_>,
+/// #     control: &zetesis_cpu::Cancellation) {
+/// let prepared = one.prepare(plan, slate, 0, TightGpuLimits::default(), control).unwrap();
+/// let _ = other.check(prepared, control);
+/// # }
+/// ```
+///
+/// The same uses, in order, compile:
+///
+/// ```no_run
+/// # use zetesis_wgpu::{GpuTightOracle, TightGpuLimits};
+/// # fn in_order(oracle: &mut GpuTightOracle, plan: &zetesis_ferraris::TightPlan,
+/// #     slate: zetesis_ferraris::SlateRef<'_>, control: &zetesis_cpu::Cancellation) {
+/// let prepared = oracle.prepare(plan, slate, 0, TightGpuLimits::default(), control).unwrap();
+/// let _ = prepared.check(control);
+/// oracle.clear_residency();
+/// let next = oracle.prepare(plan, slate, 0, TightGpuLimits::default(), control).unwrap();
+/// let (_, during) = next.check_overlapping(control, || 1);
+/// assert_eq!(during, Some(1));
+/// # }
+/// ```
+#[must_use = "a prepared submission submits nothing until it is checked"]
+pub struct PreparedTightSubmission<'o> {
+    oracle: &'o mut GpuTightOracle,
+    call: PreparedCall,
+    theory: Theory,
+    slate: SlateId,
+    offset: usize,
+    count: usize,
+    timeout: Duration,
+}
+
+impl PreparedTightSubmission<'_> {
+    /// The identity of the slate this submission belongs to.
+    #[must_use]
+    pub const fn slate(&self) -> SlateId {
+        self.slate
+    }
+
+    /// The position of the submission's first candidate in its slate.
+    #[must_use]
+    pub const fn offset(&self) -> usize {
+        self.offset
+    }
+
+    /// The candidates the submission admitted: at least one, and at most the
+    /// rest of the slate from its offset.
+    #[must_use]
+    pub const fn count(&self) -> usize {
+        self.count
+    }
+
+    /// Submit the prepared batch and wait for it, as
+    /// [`GpuTightOracle::check_prefix`] checks a prefix: the context's lease is
+    /// taken, control and health are polled, and the wait polls control
+    /// between waits of at most 50 ms.
+    ///
+    /// # Errors
+    /// Has [`GpuTightOracle::check_prefix`]'s typed failures after
+    /// preparation, with its rules for context reuse; `Busy` contention
+    /// submits nothing. A failure invalidates the retained truth.
+    pub fn check(
+        self,
+        cancellation: &Cancellation,
+    ) -> Result<CheckedSlate<TightGpuCheck>, TightGpuError> {
+        self.run(cancellation, None)
+    }
+
+    /// Submit the prepared batch, run `during` while the device checks it,
+    /// then finish: wait for the submission, map, decode and settle it. One
+    /// submission is in flight while `during` runs, and none when this
+    /// returns; nothing this returns names the submission.
+    ///
+    /// The context's lease is held from before the submission to the finish,
+    /// including `during`, so another operation on the shared context is
+    /// refused with `Busy` meanwhile, and an operation on the same context
+    /// inside `during` is refused too. The error scopes close right after the
+    /// submission, before `during`. When the control has fired by the time
+    /// `during` returns, the finish observes the submission's completion
+    /// without polling the control, within the batch's timeout, so a completed
+    /// and released readback leaves the context reusable, and the stop is
+    /// reported without decoding. A panic in `during` unwinds through this
+    /// operation and invalidates the context, since its submission's
+    /// completion is then unobserved.
+    ///
+    /// Returns the check's outcome and `during`'s result. A successful
+    /// outcome's receipt carries the finish's wait after `during`
+    /// ([`CheckedSlate::finish_wait`]). The result is absent only when the
+    /// check failed before submitting, in which case `during` did not run.
+    pub fn check_overlapping<R>(
+        self,
+        cancellation: &Cancellation,
+        during: impl FnOnce() -> R,
+    ) -> (
+        Result<CheckedSlate<TightGpuCheck>, TightGpuError>,
+        Option<R>,
+    ) {
+        crate::runtime::overlapping(during, |run| self.run(cancellation, Some(run)))
+    }
+
+    fn run(
+        self,
+        cancellation: &Cancellation,
+        during: Option<&mut dyn FnMut()>,
+    ) -> Result<CheckedSlate<TightGpuCheck>, TightGpuError> {
+        let Self {
+            oracle,
+            call,
+            theory,
+            slate,
+            offset,
+            count,
+            timeout,
+        } = self;
+        let context = oracle.runtime.context.clone();
+        let checked = context.lease().and_then(|_lease| {
+            poll(cancellation)?;
+            oracle.runtime.check_health()?;
+            oracle.run(call, timeout, cancellation, during)
+        });
+        match checked {
+            Ok((checks, finish_wait)) => {
+                Ok(CheckedSlate::new(theory, slate, offset, count, checks)
+                    .with_finish_wait(finish_wait))
+            }
+            Err(error) => {
+                if let Some(resident) = oracle.resident.as_mut() {
+                    resident.invalidate_original_truth();
+                }
+                Err(error.into())
+            }
+        }
+    }
+}
+
 /// Complete `stats` with what `plan` decides once its update state is bound:
 /// its routes' reservation, the update route's availability, and its transport
-/// and download, which under timing carry the 16-byte readback tail. The timer
-/// is the oracle's, so its storage counts in the batch's bytes alone.
+/// and download, which under timing carry the 16-byte readback tail. A plan
+/// that holds the state keeps its bytes whichever kernel runs. The timer is the
+/// oracle's, so its storage counts in the batch's bytes alone.
 fn planned_stats(
     stats: &mut TightGpuBatchStats,
     plan: &Plan,
     availability: TightGpuUpdates,
     timed: bool,
-    variant: Variant,
 ) {
     let tail = if timed {
         crate::timing::READBACK_BYTES
     } else {
         0
     };
-    // A stateless plan reserves the full kernel's placeholder; the dense twin
-    // binds no state, so its transport requests none.
-    let unbound = match variant {
-        Variant::Dense => update::PLACEHOLDER_BYTES,
-        Variant::Full => 0,
-    };
     stats.original_truth_reused = plan.original_truth_reused;
     stats.updates = availability;
-    stats.resident_transport_bytes = plan.transport - unbound + tail;
+    stats.resident_transport_bytes = plan.transport + tail;
     stats.downloaded_bytes += tail;
     stats.work = u64::from(plan.worlds) * u64::from(plan.allowance);
-}
-
-/// The kernel a batch runs. A theory whose update route is declined for its
-/// whole residency, by a serial or narrow schedule or by refused index bounds,
-/// runs the dense twin, which binds no update state and carries none of the
-/// route's code. Every other theory runs the full kernel, whose batches may
-/// still decline the route one at a time.
-fn kernel_variant(stage: &Stage) -> Variant {
-    match stage {
-        Stage::Serial | Stage::Narrow | Stage::Refused => Variant::Dense,
-        Stage::Pending | Stage::Bounded(_) | Stage::Built(_) => Variant::Full,
-    }
 }
 
 /// The reason a batch with this resident's `stage` and stateless `plan` cannot
@@ -989,7 +1320,10 @@ fn state_layout(
     Ok((layout, Some(bounds)))
 }
 
-/// Bind the batch's update state, once the dense charges are known.
+/// Bind the batch's update state, once the dense charges are known. The route
+/// is allowed when its reservation fits `ceiling` and then the runtime guard
+/// allows it; a batch either declines keeps the state allocated, unwritten
+/// and unbound, on the dense twin.
 fn bind_updates(
     plan: &mut Plan,
     graph: &Graph,
@@ -998,14 +1332,17 @@ fn bind_updates(
 ) -> (TightGpuUpdates, Option<Built>) {
     match updates {
         Updates::Stateless(availability) => (availability, None),
-        Updates::State { index, build } => {
-            let availability = if plan.bind_state(graph, &index, ceiling) {
-                TightGpuUpdates::Admitted {
+        Updates::State {
+            index,
+            build,
+            allows,
+        } => {
+            let availability = match plan.bind_state(graph, &index, ceiling, allows) {
+                None => TightGpuUpdates::Admitted {
                     count_bits: index.count_bits,
                     index_built: build.is_some(),
-                }
-            } else {
-                TightGpuUpdates::Unavailable(TightGpuUpdateUnavailable::Work)
+                },
+                Some(reason) => TightGpuUpdates::Unavailable(reason),
             };
             (availability, build)
         }
@@ -1056,7 +1393,7 @@ fn check_limits(limits: &wgpu::Limits) -> Result<(), GpuError> {
         ("workgroup width", 64, limits.max_compute_workgroup_size_x),
         (
             "workgroup storage",
-            40,
+            48,
             limits.max_compute_workgroup_storage_size,
         ),
         (

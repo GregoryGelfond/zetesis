@@ -464,7 +464,7 @@ region walker's frontier protocols: the count of unresolved regions, split
 publication and the idle back-off. A producer steals only with an empty deque,
 so its deque holds at most one sibling per atom split along its current path.
 That order suits an enumeration, which visits every region whatever the order.
-An optimizing search tightens the candidate bound as it commits answers, so its
+An optimizing search that generates candidate bounds tightens the bound as it commits answers, so its
 producers instead share one deque and each takes the region any of them
 published most recently. Production then stays where the latest splits are,
 and older, shallower regions wait for the tighter bounds that refute them near
@@ -475,8 +475,12 @@ the producers used before. Each holds one work lease for the slate. A cancellati
 once the slate is full is left to the next slate's first poll. A stopped
 validation retains its admitted prefix and reports the unfinished suffix
 explicitly. Every producer joins and settles its work before membership begins.
-Original validation has its own per-candidate work allowance. This schedule
-does not overlap production with device execution. Pending-byte limits cover
+Original validation has its own per-candidate work allowance. On a device
+route, an enumeration produces its next slate while the device checks the
+current slate's last submission, within one call; optimizing searches and the
+CPU routes do not overlap production with device execution. The slate's own
+producers still join and settle before its device check begins, and the next
+slate is submitted only after the current one commits. Pending-byte limits cover
 pending/result storage and original-validation scratch, not the entire region
 frontier, thread stacks or process memory.
 
@@ -490,6 +494,8 @@ receipts report validation work and retained bytes.
 
 Device execution uses the explicit joint-check protocol. A successful
 `CheckedBatch` binds decoded results to the exact theory and candidate slice;
+an overlapped check's `CheckedSlate` binds them to the theory, the slate's
+identity, and the submission's offset and count;
 all non-`NotModel` results establish original satisfaction, including residuals.
 The coordinator consumes these receipts in order and commits only after the
 entire pending batch succeeds. A failed device call retains pending candidates;
@@ -738,32 +744,86 @@ changed. A schedule engages the route when `I(W)` is at least
 `GpuTightOracle::UPDATE_ENGAGEMENT_STRIDES`, thirty-two, times its level count.
 Like the fitted size, the decision is structural, made once per resident theory
 and dispatched size, and on engaging schedules the change threshold still
-selects each slot's route. The factor is an execution choice, calibrated by
-measurement on an Apple M4 Pro GPU under Metal, and changes no verdict. The
-break-even it approximates also depends on the device and on how many nodes of
-one queued word a change reaches, which no structural rule can see. Declining
-keeps the dense routes, so a factor set high forgoes gains on the schedules it
-declines, and one set low slows those it engages; on a schedule above the factor,
-changes that reach many nodes of one word can still take longer with the route
-than without it.
+selects each slot's route. The factor is an execution choice and changes no
+verdict. Calibrated by measurement on an Apple M4 Pro GPU under Metal, it covers
+the change patterns measured there, their per-level chains included: scattered
+changes, and clustered changes of up to 64 atoms with one reader per input. The
+runtime guard below bounds the patterns beyond them, such as a change reaching
+many nodes of one queued word. The factor still decides whether a theory builds
+the index at all, sparing narrow theories the index, the state, the seeding
+batches and every losing probe, and it covers the update's extra
+synchronization, which the guard cannot see. Declining keeps the dense routes,
+so a factor set high forgoes gains on the schedules it declines, and one set low
+slows those it engages.
+
+On an engaged schedule a runtime guard bounds the loss of changes whose critical
+path, rather than their size, makes an update dearer than dense evaluation. It
+compares two paths counted by one cost table, which weighs the same evaluation
+alike on both routes: a node 1, each operand or condition it reads 1 (a wide
+conjunction or disjunction only those it reads before an absorbing value ends
+it), each readers entry an update visits 1, and each item of a scan 1, or 2
+where the scan reads two words per candidate word. Each update record carries
+the slot's path: in each phase after its summary, the costliest invocation of
+its workgroup, summed, with each invocation's share of the uniform scans and of
+the record. A summary after a batch that seeded every slot, such as the batch
+after the index is built or the guard's probe below, is a cost once per seeding,
+counted in the work but not in the path. A summary after the slot took dense
+reuse beyond the change threshold recurs with the changes, so its phases count
+in the path too, and the guard weighs them. The host computes dense reuse's
+path for one candidate, its busiest invocation over each level and each phase
+of support construction, once per resident theory and dispatched size in the
+pass that computes `I(W)`. It is a lower bound: where dense reuse's cost
+depends on the candidate, a wide gate's reduction or a numeric row skipped when
+none of its conditions changed, the path takes the least. After a batch decodes and its reuse authority is
+re-established, the guard judges it if any slot updated: when the batch's
+slowest update path exceeds the dense path, the route is declined. A batch's
+slots run concurrently, so a latency-bound batch waits for its slowest slot;
+judging the slowest keeps the loss bounded whether the batch holds the device
+or oversubscribes it, at the cost of declining a skewed batch whose sum would
+have won.
+
+The guard is engaged or declined. A losing judgment declines the route for the
+next batch, and each later one for twice as many batches as the last, up to 32;
+the wait never shrinks while the theory stays resident. While declined, every
+decoded batch counts the wait down and none is judged. A batch the guard
+declines runs the dense twin kernel, as a theory declined for its residency
+does, with its state allocated and accounted but unbound, so its count, prefix
+and reuse authority are an admitted batch's while every charge is the stateless
+one; it reports `GuardDeclined`. Once the wait ends, the next batch seeds the
+state, since every record written meanwhile says unseeded, and the batch after
+it updates and is judged. A failed or cancelled batch is never judged and
+consumes no wait. If every judged batch loses, at most one batch in 34 does so
+once the waits reach 32. The guard reads receipts, never a verdict or a
+witness, and changes which route evaluates a batch, never a verdict. The
+comparison sees operations, not their time: an update's storage atomics and
+indirect reads can cost more than dense evaluation's strided reads, invocations
+updating one word serialize, and neither route's synchronization is counted.
+Those errors vary with the device and the change, so how closely the guard
+follows the faster route is a measurement, not a consequence of the comparison.
 
 A narrower schedule declines the route with the typed reason `NarrowSchedule`
 from its theory's first batch on. It builds no index and holds no state, and its
 routes charge their stateless allowance and synchronize as they did before the
-route existed. A theory declined for its whole residency, by a narrow or serial
-schedule or by refused index bounds, runs the kernel's dense twin: an entry
-point that evaluates complete or dense truth as the full kernel does with the
-route not allowed, and whose call graph never names the route. Its pipeline
-therefore binds no state and compiles none of the route's phases, counters or
-decisions, and each variant is compiled at its first need. What the route still
-costs such a schedule is its larger parameter block and result records, 64
-rather than 32 bytes per batch and 36 rather than 24 per candidate. Admission of a scheduled layout also
-reserves the owner column and the per-head producer counters before the level
-widths are known; a narrow schedule releases both once packed, and its batch
-accounts neither. An exact call whose cold batch fits the scheduled layout only
-without those reservations, within `8 · live numeric rows + 4 · atoms` bytes of
-its allowance, keeps the theory on the serial schedule while it is resident;
-prefix calls, which admit their cold layout at one candidate, are unaffected.
+route existed. Which kernel a batch runs follows whether its update route is
+allowed: the full kernel exactly when it is, and otherwise the kernel's dense
+twin. The twin therefore runs a theory declined for its whole residency, by a
+narrow or serial schedule or by refused index bounds; an engaging theory's
+batches before its index is built; and a batch whose route a limit or the guard
+declines. The twin is an entry point that evaluates complete or dense truth as
+the full kernel's complete and dense routes do, and whose call graph never
+names the route. Its pipeline therefore binds no state and compiles none of the
+route's phases, counters or decisions. Each variant is compiled at its first
+need, so a theory that engages the route compiles both. A batch that admitted
+the state keeps it allocated and accounted while the twin leaves it unbound.
+What the route still costs a declined schedule is its larger parameter block
+and result records, 64 rather than 32 bytes per batch and 36 rather than 24 per
+candidate. Admission of a scheduled layout also reserves the owner column and
+the per-head producer counters before the level widths are known; a narrow
+schedule releases both once packed, and its batch accounts neither. An exact
+call whose cold batch fits the scheduled layout only without those
+reservations, within `8 · live numeric rows + 4 · atoms` bytes of its
+allowance, keeps the theory on the serial schedule while it is resident; prefix
+calls, which admit their cold layout at one candidate, are unaffected.
 
 Each slot's state counts in the batch's byte allowance once admitted. A prefix
 call admits it only when the state-inclusive layout still admits
@@ -788,14 +848,14 @@ remains accounted, like a retained schedule. The route is allowed only when its
 derived worst case, and dense reuse after a change count, fit the work
 allowance. While it is allowed, the complete and dense routes also retain the
 evaluated candidate, `words + 1` operations. Each result record carries its
-route, the nodes an update evaluated and whether the slot's state was seeded;
-an update's work receipt is what it performed, at least a fixed floor of
-`5 * words + ceil(nodes / 32)` word operations, one queued-set scan per level
-and the record. Batch statistics report the slots per route and the route's
-availability, with a typed reason when it is unavailable. The route's speed is a
-measurement, not a consequence of these bounds: on narrow changes it replaces
-most node evaluations by word scans, and on dense changes it falls back to dense
-reuse.
+route with whether the slot's state was seeded, the nodes an update evaluated,
+and an update's path; an update's work receipt is what it performed, at least a
+fixed floor of `5 * words + ceil(nodes / 32)` word operations, one queued-set
+scan per level and the record. Batch statistics report the slots per route, the
+route's availability, with a typed reason when it is unavailable, and the
+guard's two paths. The route's speed is a measurement, not a consequence of
+these bounds: on narrow changes it replaces most node evaluations by word scans,
+and on dense changes it falls back to dense reuse.
 
 Only complete decoding, healthy context completion and the final cancellation
 check authorize reuse. Dispatch consumes that authority before queue writes;
@@ -825,8 +885,17 @@ leave this record absent. Aggregate sweep totals alone cannot identify the
 reason for each residual.
 
 With several requested workers, the region proposer produces a bounded batch
-in parallel and joins before its device checker starts. CPU production and
-device checking do not overlap. Membership, scoring and objective feedback keep
+in parallel and joins before its own slate's device check starts. On an
+enumeration, the next slate's production overlaps the current slate's last
+submission; nothing else overlaps. A control stop during that production leaves
+the slate under check pending and undelivered, claims nothing for it, and lets
+the device observe its submission's completion. On a GPU formula session, the
+next slate's production and the current slate's residual completion draw on
+the stream's one cumulative search budget, production first: a work or decision
+limit that the production reaches, or brings within reach of that completion,
+leaves the slate under check pending and undelivered in the same way, while a
+slate the device decides wholly draws nothing at its commit and is delivered
+before the limit is reported. Membership, scoring and objective feedback keep
 the same original-theory and completed-batch boundaries. Failed device execution
 never triggers a hidden CPU replacement.
 
@@ -835,16 +904,21 @@ check and commit; the device checks a slate in one or more submissions. GPU
 formula sessions size their slates adaptively by default
 (`GpuBatching::Adaptive` in `SolveConfig`). Slates start at `batch_size`. The
 next slate is sized when it is selected, after the previous slate committed
-completely and its answers were scored. It returns to `batch_size` when those
+completely and its answers were scored. On an enumeration on a device route,
+the next slate is selected while the previous one is checked, from that slate's
+proposal and its submissions' admitted prefixes; an enumeration declares no
+bounds, so scoring cannot move its size. It returns to `batch_size` when those
 answers tightened the objective bound, doubles after a filled slate that left
 the bound unchanged, and otherwise keeps its size. The session's last selection
 follows its last non-empty slate and precedes the empty proposal that
-establishes exhaustion. Growth stops at the smallest device prefix observed,
+establishes exhaustion; on an enumeration, that proposal runs during the last
+slate's check, and exhaustion is established after its commit. Growth stops at the smallest device prefix observed,
 never below `batch_size`, and the pending-memory allowance bounds every slate.
 Under either policy a device submission takes as much of a slate as the device
 admits. Failed checks retain the same pending candidates and size. Larger
 slates mean fewer slates and submissions, but release their answers only after
-the whole slate is checked, and are produced under the bound as it stood when
+the whole slate is checked and, on an enumeration, after the next slate is
+produced, and are produced under the bound as it stood when
 they started. `GpuBatching::Fixed` keeps every slate at `batch_size` for
 controlled comparisons. Adaptive sizing is not a performance or allocation
 guarantee, and it never changes answer sets, optima or ties.

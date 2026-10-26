@@ -325,7 +325,8 @@ frozen-reduct query. Reusing it requires fixed-cost checks and an owner clone;
 each live oracle's retained graph and transport remain separate costs.
 
 A primitive operation holds an exclusive context lease through submission,
-readback and error cleanup. Another operation receives `GpuErrorKind::Busy`
+readback and error cleanup; an overlapping check is one operation, whose lease
+also spans the production it runs while its submission is in flight. Another operation receives `GpuErrorKind::Busy`
 without entering a waiting queue. This is serialized composition of primitives;
 their internal GPU parallelism remains unchanged. Prepared data does not retain
 that execution lease. The
@@ -342,7 +343,9 @@ and device-health check succeeds. An interrupted submitted operation may still
 be live and invalidates the context. Controlled static, formula and lazy batch
 entry polls control and then checks shared health, including empty batches.
 Readback observes control between waits of at most 50 milliseconds and releases
-mapped access before returning. Driver calls, shader execution and scope
+mapped access before returning, except after a control stop during an overlapped
+check's production, when the finish observes the submission's completion without
+polling the control, within the submission's timeout. Driver calls, shader execution and scope
 settlement are not preempted. `GpuError::interruption()` retains the exact stop;
 ordinary solving reports incomplete work without an automatic backend retry.
 Candidate proposals remain accounted for even when no device result returns.

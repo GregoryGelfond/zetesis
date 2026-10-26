@@ -104,6 +104,8 @@ pub(super) fn batch_stats(
         original_truth_reused: plan.original_truth_reused,
         routes: super::TightGpuRoutes::default(),
         nodes_evaluated: 0,
+        update_critical_path: 0,
+        dense_critical_path: graph.dense_path,
         updates: super::TightGpuUpdates::Pending,
         uploaded_bytes: PARAM_BYTES + plan.seeds + if fresh { graph.bytes } else { 0 },
         downloaded_bytes: plan.results,

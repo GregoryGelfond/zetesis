@@ -7,7 +7,7 @@ mod transport;
 mod update;
 
 use crate::GpuError;
-pub use device::GpuTightOracle;
+pub use device::{GpuTightOracle, PreparedTightSubmission};
 use std::{fmt, time::Duration};
 use zetesis_cpu::{Cancellation, Stop};
 use zetesis_ferraris::TightVerdict;
@@ -82,7 +82,10 @@ pub struct TightGpuLimits {
     /// dense evaluation takes at least
     /// [`GpuTightOracle::UPDATE_ENGAGEMENT_STRIDES`](crate::GpuTightOracle::UPDATE_ENGAGEMENT_STRIDES)
     /// workgroup strides per dependency level. Narrower schedules report
-    /// [`TightGpuUpdateUnavailable::NarrowSchedule`].
+    /// [`TightGpuUpdateUnavailable::NarrowSchedule`]. Once engaged, the oracle's
+    /// runtime guard can decline the route for a few batches at a time after a
+    /// batch whose slowest update's critical path exceeded dense evaluation's
+    /// ([`TightGpuUpdateUnavailable::GuardDeclined`]).
     pub min_update_candidates: usize,
     /// Bounded submission wait, with control polling at most 50 ms apart while
     /// waiting. Not GPU preemption or a bound on device creation, allocation,
@@ -108,6 +111,7 @@ impl Default for TightGpuLimits {
 pub struct TightGpuCheck {
     verdict: TightVerdict,
     work: u64,
+    critical_path: u64,
 }
 
 impl TightGpuCheck {
@@ -127,6 +131,21 @@ impl TightGpuCheck {
     pub const fn work(&self) -> u64 {
         self.work
     }
+
+    /// The update route's critical path for this check, by the runtime
+    /// guard's cost table, which counts what [`Self::work`] counts save that a
+    /// wide conjunction or disjunction costs the operands it read: the costliest
+    /// invocation of the candidate's workgroup in each phase after the
+    /// summary, and in each phase of the summary when the slot took dense reuse
+    /// beyond the change threshold in its previous batch, summed, with each
+    /// invocation's share of the update's uniform scans and of the record. A
+    /// summary after a batch that seeded every slot is left out. Zero for every
+    /// other route. Deterministic for the theory, the schedule and the
+    /// candidates.
+    #[must_use]
+    pub const fn critical_path(&self) -> u64 {
+        self.critical_path
+    }
 }
 
 /// Resource evidence for the last successful nonempty batch.
@@ -141,9 +160,9 @@ pub struct TightGpuBatchStats {
     /// padding; the producer buffer includes a built readers index.
     pub resident_theory_bytes: u64,
     /// Requested uniform, candidate, truth, support, result and readback
-    /// bytes, and the per-slot update state, or the full kernel's placeholder
-    /// for it. A theory declined for its residency runs the dense kernel,
-    /// which binds neither.
+    /// bytes, and the per-slot update state once admitted: bound when the
+    /// update route is allowed, and otherwise allocated but unbound, on the
+    /// kernel without the update route.
     pub resident_transport_bytes: u64,
     /// Conservative authored payload checked against the batch byte ceiling.
     pub accounted_bytes: u64,
@@ -165,6 +184,17 @@ pub struct TightGpuBatchStats {
     pub routes: TightGpuRoutes,
     /// Nodes re-evaluated by update-route slots, summed over the batch.
     pub nodes_evaluated: u64,
+    /// The largest critical path among the batch's update slots (see
+    /// [`TightGpuCheck::critical_path`]), or zero without update slots: the
+    /// runtime guard's measure of the update route.
+    pub update_critical_path: u64,
+    /// Dense reuse's least critical path for one candidate at the dispatched
+    /// workgroup size, by the same cost table as an update's: each dependency
+    /// level's and each scan's busiest invocation, summed, where every
+    /// candidate-dependent cost takes its least. The runtime guard declines
+    /// the route after a batch whose `update_critical_path` exceeds it. Zero
+    /// for a schedule the update route does not engage.
+    pub dense_critical_path: u64,
     /// Whether the update route was available to this batch, and why not.
     pub updates: TightGpuUpdates,
     /// Authored initialized/write-buffer payload, not measured bus traffic,
@@ -200,17 +230,20 @@ pub enum TightGpuUpdates {
     /// The batch held no reuse authority at its stateless count, which the
     /// route needs before it builds the theory's readers index. A fresh
     /// theory's first batch reports this unless its schedule or limits
-    /// already decline the route.
+    /// already decline the route. The batch ran the kernel without the update
+    /// route.
     #[default]
     Pending,
-    /// Per-slot state was bound and the route was allowed.
+    /// Per-slot state was bound and the route was allowed: the batch ran the
+    /// kernel with the update route.
     Admitted {
         /// Bits of each per-head support count: 8, 16 or 32.
         count_bits: u32,
         /// This batch uploaded the theory's readers index.
         index_built: bool,
     },
-    /// The route did not run in this batch, for the given reason.
+    /// The route did not run in this batch, for the given reason; the batch
+    /// ran the kernel without the update route.
     Unavailable(TightGpuUpdateUnavailable),
 }
 
@@ -240,6 +273,11 @@ pub enum TightGpuUpdateUnavailable {
     Work,
     /// [`TightGpuLimits::min_update_candidates`] was zero.
     Declined,
+    /// The oracle's runtime guard declined the route for this batch, which ran
+    /// the complete or dense routes on the kernel without the update route,
+    /// its state allocated and accounted. The guard decides which route
+    /// evaluates a batch, never a verdict.
+    GuardDeclined,
 }
 
 /// Evidence retained even when a batch fails. Reset at each new check.

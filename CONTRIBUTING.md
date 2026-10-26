@@ -311,10 +311,10 @@ Their checks remain separate from the workspace coverage population. Run
 clingo comparisons, `scripts/check.sh coverage` for both independent 91% line
 coverage floors, and `scripts/check.sh proofs` when proof sources or records change.
 Local `scripts/check.sh coverage --metal`, or `coverage --vulkan` on a Vulkan
-host, adds that backend's 70 exact physical tests within workspace coverage: static constructor and complete closure/reference checks,
+host, adds that backend's 75 exact physical tests within workspace coverage: static constructor and complete closure/reference checks,
 native aggregate reduction, lazy transport
 and source closure, typed relation masks, tight and formula
-oracles, shared-context composition, compute-pass timestamp attribution and failure handling, and ordinary
+oracles and their overlapping checks, shared-context composition, compute-pass timestamp attribution and failure handling, and ordinary
 lazy/formula CLI paths, complete-world-view collection and caller-owned session
 resources with exact executor context and compiled-profile identity, first-need
 compilation of fitted workgroup sizes and adapter selection over a prefetched
@@ -333,7 +333,7 @@ Every target group must report its
 expected named passing tests. `scripts/check.sh hardware` qualifies the host's
 own device backend without instrumentation, Metal on macOS and Vulkan
 elsewhere, or the one named by `--metal` or `--vulkan`: the same fourteen groups
-of 70 exact tests, each backend's reviewed selection, checking complete CPU/device
+of 75 exact tests, each backend's reviewed selection, checking complete CPU/device
 answer families and explicit failure boundaries; a change to a device route is qualified on
 every backend the hosts at hand expose, and the record says which. The
 portable report is retained separately; the CPU-only profile independently

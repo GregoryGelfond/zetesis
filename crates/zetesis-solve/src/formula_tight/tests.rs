@@ -73,3 +73,23 @@ fn the_tight_check_limits_carry_the_tight_batch_ceiling() {
         u64::from(options.gpu_formula_work)
     );
 }
+
+/// The one-phase check and the two-phase preparation take their limits from
+/// one function, so the two cannot drift apart. With a distinct value for each
+/// option it reads, each limit can match only through its own option; the byte
+/// ceiling's is the tight batch's.
+#[test]
+fn the_tight_check_limits_take_each_from_its_own_option() {
+    let options = crate::SolveConfig {
+        max_batch_bytes: 1_000,
+        max_tight_batch_bytes: 2_000,
+        gpu_formula_work: 3,
+        batch_size: std::num::NonZeroUsize::new(5).unwrap(),
+        ..crate::SolveConfig::default()
+    };
+    let limits = super::limits(&options, 7);
+    assert_eq!(limits.max_batch_bytes, 2_000);
+    assert_eq!(limits.max_candidates, 7);
+    assert_eq!(limits.max_work_per_candidate, 3);
+    assert_eq!(limits.min_update_candidates, 5);
+}

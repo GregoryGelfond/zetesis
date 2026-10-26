@@ -3,7 +3,7 @@
 use super::packing::{self, Decoded, Graph, PARAM_BYTES, Packed, Plan};
 use super::update::{self, Built, Stage};
 use super::{TightGpuActivity, poll};
-use crate::runtime::{self, Dispatch, Variant, buffer, entry, initialized};
+use crate::runtime::{self, Dispatch, Observation, Variant, buffer, entry, initialized};
 use crate::{GpuError, GpuErrorKind};
 use std::time::Duration;
 use zetesis_cpu::Cancellation;
@@ -18,12 +18,15 @@ pub(super) struct Resident {
     producers_generation: u64,
     /// The update route's admission for this theory.
     pub(super) updates: Stage,
+    /// The runtime guard, which belongs to the theory beside its stage.
+    pub(super) guard: update::Guard,
     pub(super) transport: Option<Transport>,
 }
 impl Resident {
     pub(super) fn new(device: &wgpu::Device, graph: Graph, packed: &Packed) -> Self {
         Self {
             updates: Stage::of(&graph),
+            guard: update::Guard::new(),
             nodes: initialized(
                 device,
                 "tight nodes",
@@ -94,23 +97,25 @@ impl Resident {
         bytes
     }
 
-    pub(super) fn dispatch(
+    /// Write and submit the batch, and request its readback's mapping. The
+    /// submission is in flight when this returns; [`Self::finish`] waits for
+    /// it. An error leaves nothing in flight.
+    pub(super) fn submit(
         &mut self,
         execution: &Execution<'_>,
-        seeds: &[u32],
-        plan: &Plan,
+        call: &Call<'_>,
         activity: &mut TightGpuActivity,
-        timing: &mut crate::timing::BatchTiming,
-    ) -> Result<runtime::Completion<Decoded>, GpuError> {
+    ) -> Result<Submitted, GpuError> {
         let Execution {
             device,
             queue,
             pipeline,
             variant,
-            timeout,
             cancellation,
             timer,
+            ..
         } = *execution;
+        let Call { seeds, plan } = *call;
         let bindings = Bindings {
             nodes: &self.nodes,
             roots: &self.roots,
@@ -159,12 +164,42 @@ impl Resident {
         activity.submissions = 1;
         activity.submitted_candidates = u64::from(plan.worlds);
         activity.scheduled_work = u64::from(plan.worlds) * u64::from(plan.allowance);
+        Ok(Submitted {
+            pending: runtime::request_read(&transport.readback, submission.index),
+            at: submission.at,
+        })
+    }
+
+    /// Wait for the submitted batch, observing the control as `observation`
+    /// says, then decode its readback. The transport is the one `submit` used:
+    /// nothing replaces it within one check.
+    pub(super) fn finish(
+        &self,
+        execution: &Execution<'_>,
+        submitted: Submitted,
+        observation: Observation,
+        call: &Call<'_>,
+        activity: &mut TightGpuActivity,
+        timing: &mut crate::timing::BatchTiming,
+    ) -> Result<runtime::Completion<Decoded>, GpuError> {
+        let Execution {
+            device,
+            timeout,
+            cancellation,
+            ..
+        } = *execution;
+        let Call { seeds, plan } = *call;
+        let transport = self
+            .transport
+            .as_ref()
+            .ok_or_else(|| GpuError::new(GpuErrorKind::Device, "missing tight transport"))?;
         let mut performed = 0;
-        let result = runtime::read_polled(
+        let result = runtime::finish_pending(
             device,
             &transport.readback,
-            submission.index,
+            submitted.pending,
             timeout,
+            observation,
             || poll(cancellation),
             |words| {
                 let (words, tail) = crate::timing::split_readback(words, transport.timed)?;
@@ -174,7 +209,7 @@ impl Resident {
                 Ok(decoded)
             },
         );
-        timing.window = result.window_since(submission.at);
+        timing.window = result.window_since(submitted.at);
         if result.is_ok() {
             activity.completed_candidates = u64::from(plan.worlds);
             activity.completed_work = performed;
@@ -187,6 +222,20 @@ impl Resident {
         }
         Ok(result)
     }
+}
+
+/// One batch's host side: the candidate seeds it uploads and its plan.
+#[derive(Clone, Copy)]
+pub(super) struct Call<'a> {
+    pub(super) seeds: &'a [u32],
+    pub(super) plan: &'a Plan,
+}
+
+/// A submitted batch awaiting its finish: its pending readback and the host
+/// instant just before its submission, from which its window is measured.
+pub(super) struct Submitted {
+    pending: runtime::PendingRead,
+    at: std::time::Instant,
 }
 
 pub(super) struct Execution<'a> {
@@ -217,10 +266,11 @@ pub(super) struct Transport {
     support: wgpu::Buffer,
     results: wgpu::Buffer,
     readback: wgpu::Buffer,
-    /// The per-slot update state, or the full kernel's placeholder when none
-    /// is bound; absent under the dense kernel, which binds no state.
+    /// The per-slot update state, when the plan holds one: bound by the full
+    /// kernel, and kept allocated but unbound by the dense twin when a limit or
+    /// the runtime guard declines the route of a batch that admitted it.
     state: Option<wgpu::Buffer>,
-    /// The state's bytes; zero for the placeholder or no state.
+    /// The state's bytes; zero without state.
     state_bytes: u64,
     /// The kernel `group` binds for: the full kernel's layout has binding 8,
     /// the dense twin's does not.
@@ -281,12 +331,13 @@ impl Transport {
             readback_bytes,
             wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
         );
-        let state = state_buffer(device, variant, plan.state);
+        let state = state_buffer(device, plan.state);
         let group = bind(
             device,
             pipeline,
             bindings,
             [&params, &seeds, &truth, &support, &results],
+            variant,
             state.as_ref(),
         );
         Ok(Self {
@@ -309,12 +360,14 @@ impl Transport {
 
     /// Bring a retained transport to `plan`'s state, `variant`'s kernel and the
     /// resident's current producer buffer, keeping its truth and result
-    /// authority. A state is added only where the placeholder, or no state, was
-    /// bound, so the previous records, written without the route allowed, say
-    /// no slot is seeded; a dropped state takes its retained evaluations with
-    /// it, and this batch, without the route, records every slot unseeded. A
-    /// theory whose route becomes declined for its residency moves to the dense
-    /// kernel and drops its state. Each of these changes rebinds.
+    /// authority. A state is added only where none was held, so the previous
+    /// records, written by the kernel without the route, say no slot is seeded;
+    /// a dropped state takes its retained evaluations with it, and this batch,
+    /// on that kernel, records every slot unseeded. A batch that keeps its
+    /// state while a limit or the runtime guard declines its route moves to the
+    /// kernel without the route and leaves the state allocated, unbound; every
+    /// record it writes says unseeded, so the state's contents bind no later
+    /// batch. Each change of state or kernel rebinds.
     fn conform(
         &mut self,
         device: &wgpu::Device,
@@ -323,13 +376,14 @@ impl Transport {
         bindings: &Bindings<'_>,
         plan: &Plan,
     ) {
-        let state_changed = self.state_bytes != plan.state || self.variant != variant;
+        let kernel_changed = self.variant != variant;
+        let state_changed = self.state_bytes != plan.state;
         if state_changed {
-            self.state = state_buffer(device, variant, plan.state);
+            self.state = state_buffer(device, plan.state);
             self.state_bytes = plan.state;
-            self.variant = variant;
         }
-        if state_changed || self.generation != bindings.generation {
+        if state_changed || kernel_changed || self.generation != bindings.generation {
+            self.variant = variant;
             self.group = bind(
                 device,
                 pipeline,
@@ -341,6 +395,7 @@ impl Transport {
                     &self.support,
                     &self.results,
                 ],
+                variant,
                 self.state.as_ref(),
             );
             self.generation = bindings.generation;
@@ -348,35 +403,29 @@ impl Transport {
     }
 }
 
-/// The update state of `bytes` for the full kernel, or its placeholder when
-/// `bytes` is zero; nothing for the dense kernel, which binds no state. Device
+/// The update state of `bytes`, or none for a plan without state. Device
 /// buffers start zeroed, so every slot starts unseeded.
-fn state_buffer(device: &wgpu::Device, variant: Variant, bytes: u64) -> Option<wgpu::Buffer> {
-    match (variant, bytes) {
-        (Variant::Dense, _) => None,
-        (Variant::Full, 0) => Some(buffer(
-            device,
-            "tight update placeholder",
-            update::PLACEHOLDER_BYTES,
-            wgpu::BufferUsages::STORAGE,
-        )),
-        (Variant::Full, bytes) => Some(buffer(
+fn state_buffer(device: &wgpu::Device, bytes: u64) -> Option<wgpu::Buffer> {
+    (bytes != 0).then(|| {
+        buffer(
             device,
             "tight update state",
             bytes,
             wgpu::BufferUsages::STORAGE,
-        )),
-    }
+        )
+    })
 }
 
 /// The resident's and the transport's buffers as `pipeline`'s layout binds
-/// them: binding 8 holds `state` for the full kernel, and the dense twin's
-/// layout has no binding 8.
+/// them: binding 8 holds `state` for the full kernel, which runs only with the
+/// route allowed and so with the state, and the dense twin's layout has no
+/// binding 8, whatever state the transport keeps.
 fn bind(
     device: &wgpu::Device,
     pipeline: &wgpu::ComputePipeline,
     bindings: &Bindings<'_>,
     [params, seeds, truth, support, results]: [&wgpu::Buffer; 5],
+    variant: Variant,
     state: Option<&wgpu::Buffer>,
 ) -> wgpu::BindGroup {
     let mut entries = vec![
@@ -389,7 +438,7 @@ fn bind(
         entry(6, support),
         entry(7, results),
     ];
-    if let Some(state) = state {
+    if let (Variant::Full, Some(state)) = (variant, state) {
         entries.push(entry(8, state));
     }
     device.create_bind_group(&wgpu::BindGroupDescriptor {

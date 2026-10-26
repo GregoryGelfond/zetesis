@@ -13,6 +13,40 @@ use crate::{SolveConfig, SolveError};
 
 #[cfg(feature = "gpu")]
 mod batching;
+#[cfg(feature = "gpu")]
+pub(crate) mod device;
+#[cfg(all(test, feature = "gpu"))]
+mod lookahead_tests;
+
+/// The answers a session still requests, which decide whether a device
+/// queue proposes the next slate while the current one is checked.
+#[cfg(feature = "gpu")]
+#[derive(Clone, Copy, Debug, Default)]
+pub(crate) struct Demand {
+    /// The session enumerates answer sets rather than selecting optimal ones.
+    pub(crate) enumerates: bool,
+    /// The answers still owed, or `None` when the request is unbounded.
+    pub(crate) owed: Option<usize>,
+}
+
+/// What a device queue's slates proposed ahead did.
+#[cfg(feature = "gpu")]
+#[derive(Clone, Copy, Debug, Default)]
+pub(crate) struct LookaheadReceipts {
+    /// Slates proposed while their predecessor's last submission was checked.
+    pub(crate) slates: u64,
+    /// The last decision, once a device slate was handed out.
+    pub(crate) decision: Option<crate::GpuLookahead>,
+    /// Measured device compute of the overlapped submissions whose interval
+    /// the timer reported, each booked with its own finish wait.
+    pub(crate) device_ns: u64,
+    /// The finish waits of the same submissions, each from the end of the
+    /// production beside it to its observed completion.
+    pub(crate) finish_wait_ns: u64,
+    /// Overlapped submissions whose interval the timer refused or never
+    /// resolved. Their waits are left out of [`Self::finish_wait_ns`].
+    pub(crate) unmeasured: u64,
+}
 
 #[derive(Default)]
 /// Owns only reduct-verified models awaiting objective scoring or output.
@@ -25,6 +59,29 @@ pub(crate) struct BatchQueue {
     original_check: OriginalCheck,
     #[cfg(feature = "gpu")]
     batching: batching::Batching,
+    #[cfg(feature = "gpu")]
+    demand: Demand,
+    #[cfg(feature = "gpu")]
+    lookahead: LookaheadReceipts,
+    /// The last decoded device submission, when it was checked while the
+    /// host proposed the next slate. The device reports each submission's
+    /// compute interval with the next submission, or at the settlement's
+    /// flush, and the pair is booked then.
+    #[cfg(feature = "gpu")]
+    last_overlapped: Option<Overlapped>,
+    /// When this queue was built, and when it released its first answer.
+    #[cfg(feature = "gpu")]
+    created: Option<Instant>,
+    #[cfg(feature = "gpu")]
+    first_answer: Option<std::time::Duration>,
+}
+
+/// A decoded device submission checked while the host proposed the next
+/// slate: its finish wait, absent if its check reported none.
+#[cfg(feature = "gpu")]
+#[derive(Clone, Copy, Debug)]
+struct Overlapped {
+    wait: Option<Duration>,
 }
 
 #[derive(Default)]
@@ -58,6 +115,7 @@ impl BatchQueue {
         let mut queue = Self::with_completion_workers(options, workers)?;
         queue.original_check = OriginalCheck::Joint;
         queue.batching = batching::Batching::new(options);
+        queue.created = Some(Instant::now());
         Ok(queue)
     }
 
@@ -108,6 +166,264 @@ impl BatchQueue {
         self.batching.resets()
     }
 
+    /// Record the answers the session still requests, before each pull.
+    #[cfg(feature = "gpu")]
+    pub(crate) const fn set_demand(&mut self, demand: Demand) {
+        self.demand = demand;
+    }
+
+    /// Whether the session enumerates, so that its device slates take the
+    /// two-phase protocol.
+    #[cfg(feature = "gpu")]
+    pub(crate) const fn enumerates(&self) -> bool {
+        self.demand.enumerates
+    }
+
+    /// Record that an optimizing search keeps the serial schedule.
+    #[cfg(feature = "gpu")]
+    pub(crate) const fn decline_optimizing(&mut self) {
+        self.lookahead.decision = Some(crate::GpuLookahead::Declined(
+            crate::GpuLookaheadDeclined::Optimizing,
+        ));
+    }
+
+    /// What this device queue's slates proposed ahead did.
+    #[cfg(feature = "gpu")]
+    pub(crate) const fn lookahead(&self) -> LookaheadReceipts {
+        self.lookahead
+    }
+
+    /// Elapsed time from this queue's construction to its first answer.
+    #[cfg(feature = "gpu")]
+    pub(crate) fn first_answer_ns(&self) -> Option<u64> {
+        self.first_answer.map(nanos)
+    }
+
+    /// Record the release of an answer: the first fixes the time to first answer.
+    #[cfg(feature = "gpu")]
+    fn released(&mut self) {
+        if self.first_answer.is_none()
+            && let Some(created) = self.created
+        {
+            self.first_answer = Some(created.elapsed());
+        }
+    }
+
+    /// Book the settlement's flushed interval, which belongs to the last
+    /// submission, with that submission's wait if it was overlapped. Without
+    /// a flushed interval, an overlapped last submission counts as
+    /// unmeasured.
+    #[cfg(feature = "gpu")]
+    pub(crate) fn flushed(&mut self, report: Option<zetesis_backend::BatchComputeTime>) {
+        self.attribute(report, None);
+    }
+
+    /// The next reduct-verified model of a device enumeration. Each slate is
+    /// checked in prefix-order submissions, at most one in flight. While its
+    /// last submission is checked the stream proposes the next slate, when the
+    /// session enumerates and the answers still owed exceed the slate. The
+    /// slate commits after its checks decode, and a control stop observed then
+    /// leaves it pending, its checks dropped. Nothing is in flight when this
+    /// returns.
+    #[cfg(feature = "gpu")]
+    pub(crate) fn next_device<D: device::SlateDevice>(
+        &mut self,
+        models: &mut StableModels,
+        options: &SolveConfig,
+        cancellation: &Cancellation,
+        phases: &crate::phase_timing::Recorder,
+        device: &mut D,
+    ) -> Option<Result<Interpretation, Failure>> {
+        loop {
+            if let Err(error) = cancellation.poll() {
+                return Some(Err(Failure::Search(error.into())));
+            }
+            if let Some(model) = self.ready.pop_front() {
+                self.released();
+                return Some(Ok(model));
+            }
+            match self.check_slate(models, options, cancellation, phases, device) {
+                Ok(true) => return None,
+                Ok(false) => {}
+                Err(failure) => return Some(Err(failure)),
+            }
+        }
+    }
+
+    /// Check and commit one slate; `true` when the stream is exhausted.
+    #[cfg(feature = "gpu")]
+    fn check_slate<D: device::SlateDevice>(
+        &mut self,
+        models: &mut StableModels,
+        options: &SolveConfig,
+        cancellation: &Cancellation,
+        phases: &crate::phase_timing::Recorder,
+        device: &mut D,
+    ) -> Result<bool, Failure> {
+        use crate::phase_timing::SolvePhase;
+        use device::PreparedSubmission;
+        use zetesis_sat::SlateProposal;
+
+        let selected = self.batching.select(models, options);
+        let limits = BatchLimits {
+            max_candidates: selected,
+            max_pending_bytes: options.max_batch_bytes,
+        };
+        let ticket = match models.propose_slate(limits).map_err(Failure::from)? {
+            SlateProposal::New(ticket) => {
+                let proposed = models
+                    .slate(&ticket)
+                    .map_err(Failure::from)?
+                    .candidates()
+                    .len();
+                self.batching.proposed(selected, proposed);
+                ticket
+            }
+            SlateProposal::Ahead(ticket) => {
+                self.batching.promoted();
+                ticket
+            }
+            SlateProposal::Retry(ticket) => ticket,
+            SlateProposal::Exhausted => return Ok(true),
+            _ => return Err(Failure::from(crate::ExecutorError::ForeignBatch)),
+        };
+        let slate = ticket.slate();
+        let (theory, count) = {
+            let view = models.slate(&ticket).map_err(Failure::from)?;
+            (view.theory().clone(), view.candidates().len())
+        };
+        let mut verdicts = Vec::new();
+        verdicts
+            .try_reserve_exact(count)
+            .map_err(|_| Failure::Search(zetesis_sat::Incomplete::Allocation))?;
+        let mut ahead = None;
+        while verdicts.len() < count {
+            let offset = verdicts.len();
+            let view = models.slate(&ticket).map_err(Failure::from)?;
+            let prepared = phases.measure(SolvePhase::GpuHostOracle, || {
+                device.prepare(view, offset, cancellation)
+            })?;
+            let offered = count - offset;
+            self.batching.admitted(offered, prepared.count());
+            let overlapped = prepared.count() >= offered && self.engages(count);
+            let checked = if overlapped {
+                let lookahead_limits = BatchLimits {
+                    max_candidates: self.batching.select_lookahead(models, options),
+                    max_pending_bytes: options.max_batch_bytes,
+                };
+                let submission = phases.start(SolvePhase::GpuHostOracle);
+                let mut finish = None;
+                let (checked, proposal) = prepared.check_overlapping(cancellation, || {
+                    drop(submission);
+                    let proposal = models.propose_lookahead(lookahead_limits);
+                    finish = Some(phases.start(SolvePhase::GpuHostOracle));
+                    proposal
+                });
+                // The check reports its finish's wait with its receipt.
+                drop(finish);
+                ahead = proposal.map(|proposal| (proposal, lookahead_limits.max_candidates));
+                checked
+            } else {
+                phases.measure(SolvePhase::GpuHostOracle, || prepared.check(cancellation))
+            };
+            let decoded = device.decode(checked, &theory, slate, offset, offered)?;
+            self.attribute(
+                decoded.compute,
+                overlapped.then_some(Overlapped {
+                    wait: decoded.finish_wait,
+                }),
+            );
+            verdicts.extend(decoded.verdicts);
+        }
+        // A stop observed now leaves the slate pending, its checks dropped:
+        // the commit's completion and model construction poll the same control.
+        if let Err(error) = cancellation.poll() {
+            return Err(Failure::Search(error.into()));
+        }
+        if let Some((proposal, selected)) = ahead {
+            self.proposed_ahead(models, proposal.map_err(Failure::from)?, selected, count);
+        }
+        let prior_completion = models.batch_statistics().completion_calls;
+        let result = models.commit_slate(ticket, verdicts, &mut self.completion);
+        if models.batch_statistics().completion_calls != prior_completion
+            && let Some(progress) = self.completion.last_statistics()
+        {
+            self.accounting.record(progress);
+        }
+        let batch = result.map_err(Failure::from)?;
+        // The bound generation is read after the commit and before any of the
+        // slate's models is scored.
+        self.batching.committed_in_flight(models.bound_generation());
+        self.ready = batch.into();
+        Ok(false)
+    }
+
+    /// Record what the lookahead beside a slate of `count` candidates did.
+    #[cfg(feature = "gpu")]
+    fn proposed_ahead(
+        &mut self,
+        models: &StableModels,
+        proposal: zetesis_sat::Lookahead,
+        selected: NonZeroUsize,
+        count: usize,
+    ) {
+        self.lookahead.decision = Some(match proposal {
+            zetesis_sat::Lookahead::Declined(reason) => {
+                crate::GpuLookahead::Declined(crate::GpuLookaheadDeclined::Stream(reason))
+            }
+            _ => crate::GpuLookahead::Engaged,
+        });
+        if let zetesis_sat::Lookahead::Proposed(_) = proposal {
+            self.lookahead.slates = self.lookahead.slates.saturating_add(1);
+            let proposed = models.batch_statistics().pending.saturating_sub(count);
+            self.batching.proposed_ahead(selected, proposed);
+        }
+    }
+
+    /// Whether the last submission of a slate of `count` candidates is checked
+    /// while the stream proposes the next slate; a refusal is recorded.
+    #[cfg(feature = "gpu")]
+    fn engages(&mut self, count: usize) -> bool {
+        let declined = if !self.demand.enumerates {
+            Some(crate::GpuLookaheadDeclined::Optimizing)
+        } else if self.demand.owed.is_some_and(|owed| owed <= count) {
+            Some(crate::GpuLookaheadDeclined::RequestedAnswers)
+        } else {
+            None
+        };
+        if let Some(reason) = declined {
+            self.lookahead.decision = Some(crate::GpuLookahead::Declined(reason));
+            return false;
+        }
+        true
+    }
+
+    /// Book the interval `report`, which belongs to the submission before
+    /// this one, when that submission was overlapped: a measured interval is
+    /// summed with that submission's own finish wait, and any other report
+    /// counts it as unmeasured, its wait left out, so the two sums cover the
+    /// same submissions. Then keep this submission, if `overlapped`, for its
+    /// own interval.
+    #[cfg(feature = "gpu")]
+    fn attribute(
+        &mut self,
+        report: Option<zetesis_backend::BatchComputeTime>,
+        overlapped: Option<Overlapped>,
+    ) {
+        if let Some(Overlapped { wait }) = self.last_overlapped.take() {
+            match (report, wait) {
+                (Some(zetesis_backend::BatchComputeTime::Measured(interval)), Some(wait)) => {
+                    self.lookahead.device_ns =
+                        self.lookahead.device_ns.saturating_add(nanos(interval));
+                    self.lookahead.finish_wait_ns =
+                        self.lookahead.finish_wait_ns.saturating_add(nanos(wait));
+                }
+                _ => self.lookahead.unmeasured = self.lookahead.unmeasured.saturating_add(1),
+            }
+        }
+        self.last_overlapped = overlapped;
+    }
+
     /// The checker sees original candidates, never models already returned by
     /// the stable iterator. A restriction cannot erase these verified queued
     /// interpretations; they must still be scored or explicitly left unreported.
@@ -123,6 +439,8 @@ impl BatchQueue {
                 return Some(Err(Failure::Search(error.into())));
             }
             if let Some(model) = self.ready.pop_front() {
+                #[cfg(feature = "gpu")]
+                self.released();
                 return Some(Ok(model));
             }
             if models.exhausted() {
@@ -192,10 +510,38 @@ impl BatchQueue {
                         actual,
                     })));
                 }
+                // The closure form never names a slate by ticket, so its
+                // receipts are bound to their batch by slice, as before.
+                Err(BatchError::SlateOrder) => {
+                    return Some(Err(Failure::from(crate::ExecutorError::ForeignBatch)));
+                }
             }
         }
     }
 }
+
+/// A two-phase protocol failure, as the closure form's failures map.
+#[cfg(feature = "gpu")]
+impl From<BatchError<std::convert::Infallible>> for Failure {
+    fn from(error: BatchError<std::convert::Infallible>) -> Self {
+        match error {
+            BatchError::Search(error) | BatchError::Limits(error) => Self::Search(error),
+            BatchError::Shape { expected, actual } => {
+                Self::Run(SolveError::FormulaBatchShape { expected, actual })
+            }
+            BatchError::SlateOrder => Self::from(crate::ExecutorError::ForeignBatch),
+            BatchError::Checker(never) => match never {},
+        }
+    }
+}
+
+#[cfg(feature = "gpu")]
+fn nanos(duration: std::time::Duration) -> u64 {
+    u64::try_from(duration.as_nanos()).unwrap_or(u64::MAX)
+}
+
+#[cfg(feature = "gpu")]
+use std::time::{Duration, Instant};
 
 #[cfg(test)]
 mod tests {

@@ -90,12 +90,16 @@ pub enum TightUpdateAvailability {
     Work,
     /// The route was declined.
     Declined,
+    /// The device oracle's runtime guard declined the route for the batch,
+    /// after a recent batch's slowest update path exceeded dense
+    /// evaluation's.
+    GuardDeclined,
 }
 
 impl TightUpdateAvailability {
     /// The serialized name: `pending`, `admitted`, `serial_schedule`,
-    /// `narrow_schedule`, `candidate_ceiling`, `index_bounds`, `bytes`, `work`
-    /// or `declined`.
+    /// `narrow_schedule`, `candidate_ceiling`, `index_bounds`, `bytes`, `work`,
+    /// `declined` or `guard_declined`.
     #[must_use]
     pub const fn label(self) -> &'static str {
         match self {
@@ -108,6 +112,7 @@ impl TightUpdateAvailability {
             Self::Bytes => "bytes",
             Self::Work => "work",
             Self::Declined => "declined",
+            Self::GuardDeclined => "guard_declined",
         }
     }
 }
@@ -127,6 +132,9 @@ pub struct TightUpdateStatistics {
     /// A decoded batch held reuse authority, so the availability is the run's
     /// steady state rather than the report of a batch without authority.
     pub steady_state: bool,
+    /// Decoded batches the device oracle's runtime guard declined the route
+    /// for, so a run that declined and then re-engaged shows both.
+    pub guard_declined_batches: u64,
 }
 
 /// Actual formula GPU work and explicitly retained candidate results.
@@ -180,6 +188,35 @@ pub struct FormulaExecutionStatistics {
     /// whose answers installed a bound. Always zero under fixed batching and
     /// for CPU routes.
     pub gpu_slate_resets: u64,
+    /// Slates a GPU enumeration proposed while their predecessor's last
+    /// submission was checked on the device. Zero for optimizing searches and
+    /// for CPU routes.
+    pub gpu_lookahead_slates: u64,
+    /// The last decision on proposing a slate ahead: engaged, or declined with
+    /// its reason, so a run shows why it stayed serial. Absent for CPU routes
+    /// and before a GPU session's first slate.
+    pub gpu_lookahead: Option<GpuLookahead>,
+    /// Device compute of the submissions checked while the host proposed the
+    /// next slate, in nanoseconds: the measured intervals of
+    /// [`Self::gpu_compute_timing`] that belong to those submissions, each
+    /// paired with its submission's finish wait in
+    /// [`Self::gpu_lookahead_finish_wait_ns`].
+    pub gpu_lookahead_device_ns: u64,
+    /// The finish's waits on the same submissions, in nanoseconds: each from
+    /// the end of the production run beside it to its observed completion,
+    /// before its readback is mapped and decoded. The device time hidden
+    /// behind production is the difference of the two paired sums,
+    /// [`Self::gpu_lookahead_device_ns`] less this, over the overlapped
+    /// submissions with a measured interval.
+    pub gpu_lookahead_finish_wait_ns: u64,
+    /// Overlapped submissions whose interval the timer refused or never
+    /// resolved. Neither paired sum includes them, so the hidden time covers
+    /// only the submissions measured; zero for CPU routes.
+    pub gpu_lookahead_unmeasured: u64,
+    /// Elapsed time from the device execution's construction to the release of
+    /// its first answer, in nanoseconds; reported, never a criterion. Absent
+    /// before the first answer and for CPU routes.
+    pub first_answer_ns: Option<u64>,
     /// Candidate worlds returned by successful GPU dispatches.
     pub gpu_candidates: u64,
     /// Charged primitive work from successfully decoded results; not time or
@@ -209,6 +246,57 @@ pub struct FormulaExecutionStatistics {
     /// waiting and exact residual time; a settlement's resolve-only submission
     /// is counted as a flush, not a batch.
     pub gpu_compute_timing: zetesis_backend::ComputeTiming,
+}
+
+/// Whether a GPU enumeration proposed its next slate while the device checked
+/// the current one.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum GpuLookahead {
+    /// The next slate's production ran while the current slate's last
+    /// submission was checked.
+    Engaged,
+    /// The next slate was proposed after the current one committed.
+    Declined(GpuLookaheadDeclined),
+}
+
+/// Why a GPU session did not propose its next slate while the device checked
+/// the current one.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum GpuLookaheadDeclined {
+    /// The session selects optimal answers, whose bound a slate produced ahead
+    /// would not see.
+    Optimizing,
+    /// The answers still requested fit the slate under check, so a slate
+    /// proposed ahead would not be used.
+    RequestedAnswers,
+    /// The candidate stream declined it.
+    Stream(zetesis_sat::LookaheadDeclined),
+}
+
+impl GpuLookahead {
+    /// A stable snake-case name for reports: `engaged`, or the reason it
+    /// was declined.
+    #[must_use]
+    pub const fn label(self) -> &'static str {
+        match self {
+            Self::Engaged => "engaged",
+            Self::Declined(reason) => reason.label(),
+        }
+    }
+}
+
+impl GpuLookaheadDeclined {
+    /// A stable snake-case name for reports.
+    #[must_use]
+    pub const fn label(self) -> &'static str {
+        match self {
+            Self::Optimizing => "optimizing",
+            Self::RequestedAnswers => "requested_answers",
+            Self::Stream(reason) => reason.label(),
+        }
+    }
 }
 
 pub(crate) enum Failure {
@@ -242,6 +330,12 @@ pub(crate) trait MembershipExecution {
         phases: &Recorder,
     ) -> Option<Result<Interpretation, Failure>>;
     fn statistics(&self, models: &StableModels) -> Option<FormulaExecutionStatistics>;
+    /// Record, before a pull, whether the session enumerates answer sets and
+    /// how many it still owes (`None` when unbounded). A device execution
+    /// proposes the next slate while the current one is checked only for an
+    /// enumeration whose owed answers exceed the slate under check. Other
+    /// executions ignore it.
+    fn demand(&mut self, _enumerates: bool, _owed: Option<usize>) {}
     /// Read the last completed device batch's compute-pass interval before the
     /// execution's final snapshot. A device execution observes the control and
     /// waits at most the time it kept from construction, so every path into a
@@ -396,6 +490,15 @@ impl Execution {
 }
 
 impl MembershipExecution for Execution {
+    fn demand(&mut self, enumerates: bool, owed: Option<usize>) {
+        #[cfg(feature = "gpu")]
+        if let Self::Hybrid { queue, .. } | Self::Tight { queue, .. } = self {
+            queue.set_demand(crate::formula_queue::Demand { enumerates, owed });
+        }
+        #[cfg(not(feature = "gpu"))]
+        let _ = (enumerates, owed);
+    }
+
     fn statistics(&self, models: &StableModels) -> Option<FormulaExecutionStatistics> {
         match self {
             Self::Cpu => None,
@@ -439,32 +542,45 @@ impl MembershipExecution for Execution {
             #[cfg(feature = "gpu")]
             Self::Hybrid {
                 oracle,
+                queue,
                 statistics,
                 settlement,
-                ..
             } => {
-                if oracle.compute_time_unresolved() {
+                let flushed = if oracle.compute_time_unresolved() {
                     // A failed flush leaves its fault in the context's health.
                     let _ = phases.measure(SolvePhase::GpuHostOracle, || {
                         oracle.flush_compute_time(settlement.wait, &settlement.control)
                     });
                     record_flush(statistics, oracle.reported_compute_time());
-                }
+                    oracle.reported_compute_time()
+                } else {
+                    None
+                };
+                // The last submission's interval arrives only with the flush;
+                // without one, an overlapped last submission is unmeasured.
+                queue.flushed(flushed);
             }
             #[cfg(feature = "gpu")]
             Self::Tight {
                 oracle,
+                queue,
                 statistics,
                 settlement,
                 ..
             } => {
-                if oracle.compute_time_unresolved() {
+                let flushed = if oracle.compute_time_unresolved() {
                     // A failed flush leaves its fault in the context's health.
                     let _ = phases.measure(SolvePhase::GpuHostOracle, || {
                         oracle.flush_compute_time(settlement.wait, &settlement.control)
                     });
                     record_flush(statistics, oracle.reported_compute_time());
-                }
+                    oracle.reported_compute_time()
+                } else {
+                    None
+                };
+                // The last submission's interval arrives only with the flush;
+                // without one, an overlapped last submission is unmeasured.
+                queue.flushed(flushed);
             }
         }
     }
@@ -498,18 +614,31 @@ impl MembershipExecution for Execution {
                 queue,
                 statistics,
                 ..
-            } => queue.next(models, options, cancellation, |batch| {
-                let verdicts = propagate(
-                    oracle,
-                    statistics,
-                    batch.theory(),
-                    batch.candidates(),
-                    options,
-                    cancellation,
-                    phases,
-                )?;
-                verdicts.finish(batch).map_err(Failure::from)
-            }),
+            } => {
+                if queue.enumerates() {
+                    let mut device = FormulaDevice {
+                        oracle,
+                        statistics,
+                        options,
+                    };
+                    return queue.next_device(models, options, cancellation, phases, &mut device);
+                }
+                // An optimizing search keeps the serial schedule of the
+                // closure form, under which no slate is produced ahead.
+                queue.decline_optimizing();
+                queue.next(models, options, cancellation, |batch| {
+                    let verdicts = propagate(
+                        oracle,
+                        statistics,
+                        batch.theory(),
+                        batch.candidates(),
+                        options,
+                        cancellation,
+                        phases,
+                    )?;
+                    verdicts.finish(batch).map_err(Failure::from)
+                })
+            }
             #[cfg(feature = "gpu")]
             Self::Tight {
                 oracle,
@@ -517,18 +646,30 @@ impl MembershipExecution for Execution {
                 queue,
                 statistics,
                 ..
-            } => queue.next(models, options, cancellation, |batch| {
-                let verdicts = super::formula_tight::check(
-                    oracle,
-                    plan,
-                    statistics,
-                    batch.candidates(),
-                    options,
-                    cancellation,
-                    phases,
-                )?;
-                verdicts.finish(batch).map_err(Failure::from)
-            }),
+            } => {
+                if queue.enumerates() {
+                    let mut device = super::formula_tight::TightDevice {
+                        oracle,
+                        plan,
+                        statistics,
+                        options,
+                    };
+                    return queue.next_device(models, options, cancellation, phases, &mut device);
+                }
+                queue.decline_optimizing();
+                queue.next(models, options, cancellation, |batch| {
+                    let verdicts = super::formula_tight::check(
+                        oracle,
+                        plan,
+                        statistics,
+                        batch.candidates(),
+                        options,
+                        cancellation,
+                        phases,
+                    )?;
+                    verdicts.finish(batch).map_err(Failure::from)
+                })
+            }
         }
     }
 }
@@ -657,6 +798,13 @@ pub(crate) fn record_slates(
     statistics.gpu_slates = queue.slates();
     statistics.gpu_largest_slate = queue.largest_slate().map(std::num::NonZeroUsize::get);
     statistics.gpu_slate_resets = queue.slate_resets();
+    let lookahead = queue.lookahead();
+    statistics.gpu_lookahead_slates = lookahead.slates;
+    statistics.gpu_lookahead = lookahead.decision;
+    statistics.gpu_lookahead_device_ns = lookahead.device_ns;
+    statistics.gpu_lookahead_finish_wait_ns = lookahead.finish_wait_ns;
+    statistics.gpu_lookahead_unmeasured = lookahead.unmeasured;
+    statistics.first_answer_ns = queue.first_answer_ns();
 }
 
 /// Device limits for a slate of `offered` candidates. Under either batching
@@ -732,23 +880,26 @@ pub(super) fn record_tight_routes(
             .get_or_insert_with(Default::default),
         batch.original_truth_reused,
         batch.updates,
-    );
-    Ok(())
+    )
 }
 
 /// Fold one decoded batch's update availability into the run's. A batch
 /// holding reuse authority sets the steady state, which a later batch without
 /// authority leaves standing: such a batch cannot update whatever its limits.
-/// Until a batch holds authority, each batch's report replaces the last.
+/// Until a batch holds authority, each batch's report replaces the last. Every
+/// batch the runtime guard declined is counted, whatever its authority.
 #[cfg(feature = "gpu")]
 fn record_update_availability(
     updates: &mut TightUpdateStatistics,
     authority: bool,
     report: zetesis_wgpu::TightGpuUpdates,
-) {
+) -> Result<(), Failure> {
     use zetesis_wgpu::{TightGpuUpdateUnavailable as Reason, TightGpuUpdates};
+    if report == TightGpuUpdates::Unavailable(Reason::GuardDeclined) {
+        add(&mut updates.guard_declined_batches, 1)?;
+    }
     if updates.steady_state && !authority {
-        return;
+        return Ok(());
     }
     updates.steady_state = authority;
     (updates.availability, updates.count_bits) = match report {
@@ -764,6 +915,7 @@ fn record_update_availability(
                 Reason::Bytes => TightUpdateAvailability::Bytes,
                 Reason::Work => TightUpdateAvailability::Work,
                 Reason::Declined => TightUpdateAvailability::Declined,
+                Reason::GuardDeclined => TightUpdateAvailability::GuardDeclined,
                 // Every reason the library names is mapped above. One it
                 // adds later reports `pending`, which names no reason,
                 // until this statistic names it too.
@@ -773,6 +925,7 @@ fn record_update_availability(
         ),
         _ => (TightUpdateAvailability::Pending, None),
     };
+    Ok(())
 }
 
 /// Record the workgroup size a decoded batch dispatched: the size of the one
@@ -837,6 +990,142 @@ impl<E: MembershipExecution + ?Sized> MembershipExecution for &mut E {
     }
     fn statistics(&self, models: &StableModels) -> Option<FormulaExecutionStatistics> {
         (**self).statistics(models)
+    }
+    fn demand(&mut self, enumerates: bool, owed: Option<usize>) {
+        (**self).demand(enumerates, owed);
+    }
+}
+
+/// General propagation's device side of a GPU enumeration's two-phase slates,
+/// recording each submission's receipts as the closure form's checker does.
+#[cfg(feature = "gpu")]
+pub(crate) struct FormulaDevice<'a> {
+    oracle: &'a mut zetesis_wgpu::GpuFormulaOracle,
+    statistics: &'a mut FormulaExecutionStatistics,
+    options: &'a SolveConfig,
+}
+
+#[cfg(feature = "gpu")]
+impl crate::formula_queue::device::SlateDevice for FormulaDevice<'_> {
+    type Prepared<'d>
+        = zetesis_wgpu::PreparedFormulaSubmission<'d>
+    where
+        Self: 'd;
+    type Checked =
+        Result<zetesis_wgpu::CheckedSlate<zetesis_wgpu::FormulaCheck>, zetesis_wgpu::GpuError>;
+
+    fn prepare<'d>(
+        &'d mut self,
+        slate: zetesis_ferraris::SlateRef<'_>,
+        offset: usize,
+        cancellation: &zetesis_cpu::Cancellation,
+    ) -> Result<Self::Prepared<'d>, Failure> {
+        let limits = slate_limits(self.options, slate.candidates().len());
+        self.oracle
+            .prepare(slate, offset, limits, cancellation)
+            .map_err(gpu_failure)
+    }
+
+    fn decode(
+        &mut self,
+        checked: Self::Checked,
+        theory: &zetesis_ferraris::Theory,
+        slate: zetesis_ferraris::SlateId,
+        offset: usize,
+        offered: usize,
+    ) -> Result<crate::formula_queue::device::Decoded, Failure> {
+        // A failed call can still report the batch before it, as unavailable.
+        let compute = self.oracle.reported_compute_time();
+        if let Some(report) = compute {
+            self.statistics.gpu_compute_timing.record(report);
+        }
+        // Submission is observable even when mapping or decoding fails. Preserve
+        // that operation's original error over a secondary accounting overflow.
+        let submitted =
+            record_submission(self.statistics, self.oracle.last_submission_candidates());
+        let checks = checked.map_err(gpu_failure)?;
+        submitted?;
+        let count = checks.count();
+        if count == 0 || count > offered {
+            return Err(Failure::Run(SolveError::FormulaBatchShape {
+                expected: offered,
+                actual: count,
+            }));
+        }
+        let finish_wait = checks.finish_wait();
+        let checks = checks
+            .into_checks(theory, slate, offset)
+            .map_err(|error| Failure::Run(SolveError::Gpu(error)))?;
+        add(&mut self.statistics.gpu_batches, 1)?;
+        add(
+            &mut self.statistics.gpu_candidates,
+            u64::try_from(checks.len())
+                .map_err(|_| Failure::Search(Incomplete::CounterOverflow))?,
+        )?;
+        if let Some(batch) = self.oracle.last_batch_stats() {
+            self.statistics.peak_accounted_bytes = self
+                .statistics
+                .peak_accounted_bytes
+                .max(batch.accounted_bytes);
+            record_workgroup_size(self.statistics, batch.workgroup_size);
+        }
+        let mut verdicts = Vec::new();
+        verdicts
+            .try_reserve_exact(checks.len())
+            .map_err(|_| Failure::Search(Incomplete::Allocation))?;
+        for check in checks {
+            add(
+                &mut self.statistics.gpu_work,
+                u64::from(check.statistics().work),
+            )?;
+            add(
+                &mut self.statistics.gpu_rounds,
+                u64::from(check.statistics().rounds),
+            )?;
+            verdicts.push(decoded_verdict(
+                self.statistics.gpu_residuals.get_or_insert_default(),
+                check.verdict(),
+            )?);
+        }
+        Ok(crate::formula_queue::device::Decoded {
+            verdicts,
+            compute,
+            finish_wait,
+        })
+    }
+}
+
+#[cfg(feature = "gpu")]
+impl crate::formula_queue::device::PreparedSubmission
+    for zetesis_wgpu::PreparedFormulaSubmission<'_>
+{
+    type Checked =
+        Result<zetesis_wgpu::CheckedSlate<zetesis_wgpu::FormulaCheck>, zetesis_wgpu::GpuError>;
+
+    fn count(&self) -> usize {
+        Self::count(self)
+    }
+
+    fn check(self, cancellation: &zetesis_cpu::Cancellation) -> Self::Checked {
+        Self::check(self, cancellation)
+    }
+
+    fn check_overlapping<R>(
+        self,
+        cancellation: &zetesis_cpu::Cancellation,
+        during: impl FnOnce() -> R,
+    ) -> (Self::Checked, Option<R>) {
+        Self::check_overlapping(self, cancellation, during)
+    }
+}
+
+/// A device operation's failure: a stop of the control is the search's, any
+/// other is the run's.
+#[cfg(feature = "gpu")]
+fn gpu_failure(error: zetesis_wgpu::GpuError) -> Failure {
+    match error.interruption() {
+        Some(stop) => Failure::Search(stop.into()),
+        None => Failure::Run(SolveError::Gpu(error)),
     }
 }
 

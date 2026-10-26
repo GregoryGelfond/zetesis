@@ -24,6 +24,7 @@ mod adapter;
 mod aggregate;
 mod candidates;
 mod checked_batch;
+mod checked_slate;
 mod context;
 mod device_source;
 mod discovery;
@@ -52,6 +53,7 @@ use residency::ResidentGraph;
 use runtime::{DeviceProfile, ErrorScopes, Runtime};
 
 pub use checked_batch::CheckedBatch;
+pub use checked_slate::CheckedSlate;
 pub use context::GpuContext;
 pub use device_source::GpuDeviceSource;
 pub use discovery::GpuDiscovery;
@@ -59,7 +61,7 @@ pub use kernel::{GpuKernelOptions, GpuPropagation, GpuWorkgroupSize, GpuWorkgrou
 
 pub use formula::{
     FormulaBatchStats, FormulaCheck, FormulaLimits, FormulaStatistics, FormulaVerdict,
-    GateProjection, GpuFormulaOracle, GpuFormulaProfile, ResidualReason,
+    GateProjection, GpuFormulaOracle, GpuFormulaProfile, PreparedFormulaSubmission, ResidualReason,
 };
 
 pub use adapter::{AdapterBackend, AdapterCategory, AdapterMetadata};
@@ -77,8 +79,9 @@ pub use relation::{
     RelationGpuLimits, RelationGpuMasks, RelationGpuStats,
 };
 pub use tight::{
-    GpuTightOracle, TightGpuActivity, TightGpuBatchStats, TightGpuCheck, TightGpuError,
-    TightGpuLimits, TightGpuRoutes, TightGpuUpdateUnavailable, TightGpuUpdates, TightSupport,
+    GpuTightOracle, PreparedTightSubmission, TightGpuActivity, TightGpuBatchStats, TightGpuCheck,
+    TightGpuError, TightGpuLimits, TightGpuRoutes, TightGpuUpdateUnavailable, TightGpuUpdates,
+    TightSupport,
 };
 
 pub use selection::{GpuInfo, GpuSelection, compiled_apis, discover_adapters};

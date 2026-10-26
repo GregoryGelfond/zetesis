@@ -291,6 +291,29 @@ models; a consumer still owns scoring, output and any queued result accounting.
 New objective restrictions apply only to future candidate generation and never
 modify the original reduct theory or discard pending proposals.
 
+The joint protocol also has a two-phase form, for a caller that checks a slate
+while the stream produces the next. `propose_slate` hands out the oldest pending
+slate with a `SlateTicket`; `slate` reads its identity and candidates; and
+`commit_slate` commits it with one ordered verdict per candidate, through the
+closure form's own certification and completion. `propose_lookahead` proposes
+the next slate while the pending one is checked. Each slate's producers still
+join and settle before that slate is checked, and a slate proposed ahead is
+handed out, as `SlateProposal::Ahead`, only after its predecessor commits. At
+most two slates are pending; any ticket but the oldest pending slate's is
+refused with `BatchError::SlateOrder`. A lookahead is declined for a stream
+that expects candidate bounds, for a slate handed out for the independent
+check, when one is already proposed ahead, when the pending slate's own
+production holds a stop, and when its rows do not fit the pending-byte limit
+beside the pending slate's or the allocator refuses them; the proposal after
+the commit then reserves as the serial schedule's does. Every failure after
+its identity is issued, a production stop among them, is held and reported
+after the pending slate commits, so `propose_lookahead` fails only on a fused
+stream; its empty proposal establishes exhaustion only after that commit. The
+pending receipt counts both slates. `joint_batch_capacity` stays the envelope's
+whole count, and is zero unless both slates' rows fit; `lookahead_capacity`
+sizes the slate proposed ahead. The closure forms run the
+same hand-out, checker and commit, with unchanged receipts.
+
 `batch_statistics()` reports checker calls, committed candidates, propagated
 decisions, exact residual completions and pending proposals. It also reports
 original-validation work, separately from search/reduct work, and the validation
@@ -558,7 +581,8 @@ candidate search algorithm or alter the original frozen reduct.
 Separate deques suit an enumeration, which visits every region whatever the
 order. A caller that tightens candidate bounds as it commits answers declares
 so with `StableModels::expect_candidate_bounds` before the stream's first
-proposal, and the solver does for every optimizing search; a started stream
+proposal, and the solver does for every optimizing search whose bound generation is enabled and whose
+objective plan was prepared; a started stream
 refuses the declaration, so one order governs every slate. Its producers then
 share one deque: each publishes there and takes the region any producer
 published most recently, so a slate fills from the area where the latest splits

@@ -6,6 +6,26 @@ Notable changes by release. Versions follow Semantic Versioning.
 
 ### Added
 
+- GPU formula and tight sessions that enumerate answers can check a slate while
+  the stream produces the next one, through a two-phase slate protocol:
+  `StableModels::propose_slate`, `propose_lookahead`, `slate` and `commit_slate`,
+  with `SlateTicket`, `SlateProposal`, `Lookahead`, `LookaheadDeclined` and
+  `BatchError::SlateOrder` in zetesis-sat, and `lookahead_capacity` to size the
+  slate proposed ahead. zetesis-ferraris adds `SlateId` and `SlateRef`, the
+  identity that binds a slate's results to it. The general and tight GPU oracles
+  add `prepare`, returning a `PreparedFormulaSubmission` or
+  `PreparedTightSubmission` that holds its oracle until checked, with a
+  synchronous `check` and a `check_overlapping` that runs a closure while the
+  submission is in flight, both returning a `CheckedSlate`. An overlapping
+  check's `CheckedSlate::finish_wait` reports the finish's wait after the
+  closure, up to the submission's observed completion.
+- `FormulaExecutionStatistics` reports `gpu_lookahead_slates`, the last
+  `gpu_lookahead` decision (`GpuLookahead`, `GpuLookaheadDeclined`),
+  `gpu_lookahead_device_ns`, `gpu_lookahead_finish_wait_ns`,
+  `gpu_lookahead_unmeasured` and `first_answer_ns`, in the JSON and the human
+  statistics. The device compute and the finish waits are paired per overlapped
+  submission, so their difference is the device time hidden behind production
+  over the submissions measured.
 - The regular benchmark corpus includes integrated Family Crossing, checking all
   eight optimal answers alongside the existing 94 cases.
 - Requested GPU statistics include compute-pass time when the device supports
@@ -52,6 +72,16 @@ Notable changes by release. Versions follow Semantic Versioning.
 
 ### Changed
 
+- GPU formula and tight sessions that enumerate answers produce the next slate
+  of candidates while the device checks the current slate, with one device
+  submission in flight. Answer families, membership checks, failure and
+  exhaustion semantics and the release of answers in proposal order are
+  unchanged. Two cases can leave the slate under check undelivered, and claim
+  nothing for it: a stop that arrives while the next slate is produced, and, in
+  a GPU formula session, a work or decision limit that the next slate's
+  production reaches or brings within reach of the current slate's completion.
+  Optimizing searches still check one slate at a time. The physical
+  qualification has 75 exact tests per backend.
 - Numeric grounding joins combine certified divisibility and range filters before
   producing tuples; equal-size sources prefer the bindings needed by those filters.
 - Repeated support checks consume initial support seeds directly after resetting
@@ -77,16 +107,29 @@ Notable changes by release. Versions follow Semantic Versioning.
   again only the formulas the change reaches; larger changes keep evaluating
   every formula. It engages only for programs whose dependency levels are wide
   enough that evaluating every formula takes several passes per level; other
-  programs keep evaluating every formula, on a kernel compiled without the
-  route, which binds no retained state. Each slot's retained state counts
-  toward the batch's memory allowance, so adaptive slates can settle at a
-  smaller device prefix, never below the batch size. Answer sets are unchanged.
+  programs, and every batch the route cannot run, keep evaluating every
+  formula, on a kernel compiled without the route, which binds no retained
+  state. Each slot's retained state counts toward the batch's memory
+  allowance, so adaptive slates can settle at a smaller device prefix, never
+  below the batch size. Answer sets are unchanged.
 - In the GPU library, tight checks report the work their route performed, and
   `TightGpuLimits` gains `min_update_candidates`. `TightGpuBatchStats` reports
   routes and the update route's availability, and
   `GpuTightOracle::UPDATE_ENGAGEMENT_STRIDES` names the strides per dependency
   level from which the route engages. The tight kernel requires eight storage
-  buffers per shader stage.
+  buffers per shader stage and 48 bytes of workgroup storage.
+- GPU tight checking guards its update route while it runs: after a batch
+  whose slowest update costs more than evaluating every formula, both measured
+  by the busiest invocation's operations under one cost table, the route waits
+  for 1, 2, 4 and up to 32 batches, which run the kernel without the update
+  route, before it is tried again. An update's cost includes rebuilding its
+  slot's support summaries after a change too large to update. Answer sets are
+  unchanged. In the GPU library, `TightGpuUpdateUnavailable::GuardDeclined`
+  reports a declined batch, `TightGpuCheck::critical_path` an update's path,
+  and `TightGpuBatchStats` gains `update_critical_path`, the batch's slowest,
+  and `dense_critical_path`. The solver's `TightUpdateAvailability` gains
+  `GuardDeclined` (`guard_declined`) and `TightUpdateStatistics` the count
+  `guard_declined_batches`, which the statistics JSON and both views report.
 - Command-line GPU solves begin adapter enumeration once their configuration is
   validated, while the program is read and admitted, and on the formula routes
   grounded, so the device is ready sooner; CPU solves start none.
@@ -169,6 +212,13 @@ Notable changes by release. Versions follow Semantic Versioning.
 
 ### Compatibility
 
+- `BatchError` gains `SlateOrder`. `BatchError` is not non-exhaustive, so an
+  exhaustive match by a library caller must add the variant. The new public
+  enums are non-exhaustive.
+- An overlapping check holds the context's lease while the production it runs
+  is under way, so another operation on a shared context is refused with
+  `Busy` for that span. The synchronous device forms and their `CheckedBatch`
+  receipts are unchanged.
 - `FormulaBatchStats`, `TightGpuBatchStats` and `FormulaExecutionStatistics`
   report the workgroup size each device batch dispatched. These statistics
   structs are now non-exhaustive: read their fields by name, and build a

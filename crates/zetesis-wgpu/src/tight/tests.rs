@@ -51,13 +51,14 @@ fn reduced_to(entry_point: &str) -> naga::Module {
     .into_owned()
 }
 
-/// The update route's own globals: the state at binding 8 and the counters and
-/// decisions only its phases use.
-const UPDATE_GLOBALS: [&str; 8] = [
+/// The update route's own globals: the state at binding 8 and the counters,
+/// path maxima and decisions only its phases use.
+const UPDATE_GLOBALS: [&str; 9] = [
     "state",
     "changed_atoms",
     "performed",
     "evaluated",
+    "phase_path",
     "entry_route",
     "chosen_route",
     "summary_flag",
@@ -98,7 +99,7 @@ fn dense_entry_points_carry_no_update_route() {
             .iter()
             .filter_map(|(_, function)| function.name.clone())
             .collect();
-        for name in ["update_slot", "summarize", "retain_for_update"] {
+        for name in ["update_slot", "summarize", "end_phase", "retain_for_update"] {
             assert!(
                 !functions.iter().any(|function| function == name),
                 "{entry_point} keeps {name}"
@@ -155,6 +156,7 @@ fn shader_constants_preserve_the_wire_contract() {
             "ROUTE_BEYOND_THRESHOLD",
             super::update::ROUTE_BEYOND_THRESHOLD,
         ),
+        ("SEEDED", super::update::SEEDED),
         ("READER_NODE", super::update::READER_NODE >> 30),
         ("READER_PRODUCER", super::update::READER_PRODUCER >> 30),
         ("SUMMARY_WORDS", super::update::SUMMARY_WORDS),
