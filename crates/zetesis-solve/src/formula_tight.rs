@@ -66,18 +66,7 @@ pub(crate) fn check(
     cancellation: &Cancellation,
     phases: &Recorder,
 ) -> Result<crate::batch_executor::DeviceVerdicts, Failure> {
-    // As for general propagation, one submission may take the whole slate
-    // under either batching policy; the device's admission bounds its prefix.
-    // The update state may not shrink that prefix below the batch size, the
-    // slates' floor: a shorter prefix would split every slate into submissions
-    // of alternating counts, which hold no reuse authority.
-    let limits = TightGpuLimits {
-        max_candidates: candidates.len(),
-        max_batch_bytes: options.max_batch_bytes,
-        max_work_per_candidate: u64::from(options.gpu_formula_work),
-        min_update_candidates: options.batch_size.get(),
-        ..Default::default()
-    };
+    let limits = limits(options, candidates.len());
     let mut verdicts =
         crate::batch_executor::DeviceVerdicts::new(candidates.len()).map_err(Failure::Search)?;
     while verdicts.values.len() < candidates.len() {
@@ -161,15 +150,7 @@ impl crate::formula_queue::device::SlateDevice for TightDevice<'_> {
         offset: usize,
         cancellation: &Cancellation,
     ) -> Result<Self::Prepared<'d>, Failure> {
-        // As in `check`: one submission may take the whole slate, and the
-        // update state may not shrink a prefix below the batch size.
-        let limits = TightGpuLimits {
-            max_candidates: slate.candidates().len(),
-            max_batch_bytes: self.options.max_batch_bytes,
-            max_work_per_candidate: u64::from(self.options.gpu_formula_work),
-            min_update_candidates: self.options.batch_size.get(),
-            ..Default::default()
-        };
+        let limits = limits(self.options, slate.candidates().len());
         self.oracle
             .prepare(self.plan, slate, offset, limits, cancellation)
             .map_err(tight_failure)
@@ -277,6 +258,25 @@ fn tight_failure(error: TightGpuError) -> Failure {
     match error {
         TightGpuError::Stopped(stop) => Failure::Search(stop.into()),
         TightGpuError::Gpu(error) => Failure::Run(SolveError::Gpu(error)),
+    }
+}
+
+/// The device limits of one tight check over a slate of `candidates`, which
+/// the one-phase check and the two-phase preparation both take.
+///
+/// As for general propagation, one submission may take the whole slate under
+/// either batching policy; the device's admission bounds its prefix. The update
+/// state may not shrink that prefix below the batch size, the slates' floor: a
+/// shorter prefix would split every slate into submissions of alternating
+/// counts, which hold no reuse authority. The byte ceiling is the device
+/// batches' own, [`SolveConfig::max_batch_bytes`].
+fn limits(options: &SolveConfig, candidates: usize) -> TightGpuLimits {
+    TightGpuLimits {
+        max_candidates: candidates,
+        max_batch_bytes: options.max_batch_bytes,
+        max_work_per_candidate: u64::from(options.gpu_formula_work),
+        min_update_candidates: options.batch_size.get(),
+        ..Default::default()
     }
 }
 

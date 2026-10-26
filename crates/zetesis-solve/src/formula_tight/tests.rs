@@ -55,3 +55,21 @@ fn support_decisions_agree_with_independent_reducts() {
         }
     }
 }
+
+/// The one-phase check and the two-phase preparation take their limits from
+/// one function, so the two cannot drift apart. With a distinct value for each
+/// option it reads, each limit can match only through its own option.
+#[test]
+fn the_tight_check_limits_take_each_from_its_own_option() {
+    let options = crate::SolveConfig {
+        max_batch_bytes: 1_000,
+        gpu_formula_work: 3,
+        batch_size: std::num::NonZeroUsize::new(5).unwrap(),
+        ..crate::SolveConfig::default()
+    };
+    let limits = super::limits(&options, 7);
+    assert_eq!(limits.max_batch_bytes, 1_000);
+    assert_eq!(limits.max_candidates, 7);
+    assert_eq!(limits.max_work_per_candidate, 3);
+    assert_eq!(limits.min_update_candidates, 5);
+}
