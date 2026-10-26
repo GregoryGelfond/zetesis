@@ -584,7 +584,7 @@ Notable changes by release. Versions follow Semantic Versioning.
 - `Program::new` now takes `FactTables`; `rules()` includes facts, while
   `templates()` contains only explicit templates. `AdmissionError::Canonical`
   replaces `template` with `origin: AdmissionOrigin`, and matches must handle
-  `FactLimitExceeded`. See [explicit facts](docs/book/rust/parallel.md#construct-templates-and-explicit-facts).
+  `FactLimitExceeded`.
 - `DomainObservation::Analyzed` carries `NumericAnalysis`; `Inapplicable` is
   removed. Use `analysis()`, `catalog()` and `arguments()` to read the new view.
   Observers can decline census work with `domain_diagnostics_enabled()`, whose
