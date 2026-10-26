@@ -304,8 +304,11 @@ refused with `BatchError::SlateOrder`. A lookahead is declined for a stream
 that expects candidate bounds, for a slate handed out for the independent
 check, when one is already proposed ahead, when the pending slate's own
 production holds a stop, and when its rows do not fit the pending-byte limit
-beside the pending slate's. Its production stop is reported after the pending
-slate commits, and its empty proposal establishes exhaustion only then. The
+beside the pending slate's or the allocator refuses them; the proposal after
+the commit then reserves as the serial schedule's does. Every failure after
+its identity is issued, a production stop among them, is held and reported
+after the pending slate commits, so `propose_lookahead` fails only on a fused
+stream; its empty proposal establishes exhaustion only after that commit. The
 pending receipt and `joint_batch_capacity` count both slates;
 `lookahead_capacity` sizes the slate proposed ahead. The closure forms run the
 same hand-out, checker and commit, with unchanged receipts.

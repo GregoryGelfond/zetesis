@@ -66,23 +66,89 @@ fn commit_slate_refuses_a_ticket_for_the_slate_proposed_ahead() {
     assert_eq!(search.batch_statistics().committed, 1);
 }
 
+fn commit(search: &mut StableModels, ticket: SlateTicket) -> Vec<Interpretation> {
+    let verdicts = residuals(search, &ticket);
+    search
+        .commit_slate(ticket, verdicts, &mut CompletionExecutor::default())
+        .unwrap()
+}
+
 #[test]
-fn an_allocation_failure_preparing_a_lookahead_is_held_until_the_pending_slate_commits() {
+fn an_allocator_refusal_preparing_a_lookahead_declines_it() {
+    let theory = choice_beside_a_loop();
+    let mut search = one_producer(&theory);
+    let _first = new_slate(&mut search, one_candidate());
+    hooks::refuse_next_lookahead_reservation();
+    assert_eq!(
+        search.propose_lookahead(one_candidate()).unwrap(),
+        Lookahead::Declined(LookaheadDeclined::Allocation)
+    );
+    assert_eq!(search.batch_statistics().lookahead_slates, 0);
+}
+
+/// Nothing is held after the decline, so the proposal after the commit
+/// reserves and produces its slate as the serial schedule's does.
+#[test]
+fn the_proposal_after_an_allocation_decline_reserves_its_own_slate() {
     let theory = choice_beside_a_loop();
     let mut search = one_producer(&theory);
     let first = new_slate(&mut search, one_candidate());
     hooks::refuse_next_lookahead_reservation();
     assert_eq!(
         search.propose_lookahead(one_candidate()).unwrap(),
+        Lookahead::Declined(LookaheadDeclined::Allocation)
+    );
+    commit(&mut search, first);
+    assert!(matches!(
+        search.propose_slate(one_candidate()).unwrap(),
+        SlateProposal::New(_)
+    ));
+}
+
+/// The walk's index failure, which a lookahead's walk cannot meet since it
+/// reads the index the pending slate's proposal built, is held as the
+/// lookahead's stop: the stream stays open, the pending slate commits, and
+/// the stop is reported by the proposal after that commit.
+#[test]
+fn a_walk_failure_in_a_lookahead_is_held_until_the_pending_slate_commits() {
+    let theory = choice_beside_a_loop();
+    let mut search = one_producer(&theory);
+    let first = new_slate(&mut search, one_candidate());
+    hooks::fail_next_walk();
+    assert_eq!(
+        search.propose_lookahead(one_candidate()).unwrap(),
         Lookahead::Stopped
     );
-    let verdicts = residuals(&search, &first);
-    search
-        .commit_slate(first, verdicts, &mut CompletionExecutor::default())
-        .unwrap();
+    assert_eq!(commit(&mut search, first).len(), 1);
     assert!(matches!(
         search.propose_slate(one_candidate()),
         Err(BatchError::Search(Incomplete::Allocation))
+    ));
+    assert!(!search.exhausted());
+}
+
+/// An overflow counting the slate proposed ahead is held beside its
+/// candidates: the slate is handed out and committed, and the overflow is
+/// reported after it.
+#[test]
+fn an_overflow_counting_a_lookahead_is_held_beside_its_candidates() {
+    let theory = choice_beside_a_loop();
+    let mut search = one_producer(&theory);
+    let first = new_slate(&mut search, one_candidate());
+    search.batch.statistics.lookahead_slates = u64::MAX;
+    assert!(matches!(
+        search.propose_lookahead(one_candidate()).unwrap(),
+        Lookahead::Proposed(_)
+    ));
+    commit(&mut search, first);
+    let SlateProposal::Ahead(ahead) = search.propose_slate(one_candidate()).unwrap() else {
+        panic!("expected the slate proposed ahead");
+    };
+    assert_eq!(search.slate(&ahead).unwrap().candidates().len(), 1);
+    commit(&mut search, ahead);
+    assert!(matches!(
+        search.propose_slate(one_candidate()),
+        Err(BatchError::Search(Incomplete::CounterOverflow))
     ));
     assert!(!search.exhausted());
 }

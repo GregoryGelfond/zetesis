@@ -15,14 +15,16 @@ use zetesis_ferraris::{EvaluationLimits, Interpretation, SlateId, SlateRef, Theo
 mod tests;
 mod validation;
 
-/// Faults the unit tests inject into allocation that cannot be refused on
-/// demand otherwise, as `original_index`'s build hook does.
+/// Faults the unit tests inject where no fixture fails on demand, as
+/// `original_index`'s build hook does: an allocation the allocator would
+/// refuse, and a walk whose index cannot be read.
 #[cfg(test)]
 pub(super) mod hooks {
     use std::cell::Cell;
 
     thread_local! {
         static REFUSE_LOOKAHEAD: Cell<bool> = const { Cell::new(false) };
+        static FAIL_WALK: Cell<bool> = const { Cell::new(false) };
     }
 
     /// Refuse the next lookahead reservation on this thread.
@@ -32,6 +34,16 @@ pub(super) mod hooks {
 
     pub(super) fn refuse_lookahead_reservation() -> bool {
         REFUSE_LOOKAHEAD.with(Cell::take)
+    }
+
+    /// Fail the next slate production's walk on this thread, as a failure to
+    /// read the walk's index would.
+    pub(in crate::ferraris) fn fail_next_walk() {
+        FAIL_WALK.with(|fail| fail.set(true));
+    }
+
+    pub(super) fn fail_walk() -> bool {
+        FAIL_WALK.with(Cell::take)
     }
 }
 use validation::Validation;
@@ -219,6 +231,11 @@ pub enum LookaheadDeclined {
     /// The slate's rows do not fit the pending-bytes limit beside the pending
     /// slate's.
     PendingBytes,
+    /// The allocator refused the slate's rows beside the pending slate's
+    /// resident rows. The serial schedule reserves the next slate only after
+    /// the commit releases those rows, so the refusal need not recur there:
+    /// the proposal after the commit reserves as the serial schedule's does.
+    Allocation,
     /// The pending slate's own production holds a stop, after which the
     /// serial schedule proposes nothing.
     PendingStop,
@@ -234,6 +251,7 @@ impl LookaheadDeclined {
             Self::NoPendingSlate => "no_pending_slate",
             Self::AlreadyProposed => "already_proposed",
             Self::PendingBytes => "pending_bytes",
+            Self::Allocation => "allocation",
             Self::PendingStop => "pending_stop",
         }
     }
@@ -275,7 +293,7 @@ impl State {
 /// A slate proposed ahead: its identity, issued before its production; its
 /// candidates; whether its production exhausted the frontier; and the stop
 /// its production holds. An empty one records the exhaustion or the stop it
-/// met, and a preparation refused before its identity was issued has none.
+/// met, and one whose identity could not be issued has none.
 #[derive(Debug)]
 struct Ahead {
     id: Option<SlateId>,
@@ -615,11 +633,15 @@ impl StableModels {
     /// `limits.max_pending_bytes` net of the pending slate's retained rows.
     /// A stop its production meets is held and reported after the pending
     /// slate commits; an empty proposal establishes exhaustion only then.
+    /// Every failure after the slate's identity is issued is held the same
+    /// way, beside the candidates produced before it: a failure of the walk,
+    /// or an overflow counting the slate. A preparation the pending bytes or
+    /// the allocator refuses declines the lookahead
+    /// ([`LookaheadDeclined::PendingBytes`], [`LookaheadDeclined::Allocation`]),
+    /// so the proposal after the commit reserves as the serial schedule's does.
     ///
     /// # Errors
-    /// A search failure in the lookahead's walk terminates the stream without
-    /// exhaustion; the pending slate then stays pending. A refused preparation
-    /// is held, as a production stop is ([`Lookahead::Stopped`]).
+    /// Only [`Incomplete::ClosedEnumerator`], on a stream already fused.
     pub fn propose_lookahead(
         &mut self,
         limits: BatchLimits,
@@ -648,12 +670,8 @@ impl StableModels {
             return Ok(Lookahead::Exhausted);
         }
         let (mut candidates, available) = match self.prepare_lookahead(limits) {
-            Ok(Some(prepared)) => prepared,
-            Ok(None) => return Ok(Lookahead::Declined(LookaheadDeclined::PendingBytes)),
-            Err(error) => {
-                self.batch.ahead = Some(Ahead::held(false, Some(error)));
-                return Ok(Lookahead::Stopped);
-            }
+            Ok(prepared) => prepared,
+            Err(reason) => return Ok(Lookahead::Declined(reason)),
         };
         let id = match self.batch.issue(&self.theory) {
             Ok(id) => id,
@@ -662,18 +680,22 @@ impl StableModels {
                 return Ok(Lookahead::Stopped);
             }
         };
-        let production =
-            match self.produce(limits, available, OriginalCheck::Joint, &mut candidates) {
-                Ok(production) => production,
-                Err(error) => {
-                    let result = Err(BatchError::Search(error));
-                    self.terminate_on_search::<Lookahead, Infallible>(&result);
-                    return result;
-                }
-            };
+        // The walk reads the index the pending slate's proposal built, so
+        // `produce` cannot return its index failures here; if it did, the
+        // failure is held like a stop the walk meets.
+        let mut production = self
+            .produce(limits, available, OriginalCheck::Joint, &mut candidates)
+            .unwrap_or_else(|error| Production {
+                exhausted: false,
+                stop: Some(error),
+            });
         let proposed = !candidates.is_empty();
-        if proposed {
-            increment(&mut self.batch.statistics.lookahead_slates).map_err(BatchError::Search)?;
+        if proposed && let Err(error) = increment(&mut self.batch.statistics.lookahead_slates) {
+            // The first failure is the one reported, as `pending_error` keeps it.
+            production = Production {
+                exhausted: false,
+                stop: production.stop.or(Some(error)),
+            };
         }
         self.batch.ahead = Some(Ahead {
             id: Some(id),
@@ -924,6 +946,10 @@ impl StableModels {
         out: &mut Vec<Interpretation>,
     ) -> Result<Production, Incomplete> {
         let validation = validation_limits(self.limits, available);
+        #[cfg(test)]
+        if hooks::fail_walk() {
+            return Err(Incomplete::Allocation);
+        }
         let index = self.walk_index()?;
         let mut budget = Budget {
             quota: crate::search::LocalQuota,
@@ -1115,43 +1141,46 @@ impl StableModels {
 
     /// Reserve a slate proposed ahead beside the oldest pending slate: its
     /// rows and the validation workspace must fit `limits.max_pending_bytes`
-    /// net of the pending slate's retained rows. `None` when they do not fit,
-    /// a decline; a refused reservation is an error, which the caller holds.
+    /// net of the pending slate's retained rows. Either refusal declines the
+    /// lookahead: rows that do not fit with `PendingBytes`, a reservation the
+    /// allocator refuses with `Allocation`. Serially, the next slate is
+    /// reserved only after the commit has dropped the pending rows, so neither
+    /// need recur then.
     fn prepare_lookahead(
         &mut self,
         limits: BatchLimits,
-    ) -> Result<Option<(Vec<Interpretation>, usize)>, Incomplete> {
+    ) -> Result<(Vec<Interpretation>, usize), LookaheadDeclined> {
         let row = self.pending_row_bytes();
         let Some(available) = u128::from(limits.max_pending_bytes)
             .checked_sub(row * self.batch.pending.capacity() as u128)
             .and_then(|available| available.checked_sub(row * limits.max_candidates.get() as u128))
         else {
-            return Ok(None);
+            return Err(LookaheadDeclined::PendingBytes);
         };
         let available = usize::try_from(available).unwrap_or(usize::MAX);
         self.batch.validation.release_excess(available);
         if self.batch.validation.retained_bytes() > available as u128 {
-            return Ok(None);
+            return Err(LookaheadDeclined::PendingBytes);
         }
         #[cfg(test)]
         if hooks::refuse_lookahead_reservation() {
-            return Err(Incomplete::Allocation);
+            return Err(LookaheadDeclined::Allocation);
         }
         let mut candidates = Vec::new();
         candidates
             .try_reserve_exact(limits.max_candidates.get())
-            .map_err(|_| Incomplete::Allocation)?;
+            .map_err(|_| LookaheadDeclined::Allocation)?;
         let Some(actual) = u128::from(limits.max_pending_bytes)
             .checked_sub(row * (self.batch.pending.capacity() + candidates.capacity()) as u128)
         else {
-            return Ok(None);
+            return Err(LookaheadDeclined::PendingBytes);
         };
         let actual = usize::try_from(actual).unwrap_or(usize::MAX);
         self.batch.validation.release_excess(actual);
         if self.batch.validation.retained_bytes() > actual as u128 {
-            return Ok(None);
+            return Err(LookaheadDeclined::PendingBytes);
         }
-        Ok(Some((candidates, actual)))
+        Ok((candidates, actual))
     }
 
     fn validation_allowance(&self, limits: BatchLimits) -> Result<usize, Incomplete> {
