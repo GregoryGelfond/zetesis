@@ -69,6 +69,22 @@ Notable changes by release. Versions follow Semantic Versioning.
 - A maintained wide Mastermind workload, outside the regular benchmark corpus,
   checks complete enumeration against clingo, with its original sources kept
   byte for byte and a recorded 45,832-answer contract.
+- Native sessions decide questions about a program's world view, its set of
+  answer sets, by folding answer sets as they arrive instead of collecting the
+  family: `SessionBuilder::known` and `possible`, whether a literal holds in
+  every or in some answer set; `cautious` and `brave`, the atoms that do; and
+  `answer`, a ground literal query's three-valued `QueryAnswer`, the agent's
+  reading of complete families. Each returns a `WorldViewDecision` whose
+  `WorldViewVerdict` is `Decided` once the fold reaches its absorbing value,
+  stopping the session with at most two witness answer sets; `Complete` after
+  the unrestricted family is exhausted; or `Inconsistent` when it has no answer
+  set. The request is `WorldView::collect`'s with any requested model count
+  cleared, so a projection, an objective's selection or `config.models` never
+  narrows the folded family, and a session stopped before either is a
+  `WorldViewDecisionFailure`, never a value. Brave consequences are decided only
+  by exhaustion.
+- `zetesis_core::Atom::contrary` gives an atom's strong contrary: the same
+  tuple under the opposite classical sign.
 
 ### Changed
 

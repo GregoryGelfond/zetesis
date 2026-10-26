@@ -203,7 +203,14 @@ particular, a set of optimal ties is not the unrestricted world view.
 The writer-free `Session::enumerate` returns checked `AnswerSet` values as they
 are found. `WorldView::collect` additionally requires complete unrestricted
 coverage and retention of every answer. Its empty family means inconsistency;
-the family containing one empty answer is consistent. The Rust boundary is
+the family containing one empty answer is consistent. A world-view question the
+session decides by folding answer sets, such as whether a literal is known or
+the cautious consequences, is a fact about this family, not a world view. Its
+value is decided from some members only when the fold reaches an absorbing
+value, and is otherwise complete under the same exhaustion; an empty family
+yields inconsistency, never the fold's identity. See
+[deciding questions over the world view](../rust/sessions.md#deciding-questions-over-the-world-view).
+The Rust boundary is
 backed by native runtime checks and enumeration contracts, not an executable
 refinement proof from the Lean definitions.
 

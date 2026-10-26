@@ -17,6 +17,7 @@ the [library reference](libraries.md#api-reference).
 | Exhausted search | Relevant candidate coverage completed | Successful external publication |
 | Proved optimum | Complete relevant search establishes the incumbent | Every optimal tie was delivered |
 | `WorldView` | All full answers of the original subject were captured after unrestricted exhaustion | Successful external publication |
+| Decided world-view question | A fold over checked answer sets reached its absorbing value, which holds over the whole world view | The world view itself, or completed search |
 | Published record | The sink accepted one whole record | Flush, durability or complete search |
 
 The CLI owns its standard-output buffer and explicitly flushes it before
