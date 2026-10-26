@@ -1,5 +1,7 @@
-//! Without a whole-program plan, a rich producer is traversed after the first
-//! round only when a predicate it reads gained rows.
+//! Without a whole-program plan, a rich producer whose reads all lie in
+//! dependency components before its heads' is traversed once, when those
+//! components reach their fixed point; other rich producers are traversed
+//! after the first round only when a predicate they read gained rows.
 
 use super::{Observer, compile};
 use zetesis_themelios::FormulaLimits;
@@ -25,16 +27,16 @@ fn receipts(source: &str) -> [u64; 4] {
 fn recursion(depth: usize, choice: bool) -> String {
     let mut source = format!("q(1..3). s(0). s(Y) :- s(X), X < {depth}, Y = X + 1.");
     if choice {
-        source.push_str(" {a(X)} :- q(X).");
+        source.push_str(" r(1..3). {a(X) : r(X)} :- q(X).");
     }
     source
 }
 
 #[test]
 fn a_choice_over_facts_adds_no_join_rows_in_later_rounds() {
-    // The choice reads only facts, whose rows are new in the second round
-    // alone; each extra round of the recursion is one more unchanged visit and
-    // adds none of the choice's join rows or snapshots.
+    // The choice reads only facts, whose component reaches its fixed point in
+    // the first rounds; each extra round of the recursion is one more
+    // unchanged visit and adds none of the choice's join rows or snapshots.
     let [rounds, unchanged, rows, snapshots] = receipts(&recursion(4, true));
     let [
         deeper_rounds,
@@ -54,15 +56,22 @@ fn a_choice_over_facts_adds_no_join_rows_in_later_rounds() {
 }
 
 #[test]
-fn a_rich_producer_over_a_growing_predicate_is_unaffected_only_in_the_final_round() {
+fn a_rich_producer_over_a_growing_predicate_is_traversed_once_at_its_fixed_point() {
     // `reach` gains a row in every round but the last, so the choice that
-    // reads it is traversed in each of those rounds and skipped once.
-    let source = "edge(0,1). edge(1,2). edge(2,3). reach(0). \
-        reach(Y) :- reach(X), edge(X,Y). {pick(X)} :- reach(X).";
-    let [_, unchanged, _, _] = receipts(source);
-    assert_eq!(unchanged, 1);
+    // reads it waits for reach's fixed point and is traversed once.
+    let source = "edge(0,1). edge(1,2). edge(2,3). node(0..3). reach(0). \
+        reach(Y) :- reach(X), edge(X,Y). {pick(X) : node(X)} :- reach(X).";
     let observer = Observer::default();
     let admitted = compile(source, &FormulaLimits::default(), Some(&observer)).unwrap();
+    let work = observer
+        .records
+        .borrow()
+        .iter()
+        .fold(super::GroundingWork::default(), |total, record| {
+            total.checked_sum(record.work)
+        });
+    assert_eq!(work.support_rich_traversals, Some(1));
+    assert!(work.support_deferred_visits.unwrap() >= 3);
     let picks = admitted
         .atoms()
         .iter()
@@ -72,7 +81,9 @@ fn a_rich_producer_over_a_growing_predicate_is_unaffected_only_in_the_final_roun
 }
 
 #[test]
-fn an_input_free_rich_producer_traverses_only_in_the_first_round() {
+fn an_input_free_choice_is_certified_and_derived_in_the_first_round() {
+    // A condition-free choice takes delta variants like a normal rule: with no
+    // input, its one traversal is the first round's.
     let observer = Observer::default();
     let admitted = compile(
         "{a}. s(0). s(Y) :- s(X), X < 3, Y = X + 1.",
@@ -93,13 +104,7 @@ fn an_input_free_rich_producer_traverses_only_in_the_first_round() {
         .fold(super::GroundingWork::default(), |total, record| {
             total.checked_sum(record.work)
         });
-    assert_eq!(work.support_rich_traversals, Some(1));
-    assert_eq!(
-        work.support_unchanged_visits,
-        work.support_rounds.map(|rounds| rounds - 1)
-    );
-    assert!(
-        work.support_producer_visits.unwrap()
-            >= work.support_rich_traversals.unwrap() + work.support_unchanged_visits.unwrap()
-    );
+    assert_eq!(work.support_rich_traversals, Some(0));
+    assert_eq!(work.support_unchanged_visits, Some(0));
+    assert_eq!(work.support_deferred_visits, Some(0));
 }

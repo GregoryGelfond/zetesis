@@ -85,8 +85,7 @@ fn rich_bodies_and_heads_make_a_rule_rich() {
     for source in [
         "q(1). r(N) :- N = #count{X : q(X)}.",
         "q(1). r :- q(X) : q(X).",
-        "q(1). {r(X)} :- q(X).",
-        "q(1). r(X) ; s(X) :- q(X).",
+        "q(1). {r(X) : q(X)} :- q(1).",
         "q(1). r(X) : q(X) :- q(1).",
     ] {
         assert!(
@@ -94,6 +93,15 @@ fn rich_bodies_and_heads_make_a_rule_rich() {
             "{source}: {:?}",
             kinds(source)
         );
+    }
+}
+
+#[test]
+fn condition_free_choice_and_disjunctive_heads_over_flat_bodies_are_certified() {
+    // Each body binding makes every head atom possible, so delta variants
+    // derive the same atoms as a full traversal.
+    for source in ["q(1). {r(X)} :- q(X).", "q(1). r(X) ; s(X) :- q(X)."] {
+        assert_eq!(kinds(source), [Producer::Certified(0..1)], "{source}");
     }
 }
 
@@ -208,12 +216,12 @@ fn registration_admits_its_header_beside_existing_storage() {
 
 #[test]
 fn an_unchanged_visit_charges_each_registered_read() {
-    let owner = prepare("p(1). q(2). {r(X)} :- p(X), not q(X).");
+    let owner = prepare("p(1). q(2). t(1). {r(X) : t(X)} :- p(X), not q(X).");
     let registration = registered(&owner);
     let Producer::Rich(range) = &registration.producers[0] else {
         panic!("the choice must be a rich producer");
     };
-    assert_eq!(range.len(), 2);
+    assert_eq!(range.len(), 3);
     let limits = FormulaLimits::default();
     let mut counters = Counters::default();
     // Before facts are published, both read relations are unchanged and empty.
@@ -228,7 +236,7 @@ fn an_unchanged_visit_charges_each_registered_read() {
         .variants(0, rule, &support, false, &limits, &mut counters)
         .unwrap();
     // One unit to test an entry and one to resolve its predicate.
-    assert_eq!(counters.accounting.work - before, 4);
+    assert_eq!(counters.accounting.work - before, 6);
     assert!(variants.next(&limits, &mut counters).unwrap().is_none());
 }
 
@@ -263,12 +271,12 @@ fn distinct_predicates_sharing_a_name_stay_distinct_reads() {
 
 #[test]
 fn repeated_reads_of_one_predicate_are_one_entry() {
-    let source = "q(1). {r(X,Y)} :- q(X), q(Y), not q(3).";
+    let source = "q(1). {r(X,Y) : q(Y)} :- q(X), q(Y), not q(3).";
     assert_eq!(reads(source, 0), [predicate("q", 1)]);
 }
 
-/// The unchanged visits every phase reports, summed: support completion
-/// reports once per completion it runs.
+/// The visits every phase reports as not traversing, unchanged or deferred,
+/// summed: support completion reports once per completion it runs.
 #[derive(Default)]
 struct Unchanged(Cell<u64>);
 
@@ -285,8 +293,11 @@ impl GroundingObserver for Unchanged {
         _: GroundingOutcome,
         work: GroundingWork,
     ) {
-        self.0
-            .set(self.0.get() + work.support_unchanged_visits.unwrap());
+        self.0.set(
+            self.0.get()
+                + work.support_unchanged_visits.unwrap()
+                + work.support_deferred_visits.unwrap(),
+        );
     }
 }
 
@@ -300,16 +311,32 @@ fn ground(source: &str) -> (Compiled, Vec<Vec<String>>, u64) {
     (compiled, published, observer.0.get())
 }
 
-/// Ground `source` with the registration's test and with the reference that
-/// traverses every rich producer in every round. Each support round must
-/// publish the same atoms in the same order, and the emitted theory must
-/// agree; the test must have skipped at least one visit, and the reference
-/// none. Emission alone could not show a missing traversal: it names a choice
-/// head that support never derived. Returns the skipped visits.
+/// Ground `source` with the registration's schedule and with the reference
+/// that traverses every rich producer in every round. Support must publish
+/// the same atoms, and the emitted theory must agree; the schedule must have
+/// skipped at least one visit, and the reference none. A deferred producer
+/// publishes its heads in a later round than the reference, so the rounds are
+/// compared as one support. Emission alone could not show a missing
+/// traversal: it names a choice head that support never derived. Returns the
+/// skipped visits.
 fn equivalent(source: &str) -> u64 {
+    let skipped = agrees_with_reference(source);
+    assert!(skipped > 0, "the test never skipped a visit");
+    skipped
+}
+
+/// The support, theory and atoms of `source` agree with the reference that
+/// traverses every rich producer in every round, which skips nothing. Returns
+/// the visits the schedule skipped.
+fn agrees_with_reference(source: &str) -> u64 {
     let (actual, published, skipped) = ground(source);
     let (reference, expected, traversed) = testing::with_every_round_traversed(|| ground(source));
-    assert_eq!(published, expected);
+    let support = |rounds: Vec<Vec<String>>| {
+        let mut atoms: Vec<String> = rounds.into_iter().flatten().collect();
+        atoms.sort();
+        atoms
+    };
+    assert_eq!(support(published), support(expected));
     let atoms = |compiled: &Compiled| {
         compiled
             .atoms
@@ -333,7 +360,6 @@ fn equivalent(source: &str) -> u64 {
     );
     assert_eq!(actual.warnings, reference.warnings);
     assert_eq!(traversed, 0);
-    assert!(skipped > 0, "the test never skipped a visit");
     skipped
 }
 
@@ -341,43 +367,97 @@ fn equivalent(source: &str) -> u64 {
 const GROWING: &str = "s(0). s(Y) :- s(X), X < 3, Y = X + 1.";
 
 #[test]
-fn a_rich_producer_wakes_on_its_flat_body_atom() {
-    equivalent(&format!("{GROWING} {{a(X)}} :- s(X)."));
+fn a_rich_producer_waits_on_its_flat_body_atom() {
+    equivalent(&format!("{GROWING} t(0..3). {{a(X) : t(X)}} :- s(X)."));
 }
 
 #[test]
-fn a_rich_producer_wakes_on_its_structural_body_occurrence() {
-    equivalent("p(f(0)). p(f(Y)) :- p(f(X)), X < 3, Y = X + 1. {b(X)} :- p(f(X)).");
+fn a_rich_producer_waits_on_its_structural_body_occurrence() {
+    equivalent("p(f(0)). p(f(Y)) :- p(f(X)), X < 3, Y = X + 1. t(0..3). {b(X) : t(X)} :- p(f(X)).");
 }
 
 #[test]
-fn a_rich_producer_wakes_on_its_assignment_element_condition() {
+fn a_rich_producer_waits_on_its_assignment_element_condition() {
     equivalent(&format!("{GROWING} m(N) :- N = #count{{X : s(X)}}."));
 }
 
 #[test]
-fn a_rich_producer_wakes_on_its_choice_element_condition() {
+fn a_rich_producer_waits_on_its_choice_element_condition() {
     equivalent(&format!("{GROWING} go. {{c(X) : s(X)}} :- go."));
 }
 
 #[test]
-fn a_rich_producer_wakes_on_its_conditional_head_condition() {
+fn a_rich_producer_waits_on_its_conditional_head_condition() {
     equivalent(&format!("{GROWING} go. d(X) : s(X) :- go."));
 }
 
 #[test]
-fn a_rich_producer_wakes_on_a_predicate_sharing_another_reads_name() {
+fn a_rich_producer_waits_on_a_predicate_sharing_another_reads_name() {
     // The body reads p/1, which never changes after the first round; only the
     // element condition's p/2 keeps growing.
     equivalent("p(0). p(0,0). p(0,Y) :- p(0,X), X < 3, Y = X + 1. {e(X,Y) : p(X,Y)} :- p(X).");
 }
 
 #[test]
-fn a_rich_producer_over_facts_skips_every_round_after_the_second() {
-    // The facts' rows are new only in the second round's snapshot; the choice
-    // rule is unaffected from the third round while the recursion grows.
-    let skipped = equivalent(&format!("q(1). q(2). {{a(X)}} :- q(X). {GROWING}"));
+fn a_rich_producer_over_facts_skips_every_round_after_its_traversal() {
+    // The facts' component reaches its fixed point in the first rounds; the
+    // choice rule is traversed once and then skipped while the recursion grows.
+    let skipped = equivalent(&format!(
+        "q(1). q(2). r(1). {{a(X) : r(X)}} :- q(X). {GROWING}"
+    ));
     assert!(skipped >= 3, "{skipped}");
+}
+
+/// Support completion's rich traversals and deferred visits for `source`.
+fn rich_visits(source: &str) -> (u64, u64) {
+    #[derive(Default)]
+    struct Visits(Cell<(u64, u64)>);
+    impl GroundingObserver for Visits {
+        fn enter(&self) {}
+        fn exit(&self) {}
+        fn details_enabled(&self) -> bool {
+            true
+        }
+        fn phase_exit(
+            &self,
+            _: GroundingPhase,
+            _: Option<ProgramSite>,
+            _: GroundingOutcome,
+            work: GroundingWork,
+        ) {
+            let (traversals, deferred) = self.0.get();
+            self.0.set((
+                traversals + work.support_rich_traversals.unwrap(),
+                deferred + work.support_deferred_visits.unwrap(),
+            ));
+        }
+    }
+    let observer = Visits::default();
+    crate::formula_ground::ground(prepare(source), Some(&observer), None).unwrap();
+    observer.0.get()
+}
+
+#[test]
+fn a_producer_whose_reads_precede_its_heads_is_traversed_once() {
+    // The count reads s, whose component grows for four rounds: it waits for
+    // that fixed point and is traversed once, where every change would
+    // traverse it four times.
+    let source = format!("{GROWING} m(N) :- N = #count{{X : s(X)}}.");
+    equivalent(&source);
+    let (traversals, deferred) = rich_visits(&source);
+    assert_eq!(traversals, 1);
+    assert!(deferred >= 3, "{deferred}");
+}
+
+#[test]
+fn a_producer_reading_its_own_component_keeps_traversing_on_change() {
+    // The count reads s and derives s: one component, so the producer cannot
+    // wait for it and is traversed whenever s gains rows.
+    let source = "s(0). s(N) :- N = #count{X : s(X)}, N < 4.";
+    agrees_with_reference(source);
+    let (traversals, deferred) = rich_visits(source);
+    assert!(traversals > 1, "{traversals}");
+    assert_eq!(deferred, 0);
 }
 
 /// A maintained scenario whose encoding its `#include` names, with the

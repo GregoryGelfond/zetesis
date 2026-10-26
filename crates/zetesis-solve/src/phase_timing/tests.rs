@@ -6,7 +6,13 @@ use super::{PhaseMeasurement, Recorder, SearchPhaseTimings, SolvePhase};
 
 #[test]
 fn disabled_details_never_start_a_phase_clock() {
-    for recorder in [Recorder::new(false), Recorder::stages_only()] {
+    // Built one at a time: a recorder holds every grounding work counter.
+    for stages_only in [false, true] {
+        let recorder = if stages_only {
+            Recorder::stages_only()
+        } else {
+            Recorder::new(false)
+        };
         for phase in SolvePhase::ALL {
             let span = recorder.start(phase);
             assert!(span.started.is_none(), "{phase:?}");

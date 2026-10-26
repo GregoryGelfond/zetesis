@@ -523,6 +523,22 @@ fn reads_in_nested_conditions_prevent_partition() {
     ));
 }
 
+#[test]
+fn a_definition_search_charges_the_same_wherever_its_address_falls() {
+    // Over six addresses a search takes three probes for 5 and two for 65.
+    let addresses = [10, 20, 30, 40, 50, 60];
+    for (address, present) in [(5, false), (40, true), (65, false)] {
+        let mut charged = 0;
+        let found = super::source::contains(&addresses, address, |amount| {
+            charged += amount;
+            Ok(())
+        })
+        .unwrap();
+        assert_eq!(found, present, "{address}");
+        assert_eq!(charged, 3, "{address}");
+    }
+}
+
 /// Partition work for a small terminal program joined by unrelated facts.
 fn partition_work(unrelated: &str) -> u128 {
     let prepared = prepare(&format!("p(1). d(X):-p(X). {unrelated}"));
