@@ -1187,15 +1187,7 @@ impl PreparedTightSubmission<'_> {
         Result<CheckedSlate<TightGpuCheck>, TightGpuError>,
         Option<R>,
     ) {
-        let mut during = Some(during);
-        let mut result = None;
-        let mut run = || {
-            if let Some(during) = during.take() {
-                result = Some(during());
-            }
-        };
-        let checked = self.run(cancellation, Some(&mut run));
-        (checked, result)
+        crate::runtime::overlapping(during, |run| self.run(cancellation, Some(run)))
     }
 
     fn run(

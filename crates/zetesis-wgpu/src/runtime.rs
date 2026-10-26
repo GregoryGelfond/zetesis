@@ -663,6 +663,25 @@ pub(crate) enum Observation {
     AfterStop(GpuError),
 }
 
+/// An overlapping check's shape, factored so that controls cover it without a
+/// device: `check` submits, runs the work it is handed beside the submission
+/// at most once, and finishes. The work's result is returned beside the
+/// check's outcome whenever the work ran, whether or not the finish then
+/// fails, and is absent only when the check failed before running it.
+pub(crate) fn overlapping<T, R>(
+    during: impl FnOnce() -> R,
+    check: impl FnOnce(&mut dyn FnMut()) -> T,
+) -> (T, Option<R>) {
+    let mut during = Some(during);
+    let mut result = None;
+    let outcome = check(&mut || {
+        if let Some(during) = during.take() {
+            result = Some(during());
+        }
+    });
+    (outcome, result)
+}
+
 /// Wait for a pending read's submission, then map, decode and release its
 /// readback, observing the control as `observation` says.
 pub(crate) fn finish_pending<T>(

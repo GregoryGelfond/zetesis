@@ -1,8 +1,8 @@
 //! Exercise the actual wait loop with a deterministic clock and poll operation.
 
 use super::{
-    Effects, GpuError, GpuErrorKind, Observation, SubmissionWait, compilation_options, finish_read,
-    wait_for_submission, wait_observing,
+    Completion, Effects, GpuError, GpuErrorKind, Observation, SubmissionWait, compilation_options,
+    finish_read, overlapping, wait_for_submission, wait_observing,
 };
 use std::{cell::Cell, time::Duration};
 use zetesis_cpu::{Cancellation, Stop};
@@ -405,4 +405,76 @@ fn a_polled_observation_waits_as_a_synchronous_read_does() {
     );
     assert!(wait.completed && wait.outcome.is_ok());
     assert_eq!(controls, 2);
+}
+
+/// An overlapping check whose finish meets `poll` after the work beside its
+/// submission ran: the real wait and read, with a deterministic clock.
+fn overlapped_finish(
+    poll: impl FnMut(Duration) -> Result<wgpu::PollStatus, wgpu::PollError>,
+    elapsed: impl FnMut() -> Duration,
+) -> (Completion<()>, Option<u32>) {
+    overlapping(
+        || 7,
+        |run| {
+            run();
+            let wait = wait_observing(
+                Duration::from_millis(80),
+                Observation::Polled,
+                || Ok(()),
+                poll,
+                elapsed,
+            );
+            finish_read::<()>(
+                wait,
+                || panic!("an unfinished wait has no mapping to inspect"),
+                || panic!("an unfinished wait must not decode"),
+                || {},
+                || Ok(()),
+            )
+        },
+    )
+}
+
+/// The hardware stop test covers a stop observed after the work beside the
+/// submission; a device error in the finish returns that work's result too.
+#[test]
+fn an_overlapping_check_returns_its_work_when_the_device_fails() {
+    let (completion, during) = overlapped_finish(
+        |_| Err(wgpu::PollError::WrongSubmissionIndex(2, 1)),
+        || Duration::ZERO,
+    );
+    assert_eq!(during, Some(7));
+    assert_eq!(completion.outcome.unwrap_err().kind(), GpuErrorKind::Device);
+    assert_eq!(completion.effects, Effects::MayBeLive);
+}
+
+/// A completion the finish never observes within the submission's timeout
+/// fails the check, and the work beside the submission is still returned.
+#[test]
+fn an_overlapping_check_returns_its_work_when_completion_is_unobserved() {
+    let elapsed = Cell::new(Duration::ZERO);
+    let (completion, during) = overlapped_finish(
+        |wait| {
+            elapsed.set(elapsed.get() + wait);
+            Err(wgpu::PollError::Timeout)
+        },
+        || elapsed.get(),
+    );
+    assert_eq!(during, Some(7));
+    assert_eq!(
+        completion.outcome.unwrap_err().kind(),
+        GpuErrorKind::Timeout
+    );
+    assert_eq!(completion.effects, Effects::MayBeLive);
+}
+
+/// A check that fails before submitting runs no work and returns none.
+#[test]
+fn an_overlapping_check_failing_before_its_submission_runs_no_work() {
+    let (outcome, during) = overlapping(
+        || panic!("no work runs beside a submission never made"),
+        |_| Err::<(), _>(GpuError::new(GpuErrorKind::Capacity, "refused")),
+    );
+    assert!(outcome.is_err());
+    assert_eq!(during, None::<()>);
 }
