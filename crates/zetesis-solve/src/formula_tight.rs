@@ -66,18 +66,7 @@ pub(crate) fn check(
     cancellation: &Cancellation,
     phases: &Recorder,
 ) -> Result<crate::batch_executor::DeviceVerdicts, Failure> {
-    // As for general propagation, one submission may take the whole slate
-    // under either batching policy; the device's admission bounds its prefix.
-    // The update state may not shrink that prefix below the batch size, the
-    // slates' floor: a shorter prefix would split every slate into submissions
-    // of alternating counts, which hold no reuse authority.
-    let limits = TightGpuLimits {
-        max_candidates: candidates.len(),
-        max_batch_bytes: options.max_batch_bytes,
-        max_work_per_candidate: u64::from(options.gpu_formula_work),
-        min_update_candidates: options.batch_size.get(),
-        ..Default::default()
-    };
+    let limits = limits(options, candidates.len());
     let mut verdicts =
         crate::batch_executor::DeviceVerdicts::new(candidates.len()).map_err(Failure::Search)?;
     while verdicts.values.len() < candidates.len() {
@@ -140,6 +129,26 @@ pub(crate) fn check(
             .extend(checks.into_iter().map(|check| verdict(check.verdict())));
     }
     Ok(verdicts)
+}
+
+/// The device limits of one tight check over a slate of `candidates`.
+///
+/// As for general propagation, one submission may take the whole slate under
+/// either batching policy; the device's admission bounds its prefix. The update
+/// state may not shrink that prefix below the batch size, the slates' floor: a
+/// shorter prefix would split every slate into submissions of alternating
+/// counts, which hold no reuse authority. The byte ceiling is the tight batch's
+/// own, [`SolveConfig::max_tight_batch_bytes`], which [`crate::Resources`]
+/// derives as twice the other device batches' share, so that the state reaches
+/// that floor under smaller allowances.
+fn limits(options: &SolveConfig, candidates: usize) -> TightGpuLimits {
+    TightGpuLimits {
+        max_candidates: candidates,
+        max_batch_bytes: options.max_tight_batch_bytes,
+        max_work_per_candidate: u64::from(options.gpu_formula_work),
+        min_update_candidates: options.batch_size.get(),
+        ..Default::default()
+    }
 }
 
 fn verdict(verdict: TightVerdict) -> BatchVerdict {

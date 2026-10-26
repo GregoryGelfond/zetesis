@@ -334,6 +334,18 @@ fn a_device_submission_may_take_the_whole_slate_under_either_policy() {
 }
 
 #[test]
+fn formula_slates_keep_the_device_batch_ceiling() {
+    // Only the tight support batch has the larger ceiling; distinct values make
+    // a formula slate that read it fail here.
+    let options = SolveConfig {
+        max_batch_bytes: 1_000,
+        max_tight_batch_bytes: 2_000,
+        ..Default::default()
+    };
+    assert_eq!(super::slate_limits(&options, 1).max_batch_bytes, 1_000);
+}
+
+#[test]
 fn submission_accounting_preserves_undecoded_candidates() {
     let mut statistics = super::FormulaExecutionStatistics::default();
     assert!(super::record_submission(&mut statistics, None).is_ok());

@@ -78,6 +78,49 @@ fn zero_memory_does_not_gain_population_headroom() {
     assert_eq!(resources.bundle_limits().max_files, 0);
     assert_eq!(resources.observation_limits().max_terms, 0);
     assert_eq!(resources.json_record_bytes(), 0);
+    assert_eq!(solve.max_batch_bytes, 0);
+    assert_eq!(solve.max_tight_batch_bytes, 0);
+}
+
+/// Zero, the divisors' rounding edge, the library reference, the default
+/// allowances of 8, 16 and 48 GiB hosts (half their memory), and the clamped
+/// maximum.
+const ALLOWANCES: [u64; 8] = [
+    0,
+    15,
+    16,
+    Resources::REFERENCE_MEMORY,
+    4 * 1024 * 1024 * 1024,
+    8 * 1024 * 1024 * 1024,
+    24 * 1024 * 1024 * 1024,
+    u64::MAX,
+];
+
+/// The allowance `Resources::new` keeps after clamping to the host's extent.
+fn clamped(memory: u64) -> u64 {
+    memory.min(u64::try_from(isize::MAX).unwrap())
+}
+
+#[test]
+fn the_tight_batch_ceiling_is_a_sixteenth_of_the_allowance() {
+    for memory in ALLOWANCES {
+        let config = Resources::new(memory, NonZeroUsize::MIN).solve_config();
+        assert_eq!(
+            config.max_tight_batch_bytes,
+            clamped(memory) / 16,
+            "{memory}"
+        );
+    }
+}
+
+#[test]
+fn other_device_batches_keep_a_thirty_second_of_the_allowance() {
+    // Every device batch but the tight support check's reads `max_batch_bytes`,
+    // which keeps the share it had before the tight batch got its own.
+    for memory in ALLOWANCES {
+        let config = Resources::new(memory, NonZeroUsize::MIN).solve_config();
+        assert_eq!(config.max_batch_bytes, clamped(memory) / 32, "{memory}");
+    }
 }
 
 #[test]

@@ -172,7 +172,10 @@ its memory, the allowance is two GiB.
 It determines named capacities for source loading, grounding, solving and
 output. These capacities do not cover every allocation and can overlap;
 the allowance is not a process RSS cap. Closure workers share a collective
-capacity, so increasing `--threads` reduces each worker's share.
+capacity, so increasing `--threads` reduces each worker's share. Device batches
+may each account a thirty-second of the allowance, except a GPU tight support
+batch, which may account a sixteenth so that its update route can engage under
+smaller allowances.
 
 Ordinary execution has no selected operation-count or grounding-round ceiling.
 Work counters remain available through `--stats`; counter overflow and storage

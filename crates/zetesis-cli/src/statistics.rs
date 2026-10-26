@@ -180,13 +180,14 @@ fn limits(sink: &mut impl Write, o: &Options, c: &crate::SolveConfig) -> io::Res
     )?;
     writeln!(
         sink,
-        "  configured execution storage: candidate bytes={}; reduct bytes/owner={}; completion bytes={}; closure bytes/worker={}; closure bytes/collective={}; batch bytes={}",
+        "  configured execution storage: candidate bytes={}; reduct bytes/owner={}; completion bytes={}; closure bytes/worker={}; closure bytes/collective={}; batch bytes={}; tight batch bytes={}",
         c.max_candidate_bytes,
         c.max_reduct_bytes,
         c.max_completion_scratch_bytes,
         c.max_closure_bytes,
         c.max_closure_batch_bytes,
-        c.max_batch_bytes
+        c.max_batch_bytes,
+        c.max_tight_batch_bytes
     )?;
     writeln!(
         sink,

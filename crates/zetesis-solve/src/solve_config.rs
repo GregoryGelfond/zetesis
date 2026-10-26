@@ -155,7 +155,9 @@ pub struct SolveConfig {
     pub max_substitutions: usize,
     /// Maximum rules in explicit static lowering.
     pub max_ground_rules: usize,
-    /// Maximum accounted pending/GPU batch payload bytes. Lazy GPU splits this
+    /// Maximum accounted pending/GPU batch payload bytes, for every device batch
+    /// except the tight support check's, which has its own ceiling
+    /// ([`Self::max_tight_batch_bytes`]). Lazy GPU splits this
     /// allowance equally between source coordination and transient transport.
     /// Shared CPU rounds use the full allowance for source and world state.
     /// Both routes derive source-scan scratch from their host share and eagerly
@@ -164,6 +166,13 @@ pub struct SolveConfig {
     /// the scan workspace has its own independent bound. These conservative
     /// capacities exclude the overhead named by each owner and are not RSS.
     pub max_batch_bytes: u64,
+    /// Maximum accounted payload bytes of one GPU tight support batch: the
+    /// resident graph, transport, packing, results and, once admitted, the
+    /// update state. It is separate from [`Self::max_batch_bytes`] so that the
+    /// update state can still admit the batch size under smaller allowances;
+    /// the state is admitted only when that many candidates fit beside it. Like
+    /// the other capacities, it is conservative accounting, not RSS.
+    pub max_tight_batch_bytes: u64,
 }
 
 impl SolveConfig {
