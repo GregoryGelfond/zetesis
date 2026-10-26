@@ -193,7 +193,7 @@ fn warm(extra: usize, projected: bool) -> u64 {
         .unwrap();
     assert_eq!(scratch.atoms, [0b011], "fanout source a actually activates");
     assert_eq!(scratch.body_nodes.len(), 7);
-    work.spent
+    work.spent()
 }
 
 #[test]
@@ -244,7 +244,7 @@ fn public_scratch_bytes_include_projected_payload() {
         ),
         Err(Stop::WorkLimit)
     );
-    assert_eq!(none.spent, 0);
+    assert_eq!(none.spent(), 0);
     assert!(scratch.founded.owner.is_none());
     assert!(scratch.founded.projected.is_none());
     assert_eq!(capacities(&scratch.founded), retained);

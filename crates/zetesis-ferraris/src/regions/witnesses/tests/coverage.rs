@@ -62,7 +62,7 @@ fn early_uncovered_paths_do_not_prepare_siblings() {
             assert_eq!(tested, [root, first, 0]);
             // Three nodes, two reached edges, three coverage callback reads.
             // Eager sibling preparation instead consumes width+1 edges.
-            assert_eq!(work.spent, 8, "width={width}");
+            assert_eq!(work.spent(), 8, "width={width}");
             assert!(!scratch.visited(1) && !scratch.visited(2));
             assert_eq!(scratch.frames.len(), 2);
             assert_eq!(scratch.stack.capacity(), 0);
@@ -91,7 +91,7 @@ fn a_late_uncovered_path_retains_full_visit_order() {
         let expected: Vec<_> = [root, first].into_iter().chain(0..width).collect();
         assert_eq!(tested, expected);
         // width+2 nodes and callbacks, width+1 edges, exactly the old full walk.
-        assert_eq!(work.spent, u64::try_from(3 * width + 5).unwrap());
+        assert_eq!(work.spent(), u64::try_from(3 * width + 5).unwrap());
     }
 }
 
@@ -116,7 +116,7 @@ fn covered_compounds_prune_only_their_descendants() {
         let expected: Vec<_> = [root, first].into_iter().chain(2..width).collect();
         assert_eq!(tested, expected);
         assert!(!scratch.visited(0) && !scratch.visited(1));
-        assert_eq!(work.spent, u64::try_from(3 * width - 1).unwrap());
+        assert_eq!(work.spent(), u64::try_from(3 * width - 1).unwrap());
         assert!(scratch.frames.is_empty());
     }
 }
@@ -138,7 +138,7 @@ fn a_covered_root_reads_no_edges() {
             .unwrap()
     );
     assert_eq!(tested, [root]);
-    assert_eq!(work.spent, 2);
+    assert_eq!(work.spent(), 2);
     assert!(!scratch.visited(first));
     assert_eq!(scratch.frames.capacity(), 0);
 }
@@ -194,7 +194,7 @@ fn complete_deep_covers_keep_distinct_callback_order() {
         assert_eq!(tested, expected, "shared atom one is tested once");
         // depth chains plus depth+1 atom encounters, 2*depth edges and
         // depth+2 distinct coverage callbacks. Dedup does not erase edge work.
-        assert_eq!(work.spent, u64::try_from(5 * depth + 3).unwrap());
+        assert_eq!(work.spent(), u64::try_from(5 * depth + 3).unwrap());
         assert!(scratch.frames.is_empty());
         assert!(scratch.frames.capacity() >= depth);
         assert_eq!(scratch.stack.capacity(), 0);
@@ -216,16 +216,16 @@ fn cone_collection_keeps_compounds_and_full_receipt() {
     let mut work = Work::new(u64::MAX);
     scratch.cone(&index, chain, &mut work).unwrap();
     assert_eq!(scratch.prepared(), expected);
-    assert_eq!(work.spent, u64::try_from(4 * depth + 1).unwrap());
+    assert_eq!(work.spent(), u64::try_from(4 * depth + 1).unwrap());
     assert!(scratch.frames.is_empty());
     let capacity = scratch.leaves.capacity();
-    for limit in 0..work.spent {
+    for limit in 0..work.spent() {
         let mut limited = Work::new(limit);
         assert_eq!(
             scratch.cone(&index, chain, &mut limited),
             Err(Stop::WorkLimit)
         );
-        assert_eq!(limited.spent, limit);
+        assert_eq!(limited.spent(), limit);
         assert_eq!(scratch.leaves.capacity(), capacity);
         scratch
             .cone(&index, chain, &mut Work::new(u64::MAX))
@@ -259,7 +259,7 @@ fn every_cover_work_prefix_can_retry_with_another_cut() {
                 }),
                 Err(Stop::WorkLimit),
             );
-            assert_eq!(work.spent, limit);
+            assert_eq!(work.spent(), limit);
             let mut tested = Vec::new();
             let mut retry = Work::new(u64::MAX);
             assert!(
@@ -294,7 +294,7 @@ fn cancelled_cover_prefixes_do_not_establish_coverage() {
             Ok(node < width)
         });
         assert_eq!(result, Err(Stop::Cancelled));
-        assert_eq!(work.spent, allowed);
+        assert_eq!(work.spent(), allowed);
         work.refund();
         assert_eq!(quota.remaining, 0);
         assert!(

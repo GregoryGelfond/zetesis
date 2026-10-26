@@ -151,6 +151,10 @@ Notable changes by release. Versions follow Semantic Versioning.
   excluded from the candidate region.
 - Possible-sum checks detect an allowed value while updating the packed sum set,
   avoiding a separate scan.
+- Region narrowing keeps its admitted and unspent reads as one count, so
+  charging a read within them is a single decrement; the work ceiling is met, or
+  the quota consulted, only when they run out. Receipts, quota reservations,
+  refunds and refusals are unchanged.
 - Weighted aggregate comparisons can determine a condition when its opposite
   value leaves no possible remainder in the required interval. These deductions
   use the existing propagation queues and preserve answer-set semantics.

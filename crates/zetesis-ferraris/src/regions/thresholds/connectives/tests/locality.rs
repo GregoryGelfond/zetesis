@@ -158,7 +158,7 @@ fn compound_anchors_keep_their_self_candidate() {
         let index = Narrower::new(&theory);
         let mut work = crate::regions::Work::new(u64::MAX);
         assert!(super::super::needs_ancestor_discovery(&index, compound, &mut work).unwrap());
-        assert_eq!(work.spent, 1);
+        assert_eq!(work.spent(), 1);
     }
 }
 
@@ -168,7 +168,7 @@ fn flat_theories_need_no_geometry_probes() {
     assert!(index.witness_chains.is_empty());
     let mut work = crate::regions::Work::new(0);
     assert!(!super::super::needs_ancestor_discovery(&index, 0, &mut work).unwrap());
-    assert_eq!(work.spent, 0);
+    assert_eq!(work.spent(), 0);
 }
 
 #[test]
@@ -179,21 +179,21 @@ fn applicability_probes_preserve_typed_refusals() {
     };
     let mut complete = crate::regions::Work::new(u64::MAX);
     assert!(!query(&mut complete).unwrap());
-    assert!(complete.spent > 1);
-    for remaining in 0..complete.spent {
+    assert!(complete.spent() > 1);
+    for remaining in 0..complete.spent() {
         let mut bounded = crate::regions::Work::new(remaining);
         assert_eq!(query(&mut bounded), Err(Stop::WorkLimit));
-        assert_eq!(bounded.spent, remaining);
+        assert_eq!(bounded.spent(), remaining);
         for failure in [Stop::WorkLimit, Stop::Cancelled, Stop::Deadline] {
             let mut quota = Allowance { remaining, failure };
             let mut interrupted = crate::regions::Work::reserved(&mut quota);
             assert_eq!(query(&mut interrupted), Err(failure));
-            assert_eq!(interrupted.spent, remaining);
+            assert_eq!(interrupted.spent(), remaining);
         }
         // The query retains no state that could survive a partial probe.
-        let mut exact = crate::regions::Work::new(complete.spent);
+        let mut exact = crate::regions::Work::new(complete.spent());
         assert!(!query(&mut exact).unwrap());
-        assert_eq!(exact.spent, complete.spent);
+        assert_eq!(exact.spent(), complete.spent());
     }
 }
 

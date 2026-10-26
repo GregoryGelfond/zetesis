@@ -189,7 +189,7 @@ fn stopped_filtered_replay_requires_a_complete_retry() {
         Stop::Deadline,
         Stop::Allocation,
     ] {
-        for ceiling in 0..completed.spent {
+        for ceiling in 0..completed.spent() {
             let mut actual = prepare();
             let mut allowance = Allowance {
                 remaining: ceiling,

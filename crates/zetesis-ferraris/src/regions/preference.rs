@@ -47,7 +47,7 @@ impl Knowledge {
         work.refund();
         PreferenceAttempt {
             result,
-            work: work.spent,
+            work: work.spent(),
         }
     }
 

@@ -657,7 +657,7 @@ impl Ledger {
         self.attempts += 1;
         counts.attempts += 1;
         let mut temporary_peak = 0;
-        let before = work.spent;
+        let before = work.spent();
         let result = explanations::collect(
             input,
             atom,
@@ -670,7 +670,7 @@ impl Ledger {
             work,
             &mut temporary_peak,
         );
-        self.remaining = self.remaining.saturating_sub(work.spent - before);
+        self.remaining = self.remaining.saturating_sub(work.spent() - before);
         self.peak_bytes = self.peak_bytes.max(self.retained_bytes() + temporary_peak);
         let Some(explanation) = result? else {
             counts.declined += 1;

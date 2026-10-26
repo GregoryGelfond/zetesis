@@ -314,13 +314,13 @@ fn nonqualifying_rows_preserve_every_interruption() {
         assert!(record.conditions.is_empty());
         assert_sound(&program, &completed, &record, &program.answers());
         for failure in [Stop::WorkLimit, Stop::Cancelled, Stop::Deadline] {
-            for prefix in 0..measured.spent {
+            for prefix in 0..measured.spent() {
                 let mut quota = SinglePermits::new(prefix, failure);
                 let mut work = Work::reserved(&mut quota);
                 assert!(
                     matches!(explain(&program, &completed, 0, limits(), &mut work), Err(actual) if actual == failure)
                 );
-                assert_eq!(work.spent, prefix);
+                assert_eq!(work.spent(), prefix);
             }
         }
     }
@@ -344,13 +344,13 @@ fn nested_numeric_witnesses_preserve_every_interruption() {
         .unwrap();
     assert_sound(&program, &completed, &record, &program.answers());
     for failure in [Stop::WorkLimit, Stop::Cancelled, Stop::Deadline] {
-        for prefix in 0..measured.spent {
+        for prefix in 0..measured.spent() {
             let mut quota = SinglePermits::new(prefix, failure);
             let mut work = Work::reserved(&mut quota);
             assert!(
                 matches!(explain(&program, &completed, 0, limits(), &mut work), Err(actual) if actual == failure)
             );
-            assert_eq!(work.spent, prefix);
+            assert_eq!(work.spent(), prefix);
         }
     }
 }

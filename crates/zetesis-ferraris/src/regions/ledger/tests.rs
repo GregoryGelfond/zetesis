@@ -422,9 +422,9 @@ fn interrupted_capture_never_publishes_partial_evidence() {
         )
         .unwrap();
     assert_eq!(complete.len(), 1);
-    assert!(measured.spent > 0);
+    assert!(measured.spent() > 0);
     for failure in [Stop::WorkLimit, Stop::Cancelled, Stop::Deadline] {
-        for prefix in 0..measured.spent {
+        for prefix in 0..measured.spent() {
             let mut ledger = Ledger::default();
             ledger.prepare(&program.owner);
             let mut counts = SupportExplanationStatistics::default();
@@ -434,7 +434,7 @@ fn interrupted_capture_never_publishes_partial_evidence() {
                 ledger.capture(input(&program, &known, &scratch), 0, &mut work, &mut counts),
                 Err(failure)
             );
-            assert_eq!(work.spent, prefix);
+            assert_eq!(work.spent(), prefix);
             assert_eq!(ledger.len(), 0);
             assert_eq!(counts.certified, 0);
             ledger
@@ -465,14 +465,14 @@ fn interrupted_matching_preserves_the_typed_failure() {
         Deduction::ForceOutputs
     );
     for failure in [Stop::WorkLimit, Stop::Cancelled, Stop::Deadline] {
-        for prefix in 0..measured.spent {
+        for prefix in 0..measured.spent() {
             let mut permits = SinglePermits::new(prefix, failure);
             let mut work = Work::reserved(&mut permits);
             assert_eq!(
                 scratch.explanations.deduction(0, &held, &cut, &mut work),
                 Err(failure)
             );
-            assert_eq!(work.spent, prefix);
+            assert_eq!(work.spent(), prefix);
             assert_eq!(scratch.explanations.len(), 1);
         }
     }

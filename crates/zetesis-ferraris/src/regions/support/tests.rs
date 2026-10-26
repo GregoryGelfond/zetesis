@@ -138,14 +138,14 @@ fn preparation_is_private_until_every_row_is_charged() {
             progress.prepare(&producers, &mut work),
             Err(Stop::WorkLimit)
         );
-        assert_eq!(work.spent, limit);
+        assert_eq!(work.spent(), limit);
         assert_eq!(progress, Progress::Vacant);
         assert_eq!(progress.allocated_bytes(), 0);
     }
     let mut progress = Progress::default();
     let mut work = Work::new(needed);
     progress.prepare(&producers, &mut work).unwrap();
-    assert_eq!(work.spent, needed);
+    assert_eq!(work.spent(), needed);
     let Progress::Small(rows) = &progress else {
         panic!("the complete producer count fits compact positions");
     };
@@ -188,7 +188,7 @@ fn interrupted_preparation_publishes_no_positions() {
             let mut work = Work::reserved(&mut quota);
             let mut progress = Progress::default();
             assert_eq!(progress.prepare(&producers, &mut work), Err(failure));
-            assert_eq!(work.spent, u64::try_from(permitted).unwrap());
+            assert_eq!(work.spent(), u64::try_from(permitted).unwrap());
             assert_eq!(progress, Progress::Vacant);
         }
     }
@@ -215,13 +215,13 @@ fn stopped_scans_never_manufacture_a_completed_outcome() {
                 progress.check(&producers, 0, true, &never, &[1], &mut work),
                 Err(stop) if stop == failure
             ));
-            assert_eq!(work.spent, permitted);
+            assert_eq!(work.spent(), permitted);
             let mut resumed = Work::new(5 - permitted);
             assert!(matches!(
                 progress.check(&producers, 0, true, &never, &[1], &mut resumed),
                 Ok(Support::Sole(Some(5)))
             ));
-            assert_eq!(resumed.spent, 5 - permitted);
+            assert_eq!(resumed.spent(), 5 - permitted);
         }
     }
 }
@@ -258,13 +258,13 @@ fn compact_and_native_positions_preserve_the_same_scan() {
             progress.check(&producers, 0, true, &[0b01110], &[1], &mut work),
             Ok(Support::Possible)
         ));
-        assert_eq!(work.spent, 5);
+        assert_eq!(work.spent(), 5);
         let mut work = Work::new(2);
         assert!(matches!(
             progress.check(&producers, 0, true, &[0b11110], &[1], &mut work),
             Ok(Support::Sole(Some(5)))
         ));
-        assert_eq!(work.spent, 2);
+        assert_eq!(work.spent(), 2);
     }
 }
 

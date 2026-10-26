@@ -333,7 +333,7 @@ pub fn producers(
     Ok(Extraction {
         producers,
         choice_heads,
-        work: work.spent,
+        work: work.spent(),
     })
 }
 
@@ -550,19 +550,22 @@ pub trait NarrowingQuota {
 pub const NARROWING_BATCH: u64 = zetesis_cpu::POLL_INTERVAL;
 
 /// The narrowing's charged reads: a fixed ceiling, or permits granted by a
-/// quota in batches and spent locally.
+/// quota in batches and spent locally. The reads admitted and not yet spent
+/// are kept as one count, so a charge within them is a decrement; the
+/// ceiling is met, or the quota consulted, only when they run out.
 struct Work<'q> {
-    spent: u64,
-    ceiling: u64,
-    available: u64,
+    /// Reads admitted so far: the whole ceiling, or every permit granted
+    /// and not refunded.
+    admitted: u64,
+    /// Admitted reads not yet spent.
+    remaining: u64,
     quota: Option<&'q mut dyn NarrowingQuota>,
 }
 impl Work<'static> {
     fn new(ceiling: u64) -> Self {
         Self {
-            spent: 0,
-            ceiling,
-            available: 0,
+            admitted: ceiling,
+            remaining: ceiling,
             quota: None,
         }
     }
@@ -570,33 +573,47 @@ impl Work<'static> {
 impl<'q> Work<'q> {
     fn reserved(quota: &'q mut dyn NarrowingQuota) -> Self {
         Self {
-            spent: 0,
-            ceiling: u64::MAX,
-            available: 0,
+            admitted: 0,
+            remaining: 0,
             quota: Some(quota),
         }
     }
+    /// The reads charged so far.
+    #[inline]
+    fn spent(&self) -> u64 {
+        self.admitted - self.remaining
+    }
+    /// Charge one read before it runs.
     #[inline]
     fn tick(&mut self) -> Result<(), Stop> {
-        if self.spent >= self.ceiling {
+        if self.remaining == 0 {
+            self.admit()?;
+        }
+        self.remaining -= 1;
+        Ok(())
+    }
+    /// Admit more reads once every admitted read is spent: under a fixed
+    /// ceiling none, the ceiling being met; under a quota, its next grant.
+    #[cold]
+    fn admit(&mut self) -> Result<(), Stop> {
+        let Some(quota) = &mut self.quota else {
+            return Err(Stop::WorkLimit);
+        };
+        let granted = quota.reserve(NARROWING_BATCH)?;
+        debug_assert!(granted <= NARROWING_BATCH, "a quota grants at most what is asked");
+        if granted == 0 {
             return Err(Stop::WorkLimit);
         }
-        if let Some(quota) = &mut self.quota {
-            if self.available == 0 {
-                self.available = quota.reserve(NARROWING_BATCH)?;
-                if self.available == 0 {
-                    return Err(Stop::WorkLimit);
-                }
-            }
-            self.available -= 1;
-        }
-        self.spent += 1;
+        self.admitted += granted;
+        self.remaining = granted;
         Ok(())
     }
     /// Return the unspent permits to the quota.
     fn refund(&mut self) {
         if let Some(quota) = &mut self.quota {
-            quota.refund(std::mem::take(&mut self.available));
+            let unspent = std::mem::take(&mut self.remaining);
+            self.admitted -= unspent;
+            quota.refund(unspent);
         }
     }
 }
@@ -935,7 +952,7 @@ impl Knowledge {
         work.refund();
         PreferenceAttempt {
             result,
-            work: work.spent,
+            work: work.spent(),
         }
     }
 
@@ -1450,7 +1467,7 @@ impl Narrower {
             Ok(narrowing)
         });
         work.refund();
-        statistics.work = work.spent;
+        statistics.work = work.spent();
         statistics.support_explanations.peak_bytes = scratch.explanations.peak_bytes();
         NarrowingAttempt { result, statistics }
     }
@@ -1703,7 +1720,7 @@ impl NarrowingScratch {
         work.refund();
         LearningAttempt {
             result,
-            work: work.spent,
+            work: work.spent(),
         }
     }
 
@@ -1724,7 +1741,7 @@ impl NarrowingScratch {
         work.refund();
         LearningAttempt {
             result,
-            work: work.spent,
+            work: work.spent(),
         }
     }
 
@@ -2167,9 +2184,9 @@ impl<C: Count> Closure<'_, C> {
                 statistics.propagations += 1;
                 let producers =
                     producers.expect("a support recheck is queued only when producers are known");
-                let before = work.spent;
+                let before = work.spent();
                 let result = self.recheck(index, producers, atom, work);
-                statistics.support_work += work.spent - before;
+                statistics.support_work += work.spent() - before;
                 result?
             } else if let Some(row) = self.lists.next_residual() {
                 debug_assert!(frozen.is_none(), "only original rows check residual sums");
@@ -2183,14 +2200,14 @@ impl<C: Count> Closure<'_, C> {
             } else if self.lists.matching && self.lists.match_dirty {
                 // Learned rows read the carrier's knowledge with or without
                 // producers, before possible foundedness tests it.
-                let before = work.spent;
+                let before = work.spent();
                 let matched =
                     self.match_rows(index, producers, work, &mut statistics.support_explanations);
-                statistics.support_explanations.work += work.spent - before;
+                statistics.support_explanations.work += work.spent() - before;
                 matched?
             } else if let Some(producers) = producers {
                 debug_assert!(frozen.is_none(), "only original subjects have producers");
-                let before = work.spent;
+                let before = work.spent();
                 let explanation_work = statistics.support_explanations.work;
                 let result = self.founded(
                     theory,
@@ -2199,8 +2216,9 @@ impl<C: Count> Closure<'_, C> {
                     work,
                     &mut statistics.support_explanations,
                 );
-                statistics.founded_work +=
-                    work.spent - before - (statistics.support_explanations.work - explanation_work);
+                statistics.founded_work += work.spent()
+                    - before
+                    - (statistics.support_explanations.work - explanation_work);
                 let founded = result?;
                 if founded == Step::Unchanged {
                     return Ok(Step::Changed);
@@ -2240,9 +2258,9 @@ impl<C: Count> Closure<'_, C> {
             self.known.atom_never,
             work,
         )?;
-        let before = work.spent;
+        let before = work.spent();
         let captured = self.remember_unsupported(theory, index, producers, work, explanations);
-        explanations.work += work.spent - before;
+        explanations.work += work.spent() - before;
         captured?;
         // A retained row is matched before the next founded pass.
         if self.lists.matching {

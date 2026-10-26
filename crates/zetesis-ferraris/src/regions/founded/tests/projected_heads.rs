@@ -160,7 +160,7 @@ fn warm(extra: usize, projected: bool) -> u64 {
         .unwrap();
     assert_eq!(scratch.atoms, [0b011]);
     assert_eq!(scratch.body_nodes.len(), 3);
-    work.spent
+    work.spent()
 }
 
 #[test]

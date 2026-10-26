@@ -187,7 +187,7 @@ fn a_pending_witness_does_not_retire_the_counter() {
         assert!(result == Ok(Step::Unchanged));
         assert_eq!(evidence(&knowledge), (false, 1, None, vec![1; 4]));
         assert_eq!(scratch.nodes, [(1, disjunction)]);
-        assert_eq!(work.spent, 2);
+        assert_eq!(work.spent(), 2);
     }
 }
 
@@ -221,7 +221,7 @@ fn retired_parents_keep_their_read_permit() {
                         &mut work,
                     );
                     work.refund();
-                    assert_eq!(work.spent, limit);
+                    assert_eq!(work.spent(), limit);
                     if limit < 2 {
                         assert!(result == Err(stop));
                     } else {
@@ -259,7 +259,7 @@ fn a_first_witness_still_refutes_an_opposite_root() {
             &mut work,
         );
         assert!(result == Ok(Step::Contradiction));
-        assert_eq!(work.spent, 2);
+        assert_eq!(work.spent(), 2);
     }
 }
 
@@ -295,7 +295,7 @@ fn a_retired_chain_does_not_hide_another_parent() {
             &mut work,
         );
         assert!(result == Ok(Step::Contradiction));
-        assert_eq!(work.spent, 3);
+        assert_eq!(work.spent(), 3);
         assert_eq!(evidence(&knowledge).1, 0);
     }
 }
@@ -327,6 +327,6 @@ fn a_frozen_falsum_parent_never_collects_a_witness() {
         );
         assert!(result == Ok(Step::Unchanged));
         assert_eq!(evidence(&knowledge), (false, 0, Some(false), vec![1; 4]));
-        assert_eq!(work.spent, 2);
+        assert_eq!(work.spent(), 2);
     }
 }

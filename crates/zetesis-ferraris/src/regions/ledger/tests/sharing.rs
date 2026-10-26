@@ -171,7 +171,7 @@ fn deliver_tier(tier: &mut Ledger, store: &mut LearningStore) {
 fn seed_tier(tier: &mut Ledger, store: &mut LearningStore) -> u64 {
     let mut work = Work::new(u64::MAX);
     tier.seed(store, &mut work).unwrap();
-    work.spent
+    work.spent()
 }
 
 #[test]

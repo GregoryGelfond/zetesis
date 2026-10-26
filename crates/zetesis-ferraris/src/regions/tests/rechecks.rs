@@ -192,7 +192,7 @@ fn an_open_head_stops_at_its_first_supporter() {
     let (result, learned) = support_attempt(&shared_head(8), &[], &[], &mut work);
     assert!(matches!(result, Ok(Step::Unchanged)));
     assert!(learned.is_empty());
-    assert_eq!(work.spent, 1);
+    assert_eq!(work.spent(), 1);
 }
 
 #[test]
@@ -201,7 +201,7 @@ fn a_held_head_stops_at_its_second_supporter() {
     let (result, learned) = support_attempt(&shared_head(8), &[0], &[], &mut work);
     assert!(matches!(result, Ok(Step::Unchanged)));
     assert!(learned.is_empty());
-    assert_eq!(work.spent, 2);
+    assert_eq!(work.spent(), 2);
 }
 
 #[test]
@@ -210,7 +210,7 @@ fn sole_support_requires_the_complete_scan() {
     let (result, learned) = support_attempt(&shared_head(4), &[0], &[1, 2, 3], &mut work);
     assert!(matches!(result, Ok(Step::Changed)));
     assert_eq!(learned, [(4, true)]);
-    assert_eq!(work.spent, 4);
+    assert_eq!(work.spent(), 4);
 }
 
 #[test]
@@ -219,7 +219,7 @@ fn an_unsupported_cut_requires_the_complete_scan() {
     let (result, learned) = support_attempt(&shared_head(4), &[], &[1, 2, 3, 4], &mut work);
     assert!(matches!(result, Ok(Step::Changed)));
     assert_eq!(learned, [(0, false)]);
-    assert_eq!(work.spent, 4);
+    assert_eq!(work.spent(), 4);
 }
 
 #[test]
@@ -228,7 +228,7 @@ fn a_held_unsupported_head_refutes_the_region() {
     let (result, learned) = support_attempt(&shared_head(4), &[0], &[1, 2, 3, 4], &mut work);
     assert!(matches!(result, Ok(Step::Contradiction)));
     assert!(learned.is_empty());
-    assert_eq!(work.spent, 4);
+    assert_eq!(work.spent(), 4);
 }
 
 #[test]
@@ -247,7 +247,7 @@ fn duplicate_producers_remain_distinct_supporters() {
     let (result, learned) = support_attempt(&theory, &[0], &[], &mut work);
     assert!(matches!(result, Ok(Step::Unchanged)));
     assert!(learned.is_empty());
-    assert_eq!(work.spent, 2);
+    assert_eq!(work.spent(), 2);
 }
 
 #[test]
@@ -270,7 +270,7 @@ fn a_competing_head_cannot_supply_support() {
     let (result, learned) = support_attempt(&theory, &[0, 1], &[], &mut work);
     assert!(matches!(result, Ok(Step::Changed)));
     assert_eq!(learned, [(3, true)]);
-    assert_eq!(work.spent, 2);
+    assert_eq!(work.spent(), 2);
 }
 
 #[test]
@@ -292,7 +292,7 @@ fn choice_support_prevents_a_spurious_sole_body() {
     let (result, learned) = support_attempt(&theory, &[0], &[], &mut work);
     assert!(matches!(result, Ok(Step::Unchanged)));
     assert!(learned.is_empty());
-    assert_eq!(work.spent, 2);
+    assert_eq!(work.spent(), 2);
 }
 
 #[test]
@@ -306,7 +306,7 @@ fn a_bodyless_sole_support_forces_no_body() {
     let (result, learned) = support_attempt(&theory, &[0], &[1], &mut work);
     assert!(matches!(result, Ok(Step::Unchanged)));
     assert!(learned.is_empty());
-    assert_eq!(work.spent, 2);
+    assert_eq!(work.spent(), 2);
 }
 
 #[test]
@@ -434,7 +434,7 @@ fn support_refusal_retains_the_exact_charged_prefix() {
         for limit in 0..=needed {
             let mut work = Work::new(limit);
             let (result, _) = support_attempt(&theory, held, failed, &mut work);
-            assert_eq!(work.spent, limit);
+            assert_eq!(work.spent(), limit);
             if limit == needed {
                 assert!(result.is_ok());
             } else {
@@ -480,7 +480,7 @@ fn support_quota_stops_before_the_next_producer() {
             let mut work = Work::reserved(&mut quota);
             let (result, _) = support_attempt(&theory, &[0], &[1, 2, 3], &mut work);
             assert!(matches!(result, Err(stop) if stop == failure));
-            assert_eq!(work.spent, permitted);
+            assert_eq!(work.spent(), permitted);
             work.refund();
             assert_eq!(quota.remaining, 0);
             assert_eq!(quota.refunded, 0);
@@ -502,7 +502,7 @@ fn support_saturation_refunds_unvisited_permits() {
         let (result, learned) = support_attempt(&theory, held, &[], &mut work);
         assert!(matches!(result, Ok(Step::Unchanged)));
         assert!(learned.is_empty());
-        let spent = work.spent;
+        let spent = work.spent();
         work.refund();
         assert_eq!(quota.refunded, 64 - spent);
         assert_eq!(quota.remaining, 0);

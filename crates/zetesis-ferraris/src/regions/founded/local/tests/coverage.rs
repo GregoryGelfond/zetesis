@@ -196,7 +196,7 @@ fn refused_replacement_preserves_retained_membership() {
     prepare(&mut actual, &mut Work::new(u64::MAX)).unwrap();
     let retained = actual.retained_bytes();
     assert!(actual.local.retained_bytes() > 0);
-    let mut stopped = Work::new(complete.spent - 1);
+    let mut stopped = Work::new(complete.spent() - 1);
     assert_eq!(prepare(&mut actual, &mut stopped), Err(Stop::WorkLimit));
     assert!(actual.owner.is_none() && actual.projected.is_none());
     assert_eq!(actual.retained_bytes(), retained);

@@ -547,7 +547,7 @@ fn acyclic_gate_reuses_only_its_completed_result() {
             .needed(&owner, &index, &producers, &mut work)
             .unwrap()
     );
-    assert!(work.spent > 0);
+    assert!(work.spent() > 0);
     // A different worker gets the completed original classification without
     // preparing a second graph or growing per-region closure scratch.
     let mut untouched = Scratch::default();
@@ -557,7 +557,7 @@ fn acyclic_gate_reuses_only_its_completed_result() {
             .needed(&owner, &index, &producers, &mut none)
             .unwrap()
     );
-    assert_eq!(none.spent, 0);
+    assert_eq!(none.spent(), 0);
     assert_eq!(untouched.retained_bytes(), 0);
 }
 
@@ -587,7 +587,7 @@ fn interrupted_cycle_tests_publish_no_classification() {
         let expected = Scratch::default()
             .needed(&owner, &index, &producers(&owner), &mut spent)
             .unwrap();
-        for ceiling in 0..spent.spent {
+        for ceiling in 0..spent.spent() {
             let producers = producers(&owner);
             let mut scratch = Scratch::default();
             let mut limited = Work::new(ceiling);
@@ -597,7 +597,7 @@ fn interrupted_cycle_tests_publish_no_classification() {
                     .unwrap_err(),
                 Stop::WorkLimit
             );
-            assert_eq!(limited.spent, ceiling);
+            assert_eq!(limited.spent(), ceiling);
             assert!(producers.founded_cycles.get().is_none());
             assert_eq!(
                 scratch
@@ -722,7 +722,7 @@ fn unrelated_constraints_add_no_warm_initialization_work() {
                 &mut work,
             )
             .unwrap();
-        (work.spent, scratch.body_nodes.len())
+        (work.spent(), scratch.body_nodes.len())
     }
     let base = cycle();
     let mut nodes = vec![
@@ -756,10 +756,10 @@ fn interrupted_body_preparation_publishes_no_owner() {
     expected
         .prepare_bodies(&owner, &index, &producers, &mut parents)
         .unwrap();
-    assert!(cone.spent > 0 && parents.spent > 0);
+    assert!(cone.spent() > 0 && parents.spent() > 0);
     projected_parents::assert_rows(&expected, &owner, &index);
     projected_heads::assert_rows(&expected, &owner, &producers);
-    for (phase, spent) in [cone.spent, parents.spent].into_iter().enumerate() {
+    for (phase, spent) in [cone.spent(), parents.spent()].into_iter().enumerate() {
         for ceiling in 0..spent {
             let mut scratch = Scratch::default();
             if phase == 1 {
@@ -774,7 +774,7 @@ fn interrupted_body_preparation_publishes_no_owner() {
                 Err(Stop::WorkLimit),
                 "phase {phase}, work prefix {ceiling}"
             );
-            assert_eq!(limited.spent, ceiling);
+            assert_eq!(limited.spent(), ceiling);
             assert!(scratch.owner.is_none());
             assert!(scratch.projected.is_none());
             scratch.prepare_projected(&owner, &index, &producers);
@@ -803,7 +803,7 @@ fn body_preparation_requires_exact_original_identity() {
             &mut none,
         )
         .unwrap();
-    assert_eq!(none.spent, 0);
+    assert_eq!(none.spent(), 0);
     projected_parents::assert_rows(&scratch, &first, &Narrower::new(&first));
     projected_heads::assert_rows(&scratch, &first, &producers(&first));
     assert_eq!(
@@ -840,7 +840,7 @@ fn interrupted_projected_rounds_reinitialize_every_active_cell() {
         .complete(&owner, &index, &producers, &never, &[0], &mut complete)
         .unwrap();
     let expected = prepared.atoms.clone();
-    for ceiling in 0..complete.spent {
+    for ceiling in 0..complete.spent() {
         let mut scratch = Scratch::default();
         scratch.prepare_projected(&owner, &index, &producers);
         let mut limited = Work::new(ceiling);
@@ -848,7 +848,7 @@ fn interrupted_projected_rounds_reinitialize_every_active_cell() {
             scratch.complete(&owner, &index, &producers, &never, &[0], &mut limited),
             Err(Stop::WorkLimit)
         );
-        assert_eq!(limited.spent, ceiling);
+        assert_eq!(limited.spent(), ceiling);
         scratch
             .complete(
                 &owner,
