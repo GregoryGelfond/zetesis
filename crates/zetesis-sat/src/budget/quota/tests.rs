@@ -1,27 +1,74 @@
-//! Exact search and reservation boundaries are independent of quota ownership.
+//! Exact work, decision and reservation boundaries are independent of quota
+//! ownership.
 
-use crate::budget::{Budget, LocalQuota, SharedBudget};
-use crate::search::query;
-use crate::{
-    AdmissionLimits, Cancellation, Cnf, Incomplete, Literal, SearchLimits, SearchStatistics, Solve,
-};
+use crate::budget::{Budget, LocalQuota, Quota, SharedBudget};
+use crate::{Cancellation, Incomplete, SearchLimits, SearchStatistics};
 
-#[derive(Debug, PartialEq, Eq)]
-enum Outcome {
-    Sat(Vec<bool>),
-    Unsat,
-    Inconclusive(Incomplete),
+/// One budget operation of a scripted search: a tick, a decision, a batched
+/// grant spending part of what it is granted, or a whole-operation
+/// reservation reporting part of its allowance as used.
+#[derive(Clone, Copy, Debug)]
+enum Operation {
+    Tick,
+    Decide,
+    Grant { wanted: u64, spent: u64 },
+    Reservation { wanted: u64, used: u64 },
 }
 
-fn outcome(result: Solve) -> Outcome {
-    match result {
-        Solve::Sat(assignment) => Outcome::Sat(assignment.0),
-        Solve::Unsat => Outcome::Unsat,
-        Solve::Inconclusive(error) => Outcome::Inconclusive(error),
+const SCRIPT: [Operation; 10] = [
+    Operation::Tick,
+    Operation::Decide,
+    Operation::Grant {
+        wanted: 3,
+        spent: 3,
+    },
+    Operation::Grant {
+        wanted: 4,
+        spent: 2,
+    },
+    Operation::Decide,
+    Operation::Tick,
+    Operation::Reservation { wanted: 3, used: 2 },
+    Operation::Tick,
+    Operation::Decide,
+    Operation::Grant {
+        wanted: 2,
+        spent: 2,
+    },
+];
+
+/// Run `script` until its first refusal, as a search stops at one, and return
+/// each step's outcome.
+fn run(budget: &mut Budget<'_, impl Quota>, script: &[Operation]) -> Vec<Result<(), Incomplete>> {
+    let mut outcomes = Vec::new();
+    for operation in script {
+        let outcome = match *operation {
+            Operation::Tick => budget.tick(),
+            Operation::Decide => budget.decide(),
+            Operation::Grant { wanted, spent } => budget.reserve_up_to(wanted).map(|granted| {
+                budget.refund(granted - spent.min(granted));
+            }),
+            Operation::Reservation { wanted, used } => {
+                budget.with_reservation(wanted, |granted| ((), used.min(granted)))
+            }
+        };
+        let refused = outcome.is_err();
+        outcomes.push(outcome);
+        if refused {
+            break;
+        }
     }
+    outcomes
 }
 
-fn compare_query(cnf: &Cnf, limits: SearchLimits, spent: SearchStatistics) -> SearchStatistics {
+/// Run `script` on a local budget and on a single lease of a shared budget,
+/// both seeded with `spent`, and check that they agree step by step and in
+/// total. Returns the local budget's statistics.
+fn compare(
+    script: &[Operation],
+    limits: SearchLimits,
+    spent: SearchStatistics,
+) -> SearchStatistics {
     let cancellation = Cancellation::default();
     let mut local = Budget {
         quota: LocalQuota,
@@ -29,7 +76,7 @@ fn compare_query(cnf: &Cnf, limits: SearchLimits, spent: SearchStatistics) -> Se
         cancellation: &cancellation,
         statistics: spent,
     };
-    let expected = outcome(query(cnf, &mut local));
+    let expected = run(&mut local, script);
     let shared = SharedBudget::new(limits, spent);
     let mut worker = Budget {
         quota: shared.lease(&cancellation),
@@ -37,7 +84,7 @@ fn compare_query(cnf: &Cnf, limits: SearchLimits, spent: SearchStatistics) -> Se
         cancellation: &cancellation,
         statistics: SearchStatistics::default(),
     };
-    assert_eq!(outcome(query(cnf, &mut worker)), expected);
+    assert_eq!(run(&mut worker, script), expected);
     assert_eq!(worker.statistics.work, local.statistics.work - spent.work);
     assert_eq!(
         worker.statistics.decisions,
@@ -46,71 +93,38 @@ fn compare_query(cnf: &Cnf, limits: SearchLimits, spent: SearchStatistics) -> Se
     let mut joined = worker.statistics;
     drop(worker.quota);
     shared.record(&mut joined);
-    joined.propagations += spent.propagations;
-    joined.conflicts += spent.conflicts;
     assert_eq!(joined, local.statistics);
-    if let Outcome::Sat(values) = expected {
-        assert_eq!(values.len(), cnf.variables());
-        assert!(cnf.clauses().all(|clause| {
-            clause
-                .iter()
-                .any(|literal| values[literal.variable()] == literal.positive())
-        }));
-    }
     local.statistics
 }
 
-fn clauses() -> Vec<Vec<Literal>> {
-    (0..9)
-        .map(|mut code| {
-            (0..2)
-                .filter_map(|variable| {
-                    let digit = code % 3;
-                    code /= 3;
-                    (digit != 0).then(|| Literal::new(variable, digit == 2))
-                })
-                .collect()
-        })
-        .collect()
-}
-
 #[test]
-fn local_and_single_job_shared_queries_agree_at_every_small_work_and_decision_ceiling() {
+fn local_and_single_job_shared_budgets_agree_at_every_small_work_and_decision_ceiling() {
     let spent = SearchStatistics {
         work: 7,
         decisions: 3,
-        propagations: 5,
-        conflicts: 11,
     };
-    let possible = clauses();
     let mut checked = 0;
-    for first in &possible {
-        for second in &possible {
-            let cnf = Cnf::new(
-                2,
-                vec![first.clone(), second.clone()],
-                AdmissionLimits::default(),
-            )
-            .unwrap();
-            let complete = compare_query(&cnf, SearchLimits::default(), spent);
-            for max_work in spent.work..=complete.work + 1 {
-                for max_decisions in spent.decisions..=complete.decisions + 1 {
-                    let stats = compare_query(
-                        &cnf,
-                        SearchLimits {
-                            max_work,
-                            max_decisions,
-                        },
-                        spent,
-                    );
-                    assert!(stats.work <= max_work);
-                    assert!(stats.decisions <= max_decisions);
-                }
+    for rotation in 0..SCRIPT.len() {
+        let mut script = SCRIPT;
+        script.rotate_left(rotation);
+        let complete = compare(&script, SearchLimits::default(), spent);
+        for max_work in spent.work..=complete.work + 1 {
+            for max_decisions in spent.decisions..=complete.decisions + 1 {
+                let stats = compare(
+                    &script,
+                    SearchLimits {
+                        max_work,
+                        max_decisions,
+                    },
+                    spent,
+                );
+                assert!(stats.work <= max_work);
+                assert!(stats.decisions <= max_decisions);
             }
-            checked += 1;
         }
+        checked += 1;
     }
-    assert_eq!(checked, 81);
+    assert_eq!(checked, SCRIPT.len());
 }
 
 #[test]
@@ -199,7 +213,6 @@ fn the_last_representable_local_or_shared_charge_never_wraps() {
     let spent = SearchStatistics {
         work: u64::MAX - 1,
         decisions: u64::MAX - 1,
-        ..SearchStatistics::default()
     };
     let shared = SharedBudget::new(limits, spent);
     let mut local = Budget {
@@ -226,82 +239,6 @@ fn the_last_representable_local_or_shared_charge_never_wraps() {
     assert_eq!(joined, local.statistics);
     assert_eq!(joined.work, u64::MAX);
     assert_eq!(joined.decisions, u64::MAX);
-}
-
-#[test]
-fn frozen_encoding_limits_and_clauses_match_before_search() {
-    use zetesis_ferraris::{Interpretation, Node, Theory};
-
-    let theory = Theory::new(
-        2,
-        zetesis_ferraris::FormulaParts::new(
-            vec![
-                Node::atom(0),
-                Node::atom(1),
-                Node::falsum(),
-                Node::implies(0, 2),
-                Node::or_pair([0, 3]),
-                Node::implies(1, 0),
-                Node::and_pair([4, 5]),
-            ],
-            vec![],
-        )
-        .unwrap(),
-        vec![6],
-        zetesis_ferraris::AdmissionLimits::default(),
-    )
-    .unwrap();
-    let cancellation = Cancellation::default();
-    for bits in 0..4 {
-        let candidate =
-            Interpretation::new(&theory, (0..2).filter(|atom| bits & (1 << atom) != 0)).unwrap();
-        for frozen in [None, Some(&candidate)] {
-            for max_work in 0..=128 {
-                let limits = SearchLimits {
-                    max_work,
-                    max_decisions: 0,
-                };
-                let mut local = Budget {
-                    quota: LocalQuota,
-                    limits,
-                    cancellation: &cancellation,
-                    statistics: SearchStatistics::default(),
-                };
-                let shared = SharedBudget::new(limits, SearchStatistics::default());
-                let mut worker = Budget {
-                    quota: shared.lease(&cancellation),
-                    limits,
-                    cancellation: &cancellation,
-                    statistics: SearchStatistics::default(),
-                };
-                let expected = crate::encoding::encode(
-                    &theory,
-                    frozen,
-                    AdmissionLimits::default(),
-                    &mut local,
-                );
-                let actual = crate::encoding::encode(
-                    &theory,
-                    frozen,
-                    AdmissionLimits::default(),
-                    &mut worker,
-                );
-                match (expected, actual) {
-                    (Ok(a), Ok(b)) => {
-                        assert_eq!(a.variables(), b.variables());
-                        assert!(a.clauses().eq(b.clauses()));
-                    }
-                    (Err(a), Err(b)) => assert_eq!(a, b),
-                    pair => panic!("different quota result at {bits}/{max_work}: {pair:?}"),
-                }
-                assert_eq!(local.statistics, worker.statistics);
-                let mut joined = SearchStatistics::default();
-                drop(worker.quota);
-                shared.record(&mut joined);
-                assert_eq!(joined, local.statistics);
-            }
-        }
-    }
 }
 
 #[test]

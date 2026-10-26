@@ -336,7 +336,6 @@ fn last_representable_reservation_never_wraps_or_spends_a_different_quota() {
     let mut spent = SearchStatistics {
         work: u64::MAX - 1,
         decisions: 7,
-        ..SearchStatistics::default()
     };
     let shared = SharedBudget::new(
         SearchLimits {

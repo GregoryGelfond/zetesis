@@ -20,7 +20,6 @@ fn doubling_memory_scales_only_named_capacities() {
     let doubled = SolveConfig::for_allowance(2 * memory, workers(4));
     let expected = SolveConfig {
         max_projection_entries: 2 * base.max_projection_entries,
-        max_projection_nodes: 2 * base.max_projection_nodes,
         max_objective_keys: 2 * base.max_objective_keys,
         max_optimal_models: 2 * base.max_optimal_models,
         max_optimal_atoms: 2 * base.max_optimal_atoms,
@@ -57,7 +56,7 @@ fn the_closure_share_is_the_collective_ceiling_over_the_workers() {
 }
 
 #[test]
-fn maximal_memory_respects_host_and_coordinate_extents() {
+fn maximal_memory_respects_host_extents() {
     let default = SolveConfig::DEFAULT;
     let vast = SolveConfig::for_allowance(u64::MAX, workers(1));
     let host_extent = u64::try_from(isize::MAX).unwrap();
@@ -67,16 +66,9 @@ fn maximal_memory_respects_host_and_coordinate_extents() {
     assert_eq!(vast.max_closure_bytes, vast.max_closure_batch_bytes);
     assert!(vast.max_batch_bytes >= default.max_batch_bytes);
     assert!(vast.max_tight_batch_bytes >= default.max_tight_batch_bytes);
-    // Projection entries follow memory; trie coordinates additionally saturate
-    // at their u32 representation. The host extent is tighter on 32-bit hosts.
-    assert_eq!(
-        vast.max_projection_nodes,
-        usize::try_from(vast.max_projection_entries)
-            .unwrap()
-            .min(u32::MAX as usize)
-    );
+    // Projection entries follow memory. The host extent is tighter on 32-bit
+    // hosts.
     if usize::BITS > 32 {
-        assert_eq!(vast.max_projection_nodes, u32::MAX as usize);
         assert!(vast.max_projection_entries > u64::from(u32::MAX));
     }
 }

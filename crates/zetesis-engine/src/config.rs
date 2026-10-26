@@ -69,7 +69,6 @@ impl Config {
     pub(crate) fn session(self) -> SolveConfig {
         SolveConfig {
             backend: zetesis_solve::Backend::Cpu,
-            search: zetesis_solve::SearchMethod::Regions,
             grounder: match self.grounder {
                 Grounder::Auto => zetesis_solve::Grounder::Auto,
                 Grounder::Eager => zetesis_solve::Grounder::Eager,

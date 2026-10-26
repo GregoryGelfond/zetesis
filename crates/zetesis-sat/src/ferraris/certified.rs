@@ -10,9 +10,9 @@ pub use types::{
 };
 
 use super::{StableModels, Statistics};
-use crate::budget::{Budget, LocalQuota, increment};
+use crate::budget::increment;
 use crate::timing::{self, Phase};
-use crate::{AdmissionError, Cancellation, Incomplete, Limits, SearchStatistics};
+use crate::{Cancellation, Incomplete, Limits, SearchStatistics};
 use std::sync::Arc;
 use zetesis_ferraris::{
     EvaluationWorkspace, Interpretation, PositiveError, PositivePlan, PositivePlanLimits,
@@ -197,24 +197,22 @@ impl StableModels {
 
     /// Try complete-original-theory class certificates in the requested order.
     /// The order is only a scheduling hint; each plan checks every original root.
-    /// For clause search, a deterministic plan installs exact original-atom units for
-    /// its determined interpretation, or an empty clause for a violated constraint.
-    /// Units are transactional and consume the existing candidate CNF admission;
-    /// no restriction formula DAG is copied. Region modes propose only the determined
-    /// interpretation, if it satisfies the original constraints and accumulated
-    /// candidate conditions. Independent membership checks retain the original owner.
-    /// Original theory and reduct semantics are unchanged.
+    /// A deterministic plan proposes only its determined interpretation, if it
+    /// satisfies the original constraints and accumulated candidate conditions;
+    /// no restriction formula DAG is copied. Independent membership checks
+    /// retain the original owner. Original theory and reduct semantics are
+    /// unchanged.
     ///
     /// Optional shape/storage refusals leave the next plan and general reduct
-    /// checking available. All preparation, failed attempts, unit construction
-    /// and candidate checking consume the same cumulative search work. Invoke
-    /// before enumeration; repeated calls never replace the first configuration
-    /// or replenish a budget. Candidate restrictions retain the selected owner.
+    /// checking available. All preparation, failed attempts and candidate
+    /// checking consume the same cumulative search work. Invoke before
+    /// enumeration; repeated calls never replace the first configuration or
+    /// replenish a budget. Candidate restrictions retain the selected owner.
     /// Injected GPU checkers should use an enumeration without this CPU policy.
     ///
     /// # Errors
     /// Refuses late/closed configuration, shared control/allocation failures or
-    /// cumulative work exhaustion. Partially appended units roll back on failure.
+    /// cumulative work exhaustion.
     pub fn enable_class_checking(
         &mut self,
         limits: CertificateLimits,
@@ -238,8 +236,7 @@ impl StableModels {
             return Err(Incomplete::ClosedEnumerator);
         }
         if self.statistics.certified.is_some() {
-            let started =
-                self.statistics.candidate_queries != 0 || self.statistics().candidates != 0;
+            let started = self.statistics().candidates != 0;
             if let Some(certificate) = self.certificate.as_mut()
                 && usage == Use::Cpu
                 && certificate.usage == Use::External
@@ -251,7 +248,7 @@ impl StableModels {
             }
             return Ok(self.certificate.is_some());
         }
-        if self.statistics.candidate_queries != 0 || self.statistics().candidates != 0 {
+        if self.statistics().candidates != 0 {
             return Err(Incomplete::LateCertificate);
         }
         let mut stats = CertifiedStatistics::default();
@@ -276,10 +273,7 @@ impl StableModels {
                     });
                     stats.refusal = None;
                     let plan = Arc::new(plan);
-                    if usage == Use::Cpu
-                        && plan.determined().is_some()
-                        && !matches!(self.proposer, super::Proposer::Clauses(_))
-                    {
+                    if usage == Use::Cpu && plan.determined().is_some() {
                         self.determined_candidates =
                             Some(DeterminedCandidates::new(Arc::clone(&plan)));
                     }
@@ -377,13 +371,10 @@ impl StableModels {
                 };
             }
         };
-        self.prepare_determined(
-            Certification::Positive {
-                plan,
-                max_bytes: limits.max_bytes,
-            },
-            stats,
-        )
+        Ok(Some(Certification::Positive {
+            plan,
+            max_bytes: limits.max_bytes,
+        }))
     }
 
     fn prepare_stratified(
@@ -412,56 +403,10 @@ impl StableModels {
                 };
             }
         };
-        self.prepare_determined(
-            Certification::Stratified {
-                plan,
-                max_bytes: limits.max_bytes,
-            },
-            stats,
-        )
-    }
-
-    fn prepare_determined(
-        &mut self,
-        certificate: Certification,
-        stats: &mut CertifiedStatistics,
-    ) -> Result<Option<Certification>, Incomplete> {
-        let plan = certificate.determined().ok_or(Incomplete::InvalidWitness)?;
-        let mut budget = Budget {
-            quota: LocalQuota,
-            limits: self.limits.search,
-            cancellation: &self.cancellation,
-            statistics: self.statistics.search,
-        };
-        // Clauses retain their transactional units. Region modes activate the
-        // singleton cursor only after this complete plan has been installed.
-        let result = match &mut self.proposer {
-            super::Proposer::Clauses(clauses) => {
-                determined::restrict(plan, &mut clauses.cnf, &mut budget)
-            }
-            super::Proposer::Regions(_)
-            | super::Proposer::Parallel(_)
-            | super::Proposer::Proposals(_) => Ok(0),
-        };
-        stats.restriction_work = stats
-            .restriction_work
-            .checked_add(budget.statistics.work - self.statistics.search.work)
-            .ok_or(Incomplete::CounterOverflow)?;
-        self.statistics.search = budget.statistics;
-        match result {
-            Ok(clauses) => {
-                stats.restriction_clauses = clauses;
-                Ok(Some(certificate))
-            }
-            Err(Incomplete::Admission(
-                error @ (AdmissionError::Limit { .. } | AdmissionError::Overflow),
-            )) => {
-                stats.restriction_refusal = Some(error);
-                stats.refusal = Some(CertificateError::Restriction(error));
-                Ok(None)
-            }
-            Err(error) => Err(error),
-        }
+        Ok(Some(Certification::Stratified {
+            plan,
+            max_bytes: limits.max_bytes,
+        }))
     }
 }
 

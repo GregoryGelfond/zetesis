@@ -107,7 +107,7 @@ fn eager_lazy_formula_certified_and_parallel_routes_preserve_results() {
                     assert!(
                         text.find("Stage timings:").unwrap() < text.find("Phase timings:").unwrap()
                     );
-                    assert!(text.contains("failed_attempts=included; schema=5"));
+                    assert!(text.contains("failed_attempts=included; schema=6"));
                 } else {
                     for phase in SolvePhase::ALL {
                         assert!(timings.get(phase).is_none());

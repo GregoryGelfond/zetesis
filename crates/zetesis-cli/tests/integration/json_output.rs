@@ -312,47 +312,25 @@ fn statistics_are_absent_without_opt_in() {
 }
 
 #[test]
-fn support_statistics_identify_the_outer_restriction_under_clauses() {
-    for (source, status) in [("a | b.", "applied"), ("{a;b}.", "not_applicable")] {
-        let (report, value) = solve(
-            source,
-            &options(&["--stats", "--oracle", "countermodel", "--search", "clauses"]),
-        );
-        let report = report.unwrap();
-        let measured = report.countermodel_statistics.unwrap().support.unwrap();
-        let support = &value["statistics"]["search"]["necessary_support"];
-        assert_eq!(support["status"], status);
-        assert_eq!(support["construction_work"], measured.construction_work);
-        assert_eq!(support["encoding_work"], measured.encoding_work);
-        assert!(value["statistics"]["search"]["candidate_regions"].is_null());
-    }
-}
-
-#[test]
 fn region_statistics_identify_the_support_cut() {
-    // A choice alone declines the clauses proposer's support restriction;
-    // the support cut reads a choice as a producer of its atom and applies.
+    // The support cut reads a choice as a producer of its atom and applies,
+    // as it does to a disjunction.
     for (source, support_cut) in [("a | b.", "applied"), ("{a;b}.", "applied")] {
-        let (report, value) = solve(
-            source,
-            &options(&["--stats", "--oracle", "countermodel", "--search", "regions"]),
-        );
+        let (report, value) = solve(source, &options(&["--stats", "--oracle", "countermodel"]));
         let report = report.unwrap();
         let statistics = report.countermodel_statistics.unwrap();
-        assert!(statistics.support.is_none());
         let measured = statistics.regions.unwrap();
         let regions = &value["statistics"]["search"]["candidate_regions"];
         assert_eq!(regions["support_cut"], support_cut);
         assert_eq!(regions["visited"], measured.counts.regions);
         assert_eq!(regions["leaves"], measured.counts.leaves);
         assert_eq!(regions["reading_work"], measured.counts.work);
-        assert!(value["statistics"]["search"]["necessary_support"].is_null());
     }
 }
 
 #[test]
 fn region_statistics_record_the_parallel_walks_engagement() {
-    let arguments = ["--stats", "--oracle", "countermodel", "--search", "regions"];
+    let arguments = ["--stats", "--oracle", "countermodel"];
     // One worker is the scalar walk, which starts none.
     let (_, value) = solve("{a;b}.", &options(&arguments));
     assert!(value["statistics"]["search"]["candidate_regions"]["workers"].is_null());
@@ -399,7 +377,7 @@ fn region_statistics_record_the_parallel_walks_engagement() {
 fn completion_statistics_distinguish_requested_storage() {
     let (report, value) = bounded(
         "{a;b}.",
-        &options(&["--stats", "--oracle", "countermodel", "--search", "clauses"]),
+        &options(&["--stats", "--oracle", "countermodel"]),
         |config| config.solve.completion_workers = std::num::NonZeroUsize::new(2).unwrap(),
         None,
     );
@@ -667,7 +645,7 @@ fn search_statistics_count_stable_models() {
 fn formula_phases_exclude_closure_measurements() {
     let (report, value) = formula_statistics();
     assert!(report.phase_timings.is_some());
-    assert_eq!(value["statistics"]["phase_timings"]["schema"], 5);
+    assert_eq!(value["statistics"]["phase_timings"]["schema"], 6);
     assert!(value["statistics"]["phase_timings"]["measurements"]["closure_membership"].is_null());
 }
 
@@ -992,7 +970,7 @@ fn resource_stops_encode_partial_coverage() {
         ),
         (
             "a | b.",
-            &["--oracle", "countermodel", "--search", "clauses"],
+            &["--oracle", "countermodel"],
             |c| {
                 c.completion_workers = std::num::NonZeroUsize::new(2).unwrap();
                 c.max_completion_scratch_bytes = 0;
@@ -1057,45 +1035,6 @@ fn objective_refusals_publish_no_incumbent() {
             }
             other => panic!("unexpected interruption: {other:?}"),
         }
-    }
-}
-
-#[test]
-fn projection_limits_preserve_checked_partial_answers() {
-    // The projection history belongs to the clauses proposer; regions keep
-    // no exclusion index and never reach these limits.
-    let cases: [(LimitChange, &str); 2] = [
-        (|c| c.max_projection_entries = 0, "projection_entries"),
-        (|c| c.max_projection_nodes = 0, "projection_nodes"),
-    ];
-    for (limit, code) in cases {
-        let (result, value) = bounded(
-            "{a;b}.",
-            &options(&["--oracle", "countermodel", "--search", "clauses", "--stats"]),
-            |config| limit(&mut config.solve),
-            None,
-        );
-        let report = result.unwrap();
-        assert_eq!(report.completion, Completion::Interrupted);
-        assert_eq!(report.models, 1);
-        assert_eq!(value["outcome"]["coverage"], "partial");
-        assert_eq!(value["outcome"]["interruption"]["code"], code);
-        assert_eq!(value["outcome"]["verified_models"], 1);
-        assert_eq!(value["models"].as_array().unwrap().len(), 1);
-        let owner = &value["statistics"]["search"]["projection_history"];
-        let receipt = report.countermodel_statistics.unwrap().projections;
-        assert_eq!(receipt.entries, 0);
-        assert_eq!(owner["entries"], receipt.entries);
-        assert_eq!(owner["nodes"], receipt.nodes);
-        assert_eq!(
-            owner["retained_bytes"].as_u64().map(u128::from),
-            Some(receipt.retained_bytes)
-        );
-        assert_eq!(
-            owner["peak_bytes"].as_u64().map(u128::from),
-            Some(receipt.peak_bytes)
-        );
-        assert_eq!(owner["work"], receipt.work);
     }
 }
 

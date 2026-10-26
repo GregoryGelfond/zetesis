@@ -229,7 +229,6 @@ fn config() -> SolveConfig {
 fn producing(config: SolveConfig) -> SolveConfig {
     SolveConfig {
         backend: Backend::Gpu(None),
-        search: crate::SearchMethod::Regions,
         workers: NonZeroUsize::new(4).unwrap(),
         ..config
     }

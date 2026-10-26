@@ -1,8 +1,8 @@
 //! The proper-subset query on regions: the coverage tree over the subsets
 //! of a classical model, narrowed by the frozen reduct's knowledge. Its
-//! verdicts agree with the exhaustive reference and with the clause query
-//! on every candidate of small theories, its witnesses are validated proper
-//! subsets, and its resources stop it without a verdict.
+//! verdicts agree with the exhaustive reference on every candidate of small
+//! theories, its witnesses are validated proper subsets, and its resources
+//! stop it without a verdict.
 
 use crate::support::batching::{batch, residual};
 use crate::support::choice_theories::choices;
@@ -14,8 +14,8 @@ use std::num::NonZeroUsize;
 
 use zetesis_ferraris::{Node, Theory, Verdict};
 use zetesis_sat::{
-    BatchError, Cancellation, Check, CompletionExecutor, Incomplete, Limits, ReductWorkspace,
-    SearchLimits, SearchMethod, StableModels, check_with,
+    BatchError, Cancellation, Check, CompletionExecutor, Incomplete, Limits, SearchLimits,
+    StableModels, check,
 };
 
 use theories::mixed;
@@ -90,10 +90,9 @@ fn masked_inside_a_consequent() -> Theory {
 fn a_negative_literal_false_under_the_candidate_teaches_nothing_in_the_reduct() {
     let theory = loop_under_constraint();
     let candidate = interpretation(&theory, 0b11);
-    let verdict = check_with(
+    let verdict = check(
         &theory,
         &candidate,
-        SearchMethod::Regions,
         Limits::default(),
         &Cancellation::default(),
     );
@@ -118,17 +117,9 @@ fn the_region_query_agrees_with_the_reference_on_every_candidate() {
                 &Cancellation::default(),
             )
             .unwrap();
-            let regions = check_with(
+            let regions = check(
                 &theory,
                 &candidate,
-                SearchMethod::Regions,
-                Limits::default(),
-                &Cancellation::default(),
-            );
-            let clauses = check_with(
-                &theory,
-                &candidate,
-                SearchMethod::Clauses,
                 Limits::default(),
                 &Cancellation::default(),
             );
@@ -137,7 +128,6 @@ fn the_region_query_agrees_with_the_reference_on_every_candidate() {
                 reference.accepted(),
                 "{mask}: {regions:?}"
             );
-            assert_eq!(regions.accepted(), clauses.accepted(), "{mask}");
             match regions {
                 Check::Stable => {}
                 Check::NotModel => {
@@ -176,13 +166,7 @@ fn a_work_limit_stops_the_region_query_without_a_verdict() {
         },
         ..Limits::default()
     };
-    let verdict = check_with(
-        &theory,
-        &candidate,
-        SearchMethod::Regions,
-        limits,
-        &Cancellation::default(),
-    );
+    let verdict = check(&theory, &candidate, limits, &Cancellation::default());
     assert!(matches!(
         verdict,
         Check::Inconclusive(Incomplete::WorkLimit)
@@ -193,9 +177,8 @@ fn a_work_limit_stops_the_region_query_without_a_verdict() {
 /// This candidate-only restriction leaves the original reduct unchanged and
 /// makes the capacity boundary independent of candidate split ordering.
 fn regions(theory: &Theory, max_reduct_bytes: u64) -> StableModels {
-    let mut search = StableModels::with_method(
+    let mut search = StableModels::new(
         theory,
-        SearchMethod::Regions,
         Limits {
             max_reduct_bytes,
             ..Limits::default()
@@ -231,6 +214,16 @@ fn general_choices(atoms: usize) -> Theory {
     theory(atoms, nodes, vec![root])
 }
 
+/// The retained capacity of a fresh query workspace, as a zero storage
+/// ceiling's refusal reports it before any evaluation.
+fn fresh_workspace_bytes(theory: &Theory) -> u128 {
+    let mut search = regions(theory, 0);
+    match search.next() {
+        Some(Err(Incomplete::ReductStorage { required, limit: 0 })) => required,
+        other => panic!("a zero ceiling refuses the fresh workspace: {other:?}"),
+    }
+}
+
 /// Measure actual capacity so the boundary includes the host's headers and
 /// allocator capacity without assuming their sizes. The first query is for
 /// the empty answer set and must grow narrowing scratch beyond truth storage.
@@ -244,7 +237,7 @@ fn first_query_workspace_bytes(theory: &Theory) -> u64 {
     assert!(statistics.reduct.regions.work > 0);
     let retained = statistics.reduct.peak_workspace_bytes;
     assert!(
-        retained > ReductWorkspace::default().retained_bytes() + theory.nodes().len() as u128,
+        retained > fresh_workspace_bytes(theory) + theory.nodes().len() as u128,
         "the query must retain narrowing scratch"
     );
     u64::try_from(retained).unwrap()

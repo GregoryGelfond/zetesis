@@ -996,9 +996,13 @@ impl StableModels {
         }
         let mut production = Production::default();
         while out.len() < limits.max_candidates.get() {
-            let walk = match self.determined_candidates.as_mut() {
-                Some(candidates) => super::Walk::Determined(candidates),
-                None => super::Walk::Index(index.as_ref()),
+            let walk = match (self.determined_candidates.as_mut(), index.as_ref()) {
+                (Some(candidates), _) => super::Walk::Determined(candidates),
+                (None, Some(index)) => super::Walk::Index(index),
+                (None, None) => {
+                    production.stop = Some(Incomplete::InvalidWitness);
+                    break;
+                }
             };
             match proposal(
                 &self.theory,
@@ -1020,19 +1024,7 @@ impl StableModels {
                         production.stop = Some(error);
                         break;
                     }
-                    // The interpretation is retained even if its exact block cannot fit.
-                    let started = timing::start(self.statistics.phase_timings.as_ref());
-                    let block = self.proposer.exclude(&candidate, &mut budget);
-                    timing::finish(
-                        &mut self.statistics.phase_timings,
-                        Phase::Candidates,
-                        started,
-                    );
                     out.push(candidate);
-                    if let Err(error) = block {
-                        production.stop = Some(error);
-                        break;
-                    }
                 }
                 Ok(None) => {
                     production.exhausted = true;
@@ -1067,7 +1059,7 @@ impl StableModels {
             &mut budget,
             &mut self.statistics.phase_timings,
         )
-        .map(|index| index.map(Arc::clone));
+        .map(|index| Some(Arc::clone(index)));
         self.statistics.search = budget.statistics;
         index
     }
@@ -1200,7 +1192,7 @@ impl StableModels {
         // Completion owns every resident query workspace in this attempt.
         // Scalar scratch carries no semantic state and must not remain as an
         // additional unaccounted workspace when switching execution modes.
-        self.reduct.workspace = crate::ReductWorkspace::default();
+        self.reduct.workspace = crate::reduct::ReductWorkspace::default();
         let mut accepted = Vec::new();
         let mut budget = Budget {
             quota: crate::budget::LocalQuota,
@@ -1215,15 +1207,13 @@ impl StableModels {
                 candidates: &self.batch.pending,
                 verdicts,
                 limits: self.limits,
-                prepared: None,
-                // A regions residual exists only after a walk, which built
-                // the index; completion borrows it and never builds one.
+                // A residual exists only after a walk, which built the index;
+                // completion borrows it and never builds one.
                 query: self.index.get().map(|index| super::ReductQuery::new(index)),
             },
             &mut budget,
             &mut self.statistics,
             &mut accepted,
-            &mut self.reduct,
         );
         self.statistics.search = budget.statistics;
         result?;

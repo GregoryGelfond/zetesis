@@ -25,7 +25,6 @@ impl Execution {
         observations.record(ExecutionObservation::DeviceTight {
             adapter: oracle.info().metadata(),
             grounder: options.grounder,
-            search: options.search,
             batch_size: options.batch_size,
         })?;
         let adapter = format!(

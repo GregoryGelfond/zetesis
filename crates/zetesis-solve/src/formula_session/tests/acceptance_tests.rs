@@ -6,7 +6,7 @@ use crate::formula_execution::{Failure, MembershipExecution};
 use crate::phase_timing::Recorder;
 use crate::{
     AnswerSelection, Backend, ExecutionObservation, ExecutionObserver, FormulaExecutionStatistics,
-    SearchMethod, SolveConfig,
+    SolveConfig,
 };
 use std::convert::Infallible;
 use zetesis_cpu::Cancellation;
@@ -80,7 +80,6 @@ fn a_rejected_cheap_proposal_cannot_tighten_the_bound() {
     }
     let config = SolveConfig {
         backend: Backend::Cpu,
-        search: SearchMethod::Clauses,
         workers: std::num::NonZeroUsize::MIN,
         models: 0,
         ..SolveConfig::default()

@@ -118,23 +118,6 @@ impl From<Oracle> for selected::Oracle {
     }
 }
 
-/// Requested formula search method.
-#[derive(Clone, Copy, Debug, ValueEnum)]
-pub enum Search {
-    /// Region search.
-    Regions,
-    /// Clause search.
-    Clauses,
-}
-impl From<Search> for selected::SearchMethod {
-    fn from(value: Search) -> Self {
-        match value {
-            Search::Regions => Self::Regions,
-            Search::Clauses => Self::Clauses,
-        }
-    }
-}
-
 /// Requested eager-formula join strategy.
 #[derive(Clone, Copy, Debug, ValueEnum)]
 pub enum FormulaJoins {
@@ -235,14 +218,6 @@ pub struct RunOptions {
         help_heading = "Advanced measurement controls"
     )]
     pub oracle: Oracle,
-    /// Formula search method for every profile; omitted, the suite's default.
-    #[arg(
-        long,
-        value_enum,
-        hide_short_help = true,
-        help_heading = "Advanced measurement controls"
-    )]
-    pub search: Option<Search>,
     /// Eager-formula join strategy for every profile; omitted, the suite's default.
     #[arg(
         long,
@@ -382,10 +357,6 @@ impl RunOptions {
                 .formula_joins
                 .map(Into::into)
                 .or(scalability.then_some(selected::FormulaJoins::Indexed)),
-            search: self
-                .search
-                .map(Into::into)
-                .or(scalability.then_some(selected::SearchMethod::Regions)),
             time_limit_seconds: self.time_limit,
         };
         let backends = if self.compare_backends.is_empty() {

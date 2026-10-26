@@ -1,8 +1,8 @@
 //! Timing evidence is optional and never substitutes for answer-set qualification.
 
 use super::{
-    CERTIFICATE_HEADER, CERTIFICATE_LABELS, FOOTER, HEADER, LABELS, RECONSTRUCTION_HEADER,
-    REDUCT_HEADER, parse,
+    CERTIFICATE_HEADER, CERTIFICATE_LABELS, FOOTER, HEADER, LABELS, MODEL_HEADER,
+    PREPARATION_LABELS, RECONSTRUCTION_HEADER, REDUCT_HEADER, parse,
 };
 
 fn section() -> String {
@@ -120,7 +120,7 @@ fn certificate_schema_is_distinct_and_legacy_evidence_remains_readable() {
 
 #[test]
 fn reduct_preparation_requires_its_own_phase_schema() {
-    let current = section_for(REDUCT_HEADER, &LABELS[..14]).replace(
+    let current = section_for(REDUCT_HEADER, &PREPARATION_LABELS[..14]).replace(
         "phase reduct_preparation: unmeasured",
         "phase reduct_preparation: calls=1; elapsed_ns=12; complete=true",
     );
@@ -145,7 +145,7 @@ fn reduct_preparation_requires_its_own_phase_schema() {
 
 #[test]
 fn reconstruction_phase_requires_schema_four_and_retains_failed_attempts() {
-    let current = section_for(RECONSTRUCTION_HEADER, &LABELS[..15]).replace(
+    let current = section_for(RECONSTRUCTION_HEADER, &PREPARATION_LABELS[..15]).replace(
         "phase answer_reconstruction: unmeasured",
         "phase answer_reconstruction: calls=3; elapsed_ns=12; complete=false",
     );
@@ -168,7 +168,7 @@ fn reconstruction_phase_requires_schema_four_and_retains_failed_attempts() {
 
 #[test]
 fn model_construction_requires_schema_five() {
-    let current = section().replace(
+    let current = section_for(MODEL_HEADER, &PREPARATION_LABELS).replace(
         "phase model_construction: unmeasured",
         "phase model_construction: calls=4; elapsed_ns=18; complete=true",
     );
@@ -177,7 +177,7 @@ fn model_construction_requires_schema_five() {
     let value = parsed.phases["model_construction"].as_ref().unwrap();
     assert_eq!((value.calls, value.elapsed_ns), (4, 18));
     for header in [RECONSTRUCTION_HEADER, REDUCT_HEADER, CERTIFICATE_HEADER] {
-        assert!(parse(&current.replace(HEADER, header)).is_err());
+        assert!(parse(&current.replace(MODEL_HEADER, header)).is_err());
     }
     assert!(
         parse(&current.replace(
@@ -186,4 +186,21 @@ fn model_construction_requires_schema_five() {
         ))
         .is_err()
     );
+}
+
+#[test]
+fn schema_six_omits_reduct_preparation() {
+    let current = section();
+    let parsed = parse(&current).unwrap().unwrap();
+    assert_eq!((parsed.schema_version, parsed.phases.len()), (6, 15));
+    assert!(!parsed.phases.contains_key("reduct_preparation"));
+    for malformed in [
+        current.replace(HEADER, MODEL_HEADER),
+        current.replace(
+            "  phase gpu_host_oracle:",
+            "  phase reduct_preparation: unmeasured\n  phase gpu_host_oracle:",
+        ),
+    ] {
+        assert!(parse(&malformed).is_err());
+    }
 }

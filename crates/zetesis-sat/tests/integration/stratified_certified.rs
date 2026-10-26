@@ -4,11 +4,9 @@ use std::{collections::BTreeSet, convert::Infallible};
 
 use crate::support::batching::{batch, residual};
 use crate::support::choice_theories::choices;
-use crate::support::clause_search::by_clauses;
 use crate::support::region_filters::{ROUTES, search};
 use zetesis_ferraris::{
     Interpretation, Node, StratifiedError, StratifiedPlanLimits, StratifiedResource, Theory,
-    TightPlanLimits,
 };
 use zetesis_sat::{
     BatchError, BatchVerdict, Cancellation, CertificateLimits, CertificateOrder,
@@ -113,7 +111,6 @@ fn stratified_regions_preserve_the_complete_answer_family() {
             assert_eq!(stats.countermodel_queries, 0);
             assert_eq!(stats.search.decisions, 0);
             assert_eq!(stats.regions.unwrap().counts.regions, 0);
-            assert!(stats.reduct.preparation.is_none());
         }
     }
 }
@@ -421,45 +418,4 @@ fn failed_stratified_checks_keep_the_pending_answer() {
         assert_eq!(stream.batch_statistics().committed, 0);
         assert!(!stream.exhausted());
     }
-}
-
-#[test]
-fn refused_determined_restrictions_accumulate_work() {
-    let original = theory(3, vec![], vec![]);
-    let mut limits = Limits::default();
-    limits.admission.max_clauses = 1;
-    let mut stream = by_clauses(&original, limits, Cancellation::default()).unwrap();
-    let initial = stream.statistics().search.work;
-    assert!(
-        !stream
-            .enable_class_checking(
-                CertificateLimits {
-                    tight: TightPlanLimits {
-                        max_bytes: 0,
-                        ..Default::default()
-                    },
-                    ..Default::default()
-                },
-                CertificateOrder::StratifiedFirst
-            )
-            .unwrap()
-    );
-    let stats = stream.statistics().certified.unwrap();
-    assert!(stats.stratified_attempt.unwrap().retained_bytes > 0);
-    assert!(stats.positive_attempt.unwrap().retained_bytes > 0);
-    assert_eq!(stats.plan, None);
-    // Both determined plans attempt two units before the same admission refusal.
-    assert_eq!(stats.restriction_work, 8);
-    assert_eq!(stats.restriction_clauses, 0);
-    assert_eq!(
-        stream.statistics().search.work - initial,
-        stats.construction_work + stats.restriction_work
-    );
-    let family: BTreeSet<Vec<usize>> = stream
-        .by_ref()
-        .map(|answer| answer.unwrap().atoms().collect())
-        .collect();
-    assert_eq!(family, BTreeSet::from([vec![]]));
-    assert!(stream.exhausted());
-    assert_eq!(stream.statistics().candidates, 8);
 }

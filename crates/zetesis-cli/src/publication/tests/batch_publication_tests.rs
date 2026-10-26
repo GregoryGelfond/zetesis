@@ -431,26 +431,21 @@ fn timing_failure_preserves_completed_answers() {
     }
 }
 
+/// One region walker returns the recorded answer sets, atom for atom, on
+/// every correctness case, through the batched route.
 #[test]
 fn cpu_batches_preserve_recorded_correctness_displays() {
-    every_correctness_case(crate::SearchMethod::Clauses, 1);
+    every_correctness_case(1);
 }
 
 /// Four workers walking the region tree return the recorded answer sets,
 /// atom for atom, on every correctness case, in whatever order they arrive.
 #[test]
 fn parallel_regions_preserve_recorded_correctness_displays() {
-    every_correctness_case(crate::SearchMethod::Regions, 4);
+    every_correctness_case(4);
 }
 
-/// The regions proposer returns the recorded answer sets, atom for atom, on
-/// every correctness case, through the same batched route.
-#[test]
-fn cpu_batches_preserve_recorded_correctness_displays_under_regions() {
-    every_correctness_case(crate::SearchMethod::Regions, 1);
-}
-
-fn every_correctness_case(search: crate::SearchMethod, workers: usize) {
+fn every_correctness_case(workers: usize) {
     let fixture: serde_json::Value = serde_json::from_str(include_str!(
         "../../../tests/fixtures/correctness/complete-models.json"
     ))
@@ -459,20 +454,14 @@ fn every_correctness_case(search: crate::SearchMethod, workers: usize) {
     assert_eq!(cases.len(), 94);
     let root = repository::correctness();
     for case in cases {
-        correctness_case(&root, case, search, workers);
+        correctness_case(&root, case, workers);
     }
 }
 
-fn correctness_case(
-    root: &std::path::Path,
-    case: &serde_json::Value,
-    search: crate::SearchMethod,
-    workers: usize,
-) {
+fn correctness_case(root: &std::path::Path, case: &serde_json::Value, workers: usize) {
     let path = case["path"].as_str().unwrap();
     let mut options = options();
     options.config.solve.batch_size = NonZeroUsize::new(64).unwrap();
-    options.config.solve.search = search;
     options.config.solve.workers = NonZeroUsize::new(workers).unwrap();
     let bundle = zetesis_themelios::SourceBundle::load(
         root.join(path),

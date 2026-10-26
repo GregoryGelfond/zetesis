@@ -11,8 +11,7 @@ use std::time::Duration;
 
 use zetesis_ferraris::{Node, Theory, TightPlanLimits};
 use zetesis_sat::{
-    Cancellation, Engagement, Incomplete, Limits, RegionWalkEngagement, SearchLimits, SearchMethod,
-    StableModels,
+    Cancellation, Engagement, Incomplete, Limits, RegionWalkEngagement, SearchLimits, StableModels,
 };
 use zetesis_test_support::{counts::nonzero as workers, harness};
 
@@ -80,13 +79,8 @@ fn assert_route(search: &StableModels, engagement: Engagement, count: usize) {
 #[test]
 fn four_workers_return_the_scalar_family_once_each() {
     for theory in [mixed(), choices(6)] {
-        let mut scalar = StableModels::with_method(
-            &theory,
-            SearchMethod::Regions,
-            Limits::default(),
-            Cancellation::default(),
-        )
-        .unwrap();
+        let mut scalar =
+            StableModels::new(&theory, Limits::default(), Cancellation::default()).unwrap();
         let expected: BTreeSet<Vec<usize>> = family(&mut scalar).into_iter().collect();
         let mut parallel = engaged(&theory, 4, Limits::default());
         let found = family(&mut parallel);
@@ -101,7 +95,6 @@ fn four_workers_return_the_scalar_family_once_each() {
             u64::try_from(found.len()).unwrap()
         );
         assert!(statistics.regions.expect("region receipts").counts.regions > 0);
-        assert_eq!(statistics.candidate_queries, 0);
     }
 }
 
@@ -305,13 +298,8 @@ fn four_workers_report_the_scalar_walks_reading_work() {
     // a worker's narrowing work goes to the live counters as it goes and
     // is not added again when the workers are joined.
     for theory in [mixed(), choices(6)] {
-        let mut scalar = StableModels::with_method(
-            &theory,
-            SearchMethod::Regions,
-            Limits::default(),
-            Cancellation::default(),
-        )
-        .unwrap();
+        let mut scalar =
+            StableModels::new(&theory, Limits::default(), Cancellation::default()).unwrap();
         let models = family(&mut scalar).len();
         let mut parallel = engaged(&theory, 4, Limits::default());
         assert_eq!(family(&mut parallel).len(), models);
@@ -330,13 +318,8 @@ fn an_unengaged_walk_reports_the_scalar_walks_receipts() {
     // calling thread with one retained workspace, so every receipt is the
     // scalar walk's, checking work and peak check storage included.
     for (theory, certified) in [(mixed(), false), (choices(6), false), (choices(5), true)] {
-        let mut scalar = StableModels::with_method(
-            &theory,
-            SearchMethod::Regions,
-            Limits::default(),
-            Cancellation::default(),
-        )
-        .unwrap();
+        let mut scalar =
+            StableModels::new(&theory, Limits::default(), Cancellation::default()).unwrap();
         let unengaged = Engagement::After(Duration::MAX);
         let mut walk = region_workers(
             &theory,
@@ -443,13 +426,8 @@ fn one_worker_returns_the_scalar_walks_sequence() {
         Cancellation::default(),
     )
     .unwrap();
-    let mut scalar = StableModels::with_method(
-        &theory,
-        SearchMethod::Regions,
-        Limits::default(),
-        Cancellation::default(),
-    )
-    .unwrap();
+    let mut scalar =
+        StableModels::new(&theory, Limits::default(), Cancellation::default()).unwrap();
     assert_eq!(family(&mut one), family(&mut scalar));
 }
 

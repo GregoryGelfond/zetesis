@@ -21,8 +21,6 @@ fn capture(work: Option<u64>, models: &str) -> (Result<Report, RunFailure>, Vec<
         "cpu",
         "--grounder",
         "auto",
-        "--search",
-        "regions",
         "--workers",
         "1",
         "--models",

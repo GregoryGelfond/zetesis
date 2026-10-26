@@ -6,7 +6,7 @@ use crate::formula_execution::{Execution, Failure, MembershipExecution};
 use crate::phase_timing::Recorder;
 use crate::{
     AnswerSelection, Backend, Completion, FormulaExecutionStatistics, Interruption, Oracle,
-    SearchMethod, SearchState, SolveConfig, SolveError,
+    SearchState, SolveConfig, SolveError,
 };
 use zetesis_cpu::Cancellation;
 use zetesis_ferraris::Interpretation;
@@ -53,7 +53,6 @@ fn terminal_outcomes_settle_workers_before_caching_receipts() {
         let config = SolveConfig {
             backend: Backend::Cpu,
             oracle: Oracle::Countermodel,
-            search: SearchMethod::Regions,
             workers: std::num::NonZeroUsize::new(2).unwrap(),
             models,
             ..SolveConfig::default()

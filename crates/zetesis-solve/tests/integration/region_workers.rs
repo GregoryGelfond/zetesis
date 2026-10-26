@@ -1,14 +1,12 @@
-//! Several workers walk the region tree together only under the regions
-//! method on a CPU backend; otherwise one worker walks it and its leaves
-//! are batched.
+//! Several workers walk the region tree together only on a CPU backend;
+//! otherwise one worker walks it and its leaves are batched.
 
-use zetesis_solve::{Backend, SearchMethod, SolveConfig};
+use zetesis_solve::{Backend, SolveConfig};
 use zetesis_test_support::counts::nonzero as workers;
 
 fn parallel() -> SolveConfig {
     SolveConfig {
         backend: Backend::Cpu,
-        search: SearchMethod::Regions,
         workers: workers(4),
         ..SolveConfig::DEFAULT
     }
@@ -27,15 +25,6 @@ fn several_workers_walk_the_regions_on_a_cpu_backend() {
 fn one_worker_walks_the_regions_alone() {
     let config = SolveConfig {
         workers: workers(1),
-        ..parallel()
-    };
-    assert_eq!(config.region_workers(), None);
-}
-
-#[test]
-fn the_clauses_method_walks_no_regions() {
-    let config = SolveConfig {
-        search: SearchMethod::Clauses,
         ..parallel()
     };
     assert_eq!(config.region_workers(), None);

@@ -1088,7 +1088,9 @@ fn frozen_positive_receipts_survive_every_worker_route() {
             crate::ferraris::Proposer::Parallel(search) => {
                 omit_producers_for_membership_test(search);
             }
-            _ => panic!("expected a scalar or parallel region proposer"),
+            crate::ferraris::Proposer::Proposals(_) => {
+                panic!("expected a scalar or parallel region proposer")
+            }
         }
         assert_eq!(models.next().unwrap().unwrap().atoms().count(), 0);
         assert!(models.next().is_none());

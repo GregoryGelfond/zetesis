@@ -1,6 +1,6 @@
 //! Borrowed execution facts, distinct from answer-set evidence and presentation.
 
-use crate::{Grounder, Oracle, SearchMethod, SolveError, SourceBatching};
+use crate::{Grounder, Oracle, SolveError, SourceBatching};
 use std::{error::Error, num::NonZeroUsize};
 use zetesis_themelios::objective_bound::ObjectiveBoundError;
 
@@ -79,8 +79,6 @@ pub enum ExecutionObservation<'a> {
         oracle: Oracle,
         /// Requested materialization policy.
         grounder: Grounder,
-        /// How candidates are proposed and the reduct queried.
-        search: SearchMethod,
     },
     /// Up to `workers` threads walk the region tree at once and decide its
     /// leaves. The walk begins on the calling thread and starts them once it
@@ -127,8 +125,6 @@ pub enum ExecutionObservation<'a> {
         projection: zetesis_wgpu::GateProjection,
         /// Requested materialization policy.
         grounder: Grounder,
-        /// How candidates are proposed and the reduct queried.
-        search: SearchMethod,
         /// Configured candidate batch size: a fixed ceiling, or the adaptive
         /// policy's initial and reset slate size, according to
         /// [`crate::SolveConfig::gpu_batching`].
@@ -144,8 +140,6 @@ pub enum ExecutionObservation<'a> {
         adapter: zetesis_wgpu::AdapterMetadata<'a>,
         /// Requested materialization policy.
         grounder: Grounder,
-        /// Candidate proposal method; membership uses the tight certificate.
-        search: SearchMethod,
         /// Configured candidate batch size: a fixed ceiling, or the adaptive
         /// policy's initial and reset slate size, according to
         /// [`crate::SolveConfig::gpu_batching`].

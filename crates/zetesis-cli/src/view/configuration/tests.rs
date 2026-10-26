@@ -1,7 +1,7 @@
 //! Effective execution facts remain separate from requested policy and utilization.
 
 use super::*;
-use crate::{Grounder, Oracle, SearchMethod, SourceBatching};
+use crate::{Grounder, Oracle, SourceBatching};
 
 fn workers() -> NonZeroUsize {
     NonZeroUsize::new(14).unwrap()
@@ -11,7 +11,6 @@ fn formula() -> ExecutionObservation<'static> {
     ExecutionObservation::CpuFormula {
         oracle: Oracle::Auto,
         grounder: Grounder::Auto,
-        search: SearchMethod::Regions,
     }
 }
 
@@ -128,7 +127,6 @@ mod device {
                     adapter: adapter(&name),
                     projection: zetesis_wgpu::GateProjection::Enumerated,
                     grounder: Grounder::Auto,
-                    search: SearchMethod::Regions,
                     batch_size: NonZeroUsize::new(32).unwrap(),
                     completion_workers: NonZeroUsize::new(2).unwrap(),
                 },
@@ -138,7 +136,6 @@ mod device {
                 ExecutionObservation::DeviceTight {
                     adapter: adapter(&name),
                     grounder: Grounder::Auto,
-                    search: SearchMethod::Regions,
                     batch_size: NonZeroUsize::new(32).unwrap(),
                 },
                 false,

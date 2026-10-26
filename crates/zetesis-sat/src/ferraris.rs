@@ -1,13 +1,8 @@
 use zetesis_ferraris::{Interpretation, Theory, models, models_reduct};
 
 use crate::budget::{Budget, Quota, increment};
-use crate::encoding;
-use crate::search::Cursor;
 use crate::timing::{self, Phase};
-use crate::{
-    AdmissionLimits, Cancellation, Cnf, Incomplete, ProjectionLimits, ProjectionStatistics,
-    SearchLimits, SearchStatistics, Solve,
-};
+use crate::{Cancellation, Incomplete, SearchLimits, SearchStatistics};
 
 mod batch;
 pub use batch::{
@@ -16,7 +11,7 @@ pub use batch::{
 };
 
 mod completion;
-pub use completion::{CompletionExecutor, CompletionScratch, CompletionStatistics};
+pub use completion::{CompletionExecutor, CompletionStatistics};
 
 mod certified;
 mod conditions;
@@ -24,11 +19,6 @@ pub use certified::{
     CertificateError, CertificateLimits, CertificateOrder, CertificatePlanStatistics,
     CertifiedStatistics,
 };
-
-mod candidate_support;
-pub use candidate_support::{SupportStatistics, SupportStatus};
-
-mod reduct_query;
 
 mod regions;
 
@@ -47,29 +37,19 @@ use regions::RegionSearch;
 pub use regions::{
     FrontierOrder, GeneratorOrderStatistics, GeneratorOrderStatus, RegionCounts,
     RegionFrontierStatistics, RegionSearchStatistics, RegionWalkEngagement, RegionWorkerStatistics,
-    SearchMethod,
 };
 
 /// Whole-operation ceilings for a membership check or stable-model enumeration.
 #[derive(Clone, Copy, Debug)]
 pub struct Limits {
-    /// Original candidate CNF, including submitted candidate restrictions.
-    /// Exact candidate exclusions have their own `projections` population.
-    pub admission: AdmissionLimits,
-    /// Immutable prepared reduct CNF, or the explicit fresh-check reduct CNF.
-    /// These dimensions are independent of candidate/restriction admission.
-    pub reduct_admission: AdmissionLimits,
-    /// Distinct exclusion keys, logical trie nodes and named retained capacity.
-    pub projections: ProjectionLimits,
-    /// Cumulative encoding, certificate and search work/decisions across a run.
+    /// Cumulative region search, certificate and query work and decisions
+    /// across a run.
     pub search: SearchLimits,
     /// Maximum classical candidates checked during enumeration; not model count.
     pub max_candidates: u64,
     /// Per-call work ceiling for independent original/reduct formula evaluation.
     pub max_verification_work: u64,
-    /// Named immutable reduct preparation and retained per-query capacity,
-    /// each bounded independently. Aggregate completion also admits the shared
-    /// prepared owner once alongside all worker/transient/result storage.
+    /// Retained capacity of each proper-subset query's workspace.
     /// Original candidate generator ordering uses the same ceiling independently
     /// for its transient graph and retained ranks; a named byte refusal declines
     /// that optional preference, with its work prefix retained in search work.
@@ -82,13 +62,10 @@ pub struct Limits {
 impl Default for Limits {
     fn default() -> Self {
         Self {
-            admission: AdmissionLimits::default(),
-            reduct_admission: AdmissionLimits::default(),
-            projections: ProjectionLimits::default(),
             search: SearchLimits::default(),
             max_candidates: 1_000_000,
             max_verification_work: 100_000_000,
-            max_reduct_bytes: crate::ReductPreparationLimits::DEFAULT_BYTES,
+            max_reduct_bytes: crate::reduct::DEFAULT_BYTES,
             max_native_narrowing_bytes: u64::MAX,
         }
     }
@@ -100,7 +77,7 @@ impl Default for Limits {
 /// subject of an actual native check, use [`crate::check_interpretation`].
 #[derive(Clone, Debug)]
 pub enum Check {
-    /// Original model whose proper-subset frozen-reduct query was proved UNSAT.
+    /// Original model whose frozen reduct has no proper-subset model.
     Stable,
     /// The candidate does not satisfy the original theory.
     NotModel,
@@ -121,21 +98,15 @@ impl Check {
 /// Cumulative accounting across candidate and countermodel search.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct Statistics {
-    /// Encoding, certificate and Boolean-kernel work, including incomplete attempts.
+    /// Region search, certificate and query work, including incomplete attempts.
     pub search: SearchStatistics,
-    /// Exact history retained across candidate queries and restrictions.
-    /// Its work is included in `search.work`, never added to it.
-    pub projections: ProjectionStatistics,
-    /// Outer clause queries started, including a final UNSAT query. Direct
-    /// positive proposals and region traversal do not increment this counter.
-    pub candidate_queries: u64,
     /// Successful permanent restrictions and bound updates, cumulatively.
     /// This is an installation count, not the population of retained indexes.
     pub candidate_restrictions: u64,
     /// Owned candidates proposed for membership checking, including retained
     /// pending proposals in the batched protocol.
     pub candidates: u64,
-    /// Frozen reduct SAT queries started.
+    /// Frozen-reduct proper-subset queries started.
     pub countermodel_queries: u64,
     /// Independently checked countermodels found.
     pub countermodels: u64,
@@ -149,15 +120,11 @@ pub struct Statistics {
     pub phase_timings: Option<crate::SearchPhaseTimings>,
     /// Optional complete-theory certificate attempt and checks.
     pub certified: Option<CertifiedStatistics>,
-    /// Initial necessary disjunctive support restriction on outer candidates.
-    /// Standalone membership checks do not construct this optional restriction,
-    /// and the regions proposer has the support cut in its narrowing instead.
-    pub support: Option<SupportStatistics>,
-    /// The regions proposer's statistics; absent under the clauses proposer.
+    /// The region proposer's statistics, on an enumeration's receipt.
     pub regions: Option<RegionSearchStatistics>,
     /// Original-region callback attempts; source work is accounted by its owner.
     pub region_filter: Option<crate::RegionFilterStatistics>,
-    /// Actual persistent-reduct construction and query work, including failures.
+    /// Actual reduct-query work and storage, including failures.
     pub reduct: crate::ReductStatistics,
 }
 
@@ -168,36 +135,15 @@ fn verification(limits: Limits) -> zetesis_ferraris::Limits {
     }
 }
 
-/// Check stability through the proper-subset query of the frozen reduct by
-/// the default method, [`SearchMethod::default`]: a region tree narrowed by
-/// the reduct's readings. [`check_with`] chooses the method. No enumeration
-/// of all subsets or invocation of an external solver occurs.
+/// Check stability through the proper-subset query of the frozen reduct, a
+/// region tree narrowed by the reduct's readings. A countermodel is validated
+/// independently before it refutes the candidate. No enumeration of all
+/// subsets or invocation of an external solver occurs.
 /// `max_candidates` applies only to [`StableModels`].
 #[must_use]
 pub fn check(
     theory: &Theory,
     candidate: &Interpretation,
-    limits: Limits,
-    cancellation: &Cancellation,
-) -> Check {
-    check_with(
-        theory,
-        candidate,
-        SearchMethod::default(),
-        limits,
-        cancellation,
-    )
-}
-
-/// Check stability by the chosen method: the proper-subset query of the
-/// frozen reduct as a region tree, or as a clause query on the kernel. The
-/// verdict is the same either way; a countermodel is validated independently
-/// of the method that proposed it.
-#[must_use]
-pub fn check_with(
-    theory: &Theory,
-    candidate: &Interpretation,
-    method: SearchMethod,
     limits: Limits,
     cancellation: &Cancellation,
 ) -> Check {
@@ -208,15 +154,7 @@ pub fn check_with(
         statistics: SearchStatistics::default(),
     };
     let mut statistics = Statistics::default();
-    match fresh_membership(
-        theory,
-        candidate,
-        method,
-        limits,
-        &mut budget,
-        &mut statistics,
-        &mut reduct_query::Workspace::default(),
-    ) {
+    match fresh_membership(theory, candidate, limits, &mut budget, &mut statistics) {
         Ok(result) => result,
         Err(error) => Check::Inconclusive(error),
     }
@@ -225,48 +163,39 @@ pub fn check_with(
 fn fresh_membership(
     theory: &Theory,
     candidate: &Interpretation,
-    method: SearchMethod,
     limits: Limits,
     budget: &mut Budget<'_, impl Quota>,
     statistics: &mut Statistics,
-    workspace: &mut reduct_query::Workspace,
 ) -> Result<Check, Incomplete> {
     let original = original_model(theory, candidate, limits, budget, statistics);
     if !original? {
         return Ok(Check::NotModel);
     }
     let started = timing::start(statistics.phase_timings.as_ref());
-    let result = match method {
-        SearchMethod::Clauses => {
-            reduct_membership(theory, candidate, limits, budget, statistics, workspace)
-        }
-        SearchMethod::Regions => {
-            // The one standalone holder: its index is built here, inside the
-            // reduct phase, and charged to the reduct's region counts.
-            let mut original = OriginalIndex::new(theory, limits.max_native_narrowing_bytes);
-            original
-                .ensure(budget.cancellation, |work| {
-                    budget.charge(work)?;
-                    statistics.reduct.regions.work = statistics
-                        .reduct
-                        .regions
-                        .work
-                        .checked_add(work)
-                        .ok_or(Incomplete::CounterOverflow)?;
-                    Ok(())
-                })
-                .and_then(|index| {
-                    crate::prepared_reduct::State::new(method).check(
-                        theory,
-                        Some(index),
-                        candidate,
-                        limits,
-                        budget,
-                        statistics,
-                    )
-                })
-        }
-    };
+    // The one standalone holder: its index is built here, inside the reduct
+    // phase, and charged to the reduct's region counts.
+    let mut original = OriginalIndex::new(theory, limits.max_native_narrowing_bytes);
+    let result = original
+        .ensure(budget.cancellation, |work| {
+            budget.charge(work)?;
+            statistics.reduct.regions.work = statistics
+                .reduct
+                .regions
+                .work
+                .checked_add(work)
+                .ok_or(Incomplete::CounterOverflow)?;
+            Ok(())
+        })
+        .and_then(|index| {
+            crate::reduct::State::default().check(
+                theory,
+                Some(index),
+                candidate,
+                limits,
+                budget,
+                statistics,
+            )
+        });
     timing::finish(&mut statistics.phase_timings, Phase::Reduct, started);
     result
 }
@@ -295,41 +224,10 @@ pub(crate) fn original_model(
     original
 }
 
-fn reduct_membership(
-    theory: &Theory,
-    candidate: &Interpretation,
-    limits: Limits,
-    budget: &mut Budget<'_, impl Quota>,
-    statistics: &mut Statistics,
-    workspace: &mut reduct_query::Workspace,
-) -> Result<Check, Incomplete> {
-    let (reduct, search) = workspace.encode(theory, candidate, limits.reduct_admission, budget)?;
-    increment(&mut statistics.countermodel_queries)?;
-    let result = search.query(reduct, budget);
-    checked_reduct_result(theory, candidate, limits, budget, statistics, result)
-}
-
-pub(crate) fn checked_reduct_result(
-    theory: &Theory,
-    candidate: &Interpretation,
-    limits: Limits,
-    budget: &mut Budget<'_, impl Quota>,
-    statistics: &mut Statistics,
-    result: Solve,
-) -> Result<Check, Incomplete> {
-    match result {
-        Solve::Unsat => Ok(Check::Stable),
-        Solve::Inconclusive(error) => Err(error),
-        Solve::Sat(assignment) => {
-            let subset = encoding::interpretation(theory, &assignment, budget)?;
-            checked_countermodel(theory, candidate, subset, limits, budget, statistics)
-        }
-    }
-}
-
 /// Validate a proposed countermodel independently: it must be a proper
-/// subset of the candidate and model the candidate's frozen reduct. Either
-/// proposer, the clause query or the region query, is held to this.
+/// subset of the candidate and model the candidate's frozen reduct. Every
+/// proposer, the frozen-positive closure and the region query alike, is held
+/// to this.
 pub(crate) fn checked_countermodel(
     theory: &Theory,
     candidate: &Interpretation,
@@ -361,16 +259,14 @@ pub(crate) fn checked_countermodel(
     Ok(Check::NonMinimal(subset))
 }
 
-/// Native answer-set enumeration over classical candidates with exact semantic blocking.
-/// A complete positive certificate can restrict proposals to the unique possible
-/// answer; larger classical models need not be enumerated or refuted individually.
-/// SAT assignments include Tseitin variables, but returned interpretations and
-/// exact exclusions contain only the original theory's atom universe.
+/// Native answer-set enumeration over classical candidates, each region leaf
+/// proposed once. A complete positive certificate can restrict proposals to the
+/// unique possible answer; larger classical models need not be enumerated or
+/// refuted individually. Returned interpretations contain only the original
+/// theory's atom universe.
 ///
 /// Work and candidate limits are cumulative. An incomplete result is emitted
-/// once and terminates the iterator without marking it exhausted. If blocking
-/// storage fails after a stable model has been proved, that model is returned
-/// first and the pending failure is returned on the next call.
+/// once and terminates the iterator without marking it exhausted.
 #[derive(Debug)]
 pub struct StableModels {
     theory: Theory,
@@ -386,20 +282,20 @@ pub struct StableModels {
     certificate_workspace: certified::Workspace,
     determined_candidates: Option<certified::DeterminedCandidates>,
     bound_generation: u64,
-    reduct: crate::prepared_reduct::State,
+    reduct: crate::reduct::State,
     /// The original theory's index, built when a region walk first needs it
     /// and shared by that walk and every membership query of its candidates.
     index: OriginalIndex,
 }
 impl StableModels {
-    /// Enumerate by the default method, [`SearchMethod::default`]: regions
-    /// of the candidate space narrowed by the theory's readings, with no
-    /// clause form built. [`Self::with_method`] chooses the method; under
-    /// [`SearchMethod::Clauses`] the original theory is encoded once,
-    /// retaining its immutable instance identity, with a complete ordinary
-    /// disjunctive support restriction on the outer CNF, and construction and
-    /// failed encoding work stay charged. Original-model and frozen-reduct
-    /// checks always use the original theory, whichever the method.
+    /// Enumerate by regions of the candidate space narrowed by the theory's
+    /// readings, with no clause form built: the theory's producers are
+    /// extracted for the support cut, charged as search work, and the root
+    /// region is queued; the theory's index is built, and charged, when a
+    /// region walk first needs it, so a run decided by a positive
+    /// certificate builds none. The reduct's proper-subset query is a region
+    /// tree too, over the same index. Original-model and frozen-reduct checks
+    /// always use the original theory.
     ///
     /// # Errors
     /// Refuses admission, work limits, cancellation or allocation.
@@ -408,7 +304,39 @@ impl StableModels {
         limits: Limits,
         cancellation: Cancellation,
     ) -> Result<Self, Incomplete> {
-        Self::with_method(theory, SearchMethod::default(), limits, cancellation)
+        let mut budget = Budget {
+            quota: crate::budget::LocalQuota,
+            limits: limits.search,
+            cancellation: &cancellation,
+            statistics: SearchStatistics::default(),
+        };
+        let proposer = Proposer::Regions(Box::new(RegionSearch::new(
+            theory,
+            limits.max_native_narrowing_bytes,
+            limits.max_reduct_bytes,
+            &mut budget,
+        )?));
+        let statistics = Statistics {
+            search: budget.statistics,
+            ..Default::default()
+        };
+        Ok(Self {
+            theory: theory.clone(),
+            proposer,
+            limits,
+            cancellation,
+            statistics,
+            terminal: false,
+            exhausted: false,
+            pending_error: None,
+            batch: batch::State::default(),
+            certificate: None,
+            certificate_workspace: certified::Workspace::default(),
+            determined_candidates: None,
+            bound_generation: 0,
+            reduct: crate::reduct::State::default(),
+            index: OriginalIndex::new(theory, limits.max_native_narrowing_bytes),
+        })
     }
 
     /// Enumerate by regions with up to `workers` walking the tree at once:
@@ -477,7 +405,7 @@ impl StableModels {
         cancellation: Cancellation,
     ) -> Result<Self, Incomplete> {
         if workers.get() == 1 {
-            return Self::with_method(theory, SearchMethod::Regions, limits, cancellation);
+            return Self::new(theory, limits, cancellation);
         }
         let mut budget = Budget {
             quota: crate::budget::LocalQuota,
@@ -511,7 +439,7 @@ impl StableModels {
             certificate_workspace: certified::Workspace::default(),
             determined_candidates: None,
             bound_generation: 0,
-            reduct: crate::prepared_reduct::State::new(SearchMethod::Regions),
+            reduct: crate::reduct::State::default(),
             index: OriginalIndex::new(theory, limits.max_native_narrowing_bytes),
         })
     }
@@ -537,7 +465,7 @@ impl StableModels {
         cancellation: Cancellation,
     ) -> Result<Self, Incomplete> {
         if workers.get() == 1 {
-            return Self::with_method(theory, SearchMethod::Regions, limits, cancellation);
+            return Self::new(theory, limits, cancellation);
         }
         let mut budget = Budget {
             quota: crate::budget::LocalQuota,
@@ -570,83 +498,16 @@ impl StableModels {
             certificate_workspace: certified::Workspace::default(),
             determined_candidates: None,
             bound_generation: 0,
-            reduct: crate::prepared_reduct::State::new(SearchMethod::Regions),
+            reduct: crate::reduct::State::default(),
             index: OriginalIndex::new(theory, limits.max_native_narrowing_bytes),
         })
     }
 
-    /// Enumerate by the chosen method. Under [`SearchMethod::Regions`] no
-    /// clause form of the theory is built: the theory's producers are
-    /// extracted for the support cut, charged as search work, and the root
-    /// region is queued; the theory's index is built, and charged, when a
-    /// region walk first needs it, so a run decided by a positive
-    /// certificate builds none. The reduct's proper-subset query is a region
-    /// tree too, over the same index. The verdict on every candidate is the
-    /// same either way.
-    ///
-    /// # Errors
-    /// Refuses admission, work limits, cancellation or allocation.
-    pub fn with_method(
-        theory: &Theory,
-        method: SearchMethod,
-        limits: Limits,
-        cancellation: Cancellation,
-    ) -> Result<Self, Incomplete> {
-        let mut budget = Budget {
-            quota: crate::budget::LocalQuota,
-            limits: limits.search,
-            cancellation: &cancellation,
-            statistics: SearchStatistics::default(),
-        };
-        let (proposer, support) = match method {
-            SearchMethod::Clauses => {
-                let mut cnf = encoding::encode(theory, None, limits.admission, &mut budget)?;
-                let support = candidate_support::restrict(&mut cnf, theory, limits, &mut budget)?;
-                let cursor = Cursor::projected(theory.atom_count(), limits.projections)?;
-                (
-                    Proposer::Clauses(Box::new(ClauseProposer { cnf, cursor })),
-                    Some(support),
-                )
-            }
-            SearchMethod::Regions => (
-                Proposer::Regions(Box::new(RegionSearch::new(
-                    theory,
-                    limits.max_native_narrowing_bytes,
-                    limits.max_reduct_bytes,
-                    &mut budget,
-                )?)),
-                None,
-            ),
-        };
-        let statistics = Statistics {
-            search: budget.statistics,
-            support,
-            ..Default::default()
-        };
-        Ok(Self {
-            theory: theory.clone(),
-            proposer,
-            limits,
-            cancellation,
-            statistics,
-            terminal: false,
-            exhausted: false,
-            pending_error: None,
-            batch: batch::State::default(),
-            certificate: None,
-            certificate_workspace: certified::Workspace::default(),
-            determined_candidates: None,
-            bound_generation: 0,
-            reduct: crate::prepared_reduct::State::new(method),
-            index: OriginalIndex::new(theory, limits.max_native_narrowing_bytes),
-        })
-    }
     /// Enable coarse host timing from this point onward. Repeated calls retain
     /// existing measurements. No timing clock is read while timing is
     /// disabled; a parallel region walk reads the clock between its
     /// coordinator's steps until its workers start, to keep its engagement
-    /// deadline. A walk's timing is fixed when the walk begins. Initial CNF
-    /// construction is deliberately outside these intervals.
+    /// deadline. A walk's timing is fixed when the walk begins.
     pub fn enable_phase_timing(&mut self) {
         self.statistics.phase_timings.get_or_insert_default();
     }
@@ -657,13 +518,10 @@ impl StableModels {
         &self.theory
     }
 
-    /// Append a classical candidate-only constraint. The clauses proposer adds
-    /// it to the CNF and restarts the outer cursor; original clauses and
-    /// earlier restrictions stay in the CNF, and the separate exact projection
-    /// index retains every earlier exclusion without turning it into watched
-    /// CNF storage. The regions proposer narrows the regions still to visit by
-    /// it and continues. A positive cursor tests the least interpretation
-    /// against these same restrictions. Original theory and reduct acceptance stay unchanged.
+    /// Append a classical candidate-only constraint. The region proposer
+    /// narrows the regions still to visit by it and continues; a positive
+    /// cursor tests the least interpretation against these same restrictions.
+    /// Original theory and reduct acceptance stay unchanged.
     ///
     /// The restriction must use the original semantic atom count and index
     /// meanings. Its separate immutable instance is expected. Restrictions
@@ -672,9 +530,9 @@ impl StableModels {
     /// An optimizer must separately justify that omitted candidates are dominated.
     ///
     /// # Errors
-    /// Refuses a different atom count, a closed iterator, pending blocking
-    /// failure, capacity, work, cancellation or allocation. Failed encoding
-    /// restores the previous CNF and cursor; charged work remains cumulative.
+    /// Refuses a different atom count, a closed iterator, a pending failure,
+    /// capacity, work, cancellation or allocation; charged work remains
+    /// cumulative.
     pub fn restrict_candidates(&mut self, restriction: &Theory) -> Result<(), Incomplete> {
         if self.terminal {
             return Err(Incomplete::ClosedEnumerator);
@@ -724,12 +582,9 @@ impl StableModels {
     /// their original membership checks still apply. An optimizer must compare
     /// every returned model with its current incumbent. Exhaustion covers the
     /// remaining constrained family, not the original unrestricted world view.
-    /// The optional clauses method appends each bound instead of retiring it;
-    /// the implication obligation makes that conjunction equivalent in the
-    /// presence of the original theory.
     ///
     /// # Errors
-    /// Refuses a different atom count, a closed iterator, pending blocking error,
+    /// Refuses a different atom count, a closed iterator, a pending error,
     /// generation overflow, resource exhaustion or cancellation. Failed setup
     /// leaves the active bound and generation unchanged; admitted work stays
     /// charged. Region knowledge retains its existing infallible allocation
@@ -811,7 +666,6 @@ impl StableModels {
         self.pending_error.is_some()
             || !self.batch.pending.is_empty()
             || statistics.candidates != 0
-            || statistics.candidate_queries != 0
             || statistics
                 .regions
                 .is_some_and(|regions| regions.counts.regions != 0)
@@ -825,7 +679,7 @@ impl StableModels {
     /// caller's soundness, resource and failure-receipt obligations.
     ///
     /// # Errors
-    /// Refuses a closed or started stream, replacement, or clause search.
+    /// Refuses a closed or started stream, or replacement.
     pub fn set_region_filter(
         &mut self,
         filter: std::sync::Arc<dyn crate::RegionFilter>,
@@ -841,7 +695,6 @@ impl StableModels {
         }
         let filter = crate::region_filter::Filter::new(filter);
         match &mut self.proposer {
-            Proposer::Clauses(_) => return Err(Incomplete::RegionFilterUnsupported),
             Proposer::Regions(regions) => regions.set_filter(filter),
             Proposer::Proposals(proposals) => proposals.set_filter(filter),
             Proposer::Parallel(parallel) => parallel.set_filter(filter)?,
@@ -899,10 +752,6 @@ impl StableModels {
     #[must_use]
     pub fn statistics(&self) -> Statistics {
         let mut statistics = match &self.proposer {
-            Proposer::Clauses(clauses) => Statistics {
-                projections: clauses.cursor.projection_statistics(),
-                ..self.statistics
-            },
             Proposer::Regions(regions) => Statistics {
                 regions: Some(regions.statistics()),
                 ..self.statistics
@@ -987,7 +836,6 @@ impl StableModels {
             &mut self.proposer,
             &mut budget,
             &mut self.statistics,
-            &mut self.pending_error,
         );
         self.statistics.search = budget.statistics;
         result
@@ -1059,19 +907,19 @@ struct Membership<'a> {
     /// share it; the coordinator reads through it.
     certificate: Option<&'a std::sync::Arc<certified::Certification>>,
     certificate_workspace: &'a mut certified::Workspace,
-    reduct: &'a mut crate::prepared_reduct::State,
+    reduct: &'a mut crate::reduct::State,
     index: &'a mut OriginalIndex,
     determined_candidates: Option<&'a mut certified::DeterminedCandidates>,
 }
 
-/// The component that proposes classical candidates: it realizes the
-/// [`SearchMethod`] the enumeration was asked for, from a clause form of the
-/// theory by the retained cursor or from regions narrowed by the theory's
-/// readings, and under several workers the regions method walked in
-/// parallel, which no method names.
+/// The component that proposes classical candidates from regions narrowed by
+/// the theory's readings: the scalar walk, workers that walk the tree in
+/// parallel and decide its leaves, or bounded producers. No proposal needs
+/// excluding afterwards: each region proposer proposes a leaf once, since only
+/// the leaf's emission resolves its region, and a producer's leaf that finds
+/// the slate's output spoken for returns unresolved and is proposed later.
 #[derive(Debug)]
 enum Proposer {
-    Clauses(Box<ClauseProposer>),
     Regions(Box<RegionSearch>),
     /// The coordinator and, after engagement, workers walk the region tree
     /// and decide its leaves.
@@ -1081,11 +929,10 @@ enum Proposer {
 }
 
 /// Where the next proposal comes from: the positive cursor, which walks no
-/// region, or the proposer's own walk with the original index it reads
-/// (`None` under the clause kernel, which reads none).
+/// region, or the proposer's own walk with the original index it reads.
 enum Walk<'a> {
     Determined(&'a mut certified::DeterminedCandidates),
-    Index(Option<&'a std::sync::Arc<IndexedTheory>>),
+    Index(&'a std::sync::Arc<IndexedTheory>),
 }
 
 /// What a proposer hands the enumeration.
@@ -1096,17 +943,9 @@ enum Proposal {
     Stable(Interpretation),
 }
 
-/// The clause form of the theory and the retained cursor over it.
-#[derive(Debug)]
-struct ClauseProposer {
-    cnf: Cnf,
-    cursor: Cursor,
-}
-
 impl Proposer {
     fn filter(&self) -> Option<&crate::region_filter::Filter> {
         match self {
-            Self::Clauses(_) => None,
             Self::Regions(regions) => regions.filter(),
             Self::Proposals(proposals) => proposals.filter(),
             Self::Parallel(parallel) => parallel.filter(),
@@ -1119,16 +958,14 @@ impl Proposer {
         match self {
             Self::Regions(regions) => regions.finish(),
             Self::Proposals(proposals) => proposals.finish(),
-            Self::Clauses(_) | Self::Parallel(_) => Ok(()),
+            Self::Parallel(_) => Ok(()),
         }
     }
 
     /// Record the original index's work, charged when a region walk first
-    /// needed it, once in this proposer's region counts. The clause kernel
-    /// walks no region and indexes no original theory.
+    /// needed it, once in this proposer's region counts.
     fn record_index_work(&mut self, work: u64) -> Result<(), Incomplete> {
         let counts = match self {
-            Self::Clauses(_) => return Err(Incomplete::InvalidWitness),
             Self::Regions(regions) => regions.counts_mut(),
             Self::Parallel(parallel) => parallel.counts_mut(),
             Self::Proposals(proposals) => proposals.counts_mut(),
@@ -1144,8 +981,7 @@ impl Proposer {
     /// active and else from this proposer's own walk, or `None` when the
     /// candidate space is covered. A proposal is refused, not returned, once
     /// the candidate ceiling is reached; the caller admits it. A region walk
-    /// reads the index `walk` carries, which [`walk_index`] built; its
-    /// absence there is refused as an invalid witness.
+    /// reads the index `walk` carries, which [`walk_index`] built.
     fn propose(
         &mut self,
         theory: &Theory,
@@ -1164,21 +1000,7 @@ impl Proposer {
             Walk::Index(index) => index,
         };
         let proposal = match self {
-            Self::Clauses(clauses) => {
-                increment(&mut statistics.candidate_queries)?;
-                match clauses.cursor.query(&clauses.cnf, budget) {
-                    Solve::Sat(assignment) => {
-                        if statistics.candidates >= limits.max_candidates {
-                            return Err(Incomplete::CandidateLimit);
-                        }
-                        Some(encoding::interpretation(theory, &assignment, budget)?)
-                    }
-                    Solve::Unsat => None,
-                    Solve::Inconclusive(error) => return Err(error),
-                }
-            }
             Self::Regions(regions) => {
-                let index = index.ok_or(Incomplete::InvalidWitness)?;
                 let proposal =
                     regions.propose(theory, index, budget, &mut statistics.phase_timings)?;
                 if proposal.is_some() && statistics.candidates >= limits.max_candidates {
@@ -1187,14 +1009,13 @@ impl Proposer {
                 proposal
             }
             Self::Parallel(parallel) => {
-                let index = index.ok_or(Incomplete::InvalidWitness)?;
                 let timed = statistics.phase_timings.is_some();
                 return Ok(parallel
                     .propose(index, certificate, timed, budget)?
                     .map(Proposal::Stable));
             }
             Self::Proposals(proposals) => {
-                let subject = index.ok_or(Incomplete::InvalidWitness)?.subject(theory)?;
+                let subject = index.subject(theory)?;
                 let mut output = crate::budget::storage(1)?;
                 let produced = proposals.fill(
                     subject,
@@ -1222,21 +1043,6 @@ impl Proposer {
         Ok(proposal.map(Proposal::Candidate))
     }
 
-    /// Exclude a proposed candidate from every later proposal. Regions need
-    /// nothing: each region proposer proposes a leaf once, since only the
-    /// leaf's emission resolves its region. A producer's leaf that finds the
-    /// slate's output spoken for returns unresolved and is proposed later.
-    fn exclude(
-        &mut self,
-        candidate: &Interpretation,
-        budget: &mut Budget<'_>,
-    ) -> Result<(), Incomplete> {
-        match self {
-            Self::Clauses(clauses) => clauses.cursor.exclude(&clauses.cnf, candidate, budget),
-            Self::Regions(_) | Self::Parallel(_) | Self::Proposals(_) => Ok(()),
-        }
-    }
-
     fn tighten(
         &mut self,
         restriction: &Theory,
@@ -1244,7 +1050,6 @@ impl Proposer {
         budget: &mut Budget<'_>,
     ) -> Result<(), Incomplete> {
         match self {
-            Self::Clauses(_) => self.restrict(restriction, budget),
             Self::Regions(regions) => regions.tighten(restriction, generation, budget),
             Self::Parallel(parallel) => parallel.tighten(restriction, generation, budget),
             Self::Proposals(proposals) => proposals.tighten(restriction, generation, budget),
@@ -1258,11 +1063,6 @@ impl Proposer {
         budget: &mut Budget<'_>,
     ) -> Result<(), Incomplete> {
         match self {
-            Self::Clauses(clauses) => {
-                encoding::restrict(&mut clauses.cnf, restriction, budget)?;
-                clauses.cursor.restart();
-                Ok(())
-            }
             Self::Regions(regions) => regions.restrict(restriction, budget),
             Self::Parallel(parallel) => parallel.restrict(restriction, budget),
             Self::Proposals(proposals) => proposals.restrict(restriction, budget),
@@ -1275,7 +1075,6 @@ fn advance(
     proposer: &mut Proposer,
     budget: &mut Budget<'_>,
     statistics: &mut Statistics,
-    pending_error: &mut Option<Incomplete>,
 ) -> Result<Option<Interpretation>, Incomplete> {
     let Membership {
         theory,
@@ -1287,7 +1086,12 @@ fn advance(
         mut determined_candidates,
     } = membership_input;
     let index = if determined_candidates.is_none() {
-        walk_index(index, proposer, budget, &mut statistics.phase_timings)?
+        Some(walk_index(
+            index,
+            proposer,
+            budget,
+            &mut statistics.phase_timings,
+        )?)
     } else {
         None
     };
@@ -1298,9 +1102,10 @@ fn advance(
             Proposer::Parallel(_) if determined_candidates.is_none() => None,
             _ => timing::start(statistics.phase_timings.as_ref()),
         };
-        let walk = match determined_candidates.as_deref_mut() {
-            Some(candidates) => Walk::Determined(candidates),
-            None => Walk::Index(index),
+        let walk = match (determined_candidates.as_deref_mut(), index) {
+            (Some(candidates), _) => Walk::Determined(candidates),
+            (None, Some(index)) => Walk::Index(index),
+            (None, None) => return Err(Incomplete::InvalidWitness),
         };
         let proposal = proposer.propose(theory, walk, limits, certificate, budget, statistics);
         timing::finish(&mut statistics.phase_timings, Phase::Candidates, started);
@@ -1340,22 +1145,17 @@ fn advance(
         if decision == Decision::Invalid {
             return Err(Incomplete::InvalidWitness);
         }
-        let started = timing::start(statistics.phase_timings.as_ref());
-        let blocking = proposer.exclude(&candidate, budget);
-        timing::finish(&mut statistics.phase_timings, Phase::Candidates, started);
         if decision == Decision::Stable {
             increment(&mut statistics.stable_models)?;
-            *pending_error = blocking.err();
             return Ok(Some(candidate));
         }
-        blocking?;
     }
 }
 
 /// The original index a region walk reads, built and charged before the
 /// walk's first step: this is the one build site of every enumeration route,
 /// scalar, parallel and batched, and it runs on the coordinator before any
-/// worker starts. The clause kernel walks no region and gets `None`.
+/// worker starts.
 ///
 /// The build is charged to `budget` first, one unit per node and operand
 /// occurrence, and recorded once in the proposer's region counts in the same
@@ -1368,12 +1168,9 @@ fn walk_index<'i>(
     proposer: &mut Proposer,
     budget: &mut Budget<'_>,
     timings: &mut Option<crate::SearchPhaseTimings>,
-) -> Result<Option<&'i std::sync::Arc<IndexedTheory>>, Incomplete> {
-    if matches!(proposer, Proposer::Clauses(_)) {
-        return Ok(None);
-    }
+) -> Result<&'i std::sync::Arc<IndexedTheory>, Incomplete> {
     if original.get().is_some() {
-        return Ok(original.get());
+        return original.get().ok_or(Incomplete::InvalidWitness);
     }
     let started = timing::start(timings.as_ref());
     let built = original.ensure(budget.cancellation, |work| {
@@ -1381,7 +1178,7 @@ fn walk_index<'i>(
         proposer.record_index_work(work)
     });
     timing::finish(timings, Phase::Candidates, started);
-    built.map(Some)
+    built
 }
 
 #[cfg(test)]

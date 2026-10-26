@@ -1,12 +1,8 @@
-//! Exact least-model units are one transaction over the candidate CNF owner.
+//! Determined-interpretation membership and complete certificate allowances.
 
 mod extrema_allowance;
 
-use crate::budget::{Budget, LocalQuota};
-use crate::{
-    AdmissionError, AdmissionLimits, Cancellation, Cnf, Incomplete, Literal, Resource,
-    SearchLimits, SearchStatistics, Solve,
-};
+use crate::{Cancellation, Incomplete, SearchLimits, SearchStatistics};
 use zetesis_ferraris::{
     AdmissionLimits as FormulaLimits, Node, PositivePlan, PositivePlanLimits, Theory,
 };
@@ -33,115 +29,6 @@ fn determined(plan: &PositivePlan) -> super::determined::Determined<'_> {
         failed_constraint: plan.failed_constraint(),
         retained_bytes: plan.statistics().retained_bytes,
     }
-}
-
-fn original(limits: AdmissionLimits) -> Cnf {
-    Cnf::new(3, vec![vec![Literal::new(0, true)]], limits).unwrap()
-}
-
-fn contents(cnf: &Cnf) -> Vec<Vec<Literal>> {
-    cnf.clauses()
-        .map(|clause| clause.iter().collect())
-        .collect()
-}
-
-#[test]
-fn unit_admission_refusal_preserves_the_original_cnf() {
-    let plan = plan();
-    let cancellation = Cancellation::default();
-    let mut cnf = original(AdmissionLimits {
-        max_clauses: 2,
-        ..Default::default()
-    });
-    let before = contents(&cnf);
-    let mut budget = Budget {
-        quota: LocalQuota,
-        limits: SearchLimits::default(),
-        cancellation: &cancellation,
-        statistics: SearchStatistics::default(),
-    };
-    assert_eq!(
-        super::determined::restrict(determined(&plan), &mut cnf, &mut budget),
-        Err(Incomplete::Admission(AdmissionError::Limit {
-            resource: Resource::Clauses,
-            observed: 3,
-            limit: 2,
-        }))
-    );
-    assert_eq!(contents(&cnf), before);
-    assert_eq!(
-        budget.statistics.work, 4,
-        "two identity reads and two attempted unit writes"
-    );
-    assert_eq!(cnf.variables(), 3);
-}
-
-#[test]
-fn stopped_unit_construction_rolls_back_every_partial_prefix() {
-    let plan = plan();
-    let cancellation = Cancellation::default();
-    let required = 2 * plan.theory().atom_count() as u64;
-    for limit in 0..required {
-        let mut cnf = original(AdmissionLimits::default());
-        let before = contents(&cnf);
-        let mut budget = Budget {
-            quota: LocalQuota,
-            limits: SearchLimits {
-                max_work: limit,
-                ..Default::default()
-            },
-            cancellation: &cancellation,
-            statistics: SearchStatistics::default(),
-        };
-        assert_eq!(
-            super::determined::restrict(determined(&plan), &mut cnf, &mut budget),
-            Err(Incomplete::WorkLimit)
-        );
-        assert_eq!(budget.statistics.work, limit);
-        assert_eq!(contents(&cnf), before);
-        budget.limits.max_work = limit + required;
-        assert_eq!(
-            super::determined::restrict(determined(&plan), &mut cnf, &mut budget),
-            Ok(3)
-        );
-        assert_eq!(budget.statistics.work, limit + required);
-    }
-}
-
-#[test]
-fn committed_units_select_exactly_the_least_interpretation() {
-    let plan = plan();
-    let cancellation = Cancellation::default();
-    let mut cnf = original(AdmissionLimits::default());
-    let mut budget = Budget {
-        quota: LocalQuota,
-        limits: SearchLimits::default(),
-        cancellation: &cancellation,
-        statistics: SearchStatistics::default(),
-    };
-    assert_eq!(
-        super::determined::restrict(determined(&plan), &mut cnf, &mut budget),
-        Ok(3)
-    );
-    assert_eq!(cnf.variables(), 3, "no auxiliary identity was added");
-    assert_eq!(
-        contents(&cnf),
-        vec![
-            vec![Literal::new(0, true)],
-            vec![Literal::new(0, true)],
-            vec![Literal::new(1, false)],
-            vec![Literal::new(2, false)]
-        ]
-    );
-    let Solve::Sat(assignment) = crate::solve(&cnf, SearchLimits::default(), &cancellation) else {
-        panic!("least model must satisfy its units");
-    };
-    assert_eq!(
-        (0..3)
-            .filter(|atom| assignment.value(*atom).unwrap())
-            .collect::<Vec<_>>(),
-        vec![0]
-    );
 }
 
 #[test]

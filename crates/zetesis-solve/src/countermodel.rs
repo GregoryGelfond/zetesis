@@ -118,35 +118,16 @@ fn certificate_limits(options: &SolveConfig) -> zetesis_sat::CertificateLimits {
 
 pub(crate) fn search_limits(options: &SolveConfig) -> zetesis_sat::Limits {
     zetesis_sat::Limits {
-        admission: cnf_admission(options.max_candidate_bytes as u128),
-        reduct_admission: cnf_admission(u128::from(options.max_reduct_bytes)),
         search: zetesis_sat::SearchLimits {
             max_work: options.max_search_work,
             max_decisions: options.max_search_decisions,
         },
-        projections: zetesis_sat::ProjectionLimits {
-            max_entries: options.max_projection_entries,
-            max_nodes: options.max_projection_nodes,
-            max_bytes: options.max_projection_bytes,
-        },
         max_candidates: options.max_candidates,
         max_reduct_bytes: options.max_reduct_bytes,
         // Candidate-index storage uses the existing candidate memory allowance,
-        // independently of prepared-reduct storage. No additional CLI control.
+        // independently of the reduct query workspace. No additional CLI control.
         max_native_narrowing_bytes: options.max_candidate_bytes as u64,
         max_verification_work: options.max_work,
-    }
-}
-
-// These independent logical populations derive from their existing named owner
-// allowance. They do not estimate total RSS. The extent cap keeps doubling a
-// literal population and the variable/sign index within checked host indices.
-fn cnf_admission(bytes: u128) -> zetesis_sat::AdmissionLimits {
-    let extent = usize::try_from(bytes.min(isize::MAX as u128)).unwrap_or(isize::MAX as usize);
-    zetesis_sat::AdmissionLimits {
-        max_variables: extent / 32,
-        max_clauses: extent / (4 * size_of::<usize>()),
-        max_literals: extent / size_of::<zetesis_sat::Literal>(),
     }
 }
 

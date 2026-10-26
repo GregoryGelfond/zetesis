@@ -9,8 +9,7 @@ use zetesis_reference_support::formula;
 use zetesis_sat::CertificatePlanStatistics;
 use zetesis_solve::{
     AnswerSelection, Backend, Completion, ExecutionObservation, ExecutionObserver, Grounder,
-    Interruption, Oracle, PreparedInput, SearchMethod, Session, SolveConfig, WorldView,
-    WorldViewLimits,
+    Interruption, Oracle, PreparedInput, Session, SolveConfig, WorldView, WorldViewLimits,
 };
 use zetesis_test_support::programs::model;
 use zetesis_themelios::{AdmittedFormula, AnalysisBasis, analysis::classify::HornKind};
@@ -51,20 +50,27 @@ impl ExecutionObserver for Observations {
     }
 }
 
-/// The completion pool these sessions observe belongs to the clause search;
-/// the region walk decides its leaves in its workers, by the same
-/// certificates, and is qualified in zetesis-sat.
+/// One region walker, whose leaves a completion pool of `workers` checks:
+/// the pool these sessions observe.
 fn config(workers: usize, oracle: Oracle) -> SolveConfig {
     SolveConfig {
         backend: Backend::Cpu,
-        search: SearchMethod::Clauses,
         oracle,
         grounder: Grounder::Eager,
         models: 0,
-        workers: NonZeroUsize::new(workers).unwrap(),
+        workers: NonZeroUsize::MIN,
         completion_workers: NonZeroUsize::new(workers).unwrap(),
         batch_size: NonZeroUsize::new(4).unwrap(),
         ..SolveConfig::default()
+    }
+}
+
+/// `workers` region walkers, which decide their leaves themselves, by the
+/// same certificates, as zetesis-sat qualifies.
+fn walkers(workers: usize, oracle: Oracle) -> SolveConfig {
+    SolveConfig {
+        workers: NonZeroUsize::new(workers).unwrap(),
+        ..config(workers, oracle)
     }
 }
 
@@ -93,9 +99,8 @@ fn positive(view: &WorldView, observations: &Observations, workers: usize) {
     assert_eq!(certified.refuted, 0);
     assert_eq!(certified.failed, 0);
     assert_eq!(statistics.countermodel_queries, 0);
-    assert!(statistics.reduct.preparation.is_none());
-    assert_eq!(statistics.reduct.parameter_work, 0);
-    // Exact least units leave at most one candidate; a violated constraint leaves none.
+    // The least interpretation is the only candidate; a violated constraint
+    // leaves none.
     assert!(statistics.candidates <= 1);
     if workers == 1 {
         assert!(observations.completion_workers.is_none());
@@ -174,9 +179,8 @@ fn positive_regions_complete_without_candidate_search() {
             let (view, observations) = collect(
                 &owner,
                 SolveConfig {
-                    search: SearchMethod::Regions,
                     max_reduct_bytes: 0,
-                    ..config(workers, Oracle::Auto)
+                    ..walkers(workers, Oracle::Auto)
                 },
             );
             assert_eq!(family(&view), expected);
@@ -196,13 +200,7 @@ fn positive_regions_preserve_scored_observations() {
     let owner = formula("a. b:-a. a:-b. #minimize {2@3,k:b;1@1,k:a}. #show a/0.");
     let expected = BTreeSet::from([(model(&["a", "b"]), Some(vec![(3, 2), (1, 1)]))]);
     for workers in [1, 4] {
-        let (view, observations) = collect(
-            &owner,
-            SolveConfig {
-                search: SearchMethod::Regions,
-                ..config(workers, Oracle::Auto)
-            },
-        );
+        let (view, observations) = collect(&owner, walkers(workers, Oracle::Auto));
         assert_eq!(observations.membership, [Membership::Positive]);
         assert_eq!(family(&view), expected);
         assert_eq!(view.outcome().scored_models(), 1);
@@ -305,7 +303,6 @@ fn optional_certificate_byte_refusal_keeps_general_solving() {
     assert!(attempt.peak_bytes > 0);
     assert_eq!(attempt.retained_bytes, 0);
     assert!(statistics.search.work >= certified.construction_work);
-    assert!(statistics.reduct.preparation.is_some());
     assert!(statistics.countermodel_queries > 0);
     let (reference, _) = collect(&owner, config(1, Oracle::Countermodel));
     let expected = BTreeSet::from([(model(&["a", "b"]), None)]);
@@ -348,7 +345,7 @@ fn disjunctive_source_declines_both_atomic_head_plans() {
             certified.positive_refusal,
             Some(PositiveError::UnsupportedRoot { root })
         );
-        assert!(statistics.reduct.preparation.is_some());
+        assert!(statistics.countermodel_queries > 0);
         let (reference, _) = collect(&owner, config(workers, Oracle::Countermodel));
         assert_eq!(family(&actual), expected);
         assert_eq!(family(&reference), expected);
@@ -387,5 +384,5 @@ fn cancellation_after_positive_preparation_is_incomplete() {
         Some(CertificatePlanStatistics::Positive(_))
     ));
     assert_eq!(statistics.candidates, 0);
-    assert!(statistics.reduct.preparation.is_none());
+    assert_eq!(statistics.countermodel_queries, 0);
 }

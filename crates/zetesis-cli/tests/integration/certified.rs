@@ -21,9 +21,9 @@ fn options(oracle: Oracle) -> Options {
             .unwrap();
     o.statistics_view = StatisticsView::Records;
     o.oracle = oracle;
-    // The batched completion protocol these tests exercise is the clause
-    // method's.
-    o.search = zetesis_cli::SearchMethod::Clauses;
+    // One region walker, whose candidates completion checks in batches: the
+    // protocol these tests exercise.
+    o.workers = std::num::NonZeroUsize::MIN;
     o
 }
 fn config(oracle: Oracle, workers: usize) -> zetesis_cli::PublicationConfig {

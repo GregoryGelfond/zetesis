@@ -109,16 +109,18 @@ fn qualify(
         sweep_limit,
         work_limit,
     } = storage(stderr, concurrency.is_some())?;
-    let [
-        _,
-        _,
-        search_candidates,
-        queries,
-        witnesses,
-        _,
+    let (
+        [
+            _,
+            _,
+            search_candidates,
+            queries,
+            witnesses,
+            _,
+            stable_models,
+        ],
         classical_queries,
-        stable_models,
-    ] = countermodel_counters(stderr)?;
+    ) = countermodel_counters(stderr)?;
     let completion = completion::record(
         stderr,
         concurrency,
@@ -137,9 +139,10 @@ fn qualify(
         || decided.checked_add(residuals - witnesses) != Some(stable_models)
         || stable_models < answer.model_count
         || (answer.cost.is_none() && stable_models != answer.model_count)
-        // The completed CLI uses only the batch route: one query per proposal,
-        // followed by exactly one final query establishing exhaustion.
-        || candidates.checked_add(1) != Some(classical_queries)
+        // A record of the removed clause search also counts its outer queries:
+        // one per proposal, then exactly one final query establishing
+        // exhaustion.
+        || classical_queries.is_some_and(|queries| candidates.checked_add(1) != Some(queries))
     {
         return Err(
             "formula execution counters contradict complete candidate/model accounting".into(),
@@ -199,10 +202,46 @@ fn gpu_counters(text: &str) -> Result<[u64; 6], String> {
     )
 }
 
-fn countermodel_counters(text: &str) -> Result<[u64; 8], String> {
-    fields(
-        text,
-        "  countermodel: ",
+/// The countermodel line's counters, and the outer queries that records of
+/// the removed clause search also carry before the verified count.
+fn countermodel_counters(text: &str) -> Result<([u64; 7], Option<u64>), String> {
+    let value = line(text, "  countermodel: ")?;
+    if value.contains("; classical queries=") {
+        let [
+            work,
+            decisions,
+            candidates,
+            queries,
+            witnesses,
+            restrictions,
+            classical,
+            stable,
+        ] = field_values(
+            value,
+            [
+                "search work",
+                "decisions",
+                "candidates",
+                "queries",
+                "witnesses",
+                "candidate restrictions",
+                "classical queries",
+                "verified stable models",
+            ],
+        )?;
+        let counters = [
+            work,
+            decisions,
+            candidates,
+            queries,
+            witnesses,
+            restrictions,
+            stable,
+        ];
+        return Ok((counters, Some(classical)));
+    }
+    let counters = field_values(
+        value,
         [
             "search work",
             "decisions",
@@ -210,10 +249,10 @@ fn countermodel_counters(text: &str) -> Result<[u64; 8], String> {
             "queries",
             "witnesses",
             "candidate restrictions",
-            "classical queries",
             "verified stable models",
         ],
-    )
+    )?;
+    Ok((counters, None))
 }
 
 struct PhysicalRoute {

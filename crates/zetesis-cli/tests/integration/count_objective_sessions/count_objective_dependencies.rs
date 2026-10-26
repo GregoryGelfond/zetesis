@@ -6,8 +6,8 @@ use zetesis_reference_support::formula;
 use zetesis_core::Value;
 use zetesis_cpu::Cancellation;
 use zetesis_solve::{
-    AnswerSelection, AnswerSet, Backend, Completion, Oracle, PreparedInput, SearchMethod,
-    SemanticOutcome, Session, SolveConfig, Subject, WorldView, WorldViewLimits,
+    AnswerSelection, AnswerSet, Backend, Completion, Oracle, PreparedInput, SemanticOutcome,
+    Session, SolveConfig, Subject, WorldView, WorldViewLimits,
 };
 use zetesis_themelios::AdmittedFormula;
 
@@ -80,11 +80,10 @@ impl Case {
 fn config(workers: usize, batch: usize) -> SolveConfig {
     SolveConfig {
         backend: Backend::Cpu,
-        // The batched completion and its accounting belong to the clause search.
-        search: SearchMethod::Clauses,
+        // One region walker; a completion pool checks its candidates in batches.
         oracle: Oracle::Countermodel,
         models: 0,
-        workers: NonZeroUsize::new(workers).unwrap(),
+        workers: NonZeroUsize::MIN,
         completion_workers: NonZeroUsize::new(workers).unwrap(),
         batch_size: NonZeroUsize::new(batch).unwrap(),
         ..SolveConfig::default()

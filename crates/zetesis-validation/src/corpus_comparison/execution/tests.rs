@@ -56,6 +56,20 @@ fn completed_dispatches_preserve_actual_adapter_and_accounting() {
 }
 
 #[test]
+fn a_record_without_outer_clause_queries_qualifies() {
+    // The current command line counts no outer queries; only records of the
+    // removed clause search carry them.
+    let current = GOOD.replace("; classical queries=2", "");
+    let record =
+        super::formula(&current, Backend::Gpu(Some(GpuApi::Metal)), 64, &answer()).unwrap();
+    assert_eq!(
+        record.status,
+        crate::corpus_comparison::execution::Status::GpuExercised
+    );
+    assert_eq!(record.verified_stable_models, 1);
+}
+
+#[test]
 fn residual_completion_and_outer_unsat_have_distinct_execution_scopes() {
     let mixed = GOOD
         .replace(

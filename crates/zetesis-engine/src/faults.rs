@@ -203,7 +203,6 @@ fn sat_class(error: zetesis_sat::Incomplete) -> Class {
         E::Cancelled => Class::Control(Conclusion::Interrupted),
         E::Deadline => Class::Control(Conclusion::Budget),
         E::Verification(stop) => stop_class(stop),
-        E::Admission(error) => sat_admission_class(error),
         E::Certificate(error) => certificate_class(error),
         E::WorkLimit
         | E::DecisionLimit
@@ -214,7 +213,6 @@ fn sat_class(error: zetesis_sat::Incomplete) -> Class {
         | E::NativeNarrowingStorage { .. }
         | E::BatchCandidateLimit
         | E::Allocation
-        | E::ProjectionLimit { .. }
         | E::CounterOverflow => Class::Resource,
         E::WorkerPanicked
         | E::PendingBatch
@@ -224,7 +222,6 @@ fn sat_class(error: zetesis_sat::Incomplete) -> Class {
         | E::LateCertificate
         | E::RegionFilter
         | E::InvalidRegionConsequence
-        | E::RegionFilterUnsupported
         | E::LateRegionFilter
         | E::LateCandidateBounds
         | E::RegionFilterAlreadySet
@@ -232,20 +229,10 @@ fn sat_class(error: zetesis_sat::Incomplete) -> Class {
     }
 }
 
-fn sat_admission_class(error: zetesis_sat::AdmissionError) -> Class {
-    match error {
-        zetesis_sat::AdmissionError::Limit { .. }
-        | zetesis_sat::AdmissionError::Overflow
-        | zetesis_sat::AdmissionError::Allocation => Class::Resource,
-        zetesis_sat::AdmissionError::Variable { .. } => Class::Engine,
-    }
-}
-
 fn certificate_class(error: zetesis_sat::CertificateError) -> Class {
     use zetesis_ferraris::{EvaluationError, PositiveError, StratifiedError, TightError};
     use zetesis_sat::CertificateError;
     match error {
-        CertificateError::Restriction(error) => sat_admission_class(error),
         CertificateError::Evaluation(EvaluationError::Stopped(stop))
         | CertificateError::Tight(TightError::Stopped(stop))
         | CertificateError::Positive(PositiveError::Stopped(stop))

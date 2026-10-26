@@ -12,19 +12,15 @@ use zetesis_test_support::io::{BoundedWriter, FULL};
 #[derive(Clone, Copy)]
 enum Refusal {
     ForeignTheory,
-    VariableLimit,
+    WorkLimit,
 }
 
 impl Refusal {
     fn observation(self) -> ExecutionObservation<'static> {
         match self {
             Self::ForeignTheory => ExecutionObservation::ObjectiveTheoryMismatch,
-            Self::VariableLimit => ExecutionObservation::ObjectiveRestrictionStopped(
-                zetesis_sat::Incomplete::Admission(zetesis_sat::AdmissionError::Limit {
-                    resource: zetesis_sat::Resource::Variables,
-                    observed: 3,
-                    limit: 2,
-                }),
+            Self::WorkLimit => ExecutionObservation::ObjectiveRestrictionStopped(
+                zetesis_sat::Incomplete::WorkLimit,
             ),
         }
     }
@@ -34,8 +30,8 @@ impl Refusal {
             Self::ForeignTheory => {
                 "Objective pruning stopped: original theory mismatch; exact search continues\n"
             }
-            Self::VariableLimit => {
-                "Objective pruning stopped: SAT Variables count 3 exceeds 2; exact search continues\n"
+            Self::WorkLimit => {
+                "Objective pruning stopped: SAT work limit reached; exact search continues\n"
             }
         }
     }
@@ -69,7 +65,7 @@ fn foreign_theory_refusal_has_exact_diagnostic() {
 
 #[test]
 fn variable_limit_refusal_has_exact_diagnostic() {
-    exact_diagnostic(Refusal::VariableLimit);
+    exact_diagnostic(Refusal::WorkLimit);
 }
 
 #[test]
@@ -79,5 +75,5 @@ fn foreign_theory_diagnostic_preserves_each_prefix() {
 
 #[test]
 fn variable_limit_diagnostic_preserves_each_prefix() {
-    every_truncation(Refusal::VariableLimit);
+    every_truncation(Refusal::WorkLimit);
 }

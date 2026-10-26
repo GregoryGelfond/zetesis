@@ -1,6 +1,5 @@
 //! Positive specialization preserves exact full families and bounded setup.
 
-use crate::support::clause_search::by_clauses;
 use std::collections::BTreeSet;
 use std::convert::Infallible;
 use std::num::NonZeroUsize;
@@ -88,7 +87,8 @@ fn positive_plans_preserve_every_small_atomic_rule_family() {
                 .collect(),
         );
         let expected = independent(&original);
-        let mut stream = by_clauses(&original, Limits::default(), Cancellation::default()).unwrap();
+        let mut stream =
+            StableModels::new(&original, Limits::default(), Cancellation::default()).unwrap();
         assert!(
             stream
                 .enable_class_checking(
@@ -105,12 +105,11 @@ fn positive_plans_preserve_every_small_atomic_rule_family() {
         assert!(stream.exhausted());
         assert!(stream.statistics().candidates <= 1);
         assert_eq!(stream.statistics().countermodel_queries, 0);
-        assert_eq!(stream.statistics().reduct.preparation, None);
     }
 }
 
 #[test]
-fn region_positive_cycles_preserve_the_clause_family() {
+fn region_positive_cycles_preserve_the_reference_family() {
     let original = theory(
         2,
         vec![
@@ -121,18 +120,8 @@ fn region_positive_cycles_preserve_the_clause_family() {
         ],
         vec![2, 3],
     );
-    let mut clauses = by_clauses(&original, Limits::default(), Cancellation::default()).unwrap();
-    assert!(
-        clauses
-            .enable_class_checking(
-                CertificateLimits::default(),
-                CertificateOrder::PositiveFirst,
-            )
-            .unwrap()
-    );
-    let expected = collect(&mut clauses);
+    let expected = independent(&original);
     assert_eq!(expected, BTreeSet::from([Vec::new()]));
-    assert!(clauses.exhausted());
     for (workers, engagement) in [
         (1, Engagement::default()),
         (3, Engagement::Immediate),
@@ -195,17 +184,6 @@ fn region_positive_constraints_exclude_the_answer_family() {
     );
     let expected = independent(&original);
     assert!(expected.is_empty());
-    let mut clauses = by_clauses(&original, Limits::default(), Cancellation::default()).unwrap();
-    assert!(
-        clauses
-            .enable_class_checking(
-                CertificateLimits::default(),
-                CertificateOrder::PositiveFirst,
-            )
-            .unwrap()
-    );
-    assert_eq!(collect(&mut clauses), expected);
-    assert!(clauses.exhausted());
     for (workers, engagement) in [
         (1, Engagement::default()),
         (3, Engagement::Immediate),
@@ -257,7 +235,7 @@ fn positive_batches_preserve_the_unique_family() {
     for original in [cycle(false, false), cycle(true, false), cycle(true, true)] {
         for workers in [1, 4] {
             let mut stream =
-                by_clauses(&original, Limits::default(), Cancellation::default()).unwrap();
+                StableModels::new(&original, Limits::default(), Cancellation::default()).unwrap();
             assert!(
                 stream
                     .enable_class_checking(
@@ -289,7 +267,6 @@ fn positive_batches_preserve_the_unique_family() {
             }
             assert_eq!(actual, independent(&original));
             assert_eq!(stream.batch_statistics().pending, 0);
-            assert_eq!(stream.statistics().reduct.preparation, None);
             assert_eq!(stream.statistics().countermodel_queries, 0);
             let stats = stream.statistics().certified.unwrap();
             assert_eq!(stats.checks, stream.statistics().candidates);
@@ -300,7 +277,8 @@ fn positive_batches_preserve_the_unique_family() {
 #[test]
 fn positive_cycle_refusal_preserves_the_tight_only_door() {
     let original = cycle(true, false);
-    let mut tight = by_clauses(&original, Limits::default(), Cancellation::default()).unwrap();
+    let mut tight =
+        StableModels::new(&original, Limits::default(), Cancellation::default()).unwrap();
     assert!(
         !tight
             .enable_certified_checking(zetesis_ferraris::TightPlanLimits::default())
@@ -313,8 +291,9 @@ fn positive_cycle_refusal_preserves_the_tight_only_door() {
         ))
     ));
     assert_eq!(collect(&mut tight), independent(&original));
-    assert!(tight.statistics().reduct.preparation.is_some());
-    let mut both = by_clauses(&original, Limits::default(), Cancellation::default()).unwrap();
+    assert!(tight.statistics().countermodel_queries > 0);
+    let mut both =
+        StableModels::new(&original, Limits::default(), Cancellation::default()).unwrap();
     assert!(
         both.enable_class_checking(CertificateLimits::default(), CertificateOrder::TightFirst)
             .unwrap()
@@ -365,7 +344,8 @@ fn positive_grammar_refusal_can_select_the_tight_plan() {
 #[test]
 fn optional_positive_bytes_refusal_keeps_general_completion() {
     let original = cycle(true, false);
-    let mut stream = by_clauses(&original, Limits::default(), Cancellation::default()).unwrap();
+    let mut stream =
+        StableModels::new(&original, Limits::default(), Cancellation::default()).unwrap();
     assert!(
         !stream
             .enable_class_checking(
@@ -389,16 +369,16 @@ fn optional_positive_bytes_refusal_keeps_general_completion() {
         })
     ));
     assert_eq!(stats.positive_attempt.unwrap().retained_bytes, 0);
-    assert_eq!(stats.restriction_clauses, 0);
     assert_eq!(collect(&mut stream), independent(&original));
     assert!(stream.exhausted());
-    assert!(stream.statistics().reduct.preparation.is_some());
+    assert!(stream.statistics().countermodel_queries > 0);
 }
 
 #[test]
 fn positive_setup_work_has_an_inclusive_boundary() {
     let original = cycle(true, false);
-    let mut probe = by_clauses(&original, Limits::default(), Cancellation::default()).unwrap();
+    let mut probe =
+        StableModels::new(&original, Limits::default(), Cancellation::default()).unwrap();
     let initial = probe.statistics().search.work;
     assert!(
         probe
@@ -410,31 +390,23 @@ fn positive_setup_work_has_an_inclusive_boundary() {
     );
     let required = probe.statistics().search.work;
     let full = probe.statistics().certified.unwrap();
-    assert_eq!(
-        required - initial,
-        full.construction_work + full.restriction_work
-    );
-    assert_eq!(full.restriction_clauses, original.atom_count());
+    assert_eq!(required - initial, full.construction_work);
     for ceiling in initial..=required {
         let mut limits = Limits::default();
         limits.search.max_work = ceiling;
-        let mut stream = by_clauses(&original, limits, Cancellation::default()).unwrap();
+        let mut stream = StableModels::new(&original, limits, Cancellation::default()).unwrap();
         let result = stream.enable_class_checking(
             CertificateLimits::default(),
             CertificateOrder::PositiveFirst,
         );
         assert_eq!(stream.statistics().search.work, ceiling);
-        assert_eq!(stream.statistics().candidate_queries, 0);
+        assert_eq!(stream.statistics().candidates, 0);
         assert_eq!(stream.statistics().stable_models, 0);
         if ceiling == required {
             assert_eq!(result, Ok(true));
         } else {
             assert_eq!(result, Err(Incomplete::WorkLimit));
             assert_eq!(stream.statistics().certified.unwrap().plan, None);
-            assert_eq!(
-                stream.statistics().certified.unwrap().restriction_clauses,
-                0
-            );
             assert!(stream.next().is_none());
             assert!(!stream.exhausted());
         }
@@ -521,50 +493,6 @@ fn a_positive_check_failure_keeps_the_pending_subject() {
 }
 
 #[test]
-fn refused_positive_units_leave_the_full_candidate_region() {
-    let original = theory(3, vec![], vec![]);
-    let mut limits = Limits::default();
-    // The original candidate CNF is empty. Exactly one of the three least-model
-    // units fits, so a later refusal detects whether that prefix was rolled back.
-    limits.admission.max_clauses = 1;
-    let mut stream = by_clauses(&original, limits, Cancellation::default()).unwrap();
-    assert!(
-        stream
-            .enable_class_checking(
-                CertificateLimits::default(),
-                CertificateOrder::PositiveFirst
-            )
-            .unwrap()
-    );
-    let setup = stream.statistics().certified.unwrap();
-    assert_eq!(
-        setup.restriction_refusal,
-        Some(zetesis_sat::AdmissionError::Limit {
-            resource: zetesis_sat::Resource::Clauses,
-            observed: 2,
-            limit: 1,
-        })
-    );
-    assert_eq!(setup.restriction_clauses, 0);
-    assert_eq!(setup.restriction_work, 4);
-    assert!(matches!(
-        setup.plan,
-        Some(CertificatePlanStatistics::Tight(_))
-    ));
-    assert_eq!(collect(&mut stream), BTreeSet::from([vec![]]));
-    assert!(stream.exhausted());
-    assert_eq!(
-        stream.statistics().candidates,
-        8,
-        "all original classical assignments remain reachable"
-    );
-    // The seven nonempty candidates each hold an unsupported atom; the tight
-    // certificate refutes them by the support law without a countermodel.
-    assert_eq!(stream.statistics().countermodels, 0);
-    assert_eq!(stream.statistics().certified.unwrap().refuted, 7);
-}
-
-#[test]
 fn a_failed_constraint_preserves_the_empty_answer_family() {
     // not not a is an original constraint with a classical model {a}. There
     // is no positive producer for a, so its unique possible answer is empty,
@@ -591,7 +519,8 @@ fn a_failed_constraint_preserves_the_empty_answer_family() {
         .unwrap()
     );
     assert!(independent(&original).is_empty());
-    let mut stream = by_clauses(&original, Limits::default(), Cancellation::default()).unwrap();
+    let mut stream =
+        StableModels::new(&original, Limits::default(), Cancellation::default()).unwrap();
     assert!(
         stream
             .enable_class_checking(
@@ -605,12 +534,10 @@ fn a_failed_constraint_preserves_the_empty_answer_family() {
         setup.plan,
         Some(CertificatePlanStatistics::Positive(_))
     ));
-    assert_eq!(setup.restriction_clauses, 1);
     assert!(collect(&mut stream).is_empty());
     assert!(stream.exhausted());
     assert_eq!(stream.statistics().candidates, 0);
     assert_eq!(stream.statistics().certified.unwrap().checks, 0);
-    assert_eq!(stream.statistics().reduct.preparation, None);
     assert!(
         zetesis_ferraris::models(
             stream.theory(),

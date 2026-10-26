@@ -80,7 +80,6 @@ fn supported_language_is_automatic_with_optional_reduct_oracle_selection() {
         assert_eq!(options(&["--oracle", name]).oracle, oracle);
     }
     assert!(Options::try_parse_from(["zetesis", "--extended"]).is_err());
-    assert!(Options::try_parse_from(["zetesis", "--search", "sat"]).is_err());
 }
 
 #[test]

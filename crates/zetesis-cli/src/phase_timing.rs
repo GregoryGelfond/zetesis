@@ -16,7 +16,7 @@ pub(crate) fn recorder(stats: bool, renderer: &impl crate::AnswerRenderer) -> Re
 pub(crate) fn write(sink: &mut impl Write, timings: &PhaseTimings) -> io::Result<()> {
     writeln!(
         sink,
-        "Phase timings: clock=host-monotonic; scope=driver; failed_attempts=included; schema=5"
+        "Phase timings: clock=host-monotonic; scope=driver; failed_attempts=included; schema=6"
     )?;
     writeln!(
         sink,

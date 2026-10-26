@@ -113,10 +113,6 @@ pub struct NativeExecution {
     /// executable's default and permits comparison with versions before this flag.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub formula_joins: Option<FormulaJoins>,
-    /// Optional formula search method. Omission preserves the sealed
-    /// executable's default and permits comparison with versions before this flag.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub search: Option<SearchMethod>,
     /// Requested worker threads.
     pub threads: NonZeroUsize,
     /// Explicit named-memory allowance in bytes. Omission requests the sealed
@@ -131,7 +127,7 @@ pub struct NativeExecution {
 }
 impl NativeExecution {
     /// Arguments for the ordinary public policy: algorithm selection, threads,
-    /// complete enumeration, then optional join/search, deadline and memory.
+    /// complete enumeration, then optional joins, deadline and memory.
     /// A campaign appends its output flags and input. No internal work, batch
     /// or completion ceiling is requested.
     pub(crate) fn arguments(&self) -> Vec<std::ffi::OsString> {
@@ -149,12 +145,6 @@ impl NativeExecution {
                 [
                     std::ffi::OsString::from("--formula-joins"),
                     std::ffi::OsString::from(joins.label()),
-                ]
-            }))
-            .chain(self.search.into_iter().flat_map(|search| {
-                [
-                    std::ffi::OsString::from("--search"),
-                    std::ffi::OsString::from(search.label()),
                 ]
             }))
             .chain(self.time_limit_seconds.into_iter().flat_map(|seconds| {
@@ -180,7 +170,6 @@ impl Default for NativeExecution {
             oracle: Oracle::Auto,
             grounder: Grounder::Eager,
             formula_joins: None,
-            search: None,
             threads: NonZeroUsize::new(1).expect("one is nonzero"),
             memory_bytes: None,
             time_limit_seconds: None,
@@ -203,25 +192,6 @@ impl FormulaJoins {
         match self {
             Self::Indexed => "indexed",
             Self::Table => "table",
-        }
-    }
-}
-
-/// How the native formula route proposes candidates and queries the reduct.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
-#[serde(rename_all = "lowercase")]
-pub enum SearchMethod {
-    /// Leaves of the region tree narrowed by the theory's readings.
-    Regions,
-    /// The classical search over a clause form of the theory.
-    Clauses,
-}
-
-impl SearchMethod {
-    pub(crate) const fn label(self) -> &'static str {
-        match self {
-            Self::Regions => "regions",
-            Self::Clauses => "clauses",
         }
     }
 }

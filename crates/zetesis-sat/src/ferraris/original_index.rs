@@ -6,7 +6,7 @@
 //! reduct read the same immutable [`IndexedTheory`], so the index is built at
 //! most once per owner, and only by [`OriginalIndex::ensure`]: no other code
 //! can construct an `IndexedTheory`. A run decided without a region walk, by a
-//! positive certificate or by the clause kernel, builds none.
+//! positive certificate, builds none.
 
 use std::sync::Arc;
 

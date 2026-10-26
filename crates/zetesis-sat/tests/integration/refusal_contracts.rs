@@ -5,9 +5,8 @@ use std::collections::BTreeSet;
 use std::error::Error as _;
 use std::time::Instant;
 
-use crate::support::clause_search::by_clauses;
 use zetesis_cpu::Stop;
-use zetesis_ferraris::{AdmissionLimits, Interpretation, Node, Theory};
+use zetesis_ferraris::{AdmissionLimits, Interpretation, Theory};
 use zetesis_sat::{Cancellation, Check, Incomplete, Limits, StableModels, check};
 
 fn remaining(search: &mut StableModels) -> BTreeSet<Vec<usize>> {
@@ -52,44 +51,6 @@ fn mismatched_restriction_error_does_not_consume_the_live_enumerator() {
     assert!(error.to_string().contains("already closed"));
     assert!(search.next().is_none());
     assert!(search.exhausted());
-}
-
-#[test]
-fn late_restriction_capacity_error_keeps_its_cause_and_previous_model_block() {
-    let original = choices(2);
-    let mut limits = Limits::default();
-    // Refuse the four-clause restriction itself, independently of history.
-    limits.admission.max_clauses = 3;
-    let mut search = by_clauses(&original, limits, Cancellation::default()).unwrap();
-    assert_eq!(search.next().unwrap().unwrap().atoms().count(), 0);
-    let guard = Theory::new(
-        2,
-        zetesis_ferraris::FormulaParts::new(
-            vec![Node::atom(0), Node::atom(1), Node::or_pair([0, 1])],
-            vec![],
-        )
-        .unwrap(),
-        vec![2],
-        AdmissionLimits::default(),
-    )
-    .unwrap();
-    let error = search.restrict_candidates(&guard).unwrap_err();
-    let Incomplete::Admission(cause) = error else {
-        panic!("expected bounded clause admission: {error}")
-    };
-    assert_eq!(
-        error
-            .source()
-            .unwrap()
-            .downcast_ref::<zetesis_sat::AdmissionError>(),
-        Some(&cause)
-    );
-    assert_eq!(error.to_string(), cause.to_string());
-    assert_eq!(search.statistics().candidate_restrictions, 0);
-    assert_eq!(
-        remaining(&mut search),
-        BTreeSet::from([vec![0], vec![1], vec![0, 1]])
-    );
 }
 
 #[test]

@@ -69,7 +69,6 @@ fn zero_memory_does_not_gain_population_headroom() {
     let solve = resources.solve_config();
     assert_eq!(solve.max_closure_bytes, 0);
     assert_eq!(solve.max_atoms, 0);
-    assert_eq!(solve.max_projection_nodes, 0);
     assert_eq!(resources.formula_limits().theory.max_nodes, 0);
     assert_eq!(resources.formula_limits().max_support_bytes, 0);
     assert_eq!(resources.expansion_limits().max_templates, 0);
@@ -165,8 +164,6 @@ fn ordinary_solve_defaults_share_the_factory() {
 #[test]
 fn maximal_memory_retains_checked_coordinate_extents() {
     let resources = Resources::new(u64::MAX, NonZeroUsize::MIN);
-    let config = resources.solve_config();
-    assert!(u32::try_from(config.max_projection_nodes).is_ok());
     let formula = resources.formula_limits();
     assert!(isize::try_from(formula.max_support_bytes).is_ok());
     assert!(

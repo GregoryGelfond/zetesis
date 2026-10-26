@@ -6,7 +6,7 @@ use clap::Args;
 use zetesis_presentation::Layout;
 use zetesis_validation::{
     performance::{self, matrix, scalability},
-    selected::{FormulaJoins, NativeExecution, SearchMethod},
+    selected::{FormulaJoins, NativeExecution},
 };
 
 use super::{Completion, Error, ProcessOptions, ViewOptions};
@@ -69,7 +69,6 @@ impl ScalabilityOptions {
             .map(|&workers| NativeExecution {
                 threads: workers,
                 formula_joins: Some(FormulaJoins::Indexed),
-                search: Some(SearchMethod::Regions),
                 memory_bytes: self.memory,
                 time_limit_seconds: self.time_limit,
                 ..NativeExecution::default()

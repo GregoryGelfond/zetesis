@@ -85,7 +85,6 @@ fn every_region_mode_proposes_only_the_least_interpretation() {
             assert_eq!(stats.search.decisions, 0);
             assert_eq!(stats.regions.unwrap().counts.regions, 0);
             assert_eq!(stats.countermodel_queries, 0);
-            assert!(stats.reduct.preparation.is_none());
         }
     }
 }

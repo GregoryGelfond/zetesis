@@ -3,7 +3,6 @@
 use std::num::NonZeroUsize;
 use std::time::Duration;
 
-use crate::support::clause_search::by_clauses;
 use zetesis_ferraris::{AdmissionLimits, Node, Theory};
 use zetesis_sat::{
     BatchError, BatchLimits, BatchVerdict, Cancellation, Incomplete, Limits, PhaseMeasurement,
@@ -70,7 +69,6 @@ fn enabling_clocks_preserves_models_and_all_deterministic_counters() {
             assert!(search.exhausted());
             let mut stats = search.statistics();
             if let Some(timing) = stats.phase_timings.take() {
-                assert!(timing.candidates.calls >= stats.candidate_queries);
                 assert_eq!(timing.original_validation.calls, stats.candidates);
                 assert_eq!(timing.reduct.calls, stats.candidates);
                 assert!(!timing.candidates.overflowed);
@@ -186,54 +184,4 @@ fn measurement_overflow_preserves_an_explicit_incomplete_prefix() {
         measurement.record(Duration::ZERO);
         assert_eq!(measurement, stopped, "never resume a partial measurement");
     }
-}
-
-#[test]
-fn failed_cold_preparation_is_recorded_before_worker_entry() {
-    let theory = choice();
-    let mut probe = by_clauses(&theory, Limits::default(), Cancellation::default()).unwrap();
-    assert!(matches!(
-        probe.next_batch(batch(), |_, _| Err::<Vec<BatchVerdict>, _>("hold")),
-        Err(BatchError::Checker("hold"))
-    ));
-    let mut search = by_clauses(
-        &theory,
-        Limits {
-            search: SearchLimits {
-                max_work: probe.statistics().search.work,
-                ..SearchLimits::default()
-            },
-            ..Limits::default()
-        },
-        Cancellation::default(),
-    )
-    .unwrap();
-    search.enable_phase_timing();
-    assert!(matches!(
-        search.next_batch(batch(), |_, candidates| Ok::<_, &'static str>(
-            vec![BatchVerdict::Residual; candidates.len()]
-        )),
-        Err(BatchError::Search(Incomplete::WorkLimit))
-    ));
-    let stats = search.statistics();
-    assert_eq!(
-        stats.countermodel_queries, 0,
-        "cold preparation failed before query entry"
-    );
-    let timing = stats.phase_timings.unwrap();
-    assert_eq!(timing.reduct_preparation.calls, 1);
-    assert_eq!(timing.reduct.calls, 0);
-    assert_eq!(
-        timing.original_validation.calls, 2,
-        "only proposals were validated"
-    );
-    let preparation = stats.reduct.preparation.unwrap();
-    assert_eq!(
-        preparation.work, 0,
-        "the proposal exhausted the work allowance"
-    );
-    assert_eq!(preparation.retained_bytes, 0);
-    assert_eq!(stats.stable_models, 0);
-    assert_eq!(search.batch_statistics().pending, 2);
-    assert!(!search.exhausted());
 }

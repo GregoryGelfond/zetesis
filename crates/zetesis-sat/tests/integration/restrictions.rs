@@ -3,7 +3,6 @@
 use std::collections::BTreeSet;
 
 use crate::support::choice_theories::choices;
-use crate::support::clause_search::by_clauses;
 use crate::support::interpretations::key;
 use proptest::prelude::*;
 use zetesis_ferraris::{Interpretation, Node};
@@ -79,33 +78,7 @@ fn refinements_accumulate_and_restarts_preserve_exact_previous_blocks() {
 }
 
 #[test]
-fn a_late_capacity_failure_restores_auxiliary_ids_clauses_and_live_cursor() {
-    let original = choices(2);
-    let mut limits = Limits::default();
-    // The actual disjunction restriction needs four clauses; history is separate.
-    limits.admission.max_clauses = 3;
-    let mut search = by_clauses(&original, limits, Cancellation::default()).unwrap();
-    assert!(key(&search.next().unwrap().unwrap()).is_empty());
-    let before = search.statistics();
-    let guard = theory(
-        2,
-        vec![Node::atom(0), Node::atom(1), Node::or_pair([0, 1])],
-        vec![2],
-    );
-    assert!(matches!(
-        search.restrict_candidates(&guard),
-        Err(Incomplete::Admission(_))
-    ));
-    assert_eq!(search.statistics().candidate_restrictions, 0);
-    assert!(search.statistics().search.work > before.search.work);
-    assert_eq!(
-        remaining(&mut search),
-        BTreeSet::from([vec![0], vec![1], vec![0, 1]])
-    );
-}
-
-#[test]
-fn carrier_control_and_encoding_work_failures_never_claim_completion() {
+fn carrier_control_and_restriction_work_failures_never_claim_completion() {
     let original = choices(2);
     let guard = theory(
         2,
@@ -113,7 +86,7 @@ fn carrier_control_and_encoding_work_failures_never_claim_completion() {
         vec![2],
     );
     let cancellation = Cancellation::default();
-    let mut search = by_clauses(&original, Limits::default(), cancellation.clone()).unwrap();
+    let mut search = StableModels::new(&original, Limits::default(), cancellation.clone()).unwrap();
     assert_eq!(
         search.restrict_candidates(&choices(3)),
         Err(Incomplete::RestrictionUniverse {
@@ -131,25 +104,30 @@ fn carrier_control_and_encoding_work_failures_never_claim_completion() {
     assert!(matches!(search.next(), Some(Err(Incomplete::Cancelled))));
     assert!(!search.exhausted());
 
-    let mut measured = by_clauses(&original, Limits::default(), Cancellation::default()).unwrap();
+    let mut measured =
+        StableModels::new(&original, Limits::default(), Cancellation::default()).unwrap();
     measured.restrict_candidates(&guard).unwrap();
     let exact = measured.statistics().search.work;
     for ceiling in [exact - 1, exact] {
         let mut limits = Limits::default();
         limits.search.max_work = ceiling;
-        let mut search = by_clauses(&original, limits, Cancellation::default()).unwrap();
+        let mut search = StableModels::new(&original, limits, Cancellation::default()).unwrap();
+        let before = search.statistics().search.work;
         let result = search.restrict_candidates(&guard);
         assert_eq!(result.is_ok(), ceiling == exact);
         assert_eq!(
             search.statistics().candidate_restrictions,
             u64::from(ceiling == exact)
         );
-        assert_eq!(search.statistics().search.work, ceiling);
+        // The restriction's indexing is charged as one operation: a refused
+        // charge adds nothing.
+        let charged = if ceiling == exact { ceiling } else { before };
+        assert_eq!(search.statistics().search.work, charged);
         assert!(!search.exhausted());
         assert!(matches!(search.next(), Some(Err(Incomplete::WorkLimit))));
     }
     let zero = choices(0);
-    let mut search = by_clauses(&zero, Limits::default(), Cancellation::default()).unwrap();
+    let mut search = StableModels::new(&zero, Limits::default(), Cancellation::default()).unwrap();
     search
         .restrict_candidates(&theory(0, vec![Node::falsum()], vec![0]))
         .unwrap();

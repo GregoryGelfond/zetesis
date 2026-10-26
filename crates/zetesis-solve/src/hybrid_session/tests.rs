@@ -4,8 +4,8 @@ use super::HybridSession;
 use crate::execution_observation::Ignore;
 use crate::phase_timing::Recorder;
 use crate::{
-    AnswerSelection, Backend, Completion, ExecutionResources, Grounder, Interruption, SearchMethod,
-    SearchState, SolveConfig, SolveError,
+    AnswerSelection, Backend, Completion, ExecutionResources, Grounder, Interruption, SearchState,
+    SolveConfig, SolveError,
 };
 use zetesis_cpu::{Cancellation, Stop, regions::Region};
 use zetesis_sat::{Incomplete, RegionFilter};
@@ -26,7 +26,6 @@ impl Fixture {
             config: SolveConfig {
                 backend: Backend::Cpu,
                 grounder: Grounder::Lazy,
-                search: SearchMethod::Regions,
                 workers: std::num::NonZeroUsize::new(4).unwrap(),
                 models: 1,
                 ..SolveConfig::default()

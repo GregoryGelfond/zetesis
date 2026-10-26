@@ -27,11 +27,10 @@ fn header(
     )?;
     writeln!(
         sink,
-        "  requested: backend={}; oracle={}; grounder={}; search={}",
+        "  requested: backend={}; oracle={}; grounder={}",
         options.backend.label(),
         options.oracle.label(),
-        options.grounder.label(),
-        options.search.label()
+        options.grounder.label()
     )?;
     writeln!(
         sink,
@@ -700,56 +699,20 @@ fn countermodel(
             filter.preparations, filter.checks, filter.refuted, filter.failed, filter.overflowed
         )?;
     }
-    if let Some(support) = stats.support {
-        writeln!(
-            sink,
-            "  necessary disjunctive support: status={:?}; construction work={}; encoding work={} (included in search work)",
-            support.status, support.construction_work, support.encoding_work
-        )?;
-    }
     if let Some(regions) = stats.regions.as_ref() {
         candidate_regions(sink, regions)?;
     }
     writeln!(
         sink,
-        "  countermodel: search work={}; decisions={}; candidates={}; queries={}; witnesses={}; candidate restrictions={}; classical queries={}; {membership}={}",
+        "  countermodel: search work={}; decisions={}; candidates={}; queries={}; witnesses={}; candidate restrictions={}; {membership}={}",
         stats.search.work,
         stats.search.decisions,
         stats.candidates,
         stats.countermodel_queries,
         stats.countermodels,
         stats.candidate_restrictions,
-        stats.candidate_queries,
         stats.stable_models
     )?;
-    writeln!(
-        sink,
-        "  projection history: entries={}; nodes={}; retained bytes={}; peak bytes={}; work={} (included in search work)",
-        stats.projections.entries,
-        stats.projections.nodes,
-        stats.projections.retained_bytes,
-        stats.projections.peak_bytes,
-        stats.projections.work,
-    )?;
-    if let Some(preparation) = stats.reduct.preparation {
-        writeln!(
-            sink,
-            "  prepared reduct: work={}; variables={}; clauses={}; literals={}; retained bytes={}; construction peak bytes={}; work included in search; capacities exclude allocator overhead",
-            preparation.work,
-            preparation.variables,
-            preparation.clauses,
-            preparation.literals,
-            preparation.retained_bytes,
-            preparation.peak_bytes,
-        )?;
-        writeln!(
-            sink,
-            "  prepared reduct queries: original evaluation work={}; parameter work={} (included in search); peak worker workspace bytes={}",
-            stats.reduct.original_work,
-            stats.reduct.parameter_work,
-            stats.reduct.peak_workspace_bytes,
-        )?;
-    }
     if stats.reduct.frozen_positive_attempts > 0 {
         writeln!(
             sink,
@@ -957,13 +920,8 @@ fn certificate(
     }
     writeln!(
         sink,
-        "  class attempts: tight refusal={:?}; positive refusal={:?}; stratified refusal={:?}; restriction refusal={:?}; restriction work={}; committed restriction clauses={}",
-        certified.tight_refusal,
-        certified.positive_refusal,
-        certified.stratified_refusal,
-        certified.restriction_refusal,
-        certified.restriction_work,
-        certified.restriction_clauses
+        "  class attempts: tight refusal={:?}; positive refusal={:?}; stratified refusal={:?}",
+        certified.tight_refusal, certified.positive_refusal, certified.stratified_refusal
     )?;
     if let Some(peak) = certified.tight_check_peak_bytes {
         writeln!(

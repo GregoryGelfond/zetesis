@@ -11,11 +11,10 @@ use zetesis_cpu::Cancellation;
 use zetesis_reference_support::formula;
 use zetesis_sat::{PhaseMeasurement, SearchPhaseTimings};
 
-fn phases(timing: SearchPhaseTimings) -> [(SolvePhase, PhaseMeasurement); 5] {
+fn phases(timing: SearchPhaseTimings) -> [(SolvePhase, PhaseMeasurement); 4] {
     [
         (SolvePhase::CandidateGeneration, timing.candidates),
         (SolvePhase::OriginalValidation, timing.original_validation),
-        (SolvePhase::ReductPreparation, timing.reduct_preparation),
         (SolvePhase::ExactReductMembership, timing.reduct),
         (SolvePhase::CertifiedMembership, timing.certified),
     ]

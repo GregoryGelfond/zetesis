@@ -10,8 +10,8 @@
 //! the atom its narrowing prefers, held branch first; a region with every atom
 //! decided is a leaf, and a leaf is a classical model of the theory and the
 //! restrictions, because at a full decision every root is sure or
-//! never and a root never refutes. The leaf is the proposal; the
-//! reduct decides it as it decides a proposal from the clauses.
+//! never and a root never refutes. The leaf is the proposal, which the reduct
+//! decides.
 //!
 //! The narrowing's node reads are charged as search work and each split as
 //! a decision. A restriction narrows the regions still to visit; visited
@@ -31,30 +31,6 @@ use super::conditions::{Bound, CandidateKnowledge, Conditions};
 use super::original_index::IndexedTheory;
 use crate::budget::{Budget, Quota};
 use crate::{Cancellation, Incomplete};
-
-/// How classical candidates are proposed to the reduct.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub enum SearchMethod {
-    /// Regions of the candidate space narrowed by the theory's readings;
-    /// every leaf is a classical model and no clause form is built. The
-    /// default.
-    #[default]
-    Regions,
-    /// A chronological search over a clause form of the theory, with exact
-    /// exclusion of every candidate already proposed.
-    Clauses,
-}
-
-impl SearchMethod {
-    /// Stable spelling for configuration and execution reports.
-    #[must_use]
-    pub const fn label(self) -> &'static str {
-        match self {
-            Self::Regions => "regions",
-            Self::Clauses => "clauses",
-        }
-    }
-}
 
 /// What a walk over a region tree counted, cumulatively: the candidate
 /// tree's walk, or the proper-subset queries' walks together.

@@ -36,7 +36,7 @@ fn check(
         cancellation: &cancellation,
         statistics: SearchStatistics::default(),
     };
-    let mut state = State::new(SearchMethod::Regions);
+    let mut state = State::default();
     let mut statistics = Statistics::default();
     // The kernel starts with a partly consumed worker grant, as it does after
     // candidate narrowing. Reserving must settle that grant before waiting.

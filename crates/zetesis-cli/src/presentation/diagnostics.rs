@@ -138,35 +138,26 @@ impl<W: Write> Diagnostics<W> {
     }
 
     /// Report which formula is checked and which original-source obligations remain.
-    fn cpu_formula(
-        &mut self,
-        oracle: crate::Oracle,
-        grounder: crate::Grounder,
-        search: crate::SearchMethod,
-    ) -> io::Result<()> {
+    fn cpu_formula(&mut self, oracle: crate::Oracle, grounder: crate::Grounder) -> io::Result<()> {
         let oracle = if oracle == crate::Oracle::Auto {
             "Ferraris reduct membership"
         } else {
             "Ferraris reduct countermodel"
         };
         if self.core == Some(Core::TerminalDefinitions) {
-            self.metadata(Label::Backend, format_args!("cpu; base oracle: {oracle}; search: {}; base grounding: eager; original answer reconstruction: host", search.label()))
+            self.metadata(Label::Backend, format_args!("cpu; base oracle: {oracle}; base grounding: eager; original answer reconstruction: host"))
         } else if self.core == Some(Core::HybridTerminalDefinitions) {
-            self.metadata(Label::Backend, format_args!("cpu; base core oracle: {oracle}; search: {}; base grounding: hybrid (eager producer core); original answer reconstruction: host", search.label()))
+            self.metadata(Label::Backend, format_args!("cpu; base core oracle: {oracle}; base grounding: hybrid (eager producer core); original answer reconstruction: host"))
         } else if self.core == Some(Core::Constraints) {
             self.metadata(
                 Label::Backend,
-                format_args!(
-                    "cpu; retained-core oracle: {oracle}; search: {}; core grounding: eager",
-                    search.label()
-                ),
+                format_args!("cpu; retained-core oracle: {oracle}; core grounding: eager"),
             )
         } else {
             self.metadata(
                 Label::Backend,
                 format_args!(
-                    "cpu; oracle: {oracle}; search: {}; grounder: eager (requested {})",
-                    search.label(),
+                    "cpu; oracle: {oracle}; grounder: eager (requested {})",
                     grounder.label()
                 ),
             )
@@ -257,7 +248,7 @@ impl<W: Write> crate::ExecutionObserver for Diagnostics<W> {
                 Label::Backend, format_args!("cpu (lazy source joins, {workers} workers)")),
             Event::CpuClosure { batching, workers, .. } => self.metadata(Label::Backend,
                 format_args!("cpu (shared {} source rounds, {workers} workers; collective source and per-world evaluation budgets)", batching.label())),
-            Event::CpuFormula { oracle, grounder, search } => self.cpu_formula(oracle, grounder, search),
+            Event::CpuFormula { oracle, grounder } => self.cpu_formula(oracle, grounder),
             Event::ParallelRegions { workers } => writeln!(self,
                 "Parallel regions: up to {workers} workers, started once the walk outlasts their start; models arrive in the scalar walk's order until then, and in the schedule's order after"),
             Event::ParallelProposals { workers } => writeln!(self,
@@ -273,16 +264,16 @@ impl<W: Write> crate::ExecutionObserver for Diagnostics<W> {
                 Some((atoms, rules)) => self.metadata(Label::Backend, format_args!("gpu ({}, {}; vendor=0x{:04x}; static atoms={atoms}, rules={rules})", adapter.name, adapter.backend, adapter.vendor_id)),
             },
             #[cfg(feature = "gpu")]
-            Event::DeviceFormula { adapter, grounder, search, batch_size, completion_workers, .. } => {
+            Event::DeviceFormula { adapter, grounder, batch_size, completion_workers, .. } => {
                 let (scope, host) = self.device_formula_scope();
                 self.metadata(Label::Backend,
-                    format_args!("hybrid GPU propagation + exact CPU residual search ({}, {}; vendor=0x{:04x}); oracle: Ferraris reduct countermodel; search: {}; {scope}: eager (requested {}); batch={batch_size}; CPU completion requested workers={completion_workers}{host}", adapter.name, adapter.backend, adapter.vendor_id, search.label(), grounder.label()))
+                    format_args!("hybrid GPU propagation + exact CPU residual search ({}, {}; vendor=0x{:04x}); oracle: Ferraris reduct countermodel; {scope}: eager (requested {}); batch={batch_size}; CPU completion requested workers={completion_workers}{host}", adapter.name, adapter.backend, adapter.vendor_id, grounder.label()))
             },
             #[cfg(feature = "gpu")]
-            Event::DeviceTight { adapter, grounder, search, batch_size } => {
+            Event::DeviceTight { adapter, grounder, batch_size } => {
                 let (scope, host) = self.device_formula_scope();
                 self.metadata(Label::Backend,
-                    format_args!("GPU tight support ({}, {}; vendor=0x{:04x}); oracle: Ferraris ranked support; search: {}; {scope}: eager (requested {}); batch={batch_size}{host}", adapter.name, adapter.backend, adapter.vendor_id, search.label(), grounder.label()))
+                    format_args!("GPU tight support ({}, {}; vendor=0x{:04x}); oracle: Ferraris ranked support; {scope}: eager (requested {}); batch={batch_size}{host}", adapter.name, adapter.backend, adapter.vendor_id, grounder.label()))
             },
             Event::Formula { atoms, nodes, operands, roots, keyed_constraints } if self.core == Some(Core::TerminalDefinitions) => writeln!(self,
                 "Base formula: {atoms} atoms, {nodes} nodes, {roots} roots; {operands} operand occurrences; {keyed_constraints} constraints asked by key; terminal definitions reconstructed separately"),

@@ -1,6 +1,5 @@
 use std::fmt;
 
-use crate::{AdmissionError, ProjectionResource};
 use zetesis_cpu::Stop;
 
 /// Why no logical decision is available. Every variant leaves coverage open.
@@ -20,11 +19,12 @@ pub enum Incomplete {
     PendingBytes,
     /// Concurrent completion workspaces and ordered results exceed logical scratch.
     CompletionScratch,
-    /// Named prepared-reduct or query storage exceeds its explicit byte ceiling.
+    /// A proper-subset query's named workspace storage exceeds its explicit
+    /// byte ceiling.
     ReductStorage {
         /// Required named vector/map capacity, excluding shared source payload.
         required: u128,
-        /// Inclusive ceiling for this preparation or query owner.
+        /// Inclusive ceiling for this query workspace.
         limit: u128,
     },
     /// Additional native-extrema narrowing index capacity exceeds its owner allowance.
@@ -41,17 +41,6 @@ pub enum Incomplete {
     PendingBatch,
     /// Fallible storage reservation failed.
     Allocation,
-    /// A finite encoding or index exceeded admission or representation limits.
-    Admission(AdmissionError),
-    /// Exact exclusion history exceeded its own inclusive resource ceiling.
-    ProjectionLimit {
-        /// Refused history dimension.
-        resource: ProjectionResource,
-        /// Proposed count or named byte capacity, before publishing a key.
-        required: u128,
-        /// Inclusive configured ceiling.
-        limit: u128,
-    },
     /// A candidate belongs to a different admitted theory instance.
     WrongTheory,
     /// A candidate-only restriction declares a different semantic atom count.
@@ -70,8 +59,6 @@ pub enum Incomplete {
     RegionFilter,
     /// A source callback returned a decision for an atom that is not open.
     InvalidRegionConsequence,
-    /// Original-region filtering is unavailable for the selected proposer.
-    RegionFilterUnsupported,
     /// A region filter cannot be installed after candidate traversal began.
     LateRegionFilter,
     /// Candidate bounds cannot be declared after candidate traversal began:
@@ -89,11 +76,6 @@ pub enum Incomplete {
     WorkerPanicked,
     /// An accounting counter cannot be incremented without overflow.
     CounterOverflow,
-}
-impl From<AdmissionError> for Incomplete {
-    fn from(error: AdmissionError) -> Self {
-        Self::Admission(error)
-    }
 }
 impl From<Stop> for Incomplete {
     fn from(error: Stop) -> Self {
@@ -117,7 +99,7 @@ impl fmt::Display for Incomplete {
             Self::CompletionScratch => f.write_str("completion logical scratch byte limit reached"),
             Self::ReductStorage { required, limit } => write!(
                 f,
-                "prepared reduct storage requires {required} bytes; limit is {limit}"
+                "reduct query storage requires {required} bytes; limit is {limit}"
             ),
             Self::NativeNarrowingStorage { required, limit } => write!(
                 f,
@@ -127,15 +109,6 @@ impl fmt::Display for Incomplete {
             Self::BatchCandidateLimit => f.write_str("pending batch candidate limit reached"),
             Self::PendingBatch => f.write_str("an unresolved candidate batch remains"),
             Self::Allocation => f.write_str("SAT storage reservation failed"),
-            Self::Admission(error) => error.fmt(f),
-            Self::ProjectionLimit {
-                resource,
-                required,
-                limit,
-            } => write!(
-                f,
-                "projection history {resource:?} requires {required}; limit is {limit}"
-            ),
             Self::WrongTheory => f.write_str("candidate belongs to a different theory"),
             Self::RestrictionUniverse { expected, actual } => write!(
                 f,
@@ -150,9 +123,6 @@ impl fmt::Display for Incomplete {
             }
             Self::InvalidRegionConsequence => {
                 f.write_str("candidate-region consequence does not decide an open atom")
-            }
-            Self::RegionFilterUnsupported => {
-                f.write_str("candidate-region filtering requires region search")
             }
             Self::LateRegionFilter => {
                 f.write_str("candidate-region filtering requires an unstarted stream")
@@ -174,7 +144,6 @@ impl fmt::Display for Incomplete {
 impl std::error::Error for Incomplete {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
-            Self::Admission(error) => Some(error),
             Self::Verification(error) => Some(error),
             Self::Certificate(error) => Some(error),
             _ => None,

@@ -1,6 +1,5 @@
 //! Public evidence for the selected complete-theory checking algorithm.
 
-use crate::AdmissionError;
 use std::fmt;
 use zetesis_ferraris::{
     EvaluationError, PositiveError, PositivePlanLimits, PositivePlanStatistics, StratifiedError,
@@ -53,9 +52,6 @@ pub enum CertificateError {
     Positive(PositiveError),
     /// Stratified classification or direct evaluation refusal.
     Stratified(StratifiedError),
-    /// The exact determined-interpretation units could not fit candidate CNF admission.
-    /// No part of the attempted restriction remains in the CNF.
-    Restriction(AdmissionError),
     /// Independent original-theory evaluation failed. A storage limit here is
     /// the remaining workspace allowance after the retained selected plan.
     Evaluation(EvaluationError),
@@ -67,7 +63,6 @@ impl fmt::Display for CertificateError {
             Self::Tight(error) => error.fmt(formatter),
             Self::Positive(error) => error.fmt(formatter),
             Self::Stratified(error) => error.fmt(formatter),
-            Self::Restriction(error) => write!(formatter, "determined-answer restriction: {error}"),
             Self::Evaluation(error) => error.fmt(formatter),
         }
     }
@@ -79,7 +74,6 @@ impl std::error::Error for CertificateError {
             Self::Tight(error) => error,
             Self::Positive(error) => error,
             Self::Stratified(error) => error,
-            Self::Restriction(error) => error,
             Self::Evaluation(error) => error,
         })
     }
@@ -98,22 +92,13 @@ pub struct CertifiedStatistics {
     /// Actual positive-plan refusal, retained even if the ranked plan succeeds.
     pub positive_refusal: Option<PositiveError>,
     /// Actual positive construction receipt, including a refused work/storage prefix.
-    /// A successful primitive may still be followed by a restriction refusal.
     pub positive_attempt: Option<PositivePlanStatistics>,
     /// Actual stratified-plan refusal, including unsupported signed recursion.
     pub stratified_refusal: Option<StratifiedError>,
     /// Actual stratified construction receipt, including a failed prefix.
     pub stratified_attempt: Option<StratifiedPlanStatistics>,
-    /// Exact unit-restriction admission refusal, even if another plan succeeds.
-    pub restriction_refusal: Option<AdmissionError>,
     /// Sum of actual plan-construction work, including every refused attempt.
     pub construction_work: u64,
-    /// Exact determined-interpretation restriction work, including rolled-back attempts.
-    /// Included in cumulative search work, separate from plan construction.
-    pub restriction_work: u64,
-    /// Successfully committed original-atom units, or one empty candidate contradiction.
-    /// Zero after a failed transactional restriction attempt.
-    pub restriction_clauses: usize,
     /// Candidate checks entered, including interrupted attempts.
     pub checks: u64,
     /// Completed certificate proofs of stability, before publication or commit.

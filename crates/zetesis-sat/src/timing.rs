@@ -44,21 +44,19 @@ impl PhaseMeasurement {
 
 /// Opt-in native search wall intervals. Original-region filter checks nest
 /// inside candidate traversal; phase sums therefore need not be exclusive.
-/// Initial CNF construction and candidate restriction application are excluded;
-/// their caller can measure these operations independently. Driver setup,
+/// The enumeration's construction and candidate restriction application are
+/// excluded; their caller can measure these operations independently. Driver setup,
 /// external batch/device execution, publication and timer overhead are not included.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct SearchPhaseTimings {
-    /// Candidate query, projection and exact blocking, including failed
-    /// attempts, and one call building the original-theory index when a
-    /// region walk starts.
+    /// Candidate proposal by region traversal, including failed attempts, and
+    /// one call building the original-theory index when a region walk starts.
     pub candidates: PhaseMeasurement,
     /// Independent original-model and original-region checks, including
     /// repeated residual prechecks, filter preparation and failed attempts.
     pub original_validation: PhaseMeasurement,
-    /// Cold immutable reduct construction, including failed preparation.
-    pub reduct_preparation: PhaseMeasurement,
-    /// Parameter installation, exact search and returned-countermodel validation.
+    /// Proper-subset queries: positive closure, the region query and
+    /// returned-countermodel validation.
     pub reduct: PhaseMeasurement,
     /// Selected class membership checking, including failed attempts.
     pub certified: PhaseMeasurement,
@@ -69,7 +67,6 @@ pub(crate) enum Phase {
     Candidates,
     OriginalValidation,
     Reduct,
-    ReductPreparation,
     Certified,
 }
 
@@ -79,7 +76,6 @@ impl SearchPhaseTimings {
     fn merge(&mut self, other: &Self) {
         self.candidates.merge(other.candidates);
         self.original_validation.merge(other.original_validation);
-        self.reduct_preparation.merge(other.reduct_preparation);
         self.reduct.merge(other.reduct);
         self.certified.merge(other.certified);
     }
@@ -113,7 +109,6 @@ pub(crate) fn finish(
             Phase::Candidates => &mut timing.candidates,
             Phase::OriginalValidation => &mut timing.original_validation,
             Phase::Reduct => &mut timing.reduct,
-            Phase::ReductPreparation => &mut timing.reduct_preparation,
             Phase::Certified => &mut timing.certified,
         };
         measurement.record(started.elapsed());

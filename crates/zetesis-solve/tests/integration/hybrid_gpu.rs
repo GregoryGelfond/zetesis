@@ -7,8 +7,8 @@ use zetesis_cpu::Cancellation;
 use zetesis_reference_support::{hybrid, prepared};
 use zetesis_solve::{
     AnswerSelection, Backend, Completion, ExecutionObservation, ExecutionObserver,
-    ExecutionResources, GpuApi, Grounder, Oracle, PreparedInput, SearchMethod, SemanticOutcome,
-    Session, SolveConfig, SolveError,
+    ExecutionResources, GpuApi, Grounder, Oracle, PreparedInput, SemanticOutcome, Session,
+    SolveConfig, SolveError,
 };
 use zetesis_themelios::{ConstraintCheckLimits, FormulaMaterialization};
 use zetesis_wgpu::{AdapterBackend, GpuContext, GpuOptions, GpuSelection};
@@ -112,11 +112,10 @@ fn complete_scored_families(api: GpuApi) {
             }
         );
         for oracle in [Oracle::Auto, Oracle::Countermodel] {
-            for (search, workers) in [(SearchMethod::Clauses, 1), (SearchMethod::Regions, 2)] {
+            for workers in [1, 2] {
                 let (actual, outcome, routes) = capture(
                     PreparedInput::hybrid(&owner),
                     SolveConfig {
-                        search,
                         workers: NonZeroUsize::new(workers).unwrap(),
                         ..config(api, oracle)
                     },
@@ -138,23 +137,16 @@ fn complete_scored_families(api: GpuApi) {
                 assert_eq!(receipt.accepted, outcome.verified_models());
                 assert_eq!(receipt.pending, 0);
                 assert!(outcome.formula_execution().unwrap().gpu_candidates > 0);
-                if search == SearchMethod::Regions {
-                    let filters = outcome
-                        .countermodel_statistics()
-                        .unwrap()
-                        .region_filter
-                        .unwrap();
-                    assert!((1..=u64::try_from(workers).unwrap()).contains(&filters.preparations));
-                    assert!(filters.checks > filters.preparations);
-                }
+                let filters = outcome
+                    .countermodel_statistics()
+                    .unwrap()
+                    .region_filter
+                    .unwrap();
+                assert!((1..=u64::try_from(workers).unwrap()).contains(&filters.preparations));
+                assert!(filters.checks > filters.preparations);
                 if selection == AnswerSelection::Optimal {
                     assert!(outcome.optimum_proved());
                     assert_eq!(outcome.incumbent().unwrap().tied_models, 2);
-                } else if search == SearchMethod::Clauses {
-                    assert_eq!(
-                        (receipt.core_answers, receipt.accepted, receipt.rejected),
-                        (8, 6, 2)
-                    );
                 }
             }
         }
@@ -194,10 +186,7 @@ fn rejected_cheapest_answer(api: GpuApi, resources: &ExecutionResources) {
     for oracle in [Oracle::Auto, Oracle::Countermodel] {
         let (answers, outcome, _) = capture(
             PreparedInput::hybrid(&owner),
-            SolveConfig {
-                search: SearchMethod::Clauses,
-                ..config(api, oracle)
-            },
+            config(api, oracle),
             resources,
             AnswerSelection::Optimal,
         );
@@ -229,7 +218,6 @@ fn source_failure(api: GpuApi) {
         let mut session = Session::builder(
             PreparedInput::hybrid(&owner),
             SolveConfig {
-                search: SearchMethod::Clauses,
                 constraints: ConstraintCheckLimits {
                     max_work: prepared.work,
                     ..Default::default()
@@ -273,10 +261,7 @@ fn cancelled_queue(api: GpuApi) {
         let cancellation = Cancellation::default();
         let mut session = Session::builder(
             PreparedInput::hybrid(&owner),
-            SolveConfig {
-                search: SearchMethod::Clauses,
-                ..config(api, oracle)
-            },
+            config(api, oracle),
             cancellation.clone(),
         )
         .resources(&resources)
@@ -337,10 +322,7 @@ fn terminal_families(api: GpuApi) {
     for oracle in [Oracle::Auto, Oracle::Countermodel] {
         let (actual, outcome, routes) = capture(
             PreparedInput::terminal(&owner),
-            SolveConfig {
-                search: SearchMethod::Clauses,
-                ..config(api, oracle)
-            },
+            config(api, oracle),
             &resources,
             AnswerSelection::All,
         );

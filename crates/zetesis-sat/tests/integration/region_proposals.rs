@@ -12,7 +12,7 @@ use crate::support::interpretations::stable_models as expected;
 use zetesis_ferraris::{Node, Theory};
 use zetesis_sat::{
     BatchError, BatchLimits, BatchVerdict, Cancellation, CompletionExecutor, Engagement,
-    Incomplete, Limits, RegionWalkEngagement, SearchLimits, SearchMethod, StableModels,
+    Incomplete, Limits, RegionWalkEngagement, SearchLimits, StableModels,
 };
 use zetesis_test_support::counts::nonzero;
 
@@ -289,13 +289,7 @@ fn stopped_frontier_retains_its_ownership_receipt() {
 fn an_unmeasured_frontier_is_absent() {
     let theory = choice_theories::choices(1);
     let searches = [
-        StableModels::with_method(
-            &theory,
-            SearchMethod::Regions,
-            Limits::default(),
-            Cancellation::default(),
-        )
-        .unwrap(),
+        StableModels::new(&theory, Limits::default(), Cancellation::default()).unwrap(),
         StableModels::with_region_producers(
             &theory,
             nonzero(1),

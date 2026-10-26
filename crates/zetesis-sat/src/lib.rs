@@ -1,56 +1,40 @@
-//! Bounded native Boolean search and finite Ferraris stable-model enumeration.
+//! Finite Ferraris stable-model enumeration by region search.
 //!
-//! Candidates are proposed either by regions of the theory's atoms narrowed
-//! by its readings, with no clause form, or by the SAT kernel's iterative
-//! chronological DPLL with two watched literals over a Tseitin encoding of
-//! the theory. Frozen reducts receive full Tseitin equivalences; only
-//! original semantic atoms enter minimality and model blocking. This
+//! Candidates are regions of the theory's atoms narrowed by its readings, with
+//! no clause form; every leaf is a classical model of the theory. Membership is
+//! the frozen reduct's: its proper-subset query is walked as a region tree over
+//! the same index, and a countermodel is validated independently before it
+//! refutes a candidate. Only original semantic atoms enter minimality. This
 //! crate does not parse, ground, translate source aggregates, invoke an
 //! external solver, or claim a refinement proof for its Rust implementation.
 #![forbid(unsafe_code)]
 
 mod budget;
-mod clauses;
-mod cnf;
-mod encoding;
 mod error;
 mod ferraris;
-mod ordering;
-mod projection;
 mod region_filter;
-mod search;
 mod timing;
 pub use region_filter::{
     RegionConsequence, RegionFeasibility, RegionFilter, RegionFilterStatistics, RegionFilterWorker,
     RegionPass,
 };
 mod checked;
-mod prepared_reduct;
-#[cfg(test)]
-mod test_support;
-pub use prepared_reduct::{
-    PreparedReduct, ReductPreparationAttempt, ReductPreparationLimits, ReductPreparationStatistics,
-    ReductQueryStatistics, ReductStatistics, ReductWorkspace,
-};
+mod reduct;
+pub use reduct::ReductStatistics;
 pub use zetesis_ferraris::partition;
 
 pub use checked::{CheckedInterpretation, StableInterpretation, check_interpretation};
 
 pub use budget::{SearchLimits, SearchStatistics};
-pub use clauses::{Clause, Clauses};
-pub use cnf::{AdmissionError, AdmissionLimits, Assignment, Cnf, Literal, Resource};
 pub use error::Incomplete;
 pub use ferraris::{
     BatchError, BatchLimits, BatchStatistics, BatchVerdict, CertificateError, CertificateLimits,
     CertificateOrder, CertificatePlanStatistics, CertifiedStatistics, Check, CompletionExecutor,
-    CompletionScratch, CompletionStatistics, Engagement, FrontierOrder, GeneratorOrderStatistics,
+    CompletionStatistics, Engagement, FrontierOrder, GeneratorOrderStatistics,
     GeneratorOrderStatus, Limits, Lookahead, LookaheadDeclined, RegionCounts,
     RegionFrontierStatistics, RegionSearchStatistics, RegionWalkEngagement, RegionWorkerStatistics,
-    SearchMethod, SlateProposal, SlateTicket, StableModels, Statistics, SupportStatistics,
-    SupportStatus, check, check_with,
+    SlateProposal, SlateTicket, StableModels, Statistics, check,
 };
-pub use projection::{ProjectionLimits, ProjectionResource, ProjectionStatistics};
-pub use search::{Solve, solve, solve_with_statistics};
 pub use zetesis_cpu::Cancellation;
 
 pub use timing::{PhaseMeasurement, SearchPhaseTimings};

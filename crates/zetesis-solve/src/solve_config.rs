@@ -2,7 +2,7 @@
 
 use std::num::NonZeroUsize;
 
-use crate::{Backend, GpuBatching, Grounder, Oracle, SearchMethod, SourceBatching};
+use crate::{Backend, GpuBatching, Grounder, Oracle, SourceBatching};
 
 /// Policy for one semantic session. Budgets retain their existing ownership:
 /// Formula search/objective work is cumulative. Independent closure work is per
@@ -21,8 +21,6 @@ pub struct SolveConfig {
     pub source_batching: SourceBatching,
     /// Exact membership policy; prepared formula inputs retain their original theory.
     pub oracle: Oracle,
-    /// How the formula route proposes candidates and queries the reduct.
-    pub search: SearchMethod,
     /// Enable optional host timing; semantic/resource counters remain independent.
     pub stats: bool,
     /// Per-check streamed-constraint limits for a hybrid formula session.
@@ -47,12 +45,11 @@ pub struct SolveConfig {
     /// immutable catalog payload, previously published models and allocator/Arc
     /// bookkeeping. This is a named capacity allowance, not process RSS.
     pub max_model_bytes: usize,
-    /// Distinct candidate projections retained to exclude previously visited keys.
+    /// Distinct projected answers an explicit `#project` session retains to
+    /// exclude repeated projections.
     pub max_projection_entries: u64,
-    /// Logical nodes in the retained candidate-projection trie.
-    pub max_projection_nodes: usize,
-    /// Named projection-history capacity and conservative growth overlap.
-    /// This excludes allocator overhead and the separate authored CNF encoding.
+    /// Named capacity of that projection history and its conservative growth
+    /// overlap. This excludes allocator overhead.
     pub max_projection_bytes: usize,
     /// Cumulative objective preparation and evaluation work, including refusals.
     pub max_objective_work: u64,
@@ -88,24 +85,23 @@ pub struct SolveConfig {
     /// GPU formula policy.
     pub gpu_batching: GpuBatching,
     /// Worker count: the closure route's pool, and the walkers of the
-    /// region tree under the regions method, one being the scalar walk.
+    /// region tree, one being the scalar walk.
     /// CPU closure setup conservatively reserves `max_closure_bytes` per worker;
     /// [`Self::for_allowance`] keeps that product within the collective ceiling.
     /// The library default is four; the command uses the host's available
     /// parallelism, or one when availability is unknown.
     pub workers: NonZeroUsize,
-    /// Worker count for unresolved formula queries: under the clauses search,
-    /// and under regions with one CPU walker or general device propagation.
+    /// Worker count for unresolved formula queries: with one CPU region walker,
+    /// and under general device propagation.
     /// Complete device certificates use scalar batch commit with no residual
     /// pool. Multiple CPU region workers decide their own leaves in `workers`.
     pub completion_workers: NonZeroUsize,
-    /// Named cold reduct preparation and each query's retained capacity.
-    /// The immutable reduct is prepared once per original theory. Parallel
-    /// completion also admits its shared owner against the collective ceiling.
-    /// Shared theory payload and allocator metadata are excluded.
+    /// Each proper-subset query's retained workspace capacity. Shared theory
+    /// payload and allocator metadata are excluded.
     pub max_reduct_bytes: u64,
-    /// Shared prepared reduct, worker query capacities and transient/result bytes, excluding
-    /// thread stacks, allocator/table overhead, scalar cursor and GPU storage.
+    /// Completion's ordered results and its workers' query workspaces, as
+    /// created, excluding thread stacks, allocator/table overhead, scalar
+    /// cursor and GPU storage.
     /// Optional class preparation/checking uses this ceiling independently;
     /// it is not a combined cap on class storage plus completion storage.
     pub max_completion_scratch_bytes: u64,
@@ -184,16 +180,13 @@ impl SolveConfig {
 
 impl SolveConfig {
     /// The workers that walk the region tree together and decide its
-    /// leaves themselves: several, under the regions method on a CPU
-    /// backend. A device backend uses separate bounded candidate producers;
-    /// those workers do not decide membership. One worker or clause search
-    /// uses the scalar proposer, so all these alternatives return `None`.
+    /// leaves themselves: several, on a CPU backend. A device backend uses
+    /// separate bounded candidate producers; those workers do not decide
+    /// membership. One worker uses the scalar proposer, so both
+    /// alternatives return `None`.
     #[must_use]
     pub fn region_workers(&self) -> Option<NonZeroUsize> {
-        (self.search == SearchMethod::Regions
-            && self.workers.get() > 1
-            && self.backend == Backend::Cpu)
-            .then_some(self.workers)
+        (self.workers.get() > 1 && self.backend == Backend::Cpu).then_some(self.workers)
     }
 }
 

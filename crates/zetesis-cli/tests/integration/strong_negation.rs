@@ -45,8 +45,6 @@ fn conditional_choices_preserve_the_complete_supported_family() {
             "cpu",
             "--oracle",
             "countermodel",
-            "--search",
-            "clauses",
             "--grounder",
             "eager",
             "--json",
@@ -56,10 +54,6 @@ fn conditional_choices_preserve_the_complete_supported_family() {
     assert_eq!(report.completion, Completion::Exhausted);
     assert_eq!(report.models, 27);
     let statistics = report.countermodel_statistics.unwrap();
-    assert_eq!(
-        statistics.support.unwrap().status,
-        zetesis_sat::SupportStatus::Applied
-    );
     assert_eq!(statistics.candidates, 27);
     assert_eq!(statistics.countermodel_queries, 27);
     assert_eq!(statistics.countermodels, 0);
@@ -91,8 +85,6 @@ fn mixed_choice_support_matches_complete_original_references() {
                 "cpu",
                 "--oracle",
                 "countermodel",
-                "--search",
-                "clauses",
                 "--grounder",
                 "eager",
             ],
@@ -101,10 +93,6 @@ fn mixed_choice_support_matches_complete_original_references() {
         assert_eq!(report.completion, Completion::Exhausted);
         assert_eq!(report.models, 27);
         let statistics = report.countermodel_statistics.unwrap();
-        assert_eq!(
-            statistics.support.unwrap().status,
-            zetesis_sat::SupportStatus::Applied
-        );
         assert_eq!(statistics.candidates, 27);
         let reference = clingo_report::complete(source, AnswerSelection::All);
         let actual = displays(&output)

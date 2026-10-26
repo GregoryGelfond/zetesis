@@ -8,6 +8,8 @@ use std::collections::BTreeMap;
 use serde::Serialize;
 
 const HEADER: &str =
+    "Phase timings: clock=host-monotonic; scope=driver; failed_attempts=included; schema=6";
+const MODEL_HEADER: &str =
     "Phase timings: clock=host-monotonic; scope=driver; failed_attempts=included; schema=5";
 const RECONSTRUCTION_HEADER: &str =
     "Phase timings: clock=host-monotonic; scope=driver; failed_attempts=included; schema=4";
@@ -48,7 +50,8 @@ const CERTIFICATE_LABELS: [&str; 13] = [
     "observation_output",
 ];
 
-const LABELS: [&str; 16] = [
+/// Schemas 3 to 5: their prefixes, with the clause search's reduct preparation.
+const PREPARATION_LABELS: [&str; 16] = [
     "admission_materialization",
     "execution_setup",
     "candidate_setup",
@@ -67,10 +70,29 @@ const LABELS: [&str; 16] = [
     "model_construction",
 ];
 
+const LABELS: [&str; 15] = [
+    "admission_materialization",
+    "execution_setup",
+    "candidate_setup",
+    "certificate_setup",
+    "certified_membership",
+    "candidate_generation",
+    "original_validation",
+    "gpu_host_oracle",
+    "exact_reduct_membership",
+    "closure_membership",
+    "objective_scoring_retention",
+    "objective_feedback",
+    "observation_output",
+    "answer_reconstruction",
+    "model_construction",
+];
+
 #[derive(Debug, Serialize)]
 pub(crate) struct PhaseTimings {
     /// Exact recognized schema: 1 omits certificates; 2 omits reduct preparation;
-    /// 3 omits answer reconstruction; 4 omits model construction.
+    /// 3 omits answer reconstruction; 4 omits model construction; 6 omits
+    /// reduct preparation again, which only the removed clause search entered.
     pub(crate) schema_version: u8,
     /// Driver host interval; source loading and statistics output are excluded.
     pub(crate) driver_elapsed_ns: u64,
@@ -100,9 +122,10 @@ pub(crate) fn parse(stderr: &str) -> Result<Option<PhaseTimings>, String> {
         return Ok(None);
     }
     let (schema_version, labels): (u8, &[&'static str]) = match lines[0] {
-        HEADER => (5, &LABELS),
-        RECONSTRUCTION_HEADER => (4, &LABELS[..15]),
-        REDUCT_HEADER => (3, &LABELS[..14]),
+        HEADER => (6, &LABELS),
+        MODEL_HEADER => (5, &PREPARATION_LABELS),
+        RECONSTRUCTION_HEADER => (4, &PREPARATION_LABELS[..15]),
+        REDUCT_HEADER => (3, &PREPARATION_LABELS[..14]),
         CERTIFICATE_HEADER => (2, &CERTIFICATE_LABELS),
         LEGACY_HEADER => (1, &LEGACY_LABELS),
         _ => return Err("unsupported phase timing schema".into()),

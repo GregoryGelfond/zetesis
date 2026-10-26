@@ -5,7 +5,6 @@ use std::convert::Infallible;
 
 use crate::support::batching::residual;
 use crate::support::choice_theories::three_choices;
-use crate::support::clause_search::by_clauses;
 use crate::support::{batching::batch as limits, interpretations::stable_models as expected};
 use zetesis_ferraris::{Node, Theory};
 use zetesis_sat::{
@@ -473,41 +472,6 @@ fn candidate_limit_preserves_the_checked_batch_prefix() {
         search.next_batch(limits(3), residual),
         Err(BatchError::Search(Incomplete::CandidateLimit))
     ));
-}
-
-#[test]
-fn history_limit_preserves_the_checked_batch_prefix() {
-    // A zero-atom stable theory has no encoding clauses; its exact empty block
-    // cannot be stored under max_entries=0, after the candidate is already owned.
-    let empty = theory(0, vec![], vec![]);
-    let bounded = Limits {
-        projections: zetesis_sat::ProjectionLimits {
-            max_entries: 0,
-            ..Default::default()
-        },
-        ..Default::default()
-    };
-    let mut search = by_clauses(&empty, bounded, Cancellation::default()).unwrap();
-    let batch = search
-        .next_batch(limits(2), |_, c| {
-            Ok::<_, Infallible>(vec![BatchVerdict::NoProperSubset; c.len()])
-        })
-        .unwrap();
-    assert_eq!(batch.len(), 1);
-    assert!(batch[0].theory().same_instance(&empty));
-    assert_eq!(batch[0].atoms().count(), 0);
-    assert_eq!(search.statistics().stable_models, 1);
-    assert_eq!(search.statistics().projections.entries, 0);
-    assert_eq!(search.batch_statistics().committed, 1);
-    assert!(matches!(
-        search.next_batch(limits(2), residual),
-        Err(BatchError::Search(Incomplete::ProjectionLimit {
-            resource: zetesis_sat::ProjectionResource::Entries,
-            required: 1,
-            limit: 0,
-        }))
-    ));
-    assert!(!search.exhausted());
 }
 
 #[test]

@@ -4,7 +4,7 @@
 mod quota;
 mod shared_budget;
 
-pub(crate) use quota::{BoundedQuota, LocalQuota, Quota};
+pub(crate) use quota::{LocalQuota, Quota};
 pub(crate) use shared_budget::{SharedBudget, WorkLease};
 
 use crate::{Cancellation, Incomplete};
@@ -12,13 +12,13 @@ use crate::{Cancellation, Incomplete};
 /// Cumulative search ceilings. Zero permits no operation of that kind.
 #[derive(Clone, Copy, Debug)]
 pub struct SearchLimits {
-    /// Initialization, watch visits, literal tests, branching scans and undo steps.
-    /// Stable-model enumeration also charges optional certificate work here.
-    /// Binary clauses have no replacement candidates, so propagation charges
-    /// their watch visit without a replacement-position scan.
-    /// Ternary clauses inspect their sole unwatched position once.
+    /// Charged operations, cumulatively: region narrowing and traversal, the
+    /// original index's construction, proper-subset queries, candidate
+    /// restrictions and bounds. Stable-model enumeration also charges optional
+    /// certificate work here.
     pub max_work: u64,
-    /// Maximum fresh decision frames; flipping an existing frame is backtracking.
+    /// Maximum region splits, in the candidate tree and in every proper-subset
+    /// query's tree together.
     pub max_decisions: u64,
 }
 impl Default for SearchLimits {
@@ -37,12 +37,8 @@ impl Default for SearchLimits {
 pub struct SearchStatistics {
     /// Charged primitive operations, including reservations lost to worker panic.
     pub work: u64,
-    /// Fresh decision frames opened.
+    /// Region splits charged against [`SearchLimits::max_decisions`].
     pub decisions: u64,
-    /// Forced assignments, including initial unit clauses.
-    pub propagations: u64,
-    /// Conflicts encountered, including an initially empty clause.
-    pub conflicts: u64,
 }
 
 pub(crate) struct Budget<'a, Q = LocalQuota> {
@@ -135,10 +131,4 @@ pub(crate) fn storage<T>(count: usize) -> Result<Vec<T>, Incomplete> {
         .try_reserve_exact(count)
         .map_err(|_| Incomplete::Allocation)?;
     Ok(result)
-}
-
-pub(crate) fn reserve<T>(values: &mut Vec<T>, count: usize) -> Result<(), Incomplete> {
-    values
-        .try_reserve_exact(count.saturating_sub(values.len()))
-        .map_err(|_| Incomplete::Allocation)
 }

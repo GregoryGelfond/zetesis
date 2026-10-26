@@ -143,14 +143,13 @@ fn sessions_preserve_complete_scored_answers() {
         let input = reference::admit(source, &FormulaLimits::default()).unwrap();
         assert_eq!(input.objectives().priorities(), expected.priorities);
         for (workers, batch) in [(1, 1), (4, 3)] {
-            // The batched completion receipts this test reads belong to the
-            // clause method.
+            // One region walker, whose candidates a completion pool of
+            // `workers` checks in batches: the receipts this test reads.
             let config = SolveConfig {
                 backend: Backend::Cpu,
                 oracle: Oracle::Countermodel,
-                search: zetesis_cli::SearchMethod::Clauses,
                 models: 0,
-                workers: NonZeroUsize::new(workers).unwrap(),
+                workers: NonZeroUsize::MIN,
                 completion_workers: NonZeroUsize::new(workers).unwrap(),
                 batch_size: NonZeroUsize::new(batch).unwrap(),
                 ..SolveConfig::default()

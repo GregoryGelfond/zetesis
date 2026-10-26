@@ -14,23 +14,21 @@ pub enum SolvePhase {
     AdmissionMaterialization,
     /// Execution setup, including static lowering, pools or device initialization.
     ExecutionSetup,
-    /// Candidate generator initialization or initial classical formula encoding.
-    /// The regions method's original-theory index is not built here.
+    /// Candidate generator initialization. The original-theory index is not
+    /// built here.
     CandidateSetup,
     /// Complete original-theory certificate construction, including refusals.
     CertificateSetup,
     /// Applicable class membership checking, including interrupted attempts.
     CertifiedMembership,
-    /// Candidate generation/projection and exact semantic blocking, including
-    /// the regions method's original-theory index, built when its walk starts.
+    /// Candidate generation by region traversal, including the original-theory
+    /// index, built when the walk starts.
     CandidateGeneration,
     /// Independent original-formula validation, including residual prechecks.
     OriginalValidation,
-    /// One immutable parametric reduct construction, including a failed attempt.
-    ReductPreparation,
     /// GPU host oracle call, including packing, waits, readback and failed calls.
     GpuHostOracle,
-    /// Frozen-reduct parameterization/search and countermodel validation on CPU.
+    /// Frozen-reduct proper-subset queries and countermodel validation on CPU.
     ExactReductMembership,
     /// CPU closure batch execution, including worker scheduling and collection.
     ClosureMembership,
@@ -49,7 +47,7 @@ pub enum SolvePhase {
 }
 impl SolvePhase {
     /// Finite phase catalog in report order.
-    pub const ALL: [Self; 16] = [
+    pub const ALL: [Self; 15] = [
         Self::AdmissionMaterialization,
         Self::ExecutionSetup,
         Self::CandidateSetup,
@@ -57,7 +55,6 @@ impl SolvePhase {
         Self::CertifiedMembership,
         Self::CandidateGeneration,
         Self::OriginalValidation,
-        Self::ReductPreparation,
         Self::GpuHostOracle,
         Self::ExactReductMembership,
         Self::ClosureMembership,
@@ -79,7 +76,6 @@ impl SolvePhase {
             Self::CertifiedMembership => "certified_membership",
             Self::CandidateGeneration => "candidate_generation",
             Self::OriginalValidation => "original_validation",
-            Self::ReductPreparation => "reduct_preparation",
             Self::GpuHostOracle => "gpu_host_oracle",
             Self::ExactReductMembership => "exact_reduct_membership",
             Self::ClosureMembership => "closure_membership",
@@ -182,11 +178,6 @@ impl Recorder {
                     SolvePhase::OriginalValidation,
                     previous.original_validation,
                     current.original_validation,
-                ),
-                (
-                    SolvePhase::ReductPreparation,
-                    previous.reduct_preparation,
-                    current.reduct_preparation,
                 ),
                 (
                     SolvePhase::ExactReductMembership,

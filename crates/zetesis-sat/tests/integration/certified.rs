@@ -6,7 +6,6 @@ use std::num::NonZeroUsize;
 
 use crate::support::batching::batch as batch_limits;
 use crate::support::choice_theories::three_choices;
-use crate::support::clause_search::by_clauses;
 use zetesis_ferraris::{Interpretation, Node, Theory, TightError, TightPlanLimits, TightResource};
 use zetesis_sat::{
     BatchError, BatchVerdict, Cancellation, CertificateError, CompletionExecutor, Incomplete,
@@ -41,7 +40,8 @@ fn expected(theory: &Theory) -> BTreeSet<Vec<usize>> {
 #[test]
 fn external_preparation_does_not_activate_cpu_checking() {
     let original = three_choices();
-    let mut stream = by_clauses(&original, Limits::default(), Cancellation::default()).unwrap();
+    let mut stream =
+        StableModels::new(&original, Limits::default(), Cancellation::default()).unwrap();
     let plan = stream
         .prepare_tight_certificate(TightPlanLimits::default())
         .unwrap()
@@ -63,7 +63,8 @@ fn external_preparation_does_not_activate_cpu_checking() {
 #[test]
 fn cpu_activation_reuses_external_preparation() {
     let original = three_choices();
-    let mut stream = by_clauses(&original, Limits::default(), Cancellation::default()).unwrap();
+    let mut stream =
+        StableModels::new(&original, Limits::default(), Cancellation::default()).unwrap();
     let plan = stream
         .prepare_tight_certificate(TightPlanLimits::default())
         .unwrap()
@@ -87,7 +88,8 @@ fn cpu_activation_reuses_external_preparation() {
 #[test]
 fn external_preparation_retains_optional_refusal() {
     let original = three_choices();
-    let mut stream = by_clauses(&original, Limits::default(), Cancellation::default()).unwrap();
+    let mut stream =
+        StableModels::new(&original, Limits::default(), Cancellation::default()).unwrap();
     assert!(
         stream
             .prepare_tight_certificate(TightPlanLimits {
@@ -113,14 +115,14 @@ fn external_preparation_retains_optional_refusal() {
 #[test]
 fn external_preparation_obeys_cumulative_work() {
     let original = three_choices();
-    let initial = by_clauses(&original, Limits::default(), Cancellation::default())
+    let initial = StableModels::new(&original, Limits::default(), Cancellation::default())
         .unwrap()
         .statistics()
         .search
         .work;
     let mut limits = Limits::default();
     limits.search.max_work = initial + 1;
-    let mut stream = by_clauses(&original, limits, Cancellation::default()).unwrap();
+    let mut stream = StableModels::new(&original, limits, Cancellation::default()).unwrap();
     assert!(matches!(
         stream.prepare_tight_certificate(TightPlanLimits::default()),
         Err(Incomplete::WorkLimit)
@@ -133,7 +135,8 @@ fn external_preparation_obeys_cumulative_work() {
 #[test]
 fn cpu_activation_refuses_pending_external_candidates() {
     let original = three_choices();
-    let mut stream = by_clauses(&original, Limits::default(), Cancellation::default()).unwrap();
+    let mut stream =
+        StableModels::new(&original, Limits::default(), Cancellation::default()).unwrap();
     stream
         .prepare_tight_certificate(TightPlanLimits::default())
         .unwrap()
@@ -158,8 +161,9 @@ fn cpu_activation_refuses_pending_external_candidates() {
 fn scalar_and_rayon_batches_match_independent_reduct_with_support_refutations_and_refusals() {
     let cases = [
         three_choices(),
-        // Unsupported carrier atoms are refuted by the support law: every
-        // present atom lacks a producer, and no countermodel query is needed.
+        // Unsupported carrier atoms are cut by the walk's founded narrowing:
+        // every present atom lacks a producer, so only the empty interpretation
+        // is proposed, and no countermodel query is needed.
         theory(3, vec![], vec![]),
         theory(
             2,
@@ -187,7 +191,8 @@ fn scalar_and_rayon_batches_match_independent_reduct_with_support_refutations_an
     ];
     for (index, theory) in cases.iter().enumerate() {
         let wanted = expected(theory);
-        let mut scalar = by_clauses(theory, Limits::default(), Cancellation::default()).unwrap();
+        let mut scalar =
+            StableModels::new(theory, Limits::default(), Cancellation::default()).unwrap();
         let eligible = scalar
             .enable_certified_checking(TightPlanLimits::default())
             .unwrap();
@@ -204,12 +209,13 @@ fn scalar_and_rayon_batches_match_independent_reduct_with_support_refutations_an
         if index == 1 {
             assert_eq!(stats.countermodel_queries, 0);
             assert_eq!(stats.countermodels, 0);
-            assert_eq!(certificate.refuted, 7);
+            assert_eq!(stats.candidates, 1);
+            assert_eq!(certificate.stable, 1);
         }
         for workers in [1, 4] {
             for size in [1, 2, 5] {
                 let mut stream =
-                    by_clauses(theory, Limits::default(), Cancellation::default()).unwrap();
+                    StableModels::new(theory, Limits::default(), Cancellation::default()).unwrap();
                 stream.enable_phase_timing();
                 assert_eq!(
                     stream
@@ -242,7 +248,12 @@ fn scalar_and_rayon_batches_match_independent_reduct_with_support_refutations_an
                     stream.statistics().candidates
                 );
                 if eligible {
-                    assert!(stream.statistics().phase_timings.unwrap().certified.calls > 0);
+                    // Each proposal is one timed certificate check; the walk can
+                    // leave none to check, as it does for an unsupported atom.
+                    assert_eq!(
+                        stream.statistics().phase_timings.unwrap().certified.calls,
+                        stream.statistics().candidates
+                    );
                 }
                 if index == 0 {
                     assert_eq!(stream.statistics().countermodel_queries, 0);
@@ -421,7 +432,8 @@ fn assert_first_tight_receipt(
 fn restrictions_keep_original_certificate_and_late_configuration_is_explicit() {
     let original = three_choices();
     let restriction = theory(3, vec![Node::atom(0)], vec![0]);
-    let mut stream = by_clauses(&original, Limits::default(), Cancellation::default()).unwrap();
+    let mut stream =
+        StableModels::new(&original, Limits::default(), Cancellation::default()).unwrap();
     stream
         .enable_certified_checking(TightPlanLimits::default())
         .unwrap();
@@ -431,7 +443,8 @@ fn restrictions_keep_original_certificate_and_late_configuration_is_explicit() {
     assert!(results.iter().all(|m| m.contains(&0)));
     assert_eq!(stream.statistics().countermodel_queries, 0);
     assert_eq!(stream.statistics().candidate_restrictions, 1);
-    let mut late = by_clauses(&original, Limits::default(), Cancellation::default()).unwrap();
+    let mut late =
+        StableModels::new(&original, Limits::default(), Cancellation::default()).unwrap();
     late.next().unwrap().unwrap();
     assert_eq!(
         late.enable_certified_checking(TightPlanLimits::default()),

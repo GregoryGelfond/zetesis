@@ -1,49 +1,31 @@
 //! Stable models proposed by regions: the coverage tree over the theory's
 //! atoms, narrowed by its readings, with every leaf a classical model that
-//! the reduct then decides. The regions and the clauses proposers return
-//! the same stable models; the regions proposer never asks a classical
-//! query, never proposes a nonmodel, and takes a restriction without
-//! restarting.
+//! the reduct then decides. The regions proposer returns the stable models
+//! the exhaustive reference finds, proposes only region leaves, never
+//! proposes a nonmodel, and takes a restriction without restarting.
 
 use crate::support::choice_theories;
 use crate::support::formula_theories as theories;
 
 use std::collections::BTreeSet;
 
-use crate::support::interpretations::models;
+use crate::support::interpretations::{models, stable_models};
 use zetesis_ferraris::{Node, Theory, TightPlanLimits};
 use zetesis_sat::{
-    BatchLimits, BatchVerdict, Cancellation, Incomplete, Limits, SearchLimits, SearchMethod,
-    StableModels,
+    BatchLimits, BatchVerdict, Cancellation, Incomplete, Limits, SearchLimits, StableModels,
 };
 
 use choice_theories::{choices, theory_over};
 use theories::mixed;
 
 fn regions(theory: &Theory, limits: Limits) -> StableModels {
-    StableModels::with_method(
-        theory,
-        SearchMethod::Regions,
-        limits,
-        Cancellation::default(),
-    )
-    .unwrap()
+    StableModels::new(theory, limits, Cancellation::default()).unwrap()
 }
 
 #[test]
-fn regions_and_clauses_return_the_same_stable_models() {
+fn regions_return_the_stable_models_of_the_exhaustive_reference() {
     for theory in [mixed(), choices(3)] {
-        let mut clauses = StableModels::with_method(
-            &theory,
-            SearchMethod::Clauses,
-            Limits::default(),
-            Cancellation::default(),
-        )
-        .unwrap();
-        let expected: BTreeSet<Vec<usize>> = models(&mut clauses).into_iter().collect();
-        assert!(clauses.exhausted());
-        assert!(clauses.statistics().candidate_queries > 0);
-        assert!(clauses.statistics().regions.is_none());
+        let expected = stable_models(&theory);
         let mut by_regions = regions(&theory, Limits::default());
         let found: BTreeSet<Vec<usize>> = models(&mut by_regions).into_iter().collect();
         assert!(by_regions.exhausted());
@@ -60,9 +42,8 @@ fn mixed_by_regions() -> (Vec<Vec<usize>>, zetesis_sat::Statistics) {
 }
 
 #[test]
-fn regions_ask_no_classical_query() {
+fn every_candidate_is_a_region_leaf() {
     let (_, statistics) = mixed_by_regions();
-    assert_eq!(statistics.candidate_queries, 0);
     let receipts = statistics.regions.expect("regions receipts");
     assert_eq!(
         u64::try_from(receipts.counts.leaves).unwrap(),
@@ -88,12 +69,6 @@ fn regions_propose_no_nonmodel() {
         u64::try_from(found.len()).unwrap(),
         statistics.stable_models
     );
-}
-
-#[test]
-fn regions_build_no_support_certificate() {
-    let (_, statistics) = mixed_by_regions();
-    assert!(statistics.support.is_none());
 }
 
 #[test]
@@ -301,17 +276,6 @@ fn a_tight_certificate_decides_region_leaves_without_a_countermodel_query() {
 }
 
 #[test]
-fn under_regions_the_reduct_is_never_encoded() {
-    let (found, statistics) = mixed_by_regions();
-    assert!(!found.is_empty());
-    assert!(
-        statistics.reduct.preparation.is_none(),
-        "no reduct encoding"
-    );
-    assert_eq!(statistics.reduct.parameter_work, 0);
-}
-
-#[test]
 fn under_regions_the_reduct_is_queried_by_regions() {
     let original = mixed();
     let mut nodes = original.nodes().to_vec();
@@ -326,10 +290,7 @@ fn under_regions_the_reduct_is_queried_by_regions() {
     let general = theory_over(&original, nodes, vec![root]);
     let mut search = regions(&general, Limits::default());
     let found: BTreeSet<_> = models(&mut search).into_iter().collect();
-    assert_eq!(
-        found,
-        crate::support::interpretations::stable_models(&original)
-    );
+    assert_eq!(found, stable_models(&original));
     assert!(search.exhausted());
     let statistics = search.statistics();
     assert!(statistics.countermodel_queries > 0);
@@ -342,22 +303,9 @@ fn under_regions_the_reduct_is_queried_by_regions() {
 }
 
 #[test]
-fn the_search_methods_have_stable_spellings() {
-    assert_eq!(SearchMethod::Regions.label(), "regions");
-    assert_eq!(SearchMethod::Clauses.label(), "clauses");
-}
-
-#[test]
-fn the_default_search_method_is_regions() {
-    assert_eq!(SearchMethod::default(), SearchMethod::Regions);
-}
-
-#[test]
 fn the_default_entry_enumerates_by_regions() {
-    // `new` follows the type's default: the regions proposer's counts are
-    // present and no clause form was built.
+    // `new` walks regions: the regions proposer's counts are present.
     let theory = mixed();
     let search = StableModels::new(&theory, Limits::default(), Cancellation::default()).unwrap();
     assert!(search.statistics().regions.is_some());
-    assert!(search.statistics().support.is_none());
 }

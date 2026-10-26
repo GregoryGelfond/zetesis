@@ -6,7 +6,6 @@ use crate::Incomplete;
 /// Reservations precede the operation's local counter increment. This policy
 /// changes quota ownership only; polling and charged operation order stay in Budget.
 pub(crate) trait Quota {
-    const BOUNDED_STORAGE: bool = false;
     fn work(&self, spent: u64, ceiling: u64) -> Result<(), Incomplete>;
     fn decision(&self, spent: u64, ceiling: u64) -> Result<(), Incomplete>;
     /// Reserve `amount` units of work at once, for an operation that counts
@@ -83,43 +82,6 @@ impl Quota for LocalQuota {
 
     // The ledger is the budget's own count, which the caller lowers.
     fn refund(&self, _unspent: u64) {}
-}
-
-/// Completion preflights a complete logical workspace before query allocation.
-pub(crate) struct BoundedQuota<Q>(pub(crate) Q);
-
-impl<Q: Quota> Quota for BoundedQuota<Q> {
-    const BOUNDED_STORAGE: bool = true;
-
-    fn work(&self, spent: u64, ceiling: u64) -> Result<(), Incomplete> {
-        self.0.work(spent, ceiling)
-    }
-
-    fn decision(&self, spent: u64, ceiling: u64) -> Result<(), Incomplete> {
-        self.0.decision(spent, ceiling)
-    }
-
-    fn charge(&self, spent: u64, ceiling: u64, amount: u64) -> Result<(), Incomplete> {
-        self.0.charge(spent, ceiling, amount)
-    }
-
-    fn reserve_up_to(&self, spent: u64, ceiling: u64, wanted: u64) -> Result<u64, Incomplete> {
-        self.0.reserve_up_to(spent, ceiling, wanted)
-    }
-
-    fn with_reservation<T>(
-        &mut self,
-        spent: u64,
-        ceiling: u64,
-        wanted: u64,
-        run: impl FnOnce(u64) -> (T, u64),
-    ) -> Result<(T, u64), Incomplete> {
-        self.0.with_reservation(spent, ceiling, wanted, run)
-    }
-
-    fn refund(&self, unspent: u64) {
-        self.0.refund(unspent);
-    }
 }
 
 // Worker counters start at zero and measure deltas; the shared budget is seeded

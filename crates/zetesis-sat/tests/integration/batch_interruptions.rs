@@ -5,7 +5,6 @@ use std::collections::BTreeSet;
 use std::convert::Infallible;
 
 use crate::support::batching::batch;
-use crate::support::clause_search::by_clauses;
 use zetesis_cpu::Stop;
 use zetesis_ferraris::{Interpretation, Theory};
 use zetesis_sat::{
@@ -98,13 +97,12 @@ fn candidate_decision_and_original_verification_limits_cannot_publish_proposals(
             Incomplete::Verification(Stop::WorkLimit),
         ),
     ] {
-        let mut search = by_clauses(&theory, limits, Cancellation::default()).unwrap();
+        let mut search = StableModels::new(&theory, limits, Cancellation::default()).unwrap();
         assert!(matches!(
             search.next_batch(batch(3), never_called),
             Err(BatchError::Search(actual)) if actual == expected
         ));
         assert_eq!(search.statistics().candidates, 0);
-        assert_eq!(search.statistics().candidate_queries, 1);
         assert_eq!(search.statistics().stable_models, 0);
         assert_eq!(search.batch_statistics().pending, 0);
         assert_eq!(search.batch_statistics().checker_calls, 0);

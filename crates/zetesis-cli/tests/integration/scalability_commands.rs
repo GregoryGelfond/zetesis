@@ -46,7 +46,6 @@ fn scalability_tests_have_only_qualification_positions() {
             .all(|profile| profile.backend == selected::Backend::Cpu
                 && profile.grounder == selected::Grounder::Eager
                 && profile.formula_joins == Some(selected::FormulaJoins::Indexed)
-                && profile.search == Some(selected::SearchMethod::Regions)
                 && profile.memory_bytes == Some(300_000_000))
     );
 }

@@ -4,7 +4,6 @@ use std::collections::BTreeSet;
 use zetesis_ferraris::{Node, Theory};
 use zetesis_sat::{
     BatchError, BatchVerdict, Cancellation, CertificateLimits, CertificateOrder, Incomplete,
-    Limits, SearchMethod, StableModels,
 };
 use zetesis_theory_support::theories::theory;
 
@@ -188,31 +187,6 @@ fn empty_universe_bounds_can_exclude_the_empty_interpretation() {
             .unwrap();
         assert!(route.collect(&mut search).is_empty());
     }
-}
-
-#[test]
-fn clauses_retain_equivalent_bounds_and_independent_restrictions() {
-    let original = choices(3);
-    let mut search = StableModels::with_method(
-        &original,
-        SearchMethod::Clauses,
-        Limits::default(),
-        Cancellation::default(),
-    )
-    .unwrap();
-    search.tighten_candidate_bound(&disjunction(3)).unwrap();
-    search
-        .restrict_candidates(&theory(
-            3,
-            vec![Node::atom(2), Node::falsum(), Node::implies(0, 1)],
-            vec![2],
-        ))
-        .unwrap();
-    search.tighten_candidate_bound(&conjunction(3)).unwrap();
-    assert_eq!(
-        Route::Scalar.collect(&mut search),
-        BTreeSet::from([vec![0, 1]])
-    );
 }
 
 #[test]

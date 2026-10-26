@@ -3,7 +3,7 @@ use clap::{Parser, Subcommand};
 use std::num::NonZeroUsize;
 use std::path::PathBuf;
 
-use crate::{Backend, Grounder, Oracle, SearchMethod, SourceBatching};
+use crate::{Backend, Grounder, Oracle, SourceBatching};
 
 #[cfg(any(target_os = "linux", test))]
 mod cgroup;
@@ -85,14 +85,6 @@ pub struct Options {
     /// requests are always honored or refused.
     #[arg(long, value_parser = oracle_parser(), default_value = "auto", hide_short_help = true)]
     pub oracle: Oracle,
-    /// Advanced formula search method, for proposing candidates and for the
-    /// reduct's proper-subset query alike. Regions, the default, narrow the
-    /// candidate space and the reduct's subsets by the theory's readings;
-    /// clauses is the classical search over a clause form, with its own
-    /// batched completion under the shared thread and memory allowance. The
-    /// reduct decides membership either way.
-    #[arg(long, value_parser = search_parser(), default_value = "regions", hide_short_help = true)]
-    pub search: SearchMethod,
     /// Print grounding, solving and execution statistics on stderr.
     ///
     /// Report version, settings, completion, available counters and total driver
@@ -284,7 +276,6 @@ impl From<&Options> for crate::SolveConfig {
             grounder: options.grounder,
             source_batching: options.source_batching,
             oracle: options.oracle,
-            search: options.search,
             stats: options.stats,
             models: options.models,
             ..options.resources().solve_config()
@@ -348,22 +339,6 @@ fn source_batching_parser() -> impl TypedValueParser<Value = SourceBatching> {
             SourceBatching::Worlds,
             PossibleValue::new(SourceBatching::Worlds.label())
                 .help("Prune source prefixes with per-world membership; evaluate on Rayon."),
-        ),
-    ])
-}
-
-fn search_parser() -> impl TypedValueParser<Value = SearchMethod> {
-    policy_parser([
-        (
-            SearchMethod::Regions,
-            PossibleValue::new(SearchMethod::Regions.label()).help(
-                "Regions narrowed by the theory's readings, for candidates and for the reduct query; no clause form.",
-            ),
-        ),
-        (
-            SearchMethod::Clauses,
-            PossibleValue::new(SearchMethod::Clauses.label())
-                .help("The classical search over a clause form for candidates, and the clause query for the reduct."),
         ),
     ])
 }

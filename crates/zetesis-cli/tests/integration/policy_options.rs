@@ -1,7 +1,7 @@
 //! Public options select algorithms and the shared ordinary resource policy.
 
 use clap::{CommandFactory, FromArgMatches, Parser, error::ErrorKind};
-use zetesis_cli::{Backend, Grounder, Options, Oracle, SearchMethod, SolveConfig, SourceBatching};
+use zetesis_cli::{Backend, Grounder, Options, Oracle, SolveConfig, SourceBatching};
 
 #[test]
 fn algorithm_options_preserve_the_selected_policies() {
@@ -15,8 +15,6 @@ fn algorithm_options_preserve_the_selected_policies() {
         "worlds",
         "--oracle",
         "closure",
-        "--search",
-        "regions",
         "--stats",
         "--models",
         "11",
@@ -31,7 +29,6 @@ fn algorithm_options_preserve_the_selected_policies() {
     assert_eq!(config.grounder, Grounder::Lazy);
     assert_eq!(config.source_batching, SourceBatching::Worlds);
     assert_eq!(config.oracle, Oracle::Closure);
-    assert_eq!(config.search, SearchMethod::Regions);
     assert!(config.stats);
     assert_eq!(config.models, 11);
     assert_eq!(config.workers.get(), 3);
@@ -179,13 +176,10 @@ fn oracle_spellings_select_typed_policies() {
 }
 
 #[test]
-fn search_spellings_select_typed_policies() {
-    for (spelling, expected) in [
-        ("regions", SearchMethod::Regions),
-        ("clauses", SearchMethod::Clauses),
-    ] {
-        let options = Options::try_parse_from(["zetesis", "--search", spelling]).unwrap();
-        assert_eq!(options.search, expected);
+fn the_removed_search_option_is_refused() {
+    for spelling in ["regions", "clauses"] {
+        let error = Options::try_parse_from(["zetesis", "--search", spelling]).unwrap_err();
+        assert_eq!(error.kind(), ErrorKind::UnknownArgument);
     }
 }
 
@@ -199,7 +193,6 @@ fn policy_defaults_match_the_solver_configuration() {
         SolveConfig::DEFAULT.source_batching
     );
     assert_eq!(options.oracle, SolveConfig::DEFAULT.oracle);
-    assert_eq!(options.search, SolveConfig::DEFAULT.search);
 }
 
 #[test]
@@ -209,7 +202,6 @@ fn policy_values_retain_case_sensitive_refusal() {
         ("--grounder", "LAZY"),
         ("--source-batching", "WORLDS"),
         ("--oracle", "COUNTERMODEL"),
-        ("--search", "CLAUSES"),
     ] {
         let error = Options::try_parse_from(["zetesis", flag, value]).unwrap_err();
         assert_eq!(error.kind(), ErrorKind::InvalidValue);

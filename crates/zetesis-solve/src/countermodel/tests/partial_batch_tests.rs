@@ -12,7 +12,7 @@ use super::test_harness::{admitted, input, run};
 use crate::formula_execution::{Failure, FormulaExecutionStatistics, MembershipExecution};
 use crate::formula_queue::BatchQueue;
 use crate::phase_timing::Recorder;
-use crate::{Backend, Oracle, SearchMethod, SolveConfig, SolveError};
+use crate::{Backend, Oracle, SolveConfig, SolveError};
 
 #[derive(Default)]
 struct Injected {
@@ -89,12 +89,12 @@ impl MembershipExecution for Injected {
     }
 }
 
-/// The batched protocol the injected checker takes part in belongs to
-/// the clause search.
+/// One region walker, whose candidates the injected checker answers in
+/// batches; several walkers would decide their leaves themselves.
 fn config() -> SolveConfig {
     SolveConfig {
         backend: Backend::Cpu,
-        search: SearchMethod::Clauses,
+        workers: NonZeroUsize::MIN,
         oracle: Oracle::Countermodel,
         models: 0,
         batch_size: NonZeroUsize::new(2).unwrap(),
@@ -238,7 +238,8 @@ fn stopping_pulls_preserves_unconsumed_membership() {
         )
         .unwrap()
         .unwrap();
-    assert!(first.0.atoms().is_empty());
+    // The walk visits the held branch first: the full choice comes first.
+    assert_eq!(first.0.atoms().len(), 2);
     let outcome = session.outcome(&phases);
     assert_eq!(outcome.verified_models(), 3);
     let statistics = outcome.formula_execution().unwrap();

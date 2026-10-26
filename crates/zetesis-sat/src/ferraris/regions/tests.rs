@@ -7,7 +7,7 @@ use super::*;
 use crate::budget::LocalQuota;
 use crate::ferraris::fresh_membership;
 use crate::ferraris::original_index::{OriginalIndex, hooks};
-use crate::prepared_reduct::State;
+use crate::reduct::State;
 use crate::{
     BatchLimits, BatchVerdict, CertificateLimits, CertificateOrder, Limits, SearchLimits,
     SearchStatistics, StableModels, Statistics,
@@ -386,7 +386,7 @@ fn a_lent_index_rejects_an_independent_equal_theory() {
     let equal = cycle();
     let candidate = Interpretation::new(&equal, []).unwrap();
     let index = built(&theory);
-    let mut state = State::new(SearchMethod::Regions);
+    let mut state = State::default();
     let cancellation = Cancellation::default();
     let mut budget = budget(&cancellation, 100);
     let mut statistics = Statistics::default();
@@ -440,7 +440,7 @@ fn a_built_index_needs_no_second_grant() {
             .unwrap(),
     );
     assert_eq!(hooks::builds(&theory), 1);
-    let mut state = State::new(SearchMethod::Regions);
+    let mut state = State::default();
     let mut statistics = Statistics::default();
     let candidate = Interpretation::new(&theory, []).unwrap();
     assert!(matches!(
@@ -474,11 +474,9 @@ fn standalone_membership_charges_its_one_index() {
             fresh_membership(
                 &theory,
                 &candidate,
-                SearchMethod::Regions,
                 Limits::default(),
                 &mut budget,
                 &mut statistics,
-                &mut crate::ferraris::reduct_query::Workspace::default(),
             ),
             Err(Incomplete::WorkLimit)
         ));
@@ -493,7 +491,7 @@ fn cancelled_lent_membership_performs_no_query_work() {
     let theory = cycle();
     let candidate = Interpretation::new(&theory, []).unwrap();
     let index = built(&theory);
-    let mut state = State::new(SearchMethod::Regions);
+    let mut state = State::default();
     let cancellation = Cancellation::default();
     let mut budget = budget(&cancellation, 100);
     let mut statistics = Statistics::default();
@@ -518,7 +516,7 @@ fn a_failed_region_query_records_growth_without_replacing_its_error() {
     let theory = cycle();
     let candidate = Interpretation::new(&theory, []).unwrap();
     let index = built(&theory);
-    let mut workspace = crate::ReductWorkspace::default();
+    let mut workspace = crate::reduct::ReductWorkspace::default();
     let cancellation = Cancellation::default();
     let mut budget = budget(&cancellation, 0);
     let mut statistics = Statistics::default();

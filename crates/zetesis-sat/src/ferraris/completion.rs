@@ -7,14 +7,13 @@ use rayon::prelude::*;
 use zetesis_ferraris::{Interpretation, Theory};
 
 use super::{BatchVerdict, Limits, Statistics};
-use crate::budget::{BoundedQuota, Budget, LocalQuota, Quota, SharedBudget, increment, storage};
+use crate::budget::{Budget, LocalQuota, Quota, SharedBudget, increment, storage};
 use crate::ferraris::Decision;
+use crate::reduct::ReductWorkspace;
 use crate::timing::{self, Phase};
-use crate::{PreparedReduct, ReductWorkspace};
 
 mod scratch;
 use crate::{Cancellation, Incomplete, PhaseMeasurement, SearchPhaseTimings};
-pub use scratch::CompletionScratch;
 
 /// Accounting for the last entered completion attempt, including failed jobs.
 /// Worker intervals may overlap; their sums are not coordinator wall time.
@@ -25,14 +24,15 @@ pub struct CompletionStatistics {
     /// Maximum query concurrency selected at preflight (zero without residuals).
     /// Candidate work starts only after the retained storage is also admitted.
     pub effective_workers: usize,
-    /// Minimum requested conservative envelope selected before allocation.
+    /// Storage requested before allocation: the ordered results. Query
+    /// workspaces are measured as they are created.
     pub requested_scratch_bytes: u64,
-    /// Shared prepared owner plus actual worker-vector capacities and
-    /// conservative transient/result storage. May exceed the ceiling on a post-
-    /// reservation scratch refusal; no candidate work has then started.
+    /// Actual worker-workspace capacities and the ordered result storage.
+    /// May exceed the ceiling on a scratch refusal; no candidate work has then
+    /// started.
     /// Allocator/table control overhead, stacks and device memory are excluded.
-    /// Saturates at `u64::MAX` if the envelope is unrepresentable. Such an
-    /// attempt fails; an earlier reservation error retains precedence.
+    /// Saturates at `u64::MAX` if the envelope is unrepresentable; such an
+    /// attempt fails.
     pub peak_scratch_bytes: u64,
     /// Candidate slots actually entered, including supplied certificates.
     pub candidates: usize,
@@ -68,14 +68,14 @@ pub struct CompletionStatistics {
 /// polling cooperative control between bounded timed waits. Decision permits
 /// remain individually shared. Neither policy gives a hard response deadline.
 ///
-/// Completion admits all ordered result slots and a conservative query envelope
-/// before allocating scratch. Concurrency shrinks to fit that requested
-/// envelope; actual retained capacities are checked before any candidate work.
-/// Allocation slack can still refuse a batch, which remains pending.
-/// Slots reserved but unused remain charged until the joined attempt returns.
-/// Worker/result scratch is released between calls; the enumeration retains
-/// its shared prepared owner. This is not an RSS, allocator-overhead,
-/// thread-stack, original-theory, candidate-cursor or GPU-memory limit.
+/// Completion admits all ordered result slots before allocating scratch, and
+/// each worker workspace as it is created; actual retained capacities are
+/// checked before any candidate work, and each query's workspace is bounded by
+/// `Limits::max_reduct_bytes`. Allocation slack can still refuse a batch, which
+/// remains pending. Slots reserved but unused remain charged until the joined
+/// attempt returns. Worker/result scratch is released between calls. This is
+/// not an RSS, allocator-overhead, thread-stack, original-theory or GPU-memory
+/// limit.
 #[derive(Debug)]
 pub struct CompletionExecutor {
     pool: Option<rayon::ThreadPool>,
@@ -96,23 +96,6 @@ impl Default for CompletionExecutor {
 impl CompletionExecutor {
     /// Default aggregate logical scratch ceiling for bounded completion batches.
     pub(crate) const DEFAULT_SCRATCH_BYTES: u64 = 256 * 1024 * 1024;
-
-    /// Requested parametric storage estimated from the original theory.
-    ///
-    /// Treats every node as an implication, bounded by `reduct_admission`.
-    /// Includes one shared owner, one query and the ordered batch results;
-    /// allocator slack is excluded. [`PreparedReduct::scratch_requirements`]
-    /// instead uses the actual compiled shape and shared owner capacity.
-    ///
-    /// # Errors
-    /// Refuses unrepresentable shape or byte arithmetic before allocation.
-    pub fn scratch_requirements(
-        theory: &Theory,
-        limits: Limits,
-        candidates: usize,
-    ) -> Result<CompletionScratch, Incomplete> {
-        scratch::requirements(theory, limits, candidates)
-    }
 
     /// The separately configured logical completion-scratch ceiling.
     #[must_use]
@@ -153,7 +136,7 @@ impl CompletionExecutor {
         })
     }
 
-    /// Maximum simultaneous exact queries; the outer candidate cursor is serial.
+    /// Maximum simultaneous exact queries; candidate proposal stays serial.
     #[must_use]
     pub fn workers(&self) -> usize {
         self.pool
@@ -177,31 +160,6 @@ impl CompletionExecutor {
         budget: &mut Budget<'_>,
         statistics: &mut Statistics,
         accepted: &mut Vec<bool>,
-        reduct: &mut crate::prepared_reduct::State,
-    ) -> Result<(), Incomplete> {
-        self.complete_with(
-            input,
-            budget,
-            statistics,
-            accepted,
-            reduct,
-            ReductWorkspace::reserve,
-        )
-    }
-
-    fn complete_with(
-        &mut self,
-        input: Input<'_>,
-        budget: &mut Budget<'_>,
-        statistics: &mut Statistics,
-        accepted: &mut Vec<bool>,
-        reduct: &mut crate::prepared_reduct::State,
-        mut reserve: impl FnMut(
-            &mut ReductWorkspace,
-            &PreparedReduct,
-            u64,
-            &Cancellation,
-        ) -> Result<(), Incomplete>,
     ) -> Result<(), Incomplete> {
         self.last = None;
         let timed = statistics.phase_timings.is_some();
@@ -213,57 +171,35 @@ impl CompletionExecutor {
         };
         let started = timed.then(Instant::now);
         let result = (|| {
-            let result_slots = scratch::results(input.candidates.len())?;
-            result_slots.admit(0, self.max_scratch_bytes)?;
+            let result_bytes = scratch::results(input.candidates.len())?;
+            scratch::admit(result_bytes, 0, self.max_scratch_bytes)?;
             let residuals = input
                 .verdicts
                 .iter()
                 .filter(|v| **v == BatchVerdict::Residual)
                 .count();
-            if residuals != 0 {
-                reduct.ensure(input.theory, input.limits, budget, statistics)?;
-            }
-            let input = Input {
-                prepared: reduct.prepared(),
-                ..input
-            };
-            let requirements = input.prepared.map_or(Ok(result_slots), |owner| {
-                owner.scratch_requirements(input.candidates.len())
-            })?;
-            progress.peak_scratch_bytes = requirements.shared_bytes;
-            let admission =
-                requirements.admit(self.workers().min(residuals), self.max_scratch_bytes)?;
-            progress.effective_workers = admission.0;
-            progress.requested_scratch_bytes = admission.1;
-            progress.peak_scratch_bytes = requirements.shared_bytes + requirements.result_bytes;
+            let admitted = scratch::admit(
+                result_bytes,
+                self.workers().min(residuals),
+                self.max_scratch_bytes,
+            )?;
+            progress.effective_workers = admitted;
+            progress.requested_scratch_bytes = result_bytes;
+            progress.peak_scratch_bytes = result_bytes;
             accepted
                 .try_reserve_exact(input.candidates.len())
                 .map_err(|_| Incomplete::Allocation)?;
-            let mut workspaces = storage(admission.0)?;
-            let transient = input.prepared.map_or(0, scratch::transient);
-            let mut peak = u128::from(requirements.shared_bytes)
-                + u128::from(requirements.result_bytes)
+            let mut workspaces = storage(admitted)?;
+            let mut peak = u128::from(result_bytes)
                 + workspaces.capacity() as u128 * std::mem::size_of::<ReductWorkspace>() as u128;
             record_peak(&mut progress, peak)?;
-            for _ in 0..admission.0 {
+            for _ in 0..admitted {
                 budget.cancellation.poll()?;
-                let mut workspace = ReductWorkspace::default();
-                // The region query has no prepared owner to reserve against;
-                // its worker workspace holds the evaluation alone.
-                let reservation = match input.prepared {
-                    Some(owner) => reserve(
-                        &mut workspace,
-                        owner,
-                        input.limits.max_reduct_bytes,
-                        budget.cancellation,
-                    ),
-                    None => Ok(()),
-                };
-                // Every header was counted with the outer allocation. Even a
-                // failed reservation can retain newly allocated query vectors.
-                peak += workspace.retained_bytes() - std::mem::size_of::<ReductWorkspace>() as u128
-                    + transient;
-                record_reservation(&mut progress, peak, reservation)?;
+                let workspace = ReductWorkspace::default();
+                // Every header was counted with the outer allocation; a fresh
+                // workspace holds its evaluation alone, which grows per query.
+                peak += workspace.retained_bytes() - std::mem::size_of::<ReductWorkspace>() as u128;
+                record_peak(&mut progress, peak)?;
                 if progress.peak_scratch_bytes > self.max_scratch_bytes {
                     return Err(Incomplete::CompletionScratch);
                 }
@@ -304,16 +240,6 @@ fn record_peak(progress: &mut CompletionStatistics, peak: u128) -> Result<(), In
     measured.map(|_| ())
 }
 
-fn record_reservation(
-    progress: &mut CompletionStatistics,
-    peak: u128,
-    reservation: Result<(), Incomplete>,
-) -> Result<(), Incomplete> {
-    let measured = record_peak(progress, peak);
-    reservation?;
-    measured
-}
-
 /// Borrows the immutable batch owner for the lifetime of a joined execution.
 /// No candidate restriction, cursor, objective state or publication sink enters
 /// a worker; only the original Theory and its matching interpretation do.
@@ -323,10 +249,8 @@ pub(super) struct Input<'a> {
     pub(super) candidates: &'a [Interpretation],
     pub(super) verdicts: &'a [BatchVerdict],
     pub(super) limits: Limits,
-    /// The prepared reduct encoding, under the clause kernel.
-    pub(super) prepared: Option<&'a PreparedReduct>,
-    /// The region query, under the regions method, over the original index
-    /// its owner lends; completion never builds one.
+    /// The region query, over the original index its owner lends; completion
+    /// never builds one.
     pub(super) query: Option<super::ReductQuery<'a>>,
 }
 
@@ -349,11 +273,8 @@ fn classify(
         BatchVerdict::Refuted => Ok(false),
         BatchVerdict::NotModel => Err(Incomplete::InvalidWitness),
         BatchVerdict::Residual => {
-            let verdict = match (input.prepared, input.query) {
-                (Some(prepared), _) => {
-                    prepared.check_with(candidate, workspace, input.limits, budget, statistics)?
-                }
-                (None, Some(query)) => {
+            let verdict = match input.query {
+                Some(query) => {
                     let result = (|| {
                         let evaluated = workspace.evaluate(
                             candidate,
@@ -382,7 +303,7 @@ fn classify(
                     })();
                     workspace.finish_check(result, input.limits.max_reduct_bytes, statistics)?
                 }
-                (None, None) => return Err(Incomplete::InvalidWitness),
+                None => return Err(Incomplete::InvalidWitness),
             };
             match Decision::from(verdict) {
                 Decision::Stable => Ok(true),
@@ -403,8 +324,8 @@ fn scalar(
 ) -> Result<(), Incomplete> {
     progress.worker_original_validation = None;
     progress.worker_reduct = None;
-    let mut bounded = Budget {
-        quota: BoundedQuota(LocalQuota),
+    let mut local = Budget {
+        quota: LocalQuota,
         limits: budget.limits,
         cancellation: budget.cancellation,
         statistics: budget.statistics,
@@ -414,20 +335,13 @@ fn scalar(
     let result = (|| {
         for (candidate, &verdict) in input.candidates.iter().zip(input.verdicts) {
             // Retain the existing scalar counters, work order and failure boundary.
-            let result = classify(
-                input,
-                candidate,
-                verdict,
-                &mut bounded,
-                statistics,
-                workspace,
-            );
+            let result = classify(input, candidate, verdict, &mut local, statistics, workspace);
             entered(progress, verdict, &result);
             accepted.push(result?);
         }
         Ok(())
     })();
-    budget.statistics = bounded.statistics;
+    budget.statistics = local.statistics;
     result
 }
 
@@ -471,7 +385,7 @@ fn parallel(
     for (outcome, &verdict) in outcomes.into_iter().zip(input.verdicts) {
         let outcome = outcome.expect("joined indexed execution fills every owned slot");
         entered(progress, verdict, &outcome.result);
-        let merged = merge(statistics, budget, &outcome.statistics);
+        let merged = merge(statistics, &outcome.statistics);
         merge_timing(progress, outcome.statistics.phase_timings);
         if failure.is_none() {
             failure = merged
@@ -494,7 +408,7 @@ fn run(
     workspace: &mut ReductWorkspace,
 ) -> Outcome {
     let mut budget = Budget {
-        quota: BoundedQuota(shared.lease(cancellation)),
+        quota: shared.lease(cancellation),
         limits: input.limits.search,
         cancellation,
         statistics: crate::SearchStatistics::default(),
@@ -528,21 +442,12 @@ fn entered(
     progress.residual_failed += usize::from(verdict == BatchVerdict::Residual && result.is_err());
 }
 
-fn merge(
-    statistics: &mut Statistics,
-    budget: &mut Budget<'_>,
-    worker: &Statistics,
-) -> Result<(), Incomplete> {
+fn merge(statistics: &mut Statistics, worker: &Statistics) -> Result<(), Incomplete> {
     add(
         &mut statistics.countermodel_queries,
         worker.countermodel_queries,
     )?;
     add(&mut statistics.countermodels, worker.countermodels)?;
-    add(
-        &mut budget.statistics.propagations,
-        worker.search.propagations,
-    )?;
-    add(&mut budget.statistics.conflicts, worker.search.conflicts)?;
     add(
         &mut statistics.reduct.original_work,
         worker.reduct.original_work,
@@ -562,10 +467,6 @@ fn merge(
     add(
         &mut statistics.reduct.frozen_positive_work,
         worker.reduct.frozen_positive_work,
-    )?;
-    add(
-        &mut statistics.reduct.parameter_work,
-        worker.reduct.parameter_work,
     )?;
     statistics.reduct.regions.add(worker.reduct.regions)?;
     statistics.reduct.peak_workspace_bytes = statistics
@@ -609,15 +510,3 @@ fn merge_timing(progress: &mut CompletionStatistics, worker: Option<SearchPhaseT
 
 #[cfg(test)]
 mod tests;
-
-impl PreparedReduct {
-    /// Exact shared owner capacity plus requested disjoint query/result slots.
-    /// Uses the actual compiled CNF shape, preserving gate-sharing reductions.
-    /// Actual worker capacities are still checked after reservation.
-    ///
-    /// # Errors
-    /// Refuses unrepresentable byte arithmetic before allocating result slots.
-    pub fn scratch_requirements(&self, candidates: usize) -> Result<CompletionScratch, Incomplete> {
-        scratch::prepared(self, candidates)
-    }
-}

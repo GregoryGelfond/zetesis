@@ -209,7 +209,7 @@ fn phases(out: &mut Buffer, timings: Option<&PhaseTimings>) -> Result<(), RunErr
         return out.text("null");
     };
     out.text(&format!(
-        "{{\"schema\":5,\"clock\":\"host_monotonic\",\"driver_elapsed_ns\":{},\"measurements\":{{",
+        "{{\"schema\":6,\"clock\":\"host_monotonic\",\"driver_elapsed_ns\":{},\"measurements\":{{",
         timings.driver_elapsed.as_nanos()
     ))?;
     for (index, phase) in SolvePhase::ALL.into_iter().enumerate() {
@@ -362,11 +362,6 @@ fn reason_code(reason: Interruption) -> &'static str {
                 Incomplete::WorkLimit => "work_limit",
                 Incomplete::DecisionLimit => "decision_limit",
                 Incomplete::CandidateLimit => "candidate_limit",
-                Incomplete::ProjectionLimit { resource, .. } => match resource {
-                    zetesis_sat::ProjectionResource::Entries => "projection_entries",
-                    zetesis_sat::ProjectionResource::Nodes => "projection_nodes",
-                    zetesis_sat::ProjectionResource::Bytes => "projection_bytes",
-                },
                 Incomplete::PendingBytes => "pending_bytes",
                 Incomplete::CompletionScratch => "completion_scratch",
                 Incomplete::ReductStorage { .. } => "reduct_storage",
@@ -375,14 +370,12 @@ fn reason_code(reason: Interruption) -> &'static str {
                 Incomplete::PendingBatch => "pending_batch",
                 Incomplete::Allocation => "allocation",
                 Incomplete::WorkerPanicked => "worker_panicked",
-                Incomplete::Admission(_) => "admission",
                 Incomplete::WrongTheory => "wrong_theory",
                 Incomplete::RestrictionUniverse { .. } => "restriction_universe",
                 Incomplete::ClosedEnumerator => "closed_enumerator",
                 Incomplete::LateCertificate => "late_certificate",
                 Incomplete::RegionFilter => "region_filter",
                 Incomplete::InvalidRegionConsequence => "invalid_region_consequence",
-                Incomplete::RegionFilterUnsupported => "region_filter_unsupported",
                 Incomplete::LateRegionFilter => "late_region_filter",
                 Incomplete::LateCandidateBounds => "late_candidate_bounds",
                 Incomplete::RegionFilterAlreadySet => "region_filter_already_set",
@@ -874,21 +867,11 @@ fn search_statistics(
     out.text(",\"scope\":")?;
     out.string(scope)?;
     out.number_field("decisions", stats.search.decisions)?;
-    out.number_field("candidate_queries", stats.candidate_queries)?;
     out.number_field("candidate_restrictions", stats.candidate_restrictions)?;
     out.number_field("candidates", stats.candidates)?;
     out.number_field("countermodel_queries", stats.countermodel_queries)?;
     out.number_field("countermodels", stats.countermodels)?;
     out.number_field("stable_models", stats.stable_models)?;
-    out.text(",\"projection_history\":{\"entries\":")?;
-    out.text(&stats.projections.entries.to_string())?;
-    out.number_field("nodes", stats.projections.nodes)?;
-    out.number_field("retained_bytes", stats.projections.retained_bytes)?;
-    out.number_field("peak_bytes", stats.projections.peak_bytes)?;
-    out.number_field("work", stats.projections.work)?;
-    out.text("}")?;
-    out.text(",\"necessary_support\":")?;
-    support_statistics(out, stats.support)?;
     out.text(",\"candidate_regions\":")?;
     region_statistics(out, stats.regions.as_ref())?;
     out.text(",\"region_filter\":")?;
@@ -1128,24 +1111,6 @@ fn candidate_statistics(
     out.text("}}")
 }
 
-fn support_statistics(
-    out: &mut Buffer,
-    statistics: Option<zetesis_sat::SupportStatistics>,
-) -> Result<(), RunError> {
-    let Some(stats) = statistics else {
-        return out.text("null");
-    };
-    out.text("{\"status\":")?;
-    out.string(match stats.status {
-        zetesis_sat::SupportStatus::Applied => "applied",
-        zetesis_sat::SupportStatus::NotApplicable => "not_applicable",
-        zetesis_sat::SupportStatus::FormulaLimit => "formula_limit",
-        zetesis_sat::SupportStatus::EncodingLimit(_) => "encoding_limit",
-    })?;
-    out.number_field("construction_work", stats.construction_work)?;
-    out.number_field("encoding_work", stats.encoding_work)?;
-    out.text("}")
-}
 fn execution_statistics(
     out: &mut Buffer,
     statistics: Option<&crate::FormulaExecutionStatistics>,

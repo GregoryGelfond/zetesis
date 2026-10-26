@@ -71,25 +71,8 @@ fn statistics_explain_candidate_restriction_units() {
     assert!(text.contains("allocator/index overhead excluded"), "{text}");
 }
 
-#[test]
-fn statistics_identify_necessary_disjunctive_support_under_clauses() {
-    let (_, _, text) = solve(
-        "a | b.",
-        &options(&["--stats", "--oracle", "countermodel", "--search", "clauses"]),
-    );
-    assert!(
-        text.contains("necessary disjunctive support: status=Applied;"),
-        "{text}"
-    );
-    assert!(text.contains("(included in search work)"), "{text}");
-    assert!(!text.contains("candidate regions:"), "{text}");
-}
-
 fn regions_statistics() -> String {
-    let (_, _, text) = solve(
-        "a | b.",
-        &options(&["--stats", "--oracle", "countermodel", "--search", "regions"]),
-    );
+    let (_, _, text) = solve("a | b.", &options(&["--stats", "--oracle", "countermodel"]));
     text
 }
 
@@ -97,7 +80,7 @@ fn regions_statistics() -> String {
 fn statistics_report_the_regions_the_search_visited() {
     let text = regions_statistics();
     assert!(
-        text.contains("oracle=countermodel; grounder=auto; search=regions"),
+        text.contains("  requested: backend=cpu; oracle=countermodel; grounder=auto\n"),
         "{text}"
     );
     assert!(text.contains("candidate regions: visited="), "{text}");
@@ -106,7 +89,7 @@ fn statistics_report_the_regions_the_search_visited() {
 
 #[test]
 fn statistics_report_the_parallel_walks_workers_under_its_regions() {
-    let mut configured = options(&["--stats", "--oracle", "countermodel", "--search", "regions"]);
+    let mut configured = options(&["--stats", "--oracle", "countermodel"]);
     configured.workers = std::num::NonZeroUsize::new(2).unwrap();
     let (report, _, text) = solve("a | b.", &configured);
     let regions = report.countermodel_statistics.unwrap().regions.unwrap();

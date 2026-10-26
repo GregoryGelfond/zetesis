@@ -85,15 +85,12 @@ fn lazy_grounding_defers_terminal_definitions_over_a_hybrid_base() {
 }
 
 #[test]
-fn a_rejected_core_answer_is_never_extended() {
-    // The core answers {b} and {a, b} violate `:- b.` and would extend by t/1;
-    // only the two accepted ones are reconstructed. Clause search proposes
-    // every core answer, so each one reaches the full check.
+fn a_filtered_core_answer_is_never_extended() {
+    // The answers {b} and {a, b} violate `:- b.` and would extend by t/1; the
+    // region filter's source consequences exclude them before they are core
+    // answers, so only the two accepted ones are reconstructed.
     let owner = lazy_terminal("{a; b}. d(1..2). t(X) :- b, d(X). :- b.");
-    let config = SolveConfig {
-        search: zetesis_solve::SearchMethod::Clauses,
-        ..config(Grounder::Lazy)
-    };
+    let config = config(Grounder::Lazy);
     let (actual, view) = family(PreparedInput::terminal(&owner), config);
     assert_eq!(actual.len(), 2);
     assert!(actual.iter().all(|model| {
@@ -112,7 +109,13 @@ fn a_rejected_core_answer_is_never_extended() {
         2
     );
     let hybrid = outcome.hybrid_execution().unwrap();
-    assert_eq!((hybrid.core_answers, hybrid.rejected), (4, 2));
+    assert_eq!((hybrid.core_answers, hybrid.rejected), (2, 0));
+    let filter = outcome
+        .countermodel_statistics()
+        .unwrap()
+        .region_filter
+        .unwrap();
+    assert!(filter.checks > 0);
     assert_eq!(outcome.completion(), Some(Completion::Exhausted));
 }
 

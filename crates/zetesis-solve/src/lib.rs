@@ -145,7 +145,6 @@ pub use world_view::{
 };
 pub use zetesis_backend::{Backend, GpuApi};
 pub use zetesis_sat::BatchVerdict;
-pub use zetesis_sat::SearchMethod;
 pub use zetesis_telemetry::{GroundingMode, SolveStage, StageMeasurement, StageTimings};
 pub use zetesis_themelios::{GroundingOutcome, GroundingPhase, GroundingWork};
 

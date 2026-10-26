@@ -3,7 +3,6 @@
 use std::collections::BTreeSet;
 use std::io;
 
-use super::by_clauses;
 use zetesis_core::Model;
 use zetesis_cpu::Cancellation;
 use zetesis_ferraris::Interpretation;
@@ -19,7 +18,7 @@ fn attempt(
     foreign: bool,
     observer: &mut impl ExecutionObserver,
 ) -> (Result<(), SolveError>, StableModels) {
-    let planned = admitted("{a;b}. #minimize{1,a:a;1,b:b}.");
+    let planned = admitted(super::HEAVY_OBJECTIVE);
     let different = foreign.then(|| admitted("{x;y}."));
     let original = different.as_ref().unwrap_or(&planned);
     let options = SolveConfig::default();
@@ -61,11 +60,12 @@ fn attempt(
         .unwrap();
     let mut bounds = Bounds::new(&options);
     assert!(preparation.plan().is_some());
-    let mut limits = Limits::default();
-    if !foreign {
-        limits.admission.max_variables = original.atoms().len();
-    }
-    let mut models = by_clauses(original.theory(), limits, Cancellation::default()).unwrap();
+    let limits = if foreign {
+        Limits::default()
+    } else {
+        super::exact_search_limits(original.theory())
+    };
+    let mut models = StableModels::new(original.theory(), limits, Cancellation::default()).unwrap();
     let result = bounds.improve(
         preparation.plan(),
         score.score(),
@@ -115,10 +115,7 @@ impl ExecutionObserver for RefuseObservation {
             assert!(matches!(
                 observation,
                 ExecutionObservation::ObjectiveRestrictionStopped(
-                    zetesis_sat::Incomplete::Admission(zetesis_sat::AdmissionError::Limit {
-                        resource: zetesis_sat::Resource::Variables,
-                        ..
-                    })
+                    zetesis_sat::Incomplete::WorkLimit
                 )
             ));
         }

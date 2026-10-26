@@ -25,13 +25,7 @@ fn repeated_fact(roots: usize) -> Theory {
 }
 
 fn models(theory: &Theory, config: &SolveConfig, cancellation: Cancellation) -> StableModels {
-    StableModels::with_method(
-        theory,
-        zetesis_sat::SearchMethod::Regions,
-        search_limits(config),
-        cancellation,
-    )
-    .unwrap()
+    StableModels::new(theory, search_limits(config), cancellation).unwrap()
 }
 
 fn prepare(

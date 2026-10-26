@@ -197,7 +197,7 @@ struct Live {
     countermodel_queries: AtomicU64,
     countermodels: AtomicU64,
     /// The workers' phase timings, one pair of counters per phase.
-    timings: [LivePhase; 5],
+    timings: [LivePhase; 4],
 }
 
 /// One phase's calls and elapsed nanoseconds, summed over the workers.
@@ -347,30 +347,22 @@ impl Live {
             elapsed: Duration::from_nanos(Self::read(&live.nanos)),
             overflowed: live.overflowed.load(Ordering::Relaxed),
         };
-        let [
-            candidates,
-            original_validation,
-            reduct,
-            reduct_preparation,
-            certified,
-        ] = &self.timings;
+        let [candidates, original_validation, reduct, certified] = &self.timings;
         SearchPhaseTimings {
             candidates: read(candidates),
             original_validation: read(original_validation),
             reduct: read(reduct),
-            reduct_preparation: read(reduct_preparation),
             certified: read(certified),
         }
     }
 }
 
-/// The five phases in the order the live counters keep them.
+/// The four phases in the order the live counters keep them.
 fn phases(timings: &SearchPhaseTimings) -> impl Iterator<Item = &PhaseMeasurement> {
     [
         &timings.candidates,
         &timings.original_validation,
         &timings.reduct,
-        &timings.reduct_preparation,
         &timings.certified,
     ]
     .into_iter()
@@ -1534,7 +1526,7 @@ enum Stepped {
 /// needed.
 struct Workspaces<'a> {
     scratch: NarrowingScratch,
-    membership: crate::prepared_reduct::State,
+    membership: crate::reduct::State,
     certificate: certified::Workspace,
     filter: Option<crate::region_filter::Worker<'a>>,
     retired_knowledge: Option<CandidateKnowledge>,
@@ -1544,7 +1536,7 @@ impl Workspaces<'_> {
     fn new() -> Self {
         Self {
             scratch: NarrowingScratch::default(),
-            membership: crate::prepared_reduct::State::new(crate::SearchMethod::Regions),
+            membership: crate::reduct::State::default(),
             certificate: certified::Workspace::default(),
             filter: None,
             retired_knowledge: None,
@@ -1663,7 +1655,7 @@ fn leaf<'a>(
     original: &IndexedTheory,
     region: &Region,
     budget: &mut Budget<'a, WorkLease<'a>>,
-    membership: &mut crate::prepared_reduct::State,
+    membership: &mut crate::reduct::State,
     workspace: &mut certified::Workspace,
     report: &mut WorkerReport,
 ) -> Result<Option<Interpretation>, Incomplete> {

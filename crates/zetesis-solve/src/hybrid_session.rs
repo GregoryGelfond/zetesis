@@ -171,16 +171,14 @@ impl<'a> HybridSession<'a> {
             phases,
             selection,
         )?;
-        let regions = (owner.streamed_templates() != 0
-            && config.search == crate::SearchMethod::Regions)
-            .then(|| {
-                let regions = Arc::new(crate::hybrid_regions::Constraints::new(
-                    owner.clone(),
-                    allowance.clone(),
-                ));
-                core.set_region_filter(regions.clone(), phases);
-                regions
-            });
+        let regions = (owner.streamed_templates() != 0).then(|| {
+            let regions = Arc::new(crate::hybrid_regions::Constraints::new(
+                owner.clone(),
+                allowance.clone(),
+            ));
+            core.set_region_filter(regions.clone(), phases);
+            regions
+        });
         Ok(Self {
             subject,
             core,

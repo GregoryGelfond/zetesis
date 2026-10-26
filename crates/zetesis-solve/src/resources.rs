@@ -22,7 +22,7 @@
 
 use std::num::NonZeroUsize;
 
-use crate::{Backend, GpuBatching, Grounder, Oracle, SearchMethod, SolveConfig, SourceBatching};
+use crate::{Backend, GpuBatching, Grounder, Oracle, SolveConfig, SourceBatching};
 use zetesis_themelios::{
     AdmissionOptions, BundleLimits, ExpansionLimits, FormulaLimits, ProgramAdmissionOptions,
     observation,
@@ -88,7 +88,6 @@ impl Resources {
             grounder: Grounder::Auto,
             source_batching: SourceBatching::Independent,
             oracle: Oracle::Auto,
-            search: SearchMethod::Regions,
             stats: false,
             constraints: zetesis_themelios::ConstraintCheckLimits {
                 max_work: u64::MAX,
@@ -101,12 +100,6 @@ impl Resources {
             max_model_work: u64::MAX,
             max_model_bytes: self.bytes(32),
             max_projection_entries: self.cells(16, 16) as u64,
-            // Trie coordinates have an independent checked u32 representation.
-            max_projection_nodes: if self.cells(16, 16) > u32::MAX as usize {
-                u32::MAX as usize
-            } else {
-                self.cells(16, 16)
-            },
             max_projection_bytes: self.bytes(16),
             max_objective_work: u64::MAX,
             // Optional candidate pruning may stop without ending exact scoring.

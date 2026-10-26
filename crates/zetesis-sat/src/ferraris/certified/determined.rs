@@ -2,7 +2,7 @@
 
 use super::{CertificateError, Verdict};
 use crate::budget::{Budget, LocalQuota};
-use crate::{Cancellation, Cnf, Incomplete, Limits, Literal, SearchStatistics};
+use crate::{Cancellation, Incomplete, Limits, SearchStatistics};
 use zetesis_ferraris::{EvaluationError, EvaluationLimits, EvaluationWorkspace, Interpretation};
 
 /// Borrowed result of a complete positive or stratified producer evaluation.
@@ -12,35 +12,6 @@ pub(super) struct Determined<'a> {
     pub interpretation: &'a Interpretation,
     pub failed_constraint: Option<usize>,
     pub retained_bytes: u128,
-}
-
-/// Only original semantic atom IDs enter these units. No new formula owner or
-/// auxiliary gates are constructed. The original CNF remains unchanged on error;
-/// admitted work and allocated capacity remain visible after rollback.
-pub(super) fn restrict(
-    plan: Determined<'_>,
-    cnf: &mut Cnf,
-    budget: &mut Budget<'_>,
-) -> Result<usize, Incomplete> {
-    let checkpoint = cnf.checkpoint();
-    let result = (|| {
-        if plan.failed_constraint.is_some() {
-            budget.tick()?;
-            crate::encoding::clause(cnf, [], budget)?;
-            return Ok(1);
-        }
-        let least = plan.interpretation;
-        for atom in 0..least.theory().atom_count() {
-            // One charged identity/membership read and one charged literal write.
-            budget.tick()?;
-            crate::encoding::clause(cnf, [Literal::new(atom, least.contains(atom))], budget)?;
-        }
-        Ok(least.theory().atom_count())
-    })();
-    if result.is_err() {
-        cnf.rollback(checkpoint);
-    }
-    result
 }
 
 pub(super) fn check(

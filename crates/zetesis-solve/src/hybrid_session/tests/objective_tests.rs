@@ -14,7 +14,6 @@ fn config() -> SolveConfig {
     SolveConfig {
         backend: Backend::Cpu,
         grounder: Grounder::Lazy,
-        search: SearchMethod::Clauses,
         workers: std::num::NonZeroUsize::MIN,
         models: 0,
         ..SolveConfig::default()

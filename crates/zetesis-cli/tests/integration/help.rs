@@ -82,12 +82,7 @@ fn full_help_states_the_memory_default_as_a_rule() {
 #[test]
 fn full_help_retains_algorithm_choices() {
     let full = help("--help-all");
-    for choice in [
-        "--oracle",
-        "--search",
-        "--source-batching",
-        "--formula-joins",
-    ] {
+    for choice in ["--oracle", "--source-batching", "--formula-joins"] {
         assert!(full.contains(choice), "missing algorithm choice: {choice}");
     }
     assert!(full.contains("interrupted runs may display incumbents"));

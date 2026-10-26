@@ -187,7 +187,7 @@ fn eager_closure_work_does_not_claim_tuple_probes() {
 fn positive_execution_is_named_from_its_certificate() {
     let (options, outcome) = solve(
         "a. b:-a. a:-b. #minimize{2@3,k:b;1@1,k:a}.",
-        &["--grounder", "eager", "--search", "clauses"],
+        &["--grounder", "eager"],
         true,
     );
     let semantic = outcome.semantic();
@@ -227,13 +227,7 @@ fn objective_work_preserves_the_recorded_count() {
 #[test]
 fn batched_cpu_completion_does_not_claim_device_work() {
     let admitted = zetesis_reference_support::formula("a|b.");
-    let mut config = crate::support::prepared::config(&[
-        "--oracle",
-        "countermodel",
-        "--search",
-        "clauses",
-        "--stats",
-    ]);
+    let mut config = crate::support::prepared::config(&["--oracle", "countermodel", "--stats"]);
     config.solve.completion_workers = NonZeroUsize::new(2).unwrap();
     let outcome = zetesis_cli::publish_prepared(
         zetesis_cli::PreparedInput::formula(&admitted),

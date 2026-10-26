@@ -6,7 +6,7 @@ use crate::formula_execution::Execution;
 use crate::phase_timing::Recorder;
 use crate::{
     AnswerSelection, Backend, ExecutionObservation, ExecutionObserver, Interruption, Oracle,
-    SearchMethod, SolveConfig, SolveError,
+    SolveConfig, SolveError,
 };
 use std::io;
 use zetesis_cpu::Cancellation;
@@ -34,7 +34,6 @@ fn config() -> SolveConfig {
     SolveConfig {
         backend: Backend::Cpu,
         oracle: Oracle::Countermodel,
-        search: SearchMethod::Clauses,
         workers: std::num::NonZeroUsize::MIN,
         models: 0,
         max_objective_bound_work: 0,

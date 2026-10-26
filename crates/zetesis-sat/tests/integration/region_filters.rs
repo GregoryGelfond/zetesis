@@ -4,7 +4,7 @@ use std::collections::BTreeSet;
 use std::sync::atomic::Ordering;
 
 use zetesis_ferraris::{Node, TightPlanLimits};
-use zetesis_sat::{BatchError, Cancellation, Incomplete, Limits, SearchMethod, StableModels};
+use zetesis_sat::{BatchError, Cancellation, Incomplete};
 
 use crate::support::batching::{batch, residual};
 use crate::support::choice_theories::choices;
@@ -556,23 +556,6 @@ fn a_configured_filter_cannot_be_replaced() {
         ));
         assert_eq!(route.collect(&mut search).len(), 2);
     }
-}
-
-#[test]
-fn clause_search_refuses_region_filter_configuration() {
-    let subject = choices(1);
-    let mut search = StableModels::with_method(
-        &subject,
-        SearchMethod::Clauses,
-        Limits::default(),
-        Cancellation::default(),
-    )
-    .unwrap();
-    assert!(matches!(
-        search.set_region_filter(Filter::new(&subject, Condition::Pass)),
-        Err(Incomplete::RegionFilterUnsupported),
-    ));
-    assert!(search.statistics().region_filter.is_none());
 }
 
 #[test]

@@ -14,13 +14,7 @@ fn search(nodes: Vec<Node>, roots: Vec<usize>) -> crate::StableModels {
         AdmissionLimits::default(),
     )
     .unwrap();
-    crate::StableModels::with_method(
-        &theory,
-        SearchMethod::Regions,
-        Limits::default(),
-        Cancellation::default(),
-    )
-    .unwrap()
+    crate::StableModels::new(&theory, Limits::default(), Cancellation::default()).unwrap()
 }
 
 #[test]
@@ -44,7 +38,7 @@ fn cyclic_candidate_rejection_uses_complete_least_closure() {
     // Supply both classical candidates directly: original possible-founded
     // pruning may otherwise remove the nonminimal leaf before this check.
     let index = IndexedTheory::for_membership_test(&theory);
-    let mut state = State::new(SearchMethod::Regions);
+    let mut state = State::default();
     let limits = Limits::default();
     let cancellation = Cancellation::default();
     let mut budget = Budget {

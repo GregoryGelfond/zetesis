@@ -161,7 +161,7 @@ impl<'a, E: MembershipExecution> FormulaSession<'a, E> {
                     crate::countermodel::search_limits(config),
                     cancellation.clone(),
                 )
-            } else if config.search == crate::SearchMethod::Regions && config.workers.get() > 1 {
+            } else if config.workers.get() > 1 {
                 StableModels::with_region_producers(
                     self.input.theory,
                     config.workers,
@@ -169,9 +169,8 @@ impl<'a, E: MembershipExecution> FormulaSession<'a, E> {
                     cancellation.clone(),
                 )
             } else {
-                StableModels::with_method(
+                StableModels::new(
                     self.input.theory,
-                    config.search,
                     crate::countermodel::search_limits(config),
                     cancellation.clone(),
                 )
@@ -193,10 +192,7 @@ impl<'a, E: MembershipExecution> FormulaSession<'a, E> {
         // Ownership is established before any fallible certificate/diagnostic
         // operation, so its attempted work remains available on failure.
         self.models = Some(models);
-        if config.region_workers().is_none()
-            && config.search == crate::SearchMethod::Regions
-            && config.workers.get() > 1
-        {
+        if config.region_workers().is_none() && config.workers.get() > 1 {
             observations.record(Event::ParallelProposals {
                 workers: config.workers,
             })?;

@@ -31,10 +31,6 @@ command zetesis | An answer-set solver
       index=None action=Set num_args=Some(1) value_names=Some(["ORACLE"]) delimiter=None terminator=None parser=Oracle flags=[] conflicts=[]
       help "Advanced oracle selection. Auto preserves answer-set semantics while selecting an applicable reduct procedure. Explicit hardware and grounder requests are always honored or refused"
       long ""
-    arg search long=Some("search") short=None aliases=None values=["regions", "clauses"] defaults=["regions"] hidden=false short_help_hidden=true heading=Some("Advanced controls")
-      index=None action=Set num_args=Some(1) value_names=Some(["SEARCH"]) delimiter=None terminator=None parser=SearchMethod flags=[] conflicts=[]
-      help "Advanced formula search method, for proposing candidates and for the reduct's proper-subset query alike. Regions, the default, narrow the candidate space and the reduct's subsets by the theory's readings; clauses is the classical search over a clause form, with its own batched completion under the shared thread and memory allowance. The reduct decides membership either way"
-      long ""
     arg stats long=Some("stats") short=None aliases=None values=[] defaults=["false"] hidden=false short_help_hidden=false heading=Some("Output")
       index=None action=SetTrue num_args=Some(0) value_names=Some(["STATS"]) delimiter=None terminator=None parser=bool flags=[] conflicts=[]
       help "Print grounding, solving and execution statistics on stderr"
@@ -355,10 +351,6 @@ command zetesis | An answer-set solver
     arg oracle long=Some("oracle") short=None aliases=None values=["auto", "closure", "countermodel"] defaults=["auto"] hidden=false short_help_hidden=true heading=Some("Advanced controls")
       index=None action=Set num_args=Some(1) value_names=Some(["ORACLE"]) delimiter=None terminator=None parser=Oracle flags=[] conflicts=[]
       help "Advanced oracle selection. Auto preserves answer-set semantics while selecting an applicable reduct procedure. Explicit hardware and grounder requests are always honored or refused"
-      long ""
-    arg search long=Some("search") short=None aliases=None values=["regions", "clauses"] defaults=["regions"] hidden=false short_help_hidden=true heading=Some("Advanced controls")
-      index=None action=Set num_args=Some(1) value_names=Some(["SEARCH"]) delimiter=None terminator=None parser=SearchMethod flags=[] conflicts=[]
-      help "Advanced formula search method, for proposing candidates and for the reduct's proper-subset query alike. Regions, the default, narrow the candidate space and the reduct's subsets by the theory's readings; clauses is the classical search over a clause form, with its own batched completion under the shared thread and memory allowance. The reduct decides membership either way"
       long ""
     arg stats long=Some("stats") short=None aliases=None values=[] defaults=["false"] hidden=false short_help_hidden=false heading=Some("Output")
       index=None action=SetTrue num_args=Some(0) value_names=Some(["STATS"]) delimiter=None terminator=None parser=bool flags=[] conflicts=[]

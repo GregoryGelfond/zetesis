@@ -1482,7 +1482,7 @@ impl Narrower {
 
 /// The open atom to split on. Atoms marked in `choices` rank before every
 /// unmarked one; among equally ranked atoms, the one with the most parents
-/// still unknown, whose decision the theory is most sensitive to, as the
+/// still unknown, whose decision the theory is most sensitive to, as a
 /// clause search branches on the variable with the most unresolved
 /// occurrences; ties go to the lower atom. The counts are kept as parents
 /// become known, so ranking reads each eligible atom once. Packed choice

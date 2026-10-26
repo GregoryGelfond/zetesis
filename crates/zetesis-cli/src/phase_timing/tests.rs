@@ -28,7 +28,6 @@ fn every_phase_output_prefix_propagates_write_failure() {
         text.matches(": unmeasured\n").count(),
         SolvePhase::ALL.len() - 1
     );
-    assert!(text.contains("phase reduct_preparation: unmeasured\n"));
     assert!(text.ends_with("kernel_time=unmeasured\n"));
     for capacity in 0..reference.len() {
         let mut output = BoundedWriter::new(capacity);
