@@ -41,7 +41,7 @@ pub(crate) struct FormulaSession<'a, E> {
     // This session's last imported cumulative prefix, independently of every
     // other session sharing the host recorder. Repeated outcomes import no work.
     imported_timings: Cell<zetesis_stable::SearchPhaseTimings>,
-    // The original-region filter an owning session installed, which a tie
+    // The streamed constraints an owning session installed, which a tie
     // pass's fresh stream installs again.
     streamed_constraints: Option<std::sync::Arc<zetesis_stable::StreamedConstraints>>,
     // While a tie pass runs: how many of the retained optima the strict
@@ -642,13 +642,14 @@ impl<'a, E: MembershipExecution> FormulaSession<'a, E> {
     /// pass when one is owed: more than one optimal answer is requested, and
     /// the last installed bound, strict at the optimum, pruned its ties. The
     /// exhausted stream proved that no model is cheaper than the optimum; a
-    /// fresh stream over the same theory, with the same certificate and region
-    /// filter and bounded to cost at most the optimum, then enumerates every
-    /// optimal model, each once. It reports its receipts after the exhausted
-    /// stream's, and only its exhaustion completes the optimal family; a stop
-    /// from here on leaves that family incomplete and the optimum proved. Its
-    /// one bound never tightens, so the fresh stream declares no candidate
-    /// bounds: its producers walk apart, as an enumeration's do.
+    /// fresh stream over the same theory, with the same certificate and
+    /// streamed constraints and bounded to cost at most the optimum, then
+    /// enumerates every optimal model, each once. It reports its receipts after
+    /// the exhausted stream's, and only its exhaustion completes the optimal
+    /// family; a stop from here on leaves that family incomplete and the
+    /// optimum proved. Its one bound never tightens, so the fresh stream
+    /// declares no candidate bounds: its producers walk apart, as an
+    /// enumeration's do.
     fn begin_tie_pass(
         &mut self,
         config: &SolveConfig,

@@ -573,8 +573,8 @@ immutable source. Workspaces are used exclusively, may move between executor
 threads and number at most the requested workers. The retained checker borrows one stable owner;
 stopping or completing production drops the checkers before that owner.
 Candidate truth and support knowledge still travel with each region, so reuse
-does not transfer deductions between unrelated candidates. Source-filter
-callbacks retain their own checker lifetime, separate from formula evaluation.
+does not transfer deductions between unrelated candidates. The streamed
+constraints' checkers keep their own lifetime, separate from formula evaluation.
 
 The original CPU `with_region_workers` operation remains useful when each
 worker should perform both operations. The two schedules share the original
@@ -678,8 +678,9 @@ certificate constructors retain separate refinement obligations.
 For a complete positive atomic-head theory, `PositivePlan` computes the least
 consequences once and checks every original constraint. CPU region modes then
 propose only that interpretation, or none when a constraint fails. Accumulated
-candidate restrictions and the region filter still apply to the singleton;
-the ordinary membership and publication checks retain the original theory owner.
+candidate restrictions and the streamed constraints still apply to the
+singleton; the ordinary membership and publication checks retain the original
+theory owner.
 No worker needs to explore candidate regions or allocate a reduct query for this
 case. Larger classical models need not be individually refuted: the certificate
 already rules them out as answer sets. An unsupported or resource-refused plan

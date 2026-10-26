@@ -5,9 +5,14 @@
 //! no clause form; every leaf is a classical model of the theory. Membership is
 //! the frozen reduct's: its proper-subset query is walked as a region tree over
 //! the same index, and a countermodel is validated independently before it
-//! refutes a candidate. Only original semantic atoms enter minimality. This
-//! crate does not parse, ground, translate source aggregates, invoke an
-//! external solver, or claim a refinement proof for its Rust implementation.
+//! refutes a candidate. Only original semantic atoms enter minimality.
+//!
+//! A hybrid program's streamed integrity constraints, admitted by
+//! zetesis-themelios, are checked over candidate regions by
+//! [`StreamedConstraints`] through that crate's checker; no caller code refutes
+//! a region or decides an atom. Beyond that check, this crate does not parse,
+//! ground, translate source aggregates, invoke an external solver, or claim a
+//! refinement proof for its Rust implementation.
 #![forbid(unsafe_code)]
 
 mod budget;

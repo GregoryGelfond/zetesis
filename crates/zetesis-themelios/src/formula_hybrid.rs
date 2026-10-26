@@ -74,8 +74,9 @@ struct Core {
 /// A materialized producer core with the integrity constraints streamed over it:
 /// its stable models are proposals, and only those satisfying the streamed
 /// constraints are answer sets of the program this core was admitted for (a
-/// hybrid owner's whole program, or a terminal owner's base). Checkers and
-/// candidate-region filters run over it. Cloning shares all retained storage.
+/// hybrid owner's whole program, or a terminal owner's base). Its checkers run
+/// over it, on candidate regions and on core answers. Cloning shares all
+/// retained storage.
 #[derive(Clone)]
 pub struct StreamedCore(Arc<Core>);
 impl fmt::Debug for StreamedCore {

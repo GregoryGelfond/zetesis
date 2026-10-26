@@ -65,7 +65,7 @@ pub(crate) enum RegionConsequence {
 /// checks prepare per operation. Preparation is not assumed free.
 /// The factory owns all external resource limits: shared allowances must be
 /// charged before work across every worker, including failed preparation and
-/// checks. SAT's search-work counters exclude this separately accounted work.
+/// checks. The search's work counters exclude this separately accounted work.
 pub(crate) trait RegionFilter: Debug + Send + Sync {
     /// Prepare independent mutable scratch for this traversal worker or check.
     ///
@@ -122,7 +122,8 @@ pub(crate) trait RegionFilterWorker: Send {
     }
 }
 
-/// Callback attempts, independent of source-work and reduct-work accounting.
+/// Attempts of the streamed constraints' region check, independent of
+/// source-work and reduct-work accounting.
 /// Live parallel snapshots need not be coherent; joined snapshots are exact
 /// unless counter overflow explicitly marked the measurement incomplete.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]

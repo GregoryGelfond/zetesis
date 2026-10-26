@@ -132,16 +132,16 @@ the conditions satisfies the outputs. The one class today is the answer sets of
 the exact immutable original theory, and the one source is the conditional
 unsupported sets above, whose outputs are absences. A row of the original theory
 also holds for the answer sets a candidate restriction, objective bound or
-region filter admits, since each only narrows the class.
+streamed constraint admits, since each only narrows the class.
 
 Rows belong to an owner, an explicit value naming the class and its allowances.
 A walk's candidate subject is the owner's carrier: the one subject that matches
-and captures rows. Restriction, bound, filter and frozen-reduct queries are never
-carriers and leave the rows untouched. Each worker's scratch holds one tier of
-the owner's rows. Each completed pass attempts at most one capture before
-publishing its cuts, preferring a held unsupported atom. Otherwise it may explain
-an open atom that the pass is about to exclude. Neither case permits omitting any
-producer from the explanation.
+and captures rows. Restriction, bound, streamed-constraint and frozen-reduct
+queries are never carriers and leave the rows untouched. Each worker's scratch
+holds one tier of the owner's rows. Each completed pass attempts at most one
+capture before publishing its cuts, preferring a held unsupported atom.
+Otherwise it may explain an open atom that the pass is about to exclude. Neither
+case permits omitting any producer from the explanation.
 
 When all signed conditions are known, a row gives each open output its sign, or
 refutes the region when an output's opposite is known. It also uses a row with

@@ -2954,10 +2954,11 @@ only the completed least interpretation can belong to the answer-set family.
 It proposes that interpretation once if the original constraints and candidate
 conditions permit it, retaining ordinary membership checking. A failed original
 constraint instead completes the empty family. Rust must preserve the exact
-certificate owner, every additional restriction and region filter, and successful
-completion before reporting exhaustion. Cancellation or a work/allocation refusal
-cannot be substituted for the empty-family case. The mathematical law does not
-verify that cursor, its packed copy, batch publication or worker accounting.
+certificate owner, every additional restriction and streamed constraint, and
+successful completion before reporting exhaustion. Cancellation or a
+work/allocation refusal cannot be substituted for the empty-family case. The
+mathematical law does not verify that cursor, its packed copy, batch publication
+or worker accounting.
 
 [`TerminalDefinitions`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/TerminalDefinitions.lean)
 separates arbitrary base atoms from new derived atoms using a disjoint sum. Each

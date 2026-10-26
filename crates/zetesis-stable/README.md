@@ -107,6 +107,23 @@ bound; a worker can temporarily retain its prior generation's immutable index.
 Existing infallible knowledge cloning and shared-owner allocation contracts
 remain; this replacement operation does not make all search allocation fallible.
 
+`StableModels::set_streamed_constraints(Arc<StreamedConstraints>)` checks an
+admitted hybrid program's streamed integrity constraints over the stream's
+candidate regions; install it before traversal. `StreamedConstraints::new`
+takes zetesis-themelios's `StreamedCore`, whose core theory the stream must
+search, and the `ConstraintAllowance` that every check charges. After original
+narrowing, a region with a certain violation is refuted, and a constraint whose
+other body literals hold can hold or cut one open atom; these deductions
+alternate with the theory's narrowing within one closure. The check never takes
+part in a frozen-reduct query, so membership stays the reduct's, and exhaustion
+covers the core's stable models that satisfy the constraints. It is the only
+check of its kind: no caller code can refute a region or decide an atom. A
+check that stops records its typed failure, read with
+`StreamedConstraints::take_failure`, and the stream reports
+`Incomplete::RegionFilter`, never exhaustion. A closed or started stream, or a
+second installation, is refused. The `region_filter` statistics count the
+check's preparations, passes, refutations and failures.
+
 ## Proposing candidates by regions
 
 No clause form of the theory is built. The candidate space is the coverage tree

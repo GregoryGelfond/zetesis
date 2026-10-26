@@ -360,16 +360,17 @@ Serial candidate traversal retains one source checker across answer pulls.
 Joined candidate production retains one per producer across slates, with at
 most the configured worker count of producers.
 The checker belongs to the exact source owner, has exclusive access to its
-scratch and can move between executor threads. `zetesis_stable::RegionFilterWorker`
-therefore requires `Send`; the callback is never invoked concurrently on one
-checker. Completion or stop releases this scratch while retaining statistics
-and pending candidate receipts. Each callback's teardown is isolated; a panic
-is reported as `Incomplete::WorkerPanicked` when no earlier failure takes
-precedence. While candidate production remains open, a retryable batch-checker
-failure retains the serial source checker and the pending candidates; it does
-not repeat source preparation. Separate singleton checks still prepare per
-operation. These preparation counts do not measure allocations or device kernel
-time.
+scratch and can move between executor threads; it is never used concurrently.
+The region search runs this check itself, as
+`zetesis_stable::StreamedConstraints` over the admitted program's streamed core:
+no caller code refutes a region or decides an atom. Completion or stop releases
+this scratch while retaining statistics and pending candidate receipts. Each
+checker's teardown is isolated; a panic is reported as
+`Incomplete::WorkerPanicked` when no earlier failure takes precedence. While
+candidate production remains open, a retryable batch-checker failure retains the
+serial source checker and the pending candidates; it does not repeat source
+preparation. Separate singleton checks still prepare per operation. These
+preparation counts do not measure allocations or device kernel time.
 
 `SemanticOutcome::hybrid_execution()` reports consumed `core_answers`,
 `accepted`, `rejected`, `pending` and cumulative constraint-check statistics.
