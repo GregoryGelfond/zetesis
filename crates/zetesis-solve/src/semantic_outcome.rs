@@ -37,14 +37,8 @@ pub struct SemanticOutcome {
     pub(crate) optimization: Option<Optimization>,
     pub(crate) objective_work: u64,
     pub(crate) checked: u64,
-    pub(crate) gate_atoms: usize,
-    pub(crate) candidate_statistics: Option<zetesis_cpu::CandidateStatistics>,
     pub(crate) countermodel_statistics: Option<zetesis_stable::Statistics>,
     pub(crate) formula_execution: Option<crate::FormulaExecutionStatistics>,
-    pub(crate) lazy_execution: Option<crate::LazyExecutionStatistics>,
-    pub(crate) shared_execution: Option<crate::SharedExecutionStatistics>,
-    pub(crate) closure_execution: Option<crate::ClosureExecutionStatistics>,
-    pub(crate) query_execution: Option<crate::QueryExecutionObservation>,
     pub(crate) hybrid_execution: Option<crate::HybridExecutionStatistics>,
     pub(crate) terminal_execution: Option<crate::TerminalExecutionStatistics>,
     pub(crate) source_evaluation: Option<zetesis_themelios::SourceEvaluationStatistics>,
@@ -70,14 +64,8 @@ impl SemanticOutcome {
             optimization: None,
             objective_work: 0,
             checked: 0,
-            gate_atoms: 0,
-            candidate_statistics: None,
             countermodel_statistics: None,
             formula_execution: None,
-            lazy_execution: None,
-            shared_execution: None,
-            closure_execution: None,
-            query_execution: None,
             hybrid_execution: None,
             terminal_execution: None,
             source_evaluation: None,
@@ -113,19 +101,6 @@ impl SemanticOutcome {
     #[must_use]
     pub const fn candidate_progress(&self) -> u64 {
         self.checked
-    }
-
-    /// Gate tuples retained by closure enumeration; formula routes return zero.
-    #[must_use]
-    pub const fn discovered_gate_atoms(&self) -> usize {
-        self.gate_atoms
-    }
-
-    /// Source candidate restriction accounting, including incomplete preparation.
-    /// Absent for formula input or an interruption before closure construction.
-    #[must_use]
-    pub const fn candidate_statistics(&self) -> Option<zetesis_cpu::CandidateStatistics> {
-        self.candidate_statistics
     }
 
     /// Formula candidate/reduct accounting, when that stream was initialized.
@@ -179,28 +154,6 @@ impl SemanticOutcome {
     #[must_use]
     pub const fn formula_execution(&self) -> Option<&crate::FormulaExecutionStatistics> {
         self.formula_execution.as_ref()
-    }
-    /// Lazy device accounting, including completed but unconsumed results.
-    #[must_use]
-    pub const fn lazy_execution(&self) -> Option<&crate::LazyExecutionStatistics> {
-        self.lazy_execution.as_ref()
-    }
-    /// Shared CPU accounting, including complete but unconsumed checks.
-    #[must_use]
-    pub const fn shared_execution(&self) -> Option<&crate::SharedExecutionStatistics> {
-        self.shared_execution.as_ref()
-    }
-    /// Independent CPU closure counters summed over completed checks, lazy or
-    /// eager. Absent for the shared, device and formula routes.
-    #[must_use]
-    pub const fn closure_execution(&self) -> Option<&crate::ClosureExecutionStatistics> {
-        self.closure_execution.as_ref()
-    }
-    /// Prepared independent CPU ownership receipts, including a snapshot fault
-    /// retained independently of already checked models. Absent for other routes.
-    #[must_use]
-    pub const fn query_execution(&self) -> Option<&crate::QueryExecutionObservation> {
-        self.query_execution.as_ref()
     }
     /// Completed exact stable-model memberships of the original subject,
     /// including still-queued results. A terminal-definition input counts only

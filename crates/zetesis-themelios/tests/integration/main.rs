@@ -30,7 +30,6 @@ mod consequent_alternatives;
 mod count_head_activity;
 mod count_heads;
 mod count_plans;
-mod dense_relations;
 mod disjunction;
 mod domain_guards;
 mod domain_positions;

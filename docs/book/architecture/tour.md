@@ -141,20 +141,13 @@ bound excludes parsing, candidate generation and output. Covering `G` independen
 `2^G` candidate seeds even if one check is cheap. Indexes change actual join work;
 these bounds establish neither a speedup nor a process-memory bound.
 
-The independent scalar evaluator preserves this reference through a delta
-schedule. It first completes bootstrap, including facts and zero-positive
-constraints. Later rounds select a binding by its first new positive row;
-previously published heads and retained constraint triggers account for old
-bindings. The final no-change round and this completed history together establish
-closure. It need not revisit every old binding. Canonical and delta-view
-preparation also consume work, so the reference scan estimate above is not a
-measured scalar work count. Shared-world source traversal retains complete
-round scans. The [delta-round laws](../lean/theorems.md) and
-[grounding contracts](grounding.md) make these distinct schedules explicit.
-
-The concrete contracts are
-[`check` and its scalar round evaluator](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-cpu/src/oracle.rs)
-and the [source-coverage laws](../lean/theorems.md). The
+This closure computation is the definition that zetesis's laws state for normal
+programs. Its executable form was the relational closure route, removed in 0.7.0.
+zetesis now checks every program through its Ferraris translation, and
+`NormalFerraris.answer_set_iff` proves that the two definitions agree on normal
+programs. The [delta-round](../lean/theorems.md) and
+[source-coverage laws](../lean/theorems.md) that stated the removed route's
+incremental schedule remain as statements. The
 [reachability example](grounding-comparison.md#follow-a-candidate-dependent-join)
 shows why candidate-dependent joins can perform different work for different
 seeds.
@@ -185,5 +178,5 @@ enumerate or publish the ordinary session's `AnswerSet` values.
 To follow the actual entry points, see the
 [writer-free session example](../rust/sessions.md),
 [`zetesis_themelios::admit`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/lib.rs),
-[`zetesis_cpu::check`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-cpu/src/oracle.rs),
+[the reduct's membership queries](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-stable/src/reduct.rs),
 and the [finite formula API](../rust/reducts.md).

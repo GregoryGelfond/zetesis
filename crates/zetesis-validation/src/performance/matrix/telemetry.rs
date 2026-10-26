@@ -134,6 +134,8 @@ fn measured_statistics(
 
 fn procedure(effective: &str, request: Oracle) -> Result<Procedure, String> {
     let procedure = match field(effective, "oracle")? {
+        // Reported by binaries built before the closure route was removed,
+        // which a comparison can still measure.
         "closure" => Procedure::Closure,
         "countermodel" => Procedure::Countermodel,
         "tight-support" => Procedure::TightSupport,
@@ -143,7 +145,6 @@ fn procedure(effective: &str, request: Oracle) -> Result<Procedure, String> {
     };
     let matches_request = match request {
         Oracle::Auto => true,
-        Oracle::Closure => procedure == Procedure::Closure,
         Oracle::Countermodel => procedure == Procedure::Countermodel,
     };
     if !matches_request {
@@ -204,9 +205,10 @@ fn device(
     procedure: Procedure,
     adapter: Option<&str>,
 ) -> Result<DeviceWork, String> {
-    let lazy_stats = statistics
-        .get("lazy_execution")
-        .ok_or("missing lazy activity field")?;
+    // Only the closure route's lazy GPU oracle filled this record. Binaries
+    // built before that route was removed report it, null elsewhere; current
+    // binaries omit it, which reads as the same absence of lazy activity.
+    let lazy_stats = statistics.get("lazy_execution").unwrap_or(&Value::Null);
     let formula_stats = statistics
         .get("execution")
         .ok_or("missing formula activity field")?;

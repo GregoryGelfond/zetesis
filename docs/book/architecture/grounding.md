@@ -2353,12 +2353,3 @@ one fallback uses `O(EV + CV + V)` logical storage and at most `O(CV³)` endpoin
 work. Existing binding steps run first, so already resolved scopes avoid this
 analysis. These bounds describe the dense implementation, not the size of its
 subsequent substitution family.
-
-The distinctions matter to parallelism. A union of several worlds' relations
-can offer shared source instances, but a join can combine atoms that coexist in
-no individual world. Each world must therefore recheck positive truth. Optional
-world-membership masks prune a prefix only if no current world satisfies it.
-They do not prune future snapshots or the candidate carrier.
-
-See [lazy checking](../rust/parallel.md) for the injected execution contract,
-and [the theorem map](../lean/theorems.md) for the corresponding coverage laws.

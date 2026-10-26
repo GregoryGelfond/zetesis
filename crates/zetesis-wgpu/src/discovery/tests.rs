@@ -83,7 +83,7 @@ type Construct = fn(GpuDeviceSource<'_>) -> crate::GpuInfo;
 fn discovered_adapter(api: GpuApi) {
     let selection = GpuSelection { api };
     let options = GpuOptions::default();
-    let primitives: [Construct; 4] = [
+    let primitives: [Construct; 2] = [
         |source| {
             crate::GpuFormulaOracle::from_source(source)
                 .unwrap()
@@ -92,18 +92,6 @@ fn discovered_adapter(api: GpuApi) {
         },
         |source| {
             crate::GpuTightOracle::from_source(source)
-                .unwrap()
-                .info()
-                .clone()
-        },
-        |source| {
-            crate::GpuLazyOracle::from_source(source)
-                .unwrap()
-                .info()
-                .clone()
-        },
-        |source| {
-            crate::GpuOracle::from_source(source)
                 .unwrap()
                 .info()
                 .clone()

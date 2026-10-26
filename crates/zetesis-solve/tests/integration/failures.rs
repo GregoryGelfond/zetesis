@@ -8,7 +8,6 @@ use zetesis_solve::{
     Backend, ExecutionObservation, ExecutionObserver, PreparedInput, Session, SolveConfig,
     SolveError, SolveFailure, Subject,
 };
-use zetesis_themelios::{AdmissionOptions, admit};
 
 #[derive(Debug)]
 struct Refusal(Arc<()>);
@@ -28,6 +27,21 @@ impl ExecutionObserver for Refuse {
 
     fn observe(&mut self, _: ExecutionObservation<'_>) -> Result<(), Self::Error> {
         Err(Refusal(Arc::clone(&self.0)))
+    }
+}
+
+/// Accepts formula setup and refuses the execution route's own observation,
+/// so the failure belongs to execution setup, which `start` returns at once.
+struct RefuseRoute(Arc<()>);
+
+impl ExecutionObserver for RefuseRoute {
+    type Error = Refusal;
+
+    fn observe(&mut self, observation: ExecutionObservation<'_>) -> Result<(), Self::Error> {
+        match observation {
+            ExecutionObservation::CpuFormula { .. } => Err(Refusal(Arc::clone(&self.0))),
+            _ => Ok(()),
+        }
     }
 }
 
@@ -77,17 +91,17 @@ fn decompose(
 
 #[test]
 fn setup_failure_decomposition_preserves_evidence() {
-    let owner = admit("a.".into(), AdmissionOptions::default()).unwrap();
+    let owner = zetesis_reference_support::formula("a.");
     let token = Arc::new(());
     let failure = Session::builder(
-        PreparedInput::admitted(&owner),
+        PreparedInput::formula(&owner),
         config(),
         Cancellation::default(),
     )
-    .start_observed(&mut Refuse(Arc::clone(&token)))
+    .start_observed(&mut RefuseRoute(Arc::clone(&token)))
     .err()
     .unwrap();
-    let parts = decompose(failure, &Subject::Program(owner.program().clone()), &token);
+    let parts = decompose(failure, &Subject::Theory(owner.theory().clone()), &token);
     assert!(parts.semantic.is_none());
     assert!(parts.phase_timings.is_some());
 }

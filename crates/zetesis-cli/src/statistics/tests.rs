@@ -6,8 +6,7 @@ use std::time::Duration;
 use clap::Parser;
 
 use crate::{
-    Backend, Completion, Options, PublicationFailure, Report, RunError,
-    run_finalized_with_diagnostics,
+    Completion, Options, PublicationFailure, Report, RunError, run_finalized_with_diagnostics,
 };
 use zetesis_cpu::Cancellation;
 use zetesis_test_support::io::{BoundedWriter, FULL, FailAt};
@@ -94,50 +93,18 @@ fn bounded_statistics(
 }
 
 #[test]
-fn cpu_closure_refuses_an_oversized_reservation() {
-    let options = options(&["--stats", "--memory", "2147483648"]);
-    let mut config = crate::PublicationConfig::from(&options);
-    config.solve.workers = std::num::NonZeroUsize::new(5).unwrap();
-    config.solve.max_closure_bytes = 134_217_728;
-    let admitted = zetesis_themelios::admit_extended(
-        "{a}.".into(),
-        zetesis_themelios::AdmissionOptions::default(),
-        zetesis_themelios::ExpansionLimits::default(),
-    )
-    .unwrap();
-    let mut output = Vec::new();
-    let failure = crate::publication_fixture::with_diagnostics(
-        crate::PreparedInput::admitted(&admitted),
-        &config,
-        &options,
-        &mut output,
-        &mut Vec::new(),
-        &Cancellation::default(),
-    )
-    .unwrap_err();
-    let text = failure.cause.to_string();
-    assert!(
-        text.contains("5 threads with 134217728 closure bytes each"),
-        "{text}"
-    );
-    assert!(text.contains("671088640"), "{text}");
-    assert!(text.contains("536870912"), "{text}");
-    assert!(!std::str::from_utf8(&output).unwrap().contains("Answer:"));
-}
-
-#[test]
 fn every_completed_cpu_statistics_prefix_is_fallible_without_losing_bytes() {
-    for (source, arguments, formula, optimum) in [
-        ("p.", vec!["--grounder", "lazy"], false, false),
-        ("p.", vec!["--grounder", "eager"], false, false),
-        ("a | b.", vec![], true, false),
-        ("1 {a;b} 1. #minimize{1,a:a;2,b:b}.", vec![], true, true),
+    for (source, arguments, optimum) in [
+        ("p.", vec!["--grounder", "lazy"], false),
+        ("p.", vec!["--grounder", "eager"], false),
+        ("a | b.", vec![], false),
+        ("1 {a;b} 1. #minimize{1,a:a;2,b:b}.", vec![], true),
     ] {
         let options = options(&arguments);
         let outcome = actual(source, &options, &Cancellation::default());
         let report = outcome.as_ref().unwrap();
         assert_eq!(report.completion, Completion::Exhausted);
-        assert_eq!(report.countermodel_statistics.is_some(), formula);
+        assert!(report.countermodel_statistics.is_some());
         assert_eq!(report.optimization.is_some(), optimum);
         let text = every_prefix(&options, &outcome);
         assert!(text.contains("completion: exhausted"));
@@ -149,100 +116,7 @@ fn every_completed_cpu_statistics_prefix_is_fallible_without_losing_bytes() {
     assert_eq!(report.completion, Completion::Exhausted);
     let text = every_prefix(&options, &outcome);
     assert!(text.contains("grounder=eager"));
-    assert!(text.contains("backend=cpu; oracle=closure; grounder=eager"));
-}
-
-#[test]
-fn shared_cpu_statistics_preserve_every_writer_prefix() {
-    for selection in ["union", "worlds"] {
-        for stop in [None, Some(false), Some(true)] {
-            let options = options(&["--source-batching", selection]);
-            let mut config = crate::PublicationConfig::from(&options);
-            match stop {
-                Some(true) => config.solve.max_source_work = 0,
-                Some(false) => config.solve.max_work = 0,
-                None => {}
-            }
-            let admitted = zetesis_themelios::admit_extended(
-                "a.".into(),
-                zetesis_themelios::AdmissionOptions::default(),
-                zetesis_themelios::ExpansionLimits::default(),
-            )
-            .unwrap();
-            let outcome = crate::publish_prepared(
-                crate::PreparedInput::admitted(&admitted),
-                &config,
-                &mut crate::HumanRenderer::new(io::sink(), crate::ColorMode::Never, 65_536),
-                &mut io::sink(),
-                &Cancellation::default(),
-            )
-            .and_then(crate::PublicationOutcome::into_legacy)
-            .map(crate::PublicationReport::into_report);
-            let report = outcome.as_ref().unwrap();
-            let stats = report.shared_execution.as_ref().unwrap();
-            assert_eq!(stats.submitted_candidates, 1);
-            assert_eq!(stats.completed_candidates, u64::from(stop.is_none()));
-            assert_eq!(stats.stopped_candidates, u64::from(stop.is_some()));
-            assert_eq!(report.models, usize::from(stop.is_none()));
-            assert_eq!(
-                report.completion,
-                if stop.is_some() {
-                    Completion::Interrupted
-                } else {
-                    Completion::Exhausted
-                }
-            );
-            let text = every_prefix(&options, &outcome);
-            assert!(text.contains("  shared CPU: source="));
-            assert!(text.contains("  shared source: rounds="));
-            assert!(text.contains("  CPU world evaluation: record visits plus antecedent tests="));
-            assert!(text.contains("closure result/control records examined=1"));
-            assert_eq!(
-                text.contains("  shared batch interruption:"),
-                stop.is_some()
-            );
-        }
-    }
-}
-
-#[test]
-fn lazy_metadata_rendering_preserves_every_writer_failure() {
-    let options = options(&["--grounder", "lazy"]);
-    let mut report = actual("p.", &options, &Cancellation::default()).unwrap();
-    report.lazy_execution = Some(crate::output::fixtures::lazy_statistics());
-    let text = every_prefix(&options, &Ok(report));
-    assert!(text.contains("requested=metal; observed=Metal"));
-    assert!(text.contains("submitted=7; completed=4; stopped=3; queued results=2"));
-    assert!(text.contains("kernel time unmeasured"));
-    assert!(text.contains("chunks allocating buffers=2; complete-set reuses=3; peak requested device bytes=1024 (RSS unmeasured)"));
-    assert!(text.contains("buffer requests (allocated/reused): uniform=1/4; offsets=1/4; records=2/3; snapshots=1/4; seeds=1/4; output=2/3; readback=2/3; slack releases: budget=0; accounting overflow=0"));
-    assert!(text.contains("FORMAT FIXTURE: no physical execution"));
-}
-
-#[test]
-fn lazy_gpu_statistics_name_the_observed_grounder() {
-    // This tests the view of an explicit device report, not physical execution.
-    let mut options = options(&["--grounder", "lazy"]);
-    let mut report = actual("p.", &options, &Cancellation::default()).unwrap();
-    options.backend = Backend::Gpu(Some(zetesis_backend::GpuApi::Metal));
-    report.lazy_execution = Some(crate::output::fixtures::lazy_statistics());
-    let text = every_prefix(&options, &Ok(report));
-    assert!(text.contains(
-        "effective execution: oracle=closure; backend=requested GPU policy; grounder=lazy; see backend diagnostics for actual adapter"
-    ));
-    assert!(!text.contains("grounder=eager"));
-}
-
-#[test]
-fn static_gpu_statistics_retain_eager_grounding() {
-    // No physical device is invoked by this formatting control.
-    let mut options = options(&["--grounder", "eager"]);
-    let report = actual("p.", &options, &Cancellation::default()).unwrap();
-    options.backend = Backend::Gpu(Some(zetesis_backend::GpuApi::Metal));
-    let text = every_prefix(&options, &Ok(report));
-    assert!(text.contains(
-        "effective execution: oracle=closure; backend=requested GPU policy; grounder=eager; see backend diagnostics for actual adapter"
-    ));
+    assert!(text.contains("backend=cpu; oracle=positive-consequences; grounder=eager"));
 }
 
 #[test]
@@ -333,7 +207,6 @@ fn every_partial_or_cancelled_statistics_prefix_preserves_incomplete_qualificati
     assert!(report.countermodel_statistics.is_none());
     let text = every_prefix(&cancelled, &outcome);
     assert!(text.contains("effective execution: unavailable (stopped before execution counters)"));
-    assert!(text.contains("oracle work: unavailable"));
 }
 
 #[test]

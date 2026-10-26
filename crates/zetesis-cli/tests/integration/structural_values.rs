@@ -25,8 +25,8 @@ fn solve(source: &str, extra: &[&str]) -> (Result<zetesis_cli::Report, RunError>
 #[test]
 fn closed_values_are_preserved_across_membership_routes() {
     for args in [
-        vec!["--oracle", "closure", "--grounder", "lazy"],
-        vec!["--oracle", "closure", "--grounder", "eager"],
+        vec!["--oracle", "countermodel", "--grounder", "lazy"],
+        vec!["--oracle", "countermodel", "--grounder", "eager"],
         vec!["--oracle", "countermodel"],
     ] {
         let (report, output) = solve("p(f(1,g(2))).q(X):-p(X).", &args);

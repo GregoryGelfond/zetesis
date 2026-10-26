@@ -11,6 +11,7 @@ use std::time::Duration;
 
 pub use device::{GpuFormulaOracle, PreparedFormulaSubmission};
 pub use profile::GpuFormulaProfile;
+pub(crate) use profile::check_limits;
 pub use projection::GateProjection;
 
 /// Bounds for one resident finite-formula propagation dispatch.

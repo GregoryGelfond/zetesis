@@ -19,9 +19,11 @@ use zetesis_core::{
 
 pub use super::view::{ViewError as Error, ViewLimits as Limits};
 
-/// Version of the model-record representation: a record refers to its atoms
-/// by index into the document's [`AtomTable`] and spells only the new ones.
-pub const RECORD_SCHEMA_VERSION: u32 = 2;
+/// Version of the JSON document. Since schema 2 a record refers to its atoms
+/// by index into the document's [`AtomTable`] and spells only the new ones;
+/// schema 3 keeps those records and drops the statistics of the removed clause
+/// search and closure route.
+pub const RECORD_SCHEMA_VERSION: u32 = 3;
 
 /// The atoms a document has spelled, in the order it spelled them. A record
 /// encoded against the table spells the atoms it adds and refers to all of

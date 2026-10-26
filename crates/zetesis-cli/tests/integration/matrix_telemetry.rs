@@ -70,7 +70,7 @@ fn positive_publication_retains_its_actual_matrix_procedure() {
             Procedure::PositiveConsequences
         );
         assert!(matches!(observation.execution.device, DeviceWork::Cpu));
-        assert_eq!(observation.timing.phase_schema, 6);
+        assert_eq!(observation.timing.phase_schema, 7);
     }
 }
 

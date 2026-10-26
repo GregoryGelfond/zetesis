@@ -230,6 +230,9 @@ impl GpuContext {
     pub(crate) fn check_health(&self) -> Result<(), GpuError> {
         self.resources.lifecycle.check()
     }
+    /// Invalidate the shared context, as a device fault does, for tests of
+    /// the failure boundary.
+    #[cfg(test)]
     pub(crate) fn invalidate(&self) {
         self.resources.lifecycle.invalidate();
     }

@@ -7,7 +7,6 @@ use zetesis_cli::{Completion, Interruption, OptimizationStop, RunError};
 use zetesis_core::{Atom, Predicate, Value};
 use zetesis_solve::AnswerSelection;
 use zetesis_themelios::observation::{ErrorKind, Resource};
-use zetesis_themelios::{AdmissionFailure, ExpansionFailure, ProfileFeature};
 use zetesis_validation::answers;
 
 const NUMERIC_SHOW_NEGATION: &str = "p(1). #show -X:p(X).";
@@ -128,24 +127,10 @@ fn displays(output: &str) -> Vec<Vec<&str>> {
 }
 
 #[test]
-fn coherence_is_enforced_by_closure_and_frozen_reduct_routes() {
+fn coherence_is_enforced_by_the_frozen_reduct_routes() {
     for arguments in [
-        vec![
-            "--backend",
-            "cpu",
-            "--oracle",
-            "closure",
-            "--grounder",
-            "lazy",
-        ],
-        vec![
-            "--backend",
-            "cpu",
-            "--oracle",
-            "closure",
-            "--grounder",
-            "eager",
-        ],
+        vec!["--backend", "cpu", "--grounder", "lazy"],
+        vec!["--backend", "cpu", "--grounder", "eager"],
         vec!["--backend", "cpu", "--oracle", "countermodel"],
     ] {
         let (report, output, _) = solve("p:-not -p. -p:-not p.", &arguments);
@@ -278,24 +263,6 @@ fn numeric_show_negation_preserves_the_full_answer() {
         assert_eq!(report.unwrap().completion, Completion::Exhausted);
         assert_eq!(displays(&output), vec![vec!["-1", "p(1)"]]);
     }
-}
-
-#[test]
-fn closure_preserves_its_term_output_boundary() {
-    let (result, output, _) = solve(
-        NUMERIC_SHOW_NEGATION,
-        &["--backend", "cpu", "--oracle", "closure"],
-    );
-    assert!(matches!(
-        result,
-        Err(RunError::Expansion(ExpansionFailure::Admission(
-            AdmissionFailure::Profile {
-                feature: ProfileFeature::ShowTerm,
-                ..
-            }
-        )))
-    ));
-    assert!(!output.contains("Answer:"));
 }
 
 #[test]

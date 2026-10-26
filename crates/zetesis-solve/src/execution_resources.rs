@@ -94,7 +94,7 @@ impl ExecutionResources {
         if config.backend.is_gpu() {
             return Self {
                 gpu: Some(GpuResources::Discovery(zetesis_wgpu::GpuDiscovery::spawn(
-                    crate::engine::selection(config.backend),
+                    selection(config.backend),
                 ))),
             };
         }
@@ -149,7 +149,7 @@ impl ExecutionResources {
         config: &crate::SolveConfig,
     ) -> Result<zetesis_wgpu::GpuDeviceSource<'_>, zetesis_wgpu::GpuError> {
         let options = zetesis_wgpu::GpuOptions::default();
-        let selection = crate::engine::selection(config.backend);
+        let selection = selection(config.backend);
         let timing = config.stats;
         if let Some(context) = self.gpu_context() {
             context.check_selection(options, selection)?;
@@ -174,3 +174,17 @@ impl ExecutionResources {
 
 #[cfg(all(test, feature = "gpu"))]
 mod tests;
+
+/// The GPU a device route opens: the solver's one application of the backend
+/// vocabulary's resolution rule, so `gpu` becomes the platform's native API here
+/// and nowhere else. Device routes run only for a GPU backend; the route choice
+/// on [`SolveConfig::backend`](crate::SolveConfig::backend) establishes that
+/// before any of them is entered.
+#[cfg(feature = "gpu")]
+pub(crate) fn selection(backend: crate::Backend) -> zetesis_wgpu::GpuSelection {
+    zetesis_wgpu::GpuSelection {
+        api: backend
+            .resolved_api()
+            .expect("device routes run only for a GPU backend"),
+    }
+}

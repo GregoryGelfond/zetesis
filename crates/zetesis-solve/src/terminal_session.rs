@@ -94,7 +94,6 @@ impl<'a> TerminalSession<'a> {
                     atoms: owner.base_atom_catalog(),
                     objectives: owner.objectives(),
                     required_choices: None,
-                    gate_atoms: 0,
                     keyed_constraints: owner.keyed_constraints(),
                     key_analysis: owner.key_analysis(),
                     certificate_order: crate::countermodel::certificate_order(

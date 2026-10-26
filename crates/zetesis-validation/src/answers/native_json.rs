@@ -200,14 +200,15 @@ impl NativeAnswers {
     }
 }
 
-/// Whether `document` is a native JSON document the decoder reads: schema 2,
-/// or schema 1 as the executables before it wrote it, in the `zetesis` format.
+/// Whether `document` is a native JSON document the decoder reads: schema 3,
+/// schema 2 with the same records, or schema 1 as the executables before them
+/// wrote it, in the `zetesis` format.
 pub(crate) fn is_native_document(document: &serde_json::Value) -> bool {
-    matches!(document["schema"].as_u64(), Some(1 | 2)) && document["format"] == "zetesis"
+    matches!(document["schema"].as_u64(), Some(1..=3)) && document["format"] == "zetesis"
 }
 
-/// Decode native JSON schema 2, or schema 1 as the executables before it wrote
-/// it, with exhausted coverage and a successful outcome; the older form is
+/// Decode native JSON schema 3 or 2, whose records agree, or schema 1 as the
+/// executables before them wrote it, with exhausted coverage and a successful outcome; the older form is
 /// read so that an earlier executable can stand as a baseline.
 /// Every full and shown value is validated, even when a consumer uses only full
 /// atoms. Failed/incomplete envelopes cannot qualify through retained optimum data.

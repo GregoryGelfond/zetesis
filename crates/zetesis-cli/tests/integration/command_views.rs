@@ -51,17 +51,20 @@ fn human_statistics_separate_eager_stages() {
 }
 
 #[test]
-fn lazy_statistics_name_interleaved_grounding() {
+fn lazy_statistics_name_hybrid_grounding() {
+    // A lazy request grounds the program's core eagerly and streams only the
+    // constraints that do not fit; the statistics name that division. This
+    // program has no constraint, so the label says that nothing streamed.
     let result = solve("{a}.", &["--grounder", "lazy", "--stats"]);
     assert!(
         result.status.success(),
         "{}",
         String::from_utf8_lossy(&result.stderr)
     );
+    let diagnostics = String::from_utf8(result.stderr).unwrap();
     assert!(
-        String::from_utf8(result.stderr)
-            .unwrap()
-            .contains("interleaved with solving")
+        diagnostics.contains("CPU hybrid formula; eager core, no streamed constraints"),
+        "{diagnostics}"
     );
 }
 

@@ -213,7 +213,7 @@ impl GpuFormulaProfile {
     }
 }
 
-pub(super) fn check_limits(limits: &wgpu::Limits) -> Result<(), GpuError> {
+pub(crate) fn check_limits(limits: &wgpu::Limits) -> Result<(), GpuError> {
     for (label, required, available) in [
         (
             "workgroup invocations",

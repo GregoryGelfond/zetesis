@@ -174,17 +174,6 @@ fn model_storage_refusals_retain_the_solve_failure() {
 }
 
 #[test]
-fn batch_preparation_cancellation_is_a_conclusion() {
-    let native = SolveFailure::from(SolveError::Batch(zetesis_cpu::BatchError::Preparation(
-        Stop::Cancelled,
-    )));
-    assert_eq!(
-        session(native, &Program::default()),
-        Ok(Conclusion::Interrupted)
-    );
-}
-
-#[test]
 fn model_and_catalog_owners_preserve_adapter_classification() {
     use zetesis_core::{ModelError, catalog::Error};
     for (catalog, resource) in [

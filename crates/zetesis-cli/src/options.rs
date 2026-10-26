@@ -3,7 +3,7 @@ use clap::{Parser, Subcommand};
 use std::num::NonZeroUsize;
 use std::path::PathBuf;
 
-use crate::{Backend, Grounder, Oracle, SourceBatching};
+use crate::{Backend, Grounder, Oracle};
 
 #[cfg(any(target_os = "linux", test))]
 mod cgroup;
@@ -58,31 +58,25 @@ pub struct Options {
     /// Grounding mode, independent of execution backend.
     ///
     /// `eager` instantiates every rule before solving. `lazy` instantiates on
-    /// demand: relational source joins on CPU or GPU, or, for formula inputs,
-    /// a producer core checked by the selected backend. Integrity constraints
-    /// whose instances fit in the formula's share of the memory allowance are
-    /// grounded with that core; only the rest are streamed on the host, which
-    /// saves memory but joins them again in every search region. Terminal
-    /// definitions (derived predicates nothing reads) can be reconstructed per
-    /// answer.
+    /// demand: a producer core checked by the selected backend. Integrity
+    /// constraints whose instances fit in the formula's share of the memory
+    /// allowance are grounded with that core; only the rest are streamed on the
+    /// host, which saves memory but joins them again in every search region.
+    /// Terminal definitions (derived predicates nothing reads) can be
+    /// reconstructed per answer.
     /// Objectives require complete constraint checks before scoring and disable
-    /// terminal deferral. Table joins are refused. `auto` admits relational source
-    /// joins where it can, else instantiates an eager base and defers terminal
-    /// definitions; it never streams constraints. Resource allowances still apply.
+    /// terminal deferral. Table joins are refused. `auto` instantiates an eager
+    /// base and defers terminal definitions; it never streams constraints.
+    /// Resource allowances still apply.
     #[arg(long, value_parser = grounder_parser(), default_value = "auto")]
     pub grounder: Grounder,
     /// Positive joins during eager formula grounding.
     ///
-    /// Table reuses support masks for eligible flat patterns. Relational source
-    /// grounding and support-growth rounds retain indexed joins. Preparation
-    /// consumes the configured support storage and records grounding work.
+    /// Table reuses support masks for eligible flat patterns. Support-growth
+    /// rounds retain indexed joins. Preparation consumes the configured support
+    /// storage and records grounding work.
     #[arg(long, value_parser = formula_joins_parser(), default_value = "indexed", hide_short_help = true)]
     pub formula_joins: zetesis_themelios::JoinStrategy,
-    /// Advanced relational CPU source batching. Union/worlds require lazy or
-    /// auto grounding and CPU execution. A stopped shared
-    /// batch publishes no candidate checks; independent remains the default.
-    #[arg(long, value_parser = source_batching_parser(), default_value = "independent", hide_short_help = true)]
-    pub source_batching: SourceBatching,
     /// Advanced oracle selection. Auto preserves answer-set semantics while
     /// selecting an applicable reduct procedure. Explicit hardware and grounder
     /// requests are always honored or refused.
@@ -277,7 +271,6 @@ impl From<&Options> for crate::SolveConfig {
         Self {
             backend: options.backend,
             grounder: options.grounder,
-            source_batching: options.source_batching,
             oracle: options.oracle,
             stats: options.stats,
             models: options.models,
@@ -305,9 +298,9 @@ fn policy_parser<T: Clone + Send + Sync + 'static, const N: usize>(
 
 fn grounder_parser() -> impl TypedValueParser<Value = Grounder> {
     policy_parser([
-        (Grounder::Auto, PossibleValue::new(Grounder::Auto.label()).help("Source joins or direct evaluation where admitted, else an eager base with terminal definitions deferred. Never streams constraints.")),
-        (Grounder::Lazy, PossibleValue::new(Grounder::Lazy.label()).help("Require relational source joins, or CPU formula grounding with an eager producer core and terminal definitions reconstructed per answer; constraints that do not fit the formula's memory share are streamed.")),
-        (Grounder::Eager, PossibleValue::new(Grounder::Eager.label()).help("Materialize a bounded static program before checking on CPU or GPU.")),
+        (Grounder::Auto, PossibleValue::new(Grounder::Auto.label()).help("Instantiate an eager base and defer terminal definitions, independently of hardware. Never streams constraints.")),
+        (Grounder::Lazy, PossibleValue::new(Grounder::Lazy.label()).help("Ground an eager producer core with the constraints that fit the formula's memory share, stream the rest and reconstruct terminal definitions per answer.")),
+        (Grounder::Eager, PossibleValue::new(Grounder::Eager.label()).help("Instantiate every formula before checking on CPU or GPU.")),
     ])
 }
 
@@ -326,38 +319,12 @@ fn formula_joins_parser() -> impl TypedValueParser<Value = zetesis_themelios::Jo
     ])
 }
 
-fn source_batching_parser() -> impl TypedValueParser<Value = SourceBatching> {
-    policy_parser([
-        (
-            SourceBatching::Independent,
-            PossibleValue::new(SourceBatching::Independent.label())
-                .help("Each candidate owns an independent relational join traversal."),
-        ),
-        (
-            SourceBatching::Union,
-            PossibleValue::new(SourceBatching::Union.label())
-                .help("Share the union carrier; evaluate each frozen candidate on Rayon."),
-        ),
-        (
-            SourceBatching::Worlds,
-            PossibleValue::new(SourceBatching::Worlds.label())
-                .help("Prune source prefixes with per-world membership; evaluate on Rayon."),
-        ),
-    ])
-}
-
 fn oracle_parser() -> impl TypedValueParser<Value = Oracle> {
     policy_parser([
         (
             Oracle::Auto,
             PossibleValue::new(Oracle::Auto.label())
-                .help("Select reduct closure, checked tight support, or general reduct checking."),
-        ),
-        (
-            Oracle::Closure,
-            PossibleValue::new(Oracle::Closure.label()).help(
-                "Require reduct closure with sparse gate candidates on CPU or static GPU batches.",
-            ),
+                .help("Select checked tight support or general reduct checking."),
         ),
         (
             Oracle::Countermodel,

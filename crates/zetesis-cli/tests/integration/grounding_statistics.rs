@@ -279,30 +279,6 @@ fn eager_formula_solving_uses_requested_table_joins() {
 }
 
 #[test]
-fn relational_grounding_stays_unmeasured_in_formula_attribution() {
-    for grounder in ["eager", "lazy"] {
-        let mut output = Vec::new();
-        let report = run_detailed_with_diagnostics(
-            "p.".into(),
-            &options(&["--grounder", grounder]),
-            &mut output,
-            &mut std::io::sink(),
-            &Cancellation::default(),
-        )
-        .unwrap();
-        let typed = report.phase_timings.unwrap().grounding;
-        let document: Value = serde_json::from_slice(&output).unwrap();
-        for phase in GroundingPhase::ALL {
-            assert!(typed.get(phase).is_none());
-            assert!(
-                document["statistics"]["grounding_attribution"]["measurements"][phase.label()]
-                    .is_null()
-            );
-        }
-    }
-}
-
-#[test]
 fn records_report_how_comparisons_were_compiled() {
     let mut diagnostics = Vec::new();
     run_detailed_with_diagnostics(

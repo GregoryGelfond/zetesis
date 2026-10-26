@@ -30,8 +30,6 @@ fn preparation_stops_publish_incomplete_coverage() {
         assert!(semantic.subject().is_none());
         assert!(semantic.countermodel_statistics().is_none());
         assert!(semantic.formula_execution().is_none());
-        assert!(semantic.lazy_execution().is_none());
-        assert!(semantic.shared_execution().is_none());
         assert!(progress.publication.summary());
         assert_eq!(progress.publication.models(), 0);
         let output = String::from_utf8(output).unwrap();

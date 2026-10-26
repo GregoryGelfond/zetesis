@@ -104,13 +104,13 @@ fn bundled_llvm_versions_preserve_schedule() {
 fn omitted_physical_group_prevents_instrumentation() {
     for backend in BACKENDS {
         for group in [
-            "lazy",
+            "tight",
             "relation",
             "context",
             "solve-context",
             "session-resources",
             "language-consumers",
-            "static",
+            "cli-formula",
         ] {
             let f = Fixture::new();
             let row = groups_of(backend)
@@ -186,7 +186,7 @@ fn failed_physical_execution_preserves_its_exit_code() {
         "solve-context",
         "session-resources",
         "language-consumers",
-        "static",
+        "cli-formula",
     ] {
         for backend in BACKENDS {
             let f = Fixture::new();

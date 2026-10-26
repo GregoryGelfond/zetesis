@@ -143,11 +143,10 @@ the core. Only answers that pass every original constraint enter scoring and
 optimal-tie retention.
 
 The three grounders: `eager` instantiates every rule before solving; `lazy`
-instantiates on demand wherever admitted — relational source joins, or the
-hybrid formula schedule with terminal definitions deferred; `auto` admits
-relational source joins where it can, and otherwise instantiates an eager base
-and defers certified terminal definitions. Relational lazy
-closure retains its existing CPU and device routes.
+grounds an eager producer core with the constraints that fit the formula's memory
+share, streams the rest and defers terminal definitions; `auto` instantiates an
+eager base and defers certified terminal definitions, and never streams
+constraints.
 
 Hybrid statistics distinguish retained-core models from original answers accepted
 after complete constraint checks, and count the constraint templates and instances

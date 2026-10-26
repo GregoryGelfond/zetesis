@@ -2,12 +2,11 @@
 
 use std::{convert::Infallible, num::NonZeroUsize};
 
-use crate::support::sessions::normal;
 use zetesis_core::{
     Atom, Model, Predicate, Sign, Value,
     relation::{Limits, Relation},
 };
-use zetesis_cpu::{Cancellation, Stop};
+use zetesis_cpu::Cancellation;
 use zetesis_reference_support::{formula, prepared};
 use zetesis_solve::{
     AnswerSelection, AnswerSet, Backend, Completion, ExecutionObservation, ExecutionObserver,
@@ -61,24 +60,19 @@ impl Physical for GpuApi {
     }
 }
 
+/// The two program shapes a session test runs: a normal program whose answer
+/// sets are enumerated, and a choice whose optimum is proved.
 #[derive(Clone, Copy)]
 enum Profile {
-    Eager,
-    Lazy,
-    Formula,
+    Normal,
+    Optimization,
 }
 
-fn config(backend: Backend, profile: Profile) -> SolveConfig {
+fn config(backend: Backend) -> SolveConfig {
     SolveConfig {
         backend,
-        grounder: match profile {
-            Profile::Lazy => Grounder::Lazy,
-            Profile::Eager | Profile::Formula => Grounder::Eager,
-        },
-        oracle: match profile {
-            Profile::Formula => Oracle::Countermodel,
-            Profile::Eager | Profile::Lazy => Oracle::Closure,
-        },
+        grounder: Grounder::Eager,
+        oracle: Oracle::Countermodel,
         models: 0,
         batch_size: NonZeroUsize::new(4).unwrap(),
         workers: NonZeroUsize::MIN,
@@ -127,11 +121,9 @@ impl Record {
 
 #[derive(Default)]
 struct Routes {
-    device_closure: usize,
     device_formula: usize,
     device_tight: usize,
     proposal_workers: Option<NonZeroUsize>,
-    cpu_closure: usize,
     cpu_formula: usize,
     observed_backend: Option<AdapterBackend>,
     observed_projection: Option<GateProjection>,
@@ -150,10 +142,6 @@ impl ExecutionObserver for Routes {
                 self.device_tight += 1;
                 Some(adapter)
             }
-            ExecutionObservation::DeviceClosure { adapter, .. } => {
-                self.device_closure += 1;
-                Some(adapter)
-            }
             ExecutionObservation::DeviceFormula {
                 adapter,
                 projection,
@@ -162,10 +150,6 @@ impl ExecutionObserver for Routes {
                 self.device_formula += 1;
                 self.observed_projection = Some(projection);
                 Some(adapter)
-            }
-            ExecutionObservation::CpuClosure { .. } => {
-                self.cpu_closure += 1;
-                None
             }
             ExecutionObservation::CpuFormula { .. } => {
                 self.cpu_formula += 1;
@@ -220,24 +204,15 @@ fn solve(
     }
 }
 
-fn require_device(capture: &Capture, device: GpuApi, profile: Profile) {
+fn require_device(capture: &Capture, device: GpuApi) {
     assert_eq!(capture.routes.observed_backend, Some(device.observed()));
-    assert_eq!(capture.routes.cpu_closure + capture.routes.cpu_formula, 0);
-    match profile {
-        Profile::Eager => assert_eq!(capture.routes.device_closure, 1),
-        Profile::Lazy => {
-            assert_eq!(capture.routes.device_closure, 1);
-            assert!(capture.outcome.lazy_execution().unwrap().dispatches > 0);
-        }
-        Profile::Formula => {
-            assert_eq!(capture.routes.device_formula, 1);
-            let execution = capture.outcome.formula_execution().unwrap();
-            assert!(execution.gpu_batches > 0);
-            assert!(execution.gpu_work > 0);
-            assert!(execution.gpu_candidates > 0);
-            assert_eq!(execution.pending_candidates + execution.queued_models, 0);
-        }
-    }
+    assert_eq!(capture.routes.cpu_formula, 0);
+    assert_eq!(capture.routes.device_formula, 1);
+    let execution = capture.outcome.formula_execution().unwrap();
+    assert!(execution.gpu_batches > 0);
+    assert!(execution.gpu_work > 0);
+    assert!(execution.gpu_candidates > 0);
+    assert_eq!(execution.pending_candidates + execution.queued_models, 0);
 }
 
 fn require_complete(capture: &Capture, expected: &[Record]) {
@@ -255,64 +230,51 @@ const FORMULA_SECOND: &str =
 // Sixty-four answers in batches of four: an answer arrives before the last batch.
 const FORMULA_MANY: &str = "{a;b;c;d;e;f}.";
 
-fn independent_closures(resources: &ExecutionResources, device: GpuApi) {
-    let first = normal(NORMAL_NUMBER);
-    let second = normal(NORMAL_STRING);
-    assert!(!first.program().same_instance(second.program()));
-    for owner in [&first, &second] {
-        assert_eq!(owner.program().facts().len(), 2);
-        assert!(owner.program().fact_catalog().is_some());
-    }
-    for profile in [Profile::Eager, Profile::Lazy] {
-        let subject = Subject::Program(first.program().clone());
-        let mut limited = config(device.backend(), profile);
-        limited.max_candidates = 0;
-        let stopped = solve(
-            PreparedInput::admitted(&first),
+fn independent_normal_sessions(resources: &ExecutionResources, device: GpuApi) {
+    let first = formula(NORMAL_NUMBER);
+    let second = formula(NORMAL_STRING);
+    assert!(!first.theory().same_instance(second.theory()));
+    let subject = Subject::Theory(first.theory().clone());
+    let mut limited = config(device.backend());
+    limited.max_candidates = 0;
+    let stopped = solve(
+        PreparedInput::formula(&first),
+        &subject,
+        limited,
+        resources,
+        AnswerSelection::All,
+    );
+    assert!(stopped.records.is_empty());
+    assert_eq!(stopped.outcome.verified_models(), 0);
+    assert_eq!(stopped.outcome.completion(), Some(Completion::Interrupted));
+    assert_eq!(
+        stopped.outcome.interruption(),
+        Some(Interruption::Countermodel(
+            zetesis_stable::Incomplete::CandidateLimit
+        )),
+    );
+    for (owner, value) in [
+        (&first, Value::Number(7)),
+        (&second, Value::String("7".into())),
+    ] {
+        let subject = Subject::Theory(owner.theory().clone());
+        let captured = solve(
+            PreparedInput::formula(owner),
             &subject,
-            limited,
+            config(device.backend()),
             resources,
             AnswerSelection::All,
         );
-        assert!(stopped.records.is_empty());
-        assert_eq!(stopped.outcome.verified_models(), 0);
-        assert_eq!(stopped.outcome.completion(), Some(Completion::Interrupted));
-        assert_eq!(
-            stopped.outcome.interruption(),
-            Some(Interruption::Oracle(Stop::CandidateLimit)),
+        require_device(&captured, device);
+        assert_eq!(captured.outcome.verified_models(), 2);
+        assert!(captured.outcome.incumbent().is_none());
+        require_complete(
+            &captured,
+            &[
+                Record::expected("a", value.clone(), None),
+                Record::expected("b", value, None),
+            ],
         );
-        for (owner, value, closure_budget) in [
-            (
-                &first,
-                Value::Number(7),
-                SolveConfig::DEFAULT.max_closure_batch_bytes,
-            ),
-            (&second, Value::String("7".into()), 0),
-        ] {
-            let subject = Subject::Program(owner.program().clone());
-            let captured = solve(
-                PreparedInput::admitted(owner),
-                &subject,
-                SolveConfig {
-                    // A device session does not reserve CPU worker closures.
-                    // Its candidate preparation still retains the per-closure bound.
-                    max_closure_batch_bytes: closure_budget,
-                    ..config(device.backend(), profile)
-                },
-                resources,
-                AnswerSelection::All,
-            );
-            require_device(&captured, device, profile);
-            assert_eq!(captured.outcome.verified_models(), 2);
-            assert!(captured.outcome.incumbent().is_none());
-            require_complete(
-                &captured,
-                &[
-                    Record::expected("a", value.clone(), None),
-                    Record::expected("b", value, None),
-                ],
-            );
-        }
     }
 }
 
@@ -325,19 +287,19 @@ fn independent_formulas(resources: &ExecutionResources, device: GpuApi) {
         let captured = solve(
             PreparedInput::formula(owner),
             &subject,
-            config(device.backend(), Profile::Formula),
+            config(device.backend()),
             resources,
             AnswerSelection::Optimal,
         );
         let reference = solve(
             PreparedInput::formula(owner),
             &subject,
-            config(Backend::Cpu, Profile::Formula),
+            config(Backend::Cpu),
             &ExecutionResources::default(),
             AnswerSelection::Optimal,
         );
         assert_eq!(captured.records, reference.records);
-        require_device(&captured, device, Profile::Formula);
+        require_device(&captured, device);
         assert!(captured.outcome.optimum_proved());
         assert_eq!(
             captured.outcome.incumbent().unwrap().score.costs(),
@@ -352,11 +314,11 @@ fn independent_formulas(resources: &ExecutionResources, device: GpuApi) {
     let all = solve(
         PreparedInput::formula(&second),
         &Subject::Theory(second.theory().clone()),
-        config(device.backend(), Profile::Formula),
+        config(device.backend()),
         resources,
         AnswerSelection::All,
     );
-    require_device(&all, device, Profile::Formula);
+    require_device(&all, device);
     assert_eq!(all.outcome.selection(), Some(AnswerSelection::All));
     assert_eq!(all.outcome.retained_models(), 0);
     assert!(all.outcome.incumbent().is_none());
@@ -392,7 +354,7 @@ fn independent_sessions(device: GpuApi) {
         .unwrap();
     drop(resources);
     drop(context);
-    independent_closures(&retained, device);
+    independent_normal_sessions(&retained, device);
     independent_formulas(&retained, device);
     stopped_timed_session(device);
     let value = Value::Number(7);
@@ -437,7 +399,7 @@ fn stopped_timed_session(device: GpuApi) {
     let control = Cancellation::default();
     let mut session = Session::builder(
         PreparedInput::formula(&owner),
-        config(device.backend(), Profile::Formula),
+        config(device.backend()),
         control.clone(),
     )
     .resources(&resources)
@@ -455,11 +417,11 @@ fn stopped_timed_session(device: GpuApi) {
     let completed = solve(
         PreparedInput::formula(&owner),
         &subject,
-        config(device.backend(), Profile::Formula),
+        config(device.backend()),
         &resources,
         AnswerSelection::All,
     );
-    require_device(&completed, device, Profile::Formula);
+    require_device(&completed, device);
     assert_eq!(completed.records.len(), 64);
     assert_timing_identity(&completed.outcome);
     let timing = completed
@@ -492,7 +454,7 @@ fn independent_profile_sessions(device: GpuApi) {
         drop(resources);
         drop(profile);
         let owner = formula(FORMULA_FIRST);
-        let mut limited = config(device.backend(), Profile::Formula);
+        let mut limited = config(device.backend());
         limited.max_candidates = 0;
         let stopped = solve(
             PreparedInput::formula(&owner),
@@ -528,21 +490,16 @@ fn policy_refusal(device: GpuApi) {
 }
 
 fn policy_refusal_with(resources: &ExecutionResources, device: GpuApi) {
-    let owner = normal(NORMAL_NUMBER);
+    let owner = formula(NORMAL_NUMBER);
     let formula = formula(FORMULA_FIRST);
     for (profile, input, subject) in [
         (
-            Profile::Eager,
-            PreparedInput::admitted(&owner),
-            Subject::Program(owner.program().clone()),
+            Profile::Normal,
+            PreparedInput::formula(&owner),
+            Subject::Theory(owner.theory().clone()),
         ),
         (
-            Profile::Lazy,
-            PreparedInput::admitted(&owner),
-            Subject::Program(owner.program().clone()),
-        ),
-        (
-            Profile::Formula,
+            Profile::Optimization,
             PreparedInput::formula(&formula),
             Subject::Theory(formula.theory().clone()),
         ),
@@ -550,7 +507,7 @@ fn policy_refusal_with(resources: &ExecutionResources, device: GpuApi) {
         let mut routes = Routes::default();
         let failure = Session::builder(
             input,
-            config(device.other().backend(), profile),
+            config(device.other().backend()),
             Cancellation::default(),
         )
         .resources(resources)
@@ -562,17 +519,17 @@ fn policy_refusal_with(resources: &ExecutionResources, device: GpuApi) {
         assert!(failure.subject().unwrap().same_instance(&subject));
         assert!(failure.semantic().is_none());
         assert_eq!(
-            routes.device_closure + routes.cpu_closure + routes.device_formula + routes.cpu_formula,
+            routes.device_tight + routes.device_formula + routes.cpu_formula,
             0
         );
         let complete = solve(
             input,
             &subject,
-            config(device.backend(), profile),
+            config(device.backend()),
             resources,
             AnswerSelection::Optimal,
         );
-        require_device(&complete, device, profile);
+        require_device(&complete, device);
         require_complete(&complete, &expected(profile));
     }
 }
@@ -584,31 +541,28 @@ fn cpu_policies(device: GpuApi) {
 }
 
 fn cpu_policies_with(resources: &ExecutionResources) {
-    let owner = normal(NORMAL_NUMBER);
-    for profile in [Profile::Eager, Profile::Lazy] {
-        let capture = solve(
-            PreparedInput::admitted(&owner),
-            &Subject::Program(owner.program().clone()),
-            config(Backend::Cpu, profile),
-            resources,
-            AnswerSelection::All,
-        );
-        assert_eq!(capture.routes.cpu_closure, 1);
-        assert!(capture.routes.observed_backend.is_none());
-        assert!(capture.outcome.lazy_execution().is_none());
-        require_complete(
-            &capture,
-            &[
-                Record::expected("a", Value::Number(7), None),
-                Record::expected("b", Value::Number(7), None),
-            ],
-        );
-    }
+    let owner = formula(NORMAL_NUMBER);
+    let capture = solve(
+        PreparedInput::formula(&owner),
+        &Subject::Theory(owner.theory().clone()),
+        config(Backend::Cpu),
+        resources,
+        AnswerSelection::All,
+    );
+    assert_eq!(capture.routes.cpu_formula, 1);
+    assert!(capture.routes.observed_backend.is_none());
+    require_complete(
+        &capture,
+        &[
+            Record::expected("a", Value::Number(7), None),
+            Record::expected("b", Value::Number(7), None),
+        ],
+    );
     let formula = formula(FORMULA_FIRST);
     let capture = solve(
         PreparedInput::formula(&formula),
         &Subject::Theory(formula.theory().clone()),
-        config(Backend::Cpu, Profile::Formula),
+        config(Backend::Cpu),
         resources,
         AnswerSelection::Optimal,
     );
@@ -633,7 +587,7 @@ impl ExecutionObserver for RejectDeviceObservation {
     fn observe(&mut self, observation: ExecutionObservation<'_>) -> Result<(), Self::Error> {
         if matches!(
             observation,
-            ExecutionObservation::DeviceClosure { .. } | ExecutionObservation::DeviceFormula { .. }
+            ExecutionObservation::DeviceTight { .. } | ExecutionObservation::DeviceFormula { .. }
         ) {
             self.calls += 1;
             return Err(self.cause.clone());
@@ -650,7 +604,7 @@ fn observer_failure(device: GpuApi) {
 
 fn observer_failure_with(resources: &ExecutionResources, device: GpuApi) {
     let context = resources.gpu_context().unwrap();
-    let owner = normal(NORMAL_NUMBER);
+    let owner = formula(NORMAL_NUMBER);
     let formula = formula(FORMULA_FIRST);
     // Reuse a real typed policy refusal as an external callback error. Its type
     // must not turn the observation failure into device fallback evidence.
@@ -659,17 +613,12 @@ fn observer_failure_with(resources: &ExecutionResources, device: GpuApi) {
         .unwrap_err();
     for (profile, input, subject) in [
         (
-            Profile::Eager,
-            PreparedInput::admitted(&owner),
-            Subject::Program(owner.program().clone()),
+            Profile::Normal,
+            PreparedInput::formula(&owner),
+            Subject::Theory(owner.theory().clone()),
         ),
         (
-            Profile::Lazy,
-            PreparedInput::admitted(&owner),
-            Subject::Program(owner.program().clone()),
-        ),
-        (
-            Profile::Formula,
+            Profile::Optimization,
             PreparedInput::formula(&formula),
             Subject::Theory(formula.theory().clone()),
         ),
@@ -678,15 +627,11 @@ fn observer_failure_with(resources: &ExecutionResources, device: GpuApi) {
             cause: cause.clone(),
             calls: 0,
         };
-        let failure = Session::builder(
-            input,
-            config(device.backend(), profile),
-            Cancellation::default(),
-        )
-        .resources(resources)
-        .start_observed(&mut observer)
-        .err()
-        .expect("the preparation observer refuses the session");
+        let failure = Session::builder(input, config(device.backend()), Cancellation::default())
+            .resources(resources)
+            .start_observed(&mut observer)
+            .err()
+            .expect("the preparation observer refuses the session");
         let SolveError::ExecutionObservation(error) = failure.cause.as_ref() else {
             panic!("external failure changed class: {failure:?}");
         };
@@ -697,22 +642,22 @@ fn observer_failure_with(resources: &ExecutionResources, device: GpuApi) {
         let complete = solve(
             input,
             &subject,
-            config(device.backend(), profile),
+            config(device.backend()),
             resources,
             AnswerSelection::Optimal,
         );
-        require_device(&complete, device, profile);
+        require_device(&complete, device);
         require_complete(&complete, &expected(profile));
     }
 }
 
 fn expected(profile: Profile) -> Vec<Record> {
     match profile {
-        Profile::Eager | Profile::Lazy => vec![
+        Profile::Normal => vec![
             Record::expected("a", Value::Number(7), None),
             Record::expected("b", Value::Number(7), None),
         ],
-        Profile::Formula => vec![Record::expected("a", Value::Number(7), Some(1))],
+        Profile::Optimization => vec![Record::expected("a", Value::Number(7), Some(1))],
     }
 }
 
@@ -723,30 +668,28 @@ fn session_resource_fixture_families_are_exact() {
         (NORMAL_NUMBER, Value::Number(7)),
         (NORMAL_STRING, Value::String("7".into())),
     ] {
-        let owner = normal(source);
-        for profile in [Profile::Eager, Profile::Lazy] {
-            let capture = solve(
-                PreparedInput::admitted(&owner),
-                &Subject::Program(owner.program().clone()),
-                config(Backend::Cpu, profile),
-                &resources,
-                AnswerSelection::All,
-            );
-            require_complete(
-                &capture,
-                &[
-                    Record::expected("a", value.clone(), None),
-                    Record::expected("b", value.clone(), None),
-                ],
-            );
-        }
+        let owner = formula(source);
+        let capture = solve(
+            PreparedInput::formula(&owner),
+            &Subject::Theory(owner.theory().clone()),
+            config(Backend::Cpu),
+            &resources,
+            AnswerSelection::All,
+        );
+        require_complete(
+            &capture,
+            &[
+                Record::expected("a", value.clone(), None),
+                Record::expected("b", value, None),
+            ],
+        );
     }
     for (source, choice, cost) in [(FORMULA_FIRST, "a", 1), (FORMULA_SECOND, "b", 4)] {
         let owner = formula(source);
         let capture = solve(
             PreparedInput::formula(&owner),
             &Subject::Theory(owner.theory().clone()),
-            config(Backend::Cpu, Profile::Formula),
+            config(Backend::Cpu),
             &resources,
             AnswerSelection::Optimal,
         );
@@ -860,7 +803,7 @@ fn unseeded_cycle_has_one_empty_answer_set() {
     let capture = solve(
         PreparedInput::formula(&owner),
         &subject,
-        config(Backend::Cpu, Profile::Formula),
+        config(Backend::Cpu),
         &ExecutionResources::default(),
         AnswerSelection::All,
     );
@@ -902,13 +845,13 @@ fn tight_families(device: GpuApi) {
         let cpu = solve(
             PreparedInput::formula(&owner),
             &subject,
-            config(Backend::Cpu, Profile::Formula),
+            config(Backend::Cpu),
             &ExecutionResources::default(),
             AnswerSelection::Optimal,
         );
         assert_eq!(cpu.outcome.completion(), Some(Completion::Exhausted));
         for workers in [1, 4] {
-            let mut options = config(device.backend(), Profile::Formula);
+            let mut options = config(device.backend());
             options.oracle = Oracle::Auto;
             options.workers = NonZeroUsize::new(workers).unwrap();
             options.completion_workers = NonZeroUsize::new(4).unwrap();
@@ -978,12 +921,12 @@ fn enumeration_lookahead(device: GpuApi) {
     let cpu = solve(
         PreparedInput::formula(&owner),
         &subject,
-        config(Backend::Cpu, Profile::Formula),
+        config(Backend::Cpu),
         &ExecutionResources::default(),
         AnswerSelection::All,
     );
     for (oracle, routes) in [(Oracle::Countermodel, (1, 0)), (Oracle::Auto, (0, 1))] {
-        let mut options = config(device.backend(), Profile::Formula);
+        let mut options = config(device.backend());
         options.oracle = oracle;
         let gpu = solve(
             PreparedInput::formula(&owner),
@@ -1047,11 +990,11 @@ fn general_formula_selection(device: GpuApi) {
         let cpu = solve(
             PreparedInput::formula(&owner),
             &subject,
-            config(Backend::Cpu, Profile::Formula),
+            config(Backend::Cpu),
             &ExecutionResources::default(),
             AnswerSelection::All,
         );
-        let mut options = config(device.backend(), Profile::Formula);
+        let mut options = config(device.backend());
         options.oracle = oracle;
         let gpu = solve(
             PreparedInput::formula(&owner),
@@ -1069,7 +1012,7 @@ fn general_formula_selection(device: GpuApi) {
             (1, 0),
             "source={source}, oracle={oracle:?}"
         );
-        require_device(&gpu, device, Profile::Formula);
+        require_device(&gpu, device);
         assert_eq!(gpu.outcome.completion(), Some(Completion::Exhausted));
         assert_eq!(
             gpu.outcome
@@ -1096,7 +1039,7 @@ fn vulkan_general_formulas_keep_device_execution() {
 fn tight_refusal(device: GpuApi) {
     let owner = formula("{a}.");
     let resources = ExecutionResources::with_gpu(&device.context());
-    let mut options = config(device.backend(), Profile::Formula);
+    let mut options = config(device.backend());
     options.oracle = Oracle::Auto;
     options.gpu_formula_work = 0;
     let mut routes = Routes::default();
@@ -1130,7 +1073,7 @@ fn tight_refusal(device: GpuApi) {
         0
     );
     // Admission before submission leaves the exact supplied context reusable.
-    let mut options = config(options.backend, Profile::Formula);
+    let mut options = config(options.backend);
     options.oracle = Oracle::Auto;
     let complete = solve(
         PreparedInput::formula(&owner),
@@ -1162,7 +1105,7 @@ fn terminal_families(device: GpuApi) {
     let reference = solve(
         PreparedInput::formula(&reference_owner),
         &Subject::Theory(reference_owner.theory().clone()),
-        config(Backend::Cpu, Profile::Formula),
+        config(Backend::Cpu),
         &ExecutionResources::default(),
         AnswerSelection::All,
     );
@@ -1182,14 +1125,14 @@ fn terminal_families(device: GpuApi) {
         &subject,
         SolveConfig {
             grounder: Grounder::Auto,
-            ..config(device.backend(), Profile::Formula)
+            ..config(device.backend())
         },
         &resources,
         AnswerSelection::All,
     );
     // The common helper checks every answer and final outcome against the
     // original terminal subject; this additionally requires real device work.
-    require_device(&capture, device, Profile::Formula);
+    require_device(&capture, device);
     require_complete(&capture, &reference.records);
     let terminal = capture.outcome.terminal_execution().unwrap();
     let construction = capture.outcome.model_construction().unwrap();
@@ -1236,7 +1179,7 @@ fn terminal_families(device: GpuApi) {
         SolveConfig {
             grounder: Grounder::Auto,
             models: 2,
-            ..config(device.backend(), Profile::Formula)
+            ..config(device.backend())
         },
         &ExecutionResources::with_gpu(&timed),
         AnswerSelection::All,

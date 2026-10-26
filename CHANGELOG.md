@@ -404,9 +404,40 @@ Notable changes by release. Versions follow Semantic Versioning.
   `candidate_queries`, `projection_history` and `necessary_support`, and the
   interruption codes `admission`, `projection_entries`, `projection_nodes`,
   `projection_bytes` and `region_filter_unsupported` no longer occur. The phase
-  timing section, in text and in JSON, is schema 6, without
-  `reduct_preparation`; zetesis-validation reads schema 6 and every earlier
-  schema.
+  timing section, in text and in JSON, drops `reduct_preparation`.
+- The closure route is removed, with no alias and no deprecation period: every
+  program is prepared as formulas and solved by region search, whose answer
+  sets equal the closure route's on normal programs
+  (`NormalFerraris.answer_set_iff`). The command line refuses `--oracle closure`
+  and `--source-batching`, and `--oracle auto` prepares formulas directly.
+  - zetesis-solve removes the closure session and executions
+    (`ClosureExecutionStatistics`, `ClosureJoinStatistics`, `ClosureRoute`, and
+    the lazy and shared executions), `PreparedInput`'s relational and ground
+    constructors, `Oracle::Closure`, `SourceBatching`, the closure-only
+    `SolveConfig` fields, `SolveError::{Batch, ClosureReservation,
+    UnsupportedSourceBatching}` and `ExecutionObservation::{CpuClosure,
+    DeviceClosure}`.
+  - zetesis-cpu removes the closure oracles, candidates, batches and lazy
+    rounds, keeping cancellation, regions and tables.
+  - zetesis-wgpu removes the static and lazy GPU oracles and their shaders.
+    `GpuInfo::supports_static_oracle` is now `supports_formula_oracle`, and it
+    screens adapters by the formula kernel's limits.
+  - The phase timing section is schema 7, without the closure membership phase.
+    zetesis-validation reads schema 7 and every earlier schema.
+  - Answers arrive in the region walk's order, held branch first.
+  - A facts-only program is evaluated completely at admission, so `--models 1`
+    reports exhaustion.
+  - `--backend gpu` with a zero device batch allowance reports an incomplete run
+    instead of a GPU error.
+  - An automatic run's parse error has the JSON error kind `formula_admission`
+    instead of `expansion`.
+- The JSON document is schema 3. Its model records are unchanged from schema
+  2; its statistics drop the keys of the removed routes: the clause search's
+  `search.candidate_queries`, `search.projection_history` and
+  `search.necessary_support`, and the closure route's `closure_execution`,
+  `lazy_execution`, `shared_execution`, `candidate_restrictions`,
+  `query_execution` and `expansion`. zetesis-validation reads schemas 1 to 3,
+  so documents of earlier executables can still be compared.
 - zetesis-sat is renamed zetesis-stable, and its library `zetesis_sat` is now
   `zetesis_stable`, with no alias and no deprecation period: depend on
   `zetesis-stable` and import from `zetesis_stable`. With the clause search
@@ -553,7 +584,7 @@ Notable changes by release. Versions follow Semantic Versioning.
 - `Program::new` now takes `FactTables`; `rules()` includes facts, while
   `templates()` contains only explicit templates. `AdmissionError::Canonical`
   replaces `template` with `origin: AdmissionOrigin`, and matches must handle
-  `FactLimitExceeded`. See [explicit facts](docs/book/rust/parallel.md#construct-templates-and-explicit-facts).
+  `FactLimitExceeded`.
 - `DomainObservation::Analyzed` carries `NumericAnalysis`; `Inapplicable` is
   removed. Use `analysis()`, `catalog()` and `arguments()` to read the new view.
   Observers can decline census work with `domain_diagnostics_enabled()`, whose

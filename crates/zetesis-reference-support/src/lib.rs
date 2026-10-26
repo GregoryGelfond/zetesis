@@ -7,29 +7,29 @@
 //! crates ([`resource_limits`] states which).
 //!
 //! [`admit`] admits a source under given formula limits, the rest at their
-//! defaults, [`formula`] under the default limits throughout and [`normal`] on
-//! the normal-program route. [`exhaustive`] enumerates every subset of an
+//! defaults, and [`formula`] under the default limits throughout. [`exhaustive`]
+//! enumerates every subset of an
 //! admitted source's atoms, keeping those the reduct check
 //! (`zetesis_ferraris::check`) accepts, each with its objective's costs; atoms
 //! are spelled as clingo spells them ([`canonical`]). [`normal_answer_sets`]
-//! finds a normal program's answer sets by exhausting its candidates, each
-//! checked against the reduct (`zetesis_cpu::check`). [`prepare`] prepares a
+//! finds a relational normal program's answer sets as the stable models of its
+//! ground graph's Ferraris theory. [`prepare`] prepares a
 //! source under the default options and limits, [`prepared`] when preparation
 //! must accept it, and [`hybrid`] grounds it for hybrid execution;
 //! [`BundleFixture`] writes a source bundle into a temporary directory for the
 //! tests that load or run one. [`resource_limits`] sets those limits by the
 //! resource a refusal reports, and reads the formula and expansion limits'
 //! defaults by resource. The crate stands above `zetesis-themelios`, so only
-//! the tests that need that closure compile it. It is not published or
+//! the tests that need these references compile it. It is not published or
 //! installed.
 
-use zetesis_core::{Model, Program, Sign};
-use zetesis_cpu::{Cancellation, CandidateLimits, CandidateTermination, Candidates};
-use zetesis_ferraris::{Interpretation, Limits, check};
+use zetesis_core::{GroundProgram, Model, Program, Sign, StaticLimits};
+use zetesis_cpu::Cancellation;
+use zetesis_ferraris::{AdmissionLimits, Interpretation, Limits, check, from_ground_program};
 use zetesis_test_support::records::Records;
 use zetesis_themelios::{
-    AdmissionOptions, Admitted, AdmittedFormula, ExpansionLimits, FormulaFailure, FormulaLimits,
-    HybridFormula, PreparedFormula, admit_extended, admit_formula, prepare_formula,
+    AdmissionOptions, AdmittedFormula, ExpansionLimits, FormulaFailure, FormulaLimits,
+    HybridFormula, PreparedFormula, admit_formula, prepare_formula,
 };
 
 mod bundle;
@@ -92,21 +92,6 @@ pub fn admit(source: &str, limits: &FormulaLimits) -> Result<AdmittedFormula, Fo
 #[must_use]
 pub fn formula(source: &str) -> AdmittedFormula {
     admit(source, &FormulaLimits::default()).unwrap_or_else(|error| panic!("{source}: {error}"))
-}
-
-/// `source` admitted on the normal-program route, the bounded extension of
-/// S0, under the default options and limits.
-///
-/// # Panics
-/// Panics if the admission refuses `source`.
-#[must_use]
-pub fn normal(source: &str) -> Admitted {
-    admit_extended(
-        source.into(),
-        AdmissionOptions::default(),
-        ExpansionLimits::default(),
-    )
-    .unwrap()
 }
 
 /// `source` prepared under the default options and limits.
@@ -189,35 +174,30 @@ pub fn exhaustive(input: &AdmittedFormula) -> Records {
     records
 }
 
-/// Every answer set of the normal program `program`: the closure of each
-/// candidate the reduct check (`zetesis_cpu::check`) accepts, the candidates
-/// exhausted under the default limits.
+/// Every answer set of the relational normal program `program`: the stable
+/// models of its ground graph's Ferraris theory, found by region search under
+/// the default limits, each translated back to the graph's atoms.
 ///
 /// # Panics
-/// Panics if a candidate or its check is refused, or if the candidates stop
-/// before they are exhausted.
+/// Panics if grounding, translation or the search is refused, or if the search
+/// stops before it is exhausted.
 #[must_use]
 pub fn normal_answer_sets(program: &Program) -> Vec<Model> {
-    let cancellation = Cancellation::default();
-    let mut candidates = Candidates::new(program, CandidateLimits::default(), cancellation.clone());
-    let answer_sets = candidates
-        .by_ref()
-        .filter_map(|seed| {
-            let checked = zetesis_cpu::check(
-                program,
-                &seed.expect("the default candidate limits"),
-                zetesis_cpu::Limits::default(),
-                &cancellation,
-            )
-            .expect("the default reduct-check limits");
-            checked.accepted().then(|| checked.closure().clone())
-        })
-        .collect();
-    assert_eq!(
-        candidates.termination(),
-        Some(CandidateTermination::Exhausted)
-    );
-    answer_sets
+    let ground = GroundProgram::compile(program, StaticLimits::default())
+        .expect("the default static limits");
+    let theory = from_ground_program(&ground, AdmissionLimits::default())
+        .expect("the default formula admission limits");
+    zetesis_stable::StableModels::new(
+        &theory,
+        zetesis_stable::Limits::default(),
+        Cancellation::default(),
+    )
+    .expect("the default search limits")
+    .map(|answer| {
+        let answer = answer.expect("an exhausted search under the default limits");
+        Model::from_positions(ground.atom_catalog(), answer.atoms()).expect("ground atom positions")
+    })
+    .collect()
 }
 
 #[cfg(test)]
@@ -261,8 +241,13 @@ mod tests {
     }
 
     #[test]
-    fn a_normal_program_has_the_answer_sets_its_candidates_check_to() {
-        let admitted = normal("a :- not b. b :- not a. c :- a.");
+    fn a_normal_program_has_the_stable_models_of_its_ground_theory() {
+        let admitted = zetesis_themelios::admit_extended(
+            "a :- not b. b :- not a. c :- a.".into(),
+            AdmissionOptions::default(),
+            ExpansionLimits::default(),
+        )
+        .unwrap();
         let mut answer_sets: Vec<Vec<String>> = normal_answer_sets(admitted.program())
             .iter()
             .map(|model| model.atoms().iter().map(canonical).collect())

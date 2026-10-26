@@ -2,9 +2,7 @@
 
 use crate::support::runs::enumerated as solve;
 use zetesis_cli::{Completion, RunError};
-use zetesis_themelios::{
-    AdmissionFailure, ExpansionFailure, FormulaFailure, FormulaResource, ProfileFeature,
-};
+use zetesis_themelios::{FormulaFailure, FormulaResource};
 
 fn displays(text: &str) -> Vec<&str> {
     let mut result = Vec::new();
@@ -72,21 +70,6 @@ fn automatic_interval_choices_keep_group_bounds_products_costs_and_hidden_ties()
             assert!(output.lines().any(|line| line == status));
         }
     }
-}
-
-#[test]
-fn explicit_closure_refuses_interval_choices_without_emitting_answers() {
-    let (result, output, _) = solve("1 {p(1..4)} 1.", &["--oracle", "closure"]);
-    assert!(matches!(
-        result,
-        Err(RunError::Expansion(ExpansionFailure::Admission(
-            AdmissionFailure::Profile {
-                feature: ProfileFeature::BoundedChoice,
-                ..
-            }
-        )))
-    ));
-    assert!(crate::support::human::preamble(&output), "{output}");
 }
 
 #[test]

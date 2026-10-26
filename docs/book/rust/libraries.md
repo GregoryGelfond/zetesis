@@ -47,7 +47,7 @@ retain the contracts documented in the themelios manual.
 
 | Task | Public library entry points | Contract or example |
 | --- | --- | --- |
-| Construct finite relational programs | `zetesis_core::{Program, Template, FactTables, FactSegment, Atom, Seed}` | [Parallel and lazy checking](parallel.md) |
+| Construct finite relational programs | `zetesis_core::{Program, Template, FactTables, FactSegment, Atom, Seed}` | [Canonical ownership](../architecture/ownership.md) |
 | Share admitted template components | `TemplateCatalogBuilder`, `TemplateCatalog`, `TemplateRef`, `PatternRef`, `TemplateTerm` | [Canonical ownership](../architecture/ownership.md) |
 | Read or explicitly export canonical values | `catalog::{AtomRef, PredicateRef, TermRef}`, `TermRef::nodes`, `TermRef::write_with`, `AtomRef::to_atom` | [Borrowing and explicit copies](models.md#borrowing-and-explicit-copies) |
 | Build typed vocabulary without a program or atom population | `catalog::{VocabularyBuilder, Vocabulary}` | [Scoped term workspaces](models.md#scoped-term-workspaces) |
@@ -56,8 +56,6 @@ retain the contracts documented in the themelios manual.
 | Key values by canonical atom identity per row scope | `catalog::AtomIdentityMap` | [Scoped term workspaces](models.md#scoped-term-workspaces) |
 | Construct derived terms over immutable input owners | `catalog::{DerivedTerms, DeclaredConstructor}` | [Scoped term workspaces](models.md#scoped-term-workspaces) |
 | Locate sparse carrier coordinates | `Program::locate_atom_with`, `CarrierAtom` | [Canonical ownership](../architecture/ownership.md) |
-| Borrow candidate membership | `SeedSelection`, `SeedView`, `Candidates::next_selection` | [Parallel and lazy checking](parallel.md) |
-| Locate an atom in the original gate carrier | `GateIndex::locate`, `Program::indexed_gate_atoms` | [Candidate identities](parallel.md) |
 | Look up complete typed atoms | `Model::lookup`, `AtomIndex`, `CatalogIndex`, `AtomLookup`, `AtomPattern::key`, `BindingView` | [Checked lookup example](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-core/examples/README.md#checked-atom-lookup-probe) |
 | Build an append-only atom catalog | `atom_interner::{AtomInterner, CommittedAtoms, AtomAppender}` | [Catalog construction](models.md#building-a-catalog-during-grounding) |
 | Select equality matches in one relation | `zetesis_core::relation::{Relation, Query, Selection, Mask}` | [Core relation API](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-core/src/relation.rs) |
@@ -74,9 +72,6 @@ row or locating a gate atom does not establish answer-set membership. See
 
 | Task | Public library entry points | Guide |
 | --- | --- | --- |
-| Compile a complete relational graph | `zetesis_core::GroundProgram::compile` | [Parallel and lazy checking](parallel.md) |
-| Check a normal program's reduct | `zetesis_cpu::{check, check_static, BatchOracle}` | [Parallel and lazy checking](parallel.md) |
-| Reuse scalar query preparation | `PreparedQueries`, `PreparationLimits`, `ClosureWorkspace` | [Repeated checks](parallel.md#reuse-preparation-across-scalar-checks) |
 | Build finite formulas and check membership | `zetesis_ferraris::{Theory, FormulaParts, NodeView, Interpretation, check}` | [Finite reducts](reducts.md) |
 | Reuse original truth or a frozen reduct | `EvaluationWorkspace`, `FormulaEvaluation`, `FrozenReduct` | [Finite reducts](reducts.md) |
 | Use checked formula specializations | `zetesis_ferraris::{PositivePlan, StratifiedPlan, TightPlan, TightWorkspace}` | [Formula plans](sessions.md#formula-membership-plans) |
@@ -129,8 +124,8 @@ and [resource contracts](outcomes.md#resource-contracts).
 
 | Previous use | Migration |
 | --- | --- |
-| `zetesis_core::Program::new(templates, limits)` | Pass `FactTables::default()` as the second argument, or supply explicit facts. Use `rules()` for all original rule occurrences and `templates()` for the separate template sequence. See [explicit facts](parallel.md#construct-templates-and-explicit-facts). |
-| Matching `zetesis_core::AdmissionError` | Replace `Canonical { error, template }` with `Canonical { error, origin }` and handle `FactLimitExceeded`. `template_index()` and `fact_index()` resolve their separate input sequences; see [explicit facts](parallel.md#construct-templates-and-explicit-facts). |
+| `zetesis_core::Program::new(templates, limits)` | Pass `FactTables::default()` as the second argument, or supply explicit facts. Use `rules()` for all original rule occurrences and `templates()` for the separate template sequence. |
+| Matching `zetesis_core::AdmissionError` | Replace `Canonical { error, template }` with `Canonical { error, origin }` and handle `FactLimitExceeded`. `template_index()` and `fact_index()` resolve their separate input sequences. |
 | Matching `DomainObservation::Inapplicable` or reading its former `Analyzed(&Analysis)` payload | Remove the `Inapplicable` arm. `Analyzed` carries `NumericAnalysis`: use `analysis()` for bounds/statistics, `catalog()` for canonical keys, and `arguments()` for predicate coordinates. Finite-guard applicability is separate; see [domain observation](source.md#optional-numeric-analysis-and-domain-guards). |
 | Exhaustive `zetesis_ferraris::NodeView` matches | Handle `Threshold` and `ExtremumCut`. Formula storage now includes shared numeric arenas; preserve them when copying. See [finite formulas](reducts.md#numeric-formula-storage). |
 | Exhaustive `zetesis_ferraris::AdmissionError` matches | Handle `ThresholdShape`, `ThresholdMeasure`, `NumericShape`, `NumericDomain`, `OrdinalRank` and `OrdinalCut`. These distinguish numeric shape/measure refusals from allocation and configured limits. |

@@ -61,7 +61,7 @@ pub(super) fn parse(text: &str, limits: Limits) -> Result<NativeAnswers, Error> 
                 "native publication numbering",
             ));
         }
-        let record = if schema == Some(2) {
+        let record = if matches!(schema, Some(2 | 3)) {
             record(&raw["model"], limits, &mut count, &mut table)?
         } else {
             spelled_record(&raw["model"], limits, &mut count)?

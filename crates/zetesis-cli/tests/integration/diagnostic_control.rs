@@ -105,8 +105,6 @@ fn cancellation_before_auto_formula_fallback_has_no_fabricated_admission_or_mode
     assert!(report.optimization.is_none());
     assert!(report.countermodel_statistics.is_none());
     assert!(report.formula_execution.is_none());
-    assert!(report.lazy_execution.is_none());
-    assert!(report.shared_execution.is_none());
     assert!(
         diagnostics.is_empty(),
         "no formula execution or backend started"

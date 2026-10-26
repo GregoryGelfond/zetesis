@@ -10,7 +10,7 @@ use std::io::{self, Write};
 use zetesis_cpu::Cancellation;
 use zetesis_themelios::observation::ViewError;
 
-const PREFIX: &[u8] = b"{\"schema\":2,\"format\":\"zetesis\",\"models\":[";
+const PREFIX: &[u8] = b"{\"schema\":3,\"format\":\"zetesis\",\"models\":[";
 const FIXTURE_BYTES: usize = 32_768;
 
 fn options(oracle: &str) -> Options {
@@ -65,10 +65,6 @@ fn checked_footer_records(outcome: &PublicationOutcome, records: &[u8]) -> serde
             semantic.candidate_progress(),
             outcome.semantic().candidate_progress()
         );
-        assert_eq!(
-            semantic.shared_execution(),
-            outcome.semantic().shared_execution()
-        );
         assert!(!failure.publication().unwrap().summary());
         assert_eq!(
             sink, expected_prefix,
@@ -88,10 +84,7 @@ fn checked_footer_records(outcome: &PublicationOutcome, records: &[u8]) -> serde
 
 #[test]
 fn every_footer_byte_ceiling_preserves_completed_cpu_evidence() {
-    for (source, oracle) in [
-        ("p. :- p.", "closure"),
-        ("a | b. :- a. :- b.", "countermodel"),
-    ] {
+    for (source, oracle) in [("p. :- p.", "auto"), ("a | b. :- a. :- b.", "countermodel")] {
         let options = options(oracle);
         let outcome = crate::run_finalized_with_diagnostics(
             source.into(),
@@ -181,65 +174,6 @@ fn batched_cpu_footer_admission_preserves_exact_completion() {
     assert_eq!(encoded["completion"]["failed"], 0);
     assert_eq!(encoded["completion"]["complete"], true);
     assert_eq!(document["outcome"]["status"], "satisfiable");
-}
-
-#[test]
-fn every_footer_byte_ceiling_preserves_shared_cpu_refusals() {
-    use crate::SourceBatching;
-    use zetesis_cpu::{Stop, lazy::shared::Cause};
-
-    for (selection, source_stop) in [
-        (SourceBatching::Union, false),
-        (SourceBatching::Worlds, true),
-    ] {
-        let mut options = options("closure");
-        options.source_batching = selection;
-        let mut config = crate::PublicationConfig::from(&options);
-        if source_stop {
-            config.solve.max_source_work = 0;
-        } else {
-            config.solve.max_work = 0;
-        }
-        let admitted = zetesis_themelios::admit_extended(
-            "a.".into(),
-            zetesis_themelios::AdmissionOptions::default(),
-            zetesis_themelios::ExpansionLimits::default(),
-        )
-        .unwrap();
-        let outcome = crate::publish_prepared(
-            crate::PreparedInput::admitted(&admitted),
-            &config,
-            &mut crate::JsonRenderer::new(io::sink(), FIXTURE_BYTES, config.solve.max_atoms),
-            &mut io::sink(),
-            &Cancellation::default(),
-        )
-        .unwrap();
-        assert_eq!(
-            outcome.semantic().completion(),
-            Some(crate::Completion::Interrupted)
-        );
-        assert_eq!(outcome.semantic().verified_models(), 0);
-        assert!(!outcome.semantic().unsatisfiable());
-        let stats = outcome.semantic().shared_execution().unwrap();
-        assert_eq!(stats.submitted_candidates, 1);
-        assert_eq!(stats.completed_candidates, 0);
-        assert_eq!(stats.stopped_candidates, 1);
-        let expected = if source_stop {
-            Cause::Source(Stop::WorkLimit)
-        } else {
-            Cause::World {
-                index: 0,
-                stop: Stop::WorkLimit,
-            }
-        };
-        assert_eq!(stats.last_stop, Some(expected));
-        let document = checked_footer(&outcome);
-        assert_eq!(document["outcome"]["status"], "incomplete");
-        assert_eq!(document["models"], serde_json::json!([]));
-        let stop = &document["statistics"]["shared_execution"]["last_stop"];
-        assert_eq!(stop["scope"], if source_stop { "source" } else { "world" });
-        assert_eq!(stop["reason"], "work_limit");
-    }
 }
 
 #[test]

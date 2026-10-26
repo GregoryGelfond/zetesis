@@ -41,18 +41,6 @@ fn base_execution(semantic: Option<&SemanticOutcome>) -> String {
             )
         };
     }
-    if let Some(execution) = semantic.lazy_execution() {
-        return format!(
-            "GPU lazy closure; {} ({})",
-            execution.adapter, execution.backend
-        );
-    }
-    if semantic.shared_execution().is_some() {
-        return "CPU shared lazy closure".into();
-    }
-    if let Some(execution) = semantic.closure_execution() {
-        return format!("CPU independent {} closure", execution.route.label());
-    }
     if let Some(statistics) = semantic.countermodel_statistics() {
         let operation = match statistics.certified.and_then(|receipt| receipt.plan) {
             Some(zetesis_stable::CertificatePlanStatistics::Tight(_)) => "tight support",
@@ -63,12 +51,6 @@ fn base_execution(semantic: Option<&SemanticOutcome>) -> String {
             None => "general reduct",
         };
         return format!("CPU native formula ({operation})");
-    }
-    if semantic
-        .candidate_statistics()
-        .is_some_and(|statistics| statistics.root_refuted)
-    {
-        return "No membership check; root refuted".into();
     }
     "unavailable (no retained execution receipt)".into()
 }
@@ -139,40 +121,6 @@ fn semantic_rows(rows: &mut Vec<Row>, semantic: &SemanticOutcome) {
     }
     if let Some(statistics) = semantic.countermodel_statistics() {
         formula(rows, statistics);
-    }
-    if let Some(statistics) = semantic.candidate_statistics() {
-        rows.push(count(
-            "Candidate restriction work",
-            statistics.restriction_work,
-            "construction and traversal; includes stopped work",
-        ));
-    }
-    if let Some(execution) = semantic.closure_execution() {
-        closure(rows, execution);
-    }
-    if let Some(execution) = semantic.shared_execution() {
-        rows.push(count(
-            "Shared source work",
-            execution.source_work,
-            "host source operations; includes attempted batches",
-        ));
-        rows.push(count(
-            "Shared world work",
-            execution.world_work,
-            "per-world record visits and tests",
-        ));
-    }
-    if let Some(execution) = semantic.lazy_execution() {
-        rows.push(count(
-            "Lazy source work",
-            execution.source_work,
-            "charged host operations",
-        ));
-        rows.push(count(
-            "Lazy device dispatches",
-            execution.dispatches,
-            "submitted nonempty chunks; not decoded results",
-        ));
     }
     if let Some(execution) = semantic.formula_execution() {
         device(rows, execution);
@@ -365,26 +313,6 @@ fn formula(rows: &mut Vec<Row>, statistics: &zetesis_stable::Statistics) {
         statistics.reduct.regions.regions,
         "zero when no region queries ran",
     ));
-}
-
-fn closure(rows: &mut Vec<Row>, execution: &crate::ClosureExecutionStatistics) {
-    let scope = match execution.route {
-        crate::ClosureRoute::Eager => "eager scan units; completed checks only",
-        crate::ClosureRoute::Lazy(_) => "join/copy units; completed checks only",
-    };
-    rows.push(count("Closure work", execution.work, scope));
-    rows.push(count(
-        "Stopped closure checks",
-        execution.stopped_checks,
-        "partial work omitted from closure totals",
-    ));
-    if let crate::ClosureRoute::Lazy(joins) = execution.route {
-        rows.push(count(
-            "Closure tuple probes",
-            joins.tuple_probes,
-            "rows offered to matching; completed checks only",
-        ));
-    }
 }
 
 fn device(rows: &mut Vec<Row>, execution: &crate::FormulaExecutionStatistics) {

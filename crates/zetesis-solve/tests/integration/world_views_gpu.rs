@@ -9,7 +9,7 @@ use zetesis_solve::{
     ExecutionResources, GpuApi, Grounder, Oracle, PreparedInput, Session, SolveConfig, SolveError,
     Subject, WorldViewError, WorldViewLimits,
 };
-use zetesis_themelios::{AdmissionOptions, Admitted, ExpansionLimits, admit_extended};
+use zetesis_themelios::AdmittedFormula;
 use zetesis_wgpu::{AdapterBackend, GpuContext, GpuErrorKind, GpuOptions, GpuSelection};
 
 /// A physical device on the requested API, and its adapter's own kind, so a
@@ -57,24 +57,8 @@ fn resources(device: Device) -> ExecutionResources {
     ExecutionResources::with_gpu(&context)
 }
 
-fn choices() -> Admitted {
-    admit_extended(
-        "{a}. {b}. {c}. {d}. {e}. {f}.".into(),
-        AdmissionOptions::default(),
-        ExpansionLimits::default(),
-    )
-    .unwrap()
-}
-
-fn lazy_config(backend: Backend, device: Device) -> SolveConfig {
-    SolveConfig {
-        backend,
-        oracle: Oracle::Closure,
-        grounder: Grounder::Lazy,
-        batch_size: NonZeroUsize::new(32).unwrap(),
-        workers: NonZeroUsize::MIN,
-        ..config(device)
-    }
+fn choices() -> AdmittedFormula {
+    formula("{a}. {b}. {c}. {d}. {e}. {f}.")
 }
 
 fn config(device: Device) -> SolveConfig {
@@ -275,7 +259,7 @@ fn collection_refuses_a_foreign_context(device: Device) {
 
 #[derive(Default)]
 struct CpuExecution {
-    cpu_closures: usize,
+    cpu_formulas: usize,
 }
 
 impl ExecutionObserver for CpuExecution {
@@ -283,8 +267,9 @@ impl ExecutionObserver for CpuExecution {
 
     fn observe(&mut self, observation: ExecutionObservation<'_>) -> Result<(), Self::Error> {
         match observation {
-            ExecutionObservation::CpuClosure { .. } => self.cpu_closures += 1,
-            ExecutionObservation::DeviceClosure { .. } => {
+            ExecutionObservation::CpuFormula { .. } => self.cpu_formulas += 1,
+            ExecutionObservation::DeviceFormula { .. }
+            | ExecutionObservation::DeviceTight { .. } => {
                 panic!("a CPU session must keep its CPU route");
             }
             _ => {}
@@ -309,14 +294,17 @@ fn resources_leave_a_cpu_collection_on_the_cpu(device: Device) {
     let owner = choices();
     let mut observer = CpuExecution::default();
     let world_view = Session::builder(
-        PreparedInput::admitted(&owner),
-        lazy_config(Backend::Cpu, device),
+        PreparedInput::formula(&owner),
+        SolveConfig {
+            backend: Backend::Cpu,
+            ..config(device)
+        },
         Cancellation::default(),
     )
     .resources(&resources(device))
     .collect_observed(WorldViewLimits::default(), &mut observer)
     .unwrap();
-    assert_eq!(observer.cpu_closures, 1);
+    assert_eq!(observer.cpu_formulas, 1);
     let actual: BTreeSet<Vec<String>> = world_view
         .answer_sets()
         .iter()

@@ -168,15 +168,6 @@ impl<'a> PublicationView<'a> {
             Err(failure) => failure.phase_timings.as_deref(),
         }
     }
-
-    /// Relational source expansion accounting, when that admission route ran.
-    #[must_use]
-    pub fn expansion(self) -> Option<zetesis_themelios::ExpansionUsage> {
-        match self.result {
-            Ok(progress) => progress.expansion,
-            Err(failure) => failure.partial_report.as_ref().and_then(|p| p.expansion),
-        }
-    }
 }
 
 /// A replaceable view over the controller's streaming answer publication.

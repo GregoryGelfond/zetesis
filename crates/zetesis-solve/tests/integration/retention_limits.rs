@@ -6,10 +6,10 @@ use zetesis_reference_support::formula;
 use zetesis_core::{Atom, Model, Predicate};
 use zetesis_cpu::Cancellation;
 use zetesis_solve::{
-    AnswerSet, Backend, Completion, Grounder, Interruption, OptimizationStop, Oracle,
-    PreparedInput, Session, SolveConfig, WorldView, WorldViewError, WorldViewLimits,
+    AnswerSet, Backend, Completion, Interruption, OptimizationStop, Oracle, PreparedInput, Session,
+    SolveConfig, WorldView, WorldViewError, WorldViewLimits,
 };
-use zetesis_themelios::{AdmissionOptions, AdmittedFormula, ExpansionLimits, admit_extended};
+use zetesis_themelios::AdmittedFormula;
 
 fn config() -> SolveConfig {
     SolveConfig {
@@ -188,58 +188,4 @@ fn short_optimum_budget_preserves_verified_ties() {
     assert_eq!(outcome.incumbent().unwrap().tied_models, 4);
     assert_eq!(outcome.retained_models(), 3);
     assert!(!outcome.optimum_proved());
-}
-
-#[test]
-fn independent_closure_catalogs_are_all_charged() {
-    let owner = admit_extended(
-        "{a}. {b}.".into(),
-        AdmissionOptions::default(),
-        ExpansionLimits::default(),
-    )
-    .unwrap();
-    let config = SolveConfig {
-        oracle: Oracle::Closure,
-        grounder: Grounder::Lazy,
-        ..config()
-    };
-    // Each independent closure transfers a catalog of its selected atoms:
-    // four catalog/selection length pairs plus absent-score tags, and four total
-    // nullary atoms with their selected positions:4*(8+8+1)+4*(18+8).
-    let required = 4 * 17 + 4 * 26;
-    let view = WorldView::collect(
-        PreparedInput::admitted(&owner),
-        config,
-        limits(required),
-        Cancellation::default(),
-    )
-    .unwrap();
-    assert_eq!(
-        view.answer_sets()
-            .iter()
-            .map(|answer| answer.interpretation().clone())
-            .collect::<BTreeSet<_>>(),
-        expected()
-    );
-    for (index, answer) in view.answer_sets().iter().enumerate() {
-        for previous in &view.answer_sets()[..index] {
-            assert!(
-                !answer
-                    .interpretation()
-                    .catalog()
-                    .same_owner(previous.interpretation().catalog())
-            );
-        }
-    }
-    assert!(view.outcome().countermodel_statistics().is_none());
-    let failure = WorldView::collect(
-        PreparedInput::admitted(&owner),
-        config,
-        limits(required - 1),
-        Cancellation::default(),
-    )
-    .unwrap_err();
-    assert!(matches!(failure.cause(), WorldViewError::Bytes));
-    assert_eq!(failure.answer_sets().len(), 3);
-    assert_eq!(failure.outcome().unwrap().completion(), None);
 }

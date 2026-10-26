@@ -329,7 +329,6 @@ impl PublicationOutcome {
                 progress.apply(stopped.semantic);
                 progress.publication = stopped.publication;
                 progress.phase_timings = stopped.phase_timings;
-                progress.expansion = stopped.expansion;
                 progress.stop = Some(stopped.stop);
                 Err(progress.fail(RunError::PublicationStopped(reason)))
             }
@@ -344,7 +343,6 @@ pub struct StoppedPublication {
     pub(crate) semantic: SemanticOutcome,
     pub(crate) publication: Publication,
     pub(crate) phase_timings: Option<PhaseTimings>,
-    pub(crate) expansion: Option<zetesis_themelios::ExpansionUsage>,
 }
 impl StoppedPublication {
     /// The operation and original control reason that stopped delivery.

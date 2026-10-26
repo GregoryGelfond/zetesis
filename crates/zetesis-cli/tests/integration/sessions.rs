@@ -8,7 +8,6 @@ use std::{
     collections::BTreeSet,
     io::{self, Write},
     num::NonZeroUsize,
-    sync::Arc,
 };
 
 use clap::Parser;
@@ -16,9 +15,8 @@ use zetesis_cli::{
     Completion, Grounder, Interruption, Options, Oracle, PreparedInput, RunError, Session,
     SessionModel, SolveConfig, Subject, run_finalized_with_diagnostics,
 };
-use zetesis_core::{GroundProgram, StaticLimits};
 use zetesis_cpu::Cancellation;
-use zetesis_reference_support::{formula, normal};
+use zetesis_reference_support::formula;
 use zetesis_test_support::io::{CLOSED, Closed, FailAt};
 
 fn atoms(model: &SessionModel) -> Vec<String> {
@@ -40,10 +38,10 @@ fn configuration_defaults_use_the_ordinary_resource_policy() {
 }
 
 #[test]
-fn prepared_closure_preserves_hidden_interpretations() {
-    let admitted = normal("{a}. {b}. #show.");
+fn prepared_formula_preserves_hidden_interpretations() {
+    let admitted = formula("{a}. {b}. #show.");
     let mut session = Session::new(
-        PreparedInput::admitted(&admitted),
+        PreparedInput::formula(&admitted),
         config(),
         Cancellation::default(),
     )
@@ -70,27 +68,6 @@ fn prepared_closure_preserves_hidden_interpretations() {
 }
 
 #[test]
-fn detached_model_retains_program_identity() {
-    let admitted = normal("a.");
-    let other = normal("a.");
-    let model = {
-        let mut session = Session::new(
-            PreparedInput::admitted(&admitted),
-            config(),
-            Cancellation::default(),
-        )
-        .unwrap();
-        session.next().unwrap().unwrap()
-    };
-    let Subject::Program(program) = model.subject() else {
-        panic!("closure subject")
-    };
-    assert!(program.same_instance(admitted.program()));
-    assert!(!program.same_instance(other.program()));
-    assert_eq!(atoms(&model), ["a"]);
-}
-
-#[test]
 fn detached_model_retains_theory_identity() {
     let admitted = formula("a | b.");
     let other = formula("a | b.");
@@ -112,85 +89,33 @@ fn detached_model_retains_theory_identity() {
 }
 
 #[test]
-fn ground_session_reuses_the_supplied_graph() {
-    let admitted = normal("a. b :- a.");
-    let graph =
-        Arc::new(GroundProgram::compile(admitted.program(), StaticLimits::default()).unwrap());
-    // Zero substitution/rule ceilings refuse recompilation; max_atoms also bounds
-    // membership and therefore retains its ordinary allowance.
+fn prepared_strategies_refuse_incompatible_requests() {
+    // An eagerly prepared formula cannot be ground again on demand.
+    let formulas = formula("a | b.");
     let configured = SolveConfig {
-        max_ground_rules: 0,
-        max_substitutions: 0,
-        stats: true,
+        oracle: Oracle::Auto,
+        grounder: Grounder::Lazy,
         ..config()
     };
-    let mut session = Session::new(
-        PreparedInput::ground(&graph),
+    let failure = Session::new(
+        PreparedInput::formula(&formulas),
         configured,
         Cancellation::default(),
     )
+    .err()
     .unwrap();
-    assert_eq!(Arc::strong_count(&graph), 2);
-    let result = session.next().unwrap().unwrap();
-    assert_eq!(atoms(&result), ["a", "b"]);
-    assert!(session.next().is_none());
-    assert_eq!(
-        session.outcome().unwrap().completion(),
-        Some(Completion::Exhausted)
-    );
-    assert_eq!(
-        session.phase_timings().unwrap().stages.grounding_mode,
-        zetesis_cli::GroundingMode::Unentered
-    );
-    drop(session);
-    assert_eq!(Arc::strong_count(&graph), 1);
-}
-
-#[test]
-fn prepared_strategies_refuse_incompatible_requests() {
-    let admitted = normal("a.");
-    let formulas = formula("a | b.");
-    let ground =
-        Arc::new(GroundProgram::compile(admitted.program(), StaticLimits::default()).unwrap());
-    for (input, oracle, grounder) in [
-        (
-            PreparedInput::admitted(&admitted),
-            Oracle::Countermodel,
-            Grounder::Auto,
-        ),
-        (
-            PreparedInput::formula(&formulas),
-            Oracle::Closure,
-            Grounder::Auto,
-        ),
-        (
-            PreparedInput::formula(&formulas),
-            Oracle::Auto,
-            Grounder::Lazy,
-        ),
-        (PreparedInput::ground(&ground), Oracle::Auto, Grounder::Lazy),
-    ] {
-        let configured = SolveConfig {
-            oracle,
-            grounder,
-            ..config()
-        };
-        let failure = Session::new(input, configured, Cancellation::default())
-            .err()
-            .unwrap();
-        assert!(matches!(
-            *failure.cause,
-            zetesis_cli::SolveError::PreparedInput { .. }
-        ));
-        assert!(failure.semantic().is_none());
-    }
+    assert!(matches!(
+        *failure.cause,
+        zetesis_cli::SolveError::PreparedInput { .. }
+    ));
+    assert!(failure.semantic().is_none());
 }
 
 #[test]
 fn early_consumer_stop_preserves_partial_coverage() {
-    let admitted = normal("{a}. {b}.");
+    let admitted = formula("{a}. {b}.");
     let mut session = Session::new(
-        PreparedInput::admitted(&admitted),
+        PreparedInput::formula(&admitted),
         config(),
         Cancellation::default(),
     )
@@ -202,26 +127,6 @@ fn early_consumer_stop_preserves_partial_coverage() {
     assert!(!outcome.unsatisfiable());
     assert!(!outcome.optimum_proved());
     assert_eq!(outcome.verified_models(), 1);
-}
-
-#[test]
-fn requested_count_preserves_batch_verification() {
-    let admitted = normal("{a}. {b}.");
-    let mut session = Session::new(
-        PreparedInput::admitted(&admitted),
-        SolveConfig {
-            models: 2,
-            ..config()
-        },
-        Cancellation::default(),
-    )
-    .unwrap();
-    assert_eq!(session.by_ref().count(), 2);
-    let outcome = session.outcome().unwrap();
-    assert_eq!(outcome.completion(), Some(Completion::RequestedModels));
-    assert_eq!(outcome.verified_models(), 4);
-    assert_eq!(outcome.candidate_progress(), 2);
-    assert!(session.next().is_none());
 }
 
 #[test]
@@ -471,8 +376,11 @@ fn failed_publication_preserves_established_optimum() {
 
 #[test]
 fn failed_first_answer_preserves_unknown_coverage() {
+    // A choice is enumerated by the region walk, which publishes each answer
+    // as it is found, so the failed first answer leaves coverage unknown.
+    // (Facts alone are evaluated completely during admission.)
     let failure = run_finalized_with_diagnostics(
-        "a.".into(),
+        "{a}.".into(),
         &options(&[]),
         &mut FailAt::new(b"Answer:"),
         &mut io::sink(),
@@ -522,7 +430,7 @@ fn reporting_failures_remain_separately_observable() {
     )
     .unwrap_err();
     assert!(output.0.is_empty(), "the complete JSON header was accepted");
-    assert!(matches!(*failure.cause, RunError::Expansion(_)));
+    assert!(matches!(*failure.cause, RunError::FormulaAdmission(_)));
     assert_eq!(failure.diagnostics_failure().unwrap().to_string(), CLOSED);
     assert_eq!(
         failure.summary_failure().unwrap().to_string(),
@@ -577,125 +485,37 @@ fn compatibility_mutation_cannot_rewrite_publication() {
 }
 
 #[test]
-fn cancelled_closure_retains_typed_incomplete_coverage() {
-    let admitted = normal("a.");
-    for grounder in [Grounder::Lazy, Grounder::Eager] {
-        let cancellation = Cancellation::default();
-        cancellation.cancel();
-        let mut session = Session::new(
-            PreparedInput::admitted(&admitted),
-            SolveConfig {
-                grounder,
-                ..config()
-            },
-            cancellation,
-        )
-        .unwrap();
-        assert!(session.next().is_none());
-        let outcome = session.outcome().unwrap();
-        assert_eq!(outcome.verified_models(), 0);
-        assert_eq!(outcome.completion(), Some(Completion::Interrupted));
-        assert_eq!(
-            outcome.interruption(),
-            Some(Interruption::Preparation(zetesis_cpu::Stop::Cancelled))
-        );
-        assert!(!outcome.unsatisfiable());
-    }
-}
-
-#[test]
 fn stopped_prepared_inputs_skip_execution_setup() {
-    let admitted = normal("a. b :- a.");
-    let graph =
-        Arc::new(GroundProgram::compile(admitted.program(), StaticLimits::default()).unwrap());
-    for input in [
-        PreparedInput::admitted(&admitted),
-        PreparedInput::ground(&graph),
-    ] {
-        let cancellation = Cancellation::default();
-        cancellation.cancel();
-        let mut session = Session::new(
-            input,
-            SolveConfig {
-                grounder: Grounder::Eager,
-                max_ground_rules: 0,
-                max_substitutions: 0,
-                stats: true,
-                ..config()
-            },
-            cancellation,
-        )
-        .unwrap();
-        assert!(session.next().is_none());
-        let outcome = session.outcome().unwrap();
-        assert_eq!(
-            outcome.interruption(),
-            Some(Interruption::Preparation(zetesis_cpu::Stop::Cancelled))
-        );
-        let Subject::Program(program) = outcome.subject().unwrap() else {
-            panic!("original program")
-        };
-        assert!(program.same_instance(admitted.program()));
-        assert!(
-            session
-                .phase_timings()
-                .unwrap()
-                .get(zetesis_cli::SolvePhase::ExecutionSetup)
-                .is_none()
-        );
-        assert_eq!(Arc::strong_count(&graph), 1);
-    }
-}
-
-#[test]
-fn native_program_preparation_reuses_the_original_subject() {
-    let admitted = normal("{a}. b :- a.");
-    let prepared = PreparedInput::program(admitted.program());
-    assert!(prepared.metadata().is_none());
-    let mut session = Session::new(prepared, config(), Cancellation::default()).unwrap();
-    let actual: BTreeSet<_> = session
-        .by_ref()
-        .map(|answer| {
-            let answer = answer.unwrap();
-            assert!(
-                answer
-                    .subject()
-                    .same_instance(&Subject::Program(admitted.program().clone()))
-            );
-            atoms(&answer)
-        })
-        .collect();
-    assert_eq!(
-        actual,
-        BTreeSet::from([vec![], vec!["a".into(), "b".into()]])
-    );
-    assert_eq!(
-        session.outcome().unwrap().completion(),
-        Some(Completion::Exhausted)
-    );
-}
-
-#[test]
-fn prepared_strategy_failure_retains_only_known_subject() {
-    let admitted = normal("a.");
-    let result = Session::new(
-        PreparedInput::program(admitted.program()),
+    let admitted = formula("a. b :- a.");
+    let cancellation = Cancellation::default();
+    cancellation.cancel();
+    let mut session = Session::new(
+        PreparedInput::formula(&admitted),
         SolveConfig {
-            oracle: Oracle::Countermodel,
+            grounder: Grounder::Eager,
+            stats: true,
             ..config()
         },
-        Cancellation::default(),
+        cancellation,
+    )
+    .unwrap();
+    assert!(session.next().is_none());
+    let outcome = session.outcome().unwrap();
+    assert_eq!(
+        outcome.interruption(),
+        Some(Interruption::Preparation(zetesis_cpu::Stop::Cancelled))
     );
-    let Err(failure) = result else {
-        panic!("native source is not an eager formula")
+    let Subject::Theory(theory) = outcome.subject().unwrap() else {
+        panic!("original theory")
     };
+    assert!(theory.same_instance(admitted.theory()));
     assert!(
-        failure
-            .subject()
+        session
+            .phase_timings()
             .unwrap()
-            .same_instance(&Subject::Program(admitted.program().clone()))
+            .get(zetesis_cli::SolvePhase::ExecutionSetup)
+            .is_none()
     );
-    assert!(failure.semantic().is_none());
 }
 
 #[derive(Clone, Copy)]

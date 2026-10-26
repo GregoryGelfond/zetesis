@@ -28,7 +28,6 @@
 - [Interpretations and retained atoms](rust/models.md)
 - [Observations and host measurements](rust/measurements.md)
 - [Working with finite reducts](rust/reducts.md)
-- [Parallel and lazy checking](rust/parallel.md)
 - [Projecting finite domains through a table](rust/finite-tables.md)
 
 # Part III — The Lean proof library

@@ -148,52 +148,28 @@ fn solve_class(error: &SolveError) -> Class {
     match error {
         SolveError::TerminalStatisticsOverflow
         | SolveError::HybridStatisticsOverflow
-        | SolveError::LazyStatisticsOverflow
-        | SolveError::ClosureStatisticsOverflow
         | SolveError::ModelStatisticsOverflow
-        | SolveError::ClosureReservation { .. }
         | SolveError::CompletionPool(_) => Class::Resource,
-        SolveError::Batch(error) => batch_class(error),
-        SolveError::QueryObservation(error) => batch_class(error),
-        SolveError::SharedCpu(error) => match error {
-            zetesis_cpu::lazy::shared::Cause::Source(stop)
-            | zetesis_cpu::lazy::shared::Cause::World { stop, .. } => stop_class(*stop),
-            zetesis_cpu::lazy::shared::Cause::InvalidOutput => Class::Engine,
-        },
-        SolveError::Static(error) => static_class(error),
-        SolveError::Words(zetesis_core::WordError::Model(error)) | SolveError::Model(error) => {
-            model_class(error)
-        }
-        SolveError::Reconstruction(zetesis_themelios::ReconstructionError::Model(
+        SolveError::Model(error)
+        | SolveError::Reconstruction(zetesis_themelios::ReconstructionError::Model(
             zetesis_core::ModelFailure::Model(error),
         )) => model_class(error),
         SolveError::ExecutionObservation(_)
         | SolveError::ConstraintFailureMissing
         | SolveError::Executor(_)
-        | SolveError::Words(_)
         | SolveError::Reconstruction(_)
         | SolveError::Constraint(_)
         | SolveError::CandidateStreamNotExhausted
         | SolveError::FormulaBatchShape { .. } => Class::Engine,
         // The remaining CPU variants concern an incompatible configured profile:
-        // Projection, BackendUnavailable, UnsupportedOracle,
-        // UnsupportedSourceBatching or PreparedInput. Cargo feature unification
-        // can also expose Gpu/LazyGpu errors without a matching adapter feature.
+        // Projection, BackendUnavailable, UnsupportedOracle or PreparedInput.
+        // Cargo feature unification can also expose Gpu errors without a
+        // matching adapter feature.
         // This closed CPU, unprojected profile admits none of those paths. Any
         // unclassified variant is a bridge configuration breach, never a clean
         // conclusion or a guessed engine/resource classification. Widening the
         // profile requires explicit classification of the newly reachable errors.
         _ => Class::Adapter,
-    }
-}
-
-fn batch_class(error: &zetesis_cpu::BatchError) -> Class {
-    match error {
-        zetesis_cpu::BatchError::Preparation(stop) => stop_class(*stop),
-        zetesis_cpu::BatchError::ClosureStorage { .. }
-        | zetesis_cpu::BatchError::Capacity { .. }
-        | zetesis_cpu::BatchError::Pool(_) => Class::Resource,
-        zetesis_cpu::BatchError::Busy | zetesis_cpu::BatchError::Poisoned => Class::Engine,
     }
 }
 
@@ -262,23 +238,6 @@ fn constraint_class(error: &zetesis_themelios::ConstraintCheckCause) -> Class {
             zetesis_core::AtomIndexError::Allocation,
         ) => Class::Resource,
         _ => Class::Engine,
-    }
-}
-
-fn static_class(error: &zetesis_core::StaticError) -> Class {
-    use zetesis_core::{CarrierError, StaticError};
-    match error {
-        StaticError::CountOverflow
-        | StaticError::DenseIdOverflow
-        | StaticError::LimitExceeded { .. }
-        | StaticError::Allocation
-        | StaticError::Carrier(CarrierError::Allocation | CarrierError::Bytes { .. }) => {
-            Class::Resource
-        }
-        StaticError::Catalog(error) => catalog_class(error),
-        StaticError::Carrier(CarrierError::Coordinates) | StaticError::InvalidAdmittedProgram => {
-            Class::Engine
-        }
     }
 }
 

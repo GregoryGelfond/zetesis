@@ -1,6 +1,6 @@
 //! Borrowed execution facts, distinct from answer-set evidence and presentation.
 
-use crate::{Grounder, Oracle, SolveError, SourceBatching};
+use crate::{Grounder, Oracle, SolveError};
 use std::{error::Error, num::NonZeroUsize};
 use zetesis_themelios::objective_bound::ObjectiveBoundError;
 
@@ -67,31 +67,6 @@ pub enum ExecutionObservation<'a> {
         /// The constraints streamed, and those grounded in the core.
         streamed: StreamedConstraints,
     },
-    /// An admitted static relational representation is available.
-    StaticGrounding {
-        /// Requested materialization policy.
-        requested: Grounder,
-        /// Admitted atom count.
-        atoms: usize,
-        /// Admitted ground rule count.
-        rules: usize,
-        /// Configured lowering limits; a device can impose a smaller atom ceiling.
-        limits: zetesis_core::StaticLimits,
-    },
-    /// Host source joins will supply CPU reduct closure.
-    LazyGrounding {
-        /// Requested materialization policy.
-        requested: Grounder,
-    },
-    /// CPU closure executor was prepared.
-    CpuClosure {
-        /// Effective materialization; always Eager or Lazy.
-        grounder: Grounder,
-        /// Source round policy.
-        batching: SourceBatching,
-        /// Requested worker population.
-        workers: NonZeroUsize,
-    },
     /// CPU formula membership execution was selected.
     CpuFormula {
         /// Requested membership policy.
@@ -119,20 +94,6 @@ pub enum ExecutionObservation<'a> {
         workers: NonZeroUsize,
         /// Logical scratch ceiling, not process RSS.
         max_scratch_bytes: u64,
-    },
-    /// Host source joins will supply device consequence rounds.
-    #[cfg(feature = "gpu")]
-    LazyDeviceGrounding {
-        /// Requested materialization policy.
-        requested: Grounder,
-    },
-    /// Device closure execution was prepared.
-    #[cfg(feature = "gpu")]
-    DeviceClosure {
-        /// Observed adapter, borrowed from this executor.
-        adapter: zetesis_wgpu::AdapterMetadata<'a>,
-        /// Static atom/rule counts, or absence for lazy source rounds.
-        static_counts: Option<(usize, usize)>,
     },
     /// A device propagator is ready; exact CPU residual completion is requested.
     #[cfg(feature = "gpu")]

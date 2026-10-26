@@ -1,20 +1,19 @@
 //! Prepared owners retain semantics independently of source files and execution limits.
 
-use std::{collections::BTreeSet, error::Error};
+use std::collections::BTreeSet;
 
 use crate::support::options::serial_config as config;
 use clap::Parser;
 use zetesis_cli::{
-    Completion, Grounder, Interruption, Options, PreparedInput, PreparedProfile, Session,
-    SolveConfig, SolveError, SolvePhase, Subject, run_finalized,
+    Completion, Interruption, Options, PreparedInput, PreparedProfile, Session, SolveConfig,
+    SolvePhase, Subject, run_finalized,
 };
-use zetesis_core::{Model, StaticError};
+use zetesis_core::Model;
 use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{PositiveError, PositiveResource};
 use zetesis_reference_support::{BundleFixture, formula};
 use zetesis_themelios::{
-    AdmissionOptions, BundleAdmissionOptions, ExpansionLimits, FormulaLimits,
-    admit_bundle_extended, admit_bundle_formula, admit_extended,
+    BundleAdmissionOptions, ExpansionLimits, FormulaLimits, admit_bundle_formula,
 };
 
 /// Sources whose entry includes `body` and shows nothing.
@@ -31,42 +30,6 @@ fn atoms(model: &Model) -> Vec<String> {
         .iter()
         .map(|atom| atom.predicate().name().to_string())
         .collect()
-}
-
-#[test]
-fn relational_bundles_outlive_their_source_files() {
-    let sources = included_body("a. {b}.");
-    let path = sources.directory().to_path_buf();
-    let owner = admit_bundle_extended(
-        sources.bundle(),
-        BundleAdmissionOptions::default(),
-        ExpansionLimits::default(),
-    )
-    .unwrap();
-    drop(sources);
-    assert!(!path.exists());
-
-    let input = PreparedInput::bundle(&owner);
-    assert_eq!(input.profile(), PreparedProfile::Relational);
-    assert!(std::ptr::eq(input.metadata().unwrap(), owner.metadata()));
-    let mut session = Session::new(input, config(), Cancellation::default()).unwrap();
-    let mut models = BTreeSet::new();
-    for result in session.by_ref() {
-        let model = result.unwrap();
-        let Subject::Program(program) = model.subject() else {
-            panic!("relational subject")
-        };
-        assert!(program.same_instance(owner.program()));
-        models.insert(atoms(model.interpretation()));
-    }
-    assert_eq!(
-        models,
-        BTreeSet::from([vec!["a".into()], vec!["a".into(), "b".into()]])
-    );
-    let outcome = session.outcome().unwrap();
-    assert_eq!(outcome.completion(), Some(Completion::Exhausted));
-    assert_eq!(outcome.verified_models(), 2);
-    assert!(!outcome.unsatisfiable());
 }
 
 #[test]
@@ -215,72 +178,6 @@ fn raw_model_conversion_preserves_hidden_atoms() {
     let detached = answer.into_interpretation();
     assert_eq!(detached, original);
     assert_eq!(atoms(&detached), ["a", "hidden"]);
-}
-
-#[test]
-fn eager_setup_refusal_leaves_the_owner_reusable() {
-    let owner = admit_extended(
-        "a. b :- a.".into(),
-        AdmissionOptions::default(),
-        ExpansionLimits::default(),
-    )
-    .unwrap();
-    let input = PreparedInput::admitted(&owner);
-    let failure = Session::new(
-        input,
-        SolveConfig {
-            grounder: Grounder::Eager,
-            max_ground_rules: 0,
-            stats: true,
-            ..config()
-        },
-        Cancellation::default(),
-    )
-    .err()
-    .unwrap();
-    let zetesis_cli::SolveError::Static(error) = failure.cause.as_ref() else {
-        panic!("expected static materialization refusal: {failure}")
-    };
-    assert!(
-        matches!(error, StaticError::LimitExceeded { resource: "ground rules", limit: 0, actual } if *actual > 0)
-    );
-    assert_eq!(
-        failure
-            .source()
-            .unwrap()
-            .downcast_ref::<SolveError>()
-            .unwrap()
-            .source()
-            .unwrap()
-            .downcast_ref::<StaticError>(),
-        Some(error)
-    );
-    assert!(failure.semantic().is_none());
-    assert!(
-        failure
-            .phase_timings
-            .as_ref()
-            .unwrap()
-            .get(SolvePhase::ExecutionSetup)
-            .is_some()
-    );
-
-    let mut session = Session::new(
-        input,
-        SolveConfig {
-            grounder: Grounder::Eager,
-            ..config()
-        },
-        Cancellation::default(),
-    )
-    .unwrap();
-    let answer = session.next().unwrap().unwrap();
-    assert_eq!(atoms(answer.interpretation()), ["a", "b"]);
-    assert!(session.next().is_none());
-    assert_eq!(
-        session.outcome().unwrap().completion(),
-        Some(Completion::Exhausted)
-    );
 }
 
 #[test]

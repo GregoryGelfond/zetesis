@@ -21,7 +21,7 @@ fn external(source: &str) -> BTreeSet<BTreeSet<String>> {
 }
 fn compare(source: &str) {
     let expected = external(source);
-    for search in ["closure", "countermodel"] {
+    for search in ["auto", "countermodel"] {
         compare_native(source, search, &expected);
     }
 }

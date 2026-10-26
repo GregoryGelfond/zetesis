@@ -52,9 +52,7 @@ impl ExecutionObserver for Routes {
         match event {
             ExecutionObservation::DeviceTight { .. } => self.tight += 1,
             ExecutionObservation::DeviceFormula { .. } => self.general += 1,
-            ExecutionObservation::CpuFormula { .. } | ExecutionObservation::CpuClosure { .. } => {
-                self.cpu += 1;
-            }
+            ExecutionObservation::CpuFormula { .. } => self.cpu += 1,
             _ => {}
         }
         Ok(())

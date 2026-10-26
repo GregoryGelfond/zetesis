@@ -22,9 +22,8 @@ use zetesis_solve::{
     SolveConfig, SolveError, SolveFailure,
 };
 use zetesis_themelios::{
-    AdmittedFormula, FormulaPurpose, MetadataLimits, ProgramAdmissionOptions,
-    ProgramFormulaOptions, ProgramSite, SourceMetadata, admit_program, observation,
-    prepare_program_formula_with,
+    AdmittedFormula, FormulaPurpose, MetadataLimits, ProgramFormulaOptions, ProgramSite,
+    SourceMetadata, observation, prepare_program_formula_with,
 };
 
 use super::Run;
@@ -311,20 +310,20 @@ fn preparation_control_concludes_on_the_first_pull() {
 }
 
 #[derive(Default)]
-struct ClosureRoute(Option<Grounder>);
+struct FormulaRoute(Option<Grounder>);
 
-impl ExecutionObserver for ClosureRoute {
+impl ExecutionObserver for FormulaRoute {
     type Error = Infallible;
 
     fn observe(&mut self, event: ExecutionObservation<'_>) -> Result<(), Self::Error> {
-        if let ExecutionObservation::CpuClosure { grounder, .. } = event {
+        if let ExecutionObservation::CpuFormula { grounder, .. } = event {
             self.0 = Some(grounder);
         }
         Ok(())
     }
 }
 
-fn cancel_after_last_relational_answer(grounder: Grounder) {
+fn cancel_after_last_answer() {
     let original = Program::of([Rule::fact(Choice::new(
         None,
         [ChoiceElement::new(
@@ -333,21 +332,30 @@ fn cancel_after_last_relational_answer(grounder: Grounder) {
         )],
         None,
     ))]);
-    let admitted = admit_program(&original, ProgramAdmissionOptions::default()).unwrap();
+    let config = crate::Config {
+        grounder: crate::config::Grounder::Eager,
+        workers: NonZeroUsize::MIN,
+        ..crate::Config::default()
+    };
+    let prepared = crate::prepared::Prepared::new(
+        Arc::new(original.clone()),
+        &config,
+        &zetesis_cpu::Cancellation::default(),
+    )
+    .unwrap();
+    let requested = config.session().grounder;
     let metadata =
         SourceMetadata::compile(&original, MetadataLimits::default(), ProgramSite::program())
             .unwrap();
     let slot = CancellationSlot::default();
     let window = slot.open(None).unwrap();
-    let mut route = ClosureRoute::default();
+    let mut route = FormulaRoute::default();
     let session = Session::enumerate_observed(
-        PreparedInput::program(admitted.program()),
+        prepared.input(),
         SolveConfig {
             backend: Backend::Cpu,
-            grounder,
+            grounder: requested,
             models: 0,
-            // The first native batch has one seed; the second then contains the
-            // remaining seed and observes candidate exhaustion before delivery.
             batch_size: NonZeroUsize::new(4).unwrap(),
             ..Default::default()
         },
@@ -355,7 +363,7 @@ fn cancel_after_last_relational_answer(grounder: Grounder) {
         &mut route,
     )
     .unwrap();
-    assert_eq!(route.0, Some(grounder));
+    assert_eq!(route.0, Some(requested));
     let mut run = Run::new(
         session,
         &original,
@@ -374,8 +382,7 @@ fn cancel_after_last_relational_answer(grounder: Grounder) {
         ])
     );
     assert_eq!(run.conclusion(), None);
-    // Simulate a consumer pause without sleeping or relying on a timer. The
-    // native closure can now return its already-known clean end without a poll.
+    // Simulate a consumer pause without sleeping or relying on a timer.
     slot.cancel();
     assert!(run.next_model().is_none());
     assert_eq!(run.conclusion(), Some(Conclusion::Interrupted));
@@ -383,13 +390,8 @@ fn cancel_after_last_relational_answer(grounder: Grounder) {
 }
 
 #[test]
-fn lazy_final_pull_observes_request_cancellation() {
-    cancel_after_last_relational_answer(Grounder::Lazy);
-}
-
-#[test]
 fn eager_final_pull_observes_request_cancellation() {
-    cancel_after_last_relational_answer(Grounder::Eager);
+    cancel_after_last_answer();
 }
 
 #[test]

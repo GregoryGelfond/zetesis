@@ -54,7 +54,7 @@ fn model_atoms(line: &str) -> BTreeSet<String> {
 }
 
 fn native(source: &str) -> (Models, String) {
-    native_search(source, "closure")
+    native_search(source, "countermodel")
 }
 
 fn native_search(source: &str, search: &str) -> (Models, String) {

@@ -40,7 +40,6 @@ use unit_writer::{UnitBuffer, UnitWriter};
 
 pub(crate) enum Label {
     Source,
-    Oracle,
     Comparisons,
     Grounding,
     Backend,
@@ -49,7 +48,6 @@ impl Label {
     const fn text(self) -> &'static str {
         match self {
             Self::Source => "Source",
-            Self::Oracle => "Oracle",
             Self::Comparisons => "Comparisons",
             Self::Grounding => "Grounding",
             Self::Backend => "Backend",
@@ -222,12 +220,6 @@ impl<W: Write> crate::ExecutionObserver for Diagnostics<W> {
         match observation {
             Event::SourceEvaluation => self.metadata(Label::Backend,
                 format_args!("cpu (dependency-ordered source evaluation; constraints checked before publication)")),
-            Event::StaticGrounding { requested, atoms, rules, limits } => self.metadata(
-                Label::Grounding,
-                format_args!("requested={}, effective=eager (static atoms={atoms}, rules={rules}; lowering caps atoms={}, rules={}, substitutions={})", requested.label(), limits.max_atoms, limits.max_ground_rules, limits.max_substitutions),
-            ),
-            Event::LazyGrounding { requested } => self.metadata(Label::Grounding,
-                format_args!("requested={}, effective=lazy (source joins; no complete ground-rule store)", requested.label())),
             Event::TerminalDefinitions { requested, base: zetesis_themelios::BaseKind::Eager, deferred_templates, .. } => {
                 self.core = Some(Core::TerminalDefinitions);
                 self.metadata(Label::Grounding, format_args!("requested={}, effective=eager_base_terminal_definitions (eager base; {deferred_templates} terminal definitions reconstructed on the host before each original answer)", requested.label()))
@@ -242,12 +234,6 @@ impl<W: Write> crate::ExecutionObserver for Diagnostics<W> {
                 self.metadata(Label::Grounding,
                     format_args!("requested={}, effective=hybrid (eager retained core; {})", requested.label(), StreamedDivision(streamed)))
             }
-            Event::CpuClosure { grounder: crate::Grounder::Eager, workers, .. } => self.metadata(
-                Label::Backend, format_args!("cpu (eager static closure scans, {workers} workers)")),
-            Event::CpuClosure { batching: crate::SourceBatching::Independent, workers, .. } => self.metadata(
-                Label::Backend, format_args!("cpu (lazy source joins, {workers} workers)")),
-            Event::CpuClosure { batching, workers, .. } => self.metadata(Label::Backend,
-                format_args!("cpu (shared {} source rounds, {workers} workers; collective source and per-world evaluation budgets)", batching.label())),
             Event::CpuFormula { oracle, grounder } => self.cpu_formula(oracle, grounder),
             Event::ParallelRegions { workers } => writeln!(self,
                 "Parallel regions: up to {workers} workers, started once the walk outlasts their start; models arrive in the scalar walk's order until then, and in the schedule's order after"),
@@ -255,14 +241,6 @@ impl<W: Write> crate::ExecutionObserver for Diagnostics<W> {
                 "Parallel candidate production: {workers} workers; joined before batch membership checking"),
             Event::ExactCompletion { workers, max_scratch_bytes } => writeln!(self,
                 "Exact completion: requested workers={workers}; bounded logical scratch bytes={max_scratch_bytes}"),
-            #[cfg(feature = "gpu")]
-            Event::LazyDeviceGrounding { requested } => self.metadata(Label::Grounding,
-                format_args!("requested={}, effective=lazy (host source joins; per-world device consequences; no complete ground-rule store)", requested.label())),
-            #[cfg(feature = "gpu")]
-            Event::DeviceClosure { adapter, static_counts } => match static_counts {
-                None => self.metadata(Label::Backend, format_args!("gpu ({}, {}; vendor=0x{:04x}; lazy immutable reduct rounds)", adapter.name, adapter.backend, adapter.vendor_id)),
-                Some((atoms, rules)) => self.metadata(Label::Backend, format_args!("gpu ({}, {}; vendor=0x{:04x}; static atoms={atoms}, rules={rules})", adapter.name, adapter.backend, adapter.vendor_id)),
-            },
             #[cfg(feature = "gpu")]
             Event::DeviceFormula { adapter, grounder, batch_size, completion_workers, .. } => {
                 let (scope, host) = self.device_formula_scope();

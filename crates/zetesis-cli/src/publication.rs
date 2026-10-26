@@ -15,19 +15,12 @@ use crate::{
     PublicationView, Session, SummaryDelivery, SummaryStage,
 };
 
-/// An admitted input with the expansion usage its admission reports, if any.
-#[derive(Clone, Copy)]
-pub(crate) struct Admitted<'a> {
-    pub(crate) input: PreparedInput<'a>,
-    pub(crate) expansion: Option<zetesis_themelios::ExpansionUsage>,
-}
-
-/// Run `admitted`'s session under `config` and publish its answers. The
+/// Run `input`'s session under `config` and publish its answers. The
 /// session uses `resources`, which the command line fills with an adapter
 /// enumeration begun before reading; every library entry point passes the
 /// default.
 pub(crate) fn solve(
-    Admitted { input, expansion }: Admitted<'_>,
+    input: PreparedInput<'_>,
     config: &PublicationConfig,
     resources: &zetesis_solve::ExecutionResources,
     renderer: &mut impl AnswerRenderer,
@@ -70,7 +63,6 @@ pub(crate) fn solve(
         phases,
     ))?;
     let mut progress = Progress::new();
-    progress.expansion = expansion;
     loop {
         let next = session.next_observed(&mut Observer::new(
             renderer,

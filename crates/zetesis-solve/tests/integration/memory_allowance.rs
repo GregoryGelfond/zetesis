@@ -1,6 +1,5 @@
 //! Ordinary memory controls named byte capacities and retained populations.
-//! Work counters and scheduling stay independent of the allowance; workers
-//! share the collective closure capacity.
+//! Work counters and scheduling stay independent of the allowance.
 
 use zetesis_solve::SolveConfig;
 use zetesis_test_support::counts::nonzero as workers;
@@ -23,9 +22,7 @@ fn doubling_memory_scales_only_named_capacities() {
         max_objective_keys: 2 * base.max_objective_keys,
         max_optimal_models: 2 * base.max_optimal_models,
         max_optimal_atoms: 2 * base.max_optimal_atoms,
-        max_carrier_atoms: 2 * base.max_carrier_atoms,
         max_atoms: 2 * base.max_atoms,
-        max_ground_rules: 2 * base.max_ground_rules,
         max_projection_bytes: 2 * base.max_projection_bytes,
         max_objective_key_bytes: 2 * base.max_objective_key_bytes,
         max_optimal_bytes: 2 * base.max_optimal_bytes,
@@ -33,8 +30,6 @@ fn doubling_memory_scales_only_named_capacities() {
         max_reduct_bytes: 2 * base.max_reduct_bytes,
         max_completion_scratch_bytes: 2 * base.max_completion_scratch_bytes,
         max_candidate_bytes: 2 * base.max_candidate_bytes,
-        max_closure_batch_bytes: 2 * base.max_closure_batch_bytes,
-        max_closure_bytes: 2 * base.max_closure_bytes,
         max_batch_bytes: 2 * base.max_batch_bytes,
         max_tight_batch_bytes: 2 * base.max_tight_batch_bytes,
         ..base
@@ -45,25 +40,12 @@ fn doubling_memory_scales_only_named_capacities() {
 }
 
 #[test]
-fn the_closure_share_is_the_collective_ceiling_over_the_workers() {
-    let eight = SolveConfig::for_allowance(SolveConfig::REFERENCE_MEMORY, workers(8));
-    assert_eq!(eight.workers, workers(8));
-    assert_eq!(
-        eight.max_closure_bytes,
-        SolveConfig::DEFAULT.max_closure_batch_bytes / 8
-    );
-    assert!(eight.validate().is_ok());
-}
-
-#[test]
 fn maximal_memory_respects_host_extents() {
     let default = SolveConfig::DEFAULT;
     let vast = SolveConfig::for_allowance(u64::MAX, workers(1));
     let host_extent = u64::try_from(isize::MAX).unwrap();
     assert_eq!(vast, SolveConfig::for_allowance(host_extent, workers(1)));
     assert!(vast.max_reduct_bytes >= default.max_reduct_bytes);
-    assert!(vast.max_closure_batch_bytes >= default.max_closure_batch_bytes);
-    assert_eq!(vast.max_closure_bytes, vast.max_closure_batch_bytes);
     assert!(vast.max_batch_bytes >= default.max_batch_bytes);
     assert!(vast.max_tight_batch_bytes >= default.max_tight_batch_bytes);
     // Projection entries follow memory. The host extent is tighter on 32-bit

@@ -3,8 +3,7 @@
 Bounded GPU primitives for grounding and answer-set checking. CPU and GPU
 operations share the same reduct obligations; device scheduling does not establish a different
 semantics. The [execution chapter](../../docs/book/architecture/execution.md)
-explains their place in ordinary solving, and the
-[parallel library guide](../../docs/book/rust/parallel.md) describes composition.
+explains their place in ordinary solving.
 
 ## Choose an operation
 
@@ -34,7 +33,7 @@ Selection checks each eligible adapter against the requested primitive's
 advertised limits before applying the deterministic ranking, then checks the
 created device's granted limits. The lazy shader requires no workgroup scratch;
 its admission is independent of the static shader's scratch requirement.
-Discovery's `supports_static_oracle` report continues to describe only the static
+Discovery's `supports_formula_oracle` report continues to describe only the static
 profile. A bare `GpuContext` requires compute support and the chosen identity
 policy; a primitive built on that context checks its own granted limits.
 

@@ -347,7 +347,7 @@ fn aggregate_reports_distinguish_reference_only_from_the_full_native_gate() {
     // The runner's population gate is exercised with synthetic protocols.
     // The independent corpus loader still enforces the actual manifest hashes.
     let complete_target = loaded(directory.path(), 94);
-    options.native_oracle = NativeOracle::Closure;
+    options.native_oracle = NativeOracle::Countermodel;
     // An invalid optional measurement does not invalidate otherwise exact answers.
     options.zetesis = emitting(
         directory.path(),
@@ -358,7 +358,7 @@ fn aggregate_reports_distinguish_reference_only_from_the_full_native_gate() {
     );
     let (report, passed) = run(&options, &complete_target);
     assert!(passed);
-    assert_eq!(report["native_oracle"], "closure");
+    assert_eq!(report["native_oracle"], "countermodel");
     assert_eq!(report["status_counts"]["pass"], 94);
     assert_eq!(report["case_count"], 94);
     assert_eq!(report["full_native_target_passed"], true);

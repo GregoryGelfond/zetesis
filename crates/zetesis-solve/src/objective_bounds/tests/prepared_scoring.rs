@@ -14,7 +14,6 @@ fn input(owner: &AdmittedFormula) -> Input<'_> {
     Input {
         theory: owner.theory(),
         atoms: owner.atom_catalog(),
-        gate_atoms: 0,
         keyed_constraints: 0,
         key_analysis: zetesis_themelios::KeyAnalysis::Complete,
         objectives: owner.objectives(),

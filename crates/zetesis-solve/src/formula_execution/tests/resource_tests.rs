@@ -6,8 +6,11 @@ use zetesis_cpu::Cancellation;
 use zetesis_wgpu::{GpuContext, GpuOptions};
 
 fn supplied_context(backend: Backend, expected_api: &str) {
-    let context =
-        GpuContext::new_selected(GpuOptions::default(), crate::engine::selection(backend)).unwrap();
+    let context = GpuContext::new_selected(
+        GpuOptions::default(),
+        crate::execution_resources::selection(backend),
+    )
+    .unwrap();
     assert_eq!(context.info().backend(), expected_api);
     println!("adapter={} api={expected_api}", context.info().name());
     let execution = Execution::with_resources(
@@ -72,8 +75,11 @@ fn vulkan_formula_retains_the_supplied_context() {
 fn supplied_profile(backend: Backend, expected_api: &str) {
     use zetesis_ferraris::{AdmissionLimits, Interpretation, Node, Theory};
     use zetesis_wgpu::{GateProjection, GpuFormulaProfile};
-    let context =
-        GpuContext::new_selected(GpuOptions::default(), crate::engine::selection(backend)).unwrap();
+    let context = GpuContext::new_selected(
+        GpuOptions::default(),
+        crate::execution_resources::selection(backend),
+    )
+    .unwrap();
     assert_eq!(context.info().backend(), expected_api);
     assert!(context.info().is_hardware_gpu());
     let theory = Theory::new(

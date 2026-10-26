@@ -13,7 +13,6 @@ use crate::{Config, Grounder};
 #[derive(Default)]
 struct Route {
     source: bool,
-    lazy: bool,
     hybrid_constraints: usize,
     hybrid_retained: usize,
     terminal_definitions: usize,
@@ -28,12 +27,6 @@ impl ExecutionObserver for Route {
     fn observe(&mut self, event: ExecutionObservation<'_>) -> Result<(), Self::Error> {
         match event {
             ExecutionObservation::SourceEvaluation => self.source = true,
-            ExecutionObservation::CpuClosure {
-                grounder: zetesis_solve::Grounder::Lazy,
-                ..
-            } => {
-                self.lazy = true;
-            }
             ExecutionObservation::HybridGrounding { streamed, .. } => {
                 self.hybrid_constraints = streamed.templates;
                 self.hybrid_retained = streamed.retained_templates;
@@ -74,19 +67,11 @@ fn execute(program: Program, grounder: Grounder) -> (PreparedProfile, Route) {
 }
 
 #[test]
-fn lazy_configuration_uses_source_closure() {
-    let (profile, route) = execute(program! { { p }. }, Grounder::Lazy);
-    assert_eq!(profile, PreparedProfile::Relational);
-    assert!(route.lazy);
-}
-
-#[test]
 fn lazy_formula_configuration_grounds_a_fitting_constraint() {
-    // A choice rule is outside the relational profile: lazy grounding takes
-    // the formula route over a producer core. The constraint's one instance
-    // fits the formula's share of the ordinary memory allowance, so it is
-    // grounded in the core and nothing is streamed. The double negation keeps
-    // pair capture from claiming `:- p, q.` first.
+    // Lazy grounding takes the formula route over a producer core. The
+    // constraint's one instance fits the formula's share of the ordinary memory
+    // allowance, so it is grounded in the core and nothing is streamed. The
+    // double negation keeps pair capture from claiming `:- p, q.` first.
     let (profile, route) = execute(program! { { p; q }. :- p, not not q. }, Grounder::Lazy);
     assert_eq!(profile, PreparedProfile::Hybrid);
     assert_eq!(route.hybrid_constraints, 0);

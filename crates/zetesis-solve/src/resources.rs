@@ -22,7 +22,7 @@
 
 use std::num::NonZeroUsize;
 
-use crate::{Backend, GpuBatching, Grounder, Oracle, QueryDivision, SolveConfig, SourceBatching};
+use crate::{Backend, GpuBatching, Grounder, Oracle, QueryDivision, SolveConfig};
 use zetesis_themelios::{
     AdmissionOptions, BundleLimits, ExpansionLimits, FormulaLimits, ProgramAdmissionOptions,
     observation,
@@ -82,11 +82,9 @@ impl Resources {
     /// physical scheduling choices; mandatory CPU work has no chosen ceiling.
     #[must_use]
     pub const fn solve_config(self) -> SolveConfig {
-        let closure = self.bytes(4);
         SolveConfig {
             backend: Backend::Cpu,
             grounder: Grounder::Auto,
-            source_batching: SourceBatching::Independent,
             oracle: Oracle::Auto,
             stats: false,
             constraints: zetesis_themelios::ConstraintCheckLimits {
@@ -119,18 +117,12 @@ impl Resources {
             max_reduct_bytes: self.bytes(32) as u64,
             max_completion_scratch_bytes: self.bytes(8) as u64,
             max_candidates: u64::MAX,
-            max_carrier_atoms: self.cells(32, 32),
             max_candidate_bytes: self.bytes(32),
             max_work: u64::MAX,
-            max_closure_bytes: closure / self.workers.get(),
-            max_closure_batch_bytes: closure,
             // These are dispatch bounds, not cumulative solve budgets.
             gpu_formula_work: 100_000_000,
             gpu_formula_rounds: 64,
-            max_source_work: u64::MAX,
             max_atoms: self.cells(8, 32),
-            max_substitutions: usize::MAX,
-            max_ground_rules: self.cells(8, 64),
             max_batch_bytes: self.bytes(32) as u64,
             // Twice the other device batches' share: the update state charges
             // every slot, and admits itself only when the batch size still fits.

@@ -2,8 +2,8 @@
 //!
 //! A region decides some atoms in, some out, and leaves the rest open; its
 //! candidates are the sets that agree with its decisions, the `Cube` of
-//! `Search.lean` indexed over the atoms of a root, as the oracle's `Cube`
-//! is the same cube over atoms. The traversal walks the coverage tree of that chapter
+//! `Search.lean` indexed over the atoms of a root. The traversal walks the
+//! coverage tree of that chapter
 //! with a stack: a region is narrowed by a caller-supplied narrowing, and
 //! is then refuted, a leaf when every atom is decided, split on the open
 //! atom its narrowing preferred or else its highest open atom, or counted
@@ -14,9 +14,8 @@
 //! the atoms with atom zero as its low bit (`Cube.split_partition` and
 //! `Cube.split_disjoint` of `Search.lean`). The root is always split.
 //!
-//! The narrowing is the caller's: on the closure route it is the program's
-//! two closures under the region's gate readings, on the formula route the
-//! theory's readings. The traversal only requires that a narrowing never
+//! The narrowing is the caller's: on the formula route it is the theory's
+//! readings. The traversal only requires that a narrowing never
 //! removes an accepted candidate from the region and never refutes a region
 //! holding one; each visit then keeps every accepted candidate of the root
 //! in exactly one region still to visit, visited as a leaf, or counted.

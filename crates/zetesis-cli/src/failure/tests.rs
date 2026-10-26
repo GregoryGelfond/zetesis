@@ -4,7 +4,6 @@ use std::{io, num::NonZeroUsize};
 use zetesis_reference_support::formula;
 
 use zetesis_cpu::Cancellation;
-use zetesis_themelios::{AdmissionOptions, Admitted, ExpansionLimits, admit_extended};
 
 use crate::{Backend, Completion, PreparedInput, RunError, Session, SolveConfig, Subject};
 
@@ -17,15 +16,6 @@ fn config() -> SolveConfig {
         models: 0,
         ..Default::default()
     }
-}
-
-fn normal() -> Admitted {
-    admit_extended(
-        "a.".into(),
-        AdmissionOptions::default(),
-        ExpansionLimits::default(),
-    )
-    .unwrap()
 }
 
 fn output_failure() -> RunError {
@@ -51,9 +41,9 @@ fn unentered_progress_has_no_success_report() {
 
 #[test]
 fn unclassified_membership_cannot_make_a_success_report() {
-    let admitted = normal();
+    let admitted = formula("a.");
     let mut session = Session::new(
-        PreparedInput::admitted(&admitted),
+        PreparedInput::formula(&admitted),
         config(),
         Cancellation::default(),
     )
@@ -67,10 +57,10 @@ fn unclassified_membership_cannot_make_a_success_report() {
     assert_eq!(semantic.verified_models(), 1);
     assert_eq!(semantic.completion(), None);
     assert!(!semantic.unsatisfiable());
-    let Subject::Program(program) = failure.subject().unwrap() else {
-        panic!("original program");
+    let Subject::Theory(theory) = failure.subject().unwrap() else {
+        panic!("original theory");
     };
-    assert!(program.same_instance(admitted.program()));
+    assert!(theory.same_instance(admitted.theory()));
     let partial = failure.partial_report.as_ref().unwrap();
     assert_eq!(partial.completion, None);
     assert_eq!(partial.verified_models, 1);
@@ -79,9 +69,9 @@ fn unclassified_membership_cannot_make_a_success_report() {
 
 #[test]
 fn report_mutation_cannot_rewrite_later_failure() {
-    let admitted = normal();
+    let admitted = formula("a.");
     let mut session = Session::new(
-        PreparedInput::admitted(&admitted),
+        PreparedInput::formula(&admitted),
         config(),
         Cancellation::default(),
     )
@@ -156,7 +146,7 @@ fn missing_completion_prevents_a_success_footer() {
     assert!(matches!(*failure.cause, RunError::CompletionUnavailable));
     assert_eq!(failure.partial_report.as_ref().unwrap().completion, None);
     assert!(!failure.publication().unwrap().summary());
-    assert_eq!(bytes, br#"{"schema":2,"format":"zetesis","models":["#);
+    assert_eq!(bytes, br#"{"schema":3,"format":"zetesis","models":["#);
 }
 
 #[test]
@@ -204,8 +194,8 @@ fn assert_status(progress: Progress, human: &str, json: &str, coverage: &str) {
 
 #[test]
 fn unpublished_membership_is_satisfiable() {
-    let admitted = normal();
-    let progress = unpublished_session(PreparedInput::admitted(&admitted), config());
+    let admitted = formula("a.");
+    let progress = unpublished_session(PreparedInput::formula(&admitted), config());
     assert_eq!(progress.semantic().unwrap().verified_models(), 1);
     assert_eq!(progress.completion().unwrap(), Completion::Exhausted);
     assert_status(
@@ -233,13 +223,8 @@ fn unpublished_optimum_retains_its_status() {
 
 #[test]
 fn exhausted_empty_family_is_unsatisfiable() {
-    let admitted = admit_extended(
-        "a. :- a.".into(),
-        AdmissionOptions::default(),
-        ExpansionLimits::default(),
-    )
-    .unwrap();
-    let progress = unpublished_session(PreparedInput::admitted(&admitted), config());
+    let admitted = formula("a. :- a.");
+    let progress = unpublished_session(PreparedInput::formula(&admitted), config());
     assert!(progress.semantic().unwrap().unsatisfiable());
     assert_status(
         progress,
@@ -251,9 +236,9 @@ fn exhausted_empty_family_is_unsatisfiable() {
 
 #[test]
 fn requested_membership_retains_its_status() {
-    let admitted = normal();
+    let admitted = formula("a.");
     let progress = unpublished_session(
-        PreparedInput::admitted(&admitted),
+        PreparedInput::formula(&admitted),
         SolveConfig {
             models: 1,
             ..config()
@@ -271,9 +256,9 @@ fn requested_membership_retains_its_status() {
 
 #[test]
 fn interrupted_empty_prefix_remains_incomplete() {
-    let admitted = normal();
+    let admitted = formula("a.");
     let progress = unpublished_session(
-        PreparedInput::admitted(&admitted),
+        PreparedInput::formula(&admitted),
         SolveConfig {
             max_candidates: 0,
             ..config()
@@ -292,9 +277,9 @@ fn interrupted_empty_prefix_remains_incomplete() {
 
 #[test]
 fn missing_completion_prevents_a_human_summary() {
-    let admitted = normal();
+    let admitted = formula("a.");
     let mut session = Session::new(
-        PreparedInput::admitted(&admitted),
+        PreparedInput::formula(&admitted),
         config(),
         Cancellation::default(),
     )

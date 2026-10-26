@@ -273,7 +273,6 @@ fn load_input(options: &Options) -> Result<(Input, crate::ExecutionResources), R
         return Err(RunError::MixedStandardInput);
     }
     let config = crate::SolveConfig::from(options);
-    config.validate()?;
     let resources = crate::ExecutionResources::discovering(&config);
     let input = if options.input.as_os_str() == "-" {
         Input::Source(read_source(options).map_err(RunError::Input)?)

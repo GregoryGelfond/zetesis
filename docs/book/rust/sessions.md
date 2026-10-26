@@ -10,13 +10,14 @@ example enumerates the guided tour's complete family:
 # extern crate zetesis_solve;
 # extern crate zetesis_core;
 # extern crate zetesis_cpu;
+# extern crate zetesis_ferraris;
+# extern crate zetesis_stable;
 # extern crate zetesis_themelios;
 {{#include ../examples/session.rs:example}}
 ```
 
-`admit` is the strict normal-profile door used by this example. Use
-`admit_extended` for its supported scalar extensions, or `admit_formula` for the
-broader finite formula profile. These are explicit library choices. The ordinary
+`admit_formula`, the finite formula profile's door, is the explicit library choice
+this example makes. The ordinary
 source driver provides automatic profile selection; `Session` receives an
 already prepared representation and does not retry admission itself.
 
@@ -675,6 +676,7 @@ mode:
 # extern crate zetesis_solve;
 # extern crate zetesis_core;
 # extern crate zetesis_cpu;
+# extern crate zetesis_themelios;
 {{#include ../examples/observations.rs:example}}
 ```
 
@@ -714,6 +716,7 @@ its compilation without attempting device discovery.
 # extern crate zetesis_solve;
 # extern crate zetesis_core;
 # extern crate zetesis_cpu;
+# extern crate zetesis_themelios;
 # extern crate zetesis_wgpu;
 {{#include ../examples/resources.rs:example}}
 ```

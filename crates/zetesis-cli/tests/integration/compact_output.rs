@@ -83,18 +83,19 @@ fn automatic_summary_identifies_direct_source_evaluation() {
 }
 
 #[test]
-fn lazy_summary_reports_interleaved_work() {
+fn lazy_summary_reports_hybrid_work() {
     let rendered = solve("p:-not q. q:-not p.", &serial(&["--grounder", "lazy"]));
     assert_eq!(rendered.report.completion, Completion::Exhausted);
     assert_eq!(rendered.report.models, 2);
     let stages = rendered.report.phase_timings.unwrap().stages;
-    assert_eq!(stages.grounding_mode, GroundingMode::LazyInterleaved);
-    assert!(stages.get(SolveStage::Grounding).is_none());
+    assert_eq!(stages.grounding_mode, GroundingMode::Mixed);
+    // The retained core is grounded eagerly, so its grounding is measured.
+    assert!(stages.get(SolveStage::Grounding).is_some());
     assert!(stages.get(SolveStage::Solving).is_some());
     assert!(
         rendered
             .answers
-            .contains("\nBackend: CPU · 1 thread · lazy grounding\n\n")
+            .contains("\nBackend: CPU · 1 thread · hybrid grounding\n\n")
     );
     let (summary, timing) = rendered.answers.split_once("\nTime: ").unwrap();
     assert!(summary.ends_with("SATISFIABLE\nModels: 2\n"));

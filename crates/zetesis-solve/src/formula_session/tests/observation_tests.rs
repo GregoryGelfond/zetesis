@@ -67,7 +67,6 @@ fn formula_observation_counts_logical_operands() {
             atoms: owner.atom_catalog(),
             objectives: owner.objectives(),
             required_choices: None,
-            gate_atoms: 0,
             keyed_constraints: 0,
             key_analysis: zetesis_themelios::KeyAnalysis::Complete,
             certificate_order: zetesis_stable::CertificateOrder::TightFirst,

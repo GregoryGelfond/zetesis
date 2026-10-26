@@ -44,6 +44,14 @@ struct PreparedCall {
     stats: FormulaBatchStats,
 }
 impl GpuFormulaOracle {
+    /// The runtime this oracle submits through, for tests of settled reads.
+    #[cfg(test)]
+    pub(crate) fn runtime(&self) -> &crate::runtime::Runtime {
+        &self.profile.runtime
+    }
+}
+
+impl GpuFormulaOracle {
     /// Select a native adapter and create this oracle's separate device and
     /// kernel, whose pipelines are compiled as [`GpuFormulaProfile`] documents.
     ///

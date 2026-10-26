@@ -103,8 +103,6 @@ pub enum Oracle {
     /// Solver's automatic choice.
     #[default]
     Auto,
-    /// Least-consequence closure.
-    Closure,
     /// Countermodel search.
     Countermodel,
 }
@@ -112,7 +110,6 @@ impl From<Oracle> for selected::Oracle {
     fn from(value: Oracle) -> Self {
         match value {
             Oracle::Auto => Self::Auto,
-            Oracle::Closure => Self::Closure,
             Oracle::Countermodel => Self::Countermodel,
         }
     }
@@ -197,7 +194,7 @@ pub struct RunOptions {
     /// Requested materialization policy.
     #[arg(long, value_enum, default_value_t)]
     pub grounder: Grounder,
-    /// Native candidate/closure workers; auto uses the host's available parallelism.
+    /// Native region walkers; auto uses the host's available parallelism.
     #[arg(long, alias = "workers", value_name = "auto|N", value_parser = zetesis_backend::parse_threads, default_value = "auto")]
     pub threads: NonZeroUsize,
     /// Compare native thread counts, for example 1,2,4; clingo only qualifies.

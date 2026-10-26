@@ -3,8 +3,8 @@
 A parallel region walk used to start all of its worker threads at the first proposal, whatever the walk turned out to
 need. This note makes the calling thread walk first, as the scalar walk does, and starts the workers only once the
 walk has run for as long as starting them costs. It is an execution choice: answer families and admission are
-unchanged at every worker count and at every engagement point. The [parallel execution
-chapter](../book/rust/parallel.md) describes the walk.
+unchanged at every worker count and at every engagement point. The [execution
+chapter](../book/architecture/execution.md) describes the walk.
 
 Paths are under `crates/zetesis-stable/src/ferraris/` unless another root is named. Measurement cells under
 `scenarios/` and `standalone/` are in `examples/correctness/`, and those under `scalability/` in `examples/`.

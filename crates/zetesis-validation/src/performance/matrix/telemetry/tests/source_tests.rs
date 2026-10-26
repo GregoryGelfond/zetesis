@@ -103,10 +103,6 @@ fn source_cannot_satisfy_an_explicit_execution_request() {
             ..request
         },
         NativeExecution {
-            oracle: Oracle::Closure,
-            ..request
-        },
-        NativeExecution {
             oracle: Oracle::Countermodel,
             ..request
         },

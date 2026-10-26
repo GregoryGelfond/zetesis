@@ -209,7 +209,7 @@ fn phases(out: &mut Buffer, timings: Option<&PhaseTimings>) -> Result<(), RunErr
         return out.text("null");
     };
     out.text(&format!(
-        "{{\"schema\":6,\"clock\":\"host_monotonic\",\"driver_elapsed_ns\":{},\"measurements\":{{",
+        "{{\"schema\":7,\"clock\":\"host_monotonic\",\"driver_elapsed_ns\":{},\"measurements\":{{",
         timings.driver_elapsed.as_nanos()
     ))?;
     for (index, phase) in SolvePhase::ALL.into_iter().enumerate() {
@@ -288,12 +288,7 @@ fn error_kind(error: &RunError) -> &'static str {
         RunError::JsonRecord(_) => "json_record",
         RunError::ObservationOutputLimit { .. } => "observation_output_limit",
         RunError::MixedStandardInput => "mixed_standard_input",
-        RunError::Admission(_) => "admission",
-        RunError::Expansion(_) => "expansion",
         RunError::BundleLoad(_) => "bundle_load",
-        RunError::BundleAdmission(_) => "bundle_admission",
-        RunError::Batch(_) => "batch",
-        RunError::QueryObservation(_) => "query_observation",
         RunError::CompletionPool(_) => "completion_pool",
         RunError::CompletionUnavailable => "completion_unavailable",
         RunError::BackendUnavailable => "backend_unavailable",
@@ -301,27 +296,17 @@ fn error_kind(error: &RunError) -> &'static str {
         RunError::Executor(_) => "executor",
         RunError::UnsupportedCombination { .. } => "unsupported_combination",
         RunError::UnsupportedOracle { .. } => "unsupported_oracle",
-        RunError::UnsupportedSourceBatching => "unsupported_source_batching",
-        RunError::ClosureReservation { .. } => "closure_reservation",
-        RunError::SharedCpu(_) => "shared_cpu",
         RunError::PreparedInput { .. } => "prepared_input",
-        RunError::Formula(_) => "formula",
         RunError::FormulaAdmission(_) => "formula_admission",
         RunError::FormulaBundleAdmission(_) => "formula_bundle_admission",
         RunError::Output(_) => "output",
         RunError::ExecutionObservation(_) => "execution_observation",
         RunError::PublicationStopped(_) => "publication_stopped",
-        RunError::Static(_) => "static",
-        RunError::Words(_) => "words",
         RunError::Model(_) => "model",
         RunError::FormulaBatchShape { .. } => "formula_batch_shape",
         RunError::CandidateStreamNotExhausted => "candidate_stream_not_exhausted",
         #[cfg(feature = "gpu")]
         RunError::Gpu(_) => "gpu",
-        #[cfg(feature = "gpu")]
-        RunError::LazyGpu(_) => "lazy_gpu",
-        RunError::LazyStatisticsOverflow => "lazy_statistics_overflow",
-        RunError::ClosureStatisticsOverflow => "closure_statistics_overflow",
         RunError::ModelStatisticsOverflow => "model_statistics_overflow",
     }
 }
@@ -618,20 +603,8 @@ fn statistics(out: &mut Buffer, view: &SummaryView<'_>) -> Result<(), RunError> 
         out.optional_number(view.objective_work)?;
         out.text(",\"model_construction\":")?;
         model_construction_statistics(out, view.model_construction)?;
-        out.text(",\"candidate_restrictions\":")?;
-        candidate_statistics(out, view.candidates)?;
         out.text(",\"execution\":")?;
         execution_statistics(out, view.execution)?;
-        out.text(",\"lazy_execution\":")?;
-        lazy_statistics(out, view.lazy_execution)?;
-        out.text(",\"shared_execution\":")?;
-        shared_statistics(out, view.shared_execution)?;
-        out.text(",\"closure_execution\":")?;
-        closure_statistics(out, view.closure_execution)?;
-        out.text(",\"query_execution\":")?;
-        query_statistics(out, view.query_execution)?;
-        out.text(",\"expansion\":")?;
-        expansion_usage(out, view.expansion)?;
         out.text(",\"phase_timings\":")?;
         phases(out, view.timings)?;
         out.text(",\"stage_timings\":")?;
@@ -782,17 +755,13 @@ struct SummaryView<'a> {
     optimization: Option<&'a crate::Optimization>,
     objective_work: Option<u64>,
     search: Option<&'a zetesis_stable::Statistics>,
-    candidates: Option<zetesis_cpu::CandidateStatistics>,
+
     execution: Option<&'a crate::FormulaExecutionStatistics>,
     hybrid_execution: Option<&'a zetesis_solve::HybridExecutionStatistics>,
     terminal_execution: Option<&'a zetesis_solve::TerminalExecutionStatistics>,
     source_evaluation: Option<&'a zetesis_themelios::SourceEvaluationStatistics>,
     model_construction: Option<&'a zetesis_solve::ModelConstructionStatistics>,
-    lazy_execution: Option<&'a crate::LazyExecutionStatistics>,
-    shared_execution: Option<&'a crate::SharedExecutionStatistics>,
-    closure_execution: Option<&'a crate::ClosureExecutionStatistics>,
-    query_execution: Option<&'a crate::QueryExecutionObservation>,
-    expansion: Option<zetesis_themelios::ExpansionUsage>,
+
     timings: Option<&'a PhaseTimings>,
 }
 impl<'a> SummaryView<'a> {
@@ -811,7 +780,6 @@ impl<'a> SummaryView<'a> {
                     optimization: semantic.and_then(crate::SemanticOutcome::incumbent),
                     objective_work: semantic.map(crate::SemanticOutcome::objective_work),
                     search: semantic.and_then(crate::SemanticOutcome::countermodel_statistics),
-                    candidates: semantic.and_then(crate::SemanticOutcome::candidate_statistics),
                     execution: semantic.and_then(crate::SemanticOutcome::formula_execution),
                     hybrid_execution: semantic.and_then(crate::SemanticOutcome::hybrid_execution),
                     terminal_execution: semantic
@@ -819,11 +787,6 @@ impl<'a> SummaryView<'a> {
                     source_evaluation: semantic.and_then(crate::SemanticOutcome::source_evaluation),
                     model_construction: semantic
                         .and_then(crate::SemanticOutcome::model_construction),
-                    lazy_execution: semantic.and_then(crate::SemanticOutcome::lazy_execution),
-                    shared_execution: semantic.and_then(crate::SemanticOutcome::shared_execution),
-                    closure_execution: semantic.and_then(crate::SemanticOutcome::closure_execution),
-                    query_execution: semantic.and_then(crate::SemanticOutcome::query_execution),
-                    expansion: progress.expansion,
                     timings: progress.phase_timings.as_ref(),
                 }
             }
@@ -846,17 +809,11 @@ impl<'a> SummaryView<'a> {
                         .semantic()
                         .map(crate::SemanticOutcome::objective_work),
                     search: partial.and_then(|p| p.countermodel_statistics.as_ref()),
-                    candidates: partial.and_then(|p| p.candidate_statistics),
                     execution: partial.and_then(|p| p.formula_execution.as_ref()),
                     hybrid_execution: partial.and_then(|p| p.hybrid_execution.as_ref()),
                     terminal_execution: partial.and_then(|p| p.terminal_execution.as_ref()),
                     source_evaluation: partial.and_then(|p| p.source_evaluation.as_ref()),
                     model_construction: partial.and_then(|p| p.model_construction.as_ref()),
-                    lazy_execution: partial.and_then(|p| p.lazy_execution.as_ref()),
-                    shared_execution: partial.and_then(|p| p.shared_execution.as_ref()),
-                    closure_execution: partial.and_then(|p| p.closure_execution.as_ref()),
-                    query_execution: partial.and_then(|p| p.query_execution.as_ref()),
-                    expansion: partial.and_then(|p| p.expansion),
                     timings: failure.phase_timings.as_deref(),
                 }
             }
@@ -1101,41 +1058,6 @@ fn frontier_statistics(
     out.text("}")
 }
 
-fn candidate_statistics(
-    out: &mut Buffer,
-    statistics: Option<zetesis_cpu::CandidateStatistics>,
-) -> Result<(), RunError> {
-    let Some(stats) = statistics else {
-        return out.text("null");
-    };
-    out.text("{\"work\":")?;
-    out.text(&stats.restriction_work.to_string())?;
-    out.number_field("conjunctions", stats.restriction_conjunctions)?;
-    out.number_field("skipped_intervals", stats.conflicts)?;
-    out.number_field("prepared_atom_occurrences", stats.restriction_atoms)?;
-    out.number_field("copied_payload_bytes", stats.restriction_bytes)?;
-    out.number_field("peak_copied_payload_bytes", stats.restriction_peak_bytes)?;
-    // The carrier narrowing and regions, under the words of the text lines.
-    out.text(",\"carrier_narrowing\":{\"passes\":")?;
-    out.text(&stats.narrowing_passes.to_string())?;
-    out.number_field("cut_gate_atoms", stats.cut_gate_atoms)?;
-    out.number_field("held_gate_atoms", stats.held_gate_atoms)?;
-    out.text(",\"refuted\":")?;
-    out.text(if stats.root_refuted { "true" } else { "false" })?;
-    out.text(",\"stopped\":")?;
-    match &stats.narrowing_stop {
-        None => out.text("null")?,
-        Some(stop) => out.string(&stop.to_string())?,
-    }
-    out.text("},\"carrier_regions\":{\"visited\":")?;
-    out.text(&stats.regions.to_string())?;
-    out.number_field("refuted", stats.regions_refuted)?;
-    out.number_field("leaves", stats.regions_leaves)?;
-    out.number_field("counted", stats.regions_counted)?;
-    out.number_field("narrowing_passes", stats.region_passes)?;
-    out.text("}}")
-}
-
 fn execution_statistics(
     out: &mut Buffer,
     statistics: Option<&crate::FormulaExecutionStatistics>,
@@ -1272,333 +1194,7 @@ fn tight_routes(
     out.text("}")
 }
 
-fn expansion_usage(
-    out: &mut Buffer,
-    usage: Option<zetesis_themelios::ExpansionUsage>,
-) -> Result<(), RunError> {
-    let Some(usage) = usage else {
-        return out.text("null");
-    };
-    out.text("{\"term_work\":")?;
-    out.text(&usage.term_work.to_string())?;
-    out.number_field("templates", usage.templates)?;
-    out.number_field("values", usage.values)?;
-    out.number_field("scalar_bytes", usage.scalar_bytes)?;
-    out.number_field("origin_locations", usage.origin_locations)?;
-    out.text("}")
-}
-
-fn closure_statistics(
-    out: &mut Buffer,
-    statistics: Option<&crate::ClosureExecutionStatistics>,
-) -> Result<(), RunError> {
-    let Some(stats) = statistics else {
-        return out.text("null");
-    };
-    out.text("{\"backend\":\"cpu\",\"grounder\":")?;
-    out.string(stats.route.label())?;
-    out.number_field("completed_checks", stats.completed_checks)?;
-    out.number_field("stopped_checks", stats.stopped_checks)?;
-    out.number_field("rounds", stats.rounds)?;
-    out.number_field("work", stats.work)?;
-    out.number_field("derived_atoms", stats.derived_atoms)?;
-    out.text(",\"joins\":")?;
-    match stats.route {
-        crate::ClosureRoute::Eager => out.text("null")?,
-        crate::ClosureRoute::Lazy(joins) => {
-            out.text("{\"catalog_work\":")?;
-            out.text(&joins.catalog_work.to_string())?;
-            out.number_field("bindings", joins.bindings)?;
-            out.number_field("tuple_probes", joins.tuple_probes)?;
-            out.number_field("dense_heads", joins.dense_heads)?;
-            out.number_field("block_steps", joins.block_steps)?;
-            out.number_field("peak_closure_bytes", joins.peak_closure_bytes)?;
-            out.text("}")?;
-        }
-    }
-    out.text("}")
-}
-
-fn query_statistics(
-    out: &mut Buffer,
-    observation: Option<&crate::QueryExecutionObservation>,
-) -> Result<(), RunError> {
-    let Some(observation) = observation else {
-        return out.text("null");
-    };
-    out.text("{\"backend\":\"cpu\",\"source_batching\":\"independent\",\"snapshot\":")?;
-    if let Some(stats) = observation.statistics {
-        out.text("{\"preparation\":")?;
-        if let Some(preparation) = stats.preparation {
-            out.text("{\"work\":")?;
-            out.text(&preparation.work.to_string())?;
-            out.number_field("retained_bytes", preparation.retained_bytes)?;
-            out.number_field("predicates", preparation.predicates)?;
-            out.number_field("dense_predicates", preparation.dense_predicates)?;
-            out.text("}")?;
-        } else {
-            out.text("null")?;
-        }
-        out.number_field("preparation_builds", stats.preparation_builds)?;
-        out.number_field("preparation_adoptions", stats.preparation_adoptions)?;
-        out.number_field("retained_workspaces", stats.retained_workspaces)?;
-        out.number_field("active_workspaces", stats.active_workspaces)?;
-        out.number_field("reused_workspaces", stats.reused_workspaces)?;
-        out.number_field("retained_bytes", stats.retained_bytes)?;
-        out.number_field("reserved_bytes", stats.reserved_bytes)?;
-        out.text("}")?;
-    } else {
-        out.text("null")?;
-    }
-    out.text(",\"fault\":")?;
-    if let Some(fault) = &observation.fault {
-        query_fault(out, fault)?;
-    } else {
-        out.text("null")?;
-    }
-    out.text("}")
-}
-
-fn query_fault(out: &mut Buffer, fault: &zetesis_cpu::BatchError) -> Result<(), RunError> {
-    use zetesis_cpu::BatchError;
-    out.text("{\"kind\":")?;
-    out.string(match fault {
-        BatchError::Pool(_) => "pool",
-        BatchError::Busy => "busy",
-        BatchError::Poisoned => "poisoned",
-        BatchError::Preparation(_) => "preparation",
-        BatchError::ClosureStorage { .. } => "closure_storage",
-        BatchError::Capacity { .. } => "capacity",
-    })?;
-    match fault {
-        BatchError::Preparation(stop) => {
-            out.text(",\"reason\":")?;
-            out.string(stop_code(*stop))?;
-        }
-        BatchError::ClosureStorage { required, limit } => {
-            out.number_field("required", *required)?;
-            out.number_field("limit", *limit)?;
-        }
-        BatchError::Capacity { limit, actual } => {
-            out.number_field("limit", *limit)?;
-            out.number_field("actual", *actual)?;
-        }
-        _ => {}
-    }
-    out.text(",\"detail\":")?;
-    out.string(&fault.to_string())?;
-    out.text("}")
-}
-
-fn shared_statistics(
-    out: &mut Buffer,
-    statistics: Option<&crate::SharedExecutionStatistics>,
-) -> Result<(), RunError> {
-    let Some(stats) = statistics else {
-        return out.text("null");
-    };
-    out.text("{\"requested_backend\":")?;
-    out.string(stats.requested_backend.label())?;
-    out.text(",\"backend\":\"cpu\",\"source_batching\":")?;
-    out.string(match stats.selection {
-        zetesis_cpu::lazy::SourceSelection::Union => "union",
-        zetesis_cpu::lazy::SourceSelection::Worlds => "worlds",
-    })?;
-    out.number_field("workers", stats.workers)?;
-    out.number_field("batches", stats.batches)?;
-    out.number_field("submitted_candidates", stats.submitted_candidates)?;
-    out.number_field("completed_candidates", stats.completed_candidates)?;
-    out.number_field("stopped_candidates", stats.stopped_candidates)?;
-    out.number_field("queued_results", stats.queued_results)?;
-    out.number_field("source_rounds", stats.source_rounds)?;
-    out.number_field("source_work", stats.source_work)?;
-    out.number_field("source_instances", stats.source_instances)?;
-    out.number_field("peak_catalog_atoms", stats.peak_catalog_atoms)?;
-    out.number_field("mask_words", stats.mask_words)?;
-    out.number_field("pruned_prefixes", stats.pruned_prefixes)?;
-    out.number_field("peak_mask_bytes", stats.peak_mask_bytes)?;
-    out.number_field("world_work", stats.world_work)?;
-    out.number_field("world_instances", stats.world_instances)?;
-    out.text(",\"last_stop\":")?;
-    match stats.last_stop {
-        None => out.text("null")?,
-        Some(zetesis_cpu::lazy::shared::Cause::Source(stop)) => {
-            out.text("{\"scope\":\"source\",\"reason\":")?;
-            out.string(stop_code(stop))?;
-            out.text("}")?;
-        }
-        Some(zetesis_cpu::lazy::shared::Cause::World { index, stop }) => {
-            out.text("{\"scope\":\"world\",\"reason\":")?;
-            out.string(stop_code(stop))?;
-            out.number_field("index", index)?;
-            out.text("}")?;
-        }
-        Some(zetesis_cpu::lazy::shared::Cause::InvalidOutput) => {
-            out.text("{\"scope\":\"protocol\",\"reason\":\"invalid_output\"}")?;
-        }
-    }
-    out.text("}")
-}
-
-fn lazy_statistics(
-    out: &mut Buffer,
-    statistics: Option<&crate::LazyExecutionStatistics>,
-) -> Result<(), RunError> {
-    let Some(stats) = statistics else {
-        return out.text("null");
-    };
-    out.text("{\"requested_backend\":")?;
-    out.string(stats.requested_backend.label())?;
-    out.text(",\"adapter\":")?;
-    out.string(&stats.adapter)?;
-    out.text(",\"backend\":")?;
-    out.string(&stats.backend)?;
-    out.number_field("batches", stats.batches)?;
-    out.number_field("submitted_candidates", stats.submitted_candidates)?;
-    out.number_field("completed_candidates", stats.completed_candidates)?;
-    out.number_field("stopped_candidates", stats.stopped_candidates)?;
-    out.number_field("queued_results", stats.queued_results)?;
-    out.number_field("source_rounds", stats.source_rounds)?;
-    out.number_field("source_work", stats.source_work)?;
-    out.number_field("source_instances", stats.source_instances)?;
-    out.number_field("peak_catalog_atoms", stats.peak_catalog_atoms)?;
-    out.number_field("dispatches", stats.dispatches)?;
-    out.number_field("world_instances", stats.world_instances)?;
-    out.number_field("uploaded_bytes", stats.uploaded_bytes)?;
-    out.number_field("downloaded_bytes", stats.downloaded_bytes)?;
-    out.number_field("transport_allocations", stats.transport_allocations)?;
-    out.number_field("transport_reuses", stats.transport_reuses)?;
-    out.number_field("peak_transport_bytes", stats.peak_transport_bytes)?;
-    out.text(",\"transport_replacements\":{")?;
-    out.text("\"initial\":")?;
-    out.text(&stats.transport_replacements.initial.to_string())?;
-    out.number_field(
-        "offsets_growth",
-        stats.transport_replacements.offsets_growth,
-    )?;
-    out.number_field(
-        "records_growth",
-        stats.transport_replacements.records_growth,
-    )?;
-    out.number_field(
-        "snapshots_growth",
-        stats.transport_replacements.snapshots_growth,
-    )?;
-    out.number_field("seeds_growth", stats.transport_replacements.seeds_growth)?;
-    out.number_field("result_shape", stats.transport_replacements.result_shape)?;
-    out.number_field("budget", stats.transport_replacements.budget)?;
-    out.number_field(
-        "accounting_overflow",
-        stats.transport_replacements.accounting_overflow,
-    )?;
-    out.text("}")?;
-    out.text(",\"transport_usage\":")?;
-    lazy_transport_usage(out, stats.transport_usage)?;
-    out.number_field("host_wait_ns", stats.host_wait.as_nanos())?;
-    out.text("}")
-}
-
-fn lazy_transport_usage(
-    out: &mut Buffer,
-    usage: crate::LazyTransportUsage,
-) -> Result<(), RunError> {
-    out.text("{")?;
-    for (index, (name, binding)) in [
-        ("uniform", usage.uniform),
-        ("offsets", usage.offsets),
-        ("records", usage.records),
-        ("snapshots", usage.snapshots),
-        ("seeds", usage.seeds),
-        ("output", usage.output),
-        ("readback", usage.readback),
-    ]
-    .into_iter()
-    .enumerate()
-    {
-        if index > 0 {
-            out.text(",")?;
-        }
-        out.string(name)?;
-        out.text(":{\"allocations\":")?;
-        out.text(&binding.allocations.to_string())?;
-        out.number_field("reuses", binding.reuses)?;
-        out.text("}")?;
-    }
-    out.number_field("budget_releases", usage.budget_releases)?;
-    out.number_field(
-        "accounting_overflow_releases",
-        usage.accounting_overflow_releases,
-    )?;
-    out.text("}")
-}
-
-#[cfg(test)]
-pub(crate) mod fixtures;
-
 #[cfg(test)]
 pub(crate) mod document_fixture;
-#[cfg(test)]
-mod lazy_tests {
-    use super::{Buffer, lazy_statistics};
-
-    #[test]
-    fn lazy_json_retains_requested_and_observed_execution() {
-        let fixture = super::fixtures::lazy_statistics();
-        let mut out = Buffer::new(4096);
-        lazy_statistics(&mut out, Some(&fixture)).unwrap();
-        let value: serde_json::Value = serde_json::from_slice(&out.bytes).unwrap();
-        assert_eq!(value["requested_backend"], "metal");
-        assert_eq!(value["backend"], "Metal");
-        assert_eq!(value["adapter"], fixture.adapter);
-        assert_eq!(value["submitted_candidates"], 7);
-        assert_eq!(value["completed_candidates"], 4);
-        assert_eq!(value["stopped_candidates"], 3);
-        assert_eq!(value["queued_results"], 2);
-        assert_eq!(value["transport_allocations"], 2);
-        assert_eq!(value["transport_reuses"], 3);
-        assert_eq!(value["peak_transport_bytes"], 1024);
-        assert_eq!(value["host_wait_ns"], 123);
-        assert_eq!(
-            value["transport_replacements"],
-            serde_json::json!({
-                "initial": 1,
-                "offsets_growth": 0,
-                "records_growth": 1,
-                "snapshots_growth": 0,
-                "seeds_growth": 0,
-                "result_shape": 1,
-                "budget": 0,
-                "accounting_overflow": 0
-            })
-        );
-        assert_eq!(
-            value["transport_usage"],
-            serde_json::json!({
-                "uniform": {"allocations": 1, "reuses": 4},
-                "offsets": {"allocations": 1, "reuses": 4},
-                "records": {"allocations": 2, "reuses": 3},
-                "snapshots": {"allocations": 1, "reuses": 4},
-                "seeds": {"allocations": 1, "reuses": 4},
-                "output": {"allocations": 2, "reuses": 3},
-                "readback": {"allocations": 2, "reuses": 3},
-                "budget_releases": 0,
-                "accounting_overflow_releases": 0
-            })
-        );
-    }
-
-    #[test]
-    fn lazy_json_obeys_the_record_byte_limit() {
-        let fixture = super::fixtures::lazy_statistics();
-        let mut out = Buffer::new(4096);
-        lazy_statistics(&mut out, Some(&fixture)).unwrap();
-        for capacity in 0..out.bytes.len() {
-            let mut bounded = Buffer::new(capacity);
-            assert!(lazy_statistics(&mut bounded, Some(&fixture)).is_err());
-            assert!(bounded.bytes.len() <= capacity);
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests;

@@ -104,7 +104,7 @@ fn replay_human_footer(stopped: &crate::StoppedPublication) {
 }
 
 fn replay_json_footer(stopped: &crate::StoppedPublication, original: &[u8]) {
-    const PREFIX: &[u8] = b"{\"schema\":2,\"format\":\"zetesis\",\"models\":[";
+    const PREFIX: &[u8] = b"{\"schema\":3,\"format\":\"zetesis\",\"models\":[";
     const MARKER: &[u8] = b"],\"outcome\":";
     assert!(original.starts_with(PREFIX));
     let boundary = original
