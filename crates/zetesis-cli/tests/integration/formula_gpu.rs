@@ -569,9 +569,13 @@ mod physical {
                     assert_eq!(core.pending, 0);
                     assert_eq!(core.core_answers, core.accepted + core.rejected);
                     if source == OBJECTIVES {
-                        // Its constraint is checked on the stream, beside
-                        // the device's checks of the core.
-                        assert!(core.constraints.substitutions > 0);
+                        // Its one constraint instance fits the formula's
+                        // share of the ordinary allowance, so lazy grounding
+                        // grounds it with the core the device checks.
+                        assert_eq!(
+                            (core.streamed.templates, core.streamed.retained_templates),
+                            (0, 1)
+                        );
                     }
                     let execution = report.formula_execution.unwrap();
                     assert!(execution.adapter.contains(backend.name()));
