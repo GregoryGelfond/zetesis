@@ -89,6 +89,13 @@ fn two_qbf_default_satisfies_its_complete_contract() {
 }
 
 #[test]
+fn strategic_companies_default_satisfies_its_complete_contract() {
+    // Disjunctive heads with control rules through strategic companies: every
+    // candidate runs the proper-subset query over its frozen reduct.
+    check_bundle("scalability/strategic-companies");
+}
+
+#[test]
 fn memory_override_reaches_the_explicit_solve_options() {
     use zetesis_cli::Invocation;
     let profile = scalability::profiles(Some(300_000_000))[0];

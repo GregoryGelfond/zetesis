@@ -70,6 +70,12 @@ over a candidate's frozen reduct, and its constants choose the formula and its
 size. It uses the same explicit workload matrix and fresh clingo qualification
 without changing either default population.
 
+The [strategic-companies workload](strategic-companies/README.md) enumerates the
+minimal covering, control-closed sets of a generated holding with the standard
+disjunctive encoding, whose control rules run through disjunctively chosen
+companies. Its constants choose the holding and its size, and it is selected and
+qualified like the 2QBF workload.
+
 ## Run an example
 
 From the repository root, using the installed solver:
