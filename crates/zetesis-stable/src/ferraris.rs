@@ -804,6 +804,23 @@ impl StableModels {
         Ok(())
     }
 
+    /// Check an admitted hybrid program's streamed integrity constraints over
+    /// this stream's candidate regions, before traversal. The stream's theory
+    /// must be the constraints' own core theory, which each checker's
+    /// preparation authenticates. The check can narrow or refute candidate
+    /// regions and never participates in frozen-reduct queries; exhaustion then
+    /// covers the core's stable models that satisfy the constraints, as well as
+    /// explicit candidate restrictions.
+    ///
+    /// # Errors
+    /// Refuses a closed or started stream, or replacement.
+    pub fn set_streamed_constraints(
+        &mut self,
+        constraints: std::sync::Arc<crate::StreamedConstraints>,
+    ) -> Result<(), Incomplete> {
+        self.set_region_filter(constraints)
+    }
+
     /// Share learned rows through `store` with every other stream given the
     /// same store, before traversal. The stream's walks seed their tiers from
     /// it and deliver to it at their boundaries (see [`LearnedStore`]); rows

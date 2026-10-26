@@ -59,7 +59,7 @@ pub(crate) struct HybridSession<'a> {
     core: FormulaSession<'a, Execution>,
     checker: ConstraintChecker<'a>,
     allowance: ConstraintAllowance,
-    regions: Option<Arc<crate::hybrid_regions::Constraints>>,
+    regions: Option<Arc<zetesis_stable::StreamedConstraints>>,
     statistics: HybridExecutionStatistics,
     final_outcome: Option<SemanticOutcome>,
 }
@@ -172,11 +172,11 @@ impl<'a> HybridSession<'a> {
             selection,
         )?;
         let regions = (owner.streamed_templates() != 0).then(|| {
-            let regions = Arc::new(crate::hybrid_regions::Constraints::new(
+            let regions = Arc::new(zetesis_stable::StreamedConstraints::new(
                 owner.clone(),
                 allowance.clone(),
             ));
-            core.set_region_filter(regions.clone(), phases);
+            core.set_streamed_constraints(regions.clone(), phases);
             regions
         });
         Ok(Self {

@@ -14,11 +14,13 @@ mod budget;
 mod error;
 mod ferraris;
 mod region_filter;
+mod streamed_constraints;
 mod timing;
 pub use region_filter::{
     RegionConsequence, RegionFeasibility, RegionFilter, RegionFilterStatistics, RegionFilterWorker,
     RegionPass,
 };
+pub use streamed_constraints::StreamedConstraints;
 mod checked;
 mod reduct;
 pub use reduct::ReductStatistics;
