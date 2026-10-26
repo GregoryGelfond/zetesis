@@ -112,6 +112,7 @@ fn assert_work_fields(json: &Value, work: &zetesis_themelios::GroundingWork) {
         ),
         ("numeric_index_builds", work.numeric_index_builds),
         ("numeric_index_declines", work.numeric_index_declines),
+        ("numeric_index_extensions", work.numeric_index_extensions),
         ("range_probes", work.range_probes),
         ("range_probe_rows", work.range_probe_rows),
         ("expression_key_probes", work.expression_key_probes),
