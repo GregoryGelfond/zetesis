@@ -2,6 +2,7 @@
 mod shifted_sum;
 mod strategic_companies;
 mod two_qbf;
+mod two_qbf_cores;
 use std::collections::BTreeSet;
 use zetesis_test_support::repository::examples as root;
 use zetesis_validation::{
