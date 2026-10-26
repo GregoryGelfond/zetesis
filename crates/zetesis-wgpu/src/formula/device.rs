@@ -796,6 +796,32 @@ impl GpuFormulaOracle {
 /// # }
 /// ```
 ///
+/// Nor can any other operation on the oracle run between a preparation and its
+/// check:
+///
+/// ```compile_fail,E0499
+/// # use zetesis_wgpu::{FormulaLimits, GpuFormulaOracle};
+/// # fn between(oracle: &mut GpuFormulaOracle, slate: zetesis_ferraris::SlateRef<'_>,
+/// #     control: &zetesis_cpu::Cancellation) {
+/// let prepared = oracle.prepare(slate, 0, FormulaLimits::default(), control).unwrap();
+/// oracle.clear_residency();
+/// let _ = prepared.check(control);
+/// # }
+/// ```
+///
+/// And a prepared submission is checked only by its own oracle: the oracle has
+/// no public operation that takes a prepared submission, so one prepared
+/// elsewhere has nowhere to go.
+///
+/// ```compile_fail,E0624
+/// # use zetesis_wgpu::{FormulaLimits, GpuFormulaOracle};
+/// # fn elsewhere(one: &mut GpuFormulaOracle, other: &mut GpuFormulaOracle,
+/// #     slate: zetesis_ferraris::SlateRef<'_>, control: &zetesis_cpu::Cancellation) {
+/// let prepared = one.prepare(slate, 0, FormulaLimits::default(), control).unwrap();
+/// let _ = other.propagate(prepared, control);
+/// # }
+/// ```
+///
 /// One after the other, they compile:
 ///
 /// ```no_run
