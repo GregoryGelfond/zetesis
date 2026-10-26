@@ -830,6 +830,17 @@
 'Zetesis.LazyRounds.chunk_concatenation' depends on axioms: [propext, Quot.sound]
 'Zetesis.LazyRounds.completed_round_closed' does not depend on any axioms
 'Zetesis.LazyRounds.completed_round_exact' depends on axioms: [propext, Quot.sound]
+'Zetesis.LearnedRegions.decides_holds' does not depend on any axioms
+'Zetesis.LearnedRegions.holds_negate_excludes' does not depend on any axioms
+'Zetesis.LearnedRegions.holds_or_negate' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.LearnedRegions.consequence_row_refutes' does not depend on any axioms
+'Zetesis.LearnedRegions.consequence_row_forces' does not depend on any axioms
+'Zetesis.LearnedRegions.consequence_row_narrows' does not depend on any axioms
+'Zetesis.LearnedRegions.consequence_row_forces_complement' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.LearnedRegions.row_of_narrower_class' does not depend on any axioms
+'Zetesis.LearnedRegions.row_union' depends on axioms: [propext]
+'Zetesis.LearnedRegions.row_dominance' does not depend on any axioms
+'Zetesis.LearnedRegions.founded_row' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.Lifted.composition_exact' does not depend on any axioms
 'Zetesis.Lifted.bind_monotone' does not depend on any axioms
 'Zetesis.Lifted.ruleTransform_monotone' does not depend on any axioms

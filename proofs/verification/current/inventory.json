@@ -4051,6 +4051,61 @@
       "name": "Zetesis.LazyRounds.completed_round_exact"
     },
     {
+      "file": "Zetesis/LearnedRegions.lean",
+      "line": 65,
+      "name": "Zetesis.LearnedRegions.decides_holds"
+    },
+    {
+      "file": "Zetesis/LearnedRegions.lean",
+      "line": 71,
+      "name": "Zetesis.LearnedRegions.holds_negate_excludes"
+    },
+    {
+      "file": "Zetesis/LearnedRegions.lean",
+      "line": 77,
+      "name": "Zetesis.LearnedRegions.holds_or_negate"
+    },
+    {
+      "file": "Zetesis/LearnedRegions.lean",
+      "line": 87,
+      "name": "Zetesis.LearnedRegions.consequence_row_refutes"
+    },
+    {
+      "file": "Zetesis/LearnedRegions.lean",
+      "line": 103,
+      "name": "Zetesis.LearnedRegions.consequence_row_forces"
+    },
+    {
+      "file": "Zetesis/LearnedRegions.lean",
+      "line": 121,
+      "name": "Zetesis.LearnedRegions.consequence_row_narrows"
+    },
+    {
+      "file": "Zetesis/LearnedRegions.lean",
+      "line": 143,
+      "name": "Zetesis.LearnedRegions.consequence_row_forces_complement"
+    },
+    {
+      "file": "Zetesis/LearnedRegions.lean",
+      "line": 166,
+      "name": "Zetesis.LearnedRegions.row_of_narrower_class"
+    },
+    {
+      "file": "Zetesis/LearnedRegions.lean",
+      "line": 174,
+      "name": "Zetesis.LearnedRegions.row_union"
+    },
+    {
+      "file": "Zetesis/LearnedRegions.lean",
+      "line": 185,
+      "name": "Zetesis.LearnedRegions.row_dominance"
+    },
+    {
+      "file": "Zetesis/LearnedRegions.lean",
+      "line": 204,
+      "name": "Zetesis.LearnedRegions.founded_row"
+    },
+    {
       "file": "Zetesis/Lifted.lean",
       "line": 61,
       "name": "Zetesis.Lifted.composition_exact"
@@ -9361,6 +9416,7 @@
     "Zetesis/JoinFrames.lean",
     "Zetesis/KeyedConstraints.lean",
     "Zetesis/LazyRounds.lean",
+    "Zetesis/LearnedRegions.lean",
     "Zetesis/Lifted.lean",
     "Zetesis/LiftedBridge.lean",
     "Zetesis/ModelSelections.lean",
@@ -9464,8 +9520,8 @@
     "Zetesis/WorldViews.lean"
   ],
   "source_sha256": {
-    "Audit.lean": "bd4c50d0c9b4cfaaeb9464fa146e8ce258e5b51aa7ee8126f985b7b31f399209",
-    "Zetesis.lean": "80f07b6a80a4d6aa59820509c229b2b1fbe048bf25dd39575239e71d82ae3b60",
+    "Audit.lean": "8ee2d2c8779d698179e6ec462e70b8082dc68da9119713056dc3a1b242e8c6ca",
+    "Zetesis.lean": "0693600149c759714ac585db9c8c809cb67de0a5f9045c8f223e62fa8be6a815",
     "Zetesis/AcyclicEvaluation.lean": "1a9c77283876cf1f61cb92031da04780aada5d0b256f79db5b64bfb6b129d0dc",
     "Zetesis/AdjacencyRows.lean": "38a19b1c74483a157636321a56e95fea660a2192a04c77930d609e411c8d30d4",
     "Zetesis/AggregateAssignment.lean": "def2eac0ae638f3801d35c11a3162afaa3e0b9e393601cf899952e449e309639",
@@ -9555,6 +9611,7 @@
     "Zetesis/JoinFrames.lean": "b4af5ba25e37e6305f9121791519aa20ee7a4977c6bc61f3e18608a38fdd95c0",
     "Zetesis/KeyedConstraints.lean": "d30e5b9149996725d57ab908a46896de465bbfa52ae1fa2364cdc2558015a40c",
     "Zetesis/LazyRounds.lean": "c356b730916c3add85d422183146eab7150281d375b5b54eff775a6157a76e86",
+    "Zetesis/LearnedRegions.lean": "09c97ccb6fc8fb08ce76d3b73fb1c373baa274eed1edd6f78b313e436682080d",
     "Zetesis/Lifted.lean": "beae8b170cd0dc605155cf996395bb3105b544dd622753954de443727915dbbb",
     "Zetesis/LiftedBridge.lean": "97de4a489c8a4e1fadf43d759320532064a70d90be463da25ed1da78b601ca09",
     "Zetesis/ModelSelections.lean": "06a4f5cfe9d5f1d0ce22de637fa64a4f08d9b07dae3947a33358df8c196547b8",

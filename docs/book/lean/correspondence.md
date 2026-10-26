@@ -2813,6 +2813,27 @@ Rust obligations. Union and retirement must preserve the existing capture bounds
 optional allowance, typed failure behavior and retained/transient storage
 accounting. These laws do not prove the ledger's representation or propagation.
 
+[LearnedRegions](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/LearnedRegions.lean)
+states the general row. A row pairs condition literals `B` with output literals
+`O`, each an atom required present or absent, and belongs to a consequence class
+`C`, a predicate on interpretations, when every member of `C` satisfying `B`
+satisfies `O` (`RowOf`). For a cube whose bounds decide every condition,
+`consequence_row_refutes` excludes every member of `C` when the cube also decides
+an output's negation, `consequence_row_forces` gives every member every output,
+and `consequence_row_narrows` restates that as `Cube.narrow_preserves_valid`'s
+premise with `C` as the valid predicate. `consequence_row_forces_complement` is
+the unit rule: with every condition but one decided and an output's negation
+decided, the remaining condition fails in every member. `row_of_narrower_class`
+carries a row to any narrower class, so a row of the original theory's answer
+sets also holds for the answer sets satisfying a streamed core. `row_union` and
+`row_dominance` generalize the union and dominance laws above to signed outputs.
+`founded_row` is the possible-foundedness collector's discharge of `RowOf`: it
+restates `conditional_unsupported_absent` for a condition given as signed
+literals and outputs given as absences, with the theory's answer sets as `C`.
+The laws are over interpretations and cubes; the ledger's encoding, matching,
+retention, eviction, ownership, delivery between workers and resource handling
+remain Rust obligations, stated with the ledger below.
+
 Retained rows use either the scalar witness lists or sparse word groups, chosen
 by actual buffer capacity including the common row header. A packed row keeps
 premise words and output words in separate ordered spans of one allocation.

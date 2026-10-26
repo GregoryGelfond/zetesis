@@ -4050,6 +4050,61 @@
     "line": 105
   },
   {
+    "name": "Zetesis.LearnedRegions.decides_holds",
+    "file": "Zetesis/LearnedRegions.lean",
+    "line": 65
+  },
+  {
+    "name": "Zetesis.LearnedRegions.holds_negate_excludes",
+    "file": "Zetesis/LearnedRegions.lean",
+    "line": 71
+  },
+  {
+    "name": "Zetesis.LearnedRegions.holds_or_negate",
+    "file": "Zetesis/LearnedRegions.lean",
+    "line": 77
+  },
+  {
+    "name": "Zetesis.LearnedRegions.consequence_row_refutes",
+    "file": "Zetesis/LearnedRegions.lean",
+    "line": 87
+  },
+  {
+    "name": "Zetesis.LearnedRegions.consequence_row_forces",
+    "file": "Zetesis/LearnedRegions.lean",
+    "line": 103
+  },
+  {
+    "name": "Zetesis.LearnedRegions.consequence_row_narrows",
+    "file": "Zetesis/LearnedRegions.lean",
+    "line": 121
+  },
+  {
+    "name": "Zetesis.LearnedRegions.consequence_row_forces_complement",
+    "file": "Zetesis/LearnedRegions.lean",
+    "line": 143
+  },
+  {
+    "name": "Zetesis.LearnedRegions.row_of_narrower_class",
+    "file": "Zetesis/LearnedRegions.lean",
+    "line": 166
+  },
+  {
+    "name": "Zetesis.LearnedRegions.row_union",
+    "file": "Zetesis/LearnedRegions.lean",
+    "line": 174
+  },
+  {
+    "name": "Zetesis.LearnedRegions.row_dominance",
+    "file": "Zetesis/LearnedRegions.lean",
+    "line": 185
+  },
+  {
+    "name": "Zetesis.LearnedRegions.founded_row",
+    "file": "Zetesis/LearnedRegions.lean",
+    "line": 204
+  },
+  {
     "name": "Zetesis.Lifted.composition_exact",
     "file": "Zetesis/Lifted.lean",
     "line": 61
