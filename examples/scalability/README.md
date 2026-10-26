@@ -83,14 +83,17 @@ carries the solve. Their constants choose the core and its size, and they are
 selected and qualified like the 2QBF workload.
 
 The [Tseitin parity](parity-tseitin/README.md), [parity chain](parity-chain/README.md),
-[pigeonhole forms](pigeonhole-forms/README.md) and [mixed parity](parity-mixed/README.md)
-workloads state constraints with algebraic structure: parity rows, linear
-equations over GF(2), and families of counts. Resolution, and so a solver that
-learns clauses, needs exponentially many steps to refute the unsatisfiable ones
-as they grow; elimination and counting refute them in polynomial time. The mixed
-workload adds random clauses to satisfiable parity constraints, so search
-remains. Their constants choose each instance and its size, and they are
-selected and qualified like the 2QBF workload.
+[pigeonhole clauses](pigeonhole-clauses/README.md) and [mixed parity](parity-mixed/README.md)
+workloads state constraints with algebraic structure in candidate generation:
+parity rows, linear equations over GF(2), and families of counts. Resolution,
+and so a solver that learns clauses, needs exponentially many steps to refute the
+unsatisfiable ones as they grow; elimination and counting refute them in
+polynomial time. `pigeonhole.lp` above states the pigeonhole principle with a
+choice bound, and the 2QBF parity, Tseitin and pigeonhole workloads put the same
+shapes inside the membership check. The mixed workload adds random clauses to
+satisfiable parity constraints, so search remains. Their constants choose each
+instance and its size, and they are selected and qualified like the 2QBF
+workload.
 
 ## Run an example
 

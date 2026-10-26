@@ -127,9 +127,9 @@ fn parity_chain_default_satisfies_its_complete_contract() {
 }
 
 #[test]
-fn pigeonhole_forms_default_satisfies_its_complete_contract() {
-    // Five pigeons cannot occupy four holes alone, in the clause encoding.
-    check_bundle("scalability/pigeonhole-forms");
+fn pigeonhole_clauses_default_satisfies_its_complete_contract() {
+    // Five pigeons cannot occupy four holes alone, stated as clauses.
+    check_bundle("scalability/pigeonhole-clauses");
 }
 
 #[test]

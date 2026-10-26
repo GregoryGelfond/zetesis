@@ -1,5 +1,5 @@
 //! Workloads whose constraints carry algebraic structure: Tseitin's parity
-//! formula, two parity chains, the pigeonhole principle in two encodings and a
+//! formula, two parity chains, the pigeonhole principle as clauses and a
 //! satisfiable mixture of parity constraints and random clauses. Each is
 //! checked against a direct evaluation of its constraints over every assignment
 //! of its atoms.
@@ -27,10 +27,10 @@ const CHAIN: Fixture = Fixture {
     manifest_sha256: "2d39bb62a544ad3a7a22ff9a7b5b342c8b719af35e343298c8a41e8dd5a97e7b",
 };
 const PIGEONHOLE: Fixture = Fixture {
-    directory: "scalability/pigeonhole-forms",
-    entry: "pigeonhole_forms.lp",
-    source_sha256: "fb0c2956b50f80b5928dadf945c6f296c7d63a0d044cfc805d406e5cd9df022a",
-    manifest_sha256: "04d204df02ec95550af2acb5d0a8aace790b6ab082ed50882093df49a280e05f",
+    directory: "scalability/pigeonhole-clauses",
+    entry: "pigeonhole_clauses.lp",
+    source_sha256: "f5d8004a9928415ecbc604c7f3c3ac8e697d54aeee15eb58bc1a85a668ebc6aa",
+    manifest_sha256: "006ee58bab15210590c410f54b40ca6847d38e45fc1ff21052c57b09050712f0",
 };
 const MIXED: Fixture = Fixture {
     directory: "scalability/parity-mixed",
@@ -44,7 +44,7 @@ const MIXED: Fixture = Fixture {
 enum Instance {
     Tseitin { p: i64, seed: i64, odd: i64 },
     Chain { p: i64, seed: i64, parity: i64 },
-    Pigeonhole { holes: i64, extra: i64, form: i64 },
+    Pigeonhole { holes: i64, extra: i64 },
     Mixed { p: i64, clauses: i64, seed: i64 },
 }
 
@@ -58,11 +58,7 @@ const CHAIN_DEFAULT: Instance = Instance::Chain {
     seed: 1,
     parity: 1,
 };
-const PIGEONHOLE_DEFAULT: Instance = Instance::Pigeonhole {
-    holes: 4,
-    extra: 1,
-    form: 1,
-};
+const PIGEONHOLE_DEFAULT: Instance = Instance::Pigeonhole { holes: 4, extra: 1 };
 const MIXED_DEFAULT: Instance = Instance::Mixed {
     p: 5,
     clauses: 8,
@@ -129,26 +125,10 @@ fn cases(default: Instance) -> Vec<Instance> {
         ],
         Instance::Pigeonhole { .. } => vec![
             default,
-            Instance::Pigeonhole {
-                holes: 4,
-                extra: 1,
-                form: 2,
-            },
-            Instance::Pigeonhole {
-                holes: 4,
-                extra: 0,
-                form: 1,
-            },
-            Instance::Pigeonhole {
-                holes: 4,
-                extra: 0,
-                form: 2,
-            },
-            Instance::Pigeonhole {
-                holes: 3,
-                extra: 1,
-                form: 2,
-            },
+            Instance::Pigeonhole { holes: 4, extra: 0 },
+            Instance::Pigeonhole { holes: 3, extra: 1 },
+            Instance::Pigeonhole { holes: 3, extra: 0 },
+            Instance::Pigeonhole { holes: 2, extra: 1 },
         ],
         Instance::Mixed { .. } => vec![
             default,
@@ -287,7 +267,7 @@ impl Instance {
     /// The program's constraints. Tseitin's vertices and the mixed workload's
     /// vertices are parities of their three edges; the chains' gates are
     /// parities of their three atoms; every pigeon occupies at least one hole
-    /// and every hole holds at most one pigeon, in either encoding.
+    /// and every hole holds at most one pigeon.
     fn constraints(self) -> Constraints {
         let mut constraints = Constraints::default();
         match self {
@@ -414,14 +394,16 @@ impl Instance {
     }
 
     /// The program's constants and values for this instance.
-    fn constants(self) -> [(&'static str, i64); 3] {
+    fn constants(self) -> Vec<(&'static str, i64)> {
         match self {
-            Self::Tseitin { p, seed, odd } => [("p", p), ("seed", seed), ("odd", odd)],
-            Self::Chain { p, seed, parity } => [("p", p), ("seed", seed), ("parity", parity)],
-            Self::Pigeonhole { holes, extra, form } => {
-                [("holes", holes), ("extra", extra), ("form", form)]
+            Self::Tseitin { p, seed, odd } => vec![("p", p), ("seed", seed), ("odd", odd)],
+            Self::Chain { p, seed, parity } => {
+                vec![("p", p), ("seed", seed), ("parity", parity)]
             }
-            Self::Mixed { p, clauses, seed } => [("p", p), ("clauses", clauses), ("seed", seed)],
+            Self::Pigeonhole { holes, extra } => vec![("holes", holes), ("extra", extra)],
+            Self::Mixed { p, clauses, seed } => {
+                vec![("p", p), ("clauses", clauses), ("seed", seed)]
+            }
         }
     }
 
