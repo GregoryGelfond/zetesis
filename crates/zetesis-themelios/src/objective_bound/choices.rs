@@ -711,6 +711,7 @@ pub(super) fn strengthen(
     plan: &ObjectivePlan,
     mut exact: ObjectiveBound,
     incumbent: &Score,
+    comparison: super::bound::Comparison,
     limits: ObjectiveBoundLimits,
     cancellation: &Cancellation,
 ) -> ObjectiveBound {
@@ -728,7 +729,15 @@ pub(super) fn strengthen(
         template: None,
         statistics: exact.statistics,
     };
-    match combined(plan, costs, &exact.theory, incumbent, limits, &mut work) {
+    match combined(
+        plan,
+        costs,
+        &exact.theory,
+        incumbent,
+        comparison,
+        limits,
+        &mut work,
+    ) {
         Ok(theory) => exact.theory = theory,
         Err(error) => exact.choice_failure = Some(error),
     }
@@ -741,6 +750,7 @@ fn combined(
     costs: &Costs,
     exact: &Theory,
     incumbent: &Score,
+    comparison: super::bound::Comparison,
     limits: ObjectiveBoundLimits,
     work: &mut Work<'_>,
 ) -> Result<Theory, ObjectiveBoundError> {
@@ -759,6 +769,7 @@ fn combined(
         &mut nodes,
         plan.levels.keys().copied(),
         incumbent,
+        comparison,
         limits,
         work,
         |priority, work| {

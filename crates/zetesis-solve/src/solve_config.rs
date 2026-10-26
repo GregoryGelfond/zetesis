@@ -62,6 +62,10 @@ pub struct SolveConfig {
     pub max_objective_keys: usize,
     /// Objective key payload bytes per verified model.
     pub max_objective_key_bytes: usize,
+    /// How an optimizing search proves its optimum and finds its ties:
+    /// [`crate::OptimumSearch::StrictForOneAnswer`] by default. The other
+    /// schedules are kept for measurement; every one returns the same optima.
+    pub optimum_search: crate::OptimumSearch,
     /// Maximum retained incumbent models.
     pub max_optimal_models: usize,
     /// Maximum atoms across retained incumbents.

@@ -156,7 +156,13 @@ fn requested_optimal_models_limit_delivery() {
             outcome.incumbent().unwrap().score.costs(),
             [(2, 0), (1, -3)]
         );
-        assert_eq!(outcome.incumbent().unwrap().tied_models, 2);
+        // Unbounded, the search meets both ties; the default's strict bound
+        // at the optimum prunes the other, which it then does not count.
+        let best = outcome.incumbent().unwrap();
+        assert_eq!(best.ties_pruned, config.max_objective_bound_work != 0);
+        if !best.ties_pruned {
+            assert_eq!(best.tied_models, 2);
+        }
         assert_eq!(outcome.retained_models(), 1);
     }
 }

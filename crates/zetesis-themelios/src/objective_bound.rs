@@ -300,7 +300,37 @@ impl ObjectivePlan {
         limits: ObjectiveBoundLimits,
         cancellation: &Cancellation,
     ) -> Result<ObjectiveBound, ObjectiveBoundError> {
-        bound::compile(self, incumbent, limits, cancellation)
+        bound::compile(
+            self,
+            incumbent,
+            bound::Comparison::AtMost,
+            limits,
+            cancellation,
+        )
+    }
+
+    /// Compile lexicographic cost strictly less than `incumbent`, so that no
+    /// tie at the incumbent's cost survives, under the same conditions as
+    /// [`Self::bound`]. A better incumbent's strict bound implies an earlier
+    /// strict or non-strict bound under the original theory, as non-strict
+    /// bounds do. The optional choice strengthening compares certified lower
+    /// costs strictly too: a model's lower cost never exceeds its cost.
+    ///
+    /// # Errors
+    /// As [`Self::bound`].
+    pub fn strict_bound(
+        &self,
+        incumbent: &Score,
+        limits: ObjectiveBoundLimits,
+        cancellation: &Cancellation,
+    ) -> Result<ObjectiveBound, ObjectiveBoundError> {
+        bound::compile(
+            self,
+            incumbent,
+            bound::Comparison::Below,
+            limits,
+            cancellation,
+        )
     }
 }
 

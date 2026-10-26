@@ -14,6 +14,7 @@ mod lazy_terminal_sessions;
 mod measurements;
 mod memory_allowance;
 mod model_construction;
+mod optimum_search;
 mod positive_sessions;
 mod stratified_sessions;
 mod projected_reference;

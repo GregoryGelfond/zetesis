@@ -117,10 +117,29 @@ fn plan_limits(options: &SolveConfig, spent: u64) -> ObjectivePlanLimits {
     }
 }
 
+/// The bound to install: its plan, its incumbent's score, and whether it keeps
+/// only strictly cheaper candidates.
+struct Request<'a> {
+    plan: Option<&'a ObjectivePlan>,
+    score: &'a Score,
+    strict: bool,
+}
+
+/// The bound last installed on the current stream.
+struct Installed {
+    score: Score,
+    strict: bool,
+}
+
 #[derive(Default)]
 pub(crate) struct Bounds {
     enabled: bool,
     work: u64,
+    /// Improvements install strict bounds: always under
+    /// [`crate::OptimumSearch::StrictWithTiePass`], and for a request of one
+    /// answer under [`crate::OptimumSearch::StrictForOneAnswer`].
+    strict: bool,
+    installed: Option<Installed>,
 }
 
 impl Bounds {
@@ -128,12 +147,30 @@ impl Bounds {
         Self {
             enabled: options.max_objective_bound_work != 0,
             work: 0,
+            strict: match options.optimum_search {
+                crate::OptimumSearch::StrictWithTiePass => true,
+                crate::OptimumSearch::StrictForOneAnswer => options.models == 1,
+                crate::OptimumSearch::Inclusive => false,
+            },
+            installed: None,
         }
     }
 
     /// Whether an improvement can still install a candidate bound.
     pub(crate) const fn is_enabled(&self) -> bool {
         self.enabled
+    }
+
+    /// The incumbent score whose ties the last installed bound prunes, when
+    /// that bound is strict. A strict bound at a worse score than the optimum
+    /// keeps every optimal model, and so does an inclusive bound, so the
+    /// search meets each of them; only a strict bound at the optimum itself
+    /// owes a tie pass.
+    pub(crate) fn pruned_ties_at(&self) -> Option<&Score> {
+        self.installed
+            .as_ref()
+            .filter(|bound| bound.strict)
+            .map(|bound| &bound.score)
     }
 
     /// Call only after a strictly better, fully retained reduct-verified model.
@@ -147,14 +184,61 @@ impl Bounds {
         observations: &mut impl ExecutionSink,
         cancellation: &Cancellation,
     ) -> Result<(), SolveError> {
+        let request = Request {
+            plan,
+            score,
+            strict: self.strict,
+        };
+        self.install(request, models, options, observations, cancellation)
+            .map(|_| ())
+    }
+
+    /// Install a tie pass's bound on its fresh stream: cost at most the proved
+    /// `optimum`, the stream's first bound, so it has no predecessor to imply.
+    /// `Ok(false)` when no bound was installed; the pass then runs unbounded,
+    /// and scoring alone keeps the optimum's ties.
+    pub(crate) fn bound_ties(
+        &mut self,
+        plan: Option<&ObjectivePlan>,
+        optimum: &Score,
+        models: &mut StableModels,
+        options: &SolveConfig,
+        observations: &mut impl ExecutionSink,
+        cancellation: &Cancellation,
+    ) -> Result<bool, SolveError> {
+        let request = Request {
+            plan,
+            score: optimum,
+            strict: false,
+        };
+        self.install(request, models, options, observations, cancellation)
+    }
+
+    fn install(
+        &mut self,
+        Request {
+            plan,
+            score,
+            strict,
+        }: Request<'_>,
+        models: &mut StableModels,
+        options: &SolveConfig,
+        observations: &mut impl ExecutionSink,
+        cancellation: &Cancellation,
+    ) -> Result<bool, SolveError> {
         let Some(plan) = plan.filter(|_| self.enabled) else {
-            return Ok(());
+            return Ok(false);
         };
         let limits = ObjectiveBoundLimits {
             max_work: options.max_objective_bound_work.saturating_sub(self.work),
             ..Default::default()
         };
-        let bound = match plan.bound(score, limits, cancellation) {
+        let compiled = if strict {
+            plan.strict_bound(score, limits, cancellation)
+        } else {
+            plan.bound(score, limits, cancellation)
+        };
+        let bound = match compiled {
             Ok(bound) => {
                 self.work += bound.statistics().work;
                 bound
@@ -163,7 +247,7 @@ impl Bounds {
                 self.work += error.statistics().work;
                 self.enabled = false;
                 observations.record(Event::ObjectiveBoundStopped(error))?;
-                return Ok(());
+                return Ok(false);
             }
         };
         if let Some(error) = bound.choice_failure() {
@@ -172,21 +256,26 @@ impl Bounds {
         if !bound.original().same_instance(models.theory()) {
             self.enabled = false;
             observations.record(Event::ObjectiveTheoryMismatch)?;
-            return Ok(());
+            return Ok(false);
         }
         if let Err(error) = models.improve_candidate_bound(plan.identity(), score, bound.theory()) {
             // Replacement is transactional: the older bound remains on failure.
             // Later scoring still borrows the unchanged immutable preparation.
             self.enabled = false;
             observations.record(Event::ObjectiveRestrictionStopped(error))?;
-        } else {
-            observations.record(Event::ObjectiveBound {
-                restrictions: models.statistics().candidate_restrictions,
-                costs: score.costs(),
-                work: self.work,
-            })?;
+            return Ok(false);
         }
-        Ok(())
+        self.installed = Some(Installed {
+            score: score.clone(),
+            strict,
+        });
+        observations.record(Event::ObjectiveBound {
+            restrictions: models.statistics().candidate_restrictions,
+            costs: score.costs(),
+            strict,
+            work: self.work,
+        })?;
+        Ok(true)
     }
 }
 

@@ -180,7 +180,10 @@ fn capped_optimal_ties_do_not_describe_every_answer() {
     assert_eq!(selected.by_ref().count(), 1);
     let outcome = selected.outcome().unwrap();
     assert!(outcome.optimum_proved());
-    assert_eq!(outcome.incumbent().unwrap().tied_models, 2);
+    // The strict bound for one requested answer pruned the other tie, so
+    // the session establishes no size for the optimal family.
+    assert!(outcome.incumbent().unwrap().ties_pruned);
+    assert_eq!(outcome.complete_answer_count(), None);
     assert_eq!(outcome.retained_models(), 1);
     assert_eq!(collect(PreparedInput::formula(&owner)).len(), 2);
 }

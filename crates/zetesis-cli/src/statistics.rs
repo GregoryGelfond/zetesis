@@ -421,11 +421,15 @@ fn objective(sink: &mut impl Write, report: &Details<'_>) -> io::Result<()> {
         } else {
             "incumbent only"
         };
+        let ties = if optimum.ties_pruned {
+            "unavailable".to_owned()
+        } else {
+            optimum.tied_models.to_string()
+        };
         writeln!(
             sink,
-            "  objective: {qualification}; costs(priority,value)={:?}; full ties={}; scored models={}; evaluation work={}",
+            "  objective: {qualification}; costs(priority,value)={:?}; full ties={ties}; scored models={}; evaluation work={}",
             optimum.score.costs(),
-            optimum.tied_models,
             optimum.scored_models,
             optimum.work
         )?;

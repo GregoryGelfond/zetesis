@@ -107,6 +107,7 @@ impl Resources {
             max_objective_bindings: u64::MAX,
             max_objective_keys: self.cells(32, 32),
             max_objective_key_bytes: self.bytes(32),
+            optimum_search: crate::OptimumSearch::DEFAULT,
             max_optimal_models: self.cells(32, 64),
             max_optimal_atoms: self.cells(32, size_of::<usize>()),
             max_optimal_bytes: self.bytes(32),

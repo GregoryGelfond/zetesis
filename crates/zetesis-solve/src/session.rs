@@ -424,7 +424,9 @@ impl<'a> SessionBuilder<'a> {
     /// At start, this clears projection and replaces the model limit using the
     /// final answer selection, regardless of builder call order. Ordinary answers
     /// stream until exhaustion, while optimization retains at most one model
-    /// and counts all ties with the existing checked incumbent counter. All
+    /// and counts all ties with the existing checked incumbent counter, in one
+    /// [`crate::OptimumSearch::Inclusive`] pass whatever the configured
+    /// policy, since a strict bound would prune the ties it counts. All
     /// resource and control limits still apply. Drain the session and read
     /// [`SemanticOutcome::complete_answer_count`] from its outcome; a stopped
     /// session has no total. A projection request is ignored in counting mode.
@@ -564,7 +566,10 @@ impl<'a> SessionBuilder<'a> {
             self.projection = None;
             self.config.models = match selection {
                 AnswerSelection::All => 0,
-                AnswerSelection::Optimal => 1,
+                AnswerSelection::Optimal => {
+                    self.config.optimum_search = crate::OptimumSearch::Inclusive;
+                    1
+                }
             };
         }
         let projected_limit = self.config.models;

@@ -24,6 +24,7 @@ fn quiet_information_never_touches_the_writer() {
         .observe(ExecutionObservation::ObjectiveBound {
             restrictions: 1,
             costs: &[(0, 7)],
+            strict: true,
             work: 8,
         })
         .unwrap();

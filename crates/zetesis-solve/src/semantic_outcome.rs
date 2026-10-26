@@ -206,7 +206,9 @@ impl SemanticOutcome {
     /// Exact size of the requested full answer-set family after exhaustion.
     /// Optimal selection counts every optimal tie, including unretained ties;
     /// all-answer selection counts full identities, even with projection.
-    /// Incomplete or absent coverage returns None, never a partial total.
+    /// Incomplete or absent coverage returns None, never a partial total, and
+    /// so does a search whose strict bound pruned the optimum's ties
+    /// ([`Optimization::ties_pruned`]).
     /// Engine counters are checked or bounded by checked candidate counts.
     #[must_use]
     pub const fn complete_answer_count(&self) -> Option<u64> {
@@ -216,6 +218,7 @@ impl SemanticOutcome {
         match self.selection {
             Some(AnswerSelection::All) => Some(self.verified),
             Some(AnswerSelection::Optimal) => match &self.optimization {
+                Some(best) if best.ties_pruned => None,
                 Some(best) => Some(best.tied_models),
                 None if self.verified == 0 => Some(0),
                 None => None,

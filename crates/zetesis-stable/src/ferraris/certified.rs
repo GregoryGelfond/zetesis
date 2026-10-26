@@ -236,7 +236,7 @@ impl StableModels {
             return Err(Incomplete::ClosedEnumerator);
         }
         if self.statistics.certified.is_some() {
-            let started = self.statistics().candidates != 0;
+            let started = self.own_statistics().candidates != 0;
             if let Some(certificate) = self.certificate.as_mut()
                 && usage == Use::Cpu
                 && certificate.usage == Use::External
@@ -248,7 +248,7 @@ impl StableModels {
             }
             return Ok(self.certificate.is_some());
         }
-        if self.statistics().candidates != 0 {
+        if self.own_statistics().candidates != 0 {
             return Err(Incomplete::LateCertificate);
         }
         let mut stats = CertifiedStatistics::default();

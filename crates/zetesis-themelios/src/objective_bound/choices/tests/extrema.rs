@@ -171,6 +171,47 @@ fn complete_cost_and_optimum_parity_keeps_duplicate_composite_witness_proofs() {
     assert_eq!(all_costs[0], all_costs[1]);
 }
 
+/// The strict bound keeps exactly the models strictly cheaper than its
+/// incumbent, with the exact fold alone and with the choice strengthening: a
+/// model at the incumbent's own cost, which the non-strict bound keeps, fails.
+#[test]
+fn a_strict_bound_keeps_only_models_strictly_cheaper_than_its_incumbent() {
+    for native in [false, true] {
+        let (mut plan, required) = fixture(native);
+        for prepared in [false, true] {
+            if prepared {
+                plan.prepare_choice_bounds(
+                    &required,
+                    ObjectivePlanLimits::default(),
+                    u128::MAX,
+                    &Cancellation::default(),
+                )
+                .unwrap();
+            }
+            let masks: Vec<_> = (0..8)
+                .filter(|&mask| holds(plan.original(), mask))
+                .collect();
+            let scores: Vec<_> = masks.iter().map(|&mask| score(&plan, mask)).collect();
+            for incumbent in &scores {
+                let strict = plan
+                    .strict_bound(
+                        incumbent,
+                        ObjectiveBoundLimits::default(),
+                        &Cancellation::default(),
+                    )
+                    .unwrap();
+                assert!(strict.choice_failure().is_none());
+                for (&mask, score) in masks.iter().zip(&scores) {
+                    assert_eq!(
+                        holds(strict.theory(), mask),
+                        score.compare_costs(incumbent) == Ordering::Less
+                    );
+                }
+            }
+        }
+    }
+}
+
 #[test]
 fn witness_cursor_charges_each_physical_occurrence_once() {
     let (plan, _) = fixture(true);

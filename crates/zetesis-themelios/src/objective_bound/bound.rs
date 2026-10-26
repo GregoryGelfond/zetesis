@@ -16,9 +16,19 @@ use super::{
 
 pub(super) mod normalize;
 
+/// Which lexicographic comparison with its incumbent a bound compiles.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) enum Comparison {
+    /// Cost at most the incumbent's, so that every tie survives.
+    AtMost,
+    /// Cost strictly less than the incumbent's, so that no tie survives.
+    Below,
+}
+
 pub(super) fn compile(
     plan: &ObjectivePlan,
     incumbent: &Score,
+    comparison: Comparison,
     limits: ObjectiveBoundLimits,
     cancellation: &Cancellation,
 ) -> Result<ObjectiveBound, ObjectiveBoundError> {
@@ -39,6 +49,7 @@ pub(super) fn compile(
         &mut nodes,
         plan.levels.keys().copied(),
         incumbent,
+        comparison,
         limits,
         &mut work,
         |priority, _| {
@@ -71,6 +82,7 @@ pub(super) fn compile(
         plan,
         exact,
         incumbent,
+        comparison,
         limits,
         cancellation,
     ))
@@ -112,14 +124,16 @@ fn copy(parts: &FormulaParts, work: &mut Work<'_>) -> Result<FormulaNodes, Objec
     Ok(FormulaNodes::new(copied))
 }
 
-/// Compile the same non-strict lexicographic comparison for exact costs and
-/// certified lower costs. Priorities absent from either side have value zero.
-/// The ascending fold makes each higher priority dominate its existing suffix;
-/// the initial true suffix retains ties at every priority.
+/// Compile the same lexicographic comparison for exact costs and certified
+/// lower costs. Priorities absent from either side have value zero. The
+/// ascending fold makes each higher priority dominate its existing suffix. Its
+/// initial suffix decides costs equal at every priority: true retains every
+/// tie ([`Comparison::AtMost`]), false keeps none ([`Comparison::Below`]).
 pub(super) fn lexicographic<'a>(
     nodes: &mut FormulaNodes,
     priorities: impl Iterator<Item = i32>,
     incumbent: &Score,
+    comparison: Comparison,
     limits: ObjectiveBoundLimits,
     work: &mut Work<'_>,
     mut elements: impl FnMut(
@@ -128,7 +142,10 @@ pub(super) fn lexicographic<'a>(
     ) -> Result<Cow<'a, [AggregateElement]>, ObjectiveBoundError>,
 ) -> Result<usize, ObjectiveBoundError> {
     let falsum = work.node(nodes, NodeView::False)?;
-    let mut root = work.node(nodes, NodeView::Implies(falsum, falsum))?;
+    let mut root = match comparison {
+        Comparison::AtMost => work.node(nodes, NodeView::Implies(falsum, falsum))?,
+        Comparison::Below => falsum,
+    };
     let mut costs = BTreeMap::new();
     for priority in priorities {
         work.tick()?;

@@ -2,6 +2,7 @@
 
 use std::{
     collections::{BTreeMap, BTreeSet},
+    convert::Infallible,
     ffi::OsStr,
     num::NonZeroUsize,
     path::Path,
@@ -14,8 +15,9 @@ use zetesis_clingo_support::REPORT_BYTES;
 use zetesis_core::{Model, Value};
 use zetesis_cpu::Cancellation;
 use zetesis_solve::{
-    AnswerSelection, AnswerSet, Backend, Completion, ExecutionResources, Grounder, Oracle,
-    PreparedInput, Session, SolveConfig, WorldViewLimits,
+    AnswerSelection, AnswerSet, Backend, Completion, ExecutionObservation, ExecutionObserver,
+    ExecutionResources, Grounder, OptimumSearch, Oracle, PreparedInput, Session, SolveConfig,
+    WorldViewLimits,
 };
 use zetesis_themelios::{AdmittedFormula, observation};
 
@@ -348,8 +350,26 @@ fn optimum_ties_retain_distinct_full_answers() {
     }
 }
 
+/// The tie passes a session begins.
+#[derive(Default)]
+struct TiePasses(usize);
+
+impl ExecutionObserver for TiePasses {
+    type Error = Infallible;
+
+    fn observe(&mut self, event: ExecutionObservation<'_>) -> Result<(), Self::Error> {
+        if matches!(event, ExecutionObservation::ObjectiveTiePass { .. }) {
+            self.0 += 1;
+        }
+        Ok(())
+    }
+}
+
+/// Every schedule returns each case's optimal ties, the strict one from its
+/// tie pass, on the route `config` selects.
 fn optimum(config: SolveConfig, resources: &ExecutionResources) {
     projected_families::check(AnswerSelection::Optimal, config, resources);
+    let mut tie_passes = 0;
     for case in cases() {
         let owner = admit(&case);
         let best = case
@@ -363,24 +383,49 @@ fn optimum(config: SolveConfig, resources: &ExecutionResources) {
             .iter()
             .filter(|answer| &answer.costs == best)
             .collect();
-        let mut session = Session::builder(
-            PreparedInput::formula(&owner),
-            config,
-            Cancellation::default(),
-        )
-        .resources(resources)
-        .selection(AnswerSelection::Optimal)
-        .start()
-        .unwrap();
-        let answers: Vec<_> = session
-            .by_ref()
-            .map(|answer| capture(&owner, &answer.unwrap()))
-            .collect();
-        assert_eq!(answers.len(), expected.len(), "{}", case.source);
-        assert_eq!(answers.iter().collect::<BTreeSet<_>>(), expected);
-        assert!(session.outcome().unwrap().optimum_proved());
-        device_evidence(&session.outcome().unwrap(), config.backend, &case);
+        for optimum_search in [
+            OptimumSearch::DEFAULT,
+            OptimumSearch::StrictWithTiePass,
+            OptimumSearch::Inclusive,
+        ] {
+            let mut passes = TiePasses::default();
+            let mut session = Session::builder(
+                PreparedInput::formula(&owner),
+                SolveConfig {
+                    optimum_search,
+                    ..config
+                },
+                Cancellation::default(),
+            )
+            .resources(resources)
+            .selection(AnswerSelection::Optimal)
+            .start_observed(&mut passes)
+            .unwrap();
+            let mut answers = Vec::new();
+            while let Some(answer) = session.next_observed(&mut passes) {
+                answers.push(capture(&owner, &answer.unwrap()));
+            }
+            let context = format!("{} {optimum_search:?}", case.source);
+            assert_eq!(answers.len(), expected.len(), "{context}");
+            assert_eq!(
+                answers.iter().collect::<BTreeSet<_>>(),
+                expected,
+                "{context}"
+            );
+            let outcome = session.outcome().unwrap();
+            assert!(outcome.optimum_proved(), "{context}");
+            // A tie pass is owed only after strict bounds, and only when the
+            // last of them was installed at the optimum.
+            if optimum_search == OptimumSearch::StrictWithTiePass {
+                assert!(passes.0 <= 1, "{context}");
+                tie_passes += passes.0;
+            } else {
+                assert_eq!(passes.0, 0, "{context}");
+            }
+            device_evidence(&outcome, config.backend, &case);
+        }
     }
+    assert!(tie_passes > 0);
 }
 
 fn device_evidence(outcome: &zetesis_solve::SemanticOutcome, backend: Backend, case: &Case) {
