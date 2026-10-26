@@ -2923,6 +2923,53 @@ The laws are over interpretations and cubes; the ledger's encoding, matching,
 retention, eviction, ownership, delivery between workers and resource handling
 remain Rust obligations, stated with the ledger below.
 
+[`AlgebraicRows`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/AlgebraicRows.lean)
+states algebraic consequences for any consequence class, as `RowOf` does. A term
+pairs an atom with a value, and a list of terms is measured in an interpretation
+by folding a commutative monoid (`AxisFolds.Reduction`) over the values of the
+terms whose atoms hold; `measure_congr` makes the measure local to the terms'
+atoms. In an abelian group, equations of a class add (`equation_sum`), terms with
+inverse values cancel (`measure_cancel`), and literals giving every other atom
+its value isolate one atom's contribution (`equation_isolates`). The isolated
+value forces the atom true or false, a row of the class
+(`equation_forces_true`, `equation_forces_false`), or excludes the conditions
+given (`equation_excludes`, `equation_excludes_given`); `excludes_region` and
+`consequence_row_forces` carry either into a region that decides the
+conditions (`decides_truth`). In an ordered commutative monoid, two families of
+rows covering the same terms exclude the class when their lower bounds' fold
+does not lie below their upper bounds' (`double_count_excludes`). In a region,
+held atoms may raise a lower bound and atoms not cut lower an upper bound
+(`lower_in_of_held`, `upper_in_of_possible`, `double_count_excludes_region`), and
+`cut_excludes_region` accepts a bipartite cut certificate whose missed terms
+count as the region's held and open atoms. The instances are `parity`, the
+Booleans under exclusive-or (`parity_forces`), and `counting`, the natural
+numbers under addition, which `count_measure` connects to `PartitionCapacities`
+(`double_count_groups`).
+
+A row enters its class through its provenance, checked once. `entailed_by_patterns`
+gives every model of a group of formulas a property that depends only on a set
+of atoms the formulas mention, provided every interpretation inside the set
+that violates the property violates a formula of the group; it rests on
+`Ferraris.satisfies_congr`, and `entailed_by_part` carries the property to the
+answer sets of any theory containing the group. `entailed_by_completion` does
+the same for an atom's completion, from `DisjunctiveSupport.answer_set_completion`,
+which requires a complete inventory in which every producer of the atom is a
+normal rule with it as its sole head and no choice has it; `xor_definition` is
+the two-rule exclusive-or instance. `lower_of_threshold` and
+`upper_of_negated_threshold` read a count bound from a threshold whose
+conditions are atoms, with the weights as the terms' values, and
+`guard_releases` applies a guarded constraint where its guard holds.
+
+No part of the solver uses these laws yet: it does not recognize parity or
+counting structure in a theory. A narrowing that does must establish in Rust
+that each recognized row passed its provenance check against its source
+constraints, completion or threshold, including that a threshold's conditions
+are atoms and its guard holds where the row is used; that the literals it
+conditions on give the other atoms their values; that families cover the same
+terms; and that a certificate's shared, missed and remaining terms split its
+rows as stated. Elimination, flow search, coordinate assignment, packing, work
+and memory accounting and cancellation remain outside the laws.
+
 Retained rows use either the scalar witness lists or sparse word groups, chosen
 by actual buffer capacity including the common row header. A packed row keeps
 premise words and output words in separate ordered spans of one allocation.

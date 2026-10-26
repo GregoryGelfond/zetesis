@@ -114,6 +114,31 @@ fn two_qbf_pigeonhole_default_satisfies_its_complete_contract() {
 }
 
 #[test]
+fn parity_tseitin_default_satisfies_its_complete_contract() {
+    // Tseitin's parity formula with an odd total charge: no choice of edges
+    // satisfies every vertex.
+    check_bundle("scalability/parity-tseitin");
+}
+
+#[test]
+fn parity_chain_default_satisfies_its_complete_contract() {
+    // Two parity chains over the same inputs cannot have differing results.
+    check_bundle("scalability/parity-chain");
+}
+
+#[test]
+fn pigeonhole_clauses_default_satisfies_its_complete_contract() {
+    // Five pigeons cannot occupy four holes alone, stated as clauses.
+    check_bundle("scalability/pigeonhole-clauses");
+}
+
+#[test]
+fn parity_mixed_default_satisfies_its_complete_contract() {
+    // Random clauses cut the even subgraphs down to the complete family.
+    check_bundle("scalability/parity-mixed");
+}
+
+#[test]
 fn memory_override_reaches_the_explicit_solve_options() {
     use zetesis_cli::Invocation;
     let profile = scalability::profiles(Some(300_000_000))[0];

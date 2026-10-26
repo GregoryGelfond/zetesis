@@ -1,0 +1,28 @@
+{
+  "schema_version": 1,
+  "root": ".",
+  "cases": [
+    {
+      "entry": "parity_tseitin.lp",
+      "contract": {
+        "satisfiability": "unsat",
+        "family": "all",
+        "model_count": 0,
+        "cost": null,
+        "witnesses": [],
+        "required_symbols": [],
+        "notes": [
+          "Tseitin's parity formula on the 3-regular graph with p = 5: 10 vertices, 15 edge atoms and 40 constraints, four per vertex, with an odd total charge. Summing the vertex equations counts every edge twice, so no choice of edges satisfies them.",
+          "The constraints form a linear system over GF(2) that elimination refutes in polynomial time; resolution needs exponentially many steps on expanding graphs as p grows."
+        ]
+      },
+      "files": [
+        {
+          "path": "parity_tseitin.lp",
+          "sha256": "4c22676741999506ad9074b7ee85c43d2e39d30cdd34ba44e5348a44abb7b142",
+          "includes": []
+        }
+      ]
+    }
+  ]
+}

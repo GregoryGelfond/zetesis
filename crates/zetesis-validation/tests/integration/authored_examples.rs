@@ -1,4 +1,5 @@
 //! Fixture integrity is portable; complete clingo contract checks are opt-in.
+mod algebraic_classes;
 mod shifted_sum;
 mod strategic_companies;
 mod two_qbf;
