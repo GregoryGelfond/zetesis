@@ -288,13 +288,27 @@ impl ChoiceHeads {
             .is_some_and(|word| word & (1u64 << (atom % 64)) != 0)
     }
 
-    /// Choices dominate every degree score. Rank only open choices when any
-    /// remain; otherwise rank every open atom. Both streams are ascending and
-    /// borrow the existing packed masks, with no per-region selection storage.
-    fn eligible<'a>(&'a self, region: &'a Region) -> impl Iterator<Item = usize> + 'a {
-        let mut choices = region.open_in(&self.words).peekable();
-        let any = choices.peek().is_some();
-        choices.chain((!any).then(|| region.open()).into_iter().flatten())
+    /// Choices dominate every degree score. Visit only the open choices when
+    /// any remain; otherwise visit every open atom. Either way the atoms come
+    /// ascending, read a mask word at a time from the existing packed masks,
+    /// with no per-region selection storage; `visit`'s first error ends the
+    /// walk and is returned.
+    fn try_for_each_eligible<E>(
+        &self,
+        region: &Region,
+        mut visit: impl FnMut(usize) -> Result<(), E>,
+    ) -> Result<(), E> {
+        let words = region.mask_words();
+        let choice = |word: usize| self.words.get(word).copied().unwrap_or(0);
+        let choosing = (0..words).any(|word| region.open_word(word, choice(word)) != 0);
+        for word in 0..words {
+            let mut open = region.open_word(word, if choosing { choice(word) } else { u64::MAX });
+            while open != 0 {
+                visit(word * 64 + open.trailing_zeros() as usize)?;
+                open &= open - 1;
+            }
+        }
+        Ok(())
     }
 }
 
@@ -600,7 +614,10 @@ impl<'q> Work<'q> {
             return Err(Stop::WorkLimit);
         };
         let granted = quota.reserve(NARROWING_BATCH)?;
-        debug_assert!(granted <= NARROWING_BATCH, "a quota grants at most what is asked");
+        debug_assert!(
+            granted <= NARROWING_BATCH,
+            "a quota grants at most what is asked"
+        );
         if granted == 0 {
             return Err(Stop::WorkLimit);
         }
@@ -1545,13 +1562,14 @@ fn preferred_split<C: Count>(
     work: &mut Work<'_>,
 ) -> Result<Option<usize>, Stop> {
     let mut best: Option<(usize, usize)> = None;
-    for atom in choices.eligible(region) {
+    choices.try_for_each_eligible(region, |atom| {
         work.tick()?;
         let rank = known.unknown.get(atom);
         if best.is_none_or(|(_, best)| rank > best) {
             best = Some((atom, rank));
         }
-    }
+        Ok(())
+    })?;
     Ok(best.map(|(atom, _)| atom))
 }
 

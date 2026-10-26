@@ -223,6 +223,28 @@ impl Region {
     pub fn open(&self) -> impl Iterator<Item = usize> + '_ {
         self.open_words(std::iter::repeat(u64::MAX))
     }
+    /// The number of 64-bit words in each of the region's atom masks:
+    /// `self.len().div_ceil(64)`.
+    #[must_use]
+    pub fn mask_words(&self) -> usize {
+        self.held.len()
+    }
+    /// The open atoms of mask word `word` that `selected` selects, as bit
+    /// `atom % 64` for atom `atom` of that word; the bits past the last atom
+    /// are clear. Constant time, for scans that read a word at a time.
+    ///
+    /// # Panics
+    /// Panics if `word` is not below [`Self::mask_words`].
+    #[must_use]
+    pub fn open_word(&self, word: usize, selected: u64) -> u64 {
+        let open = !(self.held[word] | self.cut[word]) & selected;
+        let valid = self.atoms - word * 64;
+        if valid < 64 {
+            open & ((1u64 << valid) - 1)
+        } else {
+            open
+        }
+    }
     /// Open atoms selected by a borrowed bitmask, ascending. Missing words
     /// select nothing; excess words and unused tail bits are ignored. Bit
     /// `atom % 64` in word `atom / 64` selects that atom.
