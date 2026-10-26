@@ -20,7 +20,7 @@ that every syntactically valid program belongs to an admitted finite profile.
 
 ## Ordinary language
 
-L01–L18 are closed within their documented finite profiles. Stable identifiers
+L01–L19 are closed within their documented finite profiles. Stable identifiers
 connect these contracts to their tests and the admitted-language reference.
 The separate state/input obligations and unclassified scopes below remain open.
 
@@ -44,6 +44,7 @@ The separate state/input obligations and unclassified scopes below remain open.
 | L16 | **Closed:** filtered and multiple observers, mixed extrema and recursive observer dependencies preserve complete finite source rows, independently applicable carrier refinements and original-model costs | [Aggregate objective observers](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/tests/integration/aggregate_objective_observers.rs), [carrier composition](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/tests/integration/objective_carrier_composition.rs) |
 | L17 | **Closed:** finite observation bindings preserve whole-chain values, pooled structural capture and single-occurrence checked arithmetic inversion; anonymous negative cardinality keys preserve existential pattern identity, while full answer identity remains unchanged | [Observation bindings](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/tests/integration/observation_bindings.rs), [Inverse contracts](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/tests/integration/observation_inverse.rs), [Expressions](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/tests/integration/observation_expressions.rs) |
 | L18 | **Closed:** explicit source projection prepares a fixed typed atom domain; projected sessions return unique full answer-set representatives after objective selection with bounded history and separate completion, while ordinary enumeration and WorldView retain full identity | [Projection metadata](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/tests/integration/project_metadata.rs), [Projected sessions](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-solve/tests/integration/projected_sessions.rs), [Projected references](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-solve/tests/integration/projected_reference.rs) |
+| L19 | **Closed:** an ordering between tuples that still contain variables compares complete values in ASP term order, arity first and then components, wherever a comparison can stand (bodies, aggregate element conditions and guards, choice conditions, conditional literals and objectives), binding nothing; equality and disequality keep binding their components | [Tuple orderings](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/tests/integration/tuple_orderings.rs) |
 
 The [objective boundary witnesses](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/tests/integration/objective_language_boundaries.rs)
 retain all seven original sources, their declared complete native results and
@@ -119,7 +120,8 @@ without an established local evaluation order still need precise classification.
 existing entry or explicitly identified additions. Unsafe scopes and
 ungroundable cycles require a sound finite binding contract before admission.
 The [whole-value/open-tuple comparison refusal](language.md#rules-terms-and-bindings)
-is one concrete unclassified logical-value boundary. It is separate from L05's
+is one concrete unclassified logical-value boundary: equality or disequality
+between an open tuple and a whole value. Orderings between open tuples are L19. It is separate from L05's
 nested pools and intervals and does not change the classified counts above.
 
 ASPIF import/export and any libclingo interoperability require their own
