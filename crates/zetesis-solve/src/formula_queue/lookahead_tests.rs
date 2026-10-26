@@ -6,8 +6,11 @@ use std::collections::BTreeSet;
 use std::num::NonZeroUsize;
 
 use zetesis_cpu::Cancellation;
-use zetesis_ferraris::{SlateId, SlateRef, Theory};
-use zetesis_sat::{BatchVerdict, Limits, StableModels};
+use zetesis_ferraris::{Interpretation, SlateId, SlateRef, Theory};
+use zetesis_sat::{
+    BatchLimits, BatchVerdict, CompletionExecutor, Incomplete, Limits, Lookahead, SearchLimits,
+    SlateProposal, StableModels,
+};
 
 use super::device::{Decoded, PreparedSubmission, SlateDevice};
 use super::{BatchQueue, Demand};
@@ -26,10 +29,50 @@ enum Stop {
     DuringFinish,
 }
 
-/// A device that decides each candidate exactly, admits at most `prefix`
-/// candidates per submission, and records what the queue asked of it.
+/// Which candidates the double decides on the device.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+enum Decides {
+    /// Every candidate, exactly: the tight route, which completes no
+    /// residuals on the host.
+    Wholly,
+    /// None: every candidate is a residual for the host's exact completion,
+    /// as the hybrid route's general propagation can leave it.
+    Residuals,
+    /// The first slate wholly and every later slate's candidates as
+    /// residuals: a hybrid route whose pending slate the device decides.
+    FirstSlateWholly,
+}
+
+/// The double's verdict on a candidate of a slate, the first or a later one.
+fn decided(
+    decides: Decides,
+    first: bool,
+    theory: &Theory,
+    candidate: &Interpretation,
+) -> BatchVerdict {
+    if decides == Decides::Residuals || (decides == Decides::FirstSlateWholly && !first) {
+        return BatchVerdict::Residual;
+    }
+    let check = zetesis_ferraris::check(
+        theory,
+        candidate,
+        zetesis_ferraris::Limits::default(),
+        &Cancellation::default(),
+    )
+    .unwrap();
+    if check.accepted() {
+        BatchVerdict::NoProperSubset
+    } else {
+        BatchVerdict::Refuted
+    }
+}
+
+/// A device that decides candidates as `decides` says, exactly where it
+/// decides them, admits at most `prefix` candidates per submission, and
+/// records what the queue asked of it.
 struct Double {
     prefix: usize,
+    decides: Decides,
     stop: Stop,
     control: Cancellation,
     in_flight: usize,
@@ -45,6 +88,7 @@ impl Double {
     fn new(prefix: usize, control: &Cancellation) -> Self {
         Self {
             prefix,
+            decides: Decides::Wholly,
             stop: Stop::Never,
             control: control.clone(),
             in_flight: 0,
@@ -99,24 +143,12 @@ impl SlateDevice for Double {
         if offset == 0 {
             self.slates.push(slate.candidates().len());
         }
+        let first = self.slates.len() == 1;
         let rest = &slate.candidates()[offset..];
         let admitted = &rest[..rest.len().min(self.prefix)];
         let verdicts = admitted
             .iter()
-            .map(|candidate| {
-                let check = zetesis_ferraris::check(
-                    slate.theory(),
-                    candidate,
-                    zetesis_ferraris::Limits::default(),
-                    &Cancellation::default(),
-                )
-                .unwrap();
-                if check.accepted() {
-                    BatchVerdict::NoProperSubset
-                } else {
-                    BatchVerdict::Refuted
-                }
-            })
+            .map(|candidate| decided(self.decides, first, slate.theory(), candidate))
             .collect();
         Ok(Prepared {
             double: self,
@@ -433,5 +465,228 @@ fn adaptive_slate_sizes_equal_the_serial_queues() {
         assert_eq!(double.slates, checked.slates, "prefix {prefix}");
         assert!(double.overlapped > 0);
         assert_eq!(checked.overlapped, 0);
+    }
+}
+
+/// Fixed slates of `batch` candidates with scalar completion, so that a
+/// fixture's cumulative search work is the same in every run.
+fn fixed(batch: usize) -> SolveConfig {
+    SolveConfig {
+        gpu_batching: GpuBatching::Fixed,
+        completion_workers: NonZeroUsize::MIN,
+        ..options(batch)
+    }
+}
+
+/// A stream whose cumulative search work is capped at `max_work`.
+fn limited(
+    source: &str,
+    cancellation: &Cancellation,
+    max_work: u64,
+) -> (zetesis_themelios::AdmittedFormula, StableModels) {
+    let admitted = zetesis_reference_support::formula(source);
+    let limits = Limits {
+        search: SearchLimits {
+            max_work,
+            ..SearchLimits::default()
+        },
+        ..Limits::default()
+    };
+    let models = StableModels::new(admitted.theory(), limits, cancellation.clone()).unwrap();
+    (admitted, models)
+}
+
+/// The stream's cumulative search work at the points where the limit tests
+/// place their ceilings: the two-phase calls the queue makes, in its order and
+/// under its limits for fixed slates, without a work limit.
+struct Work {
+    /// After the first slate's production.
+    produced: u64,
+    /// After the slate proposed ahead of the first slate's commit.
+    ahead: u64,
+    /// After the first slate's commit, under the verdicts the double gives it.
+    committed: u64,
+    /// After the third slate's production, proposed ahead beside the second.
+    third: u64,
+}
+
+fn work(source: &str, options: &SolveConfig, decides: Decides) -> Work {
+    let cancellation = Cancellation::default();
+    let (_admitted, mut models) = stream(source, &cancellation);
+    let limits = BatchLimits {
+        max_candidates: options.batch_size,
+        max_pending_bytes: options.max_batch_bytes,
+    };
+    let mut completion = CompletionExecutor::with_scratch_limit(
+        options.completion_workers,
+        options.max_completion_scratch_bytes,
+    )
+    .unwrap();
+    let SlateProposal::New(first) = models.propose_slate(limits).unwrap() else {
+        panic!("expected the first slate");
+    };
+    let produced = models.statistics().search.work;
+    assert!(matches!(
+        models.propose_lookahead(limits).unwrap(),
+        Lookahead::Proposed(_)
+    ));
+    let ahead = models.statistics().search.work;
+    let verdicts = {
+        let slate = models.slate(&first).unwrap();
+        slate
+            .candidates()
+            .iter()
+            .map(|candidate| decided(decides, true, slate.theory(), candidate))
+            .collect()
+    };
+    models
+        .commit_slate(first, verdicts, &mut completion)
+        .unwrap();
+    let committed = models.statistics().search.work;
+    let SlateProposal::Ahead(_second) = models.propose_slate(limits).unwrap() else {
+        panic!("expected the slate proposed ahead");
+    };
+    assert!(matches!(
+        models.propose_lookahead(limits).unwrap(),
+        Lookahead::Proposed(_)
+    ));
+    let third = models.statistics().search.work;
+    Work {
+        produced,
+        ahead,
+        committed,
+        third,
+    }
+}
+
+/// A ceiling strictly between two calibrated points and away from both, so
+/// that no reservation at either boundary decides the case.
+fn between(low: u64, high: u64) -> u64 {
+    assert!(
+        high >= low + 2,
+        "no room for a ceiling between {low} and {high}"
+    );
+    low + (high - low) / 2
+}
+
+/// What a device enumeration of `CHOICES` under a work ceiling delivered
+/// before its first failure, and what the stream and the double record then.
+struct Limited {
+    answers: usize,
+    work_limit: bool,
+    statistics: zetesis_sat::BatchStatistics,
+    exhausted: bool,
+    double: Double,
+}
+
+fn limited_run(max_work: u64, options: &SolveConfig, decides: Decides) -> Limited {
+    let cancellation = Cancellation::default();
+    let (_admitted, mut models) = limited(CHOICES, &cancellation, max_work);
+    let mut queue = BatchQueue::for_joint_oracle(options).unwrap();
+    queue.set_demand(UNBOUNDED);
+    let mut double = Double::new(usize::MAX, &cancellation);
+    double.decides = decides;
+    let phases = Recorder::new(false);
+    let mut answers = 0;
+    let work_limit = loop {
+        match queue.next_device(&mut models, options, &cancellation, &phases, &mut double) {
+            Some(Ok(_)) => answers += 1,
+            Some(Err(Failure::Search(Incomplete::WorkLimit))) => break true,
+            Some(Err(_)) => panic!("the only failure is the work limit"),
+            None => break false,
+        }
+    };
+    Limited {
+        answers,
+        work_limit,
+        statistics: models.batch_statistics(),
+        exhausted: models.exhausted(),
+        double,
+    }
+}
+
+/// On the hybrid route a slate holding residuals completes them on the host
+/// from the stream's cumulative budget, which the slate proposed ahead of its
+/// commit has already drawn on (design §3.8, Goal 2's second difference). The
+/// commit is refused: the limit is reported, the slate stays pending with its
+/// candidates counted, nothing is delivered and no exhaustion is claimed.
+fn assert_residual_commit_refused(max_work: u64, options: &SolveConfig) {
+    let run = limited_run(max_work, options, Decides::Residuals);
+    assert!(run.work_limit);
+    assert_eq!(run.answers, 0);
+    assert_eq!(run.statistics.committed, 0);
+    assert!(run.statistics.pending >= options.batch_size.get());
+    assert_eq!(run.double.slates, [options.batch_size.get()]);
+    assert!(!run.exhausted);
+}
+
+#[test]
+fn a_limit_reached_during_the_lookahead_refuses_a_residual_slates_commit() {
+    let options = fixed(4);
+    let work = work(CHOICES, &options, Decides::Residuals);
+    assert_residual_commit_refused(between(work.produced, work.ahead), &options);
+}
+
+/// The ceiling lies above what the serial schedule's first slate draws, its
+/// production and its completion, and below what it draws after the slate
+/// proposed ahead: the lookahead's production brings the limit within the
+/// pending slate's reach.
+#[test]
+fn a_limit_the_lookahead_brings_within_reach_refuses_a_residual_slates_commit() {
+    let options = fixed(4);
+    let work = work(CHOICES, &options, Decides::Residuals);
+    let serial = work.produced + (work.committed - work.ahead);
+    assert_residual_commit_refused(between(serial.max(work.ahead), work.committed), &options);
+}
+
+/// The answers a limited run delivers when every slate the device decides
+/// wholly commits before the limit is reported: all of `CHOICES`'s candidates
+/// are answers, and a later slate holding residuals cannot commit past it.
+fn wholly_decided(run: &Limited, decides: Decides) -> usize {
+    match decides {
+        Decides::Wholly => run.double.slates.iter().sum(),
+        Decides::FirstSlateWholly => run.double.slates[0],
+        Decides::Residuals => 0,
+    }
+}
+
+/// A slate the device decides wholly draws nothing at its commit, so a limit
+/// the lookahead's production reaches lets it commit and is reported after
+/// it, and after the partial slate proposed ahead if there is one. The
+/// hybrid route's wholly decided slate and the tight route agree.
+#[test]
+fn a_wholly_decided_slate_commits_before_a_limit_reached_during_the_lookahead() {
+    for decides in [Decides::FirstSlateWholly, Decides::Wholly] {
+        let options = fixed(4);
+        let work = work(CHOICES, &options, decides);
+        let run = limited_run(between(work.produced, work.ahead), &options, decides);
+        assert!(run.work_limit, "{decides:?}");
+        assert_eq!(run.double.slates[0], 4, "{decides:?}");
+        // The lookahead met the limit: the slate it proposed, if any, is partial.
+        assert!(
+            run.double.slates.get(1).is_none_or(|&count| count < 4),
+            "{decides:?}"
+        );
+        assert_eq!(run.answers, wholly_decided(&run, decides), "{decides:?}");
+        assert!(!run.exhausted, "{decides:?}");
+    }
+}
+
+/// A limit the lookahead's production stops short of is not met by a wholly
+/// decided slate's commit, which draws nothing: the slate commits, its
+/// answers are delivered with no stop at that commit, the slate proposed ahead
+/// is full, and the limit is met later, by whatever next draws on the budget.
+/// The hybrid route's wholly decided slate and the tight route agree.
+#[test]
+fn a_wholly_decided_slate_commits_with_no_stop_when_the_lookahead_stops_short() {
+    for decides in [Decides::FirstSlateWholly, Decides::Wholly] {
+        let options = fixed(4);
+        let work = work(CHOICES, &options, decides);
+        assert_eq!(work.committed, work.ahead, "{decides:?}");
+        let run = limited_run(between(work.ahead, work.third), &options, decides);
+        assert_eq!(&run.double.slates[..2], [4, 4], "{decides:?}");
+        assert!(run.work_limit, "{decides:?}");
+        assert_eq!(run.answers, wholly_decided(&run, decides), "{decides:?}");
+        assert!(!run.exhausted, "{decides:?}");
     }
 }
