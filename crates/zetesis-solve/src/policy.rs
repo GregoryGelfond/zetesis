@@ -54,7 +54,8 @@ pub enum OptimumSearch {
     /// already beaten. Exhausting that search proves the optimum. When more
     /// than one optimal answer is requested, and the last installed bound
     /// pruned the optimum's ties, one more pass over the same theory, bounded
-    /// to cost at most the optimum, enumerates them, each once.
+    /// to cost at most the optimum, enumerates them, each once. A stop of that
+    /// pass leaves the optimum proved and the optimal family incomplete.
     StrictWithTiePass,
     /// Each strictly better answer bounds the candidates to cost at most its
     /// own, so one pass proves the optimum and meets every tie along the way.

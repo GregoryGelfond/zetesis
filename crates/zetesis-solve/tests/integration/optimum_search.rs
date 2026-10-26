@@ -337,8 +337,29 @@ fn cancellation_in_the_tie_pass_establishes_no_family() {
         assert_eq!(schedule.tie_passes, 1, "{config:?}");
         assert!(answers.len() < 3, "{config:?}");
         assert_eq!(outcome.completion(), Some(Completion::Interrupted));
-        assert!(!outcome.optimum_proved());
         assert_eq!(outcome.complete_answer_count(), None);
+    }
+}
+
+#[test]
+fn cancellation_in_the_tie_pass_keeps_the_proved_optimum() {
+    // The strict pass exhausted before the tie pass began, so the optimum is
+    // proved whatever stops the pass; only the family is incomplete. The
+    // cancellation arrives as the pass begins, on every route alike.
+    let program = Program::new(PAIRS);
+    for (input, config) in program.routes() {
+        let cancellation = Cancellation::default();
+        let mut schedule = Schedule::cancelling(Moment::TiePass, &cancellation);
+        let config = SolveConfig {
+            optimum_search: OptimumSearch::StrictWithTiePass,
+            models: 0,
+            ..config
+        };
+        let (_, outcome) = solve(input, config, &mut schedule, cancellation);
+        assert_eq!(schedule.tie_passes, 1, "{config:?}");
+        assert_eq!(outcome.completion(), Some(Completion::Interrupted));
+        assert!(outcome.optimum_proved(), "{config:?}");
+        assert_eq!(costs(&outcome), [(0, 2)]);
     }
 }
 
@@ -387,6 +408,28 @@ fn a_candidate_limit_in_the_tie_pass_establishes_no_family() {
         assert_eq!(outcome.completion(), Some(Completion::Interrupted));
         assert!(outcome.candidate_progress() <= spent + 1);
         assert_eq!(outcome.complete_answer_count(), None);
+    }
+}
+
+#[test]
+fn a_candidate_limit_in_the_tie_pass_keeps_the_proved_optimum() {
+    let program = Program::new(PAIRS);
+    for (input, config) in program.serial_routes() {
+        let (_, strict, _) = run(input, config, OptimumSearch::StrictForOneAnswer, 1);
+        let spent = strict.candidate_progress();
+        let (_, outcome, schedule) = run(
+            input,
+            SolveConfig {
+                max_candidates: spent + 1,
+                ..config
+            },
+            OptimumSearch::StrictWithTiePass,
+            0,
+        );
+        assert_eq!(schedule.tie_passes, 1, "{config:?}");
+        assert_eq!(outcome.completion(), Some(Completion::Interrupted));
+        assert!(outcome.optimum_proved(), "{config:?}");
+        assert_eq!(costs(&outcome), [(0, 2)]);
     }
 }
 

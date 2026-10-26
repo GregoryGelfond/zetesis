@@ -28,6 +28,12 @@ pub struct SemanticOutcome {
     pub(crate) scored: u64,
     pub(crate) retained: usize,
     pub(crate) search_state: Option<SearchState>,
+    /// The search that bounds an optimum exhausted before a later pass
+    /// stopped: a strict search, whose exhaustion proved that no model is
+    /// cheaper than the incumbent, was followed by a tie pass enumerating the
+    /// optimum's ties. A stop of that pass leaves the family incomplete, not
+    /// the optimum unproved.
+    pub(crate) optimum_established: bool,
     pub(crate) optimization: Option<Optimization>,
     pub(crate) objective_work: u64,
     pub(crate) checked: u64,
@@ -60,6 +66,7 @@ impl SemanticOutcome {
             scored: 0,
             retained: 0,
             search_state: Some(SearchState::Interrupted(interruption)),
+            optimum_established: false,
             optimization: None,
             objective_work: 0,
             checked: 0,
@@ -282,11 +289,22 @@ impl SemanticOutcome {
     }
 
     /// Complete relevant search established the retained incumbent's optimum.
+    /// Under [`crate::OptimumSearch::StrictWithTiePass`] that search is the
+    /// strict one: once it has exhausted, a stop of the tie pass that follows
+    /// it leaves the optimum proved and the optimal family incomplete, so
+    /// [`Self::complete_answer_count`] stays absent. A stop before it, or an
+    /// unclassified failure, proves no optimum.
     #[must_use]
     pub const fn optimum_proved(&self) -> bool {
         matches!(self.selection, Some(AnswerSelection::Optimal))
-            && matches!(self.search_state, Some(SearchState::Exhausted))
             && self.optimization.is_some()
+            && match self.search_state {
+                Some(SearchState::Exhausted) => true,
+                Some(SearchState::Interrupted(_) | SearchState::PendingInterruption(_)) => {
+                    self.optimum_established
+                }
+                Some(SearchState::RequestedModels) | None => false,
+            }
     }
 
     /// Complete search found no stable model, independently of output delivery.

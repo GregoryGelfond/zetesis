@@ -230,6 +230,7 @@ impl<'a> ClosureSession<'a> {
                 self.pending_stop
                     .map(|stop| SearchState::PendingInterruption(Interruption::Oracle(stop)))
             }),
+            optimum_established: false,
             optimization: None,
             objective_work: 0,
             checked: self.checked,

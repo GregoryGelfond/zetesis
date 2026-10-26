@@ -156,6 +156,10 @@ pub(crate) fn finish(
         }
         SearchState::Interrupted(reason) => {
             verdict(output, color, format_args!("INCOMPLETE: {reason}"))?;
+            // A tie pass stopped after its strict search proved the optimum.
+            if semantic.optimum_proved() {
+                color.status(output, "Optimum proved; optimal family incomplete")?;
+            }
         }
         SearchState::PendingInterruption(_) => return Err(RunError::CompletionUnavailable),
     }

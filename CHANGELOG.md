@@ -258,8 +258,10 @@ Notable changes by release. Versions follow Semantic Versioning.
   measurement, as `OptimumSearch::Inclusive` keeps the earlier schedule: for all
   eight optimal answers of Family Crossing it walks 2,946,650 candidate regions,
   2,831,261 of them in the second pass, where the inclusive schedule walks
-  661,303. `SolveConfig::optimum_search` selects the schedule; no command-line
-  option does.
+  661,303. A stop in the second pass keeps the optimum the first proved
+  (`SemanticOutcome::optimum_proved`) and reports the family incomplete.
+  `SolveConfig::optimum_search` selects the schedule; no command-line option
+  does.
 
 ### Fixed
 

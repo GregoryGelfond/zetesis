@@ -117,8 +117,11 @@ For `Session::new` with an objective, the search phase ends before retained incu
 Exhausted search establishes optimum ties; an interrupted phase may yield
 unproved incumbents. A score alone is not an optimum certificate. Use the
 outcome's `optimum_proved()` and interruption information to distinguish proved
-ties from an interrupted incumbent. Yielded tie limits also affect how much of
-the selected family a consumer receives.
+ties from an interrupted incumbent. Under `OptimumSearch::StrictWithTiePass`, a
+stop of the tie pass, after the strict search exhausted, keeps the optimum
+proved: `optimum_proved()` holds while the interrupted family is incomplete.
+Yielded tie limits also affect how much of the selected family a consumer
+receives.
 
 ## Prepared independent CPU execution
 

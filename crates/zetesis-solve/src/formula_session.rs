@@ -47,6 +47,10 @@ pub(crate) struct FormulaSession<'a, E> {
     // While a tie pass runs: how many of the retained optima the strict
     // search found, which the pass meets again and must not retain twice.
     tie_pass: Option<usize>,
+    // The strict search exhausted at the optimum before its tie pass: a stop
+    // of that pass leaves the optimal family incomplete, not the optimum
+    // unproved.
+    optimum_established: bool,
 }
 
 /// What one pull returns: the next answer with its score, a fault, or the end
@@ -158,6 +162,7 @@ impl<'a, E: MembershipExecution> FormulaSession<'a, E> {
             imported_timings: Cell::new(zetesis_stable::SearchPhaseTimings::default()),
             region_filter: None,
             tie_pass: None,
+            optimum_established: false,
         }
     }
 
@@ -638,9 +643,10 @@ impl<'a, E: MembershipExecution> FormulaSession<'a, E> {
     /// fresh stream over the same theory, with the same certificate and region
     /// filter and bounded to cost at most the optimum, then enumerates every
     /// optimal model, each once. It reports its receipts after the exhausted
-    /// stream's, and only its exhaustion completes the optimal family. Its one
-    /// bound never tightens, so the fresh stream declares no candidate bounds:
-    /// its producers walk apart, as an enumeration's do.
+    /// stream's, and only its exhaustion completes the optimal family; a stop
+    /// from here on leaves that family incomplete and the optimum proved. Its
+    /// one bound never tightens, so the fresh stream declares no candidate
+    /// bounds: its producers walk apart, as an enumeration's do.
     fn begin_tie_pass(
         &mut self,
         config: &SolveConfig,
@@ -672,6 +678,9 @@ impl<'a, E: MembershipExecution> FormulaSession<'a, E> {
             // Finishing the stream reports that it did not exhaust.
             return TiePass::Skipped;
         }
+        // The exhausted strict search proved that no model is cheaper than
+        // the optimum; whatever stops the tie pass, that proof stands.
+        self.optimum_established = true;
         if let Err(error) = earlier.stop() {
             return TiePass::Stopped(error);
         }
@@ -816,6 +825,7 @@ impl<'a, E: MembershipExecution> FormulaSession<'a, E> {
             scored: self.incumbents.scored(),
             retained: self.incumbents.retained(),
             search_state: None,
+            optimum_established: self.optimum_established,
             optimization: self.incumbents.metadata().map(|best| Optimization {
                 // A strict bound at the optimum pruned its ties, and no tie
                 // pass began to count them again.

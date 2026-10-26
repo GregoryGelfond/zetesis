@@ -102,6 +102,7 @@ impl<'a> SourceSession<'a> {
             scored: 0,
             retained: 0,
             search_state: self.state,
+            optimum_established: false,
             optimization: None,
             objective_work: 0,
             checked: self.checked,
