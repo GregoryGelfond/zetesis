@@ -890,7 +890,52 @@ fn refused_checks_publish_before_returning() {
     assert_eq!(checker.statistics(), failure.statistics);
 }
 
+/// The original family of a hybrid owner: every subset of its atoms that is
+/// a stable model of its core theory and satisfies its streamed constraints.
+fn full_family(
+    owner: &HybridFormula,
+) -> std::collections::BTreeSet<std::collections::BTreeSet<String>> {
+    let count = owner.atom_catalog().atoms().len();
+    assert!(count <= 8, "bounded independent complete enumeration");
+    let mut checker = owner.checker(ConstraintCheckLimits::default()).unwrap();
+    let cancellation = Cancellation::default();
+    let mut answers = std::collections::BTreeSet::new();
+    for mask in 0..1_usize << count {
+        let candidate = zetesis_ferraris::Interpretation::new(
+            owner.core_theory(),
+            (0..count).filter(|atom| mask & (1 << atom) != 0),
+        )
+        .unwrap();
+        if !zetesis_ferraris::check(
+            owner.core_theory(),
+            &candidate,
+            zetesis_ferraris::Limits::default(),
+            &cancellation,
+        )
+        .unwrap()
+        .accepted()
+        {
+            continue;
+        }
+        let model = Model::from_positions(owner.atom_catalog(), candidate.atoms()).unwrap();
+        if checker.check(&model, &cancellation).unwrap() == ConstraintVerdict::Satisfied {
+            answers.insert(
+                candidate
+                    .atoms()
+                    .map(|atom| {
+                        zetesis_reference_support::canonical(
+                            owner.atom_catalog().atoms().at(atom).unwrap(),
+                        )
+                    })
+                    .collect(),
+            );
+        }
+    }
+    answers
+}
+
 mod numeric_totality;
+mod retention;
 
 #[test]
 fn late_fact_substitution_preserves_eager_and_streamed_families() {

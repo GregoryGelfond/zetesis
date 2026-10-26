@@ -229,6 +229,8 @@ pub struct GroundingWork {
     pub numeric_index_builds: Option<u64>,
     /// Expression-index attempts cached as unavailable after a nonnumeric input or checked scalar failure; interrupted attempts are not declines.
     pub numeric_index_declines: Option<u64>,
+    /// Kept expression indexes extended with the rows a later support round appended, instead of rebuilt over its snapshot.
+    pub numeric_index_extensions: Option<u64>,
     /// Completed integer-column ordering probes, including empty unions, in
     /// eager emission or possible-head production. Family evidence is excluded.
     pub range_probes: Option<u64>,
@@ -303,6 +305,7 @@ impl Default for GroundingWork {
             integer_comparison_declines: Some(0),
             numeric_index_builds: Some(0),
             numeric_index_declines: Some(0),
+            numeric_index_extensions: Some(0),
             range_probes: Some(0),
             range_probe_rows: Some(0),
             expression_key_probes: Some(0),
@@ -362,6 +365,7 @@ pub(crate) enum Event {
     IntegerComparisonDeclined,
     NumericIndexBuild,
     NumericIndexDeclined,
+    NumericIndexExtension,
     RangeProbe,
     RangeProbeRow,
     ExpressionKeyProbe,
@@ -463,6 +467,10 @@ impl GroundingWork {
             ),
             numeric_index_builds: sum(self.numeric_index_builds, other.numeric_index_builds),
             numeric_index_declines: sum(self.numeric_index_declines, other.numeric_index_declines),
+            numeric_index_extensions: sum(
+                self.numeric_index_extensions,
+                other.numeric_index_extensions,
+            ),
             range_probes: sum(self.range_probes, other.range_probes),
             range_probe_rows: sum(self.range_probe_rows, other.range_probe_rows),
             expression_key_probes: sum(self.expression_key_probes, other.expression_key_probes),
@@ -540,6 +548,7 @@ impl GroundingWork {
             Event::IntegerComparisonDeclined => &mut self.integer_comparison_declines,
             Event::NumericIndexBuild => &mut self.numeric_index_builds,
             Event::NumericIndexDeclined => &mut self.numeric_index_declines,
+            Event::NumericIndexExtension => &mut self.numeric_index_extensions,
             Event::RangeProbe => &mut self.range_probes,
             Event::RangeProbeRow => &mut self.range_probe_rows,
             Event::ExpressionKeyProbe => &mut self.expression_key_probes,

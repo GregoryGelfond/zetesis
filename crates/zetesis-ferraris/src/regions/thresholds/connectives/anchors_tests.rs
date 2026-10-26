@@ -250,13 +250,13 @@ fn sparse_lookup_charges_every_attempted_comparison() {
             };
             let mut full = Work::new(u64::MAX);
             query(&mut full).unwrap();
-            assert!(full.spent > 0);
-            for limit in 0..full.spent {
+            assert!(full.spent() > 0);
+            for limit in 0..full.spent() {
                 let mut limited = Work::new(limit);
                 assert_eq!(query(&mut limited), Err(Stop::WorkLimit));
-                assert_eq!(limited.spent, limit);
+                assert_eq!(limited.spent(), limit);
             }
-            let mut exact = Work::new(full.spent);
+            let mut exact = Work::new(full.spent());
             assert_eq!(query(&mut exact).unwrap(), query(&mut full).unwrap());
         }
     }
@@ -423,7 +423,7 @@ fn an_unanchored_chain_skips_connective_discovery() {
         }
         .threshold_connective(&index, chain, true, &mut work)
         .unwrap();
-        (step, work.spent)
+        (step, work.spent())
     };
     // The contrast: an anchored chain's discovery walks its cone and probes
     // anchors, charging work, though it finds nothing to transport here.

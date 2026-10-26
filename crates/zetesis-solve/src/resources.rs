@@ -178,6 +178,10 @@ impl Resources {
             max_origin_locations: self.cells(16, 32),
             max_warnings: self.cells(16, 32),
             theory,
+            // Lazy grounding keeps a constraint in the formula whenever the
+            // formula's own node share still holds it, so it streams only what
+            // eager grounding could not hold either.
+            max_retained_constraint_nodes: theory.max_nodes,
             aggregate: zetesis_ferraris::AggregateLimits {
                 max_elements: self.cells(16, 32),
                 max_nodes: theory.max_nodes,

@@ -931,6 +931,12 @@ fn hybrid_statistics(
     out.text(&statistics.constraints.work.to_string())?;
     out.number_field("substitutions", statistics.constraints.substitutions)?;
     out.number_field("scalar_bytes", statistics.constraints.scalar_bytes)?;
+    let streamed = statistics.streamed;
+    out.text("},\"streamed\":{\"templates\":")?;
+    out.text(&streamed.templates.to_string())?;
+    out.number_field("instances", streamed.instances)?;
+    out.number_field("retained_templates", streamed.retained_templates)?;
+    out.number_field("retained_instances", streamed.retained_instances)?;
     out.text("}}")
 }
 

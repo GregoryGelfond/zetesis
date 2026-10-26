@@ -187,14 +187,8 @@ impl Region {
     /// preferred.
     #[must_use]
     pub fn highest_open(&self) -> Option<usize> {
-        for word in (0..self.held.len()).rev() {
-            let mut open = !(self.held[word] | self.cut[word]);
-            // Ignore the unused high bits of the top partial word: they are not
-            // atoms and would otherwise read as open.
-            let valid = self.atoms - word * 64;
-            if valid < 64 {
-                open &= (1u64 << valid) - 1;
-            }
+        for word in (0..self.mask_words()).rev() {
+            let open = self.open_word(word, u64::MAX);
             if open != 0 {
                 return Some(word * 64 + (63 - open.leading_zeros() as usize));
             }
@@ -222,6 +216,30 @@ impl Region {
     pub fn open(&self) -> impl Iterator<Item = usize> + '_ {
         self.open_words(std::iter::repeat(u64::MAX))
     }
+    /// The number of 64-bit words in each of the region's atom masks:
+    /// `self.len().div_ceil(64)`.
+    #[must_use]
+    pub fn mask_words(&self) -> usize {
+        self.held.len()
+    }
+    /// The open atoms of mask word `word` that `selected` selects, as bit
+    /// `atom % 64` for atom `atom` of that word; the bits past the last atom
+    /// are clear. Constant time, for scans that read a word at a time.
+    ///
+    /// # Panics
+    /// Panics if `word` is not below [`Self::mask_words`].
+    #[must_use]
+    pub fn open_word(&self, word: usize, selected: u64) -> u64 {
+        let open = !(self.held[word] | self.cut[word]) & selected;
+        // The unused high bits of the top partial word are not atoms, and
+        // would otherwise read as open.
+        let valid = self.atoms - word * 64;
+        if valid < 64 {
+            open & ((1u64 << valid) - 1)
+        } else {
+            open
+        }
+    }
     /// Open atoms selected by a borrowed bitmask, ascending. Missing words
     /// select nothing; excess words and unused tail bits are ignored. Bit
     /// `atom % 64` in word `atom / 64` selects that atom.
@@ -235,19 +253,14 @@ impl Region {
         &'a self,
         selected: impl Iterator<Item = u64> + 'a,
     ) -> impl Iterator<Item = usize> + 'a {
-        self.held
-            .iter()
-            .zip(self.cut.iter())
+        (0..self.mask_words())
             .zip(selected)
-            .enumerate()
-            .flat_map(move |(word, ((&held, &cut), selected))| {
+            .flat_map(move |(word, selected)| {
                 let base = word * 64;
-                let mut bits = !(held | cut) & selected;
-                let valid = self.atoms - base;
-                if valid < 64 {
-                    bits &= (1u64 << valid) - 1;
+                SetBits {
+                    bits: self.open_word(word, selected),
                 }
-                SetBits { bits }.map(move |bit| base + bit)
+                .map(move |bit| base + bit)
             })
     }
     /// The atoms this region decides that are not set in `seen`, each paired

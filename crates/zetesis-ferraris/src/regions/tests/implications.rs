@@ -125,7 +125,7 @@ fn compare_transition(
         let result = closure
             .teach_operands(subject, index, 2, &mut work)
             .unwrap();
-        assert_eq!(work.spent, 0);
+        assert_eq!(work.spent(), 0);
         result
     };
     assert!(
@@ -203,7 +203,7 @@ fn implication_parent_keeps_two_charged_visits() {
                 lists: &mut lists,
             }
             .revisit(subject, &index, 0, true, &mut work);
-            assert_eq!(work.spent, limit);
+            assert_eq!(work.spent(), limit);
             work.refund();
             if limit < 2 {
                 assert!(result == Err(failure));
@@ -248,7 +248,7 @@ fn implication_events_preserve_frozen_boundaries() {
             }
             .revisit(subject, &index, 0, false, &mut work)
             .unwrap();
-            assert_eq!(work.spent, 2);
+            assert_eq!(work.spent(), 2);
             if !masked_child {
                 compact_mut(&mut expected).atom_never[0] |= 1;
             }

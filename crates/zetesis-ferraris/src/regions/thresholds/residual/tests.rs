@@ -112,7 +112,7 @@ fn completed_residue_reuses_its_last_interval_check() {
     ));
     let outcome = closure.threshold_residual_check(&index, 0, &mut work);
     assert!(matches!(outcome, Ok(Step::Contradiction)));
-    assert_eq!(work.spent, 10);
+    assert_eq!(work.spent(), 10);
 }
 
 #[test]
@@ -412,7 +412,7 @@ fn closed_refutation_work(theory: &Theory, region: &mut Region) -> u64 {
     .threshold_residual_check(&index, 0, &mut work)
     .unwrap();
     assert!(result == Step::Unchanged);
-    work.spent
+    work.spent()
 }
 
 #[test]
@@ -449,11 +449,11 @@ fn euclidean_steps_preserve_work_refusal() {
     for maximum in 0..3 {
         let mut work = Work::new(maximum);
         assert_eq!(gcd(8, 5, &mut work), Err(Stop::WorkLimit));
-        assert_eq!(work.spent, maximum);
+        assert_eq!(work.spent(), maximum);
     }
     let mut work = Work::new(4);
     assert_eq!(gcd(8, 5, &mut work), Ok(1));
-    assert_eq!(work.spent, 4);
+    assert_eq!(work.spent(), 4);
 }
 
 #[test]

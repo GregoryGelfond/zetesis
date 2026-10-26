@@ -36,8 +36,11 @@ fn formula_configuration_preserves_composite_grounding() {
         (
             Some(ExecutionObservation::HybridGrounding {
                 requested: Grounder::Auto,
-                streamed_templates: 2,
-                streamed_instances: 8,
+                streamed: zetesis_solve::StreamedConstraints {
+                    templates: 2,
+                    instances: 8,
+                    ..Default::default()
+                },
             }),
             GroundingDisplay::Hybrid,
         ),

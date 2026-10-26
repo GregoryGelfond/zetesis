@@ -1,0 +1,28 @@
+{
+  "schema_version": 1,
+  "root": ".",
+  "cases": [
+    {
+      "entry": "parity_chain.lp",
+      "contract": {
+        "satisfiability": "unsat",
+        "family": "all",
+        "model_count": 0,
+        "cost": null,
+        "witnesses": [],
+        "required_symbols": [],
+        "notes": [
+          "Two parity chains over the inputs x(1..5), the second in the order of the permutation (I + 1)^3 + 7 mod 5: 13 atoms and 34 constraints. Both chains compute the exclusive-or of every input, so their results cannot differ.",
+          "The constraints form a linear system over GF(2) that elimination refutes in polynomial time; resolution needs exponentially many steps as p grows."
+        ]
+      },
+      "files": [
+        {
+          "path": "parity_chain.lp",
+          "sha256": "3be3da465bf6270d2d01dd87b1bdb2b6c3196024daee692152cefbda54ffbfda",
+          "includes": []
+        }
+      ]
+    }
+  ]
+}

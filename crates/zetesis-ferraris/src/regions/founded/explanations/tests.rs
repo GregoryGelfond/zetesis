@@ -427,16 +427,16 @@ fn every_interrupted_explanation_prefix_returns_no_certificate() {
     let expected = explain(&program, &completed, 0, limits(), &mut measured)
         .unwrap()
         .unwrap();
-    assert!(measured.spent > 0);
+    assert!(measured.spent() > 0);
     for failure in [Stop::WorkLimit, Stop::Cancelled, Stop::Deadline] {
-        for prefix in 0..measured.spent {
+        for prefix in 0..measured.spent() {
             let mut quota = SinglePermits::new(prefix, failure);
             let mut work = Work::reserved(&mut quota);
             assert!(
                 matches!(explain(&program, &completed, 0, limits(), &mut work),
                 Err(actual) if actual == failure)
             );
-            assert_eq!(work.spent, prefix);
+            assert_eq!(work.spent(), prefix);
             let retry = explain(&program, &completed, 0, limits(), &mut Work::new(u64::MAX))
                 .unwrap()
                 .unwrap();

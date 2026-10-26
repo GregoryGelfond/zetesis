@@ -273,7 +273,7 @@ fn stopped_component_prefixes_publish_no_authority() {
         .unwrap();
     let mut interrupted_visits = false;
     for failure in [Stop::WorkLimit, Stop::Cancelled, Stop::Deadline] {
-        for ceiling in 0..complete.spent {
+        for ceiling in 0..complete.spent() {
             let mut scratch = Scratch::default();
             let mut quota = RefuseAfter {
                 remaining: ceiling,
@@ -289,7 +289,7 @@ fn stopped_component_prefixes_publish_no_authority() {
                 ),
                 Err(failure)
             );
-            assert_eq!(work.spent, ceiling);
+            assert_eq!(work.spent(), ceiling);
             assert!(scratch.owner.is_none());
             assert!(scratch.may_affect_body(0));
             interrupted_visits |= scratch
@@ -349,7 +349,7 @@ fn boundary_seeds_skip_unrelated_atom_occurrences() {
         assert_eq!(scratch.cyclic_atoms, [0b011]);
         assert_eq!(scratch.atoms, [0b011]);
         assert_eq!(scratch.body_nodes.len(), 3);
-        work.spent
+        work.spent()
     }
     assert_eq!(warm(0), warm(200));
 }

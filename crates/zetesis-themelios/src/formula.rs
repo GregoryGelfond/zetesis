@@ -141,6 +141,18 @@ pub struct FormulaLimits {
     pub max_key_work: u64,
     /// Final dense atom, formula-node, logical operand, and theory-root ceilings.
     pub theory: zetesis_ferraris::AdmissionLimits,
+    /// Formula nodes the hybrid schedule may give its eligible integrity
+    /// constraints instead of streaming them. Once the producer core and its
+    /// completion are built, each eligible template in program order is
+    /// instantiated in the formula when a checked upper bound on its instances
+    /// fits both what remains of this share and what remains of the `theory`
+    /// ceilings; a template that does not fit is streamed. Retention therefore
+    /// never takes room the rest of the program needed, and never fails.
+    /// The ordinary resource policy grants the theory's whole node share, so
+    /// lazy grounding streams only constraints that eager grounding could not
+    /// hold either. The default, zero, grants none: every eligible constraint
+    /// is streamed. Eager and automatic grounding never stream and ignore it.
+    pub max_retained_constraint_nodes: usize,
     /// Per-aggregate ceilings, additionally capped by remaining formula work and
     /// the active theory or objective node and operand ceilings.
     pub aggregate: zetesis_ferraris::AggregateLimits,
@@ -182,6 +194,7 @@ impl Default for FormulaLimits {
             max_warnings: 10_000,
             max_key_work: 1_000_000,
             theory: zetesis_ferraris::AdmissionLimits::default(),
+            max_retained_constraint_nodes: 0,
             objective: zetesis_objective::AdmissionLimits::default(),
             observation: crate::observation::AdmissionLimits::default(),
             metadata_storage: crate::MetadataStorageLimits::default(),
@@ -1065,6 +1078,16 @@ pub enum AnalysisBasis {
     DependencyProjection,
 }
 
+/// Eligible integrity constraints the hybrid schedule instantiated in the
+/// formula because their instances fit, instead of streaming them.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub(crate) struct RetainedConstraints {
+    /// Lowered constraint templates, not a count of original declarations.
+    pub templates: usize,
+    /// Their instances, as counted when admission visited them.
+    pub instances: u64,
+}
+
 #[derive(Debug)]
 pub(crate) struct Compiled {
     pub warnings: Vec<crate::FormulaWarning>,
@@ -1084,6 +1107,7 @@ pub(crate) struct Compiled {
     pub key_analysis: crate::KeyAnalysis,
     pub comparison_forms: crate::ComparisonForms,
     pub expansion: crate::ExpansionUsage,
+    pub retained_constraints: RetainedConstraints,
 }
 
 /// Admit the extended scalar profile, finite conditional choices and body

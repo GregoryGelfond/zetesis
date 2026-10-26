@@ -129,7 +129,7 @@ fn all_small_masks_match_the_queued_seed_schedule() {
                     .filter(|&&node| matches!(actual.states[node], State::True))
                     .count();
                 assert_eq!(
-                    reference_work.spent - work.spent,
+                    reference_work.spent() - work.spent(),
                     2 * u64::try_from(active).unwrap()
                 );
                 assert!(
@@ -221,7 +221,7 @@ fn interrupted_seed_replay_rebuilds_every_current_state() {
         .complete(&owner, &index, &producers, &never, &[0], &mut completed)
         .unwrap();
     for failure in [Stop::WorkLimit, Stop::Cancelled, Stop::Deadline] {
-        for ceiling in 0..completed.spent {
+        for ceiling in 0..completed.spent() {
             let mut actual = Scratch::default();
             actual.prepare_projected(&owner, &index, &producers);
             let mut allowance = crate::test_support::Allowance {
@@ -233,14 +233,14 @@ fn interrupted_seed_replay_rebuilds_every_current_state() {
                 actual.complete(&owner, &index, &producers, &never, &[0], &mut work),
                 Err(failure)
             );
-            assert_eq!(work.spent, ceiling);
+            assert_eq!(work.spent(), ceiling);
             work.refund();
             let mut retry = Work::new(u64::MAX);
             actual
                 .complete(&owner, &index, &producers, &never, &[0], &mut retry)
                 .unwrap();
             assert_same_closure(&actual, &expected);
-            assert_eq!(retry.spent, completed.spent);
+            assert_eq!(retry.spent(), completed.spent());
         }
     }
 }
@@ -274,8 +274,8 @@ fn interrupted_partition_has_no_owner_authority() {
     .unwrap();
     let mut partition = Work::new(u64::MAX);
     initialization::partition(&mut before.body_nodes, &mut roles, &mut partition).unwrap();
-    let start = full.spent - partition.spent;
-    for cutoff in start..full.spent {
+    let start = full.spent() - partition.spent();
+    for cutoff in start..full.spent() {
         let mut actual = Scratch::default();
         actual
             .prepare_bodies(&owner, &index, &producers, &mut Work::new(u64::MAX))

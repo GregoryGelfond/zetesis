@@ -10,7 +10,7 @@
 use themelios_program::program::Relation;
 use zetesis_core::{TemplateTerm, ValueNodeRef};
 
-use super::{Buffer, Computation, Context, PatternOccurrence, Support, comparison, projections};
+use super::{Buffer, Computation, Context, PatternOccurrence, Support, comparison};
 use crate::FormulaFailure;
 use crate::formula_binding::Binding;
 use crate::formula_binding_plan::expanded::View;
@@ -107,7 +107,7 @@ impl Domains {
                     continue;
                 };
                 if bound.is_none() {
-                    *bound = projections::column_bounds(rows, column, &mut context)?;
+                    *bound = support.column_hull(rows, column, &mut context)?;
                 }
             }
         }

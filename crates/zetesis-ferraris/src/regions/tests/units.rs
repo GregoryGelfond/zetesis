@@ -201,7 +201,7 @@ fn attempt(
     };
     Attempt {
         result,
-        work: work.spent,
+        work: work.spent(),
         knowledge,
         scratch,
     }
@@ -368,12 +368,12 @@ fn the_last_opposite_event_still_refutes_the_chain() {
             closure.unit(&index, 0, &mut work),
             Ok(Step::Unchanged)
         ));
-        assert_eq!(work.spent, 4);
+        assert_eq!(work.spent(), 4);
         assert!(matches!(
             closure.operand_changed(&index, 0, !disjunction, &mut work),
             Ok(Step::Contradiction)
         ));
-        assert_eq!(work.spent, 4);
+        assert_eq!(work.spent(), 4);
         assert!(bit(
             if disjunction {
                 closure.known.sure
@@ -410,7 +410,7 @@ fn an_absorbing_operand_still_refutes_an_opposite_root() {
         }
         .operand_changed(&index, 0, disjunction, &mut work);
         assert!(matches!(result, Ok(Step::Contradiction)));
-        assert_eq!(work.spent, 0);
+        assert_eq!(work.spent(), 0);
     }
 }
 /// h <- a and b, or h <- a or b; the body is a live chain with a parent.
@@ -486,7 +486,7 @@ fn processed_roots_keep_the_node_and_parent_permits() {
                     lists: &mut scratch,
                 }
                 .revisit(subject, &index, 2, !disjunction, &mut work);
-                assert_eq!(work.spent, limit);
+                assert_eq!(work.spent(), limit);
                 work.refund();
                 let known = compact_mut(&mut expected);
                 if limit > 0 {
@@ -540,13 +540,13 @@ fn a_processed_false_body_still_removes_support() {
         closure.revisit(subject, &index, 2, false, &mut work),
         Ok(Step::Unchanged)
     ));
-    assert_eq!(work.spent, 2);
+    assert_eq!(work.spent(), 2);
     assert_eq!(closure.lists.next_recheck(), Some(2));
     assert!(matches!(
         closure.recheck(&index, &producers, 2, &mut work),
         Ok(Step::Changed)
     ));
-    assert_eq!(work.spent, 3);
+    assert_eq!(work.spent(), 3);
     assert!(bit(closure.known.atom_never, 2));
     assert_eq!(closure.lists.nodes, [(3, false)]);
     assert_eq!(closure.lists.learned, [2]);
@@ -583,7 +583,7 @@ fn a_frozen_false_root_remains_a_constant() {
     }
     .revisit(subject, &index, 2, false, &mut work);
     assert!(matches!(result, Ok(Step::Unchanged)));
-    assert_eq!(work.spent, 2);
+    assert_eq!(work.spent(), 2);
     same_knowledge(&knowledge, &expected);
     // The falsum event still updates ranking and its unmasked parent. It
     // neither teaches operands nor applies original-theory support pruning.
@@ -612,7 +612,7 @@ fn witnessed_units_keep_the_node_and_parent_permits() {
                     lists: &mut scratch,
                 }
                 .revisit(subject, &index, 2, !disjunction, &mut work);
-                assert_eq!(work.spent, limit);
+                assert_eq!(work.spent(), limit);
                 work.refund();
                 let expected_known = compact_mut(&mut expected);
                 if limit > 0 {

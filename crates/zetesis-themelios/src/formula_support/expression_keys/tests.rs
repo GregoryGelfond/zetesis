@@ -205,6 +205,19 @@ fn expression_postings_preserve_repeated_column_matching() {
 }
 
 #[test]
+fn unordered_appended_keys_merge_into_the_kept_index() {
+    // r's second column cycles through ten values, so most rounds append a key
+    // below the kept maximum and the merge moves kept entries.
+    let source = "r(0,3). r(I+1,(V*7)\\11) :- r(I,V), I<40. s(I) :- r(I,V), V<5.";
+    let reference = controlled(true, || ground(testing::prepare(source), None, None)).unwrap();
+    let receipts = Receipts::default();
+    let selected = ground(testing::prepare(source), Some(&receipts), None).unwrap();
+    assert_same_program(&reference, &selected);
+    assert_eq!(receipts.other.get().numeric_index_builds, Some(1));
+    assert_eq!(receipts.other.get().numeric_index_extensions, Some(40));
+}
+
+#[test]
 fn false_equalities_preserve_independent_fatal_exclusion() {
     for source in [
         include_str!("../../../tests/fixtures/expression-keys/excluded-fatal.lp"),

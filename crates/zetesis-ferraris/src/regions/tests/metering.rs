@@ -1,9 +1,11 @@
 //! Batched work reservation stops a narrowing at the read per-read charging
-//! stops it at, records the same work, and returns every unspent permit.
+//! stops it at, records the same work, and returns every unspent permit; a
+//! fixed ceiling stops it at the same read.
 
 use zetesis_cpu::{Cancellation, Stop};
 
-use crate::{Narrower, NarrowingQuota, Region, Theory};
+use crate::regions::{NARROWING_BATCH, Work};
+use crate::{Narrower, NarrowingQuota, Region, RegionLimits, Theory};
 
 use super::implication_chain;
 
@@ -91,5 +93,116 @@ fn unspent_permits_are_refunded() {
                 "limit {limit}, batch {batch}"
             );
         }
+    }
+}
+
+/// A quota granting a fixed sequence of batches, then refusing, which
+/// records every request and every refund.
+struct Grants {
+    batches: Vec<u64>,
+    requests: Vec<u64>,
+    refunded: u64,
+}
+
+impl Grants {
+    fn new(grants: &[u64]) -> Self {
+        Self {
+            batches: grants.to_vec(),
+            requests: Vec::new(),
+            refunded: 0,
+        }
+    }
+}
+
+impl NarrowingQuota for Grants {
+    fn reserve(&mut self, wanted: u64) -> Result<u64, Stop> {
+        self.requests.push(wanted);
+        if self.batches.is_empty() {
+            return Err(Stop::WorkLimit);
+        }
+        Ok(self.batches.remove(0))
+    }
+    fn refund(&mut self, unspent: u64) {
+        self.refunded += unspent;
+    }
+}
+
+#[test]
+fn work_spends_each_grant_before_reserving_again() {
+    let mut quota = Grants::new(&[3, 2]);
+    let mut work = Work::reserved(&mut quota);
+    for _ in 0..5 {
+        work.tick().unwrap();
+    }
+    assert_eq!(work.tick(), Err(Stop::WorkLimit));
+    assert_eq!(work.spent(), 5);
+    assert_eq!(quota.requests, [NARROWING_BATCH; 3]);
+}
+
+#[test]
+fn refund_returns_exactly_the_unspent_permits() {
+    let mut quota = Grants::new(&[10, 4]);
+    let mut work = Work::reserved(&mut quota);
+    for _ in 0..3 {
+        work.tick().unwrap();
+    }
+    work.refund();
+    work.tick().unwrap();
+    work.refund();
+    assert_eq!(quota.refunded, 7 + 3);
+}
+
+#[test]
+fn refund_keeps_the_charged_reads() {
+    let mut quota = Grants::new(&[10, 4]);
+    let mut work = Work::reserved(&mut quota);
+    for _ in 0..3 {
+        work.tick().unwrap();
+    }
+    work.refund();
+    assert_eq!(work.spent(), 3);
+    work.tick().unwrap();
+    work.refund();
+    assert_eq!(work.spent(), 4);
+}
+
+#[test]
+fn a_fixed_ceiling_admits_exactly_its_reads() {
+    for ceiling in [0, 1, 5] {
+        let mut work = Work::new(ceiling);
+        for _ in 0..ceiling {
+            work.tick().unwrap();
+        }
+        assert_eq!(work.tick(), Err(Stop::WorkLimit), "ceiling {ceiling}");
+        assert_eq!(work.spent(), ceiling, "ceiling {ceiling}");
+    }
+}
+
+#[test]
+fn a_fixed_ceiling_stops_at_the_per_read_point() {
+    let theory = implication_chain(40);
+    let needed = per_read(&theory, u64::MAX).1;
+    for limit in [0, 1, 2, needed / 3, needed - 1, needed, needed + 7] {
+        let (outcome, work, region) = per_read(&theory, limit);
+        let narrower = Narrower::new(&theory);
+        let mut knowledge = narrower.knowledge();
+        let mut ceiling_region = Region::all_open(theory.atom_count());
+        let ceiling = narrower.narrow_known(
+            crate::OriginalSubject::new(&theory, None),
+            &mut ceiling_region,
+            &mut knowledge,
+            &mut crate::NarrowingScratch::default(),
+            RegionLimits { max_work: limit },
+            &Cancellation::default(),
+        );
+        let ceiling_outcome = ceiling
+            .as_ref()
+            .map(|(narrowing, _)| matches!(narrowing, crate::Narrowing::Refuted))
+            .map_err(|stop| *stop);
+        assert_eq!(ceiling_outcome, outcome, "limit {limit}");
+        if let Ok((_, statistics)) = &ceiling {
+            assert_eq!(statistics.work, work, "limit {limit}");
+        }
+        assert_eq!(ceiling_region, region, "limit {limit}");
     }
 }

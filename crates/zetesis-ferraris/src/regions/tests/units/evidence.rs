@@ -240,12 +240,12 @@ fn processed_events_preserve_two_count_transitions() {
                         );
                         counts.agrees(&actual, disjunction);
                         same_effects(
-                            (&actual, &actual_scratch, actual_result, actual_work.spent),
+                            (&actual, &actual_scratch, actual_result, actual_work.spent()),
                             (
                                 &expected,
                                 &expected_scratch,
                                 expected_result,
-                                expected_work.spent,
+                                expected_work.spent(),
                             ),
                         );
                     }
@@ -282,12 +282,12 @@ fn downward_teaching_preserves_two_count_transitions() {
                     );
                     counts.agrees(&actual, disjunction);
                     same_effects(
-                        (&actual, &actual_scratch, actual_result, actual_work.spent),
+                        (&actual, &actual_scratch, actual_result, actual_work.spent()),
                         (
                             &expected,
                             &expected_scratch,
                             expected_result,
-                            expected_work.spent,
+                            expected_work.spent(),
                         ),
                     );
                 }

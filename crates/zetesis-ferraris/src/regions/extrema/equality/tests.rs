@@ -114,7 +114,7 @@ fn repeated_class(atoms: usize) -> Theory {
 fn preparation_work(index: &Narrower) -> u64 {
     let mut work = Work::new(u64::MAX);
     EqualWitnesses::prepare_with_work(index, &mut work).unwrap();
-    work.spent
+    work.spent()
 }
 
 #[test]
@@ -155,14 +155,14 @@ fn authentication_refuses_every_incomplete_work_prefix() {
             EqualWitnesses::prepare_with_work(&index, &mut work),
             Err(Stop::WorkLimit)
         ));
-        assert_eq!(work.spent, budget);
+        assert_eq!(work.spent(), budget);
     }
     let mut work = Work::new(receipt);
     let actual = EqualWitnesses::prepare_with_work(&index, &mut work).unwrap();
     assert_eq!(actual.members, expected.members);
     assert_eq!(actual.classes, expected.classes);
     assert_eq!(actual.by_chain, expected.by_chain);
-    assert_eq!(work.spent, receipt);
+    assert_eq!(work.spent(), receipt);
 }
 
 #[test]

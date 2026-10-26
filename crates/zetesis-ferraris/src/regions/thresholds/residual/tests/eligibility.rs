@@ -177,7 +177,7 @@ fn a_stopped_width_witness_preserves_closed_state_and_can_retry() {
             closure.threshold_residual_check(&index, 0, &mut work),
             Err(Stop::WorkLimit),
         ));
-        assert_eq!(work.spent, cutoff);
+        assert_eq!(work.spent(), cutoff);
         assert_eq!(closure.known.thresholds[0], state);
         assert_eq!(&*closure.known.sure, masks.0.as_slice());
         assert_eq!(&*closure.known.never, masks.1.as_slice());
@@ -187,5 +187,5 @@ fn a_stopped_width_witness_preserves_closed_state_and_can_retry() {
         closure.threshold_residual_check(&index, 0, &mut work),
         Ok(Step::Unchanged),
     ));
-    assert_eq!(work.spent, 2);
+    assert_eq!(work.spent(), 2);
 }

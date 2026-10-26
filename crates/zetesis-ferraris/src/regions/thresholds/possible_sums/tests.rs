@@ -210,7 +210,7 @@ fn a_witness_stops_inside_the_current_shift() {
     ));
     // Allocate, clear three words and seed; then three coefficients and three
     // source words. The 64+65 witness precedes the lower source word for +65.
-    assert_eq!(work.spent, 11);
+    assert_eq!(work.spent(), 11);
     assert!(bit(&words, 129));
     assert!(
         !bit(&words, 128),
@@ -272,7 +272,7 @@ fn optional_refusal_before_a_witness_remains_incomplete() {
             ),
             Err(Failure::Declined)
         ));
-        assert_eq!(work.spent, u64::try_from(limit).unwrap());
+        assert_eq!(work.spent(), u64::try_from(limit).unwrap());
         assert!(matches!(
             attempt(
                 &data,
@@ -313,7 +313,7 @@ fn global_refusal_before_a_witness_keeps_its_kind() {
                 ),
                 Err(Failure::Stopped(actual)) if actual == failure
             ));
-            assert_eq!(work.spent, limit);
+            assert_eq!(work.spent(), limit);
             assert!(matches!(
                 attempt(
                     &data,
@@ -351,8 +351,8 @@ fn optional_declines_do_not_become_refutations() {
         ),
         Ok(Step::Contradiction)
     ));
-    assert!(complete_work.spent <= plan.visits as u64);
-    for limit in 0..complete_work.spent {
+    assert!(complete_work.spent() <= plan.visits as u64);
+    for limit in 0..complete_work.spent() {
         let mut work = Work::new(u64::MAX);
         let mut words = Vec::new();
         assert!(matches!(
@@ -369,7 +369,7 @@ fn optional_declines_do_not_become_refutations() {
             ),
             Err(Failure::Declined)
         ));
-        assert_eq!(work.spent, limit);
+        assert_eq!(work.spent(), limit);
         assert!(matches!(
             attempt(
                 &data,
@@ -405,7 +405,7 @@ fn global_refusals_keep_their_kind_and_retry_from_zero() {
     )
     .unwrap();
     for failure in [Stop::WorkLimit, Stop::Cancelled, Stop::Deadline] {
-        for limit in 0..complete_work.spent {
+        for limit in 0..complete_work.spent() {
             let mut quota = SinglePermits::new(limit, failure);
             let mut work = Work::reserved(&mut quota);
             let mut words = Vec::new();
@@ -423,7 +423,7 @@ fn global_refusals_keep_their_kind_and_retry_from_zero() {
                 ),
                 Err(Failure::Stopped(actual)) if actual == failure
             ));
-            assert_eq!(work.spent, limit);
+            assert_eq!(work.spent(), limit);
             assert!(matches!(
                 attempt(
                     &data,
@@ -475,7 +475,7 @@ fn representation_ineligibility_has_no_work_or_storage() {
         .threshold_possible_sums(&index, 0, &mut work),
         Ok(Step::Unchanged)
     ));
-    assert_eq!(work.spent, 0);
+    assert_eq!(work.spent(), 0);
     assert_eq!(scratch.possible_sums.capacity(), 0);
 }
 

@@ -275,7 +275,7 @@ fn interrupted_union_preserves_both_inputs() {
         );
         assert!(peak > proposed.retained_bytes());
         for failure in [Stop::WorkLimit, Stop::Cancelled, Stop::Deadline] {
-            for prefix in 0..measured.spent {
+            for prefix in 0..measured.spent() {
                 let mut other = copy(&proposed);
                 let mut permits = SinglePermits::new(prefix, failure);
                 let mut work = Work::reserved(&mut permits);
@@ -284,7 +284,7 @@ fn interrupted_union_preserves_both_inputs() {
                     row.union_outputs(&mut other, 64, &mut remaining, &mut work, &mut 0),
                     Err(failure)
                 );
-                assert_eq!(work.spent, prefix);
+                assert_eq!(work.spent(), prefix);
                 assert_eq!(other, proposed);
                 assert_eq!(row.retained_bytes(), bytes);
                 assert_eq!(row.outputs().collect::<Vec<_>>(), source.outputs);
@@ -292,7 +292,7 @@ fn interrupted_union_preserves_both_inputs() {
                 assert_eq!(other, complete);
             }
         }
-        for prefix in 0..measured.spent {
+        for prefix in 0..measured.spent() {
             let mut other = copy(&proposed);
             let mut remaining = prefix;
             let mut work = Work::new(u64::MAX);
@@ -300,7 +300,7 @@ fn interrupted_union_preserves_both_inputs() {
                 row.union_outputs(&mut other, 64, &mut remaining, &mut work, &mut 0),
                 Ok(None)
             );
-            assert_eq!(work.spent, prefix);
+            assert_eq!(work.spent(), prefix);
             assert_eq!(other, proposed);
             assert_eq!(row.retained_bytes(), bytes);
         }
@@ -401,7 +401,7 @@ fn interrupted_reverse_subsumption_retains_the_old_row() {
             Ok(Some(true))
         );
         for failure in [Stop::WorkLimit, Stop::Cancelled, Stop::Deadline] {
-            for prefix in 0..measured.spent {
+            for prefix in 0..measured.spent() {
                 let mut permits = SinglePermits::new(prefix, failure);
                 let mut work = Work::reserved(&mut permits);
                 let mut remaining = u64::MAX;
@@ -409,20 +409,20 @@ fn interrupted_reverse_subsumption_retains_the_old_row() {
                     row.subsumed_by(&proposed, &mut remaining, &mut work),
                     Err(failure)
                 );
-                assert_eq!(work.spent, prefix);
+                assert_eq!(work.spent(), prefix);
                 assert_eq!(row.outputs().collect::<Vec<_>>(), source.outputs);
                 assert_eq!(row.conditions().collect::<Vec<_>>(), source.conditions);
                 assert_eq!(row.retained_bytes(), bytes);
             }
         }
-        for prefix in 0..measured.spent {
+        for prefix in 0..measured.spent() {
             let mut remaining = prefix;
             let mut work = Work::new(u64::MAX);
             assert_eq!(
                 row.subsumed_by(&proposed, &mut remaining, &mut work),
                 Ok(None)
             );
-            assert_eq!(work.spent, prefix);
+            assert_eq!(work.spent(), prefix);
             assert_eq!(row.retained_bytes(), bytes);
         }
     }

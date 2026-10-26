@@ -61,7 +61,7 @@ fn chain_refutation_visits_only_its_prefix() {
                     }
                     .teach_chain(&index, 0, &mut work);
                     work.refund();
-                    assert_eq!(work.spent, limit);
+                    assert_eq!(work.spent(), limit);
                     if limit < needed {
                         assert!(result == Err(failure));
                     } else {
@@ -112,7 +112,7 @@ fn parent_refutation_visits_only_its_prefix() {
             }
             .revisit(subject, &index, 0, true, &mut work);
             work.refund();
-            assert_eq!(work.spent, limit);
+            assert_eq!(work.spent(), limit);
             if limit < 2 {
                 assert!(result == Err(failure));
             } else {
@@ -170,7 +170,7 @@ fn downward_refutation_omits_support_wakeups() {
         &mut work,
     );
     assert!(result == Ok(Step::Contradiction));
-    assert_eq!(work.spent, 2);
+    assert_eq!(work.spent(), 2);
     assert!(scratch.heads.is_empty());
     assert!(scratch.pending.iter().all(|word| *word == 0));
 }

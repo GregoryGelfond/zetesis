@@ -148,9 +148,9 @@ fn every_interrupted_inclusion_prefix_preserves_its_stop() {
         );
         // Four proposed premises and four retained outputs are compared; the
         // extra final premise cannot change inclusion and is not traversed.
-        assert_eq!(complete.spent, 8);
+        assert_eq!(complete.spent(), 8);
         for failure in [Stop::WorkLimit, Stop::Cancelled, Stop::Deadline] {
-            for prefix in 0..complete.spent {
+            for prefix in 0..complete.spent() {
                 let mut permits = SinglePermits::new(prefix, failure);
                 let mut work = Work::reserved(&mut permits);
                 let mut remaining = u64::MAX;
@@ -158,19 +158,19 @@ fn every_interrupted_inclusion_prefix_preserves_its_stop() {
                     row.subsumes(&proposed, &mut remaining, &mut work),
                     Err(failure)
                 );
-                assert_eq!(work.spent, prefix);
+                assert_eq!(work.spent(), prefix);
                 assert_eq!(row.conditions().collect::<Vec<_>>(), retained.conditions);
                 assert_eq!(row.outputs().collect::<Vec<_>>(), retained.outputs);
             }
         }
-        for prefix in 0..complete.spent {
+        for prefix in 0..complete.spent() {
             let mut remaining = prefix;
             let mut work = Work::new(u64::MAX);
             assert_eq!(
                 row.subsumes(&proposed, &mut remaining, &mut work).unwrap(),
                 None
             );
-            assert_eq!(work.spent, prefix);
+            assert_eq!(work.spent(), prefix);
             assert_eq!(remaining, 0);
             assert!(verdict(&row, &proposed));
         }

@@ -257,7 +257,7 @@ fn interrupted_selection_retries_without_partial_ids() {
     };
     let mut complete = Work::new(u64::MAX);
     assert!(run(&mut before.clone(), &mut scratch, &mut complete).unwrap() == Step::Unchanged);
-    for remaining in 0..complete.spent {
+    for remaining in 0..complete.spent() {
         for failure in [Stop::WorkLimit, Stop::Cancelled, Stop::Deadline] {
             let mut quota = Allowance { remaining, failure };
             let mut work = Work::reserved(&mut quota);
@@ -265,12 +265,12 @@ fn interrupted_selection_retries_without_partial_ids() {
             assert!(
                 matches!(run(&mut known, &mut scratch, &mut work), Err(stop) if stop == failure)
             );
-            assert_eq!(work.spent, remaining);
+            assert_eq!(work.spent(), remaining);
             work.refund();
             assert_closed(compact(&mut known), compact(&mut before.clone()));
-            let mut retry = Work::new(complete.spent);
+            let mut retry = Work::new(complete.spent());
             assert!(run(&mut known, &mut scratch, &mut retry).unwrap() == Step::Unchanged);
-            assert_eq!(retry.spent, complete.spent);
+            assert_eq!(retry.spent(), complete.spent());
             assert!(scratch.witnesses.candidates().is_empty());
         }
     }

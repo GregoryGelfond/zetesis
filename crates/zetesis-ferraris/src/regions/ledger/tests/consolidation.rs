@@ -138,7 +138,7 @@ fn every_interrupted_replacement_preserves_retained_certificates() {
     );
     assert_eq!(completed.len(), 1);
     for stop in [Stop::WorkLimit, Stop::Cancelled, Stop::Deadline] {
-        for prefix in 0..measured.spent {
+        for prefix in 0..measured.spent() {
             let mut ledger = initial();
             let owner = ledger.owner.clone().unwrap();
             let before = contents(&ledger);
@@ -148,14 +148,14 @@ fn every_interrupted_replacement_preserves_retained_certificates() {
                 ledger.retain_founded(explanation(&[(0, true)], &[4]), &mut work, &mut 0),
                 Err(stop)
             );
-            assert_eq!(work.spent, prefix);
+            assert_eq!(work.spent(), prefix);
             assert_eq!(contents(&ledger), before);
             assert!(ledger.owner.as_ref().unwrap().same_class(&owner.theory));
             retain(&mut ledger, explanation(&[(0, true)], &[4]));
             assert_eq!(contents(&ledger), contents(&completed));
         }
     }
-    for prefix in 0..measured.spent {
+    for prefix in 0..measured.spent() {
         let mut ledger = initial();
         let before = contents(&ledger);
         ledger.remaining = prefix;
@@ -166,7 +166,7 @@ fn every_interrupted_replacement_preserves_retained_certificates() {
                 .unwrap()
         );
         assert_eq!(contents(&ledger), before);
-        assert_eq!(work.spent, prefix);
+        assert_eq!(work.spent(), prefix);
         assert_eq!(ledger.remaining, 0);
     }
 }

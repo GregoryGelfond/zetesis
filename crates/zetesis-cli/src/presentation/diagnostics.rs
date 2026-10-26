@@ -226,13 +226,13 @@ impl<W: Write> crate::ExecutionObserver for Diagnostics<W> {
             }
             Event::TerminalDefinitions { requested, base: zetesis_themelios::BaseKind::Hybrid, deferred_templates, streamed } => {
                 self.core = Some(Core::HybridTerminalDefinitions);
-                let (templates, instances) = streamed.map_or((0, 0), |streamed| (streamed.templates, streamed.instances));
-                self.metadata(Label::Grounding, format_args!("requested={}, effective=hybrid_base_terminal_definitions (hybrid base: eager producer core, streamed constraints: {templates} templates, {instances} admitted instances; {deferred_templates} terminal definitions reconstructed on the host after each base answer is accepted)", requested.label()))
+                let streamed = streamed.unwrap_or_default();
+                self.metadata(Label::Grounding, format_args!("requested={}, effective=hybrid_base_terminal_definitions (hybrid base: eager producer core, {}; {deferred_templates} terminal definitions reconstructed on the host after each base answer is accepted)", requested.label(), StreamedDivision(streamed)))
             }
-            Event::HybridGrounding { requested, streamed_templates, streamed_instances } => {
+            Event::HybridGrounding { requested, streamed } => {
                 self.core = Some(Core::Constraints);
                 self.metadata(Label::Grounding,
-                    format_args!("requested={}, effective=hybrid (eager retained core; streamed constraints: {streamed_templates} templates, {streamed_instances} admitted instances)", requested.label()))
+                    format_args!("requested={}, effective=hybrid (eager retained core; {})", requested.label(), StreamedDivision(streamed)))
             }
             Event::CpuFormula { oracle, grounder } => self.cpu_formula(oracle, grounder),
             Event::ParallelRegions { workers } => writeln!(self,
@@ -285,6 +285,23 @@ impl<W: Write> crate::ExecutionObserver for Diagnostics<W> {
             Event::ObjectiveBound { restrictions, costs, strict, work } => writeln!(self, "Objective pruning: bound {restrictions}; cost {} {costs:?}; construction work {work}", if strict { "<" } else { "<=" }),
             Event::ObjectiveTiePass { costs } => writeln!(self, "Objective ties: optimum {costs:?} proved; a second pass enumerates its ties"),
         }
+    }
+}
+
+/// How a hybrid base divided its eligible constraints, as one clause.
+struct StreamedDivision(zetesis_solve::StreamedConstraints);
+impl fmt::Display for StreamedDivision {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let zetesis_solve::StreamedConstraints {
+            templates,
+            instances,
+            retained_templates,
+            retained_instances,
+        } = self.0;
+        write!(
+            f,
+            "streamed constraints: {templates} templates, {instances} admitted instances; grounded in the core: {retained_templates} templates, {retained_instances} instances"
+        )
     }
 }
 

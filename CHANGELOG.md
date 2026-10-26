@@ -6,6 +6,14 @@ Notable changes by release. Versions follow Semantic Versioning.
 
 ### Added
 
+- Hybrid statistics report how lazy grounding divided the eligible constraints:
+  the streamed templates and instances and those grounded in the core, as
+  `HybridExecutionStatistics::streamed` (a `StreamedConstraints`, which adds
+  `retained_templates` and `retained_instances`), in the `streamed` object of
+  the JSON statistics' `hybrid_execution`, and as four rows of the human
+  statistics. `HybridFormula` and `StreamedCore` add `retained_templates` and
+  `retained_instances`. The recorded execution reads "no streamed constraints"
+  when nothing was streamed.
 - An ordering between tuples that still contain variables, such as
   `(M,L) < (K,J)`, is admitted wherever a comparison can stand, including
   aggregate element conditions and guards. It compares complete values in ASP
@@ -132,6 +140,21 @@ Notable changes by release. Versions follow Semantic Versioning.
 
 ### Changed
 
+- `--grounder lazy` and the hybrid formula schedule stream an integrity constraint
+  only when its instances do not fit in the formula. Once the producer core and its
+  completion are built, each eligible template is grounded into the core, in
+  program order, while an upper bound on its instances fits the share
+  `FormulaLimits::max_retained_constraint_nodes` grants and the theory ceilings.
+  The ordinary resource policy grants the theory's node share, a quarter of the
+  memory allowance, so lazy grounding streams only what eager grounding could not
+  hold; a smaller `--memory` allowance streams more. Answer sets are unchanged.
+  Streaming joined every streamed rule again in every search region, so programs
+  whose constraints fit no longer pay that cost. `FormulaLimits::default()`
+  grants no share, so a library caller of
+  the explicit schedule with default limits streams every eligible constraint as
+  before.
+- The `--grounder` help no longer reads as though `auto` streams constraints: it
+  says that `auto` never does, and that `lazy` streams only what does not fit.
 - GPU formula and tight sessions that enumerate answers produce the next slate
   of candidates while the device checks the current slate, with one device
   submission in flight. Answer families, membership checks, failure and
@@ -142,6 +165,16 @@ Notable changes by release. Versions follow Semantic Versioning.
   production reaches or brings within reach of the current slate's completion.
   Optimizing searches still check one slate at a time. The physical
   qualification has 75 exact tests per backend.
+- Support completion keeps its integer key certificates and source-column hulls
+  from one round to the next and extends them with each round's new rows instead
+  of rebuilding them over every snapshot. An ordering query whose key range would
+  not halve its source interval reads the interval's own keys. Recursion through
+  arithmetic grounds in time linear in the rounds where it was quadratic: about
+  9x fewer instructions for a 2,048-step chain under a range comparison and 13x
+  for a counter whose rule assigns from the chain. Possible atoms, the emitted
+  formula and answer sets are unchanged. Grounding statistics add
+  `numeric_index_extensions`. The kept bytes count against `max_support_bytes`
+  until completion.
 - Numeric grounding joins combine certified divisibility and range filters before
   producing tuples; equal-size sources prefer the bindings needed by those filters.
 - Repeated support checks consume initial support seeds directly after resetting
@@ -151,6 +184,14 @@ Notable changes by release. Versions follow Semantic Versioning.
   excluded from the candidate region.
 - Possible-sum checks detect an allowed value while updating the packed sum set,
   avoiding a separate scan.
+- Region narrowing keeps its admitted and unspent reads as one count, so
+  charging a read within them is a single decrement; the work ceiling is met, or
+  the quota consulted, only when they run out. Receipts, quota reservations,
+  refunds and refusals are unchanged.
+- Split selection walks the region's open atoms a mask word at a time, through
+  `Region::mask_words` and `Region::open_word` in zetesis-cpu, instead of
+  chained atom iterators. The atoms ranked, their order, the chosen atom and
+  the charged reads are unchanged.
 - Weighted aggregate comparisons can determine a condition when its opposite
   value leaves no possible remainder in the required interval. These deductions
   use the existing propagation queues and preserve answer-set semantics.
@@ -312,6 +353,12 @@ Notable changes by release. Versions follow Semantic Versioning.
 
 ### Compatibility
 
+- `ExecutionObservation::HybridGrounding` carries one `streamed:
+  StreamedConstraints` in place of `streamed_templates` and `streamed_instances`.
+  `StreamedConstraints` adds `retained_templates` and `retained_instances`,
+  `HybridExecutionStatistics` adds `streamed`, and `FormulaLimits` adds
+  `max_retained_constraint_nodes`; a struct literal naming every field must add
+  them, and one completed from a default needs no change.
 - Fields added to exhaustive public structs: `zetesis_stable::Limits::learning`
   and `SolveConfig::share_learned_rows`. A struct literal naming every field must
   add them; one completed from a default needs no change.

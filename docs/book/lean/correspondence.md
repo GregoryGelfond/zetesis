@@ -1943,6 +1943,43 @@ prefixes remain Rust obligations. Finite-state regressions cover distinct and
 aliased operands, either queued operand when both are known, and frozen child
 and parent boundaries. They do not formally verify the concrete queue.
 
+## The solver's algebra
+
+[`Algebra`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/Algebra.lean) names the objects that candidate generation and the
+membership check share and states the laws every instance obeys. Each object has
+one name, the same in Lean and in Rust; the Rust side takes the names as the
+algebraic-core refactor proceeds, and the table records what each correspondence
+still requires. Each object is also an instance of a standard structure, recorded
+in the second column; the code uses the domain names, and these descriptions are
+for the reader.
+
+| Object and laws | Is a | Rust today | Remaining correspondence |
+| --- | --- | --- | --- |
+| `Region`, the library's `Cube` until the library renames it; `inside_refl`, `inside_trans`, `inside_antisymm` | An interval of interpretations; under `FormulaBounds.Inside`, the precision order, a poset, so a thin category | `zetesis_cpu::regions::Region` | The library-wide rename of `Cube`, and the region's word representation (`Words`); that the held and possible words denote `lower` and `upper` |
+| `Class`: `AnswerSetsSought`, `Countermodels` | A set of interpretations | Implicit: the candidate walk's models still sought, and the reduct query's subsets of the candidate | Subjects typed by their class in Rust |
+| `Subject`; `Subject.sound_of_narrower`, `Subject.apply_sound`, `Subject.narrow_ideal` | A monotone inflationary map of the region poset: a pointed endofunctor of the thin category. A subject lies between its region and the region's ideal narrowing, the abstraction of the class's members under a Galois insertion | `zetesis_ferraris::OriginalSubject` and `FrozenSubject`, and the rules of `Narrower::narrow_known` | A crate-private subject interface, typed by class, with each rule family an instance |
+| `joint`; `joint_closed`, `joint_least`, `joint_extensive`, `joint_monotone`, `joint_idempotent`, `joint_sound`, `joint_more_subjects`, `terminal_agreement`, `Reaches.eq_joint`, `fair_iteration_reaches_joint`, `refines_wf` | A closure operator on the region poset, that is, an idempotent monad on its thin category; the closed regions are its algebras. `Reaches.eq_joint` and `fair_iteration_reaches_joint` are the chaotic iteration theorem (Apt 1999) | The joint loop `narrow` in `zetesis-stable`'s `ferraris/regions.rs`, which ranks open atoms only after all subjects agree | That the loop applies each subject until none decides more, within its work bound; its order is then immaterial by `terminal_agreement`, for a fixed family. The candidate subjects change during a walk (learned rows, the bound, added restrictions, declined allowances), so answer sets stay identical across schedules while regions and trees do so only with those held fixed. The split is chosen from the knowledge after the fixed point, so the same region gives the same split only if the Rust closure equals `FormulaBounds.Known`'s inductive closure |
+| Walk: a class, subjects, a leaf decision and a schedule. `Search.CoverageTree` certifies it and `Frontier.Pending.Walk` steps it; `Subject.node`, `LeafVerdict`, `LeafVerdict.node`, `answerSetVerdict`, `countermodelVerdict` | A recursive coalgebra whose unfold is the covering tree. A decided region no subject refutes is a candidate; the leaf decision accepts it, refutes it or leaves it undecided, and L2 (`CoverageTree.mem_outputs_iff`) is about accepted leaves | `zetesis_cpu::regions::Traversal`, and `zetesis-stable`'s parallel and slate walks, whose `leaf` runs the class certificate or the reduct query; the reduct query skips the leaf equal to the candidate and validates every other leaf independently | One `Walk`, with the parallel and slate walks as its schedules and the leaf decision part of it; an interrupted leaf decision stays undecided |
+| `AxisFolds.Reduction`, and `FoldVerdict` for a walk that may stop; `foldVerdict_absorbed`, `foldVerdict_complete`, `foldVerdict_empty`, `foldVerdict_undecided`, `foldVerdict_without_absorber`, `inner_verdict`, `answer_sets_nested`, `countermodel_verdict_independent` | A commutative monoid, optionally with a zero; a fold is a monoid homomorphism. A fold decides early only at a zero and otherwise only on completion; an empty family is never the unit, and `min` decides only on completion. The answer sets are a nested walk whose inner `any` stops at the first countermodel | The private `Fold` of `zetesis-solve`'s `world_view/fold.rs`, a verdict protocol with witnesses, completion and an empty family, and the reduct query's stop at a countermodel | `Reduction` stays the monoid; the verdict protocol corresponds to `FoldVerdict`, and where its witness and emptiness accumulator lives after the move is to be settled. Early decision over a world view needs an idempotent reduction or distinct members |
+| Meter | A cost monoid with a ceiling | `Budget`, `BudgetQuota`, `NarrowingQuota`, `RegionLimits` and the other limit types | One meter; receipts charge the work performed. Not stated in Lean |
+
+The subjects built from the library's laws:
+
+| Instance | Law it rests on | Rust |
+| --- | --- | --- |
+| `readings`, and from it `original` and `restriction` | `FormulaBounds.known_sound`, `known_mono` | The original subject's readings and knowledge; a restriction, the objective bound among them, read without producers |
+| `frozen`, the whole of `countermodelSubjects` | `known_sound` over the frozen reduct, and `ReductRegions.masked_known_sound` for propagation under the candidate's mask | `zetesis_ferraris::FrozenSubject`. The reduct query builds it and fresh knowledge from the candidate alone; that the countermodel walk takes only the theory and the candidate, with the meter, and accepts no supplied subject or root state (today `Traversal::with_state` can take one), is an obligation. Class markers on a Rust subject trait would name the kind of class, not bind the candidate or the state; indexing ferraris's subject and knowledge types by class, so the learning field exists only for the candidate class, is a later step |
+| `row` | `LearnedRegions.consequence_row_narrows` | The learned-row ledger's narrowing, and algebraic forcing rows (`AlgebraicRows.equation_forces_true`, `equation_forces_false`) |
+| `exclusion`, `doubleCount`, through `refuting` | `AlgebraicRows.excludes_region`, `double_count_excludes_region` | Algebraic refutations, a recognized parity row's exclusion and the double count |
+
+The support cut (`FormulaBounds.unsupported_cut_with_choices`), the streamed
+constraints (`StreamedRegions.scan_refutes`) and the objective bound's own
+lower-bound reasoning (`RequiredChoiceCosts.lower_bound_preserves_answer_sets_strict`)
+are not yet subjects in `Algebra`. The approximation-fixpoint reading is a frame,
+not a claim: regions are its consistent pairs, but downward propagation, learned
+rows and algebraic rows are not approximators of an immediate-consequence
+operator, so the joint fixed point is a sound closure relative to a class.
+
 ## Candidate generation and query representation
 
 Candidate restrictions and storage transformations preserve different objects.
@@ -2923,6 +2960,53 @@ The laws are over interpretations and cubes; the ledger's encoding, matching,
 retention, eviction, ownership, delivery between workers and resource handling
 remain Rust obligations, stated with the ledger below.
 
+[`AlgebraicRows`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/AlgebraicRows.lean)
+states algebraic consequences for any consequence class, as `RowOf` does. A term
+pairs an atom with a value, and a list of terms is measured in an interpretation
+by folding a commutative monoid (`AxisFolds.Reduction`) over the values of the
+terms whose atoms hold; `measure_congr` makes the measure local to the terms'
+atoms. In an abelian group, equations of a class add (`equation_sum`), terms with
+inverse values cancel (`measure_cancel`), and literals giving every other atom
+its value isolate one atom's contribution (`equation_isolates`). The isolated
+value forces the atom true or false, a row of the class
+(`equation_forces_true`, `equation_forces_false`), or excludes the conditions
+given (`equation_excludes`, `equation_excludes_given`); `excludes_region` and
+`consequence_row_forces` carry either into a region that decides the
+conditions (`decides_truth`). In an ordered commutative monoid, two families of
+rows covering the same terms exclude the class when their lower bounds' fold
+does not lie below their upper bounds' (`double_count_excludes`). In a region,
+held atoms may raise a lower bound and atoms not cut lower an upper bound
+(`lower_in_of_held`, `upper_in_of_possible`, `double_count_excludes_region`), and
+`cut_excludes_region` accepts a bipartite cut certificate whose missed terms
+count as the region's held and open atoms. The instances are `parity`, the
+Booleans under exclusive-or (`parity_forces`), and `counting`, the natural
+numbers under addition, which `count_measure` connects to `PartitionCapacities`
+(`double_count_groups`).
+
+A row enters its class through its provenance, checked once. `entailed_by_patterns`
+gives every model of a group of formulas a property that depends only on a set
+of atoms the formulas mention, provided every interpretation inside the set
+that violates the property violates a formula of the group; it rests on
+`Ferraris.satisfies_congr`, and `entailed_by_part` carries the property to the
+answer sets of any theory containing the group. `entailed_by_completion` does
+the same for an atom's completion, from `DisjunctiveSupport.answer_set_completion`,
+which requires a complete inventory in which every producer of the atom is a
+normal rule with it as its sole head and no choice has it; `xor_definition` is
+the two-rule exclusive-or instance. `lower_of_threshold` and
+`upper_of_negated_threshold` read a count bound from a threshold whose
+conditions are atoms, with the weights as the terms' values, and
+`guard_releases` applies a guarded constraint where its guard holds.
+
+No part of the solver uses these laws yet: it does not recognize parity or
+counting structure in a theory. A narrowing that does must establish in Rust
+that each recognized row passed its provenance check against its source
+constraints, completion or threshold, including that a threshold's conditions
+are atoms and its guard holds where the row is used; that the literals it
+conditions on give the other atoms their values; that families cover the same
+terms; and that a certificate's shared, missed and remaining terms split its
+rows as stated. Elimination, flow search, coordinate assignment, packing, work
+and memory accounting and cancellation remain outside the laws.
+
 Retained rows use either the scalar witness lists or sparse word groups, chosen
 by actual buffer capacity including the common row header. A packed row keeps
 premise words and output words in separate ordered spans of one allocation.
@@ -3011,6 +3095,18 @@ owner identity, cursor coverage and bounded execution remain separate obligation
 The occurrence-count fuel bound does not bound Rust join or expression work;
 less retained materialization need not mean less replay work. See the
 [constraint-stream guide](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/guide/streamed-constraints.md).
+
+Hybrid retention grounds some eligible templates in the retained theory instead
+of streaming them. The law needs no change: `stable_iff_completed_partition`
+already takes an arbitrary retained theory, here the producer core with the
+grounded templates' instances. `ConstrainedPositive.stable_append_constraints`,
+applied once to the grounded instances and once to the streamed ones, shows
+that how the eligible constraints are split between the two leaves exactly the
+answer sets of the theory that grounds every instance. The Rust obligations are
+that a grounded template's instances are emitted as eager grounding emits a
+constraint, over the same completed join that capture counted; that the
+retired templates are exactly the grounded ones; and that retention creates no
+atom, so completion's guards still cover every atom.
 
 The hybrid executor composes this law with either CPU or GPU core membership.
 Host source consequences narrow only original candidate regions. The device
@@ -3690,8 +3786,22 @@ Rust interval transfers, including the variable-product and variable-divisor
 cases, or source-column coverage. The argument establishes
 definedness on full bindings, not on every earlier join prefix.
 One Rust totality attempt reuses successful numeric-column hulls for its fixed
-rule and immutable support snapshot. Every intermediate remains checked; no hull
-survives the attempt. Within a growing support round, Rust can retain a
+rule and immutable support snapshot. Every intermediate remains checked against
+the current hulls. Outside support completion no hull survives the attempt.
+Support completion keeps each column hull it reads from one round to the next
+and extends it with the appended rows' values; it keeps its integer key
+certificates the same way.
+[`KeptCertificates`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/KeptCertificates.lean)
+reads both as folds of a commutative monoid over the rows: a hull joins the
+rows' values and declines on a nonnumeric one, and a key certificate requires
+every row's key to be defined. Joining a kept certificate with the appended
+rows' certificate gives the whole relation's (`hull_extend`, `defined_extend`),
+a declined certificate stays declined (`hull_declined_stays`,
+`defined_declined_stays`), and the kept rows are the first rows of every later
+snapshot (`kept_rows_prefix`). That support rows are append-only with stable
+positions and values, that the Rust hull and key certificate compute these
+folds, and that merging the appended keys' sorted entries keeps the index
+ordered by key and row remain implementation obligations. Within a growing support round, Rust can retain a
 successful expression map for one exact rule and snapshot, then borrow it across
 that rule's delta variants. The body-totality premise is independent of the
 pivot; each variant separately authenticates its selected multiples against its

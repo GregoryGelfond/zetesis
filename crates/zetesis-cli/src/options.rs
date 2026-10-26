@@ -58,12 +58,16 @@ pub struct Options {
     /// Grounding mode, independent of execution backend.
     ///
     /// `eager` instantiates every rule before solving. `lazy` instantiates on
-    /// demand: a producer core checked by the selected backend, with eligible
-    /// constraints streamed on the host. Terminal definitions (derived predicates
-    /// nothing reads) can be reconstructed per answer.
+    /// demand: a producer core checked by the selected backend. Integrity
+    /// constraints whose instances fit in the formula's share of the memory
+    /// allowance are grounded with that core; only the rest are streamed on the
+    /// host, which saves memory but joins them again in every search region.
+    /// Terminal definitions (derived predicates nothing reads) can be
+    /// reconstructed per answer.
     /// Objectives require complete constraint checks before scoring and disable
     /// terminal deferral. Table joins are refused. `auto` instantiates an eager
-    /// base and defers terminal definitions. Resource allowances still apply.
+    /// base and defers terminal definitions; it never streams constraints.
+    /// Resource allowances still apply.
     #[arg(long, value_parser = grounder_parser(), default_value = "auto")]
     pub grounder: Grounder,
     /// Positive joins during eager formula grounding.
@@ -294,8 +298,8 @@ fn policy_parser<T: Clone + Send + Sync + 'static, const N: usize>(
 
 fn grounder_parser() -> impl TypedValueParser<Value = Grounder> {
     policy_parser([
-        (Grounder::Auto, PossibleValue::new(Grounder::Auto.label()).help("Instantiate an eager base and defer terminal definitions, independently of hardware.")),
-        (Grounder::Lazy, PossibleValue::new(Grounder::Lazy.label()).help("Ground an eager producer core, stream eligible constraints and reconstruct terminal definitions per answer.")),
+        (Grounder::Auto, PossibleValue::new(Grounder::Auto.label()).help("Instantiate an eager base and defer terminal definitions, independently of hardware. Never streams constraints.")),
+        (Grounder::Lazy, PossibleValue::new(Grounder::Lazy.label()).help("Ground an eager producer core with the constraints that fit the formula's memory share, stream the rest and reconstruct terminal definitions per answer.")),
         (Grounder::Eager, PossibleValue::new(Grounder::Eager.label()).help("Instantiate every formula before checking on CPU or GPU.")),
     ])
 }

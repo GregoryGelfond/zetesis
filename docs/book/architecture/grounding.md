@@ -338,16 +338,40 @@ The finite formula path materializes a bounded theory. Automatic admission can
 first separate [terminal positive definitions](#terminal-definition-analysis),
 ground the base and reconstruct those definitions from each verified base answer.
 Explicit eager admission materializes the complete theory. An explicit
-**hybrid formula** profile instead retains every producer and streams eligible
-integrity constraints. It uses indexed host joins and the selected CPU or GPU
+**hybrid formula** profile instead retains every producer and streams the
+eligible integrity constraints that do not fit in the formula, as described
+below. It uses indexed host joins and the selected CPU or GPU
 executor for core membership. Objectives
 are scored only after the original constraint check completes. Constraints
 containing aggregates, projected atoms or conditional
 scopes remain eager; ordinary atom/scalar constraints use the shared binding
 and evaluation operations. Certified complete pairwise exclusions become native
 constraints in the core, with the two-atom components of the same template as
-their pair constraints; remaining templates stay streamed. Existing eager entry
-points remain unchanged.
+their pair constraints. Existing eager entry points remain unchanged.
+
+A remaining template is streamed only when its instances do not fit in the
+formula. Once the producer core and its completion are built, each remaining
+template, in program order, is grounded into the core as eager grounding
+grounds a constraint, provided an upper bound on what its instances add fits
+two things: what remains of the share `FormulaLimits::max_retained_constraint_nodes`
+grants, and what remains of the theory's node, operand, root and origin
+ceilings. The bound counts, per instance, each atom literal's atom node, its
+default negations and its conjunction node, plus the implication to falsum and
+its root. Interning and simplification only lower the real growth, so a
+template that passes the check never meets a ceiling while it is grounded. A
+template that does not fit stays streamed; a later, smaller one may still fit.
+Retention follows the core's completion, so it takes only room the rest of the
+program left; it adds no atom, because capture already retained every atom an
+instance reads and completion has guarded them.
+
+The share comes from the resource model, with no constant of its own. The
+ordinary policy grants the theory's whole node share, which the model sets at a
+quarter of the memory allowance, as it does for eager grounding. Lazy grounding
+therefore streams only constraints that eager grounding could not hold either,
+and a smaller `--memory` allowance streams more of them. `FormulaLimits::default()`
+grants no share, so a library caller of the explicit hybrid schedule with default
+limits streams every eligible constraint, as before. Statistics report how many
+templates and instances were streamed and how many were grounded in the core.
 
 Hybrid admission still completes possible support and original source-family
 arithmetic validation. It visits the eligible constraint instances to retain
@@ -582,7 +606,18 @@ and support envelope must still fit. Retained source plans and support also
 occupy memory. Early refutation avoids some complete candidates, but repeated
 region joins and checker preparation can increase execution work. Reduced
 formula storage therefore does not imply a time
-or RSS improvement. Full demand-driven producer/atom discovery and device
+or RSS improvement, and streaming usually costs time. Each region's narrowing
+re-joins the streamed bodies over the complete possible support. A rule is
+rescanned from its first row whenever the walk moves to a region that does not
+extend the last one, or a predicate it reads changes in more than a few atoms.
+The work thus grows with the possible support and the number of streamed rules,
+not with the region's change, while eager grounding's propagation touches only
+the instances a change reaches. When the search is long and the instances are
+few, streaming can cost many times eager grounding's work. This is why lazy
+grounding streams only the constraints that do not fit, and why automatic
+grounding never streams: its terminal deferral, which lazy grounding shares, is
+where lazy grounding's gains on deferrable programs come from. Full
+demand-driven producer/atom discovery and device
 constraint streaming are not implemented by this profile. See the
 [checked hybrid session example](../rust/sessions.md#hybrid-formula-sessions).
 
@@ -699,8 +734,27 @@ For `n` rows and `m` expression nodes the first build uses
 `O(n*m + n*log(n))` work and `O(n+m)` storage. Equality uses `O(log(n))` lookup
 work and constant query storage. An ordering query with `k` numeric candidates
 and `s` rows inside its source interval uses `O(log(n) + k + s*log(s))` work and
-`O(s)` transient leased storage. Even a nonselective ordering query pays this
-cost. Descriptor matching scans retained indexes and compares column mappings;
+`O(s)` transient leased storage when the key range would at least halve the
+interval (`2*k <= s`). Otherwise it reads the interval's own keys in source
+order, `O(log(n) + s)` work with no sort: a round's new rows are usually far
+fewer than the keys in range.
+
+Support completion keeps these certificates from one round to the next instead
+of rebuilding them over each round's snapshot. Support rows are only appended
+and keep their positions, so a certificate over a relation's first rows remains
+a certificate over those rows, and a decline stays a decline. The next round
+finds a kept certificate by its relation's name, arity and sign, and extends it
+with the `Δ` rows appended since: `O(Δ*m + Δ*log(Δ))` work to evaluate and sort
+them, plus a merge from the end that moves only kept entries whose key exceeds
+the smallest new key. None move when the new keys are at or above the kept
+maximum, as for a counter. An undefined new key declines the whole certificate,
+exactly as a build over the complete snapshot would. `numeric_index_extensions`
+counts these extensions. The kept bytes stay leased in the support workspace,
+and so under `max_support_bytes`, for the whole fixpoint; completion releases
+them before its final publication. Support completion likewise keeps the
+integer hull of each source column that a totality proof or scalar selection
+reads, and extends it with the appended rows' values, `O(Δ)` a round instead of
+the column's `O(d)` distinct values. Other snapshots read hulls afresh. Descriptor matching scans retained indexes and compares column mappings;
 the bound operand is evaluated on each queried prefix. Builds and queries use
 the existing work, support-byte and support-index-entry limits. Resource and
 cancellation failures propagate; they never publish a partial certificate or
@@ -723,7 +777,8 @@ traversal, though their support completion can use the support-round route above
 The [numeric-domain design](../../design/numeric-argument-domains.md) states the
 failure inventory and deferred coverage.
 `numeric_index_builds` counts published certificates, `numeric_index_declines`
-counts cached data declines, and `expression_key_probes` and `range_probes` count
+counts cached data declines, `numeric_index_extensions` counts kept certificates
+extended by a later support round, and `expression_key_probes` and `range_probes` count
 completed queries including empty results. `expression_key_rows` and
 `range_probe_rows` count rows actually visited after the delta cut and before the
 matcher. These receipts describe execution; they do not establish a performance
@@ -1807,8 +1862,8 @@ bindings and row cursors. Preparation is charged once; its retained capacity is
 counted on every call. A failed preparation publishes no partial plan.
 
 The automatic formula route chooses this schedule over an eager base, and the
-lazy formula route over a hybrid base, whose eligible constraints are streamed
-and checked before an answer is reconstructed. Explicit eager grounding still
+lazy formula route over a hybrid base, whose eligible constraints that do not
+fit in the formula are streamed and checked before an answer is reconstructed. Explicit eager grounding still
 materializes the complete theory. Base membership uses the selected CPU or GPU executor. Reconstruction
 currently runs on the host. Each reconstruction starts from source admission's
 account under a per-answer allowance of work and substitutions — the headroom

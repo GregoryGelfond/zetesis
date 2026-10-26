@@ -40,6 +40,8 @@ pub struct HybridExecutionStatistics {
     /// Cumulative source checking work, including region checks, preparation and
     /// interrupted attempts. Live worker counters become final after joining.
     pub constraints: zetesis_themelios::ConstraintCheckStatistics,
+    /// The eligible constraints streamed, and those grounded in the core.
+    pub streamed: crate::StreamedConstraints,
 }
 
 #[cfg(test)]
@@ -113,8 +115,7 @@ impl<'a> HybridSession<'a> {
         phases.lazy_grounding();
         observations.record(crate::ExecutionObservation::HybridGrounding {
             requested: config.grounder,
-            streamed_templates: input.core.streamed_templates(),
-            streamed_instances: input.core.streamed_instances(),
+            streamed: crate::StreamedConstraints::of(input.core),
         })?;
         Self::new(
             input,
@@ -144,7 +145,10 @@ impl<'a> HybridSession<'a> {
         let checker = owner
             .checker_with_allowance(&allowance, cancellation)
             .map_err(SolveError::Constraint)?;
-        let statistics = HybridExecutionStatistics::default();
+        let statistics = HybridExecutionStatistics {
+            streamed: crate::StreamedConstraints::of(owner),
+            ..HybridExecutionStatistics::default()
+        };
         let core_config = SolveConfig {
             grounder: crate::Grounder::Eager,
             ..*config

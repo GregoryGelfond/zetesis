@@ -249,7 +249,7 @@ fn every_stopped_prefix_requires_full_retry() {
         Stop::Deadline,
         Stop::Allocation,
     ] {
-        for ceiling in 0..completed.spent {
+        for ceiling in 0..completed.spent() {
             let mut actual = example.prepared();
             example.start(&mut actual, &never);
             let mut allowance = Allowance {

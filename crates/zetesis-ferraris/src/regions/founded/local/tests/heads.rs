@@ -60,7 +60,7 @@ fn partition_stops_after_the_last_head() {
     let mut actual = scratch(vec![8, 0, 9, 10, 11, 12], 8);
     let mut work = Work::new(u64::MAX);
     actual.partition_heads(1, &mut work).unwrap();
-    assert_eq!(work.spent, 3); // Two visited entries and one swap.
+    assert_eq!(work.spent(), 3); // Two visited entries and one swap.
     assert_eq!(actual.queue, vec![0, 8, 9, 10, 11, 12]);
     let mut empty = scratch(vec![8, 9, 10], 8);
     empty.partition_heads(0, &mut Work::new(0)).unwrap();
@@ -78,7 +78,7 @@ fn stopped_partitions_keep_membership_clearable() {
         Stop::Deadline,
         Stop::Allocation,
     ] {
-        for ceiling in 0..complete.spent {
+        for ceiling in 0..complete.spent() {
             let mut actual = scratch(vertices.clone(), 8);
             let marks = actual.local.marks.clone();
             let touched = actual.local.touched.clone();

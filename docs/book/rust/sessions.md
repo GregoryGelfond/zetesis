@@ -296,8 +296,9 @@ search for a better answer; `AnswerSelection::All` instead limits accepted
 answers in enumeration order.
 
 Preparation still completes possible support, arithmetic admission and the atom
-catalog. Eligible instances are visited during admission, but their full
-constraint DAGs are not stored. The original eager doors remain available.
+catalog. Eligible instances are visited during admission. A template's full
+constraint DAG is stored in the core only when its instances fit the share
+`FormulaLimits::max_retained_constraint_nodes` grants; the others are streamed. The original eager doors remain available.
 [Source preparation](source.md#stream-ordinary-constraints) details eligibility,
 identity and retained-memory bounds.
 
@@ -374,6 +375,9 @@ preparation counts do not measure allocations or device kernel time.
 
 `SemanticOutcome::hybrid_execution()` reports consumed `core_answers`,
 `accepted`, `rejected`, `pending` and cumulative constraint-check statistics.
+Its `streamed` field, a `zetesis_solve::StreamedConstraints`, counts the constraint templates
+and instances streamed and those grounded in the core;
+`ExecutionObservation::HybridGrounding` carries the same division.
 Their invariant is `core_answers = accepted + rejected + pending`. Core answers
 still buffered by the inner enumerator are excluded. Search statistics and
 device batch receipts describe the retained core. A device-checked core
