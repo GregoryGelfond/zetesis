@@ -1024,6 +1024,19 @@ capture; its prefix law applies to interruptions and retention refusals. A
 selected optimum or the remaining suffix of an already consumed session cannot
 replace that family.
 
+[`AxisFolds`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/AxisFolds.lean)
+states the two rules of a reduction along an axis once. A commutative monoid's
+fold is the same over any permutation of its members (`Reduction.fold_perm`),
+and once the accumulator reaches an absorbing element no further member changes
+it (`Reduction.fold_decided_prefix`). For an idempotent reduction, a list of
+answer sets whose fold reached the absorbing element decides the fold of the
+whole world view (`world_view_fold_decided`), and any two lists that represent
+the world view fold alike (`world_view_fold_complete`). The laws concern lists
+of values. That an implementation folds only checked answer sets, that its
+accumulator computes the named reduction's operation, and that it tests for the
+absorbing element exactly are implementation obligations, as is the
+`WorldViews.Represents` premise of a complete capture.
+
 The facade re-exports the upstream `zetesis::query::WorldView`, a nonempty live
 stream that may still be incomplete. Its materialized `Snapshot` is complete
 and nonempty. These are the original upstream types; type identity supplies no

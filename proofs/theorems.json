@@ -590,6 +590,121 @@
     "line": 81
   },
   {
+    "name": "Zetesis.AxisFolds.Reduction.op_unit",
+    "file": "Zetesis/AxisFolds.lean",
+    "line": 81
+  },
+  {
+    "name": "Zetesis.AxisFolds.Reduction.foldFrom_eq_op",
+    "file": "Zetesis/AxisFolds.lean",
+    "line": 94
+  },
+  {
+    "name": "Zetesis.AxisFolds.Reduction.fold_cons",
+    "file": "Zetesis/AxisFolds.lean",
+    "line": 110
+  },
+  {
+    "name": "Zetesis.AxisFolds.Reduction.fold_append",
+    "file": "Zetesis/AxisFolds.lean",
+    "line": 118
+  },
+  {
+    "name": "Zetesis.AxisFolds.Reduction.fold_perm",
+    "file": "Zetesis/AxisFolds.lean",
+    "line": 132
+  },
+  {
+    "name": "Zetesis.AxisFolds.Reduction.foldFrom_absorbing",
+    "file": "Zetesis/AxisFolds.lean",
+    "line": 146
+  },
+  {
+    "name": "Zetesis.AxisFolds.Reduction.fold_decided_prefix",
+    "file": "Zetesis/AxisFolds.lean",
+    "line": 153
+  },
+  {
+    "name": "Zetesis.AxisFolds.Reduction.fold_absorbs_member",
+    "file": "Zetesis/AxisFolds.lean",
+    "line": 166
+  },
+  {
+    "name": "Zetesis.AxisFolds.Reduction.fold_absorbs_contained",
+    "file": "Zetesis/AxisFolds.lean",
+    "line": 180
+  },
+  {
+    "name": "Zetesis.AxisFolds.Reduction.fold_same_members",
+    "file": "Zetesis/AxisFolds.lean",
+    "line": 198
+  },
+  {
+    "name": "Zetesis.AxisFolds.all_absorbing",
+    "file": "Zetesis/AxisFolds.lean",
+    "line": 222
+  },
+  {
+    "name": "Zetesis.AxisFolds.all_idempotent",
+    "file": "Zetesis/AxisFolds.lean",
+    "line": 224
+  },
+  {
+    "name": "Zetesis.AxisFolds.any_absorbing",
+    "file": "Zetesis/AxisFolds.lean",
+    "line": 235
+  },
+  {
+    "name": "Zetesis.AxisFolds.any_idempotent",
+    "file": "Zetesis/AxisFolds.lean",
+    "line": 237
+  },
+  {
+    "name": "Zetesis.AxisFolds.inter_absorbing",
+    "file": "Zetesis/AxisFolds.lean",
+    "line": 251
+  },
+  {
+    "name": "Zetesis.AxisFolds.inter_idempotent",
+    "file": "Zetesis/AxisFolds.lean",
+    "line": 254
+  },
+  {
+    "name": "Zetesis.AxisFolds.union_absorbing",
+    "file": "Zetesis/AxisFolds.lean",
+    "line": 272
+  },
+  {
+    "name": "Zetesis.AxisFolds.union_idempotent",
+    "file": "Zetesis/AxisFolds.lean",
+    "line": 275
+  },
+  {
+    "name": "Zetesis.AxisFolds.pair_absorbing",
+    "file": "Zetesis/AxisFolds.lean",
+    "line": 297
+  },
+  {
+    "name": "Zetesis.AxisFolds.pair_idempotent",
+    "file": "Zetesis/AxisFolds.lean",
+    "line": 305
+  },
+  {
+    "name": "Zetesis.AxisFolds.walk_exhausted_fold",
+    "file": "Zetesis/AxisFolds.lean",
+    "line": 317
+  },
+  {
+    "name": "Zetesis.AxisFolds.world_view_fold_complete",
+    "file": "Zetesis/AxisFolds.lean",
+    "line": 327
+  },
+  {
+    "name": "Zetesis.AxisFolds.world_view_fold_decided",
+    "file": "Zetesis/AxisFolds.lean",
+    "line": 344
+  },
+  {
     "name": "Zetesis.BatchAccounting.initial_covers",
     "file": "Zetesis/BatchAccounting.lean",
     "line": 49

@@ -96,6 +96,8 @@ The maintained full index is
 | Does no output mean inconsistency? | `Outcomes.empty_delivery_can_hide_a_valid_model` | Counterexample: absence of delivery is insufficient |
 | When does a collection represent a world view? | `WorldViews.completed_capture_represents_world_view` | Original answer coverage, exact completed classification and complete capture |
 | Does a complete optimal family suffice? | `WorldViews.optimal_family_omits_worse_answer` | A strictly worse original answer witnesses the difference |
+| Is a fold's value independent of the order its members arrive in? | `AxisFolds.Reduction.fold_perm`, `fold_same_members` | A commutative monoid; idempotence when members may repeat |
+| May a fold over a world view stop before the enumeration ends? | `AxisFolds.world_view_fold_decided`, `world_view_fold_complete` | An idempotent reduction; every folded member an answer set; absorption, or else a capture that represents the world view |
 | Can projected enumeration retain full answer-set representatives? | `ProjectedAnswers.retain_covers`, `retain_unique`, `selected_property_survives` | A fixed key domain, exact key comparison and membership/objective selection before projection; storage and completion receipts remain separate |
 
 Each module is available under

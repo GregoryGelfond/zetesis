@@ -156,6 +156,7 @@ import Zetesis.FormulaBounds
 import Zetesis.FormulaChains
 import Zetesis.ReductRegions
 import Zetesis.Frontier
+import Zetesis.AxisFolds
 import Zetesis.ModelSelections
 import Zetesis.AtomCatalogs
 import Zetesis.CanonicalCatalog
