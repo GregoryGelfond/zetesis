@@ -883,7 +883,13 @@ in parallel and joins before its own slate's device check starts. On an
 enumeration, the next slate's production overlaps the current slate's last
 submission; nothing else overlaps. A control stop during that production leaves
 the slate under check pending and undelivered, claims nothing for it, and lets
-the device observe its submission's completion. Membership, scoring and objective feedback keep
+the device observe its submission's completion. On a GPU formula session, the
+next slate's production and the current slate's residual completion draw on
+the stream's one cumulative search budget, production first: a work or decision
+limit that the production reaches, or brings within reach of that completion,
+leaves the slate under check pending and undelivered in the same way, while a
+slate the device decides wholly draws nothing at its commit and is delivered
+before the limit is reported. Membership, scoring and objective feedback keep
 the same original-theory and completed-batch boundaries. Failed device execution
 never triggers a hidden CPU replacement.
 

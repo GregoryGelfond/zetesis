@@ -73,10 +73,12 @@ Notable changes by release. Versions follow Semantic Versioning.
   of candidates while the device checks the current slate, with one device
   submission in flight. Answer families, membership checks, failure and
   exhaustion semantics and the release of answers in proposal order are
-  unchanged; a stop that arrives while the next slate is produced can leave the
-  slate under check undelivered, and claims nothing for it. Optimizing searches
-  still check one slate at a time. The physical qualification has 75 exact
-  tests per backend.
+  unchanged. Two cases can leave the slate under check undelivered, and claim
+  nothing for it: a stop that arrives while the next slate is produced, and, in
+  a GPU formula session, a work or decision limit that the next slate's
+  production reaches or brings within reach of the current slate's completion.
+  Optimizing searches still check one slate at a time. The physical
+  qualification has 75 exact tests per backend.
 - Numeric grounding joins combine certified divisibility and range filters before
   producing tuples; equal-size sources prefer the bindings needed by those filters.
 - Repeated support checks consume initial support seeds directly after resetting
