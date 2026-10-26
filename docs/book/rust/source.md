@@ -461,8 +461,15 @@ and every other relation are released at admission. Closing is charged as
 formula work, and its transient peak is admitted against `max_support_bytes`. Producers and constraints with aggregates,
 projected atoms or conditional scopes remain in `core_theory()`. A certified
 complete family of pairwise exclusions also becomes a compact native constraint
-in that core. Other ordinary atom/scalar integrity constraints retain their
-prepared templates instead of complete formula DAGs. This schedule requires
+in that core. Each other ordinary atom/scalar integrity constraint is grounded
+into the core as well when its instances fit the share
+`FormulaLimits::max_retained_constraint_nodes` grants and the theory ceilings
+still hold them; the rest retain their prepared templates instead of complete
+formula DAGs. The ordinary resource policy grants the theory's node share, so
+only what eager grounding could not hold is streamed. `FormulaLimits::default()`
+grants none, and every eligible constraint is then streamed.
+`streamed_templates()`, `streamed_instances()`, `retained_templates()` and
+`retained_instances()` report the division. This schedule requires
 indexed joins. Objective programs
 are prepared by the same operation as eager grounding; solving checks the
 original constraints before scoring an answer. The existing `ground()` methods

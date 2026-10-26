@@ -117,7 +117,7 @@ the exit status before accepting the total. `--count` cannot be combined with `-
 | --- | --- |
 | `--backend cpu` | CPU execution, or `gpu`, which uses the platform's native API (Metal on macOS, Vulkan elsewhere). The full help also lists `metal` and `vulkan`, which name the API. A GPU request is honored or refused. |
 | `--threads auto` | The host's available parallelism; one if availability is unknown. |
-| `--grounder auto` | Prefer lazy source joins where admitted; formula admission can defer eligible terminal definitions and ground the remaining rules eagerly. |
+| `--grounder auto` | Prefer lazy source joins where admitted; formula admission can defer eligible terminal definitions and ground the remaining rules eagerly. It never streams integrity constraints. |
 | `--time-limit DURATION` | No deadline when omitted; accepts whole seconds or `s`, `m`, `h`. |
 | `--memory SIZE` | Allowance for named storage, derived from the host by default; accepts bytes or `B`, `KiB`, `MiB`, `GiB`, `TiB`. Listed under `--help-all`. |
 
@@ -128,8 +128,13 @@ definitions from each verified base answer. It returns full original answers;
 Explicit `--grounder eager` still requests complete materialization.
 
 For a formula input, explicit `--grounder lazy` selects hybrid grounding:
-the producer core is materialized, while eligible integrity constraints are
-checked from their admitted source families. Certified terminal definitions are
+the producer core is materialized with every eligible integrity constraint whose
+instances fit in the formula's share of the memory allowance, the share eager
+grounding has. Only constraints that do not fit are streamed: checked from their
+admitted source families during search. Streaming saves formula memory but
+re-joins the streamed bodies in every search region, which can cost many times
+eager grounding's time, so a smaller `--memory` allowance streams more
+constraints and trades time for memory. Certified terminal definitions are
 deferred too, and reconstructed from each accepted base answer, as automatic
 admission does over an eager base. The core uses the selected CPU or GPU backend;
 source joins and streamed constraint checks run on the host. Hybrid grounding
@@ -145,7 +150,8 @@ and defers certified terminal definitions. Relational lazy
 closure retains its existing CPU and device routes.
 
 Hybrid statistics distinguish retained-core models from original answers accepted
-after complete constraint checks. Checks observe the solve's cancellation token
+after complete constraint checks, and count the constraint templates and instances
+streamed and those grounded in the core. Checks observe the solve's cancellation token
 and memory policy. Work and substitution counts remain available in statistics.
 A stopped check is incomplete, never an accepted answer or an UNSAT result.
 
