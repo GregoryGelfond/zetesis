@@ -6,7 +6,7 @@ use crate::execution_observation::ExecutionSink;
 use crate::{SolveConfig, SolveError};
 use zetesis_cpu::Cancellation;
 use zetesis_objective::Score;
-use zetesis_sat::StableModels;
+use zetesis_stable::StableModels;
 use zetesis_themelios::objective_bound::{
     ObjectiveBoundError, ObjectiveBoundLimits, ObjectivePlan, ObjectivePlanLimits,
 };

@@ -197,8 +197,8 @@ fn batch_class(error: &zetesis_cpu::BatchError) -> Class {
     }
 }
 
-fn sat_class(error: zetesis_sat::Incomplete) -> Class {
-    use zetesis_sat::Incomplete as E;
+fn sat_class(error: zetesis_stable::Incomplete) -> Class {
+    use zetesis_stable::Incomplete as E;
     match error {
         E::Cancelled => Class::Control(Conclusion::Interrupted),
         E::Deadline => Class::Control(Conclusion::Budget),
@@ -229,9 +229,9 @@ fn sat_class(error: zetesis_sat::Incomplete) -> Class {
     }
 }
 
-fn certificate_class(error: zetesis_sat::CertificateError) -> Class {
+fn certificate_class(error: zetesis_stable::CertificateError) -> Class {
     use zetesis_ferraris::{EvaluationError, PositiveError, StratifiedError, TightError};
-    use zetesis_sat::CertificateError;
+    use zetesis_stable::CertificateError;
     match error {
         CertificateError::Evaluation(EvaluationError::Stopped(stop))
         | CertificateError::Tight(TightError::Stopped(stop))

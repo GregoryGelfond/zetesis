@@ -13,7 +13,7 @@ use zetesis_cpu::{Cancellation, Stop};
 use zetesis_ferraris::Interpretation;
 use zetesis_objective::Score;
 use zetesis_reference_support::formula;
-use zetesis_sat::StableModels;
+use zetesis_stable::StableModels;
 use zetesis_test_support::programs::model;
 use zetesis_themelios::AdmittedFormula;
 
@@ -59,7 +59,7 @@ fn cancellation_after_membership_prevents_construction() {
             gate_atoms: 0,
             keyed_constraints: 0,
             key_analysis: zetesis_themelios::KeyAnalysis::Complete,
-            certificate_order: zetesis_sat::CertificateOrder::TightFirst,
+            certificate_order: zetesis_stable::CertificateOrder::TightFirst,
         },
         CancelAfterMembership,
         &config,
@@ -167,7 +167,7 @@ fn session<'a>(
             gate_atoms: 0,
             keyed_constraints: 0,
             key_analysis: zetesis_themelios::KeyAnalysis::Complete,
-            certificate_order: zetesis_sat::CertificateOrder::TightFirst,
+            certificate_order: zetesis_stable::CertificateOrder::TightFirst,
         },
         OrderedMembership::default(),
         config,

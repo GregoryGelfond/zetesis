@@ -279,9 +279,9 @@ fn generated_include_rules_keep_original_identity_and_display_selection() {
                 .is_ok()
         );
     }
-    let mut search = zetesis_sat::StableModels::new(
+    let mut search = zetesis_stable::StableModels::new(
         program.theory(),
-        zetesis_sat::Limits::default(),
+        zetesis_stable::Limits::default(),
         Cancellation::default(),
     )
     .unwrap();

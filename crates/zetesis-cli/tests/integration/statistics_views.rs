@@ -198,7 +198,7 @@ fn positive_execution_is_named_from_its_certificate() {
         .unwrap();
     assert!(matches!(
         certified.plan,
-        Some(zetesis_sat::CertificatePlanStatistics::Positive(_))
+        Some(zetesis_stable::CertificatePlanStatistics::Positive(_))
     ));
     assert!(certified.checks > 0);
     let text = render(&SolveConfig::from(&options), Some(semantic));

@@ -3,7 +3,7 @@
 use zetesis_ferraris::{
     AdmissionLimits, Interpretation, Node, Theory, TightCheckLimits, TightPlan, TightPlanLimits,
 };
-use zetesis_sat::BatchVerdict;
+use zetesis_stable::BatchVerdict;
 
 #[test]
 fn support_decisions_agree_with_independent_reducts() {

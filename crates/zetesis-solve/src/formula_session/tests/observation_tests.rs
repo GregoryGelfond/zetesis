@@ -70,7 +70,7 @@ fn formula_observation_counts_logical_operands() {
             gate_atoms: 0,
             keyed_constraints: 0,
             key_analysis: zetesis_themelios::KeyAnalysis::Complete,
-            certificate_order: zetesis_sat::CertificateOrder::TightFirst,
+            certificate_order: zetesis_stable::CertificateOrder::TightFirst,
         },
         Execution::Cpu,
         &config,

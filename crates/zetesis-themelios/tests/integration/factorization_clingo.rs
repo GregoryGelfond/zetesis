@@ -12,7 +12,7 @@ use zetesis_clingo_support as oracle;
 use zetesis_core::Model;
 use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{Interpretation, Limits, check};
-use zetesis_sat::{Limits as SearchLimits, StableModels};
+use zetesis_stable::{Limits as SearchLimits, StableModels};
 use zetesis_themelios::{AdmittedFormula, FormulaLimits};
 
 type Record = (BTreeSet<String>, Option<Vec<i64>>);

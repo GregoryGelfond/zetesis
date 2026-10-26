@@ -1,7 +1,7 @@
 //! Decoded reasons survive the separate exact-completion boundary.
 
 use super::{Failure, FormulaResidualStatistics, decoded_verdict};
-use zetesis_sat::{BatchVerdict, Incomplete};
+use zetesis_stable::{BatchVerdict, Incomplete};
 use zetesis_wgpu::{FormulaVerdict, ResidualReason};
 
 #[test]
@@ -69,9 +69,9 @@ fn decoded_reasons_survive_exact_completion_refusal() {
     )
     .unwrap();
     let cancellation = zetesis_cpu::Cancellation::default();
-    let mut models = zetesis_sat::StableModels::new(
+    let mut models = zetesis_stable::StableModels::new(
         &theory,
-        zetesis_sat::Limits::default(),
+        zetesis_stable::Limits::default(),
         cancellation.clone(),
     )
     .unwrap();

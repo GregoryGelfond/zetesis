@@ -7,7 +7,7 @@ use crate::support::runs::detailed as cli_solve;
 use clap::Parser;
 use zetesis_cli::{Completion, Interruption, Options, RunError};
 use zetesis_cpu::Cancellation;
-use zetesis_sat::Incomplete;
+use zetesis_stable::Incomplete;
 
 use zetesis_test_support::io::FailAt;
 

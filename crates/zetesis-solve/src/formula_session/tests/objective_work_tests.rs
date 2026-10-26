@@ -27,7 +27,7 @@ fn input(owner: &AdmittedFormula) -> Input<'_> {
         gate_atoms: 0,
         keyed_constraints: 0,
         key_analysis: zetesis_themelios::KeyAnalysis::Complete,
-        certificate_order: zetesis_sat::CertificateOrder::TightFirst,
+        certificate_order: zetesis_stable::CertificateOrder::TightFirst,
     }
 }
 fn config() -> SolveConfig {

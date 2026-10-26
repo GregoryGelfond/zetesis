@@ -10,7 +10,7 @@ Notable changes by release. Versions follow Semantic Versioning.
   the stream produces the next one, through a two-phase slate protocol:
   `StableModels::propose_slate`, `propose_lookahead`, `slate` and `commit_slate`,
   with `SlateTicket`, `SlateProposal`, `Lookahead`, `LookaheadDeclined` and
-  `BatchError::SlateOrder` in zetesis-sat, and `lookahead_capacity` to size the
+  `BatchError::SlateOrder` in zetesis-stable, and `lookahead_capacity` to size the
   slate proposed ahead. zetesis-ferraris adds `SlateId` and `SlateRef`, the
   identity that binds a slate's results to it. The general and tight GPU oracles
   add `prepare`, returning a `PreparedFormulaSubmission` or
@@ -254,6 +254,12 @@ Notable changes by release. Versions follow Semantic Versioning.
   timing section, in text and in JSON, is schema 6, without
   `reduct_preparation`; zetesis-validation reads schema 6 and every earlier
   schema.
+- zetesis-sat is renamed zetesis-stable, and its library `zetesis_sat` is now
+  `zetesis_stable`, with no alias and no deprecation period: depend on
+  `zetesis-stable` and import from `zetesis_stable`. With the clause search
+  removed, the crate holds region search for the stable models of finite
+  general-formula theories, which its new name states. Its API is otherwise
+  unchanged by the rename.
 
 - `BatchError` gains `SlateOrder`. `BatchError` is not non-exhaustive, so an
   exhaustive match by a library caller must add the variant. The new public
@@ -270,7 +276,7 @@ Notable changes by release. Versions follow Semantic Versioning.
   `u32::MAX` are refused with a capacity error, where 0.6.0 refused only those
   within 64, keeping room for the largest workgroup stride. Device buffer limits
   keep such graphs out of reach on the adapters measured.
-- `zetesis_sat::Incomplete` gains `LateCandidateBounds`, so an exhaustive match
+- `zetesis_stable::Incomplete` gains `LateCandidateBounds`, so an exhaustive match
   on it needs an arm for the new variant.
 - `zetesis_core::catalog::AtomIdentityMap` changes from owner-scoped to
   row-scoped identity: it keys a row of a closed catalog by the writer that was

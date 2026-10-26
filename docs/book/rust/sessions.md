@@ -350,7 +350,7 @@ Serial candidate traversal retains one source checker across answer pulls.
 Joined candidate production retains one per producer across slates, with at
 most the configured worker count of producers.
 The checker belongs to the exact source owner, has exclusive access to its
-scratch and can move between executor threads. `zetesis_sat::RegionFilterWorker`
+scratch and can move between executor threads. `zetesis_stable::RegionFilterWorker`
 therefore requires `Send`; the callback is never invoked concurrently on one
 checker. Completion or stop releases this scratch while retaining statistics
 and pending candidate receipts. Each callback's teardown is isolated; a panic

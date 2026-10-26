@@ -71,9 +71,9 @@ fn model_count(source: &Program) -> usize {
     )
     .unwrap();
     assert!(compiled.atoms.atoms().is_empty());
-    let mut search = zetesis_sat::StableModels::new(
+    let mut search = zetesis_stable::StableModels::new(
         &compiled.theory,
-        zetesis_sat::Limits::default(),
+        zetesis_stable::Limits::default(),
         zetesis_cpu::Cancellation::default(),
     )
     .unwrap();

@@ -10,7 +10,7 @@ use std::collections::BTreeSet;
 use zetesis_clingo_support as oracle;
 use zetesis_cpu::Cancellation;
 use zetesis_ferraris::Theory;
-use zetesis_sat::{Limits, StableModels};
+use zetesis_stable::{Limits, StableModels};
 use zetesis_themelios::{
     AdmissionFailure, AdmissionOptions, BundleAdmissionOptions, ExpansionFailure, ExpansionLimits,
     FormulaFailure, FormulaLimits, FormulaResource, ProfileFeature, admit_bundle_formula,

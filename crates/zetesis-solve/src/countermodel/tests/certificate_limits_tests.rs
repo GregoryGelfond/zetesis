@@ -9,7 +9,7 @@ use zetesis_ferraris::{
     AdmissionLimits, FormulaParts, Node, PositiveError, PositiveResource, Theory, TightError,
     TightPlan, TightPlanLimits, TightResource,
 };
-use zetesis_sat::{CertificateOrder, CertificatePlanStatistics, Incomplete, StableModels};
+use zetesis_stable::{CertificateOrder, CertificatePlanStatistics, Incomplete, StableModels};
 
 fn repeated_fact(roots: usize) -> Theory {
     Theory::new(

@@ -6,11 +6,11 @@ use std::{collections::BTreeSet, convert::Infallible, num::NonZeroUsize};
 use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{NodeView, PositiveError, PositiveResource, TightError, TightResource};
 use zetesis_reference_support::formula;
-use zetesis_sat::CertificatePlanStatistics;
 use zetesis_solve::{
     AnswerSelection, Backend, Completion, ExecutionObservation, ExecutionObserver, Grounder,
     Interruption, Oracle, PreparedInput, Session, SolveConfig, WorldView, WorldViewLimits,
 };
+use zetesis_stable::CertificatePlanStatistics;
 use zetesis_test_support::programs::model;
 use zetesis_themelios::{AdmittedFormula, AnalysisBasis, analysis::classify::HornKind};
 
@@ -66,7 +66,7 @@ fn config(workers: usize, oracle: Oracle) -> SolveConfig {
 }
 
 /// `workers` region walkers, which decide their leaves themselves, by the
-/// same certificates, as zetesis-sat qualifies.
+/// same certificates, as zetesis-stable qualifies.
 fn walkers(workers: usize, oracle: Oracle) -> SolveConfig {
     SolveConfig {
         workers: NonZeroUsize::new(workers).unwrap(),
@@ -374,7 +374,7 @@ fn cancellation_after_positive_preparation_is_incomplete() {
     assert_eq!(
         outcome.interruption(),
         Some(Interruption::Countermodel(
-            zetesis_sat::Incomplete::Cancelled
+            zetesis_stable::Incomplete::Cancelled
         ))
     );
     assert!(!outcome.unsatisfiable());

@@ -11,7 +11,7 @@ use std::sync::{Mutex, PoisonError};
 
 use zetesis_cpu::{Cancellation, regions::Region};
 use zetesis_ferraris::Theory;
-use zetesis_sat::{
+use zetesis_stable::{
     Incomplete, RegionConsequence, RegionFeasibility, RegionFilter, RegionFilterWorker, RegionPass,
 };
 use zetesis_themelios::{

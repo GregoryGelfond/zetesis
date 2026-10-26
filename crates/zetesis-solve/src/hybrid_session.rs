@@ -264,7 +264,7 @@ impl<'a> HybridSession<'a> {
         let source_state = matches!(
             state,
             Some(SearchState::Interrupted(Interruption::Countermodel(
-                zetesis_sat::Incomplete::RegionFilter
+                zetesis_stable::Incomplete::RegionFilter
             )))
         );
         // A source marker still needs its precise recorded cause. Any other
@@ -272,7 +272,7 @@ impl<'a> HybridSession<'a> {
         // taking the slot above still settles the source's retained receipt.
         if !matches!(state, Some(SearchState::Interrupted(_))) || source_state {
             error = error.or_else(|| source_failure.map(SolveError::Constraint));
-            if (stopped == Err(zetesis_sat::Incomplete::RegionFilter) || source_state)
+            if (stopped == Err(zetesis_stable::Incomplete::RegionFilter) || source_state)
                 && error.is_none()
             {
                 error = Some(SolveError::ConstraintFailureMissing);

@@ -19,7 +19,7 @@ use zetesis_clingo_support as oracle;
 use zetesis_core::{Value, ValueLimits};
 use zetesis_cpu::Cancellation;
 use zetesis_reference_support::{admit, canonical, exhaustive, formula};
-use zetesis_sat::Incomplete;
+use zetesis_stable::Incomplete;
 use zetesis_test_support::programs::atom;
 use zetesis_test_support::records::Records;
 use zetesis_themelios::FormulaLimits;
@@ -280,9 +280,9 @@ fn automatic_admission_preserves_typed_json_records() {
 /// The candidates the region walk proposes up to and including its first
 /// answer; the earlier ones are classical models the reduct rejects.
 fn first_answer_candidates(input: &zetesis_themelios::AdmittedFormula) -> u64 {
-    let mut walk = zetesis_sat::StableModels::new(
+    let mut walk = zetesis_stable::StableModels::new(
         input.theory(),
-        zetesis_sat::Limits::default(),
+        zetesis_stable::Limits::default(),
         Cancellation::default(),
     )
     .unwrap();

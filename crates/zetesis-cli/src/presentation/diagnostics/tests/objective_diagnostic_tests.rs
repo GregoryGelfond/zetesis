@@ -20,7 +20,7 @@ impl Refusal {
         match self {
             Self::ForeignTheory => ExecutionObservation::ObjectiveTheoryMismatch,
             Self::WorkLimit => ExecutionObservation::ObjectiveRestrictionStopped(
-                zetesis_sat::Incomplete::WorkLimit,
+                zetesis_stable::Incomplete::WorkLimit,
             ),
         }
     }

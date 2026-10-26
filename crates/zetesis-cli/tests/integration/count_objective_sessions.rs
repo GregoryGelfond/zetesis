@@ -14,7 +14,7 @@ use std::num::NonZeroUsize;
 use zetesis_cli::{Backend, Completion, Interruption, Oracle, PreparedInput, Session, SolveConfig};
 use zetesis_core::{Value, ValueLimits};
 use zetesis_cpu::Cancellation;
-use zetesis_sat::Incomplete;
+use zetesis_stable::Incomplete;
 use zetesis_test_support::programs::atom;
 
 struct Case {

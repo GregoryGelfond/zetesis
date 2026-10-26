@@ -3,7 +3,7 @@
 use std::sync::{Mutex, MutexGuard};
 use std::time::{Duration, Instant};
 
-use zetesis_sat::{PhaseMeasurement, SearchPhaseTimings};
+use zetesis_stable::{PhaseMeasurement, SearchPhaseTimings};
 use zetesis_telemetry::{SolveStage, StageRecorder, StageSpan, StageTimings};
 
 /// Coarse ordinary-solve phases. Counts refer to measured calls,

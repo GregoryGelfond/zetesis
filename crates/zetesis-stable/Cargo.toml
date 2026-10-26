@@ -1,0 +1,24 @@
+[package]
+name = "zetesis-stable"
+version.workspace = true
+description = "Region search for the stable models of finite general-formula (Ferraris) theories."
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+rayon.workspace = true
+self_cell.workspace = true
+zetesis-cpu.workspace = true
+zetesis-ferraris.workspace = true
+
+[dev-dependencies]
+zetesis-themelios.workspace = true
+proptest.workspace = true
+zetesis-test-support.workspace = true
+zetesis-theory-support.workspace = true
+zetesis-reference-support.workspace = true
+
+[lints]
+workspace = true

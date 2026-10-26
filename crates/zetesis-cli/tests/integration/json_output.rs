@@ -350,12 +350,12 @@ fn region_statistics_record_the_parallel_walks_engagement() {
     let nanos = |duration: std::time::Duration| u64::try_from(duration.as_nanos()).unwrap();
     let delay = nanos(measured.engagement_delay.unwrap());
     let expected = match measured.engagement {
-        zetesis_sat::RegionWalkEngagement::Unengaged { elapsed, walking } => json!({
+        zetesis_stable::RegionWalkEngagement::Unengaged { elapsed, walking } => json!({
             "configured": 2, "engagement_delay_ns": delay, "engagement": "unengaged",
             "elapsed_ns": nanos(elapsed), "walking_ns": nanos(walking),
             "engaged_after_ns": null, "launched": null, "spawn_ns": null,
         }),
-        zetesis_sat::RegionWalkEngagement::Engaged {
+        zetesis_stable::RegionWalkEngagement::Engaged {
             after,
             walking,
             launched,

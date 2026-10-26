@@ -8,7 +8,7 @@ use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{Interpretation, models};
 use zetesis_objective::{ObjectiveProgram, ObjectiveTemplate, Score, WeightPolarity, evaluate};
 use zetesis_reference_support::{admit, formula, resource_limits};
-use zetesis_sat::StableModels;
+use zetesis_stable::StableModels;
 use zetesis_themelios::objective_bound::{
     ObjectiveBoundErrorKind, ObjectiveBoundLimits, ObjectiveBoundResource, ObjectivePlan,
     ObjectivePlanLimits,
@@ -86,7 +86,7 @@ fn search(input: &AdmittedFormula, pruning: bool) -> Optima {
     let plan = plan(input);
     let mut search = StableModels::new(
         input.theory(),
-        zetesis_sat::Limits::default(),
+        zetesis_stable::Limits::default(),
         Cancellation::default(),
     )
     .unwrap();

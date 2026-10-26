@@ -2,7 +2,7 @@
 
 use crate::{SolveMeasurements, SolvePhase};
 use std::{io, time::Duration};
-use zetesis_sat::PhaseMeasurement;
+use zetesis_stable::PhaseMeasurement;
 use zetesis_test_support::io::BoundedWriter;
 
 #[test]

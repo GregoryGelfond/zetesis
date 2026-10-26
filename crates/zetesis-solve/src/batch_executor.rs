@@ -9,7 +9,7 @@
 use std::{error::Error, fmt};
 
 use zetesis_ferraris::{Interpretation, Theory};
-use zetesis_sat::BatchVerdict;
+use zetesis_stable::BatchVerdict;
 
 /// Original candidates borrowed for one membership check, in proposal order.
 ///
@@ -101,11 +101,11 @@ pub(crate) struct DeviceVerdicts {
 
 #[cfg(feature = "gpu")]
 impl DeviceVerdicts {
-    pub(crate) fn new(count: usize) -> Result<Self, zetesis_sat::Incomplete> {
+    pub(crate) fn new(count: usize) -> Result<Self, zetesis_stable::Incomplete> {
         let mut values = Vec::new();
         values
             .try_reserve_exact(count)
-            .map_err(|_| zetesis_sat::Incomplete::Allocation)?;
+            .map_err(|_| zetesis_stable::Incomplete::Allocation)?;
         Ok(Self {
             values,
             prefix_limit: None,
@@ -167,7 +167,7 @@ impl Error for ExecutorError {}
 mod tests {
     use super::{CandidateBatch, ExecutorError};
     use zetesis_ferraris::{AdmissionLimits, Interpretation, Theory};
-    use zetesis_sat::BatchVerdict;
+    use zetesis_stable::BatchVerdict;
 
     fn theory() -> Theory {
         Theory::new(

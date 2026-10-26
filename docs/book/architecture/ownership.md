@@ -155,7 +155,7 @@ owner or one memory allowance.
 
 ## Shared original narrowing index
 
-Region enumeration owns one `OriginalIndex` in `zetesis-sat`, the only place
+Region enumeration owns one `OriginalIndex` in `zetesis-stable`, the only place
 an immutable `IndexedTheory` can be constructed: the exact admitted `Theory`
 and its `Narrower` index, constructed together. The enumeration builds it when
 a region walk first needs it, before the walk's first step, on every route:

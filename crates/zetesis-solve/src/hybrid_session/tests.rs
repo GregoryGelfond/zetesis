@@ -8,7 +8,7 @@ use crate::{
     SolveConfig, SolveError,
 };
 use zetesis_cpu::{Cancellation, Stop, regions::Region};
-use zetesis_sat::{Incomplete, RegionFilter};
+use zetesis_stable::{Incomplete, RegionFilter};
 use zetesis_themelios::{ConstraintCheckCause, HybridFormula};
 
 struct Fixture {

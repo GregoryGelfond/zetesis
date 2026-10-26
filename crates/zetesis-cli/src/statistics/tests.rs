@@ -387,7 +387,7 @@ fn hybrid_statistics_preserve_reported_fields() {
         if !completed {
             report.completion = Completion::Interrupted;
             report.interruption = Some(crate::Interruption::Countermodel(
-                zetesis_sat::Incomplete::WorkLimit,
+                zetesis_stable::Incomplete::WorkLimit,
             ));
         }
         let text = every_prefix(&options, &Ok(report));
@@ -525,14 +525,14 @@ fn incomplete_and_requested_model_statistics_do_not_claim_exhaustion_or_optimali
 
 #[test]
 fn frozen_positive_statistics_report_incomplete_attempts() {
-    let mut reduct = zetesis_sat::ReductStatistics::default();
+    let mut reduct = zetesis_stable::ReductStatistics::default();
     reduct.frozen_positive_attempts = 3;
     reduct.frozen_positive_completed = 2;
     reduct.frozen_positive_preparation_work = 5;
     reduct.frozen_positive_work = 17;
-    let statistics = zetesis_sat::Statistics {
+    let statistics = zetesis_stable::Statistics {
         reduct,
-        ..zetesis_sat::Statistics::default()
+        ..zetesis_stable::Statistics::default()
     };
     let mut output = Vec::new();
     super::countermodel(
@@ -549,7 +549,7 @@ fn frozen_positive_statistics_report_incomplete_attempts() {
 
 #[test]
 fn support_explanation_statistics_include_declined_work() {
-    let mut statistics = zetesis_sat::RegionSearchStatistics::default();
+    let mut statistics = zetesis_stable::RegionSearchStatistics::default();
     statistics.counts.support_explanations = zetesis_ferraris::SupportExplanationStatistics {
         attempts: 2,
         certified: 1,

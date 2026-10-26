@@ -22,7 +22,7 @@ themelios-analysis.workspace = true
 [dev-dependencies]
 zetesis-validation.workspace = true
 proptest.workspace = true
-zetesis-sat.workspace = true
+zetesis-stable.workspace = true
 serde_json.workspace = true
 tempfile.workspace = true
 zetesis-test-support.workspace = true

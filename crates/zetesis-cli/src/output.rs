@@ -355,7 +355,7 @@ fn reason_code(reason: Interruption) -> &'static str {
         | Interruption::Constraint(reason)
         | Interruption::Reconstruction(reason) => stop_code(reason),
         Interruption::Countermodel(reason) => {
-            use zetesis_sat::Incomplete;
+            use zetesis_stable::Incomplete;
             match reason {
                 Incomplete::Cancelled => "cancelled",
                 Incomplete::Deadline => "deadline",
@@ -771,7 +771,7 @@ struct SummaryView<'a> {
     interruption: Option<Interruption>,
     optimization: Option<&'a crate::Optimization>,
     objective_work: Option<u64>,
-    search: Option<&'a zetesis_sat::Statistics>,
+    search: Option<&'a zetesis_stable::Statistics>,
     candidates: Option<zetesis_cpu::CandidateStatistics>,
     execution: Option<&'a crate::FormulaExecutionStatistics>,
     hybrid_execution: Option<&'a zetesis_solve::HybridExecutionStatistics>,
@@ -856,7 +856,7 @@ impl<'a> SummaryView<'a> {
 
 fn search_statistics(
     out: &mut Buffer,
-    statistics: Option<&zetesis_sat::Statistics>,
+    statistics: Option<&zetesis_stable::Statistics>,
     scope: &str,
 ) -> Result<(), RunError> {
     let Some(stats) = statistics else {
@@ -896,7 +896,7 @@ fn search_statistics(
 
 fn region_filter_statistics(
     out: &mut Buffer,
-    statistics: Option<zetesis_sat::RegionFilterStatistics>,
+    statistics: Option<zetesis_stable::RegionFilterStatistics>,
 ) -> Result<(), RunError> {
     let Some(stats) = statistics else {
         return out.text("null");
@@ -969,7 +969,7 @@ fn hybrid_statistics(
 
 fn region_statistics(
     out: &mut Buffer,
-    statistics: Option<&zetesis_sat::RegionSearchStatistics>,
+    statistics: Option<&zetesis_stable::RegionSearchStatistics>,
 ) -> Result<(), RunError> {
     let Some(stats) = statistics else {
         return out.text("null");
@@ -1027,7 +1027,7 @@ fn region_statistics(
 /// deadline overflows, which never engages.
 fn worker_statistics(
     out: &mut Buffer,
-    statistics: Option<zetesis_sat::RegionWorkerStatistics>,
+    statistics: Option<zetesis_stable::RegionWorkerStatistics>,
 ) -> Result<(), RunError> {
     let Some(stats) = statistics else {
         return out.text("null");
@@ -1061,7 +1061,7 @@ fn worker_statistics(
 
 fn frontier_statistics(
     out: &mut Buffer,
-    statistics: Option<zetesis_sat::RegionFrontierStatistics>,
+    statistics: Option<zetesis_stable::RegionFrontierStatistics>,
 ) -> Result<(), RunError> {
     let Some(stats) = statistics else {
         return out.text("null");

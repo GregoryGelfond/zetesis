@@ -108,7 +108,7 @@ fn source_stops_have_distinct_machine_codes() {
 
 #[test]
 fn countermodel_stops_have_distinct_machine_codes() {
-    use zetesis_sat::Incomplete;
+    use zetesis_stable::Incomplete;
     for (stop, code) in [
         (Incomplete::Cancelled, "cancelled"),
         (Incomplete::Deadline, "deadline"),

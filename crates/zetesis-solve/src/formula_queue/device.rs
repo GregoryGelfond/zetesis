@@ -13,7 +13,7 @@ use std::time::Duration;
 use zetesis_backend::BatchComputeTime;
 use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{SlateId, SlateRef, Theory};
-use zetesis_sat::BatchVerdict;
+use zetesis_stable::BatchVerdict;
 
 use crate::formula_execution::Failure;
 

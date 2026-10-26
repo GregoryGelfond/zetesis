@@ -459,7 +459,7 @@ fn cancellation_preserves_only_the_verified_prefix() {
     assert_eq!(
         outcome.interruption(),
         Some(Interruption::Countermodel(
-            zetesis_sat::Incomplete::Cancelled
+            zetesis_stable::Incomplete::Cancelled
         ))
     );
     assert_eq!(outcome.verified_models(), 1);

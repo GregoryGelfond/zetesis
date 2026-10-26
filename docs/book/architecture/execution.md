@@ -64,7 +64,7 @@ without constructing a separate formula tree. Finding a proper-subset model
 rejects the candidate. Proving that none exists accepts it. The exhaustive
 `zetesis-ferraris` checker is an exact small-instance reference; ordinary
 formula search uses the native region search and countermodel machinery in
-`zetesis-sat`.
+`zetesis-stable`.
 
 Candidates on the formula route are proposed by regions, the same coverage tree
 the closure route walks (`Search.lean`), over the theory's atoms. The root
@@ -385,7 +385,7 @@ each inspected parent count spends one work permit. The primary count is read
 once per eligible atom; secondary counts are read only to resolve primary ties.
 The traversal itself is one operation in `zetesis-cpu`, shared by both
 routes when one worker walks; with several workers the formula route walks
-the same tree in `zetesis-sat`'s parallel regions: the walk begins on the
+the same tree in `zetesis-stable`'s parallel regions: the walk begins on the
 calling thread, and the workers it then starts each own a deque of regions,
 from which idle workers steal. The closure
 route narrows by its two closures, the formula route by
@@ -514,9 +514,9 @@ callbacks retain their own checker lifetime, separate from formula evaluation.
 The original CPU `with_region_workers` operation remains useful when each
 worker should perform both operations. The two schedules share the original
 formula readings, support conditions, candidate partitions and reduct semantics.
-The [batch API](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-sat/src/ferraris/batch.rs)
+The [batch API](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-stable/src/ferraris/batch.rs)
 owns proposal validation and publication; the
-[producer](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-sat/src/ferraris/region_proposals.rs)
+[producer](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-stable/src/ferraris/region_proposals.rs)
 owns the bounded parallel frontier. `Frontier` and `BatchAccounting` state the
 coverage and completion laws; concrete synchronization remains a refinement
 obligation.

@@ -425,7 +425,7 @@ full-round closure, so 3b is designed separately. 3a leaves its seam: workspaces
 The Ferraris theory already treats an atomic root as a fact. Stage 1 keeps one atomic root and one producer per fact.
 The end state replaces them with a fixed-true atom bit set over theory atoms, with per-family evidence, removing the
 per-fact root, producer and evidence entries from the theory, search, certificates and metadata. It changes the
-per-root `formula_origins()` contract, touches `zetesis-ferraris` and `zetesis-sat`, and states its own membership
+per-root `formula_origins()` contract, touches `zetesis-ferraris` and `zetesis-stable`, and states its own membership
 argument: facts hold in every answer set because the reduct's least model contains them.
 
 ### Staging

@@ -897,7 +897,7 @@ fn late_fact_substitution_preserves_eager_and_streamed_families() {
     use std::collections::BTreeSet;
     use zetesis_ferraris::{NodeView, Theory};
     use zetesis_reference_support::{canonical, exhaustive};
-    use zetesis_sat::{Limits, StableModels};
+    use zetesis_stable::{Limits, StableModels};
 
     let source = include_str!("../fixtures/hybrid-constraints/late-facts.lp");
     let eager = prepared(source).ground().unwrap();

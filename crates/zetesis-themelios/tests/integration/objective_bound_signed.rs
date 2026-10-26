@@ -8,7 +8,7 @@ use zetesis_core::{Atom, AtomPattern, Model, Predicate, Term, Value};
 use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{AggregateErrorKind, AggregateLimits, Interpretation, Node, Theory, models};
 use zetesis_objective::{ObjectiveProgram, ObjectiveTemplate, Score, evaluate};
-use zetesis_sat::StableModels;
+use zetesis_stable::StableModels;
 use zetesis_themelios::objective_bound::{
     ObjectiveBound, ObjectiveBoundErrorKind as Kind, ObjectiveBoundLimits, ObjectiveBoundResource,
     ObjectivePlan, ObjectivePlanLimits,
@@ -457,7 +457,7 @@ fn nonstrict_normalized_bound_preserves_all_original_stable_optimal_ties() {
         .unwrap();
     let mut search = StableModels::new(
         &fixture.original,
-        zetesis_sat::Limits::default(),
+        zetesis_stable::Limits::default(),
         Cancellation::default(),
     )
     .unwrap();

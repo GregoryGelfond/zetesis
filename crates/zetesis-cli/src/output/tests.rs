@@ -10,7 +10,7 @@ mod model_policy_tests;
 
 #[test]
 fn region_json_preserves_support_work_components() {
-    let mut statistics = zetesis_sat::RegionSearchStatistics::default();
+    let mut statistics = zetesis_stable::RegionSearchStatistics::default();
     statistics.counts.work = 23;
     statistics.counts.support_work = 5;
     statistics.counts.founded_work = 11;
@@ -24,14 +24,14 @@ fn region_json_preserves_support_work_components() {
 
 #[test]
 fn frozen_positive_json_preserves_failed_attempt_work() {
-    let mut reduct = zetesis_sat::ReductStatistics::default();
+    let mut reduct = zetesis_stable::ReductStatistics::default();
     reduct.frozen_positive_attempts = 3;
     reduct.frozen_positive_completed = 2;
     reduct.frozen_positive_preparation_work = 5;
     reduct.frozen_positive_work = 17;
-    let statistics = zetesis_sat::Statistics {
+    let statistics = zetesis_stable::Statistics {
         reduct,
-        ..zetesis_sat::Statistics::default()
+        ..zetesis_stable::Statistics::default()
     };
     let mut output = Buffer::new(4096);
     search_statistics(&mut output, Some(&statistics), "test").unwrap();
@@ -49,7 +49,7 @@ fn frozen_positive_json_preserves_failed_attempt_work() {
 
 #[test]
 fn region_json_preserves_support_explanation_receipts() {
-    let mut statistics = zetesis_sat::RegionSearchStatistics::default();
+    let mut statistics = zetesis_stable::RegionSearchStatistics::default();
     statistics.counts.work = 31;
     statistics.counts.support_explanations = zetesis_ferraris::SupportExplanationStatistics {
         attempts: 2,

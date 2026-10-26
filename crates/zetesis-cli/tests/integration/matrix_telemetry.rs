@@ -4,7 +4,7 @@ use clap::Parser;
 use serde_json::Value;
 use zetesis_cli::{Completion, Options, Report, run_detailed_with_diagnostics};
 use zetesis_cpu::Cancellation;
-use zetesis_sat::CertificatePlanStatistics;
+use zetesis_stable::CertificatePlanStatistics;
 use zetesis_validation::{
     performance::matrix::{DeviceWork, Observation, Procedure},
     selected::{NativeExecution, Oracle},

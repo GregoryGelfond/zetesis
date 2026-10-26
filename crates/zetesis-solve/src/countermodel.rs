@@ -20,37 +20,37 @@ pub(crate) struct Input<'a> {
     /// Optional necessary choice facts authenticated to this original theory.
     pub(crate) required_choices: Option<&'a zetesis_themelios::RequiredChoices>,
     /// Source analysis chooses attempt order; each plan checks the whole theory.
-    pub(crate) certificate_order: zetesis_sat::CertificateOrder,
+    pub(crate) certificate_order: zetesis_stable::CertificateOrder,
 }
 
 pub(crate) fn certificate_order(
     classes: &zetesis_themelios::analysis::classify::Classes,
     basis: zetesis_themelios::AnalysisBasis,
-) -> zetesis_sat::CertificateOrder {
+) -> zetesis_stable::CertificateOrder {
     use zetesis_themelios::analysis::classify::{HornKind, Normality, Stratification};
     if basis == zetesis_themelios::AnalysisBasis::NormalizedProgram
         && matches!(classes.horn(), HornKind::Horn)
     {
-        zetesis_sat::CertificateOrder::PositiveFirst
+        zetesis_stable::CertificateOrder::PositiveFirst
     } else if basis == zetesis_themelios::AnalysisBasis::NormalizedProgram
         && matches!(classes.normality(), Normality::Normal)
         && matches!(classes.stratification(), Stratification::Stratified)
     {
-        zetesis_sat::CertificateOrder::StratifiedFirst
+        zetesis_stable::CertificateOrder::StratifiedFirst
     } else {
-        zetesis_sat::CertificateOrder::TightFirst
+        zetesis_stable::CertificateOrder::TightFirst
     }
 }
 
 /// An optional setup interruption is retained by the same search report. A
 /// diagnostic failure propagates separately and never erases the owned stream.
 pub(crate) fn prepare_certificate(
-    models: &mut zetesis_sat::StableModels,
-    order: zetesis_sat::CertificateOrder,
+    models: &mut zetesis_stable::StableModels,
+    order: zetesis_stable::CertificateOrder,
     options: &SolveConfig,
     diagnostics: &mut impl ExecutionSink,
     phases: &Recorder,
-) -> Result<Option<zetesis_sat::Incomplete>, SolveError> {
+) -> Result<Option<zetesis_stable::Incomplete>, SolveError> {
     if options.oracle != crate::Oracle::Auto {
         return Ok(None);
     }
@@ -68,16 +68,16 @@ pub(crate) fn prepare_certificate(
     });
     match eligibility {
         Ok(true) => match models.statistics().certified.and_then(|stats| stats.plan) {
-            Some(zetesis_sat::CertificatePlanStatistics::Tight(_)) => {
+            Some(zetesis_stable::CertificatePlanStatistics::Tight(_)) => {
                 diagnostics.record(Event::TightMembership)?;
             }
-            Some(zetesis_sat::CertificatePlanStatistics::Positive(_)) => {
+            Some(zetesis_stable::CertificatePlanStatistics::Positive(_)) => {
                 diagnostics.record(Event::PositiveMembership)?;
             }
-            Some(zetesis_sat::CertificatePlanStatistics::Stratified(_)) => {
+            Some(zetesis_stable::CertificatePlanStatistics::Stratified(_)) => {
                 diagnostics.record(Event::StratifiedMembership)?;
             }
-            None => return Ok(Some(zetesis_sat::Incomplete::InvalidWitness)),
+            None => return Ok(Some(zetesis_stable::Incomplete::InvalidWitness)),
         },
         Ok(false) => diagnostics.record(Event::GeneralMembership(
             models
@@ -95,8 +95,8 @@ pub(crate) fn prepare_certificate(
 /// counts the actual program and checks its storage before allocating; these
 /// ceilings are not reservation sizes. Preparation consumes the enumeration's
 /// remaining search work, so ordinary execution adds no independent work cap.
-fn certificate_limits(options: &SolveConfig) -> zetesis_sat::CertificateLimits {
-    zetesis_sat::CertificateLimits {
+fn certificate_limits(options: &SolveConfig) -> zetesis_stable::CertificateLimits {
+    zetesis_stable::CertificateLimits {
         tight: zetesis_ferraris::TightPlanLimits {
             max_producers: usize::MAX,
             max_dependencies: usize::MAX,
@@ -116,9 +116,9 @@ fn certificate_limits(options: &SolveConfig) -> zetesis_sat::CertificateLimits {
     }
 }
 
-pub(crate) fn search_limits(options: &SolveConfig) -> zetesis_sat::Limits {
-    zetesis_sat::Limits {
-        search: zetesis_sat::SearchLimits {
+pub(crate) fn search_limits(options: &SolveConfig) -> zetesis_stable::Limits {
+    zetesis_stable::Limits {
+        search: zetesis_stable::SearchLimits {
             max_work: options.max_search_work,
             max_decisions: options.max_search_decisions,
         },

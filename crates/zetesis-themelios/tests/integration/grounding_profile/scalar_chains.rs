@@ -2,7 +2,7 @@
 
 use zetesis_cpu::Cancellation;
 use zetesis_reference_support::prepare;
-use zetesis_sat::{Limits, StableModels};
+use zetesis_stable::{Limits, StableModels};
 use zetesis_themelios::{
     ExpansionFailure, FormulaFailure, FormulaLimits, observation::EvaluationError,
 };

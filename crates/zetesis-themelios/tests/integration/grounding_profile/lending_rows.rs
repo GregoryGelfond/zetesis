@@ -4,7 +4,7 @@ use std::collections::BTreeSet;
 
 use zetesis_core::Atom;
 use zetesis_cpu::Cancellation;
-use zetesis_sat::{Limits, StableModels};
+use zetesis_stable::{Limits, StableModels};
 use zetesis_themelios::{AdmittedFormula, FormulaLimits, GroundingPhase};
 
 use super::{Observer, compile};

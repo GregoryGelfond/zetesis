@@ -116,9 +116,9 @@ fn signed_observer_sources_match_clingo_costs() {
 fn search_preserves_every_optimum_tie() {
     for case in cases(FIXTURE) {
         let input = admit(&case.source, &FormulaLimits::default()).unwrap();
-        let mut search = zetesis_sat::StableModels::new(
+        let mut search = zetesis_stable::StableModels::new(
             input.theory(),
-            zetesis_sat::Limits::default(),
+            zetesis_stable::Limits::default(),
             Cancellation::default(),
         )
         .unwrap();

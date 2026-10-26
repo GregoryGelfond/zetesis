@@ -11,7 +11,7 @@ use crate::{
 use std::convert::Infallible;
 use zetesis_cpu::Cancellation;
 use zetesis_ferraris::Interpretation;
-use zetesis_sat::{Incomplete, StableModels};
+use zetesis_stable::{Incomplete, StableModels};
 use zetesis_themelios::{ConstraintCheckLimits, ConstraintVerdict};
 
 /// A fixed order of independently checked core interpretations. Ending this
@@ -94,7 +94,7 @@ fn a_rejected_cheap_proposal_cannot_tighten_the_bound() {
             gate_atoms: 0,
             keyed_constraints: 0,
             key_analysis: zetesis_themelios::KeyAnalysis::Complete,
-            certificate_order: zetesis_sat::CertificateOrder::TightFirst,
+            certificate_order: zetesis_stable::CertificateOrder::TightFirst,
         },
         OrderedAnswers(proposals.into_iter()),
         &config,

@@ -223,7 +223,7 @@ struct Details<'a> {
     discovered_gate_atoms: usize,
     expansion: Option<zetesis_themelios::ExpansionUsage>,
     candidate_statistics: Option<zetesis_cpu::CandidateStatistics>,
-    countermodel_statistics: Option<&'a zetesis_sat::Statistics>,
+    countermodel_statistics: Option<&'a zetesis_stable::Statistics>,
     formula_execution: Option<&'a crate::FormulaExecutionStatistics>,
     hybrid_execution: Option<&'a zetesis_solve::HybridExecutionStatistics>,
     terminal_execution: Option<&'a zetesis_solve::TerminalExecutionStatistics>,
@@ -689,7 +689,7 @@ fn lazy_buffer_usage(sink: &mut impl Write, usage: crate::LazyTransportUsage) ->
 fn countermodel(
     sink: &mut impl Write,
     config: &crate::SolveConfig,
-    stats: &zetesis_sat::Statistics,
+    stats: &zetesis_stable::Statistics,
     membership: &str,
 ) -> io::Result<()> {
     if let Some(filter) = stats.region_filter {
@@ -739,7 +739,7 @@ fn countermodel(
 
 fn candidate_regions(
     sink: &mut impl Write,
-    regions: &zetesis_sat::RegionSearchStatistics,
+    regions: &zetesis_stable::RegionSearchStatistics,
 ) -> io::Result<()> {
     let counts = regions.counts;
     writeln!(
@@ -803,9 +803,9 @@ pub(crate) struct WorkerRecord {
     pub(crate) spawn: Option<Duration>,
 }
 
-impl From<zetesis_sat::RegionWalkEngagement> for WorkerRecord {
-    fn from(engagement: zetesis_sat::RegionWalkEngagement) -> Self {
-        use zetesis_sat::RegionWalkEngagement as State;
+impl From<zetesis_stable::RegionWalkEngagement> for WorkerRecord {
+    fn from(engagement: zetesis_stable::RegionWalkEngagement) -> Self {
+        use zetesis_stable::RegionWalkEngagement as State;
         match engagement {
             State::Unengaged { elapsed, walking } => Self {
                 elapsed: Some(elapsed),
@@ -835,7 +835,7 @@ impl From<zetesis_sat::RegionWalkEngagement> for WorkerRecord {
 /// keys: `engagement_delay_ns=never` for a delay whose deadline overflows.
 fn region_workers(
     sink: &mut impl Write,
-    workers: zetesis_sat::RegionWorkerStatistics,
+    workers: zetesis_stable::RegionWorkerStatistics,
 ) -> io::Result<()> {
     let record = WorkerRecord::from(workers.engagement);
     write!(
@@ -872,7 +872,7 @@ fn region_workers(
 
 fn certificate(
     sink: &mut impl Write,
-    certified: &zetesis_sat::CertifiedStatistics,
+    certified: &zetesis_stable::CertifiedStatistics,
     max_bytes: u64,
 ) -> io::Result<()> {
     writeln!(
@@ -890,12 +890,12 @@ fn certificate(
     )?;
     if let Some(plan) = certified.plan {
         match plan {
-            zetesis_sat::CertificatePlanStatistics::Tight(plan) => writeln!(
+            zetesis_stable::CertificatePlanStatistics::Tight(plan) => writeln!(
                 sink,
                 "  tight certificate storage: construction logical bytes={}; resident logical bytes={}; dependencies={}",
                 plan.construction_bytes, plan.resident_bytes, plan.dependencies
             )?,
-            zetesis_sat::CertificatePlanStatistics::Positive(plan) => writeln!(
+            zetesis_stable::CertificatePlanStatistics::Positive(plan) => writeln!(
                 sink,
                 "  positive certificate: derived atoms={}; activated formula nodes={}; dependencies={}; propagated dependencies={}; construction peak bytes={}; retained bytes={}",
                 plan.derived_atoms,
@@ -905,7 +905,7 @@ fn certificate(
                 plan.peak_bytes,
                 plan.retained_bytes
             )?,
-            zetesis_sat::CertificatePlanStatistics::Stratified(plan) => writeln!(
+            zetesis_stable::CertificatePlanStatistics::Stratified(plan) => writeln!(
                 sink,
                 "  stratified certificate: components={}; derived atoms={}; activated formula nodes={}; dependencies={}; propagated dependencies={}; construction peak bytes={}; retained bytes={}",
                 plan.components,
@@ -937,7 +937,7 @@ fn certificate(
     }
     if !matches!(
         certified.plan,
-        Some(zetesis_sat::CertificatePlanStatistics::Positive(_))
+        Some(zetesis_stable::CertificatePlanStatistics::Positive(_))
     ) && let Some(attempt) = certified.positive_attempt
     {
         writeln!(
@@ -954,7 +954,7 @@ fn certificate(
     }
     if !matches!(
         certified.plan,
-        Some(zetesis_sat::CertificatePlanStatistics::Stratified(_))
+        Some(zetesis_stable::CertificatePlanStatistics::Stratified(_))
     ) && let Some(attempt) = certified.stratified_attempt
     {
         writeln!(
@@ -986,9 +986,9 @@ fn formula(
         .and_then(|s| s.certified)
         .and_then(|s| s.plan)
     {
-        Some(zetesis_sat::CertificatePlanStatistics::Tight(_)) => "tight-support",
-        Some(zetesis_sat::CertificatePlanStatistics::Positive(_)) => "positive-consequences",
-        Some(zetesis_sat::CertificatePlanStatistics::Stratified(_)) => "stratified-consequences",
+        Some(zetesis_stable::CertificatePlanStatistics::Tight(_)) => "tight-support",
+        Some(zetesis_stable::CertificatePlanStatistics::Positive(_)) => "positive-consequences",
+        Some(zetesis_stable::CertificatePlanStatistics::Stratified(_)) => "stratified-consequences",
         None => "countermodel",
     };
     if let Some(execution) = report.formula_execution {

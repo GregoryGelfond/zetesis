@@ -6,7 +6,7 @@ use zetesis_reference_support::formula;
 use zetesis_core::Model;
 use zetesis_cpu::Cancellation;
 use zetesis_objective::Score;
-use zetesis_sat::{Limits, StableModels};
+use zetesis_stable::{Limits, StableModels};
 use zetesis_themelios::AdmittedFormula;
 
 use super::{Bounds, Preparation};
@@ -27,7 +27,7 @@ fn input(admitted: &AdmittedFormula) -> Input<'_> {
         key_analysis: zetesis_themelios::KeyAnalysis::Complete,
         objectives: admitted.objectives(),
         required_choices: admitted.required_choices(),
-        certificate_order: zetesis_sat::CertificateOrder::TightFirst,
+        certificate_order: zetesis_stable::CertificateOrder::TightFirst,
     }
 }
 
@@ -171,7 +171,7 @@ fn a_refused_bound_keeps_exact_search_and_disables_only_pruning() {
     assert_eq!(observations.mismatches, 0);
     assert!(matches!(
         observations.restrictions.as_slice(),
-        [zetesis_sat::Incomplete::WorkLimit]
+        [zetesis_stable::Incomplete::WorkLimit]
     ));
     let actual = complete(&mut models);
     let mut baseline =
@@ -186,7 +186,7 @@ fn a_refused_bound_keeps_exact_search_and_disables_only_pruning() {
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 struct Observations {
     mismatches: usize,
-    restrictions: Vec<zetesis_sat::Incomplete>,
+    restrictions: Vec<zetesis_stable::Incomplete>,
 }
 
 impl ExecutionObserver for Observations {

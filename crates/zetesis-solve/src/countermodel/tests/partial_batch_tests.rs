@@ -6,7 +6,7 @@ use std::num::NonZeroUsize;
 
 use zetesis_cpu::Cancellation;
 use zetesis_ferraris::Interpretation;
-use zetesis_sat::{BatchVerdict, StableModels};
+use zetesis_stable::{BatchVerdict, StableModels};
 
 use super::test_harness::{admitted, input, run};
 use crate::formula_execution::{Failure, FormulaExecutionStatistics, MembershipExecution};

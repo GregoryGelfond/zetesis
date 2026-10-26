@@ -6,7 +6,7 @@ walk has run for as long as starting them costs. It is an execution choice: answ
 unchanged at every worker count and at every engagement point. The [parallel execution
 chapter](../book/rust/parallel.md) describes the walk.
 
-Paths are under `crates/zetesis-sat/src/ferraris/` unless another root is named. Measurement cells under
+Paths are under `crates/zetesis-stable/src/ferraris/` unless another root is named. Measurement cells under
 `scenarios/` and `standalone/` are in `examples/correctness/`, and those under `scalability/` in `examples/`.
 
 ## Status
@@ -442,7 +442,7 @@ observation record.
 
 1. Revise the statements the coordinator phase made false, which still say the workers start at the first proposal or
    that only workers step regions: three in `ferraris.rs`, five in `parallel_regions.rs`, one in
-   `crates/zetesis-sat/tests/integration/parallel_regions.rs` and one in `docs/book/rust/parallel.md`; then sweep the
+   `crates/zetesis-stable/tests/integration/parallel_regions.rs` and one in `docs/book/rust/parallel.md`; then sweep the
    remaining worker-only statements.
 2. Parameterize the route tests over `Immediate` and `After(Duration::MAX)` and assert the route each takes, including
    `NotBegun`.

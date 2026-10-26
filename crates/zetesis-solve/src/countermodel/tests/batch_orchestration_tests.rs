@@ -6,7 +6,7 @@ use std::num::NonZeroUsize;
 use zetesis_core::Model;
 use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{Interpretation, Theory};
-use zetesis_sat::{
+use zetesis_stable::{
     BatchStatistics, BatchVerdict, FrontierOrder, Incomplete, StableModels, Statistics,
 };
 
@@ -145,15 +145,15 @@ impl MembershipExecution for NativeBatch {
                 return Err(Failure::Search(stop));
             }
             if self.fault == Fault::Work {
-                let limits = zetesis_sat::Limits {
-                    search: zetesis_sat::SearchLimits {
+                let limits = zetesis_stable::Limits {
+                    search: zetesis_stable::SearchLimits {
                         max_work: 0,
                         ..Default::default()
                     },
                     ..Default::default()
                 };
-                if let zetesis_sat::Check::Inconclusive(error) =
-                    zetesis_sat::check(theory, &candidates[0], limits, cancellation)
+                if let zetesis_stable::Check::Inconclusive(error) =
+                    zetesis_stable::check(theory, &candidates[0], limits, cancellation)
                 {
                     return Err(Failure::Search(error));
                 }

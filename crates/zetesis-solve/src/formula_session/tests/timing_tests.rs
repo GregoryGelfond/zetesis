@@ -9,7 +9,7 @@ use crate::{
 };
 use zetesis_cpu::Cancellation;
 use zetesis_reference_support::formula;
-use zetesis_sat::{PhaseMeasurement, SearchPhaseTimings};
+use zetesis_stable::{PhaseMeasurement, SearchPhaseTimings};
 
 fn phases(timing: SearchPhaseTimings) -> [(SolvePhase, PhaseMeasurement); 4] {
     [
@@ -48,7 +48,7 @@ fn interleaved_sessions_preserve_all_phase_attempts() {
         gate_atoms: 0,
         keyed_constraints: 0,
         key_analysis: zetesis_themelios::KeyAnalysis::Complete,
-        certificate_order: zetesis_sat::CertificateOrder::TightFirst,
+        certificate_order: zetesis_stable::CertificateOrder::TightFirst,
     };
     let mut sessions = [(), ()].map(|()| {
         FormulaSession::with_selection(

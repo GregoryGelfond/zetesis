@@ -45,10 +45,10 @@ fn plan(source: &AdmittedFormula) -> &zetesis_themelios::CountPlan {
 
 /// The complete family of stable models, enumerated under the plan's candidate
 /// restriction when planning produced one, with the search's statistics.
-fn planned_models(admitted: &AdmittedFormula) -> (reference::Models, zetesis_sat::Statistics) {
-    let mut models = zetesis_sat::StableModels::new(
+fn planned_models(admitted: &AdmittedFormula) -> (reference::Models, zetesis_stable::Statistics) {
+    let mut models = zetesis_stable::StableModels::new(
         admitted.theory(),
-        zetesis_sat::Limits::default(),
+        zetesis_stable::Limits::default(),
         Cancellation::default(),
     )
     .unwrap();

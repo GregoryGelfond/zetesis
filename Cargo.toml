@@ -41,7 +41,7 @@ zetesis-themelios = { path = "crates/zetesis-themelios" }
 zetesis-cpu = { path = "crates/zetesis-cpu" }
 zetesis-wgpu = { path = "crates/zetesis-wgpu" }
 zetesis-ferraris = { path = "crates/zetesis-ferraris" }
-zetesis-sat = { path = "crates/zetesis-sat" }
+zetesis-stable = { path = "crates/zetesis-stable" }
 zetesis-objective = { path = "crates/zetesis-objective" }
 # Reviewed estate frontend; never builds against estate worktrees.
 themelios-base = { git = "https://github.com/GregoryGelfond/themelios.git", rev = "4c163d0d07cf67180354d9b605e19df2d355529e", package = "themelios-base" }

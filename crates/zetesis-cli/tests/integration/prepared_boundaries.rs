@@ -113,9 +113,9 @@ fn certificate_setup_exhaustion_is_incomplete() {
     let owner = formula("a.");
     // The public candidate stream establishes the exact setup allowance.
     // Spending that allowance cannot fund a subsequent certificate attempt.
-    let stream = zetesis_sat::StableModels::new(
+    let stream = zetesis_stable::StableModels::new(
         owner.theory(),
-        zetesis_sat::Limits::default(),
+        zetesis_stable::Limits::default(),
         Cancellation::default(),
     )
     .unwrap();
@@ -136,7 +136,7 @@ fn certificate_setup_exhaustion_is_incomplete() {
     assert_eq!(
         outcome.interruption(),
         Some(Interruption::Countermodel(
-            zetesis_sat::Incomplete::WorkLimit
+            zetesis_stable::Incomplete::WorkLimit
         ))
     );
     assert_eq!(outcome.verified_models(), 0);
@@ -148,7 +148,7 @@ fn certificate_setup_exhaustion_is_incomplete() {
     let certificate = statistics.certified.unwrap();
     assert_eq!(
         certificate.refusal,
-        Some(zetesis_sat::CertificateError::Positive(
+        Some(zetesis_stable::CertificateError::Positive(
             PositiveError::Limit {
                 resource: PositiveResource::Work,
                 observed: 1,

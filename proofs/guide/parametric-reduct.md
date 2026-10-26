@@ -33,7 +33,7 @@ The third theorem, `countermodel_iff`, lifts that equality to all asserted roots
 and proper subsets. Original satisfaction of M remains a separate obligation
 before answer-set membership can follow from absence of a countermodel.
 
-The Rust correspondence is `PreparedReduct` in `zetesis-sat`. It retains one CNF
+The Rust correspondence is `PreparedReduct` in `zetesis-stable`. It retains one CNF
 and exact immutable theory owner. Original atom slots represent N; separate
 inputs represent M and original implication truth. It asserts N ⊆ M, at least
 one M atom absent from N, and every network root. A successful

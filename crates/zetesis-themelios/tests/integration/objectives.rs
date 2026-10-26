@@ -6,7 +6,7 @@ use zetesis_reference_support::{admit, formula, resource_limits};
 use zetesis_core::{Atom, AtomCatalog, Model, ValueLimits};
 use zetesis_cpu::Cancellation;
 use zetesis_objective::{Score, evaluate};
-use zetesis_sat::{Limits as SearchLimits, StableModels};
+use zetesis_stable::{Limits as SearchLimits, StableModels};
 use zetesis_test_support::repository;
 use zetesis_themelios::{
     AdmissionOptions, BundleAdmissionOptions, BundleLimits, ExpansionFailure, ExpansionLimits,

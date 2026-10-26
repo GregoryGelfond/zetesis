@@ -102,12 +102,12 @@ fn statistics_report_the_parallel_walks_workers_under_its_regions() {
     // Under the default delay the host's clock decides whether so small a
     // walk engages; the line follows the state it took.
     let line = match workers.engagement {
-        zetesis_sat::RegionWalkEngagement::Unengaged { elapsed, walking } => format!(
+        zetesis_stable::RegionWalkEngagement::Unengaged { elapsed, walking } => format!(
             "    workers: configured=2; engagement_delay_ns={delay}; engagement=unengaged; elapsed_ns={}; walking_ns={}\n",
             elapsed.as_nanos(),
             walking.as_nanos()
         ),
-        zetesis_sat::RegionWalkEngagement::Engaged {
+        zetesis_stable::RegionWalkEngagement::Engaged {
             after,
             walking,
             launched,

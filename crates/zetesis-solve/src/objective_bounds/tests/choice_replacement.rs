@@ -11,7 +11,7 @@ use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{Interpretation, Theory};
 use zetesis_objective::Score;
 use zetesis_reference_support::formula;
-use zetesis_sat::{Limits, StableModels};
+use zetesis_stable::{Limits, StableModels};
 use zetesis_themelios::AdmittedFormula;
 use zetesis_themelios::objective_bound::{
     ObjectiveBoundErrorKind, ObjectiveBoundLimits, ObjectiveBoundResource, ObjectivePlan,
@@ -70,7 +70,7 @@ fn prepared(owner: &AdmittedFormula) -> Prepared {
     let later = named(owner, "a");
     for incumbent in [&earlier, &later] {
         assert!(
-            zetesis_sat::check(owner.theory(), incumbent, Limits::default(), &cancellation)
+            zetesis_stable::check(owner.theory(), incumbent, Limits::default(), &cancellation)
                 .accepted()
         );
     }

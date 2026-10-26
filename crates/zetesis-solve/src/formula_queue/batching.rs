@@ -23,7 +23,7 @@
 
 use std::num::NonZeroUsize;
 
-use zetesis_sat::StableModels;
+use zetesis_stable::StableModels;
 
 use crate::{GpuBatching, SolveConfig};
 

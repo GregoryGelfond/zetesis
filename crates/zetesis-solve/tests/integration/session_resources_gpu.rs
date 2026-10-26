@@ -507,7 +507,7 @@ fn independent_profile_sessions(device: GpuApi) {
         assert_eq!(
             stopped.outcome.interruption(),
             Some(Interruption::Countermodel(
-                zetesis_sat::Incomplete::CandidateLimit
+                zetesis_stable::Incomplete::CandidateLimit
             ))
         );
         assert!(!stopped.outcome.optimum_proved());

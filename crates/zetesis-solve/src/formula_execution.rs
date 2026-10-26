@@ -5,7 +5,7 @@ use crate::execution_observation::ExecutionSink;
 
 use std::sync::Arc;
 use zetesis_ferraris::Interpretation;
-use zetesis_sat::{Incomplete, StableModels};
+use zetesis_stable::{Incomplete, StableModels};
 
 use crate::phase_timing::Recorder;
 #[cfg(feature = "gpu")]
@@ -272,7 +272,7 @@ pub enum GpuLookaheadDeclined {
     /// proposed ahead would not be used.
     RequestedAnswers,
     /// The candidate stream declined it.
-    Stream(zetesis_sat::LookaheadDeclined),
+    Stream(zetesis_stable::LookaheadDeclined),
 }
 
 impl GpuLookahead {
@@ -603,7 +603,7 @@ impl MembershipExecution for Execution {
                 verdicts
                     .try_reserve_exact(candidates.len())
                     .map_err(|_| Failure::Search(Incomplete::Allocation))?;
-                verdicts.resize(candidates.len(), zetesis_sat::BatchVerdict::Residual);
+                verdicts.resize(candidates.len(), zetesis_stable::BatchVerdict::Residual);
                 batch.finish(verdicts).map_err(Failure::from)
             }),
             #[cfg(feature = "gpu")]
@@ -769,8 +769,8 @@ fn propagate_within(
 fn decoded_verdict(
     residuals: &mut FormulaResidualStatistics,
     verdict: zetesis_wgpu::FormulaVerdict,
-) -> Result<zetesis_sat::BatchVerdict, Failure> {
-    use zetesis_sat::BatchVerdict;
+) -> Result<zetesis_stable::BatchVerdict, Failure> {
+    use zetesis_stable::BatchVerdict;
     use zetesis_wgpu::{FormulaVerdict, ResidualReason};
     Ok(match verdict {
         FormulaVerdict::NotModel => BatchVerdict::NotModel,

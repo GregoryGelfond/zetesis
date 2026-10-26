@@ -33,7 +33,7 @@ pub struct SemanticOutcome {
     pub(crate) checked: u64,
     pub(crate) gate_atoms: usize,
     pub(crate) candidate_statistics: Option<zetesis_cpu::CandidateStatistics>,
-    pub(crate) countermodel_statistics: Option<zetesis_sat::Statistics>,
+    pub(crate) countermodel_statistics: Option<zetesis_stable::Statistics>,
     pub(crate) formula_execution: Option<crate::FormulaExecutionStatistics>,
     pub(crate) lazy_execution: Option<crate::LazyExecutionStatistics>,
     pub(crate) shared_execution: Option<crate::SharedExecutionStatistics>,
@@ -127,7 +127,7 @@ impl SemanticOutcome {
     /// checking or full-answer reconstruction; use
     /// [`Self::verified_models`] for original-program membership.
     #[must_use]
-    pub const fn countermodel_statistics(&self) -> Option<&zetesis_sat::Statistics> {
+    pub const fn countermodel_statistics(&self) -> Option<&zetesis_stable::Statistics> {
         self.countermodel_statistics.as_ref()
     }
 

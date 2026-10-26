@@ -172,7 +172,7 @@ pub enum ExecutionObservation<'a> {
     /// Complete original stratified normal theory determines at most one answer.
     StratifiedMembership,
     /// General reduct checking remains after an optional certificate refusal.
-    GeneralMembership(zetesis_sat::CertificateError),
+    GeneralMembership(zetesis_stable::CertificateError),
     /// Optional objective-plan preparation was refused; exact search remains.
     ObjectiveUnavailable(ObjectiveBoundError),
     /// Required-choice strengthening declined; the exact objective plan remains usable.
@@ -182,7 +182,7 @@ pub enum ExecutionObservation<'a> {
     /// A bound failed the original-theory ownership check.
     ObjectiveTheoryMismatch,
     /// Candidate restriction was refused; prior restrictions remain sound.
-    ObjectiveRestrictionStopped(zetesis_sat::Incomplete),
+    ObjectiveRestrictionStopped(zetesis_stable::Incomplete),
     /// A dominance bound was installed after retaining a verified incumbent.
     ObjectiveBound {
         /// Cumulative installed restriction count.

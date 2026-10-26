@@ -10,7 +10,7 @@ use zetesis_backend::BatchComputeTime;
 
 use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{Interpretation, SlateId, SlateRef, Theory};
-use zetesis_sat::{
+use zetesis_stable::{
     BatchLimits, BatchVerdict, CompletionExecutor, Incomplete, Limits, Lookahead, SearchLimits,
     SlateProposal, StableModels,
 };
@@ -141,7 +141,7 @@ impl Prepared<'_> {
     fn finish(self, stopped: bool) -> Result<Receipt, Failure> {
         self.double.in_flight -= 1;
         if stopped {
-            return Err(Failure::Search(zetesis_sat::Incomplete::Cancelled));
+            return Err(Failure::Search(zetesis_stable::Incomplete::Cancelled));
         }
         Ok(self.receipt)
     }
@@ -602,7 +602,7 @@ fn between(low: u64, high: u64) -> u64 {
 struct Limited {
     answers: usize,
     work_limit: bool,
-    statistics: zetesis_sat::BatchStatistics,
+    statistics: zetesis_stable::BatchStatistics,
     exhausted: bool,
     double: Double,
 }

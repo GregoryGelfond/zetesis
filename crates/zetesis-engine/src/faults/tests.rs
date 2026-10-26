@@ -28,7 +28,7 @@ fn native_ceilings_are_not_request_controls() {
 
 #[test]
 fn resource_interruptions_retain_the_native_stage() {
-    let native = Interruption::Countermodel(zetesis_sat::Incomplete::CounterOverflow);
+    let native = Interruption::Countermodel(zetesis_stable::Incomplete::CounterOverflow);
     let fault = interruption(native).expect_err("accounting width is a resource");
     let cause = fault
         .source()
@@ -40,16 +40,18 @@ fn resource_interruptions_retain_the_native_stage() {
 
 #[test]
 fn nested_certificate_controls_are_conclusions() {
-    let reason = Interruption::Countermodel(zetesis_sat::Incomplete::Certificate(
-        zetesis_sat::CertificateError::Tight(zetesis_ferraris::TightError::Stopped(Stop::Deadline)),
+    let reason = Interruption::Countermodel(zetesis_stable::Incomplete::Certificate(
+        zetesis_stable::CertificateError::Tight(zetesis_ferraris::TightError::Stopped(
+            Stop::Deadline,
+        )),
     ));
     assert_eq!(interruption(reason), Ok(Conclusion::Budget));
 }
 
 #[test]
 fn nested_certificate_limits_are_resource_faults() {
-    let reason = Interruption::Countermodel(zetesis_sat::Incomplete::Certificate(
-        zetesis_sat::CertificateError::Evaluation(zetesis_ferraris::EvaluationError::Storage {
+    let reason = Interruption::Countermodel(zetesis_stable::Incomplete::Certificate(
+        zetesis_stable::CertificateError::Evaluation(zetesis_ferraris::EvaluationError::Storage {
             required: 8,
             limit: 7,
         }),
@@ -61,8 +63,8 @@ fn nested_certificate_limits_are_resource_faults() {
 }
 
 fn stratified_interruption(error: zetesis_ferraris::StratifiedError) -> Interruption {
-    Interruption::Countermodel(zetesis_sat::Incomplete::Certificate(
-        zetesis_sat::CertificateError::Stratified(error),
+    Interruption::Countermodel(zetesis_stable::Incomplete::Certificate(
+        zetesis_stable::CertificateError::Stratified(error),
     ))
 }
 
@@ -140,7 +142,7 @@ fn stratified_faults_retain_the_native_cause() {
 
 #[test]
 fn invalid_native_witnesses_are_engine_faults() {
-    let reason = Interruption::Countermodel(zetesis_sat::Incomplete::InvalidWitness);
+    let reason = Interruption::Countermodel(zetesis_stable::Incomplete::InvalidWitness);
     let fault = interruption(reason).expect_err("native invariant refusal");
     assert_eq!(fault.locus(), Locus::Engine);
     assert!(!fault.is_backend_bug());

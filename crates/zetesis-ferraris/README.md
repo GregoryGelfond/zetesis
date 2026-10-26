@@ -291,7 +291,7 @@ subject's atomic choice roots (`ChoiceHeads`, when the subject carries them) bef
 any other, then the open atom with the most parents still unknown, ties to the
 lowest; without a preference the traversal splits the highest open atom. The traversal that splits regions and
 covers the tree is `zetesis_cpu::regions::Traversal`, shared with the closure
-route; `zetesis-sat` uses it with this narrowing to propose candidates.
+route; `zetesis-stable` uses it with this narrowing to propose candidates.
 
 Carried knowledge requires the same narrower, theory, producer set and frozen
 truth, and a region contained in the ancestor for which that knowledge was

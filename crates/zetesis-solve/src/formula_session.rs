@@ -7,7 +7,7 @@ use std::cell::Cell;
 use zetesis_core::{Model, ModelOrder};
 use zetesis_cpu::Cancellation;
 use zetesis_objective::Score;
-use zetesis_sat::StableModels;
+use zetesis_stable::StableModels;
 
 use crate::countermodel::Input;
 use crate::formula_execution::{Failure, MembershipExecution};
@@ -32,7 +32,7 @@ pub(crate) struct FormulaSession<'a, E> {
     pending_error: Option<SolveError>,
     // This session's last imported cumulative prefix, independently of every
     // other session sharing the host recorder. Repeated outcomes import no work.
-    imported_timings: Cell<zetesis_sat::SearchPhaseTimings>,
+    imported_timings: Cell<zetesis_stable::SearchPhaseTimings>,
 }
 
 impl<'a, E: MembershipExecution> FormulaSession<'a, E> {
@@ -40,7 +40,7 @@ impl<'a, E: MembershipExecution> FormulaSession<'a, E> {
     /// An already stopped initialization has no traversal left to configure.
     pub(crate) fn set_region_filter(
         &mut self,
-        filter: std::sync::Arc<dyn zetesis_sat::RegionFilter>,
+        filter: std::sync::Arc<dyn zetesis_stable::RegionFilter>,
         phases: &Recorder,
     ) {
         if let Some(models) = self.models.as_mut()
@@ -59,7 +59,7 @@ impl<'a, E: MembershipExecution> FormulaSession<'a, E> {
     /// construction, has fired. Every completion, failure and stop of this
     /// session or of an owning hybrid or terminal-definition session passes
     /// here. Refresh receipts after the workers and the execution have settled.
-    pub(crate) fn stop(&mut self, phases: &Recorder) -> Result<(), zetesis_sat::Incomplete> {
+    pub(crate) fn stop(&mut self, phases: &Recorder) -> Result<(), zetesis_stable::Incomplete> {
         let result = self.models.as_mut().map_or(Ok(()), StableModels::stop);
         if let Some(execution) = self.execution.as_mut() {
             execution.settle(phases);
@@ -112,7 +112,7 @@ impl<'a, E: MembershipExecution> FormulaSession<'a, E> {
             yielded: 0,
             final_outcome: None,
             pending_error: None,
-            imported_timings: Cell::new(zetesis_sat::SearchPhaseTimings::default()),
+            imported_timings: Cell::new(zetesis_stable::SearchPhaseTimings::default()),
         }
     }
 
@@ -599,7 +599,11 @@ impl<'a, E: MembershipExecution> FormulaSession<'a, E> {
         }
     }
 
-    fn import_timings(&self, phases: &Recorder, timing: Option<zetesis_sat::SearchPhaseTimings>) {
+    fn import_timings(
+        &self,
+        phases: &Recorder,
+        timing: Option<zetesis_stable::SearchPhaseTimings>,
+    ) {
         if let Some(timing) = timing {
             phases.search(self.imported_timings.replace(timing), timing);
         }

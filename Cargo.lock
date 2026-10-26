@@ -1967,8 +1967,8 @@ dependencies = [
  "zetesis-objective",
  "zetesis-presentation",
  "zetesis-reference-support",
- "zetesis-sat",
  "zetesis-solve",
+ "zetesis-stable",
  "zetesis-telemetry",
  "zetesis-test-support",
  "zetesis-themelios",
@@ -2026,8 +2026,8 @@ dependencies = [
  "zetesis-core",
  "zetesis-cpu",
  "zetesis-ferraris",
- "zetesis-sat",
  "zetesis-solve",
+ "zetesis-stable",
  "zetesis-themelios",
 ]
 
@@ -2103,21 +2103,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "zetesis-sat"
-version = "0.6.0"
-dependencies = [
- "proptest",
- "rayon",
- "self_cell",
- "zetesis-cpu",
- "zetesis-ferraris",
- "zetesis-reference-support",
- "zetesis-test-support",
- "zetesis-themelios",
- "zetesis-theory-support",
-]
-
-[[package]]
 name = "zetesis-solve"
 version = "0.6.0"
 dependencies = [
@@ -2129,12 +2114,27 @@ dependencies = [
  "zetesis-ferraris",
  "zetesis-objective",
  "zetesis-reference-support",
- "zetesis-sat",
+ "zetesis-stable",
  "zetesis-telemetry",
  "zetesis-test-support",
  "zetesis-themelios",
  "zetesis-validation",
  "zetesis-wgpu",
+]
+
+[[package]]
+name = "zetesis-stable"
+version = "0.6.0"
+dependencies = [
+ "proptest",
+ "rayon",
+ "self_cell",
+ "zetesis-cpu",
+ "zetesis-ferraris",
+ "zetesis-reference-support",
+ "zetesis-test-support",
+ "zetesis-themelios",
+ "zetesis-theory-support",
 ]
 
 [[package]]
@@ -2168,7 +2168,7 @@ dependencies = [
  "zetesis-ferraris",
  "zetesis-objective",
  "zetesis-reference-support",
- "zetesis-sat",
+ "zetesis-stable",
  "zetesis-test-support",
  "zetesis-validation",
 ]

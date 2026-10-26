@@ -56,7 +56,9 @@ fn quiet_diagnostics_preserve_objective_refusals() {
             "Objective pruning stopped: original theory mismatch; exact search continues\n",
         ),
         (
-            ExecutionObservation::ObjectiveRestrictionStopped(zetesis_sat::Incomplete::WorkLimit),
+            ExecutionObservation::ObjectiveRestrictionStopped(
+                zetesis_stable::Incomplete::WorkLimit,
+            ),
             "Objective pruning stopped: SAT work limit reached; exact search continues\n",
         ),
     ] {

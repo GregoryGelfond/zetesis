@@ -170,7 +170,7 @@ fn qualify_prefix_orchestration(
 ) {
     use std::collections::BTreeSet;
     use std::num::NonZeroUsize;
-    use zetesis_sat::{Limits, StableModels};
+    use zetesis_stable::{Limits, StableModels};
 
     let admitted = zetesis_reference_support::formula("{a;b;c}.");
     let theory = admitted.theory();
@@ -361,7 +361,7 @@ fn submission_accounting_preserves_undecoded_candidates() {
         assert!(matches!(
             super::record_submission(&mut statistics, Some(1)),
             Err(super::Failure::Search(
-                zetesis_sat::Incomplete::CounterOverflow
+                zetesis_stable::Incomplete::CounterOverflow
             ))
         ));
         assert_eq!(statistics.gpu_submitted_batches, batches);

@@ -5,7 +5,7 @@ use std::num::NonZeroUsize;
 
 use zetesis_cpu::Cancellation;
 use zetesis_ferraris::Interpretation;
-use zetesis_sat::{BatchError, BatchLimits, CompletionExecutor, StableModels};
+use zetesis_stable::{BatchError, BatchLimits, CompletionExecutor, StableModels};
 
 use crate::batch_executor::{BatchResult, CandidateBatch};
 use crate::formula_execution::Failure;
@@ -262,7 +262,7 @@ impl BatchQueue {
     ) -> Result<bool, Failure> {
         use crate::phase_timing::SolvePhase;
         use device::PreparedSubmission;
-        use zetesis_sat::SlateProposal;
+        use zetesis_stable::SlateProposal;
 
         let selected = self.batching.select(models, options);
         let limits = BatchLimits {
@@ -295,7 +295,7 @@ impl BatchQueue {
         let mut verdicts = Vec::new();
         verdicts
             .try_reserve_exact(count)
-            .map_err(|_| Failure::Search(zetesis_sat::Incomplete::Allocation))?;
+            .map_err(|_| Failure::Search(zetesis_stable::Incomplete::Allocation))?;
         let mut ahead = None;
         while verdicts.len() < count {
             let offset = verdicts.len();
@@ -363,17 +363,17 @@ impl BatchQueue {
     fn proposed_ahead(
         &mut self,
         models: &StableModels,
-        proposal: zetesis_sat::Lookahead,
+        proposal: zetesis_stable::Lookahead,
         selected: NonZeroUsize,
         count: usize,
     ) {
         self.lookahead.decision = Some(match proposal {
-            zetesis_sat::Lookahead::Declined(reason) => {
+            zetesis_stable::Lookahead::Declined(reason) => {
                 crate::GpuLookahead::Declined(crate::GpuLookaheadDeclined::Stream(reason))
             }
             _ => crate::GpuLookahead::Engaged,
         });
-        if let zetesis_sat::Lookahead::Proposed(_) = proposal {
+        if let zetesis_stable::Lookahead::Proposed(_) = proposal {
             self.lookahead.slates = self.lookahead.slates.saturating_add(1);
             let proposed = models.batch_statistics().pending.saturating_sub(count);
             self.batching.proposed_ahead(selected, proposed);
@@ -592,7 +592,7 @@ mod tests {
     fn failed_later_prefix_keeps_the_whole_batch_pending() {
         use crate::batch_executor::CandidateBatch;
         use crate::formula_execution::{Failure, FormulaExecutionStatistics, record_submission};
-        use zetesis_sat::{BatchVerdict, Incomplete, Limits, StableModels};
+        use zetesis_stable::{BatchVerdict, Incomplete, Limits, StableModels};
 
         let admitted = zetesis_reference_support::formula("{a;b;c}.");
         let cancellation = zetesis_cpu::Cancellation::default();

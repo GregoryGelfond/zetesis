@@ -7,7 +7,7 @@ use zetesis_core::Model;
 use zetesis_cpu::Cancellation;
 use zetesis_ferraris::Interpretation;
 use zetesis_reference_support::formula as admitted;
-use zetesis_sat::{Limits, StableModels};
+use zetesis_stable::{Limits, StableModels};
 
 use super::{Bounds, Preparation};
 use crate::countermodel::Input;
@@ -50,7 +50,7 @@ fn attempt(
             key_analysis: zetesis_themelios::KeyAnalysis::Complete,
             objectives: planned.objectives(),
             required_choices: planned.required_choices(),
-            certificate_order: zetesis_sat::CertificateOrder::TightFirst,
+            certificate_order: zetesis_stable::CertificateOrder::TightFirst,
         },
         &options,
         &Cancellation::default(),
@@ -115,7 +115,7 @@ impl ExecutionObserver for RefuseObservation {
             assert!(matches!(
                 observation,
                 ExecutionObservation::ObjectiveRestrictionStopped(
-                    zetesis_sat::Incomplete::WorkLimit
+                    zetesis_stable::Incomplete::WorkLimit
                 )
             ));
         }

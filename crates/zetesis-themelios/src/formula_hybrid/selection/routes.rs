@@ -7,7 +7,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 
 use zetesis_cpu::{Cancellation, regions::Region};
 use zetesis_ferraris::Theory;
-use zetesis_sat::{
+use zetesis_stable::{
     BatchLimits, BatchVerdict, CertificateLimits, CertificateOrder, Incomplete, Limits,
     RegionFeasibility, RegionFilter, RegionFilterWorker, StableModels,
 };
@@ -204,7 +204,7 @@ fn persistent_workers_borrow_the_core_selection() {
         let mut search = StableModels::with_region_workers_engaging(
             filter.owner.core_theory(),
             NonZeroUsize::new(4).unwrap(),
-            zetesis_sat::Engagement::Immediate,
+            zetesis_stable::Engagement::Immediate,
             Limits::default(),
             Cancellation::default(),
         )
@@ -228,7 +228,7 @@ fn persistent_workers_borrow_the_core_selection() {
                 .workers
                 .unwrap()
                 .engagement,
-            zetesis_sat::RegionWalkEngagement::Engaged { launched: 4, .. }
+            zetesis_stable::RegionWalkEngagement::Engaged { launched: 4, .. }
         ));
     }
     assert!(filter.workers.load(Ordering::Relaxed) > 1);

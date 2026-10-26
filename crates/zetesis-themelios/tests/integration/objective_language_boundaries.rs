@@ -51,9 +51,9 @@ fn missing_extremum_witnesses_have_no_answers() {
         assert_eq!(input.source().expect("source input").id(), SOURCE);
         assert_eq!(input.source().expect("source input").text(), source);
         assert!(exhaustive(&input).is_empty());
-        let mut search = zetesis_sat::StableModels::new(
+        let mut search = zetesis_stable::StableModels::new(
             input.theory(),
-            zetesis_sat::Limits::default(),
+            zetesis_stable::Limits::default(),
             zetesis_cpu::Cancellation::default(),
         )
         .unwrap();

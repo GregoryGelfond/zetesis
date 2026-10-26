@@ -34,7 +34,7 @@ pub struct PartialReport {
     /// Necessary closure-candidate restrictions, including interrupted work.
     pub candidate_statistics: Option<zetesis_cpu::CandidateStatistics>,
     /// Original candidate/reduct accounting, when that stream was initialized.
-    pub countermodel_statistics: Option<zetesis_sat::Statistics>,
+    pub countermodel_statistics: Option<zetesis_stable::Statistics>,
     /// Actual hybrid accounting, including uncommitted candidates and queued models.
     pub formula_execution: Option<crate::FormulaExecutionStatistics>,
     /// Retained-core answers and source-constraint decisions, including pending

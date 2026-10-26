@@ -5,11 +5,11 @@ use std::num::NonZeroUsize;
 
 use zetesis_cpu::Cancellation;
 use zetesis_reference_support::formula;
-use zetesis_sat::CertificatePlanStatistics;
 use zetesis_solve::{
     Backend, Completion, Grounder, Oracle, PreparedInput, Session, SolveConfig, WorldView,
     WorldViewLimits,
 };
+use zetesis_stable::CertificatePlanStatistics;
 use zetesis_themelios::AdmittedFormula;
 
 fn collect(owner: &AdmittedFormula, workers: usize, oracle: Oracle) -> WorldView {

@@ -1,7 +1,7 @@
 //! Analysis orders bounded attempts; it does not establish their applicability.
 
 use super::{certificate_order, test_harness::admitted};
-use zetesis_sat::CertificateOrder;
+use zetesis_stable::CertificateOrder;
 use zetesis_themelios::AnalysisBasis;
 
 #[test]

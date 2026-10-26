@@ -59,9 +59,9 @@ fn count_heads_preserve_stable_models() {
 fn native_count_search_preserves_full_models() {
     for case in cases() {
         let admitted = admit(case["source"].as_str().unwrap(), &FormulaLimits::default()).unwrap();
-        let mut search = zetesis_sat::StableModels::new(
+        let mut search = zetesis_stable::StableModels::new(
             admitted.theory(),
-            zetesis_sat::Limits::default(),
+            zetesis_stable::Limits::default(),
             zetesis_cpu::Cancellation::default(),
         )
         .unwrap();

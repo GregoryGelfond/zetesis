@@ -43,7 +43,7 @@ pub struct Report {
     pub candidate_statistics: Option<zetesis_cpu::CandidateStatistics>,
     /// Cumulative countermodel accounting when available; absent for closure
     /// and for an initialization failure that returns no statistics.
-    pub countermodel_statistics: Option<zetesis_sat::Statistics>,
+    pub countermodel_statistics: Option<zetesis_stable::Statistics>,
     /// Actual batched formula execution and pending-result accounting; absent
     /// when the scalar CPU route was used or initialization did not finish.
     pub formula_execution: Option<crate::FormulaExecutionStatistics>,

@@ -6,7 +6,7 @@ use std::{collections::BTreeSet, num::NonZeroUsize};
 
 use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{AdmissionLimits, FormulaParts, Node, Theory};
-use zetesis_sat::{BatchVerdict, Incomplete, Limits, StableModels};
+use zetesis_stable::{BatchVerdict, Incomplete, Limits, StableModels};
 
 use super::Batching;
 use crate::batch_executor::{BatchResult, CandidateBatch, DeviceVerdicts};
