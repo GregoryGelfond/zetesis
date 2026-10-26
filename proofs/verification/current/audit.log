@@ -845,6 +845,12 @@
 'Zetesis.JoinFrames.prepared_prefix_exact' depends on axioms: [propext, Quot.sound]
 'Zetesis.JoinFrames.retained_frames_irrelevant' depends on axioms: [propext, Quot.sound]
 'Zetesis.JoinFrames.stale_root_can_erase_current_truth' depends on axioms: [propext]
+'Zetesis.KeptCertificates.hull_declined_absorbing' depends on axioms: [propext, Quot.sound]
+'Zetesis.KeptCertificates.hull_extend' depends on axioms: [propext, Quot.sound]
+'Zetesis.KeptCertificates.hull_declined_stays' depends on axioms: [propext, Quot.sound]
+'Zetesis.KeptCertificates.defined_extend' depends on axioms: [propext, Quot.sound]
+'Zetesis.KeptCertificates.defined_declined_stays' does not depend on any axioms
+'Zetesis.KeptCertificates.kept_rows_prefix' depends on axioms: [propext]
 'Zetesis.KeyedConstraints.one_value' does not depend on any axioms
 'Zetesis.KeyedConstraints.digit_carry' depends on axioms: [propext, Quot.sound]
 'Zetesis.KeyedConstraints.digit_carry_asked' depends on axioms: [propext, Classical.choice, Quot.sound]

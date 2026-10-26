@@ -99,6 +99,7 @@ The maintained full index is
 | Does a complete optimal family suffice? | `WorldViews.optimal_family_omits_worse_answer` | A strictly worse original answer witnesses the difference |
 | Is a fold's value independent of the order its members arrive in? | `AxisFolds.Reduction.fold_perm`, `fold_same_members` | A commutative monoid; idempotence when members may repeat |
 | May a fold over a world view stop before the enumeration ends? | `AxisFolds.world_view_fold_decided`, `world_view_fold_complete` | An idempotent reduction; every folded member an answer set; absorption, or else a capture that represents the world view |
+| May support completion extend a numeric certificate instead of rebuilding it? | `KeptCertificates.hull_extend`, `hull_declined_stays`, `defined_extend`, `defined_declined_stays`, `kept_rows_prefix` | Append-only rows with stable positions and values; certificates computed as these folds |
 | Can projected enumeration retain full answer-set representatives? | `ProjectedAnswers.retain_covers`, `retain_unique`, `selected_property_survives` | A fixed key domain, exact key comparison and membership/objective selection before projection; storage and completion receipts remain separate |
 
 Each module is available under

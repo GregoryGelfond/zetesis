@@ -825,6 +825,12 @@ import Zetesis
 #print axioms Zetesis.JoinFrames.prepared_prefix_exact
 #print axioms Zetesis.JoinFrames.retained_frames_irrelevant
 #print axioms Zetesis.JoinFrames.stale_root_can_erase_current_truth
+#print axioms Zetesis.KeptCertificates.hull_declined_absorbing
+#print axioms Zetesis.KeptCertificates.hull_extend
+#print axioms Zetesis.KeptCertificates.hull_declined_stays
+#print axioms Zetesis.KeptCertificates.defined_extend
+#print axioms Zetesis.KeptCertificates.defined_declined_stays
+#print axioms Zetesis.KeptCertificates.kept_rows_prefix
 #print axioms Zetesis.KeyedConstraints.one_value
 #print axioms Zetesis.KeyedConstraints.digit_carry
 #print axioms Zetesis.KeyedConstraints.digit_carry_asked
