@@ -12,6 +12,7 @@ mod subjects;
 
 struct Program {
     owner: Theory,
+    learning: crate::LearningOwner,
     index: Narrower,
     producers: Producers,
 }
@@ -21,6 +22,7 @@ impl Program {
         Self {
             index: Narrower::new(&owner),
             producers: producers(&owner),
+            learning: crate::test_support::learning(&owner),
             owner,
         }
     }
@@ -33,7 +35,7 @@ impl Program {
         quota: &mut dyn NarrowingQuota,
     ) -> NarrowingAttempt {
         self.index.propagate_known_reserved(
-            OriginalSubject::new(&self.owner, Some(&self.producers)),
+            OriginalSubject::carrier(&self.learning, Some(&self.producers)),
             region,
             knowledge,
             scratch,
@@ -338,7 +340,7 @@ fn inherited_completion_still_polls_cancellation() {
     let cancellation = Cancellation::default();
     cancellation.cancel();
     let attempt = program.index.propagate_known_reserved(
-        OriginalSubject::new(&program.owner, Some(&program.producers)),
+        OriginalSubject::carrier(&program.learning, Some(&program.producers)),
         &mut region,
         &mut knowledge,
         &mut scratch,

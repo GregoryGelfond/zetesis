@@ -1,21 +1,30 @@
 //! Consolidation preserves signed consequences and publishes no partial union.
 
 use super::*;
-use crate::regions::founded::ledger::{Deduction, row::append};
+use crate::regions::ledger::{Deduction, row::append};
 use crate::test_support::SinglePermits;
 
-fn explanation(conditions: &[(usize, bool)], outputs: &[usize]) -> Explanation {
-    Explanation {
+fn explanation(conditions: &[(usize, bool)], outputs: &[usize]) -> Literals {
+    Literals {
         conditions: conditions.to_vec(),
-        unsupported: outputs.to_vec(),
+        outputs: outputs.iter().map(|&atom| (atom, false)).collect(),
     }
 }
 
-fn copy(source: &Explanation) -> Explanation {
-    explanation(&source.conditions, &source.unsupported)
+fn copy(source: &Literals) -> Literals {
+    Literals {
+        conditions: source.conditions.clone(),
+        outputs: source.outputs.clone(),
+    }
 }
 
-fn stored(source: &Explanation, packed: bool) -> Row {
+/// The atoms of outputs that are all absences, as the founded source learns them.
+fn absences(outputs: &[(usize, bool)]) -> Vec<usize> {
+    assert!(outputs.iter().all(|&(_, present)| !present));
+    outputs.iter().map(|&(atom, _)| atom).collect()
+}
+
+fn stored(source: &Literals, packed: bool) -> Row {
     if !packed {
         return Row::Scalar(copy(source));
     }
@@ -24,18 +33,18 @@ fn stored(source: &Explanation, packed: bool) -> Row {
         append(&mut words, 0, atom, held);
     }
     let premise_words = words.len();
-    for &atom in &source.unsupported {
-        append(&mut words, premise_words, atom, true);
+    for &(atom, present) in &source.outputs {
+        append(&mut words, premise_words, atom, present);
     }
     Row::Packed {
         words,
         premise_words,
         conditions: source.conditions.len(),
-        outputs: source.unsupported.len(),
+        outputs: source.outputs.len(),
     }
 }
 
-fn merge(row: &Row, other: &mut Explanation, maximum: usize) -> Option<bool> {
+fn merge(row: &Row, other: &mut Literals, maximum: usize) -> Option<bool> {
     let mut remaining = u64::MAX;
     row.union_outputs(
         other,
@@ -64,16 +73,18 @@ fn consequence(row: &Row, held: &[u64], cut: &[u64]) -> Consequence {
     match deduction(row, held, cut) {
         Deduction::None => Consequence::None,
         Deduction::Require { atom, value } => Consequence::Require(atom, value),
-        Deduction::ExcludeOutputs => {
+        Deduction::ForceOutputs => {
+            let decided = |masks: &[u64], atom: usize| masks[atom / 64] & (1 << (atom % 64)) != 0;
             if row
                 .outputs()
-                .any(|atom| held[atom / 64] & (1 << (atom % 64)) != 0)
+                .any(|(atom, present)| decided(if present { cut } else { held }, atom))
             {
                 Consequence::Refuted
             } else {
                 Consequence::Exclude(
                     row.outputs()
-                        .filter(|&atom| cut[atom / 64] & (1 << (atom % 64)) == 0)
+                        .filter(|&(atom, present)| !decided(if present { held } else { cut }, atom))
+                        .map(|(atom, _)| atom)
                         .collect(),
                 )
             }
@@ -91,14 +102,31 @@ fn identical_conditions_union_distinct_outputs_in_order() {
         let mut other = explanation(&conditions, &[0, 63, 127, 129]);
         assert_eq!(merge(&row, &mut other, 64), Some(true));
         assert_eq!(other.conditions, conditions);
-        assert_eq!(other.unsupported, [0, 1, 63, 64, 127, 128, 129]);
+        assert_eq!(absences(&other.outputs), [0, 1, 63, 64, 127, 128, 129]);
         assert_eq!(row.conditions().collect::<Vec<_>>(), source.conditions);
-        assert_eq!(row.outputs().collect::<Vec<_>>(), source.unsupported);
+        assert_eq!(row.outputs().collect::<Vec<_>>(), source.outputs);
         assert_eq!(row.retained_bytes(), before);
         for merged_packed in [false, true] {
             let merged = stored(&other, merged_packed);
-            assert_eq!(merged.outputs().collect::<Vec<_>>(), other.unsupported);
+            assert_eq!(merged.outputs().collect::<Vec<_>>(), other.outputs);
         }
+    }
+}
+
+#[test]
+fn union_keeps_both_signs_of_one_atom_in_order() {
+    let source = Literals {
+        conditions: vec![(0, true)],
+        outputs: vec![(5, false), (70, true)],
+    };
+    for packed in [false, true] {
+        let row = stored(&source, packed);
+        let mut other = Literals {
+            conditions: vec![(0, true)],
+            outputs: vec![(5, true)],
+        };
+        assert_eq!(merge(&row, &mut other, 64), Some(true));
+        assert_eq!(other.outputs, [(5, false), (5, true), (70, true)]);
     }
 }
 
@@ -197,7 +225,7 @@ fn empty_conditions_still_union_all_outputs() {
         let row = stored(&source, packed);
         let mut other = explanation(&[], &[1, 128]);
         assert_eq!(merge(&row, &mut other, 64), Some(true));
-        assert_eq!(other.unsupported, [0, 1, 64, 128]);
+        assert_eq!(absences(&other.outputs), [0, 1, 64, 128]);
         assert_eq!(
             consequence(&stored(&other, packed), &[0; 3], &[0; 3]),
             Consequence::Exclude(vec![0, 1, 64, 128])
@@ -259,7 +287,7 @@ fn interrupted_union_preserves_both_inputs() {
                 assert_eq!(work.spent, prefix);
                 assert_eq!(other, proposed);
                 assert_eq!(row.retained_bytes(), bytes);
-                assert_eq!(row.outputs().collect::<Vec<_>>(), source.unsupported);
+                assert_eq!(row.outputs().collect::<Vec<_>>(), source.outputs);
                 assert_eq!(merge(&row, &mut other, 64), Some(true));
                 assert_eq!(other, complete);
             }
@@ -299,10 +327,10 @@ fn union_peak_includes_old_and_replacement_outputs() {
     );
     assert_eq!(
         peak,
-        size_of::<Explanation>() as u128
-            + size_of::<Vec<usize>>() as u128
+        size_of::<Literals>() as u128
+            + size_of::<Vec<(usize, bool)>>() as u128
             + retained
-            + other.unsupported.capacity() as u128 * size_of::<usize>() as u128
+            + other.outputs.capacity() as u128 * size_of::<(usize, bool)>() as u128
     );
 }
 
@@ -382,7 +410,7 @@ fn interrupted_reverse_subsumption_retains_the_old_row() {
                     Err(failure)
                 );
                 assert_eq!(work.spent, prefix);
-                assert_eq!(row.outputs().collect::<Vec<_>>(), source.unsupported);
+                assert_eq!(row.outputs().collect::<Vec<_>>(), source.outputs);
                 assert_eq!(row.conditions().collect::<Vec<_>>(), source.conditions);
                 assert_eq!(row.retained_bytes(), bytes);
             }

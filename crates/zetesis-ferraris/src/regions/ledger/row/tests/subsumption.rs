@@ -2,25 +2,44 @@
 
 use super::*;
 
-fn copy(source: &Explanation) -> Explanation {
-    explanation(&source.conditions, &source.unsupported)
+fn copy(source: &Literals) -> Literals {
+    Literals {
+        conditions: source.conditions.clone(),
+        outputs: source.outputs.clone(),
+    }
 }
 
-fn verdict(row: &Row, proposed: &Explanation) -> bool {
+fn verdict(row: &Row, proposed: &Literals) -> bool {
     let mut remaining = u64::MAX;
     row.subsumes(proposed, &mut remaining, &mut Work::new(u64::MAX))
         .unwrap()
         .unwrap()
 }
 
-fn satisfied(row: &Explanation, interpretation: usize) -> bool {
+fn satisfied(row: &Literals, interpretation: usize) -> bool {
     !row.conditions
         .iter()
         .all(|&(atom, value)| (interpretation & (1 << atom) != 0) == value)
         || row
-            .unsupported
+            .outputs
             .iter()
-            .all(|&atom| interpretation & (1 << atom) == 0)
+            .all(|&(atom, present)| (interpretation & (1 << atom) != 0) == present)
+}
+
+#[test]
+fn an_output_of_the_opposite_sign_does_not_subsume() {
+    let absent = Literals {
+        conditions: vec![(0, true)],
+        outputs: vec![(5, false)],
+    };
+    let present = Literals {
+        conditions: vec![(0, true)],
+        outputs: vec![(5, true)],
+    };
+    for row in [Row::Scalar(copy(&absent)), packed(&absent)] {
+        assert!(!verdict(&row, &present));
+        assert!(verdict(&row, &absent));
+    }
 }
 
 #[test]
@@ -53,9 +72,9 @@ fn subsumption_matches_sets_and_preserves_consequences() {
                 .iter()
                 .all(|value| proposed.conditions.contains(value))
                 && proposed
-                    .unsupported
+                    .outputs
                     .iter()
-                    .all(|atom| retained.unsupported.contains(atom));
+                    .all(|output| retained.outputs.contains(output));
             for row in [Row::Scalar(copy(retained)), packed(retained)] {
                 assert_eq!(verdict(&row, proposed), wanted);
             }
@@ -84,7 +103,7 @@ fn stronger_rows_subsume_without_changing_their_storage() {
         assert!(verdict(&row, &proposed));
         assert_eq!(row.retained_bytes(), before);
         assert_eq!(row.conditions().collect::<Vec<_>>(), retained.conditions);
-        assert_eq!(row.outputs().collect::<Vec<_>>(), retained.unsupported);
+        assert_eq!(row.outputs().collect::<Vec<_>>(), retained.outputs);
     }
     assert!(
         !verdict(&prepared(proposed), &retained),
@@ -141,7 +160,7 @@ fn every_interrupted_inclusion_prefix_preserves_its_stop() {
                 );
                 assert_eq!(work.spent, prefix);
                 assert_eq!(row.conditions().collect::<Vec<_>>(), retained.conditions);
-                assert_eq!(row.outputs().collect::<Vec<_>>(), retained.unsupported);
+                assert_eq!(row.outputs().collect::<Vec<_>>(), retained.outputs);
             }
         }
         for prefix in 0..complete.spent {

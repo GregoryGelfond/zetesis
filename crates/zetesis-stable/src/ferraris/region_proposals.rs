@@ -849,7 +849,7 @@ impl<'filter> SlateFill<'_, 'filter> {
             timings: &mut workspace.timings,
         });
         if regions::narrow(
-            (self.parts.subject(self.theory), self.narrower),
+            (self.parts.subject(self.theory)?, self.narrower),
             self.restrictions,
             (region, knowledge),
             &mut workspace.scratch,

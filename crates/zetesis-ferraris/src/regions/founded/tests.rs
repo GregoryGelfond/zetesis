@@ -1,7 +1,7 @@
 //! Candidate cuts preserve every independently checked stable completion.
 
 use super::*;
-use crate::test_support::{theory, world};
+use crate::test_support::{learning, theory, world};
 use crate::{
     FrozenSubject, Interpretation, Limits, Narrowing, NarrowingAttempt, NarrowingQuota,
     NarrowingScratch, Node, OriginalSubject, Region, RegionLimits,
@@ -69,9 +69,10 @@ fn producers(owner: &Theory) -> Producers {
 
 fn narrow(owner: &Theory, region: &mut Region) -> Narrowing {
     let index = Narrower::new(owner);
+    let learning = learning(owner);
     index
         .narrow_known(
-            OriginalSubject::new(owner, Some(&producers(owner))),
+            OriginalSubject::carrier(&learning, Some(&producers(owner))),
             region,
             &mut index.knowledge(),
             &mut NarrowingScratch::default(),
@@ -315,12 +316,13 @@ fn every_tiny_cut_preserves_stable_completions() {
                 .collect();
             let index = Narrower::new(&owner);
             let producers = producers(&owner);
+            let learning = learning(&owner);
             for code in 0..27 {
                 let mut region = partial_region(code, 3);
                 let expected: Vec<_> = answers.iter().filter(|m| compatible(&region, m)).collect();
                 let (result, _) = index
                     .narrow_known(
-                        OriginalSubject::new(&owner, Some(&producers)),
+                        OriginalSubject::carrier(&learning, Some(&producers)),
                         &mut region,
                         &mut index.knowledge(),
                         &mut scratch,
@@ -422,8 +424,9 @@ fn limited_region(
     work: u64,
 ) -> NarrowingAttempt {
     let index = Narrower::new(owner);
+    let learning = learning(owner);
     index.narrow_known_reserved(
-        OriginalSubject::new(owner, Some(&producers(owner))),
+        OriginalSubject::carrier(&learning, Some(&producers(owner))),
         region,
         &mut index.knowledge(),
         scratch,
@@ -457,7 +460,7 @@ fn interrupted_foundation_passes_leave_no_stale_support() {
         );
         assert!(retained <= 1);
         if retained == 1 {
-            assert_eq!(scratch.explanations.outputs(0).collect::<Vec<_>>(), [0, 1]);
+            assert_eq!(scratch.explanations.absent_outputs(0), [0, 1]);
             retained_prefixes += 1;
         }
         let mut retry_region = Region::all_open(owner.atom_count());

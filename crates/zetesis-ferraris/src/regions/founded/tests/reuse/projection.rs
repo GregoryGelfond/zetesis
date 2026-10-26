@@ -82,7 +82,7 @@ fn blocked_body_nodes_remain_inputs_across_siblings() {
         // Keep the completed projection, including its blocked cells, but
         // remove optional explanations so this test requires actual closure
         // invalidation rather than a retained row cutting the cycle first.
-        scratch.explanations = crate::regions::founded::ledger::Ledger::default();
+        scratch.explanations = crate::regions::ledger::Ledger::default();
         let mut child = parent.clone();
         child.hold(2);
         let mut knowledge = inherited.clone();

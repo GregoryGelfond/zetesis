@@ -2,16 +2,19 @@
 //! established by capture, separately from this bounded transaction.
 
 use super::*;
-use crate::regions::founded::explanations::Explanation;
-use crate::regions::founded::ledger::{MAX_OUTPUTS, MAX_ROWS, row::Row};
+use crate::regions::ledger::Literals;
+use crate::regions::ledger::row::Row;
+
+const MAX_OUTPUTS: usize = 64;
+const MAX_ROWS: usize = 64;
 
 type Entry = (Vec<(usize, bool)>, Vec<usize>);
 type Contents = Vec<Entry>;
 
-fn explanation(conditions: &[(usize, bool)], outputs: &[usize]) -> Explanation {
-    Explanation {
+fn explanation(conditions: &[(usize, bool)], outputs: &[usize]) -> Literals {
+    Literals {
         conditions: conditions.to_vec(),
-        unsupported: outputs.to_vec(),
+        outputs: outputs.iter().map(|&atom| (atom, false)).collect(),
     }
 }
 
@@ -19,14 +22,19 @@ fn contents(ledger: &Ledger) -> Contents {
     ledger
         .rows
         .iter()
-        .map(|row| (row.conditions().collect(), row.outputs().collect()))
+        .map(|entry| {
+            (
+                entry.row.conditions().collect(),
+                entry.row.outputs().map(|(atom, _)| atom).collect(),
+            )
+        })
         .collect()
 }
 
-fn retain(ledger: &mut Ledger, value: Explanation) {
+fn retain(ledger: &mut Ledger, value: Literals) {
     assert!(
         ledger
-            .retain(value, &mut Work::new(u64::MAX), &mut 0)
+            .retain_founded(value, &mut Work::new(u64::MAX), &mut 0)
             .unwrap()
     );
 }
@@ -40,7 +48,7 @@ fn identical_conditions_share_outputs_and_partial_forcing() {
         explanation(&[(0, true), (1, false)], &[64, 127]),
     );
     assert_eq!(ledger.len(), 1);
-    assert_eq!(ledger.outputs(0).collect::<Vec<_>>(), [63, 64, 127]);
+    assert_eq!(ledger.absent_outputs(0), [63, 64, 127]);
     let held = [1, 1 << 63];
     assert_eq!(
         ledger.deduction(0, &held, &[0, 0], &mut Work::new(u64::MAX)),
@@ -97,7 +105,7 @@ fn output_union_bound_keeps_separate_complete_rows() {
     retain(&mut ledger, explanation(&[(100, true)], &[MAX_OUTPUTS]));
     assert_eq!(ledger.len(), 2);
     assert_eq!(ledger.output_count(0), MAX_OUTPUTS);
-    assert_eq!(ledger.outputs(1).collect::<Vec<_>>(), [MAX_OUTPUTS]);
+    assert_eq!(ledger.absent_outputs(1), [MAX_OUTPUTS]);
 }
 
 #[test]
@@ -112,6 +120,7 @@ fn union_retirement_rechecks_rows_before_the_merged_row() {
 fn initial() -> Ledger {
     let mut ledger = Ledger::default();
     ledger.prepare(&Program::new(false).owner);
+    ledger.remaining = u64::MAX;
     retain(&mut ledger, explanation(&[(0, true), (1, true)], &[3, 4]));
     retain(&mut ledger, explanation(&[(0, true)], &[3]));
     ledger.remaining = u64::MAX;
@@ -124,7 +133,7 @@ fn every_interrupted_replacement_preserves_retained_certificates() {
     let mut measured = Work::new(u64::MAX);
     assert!(
         completed
-            .retain(explanation(&[(0, true)], &[4]), &mut measured, &mut 0)
+            .retain_founded(explanation(&[(0, true)], &[4]), &mut measured, &mut 0)
             .unwrap()
     );
     assert_eq!(completed.len(), 1);
@@ -136,12 +145,12 @@ fn every_interrupted_replacement_preserves_retained_certificates() {
             let mut permits = SinglePermits::new(prefix, stop);
             let mut work = Work::reserved(&mut permits);
             assert_eq!(
-                ledger.retain(explanation(&[(0, true)], &[4]), &mut work, &mut 0),
+                ledger.retain_founded(explanation(&[(0, true)], &[4]), &mut work, &mut 0),
                 Err(stop)
             );
             assert_eq!(work.spent, prefix);
             assert_eq!(contents(&ledger), before);
-            assert!(ledger.owner.as_ref().unwrap().same_instance(&owner));
+            assert!(ledger.owner.as_ref().unwrap().same_class(&owner.theory));
             retain(&mut ledger, explanation(&[(0, true)], &[4]));
             assert_eq!(contents(&ledger), contents(&completed));
         }
@@ -153,7 +162,7 @@ fn every_interrupted_replacement_preserves_retained_certificates() {
         let mut work = Work::new(u64::MAX);
         assert!(
             !ledger
-                .retain(explanation(&[(0, true)], &[4]), &mut work, &mut 0)
+                .retain_founded(explanation(&[(0, true)], &[4]), &mut work, &mut 0)
                 .unwrap()
         );
         assert_eq!(contents(&ledger), before);
@@ -185,7 +194,7 @@ fn appending_counts_the_staged_row_header() {
 #[test]
 fn independent_cycles_share_a_captured_condition() {
     // a<->b, c<->d, a<-x, c<-x, and the independent choice x.
-    let owner = theory(
+    let program = Program::of(theory(
         5,
         vec![
             Node::atom(0),
@@ -204,15 +213,7 @@ fn independent_cycles_share_a_captured_condition() {
             Node::implies(4, 2),
         ],
         (7..14).collect(),
-    );
-    let program = Program {
-        index: Narrower::new(&owner),
-        producers: crate::producers(&owner, RegionLimits::default(), &Cancellation::default())
-            .unwrap()
-            .producers
-            .unwrap(),
-        owner,
-    };
+    ));
     let mut scratch = NarrowingScratch::default();
     for atom in [0, 2] {
         let (result, counts) = program.close(
@@ -224,10 +225,7 @@ fn independent_cycles_share_a_captured_condition() {
         assert_eq!(counts.support_explanations.certified, 1);
     }
     assert_eq!(scratch.explanations.len(), 1);
-    assert_eq!(
-        scratch.explanations.outputs(0).collect::<Vec<_>>(),
-        [0, 1, 2, 3]
-    );
+    assert_eq!(scratch.explanations.absent_outputs(0), [0, 1, 2, 3]);
     let (result, counts) = program.close(
         &mut region(&[(3, true)]),
         &mut program.index.knowledge(),
@@ -261,5 +259,10 @@ fn consolidation_preserves_every_complete_interpretation() {
     for mask in 0..16 {
         assert_eq!(satisfies(&statements, mask), satisfies(&after, mask));
     }
-    assert!(ledger.rows.iter().any(|row| matches!(row, Row::Scalar(_))));
+    assert!(
+        ledger
+            .rows
+            .iter()
+            .any(|entry| matches!(entry.row, Row::Scalar(_)))
+    );
 }

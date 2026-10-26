@@ -3,16 +3,16 @@
 use super::*;
 use crate::test_support::SinglePermits;
 
-fn explanation(conditions: &[(usize, bool)], outputs: &[usize]) -> Explanation {
-    Explanation {
+fn explanation(conditions: &[(usize, bool)], outputs: &[usize]) -> Literals {
+    Literals {
         conditions: conditions.to_vec(),
-        unsupported: outputs.to_vec(),
+        outputs: outputs.iter().map(|&atom| (atom, false)).collect(),
     }
 }
 
 /// The reference classifies signed propositions before considering outputs;
 /// it does not use word grouping or the production scalar short-circuit loop.
-fn expected(row: &Explanation, held: &[u64], cut: &[u64]) -> Deduction {
+fn expected(row: &Literals, held: &[u64], cut: &[u64]) -> Deduction {
     let undecided: Vec<_> = row
         .conditions
         .iter()
@@ -26,8 +26,13 @@ fn expected(row: &Explanation, held: &[u64], cut: &[u64]) -> Deduction {
         return Deduction::None;
     }
     match undecided.as_slice() {
-        [] => Deduction::ExcludeOutputs,
-        &[(atom, value)] if row.unsupported.iter().any(|&output| bit(held, output)) => {
+        [] => Deduction::ForceOutputs,
+        &[(atom, value)]
+            if row
+                .outputs
+                .iter()
+                .any(|&(output, present)| bit(if present { cut } else { held }, output)) =>
+        {
             Deduction::Require {
                 atom,
                 value: !value,
@@ -39,20 +44,20 @@ fn expected(row: &Explanation, held: &[u64], cut: &[u64]) -> Deduction {
 
 /// Force the representation for semantic tests even when a sparse fixture
 /// would correctly select the smaller scalar form in production.
-fn packed(row: &Explanation) -> Row {
+fn packed(row: &Literals) -> Row {
     let mut words = Vec::new();
     for &(atom, held) in &row.conditions {
         append(&mut words, 0, atom, held);
     }
     let premise_words = words.len();
-    for &atom in &row.unsupported {
-        append(&mut words, premise_words, atom, true);
+    for &(atom, present) in &row.outputs {
+        append(&mut words, premise_words, atom, present);
     }
     Row::Packed {
         words,
         premise_words,
         conditions: row.conditions.len(),
-        outputs: row.unsupported.len(),
+        outputs: row.outputs.len(),
     }
 }
 
@@ -101,14 +106,65 @@ fn all_partial_readings_match_the_signed_condition_law() {
     }
 }
 
-fn dense() -> Explanation {
-    Explanation {
-        conditions: (0..16).map(|atom| (atom, atom % 2 == 0)).collect(),
-        unsupported: (16..80).collect(),
+#[test]
+fn signed_outputs_obey_the_signed_condition_law() {
+    let conditions = [(0, true), (64, false)];
+    for outputs in [
+        vec![(1, true), (128, false)],
+        vec![(1, true), (128, true)],
+        vec![(1, false), (1, true)],
+    ] {
+        let source = Literals {
+            conditions: conditions.to_vec(),
+            outputs,
+        };
+        let rows = [
+            packed(&source),
+            Row::Scalar(Literals {
+                conditions: source.conditions.clone(),
+                outputs: source.outputs.clone(),
+            }),
+        ];
+        let mut atoms: Vec<_> = conditions
+            .iter()
+            .chain(&source.outputs)
+            .map(|&(atom, _)| atom)
+            .collect();
+        atoms.sort_unstable();
+        atoms.dedup();
+        for mut reading in 0..4_usize.pow(u32::try_from(atoms.len()).unwrap()) {
+            let mut held = [0_u64; 3];
+            let mut cut = [0_u64; 3];
+            for &atom in &atoms {
+                let state = reading % 4;
+                reading /= 4;
+                if state & 1 != 0 {
+                    held[atom / 64] |= 1 << (atom % 64);
+                }
+                if state & 2 != 0 {
+                    cut[atom / 64] |= 1 << (atom % 64);
+                }
+            }
+            let wanted = expected(&source, &held, &cut);
+            for row in &rows {
+                assert_eq!(
+                    row.deduction(&held, &cut, &mut Work::new(u64::MAX))
+                        .unwrap(),
+                    wanted
+                );
+            }
+        }
     }
 }
 
-fn prepared(source: Explanation) -> Row {
+fn dense() -> Literals {
+    Literals {
+        conditions: (0..16).map(|atom| (atom, atom % 2 == 0)).collect(),
+        outputs: (16..80).map(|atom| (atom, false)).collect(),
+    }
+}
+
+fn prepared(source: Literals) -> Row {
     let mut allowance = u64::MAX;
     Row::prepare(source, &mut allowance, &mut Work::new(u64::MAX), &mut 0)
         .unwrap()
@@ -123,14 +179,14 @@ fn packing_retains_less_storage_for_dense_rows() {
     assert!(matches!(row, Row::Packed { .. }));
     assert!(size_of::<Row>() as u128 + row.retained_bytes() < scalar_bytes);
     assert_eq!(row.conditions().collect::<Vec<_>>(), dense().conditions);
-    assert_eq!(row.outputs().collect::<Vec<_>>(), dense().unsupported);
+    assert_eq!(row.outputs().collect::<Vec<_>>(), dense().outputs);
 }
 
 #[test]
 fn dispersed_rows_keep_the_scalar_representation() {
-    let source = Explanation {
+    let source = Literals {
         conditions: (0..16).map(|atom| (atom * 64, atom % 2 == 0)).collect(),
-        unsupported: (16..80).map(|atom| atom * 64).collect(),
+        outputs: (16..80).map(|atom| (atom * 64, false)).collect(),
     };
     let expected_bytes = source.retained_bytes();
     let row = prepared(source);
@@ -138,7 +194,7 @@ fn dispersed_rows_keep_the_scalar_representation() {
     assert_eq!(row.retained_bytes(), expected_bytes);
     assert_eq!(
         row.outputs().collect::<Vec<_>>(),
-        (16..80).map(|atom| atom * 64).collect::<Vec<_>>()
+        (16..80).map(|atom| (atom * 64, false)).collect::<Vec<_>>()
     );
 }
 
@@ -154,7 +210,7 @@ fn peak_storage_includes_both_conversion_buffers() {
     assert!(matches!(row, Row::Packed { .. }));
     assert_eq!(
         peak,
-        size_of::<Row>() as u128 + size_of::<Explanation>() as u128 + scalar + row.retained_bytes()
+        size_of::<Row>() as u128 + size_of::<Literals>() as u128 + scalar + row.retained_bytes()
     );
 }
 
@@ -177,7 +233,7 @@ fn equal_rows_and_distinct_signs_ignore_physical_form() {
             Some(false)
         );
         let mut different = dense();
-        *different.unsupported.last_mut().unwrap() = 80;
+        *different.outputs.last_mut().unwrap() = (80, false);
         let mut allowance = u64::MAX;
         assert_eq!(
             row.subsumes(&different, &mut allowance, &mut Work::new(u64::MAX))
@@ -192,7 +248,7 @@ fn output_cursors_preserve_ascending_atom_events() {
     for row in [Row::Scalar(dense()), prepared(dense())] {
         let mut cursor = OutputCursor::default();
         for expected in 16..80 {
-            assert_eq!(row.next_output(&mut cursor), Some(expected));
+            assert_eq!(row.next_output(&mut cursor), Some((expected, false)));
         }
         assert_eq!(row.next_output(&mut cursor), None);
         assert_eq!(row.next_output(&mut cursor), None);

@@ -202,22 +202,39 @@ possible-foundedness preparation, closure and publication (`founded_work`). Both
 are included in `reading_work`, and both retain work spent before interruption.
 An omitted closure pass contributes no foundedness work.
 
-A worker may retain a bounded ledger of conditional unsupported sets: if all
-signed atom conditions hold, every output atom must be absent. Identical
-conditions can share their output union, and a stronger newly certified row can
-replace older rows requiring more conditions and excluding fewer atoms. Unions
-retain the existing limit of 64 distinct outputs. Merely overlapping conditions
-are not combined. Comparisons, packing and bounded compaction are admitted before
-any old row is removed; an interrupted attempt preserves the old certificates.
-Unrelated rows retain their order. Capture still stops when the ledger is full.
-Matching and capture are counted in `support_explanations.work`, separately from
-`founded_work`, and both contribute to total reads. Consolidation changes the
-physical representation of established consequences, not their reduct meaning.
+A worker's tier of learned rows is bounded by its owner's limits: by default 64
+rows, 256 founded capture attempts and 131,072 capture reads over the tier's
+life, and per capture at most 4,096 reads, 65,536 workspace bytes, 16 signed
+conditions and 64 outputs. Identical conditions can share their output union,
+and a stronger newly certified row can replace older rows requiring more
+conditions and giving fewer outputs. Unions retain the limit of 64 distinct
+outputs. Merely overlapping conditions are not combined. Comparisons, packing
+and bounded compaction are admitted before any old row is removed; an
+interrupted attempt preserves the old certificates. Unrelated rows retain their
+order, and an evicted row's position takes the new row. By default the founded
+floor equals the tier's capacity, so a tier full of founded rows stops capturing
+as before. Matching and capture are counted in `support_explanations.work`,
+separately from `founded_work`, and both contribute to total reads.
+Consolidation changes the physical representation of established consequences,
+not their reduct meaning.
+
+Up to 64 rows, each matching step tests every row. Above that, a step reads an
+occurrence index of every row's condition and output atoms, and tests only the
+rows that mention an atom decided since the previous step. Within one narrowing
+knowledge only grows and a row's deduction reads only its own atoms, so a row
+the index skips has the deduction the previous step already applied. A
+narrowing's first step, whose inherited knowledge no earlier step of this tier
+read, and the first step after the rows change test every row. The first indexed
+step after a change rebuilds the index at one read per indexed occurrence; an
+interrupted rebuild is never read.
+
 After a complete premise match, packed output words are filtered against current
-held and cut masks before decoding atom IDs. Already-cut outputs need no event;
-a held output must still refute the region, even if also cut. Ascending event
-order is preserved. The cursor lasts only for that traversal and stores no
-knowledge for another region. Work includes loaded words and emitted outputs.
+held and cut masks before decoding atom IDs: a required absence is visited when
+its atom is held or not yet cut, a required presence when its atom is cut or not
+yet held. Outputs already satisfied need no event; a contradicted output must
+still refute the region. Ascending event order is preserved, an absence before a
+presence of the same atom. The cursor lasts only for that traversal and stores
+no knowledge for another region. Work includes loaded words and emitted outputs.
 
 Native nonnegative threshold rows also share consequences during
 original-candidate narrowing. Preparation links exact prefixes of grouped

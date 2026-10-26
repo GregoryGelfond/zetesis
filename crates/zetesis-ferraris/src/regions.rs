@@ -56,6 +56,8 @@ mod adjacency;
 mod counters;
 mod extrema;
 mod founded;
+mod ledger;
+pub use ledger::{LearningLimits, LearningOwner, LearningStore};
 mod generators;
 pub use generators::{
     GeneratorOrder, GeneratorOrderAttempt, GeneratorOrderError, GeneratorOrderLimits,
@@ -106,6 +108,9 @@ struct Subject<'a> {
     frozen: Option<&'a [bool]>,
     choices: &'a ChoiceHeads,
     generator_order: Option<&'a GeneratorOrder>,
+    /// The owner whose carrier this subject is: only the carrier matches and
+    /// captures learned rows.
+    learning: Option<&'a LearningOwner>,
 }
 
 /// The marks of a subject that ranks no atom as a choice.
@@ -119,6 +124,7 @@ pub struct OriginalSubject<'a> {
     producers: Option<&'a Producers>,
     choices: &'a ChoiceHeads,
     generator_order: Option<&'a GeneratorOrder>,
+    learning: Option<&'a LearningOwner>,
 }
 
 impl<'a> OriginalSubject<'a> {
@@ -131,6 +137,24 @@ impl<'a> OriginalSubject<'a> {
             producers,
             choices: &NO_CHOICES,
             generator_order: None,
+            learning: None,
+        }
+    }
+
+    /// `owner`'s carrier: the candidates of the owner's theory, cut by
+    /// `producers`' support when given, as the one subject of a walk that
+    /// matches and captures learned rows. A walk makes only its candidate
+    /// tree's original subject a carrier; restrictions, bounds and frozen
+    /// queries are never carriers. The subject reads the owner's own theory,
+    /// so every row it learns belongs to the owner's class.
+    #[must_use]
+    pub const fn carrier(owner: &'a LearningOwner, producers: Option<&'a Producers>) -> Self {
+        Self {
+            theory: &owner.theory,
+            producers,
+            choices: &NO_CHOICES,
+            generator_order: None,
+            learning: Some(owner),
         }
     }
 
@@ -180,6 +204,7 @@ impl<'a> From<OriginalSubject<'a>> for Subject<'a> {
             frozen: None,
             choices: subject.choices,
             generator_order: subject.generator_order,
+            learning: subject.learning,
         }
     }
 }
@@ -221,6 +246,7 @@ impl<'a> From<FrozenSubject<'a>> for Subject<'a> {
             frozen: Some(subject.truth),
             choices: &NO_CHOICES,
             generator_order: None,
+            learning: None,
         }
     }
 }
@@ -1451,7 +1477,15 @@ impl Narrower {
             scratch
                 .founded
                 .begin_local(subject.theory, known.founded_closed);
-            scratch.explanations.prepare(subject.theory);
+        }
+        // Only the owner's carrier matches and captures rows. Restriction,
+        // bound and frozen visits suspend the ledger without clearing it.
+        scratch.matching = subject.learning.is_some();
+        if let Some(owner) = subject.learning {
+            scratch.explanations.prepare(owner);
+            scratch.explanations.begin_narrowing();
+            scratch.match_dirty = true;
+            scratch.decided.clear();
         }
         let mut closure = Closure {
             known: known.borrow(),
@@ -1568,6 +1602,18 @@ impl<C: Clone> Clone for Known<C> {
     }
 }
 
+/// What seeding or delivering a tier did: its outcome and the reads it
+/// charged.
+#[derive(Clone, Debug, PartialEq, Eq)]
+#[must_use]
+pub struct LearningAttempt {
+    /// A stop of the quota, a cancellation or an allocation refusal; an
+    /// exhausted sharing allowance is not a stop.
+    pub result: Result<(), Stop>,
+    /// Reads charged to the quota.
+    pub work: u64,
+}
+
 /// The worklists of a narrowing: what a closure has learned and must still
 /// propagate. They belong to the walker, not to a region's knowledge: one
 /// value serves every narrowing a walker makes, keeping the capacity its
@@ -1605,8 +1651,17 @@ pub struct NarrowingScratch {
     witnesses: witnesses::Scratch,
     /// Possible founded atoms, computed only with complete original producers.
     founded: founded::Scratch,
-    /// Exact-original conditional deductions; not cloned with region knowledge.
-    explanations: founded::ledger::Ledger,
+    /// Learned rows of the carrier's owner; not cloned with region knowledge.
+    explanations: ledger::Ledger,
+    /// True while the narrowing's subject is its owner's carrier.
+    matching: bool,
+    /// The carrier's knowledge changed since its last matching step.
+    match_dirty: bool,
+    /// Atoms the carrier decided since its last matching step, recorded only
+    /// while the ledger reads its occurrence index.
+    decided: Vec<usize>,
+    /// Row positions one matching step tests.
+    match_rows: Vec<usize>,
 }
 
 impl NarrowingScratch {
@@ -1626,6 +1681,63 @@ impl NarrowingScratch {
             + self.witnesses.retained_bytes()
             + self.founded.retained_bytes()
             + self.explanations.retained_bytes()
+            + (self.decided.capacity() + self.match_rows.capacity()) as u128
+                * size_of::<usize>() as u128
+    }
+
+    /// Seed this scratch's tier, the rows of `owner`'s carrier, from `store`:
+    /// the store's rows of the owner's class join the tier by retention.
+    /// Runs at a walk's boundary, never inside a narrowing; work is granted
+    /// by `quota`. Exhausting the tier's sharing allowance ends seeding, not
+    /// the run.
+    pub fn seed_learning(
+        &mut self,
+        owner: &LearningOwner,
+        store: &mut LearningStore,
+        quota: &mut dyn NarrowingQuota,
+    ) -> LearningAttempt {
+        let mut work = Work::reserved(quota);
+        self.explanations.prepare(owner);
+        self.match_dirty = true;
+        let result = self.explanations.seed(store, &mut work);
+        work.refund();
+        LearningAttempt {
+            result,
+            work: work.spent,
+        }
+    }
+
+    /// Deliver this scratch's tier to `store`: the rows learned or hit since
+    /// the tier's last delivery that pass `owner`'s quality filter, under the
+    /// owner's class. Runs at a walk's boundary, never inside a narrowing;
+    /// work is granted by `quota`. Exhausting the tier's sharing allowance
+    /// ends delivery, not the run.
+    pub fn deliver_learning(
+        &mut self,
+        owner: &LearningOwner,
+        store: &mut LearningStore,
+        quota: &mut dyn NarrowingQuota,
+    ) -> LearningAttempt {
+        let mut work = Work::reserved(quota);
+        self.explanations.prepare(owner);
+        let result = self.explanations.deliver(store, &mut work);
+        work.refund();
+        LearningAttempt {
+            result,
+            work: work.spent,
+        }
+    }
+
+    /// Rows this scratch's tier holds.
+    #[must_use]
+    pub fn learned_rows(&self) -> usize {
+        self.explanations.len()
+    }
+
+    /// Rows this scratch's tier evicted over its life.
+    #[must_use]
+    pub fn learned_evictions(&self) -> u64 {
+        self.explanations.evicted()
     }
 
     /// Discard every entry, keeping the capacity, for a narrowing over
@@ -1890,6 +2002,12 @@ impl<C: Count> Closure<'_, C> {
             *self.known.founded_closed = false;
         }
         self.lists.learned.push(atom);
+        if self.lists.matching {
+            self.lists.match_dirty = true;
+            if self.lists.explanations.records_decisions() {
+                self.lists.decided.push(atom);
+            }
+        }
         let mut step = step;
         for &node in &index.atom_nodes[atom] {
             if !value {
@@ -1941,6 +2059,7 @@ impl<C: Count> Closure<'_, C> {
             frozen,
             choices: _,
             generator_order: _,
+            learning: _,
         } = subject;
         if frozen.is_none() {
             if index.thresholds.has_relations() {
@@ -2028,6 +2147,7 @@ impl<C: Count> Closure<'_, C> {
             frozen,
             choices: _,
             generator_order: _,
+            learning: _,
         } = subject;
         loop {
             let step = if let Some((node, value)) = self.lists.nodes.pop() {
@@ -2060,6 +2180,14 @@ impl<C: Count> Closure<'_, C> {
                 } else {
                     step
                 }
+            } else if self.lists.matching && self.lists.match_dirty {
+                // Learned rows read the carrier's knowledge with or without
+                // producers, before possible foundedness tests it.
+                let before = work.spent;
+                let matched =
+                    self.match_rows(index, producers, work, &mut statistics.support_explanations);
+                statistics.support_explanations.work += work.spent - before;
+                matched?
             } else if let Some(producers) = producers {
                 debug_assert!(frozen.is_none(), "only original subjects have producers");
                 let before = work.spent;
@@ -2099,13 +2227,6 @@ impl<C: Count> Closure<'_, C> {
         work: &mut Work<'_>,
         explanations: &mut SupportExplanationStatistics,
     ) -> Result<Step, Stop> {
-        let before = work.spent;
-        let matched = self.match_explanations(index, producers, work, explanations);
-        explanations.work += work.spent - before;
-        let matched = matched?;
-        if matched != Step::Unchanged {
-            return Ok(matched);
-        }
         if *self.known.founded_closed
             || !self.lists.founded.needed(theory, index, producers, work)?
         {
@@ -2123,6 +2244,10 @@ impl<C: Count> Closure<'_, C> {
         let captured = self.remember_unsupported(theory, index, producers, work, explanations);
         explanations.work += work.spent - before;
         captured?;
+        // A retained row is matched before the next founded pass.
+        if self.lists.matching {
+            self.lists.match_dirty = true;
+        }
         let mut step = Step::Unchanged;
         for word in 0..self.lists.founded.publication_words() {
             work.tick()?;
@@ -2155,7 +2280,7 @@ impl<C: Count> Closure<'_, C> {
         work: &mut Work<'_>,
         explanations: &mut SupportExplanationStatistics,
     ) -> Result<(), Stop> {
-        if !self.lists.explanations.can_capture() {
+        if !self.lists.matching || !self.lists.explanations.can_capture() {
             return Ok(());
         }
         // Prefer a direct contradiction. If none is present, capture one new
@@ -2199,26 +2324,54 @@ impl<C: Count> Closure<'_, C> {
         Ok(())
     }
 
-    /// Read conditional support as a filter over current signed atom masks.
-    /// Consequences enter the existing event queues and preserve their order.
-    fn match_explanations(
+    /// Read learned rows as a filter over the carrier's signed atom masks:
+    /// every row while the tier is small, at the narrowing's first step and
+    /// after the rows changed, otherwise the rows the occurrence index gives
+    /// for the atoms decided since the last step. Consequences enter the
+    /// existing event queues and preserve their order; decisions they make
+    /// are recorded for the next step.
+    fn match_rows(
         &mut self,
         index: &Narrower,
-        producers: &Producers,
+        producers: Option<&Producers>,
+        work: &mut Work<'_>,
+        counts: &mut SupportExplanationStatistics,
+    ) -> Result<Step, Stop> {
+        self.lists.match_dirty = false;
+        let mut rows = std::mem::take(&mut self.lists.match_rows);
+        let decided = std::mem::take(&mut self.lists.decided);
+        let gathered = self
+            .lists
+            .explanations
+            .candidates(&decided, &mut rows, work);
+        self.lists.decided = decided;
+        self.lists.decided.clear();
+        let result =
+            gathered.and_then(|()| self.match_candidates(&rows, index, producers, work, counts));
+        self.lists.match_rows = rows;
+        result
+    }
+
+    fn match_candidates(
+        &mut self,
+        rows: &[usize],
+        index: &Narrower,
+        producers: Option<&Producers>,
         work: &mut Work<'_>,
         counts: &mut SupportExplanationStatistics,
     ) -> Result<Step, Stop> {
         let mut step = Step::Unchanged;
-        for row in 0..self.lists.explanations.len() {
+        for &row in rows {
             match self.lists.explanations.deduction(
                 row,
                 self.known.atom_sure,
                 self.known.atom_never,
                 work,
             )? {
-                founded::ledger::Deduction::None => continue,
-                founded::ledger::Deduction::Require { atom, value } => {
-                    let forced = self.atom(index, Some(producers), None, atom, value);
+                ledger::Deduction::None => continue,
+                ledger::Deduction::Require { atom, value } => {
+                    let forced = self.atom(index, producers, None, atom, value);
+                    self.lists.explanations.hit(row);
                     counts.forced += 1;
                     counts.matched += 1;
                     step = step.join(forced);
@@ -2227,29 +2380,40 @@ impl<C: Count> Closure<'_, C> {
                     }
                     continue;
                 }
-                founded::ledger::Deduction::ExcludeOutputs => {}
+                ledger::Deduction::ForceOutputs => {}
             }
             let mut changed = false;
-            let mut outputs = founded::ledger::OutputCursor::default();
-            while let Some(atom) = self.lists.explanations.next_publication_output(
+            let mut outputs = ledger::OutputCursor::default();
+            while let Some((atom, present)) = self.lists.explanations.next_publication_output(
                 row,
                 &mut outputs,
                 self.known.atom_sure,
                 self.known.atom_never,
                 work,
             )? {
-                if bit(self.known.atom_sure, atom) {
+                let (agrees, opposes) = if present {
+                    (&*self.known.atom_sure, &*self.known.atom_never)
+                } else {
+                    (&*self.known.atom_never, &*self.known.atom_sure)
+                };
+                if bit(opposes, atom) {
+                    self.lists.explanations.hit(row);
                     counts.matched += 1;
                     counts.refuted += 1;
                     return Ok(Step::Contradiction);
                 }
-                if !bit(self.known.atom_never, atom) {
-                    step = step.join(self.atom(index, Some(producers), None, atom, false));
-                    counts.cut += 1;
+                if !bit(agrees, atom) {
+                    step = step.join(self.atom(index, producers, None, atom, present));
+                    // Founded rows' absences are cuts; no source yet learns a
+                    // required presence, which counts only as a match.
+                    counts.cut += u64::from(!present);
                     changed = true;
                 }
             }
-            counts.matched += u64::from(changed);
+            if changed {
+                self.lists.explanations.hit(row);
+                counts.matched += 1;
+            }
         }
         Ok(step)
     }
@@ -2442,6 +2606,7 @@ impl<C: Count> Closure<'_, C> {
             frozen,
             choices: _,
             generator_order: _,
+            learning: _,
         } = subject;
         let nodes = theory.view();
         if let Some(chain) = index.chain_of[node] {

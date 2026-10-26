@@ -2,27 +2,24 @@
 //!
 //! A first ordered pass counts distinct outputs without allocating or changing
 //! either input. A second pass fills a reserved temporary buffer. Only complete
-//! success replaces the temporary explanation's outputs; the retained row never
+//! success replaces the temporary row's outputs; the retained row never
 //! changes. Every comparison and union step shares the capture allowance.
 
-use super::{Explanation, Row, Stop, Work, capture_read};
+use super::{Literals, Row, Stop, Work, capture_read};
 
 #[cfg(test)]
 mod tests;
 
 pub(super) fn union_outputs(
     row: &Row,
-    other: &mut Explanation,
+    other: &mut Literals,
     maximum: usize,
     remaining: &mut u64,
     work: &mut Work<'_>,
     peak: &mut u128,
 ) -> Result<Option<bool>, Stop> {
     let (conditions, outputs) = row.lengths();
-    if conditions != other.conditions.len()
-        || outputs > maximum
-        || other.unsupported.len() > maximum
-    {
+    if conditions != other.conditions.len() || outputs > maximum || other.outputs.len() > maximum {
         return Ok(Some(false));
     }
     let mut premises = row.conditions();
@@ -40,7 +37,7 @@ pub(super) fn union_outputs(
 
     let count = {
         let mut count = 0;
-        let mut values = union(row.outputs(), other.unsupported.iter().copied());
+        let mut values = union(row.outputs(), other.outputs.iter().copied());
         loop {
             if !capture_read(remaining, work)? {
                 return Ok(None);
@@ -57,20 +54,22 @@ pub(super) fn union_outputs(
     };
     // Every old output belongs to the union, so equal cardinality proves that
     // the proposed buffer already represents the complete union.
-    if count == other.unsupported.len() {
+    if count == other.outputs.len() {
         return Ok(Some(true));
     }
 
-    let simultaneous =
-        size_of::<Explanation>() as u128 + size_of::<Vec<usize>>() as u128 + other.retained_bytes();
+    let simultaneous = size_of::<Literals>() as u128
+        + size_of::<Vec<(usize, bool)>>() as u128
+        + other.retained_bytes();
     *peak = (*peak).max(simultaneous);
     let mut combined = Vec::new();
     combined
         .try_reserve_exact(count)
         .map_err(|_| Stop::Allocation)?;
-    *peak = (*peak).max(simultaneous + combined.capacity() as u128 * size_of::<usize>() as u128);
+    *peak = (*peak)
+        .max(simultaneous + combined.capacity() as u128 * size_of::<(usize, bool)>() as u128);
     {
-        let mut values = union(row.outputs(), other.unsupported.iter().copied());
+        let mut values = union(row.outputs(), other.outputs.iter().copied());
         for _ in 0..count {
             if !capture_read(remaining, work)? {
                 return Ok(None);
@@ -82,16 +81,16 @@ pub(super) fn union_outputs(
             );
         }
     }
-    other.unsupported = combined;
+    other.outputs = combined;
     Ok(Some(true))
 }
 
 /// Both inputs are already strictly increasing. An equality advances both, so
 /// this stream retains each output once without another ordering or dedup pass.
-fn union(
-    left: impl Iterator<Item = usize>,
-    right: impl Iterator<Item = usize>,
-) -> impl Iterator<Item = usize> {
+fn union<T: Ord + Copy>(
+    left: impl Iterator<Item = T>,
+    right: impl Iterator<Item = T>,
+) -> impl Iterator<Item = T> {
     let mut left = left.peekable();
     let mut right = right.peekable();
     std::iter::from_fn(

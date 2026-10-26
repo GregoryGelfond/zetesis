@@ -327,12 +327,13 @@ fn original_false_events_collect_the_whole_interval() {
     let mut parent = Region::all_open(example.owner.atom_count());
     let mut known = example.index.knowledge();
     let mut scratch = NarrowingScratch::default();
+    let learning = crate::test_support::learning(&example.owner);
     let close =
         |region: &mut Region, known: &mut crate::Knowledge, scratch: &mut NarrowingScratch| {
             example
                 .index
                 .narrow_known(
-                    OriginalSubject::new(&example.owner, Some(&example.producers)),
+                    OriginalSubject::carrier(&learning, Some(&example.producers)),
                     region,
                     known,
                     scratch,

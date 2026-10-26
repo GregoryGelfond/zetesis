@@ -336,7 +336,14 @@ fn active_restrictions_keep_primary_preference() {
     let cancellation = Cancellation::default();
     let mut opening = budget(&cancellation, u64::MAX);
     let opened = super::super::open(&original, u64::MAX, &mut opening).unwrap();
-    assert!(opened.parts.subject(&original).generator_order().is_some());
+    assert!(
+        opened
+            .parts
+            .subject(&original)
+            .unwrap()
+            .generator_order()
+            .is_some()
+    );
     let restriction = Conditions {
         permanent: vec![permanent(prefer_a())],
         bound: None,
@@ -350,7 +357,7 @@ fn active_restrictions_keep_primary_preference() {
         let mut region = Region::all_open(3);
         let mut allowance = budget(&cancellation, u64::MAX);
         let result = narrow(
-            (opened.parts.subject(&original), &narrower),
+            (opened.parts.subject(&original).unwrap(), &narrower),
             &conditions,
             (&mut region, &mut CandidateKnowledge::default()),
             &mut NarrowingScratch::default(),

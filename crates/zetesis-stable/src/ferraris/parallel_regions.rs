@@ -1586,15 +1586,17 @@ fn step<'a>(
             worker: &mut workspaces.filter,
             timings: &mut report.statistics.phase_timings,
         });
-    let narrowing = super::regions::narrow(
-        (shared.parts.subject(original.theory()), original.narrower()),
-        &restrictions,
-        (&mut region, &mut knowledge),
-        &mut workspaces.scratch,
-        budget,
-        &mut report.regions,
-        check.as_mut(),
-    );
+    let narrowing = shared.parts.subject(original.theory()).and_then(|subject| {
+        super::regions::narrow(
+            (subject, original.narrower()),
+            &restrictions,
+            (&mut region, &mut knowledge),
+            &mut workspaces.scratch,
+            budget,
+            &mut report.regions,
+            check.as_mut(),
+        )
+    });
     timing::finish(
         &mut report.statistics.phase_timings,
         Phase::Candidates,

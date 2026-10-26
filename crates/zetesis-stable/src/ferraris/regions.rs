@@ -23,8 +23,8 @@ use zetesis_cpu::Stop;
 use zetesis_cpu::regions::{Counting, Narrowing, Region, Traversal, Visit};
 use zetesis_ferraris::{
     ChoiceHeads, FrozenSubject, GeneratorOrder, GeneratorOrderError, Interpretation, Knowledge,
-    Narrower, NarrowingAttempt, NarrowingQuota, NarrowingScratch, OriginalSubject, Producers,
-    RegionLimits, SupportExplanationStatistics, Theory,
+    LearningLimits, LearningOwner, Narrower, NarrowingAttempt, NarrowingQuota, NarrowingScratch,
+    OriginalSubject, Producers, RegionLimits, SupportExplanationStatistics, Theory,
 };
 
 use super::conditions::{Bound, CandidateKnowledge, Conditions};
@@ -398,21 +398,30 @@ pub(crate) struct RegionSearch {
 }
 
 /// What a region walk reads of the original theory beyond the theory itself:
-/// its producers, when it lies in the producer fragment, and the heads of its
-/// atomic choice roots, which every split ranks first.
+/// its producers, when it lies in the producer fragment, the heads of its
+/// atomic choice roots, which every split ranks first, and the owner of the
+/// rows its walks learn.
 #[derive(Debug)]
 pub(crate) struct OriginalParts {
     producers: Option<Producers>,
     choice_heads: ChoiceHeads,
     generator_order: Option<GeneratorOrder>,
+    learning: LearningOwner,
 }
 
 impl OriginalParts {
-    /// The walk's subject over `theory`, the theory these parts came from.
-    pub(crate) fn subject<'a>(&'a self, theory: &'a Theory) -> OriginalSubject<'a> {
-        OriginalSubject::new(theory, self.producers.as_ref())
-            .with_choices(&self.choice_heads)
-            .with_generator_order(self.generator_order.as_ref())
+    /// The walk's subject over `theory`, the theory these parts came from:
+    /// the carrier of the rows the walk learns. Restrictions, the bound and
+    /// filters are read by other subjects, which never carry rows.
+    pub(crate) fn subject(&self, theory: &Theory) -> Result<OriginalSubject<'_>, Incomplete> {
+        if !self.learning.owns(theory) {
+            return Err(Incomplete::WrongTheory);
+        }
+        Ok(
+            OriginalSubject::carrier(&self.learning, self.producers.as_ref())
+                .with_choices(&self.choice_heads)
+                .with_generator_order(self.generator_order.as_ref()),
+        )
     }
 }
 
@@ -489,6 +498,7 @@ pub(crate) fn open(
             producers: extraction.producers,
             choice_heads: extraction.choice_heads,
             generator_order,
+            learning: LearningOwner::theory(theory, LearningLimits::default()),
         },
     })
 }
@@ -679,7 +689,7 @@ impl RegionSearch {
         let mut advance = |mut check: Option<crate::region_filter::Check<'_, '_>>| {
             traversal.next(|region, knowledge| -> Result<Narrowing, Incomplete> {
                 narrow(
-                    (parts.subject(formulas), narrower),
+                    (parts.subject(formulas)?, narrower),
                     restrictions,
                     (region, knowledge),
                     scratch,

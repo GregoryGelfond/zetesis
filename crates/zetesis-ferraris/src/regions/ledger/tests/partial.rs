@@ -7,21 +7,11 @@ use super::*;
 /// operands. It makes an ordinary event from the required premise observable.
 fn with_consequence(body: usize, head: usize) -> Program {
     let base = Program::new(false);
-    let mut nodes = base.owner.nodes().to_vec();
-    let mut roots = base.owner.roots().to_vec();
+    let mut nodes = base.theory.nodes().to_vec();
+    let mut roots = base.theory.roots().to_vec();
     roots.push(nodes.len());
     nodes.push(Node::implies(body, head));
-    let owner = theory(5, nodes, roots);
-    let index = Narrower::new(&owner);
-    let producers = crate::producers(&owner, RegionLimits::default(), &Cancellation::default())
-        .unwrap()
-        .producers
-        .unwrap();
-    Program {
-        owner,
-        index,
-        producers,
-    }
+    Program::of(theory(5, nodes, roots))
 }
 
 #[test]
@@ -150,7 +140,7 @@ fn an_inventory_free_visit_cannot_force_a_partial_premise() {
     let (result, counts) = program
         .index
         .narrow_known(
-            OriginalSubject::new(&program.owner, None),
+            OriginalSubject::new(&program.theory, None),
             &mut narrowed,
             &mut program.index.knowledge(),
             &mut scratch,
@@ -179,7 +169,7 @@ fn a_frozen_visit_cannot_force_a_partial_premise() {
     // Keep the entire initial region below the frozen candidate. Compare with
     // a fresh reduct query rather than assuming the reduct leaves the premise
     // open: only the original-theory explanation must be ignored.
-    let candidate = world(&program.owner, 0b11111);
+    let candidate = world(&program.theory, 0b11111);
     let mut workspace = EvaluationWorkspace::default();
     let evaluated = workspace
         .evaluate(
@@ -193,7 +183,7 @@ fn a_frozen_visit_cannot_force_a_partial_premise() {
     let initial = region(&[(0, true), (3, true)]);
     let mut with_row = initial.clone();
     let mut without_row = initial;
-    let subject = FrozenSubject::new(&program.owner, evaluated.truth());
+    let subject = FrozenSubject::new(&program.theory, evaluated.truth());
     let (expected, _) = program
         .index
         .narrow_frozen_known(

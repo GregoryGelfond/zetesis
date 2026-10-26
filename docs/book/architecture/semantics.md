@@ -118,31 +118,48 @@ contributions false. Empty selections and endpoint bounds retain their ordinary
 meaning. These deductions use the existing numeric rows and signed atom premises;
 a cached aggregate value alone is not an explanation.
 
-The region narrower retains a bounded ledger of these deductions in each
-worker's scratch, owned by the exact immutable original theory. Each completed
-pass attempts at most one capture before publishing its cuts, preferring a held
-unsupported atom. Otherwise it may explain an open atom that the pass is about
-to exclude. Neither case permits omitting any producer from the explanation.
-When all signed conditions are known, it cuts open output atoms or refutes a
-held output atom.
-It also uses a row with exactly one unknown condition when every other condition
-holds and an output atom is held: the unknown condition must fail. For the example
-above, holding `a` while `x` is open forces `x` to hold. A condition already known
-to have the opposite value disables the row. Two or more unknown conditions, or
-one unknown condition without a held output, make no deduction.
+The region narrower keeps these deductions as learned rows. A row pairs signed
+atom conditions with signed outputs, each an atom required present or absent,
+and belongs to a consequence class: every member of the class that satisfies
+the conditions satisfies the outputs. The one class today is the answer sets of
+the exact immutable original theory, and the one source is the conditional
+unsupported sets above, whose outputs are absences. A row of the original theory
+also holds for the answer sets a candidate restriction, objective bound or
+region filter admits, since each only narrows the class.
+
+Rows belong to an owner, an explicit value naming the class and its allowances.
+A walk's candidate subject is the owner's carrier: the one subject that matches
+and captures rows. Restriction, bound, filter and frozen-reduct queries are never
+carriers and leave the rows untouched. Each worker's scratch holds one tier of
+the owner's rows. Each completed pass attempts at most one capture before
+publishing its cuts, preferring a held unsupported atom. Otherwise it may explain
+an open atom that the pass is about to exclude. Neither case permits omitting any
+producer from the explanation.
+
+When all signed conditions are known, a row gives each open output its sign, or
+refutes the region when an output's opposite is known. It also uses a row with
+exactly one unknown condition when every other condition holds and some output's
+opposite is known: the unknown condition must fail. For the example above,
+holding `a` while `x` is open forces `x` to hold. A condition already known to
+have the opposite value disables the row. Two or more unknown conditions, or one
+unknown condition without a contradicted output, make no deduction.
 
 Fresh sibling knowledge may reuse a row. Both deductions enter the existing
-propagation queues and use the same bounded explanations. A row retains scalar
-atom lists for dispersed identities, or compact word groups when those occupy
-less space. It has one authoritative representation. Word intersections implement
-the same signed-condition checks, and output atoms retain their ascending order.
-Conversion shares the existing optional capture allowance; matching remains
-charged to ordinary narrowing work. A new explanation is redundant when an
-existing row requires no additional conditions and excludes every proposed output.
-The comparison uses the same optional capture allowance and keeps the existing row.
-Frozen-reduct and restriction-only queries do not use the ledger. The original
-theory and membership check stay unchanged. Optional capture limits lose only
-reuse; a global resource or cancellation failure still stops the operation.
+propagation queues. A row retains scalar literal lists for dispersed identities,
+or compact word groups when those occupy less space. It has one authoritative
+representation. Word intersections implement the same signed-condition checks,
+and outputs retain their ascending order. Conversion shares the optional capture
+allowance; matching remains charged to ordinary narrowing work. A new row is
+redundant when an existing row requires no additional conditions and gives every
+proposed output. The comparison uses the same optional capture allowance and
+keeps the existing row. A full tier evicts the row with the fewest recent hits,
+the refutations and deductions it made, halved each time the tier has retained as
+many rows as it holds; among equals it evicts the oldest. It never evicts a
+founded row while it holds no more founded rows than their reserved floor.
+Deleting a row loses pruning only. The original theory and membership check stay
+unchanged, and no row enters a membership certificate. Optional capture limits
+lose only reuse; a global resource or cancellation failure still stops the
+operation.
 The [correspondence discussion](../lean/correspondence.md) separates the semantic
 law from the collector and runtime obligations.
 

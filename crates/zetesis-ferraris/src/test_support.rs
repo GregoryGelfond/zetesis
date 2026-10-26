@@ -4,8 +4,8 @@ use zetesis_cpu::{Cancellation, Stop};
 
 use crate::{
     AdmissionLimits, FormulaNodes, FormulaParts, FormulaTransaction, Interpretation, Knowledge,
-    Narrower, Narrowing, NarrowingQuota, NarrowingScratch, NarrowingStatistics, Node, NodeView,
-    OriginalSubject, Region, RegionLimits, Theory,
+    LearningLimits, LearningOwner, Narrower, Narrowing, NarrowingQuota, NarrowingScratch,
+    NarrowingStatistics, Node, NodeView, OriginalSubject, Region, RegionLimits, Theory,
 };
 
 /// The interpretation of `theory` holding the atoms whose bits `mask` sets.
@@ -27,6 +27,12 @@ pub(crate) fn theory(atoms: usize, nodes: Vec<Node>, roots: Vec<usize>) -> Theor
         AdmissionLimits::default(),
     )
     .unwrap()
+}
+
+/// The owner of rows of `theory`'s answer sets under the default limits, for
+/// a test's carrier subject.
+pub(crate) fn learning(theory: &Theory) -> LearningOwner {
+    LearningOwner::theory(theory, LearningLimits::default())
 }
 
 /// Push `node` into `transaction` with unbounded allowances, returning its

@@ -1,11 +1,14 @@
-//! One authoritative representation of a conditional unsupported set.
+//! One authoritative representation of a learned row: signed conditions and
+//! signed outputs.
 //!
 //! Scalar lists remain preferable for dispersed atom IDs. Otherwise ordered
 //! sparse words replace both lists. Premise words precede output words in one
 //! allocation; no premise scan visits an output-only word. Each span has
 //! strictly increasing word indices and nonempty words. Premise signs are
-//! disjoint, as guaranteed by the completed collector; output words use only
-//! `held`. Logical iterators decode canonical atom IDs in increasing order.
+//! disjoint, as every source guarantees for a row's conditions. An output word
+//! keeps an output required present in `held` and one required absent in
+//! `cut`; both bits for one atom mean the row's condition admits no member of
+//! its class. Logical iterators decode canonical atom IDs in increasing order.
 //!
 //! Preparation compares actual retained capacities, including the common enum
 //! header, and publishes only a complete row. Conversion and subsumption
@@ -15,8 +18,7 @@
 //! charges each read scalar entry or sparse word; no machine SIMD or full
 //! atom-universe buffer is required.
 
-use super::{Deduction, capture_read};
-use crate::regions::founded::explanations::Explanation;
+use super::{Deduction, Literals, capture_read};
 use crate::regions::{Work, bit};
 use zetesis_cpu::Stop;
 
@@ -34,7 +36,7 @@ pub(super) struct Word {
 
 #[derive(Debug, PartialEq, Eq)]
 pub(super) enum Row {
-    Scalar(Explanation),
+    Scalar(Literals),
     Packed {
         words: Vec<Word>,
         premise_words: usize,
@@ -49,30 +51,33 @@ pub(super) enum Row {
 pub(in crate::regions) struct OutputCursor {
     next: usize,
     word: usize,
-    pending: u64,
+    present: u64,
+    absent: u64,
 }
 
 impl Row {
     pub(super) fn prepare(
-        explanation: Explanation,
+        literals: Literals,
         remaining: &mut u64,
         work: &mut Work<'_>,
         peak: &mut u128,
     ) -> Result<Option<Self>, Stop> {
-        let scalar_bytes = explanation.retained_bytes();
-        let simultaneous =
-            size_of::<Self>() as u128 + size_of::<Explanation>() as u128 + scalar_bytes;
+        let scalar_bytes = literals.retained_bytes();
+        let simultaneous = size_of::<Self>() as u128 + size_of::<Literals>() as u128 + scalar_bytes;
         *peak = (*peak).max(simultaneous);
         let Some(premise_words) = count_words(
-            explanation.conditions.iter().map(|&(atom, _)| atom),
+            literals.conditions.iter().map(|&(atom, _)| atom),
             remaining,
             work,
         )?
         else {
             return Ok(None);
         };
-        let Some(output_words) =
-            count_words(explanation.unsupported.iter().copied(), remaining, work)?
+        let Some(output_words) = count_words(
+            literals.outputs.iter().map(|&(atom, _)| atom),
+            remaining,
+            work,
+        )?
         else {
             return Ok(None);
         };
@@ -81,7 +86,7 @@ impl Row {
             .ok_or(Stop::Allocation)?;
         let requested = count as u128 * size_of::<Word>() as u128;
         if requested >= scalar_bytes {
-            return Ok(Some(Self::Scalar(explanation)));
+            return Ok(Some(Self::Scalar(literals)));
         }
         let mut words = Vec::new();
         words
@@ -91,27 +96,65 @@ impl Row {
         *peak = (*peak).max(simultaneous + packed_bytes);
         // Allocator capacity is authoritative, not merely the requested count.
         if packed_bytes >= scalar_bytes {
-            return Ok(Some(Self::Scalar(explanation)));
+            return Ok(Some(Self::Scalar(literals)));
         }
-        for &(atom, held) in &explanation.conditions {
+        for &(atom, held) in &literals.conditions {
             if !capture_read(remaining, work)? {
                 return Ok(None);
             }
             append(&mut words, 0, atom, held);
         }
-        for &atom in &explanation.unsupported {
+        for &(atom, present) in &literals.outputs {
             if !capture_read(remaining, work)? {
                 return Ok(None);
             }
-            append(&mut words, premise_words, atom, true);
+            append(&mut words, premise_words, atom, present);
         }
         debug_assert_eq!(words.len(), count);
         Ok(Some(Self::Packed {
             words,
             premise_words,
-            conditions: explanation.conditions.len(),
-            outputs: explanation.unsupported.len(),
+            conditions: literals.conditions.len(),
+            outputs: literals.outputs.len(),
         }))
+    }
+
+    /// This row's literals as owned lists, for retention into another tier or
+    /// the store. Each decoded literal consumes the caller's allowance; None
+    /// means it ran out. The copy's buffers join the caller's peak.
+    pub(super) fn to_literals(
+        &self,
+        remaining: &mut u64,
+        work: &mut Work<'_>,
+        peak: &mut u128,
+    ) -> Result<Option<Literals>, Stop> {
+        let (conditions, outputs) = self.lengths();
+        let mut literals = Literals {
+            conditions: Vec::new(),
+            outputs: Vec::new(),
+        };
+        literals
+            .conditions
+            .try_reserve_exact(conditions)
+            .map_err(|_| Stop::Allocation)?;
+        literals
+            .outputs
+            .try_reserve_exact(outputs)
+            .map_err(|_| Stop::Allocation)?;
+        *peak = (*peak).max(size_of::<Literals>() as u128 + literals.retained_bytes());
+        for condition in self.conditions() {
+            if !capture_read(remaining, work)? {
+                return Ok(None);
+            }
+            literals.conditions.push(condition);
+        }
+        for output in self.outputs() {
+            if !capture_read(remaining, work)? {
+                return Ok(None);
+            }
+            literals.outputs.push(output);
+        }
+        Ok(Some(literals))
     }
 
     /// Owned buffers only; the ledger accounts for every containing row header.
@@ -122,9 +165,10 @@ impl Row {
         }
     }
 
-    fn lengths(&self) -> (usize, usize) {
+    /// The numbers of signed conditions and of signed outputs.
+    pub(super) fn lengths(&self) -> (usize, usize) {
         match self {
-            Self::Scalar(row) => (row.conditions.len(), row.unsupported.len()),
+            Self::Scalar(row) => (row.conditions.len(), row.outputs.len()),
             Self::Packed {
                 conditions,
                 outputs,
@@ -133,18 +177,18 @@ impl Row {
         }
     }
 
-    /// This row requires a subset of the proposed signed conditions and excludes
+    /// This row requires a subset of the proposed signed conditions and gives
     /// every proposed output. It therefore makes the proposed row redundant.
     /// Both logical streams are canonical; physical packing is immaterial.
     /// None means optional comparison allowance was exhausted, not a verdict.
     pub(super) fn subsumes(
         &self,
-        other: &Explanation,
+        other: &Literals,
         remaining: &mut u64,
         work: &mut Work<'_>,
     ) -> Result<Option<bool>, Stop> {
         let (conditions, outputs) = self.lengths();
-        if conditions > other.conditions.len() || outputs < other.unsupported.len() {
+        if conditions > other.conditions.len() || outputs < other.outputs.len() {
             return Ok(Some(false));
         }
         match includes(
@@ -155,7 +199,7 @@ impl Row {
         )? {
             Some(true) => includes(
                 self.outputs(),
-                other.unsupported.iter().copied(),
+                other.outputs.iter().copied(),
                 remaining,
                 work,
             ),
@@ -163,17 +207,17 @@ impl Row {
         }
     }
 
-    /// The proposed row requires no more premises and excludes all of this
-    /// row's outputs. Retiring this row then preserves its deductions, or lets
-    /// the stronger row refute the region before a formerly unit deduction.
+    /// The proposed row requires no more premises and gives all of this row's
+    /// outputs. Retiring this row then preserves its deductions, or lets the
+    /// stronger row refute the region before a formerly unit deduction.
     pub(super) fn subsumed_by(
         &self,
-        other: &Explanation,
+        other: &Literals,
         remaining: &mut u64,
         work: &mut Work<'_>,
     ) -> Result<Option<bool>, Stop> {
         let (conditions, outputs) = self.lengths();
-        if conditions < other.conditions.len() || outputs > other.unsupported.len() {
+        if conditions < other.conditions.len() || outputs > other.outputs.len() {
             return Ok(Some(false));
         }
         match includes(
@@ -183,7 +227,7 @@ impl Row {
             work,
         )? {
             Some(true) => includes(
-                other.unsupported.iter().copied(),
+                other.outputs.iter().copied(),
                 self.outputs(),
                 remaining,
                 work,
@@ -192,12 +236,12 @@ impl Row {
         }
     }
 
-    /// Extend a temporary explanation with this row's outputs when their signed
+    /// Extend a temporary row with this row's outputs when their signed
     /// conditions are identical and the distinct union stays within maximum.
     /// Optional refusal or a typed stop leaves both inputs unchanged.
     pub(super) fn union_outputs(
         &self,
-        other: &mut Explanation,
+        other: &mut Literals,
         maximum: usize,
         remaining: &mut u64,
         work: &mut Work<'_>,
@@ -241,83 +285,95 @@ impl Row {
         })
     }
 
+    /// Every atom the row mentions, conditions first, each output atom once.
+    pub(super) fn atoms(&self) -> impl Iterator<Item = usize> + '_ {
+        let mut previous = None;
+        self.conditions()
+            .map(|(atom, _)| atom)
+            .chain(self.outputs().filter_map(move |(atom, _)| {
+                let fresh = previous != Some(atom);
+                previous = Some(atom);
+                fresh.then_some(atom)
+            }))
+    }
+
     #[cfg(test)]
     pub(super) fn output_count(&self) -> usize {
         self.lengths().1
     }
 
-    pub(super) fn outputs(&self) -> impl Iterator<Item = usize> + '_ {
+    /// Signed outputs in ascending (atom, sign) order.
+    pub(super) fn outputs(&self) -> impl Iterator<Item = (usize, bool)> + '_ {
         let mut cursor = OutputCursor::default();
         std::iter::from_fn(move || self.next_output(&mut cursor))
     }
 
-    pub(super) fn next_output(&self, cursor: &mut OutputCursor) -> Option<usize> {
+    pub(super) fn next_output(&self, cursor: &mut OutputCursor) -> Option<(usize, bool)> {
         match self {
             Self::Scalar(row) => {
-                let atom = row.unsupported.get(cursor.next).copied()?;
+                let output = row.outputs.get(cursor.next).copied()?;
                 cursor.next += 1;
-                Some(atom)
+                Some(output)
             }
             Self::Packed {
                 words,
                 premise_words,
                 ..
             } => {
-                if cursor.pending == 0 {
+                if cursor.absent | cursor.present == 0 {
                     let group = words.get(*premise_words + cursor.next)?;
                     cursor.next += 1;
                     cursor.word = group.index;
-                    cursor.pending = group.held;
+                    cursor.absent = group.cut;
+                    cursor.present = group.held;
                 }
-                let bit = cursor.pending.trailing_zeros() as usize;
-                cursor.pending &= cursor.pending - 1;
-                Some(cursor.word * 64 + bit)
+                Some(cursor.take())
             }
         }
     }
 
     /// Visit outputs after a complete premise match. Scalar rows retain their
-    /// one-read-per-output traversal. Packed words omit cut-only outputs before
-    /// decoding atom IDs; held outputs remain visits even if also cut.
+    /// one-read-per-output traversal. Packed words omit outputs already
+    /// satisfied before decoding atom IDs; an output contradicted by its atom's
+    /// opposite decision remains a visit, so the caller refutes the region.
     ///
     /// Each source word and each returned packed output is charged before its
     /// read. The cursor owns only this traversal's remaining bits, not knowledge
-    /// reusable by another row or region. Between visits the caller may cut the
-    /// returned atom; other mask changes require starting a fresh cursor.
+    /// reusable by another row or region. Between visits the caller may decide
+    /// the returned atom; other mask changes require starting a fresh cursor.
     pub(super) fn next_publication_output(
         &self,
         cursor: &mut OutputCursor,
         held: &[u64],
         cut: &[u64],
         work: &mut Work<'_>,
-    ) -> Result<Option<usize>, Stop> {
+    ) -> Result<Option<(usize, bool)>, Stop> {
         match self {
             Self::Scalar(row) => {
-                let Some(atom) = row.unsupported.get(cursor.next) else {
+                let Some(output) = row.outputs.get(cursor.next) else {
                     return Ok(None);
                 };
                 work.tick()?;
                 cursor.next += 1;
-                Ok(Some(*atom))
+                Ok(Some(*output))
             }
             Self::Packed {
                 words,
                 premise_words,
                 ..
             } => {
-                while cursor.pending == 0 {
+                while cursor.absent | cursor.present == 0 {
                     let Some(group) = words.get(*premise_words + cursor.next) else {
                         return Ok(None);
                     };
                     work.tick()?;
                     cursor.word = group.index;
-                    cursor.pending = group.held & (held[group.index] | !cut[group.index]);
+                    cursor.absent = group.cut & (held[group.index] | !cut[group.index]);
+                    cursor.present = group.held & (cut[group.index] | !held[group.index]);
                     cursor.next += 1;
                 }
                 work.tick()?;
-                let bit = cursor.pending.trailing_zeros() as usize;
-                cursor.pending &= cursor.pending - 1;
-                Ok(Some(cursor.word * 64 + bit))
+                Ok(Some(cursor.take()))
             }
         }
     }
@@ -343,6 +399,26 @@ impl Row {
                 work,
             ),
         }
+    }
+}
+
+impl OutputCursor {
+    /// The lowest pending output of the current word, an absence before a
+    /// presence on the same atom, as the canonical order sorts them.
+    fn take(&mut self) -> (usize, bool) {
+        let absent = self.absent & self.absent.wrapping_neg();
+        let present = self.present & self.present.wrapping_neg();
+        let take_absent = present == 0 || (absent != 0 && absent <= present);
+        let mask = if take_absent { absent } else { present };
+        if take_absent {
+            self.absent &= !mask;
+        } else {
+            self.present &= !mask;
+        }
+        (
+            self.word * 64 + mask.trailing_zeros() as usize,
+            !take_absent,
+        )
     }
 }
 
@@ -415,7 +491,7 @@ fn append(words: &mut Vec<Word>, start: usize, atom: usize, held: bool) {
 }
 
 fn scalar_deduction(
-    row: &Explanation,
+    row: &Literals,
     held: &[u64],
     cut: &[u64],
     work: &mut Work<'_>,
@@ -432,11 +508,11 @@ fn scalar_deduction(
         open = Some((atom, !value));
     }
     let Some((atom, value)) = open else {
-        return Ok(Deduction::ExcludeOutputs);
+        return Ok(Deduction::ForceOutputs);
     };
-    for &output in &row.unsupported {
+    for &(output, present) in &row.outputs {
         work.tick()?;
-        if bit(held, output) {
+        if bit(if present { cut } else { held }, output) {
             return Ok(Deduction::Require { atom, value });
         }
     }
@@ -472,11 +548,13 @@ fn packed_deduction(
         open = Some((group.index * 64 + bit, group.cut & unknown != 0));
     }
     let Some((atom, value)) = open else {
-        return Ok(Deduction::ExcludeOutputs);
+        return Ok(Deduction::ForceOutputs);
     };
     for group in outputs {
         work.tick()?;
-        if group.held & held[group.index] != 0 {
+        // An output's negation is decided: a required absence held, or a
+        // required presence cut.
+        if (group.cut & held[group.index]) | (group.held & cut[group.index]) != 0 {
             return Ok(Deduction::Require { atom, value });
         }
     }

@@ -2778,23 +2778,40 @@ endpoint constants are handled first, and an interior cut with no chain is
 verified by a charged scan. The laws do not prove the cursor, finite-width sums,
 rollback, rank classification or original-row identity.
 
-The worker-local [ledger](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-ferraris/src/regions/founded/ledger.rs)
-authenticates the exact original theory and uses rows only with complete producer
-coverage. A complete match cuts open outputs or refutes a held output. With
-exactly one unknown signed condition, all others satisfied and an output held,
-Rust instead forces the unknown condition's opposite through the existing atom
-events. A condition known opposite disables the row; multiple unknowns or the
-absence of a held output do not authorize this additional deduction. The
-additional deduction uses existing rows and their output sets; capture retains
-the bounds below. Frozen and restriction-only visits suspend reuse; a different eligible theory
-clears the rows. Each owner retains
-at most 64 rows after at most 256 capture attempts, sharing 131,072 discovery,
-collection and redundancy-comparison reads. One collection permits at most 64 unsupported
+The worker-local [ledger](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-ferraris/src/regions/ledger.rs)
+holds one tier of an owner's rows. The owner (`LearningOwner`) names the class,
+today the answer sets of one exact original theory, and the tier's limits. Only
+the owner's carrier, a subject built by `OriginalSubject::carrier` over the
+owner's own theory, matches and captures, so every captured row belongs to the
+owner's class; capture also requires complete producer coverage. Restriction,
+bound, filter and frozen visits are not carriers and suspend reuse; a carrier
+of a different class clears the rows. A complete match gives each open output
+its sign or refutes a contradicted output. With exactly one unknown signed
+condition, all others satisfied and an output's opposite decided, Rust instead
+forces the unknown condition's opposite through the existing atom events
+(`consequence_row_forces_complement`). A condition known opposite disables the
+row; multiple unknowns or no contradicted output do not authorize this
+additional deduction. By default a tier retains at most 64 rows after at most
+256 capture attempts, sharing 131,072 discovery, collection and
+redundancy-comparison reads. One collection permits at most 64 unsupported
 atoms, 16 literals, 4,096 reads and 65,536 workspace bytes. A consolidated row
-keeps the same 64-distinct-output bound. Capture still stops at a full ledger;
-consolidation does not expand its discovery allowance. Matching remains
-charged to ordinary narrowing work. Optional limits decline capture; global
-quota, cancellation and allocation failures preserve their typed outcomes.
+keeps the same 64-distinct-output bound. A full tier evicts the row with the
+fewest decayed hits, oldest first, except founded rows within their reserved
+floor, which by default is the whole tier; deleting a row loses pruning only
+(`row_dominance` needs no deleted row). Consolidation does not expand the
+discovery allowance. Matching remains charged to ordinary narrowing work.
+Optional limits decline capture; global quota, cancellation and allocation
+failures preserve their typed outcomes.
+
+Above 64 rows a matching step reads an occurrence index covering every row's
+condition and output atoms. The Rust obligation is that the index skips only
+rows whose deduction cannot have changed: within one narrowing knowledge only
+grows and a deduction reads only the row's atoms, so the rows the index omits
+for the atoms decided since the previous step have the deductions that step
+applied. A narrowing's first step and the step after any change test every row,
+and an interrupted rebuild is never read. Exhaustive comparison of indexed and
+scanning tiers over partial regions checks this obligation; no Lean law states
+it.
 
 `PossibleFoundedness.conditional_unsupported_union` combines already established
 absence consequences under the same interpretation condition by taking the union
@@ -2840,9 +2857,10 @@ premise words and output words in separate ordered spans of one allocation.
 The scalar collector remains temporary; conversion peak accounting includes both
 buffers. Packed matching must preserve the same complete, partial and opposite
 condition classifications, and decoding must preserve canonical atom identity
-and ascending output events. Publication filters each packed output word by
-`outputs & (held | !cut)` before decoding: cut-only outputs are settled, while
-held outputs retain contradiction precedence. The cursor is local to one
+and ascending output events. Publication filters each packed output word before
+decoding, required absences by `held | !cut` and required presences by
+`cut | !held`: settled outputs need no event, while contradicted outputs retain
+precedence. The cursor is local to one
 traversal, and publication may cut its returned atom but cannot drain other
 propagation between visits. Word reads and emitted outputs remain charged;
 interruption supplies no completed traversal. These representation obligations are checked

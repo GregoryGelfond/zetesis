@@ -21,6 +21,7 @@ fn prepared_order_work_is_included_once_in_reading_work() {
         opened
             .parts
             .subject(&theory)
+            .unwrap()
             .generator_order()
             .unwrap()
             .belongs_to(&theory)
@@ -37,8 +38,15 @@ fn a_storage_decline_retains_the_existing_preference() {
     assert_eq!(receipt.status, GeneratorOrderStatus::StorageDeclined);
     assert!(receipt.peak_bytes > 0);
     assert_eq!(receipt.retained_bytes, 0);
-    assert!(opened.parts.subject(&theory).generator_order().is_none());
-    assert!(opened.parts.subject(&theory).choices().contains(0));
+    assert!(
+        opened
+            .parts
+            .subject(&theory)
+            .unwrap()
+            .generator_order()
+            .is_none()
+    );
+    assert!(opened.parts.subject(&theory).unwrap().choices().contains(0));
     assert_eq!(opened.statistics.counts.work, budget.statistics.work);
 }
 
