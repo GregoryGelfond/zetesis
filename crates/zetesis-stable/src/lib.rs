@@ -13,6 +13,10 @@
 //! a region or decides an atom. Beyond that check, this crate does not parse,
 //! ground, translate source aggregates, invoke an external solver, or claim a
 //! refinement proof for its Rust implementation.
+//!
+//! The dependency on zetesis-themelios is confined to the `streamed_constraints`
+//! module. Region search, narrowing and membership read only the Ferraris
+//! theory and this crate's own types, so they do not depend on the front end.
 #![forbid(unsafe_code)]
 
 mod budget;
