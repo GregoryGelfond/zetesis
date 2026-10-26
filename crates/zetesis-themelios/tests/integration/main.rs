@@ -152,6 +152,7 @@ mod terminal_reconstruction;
 mod tight_completion;
 mod tight_plans;
 mod true_heads;
+mod tuple_orderings;
 mod upstream_syntax;
 mod validation_only;
 mod value_extrema;

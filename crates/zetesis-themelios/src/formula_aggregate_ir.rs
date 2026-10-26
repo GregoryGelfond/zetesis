@@ -49,11 +49,14 @@ impl Compiler<'_> {
         variables: &mut Variables,
     ) -> Result<ComparisonParts, FormulaFailure> {
         // Closed tuples are ordinary complete values. Tuple destructuring is
-        // retained only when a syntactic tuple still contains local variables.
-        if matches!(left, Term::Tuple(_)) || matches!(right, Term::Tuple(_)) {
-            if !matches!(relation, Relation::Eq | Relation::Neq) {
-                return Err(unsupported(ProfileFeature::Term, self.location).into());
-            }
+        // retained only for equality and disequality with a syntactic tuple
+        // that still contains local variables, whose components it may bind.
+        // An ordering never binds: it compares complete values in ASP term
+        // order, so each side is compiled as one value, a syntactic tuple
+        // through its constructor, as an open function term already is.
+        if (matches!(left, Term::Tuple(_)) || matches!(right, Term::Tuple(_)))
+            && matches!(relation, Relation::Eq | Relation::Neq)
+        {
             Ok(ComparisonParts::Tuple(
                 self.tuple_expressions(left, variables)?,
                 relation,
