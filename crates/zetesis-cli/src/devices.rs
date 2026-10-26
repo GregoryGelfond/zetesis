@@ -78,7 +78,7 @@ fn inventory(output: &mut impl Write, color: ColorMode) -> Result<(), RunError> 
             adapter.device_id(),
             adapter.device_type(),
             adapter.is_hardware_gpu(),
-            adapter.supports_static_oracle()
+            adapter.supports_formula_oracle()
         )?;
         if let Some(issue) = adapter.capability_issue() {
             writeln!(output, "  Capability issue: {issue}")?;

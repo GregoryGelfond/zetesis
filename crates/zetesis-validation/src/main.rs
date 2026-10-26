@@ -14,7 +14,6 @@ use clap::{Parser, ValueEnum};
 enum NativeOracle {
     #[default]
     Auto,
-    Closure,
     Countermodel,
 }
 
@@ -126,7 +125,6 @@ impl From<NativeOracle> for corpus_comparison::NativeOracle {
     fn from(value: NativeOracle) -> Self {
         match value {
             NativeOracle::Auto => Self::Auto,
-            NativeOracle::Closure => Self::Closure,
             NativeOracle::Countermodel => Self::Countermodel,
         }
     }

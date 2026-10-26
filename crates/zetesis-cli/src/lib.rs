@@ -71,14 +71,11 @@ pub use finalized::{
 
 // Compatibility exports preserve the canonical solver types, not another implementation.
 pub use zetesis_solve::{
-    AnswerSelection, AnswerSet, Backend, ClosureExecutionStatistics, ClosureJoinStatistics,
-    ClosureRoute, Completion, CompletionAccounting, ExecutionObservation, ExecutionObserver,
-    ExecutionResources, FormulaDeviceLimits, FormulaExecutionStatistics, FormulaResidualStatistics,
-    Grounder, GroundingMeasurement, GroundingTimings, Interruption, LazyBufferUsage,
-    LazyExecutionStatistics, LazyTransportReplacements, LazyTransportUsage, MeasurementSpan,
-    Optimization, OptimizationStop, OptimumSearch, Oracle, PhaseTimings, PreparedInput,
-    PreparedProfile, QueryExecutionObservation, SearchState, SemanticOutcome, Session,
-    SessionBuilder, SessionModel, SharedExecutionStatistics, SolveConfig, SolveError, SolveFailure,
-    SolveMeasurements, SolvePhase, SourceBatching, Subject, WorldView, WorldViewError,
-    WorldViewFailure, WorldViewFailureParts, WorldViewLimits,
+    AnswerSelection, AnswerSet, Backend, Completion, CompletionAccounting, ExecutionObservation,
+    ExecutionObserver, ExecutionResources, FormulaDeviceLimits, FormulaExecutionStatistics,
+    FormulaResidualStatistics, Grounder, GroundingMeasurement, GroundingTimings, Interruption,
+    MeasurementSpan, Optimization, OptimizationStop, OptimumSearch, Oracle, PhaseTimings,
+    PreparedInput, PreparedProfile, SearchState, SemanticOutcome, Session, SessionBuilder,
+    SessionModel, SolveConfig, SolveError, SolveFailure, SolveMeasurements, SolvePhase, Subject,
+    WorldView, WorldViewError, WorldViewFailure, WorldViewFailureParts, WorldViewLimits,
 };

@@ -24,12 +24,12 @@ pub struct Group {
 pub struct Selection {
     /// The API whose reviewed table this is.
     pub api: GpuApi,
-    /// The fourteen groups with their exact tests.
+    /// The eleven groups with their exact tests.
     pub groups: Vec<Group>,
 }
 
 /// The reviewed selections: the Metal one and the Vulkan one, the same
-/// fourteen groups and counts, each naming the tests of its own API.
+/// eleven groups and counts, each naming the tests of its own API.
 const SELECTIONS: [(GpuApi, &str); 2] = [
     (GpuApi::Metal, include_str!("physical-selection.txt")),
     (
@@ -44,21 +44,18 @@ const SELECTIONS: [(GpuApi, &str); 2] = [
 /// # Errors
 /// Refuses missing/extra groups, altered target/count identities or duplicate tests.
 pub fn selection(table: &str) -> Result<Selection, Error> {
-    const EXPECTED: [(&str, &str, usize); 14] = [
-        ("wgpu-lib", "lib", 20),
+    const EXPECTED: [(&str, &str, usize); 11] = [
+        ("wgpu-lib", "lib", 15),
         ("tight", "integration", 5),
         ("formula", "integration", 3),
         ("aggregate", "integration", 3),
-        ("lazy", "integration", 4),
-        ("cli-lazy", "integration", 5),
         ("cli-formula", "integration", 3),
         ("world-views", "integration", 4),
         ("relation", "integration", 2),
         ("context", "integration", 4),
-        ("solve-context", "lib", 4),
+        ("solve-context", "lib", 3),
         ("session-resources", "integration", 14),
         ("language-consumers", "integration", 2),
-        ("static", "integration", 2),
     ];
     let api = SELECTIONS
         .iter()
@@ -66,13 +63,13 @@ pub fn selection(table: &str) -> Result<Selection, Error> {
         .map(|(api, _)| *api)
         .ok_or_else(|| {
             Error::Invalid(
-                "physical qualification requires one reviewed selection of 75 exact test identities".into(),
+                "physical qualification requires one reviewed selection of 58 exact test identities".into(),
             )
         })?;
     let rows: Vec<_> = table.lines().collect();
     require(
         rows.len() == EXPECTED.len(),
-        "physical qualification requires all fourteen groups and 75 named tests",
+        "physical qualification requires all eleven groups and 58 named tests",
     )?;
     let mut groups = Vec::new();
     let mut all_names = BTreeSet::new();

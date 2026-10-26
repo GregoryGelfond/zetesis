@@ -138,25 +138,7 @@ fn invalidates_shared_primitive(backend: GpuApi) {
     assert!(aggregate.info().is_hardware_gpu());
     let context = aggregate.context().clone();
     let mut formula = crate::GpuFormulaOracle::from_context(&context).unwrap();
-    let mut lazy = crate::GpuLazyOracle::from_context(&context).unwrap();
     assert!(formula.context().same_instance(aggregate.context()));
-    assert!(lazy.context().same_instance(aggregate.context()));
-    let empty = zetesis_core::Program::new(
-        vec![],
-        zetesis_core::FactTables::default(),
-        zetesis_core::AdmissionLimits::default(),
-    )
-    .unwrap();
-    let empty_batch = lazy
-        .check_batch(
-            &empty,
-            &[],
-            zetesis_cpu::lazy::Limits::default(),
-            crate::GpuLimits::default(),
-            &Cancellation::default(),
-        )
-        .unwrap();
-    assert!(empty_batch.checks.is_empty());
     let theory = reference::theory();
     let group = reference::group(&theory, Function::Sum, 1);
     let worlds = reference::worlds(&theory);
@@ -183,35 +165,6 @@ fn invalidates_shared_primitive(backend: GpuApi) {
         .propagate_batch(&theory, &[], crate::FormulaLimits::default())
         .unwrap_err();
     assert_eq!(failure.kind(), GpuErrorKind::Device);
-    let failure = lazy
-        .check_batch(
-            &empty,
-            &[],
-            zetesis_cpu::lazy::Limits::default(),
-            crate::GpuLimits::default(),
-            &Cancellation::default(),
-        )
-        .unwrap_err();
-    assert!(matches!(failure.cause,
-        zetesis_cpu::lazy::Cause::Execution(error) if error.kind() == GpuErrorKind::Device
-    ));
-    assert_eq!(failure.progress, zetesis_cpu::lazy::Progress::default());
-    assert_eq!(lazy.statistics().dispatches, 0);
-    let cancelled = Cancellation::default();
-    cancelled.cancel();
-    let failure = lazy
-        .check_batch(
-            &empty,
-            &[],
-            zetesis_cpu::lazy::Limits::default(),
-            crate::GpuLimits::default(),
-            &cancelled,
-        )
-        .unwrap_err();
-    assert!(matches!(
-        failure.cause,
-        zetesis_cpu::lazy::Cause::Source(zetesis_cpu::Stop::Cancelled)
-    ));
     aggregate.clear_residency();
     formula.clear_residency();
     assert!(matches!(

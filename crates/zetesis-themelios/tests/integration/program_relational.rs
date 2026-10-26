@@ -4,10 +4,8 @@ use crate::support::unevaluable_directives::{objective, projection};
 use std::{collections::BTreeSet, sync::Arc, time::Instant};
 use zetesis_reference_support::{normal_answer_sets, resource_limits};
 
-use zetesis_core::{GroundProgram, Model, Seed, StaticLimits};
-use zetesis_cpu::{
-    Cancellation, CandidateLimits, CandidateTermination, Candidates, Limits, Stop, check_static,
-};
+use zetesis_core::Model;
+use zetesis_cpu::{Cancellation, Stop};
 use zetesis_themelios::logical::{
     Name, Symbol, Term,
     program::{
@@ -81,23 +79,6 @@ fn full(model: &Model) -> BTreeSet<Symbol> {
         .collect()
 }
 
-fn models(
-    program: &zetesis_core::Program,
-    mut membership: impl FnMut(&Seed) -> Option<Model>,
-) -> Vec<Model> {
-    let mut candidates =
-        Candidates::new(program, CandidateLimits::default(), Cancellation::default());
-    let result = candidates
-        .by_ref()
-        .filter_map(|seed| membership(&seed.unwrap()))
-        .collect();
-    assert_eq!(
-        candidates.termination(),
-        Some(CandidateTermination::Exhausted)
-    );
-    result
-}
-
 fn family(models: &[Model]) -> BTreeSet<BTreeSet<Symbol>> {
     let family = models.iter().map(full).collect::<BTreeSet<_>>();
     assert_eq!(family.len(), models.len());
@@ -125,18 +106,9 @@ fn answers() -> ProgramRelationalOptions {
 #[test]
 fn relational_execution_preserves_the_answer_family() {
     let input = prepare_program_relational(Arc::new(Program::of(rules())), answers()).unwrap();
-    let graph = GroundProgram::compile(input.program(), StaticLimits::default()).unwrap();
-    let eager = models(input.program(), |seed| {
-        let checked =
-            check_static(&graph, seed, Limits::default(), &Cancellation::default()).unwrap();
-        checked
-            .accepted()
-            .then(|| checked.interpretation(&graph).unwrap())
-    });
-    // These invoke the source-join and static-graph membership implementations,
-    // respectively; agreement alone would not detect a shared incomplete family.
+    // The family is compared with the expected one, not with another route,
+    // since agreement alone would not detect a shared incomplete family.
     assert_eq!(family(&normal_answer_sets(input.program())), expected());
-    assert_eq!(family(&eager), expected());
 }
 
 #[test]

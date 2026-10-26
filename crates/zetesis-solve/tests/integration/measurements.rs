@@ -9,7 +9,6 @@ use zetesis_solve::{
     GroundingWork, PreparedInput, Session, SolveConfig, SolveMeasurements, SolvePhase, SolveStage,
 };
 use zetesis_themelios::GroundingObserver as _;
-use zetesis_themelios::{AdmissionOptions, admit};
 
 const WAIT: Duration = Duration::from_secs(5);
 
@@ -23,9 +22,9 @@ fn sessions_and_shared_measurements_retain_their_thread_bounds() {
 
 #[test]
 fn a_default_cpu_session_can_move_to_another_thread() {
-    let input = admit("a.".into(), AdmissionOptions::default()).unwrap();
+    let input = zetesis_reference_support::formula("a.");
     let mut session = Session::new(
-        PreparedInput::admitted(&input),
+        PreparedInput::formula(&input),
         cpu_config(),
         Cancellation::default(),
     )
@@ -48,11 +47,11 @@ fn a_default_cpu_session_can_move_to_another_thread() {
 
 #[test]
 fn injected_measurements_move_with_the_session_and_choose_its_policy() {
-    let input = admit("a.".into(), AdmissionOptions::default()).unwrap();
+    let input = zetesis_reference_support::formula("a.");
     for enabled in [false, true] {
         let owner = SolveMeasurements::new(enabled);
         let mut session = Session::builder(
-            PreparedInput::admitted(&input),
+            PreparedInput::formula(&input),
             SolveConfig {
                 stats: !enabled,
                 ..cpu_config()
@@ -176,14 +175,14 @@ fn session_observations_can_snapshot_and_measure_their_shared_owner() {
 
     let (completed, result) = mpsc::channel();
     let worker = thread::spawn(move || {
-        let input = admit("a.".into(), AdmissionOptions::default()).unwrap();
+        let input = zetesis_reference_support::formula("a.");
         let owner = SolveMeasurements::new(true);
         let mut observer = Reentrant {
             measurements: owner.clone(),
             events: 0,
         };
         let mut session = Session::builder(
-            PreparedInput::admitted(&input),
+            PreparedInput::formula(&input),
             cpu_config(),
             Cancellation::default(),
         )
@@ -538,38 +537,6 @@ fn stages_only_sessions_disable_detailed_search_clocks() {
     for phase in SolvePhase::ALL {
         assert!(snapshot.get(phase).is_none(), "{phase:?}");
     }
-}
-
-#[test]
-fn stages_only_lazy_grounding_remains_interleaved() {
-    let admitted = admit("p:-not q. q:-not p.".into(), AdmissionOptions::default()).unwrap();
-    let owner = SolveMeasurements::stages_only();
-    let mut session = Session::builder(
-        PreparedInput::admitted(&admitted),
-        SolveConfig {
-            grounder: zetesis_solve::Grounder::Lazy,
-            ..cpu_config()
-        },
-        Cancellation::default(),
-    )
-    .measurements(&owner)
-    .start()
-    .unwrap();
-    assert_eq!(
-        session
-            .by_ref()
-            .collect::<Result<Vec<_>, _>>()
-            .unwrap()
-            .len(),
-        2
-    );
-    let stages = session.phase_timings().unwrap().stages;
-    assert_eq!(
-        stages.grounding_mode,
-        zetesis_solve::GroundingMode::LazyInterleaved
-    );
-    assert!(stages.get(SolveStage::Grounding).is_none());
-    assert!(stages.get(SolveStage::Solving).is_some());
 }
 
 #[test]

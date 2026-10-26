@@ -229,7 +229,9 @@ fn bundle_and_string_paths_share_exhaustive_solver_results() {
         "#const upper=lower+1. #include \"data.lp\". {pick(X)} :- d(X).",
     );
     fixture.write("data.lp", "#const lower=1. d(lower..upper).");
-    let mut options = options(&["--backend", "cpu", "--stats"]);
+    // One worker: parallel region workers publish in the schedule's order, and
+    // this test compares exact renderings across separate runs.
+    let mut options = options(&["--backend", "cpu", "--workers", "1", "--stats"]);
     options.statistics_view = zetesis_cli::StatisticsView::Records;
     let mut original = Vec::new();
     let mut diagnostics = Vec::new();
@@ -262,7 +264,7 @@ fn bundle_and_string_paths_share_exhaustive_solver_results() {
             .unwrap()
             .contains("2 original files")
     );
-    let process = process(&fixture, &[]);
+    let process = process(&fixture, &["--workers", "1"]);
     assert!(process.status.success());
     assert_eq!(
         before_timing(std::str::from_utf8(&process.stdout).unwrap()),
@@ -308,7 +310,7 @@ fn unsafe_included_rule_keeps_original_file_and_span_in_typed_failure() {
     )
     .unwrap_err();
     assert!(!std::str::from_utf8(&models).unwrap().contains("Answer:"));
-    let RunError::BundleAdmission(failure) = &error else {
+    let RunError::FormulaBundleAdmission(failure) = &error else {
         panic!("expected located semantic refusal: {error}");
     };
     assert_eq!(failure.bundle().sources().len(), 2);

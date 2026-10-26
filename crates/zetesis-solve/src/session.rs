@@ -8,17 +8,13 @@
 
 use crate::ExecutionObserver;
 use crate::execution_observation::{ExecutionSink, Ignore, Observer};
-use std::sync::Arc;
 
-use zetesis_core::{GroundProgram, Model, Program};
+use zetesis_core::Model;
 use zetesis_cpu::Cancellation;
 use zetesis_ferraris::Theory;
 use zetesis_objective::Score;
-use zetesis_themelios::{
-    Admitted, AdmittedBundle, AdmittedFormula, AdmittedFormulaBundle, SourceMetadata,
-};
+use zetesis_themelios::{AdmittedFormula, AdmittedFormulaBundle, SourceMetadata};
 
-use crate::closure_session::ClosureSession;
 use crate::formula_execution::Execution;
 use crate::formula_session::FormulaSession;
 use crate::hybrid_session::HybridSession;
@@ -26,9 +22,8 @@ use crate::phase_timing::Recorder;
 use crate::source_session::SourceSession;
 use crate::terminal_session::TerminalSession;
 use crate::{
-    AnswerSelection, ExecutionResources, Grounder, Interruption, Oracle, PhaseTimings,
-    SemanticOutcome, SolveConfig, SolveError, SolveFailure, WorldView, WorldViewFailure,
-    WorldViewLimits,
+    AnswerSelection, ExecutionResources, Grounder, Interruption, PhaseTimings, SemanticOutcome,
+    SolveConfig, SolveError, SolveFailure, WorldView, WorldViewFailure, WorldViewLimits,
 };
 
 /// The complete semantic representation supplied to an ordinary session.
@@ -36,26 +31,20 @@ use crate::{
 pub enum PreparedProfile {
     /// A complete source program certified for dependency-ordered evaluation.
     AcyclicSource,
-    /// Finite relational normal program; closure execution chooses lazy or eager.
-    Relational,
     /// Coherently indexed finite formulas and their objective/observation programs.
     Formula,
     /// Complete producer theory with admitted constraints checked from source.
     Hybrid,
     /// A checked base theory plus terminal definitions of the original source.
     TerminalDefinitions,
-    /// A complete ground graph retaining its original relational program identity.
-    Ground,
 }
 
 #[derive(Clone, Copy)]
 enum Prepared<'a> {
     Source(&'a zetesis_themelios::AcyclicSource),
-    Relational(&'a Program),
     Formula(crate::countermodel::Input<'a>),
     Hybrid(&'a zetesis_themelios::HybridFormula),
     TerminalDefinitions(&'a zetesis_themelios::TerminalFormula),
-    Ground(&'a Arc<GroundProgram>),
 }
 
 /// A coherent borrowed owner, never an independently supplied theory/atom table.
@@ -114,48 +103,6 @@ impl<'a> PreparedInput<'a> {
         }
     }
 
-    /// Reuse an admitted native relational program without source metadata.
-    /// This borrows the program directly: it performs no parsing, carrier
-    /// expansion or grounding. Lazy and eager execution use the same relational
-    /// session branch as source-admitted programs.
-    #[must_use]
-    pub const fn program(program: &'a Program) -> Self {
-        Self {
-            input: Prepared::Relational(program),
-            metadata: None,
-            projection: None,
-        }
-    }
-    /// Borrow a canonical relational preparation with its original display
-    /// metadata. The owner keeps the program and metadata together; this borrow
-    /// performs no parsing, expansion or grounding. Lazy and eager sessions use
-    /// the same admitted relational program.
-    #[must_use]
-    pub fn relational(owner: &'a zetesis_themelios::PreparedRelational) -> Self {
-        Self {
-            input: Prepared::Relational(owner.program()),
-            metadata: Some(owner.metadata()),
-            projection: None,
-        }
-    }
-    /// Reuse an admitted normal program and its source metadata.
-    #[must_use]
-    pub fn admitted(owner: &'a Admitted) -> Self {
-        Self {
-            input: Prepared::Relational(owner.program()),
-            metadata: Some(owner.metadata()),
-            projection: None,
-        }
-    }
-    /// Reuse an admitted original-source bundle without loading its files again.
-    #[must_use]
-    pub fn bundle(owner: &'a AdmittedBundle) -> Self {
-        Self {
-            input: Prepared::Relational(owner.program()),
-            metadata: Some(owner.metadata()),
-            projection: None,
-        }
-    }
     /// Reuse a formula owner, preserving its exact atom indexing and objectives.
     #[must_use]
     pub fn formula(owner: &'a AdmittedFormula) -> Self {
@@ -165,7 +112,6 @@ impl<'a> PreparedInput<'a> {
                 atoms: owner.atom_catalog(),
                 objectives: owner.objectives(),
                 required_choices: owner.required_choices(),
-                gate_atoms: 0,
                 keyed_constraints: owner.keyed_constraints(),
                 key_analysis: owner.key_analysis(),
                 certificate_order: crate::countermodel::certificate_order(
@@ -186,7 +132,6 @@ impl<'a> PreparedInput<'a> {
                 atoms: owner.atom_catalog(),
                 objectives: owner.objectives(),
                 required_choices: owner.required_choices(),
-                gate_atoms: 0,
                 keyed_constraints: owner.keyed_constraints(),
                 key_analysis: owner.key_analysis(),
                 certificate_order: crate::countermodel::certificate_order(
@@ -198,27 +143,14 @@ impl<'a> PreparedInput<'a> {
             projection: Some(owner.projection()),
         }
     }
-    /// Reuse the supplied complete graph. Auto chooses eager execution; explicit
-    /// lazy or countermodel requests are refused. No second graph is compiled.
-    /// Ground-only models have no source-derived observation metadata.
-    #[must_use]
-    pub const fn ground(owner: &'a Arc<GroundProgram>) -> Self {
-        Self {
-            input: Prepared::Ground(owner),
-            metadata: None,
-            projection: None,
-        }
-    }
     /// Representation used for strategy compatibility checks.
     #[must_use]
     pub const fn profile(self) -> PreparedProfile {
         match self.input {
             Prepared::Source(_) => PreparedProfile::AcyclicSource,
-            Prepared::Relational(_) => PreparedProfile::Relational,
             Prepared::Formula(_) => PreparedProfile::Formula,
             Prepared::Hybrid(_) => PreparedProfile::Hybrid,
             Prepared::TerminalDefinitions(_) => PreparedProfile::TerminalDefinitions,
-            Prepared::Ground(_) => PreparedProfile::Ground,
         }
     }
     /// Validated source views, when the prepared owner retained them.
@@ -236,11 +168,9 @@ impl<'a> PreparedInput<'a> {
     pub(crate) fn subject(self) -> Subject {
         match self.input {
             Prepared::Source(owner) => Subject::Source(owner.clone()),
-            Prepared::Relational(program) => Subject::Program(program.clone()),
             Prepared::Formula(input) => Subject::Theory(input.theory.clone()),
             Prepared::Hybrid(owner) => Subject::Hybrid(owner.clone()),
             Prepared::TerminalDefinitions(owner) => Subject::TerminalDefinitions(owner.clone()),
-            Prepared::Ground(ground) => Subject::Program(ground.program().clone()),
         }
     }
     fn selection(self, requested: AnswerSelection) -> AnswerSelection {
@@ -250,7 +180,7 @@ impl<'a> PreparedInput<'a> {
             _ => AnswerSelection::All,
         }
     }
-    fn configure(self, mut config: SolveConfig) -> Result<SolveConfig, SolveError> {
+    fn configure(self, config: SolveConfig) -> Result<SolveConfig, SolveError> {
         if matches!(self.input, Prepared::Hybrid(_)) {
             config.validate_hybrid()?;
             return Ok(config);
@@ -274,24 +204,11 @@ impl<'a> PreparedInput<'a> {
             })?;
             return Ok(config);
         }
-        if !matches!(self.input, Prepared::Relational(_))
-            && config.source_batching != crate::SourceBatching::Independent
-        {
-            return Err(SolveError::UnsupportedSourceBatching);
-        }
         let compatible = match self.input {
             Prepared::Source(_) => crate::grounding::source_compatible(&config),
-            Prepared::Relational(_) => config.oracle != Oracle::Countermodel,
-            Prepared::Formula(_) => {
-                config.oracle != Oracle::Closure && config.grounder != Grounder::Lazy
-            }
-            Prepared::TerminalDefinitions(_) => {
-                config.oracle != Oracle::Closure && config.grounder == Grounder::Auto
-            }
+            Prepared::Formula(_) => config.grounder != Grounder::Lazy,
+            Prepared::TerminalDefinitions(_) => config.grounder == Grounder::Auto,
             Prepared::Hybrid(_) => unreachable!("hybrid policy validated above"),
-            Prepared::Ground(_) => {
-                config.oracle != Oracle::Countermodel && config.grounder != Grounder::Lazy
-            }
         };
         if !compatible {
             return Err(SolveError::PreparedInput {
@@ -300,10 +217,6 @@ impl<'a> PreparedInput<'a> {
                 grounder: config.grounder,
             });
         }
-        if matches!(self.input, Prepared::Ground(_)) {
-            config.grounder = Grounder::Eager;
-        }
-        crate::engine::validate_combination(&config)?;
         Ok(config)
     }
 }
@@ -316,8 +229,6 @@ pub enum Subject {
     /// Original source with a complete dependency-order certificate. No formula
     /// theory is substituted for the source or its arbitrary reduct queries.
     Source(zetesis_themelios::AcyclicSource),
-    /// Original finite relational program, also retained by a ground graph.
-    Program(Program),
     /// Original indexed finite formula theory, before candidate restrictions.
     Theory(Theory),
     /// Original producer core together with its admitted source constraints.
@@ -333,7 +244,6 @@ impl Subject {
     pub fn same_instance(&self, other: &Self) -> bool {
         match (self, other) {
             (Self::Source(left), Self::Source(right)) => left.same_instance(right),
-            (Self::Program(left), Self::Program(right)) => left.same_instance(right),
             (Self::Theory(left), Self::Theory(right)) => left.same_instance(right),
             (Self::Hybrid(left), Self::Hybrid(right)) => left.same_instance(right),
             (Self::TerminalDefinitions(left), Self::TerminalDefinitions(right)) => {
@@ -395,7 +305,6 @@ pub type SessionModel = AnswerSet;
 
 enum State<'a> {
     Source(Box<SourceSession<'a>>),
-    Closure(Box<ClosureSession<'a>>),
     Formula(Box<FormulaSession<'a, Execution>>),
     Hybrid(Box<HybridSession<'a>>),
     TerminalDefinitions(Box<TerminalSession<'a>>),
@@ -650,11 +559,18 @@ impl<'a> SessionBuilder<'a> {
 /// ```
 /// use zetesis_solve::{Backend, PreparedInput, Session, SolveConfig};
 /// use zetesis_cpu::Cancellation;
-/// use zetesis_themelios::{admit, AdmissionOptions};
+/// use zetesis_themelios::{
+///     AdmissionOptions, ExpansionLimits, FormulaLimits, admit_formula,
+/// };
 ///
-/// let admitted = admit("a.".into(), AdmissionOptions::default())?;
+/// let admitted = admit_formula(
+///     "a.".into(),
+///     AdmissionOptions::default(),
+///     ExpansionLimits::default(),
+///     FormulaLimits::default(),
+/// )?;
 /// let config = SolveConfig { backend: Backend::Cpu, models: 0, ..Default::default() };
-/// let mut session = Session::new(PreparedInput::admitted(&admitted), config, Cancellation::default())?;
+/// let mut session = Session::new(PreparedInput::formula(&admitted), config, Cancellation::default())?;
 /// let model = session.next().unwrap()?;
 /// assert_eq!(model.interpretation().atoms().len(), 1);
 /// assert!(session.next().is_none());
@@ -803,14 +719,8 @@ impl<'a> Session<'a> {
                     optimization: None,
                     objective_work: 0,
                     checked: 0,
-                    gate_atoms: 0,
-                    candidate_statistics: None,
                     countermodel_statistics: None,
                     formula_execution: None,
-                    lazy_execution: None,
-                    shared_execution: None,
-                    closure_execution: None,
-                    query_execution: None,
                     hybrid_execution: None,
                     terminal_execution: None,
                     source_evaluation: None,
@@ -823,26 +733,6 @@ impl<'a> Session<'a> {
             Prepared::Source(owner) => {
                 State::Source(Box::new(SourceSession::new(owner, observations)?))
             }
-            Prepared::Relational(program) => {
-                State::Closure(Box::new(ClosureSession::with_resources(
-                    program,
-                    None,
-                    &config,
-                    resources,
-                    observations,
-                    cancellation,
-                    phases,
-                )?))
-            }
-            Prepared::Ground(ground) => State::Closure(Box::new(ClosureSession::with_resources(
-                ground.program(),
-                Some(Arc::clone(ground)),
-                &config,
-                resources,
-                observations,
-                cancellation,
-                phases,
-            )?)),
             Prepared::Formula(input) => State::Formula(Box::new(FormulaSession::with_resources(
                 input,
                 &config,
@@ -886,7 +776,6 @@ impl<'a> Session<'a> {
         }
         let mut outcome = match &self.state {
             State::Source(state) => state.finished().then(|| state.outcome()),
-            State::Closure(state) => state.terminal().then(|| state.outcome()),
             State::Formula(state) => state
                 .finished()
                 .then(|| state.outcome(self.phases.recorder())),
@@ -926,7 +815,7 @@ impl<'a> Session<'a> {
                 let _ = state.conclude(previous, phases);
             }
             State::TerminalDefinitions(state) => state.stop(phases),
-            State::Closure(_) | State::Stopped(_) => {}
+            State::Stopped(_) => {}
         }
         self.progress()
     }
@@ -945,7 +834,6 @@ impl<'a> Session<'a> {
     pub fn progress(&self) -> SemanticOutcome {
         let mut outcome = match &self.state {
             State::Source(state) => state.outcome(),
-            State::Closure(state) => state.outcome(),
             State::Formula(state) => state.outcome(self.phases.recorder()),
             State::Hybrid(state) => state.outcome(self.phases.recorder()),
             State::TerminalDefinitions(state) => state.outcome(self.phases.recorder()),
@@ -1045,9 +933,6 @@ impl<'a> Session<'a> {
             State::Source(state) => {
                 state.next(&self.config, &self.cancellation, self.phases.recorder())
             }
-            State::Closure(state) => state
-                .next(&self.config, &self.cancellation, self.phases.recorder())
-                .map(|result| result.map(|model| (model, None))),
             State::Formula(state) => state.next(
                 &self.config,
                 observations,

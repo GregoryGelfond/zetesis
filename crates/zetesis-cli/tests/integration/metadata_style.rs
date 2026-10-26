@@ -86,9 +86,11 @@ fn diagnostics(mode: ColorMode, json: bool) -> (Vec<u8>, String) {
 fn plain_metadata_describes_the_execution_policy() {
     let expected = format!(
         "Source: 1 original file ({} bytes)\n\
-         Oracle: reduct closure\n\
-         Grounding: requested=lazy, effective=lazy (source joins; no complete ground-rule store)\n\
-         Backend: cpu (lazy source joins, 1 workers)\n",
+         Comparisons: with_form=0; long_operand=0; wide_slot=0; constructor=0; nonnumeric_constant=0; argument_position=0\n\
+         Grounding: requested=lazy, effective=hybrid (eager retained core; streamed constraints: 1 templates, 1 admitted instances)\n\
+         Retained core formula: 12 atoms, 72 nodes, 26 roots; 118 operand occurrences; 0 constraints asked by key; streamed constraints checked separately\n\
+         Core membership: checked tight support certificate; original constraints still pending\n\
+         Backend: cpu; retained-core oracle: Ferraris reduct membership; core grounding: eager\n",
         bundle().total_bytes()
     );
     assert_eq!(diagnostics(ColorMode::Never, false).1, expected);
@@ -98,8 +100,13 @@ fn plain_metadata_describes_the_execution_policy() {
 fn styled_metadata_retains_its_exact_plain_text() {
     let (_, plain) = diagnostics(ColorMode::Never, false);
     let (_, styled) = diagnostics(ColorMode::Always, false);
-    for label in ["Source", "Oracle", "Grounding", "Backend"] {
-        assert!(styled.contains(&format!("\u{1b}[34m{label}:\u{1b}[3;90m ")));
+    // Every styled metadata label; formula and membership descriptions are
+    // plain lines on every route.
+    for label in ["Source", "Comparisons", "Grounding", "Backend"] {
+        assert!(
+            styled.contains(&format!("\u{1b}[34m{label}:\u{1b}[3;90m ")),
+            "{label}: {styled:?}"
+        );
     }
     let decoded = styled
         .replace("\u{1b}[34m", "")

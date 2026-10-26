@@ -4,10 +4,7 @@ use std::cmp::Ordering;
 
 use zetesis_backend::GpuApi;
 
-use crate::{
-    AdapterBackend, AdapterCategory, AdapterMetadata, GpuError, GpuErrorKind, GpuOptions,
-    check_adapter_limits,
-};
+use crate::{AdapterBackend, AdapterCategory, AdapterMetadata, GpuError, GpuErrorKind, GpuOptions};
 
 /// The compute APIs zetesis targets, in the order `zetesis devices` lists them.
 const TARGETED: [GpuApi; 2] = [GpuApi::Metal, GpuApi::Vulkan];
@@ -40,14 +37,14 @@ impl Default for GpuSelection {
 
 impl GpuSelection {
     /// The adapter this selection opens among `adapters`, as
-    /// [`discover_adapters`] reports them, for the static profile: the filter
+    /// [`discover_adapters`] reports them, for the formula profile: the filter
     /// and order device creation applies, with each adapter's capability judged
     /// from its report. No device is created, so creating one on the adapter
     /// returned can still fail.
     ///
     /// # Errors
     /// The refusal device creation would give: no adapter at all, none admitted
-    /// by `options`, or none reporting the static profile's capabilities.
+    /// by `options`, or none reporting the formula profile's capabilities.
     pub fn chosen(self, adapters: &[GpuInfo], options: GpuOptions) -> Result<&GpuInfo, GpuError> {
         choose(
             adapters.iter().enumerate(),
@@ -95,7 +92,7 @@ impl GpuInfo {
         limits: &wgpu::Limits,
         compute: bool,
     ) -> Self {
-        let capability_issue = check_capabilities(compute, limits, check_adapter_limits)
+        let capability_issue = check_capabilities(compute, limits, crate::formula::check_limits)
             .err()
             .map(|error| error.to_string());
         Self {
@@ -214,10 +211,10 @@ impl GpuInfo {
         &self.raw.driver_info
     }
 
-    /// Whether advertised compute support and limits pass the static profile's
+    /// Whether advertised compute support and limits pass the formula profile's
     /// preflight. This is independent of hardware category and execution success.
     #[must_use]
-    pub fn supports_static_oracle(&self) -> bool {
+    pub fn supports_formula_oracle(&self) -> bool {
         self.capability_issue.is_none()
     }
 
@@ -760,14 +757,14 @@ mod tests {
             &wgpu::Limits::default(),
             false,
         );
-        assert!(!no_compute.supports_static_oracle());
+        assert!(!no_compute.supports_formula_oracle());
         assert!(no_compute.capability_issue().unwrap().contains("compute"));
         let small_limits = wgpu::Limits {
             max_compute_invocations_per_workgroup: 1,
             ..wgpu::Limits::default()
         };
         let limited = GpuInfo::from_report(raw, wgpu::Features::empty(), &small_limits, true);
-        assert!(!limited.supports_static_oracle());
+        assert!(!limited.supports_formula_oracle());
         for info in [no_compute, limited] {
             assert_eq!(
                 choose(

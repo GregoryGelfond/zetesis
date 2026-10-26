@@ -449,8 +449,7 @@ another solver argument appears, later `devices` arguments are file names.
 
 Maintained controls include [route selection](tests/integration/oracle_selection.rs),
 [source diagnostics](tests/integration/bundles.rs),
-[failure accounting](tests/integration/failure_reports.rs),
-[formula completion](tests/integration/formula_completion.rs) and
-[shared CPU execution](tests/integration/shared_cpu.rs).
+[failure accounting](tests/integration/failure_reports.rs) and
+[formula completion](tests/integration/formula_completion.rs).
 Portable regressions and actual physical-device tests have distinct purposes;
 [contributing guide](../../CONTRIBUTING.md#verification-and-review) describes their execution.

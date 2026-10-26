@@ -1998,10 +1998,8 @@ dependencies = [
 name = "zetesis-cpu"
 version = "0.6.0"
 dependencies = [
- "criterion",
  "rayon",
  "zetesis-core",
- "zetesis-test-support",
 ]
 
 [[package]]
@@ -2098,6 +2096,7 @@ dependencies = [
  "zetesis-cpu",
  "zetesis-ferraris",
  "zetesis-objective",
+ "zetesis-stable",
  "zetesis-test-support",
  "zetesis-themelios",
 ]

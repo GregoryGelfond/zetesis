@@ -5,15 +5,13 @@ use std::io::Write;
 
 use zetesis_cpu::Cancellation;
 use zetesis_themelios::{
-    AutomaticAdmission, AutomaticAdmissionFailure, BundleAdmissionError, BundleAdmissionOptions,
-    ExpansionLimits, ParsedSource, SourceBundle, SourceFailure,
-    admit_bundle_automatic_with_cancellation, admit_bundle_extended_with_cancellation,
+    BundleAdmissionOptions, ExpansionLimits, ParsedSource, SourceBundle, SourceFailure,
 };
 
 use crate::SolvePhase;
 use crate::failure::Progress;
 use crate::phase_timing::Recorder;
-use crate::{Options, Oracle, PublicationFailure, RunError};
+use crate::{Options, PublicationFailure, RunError};
 
 /// A program prepared by the shared library execution policy, with how its
 /// preparation compiled its comparisons; the CLI only presents its warnings,
@@ -130,10 +128,7 @@ impl FormulaInput {
         self.warnings(diagnostics)?;
         self.comparison_forms(diagnostics)?;
         crate::publication::solve(
-            crate::publication::Admitted {
-                input: self.prepared(),
-                expansion: None,
-            },
+            self.prepared(),
             &crate::PublicationConfig::from(options),
             resources,
             renderer,
@@ -163,89 +158,28 @@ pub(crate) fn source(
     cancellation: &Cancellation,
     phases: &Recorder,
 ) -> Result<Progress, PublicationFailure> {
-    crate::SolveConfig::from(options).validate()?;
-    if options.oracle == Oracle::Countermodel
-        && let Some(report) =
-            crate::publication::check_cancellation(renderer, diagnostics, cancellation, phases)?
+    if let Some(report) =
+        crate::publication::check_cancellation(renderer, diagnostics, cancellation, phases)?
     {
         return Ok(report);
     }
     let admission = options.resources().admission_options();
-    // This reads configuration only. Consult a refusal at the same boundary as
-    // before: after an extended refusal that actually requires formulas.
-    let formula_policy = validate_formula(options);
-    let prepared = if options.oracle == Oracle::Countermodel {
-        formula_policy?;
-        if let Some(report) =
-            crate::publication::check_cancellation(renderer, diagnostics, cancellation, phases)?
-        {
-            return Ok(report);
-        }
-        phases.measure(SolvePhase::AdmissionMaterialization, || {
-            ParsedSource::new(source, admission)
-                .map_err(zetesis_themelios::FormulaFailure::from)?
-                .prepare_formula_with_cancellation(
-                    expansion_limits(options),
-                    formula_limits(options),
-                    cancellation,
-                )
-                .map_err(SourceFailure::into_error)
-        })
-    } else {
-        let source = phases
-            .measure(SolvePhase::AdmissionMaterialization, || {
-                ParsedSource::new(source, admission)
-            })
-            .map_err(|error| RunError::Expansion(error.into()))?;
-        let admitted = phases.measure(SolvePhase::AdmissionMaterialization, || {
-            if options.oracle == Oracle::Auto && formula_policy.is_ok() {
-                source.admit_automatic_with_cancellation(
-                    expansion_limits(options),
-                    formula_limits(options),
-                    cancellation,
-                )
-            } else {
-                source
-                    .admit_extended_with_cancellation(expansion_limits(options), cancellation)
-                    .map(AutomaticAdmission::Extended)
-                    .map_err(AutomaticAdmissionFailure::Extended)
-            }
-        });
-        match admitted {
-            Ok(AutomaticAdmission::Extended(admitted)) => {
-                diagnostics.metadata(Label::Oracle, format_args!("reduct closure"))?;
-                return crate::publication::solve(
-                    crate::publication::Admitted {
-                        input: crate::PreparedInput::admitted(&admitted),
-                        expansion: Some(*admitted.expansion_usage()),
-                    },
-                    &crate::PublicationConfig::from(options),
-                    resources,
-                    renderer,
-                    diagnostics,
-                    cancellation,
-                    phases,
-                )
-                .map_err(|failure| source_failure(failure, "<input>", admitted.source()));
-            }
-            Ok(AutomaticAdmission::Formula(prepared)) => Ok(prepared),
-            Err(error) => {
-                if let Some(reason) = error.interruption() {
-                    return crate::publication::interrupted(reason, renderer, diagnostics, phases);
-                }
-                match error {
-                    AutomaticAdmissionFailure::Extended(error) => {
-                        if options.oracle == Oracle::Auto && error.error().needs_formula_admission()
-                        {
-                            formula_policy?;
-                        }
-                        return Err(RunError::Expansion(error.into_error()).into());
-                    }
-                    AutomaticAdmissionFailure::Formula(error) => Err(error.into_error()),
-                }
-            }
-        }
-    };
+    validate_formula(options)?;
+    if let Some(report) =
+        crate::publication::check_cancellation(renderer, diagnostics, cancellation, phases)?
+    {
+        return Ok(report);
+    }
+    let prepared = phases.measure(SolvePhase::AdmissionMaterialization, || {
+        ParsedSource::new(source, admission)
+            .map_err(zetesis_themelios::FormulaFailure::from)?
+            .prepare_formula_with_cancellation(
+                expansion_limits(options),
+                formula_limits(options),
+                cancellation,
+            )
+            .map_err(SourceFailure::into_error)
+    });
     solve_source_formula(
         prepared,
         options,
@@ -313,88 +247,27 @@ pub(crate) fn bundle(
     cancellation: &Cancellation,
     phases: &Recorder,
 ) -> Result<Progress, PublicationFailure> {
-    crate::SolveConfig::from(options).validate()?;
-    if options.oracle == Oracle::Countermodel
-        && let Some(report) =
-            crate::publication::check_cancellation(renderer, diagnostics, cancellation, phases)?
+    if let Some(report) =
+        crate::publication::check_cancellation(renderer, diagnostics, cancellation, phases)?
     {
         return Ok(report);
     }
     report_bundle_sources(&bundle, diagnostics)?;
-    let formula_policy = validate_formula(options);
-    let prepared = if options.oracle == Oracle::Countermodel {
-        formula_policy?;
-        if let Some(report) =
-            crate::publication::check_cancellation(renderer, diagnostics, cancellation, phases)?
-        {
-            return Ok(report);
-        }
-        phases.measure(SolvePhase::AdmissionMaterialization, || {
-            zetesis_themelios::prepare_bundle_formula_with_cancellation(
-                bundle,
-                bundle_options(options),
-                expansion_limits(options),
-                formula_limits(options),
-                cancellation,
-            )
-        })
-    } else {
-        let admitted = phases.measure(SolvePhase::AdmissionMaterialization, || {
-            if options.oracle == Oracle::Auto && formula_policy.is_ok() {
-                admit_bundle_automatic_with_cancellation(
-                    bundle,
-                    bundle_options(options),
-                    expansion_limits(options),
-                    formula_limits(options),
-                    cancellation,
-                )
-            } else {
-                admit_bundle_extended_with_cancellation(
-                    bundle,
-                    bundle_options(options),
-                    expansion_limits(options),
-                    cancellation,
-                )
-                .map(AutomaticAdmission::Extended)
-                .map_err(AutomaticAdmissionFailure::Extended)
-            }
-        });
-        match admitted {
-            Ok(AutomaticAdmission::Extended(admitted)) => {
-                diagnostics.metadata(Label::Oracle, format_args!("reduct closure"))?;
-                return crate::publication::solve(
-                    crate::publication::Admitted {
-                        input: crate::PreparedInput::bundle(&admitted),
-                        expansion: Some(*admitted.expansion_usage()),
-                    },
-                    &crate::PublicationConfig::from(options),
-                    resources,
-                    renderer,
-                    diagnostics,
-                    cancellation,
-                    phases,
-                )
-                .map_err(|failure| bundle_failure(failure, admitted.bundle()));
-            }
-            Ok(AutomaticAdmission::Formula(prepared)) => Ok(prepared),
-            Err(error) => {
-                if let Some(reason) = error.interruption() {
-                    return crate::publication::interrupted(reason, renderer, diagnostics, phases);
-                }
-                match error {
-                    AutomaticAdmissionFailure::Extended(error) => {
-                        if options.oracle == Oracle::Auto
-                            && matches!(error.error(), BundleAdmissionError::Expansion(expansion) if expansion.needs_formula_admission())
-                        {
-                            formula_policy?;
-                        }
-                        return Err(RunError::BundleAdmission(error).into());
-                    }
-                    AutomaticAdmissionFailure::Formula(error) => Err(error),
-                }
-            }
-        }
-    };
+    validate_formula(options)?;
+    if let Some(report) =
+        crate::publication::check_cancellation(renderer, diagnostics, cancellation, phases)?
+    {
+        return Ok(report);
+    }
+    let prepared = phases.measure(SolvePhase::AdmissionMaterialization, || {
+        zetesis_themelios::prepare_bundle_formula_with_cancellation(
+            bundle,
+            bundle_options(options),
+            expansion_limits(options),
+            formula_limits(options),
+            cancellation,
+        )
+    });
     solve_bundle_formula(
         prepared,
         options,

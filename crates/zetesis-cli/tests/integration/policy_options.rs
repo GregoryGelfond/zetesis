@@ -1,7 +1,7 @@
 //! Public options select algorithms and the shared ordinary resource policy.
 
 use clap::{CommandFactory, FromArgMatches, Parser, error::ErrorKind};
-use zetesis_cli::{Backend, Grounder, Options, Oracle, SolveConfig, SourceBatching};
+use zetesis_cli::{Backend, Grounder, Options, Oracle, SolveConfig};
 
 #[test]
 fn algorithm_options_preserve_the_selected_policies() {
@@ -11,10 +11,8 @@ fn algorithm_options_preserve_the_selected_policies() {
         "cpu",
         "--grounder",
         "lazy",
-        "--source-batching",
-        "worlds",
         "--oracle",
-        "closure",
+        "countermodel",
         "--stats",
         "--models",
         "11",
@@ -27,8 +25,7 @@ fn algorithm_options_preserve_the_selected_policies() {
     let config = SolveConfig::from(&options);
     assert_eq!(config.backend, Backend::Cpu);
     assert_eq!(config.grounder, Grounder::Lazy);
-    assert_eq!(config.source_batching, SourceBatching::Worlds);
-    assert_eq!(config.oracle, Oracle::Closure);
+    assert_eq!(config.oracle, Oracle::Countermodel);
     assert!(config.stats);
     assert_eq!(config.models, 11);
     assert_eq!(config.workers.get(), 3);
@@ -42,11 +39,6 @@ fn resource_options_use_the_library_policy() {
                 .unwrap();
         let expected = zetesis_solve::Resources::new(memory, options.workers).solve_config();
         let actual = SolveConfig::from(&options);
-        assert_eq!(actual.max_closure_bytes, expected.max_closure_bytes);
-        assert_eq!(
-            actual.max_closure_batch_bytes,
-            expected.max_closure_batch_bytes
-        );
         assert_eq!(
             actual.max_completion_scratch_bytes,
             expected.max_completion_scratch_bytes
@@ -55,7 +47,6 @@ fn resource_options_use_the_library_policy() {
         assert_eq!(actual.constraints, expected.constraints);
         assert_eq!(actual.max_work, u64::MAX);
         assert_eq!(actual.max_search_work, u64::MAX);
-        assert_eq!(actual.max_source_work, u64::MAX);
         assert_eq!(actual.max_objective_work, u64::MAX);
     }
 }
@@ -152,22 +143,24 @@ fn grounder_spellings_select_typed_policies() {
 }
 
 #[test]
-fn source_batching_spellings_select_typed_policies() {
-    for (spelling, expected) in [
-        ("independent", SourceBatching::Independent),
-        ("union", SourceBatching::Union),
-        ("worlds", SourceBatching::Worlds),
-    ] {
-        let options = Options::try_parse_from(["zetesis", "--source-batching", spelling]).unwrap();
-        assert_eq!(options.source_batching, expected);
+fn the_removed_source_batching_option_is_refused() {
+    for spelling in ["independent", "union", "worlds"] {
+        let error =
+            Options::try_parse_from(["zetesis", "--source-batching", spelling]).unwrap_err();
+        assert_eq!(error.kind(), ErrorKind::UnknownArgument);
     }
+}
+
+#[test]
+fn the_removed_closure_oracle_is_refused() {
+    let error = Options::try_parse_from(["zetesis", "--oracle", "closure"]).unwrap_err();
+    assert_eq!(error.kind(), ErrorKind::InvalidValue);
 }
 
 #[test]
 fn oracle_spellings_select_typed_policies() {
     for (spelling, expected) in [
         ("auto", Oracle::Auto),
-        ("closure", Oracle::Closure),
         ("countermodel", Oracle::Countermodel),
     ] {
         let options = Options::try_parse_from(["zetesis", "--oracle", spelling]).unwrap();
@@ -188,10 +181,6 @@ fn policy_defaults_match_the_solver_configuration() {
     let options = Options::try_parse_from(["zetesis"]).unwrap();
     assert_eq!(options.backend, SolveConfig::DEFAULT.backend);
     assert_eq!(options.grounder, SolveConfig::DEFAULT.grounder);
-    assert_eq!(
-        options.source_batching,
-        SolveConfig::DEFAULT.source_batching
-    );
     assert_eq!(options.oracle, SolveConfig::DEFAULT.oracle);
 }
 
@@ -200,7 +189,6 @@ fn policy_values_retain_case_sensitive_refusal() {
     for (flag, value) in [
         ("--backend", "METAL"),
         ("--grounder", "LAZY"),
-        ("--source-batching", "WORLDS"),
         ("--oracle", "COUNTERMODEL"),
     ] {
         let error = Options::try_parse_from(["zetesis", flag, value]).unwrap_err();
@@ -218,8 +206,7 @@ fn invalid_policy_values_report_ordered_choices() {
     for (flag, choices) in [
         ("--backend", "cpu, gpu, metal, vulkan"),
         ("--grounder", "auto, lazy, eager"),
-        ("--source-batching", "independent, union, worlds"),
-        ("--oracle", "auto, closure, countermodel"),
+        ("--oracle", "auto, countermodel"),
     ] {
         let error = Options::try_parse_from(["zetesis", flag, "bogus"]).unwrap_err();
         assert_eq!(error.kind(), ErrorKind::InvalidValue);
@@ -258,7 +245,7 @@ fn caller_case_policy_preserves_the_typed_value() {
 #[test]
 fn non_utf8_policy_values_remain_parser_errors() {
     use std::{ffi::OsString, os::unix::ffi::OsStringExt as _};
-    for flag in ["--backend", "--grounder", "--source-batching", "--oracle"] {
+    for flag in ["--backend", "--grounder", "--oracle"] {
         let error = Options::try_parse_from([
             OsString::from("zetesis"),
             OsString::from(flag),

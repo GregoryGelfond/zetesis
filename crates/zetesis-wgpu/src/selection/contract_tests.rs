@@ -46,7 +46,7 @@ fn every_reported_api_and_category_keeps_its_identity_and_hardware_boundary() {
             assert_eq!(info.vendor_id(), 0x10de);
             assert_eq!(info.device_id(), 0x1234);
             assert_eq!(info.pci_bus_id(), "0000:01:00.0");
-            assert!(info.supports_static_oracle());
+            assert!(info.supports_formula_oracle());
             assert!(info.capability_issue().is_none());
         }
     }

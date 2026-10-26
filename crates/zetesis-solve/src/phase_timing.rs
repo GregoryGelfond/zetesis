@@ -30,8 +30,6 @@ pub enum SolvePhase {
     GpuHostOracle,
     /// Frozen-reduct proper-subset queries and countermodel validation on CPU.
     ExactReductMembership,
-    /// CPU closure batch execution, including worker scheduling and collection.
-    ClosureMembership,
     /// Objective evaluation, score comparison and bounded full-model retention.
     ObjectiveScoringRetention,
     /// Objective plan, bound compilation and candidate-only restriction application.
@@ -47,7 +45,7 @@ pub enum SolvePhase {
 }
 impl SolvePhase {
     /// Finite phase catalog in report order.
-    pub const ALL: [Self; 15] = [
+    pub const ALL: [Self; 14] = [
         Self::AdmissionMaterialization,
         Self::ExecutionSetup,
         Self::CandidateSetup,
@@ -57,7 +55,6 @@ impl SolvePhase {
         Self::OriginalValidation,
         Self::GpuHostOracle,
         Self::ExactReductMembership,
-        Self::ClosureMembership,
         Self::ObjectiveScoringRetention,
         Self::ObjectiveFeedback,
         Self::ObservationOutput,
@@ -78,7 +75,6 @@ impl SolvePhase {
             Self::OriginalValidation => "original_validation",
             Self::GpuHostOracle => "gpu_host_oracle",
             Self::ExactReductMembership => "exact_reduct_membership",
-            Self::ClosureMembership => "closure_membership",
             Self::ObjectiveScoringRetention => "objective_scoring_retention",
             Self::ObjectiveFeedback => "objective_feedback",
             Self::ObservationOutput => "observation_output",

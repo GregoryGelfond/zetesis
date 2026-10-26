@@ -1,35 +1,15 @@
-//! Exact lazy reduct checking over source templates, streamed complete candidate
-//! generation, an explicit dense static oracle, and a bounded owned Rayon pool.
-//! The lazy oracle joins only derived tuples. The static oracle accepts an
-//! already compiled graph; neither oracle silently performs static compilation.
-//! Batched lazy rounds retain one appendable atom catalog and borrow canonical
-//! committed rows while extending a disjoint identity tail. Catalog membership,
-//! frozen seed membership and derived truth remain separate authorities.
+//! CPU primitives shared by the solver's routes: cooperative cancellation and
+//! deadlines with typed incomplete outcomes, the region traversal that covers a
+//! candidate space with a caller-supplied narrowing, and exact finite-table
+//! selection and projection over an immutable typed relation. None of them
+//! decides membership; the reduct's check stays with its callers.
 #![forbid(unsafe_code)]
 
 mod cancellation;
-mod oracle;
-mod static_oracle;
-mod candidates;
-mod batch;
-mod verified;
-pub mod lazy;
 pub mod regions;
 pub mod table;
 
-pub use batch::{BatchError, BatchOracle, QueryStatistics};
 pub use cancellation::{
     Cancellation, CancellationPoll, CancellationRun, CancellationSlot, CancellationSlotError,
     ChargeError, Meter, Metered, POLL_INTERVAL, Refusal, Stop, poll_due,
 };
-pub use candidates::{
-    CandidateLimits, CandidateRestrictionLimits, CandidateStatistics, CandidateTermination,
-    Candidates,
-};
-pub use oracle::source;
-pub use oracle::{
-    Check, ClosureWorkspace, Limits, PreparationLimits, PreparationStatistics, PreparedQueries,
-    Statistics, check, check_view,
-};
-pub use static_oracle::{StaticCheck, StaticStatistics, check_static, check_static_view};
-pub use verified::StableInterpretation;

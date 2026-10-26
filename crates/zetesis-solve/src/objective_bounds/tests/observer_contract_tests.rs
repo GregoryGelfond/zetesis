@@ -45,7 +45,6 @@ fn attempt(
         Input {
             theory: planned.theory(),
             atoms: planned.atom_catalog(),
-            gate_atoms: 0,
             keyed_constraints: 0,
             key_analysis: zetesis_themelios::KeyAnalysis::Complete,
             objectives: planned.objectives(),

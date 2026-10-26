@@ -3,12 +3,10 @@
 use std::{error::Error, fmt, io, num::NonZeroUsize, sync::Arc};
 use zetesis_cli::{
     Backend, ExecutionObservation, ExecutionObserver, Grounder, Oracle, PreparedInput,
-    PreparedProfile, PublicationFailure, RunError, Session, SolveConfig, SolveError, Subject,
+    PreparedProfile, PublicationFailure, RunError, Session, SolveConfig, Subject,
 };
-use zetesis_core::{GroundProgram, Seed, StaticLimits, WordError};
-use zetesis_cpu::{BatchError, BatchOracle, Cancellation, Limits};
+use zetesis_cpu::Cancellation;
 use zetesis_reference_support::formula;
-use zetesis_themelios::{AdmissionOptions, admit};
 
 fn config() -> SolveConfig {
     SolveConfig {
@@ -48,24 +46,38 @@ impl ExecutionObserver for FailIo {
     }
 }
 
+/// A setup failure returned by the first pull establishes no coverage: no
+/// model verified, no completion and no claim of unsatisfiability.
+fn no_coverage(semantic: Option<&zetesis_cli::SemanticOutcome>) {
+    if let Some(semantic) = semantic {
+        assert_eq!(semantic.verified_models(), 0);
+        assert_eq!(semantic.completion(), None);
+        assert!(!semantic.unsatisfiable());
+    }
+}
+
 #[test]
 fn typed_observer_failure_keeps_its_external_owner() {
-    let owner = admit("a.".into(), AdmissionOptions::default()).unwrap();
-    let subject = Subject::Program(owner.program().clone());
+    let owner = formula("a.");
+    let subject = Subject::Theory(owner.theory().clone());
     let token = Arc::new(());
+    // Formula initialization owns an observer failure at its setup and returns
+    // it from the first pull, with the original cause.
     let original = Session::builder(
-        PreparedInput::admitted(&owner),
+        PreparedInput::formula(&owner),
         config(),
         Cancellation::default(),
     )
     .start_observed(&mut FailTyped(Arc::clone(&token)))
-    .err()
-    .unwrap();
-    assert!(original.semantic().is_none());
+    .unwrap()
+    .next()
+    .unwrap()
+    .unwrap_err();
+    no_coverage(original.semantic());
     let failure = PublicationFailure::from(original);
     drop(owner);
     assert!(failure.subject().unwrap().same_instance(&subject));
-    assert!(failure.semantic().is_none());
+    no_coverage(failure.semantic());
     assert!(failure.publication().is_none());
     assert!(failure.phase_timings.is_some());
     assert_eq!(
@@ -86,16 +98,19 @@ fn typed_observer_failure_keeps_its_external_owner() {
 
 #[test]
 fn io_observer_failure_keeps_its_writer_kind() {
-    let owner = admit("a.".into(), AdmissionOptions::default()).unwrap();
+    let owner = formula("a.");
     let token = Arc::new(());
+    // As above, the first pull returns the setup observer's failure.
     let original = Session::builder(
-        PreparedInput::admitted(&owner),
+        PreparedInput::formula(&owner),
         config(),
         Cancellation::default(),
     )
     .start_observed(&mut FailIo(Arc::clone(&token)))
-    .err()
-    .unwrap();
+    .unwrap()
+    .next()
+    .unwrap()
+    .unwrap_err();
     let failure = PublicationFailure::from(original);
     assert_eq!(failure.to_string(), "output: host observer closed");
     let RunError::Output(error) = failure.cause.as_ref() else {
@@ -111,7 +126,7 @@ fn io_observer_failure_keeps_its_writer_kind() {
         .downcast_ref::<io::Error>()
         .unwrap();
     assert!(std::ptr::eq(linked, error));
-    assert!(failure.semantic().is_none());
+    no_coverage(failure.semantic());
     assert!(failure.publication().is_none());
 }
 
@@ -121,8 +136,8 @@ fn prepared_refusal_keeps_the_requested_policy() {
     let original = Session::new(
         PreparedInput::formula(&owner),
         SolveConfig {
-            oracle: Oracle::Closure,
-            grounder: Grounder::Eager,
+            oracle: Oracle::Auto,
+            grounder: Grounder::Lazy,
             ..config()
         },
         Cancellation::default(),
@@ -134,13 +149,13 @@ fn prepared_refusal_keeps_the_requested_policy() {
         failure.cause.as_ref(),
         RunError::PreparedInput {
             profile: PreparedProfile::Formula,
-            oracle: Oracle::Closure,
-            grounder: Grounder::Eager,
+            oracle: Oracle::Auto,
+            grounder: Grounder::Lazy,
         }
     ));
     assert_eq!(
         failure.to_string(),
-        "prepared Formula cannot honor oracle closure with grounder eager"
+        "prepared Formula cannot honor oracle auto with grounder lazy"
     );
     assert!(failure.cause.source().is_none());
     assert!(failure.semantic().is_none());
@@ -150,59 +165,4 @@ fn prepared_refusal_keeps_the_requested_policy() {
             .unwrap()
             .same_instance(&Subject::Theory(owner.theory().clone()))
     );
-}
-
-#[test]
-fn batch_refusal_keeps_its_admission_counts() {
-    let owner = admit("a.".into(), AdmissionOptions::default()).unwrap();
-    let seed = Seed::new(owner.program(), []).unwrap();
-    let pool = BatchOracle::new(NonZeroUsize::MIN, NonZeroUsize::MIN).unwrap();
-    let refusal = pool
-        .check_batch(
-            owner.program(),
-            &[seed.clone(), seed.clone()],
-            Limits::default(),
-            &Cancellation::default(),
-        )
-        .unwrap_err();
-    // This is the typed failure adapter; the oversized batch did no membership work.
-    let failure = RunError::from(SolveError::Batch(refusal));
-    assert_eq!(failure.to_string(), "batch of 2 exceeds capacity 1");
-    assert!(matches!(
-        failure.source().unwrap().downcast_ref::<BatchError>(),
-        Some(BatchError::Capacity {
-            limit: 1,
-            actual: 2
-        })
-    ));
-    let checks = pool
-        .check_batch(
-            owner.program(),
-            &[seed],
-            Limits::default(),
-            &Cancellation::default(),
-        )
-        .unwrap();
-    assert_eq!(checks.len(), 1);
-    assert!(checks[0].as_ref().unwrap().accepted());
-}
-
-#[test]
-fn malformed_host_words_keep_the_decode_cause() {
-    let owner = admit("a.".into(), AdmissionOptions::default()).unwrap();
-    let ground = GroundProgram::compile(owner.program(), StaticLimits::default()).unwrap();
-    let refusal = ground.model_from_words(&[]).unwrap_err();
-    let expected = refusal.to_string();
-    // Malformed host decode input is real; no device execution is represented.
-    let failure = RunError::from(SolveError::Words(refusal));
-    assert_eq!(failure.to_string(), expected);
-    assert!(matches!(failure, RunError::Words(_)));
-    assert!(
-        failure
-            .source()
-            .unwrap()
-            .downcast_ref::<WordError>()
-            .is_some()
-    );
-    assert_eq!(ground.model_from_words(&[1]).unwrap().atoms().len(), 1);
 }

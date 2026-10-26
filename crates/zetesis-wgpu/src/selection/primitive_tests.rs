@@ -36,7 +36,7 @@ fn weaker_profile_admission_does_not_change_static_discovery() {
         ..wgpu::Limits::default()
     };
     let info = report("four bindings", &limits, true);
-    assert!(!info.supports_static_oracle());
+    assert!(!info.supports_formula_oracle());
     assert_eq!(
         choose([(0, &info)], GpuOptions::default(), METAL, |_, _| {
             check_capabilities(true, &limits, four_buffers)
@@ -44,7 +44,7 @@ fn weaker_profile_admission_does_not_change_static_discovery() {
         .unwrap(),
         0
     );
-    assert!(!info.supports_static_oracle());
+    assert!(!info.supports_formula_oracle());
     assert!(
         info.capability_issue()
             .unwrap()
@@ -54,20 +54,22 @@ fn weaker_profile_admission_does_not_change_static_discovery() {
 
 #[test]
 fn stronger_profile_skips_the_first_ranked_incapable_adapter() {
-    let five = wgpu::Limits {
-        max_storage_buffers_per_shader_stage: 5,
+    // Six storage buffers pass the formula kernel's preflight; the stronger
+    // profile asks for seven.
+    let six = wgpu::Limits {
+        max_storage_buffers_per_shader_stage: 6,
         ..wgpu::Limits::default()
     };
     let seven = wgpu::Limits {
         max_storage_buffers_per_shader_stage: 7,
-        ..five.clone()
+        ..six.clone()
     };
-    let first = report("a first", &five, true);
+    let first = report("a first", &six, true);
     let later = report("b later", &seven, true);
-    assert!(first.supports_static_oracle());
+    assert!(first.supports_formula_oracle());
     for inventory in [
-        [(&first, &five), (&later, &seven)],
-        [(&later, &seven), (&first, &five)],
+        [(&first, &six), (&later, &seven)],
+        [(&later, &seven), (&first, &six)],
     ] {
         let selected = choose(
             inventory
@@ -91,7 +93,7 @@ fn profile_free_context_selection_still_requires_compute() {
         ..wgpu::Limits::default()
     };
     let info = report("generic context", &limits, true);
-    assert!(!info.supports_static_oracle());
+    assert!(!info.supports_formula_oracle());
     for compute in [false, true] {
         let selected = choose([(0, &info)], GpuOptions::default(), METAL, |_, _| {
             check_capabilities(compute, &limits, |_| Ok(()))

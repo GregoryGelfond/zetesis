@@ -6,10 +6,10 @@ use zetesis_cli::{Completion, Options, RunError, run};
 use zetesis_cpu::{Cancellation, Stop};
 
 fn bounded_candidates(source: &str, maximum: u64) -> (zetesis_cli::Report, String) {
-    let mut config = crate::support::prepared::config(&["--oracle", "closure"]);
+    let mut config = crate::support::prepared::config(&["--oracle", "countermodel"]);
     config.solve.max_candidates = maximum;
     let mut output = Vec::new();
-    let report = crate::support::prepared::relational_human(
+    let report = crate::support::prepared::human(
         source,
         &config,
         &mut output,
@@ -35,27 +35,14 @@ fn solve(source: &str, extra: &[&str]) -> (zetesis_cli::Report, String) {
 #[test]
 fn exhaustive_models_are_streamed_once_with_coverage() {
     // Deciding b decides a, so the two regions below the root are the two
-    // answers and nothing else is checked.
+    // answers, the held branch first, and nothing else is checked.
     let (report, text) = solve("a :- not b. b :- not a.", &["--models", "0"]);
     assert_eq!(report.completion, Completion::Exhausted);
-    assert_eq!(
-        (report.models, report.checked, report.discovered_gate_atoms),
-        (2, 2, 2)
+    assert_eq!((report.models, report.checked), (2, 2));
+    assert!(
+        text.contains("Answer: 1\nb\nAnswer: 2\na\nSATISFIABLE\nModels:"),
+        "{text}"
     );
-    assert!(text.contains("Answer: 1\na\nAnswer: 2\nb\nSATISFIABLE\nModels:"));
-}
-
-#[test]
-fn the_first_model_reads_the_carrier_once_for_the_root() {
-    // The narrowed root holds the one undecided gate atom; its out branch is
-    // the first answer, found after one check.
-    let (report, text) = solve("node(a). {chosen(X)} :- node(X).", &[]);
-    assert_eq!(report.completion, Completion::RequestedModels);
-    assert_eq!(
-        (report.models, report.checked, report.discovered_gate_atoms),
-        (1, 1, 1)
-    );
-    assert!(text.contains("Answer: 1\nnode(a)\n"));
 }
 
 #[test]
@@ -83,7 +70,9 @@ fn unsat_requires_exhaustion_and_limits_preserve_incomplete_status() {
     assert_eq!(limited.completion, Completion::Interrupted);
     assert_eq!(
         limited.interruption,
-        Some(zetesis_cli::Interruption::Oracle(Stop::CandidateLimit))
+        Some(zetesis_cli::Interruption::Countermodel(
+            zetesis_stable::Incomplete::CandidateLimit
+        ))
     );
     assert!(!text.contains("UNSATISFIABLE"));
 }

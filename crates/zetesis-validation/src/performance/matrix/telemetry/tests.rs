@@ -584,16 +584,14 @@ fn stratified_consequences_is_a_distinct_procedure() {
 fn positive_consequences_cannot_satisfy_an_explicit_oracle_request() {
     let (document, text) = prepared_fixture();
     let text = text.replace("oracle=closure", "oracle=positive-consequences");
-    for oracle in [Oracle::Closure, Oracle::Countermodel] {
-        let request = NativeExecution {
-            oracle,
-            ..Default::default()
-        };
-        assert_eq!(
-            observe(&document, text.as_bytes(), request).unwrap_err(),
-            "actual oracle differs from explicit requested procedure"
-        );
-    }
+    let request = NativeExecution {
+        oracle: Oracle::Countermodel,
+        ..Default::default()
+    };
+    assert_eq!(
+        observe(&document, text.as_bytes(), request).unwrap_err(),
+        "actual oracle differs from explicit requested procedure"
+    );
 }
 
 #[test]

@@ -11,10 +11,7 @@ fn stopped_formula_adapter_retains_admitted_subject() {
     cancellation.cancel();
     let options = crate::Options::try_parse_from(["zetesis", "--backend", "cpu"]).unwrap();
     let progress = super::solve(
-        super::Admitted {
-            input: crate::PreparedInput::formula(&admitted),
-            expansion: None,
-        },
+        crate::PreparedInput::formula(&admitted),
         &crate::PublicationConfig::from(&options),
         &crate::ExecutionResources::default(),
         &mut crate::HumanRenderer::new(
@@ -42,6 +39,4 @@ fn stopped_formula_adapter_retains_admitted_subject() {
     );
     assert!(semantic.countermodel_statistics().is_none());
     assert!(semantic.formula_execution().is_none());
-    assert!(semantic.lazy_execution().is_none());
-    assert!(semantic.shared_execution().is_none());
 }

@@ -2,7 +2,6 @@
 
 use std::error::Error;
 use std::io::{self, Write};
-use std::num::NonZeroUsize;
 use std::process::{Command, Stdio};
 
 use crate::support::options::serial as options;
@@ -19,18 +18,8 @@ fn bounded_human(
     diagnostics: &mut impl Write,
     cancellation: &Cancellation,
 ) -> Result<zetesis_cli::Report, RunError> {
-    let result = if config.solve.oracle == zetesis_cli::Oracle::Closure {
-        crate::support::prepared::relational_human(
-            source,
-            config,
-            output,
-            diagnostics,
-            cancellation,
-        )
-    } else {
-        crate::support::prepared::human(source, config, output, diagnostics, cancellation)
-    };
-    result.map_err(|failure| *failure.cause)
+    crate::support::prepared::human(source, config, output, diagnostics, cancellation)
+        .map_err(|failure| *failure.cause)
 }
 
 fn output_error(error: &RunError) {
@@ -54,12 +43,12 @@ fn deterministic_output_prefix_failures_propagate_on_both_oracles() {
     let scenarios: &[(&str, &[&str])] = &[
         (
             "p(1,foo). q(\"a b\\\"c\\\\d\\ne\").",
-            &["--oracle", "closure", "--grounder", "lazy"],
+            &["--oracle", "countermodel", "--grounder", "lazy"],
         ),
-        ("-q.", &["--oracle", "closure", "--grounder", "lazy"]),
+        ("-q.", &["--oracle", "countermodel", "--grounder", "lazy"]),
         (
             "{a}. b:-a.",
-            &["--oracle", "closure", "--grounder", "eager"],
+            &["--oracle", "countermodel", "--grounder", "eager"],
         ),
         ("a | b.", &["--oracle", "countermodel"]),
         (
@@ -99,8 +88,11 @@ fn deterministic_output_prefix_failures_propagate_on_both_oracles() {
 #[test]
 fn diagnostic_truncation_is_a_transport_failure_before_false_completion() {
     for (source, arguments) in [
-        ("a.", vec!["--oracle", "closure", "--grounder", "lazy"]),
-        ("{a}.", vec!["--oracle", "closure", "--grounder", "eager"]),
+        ("a.", vec!["--oracle", "countermodel", "--grounder", "lazy"]),
+        (
+            "{a}.",
+            vec!["--oracle", "countermodel", "--grounder", "eager"],
+        ),
         ("{a;b}. #minimize{1:a}.", vec!["--oracle", "countermodel"]),
     ] {
         let mut options = options(&arguments);
@@ -152,41 +144,23 @@ fn diagnostic_truncation_is_a_transport_failure_before_false_completion() {
 #[test]
 fn admission_and_materialization_failures_retain_causes_and_locations() {
     for (source, arguments, expected) in [
-        ("p(X).", vec!["--oracle", "closure"], "expansion"),
+        ("p(X).", vec![], "formula"),
         ("#external a.", vec!["--oracle", "countermodel"], "formula"),
-        (
-            "a.",
-            vec!["--oracle", "closure", "--grounder", "eager"],
-            "static",
-        ),
         ("a. #show a.", vec![], "observation"),
     ] {
         let mut output = Vec::new();
-        let error = if matches!(expected, "static" | "observation") {
+        let error = if expected == "observation" {
             let mut config = zetesis_cli::PublicationConfig::from(&options(&arguments));
-            if expected == "static" {
-                config.solve.max_ground_rules = 0;
-            } else {
-                config.observations.max_work = 0;
-            }
-            let result = if expected == "static" {
-                crate::support::prepared::relational_human(
-                    source,
-                    &config,
-                    &mut output,
-                    &mut io::sink(),
-                    &Cancellation::default(),
-                )
-            } else {
-                crate::support::prepared::human(
-                    source,
-                    &config,
-                    &mut output,
-                    &mut io::sink(),
-                    &Cancellation::default(),
-                )
-            };
-            *result.unwrap_err().cause
+            config.observations.max_work = 0;
+            *crate::support::prepared::human(
+                source,
+                &config,
+                &mut output,
+                &mut io::sink(),
+                &Cancellation::default(),
+            )
+            .unwrap_err()
+            .cause
         } else {
             run_with_diagnostics(
                 source.into(),
@@ -198,15 +172,13 @@ fn admission_and_materialization_failures_retain_causes_and_locations() {
             .unwrap_err()
         };
         match (&error, expected) {
-            (RunError::Expansion(_), "expansion")
-            | (RunError::FormulaAdmission(_), "formula")
-            | (RunError::Static(_), "static")
-            | (RunError::Observation(_), "observation") => (),
+            (RunError::FormulaAdmission(_), "formula")
+            | (RunError::Observation(_), "observation") => {}
             _ => panic!("unexpected {expected} error: {error:?}"),
         }
         assert!(error.source().is_some(), "{error}");
         let message = error.to_string();
-        if matches!(expected, "expansion" | "formula") {
+        if expected == "formula" {
             assert!(message.starts_with("source admission:"), "{message}");
             assert!(message.contains("bytes "), "{message}");
         }
@@ -235,18 +207,19 @@ fn admission_and_materialization_failures_retain_causes_and_locations() {
 
 #[test]
 fn lower_layer_failures_preserve_typed_causes_at_the_public_cli_boundary() {
-    let admission = zetesis_themelios::admit(
+    let admission = zetesis_themelios::admit_formula(
         "p(.".to_owned(),
         zetesis_themelios::AdmissionOptions::default(),
+        zetesis_themelios::ExpansionLimits::default(),
+        zetesis_themelios::FormulaLimits::default(),
     )
     .unwrap_err();
-    assert!(!admission.diagnostics().is_empty());
-    let error = RunError::Admission(admission);
+    let error = RunError::FormulaAdmission(admission);
     assert!(
         error
             .source()
             .unwrap()
-            .downcast_ref::<zetesis_themelios::AdmissionFailure>()
+            .downcast_ref::<zetesis_themelios::FormulaFailure>()
             .is_some()
     );
     let diagnostic = error.to_string();
@@ -254,76 +227,6 @@ fn lower_layer_failures_preserve_typed_causes_at_the_public_cli_boundary() {
     assert!(diagnostic.contains("<input>:1:3"), "{diagnostic}");
     assert!(diagnostic.contains("1 | p(."), "{diagnostic}");
     assert!(diagnostic.contains("to close this `(`"), "{diagnostic}");
-
-    let admitted = zetesis_themelios::admit(
-        "p.".to_owned(),
-        zetesis_themelios::AdmissionOptions::default(),
-    )
-    .unwrap();
-    let seed = zetesis_core::Seed::new(admitted.program(), []).unwrap();
-    let pool = zetesis_cpu::BatchOracle::new(NonZeroUsize::MIN, NonZeroUsize::MIN).unwrap();
-    let failure = pool
-        .check_batch(
-            admitted.program(),
-            &[seed.clone(), seed],
-            zetesis_cpu::Limits::default(),
-            &Cancellation::default(),
-        )
-        .unwrap_err();
-    let error = RunError::Batch(failure);
-    assert!(matches!(
-        error
-            .source()
-            .unwrap()
-            .downcast_ref::<zetesis_cpu::BatchError>(),
-        Some(zetesis_cpu::BatchError::Capacity {
-            limit: 1,
-            actual: 2
-        })
-    ));
-    assert_eq!(error.to_string(), "batch of 2 exceeds capacity 1");
-
-    let failure = zetesis_ferraris::Theory::new(
-        1,
-        zetesis_ferraris::FormulaParts::new(vec![zetesis_ferraris::Node::atom(1)], vec![]).unwrap(),
-        vec![0],
-        zetesis_ferraris::AdmissionLimits::default(),
-    )
-    .unwrap_err();
-    let error = RunError::Formula(failure);
-    assert_eq!(
-        error
-            .source()
-            .unwrap()
-            .downcast_ref::<zetesis_ferraris::AdmissionError>(),
-        Some(&zetesis_ferraris::AdmissionError::Atom)
-    );
-    assert_eq!(error.to_string(), "atom is outside the formula universe");
-
-    let ground = zetesis_core::GroundProgram::compile(
-        admitted.program(),
-        zetesis_core::StaticLimits::default(),
-    )
-    .unwrap();
-    assert_eq!(ground.atom_count(), 1);
-    for (words, expected) in [
-        (vec![], "expected 1 result words, received 0"),
-        (
-            vec![2],
-            "result contains nonzero bits outside the atom carrier",
-        ),
-    ] {
-        let error = RunError::Words(ground.model_from_words(&words).unwrap_err());
-        assert!(
-            error
-                .source()
-                .unwrap()
-                .downcast_ref::<zetesis_core::WordError>()
-                .is_some()
-        );
-        assert_eq!(error.to_string(), expected);
-        assert_eq!(error.source().unwrap().to_string(), expected);
-    }
 }
 
 #[test]
@@ -407,9 +310,11 @@ fn device_output_failure_is_reported_before_adapter_discovery() {
 
 #[test]
 fn incomplete_summaries_propagate_deterministic_prefix_failures() {
-    let mut requested = zetesis_cli::PublicationConfig::from(&options(&["--oracle", "closure"]));
+    let mut requested =
+        zetesis_cli::PublicationConfig::from(&options(&["--oracle", "countermodel"]));
     requested.solve.models = 1;
-    let mut candidates = zetesis_cli::PublicationConfig::from(&options(&["--oracle", "closure"]));
+    let mut candidates =
+        zetesis_cli::PublicationConfig::from(&options(&["--oracle", "countermodel"]));
     candidates.solve.max_candidates = 0;
     let mut work = zetesis_cli::PublicationConfig::from(&options(&["--oracle", "countermodel"]));
     work.solve.max_search_work = 0;
@@ -464,7 +369,7 @@ fn cpu_only_inventory_propagates_failures_after_each_capability_record() {
 #[cfg(not(feature = "gpu"))]
 #[test]
 fn cpu_only_default_eager_routing_stays_on_the_cpu() {
-    let mut options = options(&["--oracle", "closure", "--grounder", "eager"]);
+    let mut options = options(&["--oracle", "countermodel", "--grounder", "eager"]);
     options.stats = true;
     options.statistics_view = StatisticsView::Records;
     let mut output = Vec::new();
@@ -480,8 +385,11 @@ fn cpu_only_default_eager_routing_stays_on_the_cpu() {
     assert_eq!(report.completion, Completion::Exhausted);
     assert_eq!(report.models, 2);
     let diagnostics = String::from_utf8(diagnostics).unwrap();
-    assert!(diagnostics.contains("effective=eager"));
-    assert!(diagnostics.contains("Backend: cpu"));
+    assert!(
+        diagnostics.contains("grounder: eager (requested eager)"),
+        "{diagnostics}"
+    );
+    assert!(diagnostics.contains("Backend: cpu"), "{diagnostics}");
 }
 
 #[test]
@@ -509,7 +417,7 @@ fn device_inventory_exposes_availability_without_claiming_execution() {
 
 #[test]
 fn a_tiny_lazy_run_uses_the_cpu_by_default() {
-    let mut options = options(&["--oracle", "closure", "--grounder", "lazy"]);
+    let mut options = options(&["--oracle", "countermodel", "--grounder", "lazy"]);
     options.stats = true;
     options.statistics_view = StatisticsView::Records;
     let mut output = Vec::new();
@@ -525,10 +433,13 @@ fn a_tiny_lazy_run_uses_the_cpu_by_default() {
     assert_eq!(report.completion, Completion::Exhausted);
     assert_eq!(report.models, 1);
     let diagnostics = String::from_utf8(diagnostics).unwrap();
-    assert!(diagnostics.contains("Backend: cpu"));
-    assert!(report.lazy_execution.is_none());
-    assert!(diagnostics.contains("effective=lazy"));
-    assert!(!diagnostics.contains("effective=eager"));
+    assert!(diagnostics.contains("Backend: cpu"), "{diagnostics}");
+    // A lazy request takes the hybrid route, never a silent eager one.
+    assert!(
+        diagnostics.contains("Grounding: requested=lazy, effective=hybrid"),
+        "{diagnostics}"
+    );
+    assert!(!diagnostics.contains("effective=eager"), "{diagnostics}");
 }
 
 #[cfg(not(feature = "gpu"))]
@@ -536,7 +447,7 @@ fn a_tiny_lazy_run_uses_the_cpu_by_default() {
 fn cpu_only_binary_reports_explicit_gpu_unavailability_without_fallback() {
     for backend in ["gpu", "metal", "vulkan"] {
         let options =
-            crate::support::options::plain(&["--backend", backend, "--oracle", "closure"]);
+            crate::support::options::plain(&["--backend", backend, "--oracle", "countermodel"]);
         let mut output = Vec::new();
         let error = run_with_diagnostics(
             "a.".into(),

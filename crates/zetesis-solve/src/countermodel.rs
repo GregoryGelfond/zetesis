@@ -11,7 +11,6 @@ use zetesis_ferraris::Theory;
 pub(crate) struct Input<'a> {
     pub(crate) theory: &'a Theory,
     pub(crate) atoms: &'a AtomCatalog,
-    pub(crate) gate_atoms: usize,
     /// Written constraints asked as the one atom their key admits.
     pub(crate) keyed_constraints: usize,
     /// How the key analysis that asked them ended.

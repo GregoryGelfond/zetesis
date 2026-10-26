@@ -174,7 +174,7 @@ Neither participates in production answer-set search.
 
 The hardware gate selects Metal on macOS and Vulkan elsewhere. Override the
 selection with `scripts/check.sh hardware --metal` or `--vulkan`.
-Each backend has a reviewed selection of 75 exact tests in 14 groups.
+Each backend has a reviewed selection of 58 exact tests in 11 groups.
 This includes complete terminal-definition reconstruction over device-verified
 base answers, compared with eager CPU answer sets and the original output queries.
 Logs and status files are retained under `target/hardware`.
@@ -195,11 +195,10 @@ scripts/check.sh coverage --vulkan
 ```
 
 Each requires an available adapter of its backend, and each reads the reviewed
-selection the hardware gate reads. The selection includes static-oracle
-construction and closure against an independent ordered-set reference, tight and
-general formula checking, resource refusal, reusable sessions, and completed
-table joins composed with GPU checking. Formula tests do not replace the
-[static shader tests](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-wgpu/tests/integration/hardware.rs).
+selection the hardware gate reads. The selection includes tight and general
+formula checking, resource refusal, reusable sessions, and completed table joins
+composed with GPU checking. The static and lazy closure oracles' device tests left
+with that route.
 The [0.6.0 coverage snapshot](coverage-0.6.0.md) records the selected Metal tests
 within workspace coverage. The [0.3.0 snapshot](coverage-0.3.0.md) retains its
 earlier source and separate physical qualification.

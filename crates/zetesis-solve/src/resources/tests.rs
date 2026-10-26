@@ -15,7 +15,6 @@ fn mandatory_traversal_uses_counter_representation() {
         solve.max_objective_bindings,
         solve.max_candidates,
         solve.max_work,
-        solve.max_source_work,
         solve.constraints.max_work,
         solve.constraints.max_substitutions,
     ] {
@@ -67,7 +66,6 @@ fn memory_controls_retained_populations() {
 fn zero_memory_does_not_gain_population_headroom() {
     let resources = Resources::new(0, NonZeroUsize::MIN);
     let solve = resources.solve_config();
-    assert_eq!(solve.max_closure_bytes, 0);
     assert_eq!(solve.max_atoms, 0);
     assert_eq!(resources.formula_limits().theory.max_nodes, 0);
     assert_eq!(resources.formula_limits().max_support_bytes, 0);
@@ -119,21 +117,6 @@ fn other_device_batches_keep_a_thirty_second_of_the_allowance() {
     for memory in ALLOWANCES {
         let config = Resources::new(memory, NonZeroUsize::MIN).solve_config();
         assert_eq!(config.max_batch_bytes, clamped(memory) / 32, "{memory}");
-    }
-}
-
-#[test]
-fn closure_workers_share_the_collective_capacity() {
-    for memory in [0, 1, 63, 1024, Resources::REFERENCE_MEMORY, u64::MAX] {
-        for workers in [1, 3, 7, 64] {
-            let workers = NonZeroUsize::new(workers).unwrap();
-            let config = Resources::new(memory, workers).solve_config();
-            assert_eq!(config.workers, workers);
-            assert!(
-                config.max_closure_bytes.checked_mul(workers.get()).unwrap()
-                    <= config.max_closure_batch_bytes
-            );
-        }
     }
 }
 

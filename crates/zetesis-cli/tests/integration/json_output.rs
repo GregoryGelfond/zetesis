@@ -80,23 +80,13 @@ fn prepared_json(
         maximum,
         options.resources().formula_limits().theory.max_atoms,
     );
-    if config.solve.oracle == zetesis_cli::Oracle::Closure {
-        crate::support::prepared::relational(
-            source,
-            config,
-            &mut renderer,
-            &mut io::sink(),
-            &Cancellation::default(),
-        )
-    } else {
-        crate::support::prepared::formula(
-            source,
-            config,
-            &mut renderer,
-            &mut io::sink(),
-            &Cancellation::default(),
-        )
-    }
+    crate::support::prepared::formula(
+        source,
+        config,
+        &mut renderer,
+        &mut io::sink(),
+        &Cancellation::default(),
+    )
 }
 
 fn hidden_choices(oracle: &str) -> (Report, Json) {
@@ -232,27 +222,16 @@ fn elenctic_comments_do_not_change_answer_sets() {
     let source = "a. {b}. #show a/0. #show b/0.";
     let annotated =
         format!("% @expect unsat\n% @count 0\n% @cost {{99}}\n% @model {{absent}}\n{source}");
-    for oracle in ["closure", "countermodel"] {
+    for oracle in ["auto", "countermodel"] {
         let options = options(&["--oracle", oracle]);
         let (plain, expected) = solve(source, &options);
         let (annotated, actual) = solve(&annotated, &options);
         for report in [plain.as_ref().unwrap(), annotated.as_ref().unwrap()] {
             assert_eq!(report.completion, Completion::Exhausted);
             assert_eq!(report.models, 2);
-            assert_eq!(
-                report.countermodel_statistics.is_some(),
-                oracle == "countermodel"
-            );
+            assert!(report.countermodel_statistics.is_some());
         }
         assert_eq!(actual["models"], expected["models"]);
-    }
-}
-
-#[test]
-fn explicit_oracles_select_distinct_routes() {
-    for (oracle, formula_route) in [("closure", false), ("countermodel", true)] {
-        let (report, _) = hidden_choices(oracle);
-        assert_eq!(report.countermodel_statistics.is_some(), formula_route);
     }
 }
 
@@ -264,7 +243,7 @@ fn hidden_display_preserves_full_model_identity() {
         .into_iter()
         .map(|model| model.to_string())
         .collect::<std::collections::BTreeSet<_>>();
-    for oracle in ["closure", "countermodel"] {
+    for oracle in ["auto", "countermodel"] {
         let (report, value) = hidden_choices(oracle);
         assert_eq!(
             (report.models, report.completion),
@@ -285,7 +264,7 @@ fn hidden_display_preserves_full_model_identity() {
 
 #[test]
 fn model_numbers_follow_publication_order() {
-    for oracle in ["closure", "countermodel"] {
+    for oracle in ["auto", "countermodel"] {
         let (_, value) = hidden_choices(oracle);
         let models = value["models"].as_array().unwrap();
         assert_eq!(models.len(), 4);
@@ -297,7 +276,7 @@ fn model_numbers_follow_publication_order() {
 
 #[test]
 fn json_documents_identify_the_schema() {
-    for oracle in ["closure", "countermodel"] {
+    for oracle in ["auto", "countermodel"] {
         let (_, value) = hidden_choices(oracle);
         assert_eq!(value["schema"], 2);
     }
@@ -305,7 +284,7 @@ fn json_documents_identify_the_schema() {
 
 #[test]
 fn statistics_are_absent_without_opt_in() {
-    for oracle in ["closure", "countermodel"] {
+    for oracle in ["auto", "countermodel"] {
         let (_, value) = hidden_choices(oracle);
         assert!(value["statistics"].is_null());
     }
@@ -399,86 +378,6 @@ fn completion_statistics_distinguish_requested_storage() {
     );
     assert_eq!(stats["peak_scratch_bytes"], measured.peak_scratch_bytes);
     assert_eq!(stats["entered"], 4);
-}
-
-#[test]
-fn candidate_statistics_preserve_restriction_accounting() {
-    let (report, value) = solve(
-        "{a}. {b}. :- a,b.",
-        &options(&["--stats", "--grounder", "lazy"]),
-    );
-    let report = report.unwrap();
-    assert_eq!(report.models, 3);
-    let measured = report.candidate_statistics.unwrap();
-    let stats = &value["statistics"]["candidate_restrictions"];
-    assert_eq!(stats["work"], measured.restriction_work);
-    assert_eq!(stats["conjunctions"], 1);
-    assert_eq!(stats["skipped_intervals"], 1);
-    assert_eq!(
-        stats["prepared_atom_occurrences"],
-        measured.restriction_atoms
-    );
-    assert_eq!(stats["copied_payload_bytes"], measured.restriction_bytes);
-    assert_eq!(
-        stats["peak_copied_payload_bytes"],
-        measured.restriction_peak_bytes
-    );
-}
-
-#[test]
-fn candidate_statistics_carry_the_carrier_narrowing_and_regions() {
-    let (report, value) = solve(
-        "{a}. {b}. :- a,b.",
-        &options(&["--stats", "--grounder", "lazy"]),
-    );
-    let measured = report.unwrap().candidate_statistics.unwrap();
-    let stats = &value["statistics"]["candidate_restrictions"];
-    let narrowing = &stats["carrier_narrowing"];
-    assert_eq!(narrowing["passes"], measured.narrowing_passes);
-    assert_eq!(narrowing["cut_gate_atoms"], measured.cut_gate_atoms);
-    assert_eq!(narrowing["held_gate_atoms"], measured.held_gate_atoms);
-    assert_eq!(narrowing["refuted"], false);
-    assert_eq!(narrowing["stopped"], Json::Null);
-    let regions = &stats["carrier_regions"];
-    assert_eq!(regions["visited"], measured.regions);
-    assert_eq!(regions["refuted"], measured.regions_refuted);
-    assert_eq!(regions["leaves"], measured.regions_leaves);
-    assert_eq!(regions["counted"], measured.regions_counted);
-    assert_eq!(regions["narrowing_passes"], measured.region_passes);
-}
-
-#[test]
-fn candidate_statistics_say_when_the_root_narrowing_refuted_every_seed() {
-    let (report, value) = solve("{a}. p. :- p.", &options(&["--stats"]));
-    let measured = report.unwrap().candidate_statistics.unwrap();
-    assert!(measured.root_refuted);
-    let narrowing = &value["statistics"]["candidate_restrictions"]["carrier_narrowing"];
-    assert_eq!(narrowing["refuted"], true);
-    assert_eq!(narrowing["passes"], measured.narrowing_passes);
-}
-
-#[test]
-fn interrupted_restriction_work_remains_visible() {
-    let (report, value) = bounded(
-        "{a}. {b}. :- a,b.",
-        &options(&["--stats", "--grounder", "lazy", "--oracle", "closure"]),
-        |config| {
-            config.solve.max_search_work = 1;
-        },
-        None,
-    );
-    let report = report.unwrap();
-    assert_eq!(report.completion, Completion::Interrupted);
-    assert!(report.countermodel_statistics.is_none());
-    let receipt = report
-        .candidate_statistics
-        .expect("closure restriction route was entered");
-    assert_eq!(receipt.restriction_work, 1);
-    assert_eq!(
-        value["statistics"]["candidate_restrictions"]["work"],
-        receipt.restriction_work
-    );
-    assert_eq!(value["outcome"]["coverage"], "partial");
 }
 
 fn priority_ties(bounds: &str) -> (Report, Json) {
@@ -617,7 +516,7 @@ fn admission_failures_publish_error_documents() {
     let (result, value) = solve("p(.", &options(&[]));
     let cause = result.unwrap_err();
     assert_eq!(value["outcome"]["status"], "failed");
-    assert_eq!(value["outcome"]["error"]["kind"], "expansion");
+    assert_eq!(value["outcome"]["error"]["kind"], "formula_admission");
     assert_eq!(value["outcome"]["error"]["detail"], cause.to_string());
     assert!(value["outcome"]["completion"].is_null());
     assert_eq!(value["models"], json!([]));
@@ -665,11 +564,13 @@ fn search_statistics_count_stable_models() {
 }
 
 #[test]
-fn formula_phases_exclude_closure_measurements() {
+fn phase_timing_schema_seven_has_no_closure_membership_phase() {
     let (report, value) = formula_statistics();
     assert!(report.phase_timings.is_some());
-    assert_eq!(value["statistics"]["phase_timings"]["schema"], 6);
-    assert!(value["statistics"]["phase_timings"]["measurements"]["closure_membership"].is_null());
+    let timings = &value["statistics"]["phase_timings"];
+    assert_eq!(timings["schema"], 7);
+    assert!(timings["measurements"].is_object());
+    assert!(timings["measurements"].get("closure_membership").is_none());
 }
 
 #[test]
@@ -892,11 +793,7 @@ fn view_refusal_preserves_proved_optimality() {
 fn stage_views_preserve_the_typed_partition() {
     for (source, extra, mode) in [
         ("{a}.", vec!["--stats", "--grounder", "eager"], "eager"),
-        (
-            "{a}.",
-            vec!["--stats", "--grounder", "lazy"],
-            "lazy_interleaved",
-        ),
+        ("{a}.", vec!["--stats", "--grounder", "lazy"], "mixed"),
         ("a | b.", vec!["--stats"], "eager"),
     ] {
         let (result, value) = solve(source, &options(&extra));
@@ -943,39 +840,11 @@ fn resource_stops_encode_partial_coverage() {
     );
     let cases: &[Case] = &[
         (
-            "a.",
-            &["--oracle", "closure", "--grounder", "lazy"],
-            |c| c.max_closure_bytes = 0,
-            "preparation",
-            "storage_limit",
-        ),
-        (
             "{a}.",
-            &["--oracle", "closure"],
-            |c| c.max_work = 0,
-            "oracle",
-            "work_limit",
-        ),
-        (
-            "a.",
-            &["--oracle", "closure", "--grounder", "lazy"],
-            |c| c.max_atoms = 0,
-            "oracle",
-            "derived_atom_limit",
-        ),
-        (
-            "{a}.",
-            &["--oracle", "closure"],
+            &["--oracle", "countermodel"],
             |c| c.max_candidates = 0,
-            "oracle",
+            "countermodel",
             "candidate_limit",
-        ),
-        (
-            "{a}.",
-            &["--oracle", "closure"],
-            |c| c.max_carrier_atoms = 0,
-            "oracle",
-            "carrier_limit",
         ),
         (
             "{a;b}.",
@@ -1118,7 +987,7 @@ fn unretained_ties_remain_in_score_counts() {
 
 #[test]
 fn stopped_requests_publish_no_models() {
-    for oracle in ["closure", "countermodel", "auto"] {
+    for oracle in ["countermodel", "auto"] {
         for expired in [false, true] {
             let cancellation = if expired {
                 Cancellation::with_deadline(std::time::Instant::now()).unwrap()
@@ -1164,31 +1033,18 @@ fn setup_refusals_have_unavailable_coverage() {
             vec!["--oracle", "countermodel", "--grounder", "lazy"],
             "formula_admission",
         ),
-        ("p(.", vec!["--grounder", "lazy"], "expansion"),
+        ("p(.", vec!["--grounder", "lazy"], "formula_admission"),
         ("p(.", vec!["--oracle", "countermodel"], "formula_admission"),
-        (
-            "a.",
-            vec!["--oracle", "closure", "--grounder", "eager"],
-            "static",
-        ),
     ] {
         let mut configured = options(&extra);
-        if kind == "formula_admission" && extra.contains(&"lazy") {
-            configured.backend = zetesis_cli::Backend::Gpu(Some(zetesis_backend::GpuApi::Metal));
+        if extra.contains(&"lazy") {
+            configured.backend = if extra.contains(&"countermodel") {
+                zetesis_cli::Backend::Gpu(Some(zetesis_backend::GpuApi::Metal))
+            } else {
+                zetesis_cli::Backend::Gpu(None)
+            };
         }
-        if kind == "expansion" {
-            configured.backend = zetesis_cli::Backend::Gpu(None);
-        }
-        let (result, value) = if kind == "static" {
-            bounded(
-                source,
-                &configured,
-                |config| config.solve.max_ground_rules = 0,
-                None,
-            )
-        } else {
-            solve(source, &configured)
-        };
+        let (result, value) = solve(source, &configured);
         let failure = result.unwrap_err();
         assert!(failure.partial_report.is_none(), "{extra:?}: {failure:?}");
         assert_eq!(value["outcome"]["error"]["kind"], kind);
@@ -1259,7 +1115,7 @@ fn footer_write_failure_is_secondary() {
         &Cancellation::default(),
     )
     .unwrap_err();
-    assert!(matches!(*failure.cause, RunError::Expansion(_)));
+    assert!(matches!(*failure.cause, RunError::FormulaAdmission(_)));
     let header_end = reference.iter().position(|byte| *byte == b'[').unwrap() + 1;
     for capacity in header_end..reference.len() {
         let mut output = BoundedWriter::new(capacity);
@@ -1272,7 +1128,7 @@ fn footer_write_failure_is_secondary() {
         )
         .unwrap_err();
         assert!(
-            matches!(*failure.cause, RunError::Expansion(_)),
+            matches!(*failure.cause, RunError::FormulaAdmission(_)),
             "cut {capacity}"
         );
         assert_eq!(

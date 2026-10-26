@@ -81,13 +81,12 @@ completed consequence is retained.
 
 ## The scalar implementation boundary
 
-The independent scalar evaluator in
-[`zetesis_cpu::oracle`](../../crates/zetesis-cpu/src/oracle.rs) keeps one
+The closure route's independent scalar evaluator, `zetesis_cpu::oracle`, removed
+with that route, kept one
 [`Catalog`](../../crates/zetesis-core/src/relation/catalog.rs) per signed
 predicate. `OrderedRows::row_id` connects canonical access positions to stable
-insertion IDs. The private
-[partition owner](../../crates/zetesis-cpu/src/oracle/relations/partition.rs)
-constructs ordered Old/New ID slices over that same tuple payload, with a cache
+insertion IDs. Its private partition owner
+constructed ordered Old/New ID slices over that same tuple payload, with a cache
 key containing both cutoff and current extent. No second tuple store is created.
 
 `visit_round` checks complete selected bindings under the same frozen `SeedView`.

@@ -19,13 +19,10 @@ pub enum Grounder {
     Auto,
     /// Materialize the complete formula theory before search.
     Eager,
-    /// Instantiate on demand. A program inside the relational profile is
-    /// joined from source without a complete ground-rule store. Any other
-    /// program, refused by that profile only for a construct it lacks, is
-    /// grounded as formulas: an eager producer core, eligible integrity
-    /// constraints streamed during search, and certified terminal definitions
-    /// reconstructed per answer. Every other refusal is returned, never
-    /// retried under another mode.
+    /// Instantiate on demand: the program is grounded as formulas, with an
+    /// eager producer core, eligible integrity constraints streamed during
+    /// search, and certified terminal definitions reconstructed per answer.
+    /// A refusal is returned, never retried under another mode.
     Lazy,
 }
 

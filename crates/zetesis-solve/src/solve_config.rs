@@ -2,23 +2,20 @@
 
 use std::num::NonZeroUsize;
 
-use crate::{Backend, GpuBatching, Grounder, Oracle, QueryDivision, SourceBatching};
+use crate::{Backend, GpuBatching, Grounder, Oracle, QueryDivision};
 
 /// Policy for one semantic session. Budgets retain their existing ownership:
-/// Formula search/objective work is cumulative. Independent closure work is per
-/// candidate; shared CPU rounds separate collective source and per-world work.
-/// No field selects an output format, file path, source loader or writer.
+/// formula search and objective work are cumulative; verification work is per
+/// call. No field selects an output format, file path, source loader or writer.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct SolveConfig {
-    /// Execution backend: the CPU (the default) runs source joins or static
-    /// closure scans on an owned Rayon pool; a GPU backend requires a physical
-    /// device of its API and runs exact integer batches there, with general
-    /// formulas propagated on the GPU and their residual search exact on the CPU.
+    /// Execution backend: the CPU (the default) walks regions on an owned Rayon
+    /// pool; a GPU backend requires a physical device of its API and runs exact
+    /// integer batches there, with general formulas propagated on the GPU and
+    /// their residual search exact on the CPU.
     pub backend: Backend,
     /// Materialization policy within the admitted input's supported profiles.
     pub grounder: Grounder,
-    /// Relational source traversal; the sharing strategies require CPU execution.
-    pub source_batching: SourceBatching,
     /// Exact membership policy; prepared formula inputs retain their original theory.
     pub oracle: Oracle,
     /// Enable optional host timing; semantic/resource counters remain independent.
@@ -85,13 +82,10 @@ pub struct SolveConfig {
     /// Proposal scheduling for general and tight GPU formula membership.
     /// Adaptive by default ([`GpuBatching::DEFAULT`]); adaptive growth remains
     /// memory bounded and preserves the same ordered, all-or-nothing batch
-    /// commit. CPU and closure routes retain `batch_size` independently of this
-    /// GPU formula policy.
+    /// commit. CPU execution retains `batch_size` independently of this GPU
+    /// formula policy.
     pub gpu_batching: GpuBatching,
-    /// Worker count: the closure route's pool, and the walkers of the
-    /// region tree, one being the scalar walk.
-    /// CPU closure setup conservatively reserves `max_closure_bytes` per worker;
-    /// [`Self::for_allowance`] keeps that product within the collective ceiling.
+    /// Worker count: the walkers of the region tree, one being the scalar walk.
     /// The library default is four; the command uses the host's available
     /// parallelism, or one when availability is unknown.
     pub workers: NonZeroUsize,
@@ -118,31 +112,13 @@ pub struct SolveConfig {
     pub max_completion_scratch_bytes: u64,
     /// Explicit candidate-count ceiling; ordinary policy uses its representation maximum.
     pub max_candidates: u64,
-    /// Maximum incrementally retained gate atoms.
-    pub max_carrier_atoms: usize,
     /// Logical candidate restriction payload during source preparation.
     /// This excludes allocator slack and source relation/tree metadata.
     pub max_candidate_bytes: usize,
-    /// Maximum charged CPU oracle work per candidate, or shared host source
-    /// work per lazy GPU batch. Shared CPU rounds count record visits plus
-    /// antecedent tests per world; independent joins and device units differ.
-    /// Formula execution also applies this ceiling per independent original or
-    /// frozen-reduct verification call, and per certified candidate check. It
-    /// does not replace cumulative `max_search_work` or device propagation limits.
+    /// Maximum charged work per independent original or frozen-reduct
+    /// verification call, and per certified candidate check. It does not
+    /// replace cumulative `max_search_work` or device propagation limits.
     pub max_work: u64,
-    /// Named storage for one independent lazy CPU closure construction.
-    /// Input seeds and completed model retention belong to separate owners.
-    /// CPU closure setup conservatively admits every assigned worker at this
-    /// allowance, including eager and shared execution, so
-    /// `workers * max_closure_bytes` must not exceed `max_closure_batch_bytes`;
-    /// that route refuses an excessive or overflowing product before allocating
-    /// its pool, compiling static rules or initializing candidates. Formula and
-    /// device execution do not use this reservation.
-    pub max_closure_bytes: usize,
-    /// Collective independent CPU preparation, cached workspace and active
-    /// closure allowance. Also bounds immutable query preparation bytes.
-    /// Shared-round and GPU batch storage remain separate.
-    pub max_closure_batch_bytes: usize,
     /// Maximum device work per formula candidate, independent of CPU work.
     /// Propagation charges setup and sweeps; tight support charges its complete
     /// scan. Insufficient mandatory work is refused before submission.
@@ -151,27 +127,12 @@ pub struct SolveConfig {
     /// original-truth setup and leaves undecided candidates to exact CPU search.
     /// This ceiling does not apply to the tight-support scan.
     pub gpu_formula_rounds: u32,
-    /// Collective source work per shared CPU batch, or immutable query
-    /// preparation work for independent CPU closure. Candidate work is separate.
-    pub max_source_work: u64,
-    /// Maximum derived independent CPU atoms, demanded shared CPU/GPU batch
-    /// catalog atoms, eager atoms, or copied candidate restriction atom occurrences.
-    /// Shared catalogs and candidate preparation are collective, not per world.
+    /// Maximum atoms of one published model.
     pub max_atoms: usize,
-    /// Maximum substitutions in explicit static lowering.
-    pub max_substitutions: usize,
-    /// Maximum rules in explicit static lowering.
-    pub max_ground_rules: usize,
     /// Maximum accounted pending/GPU batch payload bytes, for every device batch
     /// except the tight support check's, which has its own ceiling
-    /// ([`Self::max_tight_batch_bytes`]). Lazy GPU splits this
-    /// allowance equally between source coordination and transient transport.
-    /// Shared CPU rounds use the full allowance for source and world state.
-    /// Both routes derive source-scan scratch from their host share and eagerly
-    /// reserve 1/32 of that share for one instance's referenced identity and key
-    /// metadata. The remaining host envelope admits catalog, masks and chunks;
-    /// the scan workspace has its own independent bound. These conservative
-    /// capacities exclude the overhead named by each owner and are not RSS.
+    /// ([`Self::max_tight_batch_bytes`]). These conservative capacities
+    /// exclude the overhead named by each owner and are not RSS.
     pub max_batch_bytes: u64,
     /// Maximum accounted payload bytes of one GPU tight support batch: the
     /// resident graph, transport, packing, results and, once admitted, the
@@ -225,27 +186,12 @@ impl SolveConfig {
 }
 
 impl SolveConfig {
-    /// Validate execution-policy combinations before admitting a source.
-    ///
-    /// This performs no admission, execution, allocation or device discovery.
-    /// A later prepared input can impose additional representation constraints.
-    /// Execution-specific resource checks happen only when their route is set
-    /// up. CPU closure setup checks the worker reservation before allocating or
-    /// initializing execution state. After policy validation, a pre-cancelled
-    /// session stops before those resource checks and allocations.
-    ///
-    /// # Errors
-    /// Refuses incompatible oracle, grounding and shared-source policies.
-    pub fn validate(&self) -> Result<(), crate::SolveError> {
-        crate::engine::validate_combination(self)
-    }
-
     /// Validate policies for finite formula admission before constructing it.
     ///
     /// This does not establish that any source is admissible or a device exists.
     ///
     /// # Errors
-    /// Refuses lazy grounding and relational shared-source policies.
+    /// Refuses lazy grounding, which needs the hybrid preparation.
     pub fn validate_formula(&self) -> Result<(), crate::SolveError> {
         if self.grounder == Grounder::Lazy {
             return Err(crate::SolveError::UnsupportedOracle {
@@ -253,21 +199,17 @@ impl SolveConfig {
                 grounder: self.grounder,
             });
         }
-        crate::engine::validate_countermodel(self)
+        Ok(())
     }
 
     /// Validate the execution policy for a producer core with streamed source
     /// constraints. This does not admit source or construct an executor.
     ///
     /// # Errors
-    /// Refuses eager materialization, closure membership and shared relational
-    /// source rounds. The retained formula core uses the selected backend;
-    /// streamed constraints are checked on the host.
+    /// Refuses eager materialization. The retained formula core uses the
+    /// selected backend; streamed constraints are checked on the host.
     pub fn validate_hybrid(&self) -> Result<(), crate::SolveError> {
-        if self.source_batching != SourceBatching::Independent {
-            return Err(crate::SolveError::UnsupportedSourceBatching);
-        }
-        if self.oracle == Oracle::Closure || self.grounder == Grounder::Eager {
+        if self.grounder == Grounder::Eager {
             return Err(crate::SolveError::PreparedInput {
                 profile: crate::PreparedProfile::Hybrid,
                 oracle: self.oracle,

@@ -109,9 +109,8 @@ neither a proof of truth in any one world nor permission to mix their seeds.
 Precisely, an instance is enabled when its positive antecedents are a subset of
 `X[w]`, its true-gate atoms are a subset of `S[w]`, and its false-gate atoms are
 disjoint from `S[w]`. If `G_P` is the admitted program's gate carrier, then
-`GateProjection(X) = X ∩ G_P`. The separate
-[`Candidates`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-cpu/src/candidates.rs)
-generator owes complete coverage of the relevant seeds over that carrier.
+`GateProjection(X) = X ∩ G_P`. The closure route's separate `Candidates` generator, removed with that route,
+owed complete coverage of the relevant seeds over that carrier.
 
 All chunks in one round read the same snapshots. Chunk results can be reduced
 with associative union and disjunction; their new heads become source witnesses
@@ -130,11 +129,9 @@ round depends on the prior round's completed consequences. World-membership
 masks may narrow offered bindings while preserving every world's enabled ones;
 they change source work, not the formula above or candidate coverage.
 
-The implementation connects at
-[`source::scan`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-cpu/src/oracle/source.rs),
-[`lazy::check_with_source`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-cpu/src/lazy.rs),
-the [shared Rayon evaluator](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-cpu/src/lazy/shared.rs)
-and the [wgpu evaluator](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-wgpu/src/lazy.rs).
+The implementation connected at the closure route's `source::scan`,
+`lazy::check_with_source`, shared Rayon evaluator and wgpu evaluator, all removed
+with that route.
 The source scan and round coordinator run on the host; the injected evaluator
 executes the per-world positive/gate tests and head/constraint reductions.
 The composition is meaningful without claiming that source joins run on the GPU.

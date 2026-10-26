@@ -60,13 +60,16 @@ fn tiny_auto_run() -> (Report, String, String) {
 
 #[test]
 fn a_tiny_auto_run_finds_its_first_answer_after_one_check() {
-    // The narrowed root holds the one undecided gate atom; its out branch is
-    // the first answer, found after one check.
+    // The root leaves the one choice open; the walk splits on it, held branch
+    // first, so the first answer holds the choice and is found after one
+    // check.
     let (report, models, _) = tiny_auto_run();
     assert_eq!(report.completion, Completion::RequestedModels);
     assert_eq!(report.checked, 1);
-    assert_eq!(report.discovered_gate_atoms, 1);
-    assert!(models.contains("Answer: 1\nnode(a)\n"));
+    assert!(
+        models.contains("Answer: 1\nchosen(a) node(a)\n"),
+        "{models}"
+    );
 }
 
 #[test]
@@ -116,7 +119,7 @@ fn finite_expansion_is_automatic_and_respects_its_own_limits() {
     assert!(
         String::from_utf8(diagnostics)
             .unwrap()
-            .contains("Oracle: reduct closure")
+            .contains("oracle: Ferraris reduct membership")
     );
     let error = zetesis_themelios::ParsedSource::new(
         source.into(),
@@ -265,7 +268,7 @@ fn default_execution_ignores_device_transport_limits() {
     let mut config =
         zetesis_cli::PublicationConfig::from(&options(&["--models", "0", "--grounder", "eager"]));
     config.solve.max_batch_bytes = 0;
-    let report = crate::support::prepared::relational(
+    let report = crate::support::prepared::formula(
         "{a}. {b}. {c}. {d}. {e}. {f}.",
         &config,
         &mut zetesis_cli::HumanRenderer::new(
@@ -300,12 +303,11 @@ fn default_execution_ignores_device_transport_limits() {
         .collect();
     assert_eq!(answers, expected);
     assert!(models.contains("Backend: CPU"));
-    assert!(report.lazy_execution.is_none());
 }
 
 #[cfg(feature = "gpu")]
 #[test]
-fn explicit_gpu_failure_cannot_publish_a_cpu_model() {
+fn explicit_gpu_refusal_cannot_publish_a_cpu_model() {
     let mut models = Vec::new();
     let mut diagnostics = Vec::new();
     let mut config = zetesis_cli::PublicationConfig::from(&options(&[
@@ -314,8 +316,11 @@ fn explicit_gpu_failure_cannot_publish_a_cpu_model() {
         "--grounder",
         "eager",
     ]));
+    // No device batch fits a zero allowance, so the requested device route
+    // cannot run a batch. It must stop as a resource interruption, never fall
+    // back to the CPU and publish what the CPU found.
     config.solve.max_batch_bytes = 0;
-    let failure = crate::support::prepared::relational(
+    let report = crate::support::prepared::formula(
         "a.",
         &config,
         &mut zetesis_cli::HumanRenderer::new(
@@ -326,13 +331,17 @@ fn explicit_gpu_failure_cannot_publish_a_cpu_model() {
         &mut diagnostics,
         &Cancellation::default(),
     )
-    .unwrap_err();
-    let error = *failure.cause;
-    assert!(matches!(error, RunError::Gpu(_)));
-    assert!(crate::support::human::preamble(&String::from_utf8_lossy(
-        &models
-    )));
-    assert!(!String::from_utf8_lossy(&models).contains("Answer:"));
-    assert!(!String::from_utf8_lossy(&models).contains("Backend: CPU"));
-    println!("explicit device refusal: {error}");
+    .unwrap();
+    assert_eq!(report.completion, Completion::Interrupted);
+    assert!(report.interruption.is_some());
+    assert_eq!(report.models, 0);
+    let text = String::from_utf8_lossy(&models);
+    assert!(!text.contains("Answer:"), "{text}");
+    assert!(!text.contains("Backend: CPU"), "{text}");
+    // The stop is reported as incomplete, never as a satisfiability claim.
+    assert!(
+        text.contains("INCOMPLETE: pending candidate byte limit reached"),
+        "{text}"
+    );
+    assert!(!text.contains("SATISFIABLE"), "{text}");
 }

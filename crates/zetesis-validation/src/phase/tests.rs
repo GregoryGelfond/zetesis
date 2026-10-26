@@ -1,8 +1,8 @@
 //! Timing evidence is optional and never substitutes for answer-set qualification.
 
 use super::{
-    CERTIFICATE_HEADER, CERTIFICATE_LABELS, FOOTER, HEADER, LABELS, MODEL_HEADER,
-    PREPARATION_LABELS, RECONSTRUCTION_HEADER, REDUCT_HEADER, parse,
+    CERTIFICATE_HEADER, CERTIFICATE_LABELS, CLOSURE_HEADER, CLOSURE_LABELS, FOOTER, HEADER, LABELS,
+    MODEL_HEADER, PREPARATION_LABELS, RECONSTRUCTION_HEADER, REDUCT_HEADER, parse,
 };
 
 fn section() -> String {
@@ -190,15 +190,32 @@ fn model_construction_requires_schema_five() {
 
 #[test]
 fn schema_six_omits_reduct_preparation() {
-    let current = section();
-    let parsed = parse(&current).unwrap().unwrap();
+    let recorded = section_for(CLOSURE_HEADER, &CLOSURE_LABELS);
+    let parsed = parse(&recorded).unwrap().unwrap();
     assert_eq!((parsed.schema_version, parsed.phases.len()), (6, 15));
     assert!(!parsed.phases.contains_key("reduct_preparation"));
     for malformed in [
-        current.replace(HEADER, MODEL_HEADER),
-        current.replace(
+        recorded.replace(CLOSURE_HEADER, MODEL_HEADER),
+        recorded.replace(
             "  phase gpu_host_oracle:",
             "  phase reduct_preparation: unmeasured\n  phase gpu_host_oracle:",
+        ),
+    ] {
+        assert!(parse(&malformed).is_err());
+    }
+}
+
+#[test]
+fn schema_seven_omits_closure_membership() {
+    let current = section();
+    let parsed = parse(&current).unwrap().unwrap();
+    assert_eq!((parsed.schema_version, parsed.phases.len()), (7, 14));
+    assert!(!parsed.phases.contains_key("closure_membership"));
+    for malformed in [
+        current.replace(HEADER, CLOSURE_HEADER),
+        current.replace(
+            "  phase gpu_host_oracle:",
+            "  phase closure_membership: unmeasured\n  phase gpu_host_oracle:",
         ),
     ] {
         assert!(parse(&malformed).is_err());

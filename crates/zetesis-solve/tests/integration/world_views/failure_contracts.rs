@@ -4,9 +4,9 @@ use super::*;
 use std::error::Error as _;
 
 fn collection_refusal(limits: WorldViewLimits) -> WorldViewFailure {
-    let owner = normal("a. b.");
+    let owner = formula("a. b.");
     WorldView::collect(
-        PreparedInput::admitted(&owner),
+        PreparedInput::formula(&owner),
         config(),
         limits,
         Cancellation::default(),

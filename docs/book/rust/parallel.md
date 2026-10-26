@@ -93,8 +93,8 @@ it is not RSS. Retained capacity is admitted again under each check's limits.
 Independent workers need separate mutable workspaces and may share the immutable
 prepared owner. This example executes serially and makes no speed claim.
 
-The [CPU API reference](../../doc/zetesis_cpu/index.html) and
-[prepared-query implementation](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-cpu/src/oracle/prepared.rs)
+The [CPU API reference](../../doc/zetesis_cpu/index.html) and the
+prepared-query implementation (removed with the closure route)
 give the preparation, identity and failure contracts. Run the example directly
 with `cargo run --locked -p zetesis-cpu --example book-prepared-queries`.
 

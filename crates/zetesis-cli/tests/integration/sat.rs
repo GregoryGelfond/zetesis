@@ -142,8 +142,6 @@ fn cancellation_precedes_eager_materialization() {
     assert_eq!(report.checked, 0);
     assert!(report.countermodel_statistics.is_none());
     assert!(report.formula_execution.is_none());
-    assert!(report.lazy_execution.is_none());
-    assert!(report.shared_execution.is_none());
 }
 
 fn queens(size: usize) -> String {

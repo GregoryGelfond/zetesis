@@ -152,7 +152,6 @@ impl<'a> HybridSession<'a> {
         let input = crate::countermodel::Input {
             theory: owner.core_theory(),
             atoms: owner.atom_catalog(),
-            gate_atoms: 0,
             keyed_constraints: owner.keyed_constraints(),
             key_analysis: owner.key_analysis(),
             objectives: owner.objectives(),

@@ -47,8 +47,8 @@ fn answer_ends(bytes: &[u8], objective: bool) -> Vec<usize> {
 }
 
 #[test]
-fn every_answer_prefix_counts_only_complete_publications_on_both_oracles() {
-    for oracle in ["closure", "countermodel"] {
+fn every_answer_prefix_counts_only_complete_publications_under_each_oracle_setting() {
+    for oracle in ["auto", "countermodel"] {
         let options = options(oracle);
         let mut reference = Vec::new();
         let complete = run_detailed(
@@ -90,9 +90,11 @@ fn every_answer_prefix_counts_only_complete_publications_on_both_oracles() {
                 partial.completion,
                 (published == 2).then_some(Completion::Exhausted)
             );
-            assert_eq!(
+            // Both settings take a formula route, whose walk reports its
+            // regions even when publication fails part-way.
+            assert!(
                 partial.countermodel_statistics.is_some(),
-                oracle == "countermodel"
+                "{oracle}, cut {capacity}"
             );
         }
     }
@@ -355,70 +357,12 @@ fn a_cancelled_request_keeps_its_interruption_when_its_summary_sink_fails() {
     assert!(!partial.summary_published);
     assert!(partial.countermodel_statistics.is_none());
     assert!(partial.formula_execution.is_none());
-    assert!(partial.lazy_execution.is_none());
-    assert!(partial.shared_execution.is_none());
 }
 
 #[test]
-fn an_observed_closure_candidate_stop_survives_a_buffered_answer_failure() {
+fn requested_models_survive_a_later_statistics_failure() {
     let source = "{a}. {b}.";
-    let mut options = zetesis_cli::PublicationConfig::from(&options("closure"));
-    options.solve.batch_size = std::num::NonZeroUsize::new(64).unwrap();
-    options.solve.max_candidates = 3;
-    let mut reference = Vec::new();
-    let report = crate::support::prepared::relational_human(
-        source,
-        &options,
-        &mut reference,
-        &mut Vec::new(),
-        &Cancellation::default(),
-    )
-    .unwrap();
-    assert_eq!(report.completion, Completion::Interrupted);
-    assert_eq!(report.models, 3);
-    let first = answer_ends(&reference, false)[0];
-    let mut output = BoundedWriter::new(first + 4);
-    let failure = crate::support::prepared::relational_human(
-        source,
-        &options,
-        &mut output,
-        &mut Vec::new(),
-        &Cancellation::default(),
-    )
-    .unwrap_err();
-    assert!(matches!(*failure.cause, RunError::Output(_)));
-    let partial = failure.partial_report.unwrap();
-    assert_eq!(partial.interruption, report.interruption);
-    assert!(matches!(
-        partial.interruption,
-        Some(Interruption::Oracle(_))
-    ));
-    assert_eq!((partial.published_models, partial.verified_models), (1, 3));
-    assert_eq!(
-        partial.completion, None,
-        "buffered results were not all consumed"
-    );
-    assert_eq!(output.bytes(), &reference[..first + 4]);
-
-    // A successfully requested stop keeps the established public Report invariant;
-    // the observed candidate stop belongs to detailed failure evidence only.
-    options.solve.models = 2;
-    let requested = crate::support::prepared::relational_human(
-        source,
-        &options,
-        &mut Vec::new(),
-        &mut Vec::new(),
-        &Cancellation::default(),
-    )
-    .unwrap();
-    assert_eq!(requested.completion, Completion::RequestedModels);
-    assert_eq!(requested.interruption, None);
-}
-
-#[test]
-fn completed_closure_batch_membership_survives_a_later_requested_output_statistics_failure() {
-    let source = "{a}. {b}.";
-    let mut options = options("closure");
+    let mut options = options("countermodel");
     assert_eq!(
         zetesis_cli::SolveConfig::from(&options).batch_size.get(),
         64
@@ -437,7 +381,9 @@ fn completed_closure_batch_membership_survives_a_later_requested_output_statisti
     )
     .unwrap_err();
     let partial = failure.partial_report.unwrap();
-    assert_eq!((partial.published_models, partial.verified_models), (2, 4));
+    // The CPU formula walk verifies the models it publishes and stops at the
+    // requested count, so nothing beyond the two is verified.
+    assert_eq!((partial.published_models, partial.verified_models), (2, 2));
     assert_eq!(
         partial.checked, 2,
         "only two results were consumed before the requested stop"

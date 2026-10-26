@@ -98,27 +98,6 @@ fn requested_device_cannot_supply_missing_execution() {
 }
 
 #[test]
-fn closure_work_names_its_completed_check_scope() {
-    let (options, outcome) = solve(
-        "p:-not q.q:-not p.",
-        &["--backend", "cpu", "--grounder", "lazy"],
-        true,
-    );
-    let semantic = outcome.semantic();
-    let execution = semantic.closure_execution().unwrap();
-    assert!(execution.work > 0);
-    let text = render(&SolveConfig::from(&options), Some(semantic));
-    let work = value(&text, "Closure work");
-    assert_eq!(
-        work.split_whitespace().next().unwrap(),
-        execution.work.to_string()
-    );
-    assert!(work.contains("join/copy units; completed checks only"));
-    assert!(text.contains("partial work omitted from closure totals"));
-    assert!(value(&text, "Recorded execution").starts_with("CPU independent lazy closure"));
-}
-
-#[test]
 fn disabled_measurements_keep_mandatory_work_receipts() {
     let (options, outcome) = solve("a|b.", &["--oracle", "countermodel"], false);
     let text = render(&SolveConfig::from(&options), Some(outcome.semantic()));
@@ -140,47 +119,6 @@ fn recorded_zero_does_not_become_unavailable() {
         Some("0")
     );
     assert!(value(&text, "Recorded execution").starts_with("unavailable"));
-}
-
-#[test]
-fn shared_work_keeps_distinct_operation_counts() {
-    let (options, outcome) = solve("{a}. {b}.", &["--source-batching", "worlds"], true);
-    let semantic = outcome.semantic();
-    let execution = semantic.shared_execution().unwrap();
-    assert!(execution.source_work > 0);
-    assert!(execution.world_work > 0);
-    let text = render(&SolveConfig::from(&options), Some(semantic));
-    assert_eq!(
-        value(&text, "Recorded execution"),
-        "CPU shared lazy closure"
-    );
-    for (label, expected) in [
-        ("Shared source work", execution.source_work),
-        ("Shared world work", execution.world_work),
-    ] {
-        assert_eq!(
-            value(&text, label).split_whitespace().next().unwrap(),
-            expected.to_string()
-        );
-    }
-    assert!(!text.contains("Closure tuple probes"));
-    assert!(!text.contains("GPU decoded work"));
-}
-
-#[test]
-fn eager_closure_work_does_not_claim_tuple_probes() {
-    let (options, outcome) = solve("{a}. {b}.", &["--grounder", "eager"], true);
-    let semantic = outcome.semantic();
-    let execution = semantic.closure_execution().unwrap();
-    assert_eq!(execution.route, zetesis_cli::ClosureRoute::Eager);
-    assert!(execution.work > 0);
-    let text = render(&SolveConfig::from(&options), Some(semantic));
-    assert_eq!(
-        value(&text, "Recorded execution"),
-        "CPU independent eager closure"
-    );
-    assert!(value(&text, "Closure work").contains("eager scan units; completed checks only"));
-    assert!(!text.contains("Closure tuple probes"));
 }
 
 #[test]

@@ -57,8 +57,6 @@ if [ "$mode" = portable ] || [ "$mode" = full ]; then
         cargo clippy --manifest-path "$standalone_manifest" --locked --all-targets --all-features -- -D warnings
         RUSTDOCFLAGS="-D warnings" cargo doc --manifest-path "$standalone_manifest" --locked --all-features --no-deps
     done
-    cargo bench --locked -p zetesis-cpu --bench oracles -- --test
-    cargo bench --locked -p zetesis-cpu --bench lazy_joins -- --test
     cargo bench --locked -p zetesis-ferraris --bench native_aggregates -- --test
     cargo bench --locked -p zetesis-ferraris --bench frozen_reduct -- --test
     cargo bench --locked -p zetesis-ferraris --bench membership -- --test

@@ -3,7 +3,7 @@
 //! The execution backend is the shared vocabulary [`crate::Backend`].
 
 /// Candidate proposal scheduling for general and tight GPU formula checks.
-/// Relational closure and CPU execution keep their configured batch size.
+/// CPU execution keeps its configured batch size.
 /// The ordinary policy, [`Self::DEFAULT`], is [`Self::Adaptive`].
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[non_exhaustive]
@@ -79,17 +79,15 @@ impl Default for OptimumSearch {
 pub enum Grounder {
     /// Select the input's certified execution policy. A complete acyclic normal
     /// source can evaluate directly on CPU; other profiles retain their eager
-    /// base, terminal reconstruction or relational source execution.
+    /// base or terminal reconstruction.
     #[default]
     Auto,
-    /// Instantiate on demand: source joins without a complete ground rule
-    /// store, or, for formula programs, a producer core with eligible
-    /// constraints streamed and terminal definitions reconstructed per answer.
-    /// A GPU backend checks joined sources in immutable relational rounds; the
-    /// hybrid formula schedule checks its retained core on the device and streamed
-    /// constraints on the host.
+    /// Instantiate on demand: a producer core with eligible constraints
+    /// streamed and terminal definitions reconstructed per answer. With a GPU
+    /// backend the hybrid schedule checks its retained core on the device and
+    /// streamed constraints on the host.
     Lazy,
-    /// Materialize a bounded static program before checking on CPU or GPU.
+    /// Instantiate every formula before checking on CPU or GPU.
     Eager,
 }
 
@@ -105,46 +103,12 @@ impl Grounder {
     }
 }
 
-/// Relational CPU source traversal across candidate occurrences.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub enum SourceBatching {
-    /// Each candidate owns an independent relational join traversal.
-    #[default]
-    Independent,
-    /// Share the union carrier; evaluate each frozen candidate on Rayon.
-    Union,
-    /// Prune source prefixes with per-world membership; evaluate on Rayon.
-    Worlds,
-}
-
-impl SourceBatching {
-    /// Stable policy spelling for diagnostics and machine-readable reports.
-    #[must_use]
-    pub const fn label(self) -> &'static str {
-        match self {
-            Self::Independent => "independent",
-            Self::Union => "union",
-            Self::Worlds => "worlds",
-        }
-    }
-
-    pub(crate) const fn selection(self) -> Option<zetesis_cpu::lazy::SourceSelection> {
-        match self {
-            Self::Independent => None,
-            Self::Union => Some(zetesis_cpu::lazy::SourceSelection::Union),
-            Self::Worlds => Some(zetesis_cpu::lazy::SourceSelection::Worlds),
-        }
-    }
-}
-
 /// Exact stable-model oracle selection, independent of language support.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum Oracle {
-    /// Select reduct closure, checked tight support, or general reduct checking.
+    /// Select checked tight support or general reduct checking.
     #[default]
     Auto,
-    /// Require reduct closure with sparse gate candidates on CPU or static GPU batches.
-    Closure,
     /// Require eager Ferraris search: CPU, or GPU propagation with exact CPU residuals.
     Countermodel,
 }
@@ -155,7 +119,6 @@ impl Oracle {
     pub const fn label(self) -> &'static str {
         match self {
             Self::Auto => "auto",
-            Self::Closure => "closure",
             Self::Countermodel => "countermodel",
         }
     }

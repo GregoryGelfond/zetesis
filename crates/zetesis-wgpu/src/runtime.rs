@@ -397,9 +397,6 @@ impl Runtime {
     pub(crate) fn check_health(&self) -> Result<(), GpuError> {
         self.context.check_health()
     }
-    pub(crate) fn invalidate(&self) {
-        self.context.invalidate();
-    }
 
     // The caller retains its context lease through scope and health completion.
     pub(crate) fn complete<T>(

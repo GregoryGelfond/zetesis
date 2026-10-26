@@ -1,7 +1,7 @@
 [package]
 name = "zetesis-cpu"
 version.workspace = true
-description = "Exact reduct checking on the CPU: lazy and dense static oracles, streamed complete candidates and a bounded Rayon pool."
+description = "CPU primitives shared by the solver: cancellation, the region traversal and finite tables."
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
@@ -9,19 +9,9 @@ publish = false
 
 [dependencies]
 zetesis-core.workspace = true
-rayon.workspace = true
 
 [dev-dependencies]
-criterion.workspace = true
-zetesis-test-support.workspace = true
-
-[[bench]]
-name = "lazy_joins"
-harness = false
-
-[[bench]]
-name = "oracles"
-harness = false
+rayon.workspace = true
 
 [lints]
 workspace = true
@@ -29,7 +19,3 @@ workspace = true
 [[example]]
 name = "book-finite-tables"
 path = "../../docs/book/examples/finite-tables.rs"
-
-[[example]]
-name = "book-prepared-queries"
-path = "../../docs/book/examples/prepared-queries.rs"

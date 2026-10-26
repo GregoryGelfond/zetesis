@@ -13,7 +13,6 @@ use crate::{Config, Grounder};
 #[derive(Default)]
 struct Route {
     source: bool,
-    lazy: bool,
     hybrid_constraints: usize,
     terminal_definitions: usize,
     terminal_base: Option<zetesis_themelios::BaseKind>,
@@ -26,12 +25,6 @@ impl ExecutionObserver for Route {
     fn observe(&mut self, event: ExecutionObservation<'_>) -> Result<(), Self::Error> {
         match event {
             ExecutionObservation::SourceEvaluation => self.source = true,
-            ExecutionObservation::CpuClosure {
-                grounder: zetesis_solve::Grounder::Lazy,
-                ..
-            } => {
-                self.lazy = true;
-            }
             ExecutionObservation::HybridGrounding {
                 streamed_templates, ..
             } => {
@@ -69,13 +62,6 @@ fn execute(program: Program, grounder: Grounder) -> (PreparedProfile, Route) {
         assert!(answer.is_ok());
     }
     (profile, route)
-}
-
-#[test]
-fn lazy_configuration_uses_source_closure() {
-    let (profile, route) = execute(program! { { p }. }, Grounder::Lazy);
-    assert_eq!(profile, PreparedProfile::Relational);
-    assert!(route.lazy);
 }
 
 #[test]

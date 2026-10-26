@@ -218,7 +218,6 @@ fn failure_envelopes_never_invent_search_coverage() {
             "observation_output_limit",
         ),
         (RunError::MixedStandardInput, "mixed_standard_input"),
-        (RunError::Batch(zetesis_cpu::BatchError::Busy), "batch"),
         (RunError::BackendUnavailable, "backend_unavailable"),
         (
             RunError::GpuExecutableUnavailable {
@@ -237,21 +236,16 @@ fn failure_envelopes_never_invent_search_coverage() {
         ),
         (
             RunError::PreparedInput {
-                profile: crate::PreparedProfile::Relational,
+                profile: crate::PreparedProfile::AcyclicSource,
                 oracle: crate::Oracle::Countermodel,
                 grounder: crate::Grounder::Lazy,
             },
             "prepared_input",
         ),
         (
-            RunError::Formula(zetesis_ferraris::AdmissionError::Limit),
-            "formula",
-        ),
-        (
             RunError::PublicationStopped(zetesis_cpu::Stop::Cancelled),
             "publication_stopped",
         ),
-        (RunError::Words(zetesis_core::WordError::TailBits), "words"),
         (
             RunError::Model(zetesis_core::ModelError::Position {
                 position: 1,
@@ -266,22 +260,9 @@ fn failure_envelopes_never_invent_search_coverage() {
             },
             "formula_batch_shape",
         ),
-        (RunError::LazyStatisticsOverflow, "lazy_statistics_overflow"),
-        (
-            RunError::ClosureReservation {
-                workers: 5,
-                max_closure_bytes: 3,
-                max_closure_batch_bytes: 4,
-            },
-            "closure_reservation",
-        ),
         (
             RunError::DeadlineTimer(io::Error::other("no thread")),
             "deadline_timer",
-        ),
-        (
-            RunError::ClosureStatisticsOverflow,
-            "closure_statistics_overflow",
         ),
     ];
     for (error, kind) in errors {

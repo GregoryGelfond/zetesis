@@ -56,8 +56,6 @@ pub enum Oracle {
     /// Let the native solver choose an applicable reduct procedure.
     #[default]
     Auto,
-    /// Request reduct closure explicitly.
-    Closure,
     /// Request general reduct countermodel checking explicitly.
     Countermodel,
 }
@@ -67,7 +65,6 @@ impl Oracle {
     pub const fn label(self) -> &'static str {
         match self {
             Self::Auto => "auto",
-            Self::Closure => "closure",
             Self::Countermodel => "countermodel",
         }
     }

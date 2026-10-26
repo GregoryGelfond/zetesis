@@ -21,10 +21,6 @@ pub enum SolveError {
     Executor(crate::ExecutorError),
     /// Fixed-domain answer projection failed after preserving full membership.
     Projection(crate::ProjectionError),
-    /// The owned CPU pool or batch could not be admitted.
-    Batch(zetesis_cpu::BatchError),
-    /// A prepared CPU receipt could not be read; checked models remain retained.
-    QueryObservation(std::sync::Arc<zetesis_cpu::BatchError>),
     /// The exact-completion worker pool could not be constructed.
     CompletionPool(rayon::ThreadPoolBuildError),
     /// The requested device backend was not compiled.
@@ -35,17 +31,6 @@ pub enum SolveError {
         backend: Backend,
         /// Requested materialization policy.
         grounder: Grounder,
-    },
-    /// Shared source traversal requires relational lazy CPU execution.
-    UnsupportedSourceBatching,
-    /// The workers' closure allowances together exceed the collective ceiling.
-    ClosureReservation {
-        /// Closure workers, each admitted at the full per-closure allowance.
-        workers: usize,
-        /// Per-closure allowance, `max_closure_bytes`.
-        max_closure_bytes: usize,
-        /// Collective ceiling, `max_closure_batch_bytes`.
-        max_closure_batch_bytes: usize,
     },
     /// The supplied representation cannot honor the requested policy.
     PreparedInput {
@@ -58,22 +43,9 @@ pub enum SolveError {
     },
     /// The caller's synchronous observer failed. This cannot trigger fallback.
     ExecutionObservation(Box<dyn std::error::Error + Send + Sync>),
-    /// Explicit static grounding was refused.
-    Static(zetesis_core::StaticError),
     /// Device capability, submission or result transport failed.
     #[cfg(feature = "gpu")]
     Gpu(zetesis_wgpu::GpuError),
-    /// Lazy device execution failed with retained source progress.
-    #[cfg(feature = "gpu")]
-    LazyGpu(zetesis_cpu::lazy::Failure<zetesis_wgpu::GpuError>),
-    /// Cumulative lazy counters cannot represent another batch.
-    LazyStatisticsOverflow,
-    /// Cumulative independent closure counters cannot represent another check.
-    ClosureStatisticsOverflow,
-    /// Shared CPU evaluation violated its round protocol.
-    SharedCpu(zetesis_cpu::lazy::shared::Cause),
-    /// Static closure decoding refused its words or selected-position storage.
-    Words(zetesis_core::WordError),
     /// An accepted interpretation could not retain its checked atom selection.
     Model(zetesis_core::ModelError),
     /// Cumulative model-construction work or completed count cannot represent another operation.
@@ -93,47 +65,52 @@ impl fmt::Display for SolveError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Reconstruction(error) => error.fmt(formatter),
-            Self::TerminalStatisticsOverflow => formatter.write_str("terminal answer accounting overflow"),
+            Self::TerminalStatisticsOverflow => {
+                formatter.write_str("terminal answer accounting overflow")
+            }
             Self::Constraint(error) => error.fmt(formatter),
-            Self::ConstraintFailureMissing => formatter.write_str("source region check stopped without its failure receipt"),
-            Self::HybridStatisticsOverflow => formatter.write_str("hybrid answer accounting overflow"),
+            Self::ConstraintFailureMissing => {
+                formatter.write_str("source region check stopped without its failure receipt")
+            }
+            Self::HybridStatisticsOverflow => {
+                formatter.write_str("hybrid answer accounting overflow")
+            }
             Self::Executor(error) => error.fmt(formatter),
             Self::Projection(error) => error.fmt(formatter),
-            Self::Batch(error) => error.fmt(formatter),
-            Self::QueryObservation(error) => write!(formatter, "query observation: {error}"),
             Self::CompletionPool(error) => write!(formatter, "completion worker pool: {error}"),
-            Self::BackendUnavailable => formatter.write_str("GPU support was not compiled into this build"),
-            Self::UnsupportedOracle { backend, grounder } => write!(formatter,
-                "the countermodel oracle requires eager or automatic grounding; requested {} with {}", backend.label(), grounder.label()),
-            Self::UnsupportedSourceBatching => formatter.write_str("shared source batching requires the relational closure route with lazy or auto grounding on the cpu backend"),
-            Self::ClosureReservation {
-                workers,
-                max_closure_bytes,
-                max_closure_batch_bytes,
+            Self::BackendUnavailable => {
+                formatter.write_str("GPU support was not compiled into this build")
+            }
+            Self::UnsupportedOracle { backend, grounder } => write!(
+                formatter,
+                "the countermodel oracle requires eager or automatic grounding; requested {} with {}",
+                backend.label(),
+                grounder.label()
+            ),
+            Self::PreparedInput {
+                profile,
+                oracle,
+                grounder,
             } => write!(
                 formatter,
-                "closure reservation: {workers} workers at {max_closure_bytes} bytes each need {} bytes, above the collective ceiling of {max_closure_batch_bytes}",
-                (*workers as u128) * (*max_closure_bytes as u128)
+                "prepared {profile:?} cannot honor oracle {} with grounder {}",
+                oracle.label(),
+                grounder.label()
             ),
-            Self::PreparedInput { profile, oracle, grounder } => write!(formatter,
-                "prepared {profile:?} cannot honor oracle {} with grounder {}", oracle.label(), grounder.label()),
             Self::ExecutionObservation(error) => write!(formatter, "execution observer: {error}"),
-            Self::Static(error) => error.fmt(formatter),
             #[cfg(feature = "gpu")]
             Self::Gpu(error) => error.fmt(formatter),
-            #[cfg(feature = "gpu")]
-            Self::LazyGpu(error) => error.fmt(formatter),
-            Self::LazyStatisticsOverflow => formatter.write_str("lazy execution statistics overflow"),
-            Self::ClosureStatisticsOverflow => {
-                formatter.write_str("closure execution statistics overflow")
-            }
-            Self::SharedCpu(error) => error.fmt(formatter),
-            Self::Words(error) => error.fmt(formatter),
             Self::Model(error) => error.fmt(formatter),
-            Self::ModelStatisticsOverflow => formatter.write_str("model construction statistics overflow"),
-            Self::CandidateStreamNotExhausted => formatter.write_str("membership execution ended before candidate exhaustion"),
-            Self::FormulaBatchShape { expected, actual } => write!(formatter,
-                "formula checker returned {actual} results for {expected} candidates"),
+            Self::ModelStatisticsOverflow => {
+                formatter.write_str("model construction statistics overflow")
+            }
+            Self::CandidateStreamNotExhausted => {
+                formatter.write_str("membership execution ended before candidate exhaustion")
+            }
+            Self::FormulaBatchShape { expected, actual } => write!(
+                formatter,
+                "formula checker returned {actual} results for {expected} candidates"
+            ),
         }
     }
 }
@@ -145,28 +122,17 @@ impl std::error::Error for SolveError {
             Self::Constraint(error) => Some(error),
             Self::Executor(error) => Some(error),
             Self::Projection(error) => Some(error),
-            Self::Batch(error) => Some(error),
-            Self::QueryObservation(error) => Some(error.as_ref()),
             Self::CompletionPool(error) => Some(error),
             Self::ExecutionObservation(error) => Some(error.as_ref()),
-            Self::Static(error) => Some(error),
             #[cfg(feature = "gpu")]
             Self::Gpu(error) => Some(error),
-            #[cfg(feature = "gpu")]
-            Self::LazyGpu(error) => Some(error),
-            Self::SharedCpu(error) => Some(error),
-            Self::Words(error) => Some(error),
             Self::Model(error) => Some(error),
             Self::BackendUnavailable
             | Self::TerminalStatisticsOverflow
             | Self::ConstraintFailureMissing
             | Self::HybridStatisticsOverflow
             | Self::UnsupportedOracle { .. }
-            | Self::UnsupportedSourceBatching
-            | Self::ClosureReservation { .. }
             | Self::PreparedInput { .. }
-            | Self::LazyStatisticsOverflow
-            | Self::ClosureStatisticsOverflow
             | Self::FormulaBatchShape { .. }
             | Self::CandidateStreamNotExhausted => None,
             Self::ModelStatisticsOverflow => None,

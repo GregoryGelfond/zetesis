@@ -24,7 +24,6 @@ fn input(owner: &AdmittedFormula) -> Input<'_> {
         atoms: owner.atom_catalog(),
         objectives: owner.objectives(),
         required_choices: owner.required_choices(),
-        gate_atoms: 0,
         keyed_constraints: 0,
         key_analysis: zetesis_themelios::KeyAnalysis::Complete,
         certificate_order: zetesis_stable::CertificateOrder::TightFirst,

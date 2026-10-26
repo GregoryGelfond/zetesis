@@ -5,14 +5,16 @@ use zetesis_cpu::Cancellation;
 use zetesis_solve::{
     Backend, PreparedInput, Session, SolveConfig, SolveMeasurements, SolvePhase, WorldViewLimits,
 };
-use zetesis_themelios::{AdmissionOptions, admit};
+use zetesis_themelios::{AdmissionOptions, ExpansionLimits, FormulaLimits, admit_formula};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let measurements = SolveMeasurements::new(true);
     let admitted = measurements.measure(SolvePhase::AdmissionMaterialization, || {
-        admit(
+        admit_formula(
             "a :- not b. b :- not a.".into(),
             AdmissionOptions::default(),
+            ExpansionLimits::default(),
+            FormulaLimits::default(),
         )
     })?;
     let config = SolveConfig {
@@ -21,7 +23,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         ..SolveConfig::default()
     };
     let family = Session::builder(
-        PreparedInput::admitted(&admitted),
+        PreparedInput::formula(&admitted),
         config,
         Cancellation::default(),
     )

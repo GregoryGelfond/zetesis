@@ -1641,8 +1641,8 @@ multiplicity, atomic no-underflow, notification ordering, candidate isolation an
 admitted storage/work remain implementation obligations; `FormulaChains` does
 not by itself verify this concurrent representation.
 
-The CPU oracle's [`Work::charge`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-cpu/src/oracle.rs)
-charges a payload amount before the corresponding comparison or copy.
+The closure route's CPU oracle, removed with that route, had a `Work::charge`
+that charged a payload amount before the corresponding comparison or copy.
 [`WorkCharge`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/WorkCharge.lean)
 equates its available work prefix with repeated unit charging under unchanged
 control, including exact quota exhaustion. A positive charge polls control once;
@@ -1652,8 +1652,8 @@ before changing its counter. Rust word bounds and the placement of control
 checks remain concrete implementation obligations; the law does not promise
 observation of asynchronous cancellation between bookkeeping units.
 
-[`PreparedQueries`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-cpu/src/oracle/prepared.rs)
-shares one exact program and records the join dimensions it inspected. Reusing
+The closure route's `PreparedQueries`, removed with that route,
+shared one exact program and records the join dimensions it inspected. Reusing
 that owner does not reuse a reduct or an interpretation. Each candidate starts
 with empty relations; assignments borrow only its current immutable round.
 Final assembly publishes a selected immutable prefix and resets truth-bearing

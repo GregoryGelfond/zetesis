@@ -116,17 +116,17 @@ fn integration_selections_admit_other_packages_empty_binaries() {
 #[test]
 fn physical_selection_is_a_fixed_contract() {
     for table in [
-        TABLE.replacen("lazy|integration|4|", "altered|integration|4|", 1),
-        TABLE.replacen("solve-context|lib|4|", "cli-context|lib|4|", 1),
+        TABLE.replacen("relation|integration|2|", "altered|integration|2|", 1),
+        TABLE.replacen("solve-context|lib|3|", "cli-context|lib|3|", 1),
         TABLE.replacen(
             "language-consumers|integration|2|",
             "language-consumers|formula_gpu|2|",
             1,
         ),
-        TABLE.replacen("static|integration|2|", "static|hardware_formula|2|", 1),
+        TABLE.replacen("context|integration|4|", "context|hardware_formula|4|", 1),
         TABLE.replace(
-            "metal_static_oracle_matches_independent_closures",
-            "vulkan_static_oracle_matches_independent_closures",
+            "metal_aggregate_reductions_match_native_occurrences",
+            "vulkan_aggregate_reductions_match_native_occurrences",
         ),
         TABLE
             .replace("cli-formula|integration|3|", "cli-formula|integration|2|")
@@ -143,7 +143,7 @@ fn physical_selection_is_a_fixed_contract() {
                 " session_resources_gpu::metal_terminal_sessions_preserve_complete_families",
                 "",
             ),
-        TABLE.lines().take(13).collect::<Vec<_>>().join("\n"),
+        TABLE.lines().take(10).collect::<Vec<_>>().join("\n"),
         TABLE.replace("metal_support_matches_exact_reduct_semantics", "unknown"),
         TABLE.lines().skip(1).collect::<Vec<_>>().join("\n"),
     ] {
@@ -212,10 +212,6 @@ fn metal_selection_refuses_vulkan_substitution() {
         (
             "metal_formula_executes_while_relation_columns_remain_prepared",
             "vulkan_formula_executes_while_relation_columns_remain_prepared",
-        ),
-        (
-            "engine::resource_tests::metal_closure_retains_the_supplied_context",
-            "engine::resource_tests::vulkan_closure_retains_the_supplied_context",
         ),
         (
             "formula_execution::tests::resource_tests::metal_formula_retains_the_supplied_context",
@@ -384,8 +380,8 @@ fn physical_metadata_keeps_floor_populations_separate() {
         record["floor_profiles"],
         serde_json::json!(["workspace", "cli-cpu"])
     );
-    assert_eq!(record["expected_physical_tests"], 75);
-    assert_eq!(record["physical_test_groups"].as_array().unwrap().len(), 14);
+    assert_eq!(record["expected_physical_tests"], 58);
+    assert_eq!(record["physical_test_groups"].as_array().unwrap().len(), 11);
     assert_eq!(
         record["project_added_filename_filters"],
         serde_json::json!([coverage::SUPPORT_SOURCES])
@@ -410,20 +406,17 @@ fn physical_metadata_retains_the_reviewed_schedule() {
     assert_eq!(
         identities,
         serde_json::json!([
-            ["wgpu-lib", "lib", "workspace libraries", 20],
+            ["wgpu-lib", "lib", "workspace libraries", 15],
             ["tight", "test", "integration", 5],
             ["formula", "test", "integration", 3],
             ["aggregate", "test", "integration", 3],
-            ["lazy", "test", "integration", 4],
-            ["cli-lazy", "test", "integration", 5],
             ["cli-formula", "test", "integration", 3],
             ["world-views", "test", "integration", 4],
             ["relation", "test", "integration", 2],
             ["context", "test", "integration", 4],
-            ["solve-context", "lib", "workspace libraries", 4],
+            ["solve-context", "lib", "workspace libraries", 3],
             ["session-resources", "test", "integration", 14],
-            ["language-consumers", "test", "integration", 2],
-            ["static", "test", "integration", 2]
+            ["language-consumers", "test", "integration", 2]
         ])
         .as_array()
         .unwrap()
@@ -433,15 +426,15 @@ fn physical_metadata_retains_the_reviewed_schedule() {
         "language_consumers::physical::metal_families_retain_scored_observations",
         "language_consumers::physical::metal_optimum_ties_retain_full_answers"
     ]);
-    assert_eq!(groups[12]["tests"], language_tests);
+    assert_eq!(groups[10]["tests"], language_tests);
     let tests = record["physical_tests"].as_array().unwrap();
-    assert_eq!(tests.len(), 75);
+    assert_eq!(tests.len(), 58);
     let formula_tests = serde_json::json!([
         "formula_gpu::physical::ordinary_metal_formula_batches_match_complete_cpu_models_costs_and_displays",
         "formula_gpu::physical::ordinary_metal_formula_limits_preserve_partial_coverage_and_writer_errors",
         "formula_gpu::physical::ordinary_metal_table_joins_preserve_complete_answers"
     ]);
-    assert_eq!(groups[6]["tests"], formula_tests);
+    assert_eq!(groups[4]["tests"], formula_tests);
     let session_tests = serde_json::json!([
         "session_resources_gpu::metal_resources_preserve_independent_sessions",
         "session_resources_gpu::metal_resource_policy_refusal_preserves_reuse",
@@ -458,22 +451,19 @@ fn physical_metadata_retains_the_reviewed_schedule() {
         "hybrid_gpu::metal_hybrid_cancellation_stops_queued_core_models",
         "hybrid_gpu::metal_hybrid_reconstructs_only_accepted_answers"
     ]);
-    assert_eq!(groups[11]["tests"], session_tests);
-    let static_tests = serde_json::json!([
-        "hardware::metal_constructor_executes_resident_batches_without_fallback",
-        "hardware::metal_static_oracle_matches_independent_closures"
-    ]);
-    assert_eq!(groups[13]["tests"], static_tests);
+    assert_eq!(groups[9]["tests"], session_tests);
     let grouped_tests: Vec<_> = groups
         .iter()
         .flat_map(|group| group["tests"].as_array().unwrap().iter())
         .collect();
     assert_eq!(tests.iter().collect::<Vec<_>>(), grouped_tests);
     let scope = record["physical_scope"].as_str().unwrap();
-    assert!(scope.starts_with("75 exact Metal tests: "));
+    assert!(scope.starts_with("58 exact Metal tests: "));
     assert!(scope.contains("complete tight families, the general device route for non-tight theories, and tight work refusal before dispatch"));
     assert!(scope.contains("completed-support table joins with actual GPU candidates and complete CPU/Metal answer families"));
-    assert!(scope.contains("static constructor and complete closure/reference checks"));
+    assert!(scope.contains("ordinary formula CLI paths with partial coverage and writer errors"));
+    // The removed closure route left no device tests behind.
+    assert!(!scope.contains("closure"));
     assert!(scope.contains("grows its adaptive candidate slates during steady enumeration"));
     assert!(
         scope.contains(
@@ -580,9 +570,9 @@ fn each_physical_stage_names_its_backend() {
             record["workspace_stages"],
             serde_json::json!(["portable", label])
         );
-        assert_eq!(record["expected_physical_tests"], 75);
+        assert_eq!(record["expected_physical_tests"], 58);
         let scope = record["physical_scope"].as_str().unwrap();
-        assert!(scope.starts_with(&format!("75 exact {} tests: ", api.name())));
+        assert!(scope.starts_with(&format!("58 exact {} tests: ", api.name())));
         assert!(scope.contains(&format!("complete CPU/{} answer families", api.name())));
     }
 }

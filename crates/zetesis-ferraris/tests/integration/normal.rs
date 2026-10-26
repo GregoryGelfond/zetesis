@@ -1,9 +1,8 @@
-//! Independent lazy closure and general subset-minimality agree after lowering.
+//! The normal-program definition, computed directly as the least model of the
+//! reduct, and general subset-minimality agree after lowering.
 
 use proptest::prelude::*;
-use zetesis_core::{
-    AtomPattern, GroundProgram, Model, Predicate, Program, SeedSelection, StaticLimits, Template,
-};
+use zetesis_core::{AtomPattern, GroundProgram, Model, Predicate, Program, StaticLimits, Template};
 use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{
     AdmissionError, AdmissionLimits, Interpretation, from_ground_program,
@@ -42,6 +41,45 @@ fn program(rules: &[(u8, u8, u8, u8)]) -> Program {
     .unwrap()
 }
 
+/// Whether the atoms in `mask` form an answer set of `ground`, by the definition
+/// for this fragment: the least model of the reduct `mask` leaves, satisfying
+/// every constraint. The reduct keeps the rules whose true gates hold and whose
+/// false gates fail in `mask`, without their gates; a constraint holds when its
+/// positive body does not.
+fn least_model_of_reduct(ground: &GroundProgram, mask: usize) -> bool {
+    let holds = |atoms: &[u32], set: usize| atoms.iter().all(|&atom| set & (1 << atom) != 0);
+    let kept: Vec<_> = ground
+        .rules()
+        .iter()
+        .filter(|rule| {
+            holds(rule.gate_true(), mask)
+                && rule
+                    .gate_false()
+                    .iter()
+                    .all(|&atom| mask & (1 << atom) == 0)
+        })
+        .collect();
+    let mut least = 0usize;
+    loop {
+        let before = least;
+        for rule in &kept {
+            if let Some(head) = rule.head()
+                && holds(rule.positive(), least)
+            {
+                least |= 1 << head;
+            }
+        }
+        if least == before {
+            break;
+        }
+    }
+    least == mask
+        && kept
+            .iter()
+            .filter(|rule| rule.head().is_none())
+            .all(|rule| !holds(rule.positive(), mask))
+}
+
 fn compare(program: &Program) {
     let ground = GroundProgram::compile(program, StaticLimits::default()).unwrap();
     let theory = from_ground_program(&ground, AdmissionLimits::default()).unwrap();
@@ -51,22 +89,6 @@ fn compare(program: &Program) {
         let model = Model::from_positions(
             ground.atom_catalog(),
             (0..ground.atom_count()).filter(|index| mask & (1 << index) != 0),
-        )
-        .unwrap();
-        let seed = SeedSelection::from_carrier_atoms(
-            program,
-            model
-                .atoms()
-                .iter()
-                .filter_map(|atom| program.locate_atom(atom, true).unwrap()),
-        )
-        .unwrap()
-        .to_seed();
-        let closure = zetesis_cpu::check(
-            program,
-            &seed,
-            zetesis_cpu::Limits::default(),
-            &Cancellation::default(),
         )
         .unwrap();
         let candidate = Interpretation::new(
@@ -96,7 +118,7 @@ fn compare(program: &Program) {
         );
         assert_eq!(
             general.accepted(),
-            closure.accepted() && closure.closure() == &model,
+            least_model_of_reduct(&ground, mask),
             "program {program:?}, candidate {model:?}"
         );
     }

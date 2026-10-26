@@ -141,17 +141,6 @@ fn hybrid_bounded_choices_keep_their_complete_family() {
 }
 
 #[test]
-fn ordinary_relational_lazy_keeps_its_closure_route() {
-    let (outcome, output, _) = solve("a:-not b. b:-not a.", &options(&["--grounder", "lazy"]));
-    assert!(outcome.semantic().hybrid_execution().is_none());
-    assert!(outcome.semantic().closure_execution().is_some());
-    assert_eq!(
-        family(&output),
-        vec![vec!["a".to_owned()], vec!["b".to_owned()]]
-    );
-}
-
-#[test]
 fn json_distinguishes_core_models_from_original_membership() {
     let (outcome, output, _) = solve(SOURCE, &options(&["--grounder", "lazy"]));
     let stats = outcome.semantic().hybrid_execution().unwrap();

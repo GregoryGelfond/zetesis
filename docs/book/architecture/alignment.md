@@ -55,9 +55,9 @@ different types of value.
 
 | ASP operation | Execution interpretation | Where to read the implementation |
 | --- | --- | --- |
-| Instantiate a rule body | Join positive witnesses, agree on repeated variables, filter scalar conditions, project an instance | [`source::scan`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-cpu/src/oracle/source.rs); [source preparation](grounding.md) |
-| Determine the normal reduct | Evaluate positive/negative gates against one immutable seed | [`check_static`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-cpu/src/static_oracle.rs) |
-| Derive positive consequences | Test enabled bodies, union their heads, repeat until closed | [`check_static`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-cpu/src/static_oracle.rs); [lazy batches](../rust/parallel.md) |
+| Instantiate a rule body | Join positive witnesses, agree on repeated variables, filter scalar conditions, project an instance | [support fixpoint](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/formula_support.rs); [source preparation](grounding.md) |
+| Determine the normal reduct | Evaluate positive/negative gates against one immutable seed | [frozen reduct](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-ferraris/src/reduct.rs) |
+| Derive positive consequences | Test enabled bodies, union their heads, repeat until closed | [positive consequences](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-ferraris/src/positive.rs) |
 | Reconstruct terminal positive definitions | Join true rows from a verified base answer, project heads, union with that answer | [`TerminalReconstruction`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/formula_terminal/reconstruct.rs); [applicability and extension law](grounding.md#terminal-definition-analysis) |
 | Test formula satisfaction | Evaluate an acyclic formula graph; require every asserted root | [`models`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-ferraris/src/oracle.rs) |
 | Compute least consequences of positive atomic-head formulas | Propagate newly true atom/body vertices through sparse incidences; check original constraints on the completed interpretation | [`PositivePlan`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-ferraris/src/positive.rs) |

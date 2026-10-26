@@ -171,7 +171,6 @@ fn arguments(fixture: &Fixture, backend: Backend) -> Vec<String> {
         match fixture.oracle {
             selected::Oracle::Auto => "auto",
             selected::Oracle::Countermodel => "countermodel",
-            selected::Oracle::Closure => "closure",
         },
         "--threads",
         "1",
