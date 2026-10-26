@@ -616,6 +616,8 @@ fn complete(
     #[cfg(test)]
     postings::begin_support();
     let mut rounds = 0_u64;
+    // Rows are only appended, so each round extends the kept certificates.
+    let mut retained = queries::Retained::default();
     loop {
         ceiling(
             FormulaResource::SupportRounds,
@@ -638,15 +640,15 @@ fn complete(
                 // posting would have selected its original producer. Thus this
                 // admitted round is unchanged without a new relation snapshot.
                 return finish(
-                    catalog,
-                    producers,
+                    (catalog, producers, retained),
                     GroundingWork::new(limits, counters, fallback),
                 );
             }
             counters.work(limits, fallback)?;
             counters.record(Event::SupportSnapshotPreparation);
             let (relations, mut delta) = catalog.split(limits, counters, fallback)?;
-            let support = Support::indexed(&relations, limits, counters, fallback)?;
+            let kept = std::mem::take(&mut retained);
+            let support = Support::indexed_retaining(&relations, kept, limits, counters, fallback)?;
             counters.observe_work(Event::SupportProductionWork, |counters| {
                 while let Some(index) = selected {
                     if let Some(facts) = &mut facts {
@@ -693,7 +695,7 @@ fn complete(
             })?;
             // No join remains live. Release its query descriptor before the
             // pending selection borrows the catalog's semantic ordering index.
-            drop(support);
+            retained = support.into_retained(fallback)?;
             advance_round(
                 &mut delta,
                 producers.plan_mut(),
@@ -702,8 +704,7 @@ fn complete(
         };
         if !changed {
             return finish(
-                catalog,
-                producers,
+                (catalog, producers, retained),
                 GroundingWork::new(limits, counters, fallback),
             );
         }
@@ -739,10 +740,14 @@ fn advance_round(
     Ok(true)
 }
 
-/// The fixed point drops its scheduling metadata before final publication.
+/// The fixed point drops its scheduling metadata and the certificates its
+/// rounds kept before final publication.
 fn finish(
-    mut catalog: SupportCatalog,
-    producers: producers::Producers<'_>,
+    (mut catalog, producers, retained): (
+        SupportCatalog,
+        producers::Producers<'_>,
+        queries::Retained,
+    ),
     work: GroundingWork<'_>,
 ) -> Result<CompletedCatalog, FormulaFailure> {
     let GroundingWork {
@@ -751,6 +756,7 @@ fn finish(
         location,
     } = work;
     drop(producers);
+    drop(retained);
     catalog.release_preparation();
     catalog.publish(limits, counters, location)?;
     Ok(CompletedCatalog {

@@ -4126,6 +4126,36 @@
       "name": "Zetesis.JoinFrames.stale_root_can_erase_current_truth"
     },
     {
+      "file": "Zetesis/KeptCertificates.lean",
+      "line": 69,
+      "name": "Zetesis.KeptCertificates.hull_declined_absorbing"
+    },
+    {
+      "file": "Zetesis/KeptCertificates.lean",
+      "line": 74,
+      "name": "Zetesis.KeptCertificates.hull_extend"
+    },
+    {
+      "file": "Zetesis/KeptCertificates.lean",
+      "line": 81,
+      "name": "Zetesis.KeptCertificates.hull_declined_stays"
+    },
+    {
+      "file": "Zetesis/KeptCertificates.lean",
+      "line": 87,
+      "name": "Zetesis.KeptCertificates.defined_extend"
+    },
+    {
+      "file": "Zetesis/KeptCertificates.lean",
+      "line": 94,
+      "name": "Zetesis.KeptCertificates.defined_declined_stays"
+    },
+    {
+      "file": "Zetesis/KeptCertificates.lean",
+      "line": 99,
+      "name": "Zetesis.KeptCertificates.kept_rows_prefix"
+    },
+    {
       "file": "Zetesis/KeyedConstraints.lean",
       "line": 55,
       "name": "Zetesis.KeyedConstraints.one_value"
@@ -9561,6 +9591,7 @@
     "Zetesis/IntegerEnvelopes.lean",
     "Zetesis/Iteration.lean",
     "Zetesis/JoinFrames.lean",
+    "Zetesis/KeptCertificates.lean",
     "Zetesis/KeyedConstraints.lean",
     "Zetesis/LazyRounds.lean",
     "Zetesis/LearnedRegions.lean",
@@ -9667,8 +9698,8 @@
     "Zetesis/WorldViews.lean"
   ],
   "source_sha256": {
-    "Audit.lean": "dedb0a642d36f3cb08864a9873dc0a1661a2b051bbf69385efb563a62d3263c6",
-    "Zetesis.lean": "d353177287bb774bcfc8ed29fde820c0487abfb5d8fdc9f67ec731ea990ddf7a",
+    "Audit.lean": "ad2dba82601df60a8cbf66b9d8fb49f7a709801b6c8af1371c82c2f9fbbee800",
+    "Zetesis.lean": "987d3c14e726bc0e95cadb73b7fbc13950f5934b90e21388de5553e50ed5019e",
     "Zetesis/AcyclicEvaluation.lean": "1a9c77283876cf1f61cb92031da04780aada5d0b256f79db5b64bfb6b129d0dc",
     "Zetesis/AdjacencyRows.lean": "38a19b1c74483a157636321a56e95fea660a2192a04c77930d609e411c8d30d4",
     "Zetesis/AggregateAssignment.lean": "def2eac0ae638f3801d35c11a3162afaa3e0b9e393601cf899952e449e309639",
@@ -9758,6 +9789,7 @@
     "Zetesis/IntegerEnvelopes.lean": "71d8d9a183d4953d210469da68e970d5ad72ce0f46977a54bc293248f056b4ae",
     "Zetesis/Iteration.lean": "e5aac9eba61b8150296cc53c381e8f50bd6943c3fbcd6a4c84a6933d3855db16",
     "Zetesis/JoinFrames.lean": "b4af5ba25e37e6305f9121791519aa20ee7a4977c6bc61f3e18608a38fdd95c0",
+    "Zetesis/KeptCertificates.lean": "fbcd483beda64d96706b91306b2c21df149afe5580728d4552ddba308cb9912f",
     "Zetesis/KeyedConstraints.lean": "d30e5b9149996725d57ab908a46896de465bbfa52ae1fa2364cdc2558015a40c",
     "Zetesis/LazyRounds.lean": "c356b730916c3add85d422183146eab7150281d375b5b54eff775a6157a76e86",
     "Zetesis/LearnedRegions.lean": "09c97ccb6fc8fb08ce76d3b73fb1c373baa274eed1edd6f78b313e436682080d",

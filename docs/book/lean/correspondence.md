@@ -3690,8 +3690,22 @@ Rust interval transfers, including the variable-product and variable-divisor
 cases, or source-column coverage. The argument establishes
 definedness on full bindings, not on every earlier join prefix.
 One Rust totality attempt reuses successful numeric-column hulls for its fixed
-rule and immutable support snapshot. Every intermediate remains checked; no hull
-survives the attempt. Within a growing support round, Rust can retain a
+rule and immutable support snapshot. Every intermediate remains checked against
+the current hulls. Outside support completion no hull survives the attempt.
+Support completion keeps each column hull it reads from one round to the next
+and extends it with the appended rows' values; it keeps its integer key
+certificates the same way.
+[`KeptCertificates`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/KeptCertificates.lean)
+reads both as folds of a commutative monoid over the rows: a hull joins the
+rows' values and declines on a nonnumeric one, and a key certificate requires
+every row's key to be defined. Joining a kept certificate with the appended
+rows' certificate gives the whole relation's (`hull_extend`, `defined_extend`),
+a declined certificate stays declined (`hull_declined_stays`,
+`defined_declined_stays`), and the kept rows are the first rows of every later
+snapshot (`kept_rows_prefix`). That support rows are append-only with stable
+positions and values, that the Rust hull and key certificate compute these
+folds, and that merging the appended keys' sorted entries keeps the index
+ordered by key and row remain implementation obligations. Within a growing support round, Rust can retain a
 successful expression map for one exact rule and snapshot, then borrow it across
 that rule's delta variants. The body-totality premise is independent of the
 pivot; each variant separately authenticates its selected multiples against its

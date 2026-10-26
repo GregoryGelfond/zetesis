@@ -142,6 +142,16 @@ Notable changes by release. Versions follow Semantic Versioning.
   production reaches or brings within reach of the current slate's completion.
   Optimizing searches still check one slate at a time. The physical
   qualification has 75 exact tests per backend.
+- Support completion keeps its integer key certificates and source-column hulls
+  from one round to the next and extends them with each round's new rows instead
+  of rebuilding them over every snapshot. An ordering query whose key range would
+  not halve its source interval reads the interval's own keys. Recursion through
+  arithmetic grounds in time linear in the rounds where it was quadratic: about
+  9x fewer instructions for a 2,048-step chain under a range comparison and 13x
+  for a counter whose rule assigns from the chain. Possible atoms, the emitted
+  formula and answer sets are unchanged. Grounding statistics add
+  `numeric_index_extensions`. The kept bytes count against `max_support_bytes`
+  until completion.
 - Numeric grounding joins combine certified divisibility and range filters before
   producing tuples; equal-size sources prefer the bindings needed by those filters.
 - Repeated support checks consume initial support seeds directly after resetting

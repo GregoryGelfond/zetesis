@@ -699,8 +699,27 @@ For `n` rows and `m` expression nodes the first build uses
 `O(n*m + n*log(n))` work and `O(n+m)` storage. Equality uses `O(log(n))` lookup
 work and constant query storage. An ordering query with `k` numeric candidates
 and `s` rows inside its source interval uses `O(log(n) + k + s*log(s))` work and
-`O(s)` transient leased storage. Even a nonselective ordering query pays this
-cost. Descriptor matching scans retained indexes and compares column mappings;
+`O(s)` transient leased storage when the key range would at least halve the
+interval (`2*k <= s`). Otherwise it reads the interval's own keys in source
+order, `O(log(n) + s)` work with no sort: a round's new rows are usually far
+fewer than the keys in range.
+
+Support completion keeps these certificates from one round to the next instead
+of rebuilding them over each round's snapshot. Support rows are only appended
+and keep their positions, so a certificate over a relation's first rows remains
+a certificate over those rows, and a decline stays a decline. The next round
+finds a kept certificate by its relation's name, arity and sign, and extends it
+with the `Δ` rows appended since: `O(Δ*m + Δ*log(Δ))` work to evaluate and sort
+them, plus a merge from the end that moves only kept entries whose key exceeds
+the smallest new key. None move when the new keys are at or above the kept
+maximum, as for a counter. An undefined new key declines the whole certificate,
+exactly as a build over the complete snapshot would. `numeric_index_extensions`
+counts these extensions. The kept bytes stay leased in the support workspace,
+and so under `max_support_bytes`, for the whole fixpoint; completion releases
+them before its final publication. Support completion likewise keeps the
+integer hull of each source column that a totality proof or scalar selection
+reads, and extends it with the appended rows' values, `O(Δ)` a round instead of
+the column's `O(d)` distinct values. Other snapshots read hulls afresh. Descriptor matching scans retained indexes and compares column mappings;
 the bound operand is evaluated on each queried prefix. Builds and queries use
 the existing work, support-byte and support-index-entry limits. Resource and
 cancellation failures propagate; they never publish a partial certificate or
@@ -723,7 +742,8 @@ traversal, though their support completion can use the support-round route above
 The [numeric-domain design](../../design/numeric-argument-domains.md) states the
 failure inventory and deferred coverage.
 `numeric_index_builds` counts published certificates, `numeric_index_declines`
-counts cached data declines, and `expression_key_probes` and `range_probes` count
+counts cached data declines, `numeric_index_extensions` counts kept certificates
+extended by a later support round, and `expression_key_probes` and `range_probes` count
 completed queries including empty results. `expression_key_rows` and
 `range_probe_rows` count rows actually visited after the delta cut and before the
 matcher. These receipts describe execution; they do not establish a performance
