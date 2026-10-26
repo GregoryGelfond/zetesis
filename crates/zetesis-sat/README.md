@@ -309,8 +309,9 @@ the commit then reserves as the serial schedule's does. Every failure after
 its identity is issued, a production stop among them, is held and reported
 after the pending slate commits, so `propose_lookahead` fails only on a fused
 stream; its empty proposal establishes exhaustion only after that commit. The
-pending receipt and `joint_batch_capacity` count both slates;
-`lookahead_capacity` sizes the slate proposed ahead. The closure forms run the
+pending receipt counts both slates. `joint_batch_capacity` stays the envelope's
+whole count, and is zero unless both slates' rows fit; `lookahead_capacity`
+sizes the slate proposed ahead. The closure forms run the
 same hand-out, checker and commit, with unchanged receipts.
 
 `batch_statistics()` reports checker calls, committed candidates, propagated

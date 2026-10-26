@@ -153,6 +153,29 @@ fn an_overflow_counting_a_lookahead_is_held_beside_its_candidates() {
     assert!(!search.exhausted());
 }
 
+/// Beside a slate proposed ahead, the joint capacity is still the envelope's
+/// whole count when both slates' held rows fit, and zero at an envelope that
+/// fits the pending slate's rows but not both.
+#[test]
+fn the_joint_capacity_beside_a_lookahead_needs_both_slates_rows_to_fit() {
+    let theory = choice_beside_a_loop();
+    let mut search = one_producer(&theory);
+    let _first = new_slate(&mut search, one_candidate());
+    assert!(matches!(
+        search.propose_lookahead(one_candidate()).unwrap(),
+        Lookahead::Proposed(_)
+    ));
+    let row = search.pending_row_bytes();
+    let retained = search.batch.validation.retained_bytes();
+    let pending = search.batch.pending.capacity();
+    let held = search.held_rows();
+    assert!(held > pending);
+    let envelope = |rows: usize| u64::try_from(retained + row * rows as u128).unwrap();
+    assert_eq!(search.joint_batch_capacity(envelope(held)), held);
+    assert_eq!(search.joint_batch_capacity(envelope(held + 5)), held + 5);
+    assert_eq!(search.joint_batch_capacity(envelope(pending)), 0);
+}
+
 /// A pending slate whose own production exhausted the frontier is followed
 /// by an empty lookahead, and exhaustion waits for that slate's commit. The
 /// exhausted production is handed over directly, as the region producers
