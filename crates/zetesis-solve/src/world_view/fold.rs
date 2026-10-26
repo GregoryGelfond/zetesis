@@ -67,9 +67,10 @@ impl<V> WorldViewVerdict<V> {
 }
 
 /// A world-view question's verdict, with the subject and the session evidence
-/// it rests on. A decided verdict's session stopped early, so its outcome
-/// records no completion; a complete or inconsistent verdict's records
-/// exhaustion of the unrestricted family.
+/// it rests on. A decided verdict's session was stopped at the deciding answer
+/// set, so its outcome records a completion only if the search had already
+/// ended there; a complete or inconsistent verdict's records exhaustion of the
+/// unrestricted family.
 #[derive(Debug)]
 pub struct WorldViewDecision<V> {
     subject: Subject,
@@ -193,19 +194,21 @@ impl SessionBuilder<'_> {
     /// [`AnswerSelection::All`], with any requested model count cleared, so
     /// neither a projection, an objective's selection nor `config.models`
     /// narrows the family; collection instead refuses a count that stops it
-    /// early. Answer sets
-    /// are folded as they arrive, and the session stops at the first one
-    /// without the literal, which decides `false` with that answer set as its
-    /// witness. Exhaustion without one gives `true` over the complete family;
-    /// an exhausted empty family is [`WorldViewVerdict::Inconsistent`].
+    /// early. Answer sets are folded as they arrive, and the session stops at
+    /// the first one without the literal, which decides `false` with that
+    /// answer set as its witness. Exhaustion without one gives `true` over the
+    /// complete family; an exhausted empty family is
+    /// [`WorldViewVerdict::Inconsistent`].
     ///
     /// Work is the enumeration up to the deciding answer set or exhaustion,
     /// plus one logarithmic membership test per answer set. Retained space is
     /// at most one answer set; no family is collected.
     ///
     /// # Errors
-    /// Returns the session's typed setup or execution failure, or
-    /// [`WorldViewDecisionError::NotExhausted`] when it stops undecided.
+    /// Returns [`WorldViewDecisionError::Solve`] with the session's typed setup
+    /// or execution failure, [`WorldViewDecisionError::NotExhausted`] when it
+    /// stops undecided, or [`WorldViewDecisionError::Allocation`] when the
+    /// witness cannot be retained.
     pub fn known(
         self,
         literal: &Atom,
@@ -246,7 +249,8 @@ impl SessionBuilder<'_> {
     /// the first answer set's atom catalog; no answer set is retained.
     ///
     /// # Errors
-    /// Returns [`Self::known`]'s failures, and
+    /// Returns [`WorldViewDecisionError::Solve`] or
+    /// [`WorldViewDecisionError::NotExhausted`] as [`Self::known`] does, and
     /// [`WorldViewDecisionError::Consequences`] when the intersection cannot be
     /// built.
     pub fn cautious(self) -> Result<WorldViewDecision<Model>, WorldViewDecisionFailure> {
@@ -267,7 +271,8 @@ impl SessionBuilder<'_> {
     /// Retained space is the union; no answer set is retained.
     ///
     /// # Errors
-    /// Returns [`Self::known`]'s failures, and
+    /// Returns [`WorldViewDecisionError::Solve`] or
+    /// [`WorldViewDecisionError::NotExhausted`] as [`Self::known`] does, and
     /// [`WorldViewDecisionError::Consequences`] when the union cannot be built
     /// or an atom cannot be copied between catalogs.
     pub fn brave(self) -> Result<WorldViewDecision<Model>, WorldViewDecisionFailure> {
