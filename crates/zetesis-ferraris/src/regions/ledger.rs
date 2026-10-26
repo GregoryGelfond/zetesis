@@ -14,6 +14,8 @@
 //! collector, or from the store those sources filled: no caller supplies,
 //! edits or reads a row.
 
+use std::sync::atomic::{AtomicU64, Ordering};
+
 use super::founded::explanations::{self, Explanation, Input, Limits};
 use crate::regions::{SupportExplanationStatistics, Theory, Work};
 use zetesis_cpu::Stop;
@@ -30,15 +32,19 @@ mod tests;
 /// reads the occurrence index for the atoms decided since the last step.
 const SCAN_ROWS: usize = u64::BITS as usize;
 
+/// The largest tier [`LearningLimits::for_allowance`] derives.
+const MAX_TIER_ROWS: usize = 4_096;
+
 /// Allowances for learned rows: per tier (one walk's or worker's ledger), per
-/// store, per source, and the quality filter on what a tier shares.
+/// store, per source, and what and when a tier shares.
 ///
 /// The defaults are the limits the founded source has always had: 64 rows,
 /// 256 capture attempts, 131,072 capture reads over a tier's lifetime, 4,096
 /// reads and 65,536 bytes per capture, and rows of at most 16 conditions and
-/// 64 outputs. [`LearningLimits::for_allowance`] raises the tier and store
-/// capacities with the memory allowance and never lowers any limit below
-/// these.
+/// 64 outputs. A tier shares rows of at most 8 conditions, or rows that have
+/// hit twice, and delivers every 4,096 regions its walk visits.
+/// [`LearningLimits::for_allowance`] raises the tier and store capacities
+/// with the memory allowance and never lowers any limit below these.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct LearningLimits {
     /// Rows one tier retains. A full tier evicts by decayed hits.
@@ -68,42 +74,56 @@ pub struct LearningLimits {
     pub share_conditions: usize,
     /// See `share_conditions`.
     pub share_hits: u64,
-}
-
-impl Default for LearningLimits {
-    fn default() -> Self {
-        Self {
-            tier_rows: 64,
-            store_rows: 256,
-            founded_floor: 64,
-            founded_conditions: 16,
-            founded_outputs: 64,
-            founded_attempts: 256,
-            founded_work: 131_072,
-            founded_event_work: 4_096,
-            founded_event_bytes: 65_536,
-            share_work: 131_072,
-            share_conditions: 8,
-            share_hits: 2,
-        }
-    }
+    /// The publication trigger: a walk delivers its tier each time it has
+    /// visited this many regions since the tier last delivered, as well as at
+    /// the walk's end. Zero never triggers.
+    pub publish_regions: u64,
 }
 
 impl LearningLimits {
-    /// The limits for a memory allowance of `bytes`: one tier row for every
-    /// 16 MiB of allowance, between the default's 64 rows and 4,096, and a
-    /// store four times a tier. Every other limit keeps its default.
+    /// The defaults: the founded source's limits as they have always been.
+    pub const DEFAULT: Self = Self {
+        tier_rows: 64,
+        store_rows: 256,
+        founded_floor: 64,
+        founded_conditions: 16,
+        founded_outputs: 64,
+        founded_attempts: 256,
+        founded_work: 131_072,
+        founded_event_work: 4_096,
+        founded_event_bytes: 65_536,
+        share_work: 131_072,
+        share_conditions: 8,
+        share_hits: 2,
+        publish_regions: 4_096,
+    };
+
+    /// The limits for a candidate-memory allowance of `bytes`: one tier row
+    /// for every MiB of it, between the default's 64 rows and 4,096, and a
+    /// store four times a tier. Every other limit keeps its default, so an
+    /// allowance of 64 MiB or less keeps every default.
     #[must_use]
-    pub fn for_allowance(bytes: u64) -> Self {
-        let defaults = Self::default();
-        let rows = usize::try_from(bytes >> 24)
-            .unwrap_or(usize::MAX)
-            .clamp(defaults.tier_rows, 4_096);
+    pub const fn for_allowance(bytes: usize) -> Self {
+        let defaults = Self::DEFAULT;
+        let rows = bytes >> 20;
+        let rows = if rows < defaults.tier_rows {
+            defaults.tier_rows
+        } else if rows > MAX_TIER_ROWS {
+            MAX_TIER_ROWS
+        } else {
+            rows
+        };
         Self {
             tier_rows: rows,
             store_rows: rows.saturating_mul(4),
             ..defaults
         }
+    }
+}
+
+impl Default for LearningLimits {
+    fn default() -> Self {
+        Self::DEFAULT
     }
 }
 
@@ -151,16 +171,33 @@ impl LearningOwner {
     }
 }
 
+/// Identities of stores, so a tier's seeding mark names the store it read.
+static STORES: AtomicU64 = AtomicU64::new(0);
+
 /// The rows one solve's streams share, by consequence class.
 ///
-/// Its public surface is creating an empty store: rows enter only by a tier's
-/// delivery and leave only by seeding a tier. The store charges no work of its
-/// own; the tier that seeds or delivers pays for every comparison.
-#[derive(Debug, Default)]
+/// Its public surface is creating an empty store and its counts: rows enter
+/// only by a tier's delivery and leave only by seeding a tier, and no caller
+/// supplies, edits or reads one. The store charges no work of its own; the
+/// tier that seeds or delivers pays for every read.
+#[derive(Debug)]
 pub struct LearningStore {
+    /// Distinct among the stores of a process.
+    id: u64,
     classes: Vec<Ledger>,
     deliveries: u64,
     seeded: u64,
+}
+
+impl Default for LearningStore {
+    fn default() -> Self {
+        Self {
+            id: STORES.fetch_add(1, Ordering::Relaxed),
+            classes: Vec::new(),
+            deliveries: 0,
+            seeded: 0,
+        }
+    }
 }
 
 impl LearningStore {
@@ -357,6 +394,10 @@ pub(in crate::regions) struct Ledger {
     founded: usize,
     /// Rows evicted over the tier's life.
     evicted: u64,
+    /// The store this tier last read completely, and that store's retention
+    /// count for the tier's class then: seeding reads only rows retained
+    /// since, which carry larger retention orders.
+    seeded_from: Option<(u64, u64)>,
 }
 
 impl Default for Ledger {
@@ -380,6 +421,7 @@ impl Default for Ledger {
             indexed_steps: 0,
             founded: 0,
             evicted: 0,
+            seeded_from: None,
         }
     }
 }
@@ -407,6 +449,7 @@ impl Ledger {
         self.postings.clear();
         self.founded = 0;
         self.evicted = 0;
+        self.seeded_from = None;
         self.owner = Some(owner.clone());
         self.attempts = 0;
         self.epoch = 0;
@@ -661,7 +704,9 @@ impl Ledger {
 
     /// Copy the store's rows of this tier's class into the tier by retention,
     /// so a row the tier holds or subsumes is not added twice. Each copied
-    /// row starts at the store's hit count. Charges the tier's sharing
+    /// row starts at the store's hit count. A tier that read this store
+    /// completely before reads only the rows retained there since, at one
+    /// read for each row it passes over. Charges the tier's sharing
     /// allowance; its exhaustion ends seeding, never the run.
     pub(in crate::regions) fn seed(
         &mut self,
@@ -674,14 +719,25 @@ impl Ledger {
         let Some(class) = store.class(&owner) else {
             return Ok(());
         };
+        let read = match self.seeded_from {
+            Some((id, born)) if id == store.id => born,
+            _ => 0,
+        };
         let mut sharing = self.sharing;
         let mut peak = 0;
         let mut seeded = 0;
+        let mut complete = true;
         for entry in &class.rows {
+            if entry.born <= read {
+                work.tick()?;
+                continue;
+            }
             if !capture_read(&mut sharing, work)? {
+                complete = false;
                 break;
             }
             let Some(literals) = entry.row.to_literals(&mut sharing, work, &mut peak)? else {
+                complete = false;
                 break;
             };
             let maximum_outputs = literals.outputs.len().max(owner.limits.founded_outputs);
@@ -703,8 +759,14 @@ impl Ledger {
                     seeded += 1;
                 }
                 Retained::Subsumed(_) => {}
-                Retained::Declined => break,
+                Retained::Declined => {
+                    complete = false;
+                    break;
+                }
             }
+        }
+        if complete {
+            self.seeded_from = Some((store.id, class.born));
         }
         self.sharing = sharing;
         self.peak_bytes = self.peak_bytes.max(self.retained_bytes() + peak);
@@ -715,8 +777,9 @@ impl Ledger {
     /// Deliver the rows retained or hit since the last delivery that pass the
     /// quality filter to the store, under this tier's class. A delivered
     /// row's hits since its last delivery add to the store's count for the
-    /// row that keeps them. Charges the tier's sharing allowance; its
-    /// exhaustion ends delivery, never the run.
+    /// row that keeps them. Each row examined costs one read; delivering one
+    /// is charged to the tier's sharing allowance, whose exhaustion ends
+    /// delivery, never the run.
     pub(in crate::regions) fn deliver(
         &mut self,
         store: &mut LearningStore,
@@ -731,6 +794,7 @@ impl Ledger {
         let class = store.class_mut(&owner)?;
         let mut delivered = 0;
         for entry in &mut self.rows {
+            work.tick()?;
             if entry.delivered && entry.unshared == 0 {
                 continue;
             }

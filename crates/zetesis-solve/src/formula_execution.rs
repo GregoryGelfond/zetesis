@@ -336,6 +336,10 @@ pub(crate) trait MembershipExecution {
     /// enumeration whose owed answers exceed the slate under check. Other
     /// executions ignore it.
     fn demand(&mut self, _enumerates: bool, _owed: Option<usize>) {}
+    /// Receive the solve's learned store, which the session's streams share.
+    /// Rows an execution learns while completing candidates would reach the
+    /// streams through it; no execution learns any yet.
+    fn learned_store(&mut self, _store: std::sync::Arc<zetesis_stable::LearnedStore>) {}
     /// Read the last completed device batch's compute-pass interval before the
     /// execution's final snapshot. A device execution observes the control and
     /// waits at most the time it kept from construction, so every path into a

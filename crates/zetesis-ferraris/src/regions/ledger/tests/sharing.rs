@@ -149,9 +149,59 @@ fn a_seeded_row_is_not_delivered_back() {
     seed(&program, &mut scratch, &mut store);
     let attempt = scratch.deliver_learning(&program.owner, &mut store, &mut unlimited());
     assert_eq!(attempt.result, Ok(()));
-    assert_eq!(attempt.work, 0);
+    // One read examines the seeded row, which goes nowhere.
+    assert_eq!(attempt.work, 1);
     assert_eq!(store.deliveries(), 1);
     assert_eq!(store.len(), 1);
+}
+
+/// A tier of `program`'s class holding the one row `atom` held -> e absent.
+fn tier_with(program: &Program, atoms: &[usize]) -> Ledger {
+    let mut tier = owned(&program.theory, *program.owner.limits());
+    for &atom in atoms {
+        assert!(add(&mut tier, &[(atom, true)], &[(4, false)]));
+    }
+    tier
+}
+
+fn deliver_tier(tier: &mut Ledger, store: &mut LearningStore) {
+    tier.deliver(store, &mut Work::new(u64::MAX)).unwrap();
+}
+
+fn seed_tier(tier: &mut Ledger, store: &mut LearningStore) -> u64 {
+    let mut work = Work::new(u64::MAX);
+    tier.seed(store, &mut work).unwrap();
+    work.spent
+}
+
+#[test]
+fn reseeding_reads_only_rows_retained_since() {
+    let program = Program::new(false);
+    let mut store = LearningStore::new();
+    deliver_tier(&mut tier_with(&program, &[0]), &mut store);
+    let mut tier = tier_with(&program, &[]);
+    seed_tier(&mut tier, &mut store);
+    deliver_tier(&mut tier_with(&program, &[1]), &mut store);
+    let again = seed_tier(&mut tier, &mut store);
+    assert_eq!(tier.len(), 2);
+    let fresh = seed_tier(&mut tier_with(&program, &[]), &mut store);
+    assert!(
+        again < fresh,
+        "{again} reads after a complete seeding, {fresh} fresh"
+    );
+}
+
+#[test]
+fn a_seeding_mark_names_its_store() {
+    let program = Program::new(false);
+    let mut first = LearningStore::new();
+    deliver_tier(&mut tier_with(&program, &[0, 1]), &mut first);
+    let mut second = LearningStore::new();
+    deliver_tier(&mut tier_with(&program, &[2]), &mut second);
+    let mut tier = tier_with(&program, &[]);
+    seed_tier(&mut tier, &mut first);
+    seed_tier(&mut tier, &mut second);
+    assert_eq!(tier.len(), 3);
 }
 
 #[test]

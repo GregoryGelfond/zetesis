@@ -19,6 +19,8 @@
 //! removes candidates, so no restart and no exclusion index is needed
 //! (`Search.CoverageTree`, `FormulaBounds`).
 
+use std::sync::Arc;
+
 use zetesis_cpu::Stop;
 use zetesis_cpu::regions::{Counting, Narrowing, Region, Traversal, Visit};
 use zetesis_ferraris::{
@@ -28,6 +30,7 @@ use zetesis_ferraris::{
 };
 
 use super::conditions::{Bound, CandidateKnowledge, Conditions};
+use super::learned::{LearnedStore, Tier};
 use super::original_index::IndexedTheory;
 use crate::budget::{Budget, Quota};
 use crate::{Cancellation, Incomplete};
@@ -390,8 +393,11 @@ pub(crate) struct RegionSearch {
     traversal: Traversal<CandidateKnowledge>,
     /// Each restriction with its own index.
     restrictions: Conditions<(Theory, Narrower)>,
-    /// The worklists every narrowing of this walk reuses.
+    /// The worklists every narrowing of this walk reuses, with its tier of
+    /// learned rows.
     scratch: NarrowingScratch,
+    /// The tier's sharing state.
+    tier: Tier,
     statistics: RegionSearchStatistics,
     filter: Option<RetainedFilter>,
     native_byte_limit: u64,
@@ -399,14 +405,22 @@ pub(crate) struct RegionSearch {
 
 /// What a region walk reads of the original theory beyond the theory itself:
 /// its producers, when it lies in the producer fragment, the heads of its
-/// atomic choice roots, which every split ranks first, and the owner of the
-/// rows its walks learn.
+/// atomic choice roots, which every split ranks first, the owner of the rows
+/// its walks learn, and the store its tiers share them through, if any.
 #[derive(Debug)]
 pub(crate) struct OriginalParts {
     producers: Option<Producers>,
     choice_heads: ChoiceHeads,
     generator_order: Option<GeneratorOrder>,
     learning: LearningOwner,
+    learned: Option<Arc<LearnedStore>>,
+}
+
+/// Which way a walk boundary moves a tier's rows.
+#[derive(Clone, Copy)]
+enum Sharing {
+    Seed,
+    Deliver,
 }
 
 impl OriginalParts {
@@ -422,6 +436,102 @@ impl OriginalParts {
                 .with_choices(&self.choice_heads)
                 .with_generator_order(self.generator_order.as_ref()),
         )
+    }
+
+    /// The stream's learned store, once installed.
+    pub(crate) const fn learned_store(&self) -> Option<&Arc<LearnedStore>> {
+        self.learned.as_ref()
+    }
+
+    /// Install the stream's learned store; the caller refuses a walk that
+    /// has begun and a replacement.
+    pub(crate) fn set_learned_store(&mut self, store: Arc<LearnedStore>) {
+        self.learned = Some(store);
+    }
+
+    /// Seed `scratch`'s tier from the store before the tier's first
+    /// narrowing, or its first after [`Tier::reseed`].
+    pub(crate) fn seed_tier<Q: Quota>(
+        &self,
+        tier: &mut Tier,
+        scratch: &mut NarrowingScratch,
+        budget: &mut Budget<'_, Q>,
+        counts: &mut RegionCounts,
+    ) -> Result<(), Incomplete> {
+        if tier.seeded {
+            return Ok(());
+        }
+        tier.seeded = true;
+        self.share(Sharing::Seed, scratch, budget, counts)
+    }
+
+    /// Count one region the walk visited with `scratch`; at the owner's
+    /// publication trigger, deliver the tier. The caller calls this between
+    /// regions, never inside a narrowing.
+    pub(crate) fn visited<Q: Quota>(
+        &self,
+        tier: &mut Tier,
+        scratch: &mut NarrowingScratch,
+        budget: &mut Budget<'_, Q>,
+        counts: &mut RegionCounts,
+    ) -> Result<(), Incomplete> {
+        tier.visited = tier.visited.saturating_add(1);
+        let every = self.learning.limits().publish_regions;
+        if every == 0 || tier.visited < every {
+            return Ok(());
+        }
+        self.deliver_tier(tier, scratch, budget, counts)
+    }
+
+    /// Deliver `scratch`'s tier to the store at a walk boundary.
+    pub(crate) fn deliver_tier<Q: Quota>(
+        &self,
+        tier: &mut Tier,
+        scratch: &mut NarrowingScratch,
+        budget: &mut Budget<'_, Q>,
+        counts: &mut RegionCounts,
+    ) -> Result<(), Incomplete> {
+        tier.visited = 0;
+        self.share(Sharing::Deliver, scratch, budget, counts)
+    }
+
+    /// Move rows between `scratch`'s tier and the store, under the store's
+    /// lock, charging the budget. The reads count as learning work in
+    /// `counts`, admitted prefix included. A stream given no store shares
+    /// nothing. Exhausting the tier's sharing allowance ends sharing, not the
+    /// walk; the quota, a cancellation and an allocator refusal stop it.
+    fn share<Q: Quota>(
+        &self,
+        sharing: Sharing,
+        scratch: &mut NarrowingScratch,
+        budget: &mut Budget<'_, Q>,
+        counts: &mut RegionCounts,
+    ) -> Result<(), Incomplete> {
+        let Some(store) = &self.learned else {
+            return Ok(());
+        };
+        let mut quota = BudgetQuota {
+            budget,
+            failure: None,
+        };
+        let attempt = {
+            let mut rows = store.lock();
+            match sharing {
+                Sharing::Seed => scratch.seed_learning(&self.learning, &mut rows, &mut quota),
+                Sharing::Deliver => scratch.deliver_learning(&self.learning, &mut rows, &mut quota),
+            }
+        };
+        counts.add(RegionCounts {
+            work: attempt.work,
+            support_explanations: SupportExplanationStatistics {
+                work: attempt.work,
+                ..SupportExplanationStatistics::default()
+            },
+            ..RegionCounts::default()
+        })?;
+        attempt
+            .result
+            .map_err(|stop| quota.failure.take().unwrap_or_else(|| stopped(stop)))
     }
 }
 
@@ -441,6 +551,7 @@ pub(crate) struct Opened {
 pub(crate) fn open(
     theory: &Theory,
     order_byte_limit: u64,
+    learning: LearningLimits,
     budget: &mut Budget<'_>,
 ) -> Result<Opened, Incomplete> {
     let extraction = zetesis_ferraris::producers(theory, limits(budget), budget.cancellation)
@@ -498,7 +609,8 @@ pub(crate) fn open(
             producers: extraction.producers,
             choice_heads: extraction.choice_heads,
             generator_order,
-            learning: LearningOwner::theory(theory, LearningLimits::default()),
+            learning: LearningOwner::theory(theory, learning),
+            learned: None,
         },
     })
 }
@@ -523,9 +635,10 @@ impl RegionSearch {
         theory: &Theory,
         native_byte_limit: u64,
         order_byte_limit: u64,
+        learning: LearningLimits,
         budget: &mut Budget<'_>,
     ) -> Result<Self, Incomplete> {
-        let Opened { parts, statistics } = open(theory, order_byte_limit, budget)?;
+        let Opened { parts, statistics } = open(theory, order_byte_limit, learning, budget)?;
         Ok(Self {
             statistics,
             parts,
@@ -537,6 +650,7 @@ impl RegionSearch {
             .with_held_first(),
             restrictions: Conditions::default(),
             scratch: NarrowingScratch::default(),
+            tier: Tier::default(),
             filter: None,
             native_byte_limit,
         })
@@ -544,6 +658,16 @@ impl RegionSearch {
 
     pub(crate) fn counts_mut(&mut self) -> &mut RegionCounts {
         &mut self.statistics.counts
+    }
+
+    pub(super) fn learned_store(&self) -> Option<&Arc<LearnedStore>> {
+        self.parts.learned_store()
+    }
+
+    /// The caller installs a store only before traversal and never replaces
+    /// one.
+    pub(super) fn set_learned_store(&mut self, store: Arc<LearnedStore>) {
+        self.parts.set_learned_store(store);
     }
 
     pub(super) fn filter(&self) -> Option<&crate::region_filter::Filter> {
@@ -657,6 +781,18 @@ impl RegionSearch {
         match self.next_leaf(theory, index, budget, timings) {
             Ok(Some(candidate)) => Ok(Some(candidate)),
             Ok(None) => {
+                // The walk's end is a tier boundary. A stop while delivering
+                // ends the walk incomplete, as any read's does.
+                let delivered = self.parts.deliver_tier(
+                    &mut self.tier,
+                    &mut self.scratch,
+                    budget,
+                    &mut self.statistics.counts,
+                );
+                if let Err(error) = delivered {
+                    let _ = self.finish();
+                    return Err(error);
+                }
                 self.finish()?;
                 Ok(None)
             }
@@ -680,15 +816,17 @@ impl RegionSearch {
             traversal,
             restrictions,
             scratch,
+            tier,
             statistics,
             filter,
             native_byte_limit: _,
         } = self;
         let (formulas, narrower) = index.subject(theory)?;
+        parts.seed_tier(tier, scratch, budget, &mut statistics.counts)?;
         let before = traversal.statistics();
         let mut advance = |mut check: Option<crate::region_filter::Check<'_, '_>>| {
             traversal.next(|region, knowledge| -> Result<Narrowing, Incomplete> {
-                narrow(
+                let narrowing = narrow(
                     (parts.subject(formulas)?, narrower),
                     restrictions,
                     (region, knowledge),
@@ -696,7 +834,9 @@ impl RegionSearch {
                     budget,
                     &mut statistics.counts,
                     check.as_mut(),
-                )
+                )?;
+                parts.visited(tier, scratch, budget, &mut statistics.counts)?;
+                Ok(narrowing)
             })
         };
         let visit = if let Some(filter) = filter {

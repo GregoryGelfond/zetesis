@@ -5,7 +5,8 @@ use super::{budget, theory};
 use crate::ferraris::conditions::Bound;
 use crate::{Cancellation, Incomplete};
 use zetesis_ferraris::{
-    ChoiceHeads, Narrowing, NarrowingScratch, Node, OriginalSubject, RegionLimits, Theory,
+    ChoiceHeads, LearningLimits, Narrowing, NarrowingScratch, Node, OriginalSubject, RegionLimits,
+    Theory,
 };
 
 fn original() -> Theory {
@@ -297,8 +298,14 @@ fn the_region_search_settles_the_choice_before_the_loop() {
     let theory = crate::ferraris::fixtures::choice_beside_a_loop();
     let cancellation = Cancellation::default();
     let mut budget = budget(&cancellation, u64::MAX);
-    let mut search =
-        super::super::RegionSearch::new(&theory, u64::MAX, u64::MAX, &mut budget).unwrap();
+    let mut search = super::super::RegionSearch::new(
+        &theory,
+        u64::MAX,
+        u64::MAX,
+        LearningLimits::DEFAULT,
+        &mut budget,
+    )
+    .unwrap();
     let mut owner = crate::ferraris::original_index::OriginalIndex::new(&theory, u64::MAX);
     let index = owner.ensure(&cancellation, |_| Ok(())).unwrap();
     let mut proposed = Vec::new();
@@ -335,7 +342,8 @@ fn active_restrictions_keep_primary_preference() {
     );
     let cancellation = Cancellation::default();
     let mut opening = budget(&cancellation, u64::MAX);
-    let opened = super::super::open(&original, u64::MAX, &mut opening).unwrap();
+    let opened =
+        super::super::open(&original, u64::MAX, LearningLimits::DEFAULT, &mut opening).unwrap();
     assert!(
         opened
             .parts

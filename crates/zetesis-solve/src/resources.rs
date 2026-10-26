@@ -133,6 +133,7 @@ impl Resources {
             // Twice the other device batches' share: the update state charges
             // every slot, and admits itself only when the batch size still fits.
             max_tight_batch_bytes: self.bytes(16) as u64,
+            share_learned_rows: true,
         }
     }
 

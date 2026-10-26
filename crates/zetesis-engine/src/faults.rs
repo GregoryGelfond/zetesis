@@ -225,6 +225,8 @@ fn sat_class(error: zetesis_stable::Incomplete) -> Class {
         | E::LateRegionFilter
         | E::LateCandidateBounds
         | E::RegionFilterAlreadySet
+        | E::LateLearnedStore
+        | E::LearnedStoreAlreadySet
         | E::InvalidWitness => Class::Engine,
     }
 }

@@ -7,3 +7,4 @@ mod construction_tests;
 mod objective_work_tests;
 mod acceptance_tests;
 mod completion_tests;
+mod learning_tests;

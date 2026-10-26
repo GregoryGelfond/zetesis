@@ -228,6 +228,23 @@ read, and the first step after the rows change test every row. The first indexed
 step after a change rebuilds the index at one read per indexed occurrence; an
 interrupted rebuild is never read.
 
+Sharing rows is charged as it runs. Each store row a seeding passes over or
+copies, and each tier row a delivery examines or delivers, costs reads of the
+walk's budget, counted in `support_explanations.work`. The tier's sharing
+allowance, 131,072 reads over its life by default, bounds the copies and their
+comparisons; exhausting it ends that tier's sharing, never the walk. A tier that
+read the whole store before reads only the rows retained there since. One lock
+serializes the store, held by seeding and delivery and never by a narrowing. The
+work quota, a cancellation or an allocator refusal during seeding or delivery
+stops the walk as any read does: a walk whose final delivery exceeds the work
+ceiling ends incomplete and claims no exhaustion. A tier delivers only under its
+own class, the theory instance whose carrier learned its rows. Tier and store
+capacities grow with the candidate memory allowance: one tier row per MiB of it,
+between 64 and 4,096 rows, and a store four times a tier, so the library's
+default allowance keeps today's 64 rows. Under sharing, work counts depend on the
+schedule, since which worker learns a row first affects the others; answer sets
+do not.
+
 After a complete premise match, packed output words are filtered against current
 held and cut masks before decoding atom IDs: a required absence is visited when
 its atom is held or not yet cut, a required presence when its atom is cut or not

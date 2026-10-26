@@ -66,6 +66,11 @@ pub enum Incomplete {
     LateCandidateBounds,
     /// An installed original-region filter cannot be replaced.
     RegionFilterAlreadySet,
+    /// A learned-row store cannot be installed after candidate traversal
+    /// began.
+    LateLearnedStore,
+    /// An installed learned-row store cannot be replaced.
+    LearnedStoreAlreadySet,
     /// Optional candidate certification stopped without establishing membership.
     Certificate(crate::CertificateError),
     /// Independent formula evaluation stopped without validating a witness.
@@ -133,6 +138,10 @@ impl fmt::Display for Incomplete {
             Self::RegionFilterAlreadySet => {
                 f.write_str("candidate-region filter is already installed")
             }
+            Self::LateLearnedStore => {
+                f.write_str("sharing learned rows requires an unstarted stream")
+            }
+            Self::LearnedStoreAlreadySet => f.write_str("a learned-row store is already installed"),
             Self::Certificate(error) => write!(f, "certified membership: {error}"),
             Self::Verification(error) => write!(f, "independent verification: {error}"),
             Self::InvalidWitness => f.write_str("SAT witness failed independent verification"),

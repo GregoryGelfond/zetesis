@@ -3,11 +3,12 @@
 use crate::ExecutionObservation as Event;
 use crate::execution_observation::ExecutionSink;
 use std::cell::Cell;
+use std::sync::Arc;
 
 use zetesis_core::{Model, ModelOrder};
 use zetesis_cpu::Cancellation;
 use zetesis_objective::Score;
-use zetesis_stable::StableModels;
+use zetesis_stable::{LearnedStore, StableModels};
 
 use crate::countermodel::Input;
 use crate::formula_execution::{Failure, MembershipExecution};
@@ -21,6 +22,8 @@ pub(crate) struct FormulaSession<'a, E> {
     selection: AnswerSelection,
     execution: Option<E>,
     models: Option<StableModels>,
+    /// The learned rows this solve's streams share, unless sharing is off.
+    learned: Option<Arc<LearnedStore>>,
     model_order: Option<ModelOrder<'a>>,
     construction: Option<crate::model_construction::Account>,
     objective_plan: Option<Preparation>,
@@ -90,7 +93,16 @@ impl<'a, E: MembershipExecution> FormulaSession<'a, E> {
         if let Err(error) = session.initialize(config, observations, cancellation, phases) {
             session.fail(error, phases);
         }
+        session.hand_learned_store();
         session
+    }
+
+    /// Hand the solve's learned store to the membership execution once both
+    /// exist.
+    fn hand_learned_store(&mut self) {
+        if let (Some(execution), Some(store)) = (self.execution.as_mut(), &self.learned) {
+            execution.learned_store(Arc::clone(store));
+        }
     }
 
     fn uninitialized(input: Input<'a>, selection: AnswerSelection) -> Self {
@@ -103,6 +115,7 @@ impl<'a, E: MembershipExecution> FormulaSession<'a, E> {
             },
             execution: None,
             models: None,
+            learned: None,
             model_order: None,
             construction: None,
             objective_plan: None,
@@ -192,6 +205,20 @@ impl<'a, E: MembershipExecution> FormulaSession<'a, E> {
         // Ownership is established before any fallible certificate/diagnostic
         // operation, so its attempted work remains available on failure.
         self.models = Some(models);
+        // One store for this solve call: every stream the session builds
+        // shares it, and so does the membership execution.
+        if config.share_learned_rows {
+            let store = Arc::new(LearnedStore::new());
+            let models = self.models.as_mut().expect("candidate stream installed");
+            if let Err(error) = models.set_learned_store(Arc::clone(&store)) {
+                self.complete(
+                    SearchState::Interrupted(Interruption::Countermodel(error)),
+                    phases,
+                );
+                return Ok(());
+            }
+            self.learned = Some(store);
+        }
         if config.region_workers().is_none() && config.workers.get() > 1 {
             observations.record(Event::ParallelProposals {
                 workers: config.workers,
@@ -644,6 +671,7 @@ impl<'a> FormulaSession<'a, crate::formula_execution::Execution> {
                     observations,
                 )
             })?);
+            session.hand_learned_store();
         }
         Ok(session)
     }

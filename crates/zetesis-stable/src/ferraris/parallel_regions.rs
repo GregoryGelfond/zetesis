@@ -589,7 +589,7 @@ impl ParallelRegions {
     ) -> Result<Self, Incomplete> {
         let delay = engagement.delay(workers.get());
         let super::regions::Opened { parts, statistics } =
-            super::regions::open(theory, limits.max_reduct_bytes, budget)?;
+            super::regions::open(theory, limits.max_reduct_bytes, limits.learning, budget)?;
         let (sender, receiver) = sync_channel(workers.get() * CHANNEL_SLACK);
         let root = (
             Region::all_open(theory.atom_count()),
@@ -638,6 +638,25 @@ impl ParallelRegions {
         Ok(())
     }
 
+    /// The caller refuses a replacement; the walk refuses a store once begun.
+    pub(crate) fn set_learned_store(
+        &mut self,
+        store: Arc<super::learned::LearnedStore>,
+    ) -> Result<(), Incomplete> {
+        if !matches!(self.record, WalkRecord::NotBegun) {
+            return Err(Incomplete::LateLearnedStore);
+        }
+        Arc::get_mut(&mut self.shared)
+            .ok_or(Incomplete::LateLearnedStore)?
+            .parts
+            .set_learned_store(store);
+        Ok(())
+    }
+
+    pub(crate) fn learned_store(&self) -> Option<&Arc<super::learned::LearnedStore>> {
+        self.shared.parts.learned_store()
+    }
+
     pub(crate) fn search_statistics(&self) -> SearchStatistics {
         let mut statistics = SearchStatistics::default();
         self.shared.budget.snapshot(&mut statistics);
@@ -668,6 +687,28 @@ impl ParallelRegions {
         drop(self.sender.take());
         let joined = self.join();
         self.shared.stopped().map_or(joined, Err)
+    }
+
+    /// Deliver the coordinator's tier, if it holds one, on a lease of the
+    /// walk's shared budget.
+    fn deliver_coordinator(&mut self) -> Result<(), Incomplete> {
+        let Some(cell) = self.coordinator.as_mut() else {
+            return Ok(());
+        };
+        cell.with_dependent_mut(|shared, coordinator| {
+            let mut budget = Budget {
+                quota: shared.budget.lease(&shared.cancellation),
+                limits: shared.limits.search,
+                cancellation: &shared.cancellation,
+                statistics: SearchStatistics::default(),
+            };
+            deliver(
+                shared,
+                &mut coordinator.workspaces,
+                &mut budget,
+                &mut coordinator.report,
+            )
+        })
     }
 
     /// Release the coordinator's retained state through a contained drop: a
@@ -1071,6 +1112,14 @@ impl ParallelRegions {
         match exit {
             Exit::Model(model) => Ok(Coordinated::Answer(Some(model))),
             Exit::Resolved => {
+                // The unengaged walk's end is the coordinator's tier boundary.
+                if let Err(error) = self.deliver_coordinator() {
+                    self.shared.stop(error);
+                    let _ = self.teardown();
+                    self.account(budget);
+                    return Err(self.shared.stopped().unwrap_or(error));
+                }
+                self.account(budget);
                 if let Err(error) = self.release_coordinator() {
                     self.shared.stop(error);
                     let _ = self.teardown();
@@ -1132,7 +1181,12 @@ impl ParallelRegions {
         let WalkRecord::Unengaged { since, walking, .. } = self.record else {
             return Err(Incomplete::InvalidWitness);
         };
-        if let Err(error) = self.release_coordinator() {
+        // The coordinator delivers before it hands over, so the workers seed
+        // what it learned.
+        if let Err(error) = self
+            .deliver_coordinator()
+            .and_then(|()| self.release_coordinator())
+        {
             self.shared.stop(error);
             let _ = self.teardown();
             self.account(budget);
@@ -1497,7 +1551,62 @@ fn worker(
             }
         }
     }
+    // The worker's end is a tier boundary once every region is resolved; a
+    // stopped walk has no use for the delivery.
+    if shared.frontier.termination.is_resolved() && shared.stopped().is_none() {
+        let mut budget = Budget {
+            quota,
+            limits: shared.limits.search,
+            cancellation: &shared.cancellation,
+            statistics: search,
+        };
+        if let Err(error) = deliver(shared, &mut workspaces, &mut budget, &mut report) {
+            shared.stop(error);
+        }
+    }
     report
+}
+
+/// Deliver a walker's tier at a boundary of its walk, on its own budget, and
+/// publish the reads to the live counters.
+fn deliver<Q: crate::budget::Quota>(
+    shared: &Shared,
+    workspaces: &mut Workspaces<'_>,
+    budget: &mut Budget<'_, Q>,
+    report: &mut WorkerReport,
+) -> Result<(), Incomplete> {
+    let before = report.regions;
+    let delivered = shared.parts.deliver_tier(
+        &mut workspaces.tier,
+        &mut workspaces.scratch,
+        budget,
+        &mut report.regions,
+    );
+    publish_counts(shared, &before, &report.regions);
+    delivered
+}
+
+/// Publish a walker's narrowing and learning counts since `before` to the
+/// live counters.
+fn publish_counts(shared: &Shared, before: &RegionCounts, after: &RegionCounts) {
+    Live::add(
+        &shared.live.propagations,
+        after.propagations - before.propagations,
+    );
+    Live::add(&shared.live.held, after.held - before.held);
+    Live::add(&shared.live.cut, after.cut - before.cut);
+    Live::add(
+        &shared.live.support_work,
+        after.support_work - before.support_work,
+    );
+    Live::add(
+        &shared.live.founded_work,
+        after.founded_work - before.founded_work,
+    );
+    Live::add(&shared.live.work, after.work - before.work);
+    shared
+        .live
+        .add_support_explanations(&before.support_explanations, &after.support_explanations);
 }
 
 /// Steal a region from another worker, waiting while any remains. `None` when
@@ -1526,6 +1635,8 @@ enum Stepped {
 /// needed.
 struct Workspaces<'a> {
     scratch: NarrowingScratch,
+    /// The sharing state of the scratch's tier of learned rows.
+    tier: super::learned::Tier,
     membership: crate::reduct::State,
     certificate: certified::Workspace,
     filter: Option<crate::region_filter::Worker<'a>>,
@@ -1536,6 +1647,7 @@ impl Workspaces<'_> {
     fn new() -> Self {
         Self {
             scratch: NarrowingScratch::default(),
+            tier: super::learned::Tier::default(),
             membership: crate::reduct::State::default(),
             certificate: certified::Workspace::default(),
             filter: None,
@@ -1586,41 +1698,45 @@ fn step<'a>(
             worker: &mut workspaces.filter,
             timings: &mut report.statistics.phase_timings,
         });
-    let narrowing = shared.parts.subject(original.theory()).and_then(|subject| {
-        super::regions::narrow(
-            (subject, original.narrower()),
-            &restrictions,
-            (&mut region, &mut knowledge),
+    // The tier draws the store's rows before its first narrowing, and counts
+    // the region after it, delivering at the publication trigger.
+    let narrowing = shared
+        .parts
+        .seed_tier(
+            &mut workspaces.tier,
             &mut workspaces.scratch,
             budget,
             &mut report.regions,
-            check.as_mut(),
         )
-    });
+        .and_then(|()| shared.parts.subject(original.theory()))
+        .and_then(|subject| {
+            super::regions::narrow(
+                (subject, original.narrower()),
+                &restrictions,
+                (&mut region, &mut knowledge),
+                &mut workspaces.scratch,
+                budget,
+                &mut report.regions,
+                check.as_mut(),
+            )
+        })
+        .and_then(|narrowing| {
+            shared
+                .parts
+                .visited(
+                    &mut workspaces.tier,
+                    &mut workspaces.scratch,
+                    budget,
+                    &mut report.regions,
+                )
+                .map(|()| narrowing)
+        });
     timing::finish(
         &mut report.statistics.phase_timings,
         Phase::Candidates,
         started,
     );
-    let after = report.regions;
-    Live::add(
-        &shared.live.propagations,
-        after.propagations - before.propagations,
-    );
-    Live::add(&shared.live.held, after.held - before.held);
-    Live::add(&shared.live.cut, after.cut - before.cut);
-    Live::add(
-        &shared.live.support_work,
-        after.support_work - before.support_work,
-    );
-    Live::add(
-        &shared.live.founded_work,
-        after.founded_work - before.founded_work,
-    );
-    Live::add(&shared.live.work, after.work - before.work);
-    shared
-        .live
-        .add_support_explanations(&before.support_explanations, &after.support_explanations);
+    publish_counts(shared, &before, &report.regions);
     let narrowing = narrowing?;
     if narrowing == Narrowing::Refuted {
         report.regions.refuted += 1;

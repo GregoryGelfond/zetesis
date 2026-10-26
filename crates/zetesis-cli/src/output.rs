@@ -379,6 +379,8 @@ fn reason_code(reason: Interruption) -> &'static str {
                 Incomplete::LateRegionFilter => "late_region_filter",
                 Incomplete::LateCandidateBounds => "late_candidate_bounds",
                 Incomplete::RegionFilterAlreadySet => "region_filter_already_set",
+                Incomplete::LateLearnedStore => "late_learned_store",
+                Incomplete::LearnedStoreAlreadySet => "learned_store_already_set",
                 Incomplete::Certificate(_) => "certificate",
                 Incomplete::Verification(_) => "verification",
                 Incomplete::InvalidWitness => "invalid_witness",

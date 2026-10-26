@@ -60,7 +60,15 @@ fn proposals(theory: &Theory, producers: usize) -> RegionProposals {
         cancellation: &cancellation,
         statistics: SearchStatistics::default(),
     };
-    RegionProposals::new(theory, nonzero(producers), u64::MAX, u64::MAX, &mut budget).unwrap()
+    RegionProposals::new(
+        theory,
+        nonzero(producers),
+        u64::MAX,
+        u64::MAX,
+        zetesis_ferraris::LearningLimits::DEFAULT,
+        &mut budget,
+    )
+    .unwrap()
 }
 
 /// One slate of `maximum` candidates through `fill`, with the produced
@@ -990,4 +998,55 @@ fn proposals_split_on_the_original_choice_head_first() {
     let pending = proposals.frontier.queue(0);
     assert!(!pending.is_empty());
     assert!(pending.iter().all(|(region, _)| !region.is_open(0)));
+}
+
+/// `a0 <- a1`, `a1 <- a0` beside two atomic choices: the root's pass
+/// captures the loop's absence, and every later region inherits the cut, so
+/// no producer captures it again.
+fn loop_beside_two_choices() -> Theory {
+    let mut nodes = vec![
+        Node::atom(0),
+        Node::atom(1),
+        Node::falsum(),
+        Node::implies(1, 0),
+        Node::implies(0, 1),
+    ];
+    let mut roots = vec![3, 4];
+    for choice in 0..2 {
+        let index = nodes.len();
+        nodes.extend([
+            Node::atom(2 + choice),
+            Node::implies(index, 2),
+            Node::or_pair([index, index + 1]),
+        ]);
+        roots.push(index + 2);
+    }
+    Theory::new(
+        4,
+        zetesis_ferraris::FormulaParts::new(nodes, vec![]).unwrap(),
+        roots,
+        AdmissionLimits::default(),
+    )
+    .unwrap()
+}
+
+#[test]
+fn every_producer_draws_a_joined_peers_rows_at_the_next_slate() {
+    let theory = loop_beside_two_choices();
+    let mut proposals = proposals(&theory, 2);
+    proposals.set_learned_store(Arc::new(crate::LearnedStore::new()));
+    for _ in 0..2 {
+        let (produced, candidates) = fill(&mut proposals, &theory, 1);
+        assert_eq!(produced.stopped, None);
+        assert_eq!(candidates.len(), 1);
+    }
+    // One producer captured the row in the first slate and delivered it at
+    // the join; the second slate's start seeded both tiers.
+    let held = proposals.workers.with_dependent_mut(|_, workspaces| {
+        workspaces
+            .iter()
+            .map(|workspace| workspace.scratch.learned_rows())
+            .collect::<Vec<_>>()
+    });
+    assert_eq!(held, [1, 1]);
 }

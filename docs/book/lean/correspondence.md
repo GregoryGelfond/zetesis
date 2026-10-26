@@ -2813,6 +2813,18 @@ and an interrupted rebuild is never read. Exhaustive comparison of indexed and
 scanning tiers over partial regions checks this obligation; no Lean law states
 it.
 
+The store (`LearnedStore` in zetesis-stable, over zetesis-ferraris's
+`LearningStore`) holds rows by class. Its Rust obligations: a tier delivers only
+under its own owner's class, so every store row of a class was learned by that
+class's carrier and is a row of the class (`founded_row` for every row today);
+seeding and delivery are retention, publishing only complete rows under the
+same allowances, typed stops and transactional failure as capture; they run
+only at walk boundaries, never inside a narrowing, so one narrowing reads one
+tier throughout; and no store row reaches a membership check or a coverage
+claim. Sharing needs no new law: `RowOf` does not mention regions, so a row of a
+class is a row for every walk of that class, and dropping one, by eviction or by
+the quality filter, loses pruning only.
+
 `PossibleFoundedness.conditional_unsupported_union` combines already established
 absence consequences under the same interpretation condition by taking the union
 of their unsupported atoms. Their producer witnesses may differ. The ledger can

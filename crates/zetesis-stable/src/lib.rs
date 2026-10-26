@@ -32,7 +32,7 @@ pub use ferraris::{
     BatchError, BatchLimits, BatchStatistics, BatchVerdict, CertificateError, CertificateLimits,
     CertificateOrder, CertificatePlanStatistics, CertifiedStatistics, Check, CompletionExecutor,
     CompletionStatistics, Engagement, FrontierOrder, GeneratorOrderStatistics,
-    GeneratorOrderStatus, Limits, Lookahead, LookaheadDeclined, RegionCounts,
+    GeneratorOrderStatus, LearnedStore, Limits, Lookahead, LookaheadDeclined, RegionCounts,
     RegionFrontierStatistics, RegionSearchStatistics, RegionWalkEngagement, RegionWorkerStatistics,
     SlateProposal, SlateTicket, StableModels, Statistics, check,
 };

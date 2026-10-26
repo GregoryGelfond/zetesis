@@ -560,7 +560,7 @@ mod preference;
 fn a_foreign_theory_has_no_walk_subject() {
     let cancellation = Cancellation::default();
     let mut budget = budget(&cancellation, u64::MAX);
-    let opened = open(&cycle(), u64::MAX, &mut budget).unwrap();
+    let opened = open(&cycle(), u64::MAX, LearningLimits::DEFAULT, &mut budget).unwrap();
     assert!(matches!(
         opened.parts.subject(&positive()),
         Err(Incomplete::WrongTheory)
@@ -574,7 +574,14 @@ fn the_walk_subject_learns_rows_of_its_theory() {
     let theory = cycle();
     let cancellation = Cancellation::default();
     let mut budget = budget(&cancellation, u64::MAX);
-    let mut search = RegionSearch::new(&theory, u64::MAX, u64::MAX, &mut budget).unwrap();
+    let mut search = RegionSearch::new(
+        &theory,
+        u64::MAX,
+        u64::MAX,
+        LearningLimits::DEFAULT,
+        &mut budget,
+    )
+    .unwrap();
     let index = built(&theory);
     while search
         .propose(&theory, &index, &mut budget, &mut None)

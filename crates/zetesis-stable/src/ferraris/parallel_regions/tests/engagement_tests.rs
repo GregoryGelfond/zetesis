@@ -1116,3 +1116,34 @@ fn frozen_positive_receipts_survive_every_worker_route() {
         assert_eq!(models.statistics().reduct, statistics.reduct);
     }
 }
+
+#[test]
+fn the_coordinator_delivers_its_rows_when_it_engages() {
+    // The root's pass captures the loop's absence on the calling thread. The
+    // workers inherit the loop cut, so they never capture it themselves: the
+    // store can hold it only from the coordinator's handover.
+    let theory = loop_beside_choices(3);
+    let (mut search, index) = walk(&theory, LATE);
+    let store = Arc::new(crate::LearnedStore::new());
+    search.set_learned_store(Arc::clone(&store)).unwrap();
+    let cancellation = search.shared.cancellation.clone();
+    let mut budget = caller(&search, &cancellation);
+    let mut answers = 0;
+    while search
+        .propose_with(&index, None, false, &mut budget, &mut |_| answers > 0)
+        .unwrap()
+        .is_some()
+    {
+        answers += 1;
+        if answers == 1 {
+            assert!(store.lock().is_empty());
+        }
+    }
+    assert_eq!(answers, 8);
+    assert!(matches!(
+        search.statistics().workers.unwrap().engagement,
+        RegionWalkEngagement::Engaged { .. }
+    ));
+    assert_eq!(store.lock().len(), 1);
+    assert_eq!(search.statistics().counts.support_explanations.certified, 1);
+}

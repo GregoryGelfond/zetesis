@@ -16,3 +16,16 @@ fn search_limits_follow_their_named_owner_allowances() {
     assert_eq!(limits.max_native_narrowing_bytes, 1024);
     assert_eq!(limits.max_reduct_bytes, 2048);
 }
+
+#[test]
+fn learned_tiers_grow_with_the_candidate_allowance() {
+    let limits = |bytes| {
+        search_limits(&SolveConfig {
+            max_candidate_bytes: bytes,
+            ..SolveConfig::default()
+        })
+        .learning
+    };
+    assert_eq!(limits(1024), zetesis_ferraris::LearningLimits::DEFAULT);
+    assert_eq!(limits(512 << 20).tier_rows, 512);
+}

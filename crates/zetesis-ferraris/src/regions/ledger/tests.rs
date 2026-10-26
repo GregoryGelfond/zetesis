@@ -191,16 +191,16 @@ fn input<'a>(
 fn small_allowances_keep_the_default_limits() {
     assert_eq!(LearningLimits::for_allowance(0), LearningLimits::default());
     assert_eq!(
-        LearningLimits::for_allowance(1 << 30),
+        LearningLimits::for_allowance(64 << 20),
         LearningLimits::default()
     );
 }
 
 #[test]
 fn tier_rows_grow_with_the_allowance_up_to_their_ceiling() {
-    let limits = LearningLimits::for_allowance(8 << 30);
+    let limits = LearningLimits::for_allowance(512 << 20);
     assert_eq!((limits.tier_rows, limits.store_rows), (512, 2048));
-    assert_eq!(LearningLimits::for_allowance(u64::MAX).tier_rows, 4096);
+    assert_eq!(LearningLimits::for_allowance(usize::MAX).tier_rows, 4096);
 }
 
 #[test]

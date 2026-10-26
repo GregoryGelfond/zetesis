@@ -160,6 +160,23 @@ Deleting a row loses pruning only. The original theory and membership check stay
 unchanged, and no row enters a membership certificate. Optional capture limits
 lose only reuse; a global resource or cancellation failure still stops the
 operation.
+
+A solve's candidate streams share learned rows through one store, which holds
+rows by class. A walk seeds a tier from the store before the tier's first
+narrowing, and delivers the tier to it at the walk's boundaries: at its end,
+when a parallel walk's coordinator hands over to its workers, at each join of the
+GPU route's producers, and each time the walk has visited the owner's
+`publish_regions` regions since the tier last delivered (4,096 by default). None
+of these is inside a narrowing. A tier delivers only rows of at most 8
+conditions, or rows with at least two recent hits; a row it keeps to itself still
+prunes its own walk. Seeding and delivery are retention,
+so a row the receiving side holds or subsumes is not added twice, and a full
+store evicts the row with the fewest recent hits. No public operation adds,
+seeds, edits or reads a row: a caller chooses which streams share a store
+(`StableModels::set_learned_store`), never what is learned. A solve shares by
+default; `SolveConfig::share_learned_rows` turns sharing off for measurement and
+has no command-line flag. Rows prune candidate regions only, so the answer sets
+are the same with or without sharing.
 The [correspondence discussion](../lean/correspondence.md) separates the semantic
 law from the collector and runtime obligations.
 
