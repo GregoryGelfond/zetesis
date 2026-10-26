@@ -417,7 +417,9 @@ impl GpuFormulaOracle {
                     .map(|resident| resident.graph.workgroup_size)
             })
             .ok_or_else(|| GpuError::new(GpuErrorKind::Device, "missing resident formula"))?;
-        self.profile.runtime.ensure_pipeline(workgroup_size)?;
+        self.profile
+            .runtime
+            .ensure_pipeline(workgroup_size, crate::runtime::Variant::Full)?;
         let scopes = ErrorScopes::new(self.profile.runtime.device());
         if let Some(prepared) = fresh {
             self.resident = Some(Resident::new(self.profile.runtime.device(), prepared));

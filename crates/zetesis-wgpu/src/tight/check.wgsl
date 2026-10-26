@@ -14,6 +14,13 @@
 // The pipeline keeps WebGPU's zero-fill of workgroup memory, which this rule
 // makes unobservable; CONTRIBUTING ("Carry the semantic contract into Lean and
 // Rust") records the fill's status and what removing it requires.
+// Each support policy has two entry points. `check` and `check_grouped` carry
+// the update route, for a theory whose schedule may engage it. `check_dense`
+// and `check_grouped_dense` evaluate complete or dense truth only, for a theory
+// whose route is declined for its whole residency: their call graph reads no
+// update state, so a pipeline compiled from them binds no state (binding 8)
+// and allocates none of the update's workgroup variables. Both kinds write the
+// same records; the dense kind records every slot unseeded.
 override WORKGROUP_SIZE: u32 = 64u;
 const NODE_FALSE: u32 = 0u;
 const NODE_ATOM: u32 = 1u;
@@ -70,7 +77,8 @@ struct Slot {
 // the touched and unsupported atom sets, the false-root set over root
 // positions, the queued set over schedule positions, and packed support counts
 // of `params.count_bits` bits per head. Only read or written while the update
-// route is allowed; otherwise it may be a placeholder.
+// route is allowed; otherwise it may be a placeholder. The dense entry points
+// never name it, so their pipelines do not bind it.
 @group(0) @binding(8) var<storage, read_write> state: array<atomic<u32>>;
 // The least false root and unsupported atom: invocation 0 stores their bounds
 // at entry; without the update route the dense routes' barriers, and with it
@@ -435,7 +443,7 @@ fn update_slot(world: u32, lane: u32, values: u32, current: u32, slot: Slot) {
 
 // The complete route, or dense reuse of a retained evaluation.
 fn evaluate_dense(world: u32, lane: u32, grouped: bool, values: u32, supported: u32,
-    slot: Slot, reuse: bool) {
+    reuse: bool) {
     if (params.levels == 0u) {
         if (lane == 0u) {
             for (var index = 0u; index < params.nodes; index++) {
@@ -501,15 +509,44 @@ fn evaluate_dense(world: u32, lane: u32, grouped: bool, values: u32, supported: 
             atomicMin(&first_atom, word * 32u + firstTrailingBit(missing));
         }
     }
-    // With the update route allowed, retain the evaluated candidate and require
-    // a new summary; the slot's record then says it is seeded. Otherwise no
-    // route touches the state, and the record says the slot is not seeded.
+}
+
+// With the update route allowed, a dense evaluation retains the candidate it
+// evaluated and requires a new summary; the slot's record then says it is
+// seeded. Without the route no evaluation touches the state, and the record
+// says the slot is not seeded.
+fn retain_for_update(lane: u32, supported: u32, slot: Slot) {
     if (params.allowed != 0u) {
         for (var word = lane; word < params.words; word += WORKGROUP_SIZE) {
             atomicStore(&state[slot.retained + word], candidates[supported + word]);
         }
         if (lane == 0u) { atomicStore(&state[slot.summarized], 0u); }
     }
+}
+
+// Invocation 0's record of slot `world`, after the final barrier: epoch, slot,
+// the verdict from the least false root and unsupported atom, work, marker,
+// route, nodes evaluated, and whether the slot's update state was seeded.
+fn store_record(world: u32, marker: u32, route: u32, work: u32, nodes_evaluated: u32,
+    seeded: u32) {
+    let root = atomicLoad(&first_root);
+    let atom = atomicLoad(&first_atom);
+    var status = STATUS_STABLE;
+    var witness = 0u;
+    if (root < params.roots) { status = STATUS_NOT_MODEL; witness = root; }
+    else if (atom < params.atoms) { status = STATUS_RESIDUAL; witness = atom; }
+    let base = world * RESULT_WORDS;
+    results[base] = params.epoch;
+    results[base + 1u] = world;
+    results[base + 2u] = status;
+    results[base + 3u] = witness;
+    results[base + 4u] = work;
+    // The same branch selector determines support construction and its
+    // receipt. The host refuses a record from the other physical policy.
+    results[base + 5u] = marker;
+    results[base + 6u] = route;
+    results[base + 7u] = nodes_evaluated;
+    results[base + 8u] = seeded;
 }
 
 fn check_support(world: u32, lane: u32, grouped: bool) {
@@ -534,7 +571,7 @@ fn check_support(world: u32, lane: u32, grouped: bool) {
         // no barrier, so every invocation takes the choice from the record
         // itself; the dense routes' barriers order the stores above before any
         // other invocation's atomic.
-        evaluate_dense(world, lane, grouped, values, supported, slot, reuse);
+        evaluate_dense(world, lane, grouped, values, supported, reuse);
     } else {
         if (lane == 0u) {
             atomicStore(&changed_atoms, 0u);
@@ -561,18 +598,13 @@ fn check_support(world: u32, lane: u32, grouped: bool) {
         if (chosen == ROUTE_UPDATE) {
             update_slot(world, lane, values, supported, slot);
         } else {
-            evaluate_dense(world, lane, grouped, values, supported, slot, chosen != ROUTE_COMPLETE);
+            evaluate_dense(world, lane, grouped, values, supported, chosen != ROUTE_COMPLETE);
+            retain_for_update(lane, supported, slot);
         }
         route = chosen;
     }
     workgroupBarrier();
     if (lane == 0u) {
-        let root = atomicLoad(&first_root);
-        let atom = atomicLoad(&first_atom);
-        var status = STATUS_STABLE;
-        var witness = 0u;
-        if (root < params.roots) { status = STATUS_NOT_MODEL; witness = root; }
-        else if (atom < params.atoms) { status = STATUS_RESIDUAL; witness = atom; }
         var work = params.work;
         var nodes_evaluated = 0u;
         // Dense reuse after a change count also charges the count.
@@ -585,18 +617,33 @@ fn check_support(world: u32, lane: u32, grouped: bool) {
                 RESULT_WORDS + atomicLoad(&performed);
             nodes_evaluated = atomicLoad(&evaluated);
         }
-        let base = world * RESULT_WORDS;
-        results[base] = params.epoch;
-        results[base + 1u] = world;
-        results[base + 2u] = status;
-        results[base + 3u] = witness;
-        results[base + 4u] = work;
-        // The same branch selector determines support construction and its
-        // receipt. The host refuses a record from the other physical policy.
-        results[base + 5u] = marker;
-        results[base + 6u] = route;
-        results[base + 7u] = nodes_evaluated;
-        results[base + 8u] = params.allowed;
+        store_record(world, marker, route, work, nodes_evaluated, params.allowed);
+    }
+}
+
+// The kernel of a theory whose update route is declined for its residency:
+// complete evaluation, or dense reuse under the record's authority, exactly as
+// the full kernel runs with the route not allowed, and a record saying the
+// slot is not seeded. It names no update state and no update counter.
+fn check_support_dense(world: u32, lane: u32, grouped: bool) {
+    let values = world * params.nodes;
+    let supported = world * params.words;
+    let prior = world * RESULT_WORDS;
+    let marker = select(RESULT_MAGIC, RESULT_GROUPED_MAGIC, grouped);
+    // The same authority as the full kernel's: the host either retained
+    // explicit successful ownership or cleared these hints in this encoder.
+    let reuse = params.epoch > 1u && results[prior] == params.epoch - 1u &&
+        results[prior + 1u] == world && results[prior + 5u] == marker;
+    if (lane == 0u) {
+        atomicStore(&first_root, params.roots);
+        atomicStore(&first_atom, params.atoms);
+    }
+    // The dense routes' barriers order the stores above before any other
+    // invocation's atomic.
+    evaluate_dense(world, lane, grouped, values, supported, reuse);
+    workgroupBarrier();
+    if (lane == 0u) {
+        store_record(world, marker, select(ROUTE_COMPLETE, ROUTE_DENSE, reuse), params.work, 0u, 0u);
     }
 }
 
@@ -608,4 +655,14 @@ fn check(@builtin(workgroup_id) group: vec3<u32>, @builtin(local_invocation_inde
 @compute @workgroup_size(WORKGROUP_SIZE)
 fn check_grouped(@builtin(workgroup_id) group: vec3<u32>, @builtin(local_invocation_index) lane: u32) {
     check_support(group.x, lane, true);
+}
+
+@compute @workgroup_size(WORKGROUP_SIZE)
+fn check_dense(@builtin(workgroup_id) group: vec3<u32>, @builtin(local_invocation_index) lane: u32) {
+    check_support_dense(group.x, lane, false);
+}
+
+@compute @workgroup_size(WORKGROUP_SIZE)
+fn check_grouped_dense(@builtin(workgroup_id) group: vec3<u32>, @builtin(local_invocation_index) lane: u32) {
+    check_support_dense(group.x, lane, true);
 }

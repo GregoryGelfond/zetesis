@@ -749,11 +749,15 @@ than without it.
 
 A narrower schedule declines the route with the typed reason `NarrowSchedule`
 from its theory's first batch on. It builds no index and holds no state, and its
-routes neither read nor write the state, charge their stateless allowance and
-synchronize as they did before the route existed. What the route still costs
-such a schedule is its larger parameter block and result records, 64 rather
-than 32 bytes per batch and 36 rather than 24 per candidate, and a 16-byte
-placeholder for the state binding. Admission of a scheduled layout also
+routes charge their stateless allowance and synchronize as they did before the
+route existed. A theory declined for its whole residency, by a narrow or serial
+schedule or by refused index bounds, runs the kernel's dense twin: an entry
+point that evaluates complete or dense truth as the full kernel does with the
+route not allowed, and whose call graph never names the route. Its pipeline
+therefore binds no state and compiles none of the route's phases, counters or
+decisions, and each variant is compiled at its first need. What the route still
+costs such a schedule is its larger parameter block and result records, 64
+rather than 32 bytes per batch and 36 rather than 24 per candidate. Admission of a scheduled layout also
 reserves the owner column and the per-head producer counters before the level
 widths are known; a narrow schedule releases both once packed, and its batch
 accounts neither. An exact call whose cold batch fits the scheduled layout only

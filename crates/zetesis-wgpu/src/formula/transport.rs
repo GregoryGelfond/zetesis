@@ -3,7 +3,7 @@
 use super::FormulaCheck;
 use super::packing::{self, Graph, PARAM_BYTES, Plan};
 use super::preparation::PreparedGraph;
-use crate::runtime::{self, Dispatch, buffer, entry, initialized};
+use crate::runtime::{self, Dispatch, Variant, buffer, entry, initialized};
 use crate::{GpuError, GpuErrorKind};
 use std::time::Duration;
 
@@ -60,7 +60,7 @@ impl Resident {
     ) -> Result<Dispatched, GpuError> {
         let device = runtime.device();
         let queue = runtime.queue();
-        let pipeline = runtime.pipeline_for(self.graph.workgroup_size)?;
+        let pipeline = runtime.pipeline_for(self.graph.workgroup_size, Variant::Full)?;
         if self.transport.is_none() {
             self.transport = Some(Transport::new(device, pipeline, self, plan)?);
         }

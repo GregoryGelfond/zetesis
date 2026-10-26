@@ -206,6 +206,7 @@ impl GpuFormulaProfile {
             pipeline_label: "cooperative finite-formula query",
             shader: projection.shader()?,
             entry_point: "propagate",
+            dense_entry_point: None,
             validate_limits: check_limits,
             kernel: crate::kernel::Kernel::Formula(crate::GpuKernelOptions::default()),
         })
@@ -245,4 +246,17 @@ pub(super) fn check_limits(limits: &wgpu::Limits) -> Result<(), GpuError> {
         }
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{GateProjection, GpuFormulaProfile};
+
+    #[test]
+    fn every_formula_projection_translates_to_spirv() {
+        for projection in GateProjection::ALL {
+            let profile = GpuFormulaProfile::descriptor(projection).unwrap();
+            crate::spirv_translation::assert_profile_translates(&profile);
+        }
+    }
 }

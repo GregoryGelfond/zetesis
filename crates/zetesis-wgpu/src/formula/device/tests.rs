@@ -516,6 +516,15 @@ fn tight_first_need(backend: GpuApi) {
         )
         .unwrap();
     assert_eq!(tight.compiled_sizes(), [crate::GpuWorkgroupSize::Threads64]);
+    // The narrow schedule declines the update route for the theory's
+    // residency, so its first need compiles the dense kernel alone.
+    assert_eq!(
+        tight.compiled_pipelines(),
+        [(
+            crate::GpuWorkgroupSize::Threads64,
+            crate::runtime::Variant::Dense
+        )]
+    );
 }
 
 #[test]

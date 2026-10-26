@@ -7,6 +7,11 @@ use zetesis_cpu::Stop;
 
 mod compact;
 
+#[test]
+fn the_relation_kernel_translates_to_spirv() {
+    crate::spirv_translation::assert_profile_translates(&GpuRelationExecutor::profile());
+}
+
 fn interrupted_copy(backend: GpuApi) {
     let mut executor =
         GpuRelationExecutor::new_selected(GpuOptions::default(), GpuSelection { api: backend })

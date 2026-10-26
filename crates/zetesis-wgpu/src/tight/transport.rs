@@ -3,7 +3,7 @@
 use super::packing::{self, Decoded, Graph, PARAM_BYTES, Packed, Plan};
 use super::update::{self, Built, Stage};
 use super::{TightGpuActivity, poll};
-use crate::runtime::{self, Dispatch, buffer, entry, initialized};
+use crate::runtime::{self, Dispatch, Variant, buffer, entry, initialized};
 use crate::{GpuError, GpuErrorKind};
 use std::time::Duration;
 use zetesis_cpu::Cancellation;
@@ -106,6 +106,7 @@ impl Resident {
             device,
             queue,
             pipeline,
+            variant,
             timeout,
             cancellation,
             timer,
@@ -117,8 +118,10 @@ impl Resident {
             generation: self.producers_generation,
         };
         match self.transport.as_mut() {
-            Some(transport) => transport.conform(device, pipeline, &bindings, plan),
-            None => self.transport = Some(Transport::new(device, pipeline, &bindings, plan)?),
+            Some(transport) => transport.conform(device, pipeline, variant, &bindings, plan),
+            None => {
+                self.transport = Some(Transport::new(device, pipeline, variant, &bindings, plan)?);
+            }
         }
         let transport = self
             .transport
@@ -190,6 +193,8 @@ pub(super) struct Execution<'a> {
     pub(super) device: &'a wgpu::Device,
     pub(super) queue: &'a wgpu::Queue,
     pub(super) pipeline: &'a wgpu::ComputePipeline,
+    /// The kernel `pipeline` compiles: the dense twin binds no update state.
+    pub(super) variant: Variant,
     pub(super) timeout: Duration,
     pub(super) cancellation: &'a Cancellation,
     /// The oracle's timer, present under enabled timing.
@@ -212,10 +217,14 @@ pub(super) struct Transport {
     support: wgpu::Buffer,
     results: wgpu::Buffer,
     readback: wgpu::Buffer,
-    /// The per-slot update state, or a placeholder when none is bound.
-    state: wgpu::Buffer,
-    /// The state's bytes; zero for the placeholder.
+    /// The per-slot update state, or the full kernel's placeholder when none
+    /// is bound; absent under the dense kernel, which binds no state.
+    state: Option<wgpu::Buffer>,
+    /// The state's bytes; zero for the placeholder or no state.
     state_bytes: u64,
+    /// The kernel `group` binds for: the full kernel's layout has binding 8,
+    /// the dense twin's does not.
+    variant: Variant,
     group: wgpu::BindGroup,
     /// The producer buffer generation `group` binds.
     generation: u64,
@@ -227,6 +236,7 @@ impl Transport {
     fn new(
         device: &wgpu::Device,
         pipeline: &wgpu::ComputePipeline,
+        variant: Variant,
         bindings: &Bindings<'_>,
         plan: &Plan,
     ) -> Result<Self, GpuError> {
@@ -271,12 +281,13 @@ impl Transport {
             readback_bytes,
             wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
         );
-        let state = state_buffer(device, plan.state);
+        let state = state_buffer(device, variant, plan.state);
         let group = bind(
             device,
             pipeline,
             bindings,
-            [&params, &seeds, &truth, &support, &results, &state],
+            [&params, &seeds, &truth, &support, &results],
+            state.as_ref(),
         );
         Ok(Self {
             worlds: plan.worlds,
@@ -288,6 +299,7 @@ impl Transport {
             readback,
             state,
             state_bytes: plan.state,
+            variant,
             group,
             generation: bindings.generation,
             timed,
@@ -295,23 +307,27 @@ impl Transport {
         })
     }
 
-    /// Bring a retained transport to `plan`'s state and the resident's current
-    /// producer buffer, keeping its truth and result authority. A state is
-    /// added only where the placeholder was bound, so the previous records,
-    /// written without the route allowed, say no slot is seeded; a dropped
-    /// state takes its retained evaluations with it, and this batch, without the
-    /// route, records every slot unseeded. Either change rebinds.
+    /// Bring a retained transport to `plan`'s state, `variant`'s kernel and the
+    /// resident's current producer buffer, keeping its truth and result
+    /// authority. A state is added only where the placeholder, or no state, was
+    /// bound, so the previous records, written without the route allowed, say
+    /// no slot is seeded; a dropped state takes its retained evaluations with
+    /// it, and this batch, without the route, records every slot unseeded. A
+    /// theory whose route becomes declined for its residency moves to the dense
+    /// kernel and drops its state. Each of these changes rebinds.
     fn conform(
         &mut self,
         device: &wgpu::Device,
         pipeline: &wgpu::ComputePipeline,
+        variant: Variant,
         bindings: &Bindings<'_>,
         plan: &Plan,
     ) {
-        let state_changed = self.state_bytes != plan.state;
+        let state_changed = self.state_bytes != plan.state || self.variant != variant;
         if state_changed {
-            self.state = state_buffer(device, plan.state);
+            self.state = state_buffer(device, variant, plan.state);
             self.state_bytes = plan.state;
+            self.variant = variant;
         }
         if state_changed || self.generation != bindings.generation {
             self.group = bind(
@@ -324,53 +340,61 @@ impl Transport {
                     &self.truth,
                     &self.support,
                     &self.results,
-                    &self.state,
                 ],
+                self.state.as_ref(),
             );
             self.generation = bindings.generation;
         }
     }
 }
 
-/// The update state of `bytes`, or the placeholder when `bytes` is zero.
-/// Device buffers start zeroed, so every slot starts unseeded.
-fn state_buffer(device: &wgpu::Device, bytes: u64) -> wgpu::Buffer {
-    if bytes == 0 {
-        buffer(
+/// The update state of `bytes` for the full kernel, or its placeholder when
+/// `bytes` is zero; nothing for the dense kernel, which binds no state. Device
+/// buffers start zeroed, so every slot starts unseeded.
+fn state_buffer(device: &wgpu::Device, variant: Variant, bytes: u64) -> Option<wgpu::Buffer> {
+    match (variant, bytes) {
+        (Variant::Dense, _) => None,
+        (Variant::Full, 0) => Some(buffer(
             device,
             "tight update placeholder",
             update::PLACEHOLDER_BYTES,
             wgpu::BufferUsages::STORAGE,
-        )
-    } else {
-        buffer(
+        )),
+        (Variant::Full, bytes) => Some(buffer(
             device,
             "tight update state",
             bytes,
             wgpu::BufferUsages::STORAGE,
-        )
+        )),
     }
 }
 
+/// The resident's and the transport's buffers as `pipeline`'s layout binds
+/// them: binding 8 holds `state` for the full kernel, and the dense twin's
+/// layout has no binding 8.
 fn bind(
     device: &wgpu::Device,
     pipeline: &wgpu::ComputePipeline,
     bindings: &Bindings<'_>,
-    [params, seeds, truth, support, results, state]: [&wgpu::Buffer; 6],
+    [params, seeds, truth, support, results]: [&wgpu::Buffer; 5],
+    state: Option<&wgpu::Buffer>,
 ) -> wgpu::BindGroup {
+    let mut entries = vec![
+        entry(0, params),
+        entry(1, bindings.nodes),
+        entry(2, bindings.roots),
+        entry(3, bindings.producers),
+        entry(4, seeds),
+        entry(5, truth),
+        entry(6, support),
+        entry(7, results),
+    ];
+    if let Some(state) = state {
+        entries.push(entry(8, state));
+    }
     device.create_bind_group(&wgpu::BindGroupDescriptor {
         label: Some("resident tight support"),
         layout: &pipeline.get_bind_group_layout(0),
-        entries: &[
-            entry(0, params),
-            entry(1, bindings.nodes),
-            entry(2, bindings.roots),
-            entry(3, bindings.producers),
-            entry(4, seeds),
-            entry(5, truth),
-            entry(6, support),
-            entry(7, results),
-            entry(8, state),
-        ],
+        entries: &entries,
     })
 }

@@ -130,6 +130,7 @@ impl GpuLazyOracle {
             pipeline_label: "zetesis lazy consequence pipeline",
             shader: Cow::Borrowed(SHADER),
             entry_point: "consequence",
+            dense_entry_point: None,
             kernel: crate::kernel::Kernel::Fixed,
             validate_limits: check_limits,
         }
@@ -460,6 +461,11 @@ mod tests {
     use std::num::NonZeroU32;
     use zetesis_core::{AdmissionLimits, AtomPattern, Predicate, Program, Seed, Template};
     use zetesis_cpu::{Cancellation, lazy};
+
+    #[test]
+    fn the_lazy_kernel_translates_to_spirv() {
+        crate::spirv_translation::assert_profile_translates(&super::GpuLazyOracle::profile());
+    }
 
     pub(super) fn inspect(mut assertion: impl FnMut(&lazy::Chunk<'_>)) {
         let a = AtomPattern::new(Predicate::new("a", 0).unwrap(), vec![]).unwrap();
