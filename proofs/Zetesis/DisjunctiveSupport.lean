@@ -285,4 +285,38 @@ theorem answer_set_supported_with_choices (M : Atoms α) (T : Theory α)
     exact (reverse a present).2 rfl
   exact answer.2 ⟨remove M a, proper, reductModel⟩
 
+/-- The completion of an atom defined only by normal rules holds in every
+answer set. Under a complete inventory in which every producer whose head
+contains the atom is a rule with the atom as its sole head, and no choice has
+the atom as its head, the atom is true exactly when one of those rules' bodies
+is.
+
+Proof. A body that holds makes its rule's head true, since an answer set models
+its theory. Conversely a true atom of an answer set has ordinary or choice
+support (`answer_set_supported_with_choices`). No choice has the atom as its
+head, and every ordinary producer containing it is one of the listed rules, so
+a supporting rule is one of them, and its body holds. A choice or a disjunctive
+head would satisfy its formula with the atom false, so neither may define it. -/
+theorem answer_set_completion (M : Atoms α) (T : Theory α)
+    (rules : List (Producer α)) (choices : List (ChoiceProducer α))
+    (covered : CoveredWithChoices T rules choices)
+    (original : ∀ r ∈ rules, r.formula ∈ T)
+    (p : α) (bodies : List (Formula α))
+    (producers : ∀ B ∈ bodies, Producer.rule B (.atom p) ∈ rules)
+    (sole : ∀ r ∈ rules, r.head.Contains p → ∃ B ∈ bodies, r = .rule B (.atom p))
+    (unchosen : ∀ c ∈ choices, c.head ≠ p)
+    (answer : Stable M T) :
+    M p ↔ ∃ B ∈ bodies, Satisfies M B := by
+  constructor
+  · intro present
+    rcases answer_set_supported_with_choices M T rules choices covered answer p present with
+      ⟨r, inRules, supports⟩ | ⟨c, inChoices, supports⟩
+    · obtain ⟨B, listed, rfl⟩ := sole r inRules supports.2.1
+      exact ⟨B, listed, supports.1⟩
+    · exact absurd supports.2 (unchosen c inChoices)
+  · rintro ⟨B, listed, enabled⟩
+    have asserted : Satisfies M (Producer.rule B (.atom p)).formula :=
+      answer.1 _ (original _ (producers B listed))
+    exact asserted enabled
+
 end Zetesis.DisjunctiveSupport

@@ -141,6 +141,32 @@ theorem fold_perm (value : M → V) {first second : List M} (same : first.Perm s
   | trans _ _ first_eq second_eq =>
     exact first_eq.trans second_eq
 
+/-- A fold depends only on its members' values: two value functions that agree
+on every member fold alike. -/
+theorem fold_congr {value other : M → V} {members : List M}
+    (agree : ∀ m ∈ members, value m = other m) :
+    r.fold value members = r.fold other members := by
+  induction members with
+  | nil => rfl
+  | cons head rest ih =>
+    have headAgrees : value head = other head := agree head (List.mem_cons_self ..)
+    have restAgrees : ∀ m ∈ rest, value m = other m :=
+      fun m member => agree m (List.mem_cons_of_mem head member)
+    rw [r.fold_cons, r.fold_cons, headAgrees, ih restAgrees]
+
+/-- Folding the images of the members is folding the members' composed values. -/
+theorem fold_map {N : Type w} (value : N → V) (image : M → N) (members : List M) :
+    r.fold value (members.map image) = r.fold (fun m => value (image m)) members := by
+  induction members with
+  | nil => rfl
+  | cons head rest ih => rw [List.map_cons, r.fold_cons, r.fold_cons, ih]
+
+/-- Folding the identity for every member gives the identity. -/
+theorem fold_unit (members : List M) : r.fold (fun _ => r.unit) members = r.unit := by
+  induction members with
+  | nil => rfl
+  | cons head rest ih => rw [r.fold_cons, ih, r.unit_op]
+
 /-- **Absorption.** Folding any further members into an absorbing accumulator
 leaves it unchanged. -/
 theorem foldFrom_absorbing (value : M → V) {absorber : V} (absorbing : r.Absorbing absorber)

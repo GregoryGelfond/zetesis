@@ -97,6 +97,46 @@ theorem models_reduct_self (M : Atoms α) (T : Theory α) :
     obtain ⟨G, hG, rfl⟩ := List.mem_map.mp hF
     exact (reduct_self M G).mpr (h G hG)
 
+/-- The atoms a formula mentions. -/
+def Mentions : Formula α → α → Prop
+  | .atom b, a => a = b
+  | .bot, _ => False
+  | .conj F G, a => Mentions F a ∨ Mentions G a
+  | .disj F G, a => Mentions F a ∨ Mentions G a
+  | .imp F G, a => Mentions F a ∨ Mentions G a
+
+/-- Satisfaction depends only on the atoms a formula mentions: two
+interpretations that agree on a set containing them satisfy the formula alike.
+
+Proof. By induction on the formula; an atom is satisfied alike because the
+interpretations agree on it, and each connective combines its parts' truth. -/
+theorem satisfies_congr {S M N : Atoms α} (agree : EqOn S M N) :
+    ∀ F : Formula α, (∀ a, Mentions F a → S a) → (Satisfies M F ↔ Satisfies N F)
+  | .atom b, inside => agree b (inside b rfl)
+  | .bot, _ => Iff.rfl
+  | .conj F G, inside => by
+    have left := satisfies_congr agree F (fun a mentioned => inside a (Or.inl mentioned))
+    have right := satisfies_congr agree G (fun a mentioned => inside a (Or.inr mentioned))
+    simp only [Satisfies, left, right]
+  | .disj F G, inside => by
+    have left := satisfies_congr agree F (fun a mentioned => inside a (Or.inl mentioned))
+    have right := satisfies_congr agree G (fun a mentioned => inside a (Or.inr mentioned))
+    simp only [Satisfies, left, right]
+  | .imp F G, inside => by
+    have left := satisfies_congr agree F (fun a mentioned => inside a (Or.inl mentioned))
+    have right := satisfies_congr agree G (fun a mentioned => inside a (Or.inr mentioned))
+    simp only [Satisfies, left, right]
+
+/-- A theory whose formulas mention only atoms of a set is modelled alike by
+two interpretations that agree on the set. -/
+theorem models_congr {S M N : Atoms α} (agree : EqOn S M N) (T : Theory α)
+    (inside : ∀ F ∈ T, ∀ a, Mentions F a → S a) : Models M T ↔ Models N T := by
+  constructor
+  · intro model F member
+    exact (satisfies_congr agree F (inside F member)).mp (model F member)
+  · intro model F member
+    exact (satisfies_congr agree F (inside F member)).mpr (model F member)
+
 theorem stable_iff_minimal_reduct (M : Atoms α) (T : Theory α) :
     Stable M T ↔ MinimalModel M (ReductTheory M T) := by
   classical

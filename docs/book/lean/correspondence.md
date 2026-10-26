@@ -2923,60 +2923,52 @@ The laws are over interpretations and cubes; the ledger's encoding, matching,
 retention, eviction, ownership, delivery between workers and resource handling
 remain Rust obligations, stated with the ledger below.
 
-[`EntailedPruning`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/EntailedPruning.lean)
-states the outermost law of narrowing by a theory's own consequences. An answer
-set models its theory, so a property that every model of the theory, or of
-formulas drawn from it, has, every answer set has
-(`stable_satisfies_entailed`, `stable_satisfies_entailed_by_part`). A region in
-which no interpretation has the property contains no answer set
-(`refuted_region_excludes`, the premise of `CoverageTree.refuted` with the answer
-sets as the valid predicate), and what every interpretation of a region with
-the property satisfies, every answer set in the region satisfies
-(`forced_in_region`, the form of `Cube.narrow_preserves_valid`'s premises).
-Membership is not involved: a candidate is still accepted only by the reduct's
-check.
+[`AlgebraicRows`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/AlgebraicRows.lean)
+states algebraic consequences for any consequence class, as `RowOf` does. A term
+pairs an atom with a value, and a list of terms is measured in an interpretation
+by folding a commutative monoid (`AxisFolds.Reduction`) over the values of the
+terms whose atoms hold; `measure_congr` makes the measure local to the terms'
+atoms. In an abelian group, equations of a class add (`equation_sum`), terms with
+inverse values cancel (`measure_cancel`), and literals giving every other atom
+its value isolate one atom's contribution (`equation_isolates`). The isolated
+value forces the atom true or false, a row of the class
+(`equation_forces_true`, `equation_forces_false`), or excludes the conditions
+given (`equation_excludes`, `equation_excludes_given`); `excludes_region` and
+`consequence_row_forces` carry either into a region that decides the
+conditions (`decides_truth`). In an ordered commutative monoid, two families of
+rows covering the same terms exclude the class when their lower bounds' fold
+does not lie below their upper bounds' (`double_count_excludes`). In a region,
+held atoms may raise a lower bound and atoms not cut lower an upper bound
+(`lower_in_of_held`, `upper_in_of_possible`, `double_count_excludes_region`), and
+`cut_excludes_region` accepts a bipartite cut certificate whose missed terms
+count as the region's held and open atoms. The instances are `parity`, the
+Booleans under exclusive-or (`parity_forces`), and `counting`, the natural
+numbers under addition, which `count_measure` connects to `PartitionCapacities`
+(`double_count_groups`).
 
-[`ParityRows`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/ParityRows.lean)
-applies it to parity. An interpretation restricted to a coordinate list is a
-vector over GF(2), and a row is a mask over the coordinates with the parity its
-selected atoms must have (`Holds`, a dot product by `parity_select`).
-`combination_sound` shows that the sum of satisfied rows of the list's length,
-the coordinatewise exclusive-or of masks and of constants, is satisfied, so
-elimination's row operations preserve the solution set. `region_refutes` refutes
-a region that decides every atom a row selects when the held atoms' parity
-differs from the row's constant, and `region_forces` forces the one undecided
-atom of odd multiplicity. `affine_group_sound` derives rows from a group of
-constraints over a few atoms: each forbidden pattern is excluded by a
-constraint of the group, and a certificate checks every allowed pattern against
-every recovered row. `satisfies_forbidding` characterizes the canonical
-forbidding constraint, and `forbidding_group_sound` applies the law to a group of
-them. `completion_holds` gives an atom's completion in every answer set when its
-only producers are rules with it as their sole head, from
-`DisjunctiveSupport.answer_set_supported`; `completion_xor_sound` is the two-rule
-exclusive-or definition as a row.
+A row enters its class through its provenance, checked once. `entailed_by_patterns`
+gives every model of a group of formulas a property that depends only on a set
+of atoms the formulas mention, provided every interpretation inside the set
+that violates the property violates a formula of the group; it rests on
+`Ferraris.satisfies_congr`, and `entailed_by_part` carries the property to the
+answer sets of any theory containing the group. `entailed_by_completion` does
+the same for an atom's completion, from `DisjunctiveSupport.answer_set_completion`,
+which requires a complete inventory in which every producer of the atom is a
+normal rule with it as its sole head and no choice has it; `xor_definition` is
+the two-rule exclusive-or instance. `lower_of_threshold` and
+`upper_of_negated_threshold` read a count bound from a threshold whose
+conditions are atoms, with the weights as the terms' values, and
+`guard_releases` applies a guarded constraint where its guard holds.
 
-[`CountingFamilies`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/CountingFamilies.lean)
-applies it to counts. Counting adds over a partition
-(`count_partition_additive`), so two families of rows partitioning the same atoms
-count them twice; when the first family's lower bounds exceed the second's upper
-bounds, no interpretation satisfies every row (`double_count_refutes`). In a
-bipartite system, `cut_refutes` accepts a certificate naming rows of each family
-with the atoms they share and those the second set misses, and refutes a region
-when the first set's lower bounds exceed the second set's upper bounds plus the
-missed atoms the region has not cut. `count_lower_in_region` and
-`count_upper_in_region` are the region-adjusted bounds, and `probe_forces` cuts an
-atom whose probe a certified refutation excludes. Max-flow and min-cut are not
-proved; only a certificate's inequality is.
-
-No part of the solver uses these three modules yet: it does not recognize parity
-or counting structure in a theory. A narrowing that does must establish in Rust
-that each recognized group's constraints exclude exactly their forbidden
-patterns, that a definition's rules are its atom's only producers, that rows and
-their coordinates are those a certificate checks, that rows partition the atoms
-the premises state and that their bounds are the theory's. It must check each
-certificate against the original rows and the region's masks before using a
-consequence. Elimination, flow search, packing, work and memory accounting and
-cancellation remain outside the laws.
+No part of the solver uses these laws yet: it does not recognize parity or
+counting structure in a theory. A narrowing that does must establish in Rust
+that each recognized row passed its provenance check against its source
+constraints, completion or threshold, including that a threshold's conditions
+are atoms and its guard holds where the row is used; that the literals it
+conditions on give the other atoms their values; that families cover the same
+terms; and that a certificate's shared, missed and remaining terms split its
+rows as stated. Elimination, flow search, coordinate assignment, packing, work
+and memory accounting and cancellation remain outside the laws.
 
 Retained rows use either the scalar witness lists or sparse word groups, chosen
 by actual buffer capacity including the common row header. A packed row keeps
