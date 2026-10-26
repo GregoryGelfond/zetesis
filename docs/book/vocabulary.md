@@ -14,6 +14,7 @@ representations. A representation name does not confer a semantic property.
 | Checked answer set | Privately constructed `zetesis_solve::AnswerSet` (`SessionModel` compatibility alias), or a native `StableInterpretation` | `Semantics.Stable` / `Ferraris.Stable` |
 | Ground-symbol exchange set | `zetesis_themelios::logical::AnswerSet`, a plain `BTreeSet<Symbol>` used by explicit symbol export | A set representation with no checked membership claim |
 | Complete world view | `WorldView` retains the original subject and all full answers after unrestricted exhaustion | Membership, original-family coverage and complete-capture laws |
+| A world-view question folded over answer sets: decided at an absorbing value, complete after exhaustion, or inconsistent | `WorldViewDecision` and its `WorldViewVerdict`, from `SessionBuilder::{known, possible, cautious, brave, answer}` | `AxisFolds.Reduction`, `world_view_fold_decided`, `world_view_fold_complete` |
 | Positive consequence closure | CPU normal oracle result; static or lazy representation | `Semantics.Gamma`, `Zetesis.Least` |
 | Frozen reduct | `zetesis_ferraris::FrozenReduct` or candidate-gated normal consequences | `Ferraris.ReductTheory` / `Semantics.ReductModel` |
 | Display | Source observations selecting shown atoms and terms | Distinct from full interpretation |

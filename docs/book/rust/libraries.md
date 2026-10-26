@@ -24,6 +24,7 @@ Use the tables below to find a specific capability.
 | Solve admitted input | `zetesis_solve::{PreparedInput, Session, SessionBuilder, SolveConfig}` | [Sessions](sessions.md) |
 | Count full answer sets or optimal ties | `zetesis_solve::{SessionBuilder::counting, SemanticOutcome::complete_answer_count}` | [Counting](outcomes.md#replace-answer-presentation) |
 | Collect a complete native family | `zetesis_solve::WorldView::collect`, `SessionBuilder::collect`, `WorldViewLimits` | [Completion and output](outcomes.md) |
+| Decide a world-view question without collecting the family | `SessionBuilder::{known, possible, cautious, brave, answer}`, `WorldViewDecision`, `WorldViewVerdict`, `QueryAnswer` | [Deciding questions over the world view](sessions.md#deciding-questions-over-the-world-view) |
 | Inspect an answer or interpretation | `AnswerSet`, `zetesis_core::{Interpretation, Model}`, `catalog::{AtomRef, TermRef}` | [Interpretations and atoms](models.md) |
 | Evaluate costs and source displays | `zetesis_objective`, admitted-owner observation APIs | [Costs and shown terms](costs-and-output.md) |
 | Observe execution without parsing statistics text | `ExecutionObserver`, `SolveMeasurements`, `SemanticOutcome` | [Observations and measurements](measurements.md) |

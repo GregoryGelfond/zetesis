@@ -1024,6 +1024,34 @@ capture; its prefix law applies to interruptions and retention refusals. A
 selected optimum or the remaining suffix of an already consumed session cannot
 replace that family.
 
+[`AxisFolds`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/AxisFolds.lean)
+states the two rules of a reduction along an axis once. A commutative monoid's
+fold is the same over any permutation of its members (`Reduction.fold_perm`),
+and once the accumulator reaches an absorbing element no further member changes
+it (`Reduction.fold_decided_prefix`). For an idempotent reduction, a list of
+answer sets whose fold reached the absorbing element decides the fold of the
+whole world view (`world_view_fold_decided`), and any two lists that represent
+the world view fold alike (`world_view_fold_complete`). The laws concern lists
+of values. That an implementation folds only checked answer sets, that its
+accumulator computes the named reduction's operation, and that it tests for the
+absorbing element exactly are implementation obligations, as is the
+`WorldViews.Represents` premise of a complete capture.
+
+The native session's world-view questions
+([`world_view/fold.rs`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-solve/src/world_view/fold.rs))
+fold these reductions: `known` and `possible` the module's `all` and `any`,
+`cautious` and `brave` its `inter` and `union`, and the three-valued answer its
+`pair`, all idempotent. Each folds only checked answer sets of the original
+subject, the membership premise of `world_view_fold_decided`. The request is the
+one `WorldView::collect` runs, unrestricted, and a complete verdict requires
+collection's exhaustion predicate, so it rests on the `Represents` premise a
+complete capture does. An empty family is reported as inconsistent rather than
+as the reduction's identity. The
+union's absorbing element, every atom, is never tested, so brave consequences
+are decided only by exhaustion. That the accumulators compute these operations
+and test absorption exactly is checked by comparing every question with the
+complete family and the three-valued answer with the agent's, not by the laws.
+
 The facade re-exports the upstream `zetesis::query::WorldView`, a nonempty live
 stream that may still be incomplete. Its materialized `Snapshot` is complete
 and nonempty. These are the original upstream types; type identity supplies no

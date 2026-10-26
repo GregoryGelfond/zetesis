@@ -118,6 +118,14 @@ unfinished search yields a typed fault. `Snapshot::cautious()` and
 `Snapshot::brave()` reuse an already retained complete family without solving
 again.
 
+The native session answers ground literal queries and both consequence sets
+without the agent's complete enumeration:
+[`SessionBuilder::answer`, `known`, `possible`, `cautious` and `brave`](sessions.md#deciding-questions-over-the-world-view)
+fold answer sets as they arrive and stop once the answer is decided, for example
+at the first answer set in which the literal is unknown. `Agent` and `Snapshot`
+are unchanged. A snapshot already holds its complete family, so deciding early
+has nothing to shorten there.
+
 ## Change the knowledge base
 
 An agent retains the logical program between questions. Assertion returns a

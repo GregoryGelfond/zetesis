@@ -426,6 +426,80 @@ surface for partial observations. [`zetesis::Solver`](agent.md) connects native
 execution to the canonical agent and query contracts; their nonempty snapshots
 remain distinct from the native, possibly empty complete family.
 
+## Deciding questions over the world view
+
+Some questions about a program's world view need neither its whole family nor
+its retention. An unstarted `SessionBuilder` answers five of them by folding
+answer sets as they arrive. A literal is an atom, or a strongly negated atom
+when its predicate carries the negative sign.
+
+| Method | Question | Decided early by | Witnesses |
+| --- | --- | --- | --- |
+| `known(&literal)` | Does the literal hold in every answer set? | An answer set without it: `false` | One |
+| `possible(&literal)` | Does it hold in some answer set? | An answer set with it: `true` | One |
+| `cautious()` | Which atoms hold in every answer set? | An empty intersection | None |
+| `brave()` | Which atoms hold in some answer set? | Nothing; only exhaustion decides | None |
+| `answer(&literal)` | Is the literal `Yes`, `No` or `Unknown` over the world view? | Answer sets that refute both `Yes` and `No`: `Unknown` | At most two |
+
+Each question is a commutative monoid's fold over the answer sets, so its value
+does not depend on the order in which they arrive. Some monoids have an
+absorbing value that no further answer set changes: an answer set without the
+literal makes `known` false whatever follows. When the fold reaches it, the
+session stops and the verdict is `WorldViewVerdict::Decided`, with the answer
+sets that drove the fold there. Cautious consequences name no witnesses, since
+any number of answer sets can empty an intersection. The union's absorbing value
+is every atom, which a session does not bound, so brave consequences are decided
+only by exhaustion.
+
+The request is the one `collect` runs, full answer identities and
+`AnswerSelection::All`, except that a requested model count is cleared where
+`collect` would refuse the incomplete family it stops at. A projection, an
+objective's default selection of its optimal ties or a positive `config.models`
+therefore never narrows the folded family. Without absorption a value is known
+only under `collect`'s exhaustion predicate, unrestricted search exhausted, and
+the verdict is `WorldViewVerdict::Complete`. An exhausted empty family is
+`WorldViewVerdict::Inconsistent` and carries no value: the fold's identity would
+claim, for example, that every atom is cautious. A session that stops before
+absorption or exhaustion, by cancellation, a deadline or a search or objective
+limit, returns a `WorldViewDecisionFailure` whose cause is
+`WorldViewDecisionError::NotExhausted`, with the subject and the session's
+outcome. A partial fold establishes nothing. Setup and execution failures keep
+their typed `SolveFailure`.
+
+`answer` follows the Gelfond–Kahl reading of the
+[agent's queries](agent.md#queries-yes-no-and-unknown): within one answer set a
+literal is true if present, false if its strong contrary (`Atom::contrary`) is
+present, and unknown otherwise. The answer is `QueryAnswer::Yes` when the
+literal is true in every answer set, `No` when it is false in every one, and
+`Unknown` otherwise. One answer set in which the literal is unknown refutes both
+`Yes` and `No`, so it decides `Unknown` by itself; otherwise one answer set
+where the literal is not true and another where it is not false do. The tests
+check the native answer against the agent's on complete families.
+
+Work is the enumeration up to the deciding answer set, or to exhaustion.
+`known`, `possible` and `answer` add one or two logarithmic membership tests per
+answer set, `cautious` one per atom still in the intersection, and `brave` a
+merge of each answer set into the union. The fold retains its accumulator and at
+most two answer sets, never the family, so `WorldViewLimits` does not apply.
+A `WorldViewDecision` is a fact about the world view, not a `WorldView`: it
+neither retains nor proves the complete family. `Zetesis.AxisFolds` proves the
+order independence and early decision for the reductions these methods fold;
+that the Rust accumulators compute them is checked by tests, not by the proofs.
+
+```rust
+# extern crate zetesis_solve;
+# extern crate zetesis_core;
+# extern crate zetesis_cpu;
+# extern crate zetesis_themelios;
+{{#include ../examples/world-view-questions.rs:example}}
+```
+
+Run it from the checkout root with:
+
+```sh
+cargo run --locked -p zetesis-solve --no-default-features --example book-world-view-questions
+```
+
 ## Reuse and identity
 
 ### Projected enumeration

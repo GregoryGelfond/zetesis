@@ -451,6 +451,13 @@ impl<'a> SessionBuilder<'a> {
         self.projection = None;
         self
     }
+
+    /// Clear a requested model count, so the stream runs until it is exhausted
+    /// or stopped. A world-view fold needs every answer set it has not decided.
+    pub(crate) const fn every_answer(mut self) -> Self {
+        self.config.models = 0;
+        self
+    }
     /// Choose the answer family. The default is optimal ties when an objective
     /// is present; inputs without objectives always enumerate their full family.
     #[must_use]

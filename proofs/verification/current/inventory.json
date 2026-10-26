@@ -591,6 +591,121 @@
       "name": "Zetesis.AtomKeys.membership_identity"
     },
     {
+      "file": "Zetesis/AxisFolds.lean",
+      "line": 81,
+      "name": "Zetesis.AxisFolds.Reduction.op_unit"
+    },
+    {
+      "file": "Zetesis/AxisFolds.lean",
+      "line": 94,
+      "name": "Zetesis.AxisFolds.Reduction.foldFrom_eq_op"
+    },
+    {
+      "file": "Zetesis/AxisFolds.lean",
+      "line": 110,
+      "name": "Zetesis.AxisFolds.Reduction.fold_cons"
+    },
+    {
+      "file": "Zetesis/AxisFolds.lean",
+      "line": 118,
+      "name": "Zetesis.AxisFolds.Reduction.fold_append"
+    },
+    {
+      "file": "Zetesis/AxisFolds.lean",
+      "line": 132,
+      "name": "Zetesis.AxisFolds.Reduction.fold_perm"
+    },
+    {
+      "file": "Zetesis/AxisFolds.lean",
+      "line": 146,
+      "name": "Zetesis.AxisFolds.Reduction.foldFrom_absorbing"
+    },
+    {
+      "file": "Zetesis/AxisFolds.lean",
+      "line": 153,
+      "name": "Zetesis.AxisFolds.Reduction.fold_decided_prefix"
+    },
+    {
+      "file": "Zetesis/AxisFolds.lean",
+      "line": 166,
+      "name": "Zetesis.AxisFolds.Reduction.fold_absorbs_member"
+    },
+    {
+      "file": "Zetesis/AxisFolds.lean",
+      "line": 180,
+      "name": "Zetesis.AxisFolds.Reduction.fold_absorbs_contained"
+    },
+    {
+      "file": "Zetesis/AxisFolds.lean",
+      "line": 198,
+      "name": "Zetesis.AxisFolds.Reduction.fold_same_members"
+    },
+    {
+      "file": "Zetesis/AxisFolds.lean",
+      "line": 222,
+      "name": "Zetesis.AxisFolds.all_absorbing"
+    },
+    {
+      "file": "Zetesis/AxisFolds.lean",
+      "line": 224,
+      "name": "Zetesis.AxisFolds.all_idempotent"
+    },
+    {
+      "file": "Zetesis/AxisFolds.lean",
+      "line": 235,
+      "name": "Zetesis.AxisFolds.any_absorbing"
+    },
+    {
+      "file": "Zetesis/AxisFolds.lean",
+      "line": 237,
+      "name": "Zetesis.AxisFolds.any_idempotent"
+    },
+    {
+      "file": "Zetesis/AxisFolds.lean",
+      "line": 251,
+      "name": "Zetesis.AxisFolds.inter_absorbing"
+    },
+    {
+      "file": "Zetesis/AxisFolds.lean",
+      "line": 254,
+      "name": "Zetesis.AxisFolds.inter_idempotent"
+    },
+    {
+      "file": "Zetesis/AxisFolds.lean",
+      "line": 272,
+      "name": "Zetesis.AxisFolds.union_absorbing"
+    },
+    {
+      "file": "Zetesis/AxisFolds.lean",
+      "line": 275,
+      "name": "Zetesis.AxisFolds.union_idempotent"
+    },
+    {
+      "file": "Zetesis/AxisFolds.lean",
+      "line": 297,
+      "name": "Zetesis.AxisFolds.pair_absorbing"
+    },
+    {
+      "file": "Zetesis/AxisFolds.lean",
+      "line": 305,
+      "name": "Zetesis.AxisFolds.pair_idempotent"
+    },
+    {
+      "file": "Zetesis/AxisFolds.lean",
+      "line": 317,
+      "name": "Zetesis.AxisFolds.walk_exhausted_fold"
+    },
+    {
+      "file": "Zetesis/AxisFolds.lean",
+      "line": 327,
+      "name": "Zetesis.AxisFolds.world_view_fold_complete"
+    },
+    {
+      "file": "Zetesis/AxisFolds.lean",
+      "line": 344,
+      "name": "Zetesis.AxisFolds.world_view_fold_decided"
+    },
+    {
       "file": "Zetesis/BatchAccounting.lean",
       "line": 49,
       "name": "Zetesis.BatchAccounting.initial_covers"
@@ -9286,6 +9401,7 @@
     "Zetesis/AssociativeWitnesses.lean",
     "Zetesis/AtomCatalogs.lean",
     "Zetesis/AtomKeys.lean",
+    "Zetesis/AxisFolds.lean",
     "Zetesis/BatchAccounting.lean",
     "Zetesis/BinaryWatch.lean",
     "Zetesis/BindingScopes.lean",
@@ -9464,8 +9580,8 @@
     "Zetesis/WorldViews.lean"
   ],
   "source_sha256": {
-    "Audit.lean": "bd4c50d0c9b4cfaaeb9464fa146e8ce258e5b51aa7ee8126f985b7b31f399209",
-    "Zetesis.lean": "80f07b6a80a4d6aa59820509c229b2b1fbe048bf25dd39575239e71d82ae3b60",
+    "Audit.lean": "e997c06f62928c6666a1affd0369019c759be1e346717359eb61678b0b67e123",
+    "Zetesis.lean": "47156e2f8d46e64c4802bf247ec1911e786318eb110d1eca9f2eed3618447424",
     "Zetesis/AcyclicEvaluation.lean": "1a9c77283876cf1f61cb92031da04780aada5d0b256f79db5b64bfb6b129d0dc",
     "Zetesis/AdjacencyRows.lean": "38a19b1c74483a157636321a56e95fea660a2192a04c77930d609e411c8d30d4",
     "Zetesis/AggregateAssignment.lean": "def2eac0ae638f3801d35c11a3162afaa3e0b9e393601cf899952e449e309639",
@@ -9480,6 +9596,7 @@
     "Zetesis/AssociativeWitnesses.lean": "6a964da8e22d66799054c2b02677ee5d8496807ca5a28637f9173c5d077aef37",
     "Zetesis/AtomCatalogs.lean": "2a90dd7c129290ffc3f9609f51378e6e45014a55f31b74cca9e7284a4e320eec",
     "Zetesis/AtomKeys.lean": "0188ea220bf8484db130ea674d01bad0db3db80f62678cbb0fcd930403cf1ae0",
+    "Zetesis/AxisFolds.lean": "a1e9f5a99edb63f78d41f98d64fbe9e85f41856670de37ae5605c23dca937b52",
     "Zetesis/BatchAccounting.lean": "c6ff03ea70ee1eb9afbbba472bfe10c0bd77e231b8623c4157da91fbb5a5c615",
     "Zetesis/BinaryWatch.lean": "c6391510df44d983c95f3c084aaba1336fdf88c47eded51b16e193ccd88110b4",
     "Zetesis/BindingScopes.lean": "1ccfde0f879702572dbc25ed20531f2b85e04eeedb59fd7eeea45ad7972486a7",

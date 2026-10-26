@@ -118,6 +118,29 @@
 'Zetesis.AtomKeys.tuple_agrees' depends on axioms: [propext, Quot.sound]
 'Zetesis.AtomKeys.key_identity' depends on axioms: [propext]
 'Zetesis.AtomKeys.membership_identity' depends on axioms: [propext, Quot.sound]
+'Zetesis.AxisFolds.Reduction.op_unit' does not depend on any axioms
+'Zetesis.AxisFolds.Reduction.foldFrom_eq_op' does not depend on any axioms
+'Zetesis.AxisFolds.Reduction.fold_cons' does not depend on any axioms
+'Zetesis.AxisFolds.Reduction.fold_append' depends on axioms: [propext, Quot.sound]
+'Zetesis.AxisFolds.Reduction.fold_perm' does not depend on any axioms
+'Zetesis.AxisFolds.Reduction.foldFrom_absorbing' does not depend on any axioms
+'Zetesis.AxisFolds.Reduction.fold_decided_prefix' depends on axioms: [propext, Quot.sound]
+'Zetesis.AxisFolds.Reduction.fold_absorbs_member' depends on axioms: [propext]
+'Zetesis.AxisFolds.Reduction.fold_absorbs_contained' depends on axioms: [propext]
+'Zetesis.AxisFolds.Reduction.fold_same_members' depends on axioms: [propext]
+'Zetesis.AxisFolds.all_absorbing' does not depend on any axioms
+'Zetesis.AxisFolds.all_idempotent' does not depend on any axioms
+'Zetesis.AxisFolds.any_absorbing' does not depend on any axioms
+'Zetesis.AxisFolds.any_idempotent' does not depend on any axioms
+'Zetesis.AxisFolds.inter_absorbing' depends on axioms: [propext, Quot.sound]
+'Zetesis.AxisFolds.inter_idempotent' depends on axioms: [propext, Quot.sound]
+'Zetesis.AxisFolds.union_absorbing' depends on axioms: [propext, Quot.sound]
+'Zetesis.AxisFolds.union_idempotent' depends on axioms: [propext, Quot.sound]
+'Zetesis.AxisFolds.pair_absorbing' does not depend on any axioms
+'Zetesis.AxisFolds.pair_idempotent' does not depend on any axioms
+'Zetesis.AxisFolds.walk_exhausted_fold' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.AxisFolds.world_view_fold_complete' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.AxisFolds.world_view_fold_decided' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.BatchAccounting.initial_covers' depends on axioms: [propext]
 'Zetesis.BatchAccounting.initial_sound' depends on axioms: [propext, Quot.sound]
 'Zetesis.BatchAccounting.prefix_membership' depends on axioms: [propext]
