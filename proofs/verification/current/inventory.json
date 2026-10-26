@@ -3846,6 +3846,21 @@
       "name": "Zetesis.Refinement.IndexedEvaluation.satisfies_reduct_iff"
     },
     {
+      "file": "Zetesis/InnerQuery.lean",
+      "line": 35,
+      "name": "Zetesis.InnerQuery.exhausted_walk_stable"
+    },
+    {
+      "file": "Zetesis/InnerQuery.lean",
+      "line": 43,
+      "name": "Zetesis.InnerQuery.emitted_refutes"
+    },
+    {
+      "file": "Zetesis/InnerQuery.lean",
+      "line": 58,
+      "name": "Zetesis.InnerQuery.exhausted_walk_decides"
+    },
+    {
       "file": "Zetesis/IntegerEnvelopes.lean",
       "line": 45,
       "name": "Zetesis.IntegerEnvelopes.path_bound"
@@ -9356,6 +9371,7 @@
     "Zetesis/HeadMeasures.lean",
     "Zetesis/IndexedCandidates.lean",
     "Zetesis/IndexedEvaluation.lean",
+    "Zetesis/InnerQuery.lean",
     "Zetesis/IntegerEnvelopes.lean",
     "Zetesis/Iteration.lean",
     "Zetesis/JoinFrames.lean",
@@ -9464,8 +9480,8 @@
     "Zetesis/WorldViews.lean"
   ],
   "source_sha256": {
-    "Audit.lean": "bd4c50d0c9b4cfaaeb9464fa146e8ce258e5b51aa7ee8126f985b7b31f399209",
-    "Zetesis.lean": "80f07b6a80a4d6aa59820509c229b2b1fbe048bf25dd39575239e71d82ae3b60",
+    "Audit.lean": "7ff92aec1fe8fe76769fcfd59a1cafa4749abd09ac4c8c1c47e96bfd689bdd64",
+    "Zetesis.lean": "1654e0ecad1217264b516045ff147bdb3321273d11cbcd5fa48388111edaf1a7",
     "Zetesis/AcyclicEvaluation.lean": "1a9c77283876cf1f61cb92031da04780aada5d0b256f79db5b64bfb6b129d0dc",
     "Zetesis/AdjacencyRows.lean": "38a19b1c74483a157636321a56e95fea660a2192a04c77930d609e411c8d30d4",
     "Zetesis/AggregateAssignment.lean": "def2eac0ae638f3801d35c11a3162afaa3e0b9e393601cf899952e449e309639",
@@ -9550,6 +9566,7 @@
     "Zetesis/HeadMeasures.lean": "d682f0436d88dd536e8799c6896da0e0f3550357639b500551880a0fd9a80d89",
     "Zetesis/IndexedCandidates.lean": "8740ce6aa95c6bae37c42e0074eb15fd9c7f8edb70e9bdcb5306dfcb2b5738f9",
     "Zetesis/IndexedEvaluation.lean": "f04f168f7c5ced8617ba1b9c744caefd5ea71bd1bd59014413b1415169ccedc7",
+    "Zetesis/InnerQuery.lean": "f97273c0c507b38e7c32cca3fcb498cb0d6f73b708b75b0cf07dfbf7cdb190b8",
     "Zetesis/IntegerEnvelopes.lean": "71d8d9a183d4953d210469da68e970d5ad72ce0f46977a54bc293248f056b4ae",
     "Zetesis/Iteration.lean": "e5aac9eba61b8150296cc53c381e8f50bd6943c3fbcd6a4c84a6933d3855db16",
     "Zetesis/JoinFrames.lean": "b4af5ba25e37e6305f9121791519aa20ee7a4977c6bc61f3e18608a38fdd95c0",
