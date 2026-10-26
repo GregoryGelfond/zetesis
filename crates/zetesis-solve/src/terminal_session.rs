@@ -66,10 +66,9 @@ impl<'a> TerminalSession<'a> {
     ) -> Result<Self, SolveError> {
         let streamed = match owner.base() {
             zetesis_themelios::TerminalBase::Eager(_) => None,
-            zetesis_themelios::TerminalBase::Hybrid(core) => Some(crate::StreamedConstraints {
-                templates: core.streamed_templates(),
-                instances: core.streamed_instances(),
-            }),
+            zetesis_themelios::TerminalBase::Hybrid(core) => {
+                Some(crate::StreamedConstraints::of(core))
+            }
         };
         observations.record(crate::ExecutionObservation::TerminalDefinitions {
             requested: config.grounder,

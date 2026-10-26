@@ -59,13 +59,16 @@ pub struct Options {
     ///
     /// `eager` instantiates every rule before solving. `lazy` instantiates on
     /// demand: relational source joins on CPU or GPU, or, for formula inputs,
-    /// a producer core checked by the selected backend with eligible constraints
-    /// streamed on the host. Terminal definitions (derived predicates nothing
-    /// reads) can be reconstructed per answer.
+    /// a producer core checked by the selected backend. Integrity constraints
+    /// whose instances fit in the formula's share of the memory allowance are
+    /// grounded with that core; only the rest are streamed on the host, which
+    /// saves memory but joins them again in every search region. Terminal
+    /// definitions (derived predicates nothing reads) can be reconstructed per
+    /// answer.
     /// Objectives require complete constraint checks before scoring and disable
     /// terminal deferral. Table joins are refused. `auto` admits relational source
     /// joins where it can, else instantiates an eager base and defers terminal
-    /// definitions. Resource allowances still apply.
+    /// definitions; it never streams constraints. Resource allowances still apply.
     #[arg(long, value_parser = grounder_parser(), default_value = "auto")]
     pub grounder: Grounder,
     /// Positive joins during eager formula grounding.
@@ -302,8 +305,8 @@ fn policy_parser<T: Clone + Send + Sync + 'static, const N: usize>(
 
 fn grounder_parser() -> impl TypedValueParser<Value = Grounder> {
     policy_parser([
-        (Grounder::Auto, PossibleValue::new(Grounder::Auto.label()).help("Prefer lazy source grounding where admitted, independently of hardware.")),
-        (Grounder::Lazy, PossibleValue::new(Grounder::Lazy.label()).help("Require relational source joins, or CPU formula grounding with an eager producer core, streamed eligible constraints and terminal definitions reconstructed per answer.")),
+        (Grounder::Auto, PossibleValue::new(Grounder::Auto.label()).help("Source joins or direct evaluation where admitted, else an eager base with terminal definitions deferred. Never streams constraints.")),
+        (Grounder::Lazy, PossibleValue::new(Grounder::Lazy.label()).help("Require relational source joins, or CPU formula grounding with an eager producer core and terminal definitions reconstructed per answer; constraints that do not fit the formula's memory share are streamed.")),
         (Grounder::Eager, PossibleValue::new(Grounder::Eager.label()).help("Materialize a bounded static program before checking on CPU or GPU.")),
     ])
 }

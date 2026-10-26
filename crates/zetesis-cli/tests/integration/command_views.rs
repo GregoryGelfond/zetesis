@@ -136,7 +136,14 @@ fn explicit_lazy_formula_publishes_checked_original_answers() {
     // it `:- b.`.
     let result = solve(
         "a|b. {hidden}. d(1..200). :- b, d(X), d(Y). #show a/0.",
-        &["--grounder", "lazy", "--memory", "4MiB", "--json", "--stats"],
+        &[
+            "--grounder",
+            "lazy",
+            "--memory",
+            "4MiB",
+            "--json",
+            "--stats",
+        ],
     );
     assert!(
         result.status.success(),
@@ -146,6 +153,10 @@ fn explicit_lazy_formula_publishes_checked_original_answers() {
     let document: serde_json::Value = serde_json::from_slice(&result.stdout).unwrap();
     assert_eq!(document["statistics"]["hybrid_execution"]["accepted"], 2);
     assert_eq!(document["statistics"]["hybrid_execution"]["rejected"], 0);
+    assert_eq!(
+        document["statistics"]["hybrid_execution"]["streamed"]["templates"],
+        1
+    );
     // The original constraint cuts b before a rejected region is formed.
     assert_eq!(
         document["statistics"]["search"]["region_filter"]["refuted"],

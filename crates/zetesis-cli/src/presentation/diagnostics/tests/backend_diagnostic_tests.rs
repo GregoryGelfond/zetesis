@@ -33,8 +33,11 @@ fn hybrid_device_metadata_preserves_pending_host_acceptance() {
                 } else {
                     ExecutionObservation::HybridGrounding {
                         requested: Grounder::Lazy,
-                        streamed_templates: 1,
-                        streamed_instances: 2,
+                        streamed: zetesis_solve::StreamedConstraints {
+                            templates: 1,
+                            instances: 2,
+                            ..Default::default()
+                        },
                     }
                 })
                 .unwrap();

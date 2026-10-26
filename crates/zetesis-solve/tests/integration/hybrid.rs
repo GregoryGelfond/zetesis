@@ -137,6 +137,35 @@ fn hybrid_admits_the_retained_root_ceiling() {
 }
 
 #[test]
+fn the_ordinary_policy_grounds_fitting_constraints_in_the_core() {
+    // The ordinary resource policy grants the theory's node share, which holds
+    // these fifteen instances easily: none is streamed, and the core alone
+    // carries the source constraint.
+    let resources = zetesis_solve::Resources::new(SolveConfig::REFERENCE_MEMORY, NonZeroUsize::MIN);
+    let admitted = prepare_formula(
+        MONOTONE.into(),
+        resources.admission_options(),
+        resources.expansion_limits(),
+        resources.formula_limits(),
+    )
+    .unwrap()
+    .ground_hybrid()
+    .unwrap();
+    assert_eq!(admitted.streamed_templates(), 0);
+    assert_eq!(admitted.retained_templates(), 1);
+    let config = SolveConfig {
+        grounder: Grounder::Lazy,
+        ..configuration()
+    };
+    let (family, outcome) = capture(PreparedInput::hybrid(&admitted), config);
+    assert_eq!(family, monotone_family());
+    assert_eq!(outcome.completion(), Some(Completion::Exhausted));
+    let streamed = outcome.hybrid_execution().unwrap().streamed;
+    assert_eq!((streamed.templates, streamed.retained_templates), (0, 1));
+    assert_eq!(streamed.retained_instances, admitted.retained_instances());
+}
+
+#[test]
 fn objective_free_hybrid_preserves_selection_policy() {
     let admitted = hybrid("a|b.", &limits());
     for selection in [

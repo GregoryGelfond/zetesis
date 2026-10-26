@@ -4,13 +4,33 @@ use crate::{Grounder, Oracle, SolveError, SourceBatching};
 use std::{error::Error, num::NonZeroUsize};
 use zetesis_themelios::objective_bound::ObjectiveBoundError;
 
-/// The integrity constraints a hybrid base streams.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+/// How a hybrid base divides its eligible integrity constraints: the templates
+/// it streams and checks during search, and those it grounded in its core
+/// because their instances fit the formula's share.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct StreamedConstraints {
-    /// Lowered constraint templates, not a count of original declarations.
+    /// Lowered constraint templates streamed, not a count of original declarations.
     pub templates: usize,
-    /// Possible instances visited during complete source admission.
+    /// Possible instances of the streamed templates, visited during complete
+    /// source admission.
     pub instances: u64,
+    /// Eligible templates grounded in the core instead of streamed.
+    pub retained_templates: usize,
+    /// Instances of the grounded templates.
+    pub retained_instances: u64,
+}
+
+impl StreamedConstraints {
+    /// The division a streamed core records.
+    #[must_use]
+    pub fn of(core: &zetesis_themelios::StreamedCore) -> Self {
+        Self {
+            templates: core.streamed_templates(),
+            instances: core.streamed_instances(),
+            retained_templates: core.retained_templates(),
+            retained_instances: core.retained_instances(),
+        }
+    }
 }
 
 /// One observation at an execution boundary of the current solve.
@@ -38,15 +58,14 @@ pub enum ExecutionObservation<'a> {
         /// A hybrid base's streamed constraints; absent for an eager base.
         streamed: Option<StreamedConstraints>,
     },
-    /// The complete producer core is retained; eligible source constraints are
-    /// checked on the host before any original-program answer is accepted.
+    /// The complete producer core is retained; eligible source constraints that
+    /// did not fit in it are checked on the host before any original-program
+    /// answer is accepted.
     HybridGrounding {
         /// Requested schedule; effective execution combines eager and lazy work.
         requested: Grounder,
-        /// Lowered constraint templates, not a count of original declarations.
-        streamed_templates: usize,
-        /// Possible instances visited during complete source admission.
-        streamed_instances: u64,
+        /// The constraints streamed, and those grounded in the core.
+        streamed: StreamedConstraints,
     },
     /// An admitted static relational representation is available.
     StaticGrounding {

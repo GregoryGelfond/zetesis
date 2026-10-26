@@ -525,8 +525,15 @@ fn hybrid(
 ) -> io::Result<()> {
     writeln!(
         sink,
-        "  hybrid grounding: eager retained core; streamed source constraints; core answers={}; accepted={}; rejected={}; pending={}",
-        stats.core_answers, stats.accepted, stats.rejected, stats.pending
+        "  hybrid grounding: eager retained core; streamed source constraints: templates={}, instances={}; grounded in the core: templates={}, instances={}; core answers={}; accepted={}; rejected={}; pending={}",
+        stats.streamed.templates,
+        stats.streamed.instances,
+        stats.streamed.retained_templates,
+        stats.streamed.retained_instances,
+        stats.core_answers,
+        stats.accepted,
+        stats.rejected,
+        stats.pending
     )?;
     writeln!(
         sink,

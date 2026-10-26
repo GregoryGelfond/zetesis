@@ -173,6 +173,10 @@ fn json_distinguishes_core_models_from_original_membership() {
     let (outcome, output, _) = solve(STREAMED, &options(&STREAMING));
     let stats = outcome.semantic().hybrid_execution().unwrap();
     assert_eq!(
+        (stats.streamed.templates, stats.streamed.retained_templates),
+        (1, 0)
+    );
+    assert_eq!(
         (
             stats.core_answers,
             stats.accepted,
@@ -204,6 +208,11 @@ fn json_distinguishes_core_models_from_original_membership() {
         document["statistics"]["hybrid_execution"]["rejected"],
         stats.rejected
     );
+    let streamed = &document["statistics"]["hybrid_execution"]["streamed"];
+    assert_eq!(streamed["templates"], 1);
+    assert_eq!(streamed["instances"], 40_000);
+    assert_eq!(streamed["retained_templates"], 0);
+    assert_eq!(streamed["retained_instances"], 0);
     assert_eq!(document["outcome"]["verified_models"], stats.accepted);
     assert!(stats.constraints.work > 0);
     assert_eq!(
@@ -211,6 +220,30 @@ fn json_distinguishes_core_models_from_original_membership() {
         stats.constraints.work
     );
     assert!(!output.contains(&0x1b));
+}
+
+#[test]
+fn lazy_grounding_grounds_a_fitting_constraint_in_the_core() {
+    // The ordinary allowance's formula share holds `:- b.`'s one instance, so
+    // lazy grounding grounds it with the core and streams nothing.
+    let mut config = options(&["--grounder", "lazy"]);
+    config.statistics_view = StatisticsView::Human;
+    let (outcome, output, diagnostics) = solve(SOURCE, &config);
+    let streamed = outcome.semantic().hybrid_execution().unwrap().streamed;
+    assert_eq!(
+        (
+            streamed.templates,
+            streamed.instances,
+            streamed.retained_templates,
+            streamed.retained_instances
+        ),
+        (0, 0, 1, 1)
+    );
+    assert!(
+        diagnostics.contains("CPU hybrid formula; eager core, no streamed constraints"),
+        "{diagnostics}"
+    );
+    assert_eq!(family(&output), expected());
 }
 
 #[test]
@@ -236,6 +269,8 @@ fn human_statistics_name_the_hybrid_scope() {
     let (_, _, diagnostics) = solve(SOURCE, &config);
     for text in [
         "CPU hybrid formula",
+        "Streamed constraint templates",
+        "Grounded constraint templates",
         "Core answers checked",
         "Constraint checks accepted",
         "Constraint checks rejected",

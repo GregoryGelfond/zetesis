@@ -15,9 +15,11 @@ struct Route {
     source: bool,
     lazy: bool,
     hybrid_constraints: usize,
+    hybrid_retained: usize,
     terminal_definitions: usize,
     terminal_base: Option<zetesis_themelios::BaseKind>,
     terminal_streamed: Option<usize>,
+    terminal_retained: Option<usize>,
 }
 
 impl ExecutionObserver for Route {
@@ -32,10 +34,9 @@ impl ExecutionObserver for Route {
             } => {
                 self.lazy = true;
             }
-            ExecutionObservation::HybridGrounding {
-                streamed_templates, ..
-            } => {
-                self.hybrid_constraints = streamed_templates;
+            ExecutionObservation::HybridGrounding { streamed, .. } => {
+                self.hybrid_constraints = streamed.templates;
+                self.hybrid_retained = streamed.retained_templates;
             }
             ExecutionObservation::TerminalDefinitions {
                 deferred_templates,
@@ -46,6 +47,7 @@ impl ExecutionObserver for Route {
                 self.terminal_definitions = deferred_templates;
                 self.terminal_base = Some(base);
                 self.terminal_streamed = streamed.map(|streamed| streamed.templates);
+                self.terminal_retained = streamed.map(|streamed| streamed.retained_templates);
             }
             _ => {}
         }
@@ -88,6 +90,7 @@ fn lazy_formula_configuration_grounds_a_fitting_constraint() {
     let (profile, route) = execute(program! { { p; q }. :- p, not not q. }, Grounder::Lazy);
     assert_eq!(profile, PreparedProfile::Hybrid);
     assert_eq!(route.hybrid_constraints, 0);
+    assert_eq!(route.hybrid_retained, 1);
 }
 
 #[test]
@@ -104,6 +107,7 @@ fn lazy_formula_configuration_defers_terminal_definitions() {
         Some(zetesis_themelios::BaseKind::Hybrid)
     );
     assert_eq!(route.terminal_streamed, Some(0));
+    assert_eq!(route.terminal_retained, Some(1));
     assert!(route.terminal_definitions > 0);
 }
 
