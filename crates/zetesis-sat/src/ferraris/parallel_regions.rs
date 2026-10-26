@@ -83,8 +83,8 @@ use super::regions::{
     RegionCounts, RegionSearchStatistics, RegionWalkEngagement, RegionWorkerStatistics,
 };
 use super::timing::{self, Phase, PhaseMeasurement};
+use crate::budget::{Budget, SharedBudget, WorkLease};
 use crate::ferraris::Decision;
-use crate::search::{Budget, SharedBudget, WorkLease};
 use crate::{Cancellation, Incomplete, Limits, SearchPhaseTimings, SearchStatistics, Statistics};
 
 /// An idle worker looks for a region again and polls cooperative control at

@@ -298,7 +298,7 @@ impl RegionFrontier {
     /// and the root's entry is reserved fallibly. The frontier keeps no
     /// receipts.
     pub(super) fn new(workers: usize, root: Entry) -> Result<Self, Incomplete> {
-        let mut queues = crate::search::storage(workers)?;
+        let mut queues = crate::budget::storage(workers)?;
         let mut first = VecDeque::new();
         reserve_regions(&mut first, 1)?;
         first.push_back(root);

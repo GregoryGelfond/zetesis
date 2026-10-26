@@ -129,7 +129,7 @@ fn unused_rows_without_cuts_preserve_completion_bytes() {
 #[test]
 fn actual_cache_growth_is_admitted_before_candidate_work() {
     use super::super::{BatchVerdict, CompletionExecutor, Input, Statistics};
-    use crate::search::{Budget, LocalQuota};
+    use crate::budget::{Budget, LocalQuota};
     use crate::{SearchMethod, SearchStatistics};
     use std::num::NonZeroUsize;
 

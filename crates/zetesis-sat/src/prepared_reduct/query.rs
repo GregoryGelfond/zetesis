@@ -10,12 +10,12 @@ use zetesis_ferraris::{
 };
 
 use super::{PreparedReduct, bound};
+use crate::budget::{Budget, LocalQuota, Quota, increment};
 use crate::timing::{self, Phase};
 use crate::{
     Cancellation, Check, Incomplete, Limits, Literal, SearchStatistics, Statistics, ferraris,
     search,
 };
-use search::{Budget, LocalQuota, Quota, increment};
 
 /// Cumulative actual persistent-reduct activity within an enumeration.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]

@@ -53,7 +53,7 @@ fn search_engaging(
     let cancellation = Cancellation::with_deadline(Instant::now() + 3 * WAIT).unwrap();
     let limits = Limits::default();
     let mut budget = Budget {
-        quota: crate::search::LocalQuota,
+        quota: crate::budget::LocalQuota,
         limits: limits.search,
         cancellation: &cancellation,
         statistics: SearchStatistics::default(),
@@ -543,7 +543,7 @@ fn a_refused_worker_launch_joins_the_started_subset() {
     let (mut search, _) = search(2);
     let cancellation = search.shared.cancellation.clone();
     let mut budget = Budget {
-        quota: crate::search::LocalQuota,
+        quota: crate::budget::LocalQuota,
         limits: search.shared.limits.search,
         cancellation: &cancellation,
         statistics: search.search_statistics(),
@@ -660,7 +660,7 @@ fn allocation_stop_closes_and_settles_the_frontier(engagement: Engagement) {
         .unwrap();
     let cancellation = search.shared.cancellation.clone();
     let mut budget = Budget {
-        quota: crate::search::LocalQuota,
+        quota: crate::budget::LocalQuota,
         limits: search.shared.limits.search,
         cancellation: &cancellation,
         statistics: search.search_statistics(),
@@ -858,7 +858,7 @@ fn a_worker_splits_the_root_on_the_original_choice_head() {
         limits,
         cancellation.clone(),
         &mut Budget {
-            quota: crate::search::LocalQuota,
+            quota: crate::budget::LocalQuota,
             limits: limits.search,
             cancellation: &cancellation,
             statistics: SearchStatistics::default(),

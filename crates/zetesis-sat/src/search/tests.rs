@@ -1,4 +1,5 @@
 use super::*;
+use crate::budget::LocalQuota;
 
 /// A search budget under the default limits, drawing on a local quota.
 fn budget(cancellation: &Cancellation) -> Budget<'_> {

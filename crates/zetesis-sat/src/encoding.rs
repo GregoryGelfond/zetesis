@@ -2,7 +2,7 @@ use zetesis_ferraris::{
     ExtremumCut, Interpretation, NodeView, Theory, Threshold, extremum_lowering, threshold_lowering,
 };
 
-use crate::search::{Budget, Quota, storage};
+use crate::budget::{Budget, Quota, storage};
 use crate::{AdmissionLimits, Assignment, Cnf, Incomplete, Literal};
 
 pub(crate) fn clause<const N: usize>(

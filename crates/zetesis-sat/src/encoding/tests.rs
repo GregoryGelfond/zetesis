@@ -29,7 +29,7 @@ fn input() -> Theory {
 
 fn budget(cancellation: &Cancellation, max_work: u64) -> Budget<'_> {
     Budget {
-        quota: crate::search::LocalQuota,
+        quota: crate::budget::LocalQuota,
         limits: SearchLimits {
             max_work,
             ..Default::default()

@@ -1,7 +1,7 @@
 //! Retained topology is independent of assignments, including failed queries.
 
 use super::*;
-use crate::search::LocalQuota;
+use crate::budget::LocalQuota;
 use crate::{AdmissionLimits, Cancellation, SearchLimits, SearchStatistics};
 
 pub(super) fn budget(cancellation: &Cancellation, max_work: u64) -> Budget<'_, LocalQuota> {

@@ -2,6 +2,7 @@
 
 use super::*;
 use crate::AdmissionLimits;
+use crate::budget::LocalQuota;
 
 fn outcome(result: Solve) -> Result<Option<Assignment>, Incomplete> {
     match result {

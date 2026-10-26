@@ -1,7 +1,7 @@
 //! A uniquely determined interpretation and independent original validation.
 
 use super::{CertificateError, Verdict};
-use crate::search::{Budget, LocalQuota};
+use crate::budget::{Budget, LocalQuota};
 use crate::{Cancellation, Cnf, Incomplete, Limits, Literal, SearchStatistics};
 use zetesis_ferraris::{EvaluationError, EvaluationLimits, EvaluationWorkspace, Interpretation};
 

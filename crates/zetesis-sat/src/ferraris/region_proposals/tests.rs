@@ -6,7 +6,7 @@ use super::{
     Attempt, CandidateKnowledge, Entry, FrontierOrder, Mutex, Outcome, RegionProposals, SlateFill,
     Step, Termination, Workspace, reserve_regions,
 };
-use crate::search::{Budget, LocalQuota, SharedBudget};
+use crate::budget::{Budget, LocalQuota, SharedBudget};
 use crate::{
     Cancellation, Incomplete, Limits, RegionFeasibility, RegionFilter, RegionFilterWorker,
     SearchLimits, SearchStatistics, StableModels,

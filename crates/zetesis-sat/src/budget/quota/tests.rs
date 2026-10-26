@@ -1,6 +1,7 @@
 //! Exact search and reservation boundaries are independent of quota ownership.
 
-use crate::search::{Budget, LocalQuota, SharedBudget, query};
+use crate::budget::{Budget, LocalQuota, SharedBudget};
+use crate::search::query;
 use crate::{
     AdmissionLimits, Cancellation, Cnf, Incomplete, Literal, SearchLimits, SearchStatistics, Solve,
 };

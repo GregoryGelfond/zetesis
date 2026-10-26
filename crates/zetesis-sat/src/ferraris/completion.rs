@@ -7,8 +7,8 @@ use rayon::prelude::*;
 use zetesis_ferraris::{Interpretation, Theory};
 
 use super::{BatchVerdict, Limits, Statistics};
+use crate::budget::{BoundedQuota, Budget, LocalQuota, Quota, SharedBudget, increment, storage};
 use crate::ferraris::Decision;
-use crate::search::{BoundedQuota, Budget, LocalQuota, Quota, SharedBudget, increment, storage};
 use crate::{PreparedReduct, ReductWorkspace};
 
 mod scratch;

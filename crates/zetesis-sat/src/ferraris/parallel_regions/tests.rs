@@ -88,7 +88,7 @@ fn a_panicked_worker_keeps_coverage_incomplete() {
     .unwrap();
     let limits = Limits::default();
     let mut budget = Budget {
-        quota: crate::search::LocalQuota,
+        quota: crate::budget::LocalQuota,
         limits: limits.search,
         cancellation: &cancellation,
         statistics: SearchStatistics::default(),
@@ -175,7 +175,7 @@ fn refused_certificate_refunds_its_reserved_work(engagement: Engagement) {
     });
     let limits = Limits::default();
     let mut budget = Budget {
-        quota: crate::search::LocalQuota,
+        quota: crate::budget::LocalQuota,
         limits: limits.search,
         cancellation: &cancellation,
         statistics: SearchStatistics::default(),

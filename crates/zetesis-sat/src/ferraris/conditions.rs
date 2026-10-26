@@ -48,7 +48,7 @@ impl Bound {
         restriction: &Theory,
         generation: u64,
         native_byte_limit: u64,
-        budget: &mut crate::search::Budget<'_>,
+        budget: &mut crate::budget::Budget<'_>,
         work: &mut u64,
     ) -> Result<Self, Incomplete> {
         budget.cancellation.poll()?;

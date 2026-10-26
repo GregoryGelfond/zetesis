@@ -2,8 +2,8 @@
 
 use zetesis_ferraris::{Interpretation, Theory};
 
+use crate::budget::{Budget, Quota};
 use crate::{AdmissionLimits, Cnf, Incomplete, encoding, search};
-use search::{Budget, Quota};
 
 #[derive(Debug, Default)]
 pub(super) struct Workspace {
@@ -20,7 +20,7 @@ impl Workspace {
     ) -> Result<(), Incomplete> {
         let cancellation = crate::Cancellation::default();
         let mut budget = Budget {
-            quota: search::LocalQuota,
+            quota: crate::budget::LocalQuota,
             limits: crate::SearchLimits {
                 max_work: u64::MAX,
                 max_decisions: 0,
@@ -88,7 +88,7 @@ mod tests {
         for original in [&input, &fact, &input] {
             let candidate = Interpretation::new(original, [0]).unwrap();
             let mut budget = Budget {
-                quota: search::LocalQuota,
+                quota: crate::budget::LocalQuota,
                 limits: Limits::default().search,
                 cancellation: &cancellation,
                 statistics: SearchStatistics::default(),
@@ -151,7 +151,7 @@ mod tests {
         let candidate = Interpretation::new(&fact, [0]).unwrap();
         let cancellation = Cancellation::default();
         let mut budget = Budget {
-            quota: search::LocalQuota,
+            quota: crate::budget::LocalQuota,
             limits: Limits::default().search,
             cancellation: &cancellation,
             statistics: SearchStatistics::default(),

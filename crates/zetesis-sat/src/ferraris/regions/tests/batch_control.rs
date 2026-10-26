@@ -8,7 +8,7 @@ use zetesis_ferraris::{NARROWING_BATCH, Narrower, Node, Theory};
 
 use super::super::{CandidateKnowledge, Conditions, RegionCounts, narrow};
 
-use crate::search::{Budget, LocalQuota, Quota, SharedBudget};
+use crate::budget::{Budget, LocalQuota, Quota, SharedBudget};
 use crate::{Cancellation, Incomplete, SearchLimits, SearchStatistics};
 
 /// A held root forces a chain of implications over `atoms` atoms: a closure

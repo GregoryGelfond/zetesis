@@ -4,8 +4,8 @@ use std::sync::Arc;
 
 use super::Certification;
 use crate::Incomplete;
+use crate::budget::Budget;
 use crate::ferraris::{Limits, Proposer, Statistics};
-use crate::search::Budget;
 use zetesis_ferraris::{Interpretation, Theory};
 
 /// A successful original-owner deterministic plan is the coverage certificate. The

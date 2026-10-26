@@ -2,7 +2,7 @@
 
 use std::num::NonZeroU32;
 
-use crate::search::Budget;
+use crate::budget::Budget;
 use crate::{
     AdmissionError, Assignment, Incomplete, ProjectionLimits, ProjectionResource,
     ProjectionStatistics,

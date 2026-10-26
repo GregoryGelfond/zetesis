@@ -10,7 +10,7 @@ pub use types::{
 };
 
 use super::{StableModels, Statistics};
-use crate::search::{Budget, LocalQuota, increment};
+use crate::budget::{Budget, LocalQuota, increment};
 use crate::timing::{self, Phase};
 use crate::{AdmissionError, Cancellation, Incomplete, Limits, SearchStatistics};
 use std::sync::Arc;

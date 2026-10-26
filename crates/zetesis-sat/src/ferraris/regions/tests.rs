@@ -4,10 +4,10 @@ use std::num::NonZeroUsize;
 use std::time::Duration;
 
 use super::*;
+use crate::budget::LocalQuota;
 use crate::ferraris::fresh_membership;
 use crate::ferraris::original_index::{OriginalIndex, hooks};
 use crate::prepared_reduct::State;
-use crate::search::LocalQuota;
 use crate::{
     BatchLimits, BatchVerdict, CertificateLimits, CertificateOrder, Limits, SearchLimits,
     SearchStatistics, StableModels, Statistics,

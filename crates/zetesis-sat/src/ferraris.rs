@@ -1,7 +1,8 @@
 use zetesis_ferraris::{Interpretation, Theory, models, models_reduct};
 
+use crate::budget::{Budget, Quota, increment};
 use crate::encoding;
-use crate::search::{Budget, Cursor, Quota, increment};
+use crate::search::Cursor;
 use crate::timing::{self, Phase};
 use crate::{
     AdmissionLimits, Cancellation, Cnf, Incomplete, ProjectionLimits, ProjectionStatistics,
@@ -201,7 +202,7 @@ pub fn check_with(
     cancellation: &Cancellation,
 ) -> Check {
     let mut budget = Budget {
-        quota: crate::search::LocalQuota,
+        quota: crate::budget::LocalQuota,
         limits: limits.search,
         cancellation,
         statistics: SearchStatistics::default(),
@@ -479,7 +480,7 @@ impl StableModels {
             return Self::with_method(theory, SearchMethod::Regions, limits, cancellation);
         }
         let mut budget = Budget {
-            quota: crate::search::LocalQuota,
+            quota: crate::budget::LocalQuota,
             limits: limits.search,
             cancellation: &cancellation,
             statistics: SearchStatistics::default(),
@@ -539,7 +540,7 @@ impl StableModels {
             return Self::with_method(theory, SearchMethod::Regions, limits, cancellation);
         }
         let mut budget = Budget {
-            quota: crate::search::LocalQuota,
+            quota: crate::budget::LocalQuota,
             limits: limits.search,
             cancellation: &cancellation,
             statistics: SearchStatistics::default(),
@@ -592,7 +593,7 @@ impl StableModels {
         cancellation: Cancellation,
     ) -> Result<Self, Incomplete> {
         let mut budget = Budget {
-            quota: crate::search::LocalQuota,
+            quota: crate::budget::LocalQuota,
             limits: limits.search,
             cancellation: &cancellation,
             statistics: SearchStatistics::default(),
@@ -693,7 +694,7 @@ impl StableModels {
             .checked_add(1)
             .ok_or(Incomplete::CounterOverflow)?;
         let mut budget = Budget {
-            quota: crate::search::LocalQuota,
+            quota: crate::budget::LocalQuota,
             limits: self.limits.search,
             cancellation: &self.cancellation,
             statistics: self.statistics.search,
@@ -756,7 +757,7 @@ impl StableModels {
             .checked_add(1)
             .ok_or(Incomplete::CounterOverflow)?;
         let mut budget = Budget {
-            quota: crate::search::LocalQuota,
+            quota: crate::budget::LocalQuota,
             limits: self.limits.search,
             cancellation: &self.cancellation,
             statistics: self.statistics.search,
@@ -965,7 +966,7 @@ impl StableModels {
 
     fn advance(&mut self) -> Result<Option<Interpretation>, Incomplete> {
         let mut budget = Budget {
-            quota: crate::search::LocalQuota,
+            quota: crate::budget::LocalQuota,
             limits: self.limits.search,
             cancellation: &self.cancellation,
             statistics: self.statistics.search,
@@ -1194,7 +1195,7 @@ impl Proposer {
             }
             Self::Proposals(proposals) => {
                 let subject = index.ok_or(Incomplete::InvalidWitness)?.subject(theory)?;
-                let mut output = crate::search::storage(1)?;
+                let mut output = crate::budget::storage(1)?;
                 let produced = proposals.fill(
                     subject,
                     1,

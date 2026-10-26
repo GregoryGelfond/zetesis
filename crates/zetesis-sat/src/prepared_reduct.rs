@@ -11,8 +11,8 @@ use zetesis_ferraris::{NodeView, Theory};
 
 use crate::{
     AdmissionLimits, Cancellation, Cnf, Incomplete, Literal, SearchLimits, SearchStatistics,
+    budget::{Budget, LocalQuota, Quota},
     encoding::{self, Encoded},
-    search::{Budget, LocalQuota, Quota},
 };
 
 /// Independent construction limits for one immutable reduct-query owner.

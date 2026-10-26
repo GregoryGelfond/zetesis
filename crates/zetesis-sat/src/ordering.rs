@@ -1,6 +1,6 @@
 //! A bounded permutation of unassigned variables; clauses remain unchanged.
 
-use crate::search::{Budget, Quota, increment, reserve};
+use crate::budget::{Budget, Quota, increment, reserve};
 use crate::{Clause, Incomplete};
 
 #[derive(Debug, Default)]
@@ -141,7 +141,7 @@ fn sort(
 
 #[cfg(test)]
 mod tests {
-    use crate::search::Budget;
+    use crate::budget::Budget;
     use crate::{Cancellation, Incomplete, SearchLimits, SearchStatistics};
 
     #[test]
@@ -152,7 +152,7 @@ mod tests {
             let mut expected: Vec<_> = (0..scores.len()).collect();
             expected.sort_by_key(|&index| (std::cmp::Reverse(scores[index]), index));
             let mut budget = Budget {
-                quota: crate::search::LocalQuota,
+                quota: crate::budget::LocalQuota,
                 limits: SearchLimits::default(),
                 cancellation: &cancellation,
                 statistics: SearchStatistics::default(),
@@ -164,7 +164,7 @@ mod tests {
             );
             if count > 0 {
                 let mut limited = Budget {
-                    quota: crate::search::LocalQuota,
+                    quota: crate::budget::LocalQuota,
                     limits: SearchLimits {
                         max_work: budget.statistics.work - 1,
                         ..Default::default()

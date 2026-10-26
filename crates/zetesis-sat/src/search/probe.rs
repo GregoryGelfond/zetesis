@@ -70,7 +70,7 @@ mod tests {
             )
             .unwrap();
             let mut budget = Budget {
-                quota: crate::search::LocalQuota,
+                quota: crate::budget::LocalQuota,
                 limits: SearchLimits::default(),
                 cancellation: &cancellation,
                 statistics: SearchStatistics::default(),
@@ -96,7 +96,7 @@ mod tests {
             .collect();
         let cnf = Cnf::new(2, clauses, AdmissionLimits::default()).unwrap();
         let mut budget = Budget {
-            quota: crate::search::LocalQuota,
+            quota: crate::budget::LocalQuota,
             limits: SearchLimits::default(),
             cancellation: &cancellation,
             statistics: SearchStatistics::default(),

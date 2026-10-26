@@ -57,7 +57,7 @@ impl Validation {
         } else {
             cancellation.poll().map_err(Incomplete::from)?;
         }
-        crate::search::increment(&mut statistics.candidates)
+        crate::budget::increment(&mut statistics.candidates)
     }
 
     pub(super) fn check(

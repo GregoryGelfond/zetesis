@@ -1,5 +1,6 @@
 use super::Cursor;
-use crate::search::{Budget, query};
+use crate::budget::Budget;
+use crate::search::query;
 use crate::{
     AdmissionLimits, Cancellation, Cnf, Incomplete, Literal, SearchLimits, SearchStatistics, Solve,
 };
@@ -34,7 +35,7 @@ pub(super) fn exclude(
 
 pub(super) fn budget(cancellation: &Cancellation) -> Budget<'_> {
     Budget {
-        quota: crate::search::LocalQuota,
+        quota: crate::budget::LocalQuota,
         limits: SearchLimits::default(),
         cancellation,
         statistics: SearchStatistics::default(),

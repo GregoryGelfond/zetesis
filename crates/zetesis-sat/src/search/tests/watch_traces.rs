@@ -29,7 +29,8 @@ mod queens06;
 
 use zetesis_ferraris::{Node, Theory};
 
-use super::{Budget, Cursor, LocalQuota};
+use super::{Budget, Cursor};
+use crate::budget::LocalQuota;
 use crate::{AdmissionLimits, Cancellation, SearchLimits, SearchStatistics, Solve, encoding};
 
 const QUEENS: [(usize, &[Node], &[usize]); 6] = [

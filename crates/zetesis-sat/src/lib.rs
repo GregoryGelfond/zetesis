@@ -9,6 +9,7 @@
 //! external solver, or claim a refinement proof for its Rust implementation.
 #![forbid(unsafe_code)]
 
+mod budget;
 mod clauses;
 mod cnf;
 mod encoding;
@@ -35,6 +36,7 @@ pub use zetesis_ferraris::partition;
 
 pub use checked::{CheckedInterpretation, StableInterpretation, check_interpretation};
 
+pub use budget::{SearchLimits, SearchStatistics};
 pub use clauses::{Clause, Clauses};
 pub use cnf::{AdmissionError, AdmissionLimits, Assignment, Cnf, Literal, Resource};
 pub use error::Incomplete;
@@ -48,7 +50,7 @@ pub use ferraris::{
     SupportStatus, check, check_with,
 };
 pub use projection::{ProjectionLimits, ProjectionResource, ProjectionStatistics};
-pub use search::{SearchLimits, SearchStatistics, Solve, solve, solve_with_statistics};
+pub use search::{Solve, solve, solve_with_statistics};
 pub use zetesis_cpu::Cancellation;
 
 pub use timing::{PhaseMeasurement, SearchPhaseTimings};

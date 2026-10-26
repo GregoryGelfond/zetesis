@@ -2,7 +2,7 @@
 
 use zetesis_ferraris::{SupportError, SupportLimits, Theory, support_restriction};
 
-use crate::search::Budget;
+use crate::budget::Budget;
 use crate::{AdmissionError, Cnf, Incomplete, Limits, encoding};
 
 /// Disposition of optional complete-theory candidate support construction.
@@ -140,7 +140,7 @@ mod tests {
 
     fn budget(cancellation: &Cancellation) -> Budget<'_> {
         Budget {
-            quota: crate::search::LocalQuota,
+            quota: crate::budget::LocalQuota,
             limits: Limits::default().search,
             cancellation,
             statistics: SearchStatistics::default(),

@@ -129,7 +129,7 @@ fn walk_with(
 ) -> (ParallelRegions, Arc<IndexedTheory>) {
     let cancellation = Cancellation::with_deadline(Instant::now() + 30 * WAIT).unwrap();
     let mut budget = Budget {
-        quota: crate::search::LocalQuota,
+        quota: crate::budget::LocalQuota,
         limits: limits.search,
         cancellation: &cancellation,
         statistics: SearchStatistics::default(),
@@ -164,7 +164,7 @@ fn omit_producers_for_membership_test(search: &mut ParallelRegions) {
 /// The caller's budget, as the enumeration holds it.
 fn caller<'c>(search: &ParallelRegions, cancellation: &'c Cancellation) -> Budget<'c> {
     Budget {
-        quota: crate::search::LocalQuota,
+        quota: crate::budget::LocalQuota,
         limits: search.shared.limits.search,
         cancellation,
         statistics: search.search_statistics(),

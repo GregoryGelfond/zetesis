@@ -6,8 +6,8 @@ use super::{PreparedReduct, ReductWorkspace};
 use crate::timing::{self, Phase};
 use crate::{
     Check, Incomplete, Limits, SearchMethod, Statistics,
+    budget::{Budget, Quota, increment},
     ferraris::{IndexedTheory, ReductQuery},
-    search::{Budget, Quota, increment},
 };
 
 /// The membership machinery of one enumeration or worker: under the clause

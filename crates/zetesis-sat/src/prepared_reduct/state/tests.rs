@@ -48,7 +48,7 @@ fn cyclic_candidate_rejection_uses_complete_least_closure() {
     let limits = Limits::default();
     let cancellation = Cancellation::default();
     let mut budget = Budget {
-        quota: crate::search::LocalQuota,
+        quota: crate::budget::LocalQuota,
         limits: limits.search,
         cancellation: &cancellation,
         statistics: crate::SearchStatistics::default(),

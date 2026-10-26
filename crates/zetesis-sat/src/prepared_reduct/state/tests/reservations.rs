@@ -1,7 +1,7 @@
 //! A partial worker lease is not a complete positive-kernel allowance.
 
 use super::*;
-use crate::search::{LocalQuota, SharedBudget};
+use crate::budget::{LocalQuota, SharedBudget};
 use crate::{SearchLimits, SearchStatistics};
 
 fn facts() -> Theory {

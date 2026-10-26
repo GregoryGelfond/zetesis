@@ -2,7 +2,7 @@
 
 mod extrema_allowance;
 
-use crate::search::{Budget, LocalQuota};
+use crate::budget::{Budget, LocalQuota};
 use crate::{
     AdmissionError, AdmissionLimits, Cancellation, Cnf, Incomplete, Literal, Resource,
     SearchLimits, SearchStatistics, Solve,

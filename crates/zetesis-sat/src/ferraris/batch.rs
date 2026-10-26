@@ -7,7 +7,7 @@ use std::sync::Arc;
 
 use super::{CompletionExecutor, IndexedTheory, StableModels};
 use crate::Incomplete;
-use crate::search::{Budget, increment};
+use crate::budget::{Budget, increment};
 use crate::timing::{self, Phase};
 use zetesis_ferraris::{EvaluationLimits, Interpretation, SlateId, SlateRef, Theory};
 
@@ -954,7 +954,7 @@ impl StableModels {
         }
         let index = self.walk_index()?;
         let mut budget = Budget {
-            quota: crate::search::LocalQuota,
+            quota: crate::budget::LocalQuota,
             limits: self.limits.search,
             cancellation: &self.cancellation,
             statistics: self.statistics.search,
@@ -1056,7 +1056,7 @@ impl StableModels {
             return Ok(None);
         }
         let mut budget = Budget {
-            quota: crate::search::LocalQuota,
+            quota: crate::budget::LocalQuota,
             limits: self.limits.search,
             cancellation: &self.cancellation,
             statistics: self.statistics.search,
@@ -1203,7 +1203,7 @@ impl StableModels {
         self.reduct.workspace = crate::ReductWorkspace::default();
         let mut accepted = Vec::new();
         let mut budget = Budget {
-            quota: crate::search::LocalQuota,
+            quota: crate::budget::LocalQuota,
             limits: self.limits.search,
             cancellation: &self.cancellation,
             statistics: self.statistics.search,
@@ -1228,7 +1228,7 @@ impl StableModels {
         self.statistics.search = budget.statistics;
         result?;
         // The executor preflight included these output slots before any query.
-        let mut output = crate::search::storage(verdicts.len())?;
+        let mut output = crate::budget::storage(verdicts.len())?;
         let mut stats = self.batch.statistics;
         let mut stable = self.statistics.stable_models;
         for (verdict, accepted) in verdicts.iter().zip(&accepted) {

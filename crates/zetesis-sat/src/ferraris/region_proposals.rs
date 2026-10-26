@@ -106,7 +106,7 @@ use zetesis_ferraris::{Interpretation, Narrower, NarrowingScratch, Theory};
 use super::conditions::{Bound, CandidateKnowledge, Conditions};
 use super::region_frontier::{Attempt, Busy, Entry, RegionFrontier, Termination, reserve_regions};
 use super::regions::{self, FrontierOrder, RegionCounts, RegionSearchStatistics};
-use crate::search::{Budget, SharedBudget, WorkLease};
+use crate::budget::{Budget, SharedBudget, WorkLease};
 use crate::{Cancellation, Incomplete, SearchLimits, SearchPhaseTimings, SearchStatistics};
 
 /// Idle producers poll control while another producer owns the last region.

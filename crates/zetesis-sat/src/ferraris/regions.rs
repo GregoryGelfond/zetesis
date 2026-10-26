@@ -29,7 +29,7 @@ use zetesis_ferraris::{
 
 use super::conditions::{Bound, CandidateKnowledge, Conditions};
 use super::original_index::IndexedTheory;
-use crate::search::{Budget, Quota};
+use crate::budget::{Budget, Quota};
 use crate::{Cancellation, Incomplete};
 
 /// How classical candidates are proposed to the reduct.
@@ -522,7 +522,7 @@ pub(crate) fn leaf_interpretation(
     theory: &Theory,
     region: &Region,
 ) -> Result<Interpretation, Incomplete> {
-    let mut selected = crate::search::storage(theory.atom_count())?;
+    let mut selected = crate::budget::storage(theory.atom_count())?;
     selected.extend(region.held());
     Interpretation::new(theory, selected).map_err(|error| match error {
         zetesis_ferraris::AdmissionError::Allocation => Incomplete::Allocation,

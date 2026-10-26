@@ -1,6 +1,6 @@
 use super::*;
+use crate::budget::{Budget, LocalQuota};
 use crate::ferraris::{Limits, StableModels};
-use crate::search::{Budget, LocalQuota};
 use crate::{Cancellation, SearchLimits, SearchStatistics};
 use zetesis_cpu::regions::{Narrowing, Region};
 use zetesis_ferraris::Node;

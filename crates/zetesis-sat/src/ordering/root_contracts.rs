@@ -1,6 +1,6 @@
 //! Root assignments are omitted without losing any undecided variable or tie order.
 
-use crate::search::Budget;
+use crate::budget::Budget;
 use crate::{Cancellation, Incomplete, Literal, SearchLimits, SearchStatistics};
 
 #[test]
@@ -40,7 +40,7 @@ fn partial_assignments_match_independent_unassigned_frequency_order() {
         });
         let cnf = crate::Cnf::new(4, clauses, crate::AdmissionLimits::default()).unwrap();
         let mut budget = Budget {
-            quota: crate::search::LocalQuota,
+            quota: crate::budget::LocalQuota,
             limits: SearchLimits::default(),
             cancellation: &cancellation,
             statistics: SearchStatistics::default(),
@@ -52,7 +52,7 @@ fn partial_assignments_match_independent_unassigned_frequency_order() {
         let work = budget.statistics.work;
         for ceiling in [0, work - 1, work] {
             let mut budget = Budget {
-                quota: crate::search::LocalQuota,
+                quota: crate::budget::LocalQuota,
                 limits: SearchLimits {
                     max_work: ceiling,
                     ..Default::default()
@@ -77,7 +77,7 @@ fn all_root_assigned_variables_need_no_merge_work_and_still_poll_control() {
     for count in [0, 1, 2, 128] {
         let values = vec![Some(false); count];
         let mut budget = Budget {
-            quota: crate::search::LocalQuota,
+            quota: crate::budget::LocalQuota,
             limits: SearchLimits::default(),
             cancellation: &cancellation,
             statistics: SearchStatistics::default(),
@@ -92,7 +92,7 @@ fn all_root_assigned_variables_need_no_merge_work_and_still_poll_control() {
     let cancelled = Cancellation::default();
     cancelled.cancel();
     let mut budget = Budget {
-        quota: crate::search::LocalQuota,
+        quota: crate::budget::LocalQuota,
         limits: SearchLimits::default(),
         cancellation: &cancelled,
         statistics: SearchStatistics::default(),
