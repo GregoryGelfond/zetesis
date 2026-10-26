@@ -109,7 +109,6 @@ mod components;
 pub(super) mod explanations;
 mod initialization;
 mod local;
-pub(super) mod ledger;
 mod projection;
 
 use initialization::Initial;
@@ -150,7 +149,7 @@ pub(super) struct Scratch {
     projected: Option<Projection>,
     /// Test-only operation count; no closure authority is stored here.
     #[cfg(test)]
-    passes: usize,
+    pub(super) passes: usize,
 }
 
 impl Scratch {

@@ -17,11 +17,12 @@ fn capture_from_pruning(program: &Program) -> NarrowingScratch {
     assert_eq!(scratch.explanations.len(), 1);
     assert_eq!(
         scratch.explanations.rows[0]
+            .row
             .conditions()
             .collect::<Vec<_>>(),
         [(2, false), (3, true)]
     );
-    assert_eq!(scratch.explanations.outputs(0).collect::<Vec<_>>(), [0, 1]);
+    assert_eq!(scratch.explanations.absent_outputs(0), [0, 1]);
     scratch
 }
 
@@ -58,8 +59,8 @@ fn early_rows_preserve_every_answer_in_all_partial_regions() {
     let answers: Vec<_> = (0..32)
         .filter(|&mask| {
             crate::check(
-                &program.owner,
-                &world(&program.owner, mask),
+                &program.theory,
+                &world(&program.theory, mask),
                 crate::Limits::default(),
                 &Cancellation::default(),
             )
@@ -107,7 +108,7 @@ fn early_rows_are_suspended_without_original_producer_coverage() {
     let program = Program::new(false);
     let mut scratch = capture_from_pruning(&program);
     let mut workspace = EvaluationWorkspace::default();
-    let candidate = world(&program.owner, 0b11111);
+    let candidate = world(&program.theory, 0b11111);
     let evaluated = workspace
         .evaluate(
             &candidate,
@@ -120,7 +121,7 @@ fn early_rows_are_suspended_without_original_producer_coverage() {
     let initial = region(&[(0, true), (3, true)]);
     let mut frozen = initial.clone();
     let mut reference = initial.clone();
-    let subject = FrozenSubject::new(&program.owner, evaluated.truth());
+    let subject = FrozenSubject::new(&program.theory, evaluated.truth());
     let (expected, _) = program
         .index
         .narrow_frozen_known(
@@ -153,7 +154,7 @@ fn early_rows_are_suspended_without_original_producer_coverage() {
     let (_, counts) = program
         .index
         .narrow_known(
-            OriginalSubject::new(&program.owner, None),
+            OriginalSubject::new(&program.theory, None),
             &mut restriction,
             &mut program.index.knowledge(),
             &mut scratch,
@@ -180,7 +181,7 @@ fn a_foreign_owner_discards_early_rows() {
     assert_eq!(scratch.explanations.len(), 0);
 }
 
-fn separate_cycles() -> (Theory, Narrower, Producers) {
+fn separate_cycles() -> Program {
     // Different mask words require priority to survive discovery of an
     // earlier open unsupported head. Other atoms have no producer.
     let mut nodes: Vec<_> = (0..66).map(Node::atom).collect();
@@ -189,82 +190,49 @@ fn separate_cycles() -> (Theory, Narrower, Producers) {
         roots.push(nodes.len());
         nodes.push(Node::implies(body, head));
     }
-    let owner = theory(66, nodes, roots);
-    let index = Narrower::new(&owner);
-    let producers = crate::producers(&owner, RegionLimits::default(), &Cancellation::default())
-        .unwrap()
-        .producers
-        .unwrap();
-    (owner, index, producers)
+    Program::of(theory(66, nodes, roots))
 }
 
 #[test]
 fn a_later_held_head_has_capture_priority() {
-    let (owner, index, producers) = separate_cycles();
+    let program = separate_cycles();
     let mut original = Region::all_open(66);
     assert!(original.hold(64));
     let mut scratch = NarrowingScratch::default();
-    let (result, counts) = index
-        .narrow_known(
-            OriginalSubject::new(&owner, Some(&producers)),
-            &mut original,
-            &mut index.knowledge(),
-            &mut scratch,
-            RegionLimits::default(),
-            &Cancellation::default(),
-        )
-        .unwrap();
+    let (result, counts) =
+        program.close(&mut original, &mut program.index.knowledge(), &mut scratch);
     assert_eq!(result, Narrowing::Refuted);
     assert_eq!(counts.support_explanations.attempts, 1);
     assert_eq!(counts.support_explanations.certified, 1);
     assert_eq!(scratch.explanations.len(), 1);
-    assert_eq!(
-        scratch.explanations.outputs(0).collect::<Vec<_>>(),
-        [64, 65]
-    );
+    assert_eq!(scratch.explanations.absent_outputs(0), [64, 65]);
 }
 
 #[test]
 fn one_completed_pass_captures_at_most_one_open_component() {
-    let (owner, index, producers) = separate_cycles();
+    let program = separate_cycles();
     let mut original = Region::all_open(66);
     let mut scratch = NarrowingScratch::default();
-    let (result, counts) = index
-        .narrow_known(
-            OriginalSubject::new(&owner, Some(&producers)),
-            &mut original,
-            &mut index.knowledge(),
-            &mut scratch,
-            RegionLimits::default(),
-            &Cancellation::default(),
-        )
-        .unwrap();
+    let (result, counts) =
+        program.close(&mut original, &mut program.index.knowledge(), &mut scratch);
     assert!(matches!(result, Narrowing::Fixed { .. }));
     for atom in [0, 1, 64, 65] {
         assert!(original.is_cut(atom));
     }
     assert_eq!(counts.support_explanations.attempts, 1);
     assert_eq!(scratch.explanations.len(), 1);
-    assert_eq!(scratch.explanations.outputs(0).collect::<Vec<_>>(), [0, 1]);
+    assert_eq!(scratch.explanations.absent_outputs(0), [0, 1]);
 }
 
 #[test]
 fn unfinished_optional_discovery_keeps_the_original_cuts() {
-    let (owner, index, producers) = separate_cycles();
+    let program = separate_cycles();
     let mut original = Region::all_open(66);
     let mut scratch = NarrowingScratch::default();
-    scratch.explanations.prepare(&owner);
+    scratch.explanations.prepare(&program.owner);
     scratch.explanations.remaining = 1;
-    let (result, counts) = index
-        .narrow_known(
-            OriginalSubject::new(&owner, Some(&producers)),
-            &mut original,
-            &mut index.knowledge(),
-            &mut scratch,
-            RegionLimits::default(),
-            &Cancellation::default(),
-        )
-        .unwrap();
+    let (result, counts) =
+        program.close(&mut original, &mut program.index.knowledge(), &mut scratch);
     assert!(matches!(result, Narrowing::Fixed { .. }));
     for atom in [0, 1, 64, 65] {
         assert!(original.is_cut(atom));

@@ -257,6 +257,13 @@ read the enumeration's one original index. Returned countermodels still undergo
 independent frozen-reduct validation. Candidate restrictions do not replace the
 original theory.
 
+A formula session shares the rows its candidate walks learn through one
+`zetesis_stable::LearnedStore`, created for each solve call and handed to the
+session's candidate stream and membership execution. The rows only prune
+candidate regions; see [semantics](../architecture/semantics.md) for what a row
+says and when walks exchange rows. `SolveConfig::share_learned_rows`, on by
+default, turns sharing off for measurement, with identical answer sets.
+
 `SolveConfig::max_reduct_bytes` bounds each query's retained workspace.
 `max_completion_scratch_bytes` bounds completion's ordered results and its
 workers' workspaces. That setting also supplies a separate allowance for

@@ -85,6 +85,26 @@ Notable changes by release. Versions follow Semantic Versioning.
   by exhaustion.
 - `zetesis_core::Atom::contrary` gives an atom's strong contrary: the same
   tuple under the opposite classical sign.
+- Learned rows generalize the founded collector's ledger. A row pairs signed
+  atom conditions with signed outputs, each an atom required present or absent,
+  under a consequence class; the Lean module `LearnedRegions` states what such a
+  row may decide about a region. zetesis-ferraris adds `LearningOwner`, the
+  explicit owner of a class's rows, `LearningLimits` with
+  `LearningLimits::for_allowance`, `LearningStore`, `LearningAttempt`,
+  `OriginalSubject::carrier`, the one subject of a walk that matches and
+  captures rows, and `NarrowingScratch::{seed_learning, deliver_learning,
+  learned_rows, learned_evictions}`. A full tier evicts the row with the fewest
+  decayed hits; founded rows keep a reserved floor. Above 64 rows matching
+  reads an occurrence index over condition and output atoms.
+- A solve's candidate walks share learned rows through one store:
+  `StableModels::set_learned_store` with `LearnedStore`, the type it takes, in
+  zetesis-stable. Its public surface is creating an empty store; no public
+  operation adds, seeds, edits or reads a row. Walks seed their tiers from the
+  store and deliver to it at their boundaries only: their end, a parallel
+  walk's handover to its workers, every join of the GPU route's producers, and
+  every `publish_regions` regions visited. `SolveConfig::share_learned_rows`, on
+  by default, turns sharing off for measurement; it has no command-line flag.
+  Answer sets are unchanged; work counts depend on the schedule under sharing.
 
 ### Changed
 
@@ -255,6 +275,16 @@ Notable changes by release. Versions follow Semantic Versioning.
 
 ### Compatibility
 
+- Fields added to exhaustive public structs: `zetesis_stable::Limits::learning`
+  and `SolveConfig::share_learned_rows`. A struct literal naming every field must
+  add them; one completed from a default needs no change.
+- `Incomplete` adds `LateLearnedStore` and `LearnedStoreAlreadySet`, refusing a
+  learned store for a started stream and a replacement. It is exhaustive, so a
+  match without a wildcard must add them. The JSON output's interruption `code`
+  names them `late_learned_store` and `learned_store_already_set`.
+- In zetesis-ferraris, only a subject built by `OriginalSubject::carrier`
+  matches and captures learned rows. An original subject built by
+  `OriginalSubject::new` no longer does; its narrowing is otherwise unchanged.
 - The clause search is removed, with no alias and no deprecation period: the
   region search, already the default, is the only formula search. Membership,
   answer sets and the region search's work are unchanged. The command line

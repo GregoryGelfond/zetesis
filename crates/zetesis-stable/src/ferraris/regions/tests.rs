@@ -204,9 +204,11 @@ fn an_enumeration_builds_one_original_index() {
             zetesis_ferraris::producers(&theory, RegionLimits::default(), &cancellation).unwrap();
         let narrower = Narrower::new(&theory);
         let mut region = Region::all_open(theory.atom_count());
+        // The walk's subject carries its learned rows; so does this one.
+        let learning = LearningOwner::theory(&theory, LearningLimits::default());
         let (closed, direct) = narrower
             .narrow_known(
-                OriginalSubject::new(&theory, extraction.producers.as_ref())
+                OriginalSubject::carrier(&learning, extraction.producers.as_ref())
                     .with_choices(&extraction.choice_heads),
                 &mut region,
                 &mut narrower.knowledge(),
@@ -553,6 +555,43 @@ mod composition;
 mod generator_order;
 mod ordering;
 mod preference;
+
+#[test]
+fn a_foreign_theory_has_no_walk_subject() {
+    let cancellation = Cancellation::default();
+    let mut budget = budget(&cancellation, u64::MAX);
+    let opened = open(&cycle(), u64::MAX, LearningLimits::DEFAULT, &mut budget).unwrap();
+    assert!(matches!(
+        opened.parts.subject(&positive()),
+        Err(Incomplete::WrongTheory)
+    ));
+}
+
+#[test]
+fn the_walk_subject_learns_rows_of_its_theory() {
+    // The root's possible-foundedness pass finds the loop unsupported; only a
+    // carrier captures that as a row.
+    let theory = cycle();
+    let cancellation = Cancellation::default();
+    let mut budget = budget(&cancellation, u64::MAX);
+    let mut search = RegionSearch::new(
+        &theory,
+        u64::MAX,
+        u64::MAX,
+        LearningLimits::DEFAULT,
+        &mut budget,
+    )
+    .unwrap();
+    let index = built(&theory);
+    while search
+        .propose(&theory, &index, &mut budget, &mut None)
+        .unwrap()
+        .is_some()
+    {}
+    let explanations = search.statistics().counts.support_explanations;
+    assert_eq!(explanations.attempts, 1);
+    assert_eq!(explanations.certified, 1);
+}
 
 #[test]
 fn failed_narrowing_keeps_support_explanation_receipts() {

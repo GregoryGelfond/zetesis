@@ -381,6 +381,8 @@ fn reason_code(reason: Interruption) -> &'static str {
                 Incomplete::CandidateBoundPlan => "candidate_bound_plan",
                 Incomplete::CandidateBoundNotImproving => "candidate_bound_not_improving",
                 Incomplete::RegionFilterAlreadySet => "region_filter_already_set",
+                Incomplete::LateLearnedStore => "late_learned_store",
+                Incomplete::LearnedStoreAlreadySet => "learned_store_already_set",
                 Incomplete::Certificate(_) => "certificate",
                 Incomplete::Verification(_) => "verification",
                 Incomplete::InvalidWitness => "invalid_witness",

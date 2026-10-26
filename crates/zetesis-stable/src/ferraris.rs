@@ -23,6 +23,9 @@ pub use certified::{
 
 mod regions;
 
+mod learned;
+pub use learned::LearnedStore;
+
 mod original_index;
 mod passes;
 pub(crate) use original_index::IndexedTheory;
@@ -60,6 +63,10 @@ pub struct Limits {
     /// This excludes legacy Boolean indexes and transient construction peak.
     /// Successful preparation admits actual capacity before publishing an index.
     pub max_native_narrowing_bytes: u64,
+    /// Allowances of the rows a walk learns: each tier's rows and capture,
+    /// the shared store's rows, and what and when a tier shares. Exhausting
+    /// one disables that learning and never ends the enumeration.
+    pub learning: zetesis_ferraris::LearningLimits,
 }
 impl Default for Limits {
     fn default() -> Self {
@@ -69,6 +76,7 @@ impl Default for Limits {
             max_verification_work: 100_000_000,
             max_reduct_bytes: crate::reduct::DEFAULT_BYTES,
             max_native_narrowing_bytes: u64::MAX,
+            learning: zetesis_ferraris::LearningLimits::DEFAULT,
         }
     }
 }
@@ -345,6 +353,7 @@ impl StableModels {
             theory,
             limits.max_native_narrowing_bytes,
             limits.max_reduct_bytes,
+            limits.learning,
             &mut budget,
         )?));
         let statistics = Statistics {
@@ -513,6 +522,7 @@ impl StableModels {
             workers,
             limits.max_native_narrowing_bytes,
             limits.max_reduct_bytes,
+            limits.learning,
             &mut budget,
         )?;
         let statistics = Statistics {
@@ -758,6 +768,35 @@ impl StableModels {
             Proposer::Regions(regions) => regions.set_filter(filter),
             Proposer::Proposals(proposals) => proposals.set_filter(filter),
             Proposer::Parallel(parallel) => parallel.set_filter(filter)?,
+        }
+        Ok(())
+    }
+
+    /// Share learned rows through `store` with every other stream given the
+    /// same store, before traversal. The stream's walks seed their tiers from
+    /// it and deliver to it at their boundaries (see [`LearnedStore`]); rows
+    /// only ever prune candidate regions and never decide membership or
+    /// exhaustion. A stream given no store keeps its rows to each walk.
+    ///
+    /// # Errors
+    /// Refuses a closed or started stream, or replacement.
+    pub fn set_learned_store(
+        &mut self,
+        store: std::sync::Arc<LearnedStore>,
+    ) -> Result<(), Incomplete> {
+        if self.terminal {
+            return Err(Incomplete::ClosedEnumerator);
+        }
+        if self.started() {
+            return Err(Incomplete::LateLearnedStore);
+        }
+        if self.proposer.learned_store().is_some() {
+            return Err(Incomplete::LearnedStoreAlreadySet);
+        }
+        match &mut self.proposer {
+            Proposer::Regions(regions) => regions.set_learned_store(store),
+            Proposer::Proposals(proposals) => proposals.set_learned_store(store),
+            Proposer::Parallel(parallel) => parallel.set_learned_store(store)?,
         }
         Ok(())
     }
@@ -1043,6 +1082,14 @@ impl Proposer {
             Self::Regions(regions) => regions.filter(),
             Self::Proposals(proposals) => proposals.filter(),
             Self::Parallel(parallel) => parallel.filter(),
+        }
+    }
+
+    fn learned_store(&self) -> Option<&std::sync::Arc<LearnedStore>> {
+        match self {
+            Self::Regions(regions) => regions.learned_store(),
+            Self::Proposals(proposals) => proposals.learned_store(),
+            Self::Parallel(parallel) => parallel.learned_store(),
         }
     }
 

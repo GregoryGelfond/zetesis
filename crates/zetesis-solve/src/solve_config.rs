@@ -173,6 +173,10 @@ pub struct SolveConfig {
     /// the state is admitted only when that many candidates fit beside it. Like
     /// the other capacities, it is conservative accounting, not RSS.
     pub max_tight_batch_bytes: u64,
+    /// Share learned rows among a solve's candidate walks through one store,
+    /// the default. Off, each walk keeps its rows to itself. A measurement
+    /// switch with no command-line flag: answer sets are the same either way.
+    pub share_learned_rows: bool,
 }
 
 impl SolveConfig {

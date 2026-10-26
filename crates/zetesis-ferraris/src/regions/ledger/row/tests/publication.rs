@@ -5,17 +5,19 @@ use super::*;
 #[derive(Debug, PartialEq, Eq)]
 enum Effect {
     Cut(usize),
+    Hold(usize),
     Contradiction(usize),
 }
 
-fn expected_effects(source: &Explanation, held: &[u64], cut: &[u64]) -> Vec<Effect> {
-    let conflict = source.unsupported.iter().position(|&atom| bit(held, atom));
-    let end = conflict.unwrap_or(source.unsupported.len());
-    source.unsupported[..end]
+fn expected_effects(source: &Literals, held: &[u64], cut: &[u64]) -> Vec<Effect> {
+    let absent: Vec<usize> = source.outputs.iter().map(|&(atom, _)| atom).collect();
+    let conflict = absent.iter().position(|&atom| bit(held, atom));
+    let end = conflict.unwrap_or(absent.len());
+    absent[..end]
         .iter()
         .filter(|&&atom| !bit(cut, atom))
         .map(|&atom| Effect::Cut(atom))
-        .chain(conflict.map(|position| Effect::Contradiction(source.unsupported[position])))
+        .chain(conflict.map(|position| Effect::Contradiction(absent[position])))
         .collect()
 }
 
@@ -23,10 +25,11 @@ fn publish(row: &Row, held: &[u64], cut: &mut [u64]) -> Vec<Effect> {
     let mut cursor = OutputCursor::default();
     let mut work = Work::new(u64::MAX);
     let mut effects = Vec::new();
-    while let Some(atom) = row
+    while let Some((atom, present)) = row
         .next_publication_output(&mut cursor, held, cut, &mut work)
         .unwrap()
     {
+        assert!(!present, "these fixtures learn absences only");
         if bit(held, atom) {
             effects.push(Effect::Contradiction(atom));
             break;
@@ -37,6 +40,101 @@ fn publish(row: &Row, held: &[u64], cut: &mut [u64]) -> Vec<Effect> {
         }
     }
     effects
+}
+
+/// Signed outputs in order: the first output whose negation is decided
+/// contradicts, and every earlier open output takes its sign.
+fn expected_signed_effects(source: &Literals, held: &[u64], cut: &[u64]) -> Vec<Effect> {
+    let (mut held, mut cut) = (held.to_vec(), cut.to_vec());
+    let mut effects = Vec::new();
+    for &(atom, present) in &source.outputs {
+        if bit(if present { &cut } else { &held }, atom) {
+            effects.push(Effect::Contradiction(atom));
+            break;
+        }
+        let agrees = if present { &mut held } else { &mut cut };
+        if !bit(agrees, atom) {
+            agrees[atom / 64] |= 1 << (atom % 64);
+            effects.push(if present {
+                Effect::Hold(atom)
+            } else {
+                Effect::Cut(atom)
+            });
+        }
+    }
+    effects
+}
+
+fn publish_signed(row: &Row, held: &mut [u64], cut: &mut [u64]) -> Vec<Effect> {
+    let mut cursor = OutputCursor::default();
+    let mut work = Work::new(u64::MAX);
+    let mut effects = Vec::new();
+    while let Some((atom, present)) = row
+        .next_publication_output(&mut cursor, held, cut, &mut work)
+        .unwrap()
+    {
+        if bit(if present { &*cut } else { &*held }, atom) {
+            effects.push(Effect::Contradiction(atom));
+            break;
+        }
+        let agrees = if present { &mut *held } else { &mut *cut };
+        if !bit(agrees, atom) {
+            agrees[atom / 64] |= 1 << (atom % 64);
+            effects.push(if present {
+                Effect::Hold(atom)
+            } else {
+                Effect::Cut(atom)
+            });
+        }
+    }
+    effects
+}
+
+#[test]
+fn every_signed_output_reading_preserves_ordered_effects() {
+    // Both signs of atom 64: its condition admits no member of the class, so
+    // an open atom is cut and then contradicts.
+    let outputs = [
+        (0, false),
+        (1, true),
+        (63, true),
+        (64, false),
+        (64, true),
+        (65, true),
+        (128, false),
+    ];
+    let source = Literals {
+        conditions: Vec::new(),
+        outputs: outputs.to_vec(),
+    };
+    let compact = packed(&source);
+    let scalar = Row::Scalar(Literals {
+        conditions: Vec::new(),
+        outputs: outputs.to_vec(),
+    });
+    let atoms = [0, 1, 63, 64, 65, 128];
+    for mut reading in 0..4_usize.pow(u32::try_from(atoms.len()).unwrap()) {
+        let mut held = [0_u64; 3];
+        let mut cut = [0_u64; 3];
+        for &atom in &atoms {
+            let state = reading % 4;
+            reading /= 4;
+            if state & 1 != 0 {
+                held[atom / 64] |= 1 << (atom % 64);
+            }
+            if state & 2 != 0 {
+                cut[atom / 64] |= 1 << (atom % 64);
+            }
+        }
+        let wanted = expected_signed_effects(&source, &held, &cut);
+        for row in [&scalar, &compact] {
+            let (mut actual_held, mut actual_cut) = (held, cut);
+            assert_eq!(
+                publish_signed(row, &mut actual_held, &mut actual_cut),
+                wanted
+            );
+        }
+    }
 }
 
 #[test]
@@ -132,7 +230,10 @@ fn open_packed_outputs_charge_words_and_events() {
     {
         visited.push(atom);
     }
-    assert_eq!(visited, (16..80).collect::<Vec<_>>());
+    assert_eq!(
+        visited,
+        (16..80).map(|atom| (atom, false)).collect::<Vec<_>>()
+    );
     assert_eq!(work.spent, 66);
 }
 
@@ -142,7 +243,10 @@ fn publication_refusal_keeps_the_unread_output() {
     let held = [0; 3];
     let cut = [1 << 2, 1 | (1 << 6), 0];
     for row in [
-        Row::Scalar(explanation(&[], &source.unsupported)),
+        Row::Scalar(Literals {
+            conditions: Vec::new(),
+            outputs: source.outputs.clone(),
+        }),
         packed(&source),
     ] {
         let mut complete = Work::new(u64::MAX);

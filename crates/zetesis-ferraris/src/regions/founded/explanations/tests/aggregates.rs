@@ -22,11 +22,12 @@ fn ordinary_closure_reuses_native_aggregate_explanations() {
             }
         });
         let mut scratch = NarrowingScratch::default();
+        let learning = crate::test_support::learning(&program.owner);
         let close = |region: &mut Region, known: &mut Knowledge, scratch: &mut NarrowingScratch| {
             program
                 .index
                 .narrow_known(
-                    OriginalSubject::new(&program.owner, Some(&program.producers)),
+                    OriginalSubject::carrier(&learning, Some(&program.producers)),
                     region,
                     known,
                     scratch,

@@ -2806,23 +2806,52 @@ endpoint constants are handled first, and an interior cut with no chain is
 verified by a charged scan. The laws do not prove the cursor, finite-width sums,
 rollback, rank classification or original-row identity.
 
-The worker-local [ledger](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-ferraris/src/regions/founded/ledger.rs)
-authenticates the exact original theory and uses rows only with complete producer
-coverage. A complete match cuts open outputs or refutes a held output. With
-exactly one unknown signed condition, all others satisfied and an output held,
-Rust instead forces the unknown condition's opposite through the existing atom
-events. A condition known opposite disables the row; multiple unknowns or the
-absence of a held output do not authorize this additional deduction. The
-additional deduction uses existing rows and their output sets; capture retains
-the bounds below. Frozen and restriction-only visits suspend reuse; a different eligible theory
-clears the rows. Each owner retains
-at most 64 rows after at most 256 capture attempts, sharing 131,072 discovery,
-collection and redundancy-comparison reads. One collection permits at most 64 unsupported
+The worker-local [ledger](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-ferraris/src/regions/ledger.rs)
+holds one tier of an owner's rows. The owner (`LearningOwner`) names the class,
+today the answer sets of one exact original theory, and the tier's limits. Only
+the owner's carrier, a subject built by `OriginalSubject::carrier` over the
+owner's own theory, matches and captures, so every captured row belongs to the
+owner's class; capture also requires complete producer coverage. Restriction,
+bound, filter and frozen visits are not carriers and suspend reuse; a carrier
+of a different class clears the rows. A complete match gives each open output
+its sign or refutes a contradicted output. With exactly one unknown signed
+condition, all others satisfied and an output's opposite decided, Rust instead
+forces the unknown condition's opposite through the existing atom events
+(`consequence_row_forces_complement`). A condition known opposite disables the
+row; multiple unknowns or no contradicted output do not authorize this
+additional deduction. By default a tier retains at most 64 rows after at most
+256 capture attempts, sharing 131,072 discovery, collection and
+redundancy-comparison reads. One collection permits at most 64 unsupported
 atoms, 16 literals, 4,096 reads and 65,536 workspace bytes. A consolidated row
-keeps the same 64-distinct-output bound. Capture still stops at a full ledger;
-consolidation does not expand its discovery allowance. Matching remains
-charged to ordinary narrowing work. Optional limits decline capture; global
-quota, cancellation and allocation failures preserve their typed outcomes.
+keeps the same 64-distinct-output bound. A full tier evicts the row with the
+fewest decayed hits, oldest first, except founded rows within their reserved
+floor, which by default is the whole tier; deleting a row loses pruning only
+(`row_dominance` needs no deleted row). Consolidation does not expand the
+discovery allowance. Matching remains charged to ordinary narrowing work.
+Optional limits decline capture; global quota, cancellation and allocation
+failures preserve their typed outcomes.
+
+Above 64 rows a matching step reads an occurrence index covering every row's
+condition and output atoms. The Rust obligation is that the index skips only
+rows whose deduction cannot have changed: within one narrowing knowledge only
+grows and a deduction reads only the row's atoms, so the rows the index omits
+for the atoms decided since the previous step have the deductions that step
+applied. A narrowing's first step and the step after any change test every row,
+and an interrupted rebuild is never read. Exhaustive comparison of indexed and
+scanning tiers over partial regions checks this obligation; no Lean law states
+it.
+
+The store (`LearnedStore` in zetesis-stable, over zetesis-ferraris's
+`LearningStore`) holds rows by class. Its Rust obligations: a tier delivers only
+under its own owner's class, so every store row of a class was learned by that
+class's carrier and is a row of the class (`founded_row` for every row today);
+seeding and delivery are retention, publishing only complete rows under the
+same allowances, typed stops and transactional failure as capture; they run
+only at walk boundaries, never inside a narrowing, so one narrowing reads one
+tier throughout; and no store row reaches a membership check or a coverage
+claim. Sharing needs no new law: `RowOf` does not mention regions, so a row of a
+class is a row for every walk of that class, and dropping one, by eviction or by
+the quality filter, loses pruning only.
 
 `PossibleFoundedness.conditional_unsupported_union` combines already established
 absence consequences under the same interpretation condition by taking the union
@@ -2841,15 +2870,37 @@ Rust obligations. Union and retirement must preserve the existing capture bounds
 optional allowance, typed failure behavior and retained/transient storage
 accounting. These laws do not prove the ledger's representation or propagation.
 
+[LearnedRegions](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/LearnedRegions.lean)
+states the general row. A row pairs condition literals `B` with output literals
+`O`, each an atom required present or absent, and belongs to a consequence class
+`C`, a predicate on interpretations, when every member of `C` satisfying `B`
+satisfies `O` (`RowOf`). For a cube whose bounds decide every condition,
+`consequence_row_refutes` excludes every member of `C` when the cube also decides
+an output's negation, `consequence_row_forces` gives every member every output,
+and `consequence_row_narrows` restates that as `Cube.narrow_preserves_valid`'s
+premise with `C` as the valid predicate. `consequence_row_forces_complement` is
+the unit rule: with every condition but one decided and an output's negation
+decided, the remaining condition fails in every member. `row_of_narrower_class`
+carries a row to any narrower class, so a row of the original theory's answer
+sets also holds for the answer sets satisfying a streamed core. `row_union` and
+`row_dominance` generalize the union and dominance laws above to signed outputs.
+`founded_row` is the possible-foundedness collector's discharge of `RowOf`: it
+restates `conditional_unsupported_absent` for a condition given as signed
+literals and outputs given as absences, with the theory's answer sets as `C`.
+The laws are over interpretations and cubes; the ledger's encoding, matching,
+retention, eviction, ownership, delivery between workers and resource handling
+remain Rust obligations, stated with the ledger below.
+
 Retained rows use either the scalar witness lists or sparse word groups, chosen
 by actual buffer capacity including the common row header. A packed row keeps
 premise words and output words in separate ordered spans of one allocation.
 The scalar collector remains temporary; conversion peak accounting includes both
 buffers. Packed matching must preserve the same complete, partial and opposite
 condition classifications, and decoding must preserve canonical atom identity
-and ascending output events. Publication filters each packed output word by
-`outputs & (held | !cut)` before decoding: cut-only outputs are settled, while
-held outputs retain contradiction precedence. The cursor is local to one
+and ascending output events. Publication filters each packed output word before
+decoding, required absences by `held | !cut` and required presences by
+`cut | !held`: settled outputs need no event, while contradicted outputs retain
+precedence. The cursor is local to one
 traversal, and publication may cut its returned atom but cannot drain other
 propagation between visits. Word reads and emitted outputs remain charged;
 interruption supplies no completed traversal. These representation obligations are checked

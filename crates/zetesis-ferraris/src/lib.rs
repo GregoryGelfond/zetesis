@@ -57,9 +57,10 @@ pub use oracle::{Check, Limits, Statistics, Verdict, check, models, models_reduc
 pub use reduct::FrozenReduct;
 pub use regions::{
     ChoiceHeads, Extraction, FrozenSubject, GeneratorOrder, GeneratorOrderAttempt,
-    GeneratorOrderError, GeneratorOrderLimits, Knowledge, NARROWING_BATCH, Narrower,
-    NarrowingAttempt, NarrowingQuota, NarrowingScratch, NarrowingStatistics, OriginalSubject,
-    PreferenceAttempt, Producers, RegionLimits, SupportExplanationStatistics, producers,
+    GeneratorOrderError, GeneratorOrderLimits, Knowledge, LearningAttempt, LearningLimits,
+    LearningOwner, LearningStore, NARROWING_BATCH, Narrower, NarrowingAttempt, NarrowingQuota,
+    NarrowingScratch, NarrowingStatistics, OriginalSubject, PreferenceAttempt, Producers,
+    RegionLimits, SupportExplanationStatistics, producers,
 };
 pub use slate::{SlateId, SlateRef};
 pub use theory::{

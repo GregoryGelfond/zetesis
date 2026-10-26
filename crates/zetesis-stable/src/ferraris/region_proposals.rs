@@ -104,6 +104,7 @@ use zetesis_cpu::regions::{Narrowing, Region};
 use zetesis_ferraris::{Interpretation, Narrower, NarrowingScratch, Theory};
 
 use super::conditions::{Bound, CandidateKnowledge, Conditions};
+use super::learned::{LearnedStore, Tier};
 use super::region_frontier::{Attempt, Busy, Entry, RegionFrontier, Termination, reserve_regions};
 use super::regions::{self, FrontierOrder, RegionCounts, RegionSearchStatistics};
 use crate::budget::{Budget, SharedBudget, WorkLease};
@@ -119,6 +120,8 @@ const CONTROL_WAIT: Duration = Duration::from_millis(1);
 struct Workspace<'a> {
     filter: Option<crate::region_filter::Worker<'a>>,
     scratch: NarrowingScratch,
+    /// The sharing state of the scratch's tier of learned rows.
+    tier: Tier,
     counts: RegionCounts,
     timings: Option<SearchPhaseTimings>,
 }
@@ -184,10 +187,11 @@ impl RegionProposals {
         workers: NonZeroUsize,
         native_byte_limit: u64,
         order_byte_limit: u64,
+        learning: zetesis_ferraris::LearningLimits,
         budget: &mut Budget<'_>,
     ) -> Result<Self, Incomplete> {
         let regions::Opened { parts, statistics } =
-            regions::open(theory, order_byte_limit, budget)?;
+            regions::open(theory, order_byte_limit, learning, budget)?;
         let pool = rayon::ThreadPoolBuilder::new()
             .num_threads(workers.get())
             .thread_name(|index| format!("zetesis-proposal-{index}"))
@@ -219,6 +223,60 @@ impl RegionProposals {
 
     pub(super) fn filter(&self) -> Option<&crate::region_filter::Filter> {
         self.workers.borrow_owner().as_ref()
+    }
+
+    pub(super) fn learned_store(&self) -> Option<&std::sync::Arc<LearnedStore>> {
+        self.parts.learned_store()
+    }
+
+    /// The caller installs a store only before traversal and never replaces
+    /// one.
+    pub(super) fn set_learned_store(&mut self, store: std::sync::Arc<LearnedStore>) {
+        self.parts.set_learned_store(store);
+    }
+
+    /// A slate that stopped before its producers ran or joined: its retained
+    /// scratch is discarded and nothing is established.
+    fn abandon(&mut self, error: Incomplete) -> Produced {
+        let _ = self.finish();
+        Produced {
+            exhausted: false,
+            stopped: Some(error),
+            original_validation: crate::PhaseMeasurement::default(),
+        }
+    }
+
+    /// A slate's boundary is each producer's tier boundary: before the slate
+    /// runs every tier draws the store's rows retained since it last did, and
+    /// after its producers join every tier delivers and will draw again. The
+    /// calling thread does both, charging the stream's budget.
+    fn share_at_join(&mut self, start: bool, budget: &mut Budget<'_>) -> Result<(), Incomplete> {
+        let Self {
+            parts,
+            workers,
+            statistics,
+            pool,
+            ..
+        } = self;
+        workers.with_dependent_mut(|_, workspaces| {
+            if workspaces.is_empty() {
+                let count = pool.current_num_threads();
+                workspaces
+                    .try_reserve_exact(count)
+                    .map_err(|_| Incomplete::Allocation)?;
+                workspaces.resize_with(count, Workspace::default);
+            }
+            for workspace in workspaces.iter_mut() {
+                let (tier, scratch) = (&mut workspace.tier, &mut workspace.scratch);
+                if start {
+                    parts.seed_tier(tier, scratch, budget, &mut statistics.counts)?;
+                } else {
+                    parts.deliver_tier(tier, scratch, budget, &mut statistics.counts)?;
+                    tier.reseed();
+                }
+            }
+            Ok(())
+        })
     }
 
     /// The caller permits installation only before traversal, when no
@@ -342,6 +400,9 @@ impl RegionProposals {
     ) -> Produced {
         debug_assert!(output.is_empty());
         debug_assert!(maximum > 0 && output.capacity() >= maximum);
+        if let Err(error) = self.share_at_join(true, budget) {
+            return self.abandon(error);
+        }
         let allowance = SharedBudget::new(budget.limits, budget.statistics);
         // No producer runs between slates, so the count is carried exactly.
         self.frontier.termination = Termination::resuming(self.frontier.termination.unresolved());
@@ -415,18 +476,16 @@ impl RegionProposals {
         allowance.record(&mut budget.statistics);
         let (produced, mut stopped, counts, original_validation) = match joined {
             Ok(joined) => joined,
-            Err(error) => {
-                let _ = self.finish();
-                return Produced {
-                    exhausted: false,
-                    stopped: Some(error),
-                    original_validation: crate::PhaseMeasurement::default(),
-                };
-            }
+            Err(error) => return self.abandon(error),
         };
         *output = produced;
         if let Err(error) = self.statistics.counts.add(counts) {
             stopped.get_or_insert(error);
+        }
+        if stopped.is_none()
+            && let Err(error) = self.share_at_join(false, budget)
+        {
+            stopped = Some(error);
         }
         let resolved = self.frontier.termination.is_resolved();
         if (stopped.is_some() || resolved)
@@ -848,16 +907,20 @@ impl<'filter> SlateFill<'_, 'filter> {
             worker: &mut workspace.filter,
             timings: &mut workspace.timings,
         });
-        if regions::narrow(
-            (self.parts.subject(self.theory), self.narrower),
+        let narrowing = regions::narrow(
+            (self.parts.subject(self.theory)?, self.narrower),
             self.restrictions,
             (region, knowledge),
             &mut workspace.scratch,
             budget,
             counts,
             check.as_mut(),
-        )? == Narrowing::Refuted
-        {
+        )?;
+        // Between regions, the producer's tier may reach its publication
+        // trigger.
+        self.parts
+            .visited(&mut workspace.tier, &mut workspace.scratch, budget, counts)?;
+        if narrowing == Narrowing::Refuted {
             counts.refuted = 1;
             return Ok(Step::Refuted);
         }

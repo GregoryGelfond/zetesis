@@ -1,7 +1,7 @@
 //! Reusable explanations belong to the exact original theory, not the region,
 //! inherited knowledge, a restriction-only visit or a frozen reduct query.
 
-use super::{Deduction, Ledger};
+use super::{Deduction, LearningLimits, LearningOwner, Ledger, Literals};
 use crate::regions::founded::explanations::Input;
 use crate::regions::{SupportExplanationStatistics, Width, Work};
 use crate::test_support::{SinglePermits, theory, world};
@@ -12,12 +12,18 @@ use crate::{
 };
 use zetesis_cpu::{Cancellation, Stop};
 
+mod carrier;
 mod consolidation;
 mod early;
+mod eviction;
+mod index;
 mod partial;
+mod sharing;
+mod signed;
 
 struct Program {
-    owner: Theory,
+    theory: Theory,
+    owner: LearningOwner,
     index: Narrower,
     producers: Producers,
 }
@@ -29,7 +35,7 @@ impl Program {
         if seeded {
             roots.push(0);
         }
-        let owner = theory(
+        let program = theory(
             5,
             vec![
                 Node::atom(0),
@@ -51,13 +57,19 @@ impl Program {
             ],
             roots,
         );
-        let index = Narrower::new(&owner);
-        let producers = crate::producers(&owner, RegionLimits::default(), &Cancellation::default())
-            .unwrap()
-            .producers
-            .unwrap();
+        Self::of(program)
+    }
+
+    fn of(theory: Theory) -> Self {
+        let index = Narrower::new(&theory);
+        let producers =
+            crate::producers(&theory, RegionLimits::default(), &Cancellation::default())
+                .unwrap()
+                .producers
+                .unwrap();
         Self {
-            owner,
+            owner: LearningOwner::theory(&theory, LearningLimits::default()),
+            theory,
             index,
             producers,
         }
@@ -71,7 +83,7 @@ impl Program {
     ) -> (Narrowing, NarrowingStatistics) {
         self.index
             .narrow_known(
-                OriginalSubject::new(&self.owner, Some(&self.producers)),
+                OriginalSubject::carrier(&self.owner, Some(&self.producers)),
                 region,
                 known,
                 scratch,
@@ -93,13 +105,42 @@ impl Program {
         assert_eq!(scratch.explanations.len(), 1);
         assert_eq!(
             scratch.explanations.rows[0]
+                .row
                 .conditions()
                 .collect::<Vec<_>>(),
             [(2, false), (3, true)]
         );
-        assert_eq!(scratch.explanations.outputs(0).collect::<Vec<_>>(), [0, 1]);
+        assert_eq!(scratch.explanations.absent_outputs(0), [0, 1]);
         (known, scratch)
     }
+}
+
+/// Signed conditions and signed outputs.
+fn literals(conditions: &[(usize, bool)], outputs: &[(usize, bool)]) -> Literals {
+    Literals {
+        conditions: conditions.to_vec(),
+        outputs: outputs.to_vec(),
+    }
+}
+
+/// An empty tier of `theory`'s class under `limits`, whose founded allowance
+/// does not bound direct retention.
+fn owned(theory: &Theory, limits: LearningLimits) -> Ledger {
+    let mut ledger = Ledger::default();
+    ledger.prepare(&LearningOwner::theory(theory, limits));
+    ledger.remaining = u64::MAX;
+    ledger
+}
+
+/// Retain a row as the founded source would; true when it was added.
+fn add(ledger: &mut Ledger, conditions: &[(usize, bool)], outputs: &[(usize, bool)]) -> bool {
+    ledger
+        .retain_founded(
+            literals(conditions, outputs),
+            &mut Work::new(u64::MAX),
+            &mut 0,
+        )
+        .unwrap()
 }
 
 fn region(decisions: &[(usize, bool)]) -> Region {
@@ -137,13 +178,51 @@ fn input<'a>(
 ) -> Input<'a> {
     let (atom_sure, atom_never) = masks(known);
     Input {
-        theory: &program.owner,
+        theory: &program.theory,
         index: &program.index,
         producers: &program.producers,
         completed: &scratch.founded,
         atom_sure,
         atom_never,
     }
+}
+
+#[test]
+fn small_allowances_keep_the_default_limits() {
+    assert_eq!(LearningLimits::for_allowance(0), LearningLimits::default());
+    assert_eq!(
+        LearningLimits::for_allowance(64 << 20),
+        LearningLimits::default()
+    );
+}
+
+#[test]
+fn tier_rows_grow_with_the_allowance_up_to_their_ceiling() {
+    let limits = LearningLimits::for_allowance(512 << 20);
+    assert_eq!((limits.tier_rows, limits.store_rows), (512, 2048));
+    assert_eq!(LearningLimits::for_allowance(usize::MAX).tier_rows, 4096);
+}
+
+#[test]
+fn the_founded_output_limit_declines_a_wider_row() {
+    let mut program = Program::new(false);
+    program.owner = LearningOwner::theory(
+        &program.theory,
+        LearningLimits {
+            founded_outputs: 1,
+            ..LearningLimits::default()
+        },
+    );
+    let mut scratch = NarrowingScratch::default();
+    let (result, counts) = program.close(
+        &mut region(&[(0, true), (2, false), (3, true), (4, false)]),
+        &mut program.index.knowledge(),
+        &mut scratch,
+    );
+    assert_eq!(result, Narrowing::Refuted);
+    assert_eq!(counts.support_explanations.attempts, 1);
+    assert_eq!(counts.support_explanations.declined, 1);
+    assert_eq!(scratch.explanations.len(), 0);
 }
 
 #[test]
@@ -181,8 +260,8 @@ fn all_partial_regions_preserve_every_original_answer() {
     let answers: Vec<_> = (0..32)
         .filter(|&mask| {
             crate::check(
-                &program.owner,
-                &world(&program.owner, mask),
+                &program.theory,
+                &world(&program.theory, mask),
                 crate::Limits::default(),
                 &Cancellation::default(),
             )
@@ -239,7 +318,7 @@ fn matching_requires_every_signed_condition() {
                     .deduction(0, &held, &cut, &mut Work::new(u64::MAX))
                     .unwrap(),
                 if x == 1 && y == 2 {
-                    Deduction::ExcludeOutputs
+                    Deduction::ForceOutputs
                 } else {
                     Deduction::None
                 }
@@ -252,7 +331,7 @@ fn matching_requires_every_signed_condition() {
 fn frozen_and_inventory_free_visits_suspend_original_explanations() {
     let program = Program::new(false);
     let (_, mut scratch) = program.captured();
-    let candidate = world(&program.owner, 0b01011);
+    let candidate = world(&program.theory, 0b01011);
     let mut workspace = EvaluationWorkspace::default();
     let evaluated = workspace
         .evaluate(
@@ -267,7 +346,7 @@ fn frozen_and_inventory_free_visits_suspend_original_explanations() {
     let (frozen, frozen_counts) = program
         .index
         .narrow_frozen_known(
-            FrozenSubject::new(&program.owner, evaluated.truth()),
+            FrozenSubject::new(&program.theory, evaluated.truth()),
             &mut region(&decisions),
             &mut program.index.knowledge(),
             &mut scratch,
@@ -281,7 +360,7 @@ fn frozen_and_inventory_free_visits_suspend_original_explanations() {
     let (without_inventory, inventory_counts) = program
         .index
         .narrow_known(
-            OriginalSubject::new(&program.owner, None),
+            OriginalSubject::new(&program.theory, None),
             &mut region(&decisions),
             &mut program.index.knowledge(),
             &mut scratch,
@@ -306,7 +385,7 @@ fn a_foreign_theory_discards_previous_explanations() {
     let original = Program::new(false);
     let foreign = Program::new(true);
     let (_, mut scratch) = original.captured();
-    assert!(!original.owner.same_instance(&foreign.owner));
+    assert!(!original.theory.same_instance(&foreign.theory));
     let (result, counts) = foreign.close(
         &mut region(&[(0, true), (2, false), (3, true)]),
         &mut foreign.index.knowledge(),
@@ -321,7 +400,7 @@ fn a_foreign_theory_discards_previous_explanations() {
             .owner
             .as_ref()
             .unwrap()
-            .same_instance(&foreign.owner)
+            .same_class(&foreign.theory)
     );
 }
 
@@ -383,7 +462,7 @@ fn interrupted_matching_preserves_the_typed_failure() {
             .explanations
             .deduction(0, &held, &cut, &mut measured)
             .unwrap(),
-        Deduction::ExcludeOutputs
+        Deduction::ForceOutputs
     );
     for failure in [Stop::WorkLimit, Stop::Cancelled, Stop::Deadline] {
         for prefix in 0..measured.spent {

@@ -833,6 +833,17 @@ import Zetesis
 #print axioms Zetesis.LazyRounds.chunk_concatenation
 #print axioms Zetesis.LazyRounds.completed_round_closed
 #print axioms Zetesis.LazyRounds.completed_round_exact
+#print axioms Zetesis.LearnedRegions.decides_holds
+#print axioms Zetesis.LearnedRegions.holds_negate_excludes
+#print axioms Zetesis.LearnedRegions.holds_or_negate
+#print axioms Zetesis.LearnedRegions.consequence_row_refutes
+#print axioms Zetesis.LearnedRegions.consequence_row_forces
+#print axioms Zetesis.LearnedRegions.consequence_row_narrows
+#print axioms Zetesis.LearnedRegions.consequence_row_forces_complement
+#print axioms Zetesis.LearnedRegions.row_of_narrower_class
+#print axioms Zetesis.LearnedRegions.row_union
+#print axioms Zetesis.LearnedRegions.row_dominance
+#print axioms Zetesis.LearnedRegions.founded_row
 #print axioms Zetesis.Lifted.composition_exact
 #print axioms Zetesis.Lifted.bind_monotone
 #print axioms Zetesis.Lifted.ruleTransform_monotone

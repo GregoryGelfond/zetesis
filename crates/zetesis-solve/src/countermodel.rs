@@ -128,6 +128,9 @@ pub(crate) fn search_limits(options: &SolveConfig) -> zetesis_stable::Limits {
         // independently of the reduct query workspace. No additional CLI control.
         max_native_narrowing_bytes: options.max_candidate_bytes as u64,
         max_verification_work: options.max_work,
+        // Learned rows are candidate-narrowing state: their tiers grow with
+        // the same candidate memory allowance.
+        learning: zetesis_ferraris::LearningLimits::for_allowance(options.max_candidate_bytes),
     }
 }
 
