@@ -13,12 +13,14 @@
 
 use std::collections::BTreeSet;
 use std::num::NonZeroUsize;
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use zetesis_ferraris::Theory;
 use zetesis_reference_support::formula;
 use zetesis_stable::{
-    Cancellation, Engagement, Limits, QueryDivision, QueryDivisionStatistics, StableModels,
+    Cancellation, Engagement, LearnedStore, Limits, QueryDivision, QueryDivisionStatistics,
+    StableModels,
 };
 
 /// Far above any correct run of these small instances, so a counting fault
@@ -74,12 +76,13 @@ fn workloads() -> Vec<(String, Theory)> {
 
 /// The complete family under `workers` region walkers dividing their queries
 /// as `division`, with the walk's division receipts; one worker is the scalar
-/// walk, which has none.
+/// walk, which has none. With `learned`, the walk shares a fresh learned store.
 fn family(
     theory: &Theory,
     workers: usize,
     engagement: Engagement,
     division: QueryDivision,
+    learned: bool,
 ) -> (BTreeSet<Vec<usize>>, Option<QueryDivisionStatistics>) {
     let mut search = StableModels::with_region_workers_engaging(
         theory,
@@ -90,6 +93,11 @@ fn family(
     )
     .unwrap();
     search.set_query_division(division);
+    if learned {
+        search
+            .set_learned_store(Arc::new(LearnedStore::new()))
+            .unwrap();
+    }
     let mut models = BTreeSet::new();
     for model in search.by_ref() {
         assert!(
@@ -120,7 +128,7 @@ fn divided(
     engagement: Engagement,
     division: QueryDivision,
 ) -> (BTreeSet<Vec<usize>>, QueryDivisionStatistics) {
-    let (models, receipts) = family(theory, workers, engagement, division);
+    let (models, receipts) = family(theory, workers, engagement, division, false);
     (
         models,
         receipts.expect("several workers keep division receipts"),
@@ -130,7 +138,13 @@ fn divided(
 #[test]
 fn forced_division_returns_the_undivided_family() {
     for (name, theory) in workloads() {
-        let (expected, _) = family(&theory, 1, Engagement::default(), QueryDivision::Never);
+        let (expected, _) = family(
+            &theory,
+            1,
+            Engagement::default(),
+            QueryDivision::Never,
+            false,
+        );
         let (undivided, receipts) =
             divided(&theory, 2, Engagement::Immediate, QueryDivision::Never);
         assert_eq!(undivided, expected, "{name}");
@@ -165,7 +179,13 @@ fn forced_division_returns_the_undivided_family() {
 #[test]
 fn division_when_idle_returns_the_undivided_family() {
     for (name, theory) in workloads() {
-        let (expected, _) = family(&theory, 1, Engagement::default(), QueryDivision::Never);
+        let (expected, _) = family(
+            &theory,
+            1,
+            Engagement::default(),
+            QueryDivision::Never,
+            false,
+        );
         for _ in 0..RUNS {
             let (models, receipts) =
                 divided(&theory, 14, Engagement::default(), QueryDivision::WhenIdle);
@@ -190,4 +210,39 @@ fn the_parity_workload_has_its_recorded_families() {
         })
         .collect();
     assert_eq!(sizes, [0, 1, 2]);
+}
+
+/// The candidate walk's learned tiers seed and deliver while workers serve
+/// published query regions, whose narrowing reads a frozen reduct and so
+/// suspends the ledger: sharing changes neither the family nor the division's
+/// published and served receipts.
+#[test]
+fn division_beside_a_learned_store_returns_the_undivided_family() {
+    for (name, theory) in workloads() {
+        let (expected, _) = family(
+            &theory,
+            1,
+            Engagement::default(),
+            QueryDivision::Never,
+            false,
+        );
+        for workers in [2, 14] {
+            for _ in 0..RUNS {
+                let (models, receipts) = family(
+                    &theory,
+                    workers,
+                    Engagement::Immediate,
+                    QueryDivision::Immediate,
+                    true,
+                );
+                let receipts = receipts.expect("several workers keep division receipts");
+                assert_eq!(models, expected, "{name} at {workers} workers");
+                assert!(receipts.published >= 1, "{name}: {receipts:?}");
+                assert!(
+                    receipts.served >= receipts.published,
+                    "{name}: {receipts:?}"
+                );
+            }
+        }
+    }
 }
