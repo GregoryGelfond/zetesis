@@ -3689,8 +3689,12 @@ Rust interval transfers, including the variable-product and variable-divisor
 cases, or source-column coverage. The argument establishes
 definedness on full bindings, not on every earlier join prefix.
 One Rust totality attempt reuses successful numeric-column hulls for its fixed
-rule and immutable support snapshot. Every intermediate remains checked; no hull
-survives the attempt. Within a growing support round, Rust can retain a
+rule and immutable support snapshot. Every intermediate remains checked against
+the current hulls. Outside support completion no hull survives the attempt.
+Support completion keeps each column hull it reads from one round to the next
+and extends it with the appended rows' values; it keeps its integer key
+certificates the same way. Both rest on support rows being append-only, with
+stable positions and values. Within a growing support round, Rust can retain a
 successful expression map for one exact rule and snapshot, then borrow it across
 that rule's delta variants. The body-totality premise is independent of the
 pivot; each variant separately authenticates its selected multiples against its
