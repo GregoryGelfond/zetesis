@@ -6,10 +6,8 @@ lowering, grounding or execution profile supports it. The tables below describe
 implemented forms and their boundaries; they are not a whole-language parity
 claim or a promise that every combination of individually supported forms works.
 
-The ordinary source driver selects a supported profile automatically. Explicit
-library admission doors are narrower: `admit` accepts the strict relational
-profile, `admit_extended` adds its scalar expansions, and `admit_formula` builds
-the broader finite Ferraris representation. Automatic formula admission can
+The ordinary source driver selects a supported profile automatically. The explicit
+library door `admit_formula` builds the finite Ferraris representation. Automatic formula admission can
 defer eligible terminal positive definitions and reconstruct them from verified
 base answers; the remaining rules are materialized eagerly.
 Explicit lazy execution can retain a producer core and stream

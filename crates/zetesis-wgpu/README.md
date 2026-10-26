@@ -3,8 +3,7 @@
 Bounded GPU primitives for grounding and answer-set checking. CPU and GPU
 operations share the same reduct obligations; device scheduling does not establish a different
 semantics. The [execution chapter](../../docs/book/architecture/execution.md)
-explains their place in ordinary solving, and the
-[parallel library guide](../../docs/book/rust/parallel.md) describes composition.
+explains their place in ordinary solving.
 
 ## Choose an operation
 

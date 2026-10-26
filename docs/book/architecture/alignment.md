@@ -66,10 +66,9 @@ different types of value.
 | Establish subset minimality | Search for a proper-subset reduct model; propagate Boolean domains and exactly complete unresolved queries | [`zetesis-stable`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-stable/README.md); [`GpuFormulaOracle`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-wgpu/README.md) |
 | Evaluate an aggregate | Coalesce complete tuple identities, combine eligibility, then reduce count/sum/extrema and compare the bound | [Source formula lowering](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/formula_ground.rs); [native aggregate operations](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-wgpu/README.md#native-numeric-aggregates) |
 | Score an answer | Resolve correlated objective fields, retain model-relative eligibility, coalesce complete contribution keys, then sum by priority | [Objective specialization](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/formula_ground/objectives.rs); [cost evaluation](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-objective/src/evaluate.rs) |
-| Check several proposals | Share program data while keeping each interpretation, reduct and verdict separate | [`BatchOracle`](../rust/parallel.md); [commit boundaries](execution.md#immutable-rounds-and-commit-boundaries) |
+| Check several proposals | Share program data while keeping each interpretation, reduct and verdict separate | [commit boundaries](execution.md#immutable-rounds-and-commit-boundaries) |
 
-These are capability mappings. Ordinary relational solving supports lazy source
-rounds, Rayon and GPU closure. Automatic formula admission can defer terminal
+These are capability mappings. Automatic formula admission can defer terminal
 positive definitions, joining true rows after base membership to reconstruct each
 full original answer. Other rules remain eager; explicit lazy execution can
 compose core answer enumeration with streamed

@@ -13,8 +13,6 @@ acceptance criterion.
 | clingo ordinary grounding | Selected source parts are instantiated and simplified into ground input for solving | Grounding of those selected parts in their parameter/incremental context |
 | zetesis eager formula | Possible support is completed and a finite atom catalog, shared formula DAG, objectives and observations are constructed | Source lowering and every relevant original formula/metadata obligation |
 | zetesis hybrid formula | Complete support, arithmetic admission and producer-core materialization precede source-constraint checks against core answers | Core membership and every streamed constraint before acceptance or scoring; complete enumeration, or exhaustive optimal search under sound objective bounds |
-| zetesis eager relational | A bounded complete graph is compiled explicitly from relational templates | The retained ground instances and graph identity |
-| zetesis lazy relational | Templates remain available; source joins generate instances during frozen-gate positive inference | Final closure coverage and constraints, plus separately complete candidate enumeration |
 
 These routes do not have equal language coverage. The
 [language reference](../reference/language.md) identifies the current profiles.
@@ -24,16 +22,20 @@ those checks complete. Core membership uses the selected CPU or GPU executor;
 source joins and constraint checks run on the host. Table joins remain unsupported in this profile. General
 demand-driven formula producers are not implemented.
 
-![Grounding selected program parts produces retained solver input; lazy relational checking composes source joins with world-specific reduct rounds.](grounding-comparison.svg)
 
 Three operations must remain distinct. **Source instantiation** produces bound
 rule instances. **Candidate generation** proposes interpretations, or gate seeds
 whose closures will supply interpretations. **Positive inference** derives atoms
-under a frozen seed. Lazy relational checking composes instantiation with
-inference; it does not identify a proposed atom with a derived atom or eliminate
-the candidate generator's coverage obligation.
+under a frozen seed. The reference composition below keeps instantiation and inference apart; it does
+not identify a proposed atom with a derived atom or eliminate the candidate
+generator's coverage obligation.
 
 ## Read grounding as a composition
+
+This section and the next state the composition that the source-coverage and
+gate-projection laws prove. The relational closure route that executed it directly
+was removed in 0.7.0; it remains the reference reading of lazy grounding. The
+formula routes ground before checking, as the table above shows.
 
 The following notation emphasizes the [exact transforms](alignment.md), not a
 particular loop nest. `∘` denotes composition, read from right to left. `Map`

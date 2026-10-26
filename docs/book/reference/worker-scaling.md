@@ -252,7 +252,7 @@ zetesis-series --report "A1=$A1" --report "B1=$B1" \
   --report "B2=$B2" --report "A2=$A2" --json "$COMPARISON" > "$TABLES"
 ```
 
-The [parallel execution contract](../rust/parallel.md) keeps pending, local and
+The [parallel region walk](../architecture/execution.md) keeps pending, local and
 active regions in the unfinished frontier until they are refuted, split or
 checked. `Pending.Step.perm`, `Pending.Walk.exhausted` and `WorkPermits` provide
 abstract preservation, exhaustion and work-conservation laws. As the
