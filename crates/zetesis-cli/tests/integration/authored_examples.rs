@@ -6,12 +6,28 @@ use zetesis_test_support::repository::examples as root;
 use zetesis_validation::{
     answers::native_json,
     performance::{
+        bundles,
         matrix::{NativeInvocation, Workload, WorkloadLimits},
         scalability,
     },
 };
 
 fn check(workload: &Workload) {
+    check_source(&root().join(workload.entry()), workload);
+}
+
+/// A contributed workload's default, solved from the directory its manifest
+/// names as the workload's root.
+fn check_bundle(directory: &str) {
+    let directory = root().join(directory);
+    let mut workloads =
+        bundles::load(&directory.join("manifest.json"), WorkloadLimits::default()).unwrap();
+    assert_eq!(workloads.len(), 1);
+    let workload = workloads.pop().unwrap();
+    check_source(&directory.join(workload.entry()), &workload);
+}
+
+fn check_source(path: &std::path::Path, workload: &Workload) {
     // Exercise ordinary automatic admission with unchanged resource defaults.
     // The scalability profiles intentionally request complete eager grounding.
     let options = Options::try_parse_from([
@@ -25,7 +41,7 @@ fn check(workload: &Workload) {
         "60",
     ])
     .unwrap();
-    let source = std::fs::read_to_string(root().join(workload.entry())).unwrap();
+    let source = std::fs::read_to_string(path).unwrap();
     let mut output = Vec::new();
     let report = run_with_diagnostics(
         source,
@@ -63,6 +79,13 @@ fn default_limits_admit_the_unique_einstein_assignment() {
 #[test]
 fn default_limits_admit_the_complete_sudoku_grid() {
     check(&scalability::sudoku(&root(), WorkloadLimits::default()).unwrap());
+}
+
+#[test]
+fn two_qbf_default_satisfies_its_complete_contract() {
+    // The corpus's first disjunctive program: every membership check runs the
+    // proper-subset query over the candidate's frozen reduct.
+    check_bundle("scalability/two-qbf");
 }
 
 #[test]

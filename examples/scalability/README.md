@@ -64,6 +64,12 @@ complete unsatisfiable sum and nearby unique-answer controls. It uses the same
 explicit workload matrix and fresh clingo qualification without changing either
 default population.
 
+The [2QBF workload](two-qbf/README.md) is the corpus's first disjunctive program.
+Its saturation encoding makes every membership check run the proper-subset query
+over a candidate's frozen reduct, and its constants choose the formula and its
+size. It uses the same explicit workload matrix and fresh clingo qualification
+without changing either default population.
+
 ## Run an example
 
 From the repository root, using the installed solver:

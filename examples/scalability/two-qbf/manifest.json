@@ -1,0 +1,31 @@
+{
+  "schema_version": 1,
+  "root": ".",
+  "cases": [
+    {
+      "entry": "two_qbf.lp",
+      "contract": {
+        "satisfiability": "sat",
+        "family": "all",
+        "model_count": 2,
+        "cost": null,
+        "witnesses": [
+          ["nx(1)", "nx(2)", "nx(3)"],
+          ["nx(3)", "x(1)", "x(2)"]
+        ],
+        "required_symbols": [],
+        "notes": [
+          "Three existential and eight universal variables; 68 terms, each one existential and three universal literals; seed 1. Two existential assignments make the formula hold for every universal assignment.",
+          "Every answer set is saturated, so membership needs the complete check that no universal assignment falsifies the formula: the frozen reduct's proper-subset query, which the frozen-positive certificate declines."
+        ]
+      },
+      "files": [
+        {
+          "path": "two_qbf.lp",
+          "sha256": "c9dc3cf1c650fae86a0d7fa5827c531a8b415eb3dfdcd200cfef47a8dbed7e44",
+          "includes": []
+        }
+      ]
+    }
+  ]
+}
