@@ -349,11 +349,18 @@ fn region_statistics_record_the_parallel_walks_engagement() {
         .unwrap();
     let nanos = |duration: std::time::Duration| u64::try_from(duration.as_nanos()).unwrap();
     let delay = nanos(measured.engagement_delay.unwrap());
+    let division = measured.query_division;
+    let query_division = json!({
+        "division": "when_idle", "published": division.published,
+        "served": division.served, "stolen": division.stolen,
+        "servers": division.servers, "peak_served": division.peak_served,
+    });
     let expected = match measured.engagement {
         zetesis_stable::RegionWalkEngagement::Unengaged { elapsed, walking } => json!({
             "configured": 2, "engagement_delay_ns": delay, "engagement": "unengaged",
             "elapsed_ns": nanos(elapsed), "walking_ns": nanos(walking),
             "engaged_after_ns": null, "launched": null, "spawn_ns": null,
+            "query_division": query_division,
         }),
         zetesis_stable::RegionWalkEngagement::Engaged {
             after,
@@ -364,6 +371,7 @@ fn region_statistics_record_the_parallel_walks_engagement() {
             "configured": 2, "engagement_delay_ns": delay, "engagement": "engaged",
             "elapsed_ns": null, "walking_ns": nanos(walking),
             "engaged_after_ns": nanos(after), "launched": launched, "spawn_ns": nanos(spawn),
+            "query_division": query_division,
         }),
         other => panic!("a walk that returned models has begun: {other:?}"),
     };

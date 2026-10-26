@@ -27,17 +27,18 @@ pub(crate) use original_index::IndexedTheory;
 use original_index::OriginalIndex;
 
 mod parallel_regions;
-pub use parallel_regions::Engagement;
+pub use parallel_regions::{Engagement, QueryDivision};
 mod region_frontier;
 use parallel_regions::ParallelRegions;
 mod region_proposals;
 use region_proposals::RegionProposals;
-pub(crate) use regions::ReductQuery;
 use regions::RegionSearch;
 pub use regions::{
-    FrontierOrder, GeneratorOrderStatistics, GeneratorOrderStatus, RegionCounts,
-    RegionFrontierStatistics, RegionSearchStatistics, RegionWalkEngagement, RegionWorkerStatistics,
+    FrontierOrder, GeneratorOrderStatistics, GeneratorOrderStatus, QueryDivisionStatistics,
+    RegionCounts, RegionFrontierStatistics, RegionSearchStatistics, RegionWalkEngagement,
+    RegionWorkerStatistics,
 };
+pub(crate) use regions::{Inline, Publication, Queried, ReductQuery};
 
 /// Whole-operation ceilings for a membership check or stable-model enumeration.
 #[derive(Clone, Copy, Debug)]
@@ -236,6 +237,21 @@ pub(crate) fn checked_countermodel(
     budget: &mut Budget<'_, impl Quota>,
     statistics: &mut Statistics,
 ) -> Result<Check, Incomplete> {
+    validated_countermodel(theory, candidate, subset, limits, budget, statistics)
+        .map(Check::NonMinimal)
+}
+
+/// [`checked_countermodel`]'s validation, returning the countermodel it
+/// accepts: a served region of a published query records it as its query's
+/// witness rather than as a verdict.
+pub(crate) fn validated_countermodel(
+    theory: &Theory,
+    candidate: &Interpretation,
+    subset: Interpretation,
+    limits: Limits,
+    budget: &mut Budget<'_, impl Quota>,
+    statistics: &mut Statistics,
+) -> Result<Interpretation, Incomplete> {
     let mut proper = false;
     for atom in 0..theory.atom_count() {
         budget.tick()?;
@@ -256,7 +272,7 @@ pub(crate) fn checked_countermodel(
         return Err(Incomplete::InvalidWitness);
     }
     increment(&mut statistics.countermodels)?;
-    Ok(Check::NonMinimal(subset))
+    Ok(subset)
 }
 
 /// Native answer-set enumeration over classical candidates, each region leaf
@@ -345,7 +361,10 @@ impl StableModels {
     /// costs (see [`Self::with_region_workers_engaging`]). Each worker has its
     /// own knowledge, budget lease and reduct query state, sharing the
     /// immutable original index and stealing from per-worker deques of
-    /// regions still to visit. Deque growth can return an allocation refusal.
+    /// regions still to visit. A candidate's proper-subset query that runs
+    /// long while a worker is idle is divided among the workers
+    /// ([`Self::set_query_division`]). Deque growth can return an allocation
+    /// refusal.
     /// The models arrive in the scalar walk's order until the workers start,
     /// and in the schedule's order after, which is not a property of the
     /// result and differs between runs; the family is exact. One worker is
@@ -501,6 +520,19 @@ impl StableModels {
             reduct: crate::reduct::State::default(),
             index: OriginalIndex::new(theory, limits.max_native_narrowing_bytes),
         })
+    }
+
+    /// Divide a parallel region walk's proper-subset queries among its workers
+    /// as `division` says, [`QueryDivision::WhenIdle`] by default. Answer sets
+    /// are the same under every division; what differs is which worker
+    /// narrows a query's regions. A walk keeps the division it began with, so
+    /// a setting after the first pull is ignored, as a late timing enable is;
+    /// the walk's statistics name the division it ran with. Other proposers
+    /// divide no query and ignore it.
+    pub fn set_query_division(&mut self, division: QueryDivision) {
+        if let Proposer::Parallel(parallel) = &mut self.proposer {
+            parallel.set_query_division(division);
+        }
     }
 
     /// Enable coarse host timing from this point onward. Repeated calls retain

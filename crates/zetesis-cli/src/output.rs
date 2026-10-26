@@ -1024,7 +1024,8 @@ fn region_statistics(
 
 /// The parallel walk's workers, `null` on routes without one. Each state's
 /// keys are `null` outside that state, and so is the delay of a walk whose
-/// deadline overflows, which never engages.
+/// deadline overflows, which never engages. `query_division` holds the
+/// division the walk ran with and its receipts.
 fn worker_statistics(
     out: &mut Buffer,
     statistics: Option<zetesis_stable::RegionWorkerStatistics>,
@@ -1056,7 +1057,15 @@ fn worker_statistics(
     }
     out.text(",\"spawn_ns\":")?;
     optional_number(out, record.spawn.map(|duration| duration.as_nanos()))?;
-    out.text("}")
+    let division = stats.query_division;
+    out.text(",\"query_division\":{\"division\":")?;
+    out.string(division.division.label())?;
+    out.number_field("published", division.published)?;
+    out.number_field("served", division.served)?;
+    out.number_field("stolen", division.stolen)?;
+    out.number_field("servers", division.servers)?;
+    out.number_field("peak_served", division.peak_served)?;
+    out.text("}}")
 }
 
 fn frontier_statistics(

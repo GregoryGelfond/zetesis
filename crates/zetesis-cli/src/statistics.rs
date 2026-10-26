@@ -832,7 +832,8 @@ impl From<zetesis_stable::RegionWalkEngagement> for WorkerRecord {
 }
 
 /// The parallel walk's workers, under its candidate regions, with the JSON's
-/// keys: `engagement_delay_ns=never` for a delay whose deadline overflows.
+/// keys: `engagement_delay_ns=never` for a delay whose deadline overflows. The
+/// queries the workers divided follow on their own line.
 fn region_workers(
     sink: &mut impl Write,
     workers: zetesis_stable::RegionWorkerStatistics,
@@ -867,7 +868,18 @@ fn region_workers(
     if let Some(spawn) = record.spawn {
         write!(sink, "; spawn_ns={}", spawn.as_nanos())?;
     }
-    writeln!(sink)
+    writeln!(sink)?;
+    let division = workers.query_division;
+    writeln!(
+        sink,
+        "    query division: division={}; published={}; served={}; stolen={}; servers={}; peak served={}",
+        division.division.label().replace('_', " "),
+        division.published,
+        division.served,
+        division.stolen,
+        division.servers,
+        division.peak_served,
+    )
 }
 
 fn certificate(

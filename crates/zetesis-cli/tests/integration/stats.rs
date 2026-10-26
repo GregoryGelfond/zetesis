@@ -120,6 +120,15 @@ fn statistics_report_the_parallel_walks_workers_under_its_regions() {
         ),
         other => panic!("a walk that returned models has begun: {other:?}"),
     };
+    let division = workers.query_division;
+    let line = format!(
+        "{line}    query division: division=when idle; published={}; served={}; stolen={}; servers={}; peak served={}\n",
+        division.published,
+        division.served,
+        division.stolen,
+        division.servers,
+        division.peak_served,
+    );
     let generator = regions.generator_order;
     let generator_line = format!(
         "  candidate generator order: status={}; preparation work={}; peak bytes={}; retained bytes={} (work included in reading work)\n",

@@ -11,7 +11,7 @@ use zetesis_ferraris::{
 };
 
 use crate::timing::{self, Phase};
-use crate::{Cancellation, Check, Incomplete, Limits, Statistics};
+use crate::{Cancellation, Incomplete, Limits, Statistics};
 
 /// Default ceiling for one query workspace's retained capacity.
 pub(crate) const DEFAULT_BYTES: u64 = 64 * 1024 * 1024;
@@ -97,12 +97,12 @@ impl ReductWorkspace {
     /// Record the capacity retained by a region query, including a failed
     /// attempt's growth, and admit it before returning a successful verdict.
     /// An earlier query failure keeps its original typed cause.
-    pub(crate) fn finish_check(
+    pub(crate) fn finish_check<T>(
         &self,
-        result: Result<Check, Incomplete>,
+        result: Result<T, Incomplete>,
         max_bytes: u64,
         statistics: &mut Statistics,
-    ) -> Result<Check, Incomplete> {
+    ) -> Result<T, Incomplete> {
         let retained = self.retained_bytes();
         statistics.reduct.peak_workspace_bytes =
             statistics.reduct.peak_workspace_bytes.max(retained);
@@ -110,6 +110,25 @@ impl ReductWorkspace {
             bound(retained, max_bytes)?;
             Ok(verdict)
         })
+    }
+
+    /// Lend the region query's worklists to `narrow`, a narrowing of one
+    /// region of a query another worker published, under the ceiling an
+    /// inline query's worklists grow under: a workspace already beyond it is
+    /// refused first, and its capacity afterwards is recorded and admitted as
+    /// [`Self::finish_check`] admits a query's.
+    pub(crate) fn lend_narrowing<T>(
+        &mut self,
+        max_bytes: u64,
+        statistics: &mut Statistics,
+        narrow: impl FnOnce(
+            &mut zetesis_ferraris::NarrowingScratch,
+            &mut Statistics,
+        ) -> Result<T, Incomplete>,
+    ) -> Result<T, Incomplete> {
+        bound(self.retained_bytes(), max_bytes)?;
+        let result = narrow(&mut self.narrowing, statistics);
+        self.finish_check(result, max_bytes, statistics)
     }
 
     /// Actual retained worker storage: the workspace header and the actual

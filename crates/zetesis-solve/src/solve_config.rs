@@ -2,7 +2,7 @@
 
 use std::num::NonZeroUsize;
 
-use crate::{Backend, GpuBatching, Grounder, Oracle, SourceBatching};
+use crate::{Backend, GpuBatching, Grounder, Oracle, QueryDivision, SourceBatching};
 
 /// Policy for one semantic session. Budgets retain their existing ownership:
 /// Formula search/objective work is cumulative. Independent closure work is per
@@ -91,6 +91,13 @@ pub struct SolveConfig {
     /// The library default is four; the command uses the host's available
     /// parallelism, or one when availability is unknown.
     pub workers: NonZeroUsize,
+    /// When several CPU region walkers divide one candidate's proper-subset
+    /// query among themselves: by default once it has run for the cost of
+    /// engaging a worker while another waits idle. Answer sets are the same
+    /// under every division. [`QueryDivision::Never`] keeps each query on the
+    /// walker that reached its candidate, for measurement; the command sets no
+    /// flag for it.
+    pub query_division: QueryDivision,
     /// Worker count for unresolved formula queries: with one CPU region walker,
     /// and under general device propagation.
     /// Complete device certificates use scalar batch commit with no residual

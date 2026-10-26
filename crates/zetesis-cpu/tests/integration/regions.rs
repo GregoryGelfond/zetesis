@@ -555,3 +555,82 @@ fn held_first_keeps_a_refused_region_pending() {
     assert_eq!(after_refusal, complete);
     assert_eq!(after_refusal.len(), 8);
 }
+
+#[test]
+fn surrendered_regions_list_the_next_visit_last() {
+    let mut traversal = Traversal::new(Region::all_open(2), Counting::Never);
+    let first = traversal
+        .next(|_, ()| Ok::<_, Stop>(Narrowing::Fixed { changed: false }))
+        .unwrap();
+    assert!(matches!(first, Some(Visit::Leaf(region, ())) if held(&region).is_empty()));
+    assert_eq!(traversal.pending(), 2);
+    let pending: Vec<Region> = traversal
+        .surrender()
+        .into_iter()
+        .map(|(region, ())| region)
+        .collect();
+    // The older region is the root's held child; the newer, on top, is the
+    // leaf {0} the counter's order visits next.
+    assert!(pending[0].is_held(1) && pending[0].is_open(0));
+    assert_eq!(held(&pending[1]), vec![0]);
+    assert!(pending[1].split_atom().is_none());
+}
+
+#[test]
+fn a_surrendering_traversal_ends_with_its_statistics() {
+    let mut traversal = Traversal::new(Region::all_open(2), Counting::Never);
+    traversal
+        .next(|_, ()| Ok::<_, Stop>(Narrowing::Fixed { changed: false }))
+        .unwrap();
+    let visited = traversal.statistics();
+    assert!(!traversal.surrender().is_empty());
+    assert_eq!(traversal.pending(), 0);
+    assert_eq!(
+        traversal.next(|_, ()| -> Result<Narrowing, Stop> { panic!("nothing is left to narrow") }),
+        Ok(None)
+    );
+    assert_eq!(traversal.statistics(), visited);
+}
+
+#[test]
+fn surrendered_regions_cover_the_leaves_not_yet_visited() {
+    // Visit two leaves, then walk each surrendered region as its own root:
+    // together the leaves are the root's, each once.
+    let mut traversal = Traversal::new(Region::all_open(4), Counting::Never);
+    let mut leaves = Vec::new();
+    for _ in 0..2 {
+        let Some(Visit::Leaf(region, ())) = traversal
+            .next(|_, ()| Ok::<_, Stop>(Narrowing::Fixed { changed: false }))
+            .unwrap()
+        else {
+            panic!("a leaf remains")
+        };
+        leaves.push(held(&region));
+    }
+    for (region, ()) in traversal.surrender() {
+        for visit in visits(Traversal::new(region, Counting::Never)) {
+            let Visit::Leaf(region, ()) = visit else {
+                panic!("never counted")
+            };
+            leaves.push(held(&region));
+        }
+    }
+    leaves.sort();
+    let mut every: Vec<Vec<usize>> = (0..16_usize)
+        .map(|mask| (0..4).filter(|atom| mask & (1 << atom) != 0).collect())
+        .collect();
+    every.sort();
+    assert_eq!(leaves, every);
+}
+
+#[test]
+fn a_stopped_narrowing_surrenders_its_region() {
+    let mut traversal = Traversal::new(Region::all_open(2), Counting::Never);
+    assert_eq!(
+        traversal.next(|_, ()| Err::<Narrowing, _>(Stop::WorkLimit)),
+        Err(Stop::WorkLimit)
+    );
+    let pending = traversal.surrender();
+    assert_eq!(pending.len(), 1);
+    assert_eq!(pending[0].0, Region::all_open(2));
+}

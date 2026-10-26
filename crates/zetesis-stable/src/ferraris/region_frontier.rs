@@ -447,11 +447,13 @@ impl RegionFrontier {
     /// most `timeout`. Under the gate the waiter registers, fences, and then
     /// re-checks the walk's end and `try_take`; a region found then is returned
     /// at once. `None` does not mean the walk ended: the caller re-checks.
-    pub(super) fn wait_for_work(
+    /// What a region is, a frontier entry or another deque's item taken beside
+    /// it, is `try_take`'s.
+    pub(super) fn wait_for_work<T>(
         &self,
         timeout: Duration,
-        mut try_take: impl FnMut(Attempt) -> Option<Entry>,
-    ) -> Option<Entry> {
+        mut try_take: impl FnMut(Attempt) -> Option<T>,
+    ) -> Option<T> {
         let termination = &self.termination;
         let gate = termination
             .gate
@@ -519,13 +521,13 @@ impl RegionFrontier {
     /// last waits at the gate, where it attempts once more, and then polls
     /// cancellation. `idle_wait` bounds that wait; a publication or the end of
     /// the walk ends it at once.
-    pub(super) fn find_work(
+    pub(super) fn find_work<T>(
         &self,
         idle_wait: Duration,
         cancellation: &Cancellation,
-        mut try_take: impl FnMut(Attempt) -> Option<Entry>,
+        mut try_take: impl FnMut(Attempt) -> Option<T>,
         on_stop: impl FnOnce(Incomplete),
-    ) -> Option<Entry> {
+    ) -> Option<T> {
         let mut idle_rounds = 0u32;
         loop {
             if self.termination.is_closed() {

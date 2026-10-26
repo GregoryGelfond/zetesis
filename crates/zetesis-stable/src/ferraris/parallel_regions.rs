@@ -26,6 +26,14 @@
 //! interleaving. Before engagement models arrive in the scalar walk's order;
 //! afterwards their order is the schedule's and is not a property of the result.
 //!
+//! A leaf's proper-subset query that runs long while another worker waits
+//! idle is divided as [`QueryDivision`] says: its pending regions are
+//! published to its worker's deque of published regions, any worker serves
+//! them, and the leaf stays outstanding until the last is resolved or one is a
+//! validated countermodel. The coordinator publishes only once its engagement
+//! deadline has passed, and engages the workers to serve the query
+//! (`inner`).
+//!
 //! A restriction added while the workers run narrows the regions not yet
 //! visited: each worker reads the restrictions before a narrowing, and a
 //! region reached before a restriction existed gets fresh knowledge under
@@ -53,9 +61,10 @@
 //!
 //! A local depth-first walk keeps at most one older sibling per ancestor and
 //! the two newest children. Each split decides another atom, and a worker steals
-//! only with an empty deque, so each deque holds at most `atom_count + 1` entries.
-//! Storage grows with the observed depth rather than reserving that bound for
-//! every worker. Capacity and payloads are released after joining. Fallible
+//! only with an empty deque, so each deque holds at most `atom_count + 1` entries,
+//! and with its deque of published regions a worker holds at most
+//! `2(atom_count + 1)`. Storage grows with the observed depth rather than
+//! reserving that bound for every worker. Capacity and payloads are released after joining. Fallible
 //! entry-capacity growth does not make region or knowledge cloning fallible.
 //! Each worker may retain one refuted region's knowledge allocation until its
 //! next split or exit. Copying the current parent's complete knowledge into it
@@ -80,12 +89,16 @@ use super::conditions::{Bound, CandidateKnowledge, Conditions};
 use super::original_index::IndexedTheory;
 use super::region_frontier::{Entry, RegionFrontier, reserve_regions};
 use super::regions::{
-    RegionCounts, RegionSearchStatistics, RegionWalkEngagement, RegionWorkerStatistics,
+    Queried, QueryDivisionStatistics, RegionCounts, RegionSearchStatistics, RegionWalkEngagement,
+    RegionWorkerStatistics,
 };
 use super::timing::{self, Phase, PhaseMeasurement};
 use crate::budget::{Budget, SharedBudget, WorkLease};
 use crate::ferraris::Decision;
 use crate::{Cancellation, Incomplete, Limits, SearchPhaseTimings, SearchStatistics, Statistics};
+
+mod inner;
+use inner::{InnerDeques, InnerEntry, Timing, WalkPublication};
 
 /// An idle worker looks for a region again and polls cooperative control at
 /// least once per timed wait; a publication or the end of the walk wakes it at
@@ -146,6 +159,50 @@ impl Engagement {
         }
     }
 }
+
+/// When a parallel region walk divides one candidate's proper-subset query
+/// among its workers.
+///
+/// A worker decides a leaf's membership itself, and the reduct's proper-subset
+/// query may hold most of a run's work when its candidates are few. A query
+/// that is published stops before a narrowing and hands its pending regions to
+/// its worker's deque of published regions, from which any worker serves them;
+/// the candidate is decided when the last region is resolved with no
+/// countermodel, or when a server validates one. Answer sets are the same
+/// under every division; what differs is which worker narrows a query's
+/// regions. The coordinator, the calling thread before the workers start,
+/// publishes its query only once the walk's engagement deadline has passed,
+/// and then engages the workers to serve it, unless the division is
+/// [`Self::Never`].
+#[non_exhaustive]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum QueryDivision {
+    /// A worker's query is published once it has run, since its first
+    /// narrowing, for the measured cost of engaging one worker
+    /// ([`Engagement::AfterStartCost`]'s `c`) while another worker waits idle.
+    #[default]
+    WhenIdle,
+    /// Every worker's query is published before its first narrowing, whether
+    /// or not a worker is idle: for tests and measurement.
+    Immediate,
+    /// No query is published: each runs to its verdict on the worker that
+    /// reached its candidate.
+    Never,
+}
+
+impl QueryDivision {
+    /// Stable machine-readable identifier of the division: `when_idle`,
+    /// `immediate` or `never`.
+    #[must_use]
+    pub const fn label(self) -> &'static str {
+        match self {
+            Self::WhenIdle => "when_idle",
+            Self::Immediate => "immediate",
+            Self::Never => "never",
+        }
+    }
+}
+
 struct Shared {
     /// What the walk reads of the original theory beyond the theory itself.
     parts: super::regions::OriginalParts,
@@ -155,6 +212,11 @@ struct Shared {
     /// One deque per worker and the walk's termination record. All entry
     /// preparation and evaluation happens outside the deque locks.
     frontier: RegionFrontier,
+    /// One deque of published query regions per worker, beside the
+    /// frontier's, sharing its termination record and idle gate.
+    inner: InnerDeques,
+    /// When a worker's query is published; fixed when the walk begins.
+    division: QueryDivision,
     /// The first stop a worker raised; written only on the cold error path,
     /// read by the enumeration once the workers have finished, after their models.
     stopped: Mutex<Option<Incomplete>>,
@@ -196,6 +258,10 @@ struct Live {
     support_explanation_peak_bytes: AtomicU64,
     countermodel_queries: AtomicU64,
     countermodels: AtomicU64,
+    /// Queries whose pending regions were published.
+    published: AtomicU64,
+    /// Published regions served after a steal from a peer's deque.
+    stolen: AtomicU64,
     /// The workers' phase timings, one pair of counters per phase.
     timings: [LivePhase; 4],
 }
@@ -596,6 +662,7 @@ impl ParallelRegions {
             CandidateKnowledge::default(),
         );
         let frontier = RegionFrontier::new(workers.get(), root)?;
+        let inner = InnerDeques::new(workers.get())?;
         Ok(Self {
             shared: Arc::new(Shared {
                 parts,
@@ -603,6 +670,8 @@ impl ParallelRegions {
                 filter: None,
                 restrictions: RwLock::new(Conditions::default()),
                 frontier,
+                inner,
+                division: QueryDivision::default(),
                 stopped: Mutex::new(None),
                 budget: SharedBudget::new(limits.search, budget.statistics),
                 limits,
@@ -636,6 +705,16 @@ impl ParallelRegions {
             .ok_or(Incomplete::LateRegionFilter)?
             .filter = Some(filter);
         Ok(())
+    }
+
+    /// Divide the walk's queries as `division` says, before the walk begins;
+    /// a walk that has begun keeps the division it began with.
+    pub(crate) fn set_query_division(&mut self, division: QueryDivision) {
+        if matches!(self.record, WalkRecord::NotBegun)
+            && let Some(shared) = Arc::get_mut(&mut self.shared)
+        {
+            shared.division = division;
+        }
     }
 
     pub(crate) fn search_statistics(&self) -> SearchStatistics {
@@ -739,7 +818,22 @@ impl ParallelRegions {
                 configured: self.shared.workers,
                 engagement_delay: self.delay,
                 engagement: self.record.public(),
+                query_division: self.query_division(),
             }),
+        }
+    }
+
+    /// The published queries and who served their regions, current while the
+    /// workers run.
+    fn query_division(&self) -> QueryDivisionStatistics {
+        let (served, servers, peak_served) = self.shared.inner.served();
+        QueryDivisionStatistics {
+            division: self.shared.division,
+            published: Live::read(&self.shared.live.published),
+            served,
+            stolen: Live::read(&self.shared.live.stolen),
+            servers,
+            peak_served,
         }
     }
 
@@ -1202,10 +1296,11 @@ impl ParallelRegions {
         failure.map_or(Ok(()), Err)
     }
 
-    /// Release every deque's payloads and capacity, once no party can still
-    /// own or publish work.
+    /// Release every deque's payloads and capacity, the published queries'
+    /// included, once no party can still own or publish work.
     fn release_frontier(&self) {
         self.shared.frontier.release();
+        self.shared.inner.release();
     }
 
     /// The shared allowance's spent work and decisions become the
@@ -1316,6 +1411,15 @@ fn merge_membership(into: &mut Statistics, from: &Statistics) -> Result<(), Inco
 /// coordinator state is an inconsistency, refused as an invalid witness and
 /// never taken for exhaustion. Each iteration returns, engages or steps, and
 /// a step splits or resolves a region of a finite tree, so the pull ends.
+///
+/// A step's leaf query publishes only once the deadline has passed, asked
+/// through `deadline_passed` before each of its narrowings, unless the walk
+/// never divides its queries. Its pending regions then go to inner deque 0 and
+/// the pull engages at once: at engagement every outstanding region is in
+/// deque 0, except at most one leaf, held by its published query, whose
+/// pending regions are all in inner deque 0, and the outstanding count is
+/// deque 0's length plus that leaf. No query is then running on the
+/// coordinator's workspaces, which engagement releases.
 fn coordinate<'a>(
     shared: &'a Shared,
     mut coordinator: Option<&mut Coordinator<'a>>,
@@ -1361,15 +1465,22 @@ fn coordinate<'a>(
             cancellation: &shared.cancellation,
             statistics: search,
         };
+        let timing = match (shared.division, deadline) {
+            (QueryDivision::Never, _) | (_, None) => Timing::Inline,
+            (_, Some(deadline)) => Timing::Coordinator {
+                deadline,
+                passed: &mut *deadline_passed,
+            },
+        };
         let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
             advance(
                 shared,
                 original,
-                entry,
-                0,
+                (entry, 0),
                 &mut coordinator.workspaces,
                 &mut budget,
                 (&mut coordinator.report, &mut coordinator.reported),
+                timing,
             )
         }));
         search = budget.statistics;
@@ -1377,6 +1488,8 @@ fn coordinate<'a>(
         match outcome {
             Ok(Ok(Stepped::Split | Stepped::Resolved(None))) => {}
             Ok(Ok(Stepped::Resolved(Some(model)))) => break Exit::Model(model),
+            // Published only past the deadline: the workers serve it now.
+            Ok(Ok(Stepped::Published)) => break Exit::Deadline,
             Ok(Err(error)) => {
                 shared.stop(error);
                 break Exit::Failed;
@@ -1403,27 +1516,42 @@ fn coordinate<'a>(
 /// Step one region through `step`, then publish its phase timings to the live
 /// counters as the difference from the reported baseline, and resolve the
 /// region once when it is resolved. The workers and the coordinator both
-/// drive this one unit, so they step alike.
+/// drive this one unit, so they step alike. A leaf whose query was published
+/// is not resolved here: it stays outstanding until its query is decided.
 fn advance<'a>(
     shared: &'a Shared,
     original: &IndexedTheory,
-    entry: Entry,
-    index: usize,
+    (entry, index): (Entry, usize),
     workspaces: &mut Workspaces<'a>,
     budget: &mut Budget<'a, WorkLease<'a>>,
     (report, reported): (&mut WorkerReport, &mut SearchPhaseTimings),
+    timing: Timing<'_>,
 ) -> Result<Stepped, Incomplete> {
-    let stepped = step(shared, original, entry, index, workspaces, budget, report);
-    if let Some(measured) = report.statistics.phase_timings {
-        shared.live.add_timings(reported, &measured);
-        *reported = measured;
-    }
+    let stepped = step(
+        shared,
+        original,
+        (entry, index),
+        workspaces,
+        budget,
+        report,
+        timing,
+    );
+    publish_timings(shared, (report, reported));
     // A resolved region leaves the frontier: resolve once, here, so the count
     // has exactly one structural decrement point.
     if let Ok(Stepped::Resolved(_)) = stepped {
         shared.frontier.termination.resolve();
     }
     stepped
+}
+
+/// Publish a party's phase timings to the live counters as the difference
+/// from its reported baseline.
+fn publish_timings(shared: &Shared, (report, reported): (&WorkerReport, &mut SearchPhaseTimings)) {
+    if let Some(measured) = report.statistics.phase_timings {
+        shared.live.add_timings(reported, &measured);
+        *reported = measured;
+    }
 }
 
 /// One worker's walk over `original`, the enumeration's index, until the run
@@ -1445,50 +1573,69 @@ fn worker(
     // No unused permit is held where this worker could block.
     let mut quota = shared.budget.lease(&shared.cancellation);
     loop {
-        // Honour a stop before taking any region, so a worker with a deep deque
-        // does not run its whole subtree on after a stop was raised.
-        if shared.frontier.termination.is_closed() {
+        // Honour a stop or the walk's end before taking any region, so a
+        // worker with a deep deque does not run its whole subtree on after a
+        // stop was raised, nor serve a decided query's regions after the end.
+        if shared.frontier.termination.has_ended() {
             break;
         }
-        let local = shared.frontier.take_local(index);
+        // Its own published regions first, then its own candidate regions.
+        let local = shared
+            .inner
+            .take_local(index)
+            .map(|entry| Work::Published(entry, Taken::Own))
+            .or_else(|| shared.frontier.take_local(index).map(Work::Region));
         if local.is_none() {
             quota.settle();
         }
-        let Some(entry) = local.or_else(|| find_work(shared, index, IDLE_WAIT)) else {
+        let Some(work) = local.or_else(|| find_work(shared, index, IDLE_WAIT)) else {
             break;
         };
-        let stepped = {
-            let mut budget = Budget {
-                quota,
-                limits: shared.limits.search,
-                cancellation: &shared.cancellation,
-                statistics: search,
-            };
-            let result = advance(
+        let mut budget = Budget {
+            quota,
+            limits: shared.limits.search,
+            cancellation: &shared.cancellation,
+            statistics: search,
+        };
+        let model = match work {
+            Work::Region(entry) => advance(
                 shared,
                 original,
-                entry,
-                index,
+                (entry, index),
                 &mut workspaces,
                 &mut budget,
                 (&mut report, &mut reported),
-            );
-            search = budget.statistics;
-            quota = budget.quota;
-            result
+                Timing::Worker,
+            )
+            .map(|stepped| match stepped {
+                // A split's children are on this worker's deque; `outstanding`
+                // was already incremented before they were pushed. A published
+                // leaf stays outstanding, and its regions on this worker's
+                // inner deque.
+                Stepped::Split | Stepped::Published => None,
+                // `advance` resolved the region once.
+                Stepped::Resolved(model) => model,
+            }),
+            // A published region's error was raised as the walk's stop before
+            // its region was retired; raising it again keeps the first stop.
+            Work::Published(entry, taken) => inner::serve(
+                shared,
+                original,
+                (entry, taken, index),
+                &mut workspaces,
+                &mut budget,
+                (&mut report, &mut reported),
+            ),
         };
-        match stepped {
-            // A split's children are on this worker's deque; `outstanding` was
-            // already incremented before they were pushed.
-            Ok(Stepped::Split) => {}
-            // `advance` resolved the region once.
-            Ok(Stepped::Resolved(model)) => {
-                if let Some(model) = model {
-                    quota.settle();
-                    if sender.send(model).is_err() {
-                        shared.close();
-                        break;
-                    }
+        search = budget.statistics;
+        quota = budget.quota;
+        match model {
+            Ok(None) => {}
+            Ok(Some(model)) => {
+                quota.settle();
+                if sender.send(model).is_err() {
+                    shared.close();
+                    break;
                 }
             }
             Err(error) => {
@@ -1500,25 +1647,50 @@ fn worker(
     report
 }
 
-/// Steal a region from another worker, waiting while any remains. `None` when
-/// the whole frontier is resolved or a stop closed the run. `idle_wait` bounds
-/// how long an idle worker waits before it looks for a region again and polls
-/// cancellation; a publication or the end of the walk ends the wait at once.
-fn find_work(shared: &Shared, index: usize, idle_wait: Duration) -> Option<Entry> {
+/// What a worker takes: a region of the candidate tree, or a region of a
+/// published query, from its own deque or a peer's.
+enum Work {
+    Region(Entry),
+    Published(InnerEntry, Taken),
+}
+
+/// Where a published region was taken from.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Taken {
+    Own,
+    Stolen,
+}
+
+/// Steal a region from another worker, waiting while any remains: a peer's
+/// oldest published region first, then a peer's oldest candidate region.
+/// `None` when the whole frontier is resolved or a stop closed the run.
+/// `idle_wait` bounds how long an idle worker waits before it looks for a
+/// region again and polls cancellation; a publication or the end of the walk
+/// ends the wait at once.
+fn find_work(shared: &Shared, index: usize, idle_wait: Duration) -> Option<Work> {
     shared.frontier.find_work(
         idle_wait,
         &shared.cancellation,
-        |_| shared.frontier.steal(index),
+        |_| {
+            shared
+                .inner
+                .steal(index)
+                .map(|entry| Work::Published(entry, Taken::Stolen))
+                .or_else(|| shared.frontier.steal(index).map(Work::Region))
+        },
         |error| shared.stop(error),
     )
 }
 
 /// What one `step` did to its region: split it into two children (now on the
-/// worker's deque), or resolved it — refuted, or a leaf with an optional
-/// verified model. The caller decrements `outstanding` once, on `Resolved`.
+/// worker's deque), resolved it — refuted, or a leaf with an optional
+/// verified model — or published its leaf's query. The caller decrements
+/// `outstanding` once, on `Resolved`; a published leaf stays outstanding until
+/// its query is decided.
 enum Stepped {
     Split,
     Resolved(Option<Interpretation>),
+    Published,
 }
 
 /// What one worker reuses across its regions: the narrowing worklists, the
@@ -1557,15 +1729,16 @@ impl Workspaces<'_> {
 }
 
 /// Narrow one region and act on it: refuted, split, or a leaf decided by
-/// the reduct. A split publishes both children onto this worker's deque.
+/// the reduct, or whose query `timing` published. A split publishes both
+/// children onto this worker's deque.
 fn step<'a>(
     shared: &'a Shared,
     original: &IndexedTheory,
-    (mut region, mut knowledge): Entry,
-    index: usize,
+    ((mut region, mut knowledge), index): (Entry, usize),
     workspaces: &mut Workspaces<'a>,
     budget: &mut Budget<'a, WorkLease<'a>>,
     report: &mut WorkerReport,
+    timing: Timing<'_>,
 ) -> Result<Stepped, Incomplete> {
     // The restrictions current when the region is taken, held for its
     // narrowing without the lock.
@@ -1634,11 +1807,10 @@ fn step<'a>(
             original,
             &region,
             budget,
-            &mut workspaces.membership,
-            &mut workspaces.certificate,
+            (&mut workspaces.membership, &mut workspaces.certificate),
             report,
-        )
-        .map(Stepped::Resolved);
+            WalkPublication::new(shared, index, timing),
+        );
     };
     budget.decide()?;
     // Each child carries its own copy of the knowledge, linear in the theory:
@@ -1649,16 +1821,17 @@ fn step<'a>(
     Ok(Stepped::Split)
 }
 
-/// Decide a leaf as the scalar proposer does.
+/// Decide a leaf as the scalar proposer does, unless `publication` publishes
+/// its proper-subset query for any worker to serve.
 fn leaf<'a>(
     shared: &Shared,
     original: &IndexedTheory,
     region: &Region,
     budget: &mut Budget<'a, WorkLease<'a>>,
-    membership: &mut crate::reduct::State,
-    workspace: &mut certified::Workspace,
+    (membership, workspace): (&mut crate::reduct::State, &mut certified::Workspace),
     report: &mut WorkerReport,
-) -> Result<Option<Interpretation>, Incomplete> {
+    mut publication: WalkPublication<'_, '_>,
+) -> Result<Stepped, Incomplete> {
     let candidate = super::regions::leaf_interpretation(original.theory(), region)?;
     shared
         .candidates
@@ -1669,48 +1842,53 @@ fn leaf<'a>(
     report.statistics.candidates += 1;
     let queries_before = report.statistics.countermodel_queries;
     let countermodels_before = report.statistics.countermodels;
-    let decision: Result<Decision, Incomplete> = if let Some(certificate) = &shared.certificate {
-        let mut search = budget.statistics;
-        let wanted = certificate
-            .checking_work_bound()?
-            .min(shared.limits.max_verification_work);
-        let reservation = budget.quota.reserve(wanted)?;
-        let allowance = reservation.allowance();
-        let mut limits = shared.limits;
-        limits.max_verification_work = allowance;
-        if allowance < wanted {
-            // Only a shortage of global work lowers the search ceiling.
-            // A complete reservation preserves a stricter verification
-            // ceiling's own error attribution.
-            limits.search.max_work = search
-                .work
-                .checked_add(allowance)
-                .ok_or(Incomplete::CounterOverflow)?;
-        }
-        let verdict = certified::classify(
-            certificate,
-            workspace,
-            &candidate,
-            limits,
-            budget.cancellation,
-            &mut report.statistics,
-            &mut search,
-        );
-        reservation.finish(search.work - budget.statistics.work)?;
-        budget.statistics = search;
-        verdict.map(Decision::from)
-    } else {
-        membership
-            .check(
-                original.theory(),
-                Some(original),
+    // `None`: the query was published, and the workers that serve it decide it.
+    let decision: Result<Option<Decision>, Incomplete> =
+        if let Some(certificate) = &shared.certificate {
+            let mut search = budget.statistics;
+            let wanted = certificate
+                .checking_work_bound()?
+                .min(shared.limits.max_verification_work);
+            let reservation = budget.quota.reserve(wanted)?;
+            let allowance = reservation.allowance();
+            let mut limits = shared.limits;
+            limits.max_verification_work = allowance;
+            if allowance < wanted {
+                // Only a shortage of global work lowers the search ceiling.
+                // A complete reservation preserves a stricter verification
+                // ceiling's own error attribution.
+                limits.search.max_work = search
+                    .work
+                    .checked_add(allowance)
+                    .ok_or(Incomplete::CounterOverflow)?;
+            }
+            let verdict = certified::classify(
+                certificate,
+                workspace,
                 &candidate,
-                shared.limits,
-                budget,
+                limits,
+                budget.cancellation,
                 &mut report.statistics,
-            )
-            .map(Decision::from)
-    };
+                &mut search,
+            );
+            reservation.finish(search.work - budget.statistics.work)?;
+            budget.statistics = search;
+            verdict.map(|verdict| Some(Decision::from(verdict)))
+        } else {
+            membership
+                .check_publishing(
+                    (original.theory(), Some(original)),
+                    &candidate,
+                    shared.limits,
+                    budget,
+                    &mut report.statistics,
+                    &mut publication,
+                )
+                .map(|queried| match queried {
+                    Queried::Decided(check) => Some(Decision::from(check)),
+                    Queried::Published(()) => None,
+                })
+        };
     // Query entry is a receipt even when membership checking stops before
     // producing a verdict. Publish it before propagating that failure.
     Live::add(
@@ -1722,9 +1900,10 @@ fn leaf<'a>(
         report.statistics.countermodels - countermodels_before,
     );
     match decision? {
-        Decision::Stable => Ok(Some(candidate)),
-        Decision::Refuted => Ok(None),
-        Decision::Invalid => Err(Incomplete::InvalidWitness),
+        None => Ok(Stepped::Published),
+        Some(Decision::Stable) => Ok(Stepped::Resolved(Some(candidate))),
+        Some(Decision::Refuted) => Ok(Stepped::Resolved(None)),
+        Some(Decision::Invalid) => Err(Incomplete::InvalidWitness),
     }
 }
 

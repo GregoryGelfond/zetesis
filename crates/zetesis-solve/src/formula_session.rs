@@ -186,6 +186,7 @@ impl<'a, E: MembershipExecution> FormulaSession<'a, E> {
                 return Ok(());
             }
         };
+        models.set_query_division(config.query_division);
         if config.stats {
             models.enable_phase_timing();
         }

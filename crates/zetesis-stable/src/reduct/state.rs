@@ -3,6 +3,7 @@
 use zetesis_ferraris::{Interpretation, Theory};
 
 use super::ReductWorkspace;
+use crate::ferraris::{Inline, Publication, Queried};
 use crate::timing::{self, Phase};
 use crate::{
     Check, Incomplete, Limits, Statistics,
@@ -34,6 +35,31 @@ impl State {
         budget: &mut Budget<'_, impl Quota>,
         statistics: &mut Statistics,
     ) -> Result<Check, Incomplete> {
+        match self.check_publishing(
+            (theory, index),
+            candidate,
+            limits,
+            budget,
+            statistics,
+            &mut Inline,
+        )? {
+            Queried::Decided(check) => Ok(check),
+            Queried::Published(never) => match never {},
+        }
+    }
+
+    /// [`Self::check`], whose proper-subset query may publish its pending
+    /// regions through `publication` and end here undecided. A published
+    /// query's retained capacity is recorded and admitted as a decided one's.
+    pub(crate) fn check_publishing<P: Publication>(
+        &mut self,
+        (theory, index): (&Theory, Option<&IndexedTheory>),
+        candidate: &Interpretation,
+        limits: Limits,
+        budget: &mut Budget<'_, impl Quota>,
+        statistics: &mut Statistics,
+        publication: &mut P,
+    ) -> Result<Queried<P::Receipt>, Incomplete> {
         budget.cancellation.poll()?;
         if !theory.same_instance(candidate.theory()) {
             return Err(Incomplete::WrongTheory);
@@ -47,20 +73,20 @@ impl State {
                 self.workspace
                     .evaluate(candidate, limits, budget.cancellation, statistics)?;
             if !evaluated.truth.is_model() {
-                return Ok(Check::NotModel);
+                return Ok(Queried::Decided(Check::NotModel));
             }
             let started = timing::start(statistics.phase_timings.as_ref());
             increment(&mut statistics.countermodel_queries)?;
             let result =
                 match positive_closure(&mut evaluated, candidate, limits, budget, statistics) {
-                    Ok(Some(verdict)) => Ok(verdict),
-                    Ok(None) => query.check(
+                    Ok(Some(verdict)) => Ok(Queried::Decided(verdict)),
+                    Ok(None) => query.check_publishing(
                         zetesis_ferraris::FrozenSubject::new(theory, evaluated.truth.truth()),
                         candidate,
                         limits,
                         budget,
-                        statistics,
-                        evaluated.narrowing,
+                        (statistics, evaluated.narrowing),
+                        publication,
                     ),
                     Err(error) => Err(error),
                 };
