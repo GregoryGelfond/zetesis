@@ -58,20 +58,26 @@ removes candidates. A refused restriction installs nothing. The original theory
 returned by `theory()` and every reduct check remain unchanged. After any
 successful restriction, exhaustion covers only their intersection.
 
-`StableModels::tighten_candidate_bound(&Theory)` keeps one replaceable bound
-separately from these permanent restrictions. The caller must ensure that each
-new bound, together with the unchanged original theory, classically implies its
-predecessor over the same atom meanings; this implication is **not checked**.
-Otherwise an earlier pruning may have removed an original model the new bound
-permits. The first bound has no predecessor. Under this contract, conjoining all
-old bounds is equivalent to retaining the latest one in the presence of the
-original theory and every independent restriction.
+`StableModels::improve_candidate_bound(plan, &score, &Theory)` keeps one
+replaceable bound separately from these permanent restrictions: the bound an
+objective plan compiled at an incumbent's score. It checks what makes each bound
+imply its predecessor: every bound after the first must come from the same plan
+(`PlanIdentity`) and carry a strictly better score (`Score::compare_costs`),
+and anything else is refused with `Incomplete::CandidateBoundPlan` or
+`Incomplete::CandidateBoundNotImproving`, leaving the active bound in place. A
+plan's bound at a strictly better score keeps only interpretations its bound at
+the worse score keeps too, strict or not, so a region an earlier bound pruned
+holds no candidate a later bound admits. The restriction itself must be the
+bound the plan compiled at that score; the operation checks the plan and the
+score, not the formula. The first bound has no predecessor. Under this
+contract, conjoining all old bounds is equivalent to retaining the latest one in
+the presence of the original theory and every independent restriction.
 Original theory and reduct membership are unchanged. Exhaustion covers the
 constrained candidate family, not the unrestricted world view.
 
 `StableModels::bound_generation()` counts the bounds installed so far by
-`tighten_candidate_bound`: zero before the first, one more after each successful
-installation. A refused or failed tightening, a permanent `restrict_candidates`
+`improve_candidate_bound`: zero before the first, one more after each successful
+installation. A refused or failed installation, a permanent `restrict_candidates`
 addition and every batch operation leave it unchanged; it never decreases. It is
 the generation the region proposer assigns to the current bound. A scheduling
 observation only: membership, exhaustion and optimality never depend on it.

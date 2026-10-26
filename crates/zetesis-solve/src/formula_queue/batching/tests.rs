@@ -6,6 +6,7 @@ use std::{collections::BTreeSet, num::NonZeroUsize};
 
 use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{AdmissionLimits, FormulaParts, Node, Theory};
+use zetesis_objective::{PlanIdentity, Score};
 use zetesis_stable::{BatchVerdict, Incomplete, Limits, StableModels};
 
 use super::Batching;
@@ -47,6 +48,14 @@ fn bound(atoms: usize) -> Theory {
         AdmissionLimits::default(),
     )
     .unwrap()
+}
+
+/// Install the test bound as `plan`'s candidate bound at cost `value`.
+fn tighten(models: &mut StableModels, plan: PlanIdentity, value: i64) {
+    let score = Score::from_costs(vec![(0, value)]).unwrap();
+    models
+        .improve_candidate_bound(plan, &score, &bound(5))
+        .unwrap();
 }
 
 fn checked(batch: CandidateBatch<'_>, prefix: usize) -> Result<BatchResult<'_>, Failure> {
@@ -114,7 +123,7 @@ fn a_tightening_after_a_commit_resets_the_next_slate() {
     batching.committed(count(2), 2, None, models.bound_generation());
     assert_eq!(batching.select(&models, &options), count(4));
     batching.committed(count(4), 4, None, models.bound_generation());
-    models.tighten_candidate_bound(&bound(5)).unwrap();
+    tighten(&mut models, PlanIdentity::fresh(), 0);
     assert_eq!(batching.select(&models, &options), options.batch_size);
     assert_eq!(batching.resets(), 1);
 }
@@ -161,10 +170,11 @@ fn fixed_slates_stay_at_the_batch_size_and_never_reset() {
         ..options()
     };
     let mut batching = Batching::new(&options);
-    for _ in 0..3 {
+    let plan = PlanIdentity::fresh();
+    for step in 0..3 {
         assert_eq!(batching.select(&models, &options), options.batch_size);
         batching.committed(options.batch_size, 2, None, models.bound_generation());
-        models.tighten_candidate_bound(&bound(5)).unwrap();
+        tighten(&mut models, plan, -step);
     }
     assert_eq!(batching.largest(), Some(options.batch_size));
     assert_eq!(batching.resets(), 0);
@@ -199,7 +209,7 @@ fn a_pending_retry_keeps_its_count_and_its_commit_resets_nothing() {
     ));
     assert_eq!(models.batch_statistics().pending, 4);
     // Tightened while the slate is pending: no slate's answers installed it.
-    models.tighten_candidate_bound(&bound(5)).unwrap();
+    tighten(&mut models, PlanIdentity::fresh(), 0);
     for _ in 0..5 {
         queue
             .next(&mut models, &options, &cancellation, |batch| {

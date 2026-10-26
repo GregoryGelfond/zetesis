@@ -76,7 +76,14 @@ fn assert_family(original: &Theory, conditions: &Conditions<(Theory, Narrower)>,
         search.restrict_candidates(restriction).unwrap();
     }
     if let Some(bound) = &conditions.bound {
-        search.tighten_candidate_bound(&bound.index.0).unwrap();
+        let score = zetesis_objective::Score::from_costs(vec![(0, 0)]).unwrap();
+        search
+            .improve_candidate_bound(
+                zetesis_objective::PlanIdentity::fresh(),
+                &score,
+                &bound.index.0,
+            )
+            .unwrap();
     }
     let mut actual: Vec<usize> = search
         .by_ref()

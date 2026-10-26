@@ -76,6 +76,7 @@ fn fixture(native: bool) -> (ObjectivePlan, crate::RequiredChoices) {
     )
     .unwrap();
     let plan = ObjectivePlan {
+        identity: zetesis_objective::PlanIdentity::fresh(),
         original,
         objectives,
         nodes: nodes.into_parts(),

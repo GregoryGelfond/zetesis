@@ -174,7 +174,7 @@ impl Bounds {
             observations.record(Event::ObjectiveTheoryMismatch)?;
             return Ok(());
         }
-        if let Err(error) = models.tighten_candidate_bound(bound.theory()) {
+        if let Err(error) = models.improve_candidate_bound(plan.identity(), score, bound.theory()) {
             // Replacement is transactional: the older bound remains on failure.
             // Later scoring still borrows the unchanged immutable preparation.
             self.enabled = false;

@@ -1,4 +1,5 @@
 use zetesis_ferraris::{Interpretation, Theory, models, models_reduct};
+use zetesis_objective::{PlanIdentity, Score};
 
 use crate::budget::{Budget, Quota, increment};
 use crate::timing::{self, Phase};
@@ -282,6 +283,9 @@ pub struct StableModels {
     certificate_workspace: certified::Workspace,
     determined_candidates: Option<certified::DeterminedCandidates>,
     bound_generation: u64,
+    /// The plan and score of the installed candidate bound, which every later
+    /// bound must strictly improve on.
+    active_bound: Option<(PlanIdentity, Score)>,
     reduct: crate::reduct::State,
     /// The original theory's index, built when a region walk first needs it
     /// and shared by that walk and every membership query of its candidates.
@@ -334,6 +338,7 @@ impl StableModels {
             certificate_workspace: certified::Workspace::default(),
             determined_candidates: None,
             bound_generation: 0,
+            active_bound: None,
             reduct: crate::reduct::State::default(),
             index: OriginalIndex::new(theory, limits.max_native_narrowing_bytes),
         })
@@ -439,6 +444,7 @@ impl StableModels {
             certificate_workspace: certified::Workspace::default(),
             determined_candidates: None,
             bound_generation: 0,
+            active_bound: None,
             reduct: crate::reduct::State::default(),
             index: OriginalIndex::new(theory, limits.max_native_narrowing_bytes),
         })
@@ -498,6 +504,7 @@ impl StableModels {
             certificate_workspace: certified::Workspace::default(),
             determined_candidates: None,
             bound_generation: 0,
+            active_bound: None,
             reduct: crate::reduct::State::default(),
             index: OriginalIndex::new(theory, limits.max_native_narrowing_bytes),
         })
@@ -565,16 +572,24 @@ impl StableModels {
         result
     }
 
-    /// Install a successively stronger candidate-only bound.
+    /// Install the bound an objective plan compiled at an incumbent's `score`:
+    /// a candidate-only restriction to the interpretations costing less than
+    /// the incumbent, or at most as much, under that `plan`.
     ///
-    /// # Caller obligation
-    /// Each bound must use the original atom count and semantic index meanings.
-    /// Every classical interpretation satisfying both the original theory and
-    /// this bound must satisfy the previous bound, if any. This implication
-    /// relative to the unchanged original theory is **not checked**. Violating
-    /// it can omit models because regions pruned earlier are not reopened. The
-    /// first bound has no implication obligation. Bounds never support original
-    /// atoms and never change the original theory or its reduct.
+    /// # Checked
+    /// The first bound is accepted as given. Every later bound must come from
+    /// the same `plan`, and its `score` must be strictly better than the active
+    /// bound's (`Score::compare_costs` is `Less`); otherwise it is refused with
+    /// [`Incomplete::CandidateBoundPlan`] or
+    /// [`Incomplete::CandidateBoundNotImproving`], and the active bound stays.
+    /// A plan's bound at a strictly better score keeps only interpretations its
+    /// bound at the worse score keeps too, strict or not, so regions pruned
+    /// under an earlier bound never hold a candidate a later bound admits.
+    /// `restriction` must be the bound `plan` compiled at `score`; this
+    /// operation checks the plan and the score, not the restriction's formula.
+    /// It must use the original atom count and semantic index meanings. Bounds
+    /// never support original atoms and never change the original theory or
+    /// its reduct.
     ///
     /// Region search retains only the latest bound separately from permanent
     /// [`Self::restrict_candidates`] constraints. Active worker snapshots may
@@ -584,12 +599,18 @@ impl StableModels {
     /// remaining constrained family, not the original unrestricted world view.
     ///
     /// # Errors
-    /// Refuses a different atom count, a closed iterator, a pending error,
-    /// generation overflow, resource exhaustion or cancellation. Failed setup
-    /// leaves the active bound and generation unchanged; admitted work stays
-    /// charged. Region knowledge retains its existing infallible allocation
-    /// contract; this operation does not make all search allocation fallible.
-    pub fn tighten_candidate_bound(&mut self, restriction: &Theory) -> Result<(), Incomplete> {
+    /// Refuses a closed iterator, a pending error, a different atom count,
+    /// another plan or a score that does not improve, generation overflow,
+    /// resource exhaustion or cancellation. Failed setup leaves the active
+    /// bound and generation unchanged; admitted work stays charged. Region
+    /// knowledge retains its existing infallible allocation contract; this
+    /// operation does not make all search allocation fallible.
+    pub fn improve_candidate_bound(
+        &mut self,
+        plan: PlanIdentity,
+        score: &Score,
+        restriction: &Theory,
+    ) -> Result<(), Incomplete> {
         if self.terminal {
             return Err(Incomplete::ClosedEnumerator);
         }
@@ -601,6 +622,14 @@ impl StableModels {
                 expected: self.theory.atom_count(),
                 actual: restriction.atom_count(),
             });
+        }
+        if let Some((active, previous)) = &self.active_bound {
+            if *active != plan {
+                return Err(Incomplete::CandidateBoundPlan);
+            }
+            if score.compare_costs(previous) != std::cmp::Ordering::Less {
+                return Err(Incomplete::CandidateBoundNotImproving);
+            }
         }
         let generation = self
             .bound_generation
@@ -621,13 +650,14 @@ impl StableModels {
         self.statistics.search = budget.statistics;
         if result.is_ok() {
             self.bound_generation = generation;
+            self.active_bound = Some((plan, score.clone()));
             self.statistics.candidate_restrictions = count;
         }
         result
     }
 
     /// Declare, before the stream's first proposal, that the caller will
-    /// tighten candidate bounds ([`Self::tighten_candidate_bound`]) as it
+    /// improve candidate bounds ([`Self::improve_candidate_bound`]) as it
     /// commits answers, as an optimizing search does. Region producers
     /// ([`Self::with_region_producers`]) then share one frontier
     /// ([`FrontierOrder::Shared`]) for the whole stream: every producer takes
@@ -736,7 +766,7 @@ impl StableModels {
         self.exhausted
     }
 
-    /// Bounds installed so far by [`Self::tighten_candidate_bound`]: zero
+    /// Bounds installed so far by [`Self::improve_candidate_bound`]: zero
     /// before the first, one more after each successful installation. A
     /// refused or failed tightening, a permanent [`Self::restrict_candidates`]
     /// addition and every batch operation leave it unchanged; it never

@@ -12,6 +12,7 @@ mod reduction;
 mod error;
 mod evaluate;
 mod condition;
+mod identity;
 
 pub use condition::{
     Condition, ConditionError, ConditionFailure, ConditionIndex, ConditionIter, ConditionNode,
@@ -19,6 +20,7 @@ pub use condition::{
 };
 pub use error::{Error, ErrorKind, Limits, Statistics, Stop};
 pub use evaluate::evaluate;
+pub use identity::PlanIdentity;
 pub use program::{
     AdmissionError, AdmissionLimits, AdmissionResource, ObjectiveElement, ObjectiveProgram,
     ObjectiveTemplate, ObjectiveTemplateIter, ObjectiveTemplateRef, ObjectiveTemplates,

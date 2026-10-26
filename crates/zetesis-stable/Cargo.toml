@@ -12,6 +12,7 @@ rayon.workspace = true
 self_cell.workspace = true
 zetesis-cpu.workspace = true
 zetesis-ferraris.workspace = true
+zetesis-objective.workspace = true
 
 [dev-dependencies]
 zetesis-themelios.workspace = true

@@ -49,6 +49,7 @@ fn sufficient_evidence_uses_weights_and_multiplicity() {
             )
             .unwrap();
         let plan = ObjectivePlan {
+            identity: zetesis_objective::PlanIdentity::fresh(),
             original,
             objectives: ObjectiveProgram::none(),
             nodes: nodes.into_parts(),

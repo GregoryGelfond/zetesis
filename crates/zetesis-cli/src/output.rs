@@ -378,6 +378,8 @@ fn reason_code(reason: Interruption) -> &'static str {
                 Incomplete::InvalidRegionConsequence => "invalid_region_consequence",
                 Incomplete::LateRegionFilter => "late_region_filter",
                 Incomplete::LateCandidateBounds => "late_candidate_bounds",
+                Incomplete::CandidateBoundPlan => "candidate_bound_plan",
+                Incomplete::CandidateBoundNotImproving => "candidate_bound_not_improving",
                 Incomplete::RegionFilterAlreadySet => "region_filter_already_set",
                 Incomplete::Certificate(_) => "certificate",
                 Incomplete::Verification(_) => "verification",

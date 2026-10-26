@@ -57,10 +57,12 @@ incumbent constraint, leaves scoring preparation available. Enumerating all
 answers also reuses preparation while leaving pruning disabled.
 
 For region search, each improved incumbent replaces the previous optimizer
-bound through `StableModels::tighten_candidate_bound`. Independent caller
-restrictions remain. The caller must establish that the original theory and new
-bound together imply the previous bound; the API does not check that implication.
-Active workers may finish
+bound through `StableModels::improve_candidate_bound`, which takes the bound
+with its plan's identity and its incumbent's score. Independent caller
+restrictions remain. The stream refuses a bound from another plan, or at a score
+no better than the active bound's, so each installed bound implies its
+predecessor relative to the original theory when the restriction is the plan's
+bound at that score. Active workers may finish
 under an older bound, so returned answers are still scored against the current
 incumbent. The original theory and reduct remain unchanged.
 [`ObjectiveBounds.replacement_preserves_candidates_relative`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/ObjectiveBounds.lean)
