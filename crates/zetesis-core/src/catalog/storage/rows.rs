@@ -2,13 +2,18 @@
 
 use std::sync::Arc;
 
-use super::{RowSegment, budget, locate};
+use super::{Owner, RowSegment, budget, locate};
 
 #[derive(Debug)]
 pub(super) struct RowBase {
     pub(super) segments: Vec<Arc<RowSegment>>,
     pub(super) atoms: usize,
     pub(super) bytes: u128,
+    /// The atom scope of the writer whose rows these are. Every descendant of
+    /// the closed base, and every snapshot holding these rows, names each of
+    /// them by its ID here, so the rows keep one row-scoped identity
+    /// (`Read::row_owner`). No payload.
+    pub(super) source_owner: Arc<Owner>,
 }
 
 #[derive(Clone, Copy)]

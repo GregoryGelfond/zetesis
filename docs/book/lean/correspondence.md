@@ -1440,7 +1440,13 @@ neither a concrete hash/index implementation nor support or answer-set membershi
 For an empty closed-catalog descendant, `discover_model_with` authenticates the
 model's original writer scope and readable prefix, and the descendant's exact
 shared base. The selected canonical IDs therefore decode to the same atoms in
-both owners, without granting general cross-owner atom identity. The model's
+both owners, without granting general cross-owner atom identity. The one
+cross-owner identity Rust grants rests on the shared rows themselves: every
+descendant holds the closed catalog's immutable row payload, so an ID below the
+base's count names the same row in each of them and in the closed writer's own
+snapshots. `AtomIdentityMap` therefore scopes such a row by the closed writer,
+while same-catalog equality and atom acceptance still compare owners, and the
+rows a descendant appends keep its scope. The model's
 strict semantic order makes its completed prefix a unique discovery sequence;
 predicate order matches the relation directory, and each next row follows the
 last row of its predicate. Rust still has to preserve both AVL indexes, callback
