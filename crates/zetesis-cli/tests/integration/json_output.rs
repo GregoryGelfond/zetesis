@@ -502,6 +502,21 @@ fn optimal_ties_retain_priority_cost_vectors() {
 }
 
 #[test]
+fn a_tie_count_a_strict_bound_pruned_is_null() {
+    // One requested answer under the default schedule: its strict bound at
+    // the proved optimum prunes the other three ties, which go uncounted.
+    let mut one = options(&[]);
+    one.models = 1;
+    let (report, value) = solve("a. {b;c}. #show a. #minimize{0@2,k:a;0@-1,j:b}.", &one);
+    let report = report.unwrap();
+    assert_eq!(report.completion, Completion::Exhausted);
+    assert!(report.optimization.unwrap().ties_pruned);
+    assert_eq!(value["outcome"]["optimization"]["optimal"], true);
+    assert!(value["outcome"]["optimization"]["tied_models"].is_null());
+    assert_eq!(value["outcome"]["optimization"]["scored_models"], 1);
+}
+
+#[test]
 fn observations_retain_both_output_channels() {
     for bounds in ["0", "10000000"] {
         let (report, value) = priority_ties(bounds);

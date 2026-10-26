@@ -370,7 +370,7 @@ impl StableModels {
     /// checker failures and candidate-only restrictions; they are never silently dropped.
     #[must_use]
     pub fn batch_statistics(&self) -> BatchStatistics {
-        BatchStatistics {
+        let current = BatchStatistics {
             pending: self.batch.pending.len()
                 + self
                     .batch
@@ -380,6 +380,10 @@ impl StableModels {
             original_validation_work: self.batch.validation.work(),
             original_validation_bytes: self.batch.validation.retained_bytes(),
             ..self.batch.statistics
+        };
+        match &self.earlier {
+            Some(earlier) => super::passes::batch(&earlier.batch, current),
+            None => current,
         }
     }
 

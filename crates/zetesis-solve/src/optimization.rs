@@ -18,8 +18,16 @@ pub struct Optimization {
     /// Best retained cost, at descending priorities. A storage interruption may
     /// preserve an earlier model even after a better score was evaluated.
     pub score: Score,
-    /// Number of full stable models found with this cost, including hidden ties.
+    /// Number of full stable models found with this cost, including hidden
+    /// ties. After exhaustion it counts every model at this cost unless
+    /// [`Self::ties_pruned`].
     pub tied_models: u64,
+    /// A strict bound at this cost pruned its other ties, as the default
+    /// [`crate::OptimumSearch`] does for a request of one answer. Then
+    /// [`Self::tied_models`] counts only the models at this cost that the
+    /// search met, at least one, and exhaustion proves this cost optimal
+    /// without establishing how many models share it.
+    pub ties_pruned: bool,
     /// Number of stable models whose objective was completely evaluated.
     pub scored_models: u64,
     /// Cumulative charged objective preparation and evaluation work.
@@ -162,6 +170,7 @@ impl Incumbents {
             self.best = Some(Optimization {
                 score,
                 tied_models: 1,
+                ties_pruned: false,
                 scored_models: self.scored,
                 work: self.work,
             });
@@ -230,6 +239,24 @@ impl Incumbents {
         self.models.push(model);
         self.atoms = atoms;
         Ok(())
+    }
+
+    /// Begin a tie pass at the proved optimum, and return how many retained
+    /// models it will meet again, which it must not retain twice. The
+    /// optimum's count restarts at them: the pass meets every optimal model,
+    /// those counted earlier without being retained included, and counts each
+    /// of the others once.
+    pub(crate) fn begin_tie_pass(&mut self) -> usize {
+        let retained = self.models.len();
+        if let Some(best) = self.best.as_mut() {
+            best.tied_models = u64::try_from(retained).unwrap_or(u64::MAX);
+        }
+        retained
+    }
+
+    /// Whether `model` is among the first `count` retained models.
+    pub(crate) fn holds_among(&self, count: usize, model: &Model) -> bool {
+        self.models[..count.min(self.models.len())].contains(model)
     }
 
     pub(crate) fn metadata(&self) -> Option<&Optimization> {

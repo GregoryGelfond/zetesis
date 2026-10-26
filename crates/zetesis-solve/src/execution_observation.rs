@@ -183,12 +183,22 @@ pub enum ExecutionObservation<'a> {
     ObjectiveTheoryMismatch,
     /// Candidate restriction was refused; prior restrictions remain sound.
     ObjectiveRestrictionStopped(zetesis_stable::Incomplete),
+    /// A search under strict bounds proved its optimum, and a second pass over
+    /// the same theory, bounded to cost at most that optimum, now enumerates
+    /// the optimum's ties.
+    ObjectiveTiePass {
+        /// The proved optimum's priority/cost pairs.
+        costs: &'a [(i32, i64)],
+    },
     /// A dominance bound was installed after retaining a verified incumbent.
     ObjectiveBound {
         /// Cumulative installed restriction count.
         restrictions: u64,
         /// Incumbent priority/cost pairs.
         costs: &'a [(i32, i64)],
+        /// The bound keeps only cost strictly less than the incumbent's;
+        /// otherwise cost at most the incumbent's.
+        strict: bool,
         /// Cumulative charged construction work.
         work: u64,
     },

@@ -88,9 +88,30 @@ fn all_optimal_hidden_models_retain_multiplicity_and_fixed_priorities() {
     assert_eq!(best.tied_models, 2);
     assert!(best.scored_models >= best.tied_models);
     assert_eq!(text.matches("Optimization: 0 -1\n").count(), 2);
-    let (one, _) = solve(HIDDEN_TIES, &[]);
+}
+
+#[test]
+fn one_requested_answer_proves_the_optimum_without_counting_its_ties() {
+    // The default bounds one requested answer strictly: a tie of the proved
+    // optimum is pruned, so the number of ties is not established.
+    let (one, text) = solve(HIDDEN_TIES, &[]);
+    assert_eq!(one.completion, Completion::Exhausted);
     assert_eq!(one.models, 1);
-    assert_eq!(one.optimization.unwrap().tied_models, 2);
+    let best = one.optimization.unwrap();
+    assert_eq!(best.score.costs(), &[(7, 0), (2, -1)]);
+    assert!(best.ties_pruned);
+    assert!(text.contains("OPTIMUM FOUND\nModels: 1\n"), "{text}");
+}
+
+#[test]
+fn the_inclusive_schedule_counts_every_tie_of_one_requested_answer() {
+    let (one, _) = bounded(HIDDEN_TIES, &[], |config| {
+        config.optimum_search = zetesis_cli::OptimumSearch::Inclusive;
+    });
+    assert_eq!(one.models, 1);
+    let best = one.optimization.unwrap();
+    assert_eq!(best.tied_models, 2);
+    assert!(!best.ties_pruned);
 }
 
 #[test]

@@ -64,6 +64,12 @@ pub enum Incomplete {
     /// Candidate bounds cannot be declared after candidate traversal began:
     /// the producers' frontier order is fixed for the whole stream.
     LateCandidateBounds,
+    /// A candidate bound came from another objective plan than the active
+    /// bound's; scores of different plans are not comparable.
+    CandidateBoundPlan,
+    /// A candidate bound's score does not strictly improve on the active
+    /// bound's, so it could readmit candidates that bound pruned.
+    CandidateBoundNotImproving,
     /// An installed original-region filter cannot be replaced.
     RegionFilterAlreadySet,
     /// Optional candidate certification stopped without establishing membership.
@@ -129,6 +135,12 @@ impl fmt::Display for Incomplete {
             }
             Self::LateCandidateBounds => {
                 f.write_str("declaring candidate bounds requires an unstarted stream")
+            }
+            Self::CandidateBoundPlan => {
+                f.write_str("a candidate bound must come from the active bound's objective plan")
+            }
+            Self::CandidateBoundNotImproving => {
+                f.write_str("a candidate bound's score must strictly improve on the active bound's")
             }
             Self::RegionFilterAlreadySet => {
                 f.write_str("candidate-region filter is already installed")

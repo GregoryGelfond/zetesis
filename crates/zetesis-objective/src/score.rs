@@ -41,6 +41,19 @@ pub struct Score {
     pub(crate) costs: Vec<(i32, i64)>,
 }
 impl Score {
+    /// A present objective's score at the given priority slots, which must be
+    /// strictly descending; `None` otherwise. Evaluation builds the scores of an
+    /// admitted program; this builds one from costs already known.
+    #[must_use]
+    pub fn from_costs(costs: Vec<(i32, i64)>) -> Option<Self> {
+        costs
+            .windows(2)
+            .all(|pair| pair[0].0 > pair[1].0)
+            .then_some(Self {
+                present: true,
+                costs,
+            })
+    }
     /// Whether the caller admitted an objective, even if all costs are zero.
     #[must_use]
     pub const fn is_present(&self) -> bool {
@@ -119,5 +132,29 @@ impl<'input> Evaluation<'input> {
     #[must_use]
     pub const fn statistics(&self) -> Statistics {
         self.statistics
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::cmp::Ordering;
+
+    use super::Score;
+
+    #[test]
+    fn costs_build_a_score_only_at_strictly_descending_priorities() {
+        assert!(Score::from_costs(vec![(2, 1), (0, 5)]).is_some());
+        assert!(Score::from_costs(vec![]).is_some());
+        assert!(Score::from_costs(vec![(0, 1), (2, 5)]).is_none());
+        assert!(Score::from_costs(vec![(1, 1), (1, 5)]).is_none());
+    }
+
+    #[test]
+    fn a_built_score_compares_at_its_priorities() {
+        let higher = Score::from_costs(vec![(2, 1), (0, 9)]).unwrap();
+        let lower = Score::from_costs(vec![(2, 0), (0, 99)]).unwrap();
+        assert!(higher.is_present());
+        assert_eq!(lower.compare_costs(&higher), Ordering::Less);
+        assert_eq!(higher.costs(), &[(2, 1), (0, 9)]);
     }
 }

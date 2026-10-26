@@ -8,6 +8,7 @@ use zetesis_stable::{
 use zetesis_theory_support::theories::theory;
 
 use crate::support::batching::{batch, residual};
+use crate::support::bounds::{Bounds, cost};
 use crate::support::choice_theories::choices;
 use crate::support::region_filters::{ROUTES, Route};
 
@@ -37,9 +38,10 @@ fn tightening_keeps_permanent_restrictions_added_after_a_bound() {
     );
     for route in ROUTES {
         let mut search = route.search(&original, Cancellation::default());
-        search.tighten_candidate_bound(&disjunction(3)).unwrap();
+        let mut bounds = Bounds::new();
+        bounds.improve(&mut search, &disjunction(3)).unwrap();
         search.restrict_candidates(&permanent).unwrap();
-        search.tighten_candidate_bound(&conjunction(3)).unwrap();
+        bounds.improve(&mut search, &conjunction(3)).unwrap();
         assert_eq!(route.collect(&mut search), BTreeSet::from([vec![0, 1]]));
         assert_eq!(search.statistics().candidate_restrictions, 3);
     }
@@ -62,8 +64,9 @@ fn a_bound_does_not_support_original_atoms() {
     );
     for route in ROUTES {
         let mut search = route.search(&original, Cancellation::default());
-        search.tighten_candidate_bound(&disjunction(2)).unwrap();
-        search.tighten_candidate_bound(&conjunction(2)).unwrap();
+        let mut bounds = Bounds::new();
+        bounds.improve(&mut search, &disjunction(2)).unwrap();
+        bounds.improve(&mut search, &conjunction(2)).unwrap();
         assert!(route.collect(&mut search).is_empty());
         assert!(search.theory().same_instance(&original));
         assert_eq!(search.statistics().countermodels, 1);
@@ -75,9 +78,10 @@ fn universe_refusal_preserves_the_active_bound() {
     let original = choices(2);
     for route in ROUTES {
         let mut search = route.search(&original, Cancellation::default());
-        search.tighten_candidate_bound(&conjunction(2)).unwrap();
+        let mut bounds = Bounds::new();
+        bounds.improve(&mut search, &conjunction(2)).unwrap();
         assert_eq!(
-            search.tighten_candidate_bound(&choices(3)),
+            bounds.improve(&mut search, &choices(3)),
             Err(Incomplete::RestrictionUniverse {
                 expected: 2,
                 actual: 3
@@ -93,7 +97,8 @@ fn tightening_preserves_pending_candidates_for_original_membership() {
     let original = choices(3);
     for route in [Route::Scalar, Route::Producers] {
         let mut search = route.search(&original, Cancellation::default());
-        search.tighten_candidate_bound(&disjunction(3)).unwrap();
+        let mut bounds = Bounds::new();
+        bounds.improve(&mut search, &disjunction(3)).unwrap();
         let mut pending = Vec::new();
         let failed = search.next_batch(batch(3), |subject, candidates| {
             assert!(subject.same_instance(&original));
@@ -105,8 +110,8 @@ fn tightening_preserves_pending_candidates_for_original_membership() {
         });
         assert!(matches!(failed, Err(BatchError::Checker("retry"))));
         let before = search.statistics().candidates;
-        search
-            .tighten_candidate_bound(&theory(3, vec![Node::falsum()], vec![0]))
+        bounds
+            .improve(&mut search, &theory(3, vec![Node::falsum()], vec![0]))
             .unwrap();
         let completed = search
             .next_batch(batch(3), |subject, candidates| {
@@ -131,9 +136,10 @@ fn tightening_preserves_pending_candidates_for_original_membership() {
 fn active_workers_preserve_every_model_under_the_latest_bound() {
     let original = choices(8);
     let mut search = Route::Native.search(&original, Cancellation::default());
-    search.tighten_candidate_bound(&disjunction(8)).unwrap();
+    let mut bounds = Bounds::new();
+    bounds.improve(&mut search, &disjunction(8)).unwrap();
     let first = search.next().unwrap().unwrap();
-    search.tighten_candidate_bound(&conjunction(8)).unwrap();
+    bounds.improve(&mut search, &conjunction(8)).unwrap();
     let mut all = Route::Native.collect(&mut search);
     assert!(all.insert(first.atoms().collect()));
     let expected: BTreeSet<Vec<usize>> = (0..256)
@@ -155,6 +161,7 @@ fn positive_cursor_checks_the_current_bound() {
     let original = theory(1, vec![Node::atom(0)], vec![0]);
     for route in ROUTES {
         let mut search = route.search(&original, Cancellation::default());
+        let mut bounds = Bounds::new();
         assert!(
             search
                 .enable_class_checking(
@@ -167,9 +174,9 @@ fn positive_cursor_checks_the_current_bound() {
             search.statistics().certified.unwrap().plan,
             Some(zetesis_stable::CertificatePlanStatistics::Positive(_))
         ));
-        search.tighten_candidate_bound(&original).unwrap();
-        search
-            .tighten_candidate_bound(&theory(1, vec![Node::falsum()], vec![0]))
+        bounds.improve(&mut search, &original).unwrap();
+        bounds
+            .improve(&mut search, &theory(1, vec![Node::falsum()], vec![0]))
             .unwrap();
         assert!(route.collect(&mut search).is_empty());
         assert_eq!(search.statistics().candidates, 0);
@@ -181,9 +188,10 @@ fn empty_universe_bounds_can_exclude_the_empty_interpretation() {
     let original = theory(0, vec![], vec![]);
     for route in ROUTES {
         let mut search = route.search(&original, Cancellation::default());
-        search.tighten_candidate_bound(&original).unwrap();
-        search
-            .tighten_candidate_bound(&theory(0, vec![Node::falsum()], vec![0]))
+        let mut bounds = Bounds::new();
+        bounds.improve(&mut search, &original).unwrap();
+        bounds
+            .improve(&mut search, &theory(0, vec![Node::falsum()], vec![0]))
             .unwrap();
         assert!(route.collect(&mut search).is_empty());
     }
@@ -194,10 +202,11 @@ fn the_bound_generation_counts_installed_bounds() {
     let original = choices(3);
     for route in ROUTES {
         let mut search = route.search(&original, Cancellation::default());
+        let mut bounds = Bounds::new();
         assert_eq!(search.bound_generation(), 0);
-        search.tighten_candidate_bound(&disjunction(3)).unwrap();
+        bounds.improve(&mut search, &disjunction(3)).unwrap();
         assert_eq!(search.bound_generation(), 1);
-        search.tighten_candidate_bound(&conjunction(3)).unwrap();
+        bounds.improve(&mut search, &conjunction(3)).unwrap();
         assert_eq!(search.bound_generation(), 2);
     }
 }
@@ -207,15 +216,16 @@ fn a_refused_tightening_keeps_the_bound_generation() {
     let original = choices(2);
     for route in ROUTES {
         let mut search = route.search(&original, Cancellation::default());
-        search.tighten_candidate_bound(&conjunction(2)).unwrap();
+        let mut bounds = Bounds::new();
+        bounds.improve(&mut search, &conjunction(2)).unwrap();
         assert!(matches!(
-            search.tighten_candidate_bound(&choices(3)),
+            bounds.improve(&mut search, &choices(3)),
             Err(Incomplete::RestrictionUniverse { .. })
         ));
         assert_eq!(search.bound_generation(), 1);
         search.stop().unwrap();
         assert_eq!(
-            search.tighten_candidate_bound(&conjunction(2)),
+            bounds.improve(&mut search, &conjunction(2)),
             Err(Incomplete::ClosedEnumerator)
         );
         assert_eq!(search.bound_generation(), 1);
@@ -227,9 +237,76 @@ fn a_permanent_restriction_keeps_the_bound_generation() {
     let original = choices(3);
     for route in ROUTES {
         let mut search = route.search(&original, Cancellation::default());
-        search.tighten_candidate_bound(&disjunction(3)).unwrap();
+        let mut bounds = Bounds::new();
+        bounds.improve(&mut search, &disjunction(3)).unwrap();
         search.restrict_candidates(&conjunction(3)).unwrap();
         assert_eq!(search.bound_generation(), 1);
         assert_eq!(search.statistics().candidate_restrictions, 2);
+    }
+}
+
+#[test]
+fn a_bound_from_another_plan_is_refused() {
+    let original = choices(2);
+    for route in ROUTES {
+        let mut search = route.search(&original, Cancellation::default());
+        let mut bounds = Bounds::new();
+        bounds.improve(&mut search, &disjunction(2)).unwrap();
+        let other = Bounds::new();
+        assert_eq!(
+            search.improve_candidate_bound(other.plan(), &cost(-100), &conjunction(2)),
+            Err(Incomplete::CandidateBoundPlan)
+        );
+    }
+}
+
+#[test]
+fn a_bound_at_an_equal_or_worse_score_is_refused() {
+    let original = choices(2);
+    for route in ROUTES {
+        let mut search = route.search(&original, Cancellation::default());
+        let mut bounds = Bounds::new();
+        bounds.improve(&mut search, &disjunction(2)).unwrap();
+        for value in [bounds.cost(), bounds.cost() + 1] {
+            assert_eq!(
+                search.improve_candidate_bound(bounds.plan(), &cost(value), &conjunction(2)),
+                Err(Incomplete::CandidateBoundNotImproving)
+            );
+        }
+    }
+}
+
+#[test]
+fn a_refused_bound_keeps_the_active_bound() {
+    // The conjunction would admit only {0, 1}; refused, the disjunction stays.
+    let original = choices(2);
+    for route in ROUTES {
+        let mut search = route.search(&original, Cancellation::default());
+        let mut bounds = Bounds::new();
+        bounds.improve(&mut search, &disjunction(2)).unwrap();
+        assert!(
+            search
+                .improve_candidate_bound(bounds.plan(), &cost(bounds.cost()), &conjunction(2))
+                .is_err()
+        );
+        assert_eq!(search.bound_generation(), 1);
+        assert_eq!(search.statistics().candidate_restrictions, 1);
+        assert_eq!(
+            route.collect(&mut search),
+            BTreeSet::from([vec![0], vec![1], vec![0, 1]])
+        );
+    }
+}
+
+#[test]
+fn the_first_bound_of_a_stream_needs_no_predecessor() {
+    let original = choices(2);
+    for route in ROUTES {
+        let mut search = route.search(&original, Cancellation::default());
+        let plan = Bounds::new().plan();
+        search
+            .improve_candidate_bound(plan, &cost(i64::MAX), &conjunction(2))
+            .unwrap();
+        assert_eq!(route.collect(&mut search), BTreeSet::from([vec![0, 1]]));
     }
 }

@@ -304,7 +304,8 @@ impl<W: Write> crate::ExecutionObserver for Diagnostics<W> {
             Event::ObjectiveBoundStopped(error) => writeln!(self, "Objective pruning stopped: {error}; exact search continues"),
             Event::ObjectiveTheoryMismatch => writeln!(self, "Objective pruning stopped: original theory mismatch; exact search continues"),
             Event::ObjectiveRestrictionStopped(error) => writeln!(self, "Objective pruning stopped: {error}; exact search continues"),
-            Event::ObjectiveBound { restrictions, costs, work } => writeln!(self, "Objective pruning: bound {restrictions}; cost <= {costs:?}; construction work {work}"),
+            Event::ObjectiveBound { restrictions, costs, strict, work } => writeln!(self, "Objective pruning: bound {restrictions}; cost {} {costs:?}; construction work {work}", if strict { "<" } else { "<=" }),
+            Event::ObjectiveTiePass { costs } => writeln!(self, "Objective ties: optimum {costs:?} proved; a second pass enumerates its ties"),
         }
     }
 }

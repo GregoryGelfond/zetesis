@@ -37,6 +37,42 @@ impl Default for GpuBatching {
     }
 }
 
+/// How an optimizing search proves its optimum and finds that optimum's ties.
+/// The ordinary policy, [`Self::DEFAULT`], is [`Self::StrictForOneAnswer`].
+/// Every policy returns the same optimum and the same optimal answer sets.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum OptimumSearch {
+    /// A request for one optimal answer bounds the candidates strictly, as
+    /// [`Self::StrictWithTiePass`] does, where no tie is owed; a request for
+    /// more is [`Self::Inclusive`]. A strict bound meets no tie of an
+    /// incumbent it has beaten, so one answer is proved with less search; a
+    /// tie pass from the root can cost more than one inclusive pass does.
+    StrictForOneAnswer,
+    /// Each strictly better answer bounds the candidates to cost strictly
+    /// less than its own, so the search meets no tie of an incumbent it has
+    /// already beaten. Exhausting that search proves the optimum. When more
+    /// than one optimal answer is requested, and the last installed bound
+    /// pruned the optimum's ties, one more pass over the same theory, bounded
+    /// to cost at most the optimum, enumerates them, each once.
+    StrictWithTiePass,
+    /// Each strictly better answer bounds the candidates to cost at most its
+    /// own, so one pass proves the optimum and meets every tie along the way.
+    /// The schedule of earlier releases, for controlled comparisons.
+    Inclusive,
+}
+
+impl OptimumSearch {
+    /// The ordinary policy, [`Self::StrictForOneAnswer`]; [`Default`] returns it.
+    pub const DEFAULT: Self = Self::StrictForOneAnswer;
+}
+
+impl Default for OptimumSearch {
+    fn default() -> Self {
+        Self::DEFAULT
+    }
+}
+
 /// Materialization policy, independent of execution hardware.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum Grounder {

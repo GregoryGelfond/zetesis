@@ -1,4 +1,5 @@
 use zetesis_ferraris::{Interpretation, Theory, models, models_reduct};
+use zetesis_objective::{PlanIdentity, Score};
 
 use crate::budget::{Budget, Quota, increment};
 use crate::timing::{self, Phase};
@@ -23,6 +24,7 @@ pub use certified::{
 mod regions;
 
 mod original_index;
+mod passes;
 pub(crate) use original_index::IndexedTheory;
 use original_index::OriginalIndex;
 
@@ -67,6 +69,29 @@ impl Default for Limits {
             max_verification_work: 100_000_000,
             max_reduct_bytes: crate::reduct::DEFAULT_BYTES,
             max_native_narrowing_bytes: u64::MAX,
+        }
+    }
+}
+
+impl Limits {
+    /// What these limits leave to a later stream of the same run once an
+    /// earlier stream has spent `spent`: the cumulative work, decision and
+    /// candidate ceilings less what it charged, at least zero. Per-call and
+    /// capacity ceilings are each stream's own and stay as they are. A run
+    /// that searches in passes constructs each later pass's stream with this,
+    /// so its passes together stay within the run's limits.
+    #[must_use]
+    pub const fn remaining_after(self, spent: &Statistics) -> Self {
+        Self {
+            search: SearchLimits {
+                max_work: self.search.max_work.saturating_sub(spent.search.work),
+                max_decisions: self
+                    .search
+                    .max_decisions
+                    .saturating_sub(spent.search.decisions),
+            },
+            max_candidates: self.max_candidates.saturating_sub(spent.candidates),
+            ..self
         }
     }
 }
@@ -282,6 +307,12 @@ pub struct StableModels {
     certificate_workspace: certified::Workspace,
     determined_candidates: Option<certified::DeterminedCandidates>,
     bound_generation: u64,
+    /// The plan and score of the installed candidate bound, which every later
+    /// bound must strictly improve on.
+    active_bound: Option<(PlanIdentity, Score)>,
+    /// The final receipts of the passes before this stream's, which every
+    /// statistics read reports this stream's after ([`Self::follow`]).
+    earlier: Option<Box<passes::Earlier>>,
     reduct: crate::reduct::State,
     /// The original theory's index, built when a region walk first needs it
     /// and shared by that walk and every membership query of its candidates.
@@ -334,6 +365,8 @@ impl StableModels {
             certificate_workspace: certified::Workspace::default(),
             determined_candidates: None,
             bound_generation: 0,
+            active_bound: None,
+            earlier: None,
             reduct: crate::reduct::State::default(),
             index: OriginalIndex::new(theory, limits.max_native_narrowing_bytes),
         })
@@ -439,6 +472,8 @@ impl StableModels {
             certificate_workspace: certified::Workspace::default(),
             determined_candidates: None,
             bound_generation: 0,
+            active_bound: None,
+            earlier: None,
             reduct: crate::reduct::State::default(),
             index: OriginalIndex::new(theory, limits.max_native_narrowing_bytes),
         })
@@ -498,6 +533,8 @@ impl StableModels {
             certificate_workspace: certified::Workspace::default(),
             determined_candidates: None,
             bound_generation: 0,
+            active_bound: None,
+            earlier: None,
             reduct: crate::reduct::State::default(),
             index: OriginalIndex::new(theory, limits.max_native_narrowing_bytes),
         })
@@ -565,16 +602,24 @@ impl StableModels {
         result
     }
 
-    /// Install a successively stronger candidate-only bound.
+    /// Install the bound an objective plan compiled at an incumbent's `score`:
+    /// a candidate-only restriction to the interpretations costing less than
+    /// the incumbent, or at most as much, under that `plan`.
     ///
-    /// # Caller obligation
-    /// Each bound must use the original atom count and semantic index meanings.
-    /// Every classical interpretation satisfying both the original theory and
-    /// this bound must satisfy the previous bound, if any. This implication
-    /// relative to the unchanged original theory is **not checked**. Violating
-    /// it can omit models because regions pruned earlier are not reopened. The
-    /// first bound has no implication obligation. Bounds never support original
-    /// atoms and never change the original theory or its reduct.
+    /// # Checked
+    /// The first bound is accepted as given. Every later bound must come from
+    /// the same `plan`, and its `score` must be strictly better than the active
+    /// bound's (`Score::compare_costs` is `Less`); otherwise it is refused with
+    /// [`Incomplete::CandidateBoundPlan`] or
+    /// [`Incomplete::CandidateBoundNotImproving`], and the active bound stays.
+    /// A plan's bound at a strictly better score keeps only interpretations its
+    /// bound at the worse score keeps too, strict or not, so regions pruned
+    /// under an earlier bound never hold a candidate a later bound admits.
+    /// `restriction` must be the bound `plan` compiled at `score`; this
+    /// operation checks the plan and the score, not the restriction's formula.
+    /// It must use the original atom count and semantic index meanings. Bounds
+    /// never support original atoms and never change the original theory or
+    /// its reduct.
     ///
     /// Region search retains only the latest bound separately from permanent
     /// [`Self::restrict_candidates`] constraints. Active worker snapshots may
@@ -584,12 +629,18 @@ impl StableModels {
     /// remaining constrained family, not the original unrestricted world view.
     ///
     /// # Errors
-    /// Refuses a different atom count, a closed iterator, a pending error,
-    /// generation overflow, resource exhaustion or cancellation. Failed setup
-    /// leaves the active bound and generation unchanged; admitted work stays
-    /// charged. Region knowledge retains its existing infallible allocation
-    /// contract; this operation does not make all search allocation fallible.
-    pub fn tighten_candidate_bound(&mut self, restriction: &Theory) -> Result<(), Incomplete> {
+    /// Refuses a closed iterator, a pending error, a different atom count,
+    /// another plan or a score that does not improve, generation overflow,
+    /// resource exhaustion or cancellation. Failed setup leaves the active
+    /// bound and generation unchanged; admitted work stays charged. Region
+    /// knowledge retains its existing infallible allocation contract; this
+    /// operation does not make all search allocation fallible.
+    pub fn improve_candidate_bound(
+        &mut self,
+        plan: PlanIdentity,
+        score: &Score,
+        restriction: &Theory,
+    ) -> Result<(), Incomplete> {
         if self.terminal {
             return Err(Incomplete::ClosedEnumerator);
         }
@@ -601,6 +652,14 @@ impl StableModels {
                 expected: self.theory.atom_count(),
                 actual: restriction.atom_count(),
             });
+        }
+        if let Some((active, previous)) = &self.active_bound {
+            if *active != plan {
+                return Err(Incomplete::CandidateBoundPlan);
+            }
+            if score.compare_costs(previous) != std::cmp::Ordering::Less {
+                return Err(Incomplete::CandidateBoundNotImproving);
+            }
         }
         let generation = self
             .bound_generation
@@ -621,13 +680,14 @@ impl StableModels {
         self.statistics.search = budget.statistics;
         if result.is_ok() {
             self.bound_generation = generation;
+            self.active_bound = Some((plan, score.clone()));
             self.statistics.candidate_restrictions = count;
         }
         result
     }
 
     /// Declare, before the stream's first proposal, that the caller will
-    /// tighten candidate bounds ([`Self::tighten_candidate_bound`]) as it
+    /// improve candidate bounds ([`Self::improve_candidate_bound`]) as it
     /// commits answers, as an optimizing search does. Region producers
     /// ([`Self::with_region_producers`]) then share one frontier
     /// ([`FrontierOrder::Shared`]) for the whole stream: every producer takes
@@ -662,7 +722,7 @@ impl StableModels {
     /// candidate was proposed or queried, or a region was visited. Choices
     /// that must govern the whole traversal refuse a started stream.
     fn started(&self) -> bool {
-        let statistics = self.statistics();
+        let statistics = self.own_statistics();
         self.pending_error.is_some()
             || !self.batch.pending.is_empty()
             || statistics.candidates != 0
@@ -736,7 +796,7 @@ impl StableModels {
         self.exhausted
     }
 
-    /// Bounds installed so far by [`Self::tighten_candidate_bound`]: zero
+    /// Bounds installed so far by [`Self::improve_candidate_bound`]: zero
     /// before the first, one more after each successful installation. A
     /// refused or failed tightening, a permanent [`Self::restrict_candidates`]
     /// addition and every batch operation leave it unchanged; it never
@@ -748,9 +808,18 @@ impl StableModels {
         self.bound_generation
     }
 
-    /// Cumulative work, including an incomplete terminal attempt.
+    /// Cumulative work, including an incomplete terminal attempt, after the
+    /// receipts of the earlier passes this stream follows ([`Self::follow`]).
     #[must_use]
     pub fn statistics(&self) -> Statistics {
+        match &self.earlier {
+            Some(earlier) => passes::statistics(&earlier.statistics, &self.own_statistics()),
+            None => self.own_statistics(),
+        }
+    }
+
+    /// This stream's own receipts, which decide whether it has started.
+    fn own_statistics(&self) -> Statistics {
         let mut statistics = match &self.proposer {
             Proposer::Regions(regions) => Statistics {
                 regions: Some(regions.statistics()),
@@ -811,6 +880,31 @@ impl StableModels {
             .filter()
             .map(crate::region_filter::Filter::statistics);
         statistics
+    }
+
+    /// Report `earlier`'s receipts with this stream's, as one search over the
+    /// same theory that an optimizer runs in passes, such as a tie pass after
+    /// the pass that proved its optimum: from now on [`Self::statistics`] and
+    /// [`Self::batch_statistics`] report `earlier`'s final receipts, its own
+    /// earlier passes included, followed by this stream's. Work and counts
+    /// add, peaks take the larger, and what describes the route as it stands
+    /// is this stream's. Membership, exhaustion and every limit stay this
+    /// stream's own; only the receipts combine, so a run that must stay within
+    /// its limits across passes constructs this stream with
+    /// [`Limits::remaining_after`] `earlier`'s statistics. Calling it again
+    /// replaces the earlier receipts.
+    ///
+    /// # Errors
+    /// Refuses a stream over another theory instance.
+    pub fn follow(&mut self, earlier: &StableModels) -> Result<(), Incomplete> {
+        if !earlier.theory.same_instance(&self.theory) {
+            return Err(Incomplete::WrongTheory);
+        }
+        self.earlier = Some(Box::new(passes::Earlier {
+            statistics: earlier.statistics(),
+            batch: earlier.batch_statistics(),
+        }));
+        Ok(())
     }
 
     fn advance(&mut self) -> Result<Option<Interpretation>, Incomplete> {

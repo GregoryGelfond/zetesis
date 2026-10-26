@@ -89,6 +89,7 @@ pub(super) fn compile(
         });
     }
     Ok(ObjectivePlan {
+        identity: zetesis_objective::PlanIdentity::fresh(),
         original: original.clone(),
         objectives: objectives.clone(),
         nodes: compiler.nodes.into_parts(),

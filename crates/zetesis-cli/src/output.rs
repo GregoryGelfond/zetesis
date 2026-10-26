@@ -378,6 +378,8 @@ fn reason_code(reason: Interruption) -> &'static str {
                 Incomplete::InvalidRegionConsequence => "invalid_region_consequence",
                 Incomplete::LateRegionFilter => "late_region_filter",
                 Incomplete::LateCandidateBounds => "late_candidate_bounds",
+                Incomplete::CandidateBoundPlan => "candidate_bound_plan",
+                Incomplete::CandidateBoundNotImproving => "candidate_bound_not_improving",
                 Incomplete::RegionFilterAlreadySet => "region_filter_already_set",
                 Incomplete::Certificate(_) => "certificate",
                 Incomplete::Verification(_) => "verification",
@@ -743,9 +745,15 @@ fn write_optimization(
     optimum_proved: bool,
 ) -> Result<(), RunError> {
     if let Some(best) = optimization {
+        // A strict bound at the optimum leaves the number of its ties unknown.
+        let tied_models = if best.ties_pruned {
+            "null".to_owned()
+        } else {
+            best.tied_models.to_string()
+        };
         out.text(&format!(
             "{{\"optimal\":{},\"tied_models\":{},\"scored_models\":{},\"work\":{},\"costs\":[",
-            optimum_proved, best.tied_models, best.scored_models, best.work
+            optimum_proved, tied_models, best.scored_models, best.work
         ))?;
         for (index, (priority, value)) in best.score.costs().iter().enumerate() {
             if index != 0 {

@@ -3,6 +3,8 @@
 use crate::ExecutionObservation as Event;
 use crate::execution_observation::ExecutionSink;
 use std::cell::Cell;
+use std::cmp::Ordering;
+use std::ops::ControlFlow;
 
 use zetesis_core::{Model, ModelOrder};
 use zetesis_cpu::Cancellation;
@@ -14,7 +16,10 @@ use crate::formula_execution::{Failure, MembershipExecution};
 use crate::objective_bounds::{Bounds, Preparation};
 use crate::optimization::Incumbents;
 use crate::phase_timing::{Recorder, SolvePhase};
-use crate::{AnswerSelection, Interruption, SearchState, SemanticOutcome, SolveConfig, SolveError};
+use crate::{
+    AnswerSelection, Interruption, Optimization, SearchState, SemanticOutcome, SolveConfig,
+    SolveError,
+};
 
 pub(crate) struct FormulaSession<'a, E> {
     input: Input<'a>,
@@ -33,6 +38,30 @@ pub(crate) struct FormulaSession<'a, E> {
     // This session's last imported cumulative prefix, independently of every
     // other session sharing the host recorder. Repeated outcomes import no work.
     imported_timings: Cell<zetesis_stable::SearchPhaseTimings>,
+    // The original-region filter an owning session installed, which a tie
+    // pass's fresh stream installs again.
+    region_filter: Option<std::sync::Arc<dyn zetesis_stable::RegionFilter>>,
+    // While a tie pass runs: how many of the retained optima the strict
+    // search found, which the pass meets again and must not retain twice.
+    tie_pass: Option<usize>,
+}
+
+/// What one pull returns: the next answer with its score, a fault, or the end
+/// of the answers.
+type Next = Option<Result<(Model, Option<Score>), SolveError>>;
+
+/// How the start of a tie pass ended.
+enum TiePass {
+    /// No tie pass is owed: the stream's end finishes the session.
+    Skipped,
+    /// A fresh stream bounded to cost at most the optimum replaced the
+    /// exhausted one.
+    Started,
+    /// The pass could not start; the proved optimum stands, and the family
+    /// is reported without a claim of completeness.
+    Stopped(zetesis_stable::Incomplete),
+    /// An execution or observation fault.
+    Failed(SolveError),
 }
 
 impl<'a, E: MembershipExecution> FormulaSession<'a, E> {
@@ -43,6 +72,7 @@ impl<'a, E: MembershipExecution> FormulaSession<'a, E> {
         filter: std::sync::Arc<dyn zetesis_stable::RegionFilter>,
         phases: &Recorder,
     ) {
+        self.region_filter = Some(filter.clone());
         if let Some(models) = self.models.as_mut()
             && let Err(error) = models.set_region_filter(filter)
         {
@@ -113,7 +143,43 @@ impl<'a, E: MembershipExecution> FormulaSession<'a, E> {
             final_outcome: None,
             pending_error: None,
             imported_timings: Cell::new(zetesis_stable::SearchPhaseTimings::default()),
+            region_filter: None,
+            tie_pass: None,
         }
+    }
+
+    /// The candidate stream this session's configuration selects over its
+    /// theory, within `limits`: native region workers, device region
+    /// producers, or one walk.
+    fn candidate_stream(
+        &self,
+        config: &SolveConfig,
+        limits: zetesis_stable::Limits,
+        cancellation: &Cancellation,
+        phases: &Recorder,
+    ) -> Result<StableModels, zetesis_stable::Incomplete> {
+        phases.measure(SolvePhase::CandidateSetup, || {
+            // CPU workers decide their own leaves. Device producers return
+            // unchecked leaves to the bounded batch protocol and join before
+            // membership execution starts.
+            if let Some(workers) = config.region_workers() {
+                StableModels::with_region_workers(
+                    self.input.theory,
+                    workers,
+                    limits,
+                    cancellation.clone(),
+                )
+            } else if config.workers.get() > 1 {
+                StableModels::with_region_producers(
+                    self.input.theory,
+                    config.workers,
+                    limits,
+                    cancellation.clone(),
+                )
+            } else {
+                StableModels::new(self.input.theory, limits, cancellation.clone())
+            }
+        })
     }
 
     fn initialize(
@@ -150,32 +216,8 @@ impl<'a, E: MembershipExecution> FormulaSession<'a, E> {
             }
             Err(crate::model_construction::Failure::Run(error)) => return Err(error),
         }
-        let models = phases.measure(SolvePhase::CandidateSetup, || {
-            // CPU workers decide their own leaves. Device producers return
-            // unchecked leaves to the bounded batch protocol and join before
-            // membership execution starts.
-            if let Some(workers) = config.region_workers() {
-                StableModels::with_region_workers(
-                    self.input.theory,
-                    workers,
-                    crate::countermodel::search_limits(config),
-                    cancellation.clone(),
-                )
-            } else if config.workers.get() > 1 {
-                StableModels::with_region_producers(
-                    self.input.theory,
-                    config.workers,
-                    crate::countermodel::search_limits(config),
-                    cancellation.clone(),
-                )
-            } else {
-                StableModels::new(
-                    self.input.theory,
-                    crate::countermodel::search_limits(config),
-                    cancellation.clone(),
-                )
-            }
-        });
+        let limits = crate::countermodel::search_limits(config);
+        let models = self.candidate_stream(config, limits, cancellation, phases);
         let mut models = match models {
             Ok(models) => models,
             Err(error) => {
@@ -359,7 +401,10 @@ impl<'a, E: MembershipExecution> FormulaSession<'a, E> {
                     self.fail(error, phases);
                     return self.pending_error.take().map(Err);
                 }
-                None => return self.finish_candidate_stream(phases),
+                None => match self.end_of_stream(config, observations, cancellation, phases) {
+                    ControlFlow::Continue(()) => continue,
+                    ControlFlow::Break(result) => return result,
+                },
             };
             let model =
                 match self.construct_model(interpretation.atoms(), config, cancellation, phases) {
@@ -378,42 +423,107 @@ impl<'a, E: MembershipExecution> FormulaSession<'a, E> {
             if self.selection == AnswerSelection::All {
                 return self.score_model(model, &interpretation, config, cancellation, phases);
             }
-            let scored = phases.measure(SolvePhase::ObjectiveScoringRetention, || {
-                self.incumbents.consider(
-                    self.input.objectives,
-                    model,
+            if let ControlFlow::Break(result) = self.select_optimal(
+                model,
+                &interpretation,
+                config,
+                observations,
+                cancellation,
+                phases,
+            ) {
+                return result;
+            }
+        }
+    }
+
+    /// Score and retain one verified model of an optimizing search, and bound
+    /// the candidates by it when it improves the incumbent. Continue to search
+    /// on, or break with what the pull returns.
+    fn select_optimal(
+        &mut self,
+        model: Model,
+        interpretation: &zetesis_ferraris::Interpretation,
+        config: &SolveConfig,
+        observations: &mut impl ExecutionSink,
+        cancellation: &Cancellation,
+        phases: &Recorder,
+    ) -> ControlFlow<Next> {
+        if let Some(revisit) = self.tie_pass
+            && self.incumbents.holds_among(revisit, &model)
+        {
+            // The strict search already retained this optimum.
+            return ControlFlow::Continue(());
+        }
+        let scored = phases.measure(SolvePhase::ObjectiveScoringRetention, || {
+            self.incumbents.consider(
+                self.input.objectives,
+                model,
+                config,
+                cancellation,
+                self.objective_plan
+                    .as_ref()
+                    .and_then(Preparation::plan)
+                    .map(|plan| (plan, interpretation)),
+            )
+        });
+        match scored {
+            Ok(true) if self.tie_pass.is_some() => {
+                // The strict search's exhaustion proved that nothing is
+                // cheaper, so this cannot occur; if it did, the pass, under
+                // a bound it never tightens, still meets every model at
+                // the better cost, and the retained models are its own.
+                self.tie_pass = Some(0);
+            }
+            Ok(true) => {
+                let _feedback = (config.max_objective_bound_work != 0)
+                    .then(|| phases.start(SolvePhase::ObjectiveFeedback));
+                let improved = self.bounds.improve(
+                    self.objective_plan.as_ref().and_then(Preparation::plan),
+                    self.incumbents
+                        .score()
+                        .expect("retained improvement has a score"),
+                    self.models.as_mut().expect("owned candidate stream"),
                     config,
+                    observations,
                     cancellation,
-                    self.objective_plan
-                        .as_ref()
-                        .and_then(Preparation::plan)
-                        .map(|plan| (plan, &interpretation)),
-                )
-            });
-            match scored {
-                Ok(true) => {
-                    let _feedback = (config.max_objective_bound_work != 0)
-                        .then(|| phases.start(SolvePhase::ObjectiveFeedback));
-                    let improved = self.bounds.improve(
-                        self.objective_plan.as_ref().and_then(Preparation::plan),
-                        self.incumbents
-                            .score()
-                            .expect("retained improvement has a score"),
-                        self.models.as_mut().expect("owned candidate stream"),
-                        config,
-                        observations,
-                        cancellation,
-                    );
-                    if let Err(error) = improved {
-                        self.fail(error, phases);
-                        return self.pending_error.take().map(Err);
-                    }
+                );
+                if let Err(error) = improved {
+                    self.fail(error, phases);
+                    return ControlFlow::Break(self.pending_error.take().map(Err));
                 }
-                Ok(false) => {}
-                Err(reason) => {
-                    self.complete(SearchState::Interrupted(reason), phases);
-                    return self.next_retained().map(Ok);
-                }
+            }
+            Ok(false) => {}
+            Err(reason) => {
+                self.complete(SearchState::Interrupted(reason), phases);
+                return ControlFlow::Break(self.next_retained().map(Ok));
+            }
+        }
+        ControlFlow::Continue(())
+    }
+
+    /// At the end of a candidate stream, begin the tie pass when one is owed
+    /// and continue to search it, or break with what the finished search
+    /// returns.
+    fn end_of_stream(
+        &mut self,
+        config: &SolveConfig,
+        observations: &mut impl ExecutionSink,
+        cancellation: &Cancellation,
+        phases: &Recorder,
+    ) -> ControlFlow<Next> {
+        match self.begin_tie_pass(config, observations, cancellation, phases) {
+            TiePass::Started => ControlFlow::Continue(()),
+            TiePass::Skipped => ControlFlow::Break(self.finish_candidate_stream(phases)),
+            TiePass::Stopped(error) => {
+                self.complete(
+                    SearchState::Interrupted(Interruption::Countermodel(error)),
+                    phases,
+                );
+                ControlFlow::Break(self.next_retained().map(Ok))
+            }
+            TiePass::Failed(error) => {
+                self.fail(error, phases);
+                ControlFlow::Break(self.pending_error.take().map(Err))
             }
         }
     }
@@ -492,6 +602,103 @@ impl<'a, E: MembershipExecution> FormulaSession<'a, E> {
                 self.pending_error.take().map(Err)
             }
         }
+    }
+
+    /// At the end of a candidate stream under strict bounds, start the tie
+    /// pass when one is owed: more than one optimal answer is requested, and
+    /// the last installed bound, strict at the optimum, pruned its ties. The
+    /// exhausted stream proved that no model is cheaper than the optimum; a
+    /// fresh stream over the same theory, with the same certificate and region
+    /// filter and bounded to cost at most the optimum, then enumerates every
+    /// optimal model, each once. It reports its receipts after the exhausted
+    /// stream's, and only its exhaustion completes the optimal family. Its one
+    /// bound never tightens, so the fresh stream declares no candidate bounds:
+    /// its producers walk apart, as an enumeration's do.
+    fn begin_tie_pass(
+        &mut self,
+        config: &SolveConfig,
+        observations: &mut impl ExecutionSink,
+        cancellation: &Cancellation,
+        phases: &Recorder,
+    ) -> TiePass {
+        if self.tie_pass.is_some()
+            || self.selection != AnswerSelection::Optimal
+            || config.models == 1
+        {
+            return TiePass::Skipped;
+        }
+        let Some(optimum) = self.incumbents.score().cloned() else {
+            return TiePass::Skipped;
+        };
+        if self
+            .bounds
+            .pruned_ties_at()
+            .is_none_or(|pruned| pruned.compare_costs(&optimum) != Ordering::Equal)
+        {
+            return TiePass::Skipped;
+        }
+        let earlier = self
+            .models
+            .as_mut()
+            .expect("unfinished session has a candidate stream");
+        if !earlier.exhausted() {
+            // Finishing the stream reports that it did not exhaust.
+            return TiePass::Skipped;
+        }
+        if let Err(error) = earlier.stop() {
+            return TiePass::Stopped(error);
+        }
+        // The run's cumulative limits cover both passes together.
+        let limits =
+            crate::countermodel::search_limits(config).remaining_after(&earlier.statistics());
+        let mut fresh = match self.candidate_stream(config, limits, cancellation, phases) {
+            Ok(fresh) => fresh,
+            Err(error) => return TiePass::Stopped(error),
+        };
+        if config.stats {
+            fresh.enable_phase_timing();
+        }
+        if let Err(error) = fresh.follow(self.models.as_ref().expect("exhausted stream")) {
+            return TiePass::Stopped(error);
+        }
+        // The fresh stream reports the exhausted one's receipts with its own,
+        // so it owns them before any fallible step, whose attempted work then
+        // remains in the session's receipts.
+        let fresh = self.models.insert(fresh);
+        // The same certificate as the strict search's, already reported.
+        match crate::countermodel::prepare_certificate(
+            fresh,
+            self.input.certificate_order,
+            config,
+            &mut crate::execution_observation::Ignore,
+            phases,
+        ) {
+            Ok(None) => {}
+            Ok(Some(error)) => return TiePass::Stopped(error),
+            Err(error) => return TiePass::Failed(error),
+        }
+        if let Some(filter) = self.region_filter.clone()
+            && let Err(error) = fresh.set_region_filter(filter)
+        {
+            return TiePass::Stopped(error);
+        }
+        if let Err(error) = observations.record(Event::ObjectiveTiePass {
+            costs: optimum.costs(),
+        }) {
+            return TiePass::Failed(error);
+        }
+        if let Err(error) = self.bounds.bound_ties(
+            self.objective_plan.as_ref().and_then(Preparation::plan),
+            &optimum,
+            fresh,
+            config,
+            observations,
+            cancellation,
+        ) {
+            return TiePass::Failed(error);
+        }
+        self.tie_pass = Some(self.incumbents.begin_tie_pass());
+        TiePass::Started
     }
 
     fn finish_candidate_stream(
@@ -575,7 +782,16 @@ impl<'a, E: MembershipExecution> FormulaSession<'a, E> {
             scored: self.incumbents.scored(),
             retained: self.incumbents.retained(),
             search_state: None,
-            optimization: self.incumbents.metadata().cloned(),
+            optimization: self.incumbents.metadata().map(|best| Optimization {
+                // A strict bound at the optimum pruned its ties, and no tie
+                // pass began to count them again.
+                ties_pruned: self.tie_pass.is_none()
+                    && self
+                        .bounds
+                        .pruned_ties_at()
+                        .is_some_and(|pruned| pruned.compare_costs(&best.score) == Ordering::Equal),
+                ..best.clone()
+            }),
             objective_work: self.incumbents.work(),
             checked: statistics.map_or(0, |s| s.candidates),
             gate_atoms: self.input.gate_atoms,

@@ -21,7 +21,7 @@ use zetesis_cpu::{Cancellation, Stop};
 use zetesis_ferraris::{
     AggregateElement, AggregateError, AggregateLimits, FormulaNodes, FormulaParts, NodeView, Theory,
 };
-use zetesis_objective::{ObjectiveProgram, Score};
+use zetesis_objective::{ObjectiveProgram, PlanIdentity, Score};
 
 /// Inclusive construction limits; zero is a real ceiling.
 #[derive(Clone, Copy, Debug)]
@@ -193,6 +193,7 @@ impl std::error::Error for ObjectiveBoundError {}
 /// Reusable exact positive eligibility formulas, independent of any incumbent.
 #[derive(Debug)]
 pub struct ObjectivePlan {
+    identity: PlanIdentity,
     original: Theory,
     objectives: ObjectiveProgram,
     nodes: FormulaParts,
@@ -269,6 +270,13 @@ impl ObjectivePlan {
     pub fn original(&self) -> &Theory {
         &self.original
     }
+    /// This plan's identity, fixed when it was compiled. Its bounds are
+    /// installed in a candidate stream under it, which compares their scores
+    /// only with other bounds of the same plan.
+    #[must_use]
+    pub const fn identity(&self) -> PlanIdentity {
+        self.identity
+    }
     /// Complete planning accounting.
     #[must_use]
     pub const fn statistics(&self) -> ObjectiveBoundStatistics {
@@ -292,7 +300,37 @@ impl ObjectivePlan {
         limits: ObjectiveBoundLimits,
         cancellation: &Cancellation,
     ) -> Result<ObjectiveBound, ObjectiveBoundError> {
-        bound::compile(self, incumbent, limits, cancellation)
+        bound::compile(
+            self,
+            incumbent,
+            bound::Comparison::AtMost,
+            limits,
+            cancellation,
+        )
+    }
+
+    /// Compile lexicographic cost strictly less than `incumbent`, so that no
+    /// tie at the incumbent's cost survives, under the same conditions as
+    /// [`Self::bound`]. A better incumbent's strict bound implies an earlier
+    /// strict or non-strict bound under the original theory, as non-strict
+    /// bounds do. The optional choice strengthening compares certified lower
+    /// costs strictly too: a model's lower cost never exceeds its cost.
+    ///
+    /// # Errors
+    /// As [`Self::bound`].
+    pub fn strict_bound(
+        &self,
+        incumbent: &Score,
+        limits: ObjectiveBoundLimits,
+        cancellation: &Cancellation,
+    ) -> Result<ObjectiveBound, ObjectiveBoundError> {
+        bound::compile(
+            self,
+            incumbent,
+            bound::Comparison::Below,
+            limits,
+            cancellation,
+        )
     }
 }
 

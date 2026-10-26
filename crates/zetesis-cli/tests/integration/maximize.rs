@@ -280,20 +280,49 @@ fn automatic_admission_and_bounds_preserve_complete_costs_and_display_multisets(
 }
 
 #[test]
-fn default_display_limit_still_proves_all_hidden_optimal_ties() {
+fn default_display_limit_proves_the_optimum_over_hidden_ties() {
     let case = &CASES[6];
     for pruning in [false, true] {
-        let (report, text, _) = with_pruning(case.source, pruning, 1);
+        let (report, text, diagnostics) = with_pruning(case.source, pruning, 1);
         let report = report.unwrap();
         assert_eq!(report.completion, Completion::Exhausted);
         assert_eq!(report.models, 1);
         let optimum = report.optimization.unwrap();
-        assert_eq!(optimum.tied_models, 2);
         assert_eq!(optimum.score.costs(), [(7, 0), (1, -2)]);
         assert_eq!(records(&text), [(vec!["a".to_owned()], Some(vec![0, -2]))]);
         assert!(text.contains("OPTIMUM FOUND\nModels:"));
         assert!(text.contains("Models: 1\n"));
+        // Unbounded, the search meets both optima. The default's strict bound
+        // at the optimum prunes the hidden tie, which it then does not count.
+        assert_eq!(optimum.ties_pruned, pruning);
+        if pruning {
+            assert!(
+                diagnostics.contains("full ties=unavailable"),
+                "{diagnostics}"
+            );
+        } else {
+            assert_eq!(optimum.tied_models, 2);
+        }
     }
+}
+
+#[test]
+fn the_inclusive_schedule_counts_hidden_ties_under_a_display_limit() {
+    let mut config = zetesis_cli::PublicationConfig::from(&options(1));
+    config.solve.optimum_search = zetesis_cli::OptimumSearch::Inclusive;
+    let report = crate::support::prepared::human(
+        CASES[6].source,
+        &config,
+        &mut Vec::new(),
+        &mut Vec::new(),
+        &Cancellation::default(),
+    )
+    .unwrap();
+    assert_eq!(report.completion, Completion::Exhausted);
+    assert_eq!(report.models, 1);
+    let optimum = report.optimization.unwrap();
+    assert_eq!(optimum.tied_models, 2);
+    assert!(!optimum.ties_pruned);
 }
 
 #[test]

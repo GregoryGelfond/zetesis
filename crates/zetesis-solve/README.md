@@ -33,7 +33,10 @@ true-atom set. Inspect `Session::outcome` separately to determine what completed
 - `Session::enumerate` streams every original answer set with its score, including
   nonoptimal answers when objectives exist.
 - `Session::new` uses ordinary optimization selection when an objective exists.
-  An interrupted incumbent is not a proved optimum; inspect the outcome.
+  An interrupted incumbent is not a proved optimum; inspect the outcome. A
+  request for one optimal answer bounds the search strictly by default, so it
+  proves the optimum without counting its ties (`Optimization::ties_pruned`);
+  `SolveConfig::optimum_search` selects another schedule for measurement.
 - `Session::builder(...).collect(...)` returns a `WorldView` only after complete
   capture within `WorldViewLimits`. Failure retains a checked prefix instead.
 - `Session::builder(...).counting().start()` requests exhaustive full-answer

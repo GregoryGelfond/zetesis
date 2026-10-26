@@ -4,6 +4,7 @@ use crate::ferraris::{Limits, StableModels};
 use crate::{Cancellation, SearchLimits, SearchStatistics};
 use zetesis_cpu::regions::{Narrowing, Region};
 use zetesis_ferraris::Node;
+use zetesis_objective::PlanIdentity;
 use zetesis_theory_support::theories::theory;
 
 fn guard(conjunction: bool) -> Theory {
@@ -128,13 +129,14 @@ fn generation_overflow_preserves_the_active_bound() {
     );
     let mut search =
         StableModels::new(&original, Limits::default(), Cancellation::default()).unwrap();
+    let plan = PlanIdentity::fresh();
     let first = theory(1, vec![Node::atom(0)], vec![0]);
-    search.tighten_candidate_bound(&first).unwrap();
+    bound(&mut search, plan, 1, &first).unwrap();
     search.bound_generation = u64::MAX;
     let before = search.statistics();
     let stronger = theory(1, vec![Node::falsum()], vec![0]);
     assert_eq!(
-        search.tighten_candidate_bound(&stronger),
+        bound(&mut search, plan, 0, &stronger),
         Err(Incomplete::CounterOverflow)
     );
     assert_eq!(search.bound_generation, u64::MAX);
@@ -148,6 +150,17 @@ fn generation_overflow_preserves_the_active_bound() {
     );
     assert!(search.next().is_none());
     assert!(search.exhausted());
+}
+
+/// Install `restriction` as `plan`'s candidate bound at cost `value`.
+fn bound(
+    search: &mut StableModels,
+    plan: PlanIdentity,
+    value: i64,
+    restriction: &Theory,
+) -> Result<(), Incomplete> {
+    let score = zetesis_objective::Score::from_costs(vec![(0, value)]).unwrap();
+    search.improve_candidate_bound(plan, &score, restriction)
 }
 
 fn search(
@@ -185,15 +198,16 @@ fn refused_preparation_does_not_advance_the_bound_generation() {
     let original = theory(2, vec![], vec![]);
     let first = guard(false);
     for route in 0..4 {
+        let plan = PlanIdentity::fresh();
         let mut measured = search(route, &original, Limits::default(), Cancellation::default());
-        measured.tighten_candidate_bound(&first).unwrap();
+        bound(&mut measured, plan, 1, &first).unwrap();
         let ceiling = measured.statistics().search.work;
         let mut limits = Limits::default();
         limits.search.max_work = ceiling;
         let mut limited = search(route, &original, limits, Cancellation::default());
-        limited.tighten_candidate_bound(&first).unwrap();
+        bound(&mut limited, plan, 1, &first).unwrap();
         assert_eq!(
-            limited.tighten_candidate_bound(&guard(true)),
+            bound(&mut limited, plan, 0, &guard(true)),
             Err(Incomplete::WorkLimit)
         );
         assert_eq!(limited.bound_generation, 1);
@@ -207,12 +221,13 @@ fn cancellation_does_not_advance_the_bound_generation() {
     let original = theory(2, vec![], vec![]);
     for route in 0..4 {
         let cancellation = Cancellation::default();
+        let plan = PlanIdentity::fresh();
         let mut search = search(route, &original, Limits::default(), cancellation.clone());
-        search.tighten_candidate_bound(&guard(false)).unwrap();
+        bound(&mut search, plan, 1, &guard(false)).unwrap();
         let before = search.statistics().search.work;
         cancellation.cancel();
         assert_eq!(
-            search.tighten_candidate_bound(&guard(true)),
+            bound(&mut search, plan, 0, &guard(true)),
             Err(Incomplete::Cancelled)
         );
         assert_eq!(search.bound_generation, 1);
