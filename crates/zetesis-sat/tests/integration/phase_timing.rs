@@ -90,7 +90,8 @@ fn enabling_clocks_preserves_models_and_all_deterministic_counters() {
 #[test]
 fn failed_checker_keeps_proposals_and_retry_measures_only_actual_native_residuals() {
     let theory = choice();
-    let mut search = by_clauses(&theory, Limits::default(), Cancellation::default()).unwrap();
+    let mut search =
+        StableModels::new(&theory, Limits::default(), Cancellation::default()).unwrap();
     search.enable_phase_timing();
     assert!(matches!(
         search.next_batch(batch(), |_, candidates| {

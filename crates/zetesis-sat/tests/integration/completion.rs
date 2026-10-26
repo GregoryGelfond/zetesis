@@ -416,7 +416,7 @@ fn cancellation_before_workspace_reservation_keeps_pending_candidates() {
 fn opt_in_worker_sums_do_not_replace_scalar_search_wall_intervals() {
     for workers in [1, 3] {
         let mut pool = executor(workers);
-        let mut search = by_clauses(
+        let mut search = StableModels::new(
             &three_choices_falsum_first(),
             Limits::default(),
             Cancellation::default(),

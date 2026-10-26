@@ -9,6 +9,7 @@ use zetesis_ferraris::{Interpretation, Theory};
 use super::{BatchVerdict, Limits, Statistics};
 use crate::budget::{BoundedQuota, Budget, LocalQuota, Quota, SharedBudget, increment, storage};
 use crate::ferraris::Decision;
+use crate::timing::{self, Phase};
 use crate::{PreparedReduct, ReductWorkspace};
 
 mod scratch;
@@ -363,8 +364,9 @@ fn classify(
                         if !evaluated.truth.is_model() {
                             return Err(Incomplete::InvalidWitness);
                         }
+                        let started = timing::start(statistics.phase_timings.as_ref());
                         increment(&mut statistics.countermodel_queries)?;
-                        query.check(
+                        let result = query.check(
                             zetesis_ferraris::FrozenSubject::new(
                                 input.theory,
                                 evaluated.truth.truth(),
@@ -374,7 +376,9 @@ fn classify(
                             budget,
                             statistics,
                             evaluated.narrowing,
-                        )
+                        );
+                        timing::finish(&mut statistics.phase_timings, Phase::Reduct, started);
+                        result
                     })();
                     workspace.finish_check(result, input.limits.max_reduct_bytes, statistics)?
                 }
