@@ -83,20 +83,20 @@ bound, which meets and counts every tie in one pass.
 `OptimumSearch::StrictWithTiePass` bounds every request strictly. When more
 than one answer is requested and the last bound, strict at the proved optimum,
 pruned its ties, a second stream over the same theory enumerates them: it has
-the first stream's certificate and region filter, and its one bound keeps cost
-at most the optimum. Models the first stream retained are not retained again,
-so each optimal answer is returned once. The second stream reports its receipts
-after the first's (`StableModels::follow`) and runs within what the run's
-cumulative limits leave (`Limits::remaining_after`). A stop in the first pass
-claims neither the optimum nor the family. The first pass's exhaustion proves
-the optimum, so a stop in the second leaves `SemanticOutcome::optimum_proved`
-true and the family incomplete: `complete_answer_count` gives no total, the
-human renderer adds "Optimum proved; optimal family incomplete" to its
-`INCOMPLETE` verdict, and the JSON outcome has status `incomplete` with
-`optimization.optimal` true. For all eight optimal answers of
-integrated Family Crossing, with one thread, this schedule walked 2,946,650
-candidate regions, 2,831,261 of them in the second pass, where the single
-inclusive pass walked 661,303. It is therefore kept for measurement, like
+the first stream's certificate and streamed constraints, and its one bound keeps
+cost at most the optimum. Models the first stream retained are not retained
+again, so each optimal answer is returned once. The second stream reports its
+receipts after the first's (`StableModels::follow`) and runs within what the
+run's cumulative limits leave (`Limits::remaining_after`). A stop in the first
+pass claims neither the optimum nor the family. The first pass's exhaustion
+proves the optimum, so a stop in the second leaves
+`SemanticOutcome::optimum_proved` true and the family incomplete:
+`complete_answer_count` gives no total, the human renderer adds "Optimum proved;
+optimal family incomplete" to its `INCOMPLETE` verdict, and the JSON outcome has
+status `incomplete` with `optimization.optimal` true. For all eight optimal
+answers of integrated Family Crossing, with one thread, this schedule walked
+2,946,650 candidate regions, 2,831,261 of them in the second pass, where the
+single inclusive pass walked 661,303. It is therefore kept for measurement, like
 `OptimumSearch::Inclusive`, the earlier schedule.
 
 The optional choice strengthening compares certified lower costs with the same

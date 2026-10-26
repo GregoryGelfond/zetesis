@@ -1,4 +1,8 @@
 //! Original candidate consequences, independent of the frozen-reduct traversal.
+//!
+//! The seam is the crate's own: the hybrid route's [`crate::StreamedConstraints`]
+//! implements it, and so do the crate's tests. No caller can implement it, so no
+//! caller code can refute regions or decide atoms during a search.
 
 use std::fmt::Debug;
 use std::sync::Arc;
@@ -12,7 +16,7 @@ use crate::{Cancellation, Incomplete, SearchPhaseTimings};
 
 /// What an original-program condition establishes about a candidate region.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum RegionFeasibility {
+pub(crate) enum RegionFeasibility {
     /// No exclusion was established. This certifies neither satisfaction nor
     /// answer-set membership, even when every atom is decided.
     NotRefuted,
@@ -22,7 +26,7 @@ pub enum RegionFeasibility {
 
 /// Position of a source check within one candidate closure.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum RegionPass {
+pub(crate) enum RegionPass {
     /// Begin this region's allowance, including any deferred preparation.
     First,
     /// Continue the same allowance after a fresh consequence and propagation.
@@ -34,7 +38,7 @@ pub enum RegionPass {
 /// Decisions use the authenticated theory's atom coordinates. They must concern
 /// an open atom; the traversal rejects stale or out-of-range decisions.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum RegionConsequence {
+pub(crate) enum RegionConsequence {
     /// No further consequence was established; this is not satisfaction.
     Unchanged,
     /// No sought answer belongs to this region.
@@ -45,13 +49,13 @@ pub enum RegionConsequence {
     Cut(usize),
 }
 
-/// A caller-owned original-program condition used only on candidate regions.
+/// An original-program condition used only on candidate regions.
 ///
 /// The factory authenticates the exact theory and atom coordinate meanings.
 /// A refutation must exclude every sought answer in the region. The callback
 /// never runs on a proper-subset query of a frozen reduct, and cannot replace
-/// its membership decision. A caller can retain source-specific failure
-/// evidence and return [`Incomplete::RegionFilter`] to identify it.
+/// its membership decision. An implementation retains source-specific failure
+/// evidence and returns [`Incomplete::RegionFilter`] to identify it.
 ///
 /// A checker is prepared on the first region not refuted by original narrowing.
 /// Serial traversal, a parallel walk's coordinator until its workers start,
@@ -61,8 +65,8 @@ pub enum RegionConsequence {
 /// checks prepare per operation. Preparation is not assumed free.
 /// The factory owns all external resource limits: shared allowances must be
 /// charged before work across every worker, including failed preparation and
-/// checks. SAT's search-work counters exclude this separately accounted work.
-pub trait RegionFilter: Debug + Send + Sync {
+/// checks. The search's work counters exclude this separately accounted work.
+pub(crate) trait RegionFilter: Debug + Send + Sync {
     /// Prepare independent mutable scratch for this traversal worker or check.
     ///
     /// # Errors
@@ -80,7 +84,7 @@ pub trait RegionFilter: Debug + Send + Sync {
 /// A checker belongs to one enumeration and is never used concurrently. It must
 /// be transferable between threads: joined candidate production retains its
 /// task-local scratch between slates without fixing a task to an OS thread.
-pub trait RegionFilterWorker: Send {
+pub(crate) trait RegionFilterWorker: Send {
     /// Read a region after original-theory and candidate-restriction narrowing.
     /// The theory and region are immutable; no learned restriction enters the
     /// reduct. Poll cancellation during bounded work and before a verdict.
@@ -118,7 +122,8 @@ pub trait RegionFilterWorker: Send {
     }
 }
 
-/// Callback attempts, independent of source-work and reduct-work accounting.
+/// Attempts of the streamed constraints' region check, independent of
+/// source-work and reduct-work accounting.
 /// Live parallel snapshots need not be coherent; joined snapshots are exact
 /// unless counter overflow explicitly marked the measurement incomplete.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -303,3 +308,6 @@ impl Check<'_, '_> {
         result
     }
 }
+
+#[cfg(test)]
+mod tests;

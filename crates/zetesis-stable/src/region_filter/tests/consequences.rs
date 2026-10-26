@@ -5,18 +5,15 @@ use std::num::NonZeroUsize;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 
-use zetesis_cpu::regions::Region;
-use zetesis_ferraris::{Node, Theory};
-use zetesis_stable::{
+use crate::{
     BatchError, Cancellation, Incomplete, Limits, RegionConsequence, RegionFeasibility,
     RegionFilter, RegionFilterWorker, RegionPass, SearchLimits, StableModels,
 };
+use zetesis_cpu::regions::Region;
+use zetesis_ferraris::{Node, Theory};
 use zetesis_theory_support::theories::theory;
 
-use crate::support::batching::{batch, residual};
-use crate::support::choice_theories::choices;
-use crate::support::interpretations::stable_models;
-use crate::support::region_filters::{ROUTES, Route};
+use super::support::{ROUTES, Route, batch, choices, residual, stable_models};
 
 type Callback = fn(&Region, RegionPass, &Cancellation) -> Result<RegionConsequence, Incomplete>;
 

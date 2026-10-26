@@ -41,9 +41,9 @@ pub(crate) struct FormulaSession<'a, E> {
     // This session's last imported cumulative prefix, independently of every
     // other session sharing the host recorder. Repeated outcomes import no work.
     imported_timings: Cell<zetesis_stable::SearchPhaseTimings>,
-    // The original-region filter an owning session installed, which a tie
+    // The streamed constraints an owning session installed, which a tie
     // pass's fresh stream installs again.
-    region_filter: Option<std::sync::Arc<dyn zetesis_stable::RegionFilter>>,
+    streamed_constraints: Option<std::sync::Arc<zetesis_stable::StreamedConstraints>>,
     // While a tie pass runs: how many of the retained optima the strict
     // search found, which the pass meets again and must not retain twice.
     tie_pass: Option<usize>,
@@ -72,16 +72,17 @@ enum TiePass {
 }
 
 impl<'a, E: MembershipExecution> FormulaSession<'a, E> {
-    /// Install an original-only source restriction before the first proposal.
-    /// An already stopped initialization has no traversal left to configure.
-    pub(crate) fn set_region_filter(
+    /// Check the owner's streamed constraints over candidate regions, from the
+    /// first proposal on. An already stopped initialization has no traversal
+    /// left to configure.
+    pub(crate) fn set_streamed_constraints(
         &mut self,
-        filter: std::sync::Arc<dyn zetesis_stable::RegionFilter>,
+        constraints: std::sync::Arc<zetesis_stable::StreamedConstraints>,
         phases: &Recorder,
     ) {
-        self.region_filter = Some(filter.clone());
+        self.streamed_constraints = Some(constraints.clone());
         if let Some(models) = self.models.as_mut()
-            && let Err(error) = models.set_region_filter(filter)
+            && let Err(error) = models.set_streamed_constraints(constraints)
         {
             self.complete(
                 SearchState::Interrupted(Interruption::Countermodel(error)),
@@ -160,7 +161,7 @@ impl<'a, E: MembershipExecution> FormulaSession<'a, E> {
             final_outcome: None,
             pending_error: None,
             imported_timings: Cell::new(zetesis_stable::SearchPhaseTimings::default()),
-            region_filter: None,
+            streamed_constraints: None,
             tie_pass: None,
             optimum_established: false,
         }
@@ -641,13 +642,14 @@ impl<'a, E: MembershipExecution> FormulaSession<'a, E> {
     /// pass when one is owed: more than one optimal answer is requested, and
     /// the last installed bound, strict at the optimum, pruned its ties. The
     /// exhausted stream proved that no model is cheaper than the optimum; a
-    /// fresh stream over the same theory, with the same certificate and region
-    /// filter and bounded to cost at most the optimum, then enumerates every
-    /// optimal model, each once. It reports its receipts after the exhausted
-    /// stream's, and only its exhaustion completes the optimal family; a stop
-    /// from here on leaves that family incomplete and the optimum proved. Its
-    /// one bound never tightens, so the fresh stream declares no candidate
-    /// bounds: its producers walk apart, as an enumeration's do.
+    /// fresh stream over the same theory, with the same certificate and
+    /// streamed constraints and bounded to cost at most the optimum, then
+    /// enumerates every optimal model, each once. It reports its receipts after
+    /// the exhausted stream's, and only its exhaustion completes the optimal
+    /// family; a stop from here on leaves that family incomplete and the
+    /// optimum proved. Its one bound never tightens, so the fresh stream
+    /// declares no candidate bounds: its producers walk apart, as an
+    /// enumeration's do.
     fn begin_tie_pass(
         &mut self,
         config: &SolveConfig,
@@ -714,8 +716,8 @@ impl<'a, E: MembershipExecution> FormulaSession<'a, E> {
             Ok(Some(error)) => return TiePass::Stopped(error),
             Err(error) => return TiePass::Failed(error),
         }
-        if let Some(filter) = self.region_filter.clone()
-            && let Err(error) = fresh.set_region_filter(filter)
+        if let Some(constraints) = self.streamed_constraints.clone()
+            && let Err(error) = fresh.set_streamed_constraints(constraints)
         {
             return TiePass::Stopped(error);
         }

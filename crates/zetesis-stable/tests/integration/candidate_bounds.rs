@@ -10,7 +10,7 @@ use zetesis_theory_support::theories::theory;
 use crate::support::batching::{batch, residual};
 use crate::support::bounds::{Bounds, cost};
 use crate::support::choice_theories::choices;
-use crate::support::region_filters::{ROUTES, Route};
+use crate::support::routes::{ROUTES, Route};
 
 fn disjunction(atoms: usize) -> Theory {
     theory(

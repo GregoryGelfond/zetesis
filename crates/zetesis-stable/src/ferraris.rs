@@ -773,16 +773,15 @@ impl StableModels {
                 .is_some_and(|regions| regions.counts.regions != 0)
     }
 
-    /// Install a caller-owned original-program condition before traversal.
-    /// Certificates may already be prepared. The filter can narrow or refute
-    /// candidate regions; it never participates in frozen-reduct queries.
-    /// Exhaustion then covers the family allowed by this filter as well as
-    /// explicit candidate restrictions. See [`crate::RegionFilter`] for the
-    /// caller's soundness, resource and failure-receipt obligations.
+    /// Install an original-program condition before traversal: the streamed
+    /// constraints, or a test's filter. Certificates may already be prepared.
+    /// The filter can narrow or refute candidate regions; it never participates
+    /// in frozen-reduct queries. Exhaustion then covers the family allowed by
+    /// this filter as well as explicit candidate restrictions.
     ///
     /// # Errors
     /// Refuses a closed or started stream, or replacement.
-    pub fn set_region_filter(
+    pub(crate) fn set_region_filter(
         &mut self,
         filter: std::sync::Arc<dyn crate::RegionFilter>,
     ) -> Result<(), Incomplete> {
@@ -802,6 +801,23 @@ impl StableModels {
             Proposer::Parallel(parallel) => parallel.set_filter(filter)?,
         }
         Ok(())
+    }
+
+    /// Check an admitted hybrid program's streamed integrity constraints over
+    /// this stream's candidate regions, before traversal. The stream's theory
+    /// must be the constraints' own core theory, which each checker's
+    /// preparation authenticates. The check can narrow or refute candidate
+    /// regions and never participates in frozen-reduct queries; exhaustion then
+    /// covers the core's stable models that satisfy the constraints, as well as
+    /// explicit candidate restrictions.
+    ///
+    /// # Errors
+    /// Refuses a closed or started stream, or replacement.
+    pub fn set_streamed_constraints(
+        &mut self,
+        constraints: std::sync::Arc<crate::StreamedConstraints>,
+    ) -> Result<(), Incomplete> {
+        self.set_region_filter(constraints)
     }
 
     /// Share learned rows through `store` with every other stream given the

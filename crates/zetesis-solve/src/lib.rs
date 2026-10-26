@@ -98,7 +98,6 @@ pub use query_observation::QueryExecutionObservation;
 mod closure_session;
 mod formula_session;
 mod model_construction;
-mod hybrid_regions;
 mod hybrid_session;
 mod terminal_session;
 mod source_session;

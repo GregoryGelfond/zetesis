@@ -3,12 +3,10 @@
 use std::collections::BTreeSet;
 use std::sync::atomic::Ordering;
 
+use crate::{BatchError, Cancellation, Incomplete};
 use zetesis_ferraris::{Node, TightPlanLimits};
-use zetesis_stable::{BatchError, Cancellation, Incomplete};
 
-use crate::support::batching::{batch, residual};
-use crate::support::choice_theories::choices;
-use crate::support::region_filters::{Condition, Filter, ROUTES, Route};
+use super::support::{Condition, Filter, ROUTES, Route, batch, choices, residual};
 use zetesis_theory_support::theories::theory;
 
 #[test]
@@ -673,7 +671,7 @@ fn core_refutation_never_prepares_an_external_checker() {
         assert!(route.collect(&mut search).is_empty());
         assert_eq!(
             search.statistics().region_filter.unwrap(),
-            zetesis_stable::RegionFilterStatistics::default()
+            crate::RegionFilterStatistics::default()
         );
     }
 }

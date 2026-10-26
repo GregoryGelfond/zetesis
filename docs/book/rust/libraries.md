@@ -82,6 +82,7 @@ row or locating a gate atom does not establish answer-set membership. See
 | Use checked formula specializations | `zetesis_ferraris::{PositivePlan, StratifiedPlan, TightPlan, TightWorkspace}` | [Formula plans](sessions.md#formula-membership-plans) |
 | Cover and narrow candidate regions | `zetesis_cpu::regions::{Region, Traversal}`, `zetesis_ferraris::{Narrower, producers}` | [Exact execution](../architecture/execution.md) |
 | Enumerate formula answers and complete reduct queries | `zetesis_stable::{StableModels, check, CompletionExecutor}` | [Sessions](sessions.md) |
+| Check an admitted program's streamed constraints over candidate regions | `zetesis_stable::StreamedConstraints`, `StableModels::set_streamed_constraints` | [Hybrid formula sessions](sessions.md#hybrid-formula-sessions) |
 | Produce parallel candidate batches | `StableModels::with_region_producers`, `next_batch_with_completion` | [Formula plans](sessions.md#formula-membership-plans) |
 | Share device resources | `zetesis_wgpu::GpuContext`, `GpuFormulaProfile`, `ExecutionResources` | [Device ownership](../architecture/ownership.md#device-resource-scope) |
 | Select relation masks on a device | `zetesis_wgpu::GpuRelationExecutor` | [Relation selection](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-wgpu/README.md#immutable-relation-selection) |

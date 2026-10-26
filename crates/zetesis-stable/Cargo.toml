@@ -13,9 +13,9 @@ self_cell.workspace = true
 zetesis-cpu.workspace = true
 zetesis-ferraris.workspace = true
 zetesis-objective.workspace = true
+zetesis-themelios.workspace = true
 
 [dev-dependencies]
-zetesis-themelios.workspace = true
 proptest.workspace = true
 zetesis-test-support.workspace = true
 zetesis-theory-support.workspace = true

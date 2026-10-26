@@ -1,4 +1,6 @@
-//! Borrowed original-only filter fixtures shared by the route controls.
+//! Routes, filter fixtures, batch helpers and small theories for the region
+//! check's composition tests. The filters implement the crate's own seam, which
+//! no caller can implement.
 
 use std::collections::BTreeSet;
 use std::num::NonZeroUsize;
@@ -6,13 +8,13 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 use zetesis_cpu::regions::Region;
-use zetesis_ferraris::Theory;
-use zetesis_stable::{
-    BatchLimits, Cancellation, Engagement, Incomplete, Limits, RegionFeasibility, RegionFilter,
-    RegionFilterWorker, StableModels,
-};
+use zetesis_ferraris::{Interpretation, Node, Theory};
+use zetesis_theory_support::theories::theory;
 
-use super::batching::residual;
+use crate::{
+    BatchLimits, BatchVerdict, Cancellation, Engagement, Incomplete, Limits, RegionFeasibility,
+    RegionFilter, RegionFilterWorker, StableModels,
+};
 
 #[derive(Clone, Copy, Debug)]
 pub(crate) enum Route {
@@ -202,4 +204,60 @@ pub(crate) fn search(
     control: Cancellation,
 ) -> StableModels {
     route.search_with(original, NonZeroUsize::new(3).unwrap(), limits, control)
+}
+
+/// A batch oracle that decides nothing: every candidate stays residual.
+pub(crate) fn residual(
+    _: &Theory,
+    candidates: &[Interpretation],
+) -> Result<Vec<BatchVerdict>, std::collections::TryReserveError> {
+    let mut verdicts = Vec::new();
+    verdicts.try_reserve_exact(candidates.len())?;
+    verdicts.resize(candidates.len(), BatchVerdict::Residual);
+    Ok(verdicts)
+}
+
+/// Batches of at most `count` candidates and 1 MiB of pending bytes.
+pub(crate) fn batch(count: usize) -> BatchLimits {
+    BatchLimits {
+        max_candidates: NonZeroUsize::new(count).unwrap(),
+        max_pending_bytes: 1024 * 1024,
+    }
+}
+
+/// Independent choices: a | not a, for each atom.
+pub(crate) fn choices(atoms: usize) -> Theory {
+    let mut nodes = vec![Node::falsum()];
+    let mut roots = Vec::new();
+    for atom in 0..atoms {
+        let a = nodes.len();
+        nodes.push(Node::atom(atom));
+        nodes.push(Node::implies(a, 0));
+        nodes.push(Node::or_pair([a, a + 1]));
+        roots.push(a + 2);
+    }
+    theory(atoms, nodes, roots)
+}
+
+/// Every stable model of `theory`: each interpretation the reduct check
+/// accepts, as its atoms.
+pub(crate) fn stable_models(theory: &Theory) -> BTreeSet<Vec<usize>> {
+    (0..1_usize << theory.atom_count())
+        .filter_map(|mask| {
+            let model = Interpretation::new(
+                theory,
+                (0..theory.atom_count()).filter(|atom| mask & (1 << atom) != 0),
+            )
+            .unwrap();
+            zetesis_ferraris::check(
+                theory,
+                &model,
+                zetesis_ferraris::Limits::default(),
+                &Cancellation::default(),
+            )
+            .unwrap()
+            .accepted()
+            .then(|| model.atoms().collect())
+        })
+        .collect()
 }
