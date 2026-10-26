@@ -12,8 +12,8 @@
 // workgroup, by the same invocation or by another ordered before the read by a
 // barrier or uniform load, and every workgroup array index is within its array.
 // The pipeline keeps WebGPU's zero-fill of workgroup memory, which this rule
-// makes unobservable; the rule is held pending a measurement of whether
-// dropping the fill pays.
+// makes unobservable; CONTRIBUTING ("Carry the semantic contract into Lean and
+// Rust") records the fill's status and what removing it requires.
 override WORKGROUP_SIZE: u32 = 64u;
 const NODE_FALSE: u32 = 0u;
 const NODE_ATOM: u32 = 1u;

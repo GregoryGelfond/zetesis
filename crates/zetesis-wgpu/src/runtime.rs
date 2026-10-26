@@ -429,16 +429,16 @@ fn create_pipeline(
 
 /// Whether every pipeline keeps WebGPU's zero-fill of workgroup memory.
 ///
-/// It stays `true`, wgpu's default, until a measured kernel-time gain repays
-/// removing it. Every kernel satisfies the rule that makes `false` sound, held
-/// pending that measurement: each workgroup location a kernel reads was written
-/// earlier in its workgroup, by the same invocation or by another ordered
-/// before the read by a barrier or uniform load, and every workgroup array
-/// index is within its array, since the bounds policy would otherwise
-/// substitute some element, possibly one nothing wrote (CONTRIBUTING, "Carry
-/// the semantic contract into Lean and Rust"). A decision that differs between
-/// kernels belongs in a field of each kernel's `DeviceProfile`, which
-/// `compilation_options` would then take in place of this constant.
+/// It is `true`, wgpu's default; CONTRIBUTING ("Carry the semantic contract
+/// into Lean and Rust") records each kernel's fill status and what removing the
+/// fill requires. Every kernel satisfies the rule that makes `false` sound: each
+/// workgroup location a kernel reads was written earlier in its workgroup, by
+/// the same invocation or by another ordered before the read by a barrier or
+/// uniform load, and every workgroup array index is within its array, since the
+/// bounds policy would otherwise substitute some element, possibly one nothing
+/// wrote. A decision that differs between kernels belongs in a field of each
+/// kernel's `DeviceProfile`, which `compilation_options` would then take in place
+/// of this constant.
 const ZERO_FILL_WORKGROUP_MEMORY: bool = true;
 
 /// The compilation options of every pipeline in the crate: `constants` for the

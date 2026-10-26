@@ -91,7 +91,8 @@ impl GpuWorkgroupSizing {
 
 /// The sizes a fitted kernel may select, in ascending order: the ruled set,
 /// owned apart from [`GpuWorkgroupSize::ALL`] so that a size compiled only for
-/// fixed comparisons never joins the fitted rule.
+/// fixed comparisons never joins the fitted rule. Each is a multiple of every
+/// power-of-two subgroup size up to 64.
 const FITTED: [GpuWorkgroupSize; 3] = [
     GpuWorkgroupSize::Threads64,
     GpuWorkgroupSize::Threads128,

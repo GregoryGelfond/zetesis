@@ -152,9 +152,27 @@ uniform load. Every index into a workgroup array is within the array: the bounds
 policy wgpu compiles with replaces an out-of-range index with some in-range one,
 possibly a location nothing wrote. Pipelines keep WebGPU's zero-fill of
 workgroup memory (`ZERO_FILL_WORKGROUP_MEMORY` in the wgpu runtime), which this
-rule makes unobservable. The rule is held pending a measurement of whether
-dropping the fill pays: the fill is removed only where a measured kernel-time
-gain repays it, and only once, at the commit that removes it, that kernel is
+rule makes unobservable. For the formula and tight kernels that is a measured
+decision, taken at commit c7c5feb7 on an Apple M4 Pro GPU under Metal: removing
+the fill gained no material kernel time on the formula kernel, measured on
+Family Crossing (`examples/family-crossing/integrated.lp`), or on the tight
+kernel, measured on the original wide Mastermind program
+(`examples/wide-mastermind/68/mm-68-examples.lp`, not
+`examples/scalability/mastermind.lp`), each under eager and lazy grounding and
+beside the corpus cases that dispatch it. At the measured allowance
+(`--memory 24GiB`), the wide Mastermind runs took both of the tight kernel's
+paths: the eager runs its declined route while their batches grew and then its
+update route, and the lazy runs its declined route; a later measurement confirms
+each path from its runs' statistics. The least-model oracle, aggregate and
+relation kernels, which no measured workload dispatched, keep the fill
+undecided. The decision covers each kernel as it stood at that commit: once a
+kernel's code changes, beyond its comments, its decision is open again, which
+obliges nothing while the kernel keeps the fill. The rule stays in force with
+the fill on: a kernel whose result depended on the fill would rely on an
+initialization its code does not state, and the rule is what lets the fill be
+removed from a kernel without a new argument. The fill is removed from a kernel
+only where a kernel-time gain, measured on that kernel at the commit that
+removes the fill, repays it, and only once, at that commit, the kernel is
 reviewed against this rule again and its physical comparison also passes with
 every workgroup location first set to all zeros and to all ones, with identical
 result records. The formula kernel's round and work counts are excluded from
