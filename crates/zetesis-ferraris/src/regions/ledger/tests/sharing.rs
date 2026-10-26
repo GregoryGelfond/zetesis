@@ -273,6 +273,31 @@ fn an_interrupted_delivery_publishes_no_partial_row() {
 }
 
 #[test]
+fn an_interrupted_delivery_pays_for_its_prefix() {
+    let program = Program::new(false);
+    let (_, mut scratch) = program.captured();
+    let before = scratch.explanations.sharing;
+    // One read examines the row; the next is the delivery's first.
+    let mut permits = SinglePermits::new(2, Stop::WorkLimit);
+    let attempt = scratch.deliver_learning(&program.owner, &mut LearningStore::new(), &mut permits);
+    assert_eq!(attempt.result, Err(Stop::WorkLimit));
+    assert_eq!(scratch.explanations.sharing, before - 1);
+}
+
+#[test]
+fn an_interrupted_seeding_pays_for_its_prefix() {
+    let program = Program::new(false);
+    let mut store = delivered(&program);
+    let mut scratch = NarrowingScratch::default();
+    scratch.explanations.prepare(&program.owner);
+    let before = scratch.explanations.sharing;
+    let mut permits = SinglePermits::new(1, Stop::WorkLimit);
+    let attempt = scratch.seed_learning(&program.owner, &mut store, &mut permits);
+    assert_eq!(attempt.result, Err(Stop::WorkLimit));
+    assert_eq!(scratch.explanations.sharing, before - 1);
+}
+
+#[test]
 fn an_interrupted_seeding_adds_no_partial_row() {
     let program = Program::new(false);
     let mut store = delivered(&program);

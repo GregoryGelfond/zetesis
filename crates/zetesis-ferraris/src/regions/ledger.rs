@@ -723,24 +723,56 @@ impl Ledger {
             Some((id, born)) if id == store.id => born,
             _ => 0,
         };
-        let mut sharing = self.sharing;
-        let mut peak = 0;
-        let mut seeded = 0;
-        let mut complete = true;
-        for entry in &class.rows {
+        let mark = (store.id, class.born);
+        let mut transfer = Transfer {
+            sharing: self.sharing,
+            moved: 0,
+            peak: 0,
+        };
+        let result = self.seed_rows(
+            &class.rows,
+            read,
+            owner.limits.founded_outputs,
+            &mut transfer,
+            work,
+        );
+        // A stopped seeding keeps the rows it completed and pays for its
+        // prefix, as a finished one does.
+        self.sharing = transfer.sharing;
+        self.peak_bytes = self.peak_bytes.max(self.retained_bytes() + transfer.peak);
+        store.seeded += transfer.moved;
+        if result? {
+            self.seeded_from = Some(mark);
+        }
+        Ok(())
+    }
+
+    /// Retain each of `rows` retained after `read`, each starting at its
+    /// store hit count; true when every row was read.
+    fn seed_rows(
+        &mut self,
+        rows: &[Entry],
+        read: u64,
+        founded_outputs: usize,
+        transfer: &mut Transfer,
+        work: &mut Work<'_>,
+    ) -> Result<bool, Stop> {
+        for entry in rows {
             if entry.born <= read {
                 work.tick()?;
                 continue;
             }
-            if !capture_read(&mut sharing, work)? {
-                complete = false;
-                break;
+            if !capture_read(&mut transfer.sharing, work)? {
+                return Ok(false);
             }
-            let Some(literals) = entry.row.to_literals(&mut sharing, work, &mut peak)? else {
-                complete = false;
-                break;
+            let Some(literals) =
+                entry
+                    .row
+                    .to_literals(&mut transfer.sharing, work, &mut transfer.peak)?
+            else {
+                return Ok(false);
             };
-            let maximum_outputs = literals.outputs.len().max(owner.limits.founded_outputs);
+            let maximum_outputs = literals.outputs.len().max(founded_outputs);
             match self.retain(
                 Proposed {
                     literals,
@@ -748,30 +780,21 @@ impl Ledger {
                     hits: entry.hits,
                     maximum_outputs,
                 },
-                &mut sharing,
+                &mut transfer.sharing,
                 work,
-                &mut peak,
+                &mut transfer.peak,
             )? {
                 Retained::Added(position) => {
                     // A seeded row is the store's; the tier delivers only
                     // what it learns or what hits after seeding.
                     self.rows[position].delivered = true;
-                    seeded += 1;
+                    transfer.moved += 1;
                 }
                 Retained::Subsumed(_) => {}
-                Retained::Declined => {
-                    complete = false;
-                    break;
-                }
+                Retained::Declined => return Ok(false),
             }
         }
-        if complete {
-            self.seeded_from = Some((store.id, class.born));
-        }
-        self.sharing = sharing;
-        self.peak_bytes = self.peak_bytes.max(self.retained_bytes() + peak);
-        store.seeded += seeded;
-        Ok(())
+        Ok(true)
     }
 
     /// Deliver the rows retained or hit since the last delivery that pass the
@@ -788,53 +811,19 @@ impl Ledger {
         let Some(owner) = self.owner.clone() else {
             return Ok(());
         };
-        let limits = owner.limits;
-        let mut sharing = self.sharing;
-        let mut peak = 0;
         let class = store.class_mut(&owner)?;
-        let mut delivered = 0;
-        for entry in &mut self.rows {
-            work.tick()?;
-            if entry.delivered && entry.unshared == 0 {
-                continue;
-            }
-            let (conditions, _) = entry.row.lengths();
-            if conditions > limits.share_conditions && entry.hits < limits.share_hits {
-                continue;
-            }
-            if !capture_read(&mut sharing, work)? {
-                break;
-            }
-            let Some(literals) = entry.row.to_literals(&mut sharing, work, &mut peak)? else {
-                break;
-            };
-            let maximum_outputs = literals.outputs.len().max(limits.founded_outputs);
-            let hits = entry.unshared;
-            match class.retain(
-                Proposed {
-                    literals,
-                    source: entry.source,
-                    hits,
-                    maximum_outputs,
-                },
-                &mut sharing,
-                work,
-                &mut peak,
-            )? {
-                Retained::Added(_) => delivered += 1,
-                Retained::Subsumed(position) => {
-                    let kept = &mut class.rows[position];
-                    kept.hits = kept.hits.saturating_add(hits);
-                }
-                Retained::Declined => break,
-            }
-            entry.delivered = true;
-            entry.unshared = 0;
-        }
-        self.sharing = sharing;
-        self.peak_bytes = self.peak_bytes.max(self.retained_bytes() + peak);
-        store.deliveries += delivered;
-        Ok(())
+        let mut transfer = Transfer {
+            sharing: self.sharing,
+            moved: 0,
+            peak: 0,
+        };
+        let result = deliver_rows(&mut self.rows, class, owner.limits, &mut transfer, work);
+        // A stopped delivery keeps the rows it completed and pays for its
+        // prefix, as a finished one does.
+        self.sharing = transfer.sharing;
+        self.peak_bytes = self.peak_bytes.max(self.retained_bytes() + transfer.peak);
+        store.deliveries += transfer.moved;
+        result
     }
 
     /// The row a full tier gives up for a new row: the fewest decayed hits,
@@ -1053,6 +1042,69 @@ impl Ledger {
         self.stale = false;
         Ok(())
     }
+}
+
+/// What one seeding or delivery has spent and moved so far: its sharing
+/// allowance, the rows it added and its transient peak. The tier records it
+/// whether the transfer finishes or stops.
+struct Transfer {
+    sharing: u64,
+    moved: u64,
+    peak: u128,
+}
+
+/// Deliver each of a tier's `rows` new or hit since its last delivery that
+/// passes the quality filter into `class`, one read per row examined.
+fn deliver_rows(
+    rows: &mut [Entry],
+    class: &mut Ledger,
+    limits: LearningLimits,
+    transfer: &mut Transfer,
+    work: &mut Work<'_>,
+) -> Result<(), Stop> {
+    for entry in rows {
+        work.tick()?;
+        if entry.delivered && entry.unshared == 0 {
+            continue;
+        }
+        let (conditions, _) = entry.row.lengths();
+        if conditions > limits.share_conditions && entry.hits < limits.share_hits {
+            continue;
+        }
+        if !capture_read(&mut transfer.sharing, work)? {
+            return Ok(());
+        }
+        let Some(literals) =
+            entry
+                .row
+                .to_literals(&mut transfer.sharing, work, &mut transfer.peak)?
+        else {
+            return Ok(());
+        };
+        let maximum_outputs = literals.outputs.len().max(limits.founded_outputs);
+        let hits = entry.unshared;
+        match class.retain(
+            Proposed {
+                literals,
+                source: entry.source,
+                hits,
+                maximum_outputs,
+            },
+            &mut transfer.sharing,
+            work,
+            &mut transfer.peak,
+        )? {
+            Retained::Added(_) => transfer.moved += 1,
+            Retained::Subsumed(position) => {
+                let kept = &mut class.rows[position];
+                kept.hits = kept.hits.saturating_add(hits);
+            }
+            Retained::Declined => return Ok(()),
+        }
+        entry.delivered = true;
+        entry.unshared = 0;
+    }
+    Ok(())
 }
 
 /// One finite allowance covers discovery, comparison and conversion.
