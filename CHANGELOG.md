@@ -6,6 +6,12 @@ Notable changes by release. Versions follow Semantic Versioning.
 
 ### Added
 
+- An ordering between tuples that still contain variables, such as
+  `(M,L) < (K,J)`, is admitted wherever a comparison can stand, including
+  aggregate element conditions and guards. It compares complete values in ASP
+  term order, arity first and then components, and binds nothing. Such orderings
+  were refused as an unsupported term; equality and disequality keep binding
+  their components.
 - GPU formula and tight sessions that enumerate answers can check a slate while
   the stream produces the next one, through a two-phase slate protocol:
   `StableModels::propose_slate`, `propose_lookahead`, `slate` and `commit_slate`,
