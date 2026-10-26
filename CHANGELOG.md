@@ -146,6 +146,17 @@ Notable changes by release. Versions follow Semantic Versioning.
   formula and answer sets are unchanged. Grounding statistics add
   `numeric_index_extensions`. The kept bytes count against `max_support_bytes`
   until completion.
+- Support completion schedules an aggregate, conditional or conditioned-head
+  rule whose reads all lie in dependency components before its heads' by
+  component: it waits for those components to reach their fixed point and is
+  traversed once, instead of once for every round in which a read grew.
+  Possible atoms, the emitted formula and answer sets are unchanged.
+  `max_support_rounds` still counts every round; a waiting rule adds none, but
+  its heads, and their consumers, can arrive in later rounds. A disjunctive head,
+  or a choice without element conditions, over a flat body is now scheduled like
+  a normal rule, by delta variants of its body. Grounding statistics add
+  `support_deferred_visits`. An aggregate over a 1,224-row chain grounds with
+  about 27x fewer instructions.
 - Numeric grounding joins combine certified divisibility and range filters before
   producing tuples; equal-size sources prefer the bindings needed by those filters.
 - Repeated support checks consume initial support seeds directly after resetting

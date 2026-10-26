@@ -1320,9 +1320,11 @@ the plan is released before completed support is returned. These
 checks qualify support scheduling, not satisfiability, unique-answer claims or
 source-to-Rust semantic refinement. Richer programs keep the existing schedule.
 `GroundingWork.support_producer_visits` counts charged producer visits, including
-those skipped by registration. Its disjoint subsets `support_rich_traversals`
-and `support_unchanged_visits` count rich visits selected for traversal (including
-the first round) and those skipped because no registered input changed;
+those skipped by registration. Its disjoint subsets `support_rich_traversals`,
+`support_unchanged_visits` and `support_deferred_visits` count rich visits
+selected for traversal (including the first round), those skipped because no
+registered input changed or a component-scheduled producer was already
+traversed, and those of a component-scheduled producer still waiting;
 `support_snapshot_preparations` counts charged growing
 snapshot attempts, including attempts that subsequently fail. These optional
 fields do not retroactively turn missing historical observations into zeros.
@@ -1380,18 +1382,46 @@ the cursor does not first prepare an unrestricted order and then replace it.
 An ordinary producer without positive inputs runs once, even if it has negative
 non-input atoms. Changing such atoms' possible presence cannot enable another
 head proposal, because support generation ignores their truth. Aggregate,
-conditional, projected and nonnormal producers are traversed in full when they
-are traversed at all. Without a whole-program plan, each producer is registered
-once per completion: an ordinary producer with its positive occurrences, and
-such a rich producer with its read set, the distinct signed predicates of every
-atom occurrence in its body and its head elements' conditions, at every depth
-and of either sign. After the first round, a rich producer is traversed exactly
-when one of its read predicates gained rows at the last publication. Otherwise
-every relation it reads is the one its last traversal read, and support
-membership only grows, so another traversal would follow the same plan over the
-same rows and propose only heads already supported. Facts have no producer slot:
-a fact's rows are published at the end of the first round and wake a rich
-producer that reads them in the second. The
+conditional, projected and conditioned-head producers are traversed in full
+when they are traversed at all. A disjunctive head, or a choice whose elements
+have no condition, over a flat body is ordinary for scheduling: each body
+binding makes every positive head atom possible, so its body takes the same
+delta variants as a normal rule. Without a whole-program plan, each producer is
+registered once per completion: an ordinary producer with its positive
+occurrences, and a rich producer with its read set, the distinct signed
+predicates of every atom occurrence in its body and its head elements'
+conditions, at every depth and of either sign.
+
+A rich producer whose reads all lie in dependency components before its heads'
+components is scheduled by component. Components come from the dependency
+graph's dependency-before-dependent order; a component depends on the
+components its producers read, and its fixed point is decidable when each of
+those precedes it, or is itself, and each earlier one is decidable. After a
+round's other producers ran, a component has reached its fixed point when it
+gained no atom this round, its earlier dependencies have, and every
+component-scheduled producer of its predicates was traversed. Such a producer
+is traversed once, in the round in which every component it reads reaches its
+fixed point, over that round's snapshot, whose rows of those components are
+final; one traversal then proposes every head the per-change traversals would.
+Its visits before that are counted in `support_deferred_visits`. The test runs
+in component order and repeats until no producer is ready; when a round
+proposes nothing, the earliest waiting producer always reads only components
+that reached their fixed point, so completion never ends with one untraversed.
+It costs one visit per pending atom, a signature search per run of one
+predicate, and one visit per component, dependency and deferred read each round,
+until every such producer was traversed.
+
+Every other rich producer, one that reads its own component or a later one, is
+traversed after the first round exactly when one of its read predicates gained
+rows at the last publication. Otherwise every relation it reads is the one its
+last traversal read, and support membership only grows, so another traversal
+would follow the same plan over the same rows and propose only heads already
+supported. Facts have no producer slot: a fact's rows are published at the end
+of the first round and wake a rich producer that reads them in the second.
+`max_support_rounds` counts every round of the completion as before: a
+component-scheduled producer runs inside an ordinary round and adds none, though
+the heads it proposes, and so their consumers' rounds, can come later than on
+the per-change schedule. The
 [scheduling law](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/guide/producer-scheduling.md)
 covers both registrations.
 Structural occurrences use the original whole-row capture and the same nested

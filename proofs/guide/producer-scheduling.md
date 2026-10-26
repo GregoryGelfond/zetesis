@@ -59,6 +59,18 @@ head element conditions, at every depth. After the first round it is traversed
 only when one of those predicates gained rows, which is the general law's
 selection.
 
+A rich producer whose reads all lie in dependency components before its heads'
+is instead scheduled by component: it waits, unselected though affected, until
+the components it reads reach their fixed point, and is then traversed once.
+The general laws claim closure only for the final round. There every
+component-scheduled producer was traversed after its reads' last change, so it
+is unaffected and its proposals over the old carrier were published:
+`empty_selection_closed` applies with its history premise. That the fixed-point
+test admits a producer only after its reads' last change, and that completion
+never ends with one untraversed, are Rust obligations stated in
+[the component schedule](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/formula_support/producers/registration/components.rs);
+no Lean law states them.
+
 For the correspondence, let `Q(p, C)` be producer `p`'s possible heads over the
 fixed round snapshot `C`, before pruning heads already supported. The proposal
 function supplied to `ReadsOnly` is `Q`: equal registered relations must give

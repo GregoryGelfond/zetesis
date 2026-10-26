@@ -88,12 +88,16 @@ records accepted operations and actual metadata peaks without requiring clocks;
 constructed model counts establish neither publication nor complete enumeration.
 
 The grounding profile also exposes `support_producer_visits`,
-`support_rich_traversals`, `support_unchanged_visits` and
-`support_snapshot_preparations`. These count entered operations, including
-those followed by failure. Rich traversals and unchanged visits are disjoint
-subsets of producer visits. `support_rich_traversals` includes the first round.
-`support_unchanged_visits` counts the rich-producer visits after the first round
-that ended without a traversal because nothing the producer reads had changed.
+`support_rich_traversals`, `support_unchanged_visits`,
+`support_deferred_visits` and `support_snapshot_preparations`. These count
+entered operations, including those followed by failure. Rich traversals,
+unchanged visits and deferred visits are disjoint subsets of producer visits.
+`support_rich_traversals` includes the first round. `support_unchanged_visits`
+counts the rich-producer visits after the first round that ended without a
+traversal because nothing the producer reads had changed, or because a
+component-scheduled producer was already traversed. `support_deferred_visits`
+counts the visits of a component-scheduled producer that waits for the
+components it reads to reach their fixed point.
 They distinguish affected-producer scheduling from a full round scan without
 asserting a timing benefit. Fields missing from older
 reports remain unavailable.
