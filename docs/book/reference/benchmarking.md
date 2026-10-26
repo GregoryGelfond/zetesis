@@ -193,7 +193,6 @@ The advanced controls, listed by `zetesis-bench run --help` and omitted from
 | Advanced control | Default |
 | --- | --- |
 | `--oracle auto\|closure\|countermodel` | `auto` |
-| `--search regions\|clauses` | The suite's: region search for `scalability`, the solver's own otherwise |
 | `--formula-joins indexed\|table` | The suite's: indexed joins for `scalability`, the solver's own otherwise |
 | `--memory SIZE` | The solver's ordinary host-dependent memory allowance |
 | `--time-limit SECONDS` | None; a cooperative native deadline |

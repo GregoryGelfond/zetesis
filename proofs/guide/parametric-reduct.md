@@ -1,5 +1,9 @@
 # One network for all frozen reducts
 
+The clause search that implemented this network, as `PreparedReduct`, has been
+removed; the region search walks the reduct's proper-subset query under the
+candidate's mask instead (`ReductRegions`). The law and this account remain.
+
 `Zetesis.ParametricReduct` describes a fixed connective network with two inputs:
 original truth in a candidate M, and atom membership in a prospective smaller
 interpretation N. It preserves the existing Ferraris reduct. It does not replace

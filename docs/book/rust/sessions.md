@@ -168,9 +168,9 @@ original ground theory itself.
 
 `PositivePlan` admits positive atomic-head producers, including recursive ones,
 and arbitrary constraints. It computes their least consequences once, then
-checks original roots through the first failure. Clause search restricts candidates
-to that interpretation, or excludes them all when a constraint fails. Region search
-uses a singleton cursor, checking accumulated restrictions before publication.
+checks original roots through the first failure. The region search then proposes
+that interpretation alone, through a singleton cursor that checks accumulated
+restrictions before publication, or none when a constraint fails.
 A failed constraint leaves no answer
 set; it does not necessarily rule out larger classical models. `TightPlan`
 instead establishes its own acyclicity and supportedness conditions. Neither
@@ -244,34 +244,25 @@ before such a start failure.
 Class-shape or optional-capacity refusals retain general checking. Cancellation,
 exhausted shared work and allocation failure remain explicit interruptions.
 `ExecutionObservation::PositiveMembership`, `StratifiedMembership` and
-`TightMembership` report the selected plan; the search statistics retain attempted construction, restrictions
-and checking work. Use `Oracle::Countermodel` to select the general comparison
+`TightMembership` report the selected plan; the search statistics retain attempted construction and
+checking work. Use `Oracle::Countermodel` to select the general comparison
 path explicitly. Automatic device execution uses tight checking when its exact
 certificate is available; other theories retain general device checking.
 
-General completion under the clauses method lazily constructs one
-`PreparedReduct` for the exact original theory; under the default regions
-method the proper-subset query is a region tree over the original formulas and
-no encoding is built. Subsequent candidates supply membership and authenticated original-truth
-parameters, rather than rebuilding the encoding. Scalar checking reuses one
-workspace; Rayon workers borrow the shared encoding with disjoint query state.
-A workspace retains a complete watch index and completed unconditional unit
-consequences only for the exact prepared owner. Before each subset search, it
-clears candidate-dependent assignments and decisions, then supplies fresh
-candidate parameters. An interrupted unconditional propagation is recomputed;
-a candidate conflict never becomes an unconditional refutation. Workers reuse
-these results within a completion batch; the coordinator retains the encoding
-across batches. Returned countermodels
-still undergo independent frozen-reduct validation. Candidate restrictions do
-not replace this original owner.
+General completion walks the proper-subset query as a region tree over the
+original formulas and builds no encoding. Each query recomputes the candidate's
+original truth into its workspace and reuses only that workspace's capacity.
+Scalar checking reuses one workspace; Rayon workers own disjoint workspaces and
+read the enumeration's one original index. Returned countermodels still undergo
+independent frozen-reduct validation. Candidate restrictions do not replace the
+original theory.
 
-`SolveConfig::max_reduct_bytes` bounds cold preparation and each query's named
-storage separately. `max_completion_scratch_bytes` bounds the shared prepared
-owner plus simultaneous completion workspaces and results. That setting also
-supplies a separate allowance for optional class preparation and checking; it is
-not a combined process-memory ceiling. Preparation work is charged once to the
-session search budget and reported in `SolvePhase::ReductPreparation`.
-Reuse preserves consumed work and pending-candidate accounting after a refusal.
+`SolveConfig::max_reduct_bytes` bounds each query's retained workspace.
+`max_completion_scratch_bytes` bounds completion's ordered results and its
+workers' workspaces. That setting also supplies a separate allowance for
+optional class preparation and checking; it is not a combined process-memory
+ceiling. Reuse preserves consumed work and pending-candidate accounting after a
+refusal.
 
 ## Hybrid formula sessions
 

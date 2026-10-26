@@ -209,8 +209,51 @@ Notable changes by release. Versions follow Semantic Versioning.
   front copied away from its install now explains that it is not an installed
   copy and points to the installed one, instead of advising a reinstall that
   cannot repair it.
+- With phase timing enabled, batched completion's region queries are timed in
+  the reduct phase, as scalar membership's are: in
+  `SearchPhaseTimings::reduct` and the workers' `worker_reduct`, and so in the
+  exact reduct membership phase of `--stats`. They were missing there.
 
 ### Compatibility
+
+- The clause search is removed, with no alias and no deprecation period: the
+  region search, already the default, is the only formula search. Membership,
+  answer sets and the region search's work are unchanged. The command line
+  refuses `--search`, and `zetesis-bench run` refuses its `--search`.
+  zetesis-sat removes `SearchMethod`, `StableModels::with_method`, `check_with`,
+  the clause kernel (`Cnf`, `Clause`, `Clauses`, `Literal`, `Assignment`,
+  `AdmissionError`, `AdmissionLimits`, `Resource`, `Solve`, `solve`,
+  `solve_with_statistics`), the prepared reduct (`PreparedReduct`,
+  `ReductPreparationAttempt`, `ReductPreparationLimits`,
+  `ReductPreparationStatistics`, `ReductQueryStatistics`, `ReductWorkspace`),
+  the projection history (`ProjectionLimits`, `ProjectionResource`,
+  `ProjectionStatistics`), `SupportStatistics`, `SupportStatus` and
+  `CompletionScratch`; the fields `Limits::{admission, reduct_admission,
+  projections}`, `Statistics::{candidate_queries, projections, support}`,
+  `ReductStatistics::{preparation, parameter_work}`,
+  `SearchStatistics::{propagations, conflicts}`,
+  `CertifiedStatistics::{restriction_refusal, restriction_work,
+  restriction_clauses}` and `SearchPhaseTimings::reduct_preparation`; and the
+  variants `Incomplete::{Admission, ProjectionLimit, RegionFilterUnsupported}`
+  and `CertificateError::Restriction`. `Incomplete::ReductStorage` now reads
+  "reduct query storage".
+- zetesis-solve removes `SearchMethod`, `SolveConfig::search`,
+  `SolveConfig::max_projection_nodes`, `SolvePhase::ReductPreparation` and the
+  `search` field of `ExecutionObservation::{CpuFormula, DeviceFormula,
+  DeviceTight}`. `max_projection_entries` and `max_projection_bytes` remain, for
+  an explicit `#project` session's history. zetesis-validation removes
+  `selected::SearchMethod`, `NativeExecution::search` and the performance
+  request's `search`, and still reads archived reports and statistics that
+  record the clause search; zetesis-bench removes `Search`.
+- `--stats` no longer prints a search method, the clause search's classical
+  query count, its projection history and necessary-support lines, or the class
+  attempts' restriction fields. The statistics JSON's `search` object drops
+  `candidate_queries`, `projection_history` and `necessary_support`, and the
+  interruption codes `admission`, `projection_entries`, `projection_nodes`,
+  `projection_bytes` and `region_filter_unsupported` no longer occur. The phase
+  timing section, in text and in JSON, is schema 6, without
+  `reduct_preparation`; zetesis-validation reads schema 6 and every earlier
+  schema.
 
 - `BatchError` gains `SlateOrder`. `BatchError` is not non-exhaustive, so an
   exhaustive match by a library caller must add the variant. The new public

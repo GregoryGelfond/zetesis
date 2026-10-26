@@ -36,8 +36,7 @@ agents. Apply the same standards to implementation, tests, proofs and tooling.
   around the reduct. Do not migrate these operations to a SAT/CDNL solver
   architecture. Candidate generation may learn from conflicts when what it learns
   is a sound consequence of the program, applied with those primitives, and kept
-  out of membership certificates. Existing optional clause-search support does
-  not authorize expanding that architecture.
+  out of membership certificates.
 - Reuse themelios for source representation and analysis. Keep `themelios`
   lowercase, preserve provenance and typed logical values, and retain the
   reviewed dependency pin unless the change includes a dependency review.

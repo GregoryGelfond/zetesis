@@ -217,57 +217,35 @@ its existing allocation boundary; the shared handle uses an infallible Arc
 allocation, as does Theory. These logical work and ownership facts do not
 establish a process RSS bound or a measured speedup.
 
-## Prepared formula queries
+## Formula reduct queries
 
-A formula enumeration under the clauses method (`--search clauses`) constructs
-its `PreparedReduct` lazily, when a candidate first needs exact subset
-checking; the regions method, the default, queries the reduct as a region tree
-over the original formulas under the candidate's mask and builds no encoding,
-as the [execution chapter](execution.md) describes. One immutable encoding represents
-the original theory's reduct for every candidate. The encoding separates the
-prospective subset's atom values from the candidate's membership and original
-implication truth. A successful `EvaluationWorkspace` operation authenticates
-that truth against the exact candidate and theory; an arbitrary external truth
-mask cannot parameterize the query.
+A formula enumeration queries the reduct as a region tree over the original
+formulas under the candidate's mask, as the [execution chapter](execution.md)
+describes, and builds no encoding. The enumeration's one original index, built
+when its walk first needs it, serves the candidate walk and every proper-subset
+query; a query borrows it and never builds one. A successful
+`EvaluationWorkspace` operation authenticates the candidate's original truth
+against the exact candidate and theory; an arbitrary external truth mask cannot
+drive the query.
 
-The coordinator owns this prepared encoding across batches and candidate
-restrictions. A scalar check reuses its `ReductWorkspace`; concurrent completion
-workers borrow the same encoding and own disjoint evaluation, parameter and
-search storage. Each worker reuses that storage within its batch; completion
-workers are currently created afresh for subsequent batches. Before each subset
-search, the worker clears candidate-dependent truth, decisions and ordering.
-It retains a complete watch index and a completed unconditional propagation
-prefix for the exact immutable encoding. These assignments follow from the
-encoded query's unit clauses before any candidate parameters are supplied;
-they need not be facts of the original ASP program. New authenticated parameters
-extend that prefix. A watch false in the prefix remains protected by another
-watch true there, so completed prefix events need not be replayed.
-
-An interrupted index construction cannot be reused. Interrupted unconditional
-propagation publishes no reusable prefix; a retry undoes it before recomputing.
-A completed unconditional conflict refutes every parameterization of this
-encoding, whereas a candidate conflict refutes only that query. A different
-owner invalidates both the index and the unconditional result.
+A scalar check reuses its reduct workspace; concurrent completion workers own
+disjoint workspaces. A workspace retains only capacity between queries: each
+query recomputes original truth and starts its region tree from fresh knowledge,
+so no candidate's knowledge reaches another candidate's query.
 
 Every returned subset is independently checked against the original frozen
 reduct. Candidate restrictions do not change the theory whose answer sets are
-being sought. Retained watch positions carry structural information, not a truth
-claim about a previous candidate.
+being sought.
 
-The original candidate encoding and the reduct encoding have independent
-dimension limits. Their work shares the enumeration's cumulative search budget.
-Cold preparation and each query's retained capacity also have an explicit byte
-ceiling. Parallel completion charges the shared prepared owner once, then adds
-the disjoint worker and result allowances. Allocation overhead and process RSS
-remain outside these named-storage accounts. Failed preparation publishes no
-owner; a later completion-capacity refusal can retain a successfully prepared
-owner for retry without discarding its charged work.
+Each query's retained workspace has an explicit byte ceiling, and its work
+shares the enumeration's cumulative search budget. Completion admits its ordered
+results, then measures each worker's workspace as it is created. Allocation
+overhead and process RSS remain outside these named-storage accounts.
 
-This architecture avoids rebuilding the reduct's structure for each candidate.
-The fixed encoding can be larger than a separately simplified reduct, so reuse
-alone establishes neither a time nor a memory improvement. The
-[parametric reduct law](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/guide/parametric-reduct.md) states the
-semantic preservation argument and its remaining implementation obligations.
+The removed clause search instead prepared one parametric encoding of the
+reduct, `PreparedReduct`, and parameterized it for every candidate; the
+[parametric reduct law](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/guide/parametric-reduct.md)
+states that encoding's semantic preservation argument.
 
 ## Candidate frontier observations
 

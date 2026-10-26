@@ -64,21 +64,11 @@ The public lazy source API reports exhausted rounds as `Stop::RoundLimit`,
 separately from charged-work exhaustion. A stopped round sequence has not
 established its final least consequence set.
 
-Formula enumeration bounds retained projection history separately from authored
-encoding. `max_projection_entries` counts distinct excluded keys;
-`max_projection_nodes` counts logical trie nodes; `max_projection_bytes` admits
-named capacity and its conservative growth overlap. These are explicit library
-limits; the CLI derives their capacities from its shared `--memory` allowance.
-`statistics.search.projection_history` reports entries,
-nodes, retained/peak bytes and its subtotal of cumulative search work. A history
-refusal retains any already checked answer prefix and reports incomplete coverage;
-it does not turn a completed answer into a rejected candidate. Under
-`--search regions` the history stays empty and
-`statistics.search.candidate_regions` reports the regions visited, refuted and reached as
-leaves, the propagations, atoms held and cut, whether the support cut
+`statistics.search.candidate_regions` reports the regions visited, refuted and
+reached as leaves, the propagations, atoms held and cut, whether the support cut
 applied, and the reading work, a subtotal of cumulative search work, and
-`statistics.search.reduct_query_regions` the regions of the reduct queries; under
-`--search clauses` the former is `null` and the latter zero. Its `workers`
+`statistics.search.reduct_query_regions` the regions of the reduct queries. Its
+`workers`
 object, `null` unless several workers walk the regions, reports the workers
 `configured`, the `engagement_delay_ns` in force (`null` for a delay that never
 engages), and the walk's `engagement`: `"not_begun"`, `"unengaged"` (the walk
@@ -556,16 +546,9 @@ The ordinary resource policy derives candidate storage from `--memory` and
 keeps cumulative restriction work as a checked statistic. Bounded library
 callers can set `SolveConfig::max_candidate_bytes` and `max_search_work` directly.
 
-Under `--search clauses`, formula search records its necessary
-disjunctive support attempt separately from user or objective refinements.
-`statistics.search.necessary_support` identifies application, an inapplicable
-head grammar, or a configured construction/encoding shape limit; under
-`--search regions` it is `null`, and `statistics.search.regions` says
-whether the support cut applied. Its construction and encoding work are included in search work,
-including a rolled-back encoding. A shape refusal retains general search;
-cancellation, work exhaustion and allocation failure remain explicit stops.
-Every proposed interpretation still needs membership checking against the
-original theory and its frozen reduct.
+`statistics.search.candidate_regions` says whether the region search's support
+cut applied. Every proposed interpretation still needs membership checking
+against the original theory and its frozen reduct.
 
 `CompletionAccounting` reports requested workers and the greatest concurrency
 selected at preflight. This selection alone does not mean a candidate entered

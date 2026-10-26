@@ -2,6 +2,10 @@
 
 <!-- A dated record: its commands keep the spellings of the binaries it records. -->
 
+Records made before the clause search's removal can name it, as a `clauses`
+arm or a `--search clauses` command; the solver no longer has it, and those
+records describe the executables they measured.
+
 The [final 0.6.0 CPU check](../cpu-corpus-final-20261014.md) retains
 [all timed observations](cpu-corpus-final-20261014.json) and the
 [complete table](cpu-corpus-final-20261014.tsv), separately from the earlier
@@ -1476,6 +1480,9 @@ on the host's workers, and it is faster than clingo on four of the twenty
 cells and within a twentieth of it on three more; what remains above the
 reference is the closure route's fixed cost on small programs and the
 per-region cost of one long chain of refutations.
+
+The clause search measured here as the `clauses` arm was later removed, with
+its `--search` option; the region search is the only formula search since.
 
 ## The region workers' engagement cost
 

@@ -216,8 +216,9 @@ Check both semantic qualification and sample scope before comparing timings.
 The matrix accepts the actual closure, countermodel, tight-support and positive-
 consequences procedures. Certified positive consequences require eager CPU
 formula execution and remain distinct from an explicitly requested closure or
-countermodel procedure. Phase schema 3 adds cold `reduct_preparation`; exact
-schema-1 and schema-2 records remain readable with their original phase sets.
+countermodel procedure. Phase schema 3 adds cold `reduct_preparation`, and
+schema 6 removes it with the clause search that entered it; exact records of
+every earlier schema remain readable with their original phase sets.
 Unknown versions or phase/procedure names and contradictory typed/text views are
 refused. A missing phase is not retroactively supplied to an older observation.
 
@@ -386,7 +387,8 @@ A cell that did not pass is listed by its
 decisions, never averaged. The reports may differ in the search method
 alone, which a profile spells as `search`, or as `candidates` in a report
 written before that field, with `region_workers` beside it in one
-campaign's reports. The comparison also scores each report against
+campaign's reports; reports written since the clause search's removal
+request none. The comparison also scores each report against
 the reference solver: a scoreboard per report and profile lists the cells
 where both passed, counts the wins, the cells whose native median lies below
 the reference's, and gives every compared cell, fastest ratio first, with

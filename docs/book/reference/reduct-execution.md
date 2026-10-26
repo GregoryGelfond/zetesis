@@ -2,6 +2,10 @@
 
 <!-- A dated record: its commands keep the spellings of the binaries it records. -->
 
+The prepared reduct measured here belonged to the clause search, which has since
+been removed; the region search queries the reduct without preparing an
+encoding.
+
 Retaining a prepared reduct removes repeated construction, but does not guarantee
 faster membership checks. In this comparison, task allocation's Metal route uses
 **21.87% less named completion capacity** while taking **10.25% more process

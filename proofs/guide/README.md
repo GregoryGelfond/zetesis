@@ -54,7 +54,7 @@ and theorem hypotheses are authoritative; prose is a reading aid.
 | May a descendant read held and cut root coordinates without rebuilding owned atom sets? | [RegionBounds](../Zetesis/RegionBounds.lean) identifies exact partial lookup with the materialized selections and proves equality of both gate readings and completed narrowing. Canonical root ordering, lookup correctness, completed-root coverage and decision commit remain Rust obligations. |
 | How do regions cover the candidate space exactly? | [Search](../Zetesis/Search.lean) defines cubes and the coverage tree whose `split` parts a region into two disjoint regions, so that the leaves are exactly the accepted seeds of the root. |
 | May a region of formula candidates be narrowed by its readings, and is a decided leaf a classical model? | [FormulaBounds](../Zetesis/FormulaBounds.lean) gives the sure and never readings of a formula under a region, the knowledge closed over the DAG, the support cut and the sole-support demand, and proves that a fully decided region no reading refutes is a classical model; [FormulaChains](../Zetesis/FormulaChains.lean), whose declarations are in the same namespace, lets a chain of one connective be read as one node by counters. |
-| Why may the clauses proposer narrow by classical consequence? | [FormulaRegions](../Zetesis/FormulaRegions.lean) reads the clause search as the coverage tree: propagation forces and cuts only classical consequences, a conflict refutes, and the reduct still decides every leaf. |
+| Why could the removed clause search narrow by classical consequence? | [FormulaRegions](../Zetesis/FormulaRegions.lean) reads the clause search as the coverage tree: propagation forces and cuts only classical consequences, a conflict refutes, and the reduct still decides every leaf. |
 | Why does a covered query tree over a candidate's subsets prove stability? | [ReductRegions](../Zetesis/ReductRegions.lean) states the reduct's proper-subset query as a region tree under the candidate's mask: a leaf other than the candidate is a countermodel, a covered tree is stability, and the masked readings are the reduct's. |
 | Why does a walk by several workers emit every accepted leaf once? | [Frontier](../Zetesis/Frontier.lean) proves that the pending regions, whoever holds each, and the leaves emitted are together a permutation of the tree's outputs after every step in any interleaving, so a walk that empties the frontier emits every accepted leaf once. |
 | Can supported atoms retain their positions without enumerating every gate tuple? | [GatePositions](../Zetesis/GatePositions.lean) relates the mixed-radix digit fold to lexicographic block offsets and bounds valid tuple offsets. Its subsequence law preserves original carrier positions. Completed support, Rust canonical ordering, checked arithmetic and program identity remain separate obligations. |
@@ -228,11 +228,11 @@ Rust cursor behavior and resource accounting remain unproved bridges.
 
 [BinaryWatch](../Zetesis/BinaryWatch.lean) is a small algorithmic specialization:
 two distinct positions exhaust a binary clause, leaving no replacement to find.
-The mathematical result requires valid distinct watches; the Rust registry,
-propagation order, charged work and reduct encoding remain separate obligations.
+The mathematical result requires valid distinct watches.
 
 [TernaryWatch](../Zetesis/TernaryWatch.lean) identifies the sole remaining position
 of a three-position clause. `replacement_exact` proves that any covering scan
 and one availability test there return the same replacement. Valid distinct
-watches and a fixed availability predicate are explicit premises; concrete
-registry, accounting and cancellation behavior remain implementation obligations.
+watches and a fixed availability predicate are explicit premises. The clause
+search whose watch registry these laws described has been removed; the laws
+remain as statements.

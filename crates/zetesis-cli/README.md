@@ -156,25 +156,18 @@ eligible richer source through finite Ferraris countermodel checking. Syntax,
 arithmetic and resource failures are preserved. The
 [frontend guide](../zetesis-themelios/README.md) defines admitted source profiles.
 
-Advanced `--search clauses|regions` selects the formula route's search
-method, for proposing candidates and for the reduct's proper-subset query
-alike. Regions, the default, walk the region tree over the theory's atoms,
-narrowed by the theory's readings, for both: the leaves of the candidate
-tree are proposed, and the proper subsets of a candidate are searched as a
-second tree under the frozen reduct, so no clause form is built at all.
-Clauses is the classical search over a Tseitin encoding for both, exact
-exclusion of every candidate proposed and a clause query of the frozen
-reduct.
-The reduct decides membership either way, and a countermodel is validated
-independently of the method that found it; the flag changes which
-candidate is proposed next and the work charged, never whether one is
-accepted. `--stats` reports the regions visited, refuted and reached as
-leaves for the candidate tree and, under `--search regions`, for the reduct
-queries.
+The formula route walks the region tree over the theory's atoms, narrowed by
+the theory's readings: the leaves of the candidate tree are proposed, and the
+proper subsets of a candidate are searched as a second tree under the frozen
+reduct, so no clause form is built at all. The reduct decides membership, and a
+countermodel is validated independently of the search that found it. `--stats`
+reports the regions visited, refuted and reached as leaves for the candidate
+tree and for the reduct queries. The former `--search` option, which also
+offered a clause search, has been removed.
 
 `--threads auto|N` (`--workers` in existing scripts) defaults to the host's
 available parallelism, or one when availability is unknown. It sets the closure
-route's pool and, under `--search regions`, the region walkers. Native CPU region
+route's pool and the region walkers. Native CPU region
 workers decide the leaves they reach. Device region workers produce unchecked
 leaves in bounded rounds; all producers join before device membership checking
 and any exact CPU residual completion. The family of answer sets is the same as

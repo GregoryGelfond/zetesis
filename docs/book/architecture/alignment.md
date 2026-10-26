@@ -62,7 +62,7 @@ different types of value.
 | Test formula satisfaction | Evaluate an acyclic formula graph; require every asserted root | [`models`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-ferraris/src/oracle.rs) |
 | Compute least consequences of positive atomic-head formulas | Propagate newly true atom/body vertices through sparse incidences; check original constraints on the completed interpretation | [`PositivePlan`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-ferraris/src/positive.rs) |
 | Construct and reuse a formula reduct | Freeze candidate truth at every graph node; mask candidate-false nodes during later queries | [`FrozenReduct`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-ferraris/src/reduct.rs) |
-| Reuse reduct structure across candidates | Under the clauses method, compile one parameterized graph and refresh authenticated candidate truth and membership inputs; under the regions method, read the original graph under each candidate's mask | [`PreparedReduct`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-sat/src/prepared_reduct.rs); [`ReductQuery`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-sat/src/ferraris/regions.rs) |
+| Reuse reduct structure across candidates | Read the original graph under each candidate's mask | [`ReductQuery`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-sat/src/ferraris/regions.rs) |
 | Establish subset minimality | Search for a proper-subset reduct model; propagate Boolean domains and exactly complete unresolved queries | [`zetesis-sat`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-sat/README.md); [`GpuFormulaOracle`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-wgpu/README.md) |
 | Evaluate an aggregate | Coalesce complete tuple identities, combine eligibility, then reduce count/sum/extrema and compare the bound | [Source formula lowering](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/formula_ground.rs); [native aggregate operations](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-wgpu/README.md#native-numeric-aggregates) |
 | Score an answer | Resolve correlated objective fields, retain model-relative eligibility, coalesce complete contribution keys, then sum by priority | [Objective specialization](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/formula_ground/objectives.rs); [cost evaluation](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-objective/src/evaluate.rs) |
@@ -248,11 +248,11 @@ ParametricNode(J, Implies(left,right), R) = frozen[node]
 ```
 
 This is another realization of the same reduct relation, with the subset
-premise made explicit. Under the clauses method `PreparedReduct` encodes it
-with candidate membership parameters and a strict-subset condition; under the
-regions method `ReductQuery` walks the candidate's subsets as a region tree
-with the same mask. Each query receives original truth
-through a subject-bound `FormulaEvaluation`, resets its search state, and
+premise made explicit. `ReductQuery` walks the candidate's subsets as a region
+tree under the same mask; the removed clause search encoded it, as
+`PreparedReduct`, with candidate membership parameters and a strict-subset
+condition. Each query receives original truth through a subject-bound
+`FormulaEvaluation`, reuses no knowledge from another candidate, and
 independently validates any returned countermodel. The
 [parametric correspondence](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/guide/parametric-reduct.md) explains
 why the missing explicit And/Or masks are valid under the stated premise.

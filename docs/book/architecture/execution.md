@@ -62,15 +62,13 @@ For finite general formulas, the candidate must first satisfy the original
 theory. A frozen truth mask then permits repeated evaluations of its reduct
 without constructing a separate formula tree. Finding a proper-subset model
 rejects the candidate. Proving that none exists accepts it. The exhaustive
-`zetesis-ferraris` checker is an exact small-instance reference; ordinary formula
-search uses the native candidate and countermodel machinery in `zetesis-sat`.
-Its Boolean search representation does not redefine ASP as classical
-satisfiability: auxiliary encoding variables do not participate in answer-set
-identity or minimality.
+`zetesis-ferraris` checker is an exact small-instance reference; ordinary
+formula search uses the native region search and countermodel machinery in
+`zetesis-sat`.
 
-Candidates on the formula route can be proposed by regions
-(`--search regions`), the same coverage tree the closure route walks
-(`Search.lean`), over the theory's atoms. The root leaves every atom open. Under a region every node of the formula DAG
+Candidates on the formula route are proposed by regions, the same coverage tree
+the closure route walks (`Search.lean`), over the theory's atoms. The root
+leaves every atom open. Under a region every node of the formula DAG
 has two readings, decided by one pass over the DAG: sure, when every
 candidate of the region satisfies it, and never, when no candidate does; a
 held atom is sure, a cut atom never, and the connectives combine the
@@ -523,18 +521,16 @@ owns the bounded parallel frontier. `Frontier` and `BatchAccounting` state the
 coverage and completion laws; concrete synchronization remains a refinement
 obligation.
 
-The regions method is the default, chosen by
+The region search became the default by
 [measurement](https://github.com/GregoryGelfond/zetesis/blob/main/docs/book/reference/observations/README.md#the-regions-default-and-one-worker-count)
-beside the classical search over a clause form on the same cells, with the
-host's workers on the tree; the classical search remains reachable for
-comparison. Read as regions the classical search is the same tree:
-a search node holds some atoms in and some out, propagation adds the atoms
-every classical model agrees on under those decisions, a conflict closes the
-node, and a complete assignment is a leaf the reduct decides
-(`FormulaRegions.classical_consequence_forces`, `no_model_refutes`). Under
-the clauses method the reduct's proper-subset query is the Boolean search
-too. Neither method decides membership by anything but the reduct, and
-neither keeps learned clauses.
+beside a classical search over a clause form on the same cells, with the host's
+workers on the tree. That clause search has since been removed. Read as regions
+it walked the same tree: a search node held some atoms in and some out,
+propagation added the atoms every classical model agrees on under those
+decisions, a conflict closed the node, and a complete assignment was a leaf the
+reduct decided (`FormulaRegions.classical_consequence_forces`,
+`no_model_refutes`). Neither search decided membership by anything but the
+reduct, and neither kept learned clauses.
 
 Both paths can restrict candidate generation by necessary conditions. A normal
 source constraint supplies a forbidden positive gate conjunction when its
@@ -603,12 +599,11 @@ For a theory whose complete asserted-head grammar combines ordinary disjunction
 and exact atomic choices, every true atom in an answer set needs original support:
 an ordinary producer whose body is true and whose other head atoms are false,
 or an atomic choice for that atom with a true body. Otherwise removing that atom
-leaves a proper-subset model of the reduct. The resulting support condition
-restricts only outer proposals; independent producers can still support several
-atoms in one disjunctive head. Richer or cross-atom choice forms decline the
-certificate, and choices alone do not trigger its construction: at least one
-ordinary head must contain a syntactic disjunction. The original theory and
-frozen reduct are unchanged.
+leaves a proper-subset model of the reduct. The removed clause search restricted
+its outer proposals by that condition; independent producers can still support
+several atoms in one disjunctive head. The region search's support cut reads the
+same producers inside its narrowing. The original theory and frozen reduct are
+unchanged.
 
 The [gate restriction laws](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/GateRestrictions.lean)
 and [disjunctive support laws](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/DisjunctiveSupport.lean)
@@ -626,35 +621,13 @@ already rules them out as answer sets. An unsupported or resource-refused plan
 keeps general solving available; an interrupted attempt never establishes
 exhaustion. This CPU policy does not change explicit device checking.
 
-Under the clauses method, exact projection exclusions have one owner across
-candidate restrictions: the outer cursor retains an index of previously
-proposed semantic interpretations, and strengthening the candidate query
-rebuilds its traversal while preserving that index; the regions method keeps
-no such index, since it visits a leaf once. Original and restriction clauses alone enter the watch lists. A completed
-assignment is independently checked against those clauses and looked up in the
-exclusion index before becoming another candidate. The original theory and its
-reduct remain separate from both operations. The
-[projection contract](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-sat/docs/candidate-pruning.md)
-states its transactional insertion and logical admission units.
-
-Admitted classical queries use a single packed literal arena and clause-end
-offsets. A literal occupies one machine word; repeated offsets preserve empty
-clauses. Public `Literal` values remain lossless inputs until range admission.
-`Cnf::clauses()` yields ordered borrowed `Clause` views, and `Cnf::clause(index)`
-provides checked access. Decoding allocates nothing and preserves variable,
-polarity and canonical order. This is a query representation change, with
-[separate arithmetic laws](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/PackedQueryLiterals.lean);
-it does not replace the formula reduct or establish a process-memory bound.
-
-Local search operations can specialize while preserving the candidate sequence
-of completed search. In a three-literal clause, two distinct watched positions
-leave one possible replacement position: `3 - first - second`, with indices from zero to
-two. The [replacement operation](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-sat/src/search.rs)
-tests that occurrence once, after polling control and charging work. It returns
-the same replacement as the general scan. Omitting watched positions can reduce
-charged work, so a fixed work limit can permit more progress. The
-[ternary law](../lean/correspondence.md) states the position invariant; original
-satisfaction and reduct membership retain their existing obligations.
+The removed clause search also kept an exact projection history of the
+candidates it proposed, packed its clauses in one literal arena, and replaced a
+ternary clause's watch by position. The region search needs no such history,
+since it visits a leaf once. The
+[packed literal laws](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/PackedQueryLiterals.lean)
+and the [ternary law](../lean/correspondence.md) remain as statements; no
+current route implements them.
 
 A sufficient class certificate can avoid a full countermodel query. For example,
 ranked support under a complete original-producer representation justifies a

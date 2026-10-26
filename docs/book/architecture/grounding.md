@@ -470,8 +470,8 @@ state the semantic premises separately from runtime error and storage handling.
 
 This is an original candidate restriction. It never enters a proper-subset
 search under a frozen reduct, and never replaces that membership check. The
-optional existing clause-search route retains final constraint checking without
-this region operation.
+removed clause search retained final constraint checking without this region
+operation.
 
 The [shared source owner](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/formula_hybrid.rs)
 retains prepared constraints, the closed canonical base and the support
