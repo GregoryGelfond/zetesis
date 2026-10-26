@@ -587,11 +587,16 @@ fn ordinary_hybrid_checks_a_wide_ready_body() {
         write!(source, "p{atom}").unwrap();
     }
     source.push('.');
+    // The ordinary policy would ground this one fitting constraint in the core;
+    // granting no share keeps it streamed, so the source check plans it.
     let admitted = prepare_formula(
         source,
         resources.admission_options(),
         resources.expansion_limits(),
-        resources.formula_limits(),
+        FormulaLimits {
+            max_retained_constraint_nodes: 0,
+            ..resources.formula_limits()
+        },
     )
     .unwrap()
     .ground_hybrid()

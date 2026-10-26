@@ -17,6 +17,14 @@ use zetesis_validation::answers::native_json;
 
 const SOURCE: &str = "a|b. {hidden}. :- b. #show a/0.";
 
+/// SOURCE with its constraint widened over 40,000 pairs of `d/1` facts. Lazy
+/// grounding keeps a constraint in the formula while the formula's share of the
+/// memory allowance holds it; under a 4 MiB allowance this one does not fit, so
+/// it is streamed. The facts make it equivalent to `:- b.`, so the answers are
+/// SOURCE's.
+const STREAMED: &str = "a|b. {hidden}. d(1..200). :- b, d(X), d(Y). #show a/0.";
+const STREAMING: [&str; 4] = ["--grounder", "lazy", "--memory", "4MiB"];
+
 fn options(extra: &[&str]) -> Options {
     Options::try_parse_from(
         [
@@ -70,20 +78,29 @@ fn explicit_lazy_formula_preserves_hidden_full_answers() {
 #[test]
 fn hybrid_projection_selects_only_original_answers() {
     // Under lazy grounding the constraint is checked as a stream, whose
-    // excluded {a,c} projects as {b,c} does. The double negation keeps it a
-    // stream: pair capture would move `:-a,c.` into the core.
-    let source = "a|b. {c}. :-a,not not c. #project c/0. #show c/0.";
+    // excluded {a,c} projects as {b,c} does. Its 40,000 instances over `d/1`
+    // do not fit a 4 MiB allowance's formula share, so it is streamed, and the
+    // facts make it `:-a,not not c.`. The double negation keeps it a stream:
+    // pair capture would move a positive body into the core.
+    let source = "a|b. {c}. d(1..200). :-a,not not c,d(X),d(Y). #project c/0. #show c/0.";
     let atom = |name| serde_json::json!({"predicate":name,"sign":"positive","arguments":[]});
     let original = [vec![atom("a")], vec![atom("b")], vec![atom("b"), atom("c")]];
-    for grounder in ["eager", "lazy"] {
-        let (outcome, output, _) = solve(source, &options(&["--grounder", grounder]));
+    for arguments in [&["--grounder", "eager"][..], &STREAMING] {
+        let lazy = arguments == STREAMING;
+        let (outcome, output, _) = solve(source, &options(arguments));
         // Projected publication is not the full-family decoder's input contract.
         let document: Json = serde_json::from_slice(&output).unwrap();
-        let selected: Vec<_> = document["models"]
+        // The `d/1` facts belong to every answer; compare the rest.
+        let selected: Vec<Vec<Json>> = document["models"]
             .as_array()
             .unwrap()
             .iter()
-            .map(|record| spelled(&document, record))
+            .map(|record| {
+                spelled(&document, record)
+                    .into_iter()
+                    .filter(|atom| atom["predicate"] != "d")
+                    .collect()
+            })
             .collect();
         assert_eq!(selected.len(), 2);
         assert!(selected.iter().all(|answer| original.contains(answer)));
@@ -97,7 +114,7 @@ fn hybrid_projection_selects_only_original_answers() {
         assert_eq!(document["outcome"]["projection"]["complete"], true);
         assert_eq!(outcome.semantic().verified_models(), 3);
         assert_eq!(outcome.semantic().completion(), Some(Completion::Exhausted));
-        if grounder == "lazy" {
+        if lazy {
             let streamed = outcome.semantic().hybrid_execution().unwrap().constraints;
             assert!(streamed.substitutions > 0);
         }
@@ -153,7 +170,7 @@ fn ordinary_relational_lazy_keeps_its_closure_route() {
 
 #[test]
 fn json_distinguishes_core_models_from_original_membership() {
-    let (outcome, output, _) = solve(SOURCE, &options(&["--grounder", "lazy"]));
+    let (outcome, output, _) = solve(STREAMED, &options(&STREAMING));
     let stats = outcome.semantic().hybrid_execution().unwrap();
     assert_eq!(
         (
