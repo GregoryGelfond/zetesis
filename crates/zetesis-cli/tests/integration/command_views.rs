@@ -131,9 +131,19 @@ fn requested_json_contains_machine_statistics() {
 
 #[test]
 fn explicit_lazy_formula_publishes_checked_original_answers() {
+    // The constraint's 40,000 instances over `d/1` do not fit a 4 MiB
+    // allowance's formula share, so lazy grounding streams it; the facts make
+    // it `:- b.`.
     let result = solve(
-        "a|b. {hidden}. :- b. #show a/0.",
-        &["--grounder", "lazy", "--json", "--stats"],
+        "a|b. {hidden}. d(1..200). :- b, d(X), d(Y). #show a/0.",
+        &[
+            "--grounder",
+            "lazy",
+            "--memory",
+            "4MiB",
+            "--json",
+            "--stats",
+        ],
     );
     assert!(
         result.status.success(),
@@ -143,6 +153,10 @@ fn explicit_lazy_formula_publishes_checked_original_answers() {
     let document: serde_json::Value = serde_json::from_slice(&result.stdout).unwrap();
     assert_eq!(document["statistics"]["hybrid_execution"]["accepted"], 2);
     assert_eq!(document["statistics"]["hybrid_execution"]["rejected"], 0);
+    assert_eq!(
+        document["statistics"]["hybrid_execution"]["streamed"]["templates"],
+        1
+    );
     // The original constraint cuts b before a rejected region is formed.
     assert_eq!(
         document["statistics"]["search"]["region_filter"]["refuted"],
@@ -159,8 +173,20 @@ fn explicit_lazy_formula_publishes_checked_original_answers() {
         zetesis_validation::answers::native_json::Limits::default(),
     )
     .unwrap();
+    // The `d/1` facts belong to every answer; compare the rest.
+    let answers: Vec<Vec<String>> = answers
+        .full_model_symbols(65_536)
+        .unwrap()
+        .into_iter()
+        .map(|answer| {
+            answer
+                .into_iter()
+                .filter(|atom| !atom.starts_with("d("))
+                .collect()
+        })
+        .collect();
     assert_eq!(
-        answers.full_model_symbols(65_536).unwrap(),
+        answers,
         vec![
             vec!["a".to_owned()],
             vec!["a".to_owned(), "hidden".to_owned()],

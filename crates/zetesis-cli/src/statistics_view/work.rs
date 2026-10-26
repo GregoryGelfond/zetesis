@@ -22,8 +22,12 @@ fn base_execution(semantic: Option<&SemanticOutcome>) -> String {
     if semantic.source_evaluation().is_some() {
         return "CPU direct source evaluation during admission".into();
     }
-    if semantic.hybrid_execution().is_some() {
-        return "CPU hybrid formula; eager core, streamed constraints".into();
+    if let Some(execution) = semantic.hybrid_execution() {
+        return if execution.streamed.templates == 0 {
+            "CPU hybrid formula; eager core, no streamed constraints".into()
+        } else {
+            "CPU hybrid formula; eager core, streamed constraints".into()
+        };
     }
     if let Some(execution) = semantic.formula_execution() {
         return if execution.adapter.is_empty() {
@@ -252,6 +256,31 @@ fn terminal(rows: &mut Vec<Row>, execution: &zetesis_solve::TerminalExecutionSta
 }
 
 fn hybrid(rows: &mut Vec<Row>, execution: &zetesis_solve::HybridExecutionStatistics) {
+    let streamed = execution.streamed;
+    for (label, value, scope) in [
+        (
+            "Streamed constraint templates",
+            streamed.templates as u64,
+            "checked during search; they did not fit in the formula",
+        ),
+        (
+            "Streamed constraint instances",
+            streamed.instances,
+            "possible instances, visited during admission",
+        ),
+        (
+            "Grounded constraint templates",
+            streamed.retained_templates as u64,
+            "eligible for streaming, but fit in the formula",
+        ),
+        (
+            "Grounded constraint instances",
+            streamed.retained_instances,
+            "checked as formula nodes",
+        ),
+    ] {
+        rows.push(count(label, value, scope));
+    }
     for (label, value, scope) in [
         (
             "Core answers checked",

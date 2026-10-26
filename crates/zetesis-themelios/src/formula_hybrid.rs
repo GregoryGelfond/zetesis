@@ -260,7 +260,7 @@ impl HybridFormula {
         &self.0.core.0.compiled.expansion
     }
 
-    /// Retained lowered constraint templates. Pool alternatives count separately.
+    /// As [`StreamedCore::streamed_templates`].
     #[must_use]
     pub fn streamed_templates(&self) -> usize {
         self.0.core.streamed_templates()
@@ -270,6 +270,18 @@ impl HybridFormula {
     #[must_use]
     pub fn streamed_instances(&self) -> u64 {
         self.0.core.streamed_instances()
+    }
+
+    /// As [`StreamedCore::retained_templates`].
+    #[must_use]
+    pub fn retained_templates(&self) -> usize {
+        self.0.core.retained_templates()
+    }
+
+    /// As [`StreamedCore::retained_instances`].
+    #[must_use]
+    pub fn retained_instances(&self) -> u64 {
+        self.0.core.retained_instances()
     }
 
     /// As [`StreamedCore::checker`].
@@ -400,7 +412,8 @@ impl StreamedCore {
         self.0.compiled.key_analysis
     }
 
-    /// Retained lowered constraint templates. Pool alternatives count separately.
+    /// Lowered constraint templates streamed over the core. Pool alternatives
+    /// count separately.
     #[must_use]
     pub fn streamed_templates(&self) -> usize {
         self.0
@@ -416,6 +429,21 @@ impl StreamedCore {
             .constraints
             .as_ref()
             .map_or(0, |constraints| constraints.instances)
+    }
+
+    /// Eligible constraint templates instantiated in the core instead of
+    /// streamed, because their instances fit the share
+    /// [`crate::FormulaLimits::max_retained_constraint_nodes`] grants; the core
+    /// checks them as formula nodes.
+    #[must_use]
+    pub fn retained_templates(&self) -> usize {
+        self.0.compiled.retained_constraints.templates
+    }
+
+    /// Instances of the retained templates, as counted during admission.
+    #[must_use]
+    pub fn retained_instances(&self) -> u64 {
+        self.0.compiled.retained_constraints.instances
     }
 
     /// Prepare one independent cumulative checker over the completed support.

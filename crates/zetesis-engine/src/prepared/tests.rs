@@ -15,9 +15,11 @@ struct Route {
     source: bool,
     lazy: bool,
     hybrid_constraints: usize,
+    hybrid_retained: usize,
     terminal_definitions: usize,
     terminal_base: Option<zetesis_themelios::BaseKind>,
     terminal_streamed: Option<usize>,
+    terminal_retained: Option<usize>,
 }
 
 impl ExecutionObserver for Route {
@@ -32,10 +34,9 @@ impl ExecutionObserver for Route {
             } => {
                 self.lazy = true;
             }
-            ExecutionObservation::HybridGrounding {
-                streamed_templates, ..
-            } => {
-                self.hybrid_constraints = streamed_templates;
+            ExecutionObservation::HybridGrounding { streamed, .. } => {
+                self.hybrid_constraints = streamed.templates;
+                self.hybrid_retained = streamed.retained_templates;
             }
             ExecutionObservation::TerminalDefinitions {
                 deferred_templates,
@@ -46,6 +47,7 @@ impl ExecutionObserver for Route {
                 self.terminal_definitions = deferred_templates;
                 self.terminal_base = Some(base);
                 self.terminal_streamed = streamed.map(|streamed| streamed.templates);
+                self.terminal_retained = streamed.map(|streamed| streamed.retained_templates);
             }
             _ => {}
         }
@@ -79,21 +81,22 @@ fn lazy_configuration_uses_source_closure() {
 }
 
 #[test]
-fn lazy_formula_configuration_streams_constraints() {
+fn lazy_formula_configuration_grounds_a_fitting_constraint() {
     // A choice rule is outside the relational profile: lazy grounding takes
-    // the formula route, streaming the constraint over a producer core. The
-    // double negation keeps the constraint a stream: pair capture would move
-    // `:- p, q.` into the core.
+    // the formula route over a producer core. The constraint's one instance
+    // fits the formula's share of the ordinary memory allowance, so it is
+    // grounded in the core and nothing is streamed. The double negation keeps
+    // pair capture from claiming `:- p, q.` first.
     let (profile, route) = execute(program! { { p; q }. :- p, not not q. }, Grounder::Lazy);
     assert_eq!(profile, PreparedProfile::Hybrid);
-    assert!(route.hybrid_constraints > 0);
+    assert_eq!(route.hybrid_constraints, 0);
+    assert_eq!(route.hybrid_retained, 1);
 }
 
 #[test]
 fn lazy_formula_configuration_defers_terminal_definitions() {
     // r/1 is read by nothing: the lazy materialization defers it over a
-    // hybrid base that streams the constraint, kept a stream by its double
-    // negation as above.
+    // hybrid base, which grounds the fitting constraint as above.
     let (profile, route) = execute(
         program! { { s(1); s(2) }. r(X) :- s(X). :- s(1), not not s(2). },
         Grounder::Lazy,
@@ -103,7 +106,8 @@ fn lazy_formula_configuration_defers_terminal_definitions() {
         route.terminal_base,
         Some(zetesis_themelios::BaseKind::Hybrid)
     );
-    assert_eq!(route.terminal_streamed, Some(1));
+    assert_eq!(route.terminal_streamed, Some(0));
+    assert_eq!(route.terminal_retained, Some(1));
     assert!(route.terminal_definitions > 0);
 }
 

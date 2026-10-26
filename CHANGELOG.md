@@ -6,6 +6,14 @@ Notable changes by release. Versions follow Semantic Versioning.
 
 ### Added
 
+- Hybrid statistics report how lazy grounding divided the eligible constraints:
+  the streamed templates and instances and those grounded in the core, as
+  `HybridExecutionStatistics::streamed` (a `StreamedConstraints`, which adds
+  `retained_templates` and `retained_instances`), in the `streamed` object of
+  the JSON statistics' `hybrid_execution`, and as four rows of the human
+  statistics. `HybridFormula` and `StreamedCore` add `retained_templates` and
+  `retained_instances`. The recorded execution reads "no streamed constraints"
+  when nothing was streamed.
 - An ordering between tuples that still contain variables, such as
   `(M,L) < (K,J)`, is admitted wherever a comparison can stand, including
   aggregate element conditions and guards. It compares complete values in ASP
@@ -132,6 +140,21 @@ Notable changes by release. Versions follow Semantic Versioning.
 
 ### Changed
 
+- `--grounder lazy` and the hybrid formula schedule stream an integrity constraint
+  only when its instances do not fit in the formula. Once the producer core and its
+  completion are built, each eligible template is grounded into the core, in
+  program order, while an upper bound on its instances fits the share
+  `FormulaLimits::max_retained_constraint_nodes` grants and the theory ceilings.
+  The ordinary resource policy grants the theory's node share, a quarter of the
+  memory allowance, so lazy grounding streams only what eager grounding could not
+  hold; a smaller `--memory` allowance streams more. Answer sets are unchanged.
+  Streaming joined every streamed rule again in every search region, so programs
+  whose constraints fit no longer pay that cost. `FormulaLimits::default()`
+  grants no share, so a library caller of
+  the explicit schedule with default limits streams every eligible constraint as
+  before.
+- The `--grounder` help no longer reads as though `auto` streams constraints: it
+  says that `auto` never does, and that `lazy` streams only what does not fit.
 - GPU formula and tight sessions that enumerate answers produce the next slate
   of candidates while the device checks the current slate, with one device
   submission in flight. Answer families, membership checks, failure and
@@ -330,6 +353,12 @@ Notable changes by release. Versions follow Semantic Versioning.
 
 ### Compatibility
 
+- `ExecutionObservation::HybridGrounding` carries one `streamed:
+  StreamedConstraints` in place of `streamed_templates` and `streamed_instances`.
+  `StreamedConstraints` adds `retained_templates` and `retained_instances`,
+  `HybridExecutionStatistics` adds `streamed`, and `FormulaLimits` adds
+  `max_retained_constraint_nodes`; a struct literal naming every field must add
+  them, and one completed from a default needs no change.
 - Fields added to exhaustive public structs: `zetesis_stable::Limits::learning`
   and `SolveConfig::share_learned_rows`. A struct literal naming every field must
   add them; one completed from a default needs no change.

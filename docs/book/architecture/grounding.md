@@ -338,16 +338,40 @@ The finite formula path materializes a bounded theory. Automatic admission can
 first separate [terminal positive definitions](#terminal-definition-analysis),
 ground the base and reconstruct those definitions from each verified base answer.
 Explicit eager admission materializes the complete theory. An explicit
-**hybrid formula** profile instead retains every producer and streams eligible
-integrity constraints. It uses indexed host joins and the selected CPU or GPU
+**hybrid formula** profile instead retains every producer and streams the
+eligible integrity constraints that do not fit in the formula, as described
+below. It uses indexed host joins and the selected CPU or GPU
 executor for core membership. Objectives
 are scored only after the original constraint check completes. Constraints
 containing aggregates, projected atoms or conditional
 scopes remain eager; ordinary atom/scalar constraints use the shared binding
 and evaluation operations. Certified complete pairwise exclusions become native
 constraints in the core, with the two-atom components of the same template as
-their pair constraints; remaining templates stay streamed. Existing eager entry
-points remain unchanged.
+their pair constraints. Existing eager entry points remain unchanged.
+
+A remaining template is streamed only when its instances do not fit in the
+formula. Once the producer core and its completion are built, each remaining
+template, in program order, is grounded into the core as eager grounding
+grounds a constraint, provided an upper bound on what its instances add fits
+two things: what remains of the share `FormulaLimits::max_retained_constraint_nodes`
+grants, and what remains of the theory's node, operand, root and origin
+ceilings. The bound counts, per instance, each atom literal's atom node, its
+default negations and its conjunction node, plus the implication to falsum and
+its root. Interning and simplification only lower the real growth, so a
+template that passes the check never meets a ceiling while it is grounded. A
+template that does not fit stays streamed; a later, smaller one may still fit.
+Retention follows the core's completion, so it takes only room the rest of the
+program left; it adds no atom, because capture already retained every atom an
+instance reads and completion has guarded them.
+
+The share comes from the resource model, with no constant of its own. The
+ordinary policy grants the theory's whole node share, which the model sets at a
+quarter of the memory allowance, as it does for eager grounding. Lazy grounding
+therefore streams only constraints that eager grounding could not hold either,
+and a smaller `--memory` allowance streams more of them. `FormulaLimits::default()`
+grants no share, so a library caller of the explicit hybrid schedule with default
+limits streams every eligible constraint, as before. Statistics report how many
+templates and instances were streamed and how many were grounded in the core.
 
 Hybrid admission still completes possible support and original source-family
 arithmetic validation. It visits the eligible constraint instances to retain
@@ -582,7 +606,18 @@ and support envelope must still fit. Retained source plans and support also
 occupy memory. Early refutation avoids some complete candidates, but repeated
 region joins and checker preparation can increase execution work. Reduced
 formula storage therefore does not imply a time
-or RSS improvement. Full demand-driven producer/atom discovery and device
+or RSS improvement, and streaming usually costs time. Each region's narrowing
+re-joins the streamed bodies over the complete possible support. A rule is
+rescanned from its first row whenever the walk moves to a region that does not
+extend the last one, or a predicate it reads changes in more than a few atoms.
+The work thus grows with the possible support and the number of streamed rules,
+not with the region's change, while eager grounding's propagation touches only
+the instances a change reaches. When the search is long and the instances are
+few, streaming can cost many times eager grounding's work. This is why lazy
+grounding streams only the constraints that do not fit, and why automatic
+grounding never streams: its terminal deferral, which lazy grounding shares, is
+where lazy grounding's gains on deferrable programs come from. Full
+demand-driven producer/atom discovery and device
 constraint streaming are not implemented by this profile. See the
 [checked hybrid session example](../rust/sessions.md#hybrid-formula-sessions).
 
@@ -1827,8 +1862,8 @@ bindings and row cursors. Preparation is charged once; its retained capacity is
 counted on every call. A failed preparation publishes no partial plan.
 
 The automatic formula route chooses this schedule over an eager base, and the
-lazy formula route over a hybrid base, whose eligible constraints are streamed
-and checked before an answer is reconstructed. Explicit eager grounding still
+lazy formula route over a hybrid base, whose eligible constraints that do not
+fit in the formula are streamed and checked before an answer is reconstructed. Explicit eager grounding still
 materializes the complete theory. Base membership uses the selected CPU or GPU executor. Reconstruction
 currently runs on the host. Each reconstruction starts from source admission's
 account under a per-answer allowance of work and substitutions — the headroom

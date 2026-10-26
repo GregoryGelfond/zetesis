@@ -3059,6 +3059,18 @@ The occurrence-count fuel bound does not bound Rust join or expression work;
 less retained materialization need not mean less replay work. See the
 [constraint-stream guide](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/guide/streamed-constraints.md).
 
+Hybrid retention grounds some eligible templates in the retained theory instead
+of streaming them. The law needs no change: `stable_iff_completed_partition`
+already takes an arbitrary retained theory, here the producer core with the
+grounded templates' instances. `ConstrainedPositive.stable_append_constraints`,
+applied once to the grounded instances and once to the streamed ones, shows
+that how the eligible constraints are split between the two leaves exactly the
+answer sets of the theory that grounds every instance. The Rust obligations are
+that a grounded template's instances are emitted as eager grounding emits a
+constraint, over the same completed join that capture counted; that the
+retired templates are exactly the grounded ones; and that retention creates no
+atom, so completion's guards still cover every atom.
+
 The hybrid executor composes this law with either CPU or GPU core membership.
 Host source consequences narrow only original candidate regions. The device
 checks the retained core; complete streamed acceptance still precedes scoring,
