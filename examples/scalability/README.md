@@ -82,6 +82,16 @@ unsatisfiable core on the universal side, so one candidate's proper-subset query
 carries the solve. Their constants choose the core and its size, and they are
 selected and qualified like the 2QBF workload.
 
+The [Tseitin parity](parity-tseitin/README.md), [parity chain](parity-chain/README.md),
+[pigeonhole forms](pigeonhole-forms/README.md) and [mixed parity](parity-mixed/README.md)
+workloads state constraints with algebraic structure: parity rows, linear
+equations over GF(2), and families of counts. Resolution, and so a solver that
+learns clauses, needs exponentially many steps to refute the unsatisfiable ones
+as they grow; elimination and counting refute them in polynomial time. The mixed
+workload adds random clauses to satisfiable parity constraints, so search
+remains. Their constants choose each instance and its size, and they are
+selected and qualified like the 2QBF workload.
+
 ## Run an example
 
 From the repository root, using the installed solver:

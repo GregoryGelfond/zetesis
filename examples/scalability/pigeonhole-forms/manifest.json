@@ -1,0 +1,28 @@
+{
+  "schema_version": 1,
+  "root": ".",
+  "cases": [
+    {
+      "entry": "pigeonhole_forms.lp",
+      "contract": {
+        "satisfiability": "unsat",
+        "family": "all",
+        "model_count": 0,
+        "cost": null,
+        "witnesses": [],
+        "required_symbols": [],
+        "notes": [
+          "Five pigeons and four holes in the clause encoding: one constraint per pigeon that it occupies no hole and one per pair of pigeons sharing a hole, over 20 choice atoms.",
+          "Counting the incidences once by pigeon and once by hole refutes the conditions at once; resolution needs exponentially many steps as the holes grow."
+        ]
+      },
+      "files": [
+        {
+          "path": "pigeonhole_forms.lp",
+          "sha256": "fb0c2956b50f80b5928dadf945c6f296c7d63a0d044cfc805d406e5cd9df022a",
+          "includes": []
+        }
+      ]
+    }
+  ]
+}
