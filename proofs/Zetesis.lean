@@ -158,6 +158,9 @@ import Zetesis.FormulaChains
 import Zetesis.ReductRegions
 import Zetesis.Frontier
 import Zetesis.AxisFolds
+import Zetesis.EntailedPruning
+import Zetesis.ParityRows
+import Zetesis.CountingFamilies
 import Zetesis.InnerQuery
 import Zetesis.ModelSelections
 import Zetesis.AtomCatalogs
