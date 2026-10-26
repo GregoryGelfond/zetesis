@@ -86,6 +86,54 @@
 'Zetesis.AggregateReduct.frozen' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.AggregateReduct.direct_reduct' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.AggregateReduct.evaluator_refinement' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.Algebra.inside_refl' does not depend on any axioms
+'Zetesis.Algebra.inside_trans' does not depend on any axioms
+'Zetesis.Algebra.inside_antisymm' depends on axioms: [propext, Quot.sound]
+'Zetesis.Algebra.narrow_to_inside' depends on axioms: [propext, Quot.sound]
+'Zetesis.Algebra.Subject.sound_of_narrower' does not depend on any axioms
+'Zetesis.Algebra.Subject.apply_sound' does not depend on any axioms
+'Zetesis.Algebra.joint_least' does not depend on any axioms
+'Zetesis.Algebra.joint_most_precise_bound' does not depend on any axioms
+'Zetesis.Algebra.joint_extensive' does not depend on any axioms
+'Zetesis.Algebra.joint_closed' depends on axioms: [propext, Quot.sound]
+'Zetesis.Algebra.joint_monotone' depends on axioms: [propext, Quot.sound]
+'Zetesis.Algebra.joint_of_closed' depends on axioms: [propext, Quot.sound]
+'Zetesis.Algebra.joint_idempotent' depends on axioms: [propext, Quot.sound]
+'Zetesis.Algebra.joint_more_subjects' depends on axioms: [propext, Quot.sound]
+'Zetesis.Algebra.ideal_contains' does not depend on any axioms
+'Zetesis.Algebra.ideal_inside' does not depend on any axioms
+'Zetesis.Algebra.Subject.narrow_ideal' does not depend on any axioms
+'Zetesis.Algebra.ideal_closed' depends on axioms: [propext, Quot.sound]
+'Zetesis.Algebra.joint_sound' depends on axioms: [propext, Quot.sound]
+'Zetesis.Algebra.Reaches.inside' does not depend on any axioms
+'Zetesis.Algebra.Reaches.sound' does not depend on any axioms
+'Zetesis.Algebra.Reaches.snoc' does not depend on any axioms
+'Zetesis.Algebra.Reaches.below_closed' does not depend on any axioms
+'Zetesis.Algebra.Reaches.eq_joint' depends on axioms: [propext, Quot.sound]
+'Zetesis.Algebra.Reaches.terminal_agreement' depends on axioms: [propext, Quot.sound]
+'Zetesis.Algebra.iterate_reaches' does not depend on any axioms
+'Zetesis.Algebra.iterate_inside' does not depend on any axioms
+'Zetesis.Algebra.iterate_stabilizes' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.Algebra.fair_iteration_reaches_joint' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.Algebra.countP_lt' depends on axioms: [propext]
+'Zetesis.Algebra.unheld_le' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.Algebra.admitted_le' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.Algebra.openness_lt' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.Algebra.refines_wf' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.Algebra.fair_iteration_reaches_joint_of_atoms' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.Algebra.decides_mono' does not depend on any axioms
+'Zetesis.Algebra.foldVerdict_absorbed' depends on axioms: [propext, Quot.sound]
+'Zetesis.Algebra.foldVerdict_complete' depends on axioms: [propext]
+'Zetesis.Algebra.foldVerdict_empty' depends on axioms: [propext]
+'Zetesis.Algebra.foldVerdict_undecided' depends on axioms: [propext]
+'Zetesis.Algebra.foldVerdict_without_absorber' does not depend on any axioms
+'Zetesis.Algebra.any_true_eq_false_iff' does not depend on any axioms
+'Zetesis.Algebra.inner_verdict' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.Algebra.countermodelVerdict_accepts' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.Algebra.answerSetVerdict_accepts' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.Algebra.answer_sets_nested' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.Algebra.countermodel_outputs_empty_iff' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.Algebra.countermodel_verdict_independent' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.AlgebraicRows.contribution_of_holds' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.AlgebraicRows.contribution_of_fails' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.AlgebraicRows.measure_cons' depends on axioms: [propext, Classical.choice, Quot.sound]
