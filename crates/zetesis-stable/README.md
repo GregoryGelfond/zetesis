@@ -75,6 +75,13 @@ the presence of the original theory and every independent restriction.
 Original theory and reduct membership are unchanged. Exhaustion covers the
 constrained candidate family, not the unrestricted world view.
 
+A search in passes over one theory, such as an optimizer's tie pass after the
+pass that proved its optimum, constructs each later stream with
+`Limits::remaining_after` the earlier statistics, so that the passes together
+stay within the run's cumulative work, decision and candidate limits, and calls
+`StableModels::follow` on it, so that its statistics report the earlier receipts
+before its own. Membership and exhaustion stay each stream's own.
+
 `StableModels::bound_generation()` counts the bounds installed so far by
 `improve_candidate_bound`: zero before the first, one more after each successful
 installation. A refused or failed installation, a permanent `restrict_candidates`

@@ -210,10 +210,14 @@ semantic evidence without acknowledging the summary.
 
 `SessionBuilder::counting()` supplies the same writer-free policy: it clears
 projection, requests exhaustive ordinary enumeration, and retains at most one
-optimal representative while the existing incumbent counter counts all ties.
+optimal representative while the existing incumbent counter counts all ties,
+under inclusive bounds whatever `SolveConfig::optimum_search` selects.
 Drain the session and read `complete_answer_count()` from its outcome. The method
 returns `None` for incomplete or absent coverage, `Some(0)` for complete
-inconsistency, and the exact full-family count after exhaustion. The counting
+inconsistency, and the exact full-family count after exhaustion. It also returns
+`None` when a strict bound pruned the optimum's ties, as the default schedule's
+does for a request of one optimal answer: `Optimization::ties_pruned` then
+holds, and `tied_models` counts only the optimal models it met. The counting
 policy uses the final answer selection at start, independently of builder call
 order, and ignores projection requests. Search, scoring, memory and control
 limits retain their usual effect; counting does not prove coverage before the

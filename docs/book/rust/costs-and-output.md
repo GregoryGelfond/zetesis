@@ -68,6 +68,38 @@ incumbent. The original theory and reduct remain unchanged.
 [`ObjectiveBounds.replacement_preserves_candidates_relative`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/ObjectiveBounds.lean)
 states the preservation law; it does not verify worker synchronization.
 
+`ObjectivePlan::bound` keeps cost at most the incumbent's, and
+`ObjectivePlan::strict_bound` cost strictly below it. Both come from one
+lexicographic fold over the priorities, whose initial suffix decides costs
+equal at every priority: true keeps every tie, false none. A strict bound at a
+better score implies the earlier bound, strict or not, so the stream accepts it
+under the same check. `SolveConfig::optimum_search` chooses between them. The
+default, `OptimumSearch::StrictForOneAnswer`, bounds a request for one optimal
+answer strictly: the search meets no tie of an incumbent it has beaten, and its
+exhaustion still proves the optimum, but not how many answers share it
+(`Optimization::ties_pruned`). A request for more answers keeps the inclusive
+bound, which meets and counts every tie in one pass.
+
+`OptimumSearch::StrictWithTiePass` bounds every request strictly. When more
+than one answer is requested and the last bound, strict at the proved optimum,
+pruned its ties, a second stream over the same theory enumerates them: it has
+the first stream's certificate and region filter, and its one bound keeps cost
+at most the optimum. Models the first stream retained are not retained again,
+so each optimal answer is returned once. The second stream reports its receipts
+after the first's (`StableModels::follow`) and runs within what the run's
+cumulative limits leave (`Limits::remaining_after`); a stop in either pass
+claims neither the optimum nor the family. For all eight optimal answers of
+integrated Family Crossing, with one thread, this schedule walked 2,946,650
+candidate regions, 2,831,261 of them in the second pass, where the single
+inclusive pass walked 661,303. It is therefore kept for measurement, like
+`OptimumSearch::Inclusive`, the earlier schedule.
+
+The optional choice strengthening compares certified lower costs with the same
+comparison. A model's certified lower cost never exceeds its cost at any
+priority, so a cost below the incumbent has a lower cost below it too.
+[`RequiredChoiceCosts.lexicographic_lower_bound`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/RequiredChoiceCosts.lean)
+proves this for the inclusive comparison only.
+
 Source admission also retains checked required-choice groups when the program
 has objectives. These are complete positive head groups with a positive numeric
 lower bound; the group's body remains its activation condition. Conditional

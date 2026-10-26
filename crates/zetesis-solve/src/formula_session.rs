@@ -611,7 +611,9 @@ impl<'a, E: MembershipExecution> FormulaSession<'a, E> {
     /// fresh stream over the same theory, with the same certificate and region
     /// filter and bounded to cost at most the optimum, then enumerates every
     /// optimal model, each once. It reports its receipts after the exhausted
-    /// stream's, and only its exhaustion completes the optimal family.
+    /// stream's, and only its exhaustion completes the optimal family. Its one
+    /// bound never tightens, so the fresh stream declares no candidate bounds:
+    /// its producers walk apart, as an enumeration's do.
     fn begin_tie_pass(
         &mut self,
         config: &SolveConfig,

@@ -201,6 +201,29 @@ Notable changes by release. Versions follow Semantic Versioning.
   nodes and 262,000 atoms, the default allowance engages it on hosts with about
   9.3 GiB of memory, rather than about 18.7 GiB. Requested statistics report the
   tight batch bytes beside the batch bytes. Answer sets are unchanged.
+- An optimizing search for one answer, the command line's default, bounds the
+  candidates strictly: each better answer admits only candidates cheaper than
+  itself, where it admitted those as cheap, so the search no longer walks the
+  ties of incumbents it has beaten. Its exhaustion proves the optimum as before.
+  On integrated Family Crossing, with one thread, it walks 115,389 candidate
+  regions instead of 661,303, and returns the same answer. A request for more
+  answers, `--all` included, and `--count` keep the inclusive bound, which
+  still meets every optimal tie in one pass.
+- Such a one-answer search counts only the optimal answers it met, not every
+  tie of the optimum. `--stats` prints `full ties=unavailable` for it, its JSON
+  `outcome.optimization.tied_models` is `null`, and the library reports
+  `Optimization::ties_pruned`, under which
+  `SemanticOutcome::complete_answer_count` gives no total. Requests for more
+  answers count every tie, as before.
+- The library schedule `OptimumSearch::StrictWithTiePass` bounds every request
+  strictly and, when more than one answer is requested, enumerates the proved
+  optimum's ties in a second pass over the same theory, bounded to cost at most
+  the optimum. It returns the same optimal answers, each once, and is kept for
+  measurement, as `OptimumSearch::Inclusive` keeps the earlier schedule: for all
+  eight optimal answers of Family Crossing it walks 2,946,650 candidate regions,
+  2,831,261 of them in the second pass, where the inclusive schedule walks
+  661,303. `SolveConfig::optimum_search` selects the schedule; no command-line
+  option does.
 
 ### Fixed
 
@@ -294,6 +317,33 @@ Notable changes by release. Versions follow Semantic Versioning.
   with: a sixteenth of the allowance from `Resources`, and 128 MiB under
   `SolveConfig::DEFAULT`. A caller who bounds device memory through these fields
   sets both.
+- `StableModels::tighten_candidate_bound` is removed, with no alias and no
+  deprecation period. `StableModels::improve_candidate_bound` replaces it: it
+  takes the identity of the objective plan that compiled the bound and the
+  incumbent score it was compiled at, beside the restriction. The first bound of
+  a stream is accepted as given; a later one from another plan is refused with
+  `Incomplete::CandidateBoundPlan`, and one at a score no better than the active
+  bound's with `Incomplete::CandidateBoundNotImproving`, and the active bound
+  stays. An exhaustive match on `zetesis_stable::Incomplete` needs arms for both
+  variants; the JSON interruption codes name them `candidate_bound_plan` and
+  `candidate_bound_not_improving`. zetesis-objective adds `PlanIdentity` and
+  `Score::from_costs`, `ObjectivePlan::identity` returns a plan's identity, and
+  zetesis-stable now depends on zetesis-objective.
+- zetesis-themelios adds `ObjectivePlan::strict_bound`. zetesis-stable adds
+  `StableModels::follow`, which reports an earlier stream's receipts before a
+  stream's own, and `Limits::remaining_after`, which leaves a later pass of one
+  run what the earlier passes did not spend.
+- `SolveConfig` has a new public field, `optimum_search`, of the new type
+  `OptimumSearch`, which zetesis-cli also exports, and `Optimization` a new
+  public field, `ties_pruned`. A struct literal that names every field must add
+  them; a `SolveConfig` completed from `SolveConfig::default()` or
+  `SolveConfig::for_allowance` needs no change.
+- `ExecutionObservation::ObjectiveBound` has a new field, `strict`, and
+  `ExecutionObservation` a new variant, `ObjectiveTiePass`. A pattern that names
+  every field of `ObjectiveBound` must add `strict`, and an exhaustive match on
+  `ExecutionObservation` needs an arm for the variant.
+- The JSON `outcome.optimization.tied_models` is `null` when a strict bound
+  pruned the optimum's ties, where it was always a number.
 
 ## 0.6.0 — 2026-10-14
 

@@ -80,6 +80,12 @@ proved optimum; the limit then selects how many tied optima to display. An
 interrupted optimization may report verified incumbents whose optimality is
 unproved. `--all` requests all tied optima, rather than every nonoptimal model.
 
+For one answer, the default, each better answer bounds the search to strictly
+cheaper candidates. The search then proves the optimum without visiting its
+other ties, and `--stats` reports their number as unavailable. A larger limit,
+or `--all`, admits candidates as cheap as the best answer so far, and counts
+every optimal tie.
+
 Shown atoms and terms are a presentation of an answer set. Two full answer sets
 can have the same display. Parallel search can change answer order and which
 answers appear before a finite display limit; it preserves the complete family
@@ -98,8 +104,9 @@ zetesis solve program.lp --count
 
 Counting skips display-term evaluation and projection history. It streams
 ordinary answers and retains at most one optimal representative while counting
-all optimal ties. Resource limits still apply. An interrupted or failed search
-prints no count and reports the reason on stderr with a nonzero exit status.
+all optimal ties, under bounds that admit them. Resource limits still apply. An
+interrupted or failed search prints no count and reports the reason on stderr
+with a nonzero exit status.
 An output failure can occur after bytes have been written; consumers must check
 the exit status before accepting the total. `--count` cannot be combined with `--answers`, `--all`,
 `--models` or `--json`. `--stats` remains available on stderr.
