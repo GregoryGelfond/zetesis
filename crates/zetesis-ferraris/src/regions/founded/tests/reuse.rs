@@ -375,7 +375,7 @@ fn interrupted_projection_publishes_neither_index() {
         .unwrap();
     assert!(prepared.projected.is_some());
     for failure in [Stop::Cancelled, Stop::Deadline] {
-        for ceiling in 0..complete.spent {
+        for ceiling in 0..complete.spent() {
             let mut scratch = Scratch::default();
             scratch
                 .prepare_bodies(
@@ -400,7 +400,7 @@ fn interrupted_projection_publishes_neither_index() {
                 ),
                 Err(failure)
             );
-            assert_eq!(work.spent, ceiling);
+            assert_eq!(work.spent(), ceiling);
             assert!(scratch.owner.is_none());
             assert!(scratch.projected.is_none());
             assert_eq!(scratch.retained_bytes(), retained);

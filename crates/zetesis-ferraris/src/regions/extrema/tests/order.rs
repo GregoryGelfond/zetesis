@@ -173,7 +173,7 @@ fn ordered_ranges_preserve_both_frozen_gates() {
                 let scanned = attempt(&index, event, Some(&frozen), true, &mut Work::new(u64::MAX));
                 same_effects(&selected, &scanned);
                 if !frozen[source] {
-                    assert_eq!(work.spent, 0);
+                    assert_eq!(work.spent(), 0);
                 }
             }
         }
@@ -234,14 +234,14 @@ fn interrupted_ordering_retains_only_a_charged_effect_prefix() {
             // Even a source that teaches nothing must pay for every admitted
             // target visit. Full-range endpoints detect deletion of those
             // charges independently of the measured interruption bound.
-            assert!(complete_work.spent >= targets as u64);
+            assert!(complete_work.spent() >= targets as u64);
             for stop in [Stop::WorkLimit, Stop::Cancelled, Stop::Deadline] {
-                for limit in 0..=complete_work.spent {
+                for limit in 0..=complete_work.spent() {
                     let mut quota = SinglePermits::new(limit, stop);
                     let mut work = Work::reserved(&mut quota);
                     let partial = attempt(&index, event, None, false, &mut work);
-                    assert_eq!(work.spent, limit);
-                    if limit == complete_work.spent {
+                    assert_eq!(work.spent(), limit);
+                    if limit == complete_work.spent() {
                         same_effects(&partial, &complete);
                     } else {
                         assert!(partial.result == Err(stop));

@@ -55,7 +55,10 @@ fn marking_keeps_the_complete_receipt_without_collecting_nodes() {
             let mut collected_work = Work::new(u64::MAX);
             collected.cone(&index, chain, &mut collected_work).unwrap();
             assert_eq!(collected.prepared(), expected);
-            assert_eq!(collected_work.spent, u64::try_from(4 * depth + 1).unwrap());
+            assert_eq!(
+                collected_work.spent(),
+                u64::try_from(4 * depth + 1).unwrap()
+            );
             for fresh in [false, true] {
                 let mut marked = if fresh {
                     Scratch::default()
@@ -66,7 +69,7 @@ fn marking_keeps_the_complete_receipt_without_collecting_nodes() {
                 marked.mark_cone(&index, chain, &mut work).unwrap();
                 assert_marks(&marked, &index, &expected);
                 let initialization = if fresh { index.parents.len() as u64 } else { 0 };
-                assert_eq!(work.spent, collected_work.spent + initialization);
+                assert_eq!(work.spent(), collected_work.spent() + initialization);
                 assert_eq!(marked.leaves.capacity(), 0);
                 assert!(marked.prepared().is_empty());
                 let bytes = marked.seen.capacity() * size_of::<u32>()
@@ -98,8 +101,8 @@ fn every_refused_mark_prefix_matches_collection_and_retries() {
             collected.cone(&index, chain, &mut collect_work),
             Err(Stop::WorkLimit)
         );
-        assert_eq!(mark_work.spent, limit);
-        assert_eq!(mark_work.spent, collect_work.spent);
+        assert_eq!(mark_work.spent(), limit);
+        assert_eq!(mark_work.spent(), collect_work.spent());
         assert_eq!(marked.generation, collected.generation);
         assert_eq!(marked.seen, collected.seen);
         let cursors = |scratch: &Scratch| {
@@ -135,7 +138,7 @@ fn cancelled_marking_prefixes_retry_with_fresh_membership() {
             scratch.mark_cone(&index, chain, &mut work),
             Err(Stop::Cancelled)
         );
-        assert_eq!(work.spent, allowed);
+        assert_eq!(work.spent(), allowed);
         work.refund();
         assert_eq!(quota.remaining, 0);
         scratch
@@ -172,6 +175,6 @@ fn marking_discards_prior_membership_and_collected_results() {
         } else {
             0
         };
-        assert_eq!(work.spent, 5 + reset);
+        assert_eq!(work.spent(), 5 + reset);
     }
 }

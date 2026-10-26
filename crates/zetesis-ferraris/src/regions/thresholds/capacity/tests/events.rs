@@ -189,14 +189,14 @@ fn interrupted_capacity_keeps_only_paid_deductions() {
         );
         assert_eq!(full.events.first(), Some(&(heads[0], false)));
         // Each deduction needs a footprint visit and two distinct conditions.
-        assert_eq!(full_work.spent, 6);
+        assert_eq!(full_work.spent(), 6);
         for stop in [Stop::WorkLimit, Stop::Cancelled, Stop::Deadline] {
-            for limit in 0..=full_work.spent {
+            for limit in 0..=full_work.spent() {
                 let mut quota = SinglePermits::new(limit, stop);
                 let mut work = Work::reserved(&mut quota);
                 let partial = attempt(&index, held, &mut work);
-                assert_eq!(work.spent, limit);
-                if limit == full_work.spent {
+                assert_eq!(work.spent(), limit);
+                if limit == full_work.spent() {
                     assert!(partial.result == full.result);
                     assert_eq!(partial.events, full.events);
                     assert_eq!(partial.known.masks.slices(), full.known.masks.slices());

@@ -103,6 +103,42 @@ fn masked_open_atoms_match_scalar_intersection() {
 }
 
 #[test]
+fn mask_words_cover_every_atom() {
+    for atoms in [0_usize, 1, 63, 64, 65, 127, 128, 129] {
+        assert_eq!(Region::all_open(atoms).mask_words(), atoms.div_ceil(64));
+    }
+}
+
+#[test]
+fn open_word_matches_scalar_intersection() {
+    for atoms in [0_usize, 1, 63, 64, 65, 127, 128, 129] {
+        let mut region = Region::all_open(atoms);
+        for atom in 0..atoms {
+            match atom % 3 {
+                0 => assert!(region.hold(atom)),
+                1 => assert!(region.cut(atom)),
+                _ => {}
+            }
+        }
+        for word in 0..region.mask_words() {
+            for selected in [0, 1, u64::MAX, 0xAAAA_AAAA_AAAA_AAAA] {
+                let expected = (0..64)
+                    .filter(|bit| {
+                        let atom = word * 64 + bit;
+                        region.is_open(atom) && selected & (1 << bit) != 0
+                    })
+                    .fold(0_u64, |bits, bit| bits | 1 << bit);
+                assert_eq!(
+                    region.open_word(word, selected),
+                    expected,
+                    "{atoms} atoms, word {word}"
+                );
+            }
+        }
+    }
+}
+
+#[test]
 fn a_region_holds_cuts_or_leaves_each_atom_open() {
     let mut region = Region::all_open(3);
     assert!(region.is_open(0) && region.is_open(1) && region.is_open(2));

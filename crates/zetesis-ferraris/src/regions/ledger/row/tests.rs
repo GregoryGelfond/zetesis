@@ -287,8 +287,8 @@ fn compact_matching_charges_word_reads_instead_of_atom_reads() {
         scalar.deduction(&held, &cut, &mut scalar_work).unwrap(),
         wanted
     );
-    assert_eq!(packed_work.spent, 4);
-    assert_eq!(scalar_work.spent, 81);
+    assert_eq!(packed_work.spent(), 4);
+    assert_eq!(scalar_work.spent(), 81);
 }
 
 #[test]
@@ -300,7 +300,7 @@ fn every_interrupted_conversion_prefix_returns_no_row() {
         .unwrap();
     assert!(matches!(row, Row::Packed { .. }));
     for failure in [Stop::WorkLimit, Stop::Cancelled, Stop::Deadline] {
-        for prefix in 0..complete.spent {
+        for prefix in 0..complete.spent() {
             let mut permits = SinglePermits::new(prefix, failure);
             let mut work = Work::reserved(&mut permits);
             let mut allowance = u64::MAX;
@@ -308,7 +308,7 @@ fn every_interrupted_conversion_prefix_returns_no_row() {
                 Row::prepare(dense(), &mut allowance, &mut work, &mut 0),
                 Err(failure)
             );
-            assert_eq!(work.spent, prefix);
+            assert_eq!(work.spent(), prefix);
         }
     }
 }
@@ -320,14 +320,14 @@ fn optional_conversion_exhaustion_returns_no_row() {
     Row::prepare(dense(), &mut allowance, &mut complete, &mut 0)
         .unwrap()
         .unwrap();
-    for allowance in 0..complete.spent {
+    for allowance in 0..complete.spent() {
         let mut remaining = allowance;
         let mut work = Work::new(u64::MAX);
         assert_eq!(
             Row::prepare(dense(), &mut remaining, &mut work, &mut 0).unwrap(),
             None
         );
-        assert_eq!(work.spent, allowance);
+        assert_eq!(work.spent(), allowance);
         assert_eq!(remaining, 0);
     }
 }
@@ -347,13 +347,13 @@ fn every_interrupted_word_match_preserves_its_stop() {
             value: false
         }
     );
-    assert_eq!(measured.spent, 7);
+    assert_eq!(measured.spent(), 7);
     for failure in [Stop::WorkLimit, Stop::Cancelled, Stop::Deadline] {
-        for prefix in 0..measured.spent {
+        for prefix in 0..measured.spent() {
             let mut permits = SinglePermits::new(prefix, failure);
             let mut work = Work::reserved(&mut permits);
             assert_eq!(row.deduction(&held, &cut, &mut work), Err(failure));
-            assert_eq!(work.spent, prefix);
+            assert_eq!(work.spent(), prefix);
             assert_eq!(
                 row.deduction(&held, &cut, &mut Work::new(u64::MAX))
                     .unwrap(),
@@ -375,7 +375,7 @@ fn a_subsumption_comparison_cannot_hide_a_stop() {
         Some(true)
     );
     for failure in [Stop::WorkLimit, Stop::Cancelled, Stop::Deadline] {
-        for prefix in 0..measured.spent {
+        for prefix in 0..measured.spent() {
             let mut permits = SinglePermits::new(prefix, failure);
             let mut work = Work::reserved(&mut permits);
             let mut allowance = u64::MAX;
@@ -383,10 +383,10 @@ fn a_subsumption_comparison_cannot_hide_a_stop() {
                 row.subsumes(&original, &mut allowance, &mut work),
                 Err(failure)
             );
-            assert_eq!(work.spent, prefix);
+            assert_eq!(work.spent(), prefix);
         }
     }
-    for prefix in 0..measured.spent {
+    for prefix in 0..measured.spent() {
         let mut allowance = prefix;
         assert_eq!(
             row.subsumes(&original, &mut allowance, &mut Work::new(u64::MAX))

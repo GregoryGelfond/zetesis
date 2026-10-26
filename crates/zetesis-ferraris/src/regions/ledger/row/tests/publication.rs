@@ -206,12 +206,12 @@ fn settled_packed_outputs_charge_only_their_words() {
             visited += 1;
         }
         assert_eq!(visited, expected_visits);
-        assert_eq!(work.spent, expected_reads);
+        assert_eq!(work.spent(), expected_reads);
         assert_eq!(
             row.next_publication_output(&mut cursor, &held, &cut, &mut work),
             Ok(None)
         );
-        assert_eq!(work.spent, expected_reads);
+        assert_eq!(work.spent(), expected_reads);
     }
 }
 
@@ -234,7 +234,7 @@ fn open_packed_outputs_charge_words_and_events() {
         visited,
         (16..80).map(|atom| (atom, false)).collect::<Vec<_>>()
     );
-    assert_eq!(work.spent, 66);
+    assert_eq!(work.spent(), 66);
 }
 
 #[test]
@@ -259,7 +259,7 @@ fn publication_refusal_keeps_the_unread_output() {
             wanted.push(atom);
         }
         for failure in [Stop::WorkLimit, Stop::Cancelled, Stop::Deadline] {
-            for prefix in 0..complete.spent {
+            for prefix in 0..complete.spent() {
                 let mut permits = SinglePermits::new(prefix, failure);
                 let mut work = Work::reserved(&mut permits);
                 let mut cursor = OutputCursor::default();
@@ -271,7 +271,7 @@ fn publication_refusal_keeps_the_unread_output() {
                     }
                 };
                 assert_eq!(result, Err(failure));
-                assert_eq!(work.spent, prefix);
+                assert_eq!(work.spent(), prefix);
                 assert_eq!(visited, wanted[..visited.len()]);
                 let mut resumed = Work::new(u64::MAX);
                 while let Some(atom) = row
@@ -281,7 +281,7 @@ fn publication_refusal_keeps_the_unread_output() {
                     visited.push(atom);
                 }
                 assert_eq!(visited, wanted);
-                assert_eq!(work.spent + resumed.spent, complete.spent);
+                assert_eq!(work.spent() + resumed.spent(), complete.spent());
             }
         }
     }

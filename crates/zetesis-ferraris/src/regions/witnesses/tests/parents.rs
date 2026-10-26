@@ -108,7 +108,7 @@ fn pruning_does_not_read_or_retain_the_discarded_ancestor_tail() {
         })
         .unwrap();
     assert!(selected.candidates().is_empty());
-    assert!(filtered.spent < complete.spent);
+    assert!(filtered.spent() < complete.spent());
     assert_eq!(selected.candidates.capacity(), 0);
     assert!(!selected.visited(roots[0][1]) && !selected.visited(roots[1][1]));
 }
@@ -122,14 +122,14 @@ fn every_refused_discovery_prefix_can_retry_without_stale_candidates() {
     Scratch::default()
         .parent_chains(&index, 0, &mut complete, |chain| chain.disjunction)
         .unwrap();
-    for limit in 0..complete.spent {
+    for limit in 0..complete.spent() {
         let mut scratch = Scratch::default();
         let mut work = Work::new(limit);
         assert_eq!(
             scratch.parent_chains(&index, 0, &mut work, |chain| chain.disjunction),
             Err(zetesis_cpu::Stop::WorkLimit),
         );
-        assert_eq!(work.spent, limit);
+        assert_eq!(work.spent(), limit);
         scratch
             .parent_chains(&index, 0, &mut Work::new(u64::MAX), |chain| {
                 chain.disjunction

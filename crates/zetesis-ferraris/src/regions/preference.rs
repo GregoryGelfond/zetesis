@@ -47,7 +47,7 @@ impl Knowledge {
         work.refund();
         PreferenceAttempt {
             result,
-            work: work.spent,
+            work: work.spent(),
         }
     }
 
@@ -64,11 +64,11 @@ impl Knowledge {
         work: &mut Work<'_>,
     ) -> Result<Option<usize>, Stop> {
         let mut best: Option<(usize, usize, Option<usize>)> = None;
-        for atom in choices.eligible(region) {
+        choices.try_for_each_eligible(region, |atom| {
             let primary = self.read_unknown(atom, work)?;
             let Some((previous, degree, cached)) = best.as_mut() else {
                 best = Some((atom, primary, None));
-                continue;
+                return Ok(());
             };
             match primary.cmp(degree) {
                 std::cmp::Ordering::Greater => {
@@ -92,7 +92,8 @@ impl Knowledge {
                 }
                 std::cmp::Ordering::Less => {}
             }
-        }
+            Ok(())
+        })?;
         Ok(best.map(|(atom, _, _)| atom))
     }
 }

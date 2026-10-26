@@ -265,7 +265,7 @@ fn an_order_refuses_an_unrelated_same_shape_owner() {
         order.preferred(&theory, &Region::all_open(3), &mut work),
         Err(Stop::InvalidProgram)
     );
-    assert_eq!(work.spent, 0);
+    assert_eq!(work.spent(), 0);
 }
 
 #[test]

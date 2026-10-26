@@ -22,7 +22,7 @@ fn coprime_complements_need_no_suffix_storage() {
         Ok(Step::Unchanged)
     ));
     // One whole-row witness, three ascending reads, and gcd(2,3).
-    assert_eq!(work.spent, 8);
+    assert_eq!(work.spent(), 8);
     assert_eq!(closure.known.thresholds[0], before);
     assert!(closure.known.sure.iter().all(|&word| word == 0));
     assert!(closure.known.never.iter().all(|&word| word == 0));
@@ -52,7 +52,7 @@ fn a_partial_gcd_witness_avoids_the_unread_tail() {
     ));
     // The same allowance as the three-term case cannot read the other 27
     // conditions, allocate a suffix, or perform the complement sweep.
-    assert_eq!(work.spent, 8);
+    assert_eq!(work.spent(), 8);
     assert_eq!(scratch.residual_suffix.capacity(), 0);
     assert_eq!(scratch.retained_bytes(), 0);
 }
@@ -157,7 +157,7 @@ fn interrupted_utility_checks_publish_no_state() {
             assert!(
                 matches!(closure.threshold_residual(&index, 0, &mut work), Err(stop) if stop == failure)
             );
-            assert_eq!(work.spent, cutoff);
+            assert_eq!(work.spent(), cutoff);
             assert_eq!(closure.known.thresholds[0], before);
             assert!(closure.known.sure.iter().all(|&word| word == 0));
             assert!(closure.known.never.iter().all(|&word| word == 0));

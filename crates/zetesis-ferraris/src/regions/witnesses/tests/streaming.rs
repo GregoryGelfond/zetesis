@@ -156,7 +156,7 @@ fn fresh_streaming_charges_its_mark_initialization() {
     stop_after_two(&mut scratch, &index, chain, &mut cold);
     let mut warm = Work::new(u64::MAX);
     stop_after_two(&mut scratch, &index, chain, &mut warm);
-    assert_eq!(cold.spent - warm.spent, index.parents.len() as u64);
+    assert_eq!(cold.spent() - warm.spent(), index.parents.len() as u64);
     assert!(!scratch.visited(tail));
     assert_eq!(scratch.leaves.capacity(), 0);
     assert_eq!(
@@ -183,13 +183,13 @@ fn refused_collection_restores_its_reusable_leaf_allocation() {
     let capacity = scratch.leaves.capacity();
     let mut complete = Work::new(u64::MAX);
     scratch.read(&index, chain, None, &mut complete).unwrap();
-    for limit in 0..complete.spent {
+    for limit in 0..complete.spent() {
         let mut work = Work::new(limit);
         assert!(matches!(
             scratch.read(&index, chain, None, &mut work),
             Err(Stop::WorkLimit)
         ));
-        assert_eq!(work.spent, limit);
+        assert_eq!(work.spent(), limit);
         assert_eq!(scratch.leaves.capacity(), capacity);
         assert_eq!(
             scratch
@@ -269,7 +269,7 @@ fn early_open_witnesses_do_not_read_later_sibling_edges() {
             stop_after_two(&mut scratch, &index, chain, &mut work);
             // Four nodes, three reached child edges and two visitor reads.
             // The eager sibling stack instead reads every root edge first.
-            assert_eq!(work.spent, 9, "width={width}");
+            assert_eq!(work.spent(), 9, "width={width}");
             assert!(scratch.visited(0) && scratch.visited(1));
             assert!(!scratch.visited(2));
             assert_eq!(scratch.stack.capacity(), 0);
@@ -309,7 +309,7 @@ fn a_late_second_open_witness_still_reads_the_tail() {
     assert!(outcome.is_break());
     assert_eq!(visited, (0..width).collect::<Vec<_>>());
     // width+2 nodes, width+1 edges, width visitor reads: full old receipt.
-    assert_eq!(work.spent, (3 * width + 3) as u64);
+    assert_eq!(work.spent(), (3 * width + 3) as u64);
 }
 
 #[test]
@@ -352,7 +352,7 @@ fn refused_continuations_restart_without_skipping_edges() {
             })
         });
         assert_eq!(result, Err(Stop::WorkLimit));
-        assert_eq!(work.spent, limit);
+        assert_eq!(work.spent(), limit);
         assert_eq!(
             scratch
                 .read(&index, chain, None, &mut Work::new(u64::MAX))

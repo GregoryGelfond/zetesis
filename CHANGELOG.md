@@ -151,6 +151,14 @@ Notable changes by release. Versions follow Semantic Versioning.
   excluded from the candidate region.
 - Possible-sum checks detect an allowed value while updating the packed sum set,
   avoiding a separate scan.
+- Region narrowing keeps its admitted and unspent reads as one count, so
+  charging a read within them is a single decrement; the work ceiling is met, or
+  the quota consulted, only when they run out. Receipts, quota reservations,
+  refunds and refusals are unchanged.
+- Split selection walks the region's open atoms a mask word at a time, through
+  `Region::mask_words` and `Region::open_word` in zetesis-cpu, instead of
+  chained atom iterators. The atoms ranked, their order, the chosen atom and
+  the charged reads are unchanged.
 - Weighted aggregate comparisons can determine a condition when its opposite
   value leaves no possible remainder in the required interval. These deductions
   use the existing propagation queues and preserve answer-set semantics.

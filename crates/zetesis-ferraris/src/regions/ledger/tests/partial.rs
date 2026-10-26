@@ -233,16 +233,16 @@ fn every_interrupted_partial_match_preserves_its_typed_failure() {
             .unwrap(),
         expected
     );
-    assert!(measured.spent > 0);
+    assert!(measured.spent() > 0);
     for failure in [Stop::WorkLimit, Stop::Cancelled, Stop::Deadline] {
-        for prefix in 0..measured.spent {
+        for prefix in 0..measured.spent() {
             let mut permits = SinglePermits::new(prefix, failure);
             let mut work = Work::reserved(&mut permits);
             assert_eq!(
                 scratch.explanations.deduction(0, &held, &cut, &mut work),
                 Err(failure)
             );
-            assert_eq!(work.spent, prefix);
+            assert_eq!(work.spent(), prefix);
             assert_eq!(scratch.explanations.len(), 1);
             assert_eq!(
                 scratch

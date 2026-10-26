@@ -156,7 +156,7 @@ impl GeneratorOrder {
         budget.work.refund();
         GeneratorOrderAttempt {
             result,
-            work: budget.work.spent,
+            work: budget.work.spent(),
             peak_bytes: budget.peak,
         }
     }
@@ -193,7 +193,7 @@ impl GeneratorOrder {
         work.refund();
         PreferenceAttempt {
             result,
-            work: work.spent,
+            work: work.spent(),
         }
     }
 
