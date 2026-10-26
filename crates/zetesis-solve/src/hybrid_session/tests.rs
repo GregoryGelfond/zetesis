@@ -8,7 +8,6 @@ use crate::{
     SolveConfig, SolveError,
 };
 use zetesis_cpu::{Cancellation, Stop, regions::Region};
-use zetesis_stable::{Incomplete, RegionFilter};
 use zetesis_themelios::{ConstraintCheckCause, HybridFormula};
 
 struct Fixture {
@@ -60,27 +59,42 @@ impl Fixture {
     }
 }
 
+/// Check `region` with a real source checker on the session's shared allowance,
+/// and record its failure in the session's streamed constraints, as a region
+/// worker's failed check does.
+fn record_source_failure(
+    session: &HybridSession<'_>,
+    fixture: &Fixture,
+    region: &Region,
+    cancellation: &Cancellation,
+) {
+    let source = session.regions.as_ref().unwrap();
+    let mut checker = fixture
+        .owner
+        .core()
+        .checker_with_allowance(&session.allowance, &fixture.cancellation)
+        .unwrap();
+    let failure = checker
+        .check_region(fixture.owner.core_theory(), region, cancellation)
+        .unwrap_err();
+    source.record_failure(failure);
+}
+
 #[test]
 fn a_recorded_worker_cancellation_supersedes_requested_models() {
     let fixture = Fixture::new();
     let mut session = fixture.session();
-    let source = session.regions.as_ref().unwrap().clone();
-    let mut worker = source
-        .worker(fixture.owner.core_theory(), &fixture.cancellation)
-        .unwrap();
     let cancelled = Cancellation::default();
     cancelled.cancel();
-    // Invoke the real source worker callback at a known boundary instead of
+    // Run a real source check on the session's allowance at a known boundary,
+    // and record its failure as a region worker's check does, instead of
     // relying on a native worker being interrupted at a particular instant.
-    assert_eq!(
-        worker.check(
-            fixture.owner.core_theory(),
-            &Region::all_open(fixture.owner.atom_catalog().atoms().len()),
-            &cancelled,
-        ),
-        Err(Incomplete::RegionFilter)
+    record_source_failure(
+        &session,
+        &fixture,
+        &Region::all_open(fixture.owner.atom_catalog().atoms().len()),
+        &cancelled,
     );
-    drop(worker);
     assert!(
         session
             .next(
@@ -123,20 +137,13 @@ fn a_recorded_worker_cancellation_supersedes_requested_models() {
 fn a_recorded_worker_failure_supersedes_requested_models() {
     let fixture = Fixture::new();
     let mut session = fixture.session();
-    let source = session.regions.as_ref().unwrap().clone();
-    let mut worker = source
-        .worker(fixture.owner.core_theory(), &fixture.cancellation)
-        .unwrap();
     let expected = fixture.owner.atom_catalog().atoms().len();
-    assert_eq!(
-        worker.check(
-            fixture.owner.core_theory(),
-            &Region::all_open(expected + 1),
-            &fixture.cancellation,
-        ),
-        Err(Incomplete::RegionFilter)
+    record_source_failure(
+        &session,
+        &fixture,
+        &Region::all_open(expected + 1),
+        &fixture.cancellation,
     );
-    drop(worker);
     let error = session
         .next(
             &fixture.config,
@@ -209,18 +216,12 @@ fn a_construction_stop_precedes_a_later_source_worker_failure() {
         .model_construction()
         .unwrap();
     let source = session.regions.as_ref().unwrap().clone();
-    let mut worker = source
-        .worker(fixture.owner.core_theory(), &fixture.cancellation)
-        .unwrap();
-    assert_eq!(
-        worker.check(
-            fixture.owner.core_theory(),
-            &Region::all_open(fixture.owner.atom_catalog().atoms().len() + 1),
-            &fixture.cancellation,
-        ),
-        Err(Incomplete::RegionFilter),
+    record_source_failure(
+        &session,
+        &fixture,
+        &Region::all_open(fixture.owner.atom_catalog().atoms().len() + 1),
+        &fixture.cancellation,
     );
-    drop(worker);
     assert!(
         session
             .next(

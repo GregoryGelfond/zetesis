@@ -158,3 +158,6 @@ impl RegionFilterWorker for Worker<'_> {
             .map_err(|error| self.source.stopped(error))
     }
 }
+
+#[cfg(test)]
+mod tests;

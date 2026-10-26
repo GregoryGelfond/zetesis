@@ -54,12 +54,13 @@ pub enum Incomplete {
     ClosedEnumerator,
     /// A certificate cannot be configured after candidate generation has begun.
     LateCertificate,
-    /// A caller-owned candidate-region filter retained an external failure.
-    /// Its adapter must supply the typed receipt; this never means exhaustion.
+    /// The streamed constraints' region check stopped. Its typed receipt is
+    /// retained by [`crate::StreamedConstraints::take_failure`]; this never
+    /// means exhaustion.
     RegionFilter,
-    /// A source callback returned a decision for an atom that is not open.
+    /// A region check returned a decision for an atom that is not open.
     InvalidRegionConsequence,
-    /// A region filter cannot be installed after candidate traversal began.
+    /// Streamed constraints cannot be installed after candidate traversal began.
     LateRegionFilter,
     /// Candidate bounds cannot be declared after candidate traversal began:
     /// the producers' frontier order is fixed for the whole stream.
@@ -70,7 +71,7 @@ pub enum Incomplete {
     /// A candidate bound's score does not strictly improve on the active
     /// bound's, so it could readmit candidates that bound pruned.
     CandidateBoundNotImproving,
-    /// An installed original-region filter cannot be replaced.
+    /// Installed streamed constraints cannot be replaced.
     RegionFilterAlreadySet,
     /// A learned-row store cannot be installed after candidate traversal
     /// began.

@@ -424,6 +424,21 @@ Notable changes by release. Versions follow Semantic Versioning.
 - `SolveConfig` has a new public field, `query_division`. A struct literal that
   names every field must add it; one completed from `SolveConfig::default()` or
   `SolveConfig::for_allowance` needs no change.
+- The caller-supplied candidate-region filter is removed from zetesis-stable,
+  with no alias and no deprecation period: `RegionFilter`, `RegionFilterWorker`,
+  `RegionFeasibility`, `RegionPass`, `RegionConsequence` and
+  `StableModels::set_region_filter`. A filter could refute regions or decide
+  atoms under an obligation nothing checked. The hybrid route's check of an
+  admitted program's streamed integrity constraints, the only filter in the
+  tree, is now zetesis-stable's own: `StreamedConstraints::new` takes the
+  program's `StreamedCore` and a `ConstraintAllowance`, and
+  `StableModels::set_streamed_constraints` installs it.
+  `Statistics::region_filter` and its `RegionFilterStatistics` remain, as do
+  `Incomplete::RegionFilter`, `InvalidRegionConsequence`, `LateRegionFilter`
+  and `RegionFilterAlreadySet` and their JSON interruption codes, which now
+  report this check and its installer. zetesis-stable now depends on
+  zetesis-themelios, whose streamed core holds the checker; every crate that
+  used zetesis-stable already depended on it.
 
 ## 0.6.0 — 2026-10-14
 

@@ -16,9 +16,9 @@ mod ferraris;
 mod region_filter;
 mod streamed_constraints;
 mod timing;
-pub use region_filter::{
-    RegionConsequence, RegionFeasibility, RegionFilter, RegionFilterStatistics, RegionFilterWorker,
-    RegionPass,
+pub use region_filter::RegionFilterStatistics;
+pub(crate) use region_filter::{
+    RegionConsequence, RegionFeasibility, RegionFilter, RegionFilterWorker, RegionPass,
 };
 pub use streamed_constraints::StreamedConstraints;
 mod checked;

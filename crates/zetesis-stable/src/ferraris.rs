@@ -773,16 +773,15 @@ impl StableModels {
                 .is_some_and(|regions| regions.counts.regions != 0)
     }
 
-    /// Install a caller-owned original-program condition before traversal.
-    /// Certificates may already be prepared. The filter can narrow or refute
-    /// candidate regions; it never participates in frozen-reduct queries.
-    /// Exhaustion then covers the family allowed by this filter as well as
-    /// explicit candidate restrictions. See [`crate::RegionFilter`] for the
-    /// caller's soundness, resource and failure-receipt obligations.
+    /// Install an original-program condition before traversal: the streamed
+    /// constraints, or a test's filter. Certificates may already be prepared.
+    /// The filter can narrow or refute candidate regions; it never participates
+    /// in frozen-reduct queries. Exhaustion then covers the family allowed by
+    /// this filter as well as explicit candidate restrictions.
     ///
     /// # Errors
     /// Refuses a closed or started stream, or replacement.
-    pub fn set_region_filter(
+    pub(crate) fn set_region_filter(
         &mut self,
         filter: std::sync::Arc<dyn crate::RegionFilter>,
     ) -> Result<(), Incomplete> {

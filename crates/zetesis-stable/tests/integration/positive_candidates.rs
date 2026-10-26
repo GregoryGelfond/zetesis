@@ -8,7 +8,7 @@ use zetesis_stable::{
 };
 use zetesis_theory_support::theories::theory;
 
-use crate::support::region_filters::{Condition, Filter, ROUTES, Route, search};
+use crate::support::routes::{ROUTES, Route, search};
 
 fn enable(stream: &mut StableModels) {
     assert!(
@@ -168,50 +168,6 @@ fn restriction_after_delivery_cannot_repeat_the_candidate() {
         assert!(stream.next().is_none());
         assert!(stream.exhausted());
         assert_eq!(stream.statistics().stable_models, 1);
-    }
-}
-
-#[test]
-fn singleton_filter_refutation_establishes_coverage() {
-    let original = cycle(true);
-    for route in ROUTES {
-        let mut stream = search(route, &original, Limits::default(), Cancellation::default());
-        enable(&mut stream);
-        stream
-            .set_region_filter(Filter::new(&original, Condition::ForbidHeld(0)))
-            .unwrap();
-        assert!(stream.next().is_none());
-        assert!(stream.exhausted());
-        assert_eq!(stream.statistics().candidates, 0);
-        let stats = stream.statistics().region_filter.unwrap();
-        assert_eq!(stats.preparations, 1);
-        assert_eq!(stats.refuted, 1);
-        assert_eq!(stats.failed, 0);
-    }
-}
-
-#[test]
-fn singleton_filter_stops_leave_coverage_open() {
-    let original = cycle(true);
-    for route in ROUTES {
-        for (condition, expected) in [
-            (Condition::FailPreparation, Incomplete::RegionFilter),
-            (Condition::FailCheck, Incomplete::RegionFilter),
-            (Condition::Cancel, Incomplete::Cancelled),
-        ] {
-            let mut stream = search(route, &original, Limits::default(), Cancellation::default());
-            enable(&mut stream);
-            stream
-                .set_region_filter(Filter::new(&original, condition))
-                .unwrap();
-            assert!(matches!(stream.next(), Some(Err(found)) if found == expected));
-            assert!(!stream.exhausted());
-            assert_eq!(stream.statistics().candidates, 0);
-            let stats = stream.statistics().region_filter.unwrap();
-            assert_eq!(stats.preparations, 1);
-            assert_eq!(stats.failed, 1);
-            assert_eq!(stats.refuted, 0);
-        }
     }
 }
 
