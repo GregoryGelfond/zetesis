@@ -199,11 +199,19 @@ fn rejected_cheapest_answer(api: GpuApi, resources: &ExecutionResources) {
             [(0, 1)]
         );
         assert!(outcome.optimum_proved());
+        // The region filter's source consequences exclude the invalid cheaper
+        // answer before it is a core answer.
         let receipt = outcome.hybrid_execution().unwrap();
         assert_eq!(
             (receipt.accepted, receipt.rejected, receipt.pending),
-            (1, 1, 0)
+            (1, 0, 0)
         );
+        let filter = outcome
+            .countermodel_statistics()
+            .unwrap()
+            .region_filter
+            .unwrap();
+        assert!(filter.checks > 0);
     }
 }
 
@@ -233,6 +241,8 @@ fn source_failure(api: GpuApi) {
         let failure = session.next().unwrap().unwrap_err();
         assert!(matches!(failure.cause.as_ref(), SolveError::Constraint(_)));
         let outcome = session.outcome().unwrap();
+        // The region filter's own source check stops first, before any
+        // candidate reaches the device: no core answer is published or pending.
         let receipt = outcome.hybrid_execution().unwrap();
         assert_eq!(
             (
@@ -241,9 +251,15 @@ fn source_failure(api: GpuApi) {
                 receipt.rejected,
                 receipt.pending
             ),
-            (1, 0, 0, 1)
+            (0, 0, 0, 0)
         );
-        assert!(outcome.formula_execution().unwrap().gpu_candidates > 0);
+        let filter = outcome
+            .countermodel_statistics()
+            .unwrap()
+            .region_filter
+            .unwrap();
+        assert_eq!(filter.failed, 1);
+        assert_eq!(outcome.formula_execution().unwrap().gpu_candidates, 0);
         assert_eq!((outcome.verified_models(), outcome.scored_models()), (0, 0));
         assert!(!outcome.optimum_proved());
         assert!(!outcome.unsatisfiable());
@@ -329,9 +345,17 @@ fn terminal_families(api: GpuApi) {
         assert_eq!(actual, expected);
         assert_eq!(routes.cpu, 0);
         assert_eq!(routes.tight + routes.general, 1);
+        // The region filter's source consequences exclude the answers holding
+        // b before they are core answers; only accepted ones are reconstructed.
         let core = outcome.hybrid_execution().unwrap();
         let terminal = outcome.terminal_execution().unwrap();
-        assert_eq!((core.accepted, core.rejected, core.pending), (2, 2, 0));
+        assert_eq!((core.accepted, core.rejected, core.pending), (2, 0, 0));
+        let filter = outcome
+            .countermodel_statistics()
+            .unwrap()
+            .region_filter
+            .unwrap();
+        assert!(filter.checks > 0);
         assert_eq!(
             (
                 terminal.base_answers,
