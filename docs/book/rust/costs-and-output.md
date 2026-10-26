@@ -103,7 +103,8 @@ The optional choice strengthening compares certified lower costs with the same
 comparison. A model's certified lower cost never exceeds its cost at any
 priority, so a cost below the incumbent has a lower cost below it too.
 [`RequiredChoiceCosts.lexicographic_lower_bound`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/RequiredChoiceCosts.lean)
-proves this for the inclusive comparison only.
+proves this for the inclusive comparison, and
+`RequiredChoiceCosts.lexicographic_lower_bound_strict` for the strict one.
 
 Source admission also retains checked required-choice groups when the program
 has objectives. These are complete positive head groups with a positive numeric

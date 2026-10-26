@@ -1408,6 +1408,11 @@
 'Zetesis.RequiredChoiceCosts.lower_bound_preserves_answer_sets' depends on axioms: [propext,
  Classical.choice,
  Quot.sound]
+'Zetesis.RequiredChoiceCosts.lexicographic_lower_bound_strict' depends on axioms: [propext, Quot.sound]
+'Zetesis.RequiredChoiceCosts.lower_bound_preserves_candidates_strict' depends on axioms: [propext, Quot.sound]
+'Zetesis.RequiredChoiceCosts.lower_bound_preserves_answer_sets_strict' depends on axioms: [propext,
+ Classical.choice,
+ Quot.sound]
 'Zetesis.RowSteps.marks_are_new_atoms' does not depend on any axioms
 'Zetesis.RowSteps.absorbed_is_union' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.RowSteps.marks_distinct' depends on axioms: [propext, Quot.sound]

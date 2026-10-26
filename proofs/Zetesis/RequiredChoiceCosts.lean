@@ -276,4 +276,55 @@ theorem lower_bound_preserves_answer_sets (theory : Ferraris.Theory α)
       compareVectors (priorities.map exact) (priorities.map ceiling) ≠ .gt) := by
   rw [lower_bound_preserves_candidates priorities lower exact ceiling bounded]
 
+/-- The same holds for the strict comparison, which compiles the same fold
+    with a false initial suffix: if an exact cost vector is strictly below the
+    incumbent, so is its componentwise lower vector. A strict bound's choice
+    strengthening therefore keeps every candidate the strict exact bound keeps. -/
+theorem lexicographic_lower_bound_strict (priorities : List π)
+    (lower exact ceiling : π → Int)
+    (bounded : ∀ priority ∈ priorities, lower priority ≤ exact priority)
+    (below : compareVectors (priorities.map exact) (priorities.map ceiling) = .lt) :
+    compareVectors (priorities.map lower) (priorities.map ceiling) = .lt := by
+  induction priorities with
+  | nil => simp [compareVectors] at below
+  | cons priority priorities ih =>
+    have first := bounded priority (by simp)
+    simp only [List.map_cons, compareVectors] at below ⊢
+    by_cases less : lower priority < ceiling priority
+    · simp [less]
+    · have notExactLess : ¬ exact priority < ceiling priority := by omega
+      by_cases upper : ceiling priority < exact priority
+      · simp [notExactLess, upper] at below
+      · have equalLower : lower priority = ceiling priority := by omega
+        have equalExact : exact priority = ceiling priority := by omega
+        have tail := ih (fun other member => bounded other (by simp [member]))
+        simp only [equalExact, Int.lt_irrefl, ↓reduceIte] at below
+        simpa [equalLower] using tail below
+
+/-- Conjoining the strict lower bound leaves the candidates strictly below the
+    incumbent unchanged. No tie of the incumbent is among them, as the strict
+    bound intends. -/
+theorem lower_bound_preserves_candidates_strict (priorities : List π)
+    (lower exact ceiling : π → Int)
+    (bounded : ∀ priority ∈ priorities, lower priority ≤ exact priority) :
+    (compareVectors (priorities.map exact) (priorities.map ceiling) = .lt ∧
+      compareVectors (priorities.map lower) (priorities.map ceiling) = .lt) ↔
+      compareVectors (priorities.map exact) (priorities.map ceiling) = .lt := by
+  constructor
+  · exact And.left
+  · intro below
+    exact ⟨below, lexicographic_lower_bound_strict priorities lower exact ceiling bounded below⟩
+
+/-- Under the strict comparison too, the lower-bound restriction is conjoined
+    with stability of the original theory, whose reduct it leaves unchanged. -/
+theorem lower_bound_preserves_answer_sets_strict (theory : Ferraris.Theory α)
+    (candidate : Atoms α) (priorities : List π) (lower exact ceiling : π → Int)
+    (bounded : ∀ priority ∈ priorities, lower priority ≤ exact priority) :
+    (Ferraris.Stable candidate theory ∧
+      compareVectors (priorities.map exact) (priorities.map ceiling) = .lt ∧
+      compareVectors (priorities.map lower) (priorities.map ceiling) = .lt) ↔
+    (Ferraris.Stable candidate theory ∧
+      compareVectors (priorities.map exact) (priorities.map ceiling) = .lt) := by
+  rw [lower_bound_preserves_candidates_strict priorities lower exact ceiling bounded]
+
 end Zetesis.RequiredChoiceCosts

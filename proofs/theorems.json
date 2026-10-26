@@ -6750,6 +6750,21 @@
     "line": 269
   },
   {
+    "name": "Zetesis.RequiredChoiceCosts.lexicographic_lower_bound_strict",
+    "file": "Zetesis/RequiredChoiceCosts.lean",
+    "line": 283
+  },
+  {
+    "name": "Zetesis.RequiredChoiceCosts.lower_bound_preserves_candidates_strict",
+    "file": "Zetesis/RequiredChoiceCosts.lean",
+    "line": 307
+  },
+  {
+    "name": "Zetesis.RequiredChoiceCosts.lower_bound_preserves_answer_sets_strict",
+    "file": "Zetesis/RequiredChoiceCosts.lean",
+    "line": 320
+  },
+  {
     "name": "Zetesis.RowSteps.marks_are_new_atoms",
     "file": "Zetesis/RowSteps.lean",
     "line": 52

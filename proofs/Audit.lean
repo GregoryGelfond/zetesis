@@ -1350,6 +1350,9 @@ import Zetesis
 #print axioms Zetesis.RequiredChoiceCosts.lexicographic_lower_bound
 #print axioms Zetesis.RequiredChoiceCosts.lower_bound_preserves_candidates
 #print axioms Zetesis.RequiredChoiceCosts.lower_bound_preserves_answer_sets
+#print axioms Zetesis.RequiredChoiceCosts.lexicographic_lower_bound_strict
+#print axioms Zetesis.RequiredChoiceCosts.lower_bound_preserves_candidates_strict
+#print axioms Zetesis.RequiredChoiceCosts.lower_bound_preserves_answer_sets_strict
 #print axioms Zetesis.RowSteps.marks_are_new_atoms
 #print axioms Zetesis.RowSteps.absorbed_is_union
 #print axioms Zetesis.RowSteps.marks_distinct

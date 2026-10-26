@@ -6751,6 +6751,21 @@
       "name": "Zetesis.RequiredChoiceCosts.lower_bound_preserves_answer_sets"
     },
     {
+      "file": "Zetesis/RequiredChoiceCosts.lean",
+      "line": 283,
+      "name": "Zetesis.RequiredChoiceCosts.lexicographic_lower_bound_strict"
+    },
+    {
+      "file": "Zetesis/RequiredChoiceCosts.lean",
+      "line": 307,
+      "name": "Zetesis.RequiredChoiceCosts.lower_bound_preserves_candidates_strict"
+    },
+    {
+      "file": "Zetesis/RequiredChoiceCosts.lean",
+      "line": 320,
+      "name": "Zetesis.RequiredChoiceCosts.lower_bound_preserves_answer_sets_strict"
+    },
+    {
       "file": "Zetesis/RowSteps.lean",
       "line": 52,
       "name": "Zetesis.RowSteps.marks_are_new_atoms"
@@ -9636,7 +9651,7 @@
     "Zetesis/WorldViews.lean"
   ],
   "source_sha256": {
-    "Audit.lean": "fdb91a901768bf6616b2c01a290d652ed58c01449ae460ece318b2f47a0aa04c",
+    "Audit.lean": "94ea889bdc78631707e9b0e8e6b9e69e0e5515176594517dbae2322bb1f6b47e",
     "Zetesis.lean": "70dd3d25bc69aa0707fe12d8de1af9cdad57bdedf3177c20da1a52652d591a9f",
     "Zetesis/AcyclicEvaluation.lean": "1a9c77283876cf1f61cb92031da04780aada5d0b256f79db5b64bfb6b129d0dc",
     "Zetesis/AdjacencyRows.lean": "38a19b1c74483a157636321a56e95fea660a2192a04c77930d609e411c8d30d4",
@@ -9782,7 +9797,7 @@
     "Zetesis/RegionBounds.lean": "3039f2f8d0d8f166a919007299b443264048c2a98473cd3152cb63853e401baa",
     "Zetesis/RelationExtension.lean": "b14a16ce85275538d71b742aa5889f2c4fd0fbf27710b3b4de4f1b6cb14be2f0",
     "Zetesis/RemainderIntervals.lean": "a053309beddf6c8e3e1ed0b837e4c06b2cdd78bb1ca6c515461e0bf04f060cda",
-    "Zetesis/RequiredChoiceCosts.lean": "58a63df82fa9afed84f58a3600eec45997baa6f1eb9337ac152de611b927ed95",
+    "Zetesis/RequiredChoiceCosts.lean": "055070eb434c9df42c5110cbe89ef5d6b78ed335eb8d17b67c5db8b41036a323",
     "Zetesis/RowSteps.lean": "9490851c801ef1f2d2a5233e75ed0b25dcfbe51778dc2051b9c2965a6189f3cf",
     "Zetesis/RuleFactorization.lean": "1fcd20b2f23dc91c91f9d2a7af2c47df212ef001815e868762c74de6e37b658c",
     "Zetesis/ScalarArithmetic.lean": "f6f6095c5f8c2112e42ce6271acd7979188d51b033d27b63b3388165469159b6",

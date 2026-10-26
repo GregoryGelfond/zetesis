@@ -3392,6 +3392,24 @@ This score reuse is distinct from source priority specialization and from
 constructing a nonnegative candidate bound. It neither substitutes a new
 original theory nor establishes search completion.
 
+The candidate bounds that
+[`ObjectivePlan::bound` and `ObjectivePlan::strict_bound`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/objective_bound.rs)
+compile share one lexicographic fold (`objective_bound/bound.rs`), whose initial
+suffix selects the comparison: true keeps cost at most the incumbent's, false
+keeps cost strictly below it. The optional choice strengthening
+(`objective_bound/choices.rs`) compares certified lower costs through the same
+fold and comparison.
+[`RequiredChoiceCosts.lexicographic_lower_bound`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/RequiredChoiceCosts.lean)
+and `lower_bound_preserves_answer_sets` cover the inclusive comparison;
+`lexicographic_lower_bound_strict`, `lower_bound_preserves_candidates_strict`
+and `lower_bound_preserves_answer_sets_strict` cover the strict one. Under
+either, a componentwise lower cost vector meets the comparison whenever the
+exact vector does, so conjoining the strengthening removes no candidate the exact
+bound keeps and leaves the original theory's stability unchanged. The laws
+compare vectors of one fixed priority order. The fold's node construction, the
+zero for a priority absent from either side, the certified lower costs
+themselves and finite-width arithmetic remain implementation obligations.
+
 For example, `atom a; neg 0; disj 0 1` shares the first node and computes the
 original truth of `a or not a`. This is a query-evaluation law, not permission to
 replace that formula inside the original program: a program transformation must
