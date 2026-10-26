@@ -3960,6 +3960,21 @@
     "line": 212
   },
   {
+    "name": "Zetesis.InnerQuery.exhausted_walk_stable",
+    "file": "Zetesis/InnerQuery.lean",
+    "line": 35
+  },
+  {
+    "name": "Zetesis.InnerQuery.emitted_refutes",
+    "file": "Zetesis/InnerQuery.lean",
+    "line": 43
+  },
+  {
+    "name": "Zetesis.InnerQuery.exhausted_walk_decides",
+    "file": "Zetesis/InnerQuery.lean",
+    "line": 58
+  },
+  {
     "name": "Zetesis.IntegerEnvelopes.path_bound",
     "file": "Zetesis/IntegerEnvelopes.lean",
     "line": 45

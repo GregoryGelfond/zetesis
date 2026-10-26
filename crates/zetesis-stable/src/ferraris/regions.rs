@@ -312,6 +312,32 @@ pub struct RegionWorkerStatistics {
     pub engagement_delay: Option<std::time::Duration>,
     /// Whether and when the walk engaged its workers, and what it did before.
     pub engagement: RegionWalkEngagement,
+    /// The candidates' proper-subset queries the workers divided among
+    /// themselves.
+    pub query_division: QueryDivisionStatistics,
+}
+
+/// The proper-subset queries a parallel region walk published for any of its
+/// workers to serve, and who served their regions. The counts are current
+/// while the workers run. A query's regions narrowed before its publication
+/// are its publisher's, counted with every query's regions in the reduct
+/// statistics' regions, as are the regions served here.
+#[non_exhaustive]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct QueryDivisionStatistics {
+    /// The division the walk ran with.
+    pub division: super::QueryDivision,
+    /// Queries whose pending regions were published.
+    pub published: u64,
+    /// Published regions a worker narrowed. A region taken once its query
+    /// was decided is dropped without a narrowing and not counted.
+    pub served: u64,
+    /// The served regions a worker took from a peer's deque.
+    pub stolen: u64,
+    /// The workers that served at least one published region.
+    pub servers: usize,
+    /// The most published regions any one worker served.
+    pub peak_served: u64,
 }
 
 /// Whether a parallel region walk engaged its workers. The record is frozen
@@ -1223,6 +1249,36 @@ impl<'a> ReductQuery<'a> {
         statistics: &mut crate::Statistics,
         scratch: &mut NarrowingScratch,
     ) -> Result<crate::Check, Incomplete> {
+        match self.check_publishing(
+            subject,
+            candidate,
+            limits,
+            budget,
+            (statistics, scratch),
+            &mut Inline,
+        )? {
+            Queried::Decided(check) => Ok(check),
+            Queried::Published(never) => match never {},
+        }
+    }
+
+    /// [`Self::check`], asking `publication` before each narrowing whether to
+    /// publish the query's pending regions for other workers to serve. A
+    /// publication takes every pending region, the one about to be narrowed
+    /// included, and ends the query here undecided; a declined one is not
+    /// offered again, and the query continues inline to its verdict.
+    ///
+    /// # Errors
+    /// Work, decision and control stops end the query without a verdict.
+    pub(crate) fn check_publishing<Q: Quota, P: Publication>(
+        self,
+        subject: FrozenSubject<'_>,
+        candidate: &Interpretation,
+        limits: crate::Limits,
+        budget: &mut Budget<'_, Q>,
+        (statistics, scratch): (&mut crate::Statistics, &mut NarrowingScratch),
+        publication: &mut P,
+    ) -> Result<Queried<P::Receipt>, Incomplete> {
         let truth = subject.truth();
         let (theory, narrower) = self.index.subject(subject.theory())?;
         if !theory.same_instance(candidate.theory()) {
@@ -1233,9 +1289,14 @@ impl<'a> ReductQuery<'a> {
             root.cut(atom);
         }
         let mut traversal = Traversal::with_state(root, Counting::Never, narrower.knowledge());
+        let mut offered = false;
         loop {
             let before = traversal.statistics();
             let visit = traversal.next(|region, knowledge| {
+                if !offered && publication.due() {
+                    // Before the narrowing: the region stays pending.
+                    return Err(Interrupt::Publish);
+                }
                 narrow_frozen(
                     narrower,
                     FrozenSubject::new(theory, truth),
@@ -1245,6 +1306,7 @@ impl<'a> ReductQuery<'a> {
                     budget,
                     &mut statistics.reduct.regions,
                 )
+                .map_err(Interrupt::Stopped)
             });
             let after = traversal.statistics();
             let counts = &mut statistics.reduct.regions;
@@ -1254,9 +1316,18 @@ impl<'a> ReductQuery<'a> {
             for _ in 0..after.splits_since(before) {
                 budget.decide()?;
             }
-            match visit? {
-                None | Some(Visit::Counted(..)) => return Ok(crate::Check::Stable),
-                Some(Visit::Leaf(region, _)) => {
+            match visit {
+                Err(Interrupt::Stopped(error)) => return Err(error),
+                Err(Interrupt::Publish) => {
+                    offered = true;
+                    if let Some(receipt) = publication.publish(truth, candidate, &mut traversal) {
+                        return Ok(Queried::Published(receipt));
+                    }
+                }
+                Ok(None | Some(Visit::Counted(..))) => {
+                    return Ok(Queried::Decided(crate::Check::Stable));
+                }
+                Ok(Some(Visit::Leaf(region, _))) => {
                     // The candidate models its own reduct and is no
                     // countermodel; every other leaf is a proper subset.
                     if candidate.atoms().all(|atom| region.is_held(atom)) {
@@ -1265,10 +1336,133 @@ impl<'a> ReductQuery<'a> {
                     let subset = leaf_interpretation(theory, &region)?;
                     return crate::ferraris::checked_countermodel(
                         theory, candidate, subset, limits, budget, statistics,
-                    );
+                    )
+                    .map(Queried::Decided);
                 }
             }
         }
+    }
+
+    /// Narrow one region of a published query of `candidate`, a classical
+    /// model whose node truth is `truth`, in place, as the inline query
+    /// narrows its regions: from the knowledge the region carries, its
+    /// parent's under the same narrower and frozen mask. The region is counted
+    /// as the inline query counts it, a split charges one decision, and a leaf
+    /// other than the candidate is validated before it is returned.
+    ///
+    /// # Errors
+    /// A stopped narrowing or decision, an invalid leaf, or a countermodel's
+    /// validation refused or stopped. The region is then undecided: it may
+    /// hold a countermodel.
+    pub(crate) fn serve<Q: Quota>(
+        self,
+        truth: &[bool],
+        candidate: &Interpretation,
+        (region, knowledge): (&mut Region, &mut Knowledge),
+        limits: crate::Limits,
+        budget: &mut Budget<'_, Q>,
+        (statistics, scratch): (&mut crate::Statistics, &mut NarrowingScratch),
+    ) -> Result<Served, Incomplete> {
+        let (theory, narrower) = self.index.subject(candidate.theory())?;
+        let narrowing = narrow_frozen(
+            narrower,
+            FrozenSubject::new(theory, truth),
+            region,
+            knowledge,
+            scratch,
+            budget,
+            &mut statistics.reduct.regions,
+        )?;
+        let counts = &mut statistics.reduct.regions;
+        counts.regions += 1;
+        if narrowing == Narrowing::Refuted {
+            counts.refuted += 1;
+            return Ok(Served::Empty);
+        }
+        let Some(atom) = region.split_atom() else {
+            counts.leaves += 1;
+            if candidate.atoms().all(|atom| region.is_held(atom)) {
+                return Ok(Served::Empty);
+            }
+            let subset = leaf_interpretation(theory, region)?;
+            return crate::ferraris::validated_countermodel(
+                theory, candidate, subset, limits, budget, statistics,
+            )
+            .map(Served::Countermodel);
+        };
+        budget.decide()?;
+        Ok(Served::Split(atom))
+    }
+}
+
+/// Where an inline proper-subset query may hand its pending regions to other
+/// workers: asked before each narrowing whether to publish, and then offered
+/// the traversal.
+pub(crate) trait Publication {
+    /// What a published query returns to the check's caller.
+    type Receipt;
+
+    /// Whether to publish before the query's next narrowing.
+    fn due(&mut self) -> bool;
+
+    /// Take every pending region of `traversal`, the query of `candidate`
+    /// under node truth `truth`, and return the receipt; or decline, leaving
+    /// the traversal as it is.
+    fn publish(
+        &mut self,
+        truth: &[bool],
+        candidate: &Interpretation,
+        traversal: &mut Traversal<Knowledge>,
+    ) -> Option<Self::Receipt>;
+}
+
+/// The query runs to its verdict where it started.
+pub(crate) struct Inline;
+
+impl Publication for Inline {
+    type Receipt = std::convert::Infallible;
+
+    fn due(&mut self) -> bool {
+        false
+    }
+
+    fn publish(
+        &mut self,
+        _: &[bool],
+        _: &Interpretation,
+        _: &mut Traversal<Knowledge>,
+    ) -> Option<Self::Receipt> {
+        None
+    }
+}
+
+/// What a membership check whose query may be published ends in.
+pub(crate) enum Queried<R> {
+    /// The check decided the candidate.
+    Decided(crate::Check),
+    /// The query's pending regions were published, and other workers decide it.
+    Published(R),
+}
+
+/// What one served region of a published query came to.
+pub(crate) enum Served {
+    /// Refuted, or the candidate's own leaf: no countermodel lies in it.
+    Empty,
+    /// A validated countermodel: the candidate is not stable.
+    Countermodel(Interpretation),
+    /// To be split on this open atom, its decision charged.
+    Split(usize),
+}
+
+/// Why the query's traversal stopped before a narrowing.
+enum Interrupt {
+    Stopped(Incomplete),
+    Publish,
+}
+
+impl From<Stop> for Interrupt {
+    fn from(stop: Stop) -> Self {
+        Self::Stopped(stop.into())
     }
 }
 

@@ -792,6 +792,9 @@ import Zetesis
 #print axioms Zetesis.Refinement.IndexedEvaluation.roots_exact
 #print axioms Zetesis.Refinement.IndexedEvaluation.satisfies_reduct_exact
 #print axioms Zetesis.Refinement.IndexedEvaluation.satisfies_reduct_iff
+#print axioms Zetesis.InnerQuery.exhausted_walk_stable
+#print axioms Zetesis.InnerQuery.emitted_refutes
+#print axioms Zetesis.InnerQuery.exhausted_walk_decides
 #print axioms Zetesis.IntegerEnvelopes.path_bound
 #print axioms Zetesis.IntegerEnvelopes.anchored_envelope
 #print axioms Zetesis.IntegerEnvelopes.addition_envelope

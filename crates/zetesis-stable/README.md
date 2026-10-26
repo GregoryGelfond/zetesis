@@ -414,6 +414,22 @@ begun, unengaged (on the calling thread) or engaged. One worker is the scalar
 regions walk. This particular operation does not use the batched protocol,
 since its workers decide their leaves themselves.
 
+A leaf's proper-subset query that runs, from its first narrowing, for the cost
+of engaging one worker while another waits idle is divided among the workers,
+as `StableModels::set_query_division` selects before the walk begins
+(`QueryDivision::WhenIdle` by default, `Immediate` or `Never`). The query stops
+before a narrowing and publishes its pending regions to its worker's deque of
+published regions; any worker serves them on its own reduct workspace and
+lease, its own published regions before its candidate regions and a peer's
+oldest published region before a peer's oldest candidate region. A validated
+countermodel refutes the candidate, and the last region resolved without one
+proves it stable; the leaf counts as unresolved in the walk until then, and a
+stop, or a countermodel whose check stopped, never yields a stable verdict. The
+coordinator publishes only once its engagement deadline has passed, and then
+starts the workers. Answer sets are the same under every division; the region
+statistics' `query_division` reports the division, the queries published, and
+the published regions served and stolen.
+
 Each deque has its own mutex: taking a worker's own region locks only that
 deque, a split publication locks it and then, after releasing it and only while
 a worker is idle, the idle gate to wake one, and a thief skips a busy peer. A
@@ -429,7 +445,8 @@ exhaustion.
 
 A worker's depth-first walk keeps at most one older sibling per ancestor and
 the two newest children, and it steals only with an empty deque, so each deque
-holds at most `atom_count + 1` regions. Deque storage grows with the observed
+holds at most `atom_count + 1` regions; its deque of published regions holds one
+query's at a time, at most the candidate's atoms plus one. Deque storage grows with the observed
 depth and is released after joining. This does not bound total process memory.
 
 `StableModels::with_region_producers` instead retains its region preparation

@@ -69,7 +69,7 @@ fn a_resolution_to_zero_wakes_the_idle_and_leaves_the_walk_open() {
     let (done, result) = mpsc::sync_channel(1);
     std::thread::scope(|scope| {
         scope.spawn(|| {
-            let _ = done.send(frontier.wait_for_work(Duration::from_mins(1), |_| None));
+            let _ = done.send(frontier.wait_for_work(Duration::from_mins(1), |_| None::<Entry>));
         });
         // The waiter registers under the gate and releases it only by waiting,
         // so the resolution's wake, which takes the gate, reaches it.

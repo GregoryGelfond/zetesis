@@ -76,6 +76,12 @@ disjunctive encoding, whose control rules run through disjunctively chosen
 companies. Its constants choose the holding and its size, and it is selected and
 qualified like the 2QBF workload.
 
+The [parity](two-qbf-parity/README.md), [Tseitin](two-qbf-tseitin/README.md)
+and [pigeonhole](two-qbf-pigeonhole/README.md) 2QBF workloads put a hard
+unsatisfiable core on the universal side, so one candidate's proper-subset query
+carries the solve. Their constants choose the core and its size, and they are
+selected and qualified like the 2QBF workload.
+
 ## Run an example
 
 From the repository root, using the installed solver:

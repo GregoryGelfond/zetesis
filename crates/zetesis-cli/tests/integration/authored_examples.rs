@@ -96,6 +96,24 @@ fn strategic_companies_default_satisfies_its_complete_contract() {
 }
 
 #[test]
+fn two_qbf_parity_default_satisfies_its_complete_contract() {
+    // One candidate's proper-subset query refutes a parity contradiction.
+    check_bundle("scalability/two-qbf-parity");
+}
+
+#[test]
+fn two_qbf_tseitin_default_satisfies_its_complete_contract() {
+    // One candidate's proper-subset query refutes a Tseitin contradiction.
+    check_bundle("scalability/two-qbf-tseitin");
+}
+
+#[test]
+fn two_qbf_pigeonhole_default_satisfies_its_complete_contract() {
+    // Every candidate's proper-subset query searches a pigeonhole core.
+    check_bundle("scalability/two-qbf-pigeonhole");
+}
+
+#[test]
 fn memory_override_reaches_the_explicit_solve_options() {
     use zetesis_cli::Invocation;
     let profile = scalability::profiles(Some(300_000_000))[0];

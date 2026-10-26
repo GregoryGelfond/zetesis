@@ -76,6 +76,13 @@ reduct at `J` asks another question. A reduct-satisfaction operation can test an
 interpretation `J`; the membership algorithm is responsible for restricting
 its countermodel search to proper subsets.
 
+The search for `J` may be divided among workers. Each tests its own regions of
+`M`'s proper subsets against the same frozen `Tᴹ`, so the verdict does not
+depend on which worker tested which region: any countermodel found refutes `M`,
+and `M` is an answer set only once every region has been searched without one.
+A search stopped by a resource ceiling, a cancellation, or a countermodel whose
+check could not finish claims neither.
+
 The general path supports finite formulas encoding admitted choices and
 aggregates. These constructs require their own source-to-formula preservation
 arguments. Classical equivalence of two aggregate expressions is insufficient:

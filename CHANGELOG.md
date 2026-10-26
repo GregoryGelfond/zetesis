@@ -105,6 +105,24 @@ Notable changes by release. Versions follow Semantic Versioning.
   every `publish_regions` regions visited. `SolveConfig::share_learned_rows`, on
   by default, turns sharing off for measurement; it has no command-line flag.
   Answer sets are unchanged; work counts depend on the schedule under sharing.
+- Three 2QBF workloads put a hard unsatisfiable core on the universal side of
+  the saturation encoding, so that one candidate's proper-subset query is the
+  solve: a parity contradiction, Tseitin's formula on committed 3-regular
+  graphs, and the pigeonhole formula. Each records its complete default
+  contract, and the oracle gate checks their families against clingo.
+- `QueryDivision` in zetesis-stable selects when a parallel region walk divides
+  a candidate's proper-subset query among its workers: `WhenIdle`, the default,
+  `Immediate`, for tests and measurement, or `Never`.
+  `StableModels::set_query_division` sets it before the walk begins, and
+  zetesis-solve re-exports it and carries it in `SolveConfig::query_division`;
+  the command has no flag for it.
+- `RegionWorkerStatistics::query_division` (`QueryDivisionStatistics`) reports
+  the division a walk ran with, the queries it published, the published regions
+  its workers served and stole, the workers that served any and the most one
+  served, in the human statistics' `query division` line and the statistics
+  JSON's `search.candidate_regions.workers.query_division` object.
+- zetesis-cpu's `Traversal::pending` and `Traversal::surrender` report and hand
+  over a traversal's regions still to visit, the oldest first.
 
 ### Changed
 
@@ -262,6 +280,17 @@ Notable changes by release. Versions follow Semantic Versioning.
   (`SemanticOutcome::optimum_proved`) and reports the family incomplete.
   `SolveConfig::optimum_search` selects the schedule; no command-line option
   does.
+- With several CPU region workers, a candidate's proper-subset query that runs,
+  from its first narrowing, for the cost of engaging one worker while another
+  waits idle publishes its pending regions for any worker to serve, and the
+  candidate is decided by the regions' servers: refuted by a validated
+  countermodel, or proved stable once every region is resolved without one. The
+  calling thread publishes its query only once its engagement deadline has
+  passed, and then starts the workers. Answer sets are unchanged; a stop or a
+  countermodel whose check stopped still ends the enumeration incomplete. A
+  refuted query's regions, divided, may be narrowed beyond those the undivided
+  query visits, so the reduct statistics' region counts of such queries depend
+  on the schedule.
 
 ### Fixed
 
@@ -392,6 +421,9 @@ Notable changes by release. Versions follow Semantic Versioning.
   `ExecutionObservation` needs an arm for the variant.
 - The JSON `outcome.optimization.tied_models` is `null` when a strict bound
   pruned the optimum's ties, where it was always a number.
+- `SolveConfig` has a new public field, `query_division`. A struct literal that
+  names every field must add it; one completed from `SolveConfig::default()` or
+  `SolveConfig::for_allowance` needs no change.
 
 ## 0.6.0 — 2026-10-14
 

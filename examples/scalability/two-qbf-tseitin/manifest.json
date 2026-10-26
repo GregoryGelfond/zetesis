@@ -1,0 +1,30 @@
+{
+  "schema_version": 1,
+  "root": ".",
+  "cases": [
+    {
+      "entry": "two_qbf_tseitin.lp",
+      "contract": {
+        "satisfiability": "sat",
+        "family": "all",
+        "model_count": 1,
+        "cost": null,
+        "witnesses": [
+          ["nx(1)", "nx(2)"]
+        ],
+        "required_symbols": [],
+        "notes": [
+          "Two existential variables; the core is Tseitin's parity formula on the committed 3-regular graph on 12 vertices (18 universal variables, 48 clauses) with an odd total charge. The first existential assignment gets the whole contradiction, the other three lose one clause each.",
+          "Every answer set is saturated, so membership needs the complete check that no universal assignment satisfies its core: the frozen reduct's proper-subset query. On 24 vertices the subset queries walk about 56,000 regions."
+        ]
+      },
+      "files": [
+        {
+          "path": "two_qbf_tseitin.lp",
+          "sha256": "7c18fe0f648b6d74ba4979e691d5e73ecd2e4074365da199fdef0f8f0710ad5b",
+          "includes": []
+        }
+      ]
+    }
+  ]
+}

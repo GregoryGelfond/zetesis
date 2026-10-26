@@ -22,7 +22,7 @@
 
 use std::num::NonZeroUsize;
 
-use crate::{Backend, GpuBatching, Grounder, Oracle, SolveConfig, SourceBatching};
+use crate::{Backend, GpuBatching, Grounder, Oracle, QueryDivision, SolveConfig, SourceBatching};
 use zetesis_themelios::{
     AdmissionOptions, BundleLimits, ExpansionLimits, FormulaLimits, ProgramAdmissionOptions,
     observation,
@@ -114,6 +114,7 @@ impl Resources {
             batch_size: DEFAULT_BATCH_SIZE,
             gpu_batching: GpuBatching::DEFAULT,
             workers: self.workers,
+            query_division: QueryDivision::WhenIdle,
             completion_workers: NonZeroUsize::MIN,
             max_reduct_bytes: self.bytes(32) as u64,
             max_completion_scratch_bytes: self.bytes(8) as u64,

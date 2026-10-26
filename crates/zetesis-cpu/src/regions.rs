@@ -453,6 +453,23 @@ impl<S: Clone> Traversal<S> {
         self.statistics
     }
 
+    /// The regions still to visit.
+    #[must_use]
+    pub fn pending(&self) -> usize {
+        self.regions.len()
+    }
+
+    /// Surrender the regions still to visit with their state, the oldest
+    /// first, so the last is the one the next visit would narrow. They and the
+    /// regions already visited partition the root, so a walker that visits
+    /// every surrendered region, by any narrowing the traversal could have
+    /// used, covers the rest of the tree. A region whose narrowing stopped is
+    /// among them, as a stop keeps it. The traversal is left with none, so its
+    /// next visit ends it, and its statistics keep what it visited.
+    pub fn surrender(&mut self) -> Vec<(Region, S)> {
+        std::mem::take(&mut self.regions)
+    }
+
     /// Narrow regions until one is a leaf or is counted; `None` once every
     /// region has been visited. The narrowing's failure type is the caller's;
     /// a failed reservation for the split is reported as `Stop::Allocation`.

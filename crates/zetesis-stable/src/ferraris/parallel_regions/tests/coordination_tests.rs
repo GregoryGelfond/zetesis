@@ -92,6 +92,14 @@ fn wait_for_work(shared: &Shared, index: usize, timeout: Duration) -> Option<Ent
         .wait_for_work(timeout, |_| shared.frontier.steal(index))
 }
 
+/// The candidate region a worker took, where only candidate regions exist.
+fn region(work: Work) -> Entry {
+    match work {
+        Work::Region(entry) => entry,
+        Work::Published(..) => panic!("no query was published"),
+    }
+}
+
 fn report() -> WorkerReport {
     WorkerReport {
         regions: RegionCounts::default(),
@@ -110,11 +118,11 @@ fn a_split_preserves_both_children_and_counts_the_net_gain() {
     let stepped = step(
         &search.shared,
         &original,
-        root,
-        0,
+        (root, 0),
         &mut Workspaces::new(),
         &mut budget,
         &mut report,
+        Timing::Inline,
     )
     .unwrap();
     assert!(matches!(stepped, Stepped::Split));
@@ -183,11 +191,11 @@ fn a_split_overwrites_retired_knowledge() {
         step(
             &search.shared,
             &original,
-            root,
-            0,
+            (root, 0),
             &mut workspaces,
             &mut budget,
             &mut report,
+            Timing::Inline,
         )
         .unwrap(),
         Stepped::Split
@@ -225,11 +233,11 @@ fn a_split_overwrites_retired_knowledge() {
         step(
             &search.shared,
             &original,
-            cut,
-            0,
+            (cut, 0),
             &mut workspaces,
             &mut budget,
             &mut report,
+            Timing::Inline,
         )
         .unwrap(),
         Stepped::Resolved(None)
@@ -241,11 +249,11 @@ fn a_split_overwrites_retired_knowledge() {
         step(
             &search.shared,
             &original,
-            held,
-            0,
+            (held, 0),
             &mut workspaces,
             &mut budget,
             &mut report,
+            Timing::Inline,
         )
         .unwrap(),
         Stepped::Split
@@ -259,11 +267,11 @@ fn a_split_overwrites_retired_knowledge() {
             step(
                 &search.shared,
                 &original,
-                child,
-                0,
+                (child, 0),
                 &mut workspaces,
                 &mut budget,
                 &mut report,
+                Timing::Inline,
             )
             .unwrap(),
             Stepped::Resolved(_)
@@ -321,7 +329,7 @@ fn idle_thief_after(end: impl FnOnce(&Shared)) -> Option<Entry> {
     // must fail at `WAIT` rather than wait for it. Its send can find the
     // receiver gone only after that failure, so the result is not needed.
     std::thread::spawn(move || {
-        let _ = done.send(find_work(&shared, 1, IDLE));
+        let _ = done.send(find_work(&shared, 1, IDLE).map(region));
     });
     // Time for the thief to spin out its rounds and start waiting, so the
     // walk ends while it waits; a thief that has not yet waited finds the
@@ -364,11 +372,11 @@ fn an_idle_worker_takes_a_region_published_while_it_waits() {
     let stepped = step(
         &search.shared,
         &original,
-        root,
-        0,
+        (root, 0),
         &mut Workspaces::new(),
         &mut budget(&search.shared),
         &mut report(),
+        Timing::Inline,
     )
     .unwrap();
     assert!(matches!(stepped, Stepped::Split));
@@ -398,11 +406,11 @@ fn split_next(shared: &Shared, original: &IndexedTheory, index: usize) {
     let stepped = step(
         shared,
         original,
-        entry,
-        index,
+        (entry, index),
         &mut Workspaces::new(),
         &mut budget,
         &mut report(),
+        Timing::Inline,
     )
     .unwrap();
     assert!(matches!(stepped, Stepped::Split));
@@ -419,7 +427,7 @@ fn an_owner_and_thief_acquire_distinct_split_children() {
             search.shared.frontier.take_local(0).unwrap()
         });
         start.wait();
-        let stolen = find_work(&search.shared, 1, IDLE_WAIT).unwrap();
+        let stolen = find_work(&search.shared, 1, IDLE_WAIT).map(region).unwrap();
         (local.join().unwrap(), stolen)
     });
     assert!(local.0.is_held(0));
@@ -483,7 +491,7 @@ fn children_become_stealable_after_the_split_commit() {
             Err(TryLockError::WouldBlock)
         ));
         release.send(()).unwrap();
-        let stolen = find_work(&search.shared, 1, IDLE_WAIT).unwrap();
+        let stolen = find_work(&search.shared, 1, IDLE_WAIT).map(region).unwrap();
         assert!(stolen.0.is_held(0));
         assert_eq!(outstanding(&search.shared), 2);
         publisher.join().unwrap().unwrap();
@@ -870,11 +878,11 @@ fn a_worker_splits_the_root_on_the_original_choice_head() {
     let stepped = step(
         &search.shared,
         &original,
-        root,
-        0,
+        (root, 0),
         &mut Workspaces::new(),
         &mut budget(&search.shared),
         &mut report(),
+        Timing::Inline,
     )
     .unwrap();
     assert!(matches!(stepped, Stepped::Split));
