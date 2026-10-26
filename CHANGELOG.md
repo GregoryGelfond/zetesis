@@ -334,7 +334,7 @@ Notable changes by release. Versions follow Semantic Versioning.
   Eligible acyclic normal programs can be evaluated during preparation.
   Answer sets and optima are unchanged; search order and bounded work can differ.
   See [membership plans](docs/book/rust/sessions.md#formula-membership-plans) and
-  [parallel walks](crates/zetesis-sat/README.md#walking-the-tree-with-several-workers).
+  [parallel walks](crates/zetesis-stable/README.md#walking-the-tree-with-several-workers).
 - Metered operations check cancellation at entry, exit, resource refusals and
   256-unit work boundaries. Work and storage receipts reflect the new execution
   routes, so resource ceilings can be reached at different points. See

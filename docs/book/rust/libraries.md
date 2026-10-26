@@ -134,7 +134,7 @@ and [resource contracts](outcomes.md#resource-contracts).
 | Exhaustive `zetesis_ferraris::AdmissionError` matches | Handle `ThresholdShape`, `ThresholdMeasure`, `NumericShape`, `NumericDomain`, `OrdinalRank` and `OrdinalCut`. These distinguish numeric shape/measure refusals from allocation and configured limits. |
 | Calling `zetesis_ferraris::Knowledge::preferred_atom_reserved` | Pass `&ChoiceHeads` before cancellation. `ChoiceHeads::default()` preserves the previous ranking; `Extraction::choice_heads` supplies the extracted choice heads. `OriginalSubject::with_choices` selects the same ranking for narrowing that chooses its own split. |
 | Constructing or destructuring `zetesis_sat::RegionSearchStatistics` | It now has `workers` and is non-exhaustive. Construct with `Default::default()` and assign fields; destructure with `..`. The new `RegionWorkerStatistics` is also non-exhaustive. |
-| Selecting or matching worker engagement | `StableModels::with_region_workers_engaging` accepts `Engagement`; `Immediate` starts workers at the first pull. `Engagement` and the reported `RegionWalkEngagement` are non-exhaustive, so external matches need a fallback arm. See [parallel walks](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-sat/README.md#walking-the-tree-with-several-workers). |
+| Selecting or matching worker engagement | `StableModels::with_region_workers_engaging` accepts `Engagement`; `Immediate` starts workers at the first pull. `Engagement` and the reported `RegionWalkEngagement` are non-exhaustive, so external matches need a fallback arm. See [parallel walks](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-stable/README.md#walking-the-tree-with-several-workers). |
 | Exhaustive `zetesis_cli::RunError` or `zetesis_validation::performance::matrix::Decision` matches | Handle `GpuExecutableUnavailable`, meaning the installed CPU front could not run its GPU executable. This remains separate from unavailable compiled backend support. |
 | Exhaustive `zetesis_validation::curated::Error` or `zetesis_validation::examples::Error` matches | Handle `Irregular(PathBuf)` for a resolved input that is not a regular file. These cases previously used `Path`; that variant still reports paths outside the selected root. |
 | Injecting a diagnostics writer whose behavior depends on write-call boundaries | Records and styled diagnostic lines now reach `write_all` as complete units. Bytes are unchanged; see [writer boundaries](outcomes.md#diagnostic-writer-boundaries). |
@@ -162,7 +162,7 @@ The following helpers were public in 0.5.0 and are now crate-private:
 | `zetesis-cpu` | `CONSTRAINT_HEAD`, `InstanceAtomIter` |
 | `zetesis-engine` | `OutputLimits::for_resources` |
 | `zetesis-maintenance` | `is_record` |
-| `zetesis-sat` | `CompletionExecutor::DEFAULT_SCRATCH_BYTES`, `ReductPreparationLimits::DEFAULT_BYTES` |
+| zetesis-sat (now `zetesis-stable`) | `CompletionExecutor::DEFAULT_SCRATCH_BYTES`, `ReductPreparationLimits::DEFAULT_BYTES` |
 | `zetesis-themelios` | `SourceBundle::working_directory`, `Encoded::into_text`, `ProgramSite::with_location`, `ProgramSite::with_statement` |
 | `zetesis-validation` | `Contract::with_witnesses`, `Contract::optimal_family`, `Capture::stderr_text`, `process::invoke_supervised_with_cancellation` |
 | `zetesis-wgpu` | `GpuLazyOracle::check_batch_with_source`, `GpuTightOracle::from_context_with_support` |
