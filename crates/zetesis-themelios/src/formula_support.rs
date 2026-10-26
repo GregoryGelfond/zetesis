@@ -650,46 +650,35 @@ fn complete(
             let kept = std::mem::take(&mut retained);
             let support = Support::indexed_retaining(&relations, kept, limits, counters, fallback)?;
             counters.observe_work(Event::SupportProductionWork, |counters| {
-                while let Some(index) = selected {
+                while let Some((index, deferred)) = next_producer(
+                    selected,
+                    &mut facts,
+                    (&producers, &mut delta, &support),
+                    (limits, counters, fallback),
+                )? {
                     if let Some(facts) = &mut facts {
                         facts.before_rule(index, &mut delta, &support, limits, counters)?;
                     }
                     let rule = &prepared.rules_without_facts()[index];
                     counters.work(limits, rule.location)?;
                     counters.record(Event::SupportProducerVisit);
-                    let mut variants =
-                        producers.variants(index, rule, &support, rounds == 1, limits, counters)?;
-                    let mut computation = Computation::new(&mut delta, &support);
-                    let candidates = domains
-                        .map(|domains| domains.for_rule(index, rule))
-                        .transpose()?
-                        .flatten();
-                    let totality = domains
-                        .map(|domains| domains.total_body(index, rule))
-                        .transpose()?
-                        .flatten();
-                    let guards = match candidates {
-                        Some(candidates) => support.domain_guards(
-                            rule,
-                            candidates,
-                            &computation,
-                            limits,
-                            counters,
-                        )?,
-                        None => None,
+                    let mut variants = if deferred {
+                        counters.record(Event::SupportRichTraversal);
+                        delta::traversal(rule, &support, true)
+                    } else {
+                        producers.variants(index, rule, &support, rounds == 1, limits, counters)?
                     };
-                    derive_variants(
-                        rule,
+                    let round = (&mut delta, &support, domains);
+                    produce(
+                        (index, rule),
                         &mut variants,
-                        (guards.as_ref(), totality),
-                        &support,
+                        round,
                         budget,
-                        Context::new(&mut computation, limits, counters, rule.location),
+                        (limits, counters),
                     )?;
-                    selected = schedule.next(limits, counters, fallback)?;
-                }
-                if let Some(facts) = facts {
-                    facts.finish(&mut delta, &support, limits, counters)?;
+                    if !deferred {
+                        selected = schedule.next(limits, counters, fallback)?;
+                    }
                 }
                 Ok::<_, FormulaFailure>(())
             })?;
@@ -703,6 +692,12 @@ fn complete(
             )?
         };
         if !changed {
+            // An unchanged round decides every component no deferred producer
+            // still feeds, so the earliest waiting producer was traversed.
+            debug_assert!(
+                !producers.pending(),
+                "a deferred producer was not traversed"
+            );
             return finish(
                 (catalog, producers, retained),
                 GroundingWork::new(limits, counters, fallback),
@@ -710,6 +705,71 @@ fn complete(
         }
         catalog.publish(limits, counters, fallback)?;
     }
+}
+
+/// The round's next producer: the schedule's, then, once it is exhausted and
+/// the facts are in, each deferred rich producer whose read components reached
+/// their fixed point, flagged so its caller traverses it in full.
+fn next_producer<'source>(
+    selected: Option<usize>,
+    facts: &mut Option<facts::FirstRound<'_>>,
+    (producers, delta, support): (
+        &producers::Producers<'_>,
+        &mut SupportAppend<'source>,
+        &Support<'source>,
+    ),
+    (limits, counters, location): (&FormulaLimits, &mut Counters, ProgramSite),
+) -> Result<Option<(usize, bool)>, FormulaFailure> {
+    if let Some(index) = selected {
+        return Ok(Some((index, false)));
+    }
+    if let Some(facts) = facts.take() {
+        facts.finish(delta, support, limits, counters)?;
+    }
+    let ready = match producers.take_ready() {
+        Some(index) => Some(index),
+        None if producers.mark_ready(delta, limits, counters, location)? => producers.take_ready(),
+        None => None,
+    };
+    Ok(ready.map(|index| (index, true)))
+}
+
+/// Derive one producer's variants into this round's pending atoms, under the
+/// rule's domain guards and static totality when the analysis supplies them.
+fn produce<'source>(
+    (index, rule): (usize, &'source crate::formula_ir::RuleIr),
+    variants: &mut delta::Variants<'_, '_>,
+    (delta, support, domains): (
+        &mut SupportAppend<'source>,
+        &Support<'source>,
+        Option<&crate::formula_domains::Domains<'_>>,
+    ),
+    budget: &mut Budget,
+    (limits, counters): (&FormulaLimits, &mut Counters),
+) -> Result<(), FormulaFailure> {
+    let mut computation = Computation::new(delta, support);
+    let candidates = domains
+        .map(|domains| domains.for_rule(index, rule))
+        .transpose()?
+        .flatten();
+    let totality = domains
+        .map(|domains| domains.total_body(index, rule))
+        .transpose()?
+        .flatten();
+    let guards = match candidates {
+        Some(candidates) => {
+            support.domain_guards(rule, candidates, &computation, limits, counters)?
+        }
+        None => None,
+    };
+    derive_variants(
+        rule,
+        variants,
+        (guards.as_ref(), totality),
+        support,
+        budget,
+        Context::new(&mut computation, limits, counters, rule.location),
+    )
 }
 
 /// Prepare the next wake set only after the complete pending population has its

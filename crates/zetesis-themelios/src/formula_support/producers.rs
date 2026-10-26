@@ -32,6 +32,7 @@ use zetesis_core::{
 
 use super::delta::{self, Variants};
 use super::relations::Memory;
+use super::relations::SupportAppend;
 use super::{Counters, Support, SupportCatalog};
 use crate::formula_domains::PositiveSource;
 use crate::formula_ir::{HeadIr, LiteralIr, Prepared, RuleIr};
@@ -71,14 +72,18 @@ impl<'source> Producers<'source> {
         let view = catalog.component_view(limits, counters, location)?;
         let external =
             catalog.bytes(location)? as u128 + counters.accounting.workspace.bytes() as u128;
-        Ok(Self::Registered(Registration::prepare(
+        let mut registration = Registration::prepare(
             prepared.rules_without_facts(),
             view,
             external,
             limits,
             counters,
             location,
-        )?))
+        )?;
+        if let Some(view) = view {
+            registration.schedule(prepared, view, external, (limits, counters, location))?;
+        }
+        Ok(Self::Registered(registration))
     }
 
     /// Retained bytes, counted as the catalog's prepared bytes.
@@ -98,6 +103,39 @@ impl<'source> Producers<'source> {
 
     pub(super) fn is_planned(&self) -> bool {
         matches!(self, Self::Planned(_))
+    }
+
+    /// Mark ready the deferred rich producers whose read components reached
+    /// their fixed point, given this round's pending atoms. A plan has none.
+    pub(super) fn mark_ready(
+        &self,
+        delta: &SupportAppend<'_>,
+        limits: &FormulaLimits,
+        counters: &mut Counters,
+        location: ProgramSite,
+    ) -> Result<bool, FormulaFailure> {
+        match self {
+            Self::Planned(_) => Ok(false),
+            Self::Registered(registration) => {
+                registration.mark_ready(delta, limits, counters, location)
+            }
+        }
+    }
+
+    /// The next ready deferred producer, now marked traversed.
+    pub(super) fn take_ready(&self) -> Option<usize> {
+        match self {
+            Self::Planned(_) => None,
+            Self::Registered(registration) => registration.take_ready(),
+        }
+    }
+
+    /// Whether a deferred producer has not yet been traversed.
+    pub(super) fn pending(&self) -> bool {
+        match self {
+            Self::Planned(_) => false,
+            Self::Registered(registration) => registration.pending(),
+        }
     }
 
     /// The plan, whose wake set each round advances.
@@ -401,6 +439,20 @@ fn find<'source>(
     counters: &mut Counters,
     location: ProgramSite,
 ) -> Result<usize, FormulaFailure> {
+    lookup(count, signature_at, predicate, limits, counters, location)?
+        .ok_or_else(|| invalid(Failure::Owner, location))
+}
+
+/// The index of `predicate`'s signature among `count` sorted signatures, or
+/// `None` when it is absent. Each comparison charges one unit and both names.
+fn lookup<'source>(
+    count: usize,
+    signature_at: impl Fn(usize) -> &'source Signature,
+    predicate: PredicateRef<'_>,
+    limits: &FormulaLimits,
+    counters: &mut Counters,
+    location: ProgramSite,
+) -> Result<Option<usize>, FormulaFailure> {
     let mut start = 0;
     let mut end = count;
     while start < end {
@@ -423,10 +475,10 @@ fn find<'source>(
         match comparison {
             Ordering::Less => start = middle + 1,
             Ordering::Greater => end = middle,
-            Ordering::Equal => return Ok(middle),
+            Ordering::Equal => return Ok(Some(middle)),
         }
     }
-    Err(invalid(Failure::Owner, location))
+    Ok(None)
 }
 
 fn validate_dependency(

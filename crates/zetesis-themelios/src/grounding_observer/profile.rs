@@ -143,10 +143,14 @@ pub struct GroundingWork {
     /// failure retains the selected traversal. Zero on the positive-flat plan.
     pub support_rich_traversals: Option<u64>,
     /// Rich-producer visits after the first round that ended at the
-    /// registration's test: no predicate the producer reads gained rows, so
-    /// it was not traversed. Always zero on the positive-flat plan's schedule,
-    /// which has no rich producers.
+    /// registration's test: no predicate the producer reads gained rows, or a
+    /// producer scheduled by component was already traversed after its reads
+    /// reached their fixed point. Always zero on the positive-flat plan's
+    /// schedule, which has no rich producers.
     pub support_unchanged_visits: Option<u64>,
+    /// Visits to a rich producer that waits for the dependency components it
+    /// reads to reach their fixed point; it is traversed once, after they have.
+    pub support_deferred_visits: Option<u64>,
     /// Growing support/query snapshot attempts entered after an admitted work
     /// tick. Counts attempts, including a later allocation or query refusal.
     pub support_snapshot_preparations: Option<u64>,
@@ -274,6 +278,7 @@ impl Default for GroundingWork {
             support_producer_visits: Some(0),
             support_rich_traversals: Some(0),
             support_unchanged_visits: Some(0),
+            support_deferred_visits: Some(0),
             support_snapshot_preparations: Some(0),
             local_plan_requests: Some(0),
             local_plan_preparations: Some(0),
@@ -334,6 +339,7 @@ pub(crate) enum Event {
     SupportProducerVisit,
     SupportRichTraversal,
     SupportUnchangedVisit,
+    SupportDeferredVisit,
     SupportSnapshotPreparation,
     LocalPlanRequest,
     LocalPlanPreparation,
@@ -420,6 +426,10 @@ impl GroundingWork {
             support_unchanged_visits: sum(
                 self.support_unchanged_visits,
                 other.support_unchanged_visits,
+            ),
+            support_deferred_visits: sum(
+                self.support_deferred_visits,
+                other.support_deferred_visits,
             ),
             support_snapshot_preparations: sum(
                 self.support_snapshot_preparations,
@@ -517,6 +527,7 @@ impl GroundingWork {
             Event::SupportProducerVisit => &mut self.support_producer_visits,
             Event::SupportRichTraversal => &mut self.support_rich_traversals,
             Event::SupportUnchangedVisit => &mut self.support_unchanged_visits,
+            Event::SupportDeferredVisit => &mut self.support_deferred_visits,
             Event::SupportSnapshotPreparation => &mut self.support_snapshot_preparations,
             Event::LocalPlanRequest => &mut self.local_plan_requests,
             Event::LocalPlanPreparation => &mut self.local_plan_preparations,
