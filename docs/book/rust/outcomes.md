@@ -75,7 +75,11 @@ engages), and the walk's `engagement`: `"not_begun"`, `"unengaged"` (the walk
 has run on the calling thread only, with `elapsed_ns` since it began and its
 own `walking_ns`) or `"engaged"` (with `engaged_after_ns`, `walking_ns`, the
 threads `launched` and the spawn loop's `spawn_ns`). Each state's keys are
-`null` outside it.
+`null` outside it. Its `query_division` object reports the `division` the walk
+ran with (`"when_idle"`, `"immediate"` or `"never"`), the subset queries
+`published` for any worker to serve, the published regions `served` and, of
+those, `stolen` from a peer's deque, the `servers` that served any, and the
+`peak_served` by one worker.
 
 Under `--workers` above one the answer sets of the formula route
 arrive in the schedule's order: the family is exact and each answer appears

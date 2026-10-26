@@ -1798,9 +1798,40 @@ atomic operations on its lock word, which the fences order.
 Before its workers start, the walk runs on the calling thread: the coordinator
 takes the newest region of deque 0 as a worker takes its own, and decides it with
 the same per-region step. At engagement every outstanding region is in deque 0
-and none is in hand, so the workers start with the count equal to the regions in
-the deques. The coordinator phase and this handoff are Rust refinement
+and none is in hand, except at most one leaf held by its published query, whose
+pending regions are all in the published-region deque 0, so the workers start
+with the count equal to the regions in the deques plus that leaf. The
+coordinator publishes only once its engagement deadline has passed, and the
+pull then engages at once, so no query is running on the workspaces engagement
+releases. The coordinator phase and this handoff are Rust refinement
 obligations beside the queue and gate protocols.
+
+A candidate's subset query may be published for any worker to serve. The
+traversal surrenders its pending regions, the one it was about to narrow
+included, so those and the regions it visited partition the query's root, and
+each published region is one pending node of the query's coverage tree.
+[`InnerQuery.exhausted_walk_stable`, `emitted_refutes` and
+`exhausted_walk_decides`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/InnerQuery.lean)
+compose `Pending.Walk.exhausted` with `ReductRegions.stable_iff_no_countermodel`:
+a walk of the query tree that empties its frontier without emitting a leaf
+proves stability, any emitted leaf refutes it, and an emptied walk's verdict is
+whether it emitted one, whoever held each region. The Rust obligations are the
+query cell's: its count of live regions is set to the published regions'
+number before any is visible, raised by one before a split's children are
+visible, and lowered once per region refuted, reaching the candidate itself,
+yielding a validated countermodel, or dropped after the query is decided, so
+it reaches zero only when the query's frontier is empty; a server writes its
+witness or stop before its release decrement, and the decrement that reaches
+zero is an acquire-release read-modify-write, so the stable verdict sees every
+earlier one; one compare-and-swap decides the resolver; a validator's refusal
+or stop sets the cell's stop before its region is retired and is never counted
+as a resolved region; the published leaf counts in the walk until the cell is
+decided, so the walk's count cannot reach zero beside a live query; and the
+published-region deques hold one query's regions per worker at a time, at most
+its candidate's atoms plus one, beside the candidate deque's `atom_count + 1`.
+Unit tests drive one schedule by hand through each verdict and stop, and catch
+a gain counted after its children are visible, a published leaf resolved at
+publication, and a refused validation counted as resolved.
 
 `Pending.Step.perm` and `Pending.Walk.exhausted` describe the abstract preservation
 and exhaustion laws; the atomic count, the queue and gate protocols (including the gate's idle count) and absence
@@ -1903,6 +1934,7 @@ original program or the reduct used to check membership.
 | [`OptionalIndex.successor_fits`, `optional_round_trip`, `replacement_commutes`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/OptionalIndex.lean) | None: the removed clause search's optional positive-successor child links in its compact projection trie | No current Rust correspondence; the law remains as a statement. |
 | [`FormulaRegions.classical_consequence_forces`, `classical_consequence_cuts`, `no_model_refutes`, `restricted_consequence_forces`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/FormulaRegions.lean) | The removed clause search read as the coverage tree of `Search.lean`: a search node is a cube, the atoms its propagation forces or cuts narrow it, a conflict refutes it, and a complete assignment is a leaf the reduct decides; the support restriction is a restriction every stable model satisfies | No current Rust correspondence; the law remains as a statement of how a classical search relates to the region tree. |
 | [`FormulaBounds.read_sound`, `never_root_refutes`, `known_sound`, `known_mono`, `unsupported_cut`, `sole_support_forces`, `unsupported_cut_with_choices`, `sole_rule_forces_with_choices`, `sole_choice_forces`, `known_blocked_no_support`, `known_choice_blocked_no_support`, `restriction_forces`, `restriction_cuts`, `restriction_contradiction_refutes`, `restricted_stable_narrowing`, `decided_leaf_models`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/FormulaBounds.lean), [`FormulaBounds.disj_chain_sure`, `disj_chain_never`, `disj_chain_unit`, `conj_chain_sure`, `conj_chain_never`, `conj_chain_unit`, declared in `FormulaChains.lean`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/FormulaChains.lean) | `zetesis_ferraris::Narrower::narrow_known`, the narrowing of the regions proposer in `zetesis-stable`: the sure and never readings of every node under a region, the knowledge closed in both directions over the DAG, the support cut and the sole-support rule, to a fixed point; `zetesis_cpu::regions::Traversal` walks the tree of `Search.lean` for both routes with one worker, and `zetesis_stable`'s parallel regions walk it for the formula route with several | The Rust closure must agree with `Known` on the admitted DAG, and `producers` must extract the covered fragment from the roots. The Rust closure must derive only `Known` judgements; the fixed point is the least one because every rule only adds knowledge, and a child region may start from its parent's knowledge by `known_mono`. The closure reads each maximal tree of one connective as one node with a neutral-operand count exact until a processed absorbing witness, and applies the chain rules, each admissible in `Known` as a sequence of the binary rules along the chain (`FormulaChains`); that the Rust chains are such trees, with inner nodes that have that one parent, and that a node false under the frozen mask is read by its operands' masks, are Rust obligations. That a fully decided region no reading refutes is a classical model is `decided_leaf_models`, which is why a leaf is proposed to the reduct without a classical check. An atomic choice is a producer of its atom that only an impossible body blocks, a choice having no other head: `unsupported_cut_with_choices`, `sole_rule_forces_with_choices` and `sole_choice_forces` state the support cut and the sole-support rule over ordinary producers and choices together, from `DisjunctiveSupport.answer_set_supported_with_choices`. The narrowing blocks a producer by the theory's knowledge, a body known to fail or another head known to hold, and not by the readings alone; `known_blocked_no_support` and `known_choice_blocked_no_support` say such a producer supports its atom in no classical model of the theory inside the region, which is the premise those laws ask. That `producers` recognizes the choices of the theory, in either operand order, remains a Rust obligation. A restriction, the support restriction or an objective bound, is narrowed by its readings alone, without producers: `restriction_forces` and `restriction_cuts` are its knowledge sound in its models, and `restricted_stable_narrowing` is the region narrowed by both the theory's and the restriction's knowledge keeping every stable model that satisfies the restriction; that every model still sought satisfies each restriction the enumeration adds is the Rust obligation. |
+| [`InnerQuery.exhausted_walk_stable`, `emitted_refutes`, `exhausted_walk_decides`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/InnerQuery.lean) | A published subset query in `zetesis-stable`'s parallel regions: its pending regions, served by any worker, decide the candidate through the query cell | That the surrendered and visited regions partition the query's root, and the cell's counting, ordering, resolution and stop rules, are Rust obligations, stated with the walk's frontier protocols above. |
 | [`ReductRegions.leaf_refutes`, `exhausted_stable`, `countermodels_exact`, `stable_iff_no_countermodel`, `masked_read_eq_reduct`, `masked_reads_falsum`, `masked_known_sound`, `masked_known_narrows`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/ReductRegions.lean) | The reduct's proper-subset query as a region tree: `ReductQuery` in `zetesis-stable` walks the subsets of a classical model with the frozen reduct's knowledge, returns a leaf other than the candidate as the countermodel and a covered tree as stability | That evaluation of the original DAG under the mask is the reduct's is `FerrarisMask`'s law. That the narrowing's two readings under the mask are the readings of the reduct is `masked_read_eq_reduct`; a masked node reads as falsum whatever its operands read (`masked_reads_falsum`), so it has no rules of its own, and the nodes above it combine that reading as any operand's. `masked_known_sound` says propagation under the mask, where every rule relating a connective to its operands asks that the connective be unmasked and a masked node is known to fail, knows of an original formula only what propagation over the reduct theory knows of its reduct, and `masked_known_narrows` that the query may narrow by it. That the stored mask is each node's truth in the candidate, and that the Rust propagates by those rules over the shared DAG, are Rust obligations; that the traversal covers the query root exactly is `Search.CoverageTree`; the countermodel is validated independently before it is returned. |
 | [`CandidateCursor.completed_coverage`, `stable_outputs_exact`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/CandidateCursor.lean) | None: the removed clause search's retained candidate traversal, completed checks and exhaustion | No current Rust correspondence; the law remains as a statement. |
 

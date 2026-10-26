@@ -426,6 +426,37 @@ schedule's after, is not promised to repeat between runs, and is not a property
 of the result. Verification rests on the laws and on the
 oracle comparison of answer sets as sets, not on order or determinism.
 
+A worker decides each leaf it reaches, so a candidate whose subset query is
+wide would hold one worker while the others idle once the candidate frontier is
+thin, as on a 2QBF instance with few existential and many universal
+assignments. Such a query is divided. Once it has run, since its first
+narrowing, for the cost of engaging one worker while another waits idle
+(`QueryDivision::WhenIdle`, the default), it stops before a narrowing and
+publishes its pending regions, each with its frozen-narrowing knowledge, to its
+worker's deque of published regions; the regions it visited and the ones it
+published partition its tree. Any worker may then serve them, narrowing on its
+own reduct workspace and charging its own lease on the walk's allowance. A
+worker serves its own published regions before its candidate regions, and with
+both deques empty steals a peer's oldest published region before a peer's
+oldest candidate region. The query keeps one count of its live regions, raised
+before a split's children are visible. A validated countermodel refutes the
+candidate at once; the last region resolved with no countermodel and no stop
+proves it stable, and its server sends it. The leaf stays unresolved in the
+walk until then, so the walk cannot end beside a query in progress, and a stop
+or a region whose check stopped never becomes a stable verdict
+(`InnerQuery.exhausted_walk_decides`). The coordinator publishes only once its
+engagement deadline has passed, and then engages the workers to serve the
+query. A refused allocation keeps the query inline.
+
+Answer sets are the same under every division. A query that ends stable narrows
+each region once, wherever it is divided; a refuted query, divided, may narrow
+regions beside the subtree its witness lies in until a server finds a witness,
+so its region count depends on the schedule. `SolveConfig::query_division`
+selects `QueryDivision::Never` to keep every query on the worker that reached
+its candidate, for measurement; the command has no flag for it. The workers'
+statistics report the division, the queries published, the published regions
+served and stolen, the workers that served any, and the most one served.
+
 Candidate production and membership need not run on the same executor.
 `StableModels::with_region_producers` uses the same original-theory readings
 and disjoint splits, filling each slate (the candidates checked and committed
