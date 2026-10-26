@@ -8,6 +8,8 @@
 //! submission can be prepared, and no operation can run on the device, in
 //! between: the plan it read at preparation is the plan its check uses.
 
+use std::time::Duration;
+
 use zetesis_backend::BatchComputeTime;
 use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{SlateId, SlateRef, Theory};
@@ -75,9 +77,12 @@ pub(crate) trait PreparedSubmission {
     ) -> (Self::Checked, Option<R>);
 }
 
-/// A decoded submission: its verdicts, and the compute interval the device
-/// reported with it, which belongs to the submission before it.
+/// A decoded submission: its verdicts; the compute interval the device
+/// reported with it, which belongs to the submission before it; and, for a
+/// submission checked beside the host's production, the finish's wait from
+/// the end of that production to the submission's observed completion.
 pub(crate) struct Decoded {
     pub(crate) verdicts: Vec<BatchVerdict>,
     pub(crate) compute: Option<BatchComputeTime>,
+    pub(crate) finish_wait: Option<Duration>,
 }

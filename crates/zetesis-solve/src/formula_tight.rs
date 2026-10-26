@@ -221,6 +221,7 @@ impl crate::formula_queue::device::SlateDevice for TightDevice<'_> {
                 actual: count,
             }));
         }
+        let finish_wait = checks.finish_wait();
         let checks = checks
             .into_checks(theory, slate, offset)
             .map_err(|error| Failure::Run(SolveError::Gpu(error)))?;
@@ -240,7 +241,11 @@ impl crate::formula_queue::device::SlateDevice for TightDevice<'_> {
             .try_reserve_exact(checks.len())
             .map_err(|_| Failure::Search(Incomplete::Allocation))?;
         verdicts.extend(checks.into_iter().map(|check| verdict(check.verdict())));
-        Ok(crate::formula_queue::device::Decoded { verdicts, compute })
+        Ok(crate::formula_queue::device::Decoded {
+            verdicts,
+            compute,
+            finish_wait,
+        })
     }
 }
 

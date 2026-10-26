@@ -16,11 +16,16 @@ Notable changes by release. Versions follow Semantic Versioning.
   add `prepare`, returning a `PreparedFormulaSubmission` or
   `PreparedTightSubmission` that holds its oracle until checked, with a
   synchronous `check` and a `check_overlapping` that runs a closure while the
-  submission is in flight, both returning a `CheckedSlate`.
+  submission is in flight, both returning a `CheckedSlate`. An overlapping
+  check's `CheckedSlate::finish_wait` reports the finish's wait after the
+  closure, up to the submission's observed completion.
 - `FormulaExecutionStatistics` reports `gpu_lookahead_slates`, the last
   `gpu_lookahead` decision (`GpuLookahead`, `GpuLookaheadDeclined`),
-  `gpu_lookahead_device_ns`, `gpu_lookahead_finish_wait_ns` and
-  `first_answer_ns`, in the JSON and the human statistics.
+  `gpu_lookahead_device_ns`, `gpu_lookahead_finish_wait_ns`,
+  `gpu_lookahead_unmeasured` and `first_answer_ns`, in the JSON and the human
+  statistics. The device compute and the finish waits are paired per overlapped
+  submission, so their difference is the device time hidden behind production
+  over the submissions measured.
 - The regular benchmark corpus includes integrated Family Crossing, checking all
   eight optimal answers alongside the existing 94 cases.
 - Requested GPU statistics include compute-pass time when the device supports

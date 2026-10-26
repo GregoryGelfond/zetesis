@@ -212,7 +212,7 @@ device work, so compare runs with matching policies, or report these
 statistics beside them.
 
 A GPU enumeration proposes its next slate while the device checks the current
-slate's last submission. Four statistics, in `FormulaExecutionStatistics`, the
+slate's last submission. Five statistics, in `FormulaExecutionStatistics`, the
 JSON and the human "formula GPU lookahead" line, describe that overlap:
 
 - `gpu_lookahead_slates` ("slates proposed ahead"): slates proposed while their
@@ -222,12 +222,22 @@ JSON and the human "formula GPU lookahead" line, describe that overlap:
   answers still owed fit the slate under check), or the stream's own reason,
   such as `candidate_bounds`, `pending_bytes` or `pending_stop`. It is absent on
   CPU routes and before a GPU session's first slate.
-- `gpu_lookahead_device_ns` ("overlapped device compute"): the measured device
-  compute of those submissions, from `gpu_compute_timing`'s intervals; an
-  unavailable interval adds nothing.
-- `gpu_lookahead_finish_wait_ns` ("finish waits"): the finish's waits on those
-  submissions, from the end of the production run beside each to the check's
-  return. The device time hidden behind production is at most the difference.
+- `gpu_lookahead_device_ns` ("overlapped device compute"): the measured compute
+  intervals of the submissions checked beside production, from
+  `gpu_compute_timing`. The timer reports a submission's interval one call
+  late, with the next submission or at the settlement's flush, and each is
+  booked with its own submission's wait.
+- `gpu_lookahead_finish_wait_ns` ("finish waits"): the finish's waits on the
+  same submissions, each from the end of the production run beside it to the
+  submission's observed completion, before its readback is mapped and decoded.
+- `gpu_lookahead_unmeasured` ("unmeasured submissions"): the submissions checked
+  beside production whose interval the timer refused or never resolved. Neither
+  sum includes them.
+
+The device time hidden behind production is the difference of the two paired
+sums, the compute less the waits, over the submissions with a measured
+interval. Device work outside the compute pass lies within the wait, so the
+difference understates the hidden time by that work.
 
 `first_answer_ns` (the "formula GPU first answer" line) is the elapsed time from
 the device execution's construction to the release of its first answer. It is

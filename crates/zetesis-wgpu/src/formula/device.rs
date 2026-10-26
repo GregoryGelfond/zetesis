@@ -7,7 +7,7 @@ use super::{FormulaBatchStats, FormulaCheck, FormulaLimits, GateProjection, GpuF
 use crate::runtime::{ErrorScopes, Observation, Scopes};
 use crate::timing::{BatchTiming, ComputeTimer};
 use crate::{CheckedSlate, GpuError, GpuErrorKind, GpuInfo, GpuOptions, GpuSelection};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use zetesis_backend::{BatchComputeTime, ComputeTimingStatus};
 use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{Interpretation, SlateId, SlateRef, Theory};
@@ -459,6 +459,7 @@ impl GpuFormulaOracle {
         let call = self.prepare_epoch(theory, candidates, limits, cancellation, size)?;
         cancellation.poll().map_err(GpuError::interrupted)?;
         self.run(call, limits.timeout, cancellation, None)
+            .map(|(checks, _)| checks)
     }
 
     /// Prepare a batch at the next epoch, which it commits only when it is
@@ -489,13 +490,16 @@ impl GpuFormulaOracle {
     /// finish observes the submission's completion without polling the
     /// control, within the batch's timeout, and reports the stop without
     /// decoding: a completed, released readback leaves the context reusable.
+    /// Beside the checks it returns the finish's wait after `during`: from
+    /// `during`'s return to the observed completion, before mapping and
+    /// decoding; absent without `during`.
     fn run(
         &mut self,
         call: PreparedCall,
         timeout: Duration,
         cancellation: &Cancellation,
         during: Option<&mut dyn FnMut()>,
-    ) -> Result<Vec<FormulaCheck>, GpuError> {
+    ) -> Result<(Vec<FormulaCheck>, Option<Duration>), GpuError> {
         let PreparedCall { fresh, plan, stats } = call;
         // The dispatched size's pipeline is compiled at first need, before this
         // call's scopes and before the fresh graph becomes resident. Only a
@@ -532,15 +536,18 @@ impl GpuFormulaOracle {
             .and_then(|resident| {
                 resident.submit(runtime, self.candidates.words(), &plan, self.timer.as_ref())
             });
+        let mut finish_wait = None;
         let (completion, timing) = match submitted {
             Err(error) => (Err(error), BatchTiming::default()),
             Ok(submitted) => {
                 self.last_submission_candidates = Some(submitted.candidates);
+                let mut during_ended = None;
                 let observation = match during {
                     None => Observation::Polled,
                     Some(during) => {
                         scopes.settle();
                         during();
+                        during_ended = Some(Instant::now());
                         cancellation.poll().map_or_else(
                             |stop| Observation::AfterStop(GpuError::interrupted(stop)),
                             |()| Observation::Polled,
@@ -561,7 +568,11 @@ impl GpuFormulaOracle {
                             cancellation,
                         )
                     }) {
-                    Ok(dispatched) => (Ok(dispatched.completion), dispatched.timing),
+                    Ok(dispatched) => {
+                        finish_wait = during_ended
+                            .and_then(|ended| dispatched.completion.window_since(ended));
+                        (Ok(dispatched.completion), dispatched.timing)
+                    }
                     Err(error) => (Err(error), BatchTiming::default()),
                 }
             }
@@ -578,7 +589,7 @@ impl GpuFormulaOracle {
         }
         let checks = outcome?;
         self.last = Some(stats);
-        Ok(checks)
+        Ok((checks, finish_wait))
     }
 
     // All cold staging is owned and admitted before device effects. Minimum
@@ -859,9 +870,10 @@ impl PreparedFormulaSubmission<'_> {
     /// operation and invalidates the context, since its submission's
     /// completion is then unobserved.
     ///
-    /// Returns the check's outcome and `during`'s result. The result is absent
-    /// only when the check failed before submitting, in which case `during`
-    /// did not run.
+    /// Returns the check's outcome and `during`'s result. A successful
+    /// outcome's receipt carries the finish's wait after `during`
+    /// ([`CheckedSlate::finish_wait`]). The result is absent only when the
+    /// check failed before submitting, in which case `during` did not run.
     pub fn check_overlapping<R>(
         self,
         cancellation: &Cancellation,
@@ -893,12 +905,12 @@ impl PreparedFormulaSubmission<'_> {
             timeout,
         } = self;
         let context = oracle.profile.runtime.context.clone();
-        let checks = context.lease().and_then(|_lease| {
+        let (checks, finish_wait) = context.lease().and_then(|_lease| {
             cancellation.poll().map_err(GpuError::interrupted)?;
             oracle.profile.runtime.check_health()?;
             oracle.run(call, timeout, cancellation, during)
         })?;
-        Ok(CheckedSlate::new(theory, slate, offset, count, checks))
+        Ok(CheckedSlate::new(theory, slate, offset, count, checks).with_finish_wait(finish_wait))
     }
 }
 

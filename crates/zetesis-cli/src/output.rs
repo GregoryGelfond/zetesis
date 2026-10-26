@@ -1199,6 +1199,7 @@ fn execution_statistics(
         "gpu_lookahead_finish_wait_ns",
         stats.gpu_lookahead_finish_wait_ns,
     )?;
+    out.number_field("gpu_lookahead_unmeasured", stats.gpu_lookahead_unmeasured)?;
     out.text(",\"first_answer_ns\":")?;
     out.optional_number(stats.first_answer_ns)?;
     out.number_field("gpu_candidates", stats.gpu_candidates)?;

@@ -368,6 +368,7 @@ fn lookahead_json_reports_slates_ahead_the_decision_and_hidden_device_time() {
     ));
     statistics.gpu_lookahead_device_ns = 900;
     statistics.gpu_lookahead_finish_wait_ns = 300;
+    statistics.gpu_lookahead_unmeasured = 2;
     statistics.first_answer_ns = Some(1_234);
     let mut out = Buffer::new(4096);
     super::execution_statistics(&mut out, Some(&statistics)).unwrap();
@@ -376,6 +377,7 @@ fn lookahead_json_reports_slates_ahead_the_decision_and_hidden_device_time() {
     assert_eq!(value["gpu_lookahead"], "requested_answers");
     assert_eq!(value["gpu_lookahead_device_ns"], 900);
     assert_eq!(value["gpu_lookahead_finish_wait_ns"], 300);
+    assert_eq!(value["gpu_lookahead_unmeasured"], 2);
     assert_eq!(value["first_answer_ns"], 1_234);
     let mut out = Buffer::new(4096);
     super::execution_statistics(

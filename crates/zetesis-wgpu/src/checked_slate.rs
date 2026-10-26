@@ -1,5 +1,7 @@
 //! Ordered results bound to a slate's identity and to a submission's place in it.
 
+use std::time::Duration;
+
 use zetesis_ferraris::{SlateId, Theory};
 
 use crate::{GpuError, GpuErrorKind};
@@ -24,6 +26,7 @@ pub struct CheckedSlate<T> {
     offset: usize,
     count: usize,
     checks: Vec<T>,
+    finish_wait: Option<Duration>,
 }
 
 impl<T> CheckedSlate<T> {
@@ -40,7 +43,24 @@ impl<T> CheckedSlate<T> {
             offset,
             count,
             checks,
+            finish_wait: None,
         }
+    }
+
+    /// The receipt of an overlapping check, with its finish's wait.
+    pub(crate) const fn with_finish_wait(mut self, wait: Option<Duration>) -> Self {
+        self.finish_wait = wait;
+        self
+    }
+
+    /// The finish's wait, for a submission checked while other work ran beside
+    /// it: from the end of that work to the observed completion of the
+    /// submission, before its readback was mapped and decoded. It is the
+    /// device's remaining exposure once the work beside it is done. Absent for
+    /// a check with nothing run beside it.
+    #[must_use]
+    pub const fn finish_wait(&self) -> Option<Duration> {
+        self.finish_wait
     }
 
     /// The theory instance the submission checked.

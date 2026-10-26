@@ -13,7 +13,7 @@ use crate::timing::{BatchTiming, ComputeTimer};
 use crate::{
     CheckedSlate, GpuDeviceSource, GpuError, GpuErrorKind, GpuInfo, GpuOptions, GpuSelection,
 };
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use zetesis_backend::{BatchComputeTime, ComputeTimingStatus};
 use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{Interpretation, SlateId, SlateRef, Theory, TightPlan};
@@ -628,6 +628,7 @@ impl GpuTightOracle {
         let call = self.prepare_call(certificate, candidates, limits, cancellation, size)?;
         poll(cancellation)?;
         self.run(call, limits.timeout, cancellation, None)
+            .map(|(checks, _)| checks)
     }
 
     /// Run a prepared batch under the caller's lease: compile its pipeline at
@@ -642,13 +643,16 @@ impl GpuTightOracle {
     /// finish observes the submission's completion without polling the
     /// control, within the batch's timeout, and reports the stop without
     /// decoding: a completed, released readback leaves the context reusable.
+    /// Beside the checks it returns the finish's wait after `during`: from
+    /// `during`'s return to the observed completion, before mapping and
+    /// decoding; absent without `during`.
     fn run(
         &mut self,
         call: PreparedCall,
         timeout: Duration,
         cancellation: &Cancellation,
         during: Option<&mut dyn FnMut()>,
-    ) -> Result<Vec<TightGpuCheck>, GpuError> {
+    ) -> Result<(Vec<TightGpuCheck>, Option<Duration>), GpuError> {
         let PreparedCall {
             fresh,
             plan,
@@ -682,6 +686,7 @@ impl GpuTightOracle {
         let mut timing = BatchTiming::default();
         let runtime = &self.runtime;
         let mut scopes = Scopes::Open(scopes);
+        let mut finish_wait = None;
         let outcome = self
             .resident
             .as_mut()
@@ -702,23 +707,27 @@ impl GpuTightOracle {
                     plan: &plan,
                 };
                 let submitted = resident.submit(&execution, &call, &mut self.activity)?;
+                let mut during_ended = None;
                 let observation = match during {
                     None => Observation::Polled,
                     Some(during) => {
                         scopes.settle();
                         during();
+                        during_ended = Some(Instant::now());
                         poll(cancellation)
                             .map_or_else(Observation::AfterStop, |()| Observation::Polled)
                     }
                 };
-                resident.finish(
+                let completion = resident.finish(
                     &execution,
                     submitted,
                     observation,
                     &call,
                     &mut self.activity,
                     &mut timing,
-                )
+                )?;
+                finish_wait = during_ended.and_then(|ended| completion.window_since(ended));
+                Ok(completion)
             });
         let settled = runtime.complete_scopes(scopes, outcome);
         let result = settled.and_then(|decoded| {
@@ -748,7 +757,7 @@ impl GpuTightOracle {
         stats.update_critical_path = decoded.slowest_update_path.unwrap_or(0);
         stats.work = decoded.work;
         self.last = Some(stats);
-        Ok(decoded.checks)
+        Ok((decoded.checks, finish_wait))
     }
 
     /// Make a freshly prepared graph resident, or install the readers index
@@ -1166,9 +1175,10 @@ impl PreparedTightSubmission<'_> {
     /// operation and invalidates the context, since its submission's
     /// completion is then unobserved.
     ///
-    /// Returns the check's outcome and `during`'s result. The result is absent
-    /// only when the check failed before submitting, in which case `during`
-    /// did not run.
+    /// Returns the check's outcome and `during`'s result. A successful
+    /// outcome's receipt carries the finish's wait after `during`
+    /// ([`CheckedSlate::finish_wait`]). The result is absent only when the
+    /// check failed before submitting, in which case `during` did not run.
     pub fn check_overlapping<R>(
         self,
         cancellation: &Cancellation,
@@ -1209,7 +1219,10 @@ impl PreparedTightSubmission<'_> {
             oracle.run(call, timeout, cancellation, during)
         });
         match checked {
-            Ok(checks) => Ok(CheckedSlate::new(theory, slate, offset, count, checks)),
+            Ok((checks, finish_wait)) => {
+                Ok(CheckedSlate::new(theory, slate, offset, count, checks)
+                    .with_finish_wait(finish_wait))
+            }
             Err(error) => {
                 if let Some(resident) = oracle.resident.as_mut() {
                     resident.invalidate_original_truth();

@@ -4,6 +4,9 @@
 
 use std::collections::BTreeSet;
 use std::num::NonZeroUsize;
+use std::time::Duration;
+
+use zetesis_backend::BatchComputeTime;
 
 use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{Interpretation, SlateId, SlateRef, Theory};
@@ -82,6 +85,13 @@ struct Double {
     slates: Vec<usize>,
     /// Whether every submission's completion was observed.
     reusable: bool,
+    /// Each submission's compute interval, in submission order. The double
+    /// reports one with the next submission, as the device's timer reports a
+    /// batch's interval one call late, and none past the script.
+    intervals: Vec<Option<BatchComputeTime>>,
+    /// Each checked submission's finish wait, in submission order, when it
+    /// was checked beside the host's production.
+    waits: Vec<Option<Duration>>,
 }
 
 impl Double {
@@ -96,6 +106,8 @@ impl Double {
             overlapped: 0,
             slates: Vec::new(),
             reusable: true,
+            intervals: Vec::new(),
+            waits: Vec::new(),
         }
     }
 }
@@ -104,6 +116,9 @@ struct Receipt {
     slate: SlateId,
     offset: usize,
     verdicts: Vec<BatchVerdict>,
+    /// The submission's place among every submission the double checked.
+    index: usize,
+    finish_wait: Option<Duration>,
 }
 
 struct Prepared<'d> {
@@ -112,9 +127,15 @@ struct Prepared<'d> {
 }
 
 impl Prepared<'_> {
-    fn submit(&mut self) {
+    /// Submit, recording the submission's finish wait: a distinct duration
+    /// for each submission checked beside the host's production.
+    fn submit(&mut self, overlapped: bool) {
         self.double.in_flight += 1;
         self.double.peak_in_flight = self.double.peak_in_flight.max(self.double.in_flight);
+        self.receipt.index = self.double.waits.len();
+        let wait = overlapped.then(|| Duration::from_micros(7 * (self.receipt.index as u64 + 1)));
+        self.receipt.finish_wait = wait;
+        self.double.waits.push(wait);
     }
 
     fn finish(self, stopped: bool) -> Result<Receipt, Failure> {
@@ -156,6 +177,8 @@ impl SlateDevice for Double {
                 slate: slate.id(),
                 offset,
                 verdicts,
+                index: 0,
+                finish_wait: None,
             },
         })
     }
@@ -180,9 +203,14 @@ impl SlateDevice for Double {
                 actual: receipt.verdicts.len(),
             }));
         }
+        let compute = receipt
+            .index
+            .checked_sub(1)
+            .and_then(|previous| self.intervals.get(previous).copied().flatten());
         Ok(Decoded {
             verdicts: receipt.verdicts,
-            compute: None,
+            compute,
+            finish_wait: receipt.finish_wait,
         })
     }
 }
@@ -195,7 +223,7 @@ impl PreparedSubmission for Prepared<'_> {
     }
 
     fn check(mut self, cancellation: &Cancellation) -> Self::Checked {
-        self.submit();
+        self.submit(false);
         let stopped = cancellation.poll().is_err();
         self.finish(stopped)
     }
@@ -205,7 +233,7 @@ impl PreparedSubmission for Prepared<'_> {
         cancellation: &Cancellation,
         during: impl FnOnce() -> R,
     ) -> (Self::Checked, Option<R>) {
-        self.submit();
+        self.submit(true);
         self.double.overlapped += 1;
         if self.double.stop == Stop::DuringProduction {
             self.double.control.cancel();
@@ -689,4 +717,81 @@ fn a_wholly_decided_slate_commits_with_no_stop_when_the_lookahead_stops_short() 
         assert_eq!(run.answers, wholly_decided(&run, decides), "{decides:?}");
         assert!(!run.exhausted, "{decides:?}");
     }
+}
+
+/// Every submission measured, a distinct interval each, except `refused`,
+/// whose interval the timer refused.
+fn intervals(refused: Option<usize>) -> Vec<Option<BatchComputeTime>> {
+    (0..64)
+        .map(|index| {
+            Some(if Some(index) == refused {
+                BatchComputeTime::Unavailable
+            } else {
+                BatchComputeTime::Measured(Duration::from_micros(100 * (index as u64 + 1)))
+            })
+        })
+        .collect()
+}
+
+/// The pairs the queue books for the submissions before `upto`: the measured
+/// intervals and the waits of the overlapped ones whose interval was measured,
+/// and the count of overlapped ones whose interval was not.
+fn paired(double: &Double, upto: usize) -> (u64, u64, u64) {
+    let nanos = |duration: Duration| u64::try_from(duration.as_nanos()).unwrap();
+    let (mut device, mut waits, mut unmeasured) = (0, 0, 0);
+    for (index, wait) in double.waits[..upto].iter().enumerate() {
+        let Some(wait) = wait else { continue };
+        match double.intervals[index] {
+            Some(BatchComputeTime::Measured(interval)) => {
+                device += nanos(interval);
+                waits += nanos(*wait);
+            }
+            _ => unmeasured += 1,
+        }
+    }
+    (device, waits, unmeasured)
+}
+
+/// The last overlapped submission's interval arrives only with the
+/// settlement's flush, and is booked then with that submission's own wait:
+/// until the flush neither sum includes the pair, and after it both do.
+#[test]
+fn the_last_overlapped_interval_is_booked_at_the_flush_with_its_own_wait() {
+    let cancellation = Cancellation::default();
+    let mut double = Double::new(usize::MAX, &cancellation);
+    double.intervals = intervals(None);
+    let (_, mut queue) = enumerate(CHOICES, &fixed(4), UNBOUNDED, &mut double, &cancellation);
+    let last = double.waits.len() - 1;
+    assert!(
+        double.waits[last].is_some(),
+        "the last slate is checked beside its empty lookahead"
+    );
+    let (device, waits, unmeasured) = paired(&double, last);
+    assert_eq!(queue.lookahead().device_ns, device);
+    assert_eq!(queue.lookahead().finish_wait_ns, waits);
+    queue.flushed(double.intervals[last]);
+    let (device, waits, _) = paired(&double, last + 1);
+    assert_eq!(queue.lookahead().device_ns, device);
+    assert_eq!(queue.lookahead().finish_wait_ns, waits);
+    assert_eq!(queue.lookahead().unmeasured, unmeasured);
+    assert_eq!(unmeasured, 0);
+}
+
+/// An overlapped submission whose interval the timer refused is counted as
+/// unmeasured, and its wait is left out, so both sums cover the same
+/// submissions.
+#[test]
+fn a_refused_interval_is_unmeasured_and_its_wait_left_out() {
+    let cancellation = Cancellation::default();
+    let mut double = Double::new(usize::MAX, &cancellation);
+    double.intervals = intervals(Some(1));
+    let (_, mut queue) = enumerate(CHOICES, &fixed(4), UNBOUNDED, &mut double, &cancellation);
+    let last = double.waits.len() - 1;
+    assert!(double.waits[1].is_some());
+    queue.flushed(double.intervals[last]);
+    let (device, waits, unmeasured) = paired(&double, last + 1);
+    assert_eq!(unmeasured, 1);
+    assert_eq!(queue.lookahead().unmeasured, 1);
+    assert_eq!(queue.lookahead().device_ns, device);
+    assert_eq!(queue.lookahead().finish_wait_ns, waits);
 }

@@ -37,10 +37,15 @@ pub(crate) struct LookaheadReceipts {
     pub(crate) slates: u64,
     /// The last decision, once a device slate was handed out.
     pub(crate) decision: Option<crate::GpuLookahead>,
-    /// Measured device compute of the overlapped submissions.
+    /// Measured device compute of the overlapped submissions whose interval
+    /// the timer reported, each booked with its own finish wait.
     pub(crate) device_ns: u64,
-    /// Finish waits on the overlapped submissions, after their production.
+    /// The finish waits of the same submissions, each from the end of the
+    /// production beside it to its observed completion.
     pub(crate) finish_wait_ns: u64,
+    /// Overlapped submissions whose interval the timer refused or never
+    /// resolved. Their waits are left out of [`Self::finish_wait_ns`].
+    pub(crate) unmeasured: u64,
 }
 
 #[derive(Default)]
@@ -58,16 +63,25 @@ pub(crate) struct BatchQueue {
     demand: Demand,
     #[cfg(feature = "gpu")]
     lookahead: LookaheadReceipts,
-    /// Whether the last decoded device submission was checked while the host
-    /// proposed the next slate. The device reports each submission's compute
-    /// interval with the next submission, or at the settlement's flush.
+    /// The last decoded device submission, when it was checked while the
+    /// host proposed the next slate. The device reports each submission's
+    /// compute interval with the next submission, or at the settlement's
+    /// flush, and the pair is booked then.
     #[cfg(feature = "gpu")]
-    previous_overlapped: bool,
+    last_overlapped: Option<Overlapped>,
     /// When this queue was built, and when it released its first answer.
     #[cfg(feature = "gpu")]
     created: Option<Instant>,
     #[cfg(feature = "gpu")]
     first_answer: Option<std::time::Duration>,
+}
+
+/// A decoded device submission checked while the host proposed the next
+/// slate: its finish wait, absent if its check reported none.
+#[cfg(feature = "gpu")]
+#[derive(Clone, Copy, Debug)]
+struct Overlapped {
+    wait: Option<Duration>,
 }
 
 #[derive(Default)]
@@ -195,13 +209,13 @@ impl BatchQueue {
         }
     }
 
-    /// Attribute the settlement's flushed interval, which belongs to the last
-    /// submission, if that submission was overlapped.
+    /// Book the settlement's flushed interval, which belongs to the last
+    /// submission, with that submission's wait if it was overlapped. Without
+    /// a flushed interval, an overlapped last submission counts as
+    /// unmeasured.
     #[cfg(feature = "gpu")]
     pub(crate) fn flushed(&mut self, report: Option<zetesis_backend::BatchComputeTime>) {
-        let overlapped = std::mem::take(&mut self.previous_overlapped);
-        self.attribute(report, overlapped);
-        self.previous_overlapped = false;
+        self.attribute(report, None);
     }
 
     /// The next reduct-verified model of a device enumeration. Each slate is
@@ -302,23 +316,23 @@ impl BatchQueue {
                 let (checked, proposal) = prepared.check_overlapping(cancellation, || {
                     drop(submission);
                     let proposal = models.propose_lookahead(lookahead_limits);
-                    finish = Some((phases.start(SolvePhase::GpuHostOracle), Instant::now()));
+                    finish = Some(phases.start(SolvePhase::GpuHostOracle));
                     proposal
                 });
-                if let Some((span, started)) = finish {
-                    drop(span);
-                    self.lookahead.finish_wait_ns = self
-                        .lookahead
-                        .finish_wait_ns
-                        .saturating_add(nanos(started.elapsed()));
-                }
+                // The check reports its finish's wait with its receipt.
+                drop(finish);
                 ahead = proposal.map(|proposal| (proposal, lookahead_limits.max_candidates));
                 checked
             } else {
                 phases.measure(SolvePhase::GpuHostOracle, || prepared.check(cancellation))
             };
             let decoded = device.decode(checked, &theory, slate, offset, offered)?;
-            self.attribute(decoded.compute, overlapped);
+            self.attribute(
+                decoded.compute,
+                overlapped.then_some(Overlapped {
+                    wait: decoded.finish_wait,
+                }),
+            );
             verdicts.extend(decoded.verdicts);
         }
         // A stop observed now leaves the slate pending, its checks dropped:
@@ -384,16 +398,30 @@ impl BatchQueue {
         true
     }
 
-    /// Count a reported interval as overlapped device compute when the
-    /// submission it belongs to, the one before, was overlapped.
+    /// Book the interval `report`, which belongs to the submission before
+    /// this one, when that submission was overlapped: a measured interval is
+    /// summed with that submission's own finish wait, and any other report
+    /// counts it as unmeasured, its wait left out, so the two sums cover the
+    /// same submissions. Then keep this submission, if `overlapped`, for its
+    /// own interval.
     #[cfg(feature = "gpu")]
-    fn attribute(&mut self, report: Option<zetesis_backend::BatchComputeTime>, overlapped: bool) {
-        if self.previous_overlapped
-            && let Some(zetesis_backend::BatchComputeTime::Measured(duration)) = report
-        {
-            self.lookahead.device_ns = self.lookahead.device_ns.saturating_add(nanos(duration));
+    fn attribute(
+        &mut self,
+        report: Option<zetesis_backend::BatchComputeTime>,
+        overlapped: Option<Overlapped>,
+    ) {
+        if let Some(Overlapped { wait }) = self.last_overlapped.take() {
+            match (report, wait) {
+                (Some(zetesis_backend::BatchComputeTime::Measured(interval)), Some(wait)) => {
+                    self.lookahead.device_ns =
+                        self.lookahead.device_ns.saturating_add(nanos(interval));
+                    self.lookahead.finish_wait_ns =
+                        self.lookahead.finish_wait_ns.saturating_add(nanos(wait));
+                }
+                _ => self.lookahead.unmeasured = self.lookahead.unmeasured.saturating_add(1),
+            }
         }
-        self.previous_overlapped = overlapped;
+        self.last_overlapped = overlapped;
     }
 
     /// The checker sees original candidates, never models already returned by
@@ -513,7 +541,7 @@ fn nanos(duration: std::time::Duration) -> u64 {
 }
 
 #[cfg(feature = "gpu")]
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 #[cfg(test)]
 mod tests {

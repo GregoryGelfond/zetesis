@@ -196,15 +196,23 @@ pub struct FormulaExecutionStatistics {
     /// its reason, so a run shows why it stayed serial. Absent for CPU routes
     /// and before a GPU session's first slate.
     pub gpu_lookahead: Option<GpuLookahead>,
-    /// Attributed device compute of the submissions checked while the host
-    /// proposed the next slate, in nanoseconds, from the measured intervals of
-    /// [`Self::gpu_compute_timing`]; an unavailable interval adds nothing.
+    /// Device compute of the submissions checked while the host proposed the
+    /// next slate, in nanoseconds: the measured intervals of
+    /// [`Self::gpu_compute_timing`] that belong to those submissions, each
+    /// paired with its submission's finish wait in
+    /// [`Self::gpu_lookahead_finish_wait_ns`].
     pub gpu_lookahead_device_ns: u64,
-    /// The finish's waits on those submissions, from the end of the
-    /// production run beside each to the check's return, in nanoseconds. The
-    /// device time hidden behind production is at most the difference from
-    /// [`Self::gpu_lookahead_device_ns`].
+    /// The finish's waits on the same submissions, in nanoseconds: each from
+    /// the end of the production run beside it to its observed completion,
+    /// before its readback is mapped and decoded. The device time hidden
+    /// behind production is the difference of the two paired sums,
+    /// [`Self::gpu_lookahead_device_ns`] less this, over the overlapped
+    /// submissions with a measured interval.
     pub gpu_lookahead_finish_wait_ns: u64,
+    /// Overlapped submissions whose interval the timer refused or never
+    /// resolved. Neither paired sum includes them, so the hidden time covers
+    /// only the submissions measured; zero for CPU routes.
+    pub gpu_lookahead_unmeasured: u64,
     /// Elapsed time from the device execution's construction to the release of
     /// its first answer, in nanoseconds; reported, never a criterion. Absent
     /// before the first answer and for CPU routes.
@@ -538,14 +546,19 @@ impl MembershipExecution for Execution {
                 statistics,
                 settlement,
             } => {
-                if oracle.compute_time_unresolved() {
+                let flushed = if oracle.compute_time_unresolved() {
                     // A failed flush leaves its fault in the context's health.
                     let _ = phases.measure(SolvePhase::GpuHostOracle, || {
                         oracle.flush_compute_time(settlement.wait, &settlement.control)
                     });
                     record_flush(statistics, oracle.reported_compute_time());
-                    queue.flushed(oracle.reported_compute_time());
-                }
+                    oracle.reported_compute_time()
+                } else {
+                    None
+                };
+                // The last submission's interval arrives only with the flush;
+                // without one, an overlapped last submission is unmeasured.
+                queue.flushed(flushed);
             }
             #[cfg(feature = "gpu")]
             Self::Tight {
@@ -555,14 +568,19 @@ impl MembershipExecution for Execution {
                 settlement,
                 ..
             } => {
-                if oracle.compute_time_unresolved() {
+                let flushed = if oracle.compute_time_unresolved() {
                     // A failed flush leaves its fault in the context's health.
                     let _ = phases.measure(SolvePhase::GpuHostOracle, || {
                         oracle.flush_compute_time(settlement.wait, &settlement.control)
                     });
                     record_flush(statistics, oracle.reported_compute_time());
-                    queue.flushed(oracle.reported_compute_time());
-                }
+                    oracle.reported_compute_time()
+                } else {
+                    None
+                };
+                // The last submission's interval arrives only with the flush;
+                // without one, an overlapped last submission is unmeasured.
+                queue.flushed(flushed);
             }
         }
     }
@@ -785,6 +803,7 @@ pub(crate) fn record_slates(
     statistics.gpu_lookahead = lookahead.decision;
     statistics.gpu_lookahead_device_ns = lookahead.device_ns;
     statistics.gpu_lookahead_finish_wait_ns = lookahead.finish_wait_ns;
+    statistics.gpu_lookahead_unmeasured = lookahead.unmeasured;
     statistics.first_answer_ns = queue.first_answer_ns();
 }
 
@@ -1033,6 +1052,7 @@ impl crate::formula_queue::device::SlateDevice for FormulaDevice<'_> {
                 actual: count,
             }));
         }
+        let finish_wait = checks.finish_wait();
         let checks = checks
             .into_checks(theory, slate, offset)
             .map_err(|error| Failure::Run(SolveError::Gpu(error)))?;
@@ -1067,7 +1087,11 @@ impl crate::formula_queue::device::SlateDevice for FormulaDevice<'_> {
                 check.verdict(),
             )?);
         }
-        Ok(crate::formula_queue::device::Decoded { verdicts, compute })
+        Ok(crate::formula_queue::device::Decoded {
+            verdicts,
+            compute,
+            finish_wait,
+        })
     }
 }
 

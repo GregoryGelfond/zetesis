@@ -1122,11 +1122,12 @@ fn formula_gpu_lookahead(
     if let Some(decision) = execution.gpu_lookahead {
         writeln!(
             sink,
-            "  formula GPU lookahead: slates proposed ahead={}; last decision={}; overlapped device compute={}ns; finish waits={}ns; device time hidden behind production is at most their difference",
+            "  formula GPU lookahead: slates proposed ahead={}; last decision={}; overlapped device compute={}ns; finish waits={}ns; unmeasured submissions={}; device time hidden behind production is the compute less the waits, paired over the measured submissions",
             execution.gpu_lookahead_slates,
             decision.label(),
             execution.gpu_lookahead_device_ns,
             execution.gpu_lookahead_finish_wait_ns,
+            execution.gpu_lookahead_unmeasured,
         )?;
     }
     if let Some(first) = execution.first_answer_ns {
