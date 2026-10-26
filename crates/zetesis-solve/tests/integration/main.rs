@@ -28,6 +28,7 @@ mod session_builder;
 mod session_resources_gpu;
 mod streaming_defaults;
 mod terminal_sessions;
+mod world_view_folds;
 mod world_views;
 #[cfg(feature = "gpu")]
 mod world_views_gpu;

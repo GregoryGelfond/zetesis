@@ -141,7 +141,8 @@ pub use shared_execution::SharedExecutionStatistics;
 pub use solve_config::SolveConfig;
 pub use terminal_session::TerminalExecutionStatistics;
 pub use world_view::{
-    WorldView, WorldViewError, WorldViewFailure, WorldViewFailureParts, WorldViewLimits,
+    QueryAnswer, WorldView, WorldViewDecision, WorldViewDecisionError, WorldViewDecisionFailure,
+    WorldViewError, WorldViewFailure, WorldViewFailureParts, WorldViewLimits, WorldViewVerdict,
 };
 pub use zetesis_backend::{Backend, GpuApi};
 pub use zetesis_stable::BatchVerdict;

@@ -11,6 +11,13 @@ use crate::{
     SessionBuilder, SolveConfig, SolveFailure, Subject,
 };
 
+mod fold;
+
+pub use fold::{
+    QueryAnswer, WorldViewDecision, WorldViewDecisionError, WorldViewDecisionFailure,
+    WorldViewVerdict,
+};
+
 /// Storage ceilings for explicitly collecting a complete answer-set family.
 /// Zero is a real ceiling. Search, scoring and batch limits remain in
 /// [`SolveConfig`]; these ceilings do not bound the search engine or process RSS.

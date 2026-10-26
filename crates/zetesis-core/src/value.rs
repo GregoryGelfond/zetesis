@@ -229,6 +229,25 @@ impl Atom {
     pub fn values(&self) -> &[Value] {
         &self.values
     }
+    /// The atom's strong contrary: the same tuple under the opposite classical
+    /// sign, `-p(t)` for `p(t)` and `p(t)` for `-p(t)`. A literal is false in an
+    /// interpretation that contains its contrary. The predicate name is shared,
+    /// not copied; the tuple is cloned. Taking the contrary twice gives the atom.
+    #[must_use]
+    pub fn contrary(&self) -> Self {
+        let sign = match self.predicate.sign {
+            Sign::Positive => Sign::Negative,
+            Sign::Negative => Sign::Positive,
+        };
+        Self {
+            predicate: Predicate {
+                name: std::sync::Arc::clone(&self.predicate.name),
+                arity: self.predicate.arity,
+                sign,
+            },
+            values: self.values.clone(),
+        }
+    }
     /// Named nested capacity, excluding this inline atom and allocator metadata.
     /// Counts the predicate name, actual argument-vector capacity and each
     /// value's payload capacity. Shared structural buffers are conservatively
