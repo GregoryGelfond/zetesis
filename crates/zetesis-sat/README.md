@@ -455,7 +455,8 @@ disagrees with that candidate on at least one original atom. It excludes
 exactly `M` and does not generalize countermodel evidence. If this blocking
 operation fails after a stable model was already proved, the iterator returns
 that model and emits the pending failure on its next call; coverage remains
-incomplete. The regions proposer needs no exclusion: a leaf is visited once.
+incomplete. The region proposers need no exclusion: each proposes a leaf once,
+since only the leaf's emission resolves its region.
 
 ## Walking the tree with several workers
 
@@ -533,10 +534,18 @@ slates, and shares the region walker's frontier protocols: it continues depth
 first on the newer child of each split, publishes the older child for idle peers
 to steal, and steals a peer's oldest region only with an empty deque. Its deque
 therefore holds at most one sibling per atom split along its current path, so at
-most `atom_count` regions, besides a region returned at a stop. A region a
-producer holds reserves one output slot; a split keeps the slot for the
-continued child, a refutation keeps it only while the producer finds another
-region at once, and a classical leaf consumes it. Each producer holds one work
+most `atom_count` regions, besides the region it returns at a slate's end. A
+producer holds a region only in one of the slate's hands, as many as the slate
+admits candidates and never more than there are producers; a split keeps the
+hand for the continued child, and a refutation or an emission keeps it only
+while the producer finds another region at once. A step reserves an output slot
+only when it reaches a classical leaf, so in a slate of at least as many
+candidates as producers every producer keeps working until the slate's last
+candidate is found. Once every output slot is reserved the output is spoken
+for: no producer that has read it so takes a region or begins a step. A producer
+that has not yet read it holds one of the slate's other hands, and its step ends
+as a step under way does. A leaf that finds the output spoken for returns its
+region unresolved for a later slate. A return refused entry capacity records an allocation stop. Each producer holds one work
 lease per slate. Every slate's producers join before device execution begins. A
 cancellation or deadline observed once the slate is full is left to the next
 slate, so no polled stop follows the emission that fills it. A checker failure

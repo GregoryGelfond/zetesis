@@ -2048,18 +2048,21 @@ emitted so far together with those still held by the frontier. The producers'
 frontier is their deques together with the region each producer holds: a split
 publishes one child and keeps the other in hand, a steal or a return to a deque
 only transfers ownership, and the count of unresolved regions is raised before a
-published child becomes visible. So every stop-free step permutes that frontier
-and the emitted leaves, and a slate reports exhaustion only from a stop-free
-join at a count of zero. The count, the output-slot reservation that bounds the
-regions in hand plus the emitted candidates, and the hand-over are Rust
-obligations beside the walker's queue and gate protocols, as is the stop's
+published child becomes visible. A leaf that finds every output slot reserved
+returns its region to a deque unresolved, which again only transfers ownership,
+and a return refused entry capacity records a stop. So every stop-free step
+permutes that frontier and the emitted leaves, and a slate reports exhaustion
+only from a stop-free join at a count of zero. The count, the hands that bound
+the regions in hand, the output-slot reservation at a leaf that bounds the
+emitted candidates, the stop a refused return records, and the hand-over are
+Rust obligations beside the walker's queue and gate protocols, as is the stop's
 order: a failed region returns to a deque only after the stop closes the slate,
 and a producer checks for the close after each take, so no region is stepped
 again after its step failed. An optimizing search's producers share one deque,
 taking the region published most recently; the frontier is still the deques
-and the hands, every transition only moves a region between them, and the same
-permutation argument applies. Only the order of exploration, and the bound on
-queued regions, differ.
+and the regions in hand, every transition only moves a region between them,
+and the same permutation argument applies. Only the order of exploration, and
+the bound on queued regions, differ.
 
 After producers join, emitted candidates enter the pending membership ledger.
 `BatchAccounting.exact_commit_preserves_soundness` justifies committing a fully

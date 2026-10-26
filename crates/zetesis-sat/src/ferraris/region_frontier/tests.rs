@@ -164,7 +164,7 @@ fn a_returned_region_counts_its_new_knowledge_capacity() {
     // Restrictions added while a region was pending acquire fresh knowledge
     // only when it is narrowed, outside the frontier's ownership.
     hand.1.permanent(1, &index()).unwrap();
-    frontier.requeue(0, hand);
+    frontier.requeue(0, hand, reserve_regions).unwrap();
     let returned = receipts(&frontier);
     assert!(returned.retained_bytes > initial.retained_bytes);
     assert_eq!(returned.regions, 1);
@@ -175,7 +175,7 @@ fn a_returned_region_counts_its_new_knowledge_capacity() {
 fn receipts_follow_entries_across_steals_and_deques() {
     let frontier = RegionFrontier::measured(2, entry()).unwrap();
     let stolen = frontier.steal(1).unwrap();
-    frontier.requeue(1, stolen);
+    frontier.requeue(1, stolen, reserve_regions).unwrap();
     let moved = receipts(&frontier);
     assert_eq!(moved.regions, 1);
     let capacity = frontier.queue(0).capacity() + frontier.queue(1).capacity();
@@ -194,7 +194,7 @@ fn the_peak_is_the_maximum_of_the_counter_history() {
     history.push(0);
     for step in 0..6 {
         if step % 3 == 2 {
-            frontier.requeue(step % 2, hand);
+            frontier.requeue(step % 2, hand, reserve_regions).unwrap();
             hand = frontier.take_local(step % 2).unwrap();
             history.extend([*history.last().unwrap() + 1, *history.last().unwrap()]);
         } else {
