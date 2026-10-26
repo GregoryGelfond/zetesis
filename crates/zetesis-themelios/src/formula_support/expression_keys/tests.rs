@@ -162,9 +162,17 @@ fn source_admission_keeps_undefined_families() {
 
 #[test]
 fn hybrid_capture_keeps_its_original_rows() {
-    let reference = controlled(true, || ground_hybrid(testing::prepare(DIAGONAL), None)).unwrap();
+    // The diagonal family stays streamed with pairwise capture off, so the
+    // captured rows themselves are compared.
+    let reference = crate::test_support::without_pair_exclusions(|| {
+        controlled(true, || ground_hybrid(testing::prepare(DIAGONAL), None))
+    })
+    .unwrap();
     let receipts = Receipts::default();
-    let selected = ground_hybrid(testing::prepare(DIAGONAL), Some(&receipts)).unwrap();
+    let selected = crate::test_support::without_pair_exclusions(|| {
+        ground_hybrid(testing::prepare(DIAGONAL), Some(&receipts))
+    })
+    .unwrap();
     assert!(reference.1.is_some());
     assert!(selected.1.is_some());
     assert_same_program(&reference.0, &selected.0);

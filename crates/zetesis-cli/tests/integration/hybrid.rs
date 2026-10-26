@@ -69,7 +69,10 @@ fn explicit_lazy_formula_preserves_hidden_full_answers() {
 
 #[test]
 fn hybrid_projection_selects_only_original_answers() {
-    let source = "a|b. {c}. :-a,c. #project c/0. #show c/0.";
+    // Under lazy grounding the constraint is checked as a stream, whose
+    // excluded {a,c} projects as {b,c} does. The double negation keeps it a
+    // stream: pair capture would move `:-a,c.` into the core.
+    let source = "a|b. {c}. :-a,not not c. #project c/0. #show c/0.";
     let atom = |name| serde_json::json!({"predicate":name,"sign":"positive","arguments":[]});
     let original = [vec![atom("a")], vec![atom("b")], vec![atom("b"), atom("c")]];
     for grounder in ["eager", "lazy"] {
@@ -94,6 +97,10 @@ fn hybrid_projection_selects_only_original_answers() {
         assert_eq!(document["outcome"]["projection"]["complete"], true);
         assert_eq!(outcome.semantic().verified_models(), 3);
         assert_eq!(outcome.semantic().completion(), Some(Completion::Exhausted));
+        if grounder == "lazy" {
+            let streamed = outcome.semantic().hybrid_execution().unwrap().constraints;
+            assert!(streamed.substitutions > 0);
+        }
     }
 }
 

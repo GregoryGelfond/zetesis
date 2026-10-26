@@ -106,3 +106,36 @@ pub(crate) fn prepared(source: &str) -> PreparedFormula {
 pub(crate) fn hybrid(source: &str) -> HybridFormula {
     prepared(source).ground_hybrid().unwrap()
 }
+
+thread_local! {
+    /// Whether constraint grounding collects pairwise exclusions on this
+    /// thread: on, as in every run, except inside `without_pair_exclusions`.
+    static PAIR_EXCLUSIONS: Cell<bool> = const { Cell::new(true) };
+}
+
+/// Whether pairwise-exclusion collection is on for this thread.
+pub(crate) fn pair_exclusions_enabled() -> bool {
+    PAIR_EXCLUSIONS.get()
+}
+
+/// Run `run` with pairwise-exclusion collection off on this thread, restoring
+/// it afterwards even if `run` unwinds: every pairwise constraint then takes
+/// the route it would take were it not a pair family.
+pub(crate) fn without_pair_exclusions<T>(run: impl FnOnce() -> T) -> T {
+    struct Restore(bool);
+    impl Drop for Restore {
+        fn drop(&mut self) {
+            PAIR_EXCLUSIONS.set(self.0);
+        }
+    }
+    let _restore = Restore(PAIR_EXCLUSIONS.replace(false));
+    run()
+}
+
+/// `source` grounded for hybrid execution with its constraints streamed: the
+/// fixture of the streamed route's own tests. Capture would move a pairwise
+/// family whose every component is complete into the core, and these tests
+/// exercise the stream, not that disposition.
+pub(crate) fn streamed_hybrid(source: &str) -> HybridFormula {
+    without_pair_exclusions(|| hybrid(source))
+}

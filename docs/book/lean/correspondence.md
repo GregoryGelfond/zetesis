@@ -2465,7 +2465,10 @@ source provenance alone cannot establish coverage. Sorting, duplicate-edge
 removal, component membership and the distinct-edge count must establish the
 Lean coverage premises. Eager compilation may replace separate complete
 components; hybrid capture retires a whole streamed template only when every
-passing row is a pair and every component is certified. Full source validation,
+passing row is a pair and every component is certified or has exactly two
+atoms. A two-atom component's pair constraint is emitted once, since repeated
+and reversed occurrences are the same constraint, so its part of the retirement
+rests on that constraint itself rather than on the law. Full source validation,
 original atom and producer ownership, root provenance, typed failures, charged
 storage/work and the retirement of exact original rule positions remain
 executable obligations. The Lean law does not verify these Rust operations or

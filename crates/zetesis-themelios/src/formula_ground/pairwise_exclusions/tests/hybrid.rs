@@ -40,6 +40,14 @@ fn family(owner: &HybridFormula) -> BTreeSet<Vec<usize>> {
         .collect()
 }
 
+/// The number of roots the hybrid core of `source` holds.
+fn roots(source: &str) -> usize {
+    crate::test_support::hybrid(source)
+        .core_theory()
+        .roots()
+        .len()
+}
+
 fn compare(source: &str, templates: usize, instances: u64, native: usize) {
     let actual = crate::test_support::hybrid(source);
     let reference = without(|| crate::test_support::hybrid(source));
@@ -88,16 +96,53 @@ fn a_missing_edge_keeps_the_original_stream() {
     compare("{p(1..4)}. :- p(X),p(Y),X<Y,X+Y<6.", 1, 4, 0);
 }
 
+/// A complete component and a two-atom one: the threshold replaces the first,
+/// the second keeps its pair constraint, and the template leaves the stream.
 #[test]
-fn one_declined_component_keeps_the_whole_template() {
+fn a_two_atom_component_moves_into_the_core_with_its_template() {
     let source = "{p(1,1);p(1,2);p(1,3);p(2,1);p(2,2)}. \
         :- p(G,X),p(G,Y),X!=Y.";
-    compare(source, 1, 8, 0);
+    compare(source, 0, 0, 1);
     assert_eq!(
         native_groups(&compile(source)).len(),
         1,
-        "eager emission can independently replace the complete component"
+        "eager emission replaces the same complete component"
     );
+}
+
+/// A population of two-atom components alone, too few pairs for any
+/// threshold, is materialized as its pair constraints.
+#[test]
+fn two_atom_components_alone_move_into_the_core() {
+    compare("{p(1..4)}. :- p(X),p(Y),X<Y,X+Y=5.", 0, 0, 0);
+}
+
+/// Each two-atom component, met in both orders, becomes one constraint: the
+/// core gains one root per component, not one per occurrence.
+#[test]
+fn a_two_atom_component_becomes_one_constraint() {
+    let moved = roots("{p(1..4)}. :- p(X),p(Y),X!=Y,X+Y=5.");
+    assert_eq!(moved - roots("{p(1..4)}."), 2);
+}
+
+/// A complete component of three atoms beside a two-atom one: the core gains
+/// the first's threshold and the second's pair constraint, and no pair
+/// constraint for any of the first's three edges.
+#[test]
+fn a_moved_family_adds_one_root_per_component() {
+    let choices = "{p(1,1);p(1,2);p(1,3);p(2,1);p(2,2)}.";
+    let moved = roots(&format!("{choices} :- p(G,X),p(G,Y),X!=Y."));
+    assert_eq!(moved - roots(choices), 2);
+}
+
+/// An incomplete component beside a complete one keeps the whole template
+/// streamed: group 1's three pairs certify it, group 2 lacks the pair the
+/// guard excludes, and no partial strengthening is published.
+#[test]
+fn one_incomplete_component_keeps_the_whole_template() {
+    let source = "{p(1,1);p(1,2);p(1,3);p(2,1);p(2,2);p(2,3)}. \
+        :- p(G,X),p(G,Y),X<Y,G+X+Y!=7.";
+    compare(source, 1, 5, 0);
 }
 
 #[test]

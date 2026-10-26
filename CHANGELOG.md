@@ -137,6 +137,13 @@ Notable changes by release. Versions follow Semantic Versioning.
   published most recently, so regions far from the current work wait for
   tighter bounds. Proposal order remains schedule-dependent, and answer sets are
   unchanged.
+- Lazy grounding moves a pairwise constraint into the retained core when every
+  component of its pairs is complete, two-atom components included: each
+  two-atom component becomes its pair constraint, once, and each larger
+  component still becomes one at-most-one condition. A single two-atom
+  component, such as a corner diagonal in n-queens, previously kept the whole
+  constraint streamed; a constraint with an incomplete component still streams.
+  Answer sets are unchanged.
 
 ### Fixed
 

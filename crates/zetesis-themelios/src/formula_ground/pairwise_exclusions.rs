@@ -46,7 +46,7 @@ impl Pending {
         rule: &RuleIr,
     ) -> Result<Option<Self>, FormulaFailure> {
         #[cfg(test)]
-        if !tests::enabled() {
+        if !crate::test_support::pair_exclusions_enabled() {
             return Ok(None);
         }
         if !matches!(rule.head, HeadIr::Normal(None)) {
@@ -87,7 +87,8 @@ impl Pending {
     }
 
     /// A captured template may move into the core only as a whole. Its mode
-    /// records whether every passing row is a pair; no speculative DAG is made.
+    /// records whether every passing row is a pair; no speculative DAG is made
+    /// (see [`Self::finish_capture`]).
     pub(super) fn for_capture(
         builder: &mut Builder<'_, '_, '_>,
         rule: &RuleIr,
@@ -152,22 +153,39 @@ impl Pending {
         }
     }
 
-    /// A completed capture either publishes all its certified groups or keeps
-    /// the original stream. No pair fallback or partial strengthening is emitted.
+    /// A completed capture moves into the core whole, or keeps the original
+    /// stream. It moves only when every component is complete: a component of
+    /// three or more atoms becomes one threshold, and a component of two atoms,
+    /// complete by its one pair, becomes that pair's constraint, emitted once,
+    /// since a repeated or reversed occurrence is the same constraint. A
+    /// repeated atom, an incomplete component or an empty population keeps the
+    /// stream, decided before anything is emitted. So the core gains at most
+    /// one root per component, each over atoms it already holds.
     pub(super) fn finish_capture(
         mut self,
         builder: &mut Builder<'_, '_, '_>,
         rule: &RuleIr,
     ) -> Result<bool, FormulaFailure> {
-        if self.mode != Mode::CapturedPairs || self.pairs.len() < 3 {
+        if self.mode != Mode::CapturedPairs || self.pairs.len() == 0 {
             return Ok(false);
         }
         let plan = plan::Plan::new(&mut self.pairs, builder, rule)?;
         for &[left, right] in self.pairs.slice() {
             let component = plan.component(left, builder, rule)?;
-            if left == right || !plan.complete(component) {
+            if left == right || !(plan.complete(component) || plan.single_pair(component)) {
                 return Ok(false);
             }
+        }
+        // The plan sorted the pairs by their unordered key, so a two-atom
+        // component's occurrences are adjacent and share one key.
+        let mut previous = None;
+        for &[left, right] in self.pairs.slice() {
+            let key = [left.min(right), left.max(right)];
+            let component = plan.component(left, builder, rule)?;
+            if plan.single_pair(component) && previous != Some(key) {
+                emit_pair(plan.node(left), plan.node(right), builder, rule)?;
+            }
+            previous = Some(key);
         }
         emit_groups(&plan, builder, rule)?;
         Ok(true)

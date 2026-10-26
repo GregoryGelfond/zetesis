@@ -65,7 +65,10 @@ fn refused(failure: &zetesis_solve::WorldViewFailure, is: impl Fn(&SolveError) -
     matches!(failure.cause(), zetesis_solve::WorldViewError::Solve(solve) if is(&solve.cause))
 }
 
-const OPTIONAL: &str = "{seed(1);seed(2)}. receipt(X):-seed(X). :- seed(1), seed(2).";
+/// Three answer sets over a hybrid base that streams the constraint. The
+/// double negation keeps it a stream: pair capture would move
+/// `:- seed(1), seed(2).` into the core, leaving nothing to stream.
+const OPTIONAL: &str = "{seed(1);seed(2)}. receipt(X):-seed(X). :- seed(1), not not seed(2).";
 
 #[test]
 fn lazy_grounding_defers_terminal_definitions_over_a_hybrid_base() {
@@ -190,10 +193,12 @@ fn a_stopped_constraint_check_never_claims_exhaustion() {
 #[test]
 fn a_streamed_check_constructs_terms_over_the_closed_base() {
     // The constraint's check builds f(X) for each p(X), resolving it through
-    // the closed base's terms.
+    // the closed base's terms. Its double negation keeps it a stream, as in
+    // `OPTIONAL`.
     const SOURCE: &str =
-        "{p(1); p(2)}. {q(f(1))}. r(X) :- p(X), seed(X). seed(1..2). :- p(X), q(f(X)).";
+        "{p(1); p(2)}. {q(f(1))}. r(X) :- p(X), seed(X). seed(1..2). :- p(X), not not q(f(X)).";
     let owner = lazy_terminal(SOURCE);
+    assert!(matches!(owner.base(), TerminalBase::Hybrid(core) if core.streamed_templates() == 1));
     let (actual, _) = family(PreparedInput::terminal(&owner), config(Grounder::Lazy));
     let reference = adaptive_terminal(SOURCE);
     let (expected, _) = family(PreparedInput::terminal(&reference), config(Grounder::Auto));

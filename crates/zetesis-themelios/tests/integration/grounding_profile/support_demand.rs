@@ -103,12 +103,16 @@ fn every_kind_of_join_finds_its_posting() {
 
 #[test]
 fn a_streamed_constraint_finds_its_posting() {
+    // The negated literal keeps the constraint a stream: pair capture would
+    // move its two-atom components into the core. It probes no posting, being
+    // decided by exact lookup once X is bound.
     let observer = Observer::default();
-    zetesis_reference_support::prepared(
-        "{ a(1..6) }.\n{ b(1..6, 1..2) }.\nc(X) :- a(X).\n:- c(X), b(X, 2).\n",
+    let owner = zetesis_reference_support::prepared(
+        "{ a(1..6) }.\n{ b(1..6, 1..2) }.\nc(X) :- a(X).\n:- c(X), b(X, 2), not b(X, 1).\n",
     )
     .ground_hybrid_with_observer(Some(&observer))
     .expect("admitted");
+    assert_eq!(owner.streamed_templates(), 1);
     let unindexed: u64 = observer
         .records
         .borrow()

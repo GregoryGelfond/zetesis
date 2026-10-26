@@ -21,8 +21,11 @@ pub(super) struct Plan {
 }
 
 impl Plan {
-    /// On return every pair endpoint is a private vertex coordinate. Until then
-    /// no caller may use this partially sorted/remapped private population.
+    /// On return every pair endpoint is a private vertex coordinate, and the
+    /// pairs are sorted by their unordered key, so a pair's repeated and
+    /// reversed occurrences are adjacent: `finish_capture` relies on that to
+    /// emit a two-atom component's constraint once. Until then no caller may
+    /// use this partially sorted/remapped private population.
     pub(super) fn new(
         pairs: &mut Buffer<[usize; 2]>,
         builder: &mut Builder<'_, '_, '_>,
@@ -162,6 +165,12 @@ impl Plan {
         let vertex = self.vertices.slice()[component];
         let size = vertex.size as u128;
         size >= 3 && vertex.edges as u128 == size * (size - 1) / 2
+    }
+
+    /// Whether `component` has exactly two atoms: one distinct edge, which no
+    /// threshold replaces, since the pair constraint is already as small.
+    pub(super) fn single_pair(&self, component: usize) -> bool {
+        self.vertices.slice()[component].size == 2
     }
 
     /// Group all vertices once, rather than scan every vertex per component.

@@ -518,9 +518,10 @@ mod physical {
     }
 
     fn qualify_hybrid_output(backend: GpuApi) {
+        const OBJECTIVES: &str = include_str!("../fixtures/hybrid-gpu/objectives.lp");
         for source in [
             include_str!("../fixtures/observations/conditional.lp"),
-            include_str!("../fixtures/hybrid-gpu/objectives.lp"),
+            OBJECTIVES,
             include_str!("../fixtures/hybrid-gpu/terminal.lp"),
         ] {
             for json in [false, true] {
@@ -567,6 +568,11 @@ mod physical {
                     let core = report.hybrid_execution.unwrap();
                     assert_eq!(core.pending, 0);
                     assert_eq!(core.core_answers, core.accepted + core.rejected);
+                    if source == OBJECTIVES {
+                        // Its constraint is checked on the stream, beside
+                        // the device's checks of the core.
+                        assert!(core.constraints.substitutions > 0);
+                    }
                     let execution = report.formula_execution.unwrap();
                     assert!(execution.adapter.contains(backend.name()));
                     assert!(execution.gpu_candidates > 0);

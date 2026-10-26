@@ -17,6 +17,7 @@ struct Route {
     hybrid_constraints: usize,
     terminal_definitions: usize,
     terminal_base: Option<zetesis_themelios::BaseKind>,
+    terminal_streamed: Option<usize>,
 }
 
 impl ExecutionObserver for Route {
@@ -39,10 +40,12 @@ impl ExecutionObserver for Route {
             ExecutionObservation::TerminalDefinitions {
                 deferred_templates,
                 base,
+                streamed,
                 ..
             } => {
                 self.terminal_definitions = deferred_templates;
                 self.terminal_base = Some(base);
+                self.terminal_streamed = streamed.map(|streamed| streamed.templates);
             }
             _ => {}
         }
@@ -78,8 +81,10 @@ fn lazy_configuration_uses_source_closure() {
 #[test]
 fn lazy_formula_configuration_streams_constraints() {
     // A choice rule is outside the relational profile: lazy grounding takes
-    // the formula route, streaming the constraint over a producer core.
-    let (profile, route) = execute(program! { { p; q }. :- p, q. }, Grounder::Lazy);
+    // the formula route, streaming the constraint over a producer core. The
+    // double negation keeps the constraint a stream: pair capture would move
+    // `:- p, q.` into the core.
+    let (profile, route) = execute(program! { { p; q }. :- p, not not q. }, Grounder::Lazy);
     assert_eq!(profile, PreparedProfile::Hybrid);
     assert!(route.hybrid_constraints > 0);
 }
@@ -87,9 +92,10 @@ fn lazy_formula_configuration_streams_constraints() {
 #[test]
 fn lazy_formula_configuration_defers_terminal_definitions() {
     // r/1 is read by nothing: the lazy materialization defers it over a
-    // hybrid base that streams the constraint.
+    // hybrid base that streams the constraint, kept a stream by its double
+    // negation as above.
     let (profile, route) = execute(
-        program! { { s(1); s(2) }. r(X) :- s(X). :- s(1), s(2). },
+        program! { { s(1); s(2) }. r(X) :- s(X). :- s(1), not not s(2). },
         Grounder::Lazy,
     );
     assert_eq!(profile, PreparedProfile::TerminalDefinitions);
@@ -97,6 +103,7 @@ fn lazy_formula_configuration_defers_terminal_definitions() {
         route.terminal_base,
         Some(zetesis_themelios::BaseKind::Hybrid)
     );
+    assert_eq!(route.terminal_streamed, Some(1));
     assert!(route.terminal_definitions > 0);
 }
 

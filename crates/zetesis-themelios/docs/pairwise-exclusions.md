@@ -50,11 +50,17 @@ Ordinary source failures keep their original statement location; resource work
 and its interruption point can change with the representation.
 
 Hybrid capture feeds the same collector during its existing complete admission
-join. It publishes native groups only if every passing row is a pair and every
-component is certified. Any nonpair, missing edge, component too small to replace,
-or empty selected population keeps the original whole template streamed. Decline
+join. It moves a template into the core only if every passing row is a pair and
+every component either is certified or has exactly two atoms. A certified
+component publishes its native group; a two-atom component publishes its one
+pair's constraint once, since repeated and reversed occurrences are the same
+constraint. The core so gains at most one root per component. Any nonpair,
+missing edge in a larger component, repeated atom or empty selected population
+keeps the original whole template streamed. Decline
 publishes no speculative pair or threshold root, and capture still exhausts every
 source row and its original validation. There is no second complete enumeration.
+An at-most-one family whose components include two-atom ones, as a board's
+corner diagonals are, therefore leaves the stream with its larger components.
 
 After all support/query/domain borrows end, exact original rule positions record
 which templates were fully materialized. Existing in-place item/rule compaction

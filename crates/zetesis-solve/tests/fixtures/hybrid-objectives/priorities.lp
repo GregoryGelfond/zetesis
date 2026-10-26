@@ -1,5 +1,5 @@
 {a;b;hidden}.
-:- a,b.
+:- a, not not b.
 #minimize {2@2,key:a;2@2,key:a;-3@1,reward:b}.
 #maximize {3@1,reward:b}.
 :~ a. [2@2,key]

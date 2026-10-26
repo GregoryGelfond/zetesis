@@ -141,11 +141,13 @@ fn captured(source: &str) -> (HybridFormula, (u64, u64)) {
 
 #[test]
 fn frozen_checks_decide_integer_comparisons_without_admitted_operands() {
-    // X - Y takes the values -2 to 2; no fact or head constructs -2, -1 or 0.
-    // Capture decides the comparison on its nine rows by its form, admitting
+    // X - Y takes the values -4 to 4; no fact or head constructs -4 to 0.
+    // Capture decides the comparison on its 25 rows by its form, admitting
     // none of them, and so do the frozen checks, which could not admit them.
-    let (owner, receipts) = captured("{q(1..3)}. :- q(X), q(Y), X - Y = 2.");
-    assert_eq!(receipts, (9, 0));
+    // The pairs q(3), q(1) and q(5), q(3) leave q(1), q(3) and q(5) an
+    // incomplete component, so the template stays a stream.
+    let (owner, receipts) = captured("{q(1..5)}. :- q(X), q(Y), X - Y = 2.");
+    assert_eq!(receipts, (25, 0));
     assert!(matches!(
         verdict(&owner, &["q(1)", "q(3)"]),
         ConstraintVerdict::Violated { .. }
