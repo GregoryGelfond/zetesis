@@ -389,9 +389,12 @@ impl GpuFormulaOracle {
     /// The returned submission holds this oracle's mutable borrow until a
     /// check consumes it, so no other operation on the oracle, and no second
     /// preparation, can run between the plan and its check. Dropping it submits
-    /// nothing and releases the borrow. The context's lease is taken by the
-    /// check, not here; this polls control and context health before
-    /// preparing.
+    /// nothing and releases the borrow; any retained state its preparation
+    /// replaced stays released, and the next check prepares again. That can be
+    /// the host staging, the resident graph on a fresh admission, and the
+    /// transport when the preparation allocates one. The context's lease is
+    /// taken by the check, not here; this polls control and context health
+    /// before preparing.
     ///
     /// # Errors
     /// Refuses an offset that leaves no candidate, and every refusal and
