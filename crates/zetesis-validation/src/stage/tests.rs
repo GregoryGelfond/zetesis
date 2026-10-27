@@ -19,7 +19,12 @@ fn stage_absence_preserves_supported_phase_schemas() {
         "  phase gpu_host_oracle:",
         "  phase reduct_preparation: unmeasured\n  phase gpu_host_oracle:",
     );
-    for phase in [legacy, current.as_str(), prepared.as_str()] {
+    for phase in [
+        legacy,
+        current.as_str(),
+        prepared.as_str(),
+        zetesis_test_support::fixtures::CURRENT_PHASE_STATISTICS,
+    ] {
         let combined = format!("Timing summary: 0.001 ms\n{SECTION}{phase}\nother diagnostic\n");
         let stages = parse(&combined).unwrap().unwrap();
         assert!(stages.complete);

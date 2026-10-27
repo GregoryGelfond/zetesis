@@ -73,3 +73,31 @@ fn phase_output_preserves_incomplete_measurements() {
         assert_eq!(output.bytes(), &expected[..capacity]);
     }
 }
+
+#[test]
+fn phase_rendering_matches_the_shared_protocol_fixture() {
+    let recorder = SolveMeasurements::new(true);
+    recorder.measure(SolvePhase::AdmissionMaterialization, || ());
+    let timings = recorder.snapshot().unwrap();
+    let admission = timings.get(SolvePhase::AdmissionMaterialization).unwrap();
+    // Only elapsed values depend on the clock. Names, order, calls, availability,
+    // completeness and scope must match the fixture validation reads.
+    let expected = zetesis_test_support::fixtures::CURRENT_PHASE_STATISTICS
+        .replace(
+            "  phase driver: elapsed_ns=1000\n",
+            &format!(
+                "  phase driver: elapsed_ns={}\n",
+                timings.driver_elapsed.as_nanos()
+            ),
+        )
+        .replace(
+            "  phase admission_materialization: calls=1; elapsed_ns=40;",
+            &format!(
+                "  phase admission_materialization: calls=1; elapsed_ns={};",
+                admission.elapsed.as_nanos()
+            ),
+        );
+    let mut rendered = Vec::new();
+    super::write(&mut rendered, &timings).unwrap();
+    assert_eq!(String::from_utf8(rendered).unwrap(), expected);
+}

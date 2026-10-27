@@ -221,3 +221,22 @@ fn schema_seven_omits_closure_membership() {
         assert!(parse(&malformed).is_err());
     }
 }
+
+#[test]
+fn current_phase_fixture_preserves_measurement_presence() {
+    let timing = parse(zetesis_test_support::fixtures::CURRENT_PHASE_STATISTICS)
+        .unwrap()
+        .unwrap();
+    assert_eq!(timing.schema_version, 7);
+    assert_eq!(timing.driver_elapsed_ns, 1000);
+    assert!(timing.complete);
+    assert_eq!(timing.phases.len(), 14);
+    let admission = timing.phases["admission_materialization"].as_ref().unwrap();
+    assert_eq!((admission.calls, admission.elapsed_ns), (1, 40));
+    assert!(admission.complete);
+    for (label, measurement) in &timing.phases {
+        if *label != "admission_materialization" {
+            assert!(measurement.is_none(), "{label}");
+        }
+    }
+}

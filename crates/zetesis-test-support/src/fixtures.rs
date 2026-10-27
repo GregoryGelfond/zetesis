@@ -1,7 +1,12 @@
 //! Data several crates' tests read, embedded.
 
-/// The phase timings section of zetesis's statistics, for one fixed run.
+/// A retained schema-1 phase section, for compatibility checks.
 pub const PHASE_STATISTICS: &str = include_str!("../fixtures/phase_statistics.txt");
+
+/// The current phase protocol, with one measured admission attempt.
+/// Reader tests use its fixed elapsed values; the CLI guard substitutes only
+/// those values from a real recorder snapshot before comparing the full text.
+pub const CURRENT_PHASE_STATISTICS: &str = include_str!("../fixtures/current_phase_statistics.txt");
 
 /// The stage timings section of zetesis's statistics, for the same run as
 /// [`PHASE_STATISTICS`].
