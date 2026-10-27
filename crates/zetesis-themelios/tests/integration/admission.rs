@@ -1,100 +1,105 @@
-//! Boundary laws against real themelios parsing and raising. These fixtures test
-//! source admission and normalized structure, not solver outcomes.
+//! Source formula admission preserves typed values, scopes and refusal evidence.
 
 use crate::support::admission;
+use crate::support::atom_models::{self, Models, answer_sets};
 use themelios_base::source::SourceId;
-use zetesis_core::{AdmissionResource, Filter, Term, Value};
+use zetesis_core::{Value, ValueLimits};
 use zetesis_reference_support::resource_limits;
 use zetesis_themelios::{
-    AdmissionFailure, AdmissionOptions, Admitted, ExpansionLimits, ExpansionUsage, InputLimit,
-    ProfileFeature, admit, admit_extended,
+    AdmissionFailure, AdmissionOptions, AdmittedFormula, ExpansionFailure, ExpansionLimits,
+    FormulaFailure, FormulaLimits, InputLimit, ProfileFeature, admit_formula,
 };
 
-fn accepted(text: &str) -> Admitted {
-    admit(text.to_owned(), AdmissionOptions::default()).expect("fixture is in S0")
+fn admit(text: String, options: AdmissionOptions) -> Result<AdmittedFormula, FormulaFailure> {
+    admit_formula(
+        text,
+        options,
+        ExpansionLimits::default(),
+        FormulaLimits::default(),
+    )
 }
 
-#[test]
-fn positive_recursion_remains_a_positive_dependency() {
-    let input = accepted("p :- q. q :- p.");
-    assert_eq!(input.program().templates().len(), 2);
-    for template in input.program().templates() {
-        assert_eq!(template.positive().len(), 1);
-        assert!(template.gate_true().is_empty());
-        assert!(template.gate_false().is_empty());
-    }
+fn accepted(text: &str) -> AdmittedFormula {
+    admit(text.into(), AdmissionOptions::default()).unwrap()
 }
 
-#[test]
-fn choice_head_is_a_frozen_true_gate_not_a_positive_antecedent() {
-    let input = accepted("{p}.");
-    let template = &input.program().templates().at(0).unwrap();
-    assert!(template.positive().is_empty());
-    assert_eq!(
-        template.gate_true().iter().collect::<Vec<_>>(),
-        &[template.head().expect("choice head")]
-    );
-    assert!(template.gate_false().is_empty());
-}
-
-#[test]
-fn default_and_double_default_negation_have_opposite_gate_polarities() {
-    let input = accepted("p :- not q, not not r.");
-    let template = &input.program().templates().at(0).unwrap();
-    assert_eq!(template.gate_false().at(0).unwrap().predicate().name(), "q");
-    assert_eq!(template.gate_true().at(0).unwrap().predicate().name(), "r");
-    assert!(template.positive().is_empty());
-}
-
-#[test]
-fn constraints_share_gates_and_scalar_filters() {
-    let input = accepted(":- not p, not not q, 1 != 2.");
-    let template = &input.program().templates().at(0).unwrap();
-    assert!(template.head().is_none());
-    assert_eq!(template.gate_false().len(), 1);
-    assert_eq!(template.gate_true().len(), 1);
-    assert_eq!(
-        template.filters().iter().collect::<Vec<_>>(),
-        [Filter::Neq(
-            Term::Constant(Value::Number(1)),
-            Term::Constant(Value::Number(2))
-        )]
+fn expected(models: &[&[&str]]) -> Models {
+    models
         .iter()
-        .map(zetesis_core::FilterRef::from)
-        .collect::<Vec<_>>()
+        .map(|atoms| atoms.iter().map(|atom| atom_models::atom(atom)).collect())
+        .collect()
+}
+
+#[test]
+fn positive_recursion_does_not_supply_its_own_support() {
+    assert_eq!(answer_sets(&accepted("p :- q. q :- p.")), expected(&[&[]]));
+    assert_eq!(
+        answer_sets(&accepted("p :- q. q :- p. {p}.")),
+        expected(&[&[], &["p", "q"]])
+    );
+}
+
+#[test]
+fn a_choice_supplies_both_frozen_gate_interpretations() {
+    assert_eq!(answer_sets(&accepted("{p}.")), expected(&[&[], &["p"]]));
+}
+
+#[test]
+fn default_and_double_default_negation_keep_opposite_polarities() {
+    assert_eq!(
+        answer_sets(&accepted("p :- not q, not not r.")),
+        expected(&[&[]])
+    );
+    assert_eq!(
+        answer_sets(&accepted("{q}. {r}. p :- not q, not not r.")),
+        expected(&[&[], &["q"], &["p", "r"], &["q", "r"]])
+    );
+}
+
+#[test]
+fn constraints_preserve_frozen_gates_and_scalar_filters() {
+    assert_eq!(
+        answer_sets(&accepted(":- not p, not not q, 1 != 2.")),
+        expected(&[&[]])
+    );
+    assert_eq!(
+        answer_sets(&accepted("{p}. {q}. :- not p, not not q, 1 != 2.")),
+        expected(&[&[], &["p"], &["p", "q"]])
     );
 }
 
 #[test]
 fn scalar_values_keep_their_types_and_decode_strings() {
     let input = accepted("p(a, \"a\", 12, -7, \"a\\\"b\").");
-    let terms = input.program().facts().at(0).unwrap().pattern().terms();
+    let atom = input
+        .atoms()
+        .at(0)
+        .unwrap()
+        .to_atom(ValueLimits::default())
+        .unwrap();
     assert_eq!(
-        terms.iter().collect::<Vec<_>>(),
+        atom.values(),
         [
-            Term::Constant(Value::Symbol("a".to_owned())),
-            Term::Constant(Value::String("a".to_owned())),
-            Term::Constant(Value::Number(12)),
-            Term::Constant(Value::Number(-7)),
-            Term::Constant(Value::String("a\"b".to_owned())),
+            Value::Symbol("a".into()),
+            Value::String("a".into()),
+            Value::Number(12),
+            Value::Number(-7),
+            Value::String("a\"b".into())
         ]
-        .iter()
-        .map(zetesis_core::TemplateTerm::from)
-        .collect::<Vec<_>>()
     );
 }
 
 #[test]
 fn numeral_boundaries_follow_the_actual_raiser() {
     accepted("p(2147483647, -2147483647).");
-    assert!(matches!(
-        admit("p(-2147483648).".to_owned(), AdmissionOptions::default()),
-        Err(AdmissionFailure::Raise(_))
-    ));
-    assert!(matches!(
-        admit("p(2147483648).".to_owned(), AdmissionOptions::default()),
-        Err(AdmissionFailure::Raise(_))
-    ));
+    for source in ["p(-2147483648).", "p(2147483648)."] {
+        assert!(matches!(
+            admit(source.into(), AdmissionOptions::default()),
+            Err(FormulaFailure::Expansion(ExpansionFailure::Admission(
+                AdmissionFailure::Raise(_)
+            )))
+        ));
+    }
 }
 
 #[test]
@@ -107,11 +112,13 @@ fn nonbase_delimiters_are_refused_before_raising() {
     ] {
         assert!(
             matches!(
-                admit(text.to_owned(), AdmissionOptions::default()),
-                Err(AdmissionFailure::Profile {
-                    feature: ProfileFeature::ProgramPart,
-                    ..
-                })
+                admit(text.into(), AdmissionOptions::default()),
+                Err(FormulaFailure::Expansion(ExpansionFailure::Admission(
+                    AdmissionFailure::Profile {
+                        feature: ProfileFeature::ProgramPart,
+                        ..
+                    }
+                )))
             ),
             "{text}"
         );
@@ -120,208 +127,28 @@ fn nonbase_delimiters_are_refused_before_raising() {
 }
 
 #[test]
-fn raw_choice_shape_is_checked_before_set_canonicalization() {
-    use themelios_base::source::Source;
-
-    // Pin the raw relational-profile refusal, not an arbitrary parse/raise or
-    // later admission failure. Duplicate elements and an explicit empty
-    // condition must not disappear before this authored shape check.
-    for (text, feature) in [
-        ("{p;p}.", ProfileFeature::ChoiceCardinality),
-        ("{p;q}.", ProfileFeature::ChoiceCardinality),
-        ("{}.", ProfileFeature::ChoiceCardinality),
-        ("1 {p}.", ProfileFeature::BoundedChoice),
-        ("{p} 1.", ProfileFeature::BoundedChoice),
-        ("{p:}.", ProfileFeature::ConditionalChoice),
-        ("{p:q}.", ProfileFeature::ConditionalChoice),
-    ] {
-        let source_id = SourceId::new(220);
-        let source = Source::new(source_id, text.into()).unwrap();
-        let error = admit(text.into(), admission::options(source_id)).unwrap_err();
-        let AdmissionFailure::Profile {
-            feature: actual,
-            location,
-        } = error
-        else {
-            panic!("{text}: {error}");
-        };
-        assert_eq!(actual, feature, "{text}");
-        assert_eq!(
-            location.location().expect("parsed source").source,
-            source_id
-        );
-        assert_eq!(
-            source
-                .slice(location.location().expect("parsed source").span)
-                .unwrap(),
-            text.strip_suffix('.').unwrap(),
-            "the original complete choice head must be located: {text}"
-        );
-    }
-}
-
-#[test]
-fn relational_refusals_preserve_the_profile_diagnostic() {
-    use themelios_base::diagnostic::Severity;
-    use themelios_base::source::Source;
-
-    // These are refusals of the deliberately smaller relational admission
-    // door. They do not assert that ordinary formula solving refuses the forms.
-    for (text, feature, description, highlighted) in [
-        (
-            "{p;q}.",
-            ProfileFeature::ChoiceCardinality,
-            "choice with other than one element",
-            "{p;q}",
-        ),
-        (
-            "1{p}.",
-            ProfileFeature::BoundedChoice,
-            "bounded choice",
-            "1{p}",
-        ),
-        (
-            "{p:q}.",
-            ProfileFeature::ConditionalChoice,
-            "conditional choice element",
-            "{p:q}",
-        ),
-        (
-            "not p.",
-            ProfileFeature::NegatedHead,
-            "default-negated head",
-            "not p.",
-        ),
-        (
-            "p:-not 1=1.",
-            ProfileFeature::NegatedComparison,
-            "default-negated comparison",
-            "p:-not 1=1.",
-        ),
-        (
-            "p:-1=1=1.",
-            ProfileFeature::ComparisonChain,
-            "comparison chain",
-            "p:-1=1=1.",
-        ),
-        (
-            "p:-1<2.",
-            ProfileFeature::ComparisonRelation,
-            "comparison relation",
-            "p:-1<2.",
-        ),
-        (
-            "p:-#true.",
-            ProfileFeature::BooleanLiteral,
-            "Boolean literal",
-            "p:-#true.",
-        ),
-    ] {
-        let source_id = SourceId::new(219);
-        let source = Source::new(source_id, text.into()).unwrap();
-        let error = admit(text.into(), admission::options(source_id)).unwrap_err();
-        let AdmissionFailure::Profile {
-            feature: actual,
-            location,
-        } = &error
-        else {
-            panic!("{text}: {error}");
-        };
-        assert_eq!(*actual, feature, "{text}");
-        let location = location
-            .location()
-            .expect("source profile retains its parsed span");
-        assert_eq!(location.source, source_id);
-        assert_eq!(source.slice(location.span).unwrap(), highlighted, "{text}");
-        let expected = format!("source profile does not admit {description}");
-        assert_eq!(error.to_string(), expected);
-        assert!(std::error::Error::source(&error).is_none());
-        let diagnostics = error.diagnostics();
-        let [diagnostic] = diagnostics.as_slice() else {
-            panic!("one profile refusal must yield one diagnostic: {diagnostics:?}");
-        };
-        assert_eq!(diagnostic.severity(), Severity::Error);
-        assert_eq!(diagnostic.message(), expected);
-        assert_eq!(diagnostic.primary().location, location);
-    }
-}
-
-#[test]
-fn unsupported_language_families_never_become_partial_programs() {
-    for text in [
-        "p. #show p/0.",
-        "#const n=1. p(n).",
-        "#include \"missing.lp\".",
-        "p | q.",
-        "p :- #count{1:q} > 0.",
-        "p :- q:r.",
-        "not p.",
-        "{not p}.",
-        "p :- #true.",
-        "#true.",
-        "p(1..3).",
-        "p(a;a).",
-        "p((a;a)).",
-        "p(1+2).",
-        "p(~1).",
-        "p(- -1).",
-        "p(@f()).",
-        "p :- 1 < 2.",
-        "p :- 1 = 1 = 1.",
-        "p :- not 1 = 1.",
-    ] {
-        assert!(
-            admit(text.to_owned(), AdmissionOptions::default()).is_err(),
-            "{text}"
-        );
-    }
-}
-
-#[test]
 fn empty_body_scalar_filters_do_not_need_variable_bindings() {
-    let input = accepted("p :- 1=1. :- 1!=1.");
-    assert_eq!(input.program().templates().len(), 2);
-    assert!(
-        input
-            .program()
-            .templates()
-            .iter()
-            .all(|template| template.positive().is_empty() && template.filters().len() == 1)
+    assert_eq!(
+        answer_sets(&accepted("p :- 1=1. :- 1!=1.")),
+        expected(&[&["p"]])
     );
 }
 
 #[test]
-fn scalar_assignments_require_binding_analysis() {
-    for source in ["p(X):-X=1.", "p(X):-X=Y.", "p :- r(_), _=1."] {
-        assert!(
-            matches!(
-                admit(source.to_owned(), AdmissionOptions::default()),
-                Err(AdmissionFailure::Profile {
-                    feature: ProfileFeature::ScalarBinding,
-                    ..
-                })
-            ),
-            "{source}"
-        );
-    }
-}
-
-#[test]
-fn anonymous_occurrences_have_distinct_slots() {
-    let input = accepted("p(X) :- r(_,X,_).");
-    let template = &input.program().templates().at(0).unwrap();
-    let terms = template.positive().at(0).unwrap().terms();
-    assert_ne!(terms.at(0).unwrap(), terms.at(2).unwrap());
-}
-
-#[test]
-fn named_occurrences_share_slots() {
-    let input = accepted("p(X) :- r(_,X,_).");
-    let template = &input.program().templates().at(0).unwrap();
-    let terms = template.positive().at(0).unwrap().terms();
+fn anonymous_occurrences_have_distinct_bindings() {
+    accepted("p(X) :- r(_,X,_).");
     assert_eq!(
-        template.head().expect("head").terms().at(0).unwrap(),
-        terms.at(1).unwrap()
+        answer_sets(&accepted("r(1,2,3). p(X) :- r(_,X,_).")),
+        expected(&[&["r(1,2,3)", "p(2)"]])
+    );
+}
+
+#[test]
+fn named_occurrences_share_bindings() {
+    accepted("p(X) :- r(_,X,_).");
+    assert_eq!(
+        answer_sets(&accepted("r(1,2,3). r(4,5,4). p(X) :- r(_,X,_).")),
+        expected(&[&["r(1,2,3)", "r(4,5,4)", "p(2)", "p(5)"]])
     );
 }
 
@@ -329,32 +156,21 @@ fn named_occurrences_share_slots() {
 fn anonymous_head_slots_remain_unsafe() {
     assert!(matches!(
         admit("p(_) :- r(_).".into(), AdmissionOptions::default()),
-        Err(AdmissionFailure::Core { .. })
+        Err(FormulaFailure::UnsafeVariable { .. })
     ));
-}
-
-#[test]
-fn negated_anonymous_atoms_require_projection() {
-    for source in ["p :- not r(_), s(_).", "p :- not not r(_)."] {
-        assert!(matches!(
-            admit(source.into(), AdmissionOptions::default()),
-            Err(AdmissionFailure::Profile {
-                feature: ProfileFeature::AnonymousProjection,
-                ..
-            })
-        ));
-    }
 }
 
 #[test]
 fn byte_limits_are_checked_before_syntax() {
     let options = resource_limits::admission(InputLimit::SourceBytes, 2);
     assert!(matches!(
-        admit("invalid input".to_owned(), options),
-        Err(AdmissionFailure::Limit {
-            resource: InputLimit::SourceBytes,
-            ..
-        })
+        admit("invalid input".into(), options),
+        Err(FormulaFailure::Expansion(ExpansionFailure::Admission(
+            AdmissionFailure::Limit {
+                resource: InputLimit::SourceBytes,
+                ..
+            }
+        )))
     ));
     accepted("");
 }
@@ -363,11 +179,13 @@ fn byte_limits_are_checked_before_syntax() {
 fn body_limits_count_source_occurrences_before_deduplication() {
     let options = resource_limits::admission(InputLimit::BodyElements, 1);
     assert!(matches!(
-        admit("p :- q,q.".to_owned(), options),
-        Err(AdmissionFailure::Limit {
-            resource: InputLimit::BodyElements,
-            ..
-        })
+        admit("p :- q,q.".into(), options),
+        Err(FormulaFailure::Expansion(ExpansionFailure::Admission(
+            AdmissionFailure::Limit {
+                resource: InputLimit::BodyElements,
+                ..
+            }
+        )))
     ));
 }
 
@@ -375,10 +193,12 @@ fn body_limits_count_source_occurrences_before_deduplication() {
 fn syntax_node_and_depth_limits_refuse_with_locations() {
     for (expected, limit) in [(InputLimit::SyntaxNodes, 0), (InputLimit::SyntaxDepth, 1)] {
         let options = resource_limits::admission(expected, limit);
-        match admit("p(a).".to_owned(), options) {
-            Err(AdmissionFailure::Limit {
-                resource, location, ..
-            }) => {
+        match admit("p(a).".into(), options) {
+            Err(FormulaFailure::Expansion(ExpansionFailure::Admission(
+                AdmissionFailure::Limit {
+                    resource, location, ..
+                },
+            ))) => {
                 assert_eq!(resource, expected);
                 assert_eq!(location.location().unwrap().source, options.source_id);
             }
@@ -388,19 +208,13 @@ fn syntax_node_and_depth_limits_refuse_with_locations() {
 }
 
 #[test]
-fn core_limits_remain_an_independent_admission_door() {
-    let options = resource_limits::admission_core(AdmissionResource::Templates, 1);
-    assert!(matches!(
-        admit("p. q.".to_owned(), options),
-        Err(AdmissionFailure::Core { .. })
-    ));
-}
-
-#[test]
 fn syntax_refusal_preserves_dependency_diagnostics_and_source_identity() {
     let options = admission::options(SourceId::new(42));
-    let error = admit("p(.".to_owned(), options).expect_err("broken source");
-    assert!(matches!(error, AdmissionFailure::Syntax(_)));
+    let error = admit("p(.".into(), options).expect_err("broken source");
+    assert!(matches!(
+        error,
+        FormulaFailure::Expansion(ExpansionFailure::Admission(AdmissionFailure::Syntax(_)))
+    ));
     let diagnostics = error.diagnostics();
     assert!(!diagnostics.is_empty());
     assert!(
@@ -412,11 +226,12 @@ fn syntax_refusal_preserves_dependency_diagnostics_and_source_identity() {
 
 #[test]
 fn merged_rules_retain_all_source_origins() {
-    let input = accepted("p(a). p(a).");
-    assert!(input.program().templates().is_empty());
-    assert_eq!(input.program().facts().len(), 1);
-    assert_eq!(input.fact_origins()[0].len(), 2);
-    assert_eq!(input.source().text(), "p(a). p(a).");
+    let (input, roots) = crate::support::root_emission::source("p(a). p(a).");
+    assert_eq!(input.atoms().len(), 1);
+    let authored = roots.indices(zetesis_themelios::GroundingPhase::RuleInstantiation);
+    assert_eq!(authored.len(), 1);
+    assert_eq!(input.formula_origins()[authored[0]].len(), 2);
+    assert_eq!(input.source().unwrap().text(), "p(a). p(a).");
 }
 
 #[test]
@@ -430,9 +245,11 @@ fn closed_function_and_tuple_facts_have_complete_distinct_values() {
         ("p(-f()).", "-f"),
         ("p(-f(1)).", "-f(1)"),
     ] {
-        let input = admit(source.to_owned(), AdmissionOptions::default()).unwrap();
-        assert_eq!(input.program().domain().len(), 1);
-        let value = &input.program().domain().at(0).unwrap();
+        let input = accepted(source);
+        assert_eq!(input.atoms().len(), 1);
+        let atom = input.atoms().at(0).unwrap();
+        assert_eq!(atom.values().len(), 1);
+        let value = atom.values().at(0).unwrap();
         let actual = match value.descriptor() {
             zetesis_core::ValueNodeRef::Function { .. }
             | zetesis_core::ValueNodeRef::Tuple { .. } => value.to_string(),
@@ -444,27 +261,38 @@ fn closed_function_and_tuple_facts_have_complete_distinct_values() {
 }
 
 #[test]
-fn extended_admission_reports_the_expansion_it_used() {
+fn formula_admission_reports_the_expansion_it_used() {
     let limits = ExpansionLimits::default();
-    let admitted = admit_extended(
-        "p(1..3). q(X) :- p(X).".to_owned(),
+    let admitted = admit_formula(
+        "p(1..3). q(X) :- p(X).".into(),
         AdmissionOptions::default(),
         limits,
+        FormulaLimits::default(),
     )
     .unwrap();
     let usage = admitted.expansion_usage();
     assert!(usage.term_work > 0);
     assert!(usage.term_work <= limits.max_term_work);
-    assert!(usage.templates >= admitted.program().rules().len());
+    assert!(usage.templates >= 4);
     assert!(usage.templates <= limits.max_templates);
     assert!(usage.values >= 3);
-    assert!(usage.origin_locations >= admitted.program().rules().len());
+    assert!(usage.origin_locations >= 4);
 }
 
 #[test]
-fn plain_admission_performs_no_expansion() {
-    assert_eq!(
-        *accepted("p :- q.").expansion_usage(),
-        ExpansionUsage::default()
-    );
+fn source_external_calls_and_unresolved_includes_remain_refused() {
+    for text in ["p(@f()).", r#"#include "missing.lp"."#] {
+        assert!(
+            admit(text.into(), AdmissionOptions::default()).is_err(),
+            "{text}"
+        );
+    }
+}
+
+#[test]
+fn an_equality_of_unbound_variables_remains_unsafe() {
+    assert!(matches!(
+        admit("p(X):-X=Y.".into(), AdmissionOptions::default()),
+        Err(FormulaFailure::UnsafeVariable { .. })
+    ));
 }

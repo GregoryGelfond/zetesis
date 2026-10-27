@@ -61,14 +61,6 @@ const BUNDLE: [InputLimit; 3] = [
     InputLimit::BodyElements,
 ];
 
-const CORE: [zetesis_core::AdmissionResource; 5] = [
-    zetesis_core::AdmissionResource::Templates,
-    zetesis_core::AdmissionResource::PredicateArity,
-    zetesis_core::AdmissionResource::Variables,
-    zetesis_core::AdmissionResource::PositiveBody,
-    zetesis_core::AdmissionResource::DomainValues,
-];
-
 const PROGRAM: [ProgramResource; 4] = [
     ProgramResource::Nodes,
     ProgramResource::Depth,
@@ -200,11 +192,6 @@ fn each_bundle_input_limit_has_a_field_of_its_own() {
 }
 
 #[test]
-fn each_core_admission_resource_has_a_field_of_its_own() {
-    independent(&CORE, core_field);
-}
-
-#[test]
 fn each_program_resource_has_a_field_of_its_own() {
     independent(&PROGRAM, program_field);
 }
@@ -293,16 +280,10 @@ fn the_formula_forms_bound_only_their_nested_field() {
 }
 
 #[test]
-fn the_admission_forms_bound_only_their_nested_field() {
-    let mut templates = admission_core(zetesis_core::AdmissionResource::Templates, 0);
-    assert_eq!(templates.core_limits.max_templates, 0);
-    assert!(at_defaults(&mut templates, &INPUT, input_field));
+fn formula_admission_bounds_only_its_nested_field() {
     let mut arity = admission_formula(FormulaResource::Arity, 0);
     assert_eq!(arity.core_limits.max_predicate_arity, 0);
     assert!(at_defaults(&mut arity, &INPUT, input_field));
-    let mut program = program_core(zetesis_core::AdmissionResource::Templates, 0);
-    assert_eq!(program.core_limits.max_templates, 0);
-    assert!(at_defaults(&mut program, &PROGRAM, program_field));
 }
 
 #[test]

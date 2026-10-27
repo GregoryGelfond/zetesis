@@ -539,4 +539,111 @@ mod tests {
             assert_eq!(arena.retained_bytes(), 5 * cell);
         });
     }
+
+    /// Receipts stop before fact-arena storage and rule compilation. Those
+    /// consumers have their own charges; source normalization and checked fact
+    /// products can be inspected without paying or simulating them here.
+    struct NormalizationReceipt {
+        usage: crate::ExpansionUsage,
+        statements: Vec<WithProvenance<Statement>>,
+        fact_rows: usize,
+        nonfact_statements: usize,
+        origins: Vec<Vec<ProgramSite>>,
+    }
+
+    fn normalization_receipt(text: &str) -> NormalizationReceipt {
+        let parsed =
+            crate::ParsedSource::new(text.into(), crate::AdmissionOptions::default()).unwrap();
+        let raised = themelios_program::raise::raise(parsed.parsed());
+        assert!(raised.diagnostics().is_empty());
+        let fallback = ProgramSite::source(themelios_base::span::Location {
+            source: parsed.source().id(),
+            span: parsed.source().span(),
+        });
+        with_compiler(ExpansionLimits::default(), |compiler| {
+            assert_eq!(compiler.budget.usage(), crate::ExpansionUsage::default());
+            let constants =
+                crate::extended::resolve(raised.program(), compiler.budget, fallback).unwrap();
+            let mut statements = Vec::new();
+            let mut origins = Vec::new();
+            let mut fact_rows = 0;
+            let mut nonfact_statements = 0;
+            for (index, carrier) in raised.program().statements().enumerate() {
+                if matches!(carrier.get(), Statement::Const(_)) {
+                    continue;
+                }
+                let site = fallback.with_statement(StatementId::new(index));
+                compiler.location = crate::extended::origin(carrier, site);
+                let rewritten = if compiler.keeps_fact(carrier, &constants).unwrap() {
+                    None
+                } else {
+                    Some(compiler.normalize_statement(carrier, &constants).unwrap())
+                };
+                let normalized = rewritten.as_ref().map_or(carrier, |program| {
+                    program
+                        .statements()
+                        .next()
+                        .expect("normalization retains its rule")
+                });
+                match crate::fact_expansion::facts(normalized, compiler.budget, compiler.location)
+                    .unwrap()
+                {
+                    Some(facts) => fact_rows += facts.len(),
+                    None => nonfact_statements += 1,
+                }
+                origins.push(crate::extended::program_sites(carrier, compiler.location));
+                statements.push(normalized.clone());
+            }
+            NormalizationReceipt {
+                usage: compiler.budget.usage(),
+                statements,
+                fact_rows,
+                nonfact_statements,
+                origins,
+            }
+        })
+    }
+
+    #[test]
+    fn plain_statements_keep_exact_normalization_and_fact_expansion_charges() {
+        let receipt = normalization_receipt("e(0,1). e(1,2). r(0). r(Y) :- r(X), e(X,Y).");
+        // Five numeric fact arguments and four variable occurrences normalize
+        // once. The three fact products charge three name bytes and ten values.
+        assert_eq!(receipt.usage.term_work, 9);
+        assert_eq!(receipt.usage.scalar_bytes, 3);
+        assert_eq!(receipt.usage.values, 10);
+        assert_eq!(receipt.usage.templates, 3);
+        assert_eq!(receipt.fact_rows, 3);
+        assert_eq!(receipt.nonfact_statements, 1);
+        assert_eq!(receipt.statements.len(), 4);
+        assert_eq!(receipt.origins.len(), 4);
+        assert!(receipt.origins.iter().all(|origins| origins.len() == 1));
+        // Evidence has been read, not charged or copied into a compiler owner.
+        // The removed relational emitter added one rule template and four
+        // origin charges here; the retained formula consumers charge their own
+        // later work rather than preserving that obsolete combined receipt.
+        assert_eq!(receipt.usage.origin_locations, 0);
+    }
+
+    #[test]
+    fn a_definition_after_a_kept_leaf_is_replaced_and_charged_once() {
+        let receipt = normalization_receipt("#const n=2. p(1,n).");
+        // Definition resolution costs two units. A failed keep attempt must
+        // discard its tentative first-argument charge before rewriting both.
+        assert_eq!(receipt.usage.term_work, 4);
+        assert_eq!(receipt.usage.scalar_bytes, 1);
+        assert_eq!(receipt.usage.values, 4);
+        assert_eq!(receipt.usage.templates, 1);
+        assert_eq!(receipt.fact_rows, 1);
+        assert_eq!(receipt.nonfact_statements, 0);
+        assert_eq!(receipt.statements.len(), 1);
+        let expected =
+            crate::ParsedSource::new("p(1,2).".into(), crate::AdmissionOptions::default()).unwrap();
+        let expected = themelios_program::raise::raise(expected.parsed());
+        assert!(expected.diagnostics().is_empty());
+        assert_eq!(
+            receipt.statements[0].get(),
+            expected.program().statements().next().unwrap().get()
+        );
+    }
 }

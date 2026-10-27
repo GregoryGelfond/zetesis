@@ -4,18 +4,26 @@ use std::collections::BTreeSet;
 
 use serde_json::Value as Json;
 use zetesis_clingo_support as oracle;
-use zetesis_core::{Atom, PatternRef, Predicate, Program, TemplateTerm, ValueLimits};
-use zetesis_reference_support::normal_answer_sets;
-use zetesis_themelios::{AdmissionOptions, admit};
+use zetesis_core::{Atom, Model, ValueLimits};
+use zetesis_reference_support::{exhaustive_bundle_models, exhaustive_models};
+use zetesis_themelios::{AdmittedFormula, AdmittedFormulaBundle, FormulaLimits};
 
 /// Models as sets of atoms.
 pub(crate) type Models = BTreeSet<BTreeSet<Atom>>;
 
-/// Every answer set of the normal program `program`, as sets of atoms; no two
-/// candidates yield the same one.
-pub(crate) fn answer_sets(program: &Program) -> Models {
+/// Every answer set of the admitted formula, retaining typed atom identity.
+pub(crate) fn answer_sets(input: &AdmittedFormula) -> Models {
+    models(exhaustive_models(input))
+}
+
+/// Every answer set of an admitted bundle, retaining typed atom identity.
+pub(crate) fn bundle_answer_sets(input: &AdmittedFormulaBundle) -> Models {
+    models(exhaustive_bundle_models(input))
+}
+
+fn models(answers: Vec<Model>) -> Models {
     let mut models = Models::new();
-    for model in normal_answer_sets(program) {
+    for model in answers {
         let atoms = model
             .atoms()
             .iter()
@@ -31,29 +39,15 @@ pub(crate) fn answer_sets(program: &Program) -> Models {
 pub(crate) fn atom(source: &str) -> Atom {
     // Parsing complete atoms preserves strings and numeric identities; output
     // atoms are never split at whitespace or compared through display filters.
-    let input = admit(format!("{source}."), AdmissionOptions::default())
-        .expect("campaign atoms belong to the scalar profile");
-    assert_eq!(input.program().facts().len(), 1);
-    assert!(input.program().templates().is_empty());
-    ground_atom(input.program().facts().at(0).unwrap().pattern())
-}
-
-/// The atom an admitted fact's ground head denotes.
-pub(crate) fn ground_atom(head: PatternRef<'_>) -> Atom {
-    let values = head
-        .terms()
-        .iter()
-        .map(|term| match term {
-            TemplateTerm::Constant(value) => value.to_value(ValueLimits::default()).unwrap(),
-            TemplateTerm::Variable(_) => panic!("a fact's head is ground"),
-        })
-        .collect();
-    let predicate = head.predicate();
-    Atom::new(
-        Predicate::with_sign(predicate.name(), predicate.arity(), predicate.sign()).unwrap(),
-        values,
-    )
-    .expect("canonical atom arity")
+    let input = zetesis_reference_support::admit(&format!("{source}."), &FormulaLimits::default())
+        .expect("campaign atoms are complete ground atoms");
+    assert_eq!(input.atoms().len(), 1);
+    input
+        .atoms()
+        .at(0)
+        .unwrap()
+        .to_atom(ValueLimits::default())
+        .unwrap()
 }
 
 /// The full models of a complete clingo report of a program without an

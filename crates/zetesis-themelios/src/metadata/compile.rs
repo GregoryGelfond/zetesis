@@ -337,7 +337,7 @@ impl SourceMetadata {
         let fallback = fallback.into();
         validate(program, limits, fallback)?;
         let mut metadata = super::Builder::new(limits.storage);
-        super::collect_profile_at(program, &mut metadata, true, fallback)
+        super::collect_profile_at(program, &mut metadata, fallback)
             .map_err(|error| MetadataError::Compilation(error.into()))?;
         let mut budget = crate::expansion::Budget::new(limits.expansion, 0);
         if !program.statements().any(|entry| {

@@ -473,7 +473,7 @@ fn projected_admission_refuses_below_combined_peak() {
     );
 }
 
-fn admitted_program() -> (crate::Program, crate::Atom) {
+fn admitted_catalog() -> (crate::TemplateCatalog, crate::Atom) {
     let nested = Value::from_nodes(
         vec![
             ValueNode::Function {
@@ -499,27 +499,22 @@ fn admitted_program() -> (crate::Program, crate::Atom) {
             .collect(),
     )
     .unwrap();
-    let program = crate::Program::new(
-        vec![crate::Template::new(
-            Some(pattern),
-            vec![],
-            vec![],
-            vec![],
-            vec![],
-        )],
-        crate::FactTables::default(),
-        crate::AdmissionLimits::default(),
-    )
-    .unwrap();
-    (program, expected)
+    let catalog = crate::test_support::template_catalog(&[crate::Template::new(
+        Some(pattern),
+        vec![],
+        vec![],
+        vec![],
+        vec![],
+    )]);
+    (catalog, expected)
 }
 
 #[test]
 fn admitted_pattern_publishes_its_borrowed_constants() {
-    let (program, expected) = admitted_program();
-    let mut owner = AtomInterner::for_program(&program, 1_048_576).unwrap();
+    let (catalog, expected) = admitted_catalog();
+    let mut owner = AtomInterner::for_template_catalog(&catalog, 1_048_576).unwrap();
     let values = owner.read().assignment();
-    let pattern = program.templates().at(0).unwrap().head().unwrap();
+    let pattern = catalog.at(0).unwrap().patterns().at(0).unwrap();
     // This producer is PatternTerms::Admitted, rather than from_parts metadata.
     let position = owner
         .split()
@@ -542,10 +537,10 @@ fn admitted_pattern_publishes_its_borrowed_constants() {
 
 #[test]
 fn occupied_projection_checks_nested_bounds() {
-    let (program, _) = admitted_program();
-    let mut owner = AtomInterner::for_program(&program, 1_048_576).unwrap();
+    let (catalog, _) = admitted_catalog();
+    let mut owner = AtomInterner::for_template_catalog(&catalog, 1_048_576).unwrap();
     let values = owner.read().assignment();
-    let pattern = program.templates().at(0).unwrap().head().unwrap();
+    let pattern = catalog.at(0).unwrap().patterns().at(0).unwrap();
     owner
         .split()
         .1

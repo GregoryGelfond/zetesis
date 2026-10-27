@@ -7,16 +7,14 @@ representations. A representation name does not confer a semantic property.
 | --- | --- | --- |
 | Canonical logical program | `themelios_program::Program`, re-exported as `zetesis_themelios::logical::Program`; constructed directly or raised from source | Source-template and translation laws use explicit abstract premises |
 | Original statement evidence | `zetesis_themelios::ProgramSite` carries an owner-local `StatementId` when available and an optional real `Location` | Identity and provenance do not by themselves establish a translation law |
-| Admitted relational program | `zetesis_core::Program` | `Semantics.Program` |
 | Finite propositional theory | `zetesis_ferraris::Theory` | `Ferraris.Theory` |
 | Interpretation | `zetesis_core::Interpretation` / `Model`; theory-bound `zetesis_ferraris::Interpretation` | `Atoms α` |
-| Candidate gate assignment | `zetesis_core::Seed` | Seed `z` and `Semantics.GateCarrier` |
 | Checked answer set | Privately constructed `zetesis_solve::AnswerSet` (`SessionModel` compatibility alias), or a native `StableInterpretation` | `Semantics.Stable` / `Ferraris.Stable` |
 | Ground-symbol exchange set | `zetesis_themelios::logical::AnswerSet`, a plain `BTreeSet<Symbol>` used by explicit symbol export | A set representation with no checked membership claim |
 | Complete world view | `WorldView` retains the original subject and all full answers after unrestricted exhaustion | Membership, original-family coverage and complete-capture laws |
 | A world-view question folded over answer sets: decided at an absorbing value, complete after exhaustion, or inconsistent | `WorldViewDecision` and its `WorldViewVerdict`, from `SessionBuilder::{known, possible, cautious, brave, answer}` | `AxisFolds.Reduction`, `world_view_fold_decided`, `world_view_fold_complete` |
-| Positive consequence closure | CPU normal oracle result; static or lazy representation | `Semantics.Gamma`, `Zetesis.Least` |
-| Frozen reduct | `zetesis_ferraris::FrozenReduct` or candidate-gated normal consequences | `Ferraris.ReductTheory` / `Semantics.ReductModel` |
+| Positive consequence closure | Checked positive-formula specialization | `Semantics.Gamma`, `Zetesis.Least` |
+| Frozen reduct | `zetesis_ferraris::FrozenReduct` | `Ferraris.ReductTheory` / `Semantics.ReductModel` |
 | Display | Source observations selecting shown atoms and terms | Distinct from full interpretation |
 | Proved optimum | `SemanticOutcome::optimum_proved()` and retained objective evidence | Objective ordering and completed-search laws |
 | The sides of a region: held, cut, open | `Region::is_held`, `is_cut`, `is_open`; the carrier's `held_gate_atoms` and `cut_gate_atoms`; the cube's `must` is the held set and the complement of `may` the cut set | `Cube`, `Bounds.undecided` for the open cube |

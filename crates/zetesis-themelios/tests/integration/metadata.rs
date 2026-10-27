@@ -3,27 +3,23 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use crate::support::admission;
-use crate::support::atom_models::{self, Models, answer_sets};
+use crate::support::atom_models::{self, Models, answer_sets, bundle_answer_sets};
 use serde_json::Value as Json;
 use themelios_base::source::SourceId;
 use zetesis_clingo_support as oracle;
 use zetesis_core::Atom;
 use zetesis_reference_support::{BundleFixture, resource_limits};
 use zetesis_themelios::{
-    AdmissionOptions, Admitted, BundleAdmissionError, BundleAdmissionOptions, ExpansionFailure,
-    ExpansionLimits, ExpansionResource, OutputSelection, SourceDirective, admit,
-    admit_bundle_extended, admit_extended,
+    AdmissionOptions, AdmittedFormula, BundleAdmissionOptions, ExpansionFailure, ExpansionLimits,
+    ExpansionResource, FormulaFailure, FormulaLimits, OutputSelection, SourceDirective,
+    admit_bundle_formula, admit_formula,
 };
 
 type Displays = BTreeMap<BTreeSet<Atom>, usize>;
 
-fn input(source: &str) -> Admitted {
-    admit_extended(
-        source.to_owned(),
-        AdmissionOptions::default(),
-        ExpansionLimits::default(),
-    )
-    .unwrap_or_else(|error| panic!("metadata source {source}: {error}"))
+fn input(source: &str) -> AdmittedFormula {
+    zetesis_reference_support::admit(source, &FormulaLimits::default())
+        .unwrap_or_else(|error| panic!("metadata source {source}: {error}"))
 }
 
 fn displays(models: &Models, selection: &OutputSelection) -> Displays {
@@ -44,11 +40,11 @@ fn defined_signatures_are_located_declarations_without_logical_effects() {
     let source = "#defined missing/3. p(1). {q}. #defined p/1.";
     let accepted = input(source);
     let base = input("p(1). {q}.");
-    assert_eq!(
-        zetesis_test_support::programs::rules(accepted.program()).collect::<Vec<_>>(),
-        zetesis_test_support::programs::rules(base.program()).collect::<Vec<_>>()
-    );
-    assert_eq!(answer_sets(accepted.program()), answer_sets(base.program()));
+    assert_eq!(accepted.theory().roots(), base.theory().roots());
+    assert_eq!(accepted.atoms(), base.atoms());
+    assert_eq!(accepted.theory().nodes(), base.theory().nodes());
+    assert_eq!(accepted.theory().operands(), base.theory().operands());
+    assert_eq!(answer_sets(&accepted), answer_sets(&base));
     assert!(!accepted.metadata().output().is_explicit());
     assert!(
         accepted
@@ -61,6 +57,7 @@ fn defined_signatures_are_located_declarations_without_logical_effects() {
     assert_eq!(
         accepted
             .source()
+            .expect("source input")
             .slice(first.location().span)
             .expect("original declaration"),
         "#defined missing/3."
@@ -70,7 +67,7 @@ fn defined_signatures_are_located_declarations_without_logical_effects() {
 #[test]
 fn signatures_select_exact_arities_and_never_rename_through_constants() {
     let accepted = input("#const p=7. p. p(1). q. #show p/0.");
-    let full = answer_sets(accepted.program());
+    let full = answer_sets(&accepted);
     assert_eq!(full.first().expect("full model").len(), 3);
     let shown = displays(&full, accepted.metadata().output());
     let atom = shown
@@ -91,28 +88,22 @@ fn empty_show_activates_explicit_selection_without_erasing_other_signatures() {
         assert!(accepted.metadata().output().is_explicit());
         assert_eq!(accepted.metadata().output().signatures().len(), 1);
         assert_eq!(
-            displays(
-                &answer_sets(accepted.program()),
-                accepted.metadata().output()
-            )
-            .first_key_value()
-            .expect("display")
-            .0
-            .len(),
+            displays(&answer_sets(&accepted), accepted.metadata().output())
+                .first_key_value()
+                .expect("display")
+                .0
+                .len(),
             1
         );
     }
     let accepted = input("p. q. #show.");
     assert_eq!(
-        displays(
-            &answer_sets(accepted.program()),
-            accepted.metadata().output()
-        ),
+        displays(&answer_sets(&accepted), accepted.metadata().output()),
         BTreeMap::from([(BTreeSet::new(), 1)])
     );
     let default = input("p. q.");
     assert_eq!(
-        displays(&answer_sets(default.program()), default.metadata().output())
+        displays(&answer_sets(&default), default.metadata().output())
             .first_key_value()
             .expect("display")
             .0
@@ -124,14 +115,14 @@ fn empty_show_activates_explicit_selection_without_erasing_other_signatures() {
 #[test]
 fn equal_displays_do_not_collapse_full_model_identity_or_counts() {
     let accepted = input("{p}. {q}. #show p/0.");
-    let full = answer_sets(accepted.program());
+    let full = answer_sets(&accepted);
     assert_eq!(full.len(), 4);
     let shown = displays(&full, accepted.metadata().output());
     assert_eq!(shown.len(), 2);
     assert!(shown.values().all(|count| *count == 2));
     let hidden = input("{p}. {q}. #show.");
     assert_eq!(
-        displays(&answer_sets(hidden.program()), hidden.metadata().output()),
+        displays(&answer_sets(&hidden), hidden.metadata().output()),
         BTreeMap::from([(BTreeSet::new(), 4)])
     );
 }
@@ -140,14 +131,20 @@ fn equal_displays_do_not_collapse_full_model_identity_or_counts() {
 fn duplicate_metadata_occurrences_keep_their_original_spans() {
     let source = "#show p/1.\r\n#show p/1.\r\n#defined q/2. #defined q/2.";
     let options = admission::options(SourceId::new(91));
-    let accepted = admit_extended(source.to_owned(), options, ExpansionLimits::default())
-        .expect("located metadata");
+    let accepted = admit_formula(
+        source.to_owned(),
+        options,
+        ExpansionLimits::default(),
+        FormulaLimits::default(),
+    )
+    .expect("located metadata");
     assert_eq!(accepted.metadata().directives().len(), 4);
     assert_eq!(accepted.metadata().output().signatures().len(), 1);
     for entry in accepted.metadata().directives().iter() {
         assert_eq!(entry.location().source, SourceId::new(91));
         let original = accepted
             .source()
+            .expect("source input")
             .slice(entry.location().span)
             .expect("original metadata span");
         assert!(matches!(original, "#show p/1." | "#defined q/2."));
@@ -158,39 +155,48 @@ fn duplicate_metadata_occurrences_keep_their_original_spans() {
 fn raw_metadata_occurrences_have_their_own_budget_before_deduplication() {
     let limits = resource_limits::expansion(ExpansionResource::MetadataStatements, 1);
     assert!(matches!(
-        admit_extended(
+        admit_formula(
             "#show p/1. #show p/1.".to_owned(),
             AdmissionOptions::default(),
-            limits
+            limits,
+            FormulaLimits::default()
         ),
-        Err(ExpansionFailure::Limit {
+        Err(FormulaFailure::Expansion(ExpansionFailure::Limit {
             resource: ExpansionResource::MetadataStatements,
             observed: 2,
             limit: 1,
             ..
-        })
+        }))
     ));
-    let options = resource_limits::admission_core(zetesis_core::AdmissionResource::Templates, 0);
-    let accepted = admit_extended(
+    let options = AdmissionOptions {
+        core_limits: zetesis_core::AdmissionLimits {
+            max_templates: 0,
+            ..Default::default()
+        },
+        ..Default::default()
+    };
+    let accepted = admit_formula(
         "#defined p/2. #show.".to_owned(),
         options,
         ExpansionLimits::default(),
+        FormulaLimits::default(),
     )
     .expect("metadata consumes no templates");
-    assert!(accepted.program().is_empty());
-    assert_eq!(answer_sets(accepted.program()).len(), 1);
+    assert!(accepted.theory().roots().is_empty());
+    assert_eq!(answer_sets(&accepted).len(), 1);
     assert!(
-        admit_extended(
+        admit_formula(
             "p.".to_owned(),
             AdmissionOptions::default(),
-            resource_limits::expansion(ExpansionResource::MetadataStatements, 0)
+            resource_limits::expansion(ExpansionResource::MetadataStatements, 0),
+            FormulaLimits::default()
         )
         .is_ok()
     );
 }
 
 #[test]
-fn strict_s0_and_unsupported_display_forms_still_refuse() {
+fn declaration_and_signature_forms_are_accepted() {
     for source in [
         "#defined p/1.",
         "#show p/1.",
@@ -198,26 +204,13 @@ fn strict_s0_and_unsupported_display_forms_still_refuse() {
         "#defined -p/1.",
         "#show -p/1.",
     ] {
-        assert!(admit(source.to_owned(), AdmissionOptions::default()).is_err());
         input(source);
     }
-    for source in [
-        "#show p.",
-        "#show p(X) : q(X).",
-        "#show 1+2.",
-        "#project p/1.",
-        "#defined p.",
-    ] {
-        assert!(
-            admit_extended(
-                source.to_owned(),
-                AdmissionOptions::default(),
-                ExpansionLimits::default()
-            )
-            .is_err(),
-            "unsupported source {source}"
-        );
-    }
+}
+
+#[test]
+fn malformed_defined_declarations_are_refused() {
+    assert!(zetesis_reference_support::admit("#defined p.", &FormulaLimits::default()).is_err());
 }
 
 #[test]
@@ -228,30 +221,28 @@ fn bundle_metadata_unions_global_selection_and_keeps_file_identities() {
         "#include \"child.lp\". #show p/0. #defined missing/1.",
     );
     fixture.write("child.lp", "p. q. r. #show q/0. #show. #show p/0.");
-    let accepted = admit_bundle_extended(
+    let accepted = admit_bundle_formula(
         fixture.bundle(),
         BundleAdmissionOptions::default(),
         ExpansionLimits::default(),
+        FormulaLimits::default(),
     )
     .expect("bundle metadata");
     assert_eq!(accepted.metadata().directives().len(), 5);
     assert_eq!(accepted.metadata().output().signatures().len(), 2);
     assert_eq!(
-        answer_sets(accepted.program())
+        bundle_answer_sets(&accepted)
             .first()
             .expect("full model")
             .len(),
         3
     );
     assert_eq!(
-        displays(
-            &answer_sets(accepted.program()),
-            accepted.metadata().output()
-        )
-        .first_key_value()
-        .expect("display")
-        .0
-        .len(),
+        displays(&bundle_answer_sets(&accepted), accepted.metadata().output())
+            .first_key_value()
+            .expect("display")
+            .0
+            .len(),
         2
     );
     let identities: BTreeSet<_> = accepted
@@ -275,15 +266,16 @@ fn bundle_metadata_unions_global_selection_and_keeps_file_identities() {
                 .is_ok()
         );
     }
-    let error = admit_bundle_extended(
+    let error = admit_bundle_formula(
         fixture.bundle(),
         BundleAdmissionOptions::default(),
         resource_limits::expansion(ExpansionResource::MetadataStatements, 4),
+        FormulaLimits::default(),
     )
     .expect_err("global metadata ceiling");
     assert!(matches!(
         error.error(),
-        BundleAdmissionError::Expansion(ExpansionFailure::Limit {
+        FormulaFailure::Expansion(ExpansionFailure::Limit {
             resource: ExpansionResource::MetadataStatements,
             observed: 5,
             limit: 4,
@@ -342,7 +334,7 @@ fn declarations_and_signature_display_match_clingo_without_model_projection() {
             "#show unknown/7.",
         ] {
             let accepted = input(&format!("{base} {metadata}"));
-            let full = answer_sets(accepted.program());
+            let full = answer_sets(&accepted);
             assert_eq!(
                 displays(&full, &OutputSelection::default()),
                 external(base),
@@ -367,10 +359,11 @@ fn included_signature_metadata_matches_clingo_complete_display_multiplicities() 
             &format!("#include \"child.lp\". #defined p/0. {directives}"),
         );
         fixture.write("child.lp", "{p}. {q}. #show.");
-        let accepted = admit_bundle_extended(
+        let accepted = admit_bundle_formula(
             fixture.bundle(),
             BundleAdmissionOptions::default(),
             ExpansionLimits::default(),
+            FormulaLimits::default(),
         )
         .expect("metadata bundle");
         let run = oracle::run_in(
@@ -380,10 +373,7 @@ fn included_signature_metadata_matches_clingo_complete_display_multiplicities() 
             oracle::Limits::default(),
         );
         assert_eq!(
-            displays(
-                &answer_sets(accepted.program()),
-                accepted.metadata().output()
-            ),
+            displays(&bundle_answer_sets(&accepted), accepted.metadata().output()),
             oracle_json(run.stdout())
         );
     }

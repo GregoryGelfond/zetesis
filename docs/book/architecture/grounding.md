@@ -3,7 +3,7 @@
 Source processing and solving are separate library capabilities. themelios owns
 syntax, logical terms, program structure and source provenance.
 `zetesis-themelios` checks the supported semantic profile and lowers it into
-relational templates or a finite formula theory. It also retains objective and
+a finite formula theory. It also retains objective and
 observation data associated with that representation.
 
 Text and canonical logical input meet at the same formula preparation compiler.
@@ -316,23 +316,6 @@ This makes the remaining completeness obligation explicit: admission must have
 visited every computed identity that the retained source checks can require.
 
 ## Eager and lazy execution
-
-For admitted relational programs, **eager** grounding explicitly compiles a
-complete bounded graph. This is useful when repeated candidate checks amortize
-its construction. `GroundProgram::compile` is the operation that creates this
-graph; constructing a `Program` or `Seed` does not silently invoke it.
-
-**Lazy** relational execution retains non-fact templates and a canonical fact
-store, then streams relevant instances during positive inference. Source admission
-classifies closed positive facts once and records their positions among the
-templates. Both eager grounding and lazy source scans read `Program::rules()`,
-so duplicate occurrences and their order survive the separate storage. Signed
-coherence reads both streams and keeps the evidence for both introducing
-signatures. Template indexes and join dimensions remain template-only. It can avoid storing the complete ground
-program. Candidate generation still owes coverage of all relevant gate choices,
-and each completed closure owes coverage of all instances enabled in its final
-snapshot. Laziness moves and limits materialization; it does not remove these
-obligations or guarantee smaller memory use on every input.
 
 The finite formula path materializes a bounded theory. Automatic admission can
 first separate [terminal positive definitions](#terminal-definition-analysis),

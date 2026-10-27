@@ -7,7 +7,7 @@ use themelios_base::source::{Source, TooLarge};
 use themelios_base::span::Location;
 use themelios_program::raise::LowerError;
 use themelios_syntax::diagnostic::SyntaxError;
-use zetesis_core::{AdmissionError, ConstructionError};
+use zetesis_core::ConstructionError;
 
 use crate::ProgramSite;
 
@@ -36,9 +36,7 @@ impl fmt::Display for InputLimit {
 }
 
 /// A construct excluded by the admission operation that reports it.
-///
-/// Relational and formula admission share these feature names. The enclosing
-/// operation identifies the profile; this value does not imply an S0 refusal.
+/// The enclosing operation identifies the admission profile.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum ProfileFeature {
     /// Any non-rule statement, including an erased program delimiter.
@@ -230,13 +228,6 @@ pub enum AdmissionFailure {
         /// Original declaration identity and any real source evidence.
         location: ProgramSite,
     },
-    /// The normalized program failed the independent core admission door.
-    Core {
-        /// The typed core refusal.
-        error: AdmissionError,
-        /// The affected rule, or the full source for program-wide failures.
-        location: ProgramSite,
-    },
 }
 
 impl AdmissionFailure {
@@ -250,8 +241,7 @@ impl AdmissionFailure {
             | Self::Profile { location, .. }
             | Self::ExtremumEndpoint { location, .. }
             | Self::Construction { location, .. }
-            | Self::Metadata { location, .. }
-            | Self::Core { location, .. } => Some(*location),
+            | Self::Metadata { location, .. } => Some(*location),
             Self::Syntax(_) | Self::Raise(_) => None,
         }
     }
@@ -285,9 +275,6 @@ impl AdmissionFailure {
             Self::Metadata { location, .. } => {
                 site_diagnostics("metadata-storage", self.to_string(), *location)
             }
-            Self::Core { location, .. } => {
-                site_diagnostics("core-admission", self.to_string(), *location)
-            }
         }
     }
 }
@@ -318,7 +305,6 @@ impl fmt::Display for AdmissionFailure {
             ),
             Self::Construction { error, .. } => error.fmt(f),
             Self::Metadata { error, .. } => error.fmt(f),
-            Self::Core { error, .. } => error.fmt(f),
         }
     }
 }
@@ -330,7 +316,6 @@ impl std::error::Error for AdmissionFailure {
             Self::Syntax(error) => Some(error),
             Self::Construction { error, .. } => Some(error),
             Self::Metadata { error, .. } => Some(error),
-            Self::Core { error, .. } => Some(error),
             _ => None,
         }
     }

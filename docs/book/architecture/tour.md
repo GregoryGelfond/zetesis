@@ -32,39 +32,30 @@ cargo run --locked -p zetesis-solve --no-default-features --example book-session
 
 ## From source to admitted solver input
 
-The Rust example passes source text to `zetesis_themelios::admit`, zetesis's
-normal-profile admission operation. Internally, themelios supplies lossless
-parsing and the logical program representation. Zetesis checks its supported
-profile and creates an admitted owner, preserving source metadata. For these
-normal rules it can retain relational templates without requiring a complete
-ground-rule graph.
-Admission establishes a well-formed input for a particular execution profile.
-It does not establish satisfiability.
+The Rust example calls `zetesis_themelios::admit_formula`. themelios supplies
+lossless parsing and the canonical logical program; zetesis prepares and grounds
+that program while preserving original statements and source metadata.
+Admission establishes well-formed input, not satisfiability.
 
-A constructed logical program can enter the same compiler without source text:
-`admit_program` handles the relational profile, and `prepare_program_formula`
-handles general formulas. Both preserve the original statement identity. See
-[program preparation](../rust/source.md) for their limits and checked examples.
+Constructed logical programs enter the same compiler through
+`prepare_program_formula`, without rendering or reparsing. Preparation exposes
+both eager and hybrid grounding. See [program preparation](../rust/source.md)
+for their limits and checked examples.
 
 ```text
-original source
-      │ themelios parsing and logical Program
+source or canonical logical Program
+      │ preparation and grounding
       ▼
-admitted templates ── candidate generation ──► candidate
-      │                                         │
-      └──────── original program + frozen gates ┘
+original formula theory ── candidate generation ──► candidate
+      │                                               │
+      └──────── satisfaction and frozen reduct ───────┘
                               │
+                 no proper-subset reduct model
                               ▼
-                  positive reduct consequences
-                              │
-                   closure and constraints
-                              │
-                   candidate agreement
-                              ▼
-                   verified answer set
+                     verified answer set
                               │ complete enumeration
                               ▼
-                  complete answer-set family
+                    complete answer-set family
 ```
 
 These are semantic stages, not necessarily separately allocated intermediate
@@ -90,15 +81,10 @@ The last row is why classical satisfaction cannot replace reduct checking.
 Equally, copying the candidate into the initial positive closure would make the
 test unsound: it would give assumed atoms the status of derived consequences.
 
-The relational implementation can guess only the atoms needed to decide frozen
-gates. It derives the remaining atoms and checks that the result's gate
-projection agrees with the seed. Here both `a` and `b` are gate atoms, so seeds
-and full candidates happen to have the same carrier.
-
-The session example also constructs `Seed::new` for `{a}` and calls
-`zetesis_cpu::check` directly. A seed fixes gate truth; it carries no membership
-claim. The completed `Check` accepts it only after closure, constraints and gate
-agreement. The [checked Lean consumer](../lean/normal-rules.md) applies the
+The session example also constructs a theory-bound interpretation for `{a}`
+and calls `zetesis_stable::check`. A candidate carries no membership claim.
+The completed check accepts it only after original satisfaction and reduct
+minimality. The [checked Lean consumer](../lean/normal-rules.md) applies the
 normal-rule/Ferraris bridge to the corresponding mathematical program.
 
 ## A finite closure algorithm
@@ -154,11 +140,10 @@ seeds.
 
 ## Where the machine enters
 
-CPU execution can perform source joins directly, or use an explicitly compiled
-ground graph. Independent candidate checks can run in an owned Rayon pool.
-Lazy GPU rounds share source instances across candidates while keeping each
-candidate's frozen gates and derived truth separate. CPU or GPU scheduling does
-not change which interpretations qualify as answer sets.
+CPU and GPU execution share the admitted formula representation. Independent
+candidate checks may run concurrently; each retains its own interpretation and
+frozen reduct. Hybrid execution additionally checks retained source constraints
+before accepting an original answer. Scheduling does not change membership.
 
 For a general formula reduct, such as the disjunction `a | b.`, there need not
 be one least model. zetesis instead asks whether a proper subset of the
@@ -177,6 +162,6 @@ enumerate or publish the ordinary session's `AnswerSet` values.
 
 To follow the actual entry points, see the
 [writer-free session example](../rust/sessions.md),
-[`zetesis_themelios::admit`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/lib.rs),
+[`zetesis_themelios::admit_formula`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/lib.rs),
 [the reduct's membership queries](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-stable/src/reduct.rs),
 and the [finite formula API](../rust/reducts.md).

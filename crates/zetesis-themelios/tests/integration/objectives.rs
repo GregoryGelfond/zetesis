@@ -11,7 +11,7 @@ use zetesis_test_support::repository;
 use zetesis_themelios::{
     AdmissionOptions, BundleAdmissionOptions, BundleLimits, ExpansionFailure, ExpansionLimits,
     ExpansionResource, FormulaFailure, FormulaLimits, FormulaResource, SourceBundle,
-    admit_bundle_formula, admit_extended,
+    admit_bundle_formula, admit_formula,
 };
 
 fn scored(
@@ -59,21 +59,15 @@ fn scores(source: &str) -> Vec<Vec<(i32, i64)>> {
     scores
 }
 fn expected_model(facts: &str) -> BTreeSet<Atom> {
-    admit_extended(
-        facts.to_owned(),
-        AdmissionOptions::default(),
-        ExpansionLimits::default(),
-    )
-    .expect("expected scalar facts")
-    .program()
-    .facts()
-    .iter()
-    .map(|fact| {
-        fact.atom()
-            .to_atom(ValueLimits::default())
-            .expect("external comparison identity")
-    })
-    .collect()
+    zetesis_reference_support::admit(facts, &FormulaLimits::default())
+        .expect("expected scalar facts")
+        .atoms()
+        .iter()
+        .map(|atom| {
+            atom.to_atom(ValueLimits::default())
+                .expect("external comparison identity")
+        })
+        .collect()
 }
 
 #[test]
@@ -303,30 +297,39 @@ fn unsupported_objective_syntax_and_unsafe_variables_are_typed_refusals() {
 }
 
 #[test]
-fn profile_retry_classification_does_not_hide_malformed_arithmetic_or_limits() {
-    for source in ["1{a;b}1.", "#minimize{1:a}.", "d(1). p(X) :- d(X), X+1=2."] {
-        let error = admit_extended(
-            source.to_owned(),
-            AdmissionOptions::default(),
-            ExpansionLimits::default(),
-        )
-        .expect_err("requires formula profile");
-        assert!(error.needs_formula_admission(), "{source}");
+fn malformed_arithmetic_and_limits_keep_their_typed_refusals() {
+    for source in ["p(1/0).", "p(2147483647+1)."] {
+        let error =
+            zetesis_reference_support::admit(source, &FormulaLimits::default()).unwrap_err();
+        assert!(
+            matches!(
+                error,
+                FormulaFailure::Expansion(ExpansionFailure::Evaluation { .. })
+            ),
+            "{source}"
+        );
     }
-    for source in ["p(1/0).", "p(2147483647+1).", "p(."] {
-        let error = admit_extended(
-            source.to_owned(),
-            AdmissionOptions::default(),
-            ExpansionLimits::default(),
-        )
-        .expect_err("not a profile mismatch");
-        assert!(!error.needs_formula_admission(), "{source}");
-    }
-    let error: ExpansionFailure = admit_extended(
-        "p(1..3).".to_owned(),
+    let error = zetesis_reference_support::admit("p(.", &FormulaLimits::default()).unwrap_err();
+    assert!(matches!(
+        error,
+        FormulaFailure::Expansion(ExpansionFailure::Admission(
+            zetesis_themelios::AdmissionFailure::Syntax(_)
+        ))
+    ));
+    let error = admit_formula(
+        "p(1..3).".into(),
         AdmissionOptions::default(),
         resource_limits::expansion(ExpansionResource::Templates, 1),
+        FormulaLimits::default(),
     )
-    .expect_err("budget");
-    assert!(!error.needs_formula_admission());
+    .unwrap_err();
+    assert!(matches!(
+        error,
+        FormulaFailure::Expansion(ExpansionFailure::Limit {
+            resource: ExpansionResource::Templates,
+            limit: 1,
+            observed: 3,
+            ..
+        })
+    ));
 }

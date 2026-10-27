@@ -255,20 +255,6 @@ impl AtomInterner {
         Self::default()
     }
 
-    /// Create one tuple authority over the admitted program's exact vocabulary.
-    /// Terms and signed predicates share their original immutable allocations;
-    /// this request has a fresh atom identity scope and empty discovery/truth.
-    /// New terms or signatures are refused rather than extending the domain.
-    /// The byte allowance includes shared base retention and this owner's named
-    /// metadata. Arc envelopes follow the ordinary constructor's allocation
-    /// boundary. Later operations retain their own population/work allowances.
-    ///
-    /// # Errors
-    /// Refuses an initial named-storage footprint beyond `max_bytes`.
-    pub fn for_program(program: &crate::Program, max_bytes: usize) -> Result<Self, super::Error> {
-        Self::with_vocabulary(program.vocabulary().clone(), max_bytes)
-    }
-
     /// Create an independent tuple authority over an admitted template vocabulary.
     /// Shared terms and predicates retain their canonical identity; atoms receive
     /// a fresh scope. No new vocabulary is admitted by the returned writer.
@@ -305,7 +291,7 @@ impl AtomInterner {
     }
 
     /// Shared immutable vocabulary already included in [`Self::storage_bytes`].
-    /// A combined Program/tuple ledger counts that same retained base once.
+    /// A combined template-catalog/tuple ledger counts that same retained base once.
     /// General evolving owners have no separately shared vocabulary allocation.
     #[must_use]
     pub fn shared_vocabulary_bytes(&self) -> u128 {

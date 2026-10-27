@@ -4,6 +4,9 @@ use crate::{Atom, ConstructionError, Predicate, Value};
 use std::collections::BTreeSet;
 use std::fmt;
 
+mod views;
+pub use views::{FilterRef, Filters, PatternRef, PatternTerms, Patterns, TemplateTerm};
+
 pub(crate) mod catalog;
 pub use catalog::{
     TemplateCatalog, TemplateCatalogBuilder, TemplateCatalogFailure, TemplateCatalogSelection,
@@ -102,7 +105,7 @@ impl Filter {
     /// # Errors
     /// Returns the first variable not present in the assignment.
     pub fn evaluate(&self, assignment: &[Value]) -> Result<bool, InstantiationError> {
-        crate::program::FilterRef::from(self).evaluate(assignment)
+        FilterRef::from(self).evaluate(assignment)
     }
 }
 
@@ -117,8 +120,8 @@ pub struct Template {
     variable_count: usize,
 }
 impl Template {
-    /// Assemble a template. Program admission checks safety, dense variable IDs,
-    /// and budgets. Input template order and duplicate templates are preserved.
+    /// Assemble a template. Semantic admission owners check safety, dense
+    /// variable IDs, and budgets. This constructor preserves all input occurrences.
     #[must_use]
     pub fn new(
         head: Option<AtomPattern>,

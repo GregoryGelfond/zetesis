@@ -1,6 +1,6 @@
 //! Strong predicate signs remain distinct atoms, with explicit coherence.
 
-use crate::support::atom_models::answer_sets;
+use crate::support::atom_models::{self, Models, answer_sets};
 use std::collections::BTreeSet;
 
 use crate::support::answer_records::Record;
@@ -14,9 +14,8 @@ use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{Node, Theory};
 use zetesis_reference_support::{BundleFixture, canonical, resource_limits};
 use zetesis_themelios::{
-    AdmissionFailure, AdmissionOptions, AdmittedFormula, BundleAdmissionOptions, ExpansionFailure,
-    ExpansionLimits, FormulaFailure, FormulaLimits, FormulaResource, ProfileFeature, admit,
-    admit_bundle_formula, admit_extended,
+    AdmissionFailure, AdmittedFormula, BundleAdmissionOptions, ExpansionFailure, ExpansionLimits,
+    FormulaFailure, FormulaLimits, FormulaResource, ProfileFeature, admit_bundle_formula,
 };
 
 const SIGNED_ANONYMOUS_PROJECTIONS: [(&str, &str); 2] = [
@@ -258,38 +257,21 @@ fn coherence_and_signed_choices_match_a_manual_theory_in_every_frozen_world() {
 }
 
 #[test]
-fn ordinary_and_extended_closure_routes_enforce_the_same_signed_coherence() {
-    for source in [
-        "-p.",
-        "p.-p.",
-        "p(1).-p(2).",
-        "p:-not -p.-p:-not p.",
-        "{-p}.p.",
-        "-p(1).q(X):- -p(X).",
+fn signed_coherence_preserves_explicit_complete_families() {
+    for (source, wanted) in [
+        ("-p.", vec![vec!["-p"]]),
+        ("p.-p.", vec![]),
+        ("p(1).-p(2).", vec![vec!["p(1)", "-p(2)"]]),
+        ("p:-not -p.-p:-not p.", vec![vec!["p"], vec!["-p"]]),
+        ("{-p}.p.", vec![vec!["p"]]),
+        ("-p(1).q(X):- -p(X).", vec![vec!["-p(1)", "q(1)"]]),
     ] {
-        let expected: BTreeSet<_> = stable_models(
-            &zetesis_reference_support::admit(source, &FormulaLimits::default()).unwrap(),
-        )
-        .into_iter()
-        .map(|model| {
-            model
-                .atoms()
-                .iter()
-                .map(|atom| atom.to_atom(zetesis_core::ValueLimits::default()).unwrap())
-                .collect::<BTreeSet<_>>()
-        })
-        .collect();
-        for admitted in [
-            admit(source.into(), AdmissionOptions::default()).unwrap(),
-            admit_extended(
-                source.into(),
-                AdmissionOptions::default(),
-                ExpansionLimits::default(),
-            )
-            .unwrap(),
-        ] {
-            assert_eq!(answer_sets(admitted.program()), expected, "{source}");
-        }
+        let wanted: Models = wanted
+            .iter()
+            .map(|atoms| atoms.iter().map(|atom| atom_models::atom(atom)).collect())
+            .collect();
+        let input = zetesis_reference_support::admit(source, &FormulaLimits::default()).unwrap();
+        assert_eq!(answer_sets(&input), wanted, "{source}");
     }
 }
 
@@ -437,14 +419,6 @@ fn coherence_roots_are_bounded_and_keep_both_original_source_locations() {
             ));
         }
     }
-    let options = resource_limits::admission_core(zetesis_core::AdmissionResource::Templates, 2);
-    assert!(
-        matches!(
-            admit(source.into(), options),
-            Err(AdmissionFailure::Core { .. })
-        ),
-        "coherence must fit the core template ceiling"
-    );
 }
 
 #[test]

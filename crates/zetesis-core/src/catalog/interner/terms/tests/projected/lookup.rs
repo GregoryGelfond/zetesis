@@ -276,10 +276,10 @@ fn projected_lookup_requires_discovery_publication() {
 
 #[test]
 fn projected_lookup_reads_admitted_template_constants() {
-    let (program, expected) = admitted_program();
-    let mut owner = AtomInterner::for_program(&program, 1_048_576).unwrap();
+    let (catalog, expected) = admitted_catalog();
+    let mut owner = AtomInterner::for_template_catalog(&catalog, 1_048_576).unwrap();
     let values = owner.read().assignment();
-    let pattern = program.templates().at(0).unwrap().head().unwrap();
+    let pattern = catalog.at(0).unwrap().patterns().at(0).unwrap();
     let (_, mut append) = owner.split();
     append
         .insert_pattern_with(

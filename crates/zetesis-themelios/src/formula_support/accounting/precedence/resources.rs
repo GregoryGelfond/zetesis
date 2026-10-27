@@ -14,7 +14,6 @@ pub(super) fn formula(error: &FormulaFailure) -> bool {
                 crate::CompilationFailure::Profile(_) => false,
                 crate::CompilationFailure::Construction(error) => construction(error),
             },
-            crate::ProgramFailureKind::Core(error) => core(error),
         },
         FormulaFailure::TemplateCatalog { error, .. } => template(error),
         FormulaFailure::TermAssignment { error, .. } => assignment(error),
@@ -137,21 +136,11 @@ fn construction(error: &zetesis_core::ConstructionError) -> bool {
     }
 }
 
-fn core(error: &zetesis_core::AdmissionError) -> bool {
-    use zetesis_core::AdmissionError;
-    match error {
-        AdmissionError::Canonical { error, .. } => error.is_resource_refusal(),
-        AdmissionError::LimitExceeded { .. } | AdmissionError::FactLimitExceeded { .. } => true,
-        AdmissionError::UnsafeVariable { .. } | AdmissionError::NonDenseVariable { .. } => false,
-    }
-}
-
 fn admission(error: &AdmissionFailure) -> bool {
     match error {
         AdmissionFailure::Limit { .. } | AdmissionFailure::Source { .. } => true,
         AdmissionFailure::Construction { error, .. } => construction(error),
         AdmissionFailure::Metadata { error, .. } => metadata(error),
-        AdmissionFailure::Core { error, .. } => core(error),
         AdmissionFailure::Syntax(_)
         | AdmissionFailure::Raise(_)
         | AdmissionFailure::Profile { .. }

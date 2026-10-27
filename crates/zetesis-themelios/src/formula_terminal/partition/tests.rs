@@ -30,7 +30,12 @@ fn prepare(text: &str) -> crate::formula::Preparation {
     let mut catalog = SupportCatalog::default();
     let mut counters = Counters::default();
     let mut metadata = crate::metadata::Builder::default();
-    crate::metadata::collect_profile(raised.program(), &mut metadata, true).unwrap();
+    crate::metadata::collect_profile_at(
+        raised.program(),
+        &mut metadata,
+        crate::ProgramSite::program(),
+    )
+    .unwrap();
     let metadata = metadata.finish(location).unwrap();
     let program = PreparationContext {
         options: AdmissionOptions::default().into(),

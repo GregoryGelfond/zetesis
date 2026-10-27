@@ -23,6 +23,7 @@ pub(crate) mod observation_construction;
 pub(crate) mod observation_rendering;
 pub(crate) mod observation_reference;
 pub(crate) mod priority_contracts;
+pub(crate) mod root_emission;
 pub(crate) mod source_cases;
 pub(crate) mod sourced_admission;
 pub(crate) mod stable_models;

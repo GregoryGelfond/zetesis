@@ -32,7 +32,6 @@ mod count_heads;
 mod count_plans;
 mod disjunction;
 mod domain_guards;
-mod domain_positions;
 mod evaluated_heads;
 mod evaluated_witnesses;
 mod expansion_display;

@@ -11,7 +11,7 @@ use zetesis_test_support::thresholds::first_success;
 use zetesis_themelios::{
     AdmissionFailure, AdmissionOptions, BundleAdmissionOptions, ExpansionFailure, ExpansionLimits,
     ExpansionResource, FormulaFailure, FormulaLimits, FormulaResource, InputLimit,
-    admit_bundle_formula, admit_extended,
+    admit_bundle_formula,
 };
 
 fn cases() -> Vec<Json> {
@@ -105,18 +105,6 @@ fn conditional_disjunctions_preserve_finite_families() {
 fn true_disjuncts_preserve_scored_answers() {
     let source = "p:#true;q:#true.#minimize{1:q}.";
     objective_boundaries::check(source);
-}
-
-#[test]
-fn extended_profile_refuses_true_disjunctions() {
-    assert!(
-        admit_extended(
-            "p:#true;q:#true.".into(),
-            AdmissionOptions::default(),
-            ExpansionLimits::default()
-        )
-        .is_err()
-    );
 }
 
 #[test]

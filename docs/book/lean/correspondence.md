@@ -19,7 +19,12 @@ counterpart now:
 - the static closure transport.
 
 The entries below that describe those correspondences record what the removed code
-was required to satisfy.
+was required to satisfy. The relational `Program`, `Seed`/`SeedSelection`, gate-token
+and carrier owners, and `from_ground_program` translation are also retired. Their
+correspondences below are historical implementation obligations, not live API
+claims. The general Lean laws, canonical atom/template storage, relations and
+formula consumers remain; removing one consumer does not retire a law or verify
+a different consumer.
 
 The retained binary `Evaluator` generation supplies the historical full-package
 results. The native `Native` generation has separate checked row, admission,
@@ -655,8 +660,10 @@ from the mathematical results. The optional reference-checker refinement above
 supplies the selected-atom and packed-counter correspondences under its stated
 models; it does not cover the normal-closure checker or public ownership and
 allocation. In particular, the final carrier comparison cannot itself
-establish seed admission; that condition belongs to the seed constructors and
-their mapping into the compiled program.
+establish seed admission. In the retired normal-closure route, the seed
+constructors and their mapping into `GroundProgram` were responsible for that
+condition. Those APIs have no current executable counterpart; the structural
+premise remains part of the mathematical checker.
 
 The [indexed-evaluation](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/guide/indexed-evaluation.md),
 [subset-counter](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/guide/subset-counter.md),
@@ -1140,7 +1147,8 @@ The [ownership chapter](../architecture/ownership.md) and
 [session example](../rust/sessions.md#reuse-and-identity) connect these obligations
 to the maintained implementation.
 
-The CPU source join borrows bound values from its immutable relation snapshot.
+The retired relational CPU source join borrowed bound values from its immutable
+relation snapshot. The following describes its historical ownership obligations.
 Backtracking clears slots; a ground instance lends checked keys over those
 bindings, and retained consequences select canonical identities. This changes
 storage ownership without changing the substitution used by whole-tuple
@@ -1165,8 +1173,9 @@ ordering of resource refusal versus source diagnostics remain executable
 obligations, covered by cursor, ownership, bounded-prefix and source tests. No
 new theorem or existing law certifies the concrete cursor state machine.
 
-Gate and consequence membership uses a checked `AtomKey` over that borrowed
-assignment. The key denotes the same signed predicate and complete typed tuple
+In that retired relational route, gate and consequence membership used a
+checked `AtomKey` over the borrowed assignment. The following storage and charge
+description is historical; `AtomKey` and its general identity laws remain. The key denotes the same signed predicate and complete typed tuple
 as materialization. Gate lookup and duplicate-head lookup create no owned atom;
 a new tree consequence retains a discovery ID after canonical import, and a
 dense consequence is a pending coordinate bit. Key construction charges
@@ -1178,8 +1187,10 @@ callback lifetime; their buffers own metadata, not logical payload.
 membership. Rust comparison/hash equivalence, index construction and binding
 lifetimes remain implementation obligations.
 
-A dense relation stores a bounded predicate's rows as bits over the
-mixed-radix index of the arguments' ranks in their bounds. A round's dense
+The removed closure route's dense relation stored a bounded predicate's rows as
+bits over the mixed-radix index of the arguments' ranks in their bounds. Its
+round and block-step correspondence below is historical; the `RowSteps` laws
+remain general statements. A round's dense
 heads are marked as pending bits and joined into the relation after the
 round, and a block step marks a block of heads from a block of rows by words.
 [`RowSteps`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/RowSteps.lean)
@@ -1228,8 +1239,8 @@ remain Rust obligations. Regressions compare ordinary ranking with prepared
 coordinates, alternate preparations with different inferred axes and retain
 earlier interpretations across those calls.
 
-Preparation reads a constant's domain position through a domain position table
-of one slot per catalog term: each domain value's slot names its domain
+The removed `DomainPositions` consumer read a constant's domain position
+through a table of one slot per catalog term. Its historical invariant was: each domain value's slot names its domain
 position, and every other term's slot is empty. An empty slot, a term the
 program's read cannot name, or an absent table falls back to the domain's
 content search, which decides presence and rank. The argument bounds and the
@@ -1260,31 +1271,32 @@ from preparing a window.
 
 `SeedSelections.materialization_exact` shows that ordering and coalescing the
 atom denotations of shared handles preserves their exact true set. Distinct
-handles may denote the same atom. The Rust `SeedSelection` owns canonical shared
-coordinate tokens, while `SeedView` borrows their semantic atom views without
-materializing owned atoms. Arc lifetime safety, program-instance validation, canonical
-comparison and the executable candidate cursor remain separate correspondence
-obligations. This interpretation law does not establish answer-set membership
+handles may denote the same atom. The retired Rust `SeedSelection` owned
+canonical shared coordinate tokens, while `SeedView` borrowed their semantic
+atom views without materializing owned atoms. Arc lifetime safety,
+program-instance validation, canonical comparison and the executable candidate
+cursor were separate correspondence obligations for that consumer. This interpretation law does not establish answer-set membership
 or complete candidate coverage.
 
 `GatePositions.atoms_exact` identifies the gate subsequence of an indexed atom
 carrier. `retained_position_exact` relates each gate rank to its original dense
-position and atom. Rust's `GateAtom` retains a Program-bound `CarrierAtom`
-coordinate token and checked positive position. `SeedAtom::resolve_in` uses that position in the
-compiled gate table; ordinary CPU and GPU packing share this resolver. The
-implementation must establish the common predicate/domain order, inseparable
-token construction, program identity and checked indices. The Lean laws prove
-the filtered-list correspondence, not those Rust obligations or membership.
-For the concrete order bridge, admitted signatures and domain values are sorted
-and unique. `AtomIter` advances the last tuple coordinate fastest, giving the
-same lexicographic tuple order as `Atom::Ord`, within its signature-first order.
-Nullary predicates contribute one tuple even when the domain is empty. The
-[full-carrier control](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-core/tests/integration/gate_positions.rs)
-compares enumeration with an independently generated, sorted and deduplicated
-product, including signed predicates and typed values. This is executable test
-evidence and a source argument, not a Lean proof of Rust's iterator. Canonical
-carrier ranks remain distinct from append-assigned catalog identities and ASP
-term comparison order.
+position and atom. The retired Rust `GateAtom` retained a Program-bound
+`CarrierAtom` coordinate token and checked positive position.
+`SeedAtom::resolve_in` used that position in the compiled gate table; the
+relational CPU and GPU packing paths shared this resolver. That implementation
+needed common predicate/domain order, inseparable token construction, program
+identity and checked indices. The Lean laws prove the filtered-list
+correspondence, not those historical Rust obligations or membership.
+For that historical order bridge, admitted signatures and domain values were
+sorted and unique. `AtomIter` advanced the last tuple coordinate fastest, giving
+the same lexicographic tuple order as `Atom::Ord`, within its signature-first
+order. Nullary predicates contributed one tuple even when the domain was empty.
+The now-retired `crates/zetesis-core/tests/integration/gate_positions.rs` control
+compared enumeration with an independently generated, sorted and deduplicated
+product, including signed predicates and typed values. That source argument and
+regression contract were not a Lean proof of the iterator. Canonical carrier
+ranks remain distinct from append-assigned catalog identities and ASP term
+comparison order.
 
 [`CarrierCoordinates`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/CarrierCoordinates.lean)
 makes the coordinate bridge explicit. `decode_injective` requires unique signed
@@ -1295,21 +1307,24 @@ chosen relations; increasing interning IDs do not supply that premise.
 without assuming a finite or machine-representable whole carrier.
 `shared_vocabulary_does_not_identify_atoms` separates shared term/signature
 meaning from independent atom-row positions. These laws assume admitted
-coordinate types; Rust still checks arity, bounds, exact Program applicability,
-immutable owner retention and fallible coordinate construction.
+coordinate types. The removed Program-coordinate implementation separately
+checked arity, bounds, exact Program applicability, immutable owner retention
+and fallible coordinate construction. The general coordinate and shared-vocabulary
+laws remain; canonical atom storage still has independent atom scopes.
 
 `GatePositions.rank_fold_eq_blocks` relates the left-to-right domain-rank fold
 to the sum of lexicographic block offsets. `blockOffset_lt_cardinality` places
 valid digits inside a carrier of size `domain_size ^ arity`, including the one
-empty tuple at arity zero. `GateIndex` adds the cardinalities of earlier gate
-signatures and one to that offset. These arithmetic laws do not establish the
-Rust binary search, signature/domain order, checked powers and additions, or
-the connection to `AtomIter`; the full-carrier tests check that connection.
-An index token keeps the original program and full gate position even when
-only supported atoms are supplied to `locate`.
+empty tuple at arity zero. The retired `GateIndex` added the cardinalities of
+earlier gate signatures and one to that offset. These arithmetic laws do not
+establish its binary search, signature/domain order, checked powers and
+additions, or connection to `AtomIter`; the historical full-carrier tests
+exercised that connection. Its index token kept the original program and full
+gate position even when only supported atoms were supplied to `locate`.
 
-The closure candidate root may enumerate its completed upper bound's gate atoms
-directly, holding its lower bound and offering only the remaining upper atoms.
+The retired closure candidate root could enumerate its completed upper bound's
+gate atoms directly, holding its lower bound and offering only the remaining
+upper atoms. The following coverage obligations describe that removed consumer.
 `Bounds.narrowed_contains_accepted` supplies the coverage argument for every
 completed pass. The semantic gate carrier stays the original full carrier:
 atoms outside the upper bound are absent, including when read under default
@@ -1327,7 +1342,9 @@ and that each materialized list is a permutation of its selected denotations;
 and the complete narrowing operation. The existing `Bounds` preservation and
 conflict laws apply to that same cube, not to a new acceptance test.
 
-Rust retains distinct canonical root coordinates disjoint from fixed-held atoms.
+The removed closure-region consumer retained distinct canonical root coordinates
+disjoint from fixed-held atoms. The concrete publication and control obligations
+in this paragraph describe that historical consumer.
 The theorem needs no disjointness assumption to establish union/set equality;
 exact lookup already requires unambiguous coordinate identity. Matching region
 length, signed and typed atom comparison, binary-search direction, original
@@ -1343,8 +1360,9 @@ completed decisions survive a later resource stop, while cancellation and
 deadlines retain stopped coverage. These control and allocation properties are
 Rust obligations, not consequences of the representation equality.
 
-The scalar lazy closure retains one canonical tuple authority per Program
-workspace. Per-predicate `Catalog` values retain scoped membership and
+The removed scalar lazy closure retained one canonical tuple authority per
+Program workspace. Its workspace/truth protocol below is historical; shared
+relation storage and the `RelationExtension` laws remain. Per-predicate `Catalog` values retain scoped membership and
 ordering/equality metadata. Every round borrows committed rows while a disjoint
 appender admits newly discovered identities. Pending discovery IDs and dense
 coordinate marks remain separate from truth until the complete scan finishes.
@@ -1366,8 +1384,9 @@ that every successful session prefix has the same ordered rows and dictionary
 meanings as the scalar insertion sequence, that refusal preserves that prefix,
 and that retained scratch and capacity growth obey the reported byte limits.
 `RelationExtension` can supply old-row preservation once these premises hold; it
-does not prove this concrete session or its resource and failure protocol. `catalog_work` is a subtotal of oracle work; subtracting it
-leaves other charged operations, not a runtime estimate. Existing selection and
+does not prove this concrete session or its resource and failure protocol. The
+retired oracle's `catalog_work` was a subtotal of its charged work; subtracting it
+left other charged operations, not a runtime estimate. Existing selection and
 round laws supply the semantic interfaces, while the complete composition with
 canonical tuple storage remains an executable refinement obligation.
 
@@ -1519,9 +1538,9 @@ Neither equality shortcut establishes numeric or ASP order. The callback before
 the identity probe and preservation of its refusal are executable obligations.
 
 `TemplateCatalog` stores shared ordered terms, patterns and filters beneath
-separate rule and objective policies. `Program` retains rule topology and its
-explicit domain/signature order; `ObjectiveProgram` retains weight polarity,
-priority slots and ID-only closed conditions. Shared component storage creates
+separate semantic-owner policies. The retired relational `Program` retained
+rule topology and explicit domain/signature order. `ObjectiveProgram` still
+retains weight polarity, priority slots and ID-only closed conditions. Shared component storage creates
 no synthetic support or objective rule.
 The source compiler uses the same component schema for its constants, predicates,
 patterns and filters. Its private coordinates are valid only with the
@@ -1665,13 +1684,16 @@ admission instead checks an entire proposed charge before changing its counter.
 The closure route's `PreparedQueries`, one exact-program preparation that
 candidates reused with private truth state, was removed with that route. The
 reuse argument stated for it remains as text and has no Rust counterpart now.
-Changed preparation owners retire retained workspaces, even for the same program.
-These admission and lifetime checks remain implementation obligations; existing
-closure laws do not prove them. Regressions establish identity sharing, preserved
-refusals and retained-answer isolation.
+In that implementation, changed preparation owners retired retained workspaces,
+even for the same program. Those admission and lifetime checks were separate
+implementation obligations; the closure laws did not prove them. Historical
+regressions checked identity sharing, preserved refusals and retained-answer
+isolation.
 
-The batch oracle partitions ordered candidate occurrences into disjoint ranges,
-each with an exclusive workspace. Its coverage obligation is that splitting
+The removed closure batch oracle partitioned ordered candidate occurrences
+into disjoint ranges, each with an exclusive workspace. The following shared
+accounting law remains general; the prepared-query accounting describes that
+historical batch consumer. Its coverage obligation is that splitting
 preserves every occurrence once and ordered concatenation restores the input
 sequence. Its storage obligation includes shared preparation, idle capacities
 and active reservations without counting shared headers twice.
@@ -1692,21 +1714,23 @@ establish a hard allocator or RSS cap, including on a refused allocation. Reused
 capacity can increase retained space or change work counts; neither this law nor
 semantic equivalence proves a speedup.
 
-Independent scalar rounds use the same occurrence partition over stable catalog
-insertion IDs. `DeltaRounds.coverage_of_first_delta` requires a correspondence
+The removed independent scalar rounds used the same occurrence partition over
+stable catalog insertion IDs. The `DeltaRounds` premises remain general. `DeltaRounds.coverage_of_first_delta` requires a correspondence
 between those IDs and complete body bindings. `delta_step_exact` then preserves
 the complete inflationary step when old consequences are already present;
 `latched_constraints_exact` additionally requires exact prior constraint history.
-Bootstrap handles zero-positive rules and constraints. Explicit core fact tables
-represent the same zero-positive headed occurrences: `Program::rules()` must
-preserve their signed atoms, duplicate occurrences and anchors, and the borrowed
-`FactRef::as_template()` must denote that head with empty bodies and filters.
-The oracle emits these heads through the same binding and `record_head` path;
-incremental indexes contain only templates, since a fact reads no predicate.
+Bootstrap handles zero-positive rules and constraints. In the retired
+relational representation, explicit core fact tables represented the same
+zero-positive headed occurrences: `Program::rules()` had to preserve their
+signed atoms, duplicate occurrences and anchors, and `FactRef::as_template()`
+had to denote that head with empty bodies and filters. The old oracle emitted
+these heads through the same binding and `record_head` path; its incremental
+indexes contained only templates, since a fact reads no predicate.
 `delta_step_exact` therefore uses the same old-consequence premise after
 bootstrap. The shared closed store supplies identity only; each workspace starts
-with empty discovery and truth. Full/delta, dense/tree, source-order and reuse
-tests exercise these obligations, but do not prove the Rust interning,
+with empty discovery and truth. The historical full/delta, dense/tree,
+source-order and reuse tests exercised these obligations, but did not prove the
+Rust interning,
 occurrence mapping, allocation ledger or lifetime implementation.
 
 These premises explain
@@ -1714,7 +1738,7 @@ why the final no-change round can combine its selected scans with completed
 history instead of revisiting every old binding. They do not certify the Rust
 matcher, cache boundaries, failure cleanup or shared-world/device schedules.
 The [delta-round guide](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/guide/delta-rounds.md)
-connects each premise to its concrete owner and publication boundary.
+records the historical owner and publication boundary for those premises.
 
 Eager support joins partition new tuple combinations by their first new source
 occurrence. `DeltaJoins.partition_complete` proves coverage and
@@ -2232,16 +2256,13 @@ fabricated statement or span. Executable conformance tests exercise this
 boundary; they are not an end-to-end Lean proof. The existing scalar-checker
 refinement does not establish adapter or query-layer correctness.
 
-The typed relational `admit_program` door and source `admit` door share
-[`compile::checked_statement`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/compile.rs)
-and the strong-negation coherence operation. Their entry checks have different
-inputs: source admission checks authored syntax before raising, while typed
-admission bounds the borrowed canonical rule, term and symbol structure. A
-logical program cannot recover an erased empty program section or the original
-multiplicity of set-valued body syntax. The source checks remain in place.
-The shared compiler, statement-evidence borrows and resource traversal are Rust
-correspondence obligations; the existing semantic laws do not prove either
-admission implementation or equality of their admitted input sets.
+Source admission checks authored syntax before raising; typed admission bounds
+the canonical rule, term and symbol structure. A logical program cannot recover
+an erased empty program section or the original multiplicity of set-valued body
+syntax. The source checks therefore remain in place. Both doors now use formula
+preparation. The shared compiler, statement-evidence borrows and resource
+traversal remain Rust correspondence obligations; semantic laws alone establish
+neither source admission nor equality of the two doors' admitted input sets.
 
 The full formula door, `prepare_program_formula`, borrows the canonical program
 for structural, text and provenance preflight before normalization and analysis.
@@ -2624,8 +2645,10 @@ distinguishes these prospective filters from the existing source-domain analysis
 The normal-rule and Ferraris foundations retain independent definitions.
 The [NormalFerraris bridge](normal-rules.md) proves their equivalence under the
 specified normalized-rule translation, including its filtered/direct-map
-distinction. It does not verify `from_ground_program`, atom interning or formula
-DAG construction. `FrozenReduct` represents a fixed candidate's reduct.
+distinction. The `from_ground_program` Rust translator is now removed; the
+bridge did not verify that implementation and does not verify current atom
+interning or formula DAG construction. `FrozenReduct` represents a fixed
+candidate's reduct.
 The separate generated-code proofs establish its stored-mask invariant through
 actual construction and compose it with the public query under per-invocation
 reservation providers and fixed observations. Source lowering remains separate.
@@ -4012,15 +4035,17 @@ false while serving other live guards; ownership grants no semantic premise.
 Atomic intersections, dirty notifications, finite-width comparisons and charged
 sweep work remain implementation obligations checked by host and device tests.
 
-The static closure transport validates a nonzero submission epoch, input-world
-ordinal and completion marker before publishing any batch. The marker is written
-after the workgroup's closure writes synchronize. Exact record count, verdict
-bits, closure padding and the original seed's gate projection are also checked.
-Pure malformed-record tests establish refusal at this host boundary; they do not
-establish that a particular device ran the shader. Framing does not independently
-prove least closure or constraint satisfaction, and the existing semantic laws do
-not certify the Rust/WGSL protocol or arbitrary driver behavior. Physical tests
-retain independent complete-closure comparisons across resident submissions.
+The removed static closure transport validated a nonzero submission epoch,
+input-world ordinal and completion marker before publishing any batch. Its
+marker was written after the workgroup's closure writes synchronized. Exact
+record count, verdict bits, closure padding and the original seed's gate
+projection were also checked. Historical malformed-record tests exercised
+refusal at that host boundary; they did not establish that a particular device
+ran the shader. Framing did not independently prove least closure or constraint
+satisfaction, and the semantic laws do not certify that retired Rust/WGSL
+protocol or arbitrary driver behavior. Its physical tests used independent
+complete-closure comparisons across resident submissions; they are historical
+evidence, not qualification of a current transport.
 
 For a frozen mask, correctness means agreement with the fixed candidate's
 classical truth, not merely matching dimensions. For lazy inference, final

@@ -1,10 +1,7 @@
 //! Source validation is independent of whether a rule can contribute an answer.
 
 use zetesis_reference_support::prepare;
-use zetesis_themelios::{
-    AdmissionFailure, AdmissionOptions, ExpansionFailure, ExpansionLimits, FormulaFailure,
-    ProfileFeature, admit_extended,
-};
+use zetesis_themelios::{AdmissionFailure, ExpansionFailure, FormulaFailure, ProfileFeature};
 
 #[test]
 fn authored_terms_reject_undefined_arithmetic() {
@@ -14,16 +11,6 @@ fn authored_terms_reject_undefined_arithmetic() {
         "p :- 1=0, f(1/0)=f(0).",
         "#const unused=f(1/0). q.",
     ] {
-        let error = admit_extended(
-            source.into(),
-            AdmissionOptions::default(),
-            ExpansionLimits::default(),
-        )
-        .unwrap_err();
-        assert!(
-            matches!(error, ExpansionFailure::Evaluation { .. }),
-            "{source}: {error}"
-        );
         let error = prepare(source).unwrap_err();
         assert!(
             matches!(
@@ -41,22 +28,6 @@ fn authored_terms_reject_nested_nul_values() {
         "p(f(\"bad\0value\")) :- 1=0.",
         "#const unused=f(\"bad\0value\"). q.",
     ] {
-        let error = admit_extended(
-            source.into(),
-            AdmissionOptions::default(),
-            ExpansionLimits::default(),
-        )
-        .unwrap_err();
-        assert!(
-            matches!(
-                error,
-                ExpansionFailure::Admission(AdmissionFailure::Profile {
-                    feature: ProfileFeature::NulString,
-                    ..
-                })
-            ),
-            "{error}"
-        );
         let error = prepare(source).unwrap_err();
         assert!(
             matches!(
