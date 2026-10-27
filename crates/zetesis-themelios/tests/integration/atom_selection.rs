@@ -114,7 +114,7 @@ fn constant_selections_need_no_signature_probe() {
 #[test]
 fn source_selection_matches_explicit_union_construction() {
     use std::fmt::Write;
-    use zetesis_themelios::{AdmissionOptions, ExpansionLimits, admit_extended};
+    use zetesis_themelios::FormulaLimits;
 
     let signatures: Vec<_> = (0..256)
         .rev()
@@ -146,12 +146,7 @@ fn source_selection_matches_explicit_union_construction() {
         )
         .unwrap();
     }
-    let admitted = admit_extended(
-        source,
-        AdmissionOptions::default(),
-        ExpansionLimits::default(),
-    )
-    .unwrap();
+    let admitted = zetesis_reference_support::admit(&source, &FormulaLimits::default()).unwrap();
     let expected =
         AtomSelection::from_signatures(&signatures, AtomSelectionLimits::default()).unwrap();
     assert_eq!(admitted.metadata().atom_selection(), &expected);

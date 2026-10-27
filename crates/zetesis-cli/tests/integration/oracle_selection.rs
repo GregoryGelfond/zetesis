@@ -143,14 +143,21 @@ fn empty_and_unsupported_positive_cycles_have_one_empty_stable_model() {
 
 #[test]
 fn source_limits_preserve_typed_admission_refusals() {
-    use zetesis_themelios::{AdmissionOptions, ExpansionLimits, admit_extended};
+    use zetesis_themelios::{AdmissionOptions, ExpansionLimits, FormulaLimits, admit_formula};
     let bounded = resource_limits::admission(InputLimit::SourceBytes, 1);
     assert!(matches!(
-        admit_extended("1 {a;b} 1.".into(), bounded, ExpansionLimits::default()),
-        Err(ExpansionFailure::Admission(AdmissionFailure::Limit {
-            resource: InputLimit::SourceBytes,
-            ..
-        }))
+        admit_formula(
+            "1 {a;b} 1.".into(),
+            bounded,
+            ExpansionLimits::default(),
+            FormulaLimits::default()
+        ),
+        Err(FormulaFailure::Expansion(ExpansionFailure::Admission(
+            AdmissionFailure::Limit {
+                resource: InputLimit::SourceBytes,
+                ..
+            }
+        )))
     ));
     assert!(matches!(
         assert_refused_without_output("a(", &options(&[])),
@@ -167,14 +174,16 @@ fn source_limits_preserve_typed_admission_refusals() {
         ),
     ] {
         assert!(
-            matches!(admit_extended(source, AdmissionOptions::default(), ExpansionLimits::default()), Err(ExpansionFailure::Admission(AdmissionFailure::Limit {resource: actual, ..})) if actual == resource)
+            matches!(admit_formula(source, AdmissionOptions::default(), ExpansionLimits::default(), FormulaLimits::default()), Err(FormulaFailure::Expansion(ExpansionFailure::Admission(AdmissionFailure::Limit {resource: actual, ..}))) if actual == resource)
         );
     }
 }
 
 #[test]
 fn undefined_arithmetic_and_expansion_limits_remain_refusals() {
-    use zetesis_themelios::{AdmissionOptions, ExpansionLimits, ExpansionResource, admit_extended};
+    use zetesis_themelios::{
+        AdmissionOptions, ExpansionLimits, ExpansionResource, FormulaLimits, admit_formula,
+    };
     for source in ["p(1/0).", "p(2147483647+1)."] {
         assert!(matches!(
             assert_refused_without_output(source, &options(&[])),
@@ -188,8 +197,13 @@ fn undefined_arithmetic_and_expansion_limits_remain_refusals() {
     ] {
         let limits = resource_limits::expansion(resource, 0);
         assert!(matches!(
-            admit_extended("p(1..2).".into(), AdmissionOptions::default(), limits),
-            Err(ExpansionFailure::Limit { .. })
+            admit_formula(
+                "p(1..2).".into(),
+                AdmissionOptions::default(),
+                limits,
+                FormulaLimits::default()
+            ),
+            Err(FormulaFailure::Expansion(ExpansionFailure::Limit { .. }))
         ));
     }
     for resource in [

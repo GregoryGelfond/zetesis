@@ -111,17 +111,11 @@ impl TemplateCatalog {
             Source::Selected(catalog) => Some(catalog),
         }
     }
-    pub(crate) fn read(&self) -> Read<'_> {
-        self.0.source.read()
-    }
     pub(crate) fn vocabulary(&self) -> Option<&FrozenVocabulary> {
         match &self.0.source {
             Source::Frozen(base) => Some(base),
             Source::Selected(_) => None,
         }
-    }
-    pub(crate) fn data(&self, row: usize) -> Option<&RowData> {
-        self.0.rows.get(row)
     }
 }
 
@@ -304,13 +298,7 @@ impl TemplateCatalogBuilder {
         })))
     }
 
-    pub(crate) fn data(&self, row: usize) -> Option<&RowData> {
-        self.rows.get(row)
-    }
-    pub(crate) fn read(&self) -> Read<'_> {
-        Read::from(&self.store)
-    }
-    pub(crate) fn term(&mut self, term: TemplateTerm<'_>) -> Result<TermData, Error> {
+    fn term(&mut self, term: TemplateTerm<'_>) -> Result<TermData, Error> {
         match term {
             TemplateTerm::Variable(variable) => Ok(TermData::Variable(variable)),
             TemplateTerm::Constant(value) => {
@@ -328,7 +316,7 @@ impl TemplateCatalogBuilder {
             }
         }
     }
-    pub(crate) fn predicate(&mut self, predicate: PredicateRef<'_>) -> Result<PredicateId, Error> {
+    fn predicate(&mut self, predicate: PredicateRef<'_>) -> Result<PredicateId, Error> {
         self.store
             .import_predicate_with(predicate, || Ok::<(), Infallible>(()))
             .map_err(|failure| failure_error(failure, self.metadata + self.external, self.limit))

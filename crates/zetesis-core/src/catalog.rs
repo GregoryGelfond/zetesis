@@ -449,11 +449,6 @@ impl<'a> Atoms<'a> {
             .binary_search_by(|&id| self.resolve(id).cmp(&atom))
     }
 
-    pub(crate) fn binary_search_key(self, key: &crate::AtomKey<'_>) -> Result<usize, usize> {
-        self.positions
-            .binary_search_by(|&id| key.compare_ref(self.resolve(id)).reverse())
-    }
-
     /// Iterate in original dense order; cloning the cursor copies only borrows.
     #[must_use]
     pub fn iter(self) -> AtomIter<'a> {

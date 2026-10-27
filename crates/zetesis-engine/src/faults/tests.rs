@@ -198,12 +198,16 @@ fn model_and_catalog_owners_preserve_adapter_classification() {
 
 #[test]
 fn fact_arity_refusals_are_resource_faults() {
-    use zetesis_core::{AdmissionError, AdmissionLimits, AdmissionResource};
-    use zetesis_themelios::{ProgramAdmissionOptions, ProgramFailureKind, admit_program};
+    use std::sync::Arc;
+    use zetesis_core::AdmissionLimits;
+    use zetesis_themelios::{
+        ExpansionLimits, FormulaLimits, FormulaResource, ProgramAdmissionOptions,
+        admit_program_formula,
+    };
 
-    let original = themelios_macros::program! { p(1, 2). };
-    let native = admit_program(
-        &original,
+    let original = Arc::new(themelios_macros::program! { p(1, 2). });
+    let native = admit_program_formula(
+        Arc::clone(&original),
         ProgramAdmissionOptions {
             core_limits: AdmissionLimits {
                 max_predicate_arity: 1,
@@ -211,31 +215,36 @@ fn fact_arity_refusals_are_resource_faults() {
             },
             ..Default::default()
         },
+        ExpansionLimits::default(),
+        FormulaLimits::default(),
     )
     .unwrap_err();
-    // Prove this reached table-fact admission, rather than an earlier whole-input
-    // ceiling or the template-only refusal the engine already classifies.
+    // Formula fact admission preserves the exact resource and original statement;
+    // the removed relational table's fact index is no longer an execution owner.
     assert!(matches!(
-        &native.kind,
-        ProgramFailureKind::Core(AdmissionError::FactLimitExceeded {
-            resource: AdmissionResource::PredicateArity,
+        native.cause(),
+        FormulaFailure::Limit {
+            resource: FormulaResource::Arity,
             limit: 1,
-            actual: 2,
-            fact: 0,
-        })
+            observed: 2,
+            location,
+        } if location.statement_id().unwrap().index() == 0
     ));
-    let fault = admission(native);
+    let fault = formula(native, &original).unwrap_err();
     assert_eq!(fault.locus(), Locus::Resource);
     assert!(!fault.is_backend_bug());
+    let cause = fault
+        .source()
+        .unwrap()
+        .downcast_ref::<FormulaFailure>()
+        .unwrap();
     assert!(matches!(
-        fault.source().unwrap().downcast_ref::<ProgramFailureKind>(),
-        Some(ProgramFailureKind::Core(
-            AdmissionError::FactLimitExceeded {
-                resource: AdmissionResource::PredicateArity,
-                limit: 1,
-                actual: 2,
-                fact: 0,
-            }
-        ))
+        cause.cause(),
+        FormulaFailure::Limit {
+            resource: FormulaResource::Arity,
+            limit: 1,
+            observed: 2,
+            location,
+        } if location.statement_id().unwrap().index() == 0
     ));
 }

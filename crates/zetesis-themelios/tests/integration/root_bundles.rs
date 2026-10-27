@@ -1,14 +1,20 @@
 //! Ordered roots share original identities, source budgets and global constants.
 
+use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 
+use crate::support::atom_models::bundle_answer_sets;
 use themelios_base::source::SourceId;
 use zetesis_reference_support::{BundleFixture, resource_limits};
-use zetesis_test_support::harness;
+use zetesis_test_support::{
+    harness,
+    programs::{nullary, numbered},
+};
 use zetesis_themelios::{
     BundleAdmissionError, BundleAdmissionOptions, BundleError, BundleLimits, BundleResource,
-    ExpansionLimits, IncludeResolution, SourceBundle, admit_bundle_extended,
+    ExpansionLimits, FormulaFailure, FormulaLimits, IncludeResolution, SourceBundle,
+    admit_bundle_formula,
 };
 
 /// Bundle sources loaded from several roots at once.
@@ -59,21 +65,37 @@ fn ordered_occurrences_and_shared_includes_keep_unique_original_sources() {
         .map(|source| source.source().text().len())
         .sum();
     assert_eq!(bundle.total_bytes(), expected_bytes);
-    let admitted = admit_bundle_extended(
+    let admitted = admit_bundle_formula(
         bundle,
         BundleAdmissionOptions::default(),
         ExpansionLimits::default(),
+        FormulaLimits::default(),
     )
     .expect("exact root and include spellings are included once");
-    assert_eq!(admitted.program().facts().len(), 2);
+    assert_eq!(admitted.atoms().len(), 2);
     let owners: Vec<_> = admitted
-        .fact_origins()
+        .formula_origins()
         .iter()
         .flatten()
-        .map(|location| location.source)
+        .map(|site| site.location().unwrap().source)
         .collect();
     assert!(owners.contains(&SourceId::new(0)));
     assert!(owners.contains(&SourceId::new(2)));
+    assert_eq!(
+        bundle_answer_sets(&admitted),
+        [BTreeSet::from([numbered("p", &[2]), numbered("q", &[2])])].into()
+    );
+    for site in admitted.formula_origins().iter().flatten() {
+        let location = site.location().unwrap();
+        let text = admitted
+            .bundle()
+            .get(location.source)
+            .unwrap()
+            .source()
+            .slice(location.span)
+            .unwrap();
+        assert!(matches!(text, "p(n)." | "q(n)."), "{text}");
+    }
     fixture.close();
 }
 
@@ -82,20 +104,39 @@ fn later_roots_supply_global_constants_without_flattening_evidence() {
     let fixture = Fixture::new();
     fixture.write("rules.lp", "% original rule\np(lower..upper). #show p/1.");
     fixture.write("constants.lp", "#const upper=lower+1. #const lower=1.");
-    let admitted = admit_bundle_extended(
+    let admitted = admit_bundle_formula(
         fixture.load(&["rules.lp", "constants.lp"]),
         BundleAdmissionOptions::default(),
         ExpansionLimits::default(),
+        FormulaLimits::default(),
     )
     .unwrap();
-    assert_eq!(admitted.program().facts().len(), 2);
+    assert_eq!(admitted.atoms().len(), 2);
     assert!(
         admitted
-            .fact_origins()
+            .formula_origins()
             .iter()
             .flatten()
-            .all(|origin| origin.source == SourceId::new(0))
+            .all(|origin| origin.location().unwrap().source == SourceId::new(0))
     );
+    assert_eq!(
+        bundle_answer_sets(&admitted),
+        [BTreeSet::from([numbered("p", &[1]), numbered("p", &[2])])].into()
+    );
+    assert!(!admitted.formula_origins().is_empty());
+    for site in admitted.formula_origins().iter().flatten() {
+        let location = site.location().unwrap();
+        assert_eq!(
+            admitted
+                .bundle()
+                .get(location.source)
+                .unwrap()
+                .source()
+                .slice(location.span)
+                .unwrap(),
+            "p(lower..upper)."
+        );
+    }
     assert_eq!(
         admitted
             .bundle()
@@ -172,10 +213,11 @@ fn later_root_parse_and_semantic_refusals_keep_original_source_ids() {
     assert!(matches!(error, BundleError::Syntax { source, .. }
         if source.id() == SourceId::new(1) && source.text() == "broken(."));
     fixture.write("second.lp", "#program other. q.");
-    let error = admit_bundle_extended(
+    let error = admit_bundle_formula(
         fixture.load(&["first.lp", "second.lp"]),
         BundleAdmissionOptions::default(),
         ExpansionLimits::default(),
+        FormulaLimits::default(),
     )
     .unwrap_err();
     assert_eq!(error.bundle().roots().len(), 2);
@@ -192,26 +234,28 @@ fn later_root_parse_and_semantic_refusals_keep_original_source_ids() {
 fn root_aliases_do_not_silently_erase_repeated_definitions() {
     let fixture = Fixture::new();
     fixture.write("data.lp", "#const n=1. p(n).");
-    let error = admit_bundle_extended(
+    let error = admit_bundle_formula(
         fixture.load(&["data.lp", "./data.lp"]),
         BundleAdmissionOptions::default(),
         ExpansionLimits::default(),
+        FormulaLimits::default(),
     )
     .unwrap_err();
     assert!(matches!(
         error.error(),
-        BundleAdmissionError::RootAlias { .. }
+        FormulaFailure::Include(error) if matches!(error.as_ref(), BundleAdmissionError::RootAlias { .. })
     ));
     fixture.write("first.lp", "#include \"data.lp\".");
-    let error = admit_bundle_extended(
+    let error = admit_bundle_formula(
         fixture.load(&["first.lp", "./data.lp"]),
         BundleAdmissionOptions::default(),
         ExpansionLimits::default(),
+        FormulaLimits::default(),
     )
     .unwrap_err();
     assert!(matches!(
         error.error(),
-        BundleAdmissionError::RootAlias { .. }
+        FormulaFailure::Include(error) if matches!(error.as_ref(), BundleAdmissionError::RootAlias { .. })
     ));
     fixture.close();
 }
@@ -252,13 +296,24 @@ fn cwd_resolution_is_captured_before_loading_and_retained_for_admission() {
         // This helper runs alone in a separate process; no parallel test sees
         // its cwd change. Admission must use captured resolution evidence.
         std::env::set_current_dir("sub").unwrap();
-        let admitted = admit_bundle_extended(
+        let admitted = admit_bundle_formula(
             bundle,
             BundleAdmissionOptions::default(),
             ExpansionLimits::default(),
+            FormulaLimits::default(),
         )
         .unwrap();
-        assert_eq!(admitted.program().facts().len(), 4);
+        assert_eq!(admitted.atoms().len(), 4);
+        assert_eq!(
+            bundle_answer_sets(&admitted),
+            [BTreeSet::from([
+                nullary("cwd"),
+                nullary("fallback"),
+                nullary("second"),
+                nullary("not_directory_fallback"),
+            ])]
+            .into()
+        );
         return;
     }
     let fixture = Fixture::new();

@@ -17,7 +17,7 @@ use zetesis_cpu::Cancellation;
 use zetesis_themelios::{
     AdmissionFailure, AdmissionOptions, AdmittedFormula, BundleAdmissionOptions, ExpansionFailure,
     ExpansionLimits, ExpansionResource, FormulaFailure, FormulaLimits, FormulaResource,
-    ProfileFeature, admit_bundle_formula, admit_extended, admit_formula,
+    ProfileFeature, admit_bundle_formula, admit_formula,
 };
 
 fn cases() -> Vec<Json> {
@@ -374,15 +374,6 @@ fn excluded_endpoints_syntax_and_unsafe_scopes_remain_typed_refusals() {
         count += 1;
     }
     assert_eq!(count, 15);
-    assert!(
-        admit_extended(
-            "1{p(1..2)}1.".into(),
-            AdmissionOptions::default(),
-            ExpansionLimits::default()
-        )
-        .is_err(),
-        "explicit closure profile is unchanged"
-    );
 }
 
 #[test]

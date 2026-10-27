@@ -126,17 +126,20 @@ fn finite_expansion_is_automatic_and_respects_its_own_limits() {
         zetesis_themelios::AdmissionOptions::default(),
     )
     .unwrap()
-    .admit_extended(zetesis_reference_support::resource_limits::expansion(
-        zetesis_themelios::ExpansionResource::Templates,
-        2,
-    ))
+    .prepare_formula(
+        zetesis_reference_support::resource_limits::expansion(
+            zetesis_themelios::ExpansionResource::Templates,
+            2,
+        ),
+        zetesis_themelios::FormulaLimits::default(),
+    )
     .unwrap_err();
     assert!(matches!(
         error.error(),
-        zetesis_themelios::ExpansionFailure::Limit {
+        zetesis_themelios::FormulaFailure::Expansion(zetesis_themelios::ExpansionFailure::Limit {
             resource: zetesis_themelios::ExpansionResource::Templates,
             ..
-        }
+        })
     ));
     assert!(error.error().site().is_some());
     assert!(!error.error().diagnostics().is_empty());

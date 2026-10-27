@@ -11,9 +11,9 @@
 //! enumerates every subset of an
 //! admitted source's atoms, keeping those the reduct check
 //! (`zetesis_ferraris::check`) accepts, each with its objective's costs; atoms
-//! are spelled as clingo spells them ([`canonical`]). [`normal_answer_sets`]
-//! finds a relational normal program's answer sets as the stable models of its
-//! ground graph's Ferraris theory. [`prepare`] prepares a
+//! are spelled as clingo spells them ([`canonical`]). [`exhaustive_models`] and
+//! [`exhaustive_bundle_models`] retain typed atoms from the same subset reference.
+//! [`prepare`] prepares a
 //! source under the default options and limits, [`prepared`] when preparation
 //! must accept it, and [`hybrid`] grounds it for hybrid execution;
 //! [`BundleFixture`] writes a source bundle into a temporary directory for the
@@ -23,13 +23,13 @@
 //! the tests that need these references compile it. It is not published or
 //! installed.
 
-use zetesis_core::{GroundProgram, Model, Program, Sign, StaticLimits};
+use zetesis_core::{Model, Sign};
 use zetesis_cpu::Cancellation;
-use zetesis_ferraris::{AdmissionLimits, Interpretation, Limits, check, from_ground_program};
+use zetesis_ferraris::{Interpretation, Limits, check};
 use zetesis_test_support::records::Records;
 use zetesis_themelios::{
-    AdmissionOptions, AdmittedFormula, ExpansionLimits, FormulaFailure, FormulaLimits,
-    HybridFormula, PreparedFormula, admit_formula, prepare_formula,
+    AdmissionOptions, AdmittedFormula, AdmittedFormulaBundle, ExpansionLimits, FormulaFailure,
+    FormulaLimits, HybridFormula, PreparedFormula, admit_formula, prepare_formula,
 };
 
 mod bundle;
@@ -136,31 +136,12 @@ pub fn hybrid(source: &str) -> HybridFormula {
 /// every subset, or if a candidate's check or evaluation is refused.
 #[must_use]
 pub fn exhaustive(input: &AdmittedFormula) -> Records {
-    let count = input.atoms().len();
-    assert!(count <= 12, "small independent subset enumeration");
     let cancellation = Cancellation::default();
     let mut records = Records::new();
-    for bits in 0..(1_usize << count) {
-        let candidate = Interpretation::new(
-            input.theory(),
-            (0..count).filter(|&atom| bits & (1 << atom) != 0),
-        )
-        .unwrap();
-        if !check(input.theory(), &candidate, Limits::default(), &cancellation)
-            .unwrap()
-            .accepted()
-        {
-            continue;
-        }
-        let atoms: Vec<_> = candidate
-            .atoms()
-            .map(|atom| input.atoms().at(atom).unwrap())
-            .collect();
-        let evaluated_model =
-            Model::from_positions(input.atom_catalog(), candidate.atoms()).unwrap();
+    for model in exhaustive_models(input) {
         let evaluation = zetesis_objective::evaluate(
             input.objectives(),
-            &evaluated_model,
+            &model,
             zetesis_objective::Limits::default(),
             &cancellation,
         )
@@ -169,35 +150,53 @@ pub fn exhaustive(input: &AdmittedFormula) -> Records {
         let costs = score
             .is_present()
             .then(|| score.costs().iter().map(|&(_, value)| value).collect());
-        assert!(records.insert((atoms.iter().copied().map(canonical).collect(), costs)));
+        assert!(records.insert((model.atoms().iter().map(canonical).collect(), costs)));
     }
     records
 }
 
-/// Every answer set of the relational normal program `program`: the stable
-/// models of its ground graph's Ferraris theory, found by region search under
-/// the default limits, each translated back to the graph's atoms.
+/// Every answer set of `input`, retaining its catalog and typed atom values.
+///
+/// Enumerates every subset independently of the production candidate walk,
+/// accepting exactly the subsets admitted by the Ferraris reduct check. This
+/// shares the membership checker, not an independent membership oracle.
 ///
 /// # Panics
-/// Panics if grounding, translation or the search is refused, or if the search
-/// stops before it is exhausted.
+/// Panics if `input` has more than twelve atoms, a membership check refuses,
+/// or an accepted interpretation cannot be read from the original catalog.
 #[must_use]
-pub fn normal_answer_sets(program: &Program) -> Vec<Model> {
-    let ground = GroundProgram::compile(program, StaticLimits::default())
-        .expect("the default static limits");
-    let theory = from_ground_program(&ground, AdmissionLimits::default())
-        .expect("the default formula admission limits");
-    zetesis_stable::StableModels::new(
-        &theory,
-        zetesis_stable::Limits::default(),
-        Cancellation::default(),
-    )
-    .expect("the default search limits")
-    .map(|answer| {
-        let answer = answer.expect("an exhausted search under the default limits");
-        Model::from_positions(ground.atom_catalog(), answer.atoms()).expect("ground atom positions")
-    })
-    .collect()
+pub fn exhaustive_models(input: &AdmittedFormula) -> Vec<Model> {
+    models(input.theory(), input.atom_catalog())
+}
+
+/// Every answer set of a formula bundle, preserving its typed atom catalog.
+///
+/// Uses the same exhaustive subset reference as [`exhaustive_models`].
+///
+/// # Panics
+/// Panics under the same bounds and membership failures as [`exhaustive_models`].
+#[must_use]
+pub fn exhaustive_bundle_models(input: &AdmittedFormulaBundle) -> Vec<Model> {
+    models(input.theory(), input.atom_catalog())
+}
+
+fn models(theory: &zetesis_ferraris::Theory, catalog: &zetesis_core::AtomCatalog) -> Vec<Model> {
+    let count = catalog.atoms().len();
+    assert!(count <= 12, "small independent subset enumeration");
+    let cancellation = Cancellation::default();
+    let mut models = Vec::new();
+    for bits in 0..(1_usize << count) {
+        let candidate =
+            Interpretation::new(theory, (0..count).filter(|&atom| bits & (1 << atom) != 0))
+                .unwrap();
+        if check(theory, &candidate, Limits::default(), &cancellation)
+            .unwrap()
+            .accepted()
+        {
+            models.push(Model::from_positions(catalog, candidate.atoms()).unwrap());
+        }
+    }
+    models
 }
 
 #[cfg(test)]
@@ -241,14 +240,9 @@ mod tests {
     }
 
     #[test]
-    fn a_normal_program_has_the_stable_models_of_its_ground_theory() {
-        let admitted = zetesis_themelios::admit_extended(
-            "a :- not b. b :- not a. c :- a.".into(),
-            AdmissionOptions::default(),
-            ExpansionLimits::default(),
-        )
-        .unwrap();
-        let mut answer_sets: Vec<Vec<String>> = normal_answer_sets(admitted.program())
+    fn normal_rules_preserve_their_complete_answer_family() {
+        let admitted = formula("a :- not b. b :- not a. c :- a.");
+        let mut answer_sets: Vec<Vec<String>> = exhaustive_models(&admitted)
             .iter()
             .map(|model| model.atoms().iter().map(canonical).collect())
             .collect();

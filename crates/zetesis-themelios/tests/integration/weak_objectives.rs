@@ -7,9 +7,8 @@ use themelios_program::program::Statement;
 use zetesis_core::Model;
 use zetesis_cpu::Cancellation;
 use zetesis_themelios::{
-    AdmissionFailure, AdmissionOptions, BundleAdmissionOptions, ExpansionFailure, ExpansionLimits,
-    FormulaFailure, FormulaLimits, FormulaResource, InputLimit, admit, admit_bundle_formula,
-    admit_extended, admit_formula,
+    AdmissionFailure, BundleAdmissionOptions, ExpansionFailure, ExpansionLimits, FormulaFailure,
+    FormulaLimits, FormulaResource, InputLimit, admit_bundle_formula, admit_formula,
 };
 
 use crate::support::admission;
@@ -137,16 +136,6 @@ fn unsupported_weak_scopes_remain_typed_refusals() {
             "{source}"
         );
     }
-    let source = "{a}. :~a.[1]";
-    assert!(admit(source.to_owned(), AdmissionOptions::default()).is_err());
-    assert!(
-        admit_extended(
-            source.to_owned(),
-            AdmissionOptions::default(),
-            ExpansionLimits::default()
-        )
-        .is_err()
-    );
 }
 
 #[test]

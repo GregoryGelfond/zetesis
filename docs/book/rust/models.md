@@ -26,12 +26,11 @@ Neither asserts the same truth selection. Borrowed `Atoms::same_occurrences`
 and relation `Row::occurrence_in` identify an exact source occurrence mapping,
 including duplicate positions, without a semantic search.
 
-Admitted formula owners and eager `GroundProgram` values expose an `Atoms` view
-and shared `atom_catalog()`. Formula answers and decoded static words select
-these catalogs. Shared lazy rounds publish one catalog after their complete
-no-delta scan; all completed worlds select that owner. Scalar closure publishes
-its final truth over its workspace's canonical authority. Discovery and
-publication alone do not make an atom true.
+Admitted formula owners expose an `Atoms` view and shared `atom_catalog()`.
+Formula answers and decoded device words select positions in these catalogs.
+Hybrid grounding retains the producer core's catalog and checks the original
+streamed constraints before publishing an answer. Discovery and publication
+alone do not make an atom true.
 
 Cloning a model shares both the catalog and selected-position allocation. A
 retained model remains valid after its source, graph or session is dropped. It

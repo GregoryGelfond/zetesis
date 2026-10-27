@@ -1,5 +1,10 @@
 # Fact path: oracle preparation by identity, unchanged statements kept, one admission
 
+This record includes the former relational admission route. Its `Program`,
+carrier and automatic-retry APIs have since been removed. The shared formula
+fact blocks and normalization mechanisms remain; use the
+[current preparation guide](../book/rust/source.md) for supported entry points.
+
 A fact is a body-free ground rule. This note designs three independent parts that cut the per-fact cost of the paths
 facts take besides the [columnar fact blocks](columnar-fact-relations.md), which take facts out of the formula route's
 rule population. None changes a program's answers; each saves elapsed time and allocation on fact-heavy inputs.

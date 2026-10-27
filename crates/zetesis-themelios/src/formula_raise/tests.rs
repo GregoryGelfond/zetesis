@@ -64,7 +64,7 @@ fn metadata_matches_collection_from_the_program() {
     let mut actual = metadata::Builder::default();
     let program = raise(&parsed, &mut actual).unwrap();
     let mut expected = metadata::Builder::default();
-    metadata::collect_profile(&program, &mut expected, true).unwrap();
+    metadata::collect_profile_at(&program, &mut expected, crate::ProgramSite::program()).unwrap();
     assert_eq!(
         actual.finish(fallback(&source)).unwrap(),
         expected.finish(fallback(&source)).unwrap()
@@ -92,4 +92,81 @@ fn raise_diagnostics_precede_metadata_admission() {
             .finish(fallback(&source))
             .unwrap()
     );
+}
+
+fn occurrence_raise_agrees(text: &str) {
+    let Ok(parsed) = crate::ParsedSource::new(text.into(), crate::AdmissionOptions::default())
+    else {
+        return;
+    };
+    let expected = raise_program(parsed.parsed());
+    let actual = themelios_program::raise::raise_occurrences(parsed.parsed()).into_raised();
+    assert_eq!(actual.diagnostics(), expected.diagnostics());
+    assert_eq!(actual.program(), expected.program());
+    assert_eq!(
+        format!("{:?}", actual.program()),
+        format!("{:?}", expected.program()),
+        "nested provenance: {text}"
+    );
+}
+
+fn files_under(directory: &std::path::Path, paths: &mut Vec<std::path::PathBuf>) {
+    for entry in std::fs::read_dir(directory).unwrap() {
+        let path = entry.unwrap().path();
+        if path.is_dir() {
+            files_under(&path, paths);
+        } else {
+            paths.push(path);
+        }
+    }
+}
+
+#[test]
+fn occurrence_raising_preserves_corpus_and_refusal_fixture_verdicts() {
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
+    let mut paths = Vec::new();
+    files_under(&root.join("../../validation/corpus/kr-domains"), &mut paths);
+    files_under(&root.join("tests/fixtures"), &mut paths);
+    paths.sort();
+    let mut sources = 0;
+    for path in paths {
+        match path.extension().and_then(|value| value.to_str()) {
+            Some("lp") => {
+                occurrence_raise_agrees(&std::fs::read_to_string(path).unwrap());
+                sources += 1;
+            }
+            Some("jsonl") => {
+                for line in std::fs::read_to_string(path)
+                    .unwrap()
+                    .lines()
+                    .filter(|line| !line.trim().is_empty())
+                {
+                    let value: serde_json::Value = serde_json::from_str(line).unwrap();
+                    if let Some(source) = value.get("source").and_then(serde_json::Value::as_str) {
+                        occurrence_raise_agrees(source);
+                        sources += 1;
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+    assert!(sources >= 108);
+    for text in crate::test_support::PREPARATION_CASES {
+        occurrence_raise_agrees(text);
+    }
+}
+
+proptest::proptest! {
+    #![proptest_config(proptest::test_runner::Config::with_cases(32))]
+    #[test]
+    fn generated_fact_and_comparison_sources_preserve_occurrence_raising(values in proptest::collection::vec(-20i32..20, 0..25)) {
+        use std::fmt::Write;
+        let mut text = String::new();
+        for value in values {
+            write!(&mut text, "p({value}).").unwrap();
+        }
+        text.push_str("q(X) :- p(X), X+1=2.");
+        occurrence_raise_agrees(&text);
+    }
 }

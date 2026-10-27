@@ -645,9 +645,10 @@ fn nested_formula_resource_families_settle_at_their_own_site() {
             location: site,
         },
         FormulaFailure::Logical {
-            error: crate::ProgramFailureKind::Core(zetesis_core::AdmissionError::Canonical {
-                error: catalog::Error::Allocation,
-                origin: zetesis_core::AdmissionOrigin::Program,
+            error: crate::ProgramFailureKind::Limit(crate::ProgramLimit {
+                resource: crate::ProgramResource::Nodes,
+                limit: 0,
+                observed: 1,
             }),
             part: None,
             location: site,
@@ -718,13 +719,9 @@ fn nested_formula_shape_families_survive_a_pending_stop() {
             location: site,
         },
         FormulaFailure::Logical {
-            error: crate::ProgramFailureKind::Core(
-                zetesis_core::AdmissionError::NonDenseVariable {
-                    template: 0,
-                    expected: 0,
-                    actual: 2,
-                },
-            ),
+            error: crate::ProgramFailureKind::Compilation(crate::CompilationFailure::Profile(
+                crate::ProfileFeature::Statement,
+            )),
             part: None,
             location: site,
         },

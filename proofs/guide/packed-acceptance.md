@@ -8,8 +8,10 @@ atom coordinates. Ground filters have already been discharged.
 Two final operations determine acceptance. `constraints` selects the enabled
 headless rules using the frozen seed, then rejects when a selected positive body
 is true in the completed closure. `agrees` compares frozen and derived packed
-membership at every coordinate in the supplied gate carrier. These mirror the
-final loops in `zetesis-cpu/src/static_oracle.rs::check_static_view`.
+membership at every coordinate in the supplied gate carrier. These modeled the
+final loops of the now-removed
+`zetesis-cpu/src/static_oracle.rs::check_static_view`; the authored Lean checker
+and its laws remain.
 
 ## Seed admission is a separate obligation
 
@@ -25,22 +27,27 @@ the computed closure or verdict is correct. The carrier may conservatively
 contain more atoms than occur in the retained rules' gates. No uniqueness or
 ordering premise is needed for either the seed list or the carrier list.
 
-Rust establishes this boundary before the final loop:
+The retired relational Rust implementation established the following boundary
+before its final loop. These are historical constructor/graph obligations, not
+current APIs:
 
-- `Seed::new` delegates to `SelectionBuilder::manual`, which uses
+- `Seed::new` delegated to `SelectionBuilder::manual`, which used
   `Program::locate_atom(atom, true)` to require gate-carrier membership.
-- Construction from carrier tokens rejects nongate predicates; construction
-  from gate tokens preserves their checked coordinates and program identity.
-  `SeedView` and the inseparable token fields cannot be assembled publicly.
-- `GroundProgram::compile` builds its dense carrier from all admitted program
-  atoms and retains exactly the gate atoms in `gate_atom_ids`.
-- `SeedAtom::resolve_in` checks program identity. Indexed entries address that
-  gate list; manual entries resolve previously admitted logical carrier atoms
+- Construction from carrier tokens rejected nongate predicates; construction
+  from gate tokens preserved their checked coordinates and program identity.
+  `SeedView` and the inseparable token fields could not be assembled publicly.
+- `GroundProgram::compile` built its dense carrier from all admitted program
+  atoms and retained exactly the gate atoms in `gate_atom_ids`.
+- `SeedAtom::resolve_in` checked program identity. Indexed entries addressed that
+  gate list; manual entries resolved previously admitted logical carrier atoms
   in the complete graph.
 
-These are reviewed Rust correspondence points, not new extraction theorems.
-Proving that the constructors and canonical graph mapping establish the Lean
-admission premise remains part of a concrete implementation refinement.
+Those reviewed correspondence points were not extraction theorems. The
+relational `Program`, seed/carrier owners and `GroundProgram` are now removed;
+they have no current executable counterpart for this checker. The general
+seed-admission premise is unchanged. Any implementation of the mathematical
+checker must separately prove that its constructors and coordinate mapping
+establish that premise.
 
 ## From completed words to acceptance
 
@@ -62,5 +69,5 @@ distinct premises. Enumeration of all candidate seeds remains separate.
 The mathematical checker is total because its scan fuel is proved sufficient.
 It does not model allocation, cancellation, deadlines, work or consequence
 limits, program ownership, or machine-sized arithmetic. It also makes no claim
-about the Rust loops' exact short-circuit order or statistics. A machine resource
+about the historical Rust loops' exact short-circuit order or statistics. A machine resource
 stop must still remain distinct from either completed Boolean decision.

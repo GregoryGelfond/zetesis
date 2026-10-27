@@ -332,23 +332,22 @@ fn combined_expansion_budget_applies_across_original_files() {
     let fixture = BundleFixture::new();
     fixture.write("entry.lp", "#include \"data.lp\". p(1..2).");
     fixture.write("data.lp", "q(1..2).");
-    let error = zetesis_themelios::admit_bundle_extended(
+    let error = zetesis_themelios::admit_bundle_formula(
         fixture.bundle(),
         zetesis_themelios::BundleAdmissionOptions::default(),
         zetesis_reference_support::resource_limits::expansion(
             zetesis_themelios::ExpansionResource::Templates,
             3,
         ),
+        zetesis_themelios::FormulaLimits::default(),
     )
     .unwrap_err();
     assert!(matches!(
         error.error(),
-        zetesis_themelios::BundleAdmissionError::Expansion(
-            zetesis_themelios::ExpansionFailure::Limit {
-                resource: zetesis_themelios::ExpansionResource::Templates,
-                ..
-            }
-        )
+        zetesis_themelios::FormulaFailure::Expansion(zetesis_themelios::ExpansionFailure::Limit {
+            resource: zetesis_themelios::ExpansionResource::Templates,
+            ..
+        })
     ));
     assert!(error.to_string().contains("Templates"));
 }

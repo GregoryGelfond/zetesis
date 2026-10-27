@@ -15,11 +15,8 @@ Use the tables below to find a specific capability.
 | --- | --- | --- |
 | Construct canonical ASP and use upstream solve/query vocabulary | `zetesis::{Program, Symbol, program, syntax, analysis, solve, query, prelude}` | [Facade](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis/README.md) |
 | Solve and query a canonical knowledge base | `zetesis::{Solver, Config}`, `zetesis::solve::agent::Agent`, `zetesis::query::AgentReading` | [Programs, answers and queries](agent.md) |
-| Admit ASP source | `zetesis_themelios::{admit, admit_extended, prepare_formula, admit_formula}` and bundle counterparts | [Source preparation](source.md) |
+| Admit ASP source | `zetesis_themelios::{prepare_formula, admit_formula}` and bundle counterparts | [Source preparation](source.md) |
 | Prepare or admit a logical formula program | `zetesis_themelios::{prepare_program_formula, admit_program_formula, ProgramAdmissionOptions, PreparedFormula, ProgramSite}` | [Typed formula preparation](source.md#prepare-a-logical-formula-program) |
-| Prepare an owned logical relational program | `zetesis_themelios::{prepare_program_relational, ProgramRelationalOptions, PreparedRelational}` | [Owned relational preparation](source.md#admit-an-existing-logical-program) |
-| Choose extended or formula admission once per input door | `ParsedSource::admit_automatic_with_cancellation`, `admit_bundle_automatic_with_cancellation`, `prepare_program_automatic`, `AutomaticAdmission`, `AutomaticAdmissionFailure` | [Parsed-source transfer](source.md#reuse-original-input-across-profiles) and [logical programs](source.md#admit-an-existing-logical-program) |
-| Admit a logical program under S0 | `zetesis_themelios::{admit_program, ProgramAdmissionOptions, AdmittedProgram}` | [Typed program admission](source.md#borrow-the-strict-relational-input) |
 | Configure ordinary resource policy | `zetesis_solve::Resources` | [Sessions](sessions.md) |
 | Solve admitted input | `zetesis_solve::{PreparedInput, Session, SessionBuilder, SolveConfig}` | [Sessions](sessions.md) |
 | Count full answer sets or optimal ties | `zetesis_solve::{SessionBuilder::counting, SemanticOutcome::complete_answer_count}` | [Counting](outcomes.md#replace-answer-presentation) |
@@ -47,15 +44,13 @@ retain the contracts documented in the themelios manual.
 
 | Task | Public library entry points | Contract or example |
 | --- | --- | --- |
-| Construct finite relational programs | `zetesis_core::{Program, Template, FactTables, FactSegment, Atom, Seed}` | [Canonical ownership](../architecture/ownership.md) |
-| Share admitted template components | `TemplateCatalogBuilder`, `TemplateCatalog`, `TemplateRef`, `PatternRef`, `TemplateTerm` | [Canonical ownership](../architecture/ownership.md) |
+| Share admitted template components | `TemplateCatalogBuilder`, `TemplateCatalog`, `TemplateRow`, `PatternRef`, `TemplateTerm` | [Canonical ownership](../architecture/ownership.md) |
 | Read or explicitly export canonical values | `catalog::{AtomRef, PredicateRef, TermRef}`, `TermRef::nodes`, `TermRef::write_with`, `AtomRef::to_atom` | [Borrowing and explicit copies](models.md#borrowing-and-explicit-copies) |
 | Build typed vocabulary without a program or atom population | `catalog::{VocabularyBuilder, Vocabulary}` | [Scoped term workspaces](models.md#scoped-term-workspaces) |
 | Retain scoped bindings and selected roots | `catalog::{CatalogRead, TermRead, TermKey, TermAssignment, AssignmentSlice, TermSet}` | [Scoped term workspaces](models.md#scoped-term-workspaces) |
 | Decide each predicate of one vocabulary once | `catalog::{CatalogRead::predicate_mask_with, PredicateMask}` | [Scoped term workspaces](models.md#scoped-term-workspaces) |
 | Key values by canonical atom identity per row scope | `catalog::AtomIdentityMap` | [Scoped term workspaces](models.md#scoped-term-workspaces) |
 | Construct derived terms over immutable input owners | `catalog::{DerivedTerms, DeclaredConstructor}` | [Scoped term workspaces](models.md#scoped-term-workspaces) |
-| Locate sparse carrier coordinates | `Program::locate_atom_with`, `CarrierAtom` | [Canonical ownership](../architecture/ownership.md) |
 | Look up complete typed atoms | `Model::lookup`, `AtomIndex`, `CatalogIndex`, `AtomLookup`, `AtomPattern::key`, `BindingView` | [Checked lookup example](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-core/examples/README.md#checked-atom-lookup-probe) |
 | Build an append-only atom catalog | `atom_interner::{AtomInterner, CommittedAtoms, AtomAppender}` | [Catalog construction](models.md#building-a-catalog-during-grounding) |
 | Select equality matches in one relation | `zetesis_core::relation::{Relation, Query, Selection, Mask}` | [Core relation API](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-core/src/relation.rs) |
@@ -64,8 +59,8 @@ retain the contracts documented in the themelios manual.
 
 Atoms retain signed predicates, argument order and typed values. Dense positions,
 query masks and indexed tokens belong to their exact owner; equal lengths or
-printed values do not make them interchangeable. Constructing a seed, finding a
-row or locating a gate atom does not establish answer-set membership. See
+printed values do not make them interchangeable. Constructing a model or finding a
+row does not establish answer-set membership. See
 [ownership and reuse](../architecture/ownership.md) for these boundaries.
 
 ## Membership and execution
@@ -82,10 +77,10 @@ row or locating a gate atom does not establish answer-set membership. See
 | Share device resources | `zetesis_wgpu::GpuContext`, `GpuFormulaProfile`, `ExecutionResources` | [Device ownership](../architecture/ownership.md#device-resource-scope) |
 | Select relation masks on a device | `zetesis_wgpu::GpuRelationExecutor` | [Relation selection](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-wgpu/README.md#immutable-relation-selection) |
 
-`PreparedInput` borrows a coherent admitted owner, native program or complete
-ground graph. Keep the theory, atom catalog, objectives and source observations
-from the same admission together. A supplied `GroundProgram` is reused; it does
-not support a request to replace that graph with lazy grounding.
+`PreparedInput` borrows a coherent formula, hybrid, terminal-definition or
+certified source owner. Keep the theory, atom catalog, objectives and source
+observations from the same admission together. Borrowing a prepared owner does
+not repeat admission or choose a different representation.
 
 Prepared resources can share immutable data and reusable storage. Candidate
 truth, search coverage and resource budgets remain local to the computation.
@@ -124,8 +119,7 @@ and [resource contracts](outcomes.md#resource-contracts).
 
 | Previous use | Migration |
 | --- | --- |
-| `zetesis_core::Program::new(templates, limits)` | Pass `FactTables::default()` as the second argument, or supply explicit facts. Use `rules()` for all original rule occurrences and `templates()` for the separate template sequence. |
-| Matching `zetesis_core::AdmissionError` | Replace `Canonical { error, template }` with `Canonical { error, origin }` and handle `FactLimitExceeded`. `template_index()` and `fact_index()` resolve their separate input sequences. |
+| `zetesis_core::Program`, its fact/carrier owners, or relational admission | Use `prepare_formula` for source or `prepare_program_formula` for a canonical logical program, then choose eager or hybrid grounding. The relational compiler and its errors have been removed; shared limits remain in `AdmissionOptions` and `ProgramAdmissionOptions`. See [source preparation](source.md). |
 | Matching `DomainObservation::Inapplicable` or reading its former `Analyzed(&Analysis)` payload | Remove the `Inapplicable` arm. `Analyzed` carries `NumericAnalysis`: use `analysis()` for bounds/statistics, `catalog()` for canonical keys, and `arguments()` for predicate coordinates. Finite-guard applicability is separate; see [domain observation](source.md#optional-numeric-analysis-and-domain-guards). |
 | Exhaustive `zetesis_ferraris::NodeView` matches | Handle `Threshold` and `ExtremumCut`. Formula storage now includes shared numeric arenas; preserve them when copying. See [finite formulas](reducts.md#numeric-formula-storage). |
 | Exhaustive `zetesis_ferraris::AdmissionError` matches | Handle `ThresholdShape`, `ThresholdMeasure`, `NumericShape`, `NumericDomain`, `OrdinalRank` and `OrdinalCut`. These distinguish numeric shape/measure refusals from allocation and configured limits. |
@@ -194,7 +188,7 @@ limits remain available for an explicitly bounded operation.
 | Previous use | Migration |
 | --- | --- |
 | `zetesis::Config::{admission, expansion, formula, output}` | Configure `grounder`, `workers` and `memory`; the adapter derives preparation, solve and output settings together. For individual bounds, use the underlying preparation/session APIs. |
-| `zetesis::Grounder::Hybrid` | Use `Grounder::Lazy`. Relational admission still takes its source-join route; unsupported relational constructs can take the hybrid formula route. Other refusals are returned. |
+| `zetesis::Grounder::Hybrid` | Use `Grounder::Lazy` for hybrid formula materialization. Retained streamed constraints are checked before publishing original answers; refusals are returned without changing representation. |
 | `Theory::new` over `Vec<Node>` and matching binary `Node` variants | Supply `FormulaParts` containing nodes and their operand arena. Inspect `theory.view().node(index)` as `NodeView`; `And` and `Or` expose complete slices. Raw pairs use `Node::and_pair`/`or_pair`; wide rows use checked arena spans. |
 | Aggregate append functions over a node vector | Use the paired `FormulaNodes` owner. Transactions commit, roll back or detach both suffixes together. `into_parts` discards topology evidence; `prepare_admission` consumes it for checked final admission. |
 | Complete literals of formula/aggregate or expansion limits | Include the new operand ceilings and `ExpansionLimits::max_family_bytes`. Exhaustive failures must cover operand-span/arity and materialized-family refusals. Node count alone no longer describes graph size. |

@@ -1,4 +1,4 @@
-//! Independent exhausted-model comparison for the opt-in source extension.
+//! Independent exhausted-model comparison for source formula normalization.
 //! clingo is only an optional reference solver; original strings remain whole atoms
 //! through JSON and quote-aware native output parsing.
 
@@ -10,9 +10,12 @@ use zetesis_cli::{Completion, Options, run};
 use zetesis_clingo_support as oracle;
 use zetesis_cpu::Cancellation;
 use zetesis_themelios::{
-    AdmissionFailure, AdmissionOptions, ExpansionFailure, ExpansionLimits, ProfileFeature, admit,
-    admit_extended,
+    AdmissionFailure, ExpansionFailure, FormulaFailure, FormulaLimits, ProfileFeature,
 };
+
+fn admit(source: &str) -> Result<zetesis_themelios::AdmittedFormula, FormulaFailure> {
+    zetesis_reference_support::admit(source, &FormulaLimits::default())
+}
 
 // Display selection can map distinct stable models to the same answer line.
 // Preserve multiplicity rather than treating #show as model projection.
@@ -199,58 +202,45 @@ fn deliberately_unsupported_arithmetic_remains_an_admission_refusal() {
         "p((-2147483647-1)/(-1)).",
         "p(|(-2147483647-1)|).",
         "p(a+1).",
-        "p((1;2)+3).",
-        "p(X+1) :- d(X).",
     ] {
         assert!(
-            admit_extended(
-                source.to_owned(),
-                AdmissionOptions::default(),
-                ExpansionLimits::default()
-            )
-            .is_err(),
+            matches!(
+                admit(source),
+                Err(FormulaFailure::Expansion(
+                    ExpansionFailure::Evaluation { .. }
+                ))
+            ),
             "source: {source}"
         );
     }
 }
 
 #[test]
+fn pooled_and_bound_arithmetic_have_explicit_formula_models() {
+    assert_eq!(
+        native("p((1;2)+3).").0,
+        BTreeMap::from([(BTreeSet::from(["p(4)".to_owned(), "p(5)".to_owned()]), 1)])
+    );
+    assert_eq!(
+        native("p(X+1) :- d(X).").0,
+        BTreeMap::from([(BTreeSet::new(), 1)])
+    );
+}
+
+#[test]
 fn nul_strings_refuse_instead_of_inheriting_clingo_truncation() {
     let source = "p(\"a\0b\").";
     assert!(matches!(
-        admit(source.to_owned(), AdmissionOptions::default()),
-        Err(AdmissionFailure::Profile {
-            feature: ProfileFeature::NulString,
-            ..
-        })
+        admit(source),
+        Err(FormulaFailure::Expansion(ExpansionFailure::Admission(
+            AdmissionFailure::Profile {
+                feature: ProfileFeature::NulString,
+                ..
+            }
+        )))
     ));
-    assert!(matches!(
-        admit_extended(
-            source.to_owned(),
-            AdmissionOptions::default(),
-            ExpansionLimits::default()
-        ),
-        Err(ExpansionFailure::Admission(AdmissionFailure::Profile {
-            feature: ProfileFeature::NulString,
-            ..
-        }))
-    ));
-    assert!(
-        admit_extended(
-            "#const a=\"a\0b\". p(a).".to_owned(),
-            AdmissionOptions::default(),
-            ExpansionLimits::default()
-        )
-        .is_err()
-    );
-    assert!(
-        admit_extended(
-            "p(\"raw\nnewline\").".to_owned(),
-            AdmissionOptions::default(),
-            ExpansionLimits::default()
-        )
-        .is_err()
-    );
+    assert!(admit("#const a=\"a\0b\". p(a).").is_err());
+    assert!(admit("p(\"raw\nnewline\").").is_err());
 }
 
 #[test]

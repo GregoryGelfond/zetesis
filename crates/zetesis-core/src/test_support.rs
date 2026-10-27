@@ -45,3 +45,25 @@ pub(crate) fn compare_terms<E>(
         left.compare_ref_with(right, before)
     }
 }
+
+/// Store test template components without asserting any admission policy.
+/// Head and body occurrences keep their supplied order in one component row.
+pub(crate) fn template_catalog(templates: &[crate::Template]) -> crate::TemplateCatalog {
+    let mut builder = crate::TemplateCatalogBuilder::new(usize::MAX).unwrap();
+    for template in templates {
+        builder
+            .append(
+                [],
+                template
+                    .head()
+                    .into_iter()
+                    .chain(template.positive())
+                    .chain(template.gate_true())
+                    .chain(template.gate_false())
+                    .map(crate::PatternRef::from),
+                template.filters().iter().map(crate::FilterRef::from),
+            )
+            .unwrap();
+    }
+    builder.finish().unwrap()
+}

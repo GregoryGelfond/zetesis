@@ -61,8 +61,7 @@ pub struct ExpansionLimits {
     /// outside this envelope. The host signed allocation extent is also checked.
     pub max_family_bytes: usize,
     /// Maximum retained origin-evidence entries. Canonical-program evidence carries a
-    /// statement identity and an optional real location; source-only relational
-    /// evidence retains its parsed locations.
+    /// statement identity and an optional real location.
     pub max_origin_locations: usize,
     /// Maximum original `#defined` and `#show` occurrences before deduplication.
     pub max_metadata_statements: usize,
@@ -85,8 +84,7 @@ impl Default for ExpansionLimits {
 
 /// Charges accumulated by one admission under [`ExpansionLimits`], in the
 /// units of the ceiling each names. Every count is at most its ceiling; a
-/// refused admission reports no usage. Plain S0 admission expands nothing
-/// and reports zero throughout.
+/// refused admission reports no usage.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct ExpansionUsage {
     /// Charged term work, under `max_term_work`.
@@ -210,23 +208,6 @@ impl ExpansionFailure {
             Self::DuplicateConstant { duplicate, .. } => Some(*duplicate),
         }
     }
-    /// Whether another source profile may handle this refusal. This permits
-    /// automatic formula admission after an unsupported profile construct or
-    /// scalar evaluation stopped at a variable. Syntax, arithmetic undefinedness,
-    /// overflow, source/expansion limits, and core failures must not be retried
-    /// as if a more permissive mode had resolved them.
-    #[must_use]
-    pub fn needs_formula_admission(&self) -> bool {
-        matches!(
-            self,
-            Self::Admission(AdmissionFailure::Profile { .. })
-                | Self::Evaluation {
-                    error: themelios_program::term::EvalError::NotGround { .. },
-                    ..
-                }
-        )
-    }
-
     /// Render diagnostics for actual source coordinates, without discarding the
     /// typed refusal or inventing a span for a logical statement.
     #[must_use]

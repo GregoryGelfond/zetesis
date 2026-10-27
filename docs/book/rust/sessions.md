@@ -661,15 +661,14 @@ path: its retained evidence includes earlier incumbent counts, but that path
 does not deliver the remaining models. Neither behavior discards the original
 failure reason in favor of a later cleanup stop.
 
-`PreparedInput::program` borrows a native `zetesis_core::Program` without source
-metadata. It reaches the same relational session as a source-admitted program,
-including lazy execution; it does not first compile a complete ground graph.
-`PreparedInput::relational` borrows the native program and its display metadata
-from one [prepared canonical owner](source.md#admit-an-existing-logical-program).
+`PreparedInput::formula` borrows a complete admitted formula and its metadata.
+`PreparedInput::hybrid` borrows a prepared hybrid owner, retaining its materialized
+core and streamed constraints. Both preserve the original program through the
+[shared preparation boundary](source.md#prepare-a-logical-formula-program).
 
 An execution observer receives typed, borrowed facts about preparation and
-execution choices. It need not parse diagnostics. This example constructs the
-fact `ready.` through the native library and retains only its selected grounding
+execution choices. It need not parse diagnostics. This example admits the
+fact `ready.` through the formula library and retains only its selected grounding
 mode:
 
 ```rust

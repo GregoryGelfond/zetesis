@@ -552,73 +552,31 @@ relation enforces its own limits, then asks the enclosing operation for each
 work permit. A refusal retains the accepted prefix and runs no later step. It
 uses the same equality resolver as locally metered `query_attempt`.
 
-## Reuse original input across profiles
+## Retain original parsed input
 
 `ParsedSource` owns original bytes, their successful parse and fixed
-`AdmissionOptions`. Its consuming profile operations retain that owner on
-failure. This is useful when relational admission identifies a construct that
-needs the finite formula profile:
+`AdmissionOptions`. Formula preparation consumes that owner and retains it on
+failure. Successful parsing alone establishes neither admissibility nor an
+answer set.
 
 ```rust
 # extern crate zetesis_themelios;
 use zetesis_themelios::{AdmissionOptions, ExpansionLimits, FormulaLimits, ParsedSource};
 
 let source = ParsedSource::new("1{a;b}1.".into(), AdmissionOptions::default())?;
-let failure = source.admit_extended(ExpansionLimits::default()).unwrap_err();
-assert!(failure.error().needs_formula_admission());
-let prepared = failure.into_source()
-    .prepare_formula(ExpansionLimits::default(), FormulaLimits::default())?;
+let prepared = source.prepare_formula(ExpansionLimits::default(), FormulaLimits::default())?;
 let admitted = prepared.ground()?;
 assert_eq!(admitted.atoms().len(), 2);
 # Ok::<(), Box<dyn std::error::Error>>(())
 ```
 
-The example's known bounded choice requires formula admission. General callers
-must inspect `needs_formula_admission()` before choosing that alternative;
-undefined arithmetic, syntax and resource refusals are not permissions to retry.
-`SourceFailure::error()` exposes the unchanged typed refusal, and `into_parts()`
-recovers both it and the parsed owner. The String-taking convenience functions
-preserve their existing result and error types.
-
-For the same choice through one library operation, use
-`ParsedSource::admit_automatic_with_cancellation`. Its `AutomaticAdmission`
-result names the accepted profile; `AutomaticAdmissionFailure` preserves the
-selected refusal and exposes `interruption()` for cancellation and deadlines.
-The library switches profiles only for `needs_formula_admission()`, preserving
-input and resource refusals. For example:
-
-```rust
-# extern crate zetesis_themelios;
-# extern crate zetesis_cpu;
-use zetesis_cpu::Cancellation;
-use zetesis_themelios::{
-    AdmissionOptions, AutomaticAdmission, ExpansionLimits, FormulaLimits, ParsedSource,
-};
-let source = ParsedSource::new("1{a;b}1.".into(), AdmissionOptions::default())?;
-let admitted = source.admit_automatic_with_cancellation(
-    ExpansionLimits::default(), FormulaLimits::default(), &Cancellation::default(),
-)?;
-let AutomaticAdmission::Formula(prepared) = admitted else {
-    panic!("the bounded choice requires the formula profile");
-};
-assert_eq!(prepared.ground()?.atoms().len(), 2);
-# Ok::<(), Box<dyn std::error::Error>>(())
-```
-
-`admit_bundle_automatic_with_cancellation` makes the same choice for an original
-`SourceBundle`. The CLI prepares formulas directly and does not use these operations.
-
-The automatic source doors retain O(source bytes + syntax nodes) input storage
-and never clone the entire stdin buffer or reparse it on retry. When extended
-compilation reaches a formula-eligible refusal after the complete source checks,
-one shared traversal records both profile verdicts and one occurrence raise
-supplies both attempts. The handoff is used only when all formula profile
-verdicts passed; earlier refusals use the ordinary formula checks. Formula
-metadata refusals and objective checks keep their original order. Both attempts
-retain the same control token and independent per-attempt expansion allowances;
-the removed inspections and raising carried no expansion charges. Deferred
-formula materialization consumes its preparation's remaining budget. Library
-domain analysis stays an explicit `with_domain_analysis` opt-in.
+`SourceFailure::error()` exposes the typed preparation refusal, and
+`into_parts()` recovers both it and the parsed owner. Recovering the owner
+neither clones the input nor reparses it. A caller may explicitly prepare it
+again with different resource controls; a refusal does not silently select a
+different compiler. Each attempt performs its own checked raising and
+normalization. Deferred materialization consumes its preparation's remaining
+allowances. Domain analysis remains an explicit `with_domain_analysis` opt-in.
 
 Configure eager support storage through `FormulaLimits::max_support_bytes`
 before preparation. The default is 128 MiB for the support authority's canonical
@@ -1000,6 +958,12 @@ the completed projection domain separately from theory roots. Authored
 `projection()` supplies the fixed typed domain for
 [projected enumeration](sessions.md#projected-enumeration).
 
+A coherence constraint rules out a pair such as `p(2)` and `-p(2)`. Its evidence
+names the first materialized occurrence of each ground atom, which can be in a
+rule head or body. If both occurrences belong to the same original statement,
+that site appears once. This is evidence for the concrete pair, not a complete
+list of its producers or the first occurrence of each predicate signature.
+
 The example checks that emitted root evidence retains the source identity
 supplied in `AdmissionOptions`. It leaves syntax traversal to themelios's API
 documentation. For counted entry identity, pool expansion, tuple activity and
@@ -1063,8 +1027,8 @@ validation still runs after an earlier false filter.
 
 Canonical programs need not have source text. The APIs below therefore distinguish
 logical statement identity from optional parsed evidence. These changes require
-updates to Rust consumers of `v0.2.0`; the source-only relational owners keep their
-existing source accessors.
+updates to Rust consumers of `v0.2.0`. The former relational admission owners
+have been removed; use the formula preparation doors described above.
 
 `PreparedFormula::source()` and `AdmittedFormula::source()` now return
 `Option<&Source>`. Previously, a consumer could write:

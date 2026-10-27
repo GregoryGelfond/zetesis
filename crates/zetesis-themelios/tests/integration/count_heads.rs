@@ -13,7 +13,7 @@ use serde_json::{Value as Json, json};
 use zetesis_clingo_support as oracle;
 use zetesis_themelios::{
     AdmissionOptions, BundleAdmissionOptions, ExpansionFailure, ExpansionLimits, ExpansionResource,
-    FormulaFailure, FormulaLimits, FormulaResource, admit_bundle_formula, admit_extended,
+    FormulaFailure, FormulaLimits, FormulaResource, admit_bundle_formula,
 };
 
 fn cases() -> Vec<Json> {
@@ -224,18 +224,6 @@ fn count_aliases_admit_complete_groups() {
 #[test]
 fn count_heads_preserve_scored_answers() {
     objective_dependencies::check("1#count{1:a}1.#minimize{1:a}.");
-}
-
-#[test]
-fn extended_profile_refuses_count_heads() {
-    assert!(
-        admit_extended(
-            "1#count{X:p(X):X=1..4}2.".into(),
-            AdmissionOptions::default(),
-            ExpansionLimits::default()
-        )
-        .is_err()
-    );
 }
 
 #[test]

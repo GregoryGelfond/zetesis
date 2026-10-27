@@ -16,7 +16,6 @@ mod evaluation;
 mod extremum_cut;
 pub mod extremum_lowering;
 mod frozen_positive;
-mod normal;
 mod numeric_evaluation;
 mod operand_evaluation;
 mod oracle;
@@ -52,7 +51,6 @@ pub use evaluation::{
     EvaluationAttempt, EvaluationError, EvaluationLimits, EvaluationWorkspace, FormulaEvaluation,
 };
 pub use frozen_positive::{FrozenPositiveAttempt, FrozenPositiveOutcome, FrozenPositiveWorkspace};
-pub use normal::{from_ground_program, from_ground_program_supported};
 pub use oracle::{Check, Limits, Statistics, Verdict, check, models, models_reduct};
 pub use reduct::FrozenReduct;
 pub use regions::{

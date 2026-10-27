@@ -826,6 +826,8 @@ impl AdmittedFormula {
     /// Necessary support guards collect producer origins and first atom occurrences.
     /// A shared condition guard retains their sorted union across all requiring heads;
     /// its root identity and position need not correspond to a single atom.
+    /// Coherence roots retain each opposite ground atom's first occurrence site,
+    /// recording a shared site once. These sites need not name every producer.
     #[must_use]
     pub fn formula_origins(&self) -> &[Vec<ProgramSite>] {
         &self.compiled.origins
@@ -988,6 +990,8 @@ impl AdmittedFormulaBundle {
     }
     /// Original statement sites per theory root, with parsed evidence when available.
     /// Shared necessary-condition guards merge evidence from every requiring head.
+    /// Coherence roots retain each opposite ground atom's first occurrence site,
+    /// recording a shared site once. These sites need not name every producer.
     #[must_use]
     pub fn formula_origins(&self) -> &[Vec<ProgramSite>] {
         &self.compiled.origins
@@ -1387,17 +1391,7 @@ pub(crate) fn prepare_parsed(
     limits: &FormulaLimits,
     cancellation: Option<zetesis_cpu::Cancellation>,
 ) -> Result<PreparedFormula, SourceFailure<FormulaFailure>> {
-    prepare_parsed_reusing(source, expansion, limits, cancellation, None)
-}
-
-pub(crate) fn prepare_parsed_reusing(
-    source: ParsedSource,
-    expansion: ExpansionLimits,
-    limits: &FormulaLimits,
-    cancellation: Option<zetesis_cpu::Cancellation>,
-    handoff: Option<crate::automatic::handoff::Handoff>,
-) -> Result<PreparedFormula, SourceFailure<FormulaFailure>> {
-    match prepare_source(&source, expansion, limits, cancellation, handoff) {
+    match prepare_source(&source, expansion, limits, cancellation) {
         Ok((preparation, metadata, program)) => Ok(PreparedFormula::new(
             preparation,
             Owner::single(program, source.into_source()),
@@ -1412,10 +1406,7 @@ fn prepare_source(
     expansion: ExpansionLimits,
     limits: &FormulaLimits,
     cancellation: Option<zetesis_cpu::Cancellation>,
-    handoff: Option<crate::automatic::handoff::Handoff>,
 ) -> Result<(Preparation, SourceMetadata, Arc<SourceProgram>), FormulaFailure> {
-    #[cfg(test)]
-    crate::automatic::testing::note_formula_attempt();
     let parsed = source.parsed();
     let options = source.options();
     let location = ProgramSite::source(themelios_base::span::Location {
@@ -1425,20 +1416,13 @@ fn prepare_source(
     let budget = crate::expansion::Budget::new(expansion, options.core_limits.max_templates)
         .with_cancellation(cancellation);
     budget.poll(location)?;
-    if handoff.is_none() {
-        profile::check_formula(parsed, options, false)?;
-        extended::check_definitions_in(parsed, expansion, &mut BTreeMap::new())?;
-        metadata::check_count(parsed, expansion, &mut 0)?;
-    }
+    profile::check_formula(parsed, options, false)?;
+    extended::check_definitions_in(parsed, expansion, &mut BTreeMap::new())?;
+    metadata::check_count(parsed, expansion, &mut 0)?;
     formula_ir::check_objectives(parsed, limits, &mut 0)?;
-    let (mut metadata, replay) = crate::automatic::handoff::split(handoff, limits.metadata_storage);
+    let mut metadata = metadata::Builder::new(limits.metadata_storage);
     budget.poll(location)?;
-    let raised = if let Some(mut replay) = replay {
-        replay.metadata_at(0)?;
-        replay.program
-    } else {
-        Arc::new(crate::formula_raise::raise(parsed, &mut metadata)?)
-    };
+    let raised = Arc::new(crate::formula_raise::raise(parsed, &mut metadata)?);
     budget.poll(location)?;
     let (preparation, metadata) =
         prepare(&raised, options.into(), budget, limits, location, metadata)?;
@@ -1446,8 +1430,8 @@ fn prepare_source(
 }
 
 /// Admit the same finite formula profile across original include graphs.
-/// Include identity, global constants, and source metadata follow the existing
-/// extended bundle contract, without textual concatenation.
+/// Include identity, global constants, and source metadata are checked across
+/// the complete source catalog, without textual concatenation.
 ///
 /// # Errors
 /// Retains the complete source catalog alongside every typed located refusal.
@@ -1521,18 +1505,7 @@ fn prepare_bundle_with_control(
     limits: &FormulaLimits,
     cancellation: Option<zetesis_cpu::Cancellation>,
 ) -> Result<PreparedFormulaBundle, FormulaBundleFailure> {
-    prepare_bundle_reusing(bundle, options, expansion, limits, cancellation, None)
-}
-
-pub(crate) fn prepare_bundle_reusing(
-    bundle: SourceBundle,
-    options: BundleAdmissionOptions,
-    expansion: ExpansionLimits,
-    limits: &FormulaLimits,
-    cancellation: Option<zetesis_cpu::Cancellation>,
-    handoff: Option<crate::automatic::handoff::Handoff>,
-) -> Result<PreparedFormulaBundle, FormulaBundleFailure> {
-    match prepare_bundle(&bundle, options, expansion, limits, cancellation, handoff) {
+    match prepare_bundle(&bundle, options, expansion, limits, cancellation) {
         Ok((preparation, metadata, program)) => Ok(PreparedFormulaBundle::new(
             preparation,
             Owner::bundle(program, bundle),
@@ -1551,10 +1524,7 @@ fn prepare_bundle(
     expansion: ExpansionLimits,
     limits: &FormulaLimits,
     cancellation: Option<zetesis_cpu::Cancellation>,
-    handoff: Option<crate::automatic::handoff::Handoff>,
 ) -> Result<(Preparation, SourceMetadata, Arc<SourceProgram>), FormulaFailure> {
-    #[cfg(test)]
-    crate::automatic::testing::note_formula_attempt();
     let budget = crate::expansion::Budget::new(expansion, options.core_limits.max_templates)
         .with_cancellation(cancellation);
     budget.poll(ProgramSite::program())?;
@@ -1563,11 +1533,10 @@ fn prepare_bundle(
     let mut definitions = BTreeMap::new();
     let mut metadata_count = 0;
     let mut objective_count = 0;
-    let (mut metadata, mut replay) =
-        crate::automatic::handoff::split(handoff, limits.metadata_storage);
+    let mut metadata = metadata::Builder::new(limits.metadata_storage);
     let mut statements = Vec::new();
     let mut visited = 0;
-    for (index, source) in bundle.sources().iter().enumerate() {
+    for source in bundle.sources() {
         let site = ProgramSite::source(themelios_base::span::Location {
             source: source.id(),
             span: source.source().span(),
@@ -1581,30 +1550,33 @@ fn prepare_bundle(
             max_body_elements: options.max_body_elements,
             core_limits: options.core_limits,
         };
-        if let Some(replay) = &replay {
-            visited += replay.nodes[index];
-        } else {
-            visited += profile::check_formula(source.parsed(), local, true)?;
-            extended::check_definitions_in(source.parsed(), expansion, &mut definitions)?;
-            metadata::check_count(source.parsed(), expansion, &mut metadata_count)?;
-        }
+        visited +=
+            profile::check_formula(source.parsed(), local, true).map_err(|error| match error {
+                AdmissionFailure::Limit {
+                    resource: crate::InputLimit::SyntaxNodes,
+                    observed,
+                    location,
+                    ..
+                } => AdmissionFailure::Limit {
+                    resource: crate::InputLimit::SyntaxNodes,
+                    limit: options.max_syntax_nodes,
+                    observed: visited.saturating_add(observed),
+                    location,
+                },
+                other => other,
+            })?;
+        extended::check_definitions_in(source.parsed(), expansion, &mut definitions)?;
+        metadata::check_count(source.parsed(), expansion, &mut metadata_count)?;
         formula_ir::check_objectives(source.parsed(), limits, &mut objective_count)?;
         budget.poll(site)?;
-        let raised = if let Some(replay) = &mut replay {
-            replay.metadata_at(index)?;
-            None
-        } else {
-            Some(crate::formula_raise::raise(source.parsed(), &mut metadata)?)
-        };
+        let raised = crate::formula_raise::raise(source.parsed(), &mut metadata)?;
         budget.poll(site)?;
-        if let Some(raised) = raised {
-            statements.extend(
-                raised
-                    .statements()
-                    .filter(|carrier| !matches!(carrier.get(), Statement::Include(_)))
-                    .cloned(),
-            );
-        }
+        statements.extend(
+            raised
+                .statements()
+                .filter(|carrier| !matches!(carrier.get(), Statement::Include(_)))
+                .cloned(),
+        );
     }
     let entry = bundle
         .get(bundle.entry())
@@ -1613,10 +1585,7 @@ fn prepare_bundle(
         source: entry.id(),
         span: entry.source().span(),
     });
-    let program = replay.map_or_else(
-        || Arc::new(SourceProgram::of_nodes(statements)),
-        |replay| replay.program,
-    );
+    let program = Arc::new(SourceProgram::of_nodes(statements));
     let (preparation, metadata) =
         prepare(&program, options.into(), budget, limits, location, metadata)?;
     Ok((preparation, metadata, program))

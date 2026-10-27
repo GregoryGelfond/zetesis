@@ -1,9 +1,10 @@
-//! Program admission consumes syntax into borrowed canonical execution views.
+//! Canonical template components preserve borrowed identity and occurrence order.
 
+use super::support::canonical::template_catalog;
 use zetesis_core::catalog::{Error as CatalogError, TermRef};
 use zetesis_core::{
-    AdmissionError, AdmissionLimits, Atom, AtomPattern, Filter, PatternRef, Predicate, Program,
-    Template, TemplateTerm, Term, Value, ValueLimits, ValueNode,
+    Atom, AtomPattern, Filter, PatternRef, Predicate, Template, TemplateCatalogBuilder,
+    TemplateTerm, Term, Value, ValueLimits, ValueNode,
 };
 
 fn fact(value: Value) -> Template {
@@ -13,7 +14,7 @@ fn fact(value: Value) -> Template {
 }
 
 #[test]
-fn interned_subterms_do_not_expand_the_domain() {
+fn template_rows_keep_explicit_constant_roots() {
     let value = Value::from_nodes(
         vec![
             ValueNode::Function {
@@ -26,51 +27,49 @@ fn interned_subterms_do_not_expand_the_domain() {
         ValueLimits::default(),
     )
     .unwrap();
-    let program = Program::new(
-        vec![fact(value.clone())],
-        zetesis_core::FactTables::default(),
-        AdmissionLimits::default(),
-    )
-    .unwrap();
-    assert_eq!(program.domain().len(), 1);
-    assert_eq!(program.domain().at(0).unwrap(), value);
-    assert!(
-        program
-            .domain()
-            .binary_search(&Value::Symbol("child".into()))
-            .is_err()
-    );
-    let constant = program
-        .templates()
-        .at(0)
+    let catalog = template_catalog(&[fact(value.clone()), fact(value.clone())]);
+    let terms = catalog.at(0).unwrap().patterns().at(0).unwrap().terms();
+    assert_eq!(terms.len(), 1);
+    let TemplateTerm::Constant(root) = terms.at(0).unwrap() else {
+        panic!("closed root");
+    };
+    assert_eq!(root, value);
+    assert_ne!(root, Value::Symbol("child".into()));
+    let TemplateTerm::Constant(other) = catalog
+        .at(1)
         .unwrap()
-        .head()
+        .patterns()
+        .at(0)
         .unwrap()
         .terms()
         .at(0)
-        .unwrap();
-    assert_eq!(
-        constant,
-        TemplateTerm::Constant(program.domain().at(0).unwrap())
-    );
+        .unwrap()
+    else {
+        panic!("repeated closed root");
+    };
+    let zetesis_core::ValueNodeRef::Function { name, .. } = root.descriptor() else {
+        panic!("structured root");
+    };
+    let zetesis_core::ValueNodeRef::Function {
+        name: other_name, ..
+    } = other.descriptor()
+    else {
+        panic!("structured occurrence");
+    };
+    assert!(std::ptr::eq(name, other_name));
+    assert_eq!(terms.slice(0..1).unwrap().len(), 1);
+    assert!(terms.slice(std::ops::Range { start: 1, end: 0 }).is_none());
+    assert_eq!(terms.variables().count(), 0);
 }
 
 #[test]
 fn admitted_views_share_the_constant_payload() {
     let template = fact(Value::Symbol("a-longer-owned-symbol".into()));
-    let program = Program::new(
-        vec![template.clone(), template],
-        zetesis_core::FactTables::default(),
-        AdmissionLimits::default(),
-    )
-    .unwrap();
-    let domain = program.domain().at(0).unwrap();
-    let zetesis_core::ValueNodeRef::Symbol(domain_text) = domain.descriptor() else {
-        panic!("symbol domain");
-    };
+    let catalog = template_catalog(&[template.clone(), template]);
     let mut signatures = Vec::new();
-    for template in program.templates() {
-        let pattern = template.head().unwrap();
+    let mut constants = Vec::new();
+    for row in 0..catalog.len() {
+        let pattern = catalog.at(row).unwrap().patterns().at(0).unwrap();
         signatures.push(pattern.predicate().name());
         let TemplateTerm::Constant(value) = pattern.terms().at(0).unwrap() else {
             panic!("closed fact");
@@ -78,14 +77,15 @@ fn admitted_views_share_the_constant_payload() {
         let zetesis_core::ValueNodeRef::Symbol(text) = value.descriptor() else {
             panic!("symbol constant");
         };
-        assert!(std::ptr::eq(text, domain_text));
+        constants.push(text);
     }
+    assert!(std::ptr::eq(constants[0], constants[1]));
     assert!(std::ptr::eq(signatures[0], signatures[1]));
-    assert_eq!(program.templates().len(), 2);
+    assert_eq!(catalog.len(), 2);
 }
 
 #[test]
-fn admission_preserves_explicitly_admitted_depth() {
+fn catalog_import_preserves_explicitly_admitted_depth() {
     let depth = 256;
     let mut nodes = vec![ValueNode::Tuple { arity: 1 }; depth - 1];
     nodes.push(ValueNode::Number(7));
@@ -97,37 +97,52 @@ fn admission_preserves_explicitly_admitted_depth() {
         },
     )
     .unwrap();
-    let program = Program::new(
-        vec![fact(value)],
-        zetesis_core::FactTables::default(),
-        AdmissionLimits::default(),
-    )
-    .unwrap();
-    assert_eq!(program.domain().at(0).unwrap().depth(), depth);
+    let catalog = template_catalog(&[fact(value)]);
+    let TemplateTerm::Constant(root) = catalog
+        .at(0)
+        .unwrap()
+        .patterns()
+        .at(0)
+        .unwrap()
+        .terms()
+        .at(0)
+        .unwrap()
+    else {
+        panic!("closed root");
+    };
+    assert_eq!(root.depth(), depth);
 }
 
 #[test]
-fn admission_bounds_template_metadata() {
+fn catalog_bounds_template_metadata() {
     let pattern = AtomPattern::new(Predicate::new("p", 0).unwrap(), vec![]).unwrap();
-    let template = Template::new(Some(pattern), vec![], vec![], vec![], vec![]);
-    let error = Program::new(
-        vec![template; 100],
-        zetesis_core::FactTables::default(),
-        AdmissionLimits {
-            max_bytes: 1024,
-            ..AdmissionLimits::default()
-        },
-    )
-    .unwrap_err();
-    let AdmissionError::Canonical {
-        error: CatalogError::Storage { required, limit },
-        ..
-    } = error
-    else {
+    let result = (|| {
+        let mut builder = TemplateCatalogBuilder::new(1024)?;
+        for _ in 0..100 {
+            builder.append([], [PatternRef::from(&pattern)], [])?;
+        }
+        builder.finish()
+    })();
+    let CatalogError::Storage { required, limit } = result.unwrap_err() else {
         panic!("named storage refusal");
     };
     assert_eq!(limit, 1024);
     assert!(required > limit as u128);
+}
+
+#[test]
+fn failed_component_import_cannot_publish_an_accepted_prefix() {
+    let first = fact(Value::Number(1));
+    let oversized = fact(Value::String("x".repeat(1 << 20)));
+    let mut builder = TemplateCatalogBuilder::new(1 << 19).unwrap();
+    builder
+        .append([], first.head().map(PatternRef::from), [])
+        .unwrap();
+    let error = builder
+        .append([], oversized.head().map(PatternRef::from), [])
+        .unwrap_err();
+    assert!(matches!(error, CatalogError::Storage { required, limit } if required > limit as u128));
+    assert_eq!(builder.finish().unwrap_err(), error);
 }
 
 #[test]
@@ -149,12 +164,7 @@ fn admitted_keys_preserve_substitution_identity() {
         vec![],
         vec![],
     );
-    let program = Program::new(
-        vec![template],
-        zetesis_core::FactTables::default(),
-        AdmissionLimits::default(),
-    )
-    .unwrap();
+    let catalog = template_catalog(&[template]);
     let assignment = [Value::Number(9)];
     let expected = Atom::new(
         predicate,
@@ -165,11 +175,11 @@ fn admitted_keys_preserve_substitution_identity() {
         ],
     )
     .unwrap();
-    let admitted = program
-        .templates()
+    let admitted = catalog
         .at(0)
         .unwrap()
-        .head()
+        .patterns()
+        .at(0)
         .unwrap()
         .key(assignment.as_slice())
         .unwrap();
@@ -181,11 +191,11 @@ fn admitted_keys_preserve_substitution_identity() {
     assert_eq!(admitted.value(0), admitted.value(2));
     let missing: &[Option<TermRef<'_>>] = &[None];
     assert_eq!(
-        program
-            .templates()
+        catalog
             .at(0)
             .unwrap()
-            .head()
+            .patterns()
+            .at(0)
             .unwrap()
             .key(missing)
             .unwrap_err()
@@ -198,18 +208,13 @@ fn admitted_keys_preserve_substitution_identity() {
 fn admitted_key_comparison_stops_at_each_work_boundary() {
     let value = Value::String("compared text".into());
     let template = fact(value.clone());
-    let program = Program::new(
-        vec![template],
-        zetesis_core::FactTables::default(),
-        AdmissionLimits::default(),
-    )
-    .unwrap();
+    let catalog = template_catalog(&[template]);
     let empty: &[Value] = &[];
-    let key = program
-        .templates()
+    let key = catalog
         .at(0)
         .unwrap()
-        .head()
+        .patterns()
+        .at(0)
         .unwrap()
         .key(empty)
         .unwrap();
@@ -244,22 +249,16 @@ fn filter_views_share_the_ingress_evaluator() {
         Term::Constant(Value::Number(7)),
         Term::Constant(Value::String("7".into())),
     );
-    let program = Program::new(
-        vec![Template::new(
-            None,
-            vec![],
-            vec![],
-            vec![],
-            vec![filter.clone()],
-        )],
-        zetesis_core::FactTables::default(),
-        AdmissionLimits::default(),
-    )
-    .unwrap();
+    let catalog = template_catalog(&[Template::new(
+        None,
+        vec![],
+        vec![],
+        vec![],
+        vec![filter.clone()],
+    )]);
     let empty: &[Value] = &[];
     assert_eq!(
-        program
-            .templates()
+        catalog
             .at(0)
             .unwrap()
             .filters()

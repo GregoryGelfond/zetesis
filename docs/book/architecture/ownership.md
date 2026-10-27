@@ -47,32 +47,13 @@ construction cost and lifetimes should be explicit. Duplicating owned logical
 payload merely to index it requires a separate justification.
 
 Core construction descriptions (`Value`, `Atom`, `Template`) are distinct from
-admitted execution views. `Program` imports its constants and signed predicates
-into a frozen canonical vocabulary. Its template rows, explicit finite domain
-and signature order retain typed IDs and topology. Interned subterms are not
-thereby members of the substitution domain. `TemplateCatalog` supplies the same
-ordered component storage to rules and objectives without treating an objective
-as a synthetic rule or source of support.
+admitted execution views. `TemplateCatalog` imports typed components into one
+canonical vocabulary and retains their order and topology. Interned subterms
+are not thereby members of a substitution domain. Rules and objectives share
+component storage without treating an objective as a synthetic rule or source
+of support. Catalog presence denotes identity, not truth.
 
-Explicit `FactTables` input is consumed into one closed atom authority over that
-same vocabulary. Per-predicate relation catalogs retain row membership, equality
-columns and canonical order; an occurrence list retains original duplicates and
-anchors beside template order. Neither the catalogs nor occurrence positions own
-another `Value` or `Atom`. Admission charges its still-live imported-column IDs,
-canonical writer, relation metadata and close/publication overlap together, with
-the vocabulary counted once. Caller construction values follow the same exclusion
-as caller-supplied templates. After admission, formula/source evidence and core
-fact occurrences remain separate coordinates linked by their owning adapter.
-
-An oracle workspace descends from the program's closed store with a fresh atom
-scope and empty discovery. Bootstrap visits facts at their original positions;
-presence in shared storage never substitutes for that visit or seeds truth by
-itself. Per-workspace byte receipts include the shared base. The batch cache
-counts the closed rows and indexes once under exact program/preparation ownership;
-it leaves the existing vocabulary accounting in place. Other lazy-round and eager
-grounding catalogs still import each fact through their established paths.
-
-`TemplateRef`, `PatternRef`, `FilterRef` and `TemplateTerm` borrow that storage.
+`TemplateRow`, `PatternRef`, `FilterRef` and `TemplateTerm` borrow that storage.
 `ObjectiveTemplateRef` adds objective weight polarity, priority slot and closed
 condition metadata. Owned condition descriptions import into one objective tuple
 authority over the same vocabulary. Conditions already backed by a source catalog
@@ -80,14 +61,6 @@ retain that supplied authority. The objective's aggregate byte allowance counts
 exact shared owners once; different source prefixes can conservatively recount
 shared segments. This boundary does not establish one global authority for all
 source syntax, generated bindings and observation values.
-
-A Program's `CarrierAtom` retains signature and explicit-domain coordinates,
-sharing the canonical vocabulary. Sparse candidates do not enumerate or count
-the complete Cartesian carrier. A positional `GateAtom` additionally witnesses
-a checked rank for that exact Program. Equal logical atoms from separately
-admitted Programs are comparable semantically but cannot exchange applicability
-witnesses. Tuple writers created for the same Program share vocabulary identity
-while retaining independent atom-row scopes and candidate truth.
 
 Formula preparation accepts source text or a canonical logical program. Both
 retain the original canonical `Program` in an `Arc` through preparation and
@@ -407,100 +380,13 @@ avoid reallocation while increasing retained storage. An admission limit must
 account for the capacity actually retained, including simultaneously live
 packing, output and transport storage within its stated scope.
 
-Independent scalar closure construction has a per-candidate named-capacity
-allowance, `Limits::max_closure_bytes`. `BatchOracle` retains one preparation
-for its exact `Program` and reuses empty query workspaces across submissions.
-Scalar delta rows are derived ID selections over each predicate's sole tuple
-owner. Their live and spare capacities, headers and conservative replacement
-overlap enter the same per-candidate allowance. Cutoffs, cache keys and logical
-ID lengths are reset before reuse; stable insertion IDs belong to one candidate's
-catalog lifetime and do not become persistent truth across candidates. A dense
-relation's recorded discovery positions, kept for rows derived again, are
-identity metadata of the workspace's authority: they count in the same
-allowance, are skipped rather than refused when the work or byte allowance
-cannot hold them, and are discarded with a failed or foreign workspace.
-Before executing a batch it admits idle retained workspaces and the allowance
-for each assigned workspace against its collective limit. If `S` is spare slot
-capacity (zero once every reserved slot holds a workspace), `H` the separately
-allocated preparation header, `P` the prepared queries' retained bytes (including
-`H`), `R_i` a workspace's retained capacity, and `L` the
-per-candidate allowance, the required envelope is
-`H + S + sum(idle R_i) + sum(assigned max(R_i, L - P))`. Every assigned workspace
-requires `L >= P`. The other immutable preparation payload has its separate
-preparation ceiling. The cache's own header and Arc counters are bookkeeping
-outside this envelope, like allocator metadata. Since `H <= P`,
-`workers * L` remains the conservative setup allowance: CPU closure setup checks that product
-before allocating its pool, compiling static rules or initializing candidates.
-This conservative guard also covers eager and shared CPU closure execution;
-formula and device routes apply their own resource checks instead.
-`SolveConfig::validate` checks representation-independent policies. With valid
-policies, an already cancelled session stops before executor resource checks.
-The ordinary resource policy derives `L` as each worker's share of the
-collective capacity selected by `--memory`. At most
-`min(submitted candidates, worker count)` workspaces are
-assigned, each to a contiguous candidate range; candidates inside one range run
-sequentially. An empty batch admits only retained collective capacity and does
-not prepare a program. Returned models, input seeds, worker stacks and
-allocator overhead are separate owners.
-
-Ordinary sessions map `SolveConfig::max_source_work` to immutable preparation
-work and `max_closure_batch_bytes` to both preparation storage and the collective
-owner allowance. Candidate closure work retains its separate `max_work` counter.
-Bounded library callers can select these work ceilings. Ordinary command
-execution uses checked counter maxima without a selected work quota.
-A preparation stop is distinct from an individual candidate stop; neither
-establishes candidate exhaustion. A collective reservation refusal starts no
-candidate and releases the admission slot.
-
-`SemanticOutcome::query_execution()` retains the CPU producer's typed
-`QueryStatistics` snapshot for independent relational execution. Preparation
-builds and adoptions are cumulative; an adoption shares a compatible immutable
-owner supplied by candidate narrowing without reconstructing it. The retained
-receipt still describes that owner's original construction work. Active and
-reused workspace counts describe the latest
-independent attempt that acquired admission. They count assigned owners, not
-completed candidates. Retained bytes describe the current cache. Reserved bytes
-are the latest attempt's admitted envelope, or zero if it admitted none.
-Text statistics, JSON and failure
-reports use this same observation. If reading the snapshot fails, the original
-typed fault and any earlier successful snapshot remain distinguishable; checked
-models are retained without a coverage claim. Shared and device routes expose
-their own execution receipts instead.
-
-`SemanticOutcome::closure_execution()` is the other receipt of the independent
-routes, lazy and eager: the per-check counters of `Statistics` and
-`StaticStatistics`, summed over completed checks, with the number of stopped
-checks whose partial work no counter reports. Its peak closure envelope is the
-largest capacity a completed check admitted or reserved, in the same terms as
-`max_closure_bytes`; it is not an allocation peak.
-
 [`StorageOwners`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/StorageOwners.lean)
 proves the natural-number bound obtained by summing independently bounded
 owners. Its premise is admitted capacity: allocator slack can exceed a proposed
-reservation before the actual-capacity check refuses it. A scalar stop returns
-no completed statistics; a core catalog failure separately carries its capacity
-receipt. This is not a hard bound on transient allocator or process memory.
-Concrete capacity measurement, worker scheduling and checked arithmetic remain
-implementation obligations.
-
-The lazy coordinator's `max_host_bytes` is a mixed, explicitly scoped envelope.
-It includes actual committed/pending catalog, AVL/path and ordered-ID capacities,
-their named growth overlap and canonical payload, plus requested packed
-transport, source membership/workspace, instance-key scratch and final model
-positions. The final position allowance bounds logical selected slots; it
-excludes the extra capacity retained by `Model`'s geometrically growing Vec.
-Other allocator overhead and rounding outside the catalog/ordered-ID capacities,
-Arc envelopes, caller inputs and backend-private transport are also excluded.
-Source work includes initialization, identity lookup/insertion, canonical row
-selection and prefix commits; the quota is shared across the whole batch.
-
-The borrowed source reader has a separate `max_scan_bytes` allowance for its
-row-reference directory, join scratch and current instance-key buffer. It
-includes actual capacities and old/replacement overlap, while borrowing the
-Program and catalog payload. `max_instance_bytes` bounds one instance's logical
-referenced identity; it does not stand in for the scan workspace allowance.
-World masks and callback transport keep their existing accounts. These owners
-can be simultaneously live, so their separate admitted bounds must be composed.
+reservation before an actual-capacity check refuses it. Concrete capacity
+measurement, worker scheduling and checked arithmetic remain implementation
+obligations. The general law survives removal of the relational closure route;
+it does not establish a hard bound on transient allocator or process memory.
 
 Authored payload bounds exclude any costs their API says they exclude, such as
 allocator metadata or driver allocations. They are not process RSS. Dropping a

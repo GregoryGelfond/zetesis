@@ -1,4 +1,4 @@
-//! A kept statement against its rewrite, on both routes.
+//! A kept formula statement against its full rewrite.
 //!
 //! Each program is admitted twice on this thread: once with every statement
 //! rewritten, the reference path, and once as the kept-statement predicate
@@ -9,44 +9,6 @@
 
 use super::testing::{kept_statements, with_every_statement_rewritten};
 use crate::{AdmissionOptions, ExpansionLimits, FormulaLimits};
-
-/// What the extended route's two paths must agree on: the emitted templates,
-/// compared as templates since the program's own rendering includes hash
-/// indexes whose order differs between programs, their origins and the
-/// receipt, or the failure.
-fn extended(text: &str, limits: &ExpansionLimits) -> Result<crate::Admitted, String> {
-    crate::admit_extended(text.to_owned(), AdmissionOptions::default(), *limits)
-        .map_err(|failure| format!("{failure:?}"))
-}
-
-fn extended_agree(text: &str, limits: &ExpansionLimits) -> usize {
-    let reference = with_every_statement_rewritten(|| extended(text, limits));
-    let before = kept_statements();
-    let kept = extended(text, limits);
-    match (&kept, &reference) {
-        (Ok(kept), Ok(reference)) => {
-            assert!(
-                zetesis_test_support::programs::rules(kept.program())
-                    .eq(zetesis_test_support::programs::rules(reference.program())),
-                "{text} under {limits:?}: templates differ",
-            );
-            assert_eq!(
-                kept.template_origins(),
-                reference.template_origins(),
-                "{text}"
-            );
-            assert_eq!(kept.fact_origins(), reference.fact_origins(), "{text}");
-            assert_eq!(
-                kept.expansion_usage(),
-                reference.expansion_usage(),
-                "{text}"
-            );
-        }
-        (Err(kept), Err(reference)) => assert_eq!(kept, reference, "{text} under {limits:?}"),
-        _ => panic!("{text} under {limits:?}: one path failed: {kept:?} against {reference:?}"),
-    }
-    kept_statements() - before
-}
 
 /// What the formula route's two paths must agree on: the analyzed program,
 /// whose `Debug` rendering carries provenance at every nesting level, the
@@ -110,16 +72,6 @@ const NOT_KEPT: [&str; 6] = [
 ];
 
 #[test]
-fn kept_facts_match_their_rewrite_on_the_extended_route() {
-    for text in KEPT_FACTS {
-        assert!(
-            extended_agree(text, &ExpansionLimits::default()) > 0,
-            "{text}"
-        );
-    }
-}
-
-#[test]
 fn kept_facts_match_their_rewrite_on_the_formula_route() {
     for text in KEPT_FACTS {
         assert!(
@@ -127,12 +79,6 @@ fn kept_facts_match_their_rewrite_on_the_formula_route() {
             "{text}"
         );
     }
-}
-
-#[test]
-fn a_rule_with_a_compound_symbol_is_kept_on_the_extended_route() {
-    let text = "p(f(a)). q(X) :- p(X), X = f(a).";
-    assert_eq!(extended_agree(text, &ExpansionLimits::default()), 2);
 }
 
 #[test]
@@ -150,13 +96,8 @@ fn sentinel_facts_are_kept_on_the_formula_route() {
 }
 
 #[test]
-fn definitions_pools_intervals_and_arithmetic_are_rewritten_on_both_routes() {
+fn definitions_pools_intervals_and_arithmetic_are_rewritten() {
     for text in NOT_KEPT {
-        assert_eq!(
-            extended_agree(text, &ExpansionLimits::default()),
-            0,
-            "{text}"
-        );
         assert_eq!(
             formula_agree(text, &ExpansionLimits::default()),
             0,
@@ -166,9 +107,8 @@ fn definitions_pools_intervals_and_arithmetic_are_rewritten_on_both_routes() {
 }
 
 #[test]
-fn a_kept_statement_after_a_rewritten_one_matches_on_both_routes() {
+fn a_kept_statement_after_a_rewritten_one_matches() {
     let text = "#const c = 5. p(c). p(f(a, b)). p(f(c)).";
-    assert_eq!(extended_agree(text, &ExpansionLimits::default()), 1);
     assert_eq!(formula_agree(text, &ExpansionLimits::default()), 1);
 }
 
@@ -180,7 +120,6 @@ fn a_term_work_ceiling_fails_at_the_same_charge_on_both_paths() {
             max_term_work,
             ..ExpansionLimits::default()
         };
-        extended_agree(text, &limits);
         formula_agree(text, &limits);
     }
 }
@@ -193,7 +132,6 @@ fn a_scalar_byte_ceiling_fails_at_the_same_charge_on_both_paths() {
             max_scalar_bytes,
             ..ExpansionLimits::default()
         };
-        extended_agree(text, &limits);
         formula_agree(text, &limits);
     }
 }

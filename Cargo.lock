@@ -2096,7 +2096,6 @@ dependencies = [
  "zetesis-cpu",
  "zetesis-ferraris",
  "zetesis-objective",
- "zetesis-stable",
  "zetesis-test-support",
  "zetesis-themelios",
 ]

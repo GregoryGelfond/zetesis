@@ -1,11 +1,7 @@
 //! Admission of source and canonical logical programs through pinned themelios.
-//! [`admit_program`] borrows a canonical program for strict relational admission.
-//! [`prepare_program_relational`] retains an owned canonical program and display
-//! metadata through bounded scalar and fact expansion;
 //! [`prepare_program_formula`] retains its original program through an `Arc` and
 //! enters the shared formula compiler without rendering or reparsing.
-//! Strict S0 and extended scalar admission compile relational templates without
-//! grounding. The separate formula APIs compute a bounded possible-positive
+//! The formula APIs compute a bounded possible-positive
 //! relation and ground complete joins into normal, conditional-choice, and finite-aggregate Ferraris
 //! formulas. Lifted minimization templates remain separate and score only supplied
 //! verified stable models. No source route invokes a solver or external engine.
@@ -31,14 +27,12 @@
 //! Source acceptance is not a parser-to-Lean or Rust implementation proof.
 #![forbid(unsafe_code)]
 
-mod automatic;
 mod compile;
 mod diagnostic;
 mod parsed_source;
 mod profile;
 mod program_admission;
 mod program_limits;
-mod program_relational;
 mod program_site;
 mod source_diagnostics;
 pub use program_site::{ProgramSite, StatementId};
@@ -98,17 +92,10 @@ pub mod observation;
 mod scalar_arithmetic;
 pub mod symbols;
 
-pub use automatic::{
-    AutomaticAdmission, AutomaticAdmissionFailure, admit_bundle_automatic_with_cancellation,
-    prepare_program_automatic,
-};
 pub use parsed_source::{ParsedSource, SourceFailure};
 pub use program_admission::{
-    AdmittedProgram, CompilationFailure, ProgramAdmissionFailure, ProgramAdmissionOptions,
-    ProgramFailureKind, ProgramLimit, ProgramResource, ProgramSubject, admit_program,
-};
-pub use program_relational::{
-    PreparedRelational, ProgramRelationalOptions, prepare_program_relational,
+    CompilationFailure, ProgramAdmissionFailure, ProgramAdmissionOptions, ProgramFailureKind,
+    ProgramLimit, ProgramResource, ProgramSubject,
 };
 /// Canonical shared frontend tiers, including all vocabulary exposed by this crate.
 pub use themelios_analysis as analysis;
@@ -119,22 +106,16 @@ pub use themelios_program as logical;
 /// Canonical lossless syntax and parsing vocabulary.
 pub use themelios_syntax as syntax;
 
-use themelios_base::source::{Source, SourceId};
-use themelios_base::span::Location;
-use themelios_program::raise::raise;
-use zetesis_core::{AdmissionLimits, Program};
+use themelios_base::source::SourceId;
+use zetesis_core::AdmissionLimits;
 
 pub use bundle::{
     BundleError, BundleIoOperation, BundleLimits, BundleResource, BundleRoot, BundleSource,
     IncludeEdge, IncludeResolution, SourceBundle,
 };
-pub use bundle_admission::{
-    AdmittedBundle, BundleAdmissionError, BundleAdmissionFailure, BundleAdmissionOptions,
-    admit_bundle_extended, admit_bundle_extended_with_cancellation,
-};
+pub use bundle_admission::{BundleAdmissionError, BundleAdmissionOptions};
 pub use diagnostic::{AdmissionFailure, InputLimit, ProfileFeature, SyntaxFailure};
 pub use expansion::{ExpansionFailure, ExpansionLimits, ExpansionResource, ExpansionUsage};
-pub use extended::admit_extended;
 pub use formula::{
     AdmittedFormula, AdmittedFormulaBundle, AnalysisBasis, FormulaBundleFailure, FormulaFailure,
     FormulaLimits, FormulaPurpose, FormulaResource, PreparedFormula, PreparedFormulaBundle,
@@ -197,7 +178,7 @@ pub struct AdmissionOptions {
     pub max_syntax_depth: usize,
     /// Maximum source body elements per rule, before set deduplication.
     pub max_body_elements: usize,
-    /// Limits checked independently by the core template admission door.
+    /// Formula template, variable, predicate-arity and value ceilings.
     pub core_limits: AdmissionLimits,
 }
 
@@ -212,108 +193,6 @@ impl Default for AdmissionOptions {
             core_limits: AdmissionLimits::default(),
         }
     }
-}
-
-/// An admitted program and the source evidence retained by its boundary.
-/// Template and fact origins follow their respective core occurrence orders.
-#[derive(Debug)]
-pub struct Admitted {
-    program: Program,
-    source: Source,
-    template_origins: Vec<Vec<Location>>,
-    fact_origins: Vec<Vec<Location>>,
-    metadata: SourceMetadata,
-    expansion: ExpansionUsage,
-}
-
-impl Admitted {
-    /// The checked finite relational program.
-    #[must_use]
-    pub fn program(&self) -> &Program {
-        &self.program
-    }
-
-    /// Original bytes under the source identity used by every origin.
-    #[must_use]
-    pub fn source(&self) -> &Source {
-        &self.source
-    }
-
-    /// Parsed origins per template. Equal source rules may have merged several
-    /// origins during themelios canonicalization.
-    #[must_use]
-    pub fn template_origins(&self) -> &[Vec<Location>] {
-        &self.template_origins
-    }
-
-    /// Parsed origins per fact occurrence, including duplicate rows. The order
-    /// is parallel to [`Program::facts`], independently of template origins.
-    #[must_use]
-    pub fn fact_origins(&self) -> &[Vec<Location>] {
-        &self.fact_origins
-    }
-
-    /// Original source declarations and display selection. Display metadata
-    /// never changes the independently admitted program or model identity.
-    #[must_use]
-    pub fn metadata(&self) -> &SourceMetadata {
-        &self.metadata
-    }
-
-    /// Expansion charges this admission accepted, each under its ceiling.
-    #[must_use]
-    pub fn expansion_usage(&self) -> &ExpansionUsage {
-        &self.expansion
-    }
-
-    /// Consume the boundary value when source evidence is no longer required.
-    #[must_use]
-    pub fn into_program(self) -> Program {
-        self.program
-    }
-}
-
-/// Admit UTF-8 source under S0 using the clingo dialect. Refuses resource-limit
-/// violations, every parser/raiser diagnostic, unsupported source forms, and
-/// core validation failures. No recovered or truncated program is returned.
-/// Work before core admission is bounded by source bytes and syntax ceilings.
-///
-/// # Errors
-/// Returns the typed source, syntax, profile, construction, or core admission
-/// refusal at the first failing stage, preserving that stage's diagnostics.
-pub fn admit(text: String, options: AdmissionOptions) -> Result<Admitted, AdmissionFailure> {
-    let source = ParsedSource::new(text, options)?;
-    profile::check(source.parsed(), options)?;
-    let raised = raise(source.parsed());
-    if !raised.diagnostics().is_empty() {
-        return Err(AdmissionFailure::Raise(raised.diagnostics().to_vec()));
-    }
-    let source_location = Location {
-        source: source.source().id(),
-        span: source.source().span(),
-    };
-    let mut compiled = compile::program(raised.program(), source_location)?;
-    coherence::append(
-        &mut compiled,
-        options.core_limits,
-        source_location,
-        |_, _, _| Ok::<(), AdmissionFailure>(()),
-    )?;
-    let compiled = compiled.admit(options.core_limits, |error, origins| {
-        let location = origins.first().copied().unwrap_or(source_location);
-        AdmissionFailure::Core {
-            error,
-            location: location.into(),
-        }
-    })?;
-    Ok(Admitted {
-        program: compiled.program,
-        source: source.into_source(),
-        template_origins: compiled.template_origins,
-        fact_origins: compiled.fact_origins,
-        metadata: SourceMetadata::default(),
-        expansion: ExpansionUsage::default(),
-    })
 }
 
 mod structural_value;

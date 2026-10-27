@@ -32,11 +32,10 @@ use themelios_syntax::tree::AstNode;
 pub(crate) use vocabulary::Predicate;
 use zetesis_core::Predicate as OwnedPredicate;
 
-use crate::diagnostic::unsupported;
 use crate::expansion::check;
 use crate::{
-    AdmissionFailure, ExpansionFailure, ExpansionLimits, ExpansionResource, ProfileFeature,
-    ProgramSite, StatementId,
+    AdmissionFailure, ExpansionFailure, ExpansionLimits, ExpansionResource, ProgramSite,
+    StatementId,
 };
 
 /// An accepted borrowed metadata directive. Signature payload belongs to the
@@ -292,29 +291,6 @@ impl Builder {
     }
 }
 
-pub(crate) fn check_syntax(
-    statement: &ast::Statement,
-    parsed: &Parse<ast::Program>,
-    formula: bool,
-) -> Result<(), AdmissionFailure> {
-    let location = parsed.location(statement.syntax().text_range());
-    match statement {
-        ast::Statement::Project(_) if !formula => {
-            return Err(unsupported(ProfileFeature::Statement, location));
-        }
-        ast::Statement::Defined(_) | ast::Statement::Project(_) => {}
-        ast::Statement::Show(show) => {
-            if !formula
-                && (show.term().is_some() || show.colon_token().is_some() || show.body().is_some())
-            {
-                return Err(unsupported(ProfileFeature::ShowTerm, location));
-            }
-        }
-        _ => return Ok(()),
-    }
-    Ok(())
-}
-
 pub(crate) fn check_count(
     parsed: &Parse<ast::Program>,
     limits: ExpansionLimits,
@@ -373,13 +349,6 @@ pub(crate) fn check_program_count(
     Ok(())
 }
 
-pub(crate) fn collect(
-    program: &SourceProgram,
-    metadata: &mut Builder,
-) -> Result<(), AdmissionFailure> {
-    collect_profile(program, metadata, false)
-}
-
 pub(crate) fn collect_program_for(
     program: &SourceProgram,
     metadata: &mut Builder,
@@ -390,24 +359,15 @@ pub(crate) fn collect_program_for(
         let site = ProgramSite::statement(StatementId::new(index), None);
         budget.poll(site)?;
         if purpose.includes(carrier.get()) {
-            collect_carriers(std::iter::once((carrier, site)), metadata, true)?;
+            collect_carriers(std::iter::once((carrier, site)), metadata)?;
         }
     }
     Ok(())
 }
 
-pub(crate) fn collect_profile(
-    program: &SourceProgram,
-    metadata: &mut Builder,
-    formula: bool,
-) -> Result<(), AdmissionFailure> {
-    collect_profile_at(program, metadata, formula, ProgramSite::program())
-}
-
 pub(crate) fn collect_profile_at(
     program: &SourceProgram,
     metadata: &mut Builder,
-    formula: bool,
     fallback: ProgramSite,
 ) -> Result<(), AdmissionFailure> {
     collect_carriers(
@@ -416,7 +376,6 @@ pub(crate) fn collect_profile_at(
             .enumerate()
             .map(|(index, carrier)| (carrier, fallback.with_statement(StatementId::new(index)))),
         metadata,
-        formula,
     )
 }
 
@@ -435,14 +394,12 @@ pub(crate) fn collect_occurrences(
             .iter()
             .map(|occurrence| (occurrence.statement(), ProgramSite::program())),
         metadata,
-        true,
     )
 }
 
 fn collect_carriers<'a>(
     carriers: impl Iterator<Item = (&'a WithProvenance<Statement>, ProgramSite)>,
     metadata: &mut Builder,
-    formula: bool,
 ) -> Result<(), AdmissionFailure> {
     for (carrier, site) in carriers {
         let site = crate::extended::origin(carrier, site);
@@ -460,8 +417,7 @@ fn collect_carriers<'a>(
                 DirectiveKind::ProjectSignature(metadata.signature(signature, site)?)
             }
             Statement::Project(Project::Atom { .. }) => DirectiveKind::ProjectAtom,
-            Statement::Show(_) if formula => DirectiveKind::ShowTerm,
-            Statement::Show(_) => return Err(unsupported(ProfileFeature::ShowTerm, site)),
+            Statement::Show(_) => DirectiveKind::ShowTerm,
             _ => continue,
         };
         // Effective policy is logical. Parsed evidence is optional and never

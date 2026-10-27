@@ -26,27 +26,20 @@ fn scalar_language_order_agrees_with_pinned_symbol_order_for_every_pair() {
     let values: Vec<(Value, Symbol)> = texts
         .iter()
         .map(|text| {
-            let admitted = zetesis_themelios::admit_extended(
-                format!("p({text})."),
-                zetesis_themelios::AdmissionOptions::default(),
-                zetesis_themelios::ExpansionLimits::default(),
+            let admitted = zetesis_reference_support::admit(
+                &format!("p({text})."),
+                &zetesis_themelios::FormulaLimits::default(),
             )
             .unwrap();
-            let value = match &admitted
-                .program()
-                .facts()
+            let value = admitted
+                .atoms()
                 .at(0)
                 .unwrap()
-                .pattern()
-                .terms()
+                .values()
                 .at(0)
                 .unwrap()
-            {
-                zetesis_core::TemplateTerm::Constant(value) => value
-                    .to_value(zetesis_core::ValueLimits::default())
-                    .unwrap(),
-                zetesis_core::TemplateTerm::Variable(_) => panic!("scalar fact must remain ground"),
-            };
+                .to_value(zetesis_core::ValueLimits::default())
+                .unwrap();
             let parsed = themelios_syntax::parse::parse(
                 &themelios_base::source::Source::new(
                     themelios_base::source::SourceId::new(0),

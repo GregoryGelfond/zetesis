@@ -139,3 +139,22 @@ pub(crate) fn without_pair_exclusions<T>(run: impl FnOnce() -> T) -> T {
 pub(crate) fn streamed_hybrid(source: &str) -> HybridFormula {
     without_pair_exclusions(|| hybrid(source))
 }
+
+/// Source preparation and occurrence-raising edge cases, including refusals.
+pub(crate) const PREPARATION_CASES: &[&str] = &[
+    "a.",
+    "#const n=2. p(1..n).",
+    "{p}.",
+    "1{p;q}1.",
+    "p|q.",
+    "p(1). q(X) :- p(X), X+1=2.",
+    "#show p/0. #show p/0. p.",
+    "#show p(X) : p(X). p(1).",
+    "#project p/0. {p}.",
+    ":~ p. [1@0] {p}.",
+    "p(X) :- not q(X).",
+    "#const a=b. #const b=a. p(a).",
+    "p(1/0).",
+    "p(2147483648).",
+    "#program step(t). p(t).",
+];

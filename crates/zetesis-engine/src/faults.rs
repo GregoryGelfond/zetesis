@@ -321,7 +321,6 @@ fn formula_ref(error: &FormulaFailure, original: &Program) -> Result<Conclusion,
 fn program_class(error: &zetesis_themelios::ProgramFailureKind) -> Class {
     match error {
         zetesis_themelios::ProgramFailureKind::Limit(_) => Class::Resource,
-        zetesis_themelios::ProgramFailureKind::Core(error) => core_admission_class(error),
         zetesis_themelios::ProgramFailureKind::Compilation(error) => match error {
             zetesis_themelios::CompilationFailure::Profile(_) => Class::Program,
             zetesis_themelios::CompilationFailure::Construction(error) => construction_class(error),
@@ -376,7 +375,6 @@ fn admission_class(error: &zetesis_themelios::AdmissionFailure) -> Class {
     match error {
         E::Limit { .. } | E::Source { .. } => Class::Resource,
         E::Metadata { error, .. } => metadata_class(error),
-        E::Core { error, .. } => core_admission_class(error),
         E::Construction { error, .. } => construction_class(error),
         E::Profile { .. } | E::ExtremumEndpoint { .. } => Class::Program,
         E::Syntax(_) | E::Raise(_) => Class::Adapter,
@@ -389,16 +387,6 @@ fn construction_class(error: &zetesis_core::ConstructionError) -> Class {
             zetesis_core::ValueError::Limit { .. } | zetesis_core::ValueError::Allocation,
         ) => Class::Resource,
         _ => Class::Program,
-    }
-}
-
-fn core_admission_class(error: &zetesis_core::AdmissionError) -> Class {
-    match error {
-        zetesis_core::AdmissionError::Canonical { error, .. } => catalog_class(error),
-        zetesis_core::AdmissionError::LimitExceeded { .. }
-        | zetesis_core::AdmissionError::FactLimitExceeded { .. } => Class::Resource,
-        zetesis_core::AdmissionError::UnsafeVariable { .. } => Class::Program,
-        zetesis_core::AdmissionError::NonDenseVariable { .. } => Class::Engine,
     }
 }
 

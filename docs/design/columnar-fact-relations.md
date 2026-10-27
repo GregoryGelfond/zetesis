@@ -1,5 +1,10 @@
 # Facts as columnar relation rows
 
+This record includes the former relational admission route. Its `Program`,
+carrier and automatic-retry APIs have since been removed. The shared formula
+fact blocks and normalization mechanisms remain; use the
+[current preparation guide](../book/rust/source.md) for supported entry points.
+
 A fact `p(t) ← ⊤` is a body-free ground rule, and zetesis has built general rule machinery for each one on both
 routes. This note normalizes facts into the representation the system already has for data, the columnar,
 dictionary-encoded support relations, in four stages. Each stage is an execution choice: answers and output are
