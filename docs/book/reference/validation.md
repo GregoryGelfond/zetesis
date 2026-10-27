@@ -179,6 +179,11 @@ This includes complete terminal-definition reconstruction over device-verified
 base answers, compared with eager CPU answer sets and the original output queries.
 Logs and status files are retained under `target/hardware`.
 
+Run physical qualification on a quiet host. The compute-time attribution tests
+calibrate heavy device passes against light host calls to detect a timestamp
+assigned to the wrong batch. Competing host work can lengthen a light call and
+invalidate that calibration; it does not establish a timestamp defect.
+
 The portable tests also translate every kernel to SPIR-V as wgpu's Vulkan
 backend does: each entry point, at each workgroup size, optional-feature
 specialization, SPIR-V version and workgroup zero-fill mode that backend can

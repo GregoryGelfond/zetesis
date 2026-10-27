@@ -364,8 +364,10 @@ impl Timed for GpuTightOracle {
 // Qualify the host without the per-batch placement under test: a flush after
 // each batch reads its pass after observed completion, the evidenced placement.
 // Heavy passes must outlast every light call, or the alternation cannot tell a
-// shifted report from a true one. Returns the shortest heavy pass and the
-// longest light call.
+// shifted report from a true one. Run this qualification on a quiet host:
+// descheduling can lengthen a light host call beyond a heavy device pass and
+// invalidate that separation. Returns the shortest heavy pass and the longest
+// light call.
 fn calibrate(oracle: &mut impl Timed, wide: &Subject, name: &str) -> (Duration, Duration) {
     let live = Cancellation::default();
     let mut shortest_heavy = Duration::MAX;
