@@ -59,3 +59,50 @@ fn terminal_rendering_names_only_base_grounding_as_eager() {
     assert!(text.contains("stage grounding_mode: eager_base_terminal_definitions"));
     assert!(text.contains("base only; terminal definitions reconstructed during solving"));
 }
+
+#[test]
+fn stage_rendering_matches_the_shared_protocol_fixture() {
+    let recorder = StageRecorder::new(true);
+    let stages = [
+        (SolveStage::SourcePreparation, 1, 100),
+        (SolveStage::Grounding, 1, 200),
+        (SolveStage::Solving, 3, 500),
+        (SolveStage::ObservationOutput, 2, 40),
+    ];
+    for (stage, calls, _) in stages {
+        for _ in 0..calls {
+            drop(recorder.enter(stage));
+        }
+    }
+    let timings = recorder.snapshot().unwrap();
+    assert!(timings.is_complete());
+    // Substitute only clock durations; every other protocol field stays fixed.
+    let mut expected = zetesis_test_support::fixtures::STAGE_STATISTICS.replace(
+        "  stage driver: elapsed_ns=1000\n",
+        &format!(
+            "  stage driver: elapsed_ns={}\n",
+            timings.driver_elapsed.as_nanos()
+        ),
+    );
+    for (stage, calls, elapsed) in stages {
+        let label = stage.label();
+        let measured = timings.get(stage).unwrap().elapsed.as_nanos();
+        expected = expected.replace(
+            &format!("  stage {label}: calls={calls}; elapsed_ns={elapsed};"),
+            &format!("  stage {label}: calls={calls}; elapsed_ns={measured};"),
+        );
+    }
+    expected = expected.replace(
+        "  stage unattributed: elapsed_ns=160\n",
+        &format!(
+            "  stage unattributed: elapsed_ns={}\n",
+            timings.unattributed.unwrap().as_nanos()
+        ),
+    );
+    let mut rendered = Vec::new();
+    super::write(&mut rendered, &timings).unwrap();
+    let text = std::str::from_utf8(&rendered).unwrap();
+    // The human summary is independent of the versioned protocol below it.
+    let (_, section) = text.split_once("\nStage timings:").unwrap();
+    assert_eq!(format!("Stage timings:{section}"), expected);
+}
