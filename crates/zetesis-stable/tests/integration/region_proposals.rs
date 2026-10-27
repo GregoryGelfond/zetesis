@@ -6,13 +6,14 @@ use crate::support::formula_theories as theories;
 use zetesis_theory_support::theories::theory;
 
 use std::collections::BTreeSet;
+use std::ops::RangeInclusive;
 use std::time::Duration;
 
 use crate::support::interpretations::stable_models as expected;
 use zetesis_ferraris::{Node, Theory};
 use zetesis_stable::{
     BatchError, BatchLimits, BatchVerdict, Cancellation, CompletionExecutor, Engagement,
-    Incomplete, Limits, RegionWalkEngagement, SearchLimits, StableModels,
+    Incomplete, Limits, QueryDivision, RegionWalkEngagement, SearchLimits, StableModels,
 };
 use zetesis_test_support::counts::nonzero;
 
@@ -78,6 +79,15 @@ fn general_cyclic_choices() -> Theory {
     theory
 }
 
+fn cyclic_query_region_bounds(answers: usize, countermodels: u64) -> RangeInclusive<usize> {
+    // Stable queries each visit one region. Each unsupported cycle visits its
+    // root and a countermodel; a parallel sibling may also be narrowed before
+    // that countermodel absorbs the query.
+    let countermodels = usize::try_from(countermodels).unwrap();
+    let minimum = answers + 2 * countermodels;
+    minimum..=minimum + countermodels
+}
+
 #[test]
 fn shared_indexes_preserve_non_tight_answer_families() {
     let theory = general_cyclic_choices();
@@ -97,10 +107,15 @@ fn shared_indexes_preserve_non_tight_answer_families() {
         reference.countermodels > 0,
         "present unsupported cycles must be rejected"
     );
-    for (workers, engagement) in [2, 4].into_iter().flat_map(|workers| {
+    for (workers, engagement, division) in [2, 4].into_iter().flat_map(|workers| {
         [
-            (workers, Engagement::Immediate),
-            (workers, Engagement::After(Duration::MAX)),
+            (workers, Engagement::Immediate, QueryDivision::WhenIdle),
+            (workers, Engagement::Immediate, QueryDivision::Never),
+            (
+                workers,
+                Engagement::After(Duration::MAX),
+                QueryDivision::WhenIdle,
+            ),
         ]
     }) {
         let mut native = StableModels::with_region_workers_engaging(
@@ -111,6 +126,7 @@ fn shared_indexes_preserve_non_tight_answer_families() {
             Cancellation::default(),
         )
         .unwrap();
+        native.set_query_division(division);
         let answers: Vec<Vec<_>> = native
             .by_ref()
             .map(|answer| answer.unwrap().atoms().collect())
@@ -119,7 +135,9 @@ fn shared_indexes_preserve_non_tight_answer_families() {
         assert_eq!(answers.len(), expected.len());
         assert_eq!(answers.into_iter().collect::<BTreeSet<_>>(), expected);
         let actual = native.statistics();
-        let record = actual.regions.unwrap().workers.unwrap().engagement;
+        let workers_record = actual.regions.unwrap().workers.unwrap();
+        assert_eq!(workers_record.query_division.division, division);
+        let record = workers_record.engagement;
         match engagement {
             Engagement::Immediate => assert!(
                 matches!(record, RegionWalkEngagement::Engaged { launched, .. } if launched == workers),
@@ -133,9 +151,19 @@ fn shared_indexes_preserve_non_tight_answer_families() {
         }
         assert_eq!(actual.countermodel_queries, reference.countermodel_queries);
         assert_eq!(actual.countermodels, reference.countermodels);
-        // Each query starts with private fresh knowledge. Scheduling neither
-        // builds a second original index nor changes its frozen-query work.
-        assert_eq!(actual.reduct.regions, reference.reduct.regions);
+        if engagement == Engagement::Immediate && division == QueryDivision::WhenIdle {
+            let bounds = cyclic_query_region_bounds(expected.len(), reference.countermodels);
+            assert!(
+                bounds.contains(&actual.reduct.regions.regions),
+                "{workers} workers: {:?}",
+                actual.reduct.regions
+            );
+        } else {
+            // Undivided queries retain exact receipts, even when candidate
+            // enumeration runs on several workers. Each query starts fresh
+            // and shares the original index.
+            assert_eq!(actual.reduct.regions, reference.reduct.regions);
+        }
         for count in [1, 64] {
             for completion_workers in [1, 4] {
                 let mut search = StableModels::with_region_producers(
