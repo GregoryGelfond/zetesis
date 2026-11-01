@@ -1,5 +1,6 @@
 //! Positive specialization preserves exact full families and bounded setup.
 
+use crate::support::arithmetic::{assert_arithmetic_declined, assert_root_absorbed};
 use std::collections::BTreeSet;
 use std::convert::Infallible;
 use std::num::NonZeroUsize;
@@ -87,8 +88,18 @@ fn positive_plans_preserve_every_small_atomic_rule_family() {
                 .collect(),
         );
         let expected = independent(&original);
-        let mut stream =
-            StableModels::new(&original, Limits::default(), Cancellation::default()).unwrap();
+        // Keep this family on the Positive certificate route, independently of
+        // the optional arithmetic stage's ability to refute individual cases.
+        let mut stream = StableModels::new(
+            &original,
+            Limits {
+                max_reduct_bytes: 0,
+                ..Limits::default()
+            },
+            Cancellation::default(),
+        )
+        .unwrap();
+        assert_arithmetic_declined(&stream);
         assert!(
             stream
                 .enable_class_checking(
@@ -105,6 +116,11 @@ fn positive_plans_preserve_every_small_atomic_rule_family() {
         assert!(stream.exhausted());
         assert!(stream.statistics().candidates <= 1);
         assert_eq!(stream.statistics().countermodel_queries, 0);
+        // The same original family also retains its default-limit comparison.
+        let mut default_stream =
+            StableModels::new(&original, Limits::default(), Cancellation::default()).unwrap();
+        assert_eq!(collect(&mut default_stream), expected);
+        assert!(default_stream.exhausted());
     }
 }
 
@@ -232,10 +248,23 @@ fn region_positive_constraints_exclude_the_answer_family() {
 
 #[test]
 fn positive_batches_preserve_the_unique_family() {
-    for original in [cycle(false, false), cycle(true, false), cycle(true, true)] {
+    for (index, original) in [cycle(false, false), cycle(true, false), cycle(true, true)]
+        .into_iter()
+        .enumerate()
+    {
         for workers in [1, 4] {
-            let mut stream =
-                StableModels::new(&original, Limits::default(), Cancellation::default()).unwrap();
+            let limits = if index == 2 {
+                Limits {
+                    max_reduct_bytes: 0,
+                    ..Limits::default()
+                }
+            } else {
+                Limits::default()
+            };
+            let mut stream = StableModels::new(&original, limits, Cancellation::default()).unwrap();
+            if index == 2 {
+                assert_arithmetic_declined(&stream);
+            }
             assert!(
                 stream
                     .enable_class_checking(
@@ -519,8 +548,16 @@ fn a_failed_constraint_preserves_the_empty_answer_family() {
         .unwrap()
     );
     assert!(independent(&original).is_empty());
-    let mut stream =
-        StableModels::new(&original, Limits::default(), Cancellation::default()).unwrap();
+    let mut stream = StableModels::new(
+        &original,
+        Limits {
+            max_reduct_bytes: 0,
+            ..Limits::default()
+        },
+        Cancellation::default(),
+    )
+    .unwrap();
+    assert_arithmetic_declined(&stream);
     assert!(
         stream
             .enable_class_checking(
@@ -547,4 +584,11 @@ fn a_failed_constraint_preserves_the_empty_answer_family() {
         )
         .unwrap()
     );
+}
+
+#[test]
+fn conflicting_seeded_cycle_absorbs_before_class_preparation() {
+    let original = cycle(true, true);
+    assert!(independent(&original).is_empty());
+    assert_root_absorbed(&original, CertificateOrder::PositiveFirst);
 }

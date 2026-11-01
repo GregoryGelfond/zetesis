@@ -2,6 +2,7 @@
 
 use std::{collections::BTreeSet, convert::Infallible};
 
+use crate::support::arithmetic::{assert_arithmetic_declined, assert_root_absorbed};
 use crate::support::batching::{batch, residual};
 use crate::support::choice_theories::choices;
 use crate::support::routes::{ROUTES, search};
@@ -125,10 +126,12 @@ fn failed_stratified_constraints_exhaust_without_proposals() {
             &original,
             Limits {
                 max_candidates: 0,
+                max_reduct_bytes: 0,
                 ..Limits::default()
             },
             Cancellation::default(),
         );
+        assert_arithmetic_declined(&stream);
         enable(&mut stream);
         assert!(route.collect(&mut stream).is_empty());
         let stats = stream.statistics();
@@ -418,4 +421,11 @@ fn failed_stratified_checks_keep_the_pending_answer() {
         assert_eq!(stream.batch_statistics().committed, 0);
         assert!(!stream.exhausted());
     }
+}
+
+#[test]
+fn conflicting_strata_absorb_before_class_preparation() {
+    let original = strata(true, true);
+    assert!(independent(&original).is_empty());
+    assert_root_absorbed(&original, CertificateOrder::StratifiedFirst);
 }

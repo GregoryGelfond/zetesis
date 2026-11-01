@@ -230,8 +230,28 @@ fn positive_sessions_preserve_original_constraints() {
     ] {
         let owner = formula(source);
         for workers in [1, 4] {
-            let (actual, observations) = collect(&owner, config(workers, Oracle::Auto));
+            // Decline optional root arithmetic through its existing allowance,
+            // keeping this test on the positive-certificate constraint path.
+            let (actual, observations) = collect(
+                &owner,
+                SolveConfig {
+                    max_reduct_bytes: 0,
+                    ..config(workers, Oracle::Auto)
+                },
+            );
             positive(&actual, &observations, workers);
+            assert_eq!(
+                actual
+                    .outcome()
+                    .countermodel_statistics()
+                    .unwrap()
+                    .regions
+                    .unwrap()
+                    .parity
+                    .status,
+                zetesis_ferraris::PreparationStatus::StorageDeclined,
+            );
+            let (automatic, _) = collect(&owner, config(workers, Oracle::Auto));
             let (reference, _) = collect(&owner, config(workers, Oracle::Countermodel));
             assert_eq!(
                 family(&actual),
@@ -239,7 +259,9 @@ fn positive_sessions_preserve_original_constraints() {
                 "source={source}, workers={workers}"
             );
             assert_eq!(family(&reference), expected);
+            assert_eq!(family(&automatic), expected);
             assert_eq!(actual.outcome().unsatisfiable(), expected.is_empty());
+            assert_eq!(automatic.outcome().unsatisfiable(), expected.is_empty());
         }
     }
 }
@@ -385,4 +407,27 @@ fn cancellation_after_positive_preparation_is_incomplete() {
     ));
     assert_eq!(statistics.candidates, 0);
     assert_eq!(statistics.countermodel_queries, 0);
+}
+
+#[test]
+fn arithmetic_refutation_precedes_positive_certificate_selection() {
+    let owner = formula("a. b:-a. a:-b. :-b.");
+    for workers in [1, 4] {
+        let (view, observations) = collect(&owner, config(workers, Oracle::Auto));
+        assert!(family(&view).is_empty());
+        assert!(view.outcome().unsatisfiable());
+        assert!(observations.membership.is_empty());
+        let statistics = view.outcome().countermodel_statistics().unwrap();
+        let regions = statistics.regions.unwrap();
+        assert!(statistics.certified.is_none());
+        assert_eq!(
+            regions.parity.status,
+            zetesis_ferraris::PreparationStatus::Prepared
+        );
+        assert!(regions.parity.root_refuted);
+        assert_eq!(regions.counts.regions, 0);
+        assert_eq!(statistics.candidates, 0);
+        assert_eq!(statistics.countermodel_queries, 0);
+        assert_eq!(statistics.search.decisions, 0);
+    }
 }

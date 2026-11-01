@@ -4,6 +4,7 @@ use std::collections::BTreeSet;
 use std::convert::Infallible;
 use std::num::NonZeroUsize;
 
+use crate::support::arithmetic::assert_arithmetic_declined;
 use crate::support::batching::batch as batch_limits;
 use crate::support::choice_theories::three_choices;
 use zetesis_ferraris::{Interpretation, Node, Theory, TightError, TightPlanLimits, TightResource};
@@ -157,6 +158,22 @@ fn cpu_activation_refuses_pending_external_candidates() {
     assert!(!stream.exhausted());
 }
 
+fn support_comparison_stream(theory: &Theory, decline_arithmetic: bool) -> StableModels {
+    let limits = if decline_arithmetic {
+        Limits {
+            max_reduct_bytes: 0,
+            ..Limits::default()
+        }
+    } else {
+        Limits::default()
+    };
+    let stream = StableModels::new(theory, limits, Cancellation::default()).unwrap();
+    if decline_arithmetic {
+        assert_arithmetic_declined(&stream);
+    }
+    stream
+}
+
 #[test]
 fn scalar_and_rayon_batches_match_independent_reduct_with_support_refutations_and_refusals() {
     let cases = [
@@ -191,8 +208,9 @@ fn scalar_and_rayon_batches_match_independent_reduct_with_support_refutations_an
     ];
     for (index, theory) in cases.iter().enumerate() {
         let wanted = expected(theory);
-        let mut scalar =
-            StableModels::new(theory, Limits::default(), Cancellation::default()).unwrap();
+        // Only the unsupported-atom constraint needs arithmetic declined to
+        // retain this test's certificate route. Refusal cases keep query storage.
+        let mut scalar = support_comparison_stream(theory, index == 5);
         let eligible = scalar
             .enable_certified_checking(TightPlanLimits::default())
             .unwrap();
@@ -214,8 +232,7 @@ fn scalar_and_rayon_batches_match_independent_reduct_with_support_refutations_an
         }
         for workers in [1, 4] {
             for size in [1, 2, 5] {
-                let mut stream =
-                    StableModels::new(theory, Limits::default(), Cancellation::default()).unwrap();
+                let mut stream = support_comparison_stream(theory, index == 5);
                 stream.enable_phase_timing();
                 assert_eq!(
                     stream
