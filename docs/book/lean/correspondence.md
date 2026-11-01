@@ -3601,6 +3601,21 @@ occurrence of falsum where the implication fails. Recognizing a proved
 fragment in a Rust formula DAG and attaching its witness to a candidate row
 remain implementation obligations.
 
+[`CountermodelReplay`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/CountermodelReplay.lean)
+gives a separate rule for any finite propositional theory in the Ferraris grammar.
+`LearnedRegions.replayNodes` selects formula occurrences at a fixed witness. A
+false conjunction or true disjunction can use one decisive branch. At a nested
+implication, the selection also records whether its original root was true:
+a false root freezes to falsum even if its antecedent would be false at the witness.
+`replay_nodes_agree` transfers the frozen reading when the two candidates contain
+the witness and agree on the selected nodes. `countermodel_row_refutes` applies
+this law to all original roots. A new candidate containing the witness and one
+extra atom cannot be stable under that agreement. It need not contain the old
+candidate. A concrete row would have to bind the validated witness and selected
+signed nodes to the same original theory and use node knowledge sound for every
+answer set in the region. Shared node IDs, supported lowered operators, extraction
+cost, row limits and publication remain implementation obligations.
+
 [`AlgebraicRows`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/AlgebraicRows.lean)
 states algebraic consequences for any consequence class, as `RowOf` does. A term
 pairs an atom with a value, and a list of terms is measured in an interpretation

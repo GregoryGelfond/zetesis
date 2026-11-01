@@ -3065,6 +3065,21 @@
     "line": 247
   },
   {
+    "name": "Zetesis.LearnedRegions.alternative_nodes_agree",
+    "file": "Zetesis/CountermodelReplay.lean",
+    "line": 54
+  },
+  {
+    "name": "Zetesis.LearnedRegions.replay_nodes_agree",
+    "file": "Zetesis/CountermodelReplay.lean",
+    "line": 76
+  },
+  {
+    "name": "Zetesis.LearnedRegions.countermodel_row_refutes",
+    "file": "Zetesis/CountermodelReplay.lean",
+    "line": 117
+  },
+  {
     "name": "Zetesis.LearnedRegions.antimonotone_superset_refutes",
     "file": "Zetesis/CountermodelReuse.lean",
     "line": 33
