@@ -8515,6 +8515,96 @@
     "line": 148
   },
   {
+    "name": "Zetesis.StreamedSubjects.holds_truth_iff",
+    "file": "Zetesis/StreamedSubjects.lean",
+    "line": 40
+  },
+  {
+    "name": "Zetesis.StreamedSubjects.holds_opposite_iff",
+    "file": "Zetesis/StreamedSubjects.lean",
+    "line": 50
+  },
+  {
+    "name": "Zetesis.StreamedSubjects.decides_truth_iff",
+    "file": "Zetesis/StreamedSubjects.lean",
+    "line": 61
+  },
+  {
+    "name": "Zetesis.StreamedSubjects.decides_occurrences_iff",
+    "file": "Zetesis/StreamedSubjects.lean",
+    "line": 70
+  },
+  {
+    "name": "Zetesis.StreamedSubjects.occurrence_row",
+    "file": "Zetesis/StreamedSubjects.lean",
+    "line": 89
+  },
+  {
+    "name": "Zetesis.StreamedSubjects.body_excludes",
+    "file": "Zetesis/StreamedSubjects.lean",
+    "line": 118
+  },
+  {
+    "name": "Zetesis.StreamedSubjects.occurrence_narrow_eq_falsify",
+    "file": "Zetesis/StreamedSubjects.lean",
+    "line": 146
+  },
+  {
+    "name": "Zetesis.StreamedSubjects.fresh_step_reaches",
+    "file": "Zetesis/StreamedSubjects.lean",
+    "line": 191
+  },
+  {
+    "name": "Zetesis.StreamedSubjects.occurrence_conditions_persist",
+    "file": "Zetesis/StreamedSubjects.lean",
+    "line": 209
+  },
+  {
+    "name": "Zetesis.StreamedSubjects.completed_fixed_iff",
+    "file": "Zetesis/StreamedSubjects.lean",
+    "line": 228
+  },
+  {
+    "name": "Zetesis.StreamedSubjects.grouped_closed_iff",
+    "file": "Zetesis/StreamedSubjects.lean",
+    "line": 240
+  },
+  {
+    "name": "Zetesis.StreamedSubjects.grouped_joint_eq",
+    "file": "Zetesis/StreamedSubjects.lean",
+    "line": 261
+  },
+  {
+    "name": "Zetesis.StreamedSubjects.falsify_fixed_of_not_sure_not_fresh",
+    "file": "Zetesis/StreamedSubjects.lean",
+    "line": 281
+  },
+  {
+    "name": "Zetesis.StreamedSubjects.no_consequence_occurrence_fixed",
+    "file": "Zetesis/StreamedSubjects.lean",
+    "line": 331
+  },
+  {
+    "name": "Zetesis.StreamedSubjects.no_consequence_exclusion_fixed",
+    "file": "Zetesis/StreamedSubjects.lean",
+    "line": 368
+  },
+  {
+    "name": "Zetesis.StreamedSubjects.no_consequence_occurrences_closed",
+    "file": "Zetesis/StreamedSubjects.lean",
+    "line": 402
+  },
+  {
+    "name": "Zetesis.StreamedSubjects.no_consequence_constraint_closed",
+    "file": "Zetesis/StreamedSubjects.lean",
+    "line": 438
+  },
+  {
+    "name": "Zetesis.StreamedSubjects.complete_no_consequence_closed",
+    "file": "Zetesis/StreamedSubjects.lean",
+    "line": 485
+  },
+  {
     "name": "Zetesis.StrongNegation.satisfies_rename",
     "file": "Zetesis/StrongNegation.lean",
     "line": 44

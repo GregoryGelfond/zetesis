@@ -1,7 +1,7 @@
 //! The compact evidence reproduces the former two-count transitions, including
 //! pending operand events, contradictory roots and every short work prefix.
 
-use super::{Closure, Knowledge, Narrower, NarrowingScratch, Step, Stop, Work, bit};
+use super::{Closure, Knowledge, Meter, Narrower, NarrowingScratch, Step, Stop, bit};
 use crate::regions::tests::{compact, compact_mut};
 
 /// The previous representation, computed independently from processed events.
@@ -19,11 +19,11 @@ impl Counts {
         }
     }
 
-    fn unit(
+    fn unit<Q: zetesis_algebra::Quota<Error = Stop> + ?Sized>(
         self,
         closure: &mut Closure<'_, u16>,
         index: &Narrower,
-        work: &mut Work<'_>,
+        work: &mut Meter<'_, Q>,
     ) -> Result<Step, Stop> {
         let witnessed = if index.chains[0].disjunction {
             self.sure != 0
@@ -39,12 +39,12 @@ impl Counts {
 
     /// The former event transition reads two exact counts. It never reads the
     /// replacement count or witness and uses the former ordered unit scan.
-    fn changed(
+    fn changed<Q: zetesis_algebra::Quota<Error = Stop> + ?Sized>(
         &mut self,
         closure: &mut Closure<'_, u16>,
         index: &Narrower,
         value: bool,
-        work: &mut Work<'_>,
+        work: &mut Meter<'_, Q>,
     ) -> Result<Step, Stop> {
         let chain = &index.chains[0];
         if value {
@@ -75,11 +75,11 @@ impl Counts {
         })
     }
 
-    fn teach(
+    fn teach<Q: zetesis_algebra::Quota<Error = Stop> + ?Sized>(
         self,
         closure: &mut Closure<'_, u16>,
         index: &Narrower,
-        work: &mut Work<'_>,
+        work: &mut Meter<'_, Q>,
     ) -> Result<Step, Stop> {
         let chain = &index.chains[0];
         if closure.known.sure.contains(chain.root) {
@@ -102,15 +102,15 @@ impl Counts {
         Ok(Step::Unchanged)
     }
 
-    fn force(
+    fn force<Q: zetesis_algebra::Quota<Error = Stop> + ?Sized>(
         closure: &mut Closure<'_, u16>,
         index: &Narrower,
         value: bool,
-        work: &mut Work<'_>,
+        work: &mut Meter<'_, Q>,
     ) -> Result<Step, Stop> {
         let mut step = Step::Unchanged;
         for &operand in index.chains[0].ordinary_leaves() {
-            work.tick()?;
+            work.tick().map_err(zetesis_algebra::Failure::into_stop)?;
             step = step.join(if value {
                 closure.sure(operand)
             } else {
@@ -145,14 +145,17 @@ fn state(
     let flag = 1 << index.chains[0].root;
     known.sure[0] &= !flag;
     known.never[0] &= !flag;
-    scratch.nodes.remove(0);
+    scratch.common.nodes.remove(0);
     if let Some(value) = root {
         if value {
             known.sure[0] |= flag;
         } else {
             known.never[0] |= flag;
         }
-        scratch.nodes.insert(0, (index.chains[0].root, value));
+        scratch
+            .common
+            .nodes
+            .insert(0, (index.chains[0].root, value));
     }
     (knowledge, scratch)
 }
@@ -173,10 +176,16 @@ fn same_effects(
     for atom in 0..actual.unknown.len() {
         assert_eq!(actual.unknown.get(atom), expected.unknown.get(atom));
     }
-    assert_eq!(actual_scratch.nodes, expected_scratch.nodes);
-    assert_eq!(actual_scratch.learned, expected_scratch.learned);
-    assert_eq!(actual_scratch.heads, expected_scratch.heads);
-    assert_eq!(actual_scratch.pending, expected_scratch.pending);
+    assert_eq!(actual_scratch.common.nodes, expected_scratch.common.nodes);
+    assert_eq!(
+        actual_scratch.common.learned,
+        expected_scratch.common.learned
+    );
+    assert_eq!(actual_scratch.common.heads, expected_scratch.common.heads);
+    assert_eq!(
+        actual_scratch.common.pending,
+        expected_scratch.common.pending
+    );
 }
 
 fn values(mut code: usize) -> [usize; 4] {
@@ -209,30 +218,29 @@ fn processed_events_preserve_two_count_transitions() {
                         // The caller removes the current event before dispatch.
                         for scratch in [&mut actual_scratch, &mut expected_scratch] {
                             let at = scratch
+                                .common
                                 .nodes
                                 .iter()
                                 .position(|event| *event == (operand, value == 3))
                                 .unwrap();
-                            scratch.nodes.remove(at);
+                            scratch.common.nodes.remove(at);
                         }
                         let (mut actual_work, mut expected_work) =
-                            (Work::new(limit), Work::new(limit));
+                            (Meter::local(limit), Meter::local(limit));
                         let mut counts = Counts::new(values);
                         counts.agrees(&actual, disjunction);
-                        let actual_result = Closure {
+                        let actual_result = Closure::<_, zetesis_algebra::AnswerSetsSought> {
                             known: compact_mut(&mut actual),
-                            lists: &mut actual_scratch,
+                            lists: &mut actual_scratch.common,
+                            learning: &mut actual_scratch.learning,
                         }
-                        .operand_changed(
-                            &index,
-                            0,
-                            value == 3,
-                            &mut actual_work,
-                        );
+                        .operand_changed(&index, 0, value == 3, &mut actual_work)
+                        .map_err(zetesis_algebra::Failure::into_stop);
                         let expected_result = counts.changed(
-                            &mut Closure {
+                            &mut Closure::<_, zetesis_algebra::AnswerSetsSought> {
                                 known: compact_mut(&mut expected),
-                                lists: &mut expected_scratch,
+                                lists: &mut expected_scratch.common,
+                                learning: &mut expected_scratch.learning,
                             },
                             &index,
                             value == 3,
@@ -240,12 +248,17 @@ fn processed_events_preserve_two_count_transitions() {
                         );
                         counts.agrees(&actual, disjunction);
                         same_effects(
-                            (&actual, &actual_scratch, actual_result, actual_work.spent()),
+                            (
+                                &actual,
+                                &actual_scratch,
+                                actual_result,
+                                actual_work.charged(),
+                            ),
                             (
                                 &expected,
                                 &expected_scratch,
                                 expected_result,
-                                expected_work.spent(),
+                                expected_work.charged(),
                             ),
                         );
                     }
@@ -265,29 +278,38 @@ fn downward_teaching_preserves_two_count_transitions() {
                 for limit in [0, 1, 3, 4, u64::MAX] {
                     let (mut actual, mut actual_scratch) = state(&index, values, root);
                     let (mut expected, mut expected_scratch) = state(&index, values, root);
-                    let (mut actual_work, mut expected_work) = (Work::new(limit), Work::new(limit));
+                    let (mut actual_work, mut expected_work) =
+                        (Meter::local(limit), Meter::local(limit));
                     let counts = Counts::new(values);
-                    let actual_result = Closure {
+                    let actual_result = Closure::<_, zetesis_algebra::AnswerSetsSought> {
                         known: compact_mut(&mut actual),
-                        lists: &mut actual_scratch,
+                        lists: &mut actual_scratch.common,
+                        learning: &mut actual_scratch.learning,
                     }
-                    .teach_chain(&index, 0, &mut actual_work);
+                    .teach_chain(&index, 0, &mut actual_work)
+                    .map_err(zetesis_algebra::Failure::into_stop);
                     let expected_result = counts.teach(
-                        &mut Closure {
+                        &mut Closure::<_, zetesis_algebra::AnswerSetsSought> {
                             known: compact_mut(&mut expected),
-                            lists: &mut expected_scratch,
+                            lists: &mut expected_scratch.common,
+                            learning: &mut expected_scratch.learning,
                         },
                         &index,
                         &mut expected_work,
                     );
                     counts.agrees(&actual, disjunction);
                     same_effects(
-                        (&actual, &actual_scratch, actual_result, actual_work.spent()),
+                        (
+                            &actual,
+                            &actual_scratch,
+                            actual_result,
+                            actual_work.charged(),
+                        ),
                         (
                             &expected,
                             &expected_scratch,
                             expected_result,
-                            expected_work.spent(),
+                            expected_work.charged(),
                         ),
                     );
                 }

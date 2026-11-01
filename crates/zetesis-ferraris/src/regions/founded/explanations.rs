@@ -31,7 +31,7 @@
 //! Storage consists of bounded atom/literal lists and an explicit Boolean
 //! frame stack, not a full-theory mask or another dependency graph. Every
 //! producer/body visit, list comparison, frame step and canonicalization step
-//! spends existing Work. Local visit/storage/list bounds decline capture;
+//! spends the existing meter. Local visit/storage/list bounds decline capture;
 //! allocation, quota and cancellation failures preserve their original Stop.
 //! The caller invokes this immediately after a successful exact-owner original
 //! pass, before publishing any of its cuts, using the same original masks.
@@ -39,9 +39,9 @@
 
 use zetesis_algebra::words::Words;
 
-use super::{Narrower, NodeView, Producers, Scratch, Theory, Work, chain_position, flag_words};
+use super::{Narrower, NodeView, Producers, Scratch, Theory, chain_position, flag_words};
 use std::mem::size_of;
-use zetesis_algebra::Stop;
+use zetesis_algebra::{Failure, Meter, Quota, Stop};
 
 #[cfg(test)]
 mod tests;
@@ -57,7 +57,7 @@ pub(in crate::regions) struct Input<'a> {
     pub(in crate::regions) atom_never: Words<u64, &'a [u64]>,
 }
 
-/// Optional capture bounds, independent of the caller's global Work quota.
+/// Optional capture bounds, independent of the caller's global work quota.
 #[derive(Clone, Copy)]
 pub(in crate::regions) struct Limits {
     pub(in crate::regions) atoms: usize,
@@ -85,13 +85,13 @@ impl Explanation {
 /// independently of the region decision that made the deduction useful.
 /// A local refusal returns None and has no semantic effect. The peak includes
 /// the local collector header and simultaneous buffers even on failed capture.
-pub(in crate::regions) fn collect(
+pub(in crate::regions) fn collect<Q: Quota + ?Sized>(
     input: Input<'_>,
     start: usize,
     limits: Limits,
-    work: &mut Work<'_>,
+    work: &mut Meter<'_, Q>,
     peak_bytes: &mut u128,
-) -> Result<Option<Explanation>, Stop> {
+) -> Result<Option<Explanation>, Failure<Q::Error>> {
     let mut collector = Collector {
         input,
         limits,
@@ -100,43 +100,44 @@ pub(in crate::regions) fn collect(
             unsupported: Vec::new(),
         },
         frames: Vec::new(),
-        meter: Meter {
-            work,
-            remaining: limits.visits,
-        },
+        work,
+        remaining: limits.visits,
         peak_bytes,
     };
     match collector.run(start) {
         Ok(()) => Ok(Some(collector.result)),
-        Err(Failure::Declined) => Ok(None),
-        Err(Failure::Stopped(stop)) => Err(stop),
+        Err(CaptureFailure::Declined) => Ok(None),
+        Err(CaptureFailure::Stopped(stop)) => Err(stop),
     }
 }
 
-enum Failure {
+enum CaptureFailure<E> {
     Declined,
-    Stopped(Stop),
+    Stopped(Failure<E>),
 }
 
-impl From<Stop> for Failure {
+impl<E> From<Stop> for CaptureFailure<E> {
     fn from(stop: Stop) -> Self {
-        Self::Stopped(stop)
+        Self::Stopped(Failure::Stopped(stop))
     }
 }
 
-struct Meter<'w, 'q> {
-    work: &'w mut Work<'q>,
-    remaining: u64,
+impl<E> From<Failure<E>> for CaptureFailure<E> {
+    fn from(failure: Failure<E>) -> Self {
+        Self::Stopped(failure)
+    }
 }
 
-impl Meter<'_, '_> {
-    fn tick(&mut self) -> Result<(), Failure> {
-        if self.remaining == 0 {
-            return Err(Failure::Declined);
-        }
-        self.work.tick()?;
-        self.remaining -= 1;
+/// Optional visits refuse before requesting a global permit. The common meter
+/// owns the debit and decreases this local ceiling only after a successful tick.
+fn visit<Q: Quota + ?Sized>(
+    work: &mut Meter<'_, Q>,
+    remaining: &mut u64,
+) -> Result<(), CaptureFailure<Q::Error>> {
+    if work.tick_within(remaining)? {
         Ok(())
+    } else {
+        Err(CaptureFailure::Declined)
     }
 }
 
@@ -172,49 +173,50 @@ enum BodyStep {
     Done(bool),
 }
 
-struct Collector<'a, 'w, 'q> {
+struct Collector<'a, 'w, 'q, Q: Quota + ?Sized> {
     input: Input<'a>,
     limits: Limits,
     result: Explanation,
     frames: Vec<Frame>,
-    meter: Meter<'w, 'q>,
+    work: &'w mut Meter<'q, Q>,
+    remaining: u64,
     peak_bytes: &'w mut u128,
 }
 
-impl Collector<'_, '_, '_> {
+impl<Q: Quota + ?Sized> Collector<'_, '_, '_, Q> {
     fn bytes(&self) -> u128 {
         size_of::<Self>() as u128 + self.result.retained_bytes() + capacity_bytes(&self.frames)
     }
 
-    fn run(&mut self, start: usize) -> Result<(), Failure> {
+    fn run(&mut self, start: usize) -> Result<(), CaptureFailure<Q::Error>> {
         *self.peak_bytes = (*self.peak_bytes).max(self.bytes());
         if self.bytes() > self.limits.bytes {
-            return Err(Failure::Declined);
+            return Err(CaptureFailure::Declined);
         }
         self.validate(start)?;
         self.add_atom(start)?;
         let mut next = 0;
         let producers = self.input.producers;
         while next < self.result.unsupported.len() {
-            self.meter.tick()?;
+            visit(self.work, &mut self.remaining)?;
             let atom = self.result.unsupported[next];
             next += 1;
             for &row in &producers.by_head[atom] {
-                self.meter.tick()?;
+                visit(self.work, &mut self.remaining)?;
                 let Some(body) = producers.rules[row].body else {
-                    return Err(Failure::Declined);
+                    return Err(CaptureFailure::Declined);
                 };
                 if !self.body(body)? {
-                    return Err(Failure::Declined);
+                    return Err(CaptureFailure::Declined);
                 }
             }
         }
-        canonicalize(&mut self.result.conditions, &mut self.meter)?;
-        canonicalize(&mut self.result.unsupported, &mut self.meter)
+        canonicalize(&mut self.result.conditions, self.work, &mut self.remaining)?;
+        canonicalize(&mut self.result.unsupported, self.work, &mut self.remaining)
     }
 
-    fn validate(&mut self, start: usize) -> Result<(), Failure> {
-        self.meter.tick()?;
+    fn validate(&mut self, start: usize) -> Result<(), CaptureFailure<Q::Error>> {
+        visit(self.work, &mut self.remaining)?;
         let input = self.input;
         if !input
             .completed
@@ -222,7 +224,7 @@ impl Collector<'_, '_, '_> {
             .as_ref()
             .is_some_and(|owner| owner.same_instance(input.theory))
         {
-            return Err(Failure::Declined);
+            return Err(CaptureFailure::Declined);
         }
         let atoms = input.theory.atom_count();
         let words = flag_words(atoms);
@@ -236,9 +238,9 @@ impl Collector<'_, '_, '_> {
         {
             return Err(Stop::InvalidProgram.into());
         }
-        self.meter.tick()?;
+        visit(self.work, &mut self.remaining)?;
         if input.atom_never.contains(start) || !self.missing(start) {
-            return Err(Failure::Declined);
+            return Err(CaptureFailure::Declined);
         }
         Ok(())
     }
@@ -247,17 +249,17 @@ impl Collector<'_, '_, '_> {
         self.input.completed.cyclic_atoms.contains(atom) && !self.input.completed.contains(atom)
     }
 
-    fn add_atom(&mut self, atom: usize) -> Result<(), Failure> {
+    fn add_atom(&mut self, atom: usize) -> Result<(), CaptureFailure<Q::Error>> {
         for &present in &self.result.unsupported {
-            self.meter.tick()?;
+            visit(self.work, &mut self.remaining)?;
             if present == atom {
                 return Ok(());
             }
         }
         if self.result.unsupported.len() == self.limits.atoms {
-            return Err(Failure::Declined);
+            return Err(CaptureFailure::Declined);
         }
-        self.meter.tick()?;
+        visit(self.work, &mut self.remaining)?;
         let other = self.bytes() - capacity_bytes(&self.result.unsupported);
         reserve_one(
             &mut self.result.unsupported,
@@ -269,21 +271,21 @@ impl Collector<'_, '_, '_> {
         Ok(())
     }
 
-    fn add_condition(&mut self, atom: usize, held: bool) -> Result<(), Failure> {
+    fn add_condition(&mut self, atom: usize, held: bool) -> Result<(), CaptureFailure<Q::Error>> {
         for &(present, value) in &self.result.conditions {
-            self.meter.tick()?;
+            visit(self.work, &mut self.remaining)?;
             if present == atom {
                 return if value == held {
                     Ok(())
                 } else {
-                    Err(Failure::Declined)
+                    Err(CaptureFailure::Declined)
                 };
             }
         }
         if self.result.conditions.len() == self.limits.literals {
-            return Err(Failure::Declined);
+            return Err(CaptureFailure::Declined);
         }
-        self.meter.tick()?;
+        visit(self.work, &mut self.remaining)?;
         let other = self.bytes() - capacity_bytes(&self.result.conditions);
         reserve_one(
             &mut self.result.conditions,
@@ -295,7 +297,7 @@ impl Collector<'_, '_, '_> {
         Ok(())
     }
 
-    fn body(&mut self, root: usize) -> Result<bool, Failure> {
+    fn body(&mut self, root: usize) -> Result<bool, CaptureFailure<Q::Error>> {
         let mut node = root;
         loop {
             match self.enter(node)? {
@@ -308,8 +310,8 @@ impl Collector<'_, '_, '_> {
         }
     }
 
-    fn enter(&mut self, node: usize) -> Result<BodyStep, Failure> {
-        self.meter.tick()?;
+    fn enter(&mut self, node: usize) -> Result<BodyStep, CaptureFailure<Q::Error>> {
+        visit(self.work, &mut self.remaining)?;
         let view = self.input.theory.view();
         let found = match view.node(node).map_err(|_| Stop::InvalidProgram)? {
             NodeView::False => true,
@@ -322,11 +324,11 @@ impl Collector<'_, '_, '_> {
         Ok(BodyStep::Done(found))
     }
 
-    fn positive(&mut self, atom: usize) -> Result<bool, Failure> {
-        self.meter.tick()?;
+    fn positive(&mut self, atom: usize) -> Result<bool, CaptureFailure<Q::Error>> {
+        visit(self.work, &mut self.remaining)?;
         if self.input.atom_never.contains(atom) {
             if self.input.atom_sure.contains(atom) {
-                return Err(Failure::Declined);
+                return Err(CaptureFailure::Declined);
             }
             self.add_condition(atom, false)?;
         } else if self.missing(atom) {
@@ -337,32 +339,32 @@ impl Collector<'_, '_, '_> {
         Ok(true)
     }
 
-    fn negative(&mut self, left: usize, right: usize) -> Result<bool, Failure> {
+    fn negative(&mut self, left: usize, right: usize) -> Result<bool, CaptureFailure<Q::Error>> {
         let view = self.input.theory.view();
-        self.meter.tick()?;
+        visit(self.work, &mut self.remaining)?;
         if !matches!(
             view.node(right).map_err(|_| Stop::InvalidProgram)?,
             NodeView::False
         ) {
             return Ok(false);
         }
-        self.meter.tick()?;
+        visit(self.work, &mut self.remaining)?;
         let NodeView::Atom(atom) = view.node(left).map_err(|_| Stop::InvalidProgram)? else {
             return Ok(false);
         };
-        self.meter.tick()?;
+        visit(self.work, &mut self.remaining)?;
         if !self.input.atom_sure.contains(atom) {
             return Ok(false);
         }
         if self.input.atom_never.contains(atom) {
-            return Err(Failure::Declined);
+            return Err(CaptureFailure::Declined);
         }
         self.add_condition(atom, true)?;
         Ok(true)
     }
 
-    fn chain(&mut self, node: usize) -> Result<BodyStep, Failure> {
-        self.meter.tick()?;
+    fn chain(&mut self, node: usize) -> Result<BodyStep, CaptureFailure<Q::Error>> {
+        visit(self.work, &mut self.remaining)?;
         let index = self.input.index;
         let chain = index.chain_of[node].ok_or(Stop::InvalidProgram)?;
         let chain = chain_position(chain);
@@ -389,7 +391,7 @@ impl Collector<'_, '_, '_> {
         }
     }
 
-    fn push_frame(&mut self, frame: Frame) -> Result<(), Failure> {
+    fn push_frame(&mut self, frame: Frame) -> Result<(), CaptureFailure<Q::Error>> {
         let other = self.bytes() - capacity_bytes(&self.frames);
         reserve_one(&mut self.frames, other, self.limits.bytes, self.peak_bytes)?;
         self.frames.push(frame);
@@ -404,12 +406,12 @@ impl Collector<'_, '_, '_> {
         &mut self,
         node: usize,
         threshold: crate::Threshold<'_>,
-    ) -> Result<BodyStep, Failure> {
+    ) -> Result<BodyStep, CaptureFailure<Q::Error>> {
         if threshold.bound <= 0 {
             return Ok(BodyStep::Done(false));
         }
-        let total = threshold.selected_sum::<Failure>(|_| {
-            self.meter.tick()?;
+        let total = threshold.selected_sum::<CaptureFailure<Q::Error>>(|_| {
+            visit(self.work, &mut self.remaining)?;
             Ok(true)
         })?;
         if total < threshold.bound {
@@ -432,9 +434,9 @@ impl Collector<'_, '_, '_> {
         &mut self,
         mut frame: Frame,
         threshold: crate::Threshold<'_>,
-    ) -> Result<BodyStep, Failure> {
+    ) -> Result<BodyStep, CaptureFailure<Q::Error>> {
         while let Some(&weight) = threshold.weights.get(frame.next) {
-            self.meter.tick()?;
+            visit(self.work, &mut self.remaining)?;
             let child = threshold.conditions[frame.next];
             frame.next += 1;
             if weight != 0 {
@@ -446,7 +448,11 @@ impl Collector<'_, '_, '_> {
         Ok(BodyStep::Done(false))
     }
 
-    fn extremum(&mut self, node: usize, cut: crate::ExtremumCut<'_>) -> Result<BodyStep, Failure> {
+    fn extremum(
+        &mut self,
+        node: usize,
+        cut: crate::ExtremumCut<'_>,
+    ) -> Result<BodyStep, CaptureFailure<Q::Error>> {
         if let Some(truth) = cut.endpoint_truth() {
             return Ok(BodyStep::Done(!truth));
         }
@@ -455,8 +461,8 @@ impl Collector<'_, '_, '_> {
         }
         // An interior cut without a chain has no qualifying occurrence. Verify
         // that constant case from the authoritative row, charging every read.
-        let possible = cut.row.reduce::<Failure>(|_| {
-            self.meter.tick()?;
+        let possible = cut.row.reduce::<CaptureFailure<Q::Error>>(|_| {
+            visit(self.work, &mut self.remaining)?;
             Ok(true)
         })?;
         if cut.rule.holds(possible) {
@@ -465,9 +471,9 @@ impl Collector<'_, '_, '_> {
         Ok(BodyStep::Done(true))
     }
 
-    fn resume(&mut self, mut found: bool) -> Result<BodyStep, Failure> {
+    fn resume(&mut self, mut found: bool) -> Result<BodyStep, CaptureFailure<Q::Error>> {
         while let Some(mut frame) = self.frames.pop() {
-            self.meter.tick()?;
+            visit(self.work, &mut self.remaining)?;
             if !found {
                 self.result.unsupported.truncate(frame.mark.atoms);
                 self.result.conditions.truncate(frame.mark.literals);
@@ -479,7 +485,7 @@ impl Collector<'_, '_, '_> {
                     if found != disjunction {
                         continue;
                     }
-                    self.meter.tick()?;
+                    visit(self.work, &mut self.remaining)?;
                     let index = self.input.index;
                     let children = index.chains[chain].leaves(&index.extrema);
                     if let Some(&child) = children.get(frame.next) {
@@ -490,7 +496,7 @@ impl Collector<'_, '_, '_> {
                     found = disjunction;
                 }
                 FrameKind::Threshold { node, mut surplus } => {
-                    self.meter.tick()?;
+                    visit(self.work, &mut self.remaining)?;
                     let NodeView::Threshold(threshold) = self
                         .input
                         .theory
@@ -523,32 +529,36 @@ fn capacity_bytes<T>(values: &Vec<T>) -> u128 {
     values.capacity() as u128 * size_of::<T>() as u128
 }
 
-fn reserve_one<T>(
+fn reserve_one<T, E>(
     values: &mut Vec<T>,
     other_bytes: u128,
     limit: u128,
     peak: &mut u128,
-) -> Result<(), Failure> {
+) -> Result<(), CaptureFailure<E>> {
     if values.len() == values.capacity() {
         let requested = (values.len() as u128 + 1) * size_of::<T>() as u128;
         if other_bytes.saturating_add(requested) > limit {
-            return Err(Failure::Declined);
+            return Err(CaptureFailure::Declined);
         }
         values.try_reserve_exact(1).map_err(|_| Stop::Allocation)?;
         let actual = other_bytes.saturating_add(capacity_bytes(values));
         *peak = (*peak).max(actual);
         if actual > limit {
-            return Err(Failure::Declined);
+            return Err(CaptureFailure::Declined);
         }
     }
     Ok(())
 }
 
-fn canonicalize<T: Ord>(values: &mut [T], meter: &mut Meter<'_, '_>) -> Result<(), Failure> {
+fn canonicalize<T: Ord, Q: Quota + ?Sized>(
+    values: &mut [T],
+    work: &mut Meter<'_, Q>,
+    remaining: &mut u64,
+) -> Result<(), CaptureFailure<Q::Error>> {
     for next in 1..values.len() {
         let mut cursor = next;
         while cursor > 0 {
-            meter.tick()?;
+            visit(work, remaining)?;
             if values[cursor - 1] <= values[cursor] {
                 break;
             }

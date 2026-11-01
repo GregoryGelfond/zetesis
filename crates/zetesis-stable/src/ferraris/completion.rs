@@ -4,7 +4,7 @@ use std::num::NonZeroUsize;
 use std::time::{Duration, Instant};
 
 use rayon::prelude::*;
-use zetesis_ferraris::{Interpretation, Theory};
+use zetesis_ferraris::Interpretation;
 
 use super::{BatchVerdict, Limits, Statistics};
 use crate::budget::{Budget, LocalQuota, Quota, SharedBudget, increment, storage};
@@ -245,7 +245,6 @@ fn record_peak(progress: &mut CompletionStatistics, peak: u128) -> Result<(), In
 /// a worker; only the original Theory and its matching interpretation do.
 #[derive(Clone, Copy)]
 pub(super) struct Input<'a> {
-    pub(super) theory: &'a Theory,
     pub(super) candidates: &'a [Interpretation],
     pub(super) verdicts: &'a [BatchVerdict],
     pub(super) limits: Limits,
@@ -288,11 +287,7 @@ fn classify(
                         let started = timing::start(statistics.phase_timings.as_ref());
                         increment(&mut statistics.countermodel_queries)?;
                         let result = query.check(
-                            zetesis_ferraris::FrozenSubject::new(
-                                input.theory,
-                                evaluated.truth.truth(),
-                            ),
-                            candidate,
+                            &evaluated.truth,
                             input.limits,
                             budget,
                             statistics,

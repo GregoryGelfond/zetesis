@@ -1,3 +1,5 @@
+use zetesis_algebra::Meter;
+
 mod conditioning;
 mod views;
 
@@ -5,14 +7,11 @@ use zetesis_algebra::Cancellation;
 
 use crate::{
     AdmissionError, NodeView, Theory,
-    regions::{
-        Work,
-        arithmetic::{
-            budget::{Budget, BudgetError},
-            root_facts::{self, CheckedRootFacts},
-            source,
-            storage::Storage,
-        },
+    regions::arithmetic::{
+        budget::{Budget, BudgetError},
+        root_facts::{self, CheckedRootFacts},
+        source,
+        storage::Storage,
     },
     test_support::{constructed_theory, push},
 };
@@ -43,15 +42,15 @@ fn clauses(patterns: &[usize]) -> Theory {
     })
 }
 
-fn budget(cancellation: &Cancellation) -> Budget<'_, 'static> {
-    Budget::new(Work::new(u64::MAX), u64::MAX, usize::MAX, cancellation)
+fn budget<'a>(work: &'a mut Meter<'static>, cancellation: &'a Cancellation) -> Budget<'a, 'static> {
+    Budget::new(work, u64::MAX, usize::MAX, cancellation)
 }
 
 fn checked_facts(owner: &Theory) -> CheckedRootFacts {
     root_facts::build(
         owner,
         &mut Storage::default(),
-        &mut budget(&Cancellation::default()),
+        &mut budget(&mut Meter::local(u64::MAX), &Cancellation::default()),
     )
     .unwrap()
 }
@@ -60,7 +59,8 @@ fn checked_facts(owner: &Theory) -> CheckedRootFacts {
 fn constraints_report_their_forbidden_body_patterns() {
     let owner = clauses(&[0, 1, 2, 3]);
     let cancellation = Cancellation::default();
-    let mut meter = budget(&cancellation);
+    let mut meter_work = Meter::local(u64::MAX);
+    let mut meter = budget(&mut meter_work, &cancellation);
     for ordinal in 0..4 {
         let record = source::clause(&owner, ordinal, &mut Storage::default(), &mut meter)
             .unwrap()
@@ -79,7 +79,8 @@ fn source_checks_agree_with_all_small_allowed_pattern_sets() {
     for forbidden in 1_usize..16 {
         let patterns: Vec<_> = (0..4).filter(|p| forbidden & (1 << p) != 0).collect();
         let owner = clauses(&patterns);
-        let mut meter = budget(&cancellation);
+        let mut meter_work = Meter::local(u64::MAX);
+        let mut meter = budget(&mut meter_work, &cancellation);
         let records: Vec<_> = (0..patterns.len())
             .map(|ordinal| {
                 source::clause(&owner, ordinal, &mut Storage::default(), &mut meter)
@@ -115,7 +116,8 @@ fn source_checks_agree_with_all_small_allowed_pattern_sets() {
 fn checker_rereads_patterns_instead_of_trusting_the_proposal() {
     let owner = clauses(&[0, 1]);
     let cancellation = Cancellation::default();
-    let mut meter = budget(&cancellation);
+    let mut meter_work = Meter::local(u64::MAX);
+    let mut meter = budget(&mut meter_work, &cancellation);
     let mut records: Vec<_> = (0..2)
         .map(|ordinal| {
             source::clause(&owner, ordinal, &mut Storage::default(), &mut meter)
@@ -144,7 +146,8 @@ fn checker_refuses_foreign_owners_and_padding_coefficients() {
     let owner = clauses(&[0, 3]);
     let foreign = clauses(&[0, 3]);
     let cancellation = Cancellation::default();
-    let mut meter = budget(&cancellation);
+    let mut meter_work = Meter::local(u64::MAX);
+    let mut meter = budget(&mut meter_work, &cancellation);
     let records: Vec<_> = (0..2)
         .map(|ordinal| {
             source::clause(&owner, ordinal, &mut Storage::default(), &mut meter)
@@ -187,7 +190,7 @@ fn an_absent_root_is_a_typed_source_failure() {
             &owner,
             1,
             &mut Storage::default(),
-            &mut budget(&cancellation)
+            &mut budget(&mut Meter::local(u64::MAX), &cancellation)
         ),
         Err(BudgetError::Source(AdmissionError::Root))
     ));
@@ -206,7 +209,7 @@ fn duplicate_atoms_decline_source_a() {
             &owner,
             0,
             &mut Storage::default(),
-            &mut budget(&cancellation)
+            &mut budget(&mut Meter::local(u64::MAX), &cancellation)
         )
         .unwrap()
         .is_none()
@@ -217,12 +220,14 @@ fn duplicate_atoms_decline_source_a() {
 fn source_refusal_publishes_no_clause_prefix() {
     let owner = clauses(&[2]);
     let cancellation = Cancellation::default();
-    let mut full = budget(&cancellation);
+    let mut full_work = Meter::local(u64::MAX);
+    let mut full = budget(&mut full_work, &cancellation);
     let expected = source::clause(&owner, 0, &mut Storage::default(), &mut full)
         .unwrap()
         .unwrap();
     for maximum in 0..full.work() {
-        let mut limited = Budget::new(Work::new(u64::MAX), maximum, usize::MAX, &cancellation);
+        let mut limited_work = Meter::local(u64::MAX);
+        let mut limited = Budget::new(&mut limited_work, maximum, usize::MAX, &cancellation);
         assert!(matches!(
             source::clause(&owner, 0, &mut Storage::default(), &mut limited),
             Err(BudgetError::WorkDeclined)

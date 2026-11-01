@@ -144,6 +144,21 @@ re-exports the shared frontier's statistics. The unified schedules and the
 separate Reduction/Verdict interface are subsequent changes, not effects of
 moving these owners.
 
+### Candidate and countermodel knowledge
+
+`Narrower::knowledge()` constructs `Knowledge<AnswerSetsSought>` for original
+formula narrowing, restrictions and objective bounds.
+`Narrower::frozen_knowledge()` constructs `Knowledge<Countermodels>` for a
+candidate's frozen reduct. The markers are sealed types from `zetesis_algebra`;
+the two knowledge types cannot be substituted for one another.
+
+Direct callers of frozen narrowing must use `frozen_knowledge()` and explicitly
+name `Knowledge<Countermodels>` wherever they store its result. The default
+`Knowledge` parameter remains `AnswerSetsSought`. Each value still belongs to
+the narrower that constructed it; the class marker does not authenticate that
+runtime owner. `NarrowingScratch` retains its worker-owned allocations, while
+frozen execution borrows only the common scratch and cannot read learned rows.
+
 ### Region intervals and walk entries
 
 `Region` contains the atom universe and its held/cut masks. Equality compares
@@ -263,7 +278,7 @@ limits remain available for an explicitly bounded operation.
 | Aggregate append functions over a node vector | Use the paired `FormulaNodes` owner. Transactions commit, roll back or detach both suffixes together. `into_parts` discards topology evidence; `prepare_admission` consumes it for checked final admission. |
 | Complete literals of formula/aggregate or expansion limits | Include the new operand ceilings and `ExpansionLimits::max_family_bytes`. Exhaustive failures must cover operand-span/arity and materialized-family refusals. Node count alone no longer describes graph size. |
 | `TerminalFormula::base_theory() -> &Theory` | It returns `Option<&Theory>`. Match `base()` for eager versus streamed bases; a hybrid core's proposals must pass its constraints before reconstruction. Terminal observations add `base` and `streamed`, and grounding-mode matches include the hybrid terminal route. |
-| Narrowing with separate theory/producer/truth arguments and per-read callbacks | Pass `OriginalSubject` or `FrozenSubject` and reusable `NarrowingScratch`. Quota variants use `NarrowingQuota`; `narrow_known_metered` and `narrow_frozen_known_metered` are removed. |
+| Narrowing with separate theory/producer/truth arguments and per-read callbacks | Pass `OriginalSubject` or `FrozenSubject` and reusable `NarrowingScratch`. Reserved variants borrow `zetesis_algebra::Meter` over a typed `Quota`; `Failure` preserves caller refusals separately from local stops. `NarrowingQuota`, `narrow_known_metered` and `narrow_frozen_known_metered` are removed. |
 | `AtomTable::index` as an identity-recording operation | It performs structural lookup; the record encoder owns identity recording. `AtomIdentityMap::retain_held` releases unneeded owners. |
 | Native benchmark execution fields for workers, completion, batch and work caps | Use `NativeExecution::{threads, memory_bytes, time_limit_seconds}` with algorithm choices. New records identify the requested ordinary policy; historical report readers retain earlier fields. |
 

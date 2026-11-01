@@ -1,6 +1,6 @@
 use std::fmt;
 
-use zetesis_algebra::Stop;
+use zetesis_algebra::{Refusal, Stop};
 
 /// Why no logical decision is available. Every variant leaves coverage open.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -91,6 +91,53 @@ pub enum Incomplete {
     /// An accounting counter cannot be incremented without overflow.
     CounterOverflow,
 }
+impl Refusal for Incomplete {
+    fn is_resource_refusal(&self) -> bool {
+        match self {
+            Self::WorkLimit
+            | Self::DecisionLimit
+            | Self::CandidateLimit
+            | Self::PendingBytes
+            | Self::CompletionScratch
+            | Self::ReductStorage { .. }
+            | Self::NativeNarrowingStorage { .. }
+            | Self::BatchCandidateLimit
+            | Self::Allocation => true,
+            Self::Verification(stop) => stop.is_resource_refusal(),
+            Self::ArithmeticSource(error) => error.is_resource_refusal(),
+            Self::Certificate(error) => match error {
+                crate::CertificateError::Tight(error) => error.is_resource_refusal(),
+                crate::CertificateError::Positive(error) => error.is_resource_refusal(),
+                crate::CertificateError::Stratified(error) => error.is_resource_refusal(),
+                crate::CertificateError::Evaluation(error) => error.is_resource_refusal(),
+            },
+            Self::Cancelled
+            | Self::Deadline
+            | Self::PendingBatch
+            | Self::WrongTheory
+            | Self::RestrictionUniverse { .. }
+            | Self::ClosedEnumerator
+            | Self::LateCertificate
+            | Self::RegionFilter
+            | Self::InvalidRegionConsequence
+            | Self::LateRegionFilter
+            | Self::LateCandidateBounds
+            | Self::CandidateBoundPlan
+            | Self::CandidateBoundNotImproving
+            | Self::RegionFilterAlreadySet
+            | Self::LateLearnedStore
+            | Self::LearnedStoreAlreadySet
+            | Self::InvalidWitness
+            | Self::WorkerPanicked
+            | Self::CounterOverflow => false,
+        }
+    }
+
+    fn from_stop(stop: Stop) -> Self {
+        Self::from(stop)
+    }
+}
+
 impl From<Stop> for Incomplete {
     fn from(error: Stop) -> Self {
         match error {

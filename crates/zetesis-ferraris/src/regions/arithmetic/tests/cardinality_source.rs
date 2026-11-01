@@ -1,3 +1,5 @@
+use zetesis_algebra::Meter;
+
 mod asserted;
 
 use zetesis_algebra::{Cancellation, Stop};
@@ -5,21 +7,18 @@ use zetesis_algebra::{Cancellation, Stop};
 use crate::{
     AdmissionError, EvaluationLimits, EvaluationWorkspace, FormulaTransaction, NodeView, Theory,
     Threshold,
-    regions::{
-        Work,
-        arithmetic::{
-            budget::{Budget, BudgetError},
-            cardinality_source::{self, Bound, Kind},
-            source::Literal,
-            storage::Storage,
-            uniform::BoundSide,
-        },
+    regions::arithmetic::{
+        budget::{Budget, BudgetError},
+        cardinality_source::{self, Bound, Kind},
+        source::Literal,
+        storage::Storage,
+        uniform::BoundSide,
     },
     test_support::{Allowance, constructed_theory, push, world},
 };
 
-fn budget(cancellation: &Cancellation) -> Budget<'_, 'static> {
-    Budget::new(Work::new(u64::MAX), u64::MAX, usize::MAX, cancellation)
+fn budget<'a>(work: &'a mut Meter<'static>, cancellation: &'a Cancellation) -> Budget<'a, 'static> {
+    Budget::new(work, u64::MAX, usize::MAX, cancellation)
 }
 
 fn threshold(
@@ -109,7 +108,8 @@ fn holds(bound: &Bound, interpretation: usize) -> bool {
 fn all_four_shapes_agree_with_original_formula_truth() {
     let owner = shapes();
     let cancellation = Cancellation::default();
-    let mut meter = budget(&cancellation);
+    let mut meter_work = Meter::local(u64::MAX);
+    let mut meter = budget(&mut meter_work, &cancellation);
     let mut storage = Storage::default();
     let mut evaluator = EvaluationWorkspace::default();
     for ordinal in 0..owner.roots().len() {
@@ -149,8 +149,13 @@ fn nested_guards_retain_order_polarity_and_repeated_occurrences() {
     let owner = shapes();
     let cancellation = Cancellation::default();
     let mut storage = Storage::default();
-    let bounds =
-        cardinality_source::read_root(&owner, 0, &mut storage, &mut budget(&cancellation)).unwrap();
+    let bounds = cardinality_source::read_root(
+        &owner,
+        0,
+        &mut storage,
+        &mut budget(&mut Meter::local(u64::MAX), &cancellation),
+    )
+    .unwrap();
     assert_eq!(
         bounds[0].guard,
         [
@@ -189,8 +194,13 @@ fn contradictory_guard_is_retained_without_becoming_an_unconditional_bound() {
     });
     let cancellation = Cancellation::default();
     let mut storage = Storage::default();
-    let bounds =
-        cardinality_source::read_root(&owner, 0, &mut storage, &mut budget(&cancellation)).unwrap();
+    let bounds = cardinality_source::read_root(
+        &owner,
+        0,
+        &mut storage,
+        &mut budget(&mut Meter::local(u64::MAX), &cancellation),
+    )
+    .unwrap();
     assert_eq!(bounds.len(), 1);
     assert_eq!(bounds[0].guard.len(), 2);
     assert!((0..4).all(|assignment| holds(&bounds[0], assignment)));
@@ -217,7 +227,8 @@ fn unequal_zero_repeated_compound_and_trivial_thresholds_decline() {
     });
     let cancellation = Cancellation::default();
     let mut storage = Storage::default();
-    let mut meter = budget(&cancellation);
+    let mut meter_work = Meter::local(u64::MAX);
+    let mut meter = budget(&mut meter_work, &cancellation);
     for ordinal in 0..owner.roots().len() {
         let bounds =
             cardinality_source::read_root(&owner, ordinal, &mut storage, &mut meter).unwrap();
@@ -257,7 +268,8 @@ fn unsupported_contexts_do_not_publish_a_recognized_prefix() {
     });
     let cancellation = Cancellation::default();
     let mut storage = Storage::default();
-    let mut meter = budget(&cancellation);
+    let mut meter_work = Meter::local(u64::MAX);
+    let mut meter = budget(&mut meter_work, &cancellation);
     for ordinal in 0..owner.roots().len() {
         let bounds =
             cardinality_source::read_root(&owner, ordinal, &mut storage, &mut meter).unwrap();
@@ -277,8 +289,13 @@ fn clause_lower_has_no_eight_atom_pattern_limit() {
     });
     let cancellation = Cancellation::default();
     let mut storage = Storage::default();
-    let bounds =
-        cardinality_source::read_root(&owner, 0, &mut storage, &mut budget(&cancellation)).unwrap();
+    let bounds = cardinality_source::read_root(
+        &owner,
+        0,
+        &mut storage,
+        &mut budget(&mut Meter::local(u64::MAX), &cancellation),
+    )
+    .unwrap();
     assert_eq!(bounds.len(), 1);
     assert_eq!(&*bounds[0].support, [u64::MAX, u64::MAX, 1, 0]);
     assert_eq!(bounds[0].cardinality, 129);
@@ -295,7 +312,8 @@ fn independent_reread_rejects_every_corrupted_proposal_field() {
     let owner = shapes();
     let cancellation = Cancellation::default();
     for field in 0..13 {
-        let mut meter = budget(&cancellation);
+        let mut meter_work = Meter::local(u64::MAX);
+        let mut meter = budget(&mut meter_work, &cancellation);
         let mut storage = Storage::default();
         let mut bounds =
             cardinality_source::read_root(&owner, 0, &mut storage, &mut meter).unwrap();
@@ -337,7 +355,8 @@ fn owner_and_source_root_identity_cannot_be_replaced_by_equal_contents() {
     let foreign = shapes();
     let clone = owner.clone();
     let cancellation = Cancellation::default();
-    let mut meter = budget(&cancellation);
+    let mut meter_work = Meter::local(u64::MAX);
+    let mut meter = budget(&mut meter_work, &cancellation);
     let mut storage = Storage::default();
     let mut bounds = cardinality_source::read_root(&owner, 0, &mut storage, &mut meter).unwrap();
     let live = storage.bytes();
@@ -360,12 +379,14 @@ fn owner_and_source_root_identity_cannot_be_replaced_by_equal_contents() {
 fn every_work_refusal_prefix_publishes_no_row() {
     let owner = shapes();
     let cancellation = Cancellation::default();
-    let mut full = budget(&cancellation);
+    let mut full_work = Meter::local(u64::MAX);
+    let mut full = budget(&mut full_work, &cancellation);
     let mut storage = Storage::default();
     let rows = cardinality_source::read_root(&owner, 0, &mut storage, &mut full).unwrap();
     release(rows, &mut storage);
     for maximum in 0..full.work() {
-        let mut meter = Budget::new(Work::new(u64::MAX), maximum, usize::MAX, &cancellation);
+        let mut meter_work = Meter::local(u64::MAX);
+        let mut meter = Budget::new(&mut meter_work, maximum, usize::MAX, &cancellation);
         assert!(
             matches!(
                 cardinality_source::read_root(&owner, 0, &mut Storage::default(), &mut meter),
@@ -381,13 +402,15 @@ fn every_work_refusal_prefix_publishes_no_row() {
 fn every_storage_refusal_prefix_publishes_no_row() {
     let owner = shapes();
     let cancellation = Cancellation::default();
-    let mut full = budget(&cancellation);
+    let mut full_work = Meter::local(u64::MAX);
+    let mut full = budget(&mut full_work, &cancellation);
     let mut storage = Storage::default();
     let rows = cardinality_source::read_root(&owner, 0, &mut storage, &mut full).unwrap();
     release(rows, &mut storage);
     let peak = usize::try_from(full.peak_bytes()).unwrap();
     for maximum in 0..peak {
-        let mut meter = Budget::new(Work::new(u64::MAX), u64::MAX, maximum, &cancellation);
+        let mut meter_work = Meter::local(u64::MAX);
+        let mut meter = Budget::new(&mut meter_work, u64::MAX, maximum, &cancellation);
         assert!(
             matches!(cardinality_source::read_root(&owner, 0, &mut Storage::default(), &mut meter), Err(BudgetError::StorageDeclined { limit, .. }) if limit == maximum)
         );
@@ -403,19 +426,16 @@ fn global_stop_and_cancellation_keep_their_typed_failures() {
             remaining: 100,
             failure,
         };
-        let mut meter = Budget::new(
-            Work::reserved(&mut quota),
-            u64::MAX,
-            usize::MAX,
-            &cancellation,
-        );
+        let mut meter_work = Meter::reserved(&mut quota);
+        let mut meter = Budget::new(&mut meter_work, u64::MAX, usize::MAX, &cancellation);
         assert!(
-            matches!(cardinality_source::read_root(&owner, 0, &mut Storage::default(), &mut meter), Err(BudgetError::Stopped(actual)) if actual == failure)
+            matches!(cardinality_source::read_root(&owner, 0, &mut Storage::default(), &mut meter), Err(BudgetError::Refused(actual)) if actual == failure)
         );
         meter.finish();
     }
     cancellation.cancel();
-    let mut meter = Budget::new(Work::new(0), 0, 0, &cancellation);
+    let mut meter_work = Meter::local(0);
+    let mut meter = Budget::new(&mut meter_work, 0, 0, &cancellation);
     assert!(matches!(
         cardinality_source::read_root(&owner, usize::MAX, &mut Storage::default(), &mut meter),
         Err(BudgetError::Stopped(Stop::Cancelled))
@@ -435,7 +455,8 @@ fn repeated_signed_guard_occurrences_keep_their_exact_decoder_work() {
             vec![negate(nodes, body, falsum)]
         });
         let cancellation = Cancellation::default();
-        let mut meter = budget(&cancellation);
+        let mut meter_work = Meter::local(u64::MAX);
+        let mut meter = budget(&mut meter_work, &cancellation);
         let mut storage = Storage::default();
         let rows = cardinality_source::read_root(&owner, 0, &mut storage, &mut meter).unwrap();
         assert_eq!(rows[0].guard.len(), 3);
@@ -460,16 +481,23 @@ fn every_checker_work_refusal_prefix_remains_a_failure_not_acceptance() {
     let owner = shapes();
     let cancellation = Cancellation::default();
     let mut retained = Storage::default();
-    let rows = cardinality_source::read_root(&owner, 0, &mut retained, &mut budget(&cancellation))
-        .unwrap();
+    let rows = cardinality_source::read_root(
+        &owner,
+        0,
+        &mut retained,
+        &mut budget(&mut Meter::local(u64::MAX), &cancellation),
+    )
+    .unwrap();
     let base = retained.bytes();
-    let mut complete = budget(&cancellation);
+    let mut complete_work = Meter::local(u64::MAX);
+    let mut complete = budget(&mut complete_work, &cancellation);
     assert!(
         cardinality_source::check(&owner, &owner, &rows[0], &mut retained, &mut complete).unwrap()
     );
     assert_eq!(retained.bytes(), base);
     for maximum in 0..complete.work() {
-        let mut meter = Budget::new(Work::new(u64::MAX), maximum, usize::MAX, &cancellation);
+        let mut meter_work = Meter::local(u64::MAX);
+        let mut meter = Budget::new(&mut meter_work, maximum, usize::MAX, &cancellation);
         let mut storage = Storage::with_live_bytes(base);
         assert_eq!(
             cardinality_source::check(&owner, &owner, &rows[0], &mut storage, &mut meter),
@@ -517,7 +545,8 @@ fn checked_support_keeps_its_padded_allocation() {
             vec![threshold(nodes, &[0, atoms - 1], &[1, 1], 1)]
         });
         let cancellation = Cancellation::default();
-        let mut meter = budget(&cancellation);
+        let mut meter_work = Meter::local(u64::MAX);
+        let mut meter = budget(&mut meter_work, &cancellation);
         let mut storage = Storage::default();
         let bounds = cardinality_source::read_root(&owner, 0, &mut storage, &mut meter).unwrap();
         assert_eq!(bounds.len(), 1);

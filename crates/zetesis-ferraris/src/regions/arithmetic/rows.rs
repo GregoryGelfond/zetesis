@@ -5,6 +5,8 @@
 //! proposed equation is materialized in the original atom coordinates and then
 //! checked by rereading its own sources. Only checked rows reach elimination.
 
+use zetesis_algebra::Quota;
+
 use std::cmp::Ordering;
 use std::mem::size_of;
 
@@ -72,12 +74,12 @@ impl Recognized {
     }
 }
 
-pub(super) fn recognize(
+pub(super) fn recognize<Q: Quota + ?Sized>(
     theory: &Theory,
     producers: Option<&Producers>,
     storage: &mut Storage,
-    budget: &mut Budget<'_, '_>,
-) -> Result<Recognized, BudgetError> {
+    budget: &mut Budget<'_, '_, Q>,
+) -> Result<Recognized, BudgetError<Q::Error>> {
     storage.admit_record(
         (size_of::<Recognized>() - size_of::<CheckedRootFacts>() - 2 * size_of::<Vec<Clause>>())
             as u128,
@@ -130,15 +132,15 @@ pub(super) fn recognize(
 }
 
 /// Propose and independently authenticate affine rows from equal-support clauses.
-fn from_clauses(
+fn from_clauses<Q: Quota + ?Sized>(
     facts: &CheckedRootFacts,
     producers: Option<&Producers>,
     clauses: &[Clause],
     equations: &mut Vec<Equation>,
     counts: &mut Counts,
     storage: &mut Storage,
-    budget: &mut Budget<'_, '_>,
-) -> Result<(), BudgetError> {
+    budget: &mut Budget<'_, '_, Q>,
+) -> Result<(), BudgetError<Q::Error>> {
     let theory = facts.owner();
     let mut first = 0;
     while first < clauses.len() {
@@ -210,15 +212,15 @@ fn from_clauses(
 }
 
 /// Propose and independently authenticate affine rows from complete definitions.
-fn from_definitions(
+fn from_definitions<Q: Quota + ?Sized>(
     facts: &CheckedRootFacts,
     producers: Option<&Producers>,
     clauses: &[Clause],
     equations: &mut Vec<Equation>,
     counts: &mut Counts,
     storage: &mut Storage,
-    budget: &mut Budget<'_, '_>,
-) -> Result<(), BudgetError> {
+    budget: &mut Budget<'_, '_, Q>,
+) -> Result<(), BudgetError<Q::Error>> {
     let theory = facts.owner();
     if let Some(producers) = producers {
         for head in 0..theory.atom_count() {
@@ -270,12 +272,12 @@ fn from_definitions(
     Ok(())
 }
 
-fn propose(
+fn propose<Q: Quota + ?Sized>(
     support: Support,
     forbidden: &[u64; 4],
     counts: &mut Counts,
-    budget: &mut Budget<'_, '_>,
-) -> Result<hull::Hull, BudgetError> {
+    budget: &mut Budget<'_, '_, Q>,
+) -> Result<hull::Hull, BudgetError<Q::Error>> {
     budget.charge(1)?;
     counts.groups += 1;
     budget.charge(2)?; // choose and publish the padded local-table width
@@ -291,13 +293,13 @@ fn propose(
     Ok(proposed)
 }
 
-fn materialize(
+fn materialize<Q: Quota + ?Sized>(
     theory: &Theory,
     support: Support,
     local: LocalEquation,
     storage: &mut Storage,
-    budget: &mut Budget<'_, '_>,
-) -> Result<Words<u64>, BudgetError> {
+    budget: &mut Budget<'_, '_, Q>,
+) -> Result<Words<u64>, BudgetError<Q::Error>> {
     let mut words =
         Words::new(storage.filled(theory.atom_count().div_ceil(128) * 2, 0_u64, 1, budget)?);
     for (coordinate, &atom) in support.atoms[..support.len].iter().enumerate() {
@@ -310,15 +312,15 @@ fn materialize(
     Ok(words)
 }
 
-fn check(
+fn check<Q: Quota + ?Sized>(
     facts: &CheckedRootFacts,
     producers: Option<&Producers>,
     clauses: &[Clause],
     candidate: &Equation,
     support: Support,
     live_bytes: u128,
-    budget: &mut Budget<'_, '_>,
-) -> Result<bool, BudgetError> {
+    budget: &mut Budget<'_, '_, Q>,
+) -> Result<bool, BudgetError<Q::Error>> {
     let theory = facts.owner();
     budget.charge(1)?;
     match candidate.source {
@@ -368,15 +370,15 @@ fn check(
     }
 }
 
-fn retain(
+fn retain<Q: Quota + ?Sized>(
     valid: bool,
     candidate: Equation,
     coefficients: u8,
     equations: &mut Vec<Equation>,
     counts: &mut Counts,
     storage: &mut Storage,
-    budget: &mut Budget<'_, '_>,
-) -> Result<(), BudgetError> {
+    budget: &mut Budget<'_, '_, Q>,
+) -> Result<(), BudgetError<Q::Error>> {
     budget.charge(1)?;
     if !valid {
         budget.charge(1)?;
@@ -403,14 +405,14 @@ fn retain(
         }
     }
     storage.push(equations, candidate, 7, budget)?;
-    storage.embed::<u64>()
+    storage.embed::<u64>().map_err(BudgetError::Stopped)
 }
 
-fn compare_support(
+fn compare_support<Q: Quota + ?Sized>(
     left: Support,
     right: Support,
-    budget: &mut Budget<'_, '_>,
-) -> Result<Ordering, BudgetError> {
+    budget: &mut Budget<'_, '_, Q>,
+) -> Result<Ordering, BudgetError<Q::Error>> {
     for (left, right) in std::iter::once(&left.len)
         .chain(left.atoms.iter())
         .zip(std::iter::once(&right.len).chain(right.atoms.iter()))
@@ -433,11 +435,11 @@ fn compare_support(
 /// Stable bottom-up merges bound comparisons and their result use by
 /// `20Q ceil(log2 Q)`: eighteen scalar tests, a tag and its comparison.
 /// Every copied record and both initialized buffers enter work/storage receipts.
-fn sort_clauses(
+fn sort_clauses<Q: Quota + ?Sized>(
     clauses: &mut Vec<Clause>,
     storage: &mut Storage,
-    budget: &mut Budget<'_, '_>,
-) -> Result<(), BudgetError> {
+    budget: &mut Budget<'_, '_, Q>,
+) -> Result<(), BudgetError<Q::Error>> {
     budget.charge(1)?;
     if clauses.len() < 2 {
         return Ok(());
@@ -474,5 +476,5 @@ fn sort_clauses(
         std::mem::swap(clauses, &mut scratch);
         width = width.saturating_mul(2);
     }
-    storage.release(scratch)
+    storage.release(scratch).map_err(BudgetError::Stopped)
 }

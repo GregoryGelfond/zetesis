@@ -414,13 +414,24 @@ fn a_lent_index_rejects_an_independent_equal_theory() {
         ),
         Err(Incomplete::WrongTheory)
     ));
-    // An empty truth buffer would be invalid for either DAG. Identity refusal
-    // must precede every indexed access, independently of equal dimensions.
-    for subject in [&equal, &theory] {
+    // Only a genuine evaluation can enter the root-query constructor. Both
+    // classical models carry the independently equal, foreign theory; identity
+    // refusal precedes any indexed query work or fresh regional state.
+    for atoms in [vec![], vec![0, 1]] {
+        let candidate = Interpretation::new(&equal, atoms).unwrap();
+        let mut workspace = zetesis_ferraris::EvaluationWorkspace::default();
+        let evaluated = workspace
+            .evaluate(
+                &candidate,
+                zetesis_ferraris::EvaluationLimits::default(),
+                &cancellation,
+            )
+            .result
+            .unwrap();
+        assert!(evaluated.is_model());
         assert!(matches!(
             ReductQuery::new(&index).check(
-                zetesis_ferraris::FrozenSubject::new(subject, &[]),
-                &candidate,
+                &evaluated,
                 Limits::default(),
                 &mut budget,
                 &mut statistics,
@@ -544,8 +555,7 @@ fn a_failed_region_query_records_growth_without_replacing_its_error() {
     let result = (|| {
         let evaluated = workspace.evaluate(&candidate, limits, &cancellation, &mut statistics)?;
         ReductQuery::new(&index).check(
-            zetesis_ferraris::FrozenSubject::new(&theory, evaluated.truth.truth()),
-            &candidate,
+            &evaluated.truth,
             limits,
             &mut budget,
             &mut statistics,
@@ -566,6 +576,7 @@ mod composition;
 mod generator_order;
 mod ordering;
 mod preference;
+mod typed_meter;
 
 #[test]
 fn a_foreign_theory_has_no_walk_subject() {
@@ -624,7 +635,10 @@ fn failed_narrowing_keeps_support_explanation_receipts() {
         statistics,
     };
     let mut counts = RegionCounts::default();
-    assert_eq!(account(&attempt, &mut counts), Err(Incomplete::WorkLimit));
+    assert_eq!(
+        SubjectAttempt::from_narrowing(&attempt).account(&mut counts),
+        Err(Incomplete::WorkLimit)
+    );
     assert_eq!(counts.support_explanations, explanations);
     assert_eq!(counts.work, 31, "explanation work is already included");
 }
@@ -666,3 +680,5 @@ fn explanation_overflow_leaves_all_counts_unchanged() {
         assert_eq!(counts, before);
     }
 }
+
+mod source_preflight;

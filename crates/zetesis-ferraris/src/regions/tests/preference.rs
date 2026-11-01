@@ -1,8 +1,8 @@
 //! Propagation can be composed without spending or replacing split preferences.
 
 use crate::{
-    AdmissionLimits, ChoiceHeads, FormulaParts, Knowledge, Narrower, Narrowing, NarrowingQuota,
-    NarrowingScratch, Node, OriginalSubject, Region, RegionLimits, Theory,
+    AdmissionLimits, ChoiceHeads, FormulaParts, Knowledge, Narrower, Narrowing, NarrowingScratch,
+    Node, OriginalSubject, Region, RegionLimits, Theory,
 };
 use zetesis_algebra::{Cancellation, Stop, region::Entry};
 
@@ -22,7 +22,8 @@ impl Allowance {
     }
 }
 
-impl NarrowingQuota for Allowance {
+impl zetesis_algebra::Quota for Allowance {
+    type Error = Stop;
     fn reserve(&mut self, wanted: u64) -> Result<u64, Stop> {
         let grant = wanted.min(self.remaining);
         if grant == 0 {
@@ -86,14 +87,14 @@ fn deferred_preference_preserves_existing_split_choice() {
     let mut known = narrower.knowledge();
     let mut entry = Entry::new(Region::all_open(3), ());
     entry.prefer(2);
-    let attempt = narrower.propagate_known_reserved(
+    let attempt = crate::test_support::stop_narrowing(&narrower.propagate_known_reserved(
         OriginalSubject::new(&theory, None),
         &mut entry.region,
         &mut known,
         &mut NarrowingScratch::default(),
         &Cancellation::default(),
-        &mut Allowance::new(1000),
-    );
+        &mut zetesis_algebra::Meter::reserved(&mut Allowance::new(1000)),
+    ));
     assert_eq!(attempt.result.unwrap(), Narrowing::Fixed { changed: false });
     assert_eq!(attempt.preferred, None);
     assert_eq!(entry.split_atom(), Some(2));
@@ -117,21 +118,21 @@ fn separate_preference_has_the_original_narrowing_receipt() {
     let mut region = Region::all_open(3);
     let mut known = narrower.knowledge();
     let mut allowance = Allowance::new(1000);
-    let propagated = narrower.propagate_known_reserved(
+    let propagated = crate::test_support::stop_narrowing(&narrower.propagate_known_reserved(
         OriginalSubject::new(&theory, None),
         &mut region,
         &mut known,
         &mut NarrowingScratch::default(),
         &Cancellation::default(),
-        &mut allowance,
-    );
+        &mut zetesis_algebra::Meter::reserved(&mut allowance),
+    ));
     propagated.result.unwrap();
-    let preference = known.preferred_atom_reserved(
+    let preference = crate::test_support::stop_preference(&known.preferred_atom_reserved(
         &region,
         &ChoiceHeads::default(),
         &Cancellation::default(),
-        &mut allowance,
-    );
+        &mut zetesis_algebra::Meter::reserved(&mut allowance),
+    ));
     assert_eq!(preference.result.unwrap(), attempt.preferred);
     assert_eq!(region, ordinary);
     assert_eq!(preference.work, 3);
@@ -145,12 +146,12 @@ fn preference_refusal_retains_exact_read_prefix() {
     let (region, known) = closed(&theory);
     for limit in 0..=3 {
         let mut allowance = Allowance::new(limit);
-        let selected = known.preferred_atom_reserved(
+        let selected = crate::test_support::stop_preference(&known.preferred_atom_reserved(
             &region,
             &ChoiceHeads::default(),
             &Cancellation::default(),
-            &mut allowance,
-        );
+            &mut zetesis_algebra::Meter::reserved(&mut allowance),
+        ));
         assert_eq!(selected.work, limit);
         assert_eq!(allowance.granted - allowance.refunded, limit);
         assert_eq!(
@@ -171,12 +172,12 @@ fn cancelled_preference_reads_nothing() {
     let cancellation = Cancellation::default();
     cancellation.cancel();
     let mut allowance = Allowance::new(1000);
-    let selected = known.preferred_atom_reserved(
+    let selected = crate::test_support::stop_preference(&known.preferred_atom_reserved(
         &region,
         &ChoiceHeads::default(),
         &cancellation,
-        &mut allowance,
-    );
+        &mut zetesis_algebra::Meter::reserved(&mut allowance),
+    ));
     assert_eq!(selected.result, Err(Stop::Cancelled));
     assert_eq!(selected.work, 0);
     assert_eq!(allowance.granted, 0);
@@ -197,12 +198,12 @@ fn zero_parent_counts_prefer_the_lowest_open_atom() {
             assert!(region.cut(atom));
         }
     }
-    let selected = known.preferred_atom_reserved(
+    let selected = crate::test_support::stop_preference(&known.preferred_atom_reserved(
         &region,
         &ChoiceHeads::default(),
         &Cancellation::default(),
-        &mut Allowance::new(1000),
-    );
+        &mut zetesis_algebra::Meter::reserved(&mut Allowance::new(1000)),
+    ));
     assert_eq!(selected.result, Ok(Some(64)));
     assert_eq!(selected.work, 2);
 }
@@ -281,22 +282,22 @@ fn choice_heads_rank_before_more_constrained_atoms() {
         .result
         .unwrap();
     assert_eq!(region.open().collect::<Vec<_>>(), [0, 1, 2, 3, 4]);
-    let ordinary = known.preferred_atom_reserved(
+    let ordinary = crate::test_support::stop_preference(&known.preferred_atom_reserved(
         &region,
         &ChoiceHeads::default(),
         &Cancellation::default(),
-        &mut Allowance::new(1000),
-    );
+        &mut zetesis_algebra::Meter::reserved(&mut Allowance::new(1000)),
+    ));
     let busiest = ordinary.result.unwrap().unwrap();
     // The premise: the ordinary ranking prefers an atom with more unknown
     // parents than the choice head.
     assert!(unknown(&known, busiest) > unknown(&known, 0));
-    let choice = known.preferred_atom_reserved(
+    let choice = crate::test_support::stop_preference(&known.preferred_atom_reserved(
         &region,
         &extraction.choice_heads,
         &Cancellation::default(),
-        &mut Allowance::new(1000),
-    );
+        &mut zetesis_algebra::Meter::reserved(&mut Allowance::new(1000)),
+    ));
     assert_eq!(choice.result, Ok(Some(0)));
     // Only the open choice can win; the four unmarked degrees are unread.
     assert_eq!(choice.work, 1);
@@ -363,23 +364,23 @@ fn closed_and_outside_choice_bits_do_not_hide_open_atoms() {
     let choices = ChoiceHeads {
         words: vec![1, 1, !3, u64::MAX].into(),
     };
-    let attempt = known.preferred_atom_reserved(
+    let attempt = crate::test_support::stop_preference(&known.preferred_atom_reserved(
         &region,
         &choices,
         &Cancellation::default(),
-        &mut Allowance::new(1000),
-    );
+        &mut zetesis_algebra::Meter::reserved(&mut Allowance::new(1000)),
+    ));
     assert_eq!(attempt.result, Ok(Some(1)));
     assert_eq!(attempt.work, 127);
     let choices = ChoiceHeads {
         words: vec![1, 1 | (1 << 63), !1, u64::MAX].into(),
     };
-    let attempt = known.preferred_atom_reserved(
+    let attempt = crate::test_support::stop_preference(&known.preferred_atom_reserved(
         &region,
         &choices,
         &Cancellation::default(),
-        &mut Allowance::new(1000),
-    );
+        &mut zetesis_algebra::Meter::reserved(&mut Allowance::new(1000)),
+    ));
     assert_eq!(attempt.result, Ok(Some(127)));
     assert_eq!(attempt.work, 1);
 }

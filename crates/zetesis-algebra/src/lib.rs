@@ -5,11 +5,15 @@
 #![forbid(unsafe_code)]
 
 mod cancellation;
+pub mod class;
 pub mod region;
 pub mod walk;
 pub mod words;
 
+pub use class::{AnswerSetsSought, Class, Countermodels};
+
 pub use cancellation::{
     Cancellation, CancellationPoll, CancellationRun, CancellationSlot, CancellationSlotError,
-    ChargeError, Meter, Metered, POLL_INTERVAL, Refusal, Stop, poll_due,
+    ChargeError, Failure, LocalQuota, Meter, Metered, POLL_INTERVAL, Quota, Refusal, Stop,
+    poll_due,
 };

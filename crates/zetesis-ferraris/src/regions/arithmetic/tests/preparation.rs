@@ -1,15 +1,18 @@
+use zetesis_algebra::Meter;
+
 use zetesis_algebra::{Cancellation, Stop};
 
 use super::super::{PreparationError, PreparationLimits, PreparationStatus, RootPreparation};
 use crate::test_support::{constructed_theory, push};
-use crate::{NarrowingQuota, NodeView, RegionLimits, Theory, producers};
+use crate::{NodeView, RegionLimits, Theory, producers};
 
 struct Quota {
     ceiling: u64,
     held: u64,
 }
 
-impl NarrowingQuota for Quota {
+impl zetesis_algebra::Quota for Quota {
+    type Error = Stop;
     fn reserve(&mut self, wanted: u64) -> Result<u64, Stop> {
         let granted = wanted.min(self.ceiling - self.held);
         if granted == 0 {
@@ -60,7 +63,7 @@ fn odd_cycle_refutation_skips_cardinality_preparation() {
         None,
         limits(),
         &Cancellation::default(),
-        &mut quota,
+        &mut Meter::reserved(&mut quota),
     );
     assert_eq!(result.parity.status, PreparationStatus::Prepared);
     assert_eq!(result.cardinality.status, PreparationStatus::NotPrepared);
@@ -86,7 +89,7 @@ fn even_cycle_retains_one_owner_and_no_echelon_units() {
         None,
         limits(),
         &Cancellation::default(),
-        &mut quota,
+        &mut Meter::reserved(&mut quota),
     );
     assert_eq!(result.work, quota.held);
     assert_eq!(
@@ -123,7 +126,7 @@ fn complete_definitions_force_a_fact_and_an_unsupported_atom() {
         extracted.producers.as_ref(),
         limits(),
         &cancellation,
-        &mut quota,
+        &mut Meter::reserved(&mut quota),
     );
     let mut prepared = result.result.unwrap().unwrap();
     assert_eq!(
@@ -154,8 +157,13 @@ fn every_declined_work_prefix_refunds_spare_permits() {
         ceiling: u64::MAX,
         held: 0,
     };
-    let full =
-        RootPreparation::prepare_reserved(&theory, None, limits(), &cancellation, &mut full_quota);
+    let full = RootPreparation::prepare_reserved(
+        &theory,
+        None,
+        limits(),
+        &cancellation,
+        &mut Meter::reserved(&mut full_quota),
+    );
     assert!(full.result.unwrap().unwrap().root_refuted());
     for work in 0..full.work {
         let mut quota = Quota {
@@ -167,7 +175,7 @@ fn every_declined_work_prefix_refunds_spare_permits() {
             None,
             PreparationLimits { work, ..limits() },
             &cancellation,
-            &mut quota,
+            &mut Meter::reserved(&mut quota),
         );
         assert!(attempt.result.unwrap().is_none(), "allowance {work}");
         assert_eq!(attempt.parity.status, PreparationStatus::WorkDeclined);
@@ -196,7 +204,7 @@ fn storage_decline_never_publishes_a_partial_preparation() {
             ..limits()
         },
         &Cancellation::default(),
-        &mut quota,
+        &mut Meter::reserved(&mut quota),
     );
     assert!(attempt.result.unwrap().is_none());
     assert_eq!(attempt.parity.status, PreparationStatus::StorageDeclined);
@@ -220,11 +228,13 @@ fn mandatory_refusal_is_not_optional_decline_or_refutation() {
         None,
         limits(),
         &Cancellation::default(),
-        &mut quota,
+        &mut Meter::reserved(&mut quota),
     );
     assert!(matches!(
         attempt.result,
-        Err(PreparationError::Stopped(Stop::WorkLimit))
+        Err(PreparationError::Stopped(
+            zetesis_algebra::Failure::Refused(Stop::WorkLimit)
+        ))
     ));
     assert_eq!(attempt.parity.status, PreparationStatus::Incomplete);
     assert!(!attempt.parity.root_refuted);
@@ -250,7 +260,7 @@ fn seeded_root_receipts_follow_actual_constructor_and_units() {
             extracted.producers.as_ref(),
             limits(),
             &cancellation,
-            &mut quota,
+            &mut Meter::reserved(&mut quota),
         );
         let mut prepared = attempt.result.unwrap().unwrap();
         assert!(!prepared.root_refuted());
@@ -313,7 +323,7 @@ fn absent_and_refuted_seeds_do_not_charge_a_constructor() {
             None,
             limits(),
             &Cancellation::default(),
-            &mut quota,
+            &mut Meter::reserved(&mut quota),
         );
         let mut prepared = attempt.result.unwrap().unwrap();
         assert_eq!(prepared.root_refuted(), refuted);
@@ -344,7 +354,7 @@ fn prepared_equations_keep_padded_owned_words() {
             None,
             limits(),
             &Cancellation::default(),
-            &mut quota,
+            &mut Meter::reserved(&mut quota),
         );
         assert_eq!(attempt.parity.rows, 1, "atoms {atoms}");
         let prepared = attempt.result.unwrap().unwrap();
@@ -392,4 +402,66 @@ fn equation_keeps_its_original_record_layout() {
         offset_of!(Original, constant)
     );
     assert_eq!(offset_of!(Equation, source), offset_of!(Original, source));
+}
+
+#[test]
+fn typed_preparation_refusal_preserves_the_same_failed_receipt() {
+    use super::budget::{TypedQuota, TypedRefusal};
+    use zetesis_algebra::Failure;
+
+    let theory = cycle(3);
+    let cancellation = Cancellation::default();
+    let mut local_quota = Quota {
+        ceiling: 64,
+        held: 0,
+    };
+    let baseline = RootPreparation::prepare_reserved(
+        &theory,
+        None,
+        limits(),
+        &cancellation,
+        &mut Meter::reserved(&mut local_quota),
+    );
+    assert!(matches!(
+        baseline.result,
+        Err(PreparationError::Stopped(Failure::Refused(Stop::WorkLimit)))
+    ));
+    let owner = Box::<str>::from("root-preparation");
+    let identity = owner.as_ptr();
+    let mut typed = TypedQuota::new([
+        Ok(64),
+        Err(TypedRefusal::Storage {
+            owner,
+            required: u128::MAX,
+            limit: 43,
+        }),
+    ]);
+    let attempted = RootPreparation::prepare_reserved(
+        &theory,
+        None,
+        limits(),
+        &cancellation,
+        &mut Meter::reserved(&mut typed),
+    );
+    let Err(PreparationError::Stopped(Failure::Refused(TypedRefusal::Storage {
+        owner,
+        required,
+        limit,
+    }))) = attempted.result
+    else {
+        panic!("preparation must retain the caller's owned refusal")
+    };
+    assert_eq!(owner.as_ptr(), identity);
+    assert_eq!(&*owner, "root-preparation");
+    assert_eq!((required, limit), (u128::MAX, 43));
+    assert_eq!(attempted.work, baseline.work);
+    assert!(attempted.work > 0);
+    assert_eq!(attempted.peak_bytes, baseline.peak_bytes);
+    assert_eq!(attempted.parity, baseline.parity);
+    assert_eq!(attempted.cardinality, baseline.cardinality);
+    assert_eq!(typed.granted - typed.refunded, attempted.work);
+    assert_eq!(local_quota.held, attempted.work);
+    assert_eq!(attempted.parity.status, PreparationStatus::Incomplete);
+    assert_eq!(attempted.parity.retained_bytes, 0);
+    assert!(!attempted.parity.root_refuted);
 }

@@ -249,8 +249,15 @@ fn an_undecided_shared_parent_forwards_a_child_wakeup() {
     assert_eq!(region, fresh);
     assert_eq!(region.decision(0), Some(true));
     assert_eq!(region.decision(2), Some(true));
-    assert!(scratch.witnesses.dirty.is_empty());
-    assert!(scratch.witnesses.pending.iter().all(|&word| word == 0));
+    assert!(scratch.common.witnesses.dirty.is_empty());
+    assert!(
+        scratch
+            .common
+            .witnesses
+            .pending
+            .iter()
+            .all(|&word| word == 0)
+    );
 }
 
 #[test]
@@ -294,7 +301,7 @@ fn associative_units_preserve_every_original_and_frozen_model() {
                 narrower.narrow_frozen_known(
                     FrozenSubject::new(&theory, truth.truth()),
                     &mut after,
-                    &mut narrower.knowledge(),
+                    &mut narrower.frozen_knowledge(),
                     &mut scratch,
                     RegionLimits::default(),
                     &cancellation,
@@ -344,25 +351,29 @@ fn associative_units_preserve_every_original_and_frozen_model() {
 
 #[test]
 fn associative_scratch_recovers_after_refusal_and_generation_wrap() {
-    use super::{Scratch, Work};
+    use super::{Meter, Scratch};
     let theory = compound_witness();
     let narrower = Narrower::new(&theory);
     let chain = super::chain_position(narrower.chain_of[4].unwrap());
     let mut scratch = Scratch::default();
     assert_eq!(
-        scratch.read(&narrower, chain, None, &mut Work::new(0)),
+        scratch
+            .read(&narrower, chain, None, &mut Meter::local(0))
+            .map_err(zetesis_algebra::Failure::into_stop),
         Err(zetesis_algebra::Stop::WorkLimit)
     );
     assert_eq!(
         scratch
-            .read(&narrower, chain, None, &mut Work::new(u64::MAX))
+            .read(&narrower, chain, None, &mut Meter::local(u64::MAX))
+            .map_err(zetesis_algebra::Failure::into_stop)
             .unwrap(),
         &[0, 1]
     );
     scratch.generation = u32::MAX;
     assert_eq!(
         scratch
-            .read(&narrower, chain, None, &mut Work::new(u64::MAX))
+            .read(&narrower, chain, None, &mut Meter::local(u64::MAX))
+            .map_err(zetesis_algebra::Failure::into_stop)
             .unwrap(),
         &[0, 1]
     );
@@ -635,7 +646,7 @@ fn compound_cut_inference_leaves_arbitrary_frozen_worlds_sound() {
                     .narrow_frozen_known(
                         FrozenSubject::new(&theory, truth.truth()),
                         &mut after,
-                        &mut index.knowledge(),
+                        &mut index.frozen_knowledge(),
                         &mut scratch,
                         RegionLimits::default(),
                         &cancellation,
@@ -718,7 +729,8 @@ fn a_native_upper_bound_refutes_its_smaller_boolean_conjunction() {
 fn warmed(index: &Narrower) -> super::Scratch {
     let mut scratch = super::Scratch::default();
     scratch
-        .begin(index.parents.len(), &mut super::Work::new(u64::MAX))
+        .begin(index.parents.len(), &mut super::Meter::local(u64::MAX))
+        .map_err(zetesis_algebra::Failure::into_stop)
         .unwrap();
     scratch
 }

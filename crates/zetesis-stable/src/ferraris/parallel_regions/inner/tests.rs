@@ -376,7 +376,7 @@ fn a_split_counts_its_gain_before_its_children_are_queued() {
     let candidate = Interpretation::new(&theory, 0..theory.atom_count()).unwrap();
     let truth = vec![true; theory.nodes().len()];
     let cell = Arc::new(QueryCell::new(&truth, &candidate, 1).unwrap());
-    let knowledge = Narrower::new(&theory).knowledge();
+    let knowledge = Narrower::new(&theory).frozen_knowledge();
     let cut_knowledge = knowledge.clone();
     let mut pending = Some(InnerEntry::new(
         Entry::new(Region::all_open(theory.atom_count()), knowledge),
@@ -417,7 +417,7 @@ fn a_refused_split_publishes_nothing_and_withdraws_its_gain() {
     let candidate = Interpretation::new(&theory, 0..theory.atom_count()).unwrap();
     let truth = vec![true; theory.nodes().len()];
     let cell = Arc::new(QueryCell::new(&truth, &candidate, 1).unwrap());
-    let knowledge = Narrower::new(&theory).knowledge();
+    let knowledge = Narrower::new(&theory).frozen_knowledge();
     let mut entry = Entry::new(Region::all_open(theory.atom_count()), knowledge);
     entry.prefer(1);
     let region = entry.region.clone();
@@ -466,7 +466,7 @@ fn a_decided_querys_queued_region_is_dropped_unnarrowed() {
     let entry = InnerEntry::new(
         Entry::new(
             Region::all_open(theory.atom_count()),
-            Narrower::new(&theory).knowledge(),
+            Narrower::new(&theory).frozen_knowledge(),
         ),
         &cell,
     );
@@ -503,7 +503,7 @@ fn a_declined_publication_leaves_the_query_to_decide_inline() {
             &mut self,
             _: &[bool],
             _: &Interpretation,
-            traversal: &mut Walk<Knowledge>,
+            traversal: &mut Walk<Knowledge<Countermodels>>,
         ) -> Option<()> {
             self.offered += 1;
             assert!(traversal.pending() >= 1);

@@ -4,6 +4,8 @@
 //! bound checks justify them. Original guards and source occurrences remain in
 //! the checked input inventory. No guarded bound is assumed active at the root.
 
+use zetesis_algebra::Quota;
+
 use std::cmp::Ordering;
 use std::mem::size_of;
 use std::ops::Range;
@@ -87,13 +89,13 @@ impl Prepared {
 /// Independent of discovery: authenticate directions and rebuild both unions.
 /// Equality of union cardinality and the sum of row cardinalities establishes
 /// disjointness, including duplicate row occurrences. XOR checks equal carriers.
-fn check_pair(
+fn check_pair<Q: Quota + ?Sized>(
     bounds: &[Bound],
     lower: &[usize],
     upper: &[usize],
     unions: (&mut [u64], &mut [u64]),
-    budget: &mut Budget<'_, '_>,
-) -> Result<bool, BudgetError> {
+    budget: &mut Budget<'_, '_, Q>,
+) -> Result<bool, BudgetError<Q::Error>> {
     let (left, right) = unions;
     clear(left, budget)?;
     clear(right, budget)?;
@@ -123,13 +125,13 @@ fn check_pair(
     Ok(true)
 }
 
-fn union_side(
+fn union_side<Q: Quota + ?Sized>(
     bounds: &[Bound],
     rows: &[usize],
     side: BoundSide,
     union: &mut [u64],
-    budget: &mut Budget<'_, '_>,
-) -> Result<Option<u64>, BudgetError> {
+    budget: &mut Budget<'_, '_, Q>,
+) -> Result<Option<u64>, BudgetError<Q::Error>> {
     budget.charge(1)?;
     let mut cardinality = 0_u64;
     for &row in rows {
@@ -152,7 +154,10 @@ fn union_side(
     Ok(Some(cardinality))
 }
 
-fn effective(bound: &Bound, budget: &mut Budget<'_, '_>) -> Result<u64, BudgetError> {
+fn effective<Q: Quota + ?Sized>(
+    bound: &Bound,
+    budget: &mut Budget<'_, '_, Q>,
+) -> Result<u64, BudgetError<Q::Error>> {
     budget.charge(2)?; // original guard emptiness and authenticated side
     let fallback = match bound.side {
         BoundSide::Lower => 0,
@@ -170,13 +175,13 @@ fn effective(bound: &Bound, budget: &mut Budget<'_, '_>) -> Result<u64, BudgetEr
     }
 }
 
-fn reduce_side(
+fn reduce_side<Q: Quota + ?Sized>(
     bounds: &[Bound],
     occurrences: &mut [Occurrence],
     pair: usize,
     side: BoundSide,
-    budget: &mut Budget<'_, '_>,
-) -> Result<Option<u64>, BudgetError> {
+    budget: &mut Budget<'_, '_, Q>,
+) -> Result<Option<u64>, BudgetError<Q::Error>> {
     budget.charge(1)?;
     let mut sum = 0_u64;
     for occurrence in occurrences {
@@ -208,12 +213,12 @@ fn reduce_side(
 }
 
 /// C0 reads the same occurrence cache and pair ranges retained for later C1.
-fn reduce_pair(
+fn reduce_pair<Q: Quota + ?Sized>(
     families: &mut Families,
     bounds: &[Bound],
     pair: usize,
-    budget: &mut Budget<'_, '_>,
-) -> Result<bool, BudgetError> {
+    budget: &mut Budget<'_, '_, Q>,
+) -> Result<bool, BudgetError<Q::Error>> {
     budget.charge(4)?;
     let lower = families.pairs[pair].lower.clone();
     let upper = families.pairs[pair].upper.clone();
@@ -243,7 +248,10 @@ fn reduce_pair(
     Ok(families.pairs[pair].lower_sum > families.pairs[pair].upper_sum)
 }
 
-fn clear(words: &mut [u64], budget: &mut Budget<'_, '_>) -> Result<(), BudgetError> {
+fn clear<Q: Quota + ?Sized>(
+    words: &mut [u64],
+    budget: &mut Budget<'_, '_, Q>,
+) -> Result<(), BudgetError<Q::Error>> {
     Words::<u64, _>::new(words).fill_with(0, || budget.charge(1))
 }
 
@@ -253,21 +261,33 @@ struct GuardKey {
     len: usize,
 }
 
+/// Flat guard-key spans and the signed literals they index.
+struct GuardKeys {
+    keys: Vec<GuardKey>,
+    literals: Vec<Literal>,
+}
+
 #[derive(Clone)]
 struct Proposal {
     lower: Range<usize>,
     upper: Range<usize>,
 }
 
+/// Selected row indices and partition proposals over ranges of those indices.
+struct PartitionProposals {
+    selected: Vec<usize>,
+    proposals: Vec<Proposal>,
+}
+
 /// Stable bottom-up merging, reusing one initialized caller-owned buffer.
 /// Each level moves each record once; an odd final level copies it back once.
-fn sort<'a, T: Copy>(
+fn sort<'a, T: Copy, Q: Quota + ?Sized>(
     values: &'a mut [T],
     scratch: &'a mut [T],
     words: u64,
-    mut compare: impl FnMut(&T, &T, &mut Budget<'_, '_>) -> Result<Ordering, BudgetError>,
-    budget: &mut Budget<'_, '_>,
-) -> Result<(), BudgetError> {
+    mut compare: impl FnMut(&T, &T, &mut Budget<'_, '_, Q>) -> Result<Ordering, BudgetError<Q::Error>>,
+    budget: &mut Budget<'_, '_, Q>,
+) -> Result<(), BudgetError<Q::Error>> {
     let len = values.len();
     if len < 2 {
         return Ok(());
@@ -316,11 +336,11 @@ fn sort<'a, T: Copy>(
     Ok(())
 }
 
-fn scalar<T: Copy + Ord>(
+fn scalar<T: Copy + Ord, Q: Quota + ?Sized>(
     left: T,
     right: T,
-    budget: &mut Budget<'_, '_>,
-) -> Result<Ordering, BudgetError> {
+    budget: &mut Budget<'_, '_, Q>,
+) -> Result<Ordering, BudgetError<Q::Error>> {
     budget.charge(1)?;
     if left < right {
         return Ok(Ordering::Less);
@@ -333,11 +353,11 @@ fn scalar<T: Copy + Ord>(
     })
 }
 
-fn literal_order(
+fn literal_order<Q: Quota + ?Sized>(
     left: &Literal,
     right: &Literal,
-    budget: &mut Budget<'_, '_>,
-) -> Result<Ordering, BudgetError> {
+    budget: &mut Budget<'_, '_, Q>,
+) -> Result<Ordering, BudgetError<Q::Error>> {
     let atom = scalar(left.atom, right.atom, budget)?;
     budget.charge(1)?;
     if atom == Ordering::Equal {
@@ -349,11 +369,11 @@ fn literal_order(
 
 /// Sorting keys alone remove repeated signed occurrences. Source guards stay
 /// untouched, including both polarities of an atom and all original repeats.
-fn guard_keys(
+fn guard_keys<Q: Quota + ?Sized>(
     bounds: &[Bound],
     storage: &mut Storage,
-    budget: &mut Budget<'_, '_>,
-) -> Result<(Vec<GuardKey>, Vec<Literal>), BudgetError> {
+    budget: &mut Budget<'_, '_, Q>,
+) -> Result<GuardKeys, BudgetError<Q::Error>> {
     budget.charge(2)?;
     let (mut total, mut maximum) = (0usize, 0usize);
     for row in bounds {
@@ -418,10 +438,14 @@ fn guard_keys(
         keys.push(GuardKey { start, len: count });
     }
     storage.release(scratch)?;
-    Ok((keys, literals))
+    Ok(GuardKeys { keys, literals })
 }
 
-fn find(parents: &[usize], row: usize, budget: &mut Budget<'_, '_>) -> Result<usize, BudgetError> {
+fn find<Q: Quota + ?Sized>(
+    parents: &[usize],
+    row: usize,
+    budget: &mut Budget<'_, '_, Q>,
+) -> Result<usize, BudgetError<Q::Error>> {
     budget.charge(1)?;
     let mut current = row;
     loop {
@@ -435,13 +459,13 @@ fn find(parents: &[usize], row: usize, budget: &mut Budget<'_, '_>) -> Result<us
     }
 }
 
-fn unite(
+fn unite<Q: Quota + ?Sized>(
     parents: &mut [usize],
     sizes: &mut [usize],
     left: usize,
     right: usize,
-    budget: &mut Budget<'_, '_>,
-) -> Result<(), BudgetError> {
+    budget: &mut Budget<'_, '_, Q>,
+) -> Result<(), BudgetError<Q::Error>> {
     let left = find(parents, left, budget)?;
     let right = find(parents, right, budget)?;
     budget.charge(1)?;
@@ -460,12 +484,12 @@ fn unite(
     Ok(())
 }
 
-fn components(
+fn components<Q: Quota + ?Sized>(
     bounds: &[Bound],
     atom_count: usize,
     storage: &mut Storage,
-    budget: &mut Budget<'_, '_>,
-) -> Result<Vec<usize>, BudgetError> {
+    budget: &mut Budget<'_, '_, Q>,
+) -> Result<Vec<usize>, BudgetError<Q::Error>> {
     let mut first = storage.filled(atom_count, 0usize, 1, budget)?;
     let mut parents = storage.reserve(bounds.len(), budget)?;
     for row in 0..bounds.len() {
@@ -529,11 +553,11 @@ fn kind(kind: Kind) -> u8 {
 /// Equal-cardinality supports compare by their increasing atom sequences.
 /// At the first differing word, the support containing its least differing bit
 /// comes first. No secondary atom-sequence representation is constructed.
-fn support_order(
+fn support_order<Q: Quota + ?Sized>(
     left: &[u64],
     right: &[u64],
-    budget: &mut Budget<'_, '_>,
-) -> Result<Ordering, BudgetError> {
+    budget: &mut Budget<'_, '_, Q>,
+) -> Result<Ordering, BudgetError<Q::Error>> {
     for (&left, &right) in left.iter().zip(right) {
         budget.charge(1)?;
         if left != right {
@@ -556,13 +580,13 @@ struct Keys<'a> {
 }
 
 impl Keys<'_> {
-    fn compare(
+    fn compare<Q: Quota + ?Sized>(
         &self,
         left: usize,
         right: usize,
         descending: bool,
-        budget: &mut Budget<'_, '_>,
-    ) -> Result<Ordering, BudgetError> {
+        budget: &mut Budget<'_, '_, Q>,
+    ) -> Result<Ordering, BudgetError<Q::Error>> {
         let a = &self.bounds[left];
         let b = &self.bounds[right];
         let count = scalar(a.cardinality, b.cardinality, budget)?;
@@ -612,14 +636,14 @@ impl Keys<'_> {
     }
 }
 
-fn greedy(
+fn greedy<Q: Quota + ?Sized>(
     bounds: &[Bound],
     rows: &[usize],
     selected: &mut Vec<usize>,
     union: &mut [u64],
     storage: &mut Storage,
-    budget: &mut Budget<'_, '_>,
-) -> Result<Range<usize>, BudgetError> {
+    budget: &mut Budget<'_, '_, Q>,
+) -> Result<Range<usize>, BudgetError<Q::Error>> {
     clear(union, budget)?;
     budget.charge(1)?;
     let first = selected.len();
@@ -640,15 +664,15 @@ fn greedy(
 /// upper-descending order, then publish their prescribed Cartesian attempts.
 /// The caller already admitted the four-range workspace; all borrowed order
 /// slices refer to the same carrier and this helper retains no new owner.
-fn propose_carrier(
+fn propose_carrier<Q: Quota + ?Sized>(
     bounds: &[Bound],
     orders: [&[usize]; 4],
     selected: &mut Vec<usize>,
     proposals: &mut Vec<Proposal>,
     union: &mut [u64],
     storage: &mut Storage,
-    budget: &mut Budget<'_, '_>,
-) -> Result<(), BudgetError> {
+    budget: &mut Budget<'_, '_, Q>,
+) -> Result<(), BudgetError<Q::Error>> {
     let lists = [
         greedy(bounds, orders[0], selected, union, storage, budget)?,
         greedy(bounds, orders[1], selected, union, storage, budget)?,
@@ -669,22 +693,32 @@ fn propose_carrier(
     Ok(())
 }
 
+/// Allocate the source-order row indices before carrier and bound ordering.
+fn row_indices<Q: Quota + ?Sized>(
+    count: usize,
+    storage: &mut Storage,
+    budget: &mut Budget<'_, '_, Q>,
+) -> Result<Vec<usize>, BudgetError<Q::Error>> {
+    let mut rows = storage.reserve(count, budget)?;
+    for row in 0..count {
+        budget.charge(2)?;
+        rows.push(row);
+    }
+    Ok(rows)
+}
+
 /// Complete the four deterministic proposals for every support carrier before
 /// checking them. Neither a guarded atom nor greedy success changes a carrier.
-fn discover(
+fn discover<Q: Quota + ?Sized>(
     bounds: &[Bound],
     atom_count: usize,
     counts: &mut Counts,
     storage: &mut Storage,
-    budget: &mut Budget<'_, '_>,
-) -> Result<(Vec<usize>, Vec<Proposal>), BudgetError> {
+    budget: &mut Budget<'_, '_, Q>,
+) -> Result<PartitionProposals, BudgetError<Q::Error>> {
     let components = components(bounds, atom_count, storage, budget)?;
-    let (guard_keys, literals) = guard_keys(bounds, storage, budget)?;
-    let mut members = storage.reserve(bounds.len(), budget)?;
-    for row in 0..bounds.len() {
-        budget.charge(2)?;
-        members.push(row);
-    }
+    let guards = guard_keys(bounds, storage, budget)?;
+    let mut members = row_indices(bounds.len(), storage, budget)?;
     let mut scratch = storage.filled(bounds.len(), 0usize, 1, budget)?;
     sort(
         &mut members,
@@ -712,8 +746,8 @@ fn discover(
     storage.admit_record(size_of::<[Range<usize>; 4]>() as u128, budget)?;
     let keys = Keys {
         bounds,
-        guards: &guard_keys,
-        literals: &literals,
+        guards: &guards.keys,
+        literals: &guards.literals,
     };
     let mut first = 0;
     while first < members.len() {
@@ -774,18 +808,21 @@ fn discover(
     storage.release(members)?;
     storage.release(scratch)?;
     storage.release(components)?;
-    storage.release(guard_keys)?;
-    storage.release(literals)?;
-    Ok((selected, proposals))
+    storage.release(guards.keys)?;
+    storage.release(guards.literals)?;
+    Ok(PartitionProposals {
+        selected,
+        proposals,
+    })
 }
 
-fn retain(
+fn retain<Q: Quota + ?Sized>(
     families: &mut Families,
     lower: &[usize],
     upper: &[usize],
     storage: &mut Storage,
-    budget: &mut Budget<'_, '_>,
-) -> Result<usize, BudgetError> {
+    budget: &mut Budget<'_, '_, Q>,
+) -> Result<usize, BudgetError<Q::Error>> {
     budget.charge(2)?;
     let pair = families.pairs.len();
     let first = families.occurrences.len();
@@ -850,12 +887,12 @@ fn retain(
 /// The first checked root contradiction returns before later checks or index
 /// construction. All remaining family occurrences get the shared incidence
 /// index, including every original guard occurrence and each repeated pair use.
-pub(super) fn prepare(
+pub(super) fn prepare<Q: Quota + ?Sized>(
     bounds: &[Bound],
     atom_count: usize,
     storage: &mut Storage,
-    budget: &mut Budget<'_, '_>,
-) -> Result<Prepared, BudgetError> {
+    budget: &mut Budget<'_, '_, Q>,
+) -> Result<Prepared, BudgetError<Q::Error>> {
     let width = atom_count.div_ceil(128) * 2;
     for bound in bounds {
         budget.charge(1)?;
@@ -879,7 +916,10 @@ pub(super) fn prepare(
     if bounds.is_empty() {
         return Ok(Prepared::Families(families));
     }
-    let (selected, proposals) = budget.in_phase(super::work::Phase::Discovery, |budget| {
+    let PartitionProposals {
+        selected,
+        proposals,
+    } = budget.in_phase(super::work::Phase::Discovery, |budget| {
         discover(bounds, atom_count, &mut families.counts, storage, budget)
     })?;
     let mut lower_union = Words::new(storage.filled(width, 0u64, 1, budget)?);

@@ -1958,8 +1958,9 @@ bounded-stop contract.
 The Lean laws do not prove the scheduler's progress or Rust memory ordering.
 
 Original and frozen `Narrower` operations expose metered entry points returning
-an independent `NarrowingAttempt` receipt. Narrowing reserves permits from
-the injected SAT budget through a `NarrowingQuota`, at most `NARROWING_BATCH`
+an independent `NarrowingAttempt<Failure<Q::Error>>` receipt. The common
+`zetesis_algebra::Meter` reserves permits from the injected search budget
+through a typed `Quota`, at most `NARROWING_BATCH`
 (256) at a time, and spends one before each charged read, so the shared
 ceiling bounds execution itself. Cancellation and deadlines are polled at each
 reservation, so at most `NARROWING_BATCH` charged reads apart. A budget grants
@@ -1967,16 +1968,22 @@ what remains when fewer permits than requested do, so a refused reservation
 prevents the same read per-read charging would; all earlier reads remain in the
 attempt and joined region counters even on a stop. Unspent permits are refunded
 when narrowing returns, so the receipt and the shared ledger count exactly the
-reads made. The local
-`RegionLimits` APIs wrap the same closure. Preservation of semantic narrowing
+reads made. The failure carrier preserves the caller's original payload; local
+stops retain their narrower-specific mapping. The stable adapter has no saved
+last-error slot. The local `RegionLimits` APIs wrap the same closure and meter,
+with their existing polling boundaries. Preservation of semantic narrowing
 still depends on `FormulaBounds` and `FerrarisMask`; permit conservation does
 not prove the reading rules or knowledge ownership. Prefix tests for original
 and frozen narrowing and a shared one-permit regression exercise the Rust
 admission/receipt boundary.
 
-Candidate composition uses `Narrower::propagate_known_reserved` to close the
-original theory, then each permanent restriction and the active bound. Each
-subject drains its propagation and support queues before returning `Fixed`.
+Candidate composition uses the private `zetesis_stable::subject::Subject<C>`
+interface and `joint` driver. Its eager adapters call
+`Narrower::propagate_known_reserved` to close the original theory, then each
+permanent restriction and the active bound. Each eager subject drains its
+propagation and support queues before reporting its local result. A streamed
+subject may instead decide one fresh atom and immediately return to eager
+closure. Only a complete late pass without changes establishes joint agreement.
 If no later subject changes the region, all preceding closures remain valid:
 their only shared mutable input is the region's decisions. A later restriction
 or source consequence that decides an atom restarts from the original theory.
@@ -1984,6 +1991,16 @@ This stopping condition depends on complete per-subject closure, exact changed
 flags and independent knowledge; those remain Rust correspondence obligations.
 The semantic preservation laws do not establish this concrete loop's fixed point
 or its work and interruption prefixes.
+
+The shared `SubjectAttempt` publishes each attempt's search counts before
+inspecting its result, including on a failed attempt. A streamed update checks
+the cumulative receipt before polling, spending its existing one-unit
+propagation charge and mutating the mask. It spends no split decision. Source
+work, diagnostics and the retained source checker remain separately owned.
+The frozen adapter performs its existing single narrowing/selection attempt
+and publishes preference only after accounting; it has no candidate components.
+These concrete sequencing and ownership claims require Rust validation, not
+just the abstract Subject laws.
 
 At that joint fixed point, the `Knowledge` preference operations select once,
 ranking the original theory's atomic choice heads first and then the unknown-parent
@@ -2039,12 +2056,12 @@ to these pointwise applications remain implementation obligations.
 | Object and laws | Is a | Rust today | Remaining correspondence |
 | --- | --- | --- | --- |
 | `Zetesis.Region` in `Search`; `Algebra.inside_refl`, `inside_trans`, `inside_antisymm` | An interval of interpretations; under `FormulaBounds.Inside`, the precision order, a poset, so a thin category | `zetesis_algebra::region::Region` | The region's word representation (`Words`); that the held and possible words denote `lower` and `upper` |
-| `Class`: `AnswerSetsSought`, `Countermodels` | A set of interpretations | Implicit: the candidate walk's models still sought, and the reduct query's subsets of the candidate | Subjects typed by their class in Rust |
-| `Subject`; `Subject.sound_of_narrower`, `Subject.apply_sound`, `Subject.narrow_ideal` | A monotone inflationary map of the region poset: a pointed endofunctor of the thin category. A subject lies between its region and the region's ideal narrowing, the abstraction of the class's members under a Galois insertion | `zetesis_ferraris::OriginalSubject` and `FrozenSubject`, and the rules of `Narrower::narrow_known` | A crate-private subject interface, typed by class, with each rule family an instance |
-| `joint`; `joint_closed`, `joint_least`, `joint_extensive`, `joint_monotone`, `joint_idempotent`, `joint_sound`, `joint_more_subjects`, `terminal_agreement`, `Reaches.eq_joint`, `fair_iteration_reaches_joint`, `refines_wf` | A closure operator on the region poset, that is, an idempotent monad on its thin category; the closed regions are its algebras. `Reaches.eq_joint` and `fair_iteration_reaches_joint` are the chaotic iteration theorem (Apt 1999) | The joint loop `narrow` in `zetesis-stable`'s `ferraris/regions.rs`, which ranks open atoms only after all subjects agree | That the loop applies each subject until none decides more, within its work bound; its order is then immaterial by `terminal_agreement`, for a fixed family. The candidate subjects change during a walk (learned rows, the bound, added restrictions, declined allowances), so answer sets stay identical across schedules while regions and trees do so only with those held fixed. The split is chosen from the knowledge after the fixed point, so the same region gives the same split only if the Rust closure equals `FormulaBounds.Known`'s inductive closure |
+| `Class`: `AnswerSetsSought`, `Countermodels` | A set of interpretations | Sealed markers in `zetesis_algebra`, indexing Ferraris's `Knowledge` and private reading context; frozen execution cannot borrow the candidate ledger | Markers separate kinds of search, not particular theories, candidates or restriction generations; their runtime identities and semantic class correspondence remain obligations |
+| `Subject`; `Subject.sound_of_narrower`, `Subject.apply_sound`, `Subject.narrow_ideal` | A monotone inflationary map of the region poset: a pointed endofunctor of the thin category. A subject lies between its region and the region's ideal narrowing, the abstraction of the class's members under a Galois insertion | Private `zetesis_stable::subject::Subject<C>` applications: original, restriction, bound and streamed candidate adapters, and a frozen adapter over Ferraris's class-indexed readings | Each concrete rule family's soundness and knowledge correspondence; a one-consequence streamed result is progress, not a completed Subject closure |
+| `joint`; `joint_closed`, `joint_least`, `joint_extensive`, `joint_monotone`, `joint_idempotent`, `joint_sound`, `joint_more_subjects`, `terminal_agreement`, `Reaches.eq_joint`, `fair_iteration_reaches_joint`, `refines_wf` | A closure operator on the region poset, that is, an idempotent monad on its thin category; the closed regions are its algebras. `Reaches.eq_joint` and `fair_iteration_reaches_joint` are the chaotic iteration theorem (Apt 1999) | Private `zetesis_stable::subject::joint`, called by candidate `ferraris::regions::narrow`; the caller ranks open atoms only after eager and late agreement | That the loop applies each subject until none decides more, within its work bound; its order is then immaterial by `terminal_agreement`, for a fixed family. The candidate subjects change during a walk (learned rows, the bound, added restrictions, declined allowances), so answer sets stay identical across schedules while regions and trees do so only with those held fixed. The split is chosen from the knowledge after the fixed point, so the same region gives the same split only if the Rust closure equals `FormulaBounds.Known`'s inductive closure |
 | Walk: a class, subjects, a leaf decision and a schedule. `Search.CoverageTree` certifies it and `Frontier.Pending.Walk` steps it; `Subject.node`, `LeafVerdict`, `LeafVerdict.node`, `answerSetVerdict`, `countermodelVerdict` | A recursive coalgebra whose unfold is the covering tree. A decided region no subject refutes is a candidate; the leaf decision accepts it, refutes it or leaves it undecided, and L2 (`CoverageTree.mem_outputs_iff`) is about accepted leaves | `zetesis_algebra::walk::Walk`, and `zetesis-stable`'s parallel and slate walks, whose `leaf` runs the class certificate or the reduct query; the reduct query skips the leaf equal to the candidate and validates every other leaf independently | One `Walk`, with the parallel and slate walks as its schedules and the leaf decision part of it; an interrupted leaf decision stays undecided |
 | `AxisFolds.Reduction`, and `FoldVerdict` for a walk that may stop; `foldVerdict_absorbed`, `foldVerdict_complete`, `foldVerdict_empty`, `foldVerdict_undecided`, `foldVerdict_without_absorber`, `inner_verdict`, `answer_sets_nested`, `countermodel_verdict_independent` | A commutative monoid, optionally with a zero; a fold is a monoid homomorphism. A fold decides early only at a zero and otherwise only on completion; an empty family is never the unit, and `min` decides only on completion. The answer sets are a nested walk whose inner `any` stops at the first countermodel | The private `Fold` of `zetesis-solve`'s `world_view/fold.rs`, a verdict protocol with witnesses, completion and an empty family, and the reduct query's stop at a countermodel | `Reduction` stays the monoid; the verdict protocol corresponds to `FoldVerdict`. Their separation follows the ownership migration, with answer-specific accumulators remaining in `zetesis-solve`. Early decision over a world view needs an idempotent reduction or distinct members |
-| Meter | A cost monoid with a ceiling | `Budget`, `BudgetQuota`, `NarrowingQuota`, `RegionLimits` and the other limit types | One meter; receipts charge the work performed. Not stated in Lean |
+| Meter | A cost monoid with a ceiling | `zetesis_algebra::Meter`, with local or typed `Quota` admission and `Failure` preserving refusal identity; `Budget` supplies the existing search account | `WorkCharge` and `ChargeCadence` describe charge traces. Concrete grants, refunds, failure prefixes and exact exit settlement remain Rust correspondence obligations; migration of other resource dimensions is still pending |
 
 The shared word kernels now live in `zetesis_algebra::words`; their denotation
 still rests on the `PackedInterpretations` laws and the concrete Rust
@@ -2069,14 +2086,17 @@ The subjects built from the library's laws:
 | Instance | Law it rests on | Rust |
 | --- | --- | --- |
 | `readings`, and from it `original` and `restriction` | `FormulaBounds.known_sound`, `known_mono` | The original subject's readings and knowledge; a restriction, the objective bound among them, read without producers |
-| `frozen`, the whole of `countermodelSubjects` | `known_sound` over the frozen reduct, and `ReductRegions.masked_known_sound` for propagation under the candidate's mask | `zetesis_ferraris::FrozenSubject`. The reduct query builds it and fresh knowledge from the candidate alone; that the countermodel walk takes only the theory and the candidate, with the meter, and accepts no supplied subject or root state (today `Walk::with_state` can take one), is an obligation. Class markers on a Rust subject trait would name the kind of class, not bind the candidate or the state; indexing ferraris's subject and knowledge types by class, so the learning field exists only for the candidate class, is a later step |
+| `frozen`, the whole of `countermodelSubjects` | `known_sound` over the frozen reduct, and `ReductRegions.masked_known_sound` for propagation under the candidate's mask | The private frozen adapter reads `zetesis_ferraris::FrozenSubject`. The reduct query takes the existing authenticated `FormulaEvaluation`, derives its theory, candidate and frozen truth, and constructs its adapter, subset region and fresh frozen knowledge internally. It accepts no supplied subject or root state. Published query continuations retain their own authenticated entries; they are not new root constructors. Ferraris now indexes its knowledge and private reading context by the sealed class markers. The frozen closure borrows only common worker scratch; its learning capability is unit. A candidate closure can borrow the worker-owned ledger, which is never copied into regional knowledge. The marker does not bind a particular theory, candidate or state; the existing runtime ownership checks remain necessary |
 | `row` | `LearnedRegions.consequence_row_narrows` | The learned-row ledger's narrowing, and algebraic forcing rows (`AlgebraicRows.equation_forces_true`, `equation_forces_false`) |
 | `exclusion`, `doubleCount`, through `refuting` | `AlgebraicRows.excludes_region`, `double_count_excludes_region` | Algebraic refutations, a recognized parity row's exclusion and the double count |
 
-The support cut (`FormulaBounds.unsupported_cut_with_choices`), the streamed
-constraints (`StreamedRegions.scan_refutes`) and the objective bound's own
-lower-bound reasoning (`RequiredChoiceCosts.lower_bound_preserves_answer_sets_strict`)
-are not yet subjects in `Algebra`. The approximation-fixpoint reading is a frame,
+The support cut (`FormulaBounds.unsupported_cut_with_choices`) and the objective
+bound's own lower-bound reasoning
+(`RequiredChoiceCosts.lower_bound_preserves_answer_sets_strict`) still require
+their full Subject correspondence. `StreamedSubjects` constructs the elementary
+subjects of authenticated original constraints and relates completed scans to
+closure; its concrete cursor refinement remains separate. The
+approximation-fixpoint reading is a frame,
 not a claim: regions are its consistent pairs, but downward propagation, learned
 rows and algebraic rows are not approximators of an immediate-consequence
 operator, so the joint fixed point is a sound closure relative to a class.
@@ -3348,6 +3368,24 @@ pivot cuts it. `unit_preserves_models` and `unit_preserves_answers` retain the
 same original theory and its full satisfaction and reduct obligations. A second
 open occurrence of an aliased atom blocks this conservative test, independent of
 sign. This does not prove completeness of Rust's selected positive-pivot queries.
+
+[`StreamedSubjects`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/StreamedSubjects.lean)
+connects these updates to the named algebra. `occurrence_row` authenticates each
+prefix/pivot/suffix row without merging repeated occurrences; `body_excludes`
+supplies the full-body exclusion. `fresh_step_reaches` identifies a validated
+unit update as one elementary step. It does not claim that the first consequence
+selected by an ordered scan is itself a monotone closure.
+
+`complete_no_consequence_closed` requires a fixed finite family of authenticated
+instances, successful scalar results for every instance, complete scan coverage
+and no consequence throughout that scan. A failed or unvisited scalar, an empty
+pending queue or a partial scan cannot establish closure. `grouped_joint_eq`
+shows that packaging the completed family as a Subject preserves the joint
+region; it does not equate intermediate states, costs or failure prefixes.
+These are original-model laws, inherited by sought answer sets through class
+inclusion, never transported to a frozen reduct by relabeling. Rust still must
+establish instance coverage, cursor lineage, witness identity, publication
+freshness and the separate source/search receipt boundaries.
 
 `batch_preserves_answers` permits a finite list of consequences proved against
 one immutable region to be applied at any narrower region. The prefix law does

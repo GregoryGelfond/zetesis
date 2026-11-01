@@ -42,6 +42,8 @@
 //! Frozen subjects skip this bridge: these are original-subject consequences,
 //! never an assumption about arbitrary frozen-reduct interpretations.
 
+use zetesis_algebra::{Failure, Quota};
+
 use zetesis_algebra::words::Words;
 
 use std::cmp::Ordering;
@@ -49,7 +51,7 @@ use std::num::NonZeroUsize;
 
 use zetesis_algebra::Stop;
 
-use crate::regions::{Chain, Closure, Count, Narrower, Step, Work, bit, chain_position};
+use crate::regions::{Chain, Closure, Count, Meter, Narrower, Step, bit, chain_position};
 
 use super::{Adjacency, Row, State, reserve};
 
@@ -125,7 +127,11 @@ impl Connectives {
     }
 
     /// Find a processed chain's one anchor, charging each reverse-index probe.
-    fn rows(&self, chain: usize, work: &mut Work<'_>) -> Result<&[usize], Stop> {
+    fn rows<Q: Quota + ?Sized>(
+        &self,
+        chain: usize,
+        work: &mut Meter<'_, Q>,
+    ) -> Result<&[usize], Failure<Q::Error>> {
         let Some(position) = find(&self.by_chain, chain, |&(chain, _)| chain, work)? else {
             return Ok(&[]);
         };
@@ -139,7 +145,11 @@ impl Connectives {
     }
 
     /// A cone node is only a discovery key, not proof of a row relation.
-    fn rows_at(&self, node: usize, work: &mut Work<'_>) -> Result<&[usize], Stop> {
+    fn rows_at<Q: Quota + ?Sized>(
+        &self,
+        node: usize,
+        work: &mut Meter<'_, Q>,
+    ) -> Result<&[usize], Failure<Q::Error>> {
         let Some(anchor) = find(&self.anchors, node, |&condition| condition, work)? else {
             return Ok(&[]);
         };
@@ -147,7 +157,11 @@ impl Connectives {
     }
 
     /// Find a native row's anchor, charging each immutable key probe.
-    fn chains(&self, first: usize, work: &mut Work<'_>) -> Result<&[usize], Stop> {
+    fn chains<Q: Quota + ?Sized>(
+        &self,
+        first: usize,
+        work: &mut Meter<'_, Q>,
+    ) -> Result<&[usize], Failure<Q::Error>> {
         let Some(anchor) = find(&self.anchors, first, |&condition| condition, work)? else {
             return Ok(&[]);
         };
@@ -224,12 +238,12 @@ fn chain_anchors(
 }
 
 /// A shrinking binary-search interval; charge before reading each candidate.
-fn find<T>(
+fn find<T, Q: Quota + ?Sized>(
     values: &[T],
     wanted: usize,
     key: impl Fn(&T) -> usize,
-    work: &mut Work<'_>,
-) -> Result<Option<usize>, Stop> {
+    work: &mut Meter<'_, Q>,
+) -> Result<Option<usize>, Failure<Q::Error>> {
     let mut start = 0;
     let mut end = values.len();
     while start < end {
@@ -248,11 +262,11 @@ fn find<T>(
 /// Distinct leaves at or below the prefix's last condition must all belong to
 /// the prefix, and their count must equal its length. Thus no earlier condition
 /// is missing or replaced by an unrelated leaf. Larger leaves are extensions.
-fn exact_prefix(
+fn exact_prefix<Q: Quota + ?Sized>(
     terms: &[(usize, i128)],
     leaves: &[usize],
-    work: &mut Work<'_>,
-) -> Result<bool, Stop> {
+    work: &mut Meter<'_, Q>,
+) -> Result<bool, Failure<Q::Error>> {
     let prefix = &terms[..terms.len().min(leaves.len())];
     let Some(&(last, _)) = prefix.last() else {
         return Ok(false);
@@ -272,7 +286,11 @@ fn exact_prefix(
 
 /// The candidate interval shrinks on every comparison. Each actual term read
 /// consumes work, including the comparison that finds or rejects membership.
-fn contains(terms: &[(usize, i128)], leaf: usize, work: &mut Work<'_>) -> Result<bool, Stop> {
+fn contains<Q: Quota + ?Sized>(
+    terms: &[(usize, i128)],
+    leaf: usize,
+    work: &mut Meter<'_, Q>,
+) -> Result<bool, Failure<Q::Error>> {
     Ok(find(terms, leaf, |&(condition, _)| condition, work)?.is_some())
 }
 
@@ -287,11 +305,11 @@ fn contains(terms: &[(usize, i128)], leaf: usize, work: &mut Work<'_>) -> Result
 /// This is a metered read of existing geometry, not a retained reachability
 /// index. It allocates nothing and leaves coverage/containment authentication
 /// unchanged. An interrupted applicability query changes no logical state.
-fn needs_ancestor_discovery(
+fn needs_ancestor_discovery<Q: Quota + ?Sized>(
     index: &Narrower,
     anchor: usize,
-    work: &mut Work<'_>,
-) -> Result<bool, Stop> {
+    work: &mut Meter<'_, Q>,
+) -> Result<bool, Failure<Q::Error>> {
     if index.witness_chains.is_empty() {
         return Ok(false);
     }
@@ -326,17 +344,17 @@ fn useful_bound(state: &State, value: bool, bound: i128) -> bool {
     }
 }
 
-impl<C: Count> Closure<'_, C> {
+impl<W: Count, C: crate::regions::ReadingClass> Closure<'_, W, C> {
     /// A processed true Boolean prefix supplies a lower bound to its native
     /// extension; a false Boolean extension supplies an exclusive upper bound
     /// to its native prefix. Each candidate is authenticated before transport.
-    pub(in crate::regions) fn threshold_connective(
+    pub(in crate::regions) fn threshold_connective<Q: Quota + ?Sized>(
         &mut self,
         index: &Narrower,
         chain: usize,
         value: bool,
-        work: &mut Work<'_>,
-    ) -> Result<Step, Stop> {
+        work: &mut Meter<'_, Q>,
+    ) -> Result<Step, Failure<Q::Error>> {
         let source = &index.chains[chain];
         if value != source.disjunction {
             // teach_chain already forced every leaf of a true And or false Or.
@@ -446,12 +464,12 @@ impl<C: Count> Closure<'_, C> {
     /// Compose native-prefix transport with Boolean endpoints discovered for
     /// the same dirty requirement. Both consume original row state and stop at
     /// the first contradiction, without charging the remaining neighbours.
-    pub(in crate::regions) fn threshold_requirements(
+    pub(in crate::regions) fn threshold_requirements<Q: Quota + ?Sized>(
         &mut self,
         index: &Narrower,
         row: usize,
-        work: &mut Work<'_>,
-    ) -> Result<Step, Stop> {
+        work: &mut Meter<'_, Q>,
+    ) -> Result<Step, Failure<Q::Error>> {
         let mut step = self.threshold_prefixes(index, row, work)?;
         if step == Step::Contradiction {
             return Ok(step);

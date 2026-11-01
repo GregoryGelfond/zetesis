@@ -1219,7 +1219,6 @@ impl StableModels {
         increment(&mut self.batch.statistics.completion_calls)?;
         let result = completion.complete(
             super::completion::Input {
-                theory: &self.theory,
                 candidates: &self.batch.pending,
                 verdicts,
                 limits: self.limits,

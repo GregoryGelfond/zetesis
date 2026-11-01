@@ -5,6 +5,8 @@
 //! ordinals from the exact admitted owner before trusting an equation. No
 //! formula, atom coordinate or reduct is rewritten.
 
+use zetesis_algebra::Quota;
+
 use zetesis_algebra::words::Words;
 
 use crate::{AdmissionError, NodeView, Theory};
@@ -54,11 +56,11 @@ pub(super) const CHECK_SCRATCH_BYTES: usize =
 
 /// Read a signed atom without recursively interpreting another formula shape.
 /// A previously read view is consumed directly, avoiding another source read.
-pub(super) fn literal(
+pub(super) fn literal<Q: Quota + ?Sized>(
     theory: &Theory,
     view: NodeView<'_>,
-    budget: &mut Budget<'_, '_>,
-) -> Result<Option<Literal>, BudgetError> {
+    budget: &mut Budget<'_, '_, Q>,
+) -> Result<Option<Literal>, BudgetError<Q::Error>> {
     budget.charge(1)?; // inspect the source kind
     let (atom, positive) = match view {
         NodeView::Atom(atom) => (atom, true),
@@ -93,11 +95,11 @@ pub(super) fn literal(
 
 /// Authenticate only the canonical truth formula, falsum implying falsum.
 /// Other tautologies are deliberately outside this source view.
-pub(super) fn canonical_truth(
+pub(super) fn canonical_truth<Q: Quota + ?Sized>(
     theory: &Theory,
     view: NodeView<'_>,
-    budget: &mut Budget<'_, '_>,
-) -> Result<bool, BudgetError> {
+    budget: &mut Budget<'_, '_, Q>,
+) -> Result<bool, BudgetError<Q::Error>> {
     budget.charge(1)?;
     let NodeView::Implies(left, right) = view else {
         budget.charge(1)?;
@@ -118,12 +120,12 @@ pub(super) fn canonical_truth(
 /// Each accepted wrapper moves to a strictly earlier node, so the loop is
 /// bounded by the admitted DAG. It neither flattens a hidden conjunction nor
 /// treats a different tautology as canonical truth.
-pub(super) fn clause_literal<'a>(
+pub(super) fn clause_literal<'a, Q: Quota + ?Sized>(
     theory: &'a Theory,
     mut node: usize,
     mut view: NodeView<'a>,
-    budget: &mut Budget<'_, '_>,
-) -> Result<Option<Literal>, BudgetError> {
+    budget: &mut Budget<'_, '_, Q>,
+) -> Result<Option<Literal>, BudgetError<Q::Error>> {
     loop {
         budget.charge(1)?;
         let NodeView::Implies(left, right) = view else {
@@ -149,12 +151,12 @@ pub(super) fn clause_literal<'a>(
 /// declared signed-clause views. Duplicate atoms still decline the source,
 /// including opposite polarities. The exact constant-true body has no atoms
 /// and forbids its sole empty pattern.
-pub(super) fn clause(
+pub(super) fn clause<Q: Quota + ?Sized>(
     theory: &Theory,
     ordinal: usize,
     storage: &mut Storage,
-    budget: &mut Budget<'_, '_>,
-) -> Result<Option<Clause>, BudgetError> {
+    budget: &mut Budget<'_, '_, Q>,
+) -> Result<Option<Clause>, BudgetError<Q::Error>> {
     budget.charge(2)?; // authenticate root ordinal and copy its node identity
     let root = *theory
         .roots()
@@ -257,13 +259,13 @@ pub(super) fn clause(
 /// makes the body false; unknown atoms retain both possible truth values.
 ///
 /// Callers account for `CONDITIONED_SCRATCH_BYTES` while this record is built.
-pub(super) fn conditioned_clause(
+pub(super) fn conditioned_clause<Q: Quota + ?Sized>(
     theory: &Theory,
     facts: &CheckedRootFacts,
     ordinal: usize,
     storage: &mut Storage,
-    budget: &mut Budget<'_, '_>,
-) -> Result<Option<Clause>, BudgetError> {
+    budget: &mut Budget<'_, '_, Q>,
+) -> Result<Option<Clause>, BudgetError<Q::Error>> {
     let Some(original) = clause(theory, ordinal, storage, budget)? else {
         return Ok(None);
     };
@@ -306,15 +308,15 @@ pub(super) fn conditioned_clause(
 
 /// Reread the claimed source roots and check the equation at every
 /// allowed pattern. The proposal's cached forbidden patterns are never read.
-pub(super) fn check_clause_equation(
+pub(super) fn check_clause_equation<Q: Quota + ?Sized>(
     theory: &Theory,
     facts: &CheckedRootFacts,
     roots: &[Clause],
     support: Support,
     (words, constant): (&[u64], bool),
     storage: &mut Storage,
-    budget: &mut Budget<'_, '_>,
-) -> Result<bool, BudgetError> {
+    budget: &mut Budget<'_, '_, Q>,
+) -> Result<bool, BudgetError<Q::Error>> {
     budget.charge(1)?;
     if !facts.belongs_to(theory) {
         budget.charge(1)?;
@@ -358,12 +360,12 @@ pub(super) fn check_clause_equation(
 
 /// Check dense coefficients against an authenticated bounded coordinate map.
 /// Every padded word is inspected; no coefficient outside that map is accepted.
-pub(super) fn local_coefficients(
+pub(super) fn local_coefficients<Q: Quota + ?Sized>(
     theory: &Theory,
     support: Support,
     words: &[u64],
-    budget: &mut Budget<'_, '_>,
-) -> Result<Option<u8>, BudgetError> {
+    budget: &mut Budget<'_, '_, Q>,
+) -> Result<Option<u8>, BudgetError<Q::Error>> {
     budget.charge(1)?;
     if support.len > MAX_SUPPORT {
         budget.charge(1)?;
@@ -403,13 +405,13 @@ pub(super) fn local_coefficients(
 }
 
 /// The independent finite-pattern check shared by both parity sources.
-pub(super) fn implied_by_table(
+pub(super) fn implied_by_table<Q: Quota + ?Sized>(
     forbidden: &[u64; 4],
     support_len: usize,
     coefficients: u8,
     constant: bool,
-    budget: &mut Budget<'_, '_>,
-) -> Result<bool, BudgetError> {
+    budget: &mut Budget<'_, '_, Q>,
+) -> Result<bool, BudgetError<Q::Error>> {
     budget.charge(1)?;
     let extent = 1_u16 << support_len;
     for pattern in 0..extent {

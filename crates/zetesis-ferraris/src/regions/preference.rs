@@ -1,9 +1,11 @@
 //! Split ordering over already-maintained unknown-parent counts.
 
-use super::{ChoiceHeads, Knowledge, NarrowingQuota, PreferenceAttempt, Region, Width, Work};
-use zetesis_algebra::{Cancellation, Stop};
+use zetesis_algebra::{Failure, Quota};
 
-impl Knowledge {
+use super::{ChoiceHeads, Knowledge, Meter, PreferenceAttempt, Region, Width};
+use zetesis_algebra::Cancellation;
+
+impl<C: zetesis_algebra::Class> Knowledge<C> {
     fn unknown_count(&self, atom: usize) -> usize {
         match &self.width {
             Width::Compact16(known) => known.unknown.get(atom),
@@ -32,39 +34,44 @@ impl Knowledge {
     ///
     /// # Panics
     /// Panics if an open atom is outside either knowledge's universe.
-    pub fn preferred_atom_with_secondary_reserved(
+    pub fn preferred_atom_with_secondary_reserved<Q: Quota + ?Sized>(
         &self,
         region: &Region,
         choices: &ChoiceHeads,
         secondary: &Self,
         cancellation: &Cancellation,
-        quota: &mut dyn NarrowingQuota,
-    ) -> PreferenceAttempt {
-        let mut work = Work::reserved(quota);
+        work: &mut Meter<'_, Q>,
+    ) -> PreferenceAttempt<Failure<Q::Error>> {
+        let before = work.charged();
         let result = cancellation
             .poll()
-            .and_then(|()| self.preferred_with_secondary(region, choices, secondary, &mut work));
+            .map_err(Failure::from)
+            .and_then(|()| self.preferred_with_secondary(region, choices, secondary, work));
         work.refund();
         PreferenceAttempt {
             result,
-            work: work.spent(),
+            work: work.charged() - before,
         }
     }
 
-    fn read_unknown(&self, atom: usize, work: &mut Work<'_>) -> Result<usize, Stop> {
+    fn read_unknown<Q: Quota + ?Sized>(
+        &self,
+        atom: usize,
+        work: &mut Meter<'_, Q>,
+    ) -> Result<usize, Failure<Q::Error>> {
         work.tick()?;
         Ok(self.unknown_count(atom))
     }
 
-    fn preferred_with_secondary(
+    fn preferred_with_secondary<Q: Quota + ?Sized>(
         &self,
         region: &Region,
         choices: &ChoiceHeads,
         secondary: &Self,
-        work: &mut Work<'_>,
-    ) -> Result<Option<usize>, Stop> {
+        work: &mut Meter<'_, Q>,
+    ) -> Result<Option<usize>, Failure<Q::Error>> {
         let mut best: Option<(usize, usize, Option<usize>)> = None;
-        choices.try_for_each_eligible(region, |atom| {
+        choices.try_for_each_eligible(region, |atom| -> Result<(), Failure<Q::Error>> {
             let primary = self.read_unknown(atom, work)?;
             let Some((previous, degree, cached)) = best.as_mut() else {
                 best = Some((atom, primary, None));

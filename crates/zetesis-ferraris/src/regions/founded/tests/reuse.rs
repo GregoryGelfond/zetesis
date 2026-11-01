@@ -32,16 +32,16 @@ impl Program {
         region: &mut Region,
         knowledge: &mut Knowledge,
         scratch: &mut NarrowingScratch,
-        quota: &mut dyn NarrowingQuota,
+        quota: &mut dyn zetesis_algebra::Quota<Error = Stop>,
     ) -> NarrowingAttempt {
-        self.index.propagate_known_reserved(
+        crate::test_support::stop_narrowing(&self.index.propagate_known_reserved(
             OriginalSubject::carrier(&self.learning, Some(&self.producers)),
             region,
             knowledge,
             scratch,
             &Cancellation::default(),
-            quota,
-        )
+            &mut zetesis_algebra::Meter::reserved(quota),
+        ))
     }
 
     fn close(
@@ -92,7 +92,7 @@ impl Program {
                 assert!(candidates.insert(mask));
             }
         }
-        (candidates, scratch.founded.passes)
+        (candidates, scratch.common.founded.passes)
     }
 }
 
@@ -151,13 +151,13 @@ fn negative_seed() -> Theory {
 fn unchanged_knowledge_omits_repeated_passes() {
     let program = Program::new(seeded_cycle());
     let (mut region, mut knowledge, mut scratch) = program.closed();
-    assert_eq!(scratch.founded.passes, 1);
+    assert_eq!(scratch.common.founded.passes, 1);
     let bytes = knowledge.retained_bytes();
     for _ in 0..3 {
         let (result, statistics) = program.close(&mut region, &mut knowledge, &mut scratch);
         assert_eq!(result, Narrowing::Fixed { changed: false });
         assert_eq!(statistics.work, 0);
-        assert_eq!(scratch.founded.passes, 1);
+        assert_eq!(scratch.common.founded.passes, 1);
     }
     let mut child = region;
     assert!(child.hold(0));
@@ -165,8 +165,8 @@ fn unchanged_knowledge_omits_repeated_passes() {
     let mut other_worker = NarrowingScratch::default();
     program.close(&mut child, &mut inherited, &mut other_worker);
     assert!(child.is_held(0) && child.is_held(1));
-    assert_eq!(other_worker.founded.passes, 0);
-    assert_eq!(other_worker.founded.retained_bytes(), 0);
+    assert_eq!(other_worker.common.founded.passes, 0);
+    assert_eq!(other_worker.common.founded.retained_bytes(), 0);
     assert_eq!(inherited.retained_bytes(), bytes);
 }
 
@@ -174,14 +174,14 @@ fn unchanged_knowledge_omits_repeated_passes() {
 fn a_held_atom_can_invalidate_completed_foundation() {
     let program = Program::new(negative_seed());
     let (mut child, mut knowledge, mut scratch) = program.closed();
-    assert_eq!(scratch.founded.passes, 1);
+    assert_eq!(scratch.common.founded.passes, 1);
     assert!(child.hold(2));
     let (result, _) = program.close(&mut child, &mut knowledge, &mut scratch);
     assert_eq!(result, Narrowing::Fixed { changed: true });
     assert!(child.is_cut(0) && child.is_cut(1) && child.is_held(2));
     // The first changed pass cuts the cycle; a second pass completes after
     // ordinary propagation incorporates those cuts and their false nodes.
-    assert_eq!(scratch.founded.passes, 3);
+    assert_eq!(scratch.common.founded.passes, 3);
     assert!(completed(&knowledge));
 }
 
@@ -198,12 +198,12 @@ fn recycled_siblings_receive_only_parent_authority() {
             child.cut(2);
         }
         recycled.clone_from(&knowledge);
-        let before = scratch.founded.passes;
+        let before = scratch.common.founded.passes;
         program.close(&mut child, &mut recycled, &mut scratch);
         if held {
-            assert!(scratch.founded.passes > before);
+            assert!(scratch.common.founded.passes > before);
         } else {
-            assert_eq!(scratch.founded.passes, before);
+            assert_eq!(scratch.common.founded.passes, before);
         }
         assert_eq!(child.decision(0), Some(!held));
         assert_eq!(child.decision(1), Some(!held));
@@ -221,12 +221,13 @@ fn foreign_worker_scratch_supplies_no_completion() {
     let mut recycled = first_known.clone();
     recycled.clone_from(&second.index.knowledge());
     assert!(!completed(&recycled));
-    let before = scratch.founded.passes;
+    let before = scratch.common.founded.passes;
     second.close(&mut second_region, &mut recycled, &mut scratch);
     assert!(second_region.is_cut(0) && second_region.is_cut(1));
-    assert_eq!(scratch.founded.passes, before + 2);
+    assert_eq!(scratch.common.founded.passes, before + 2);
     assert!(
         scratch
+            .common
             .founded
             .owner
             .as_ref()
@@ -237,13 +238,13 @@ fn foreign_worker_scratch_supplies_no_completion() {
     // values from a worker whose last completed pass belonged to the second.
     recycled.clone_from(&first_known);
     first_region.hold(0);
-    let before = scratch.founded.passes;
+    let before = scratch.common.founded.passes;
     first.close(&mut first_region, &mut recycled, &mut scratch);
     assert!(first_region.is_held(0) && first_region.is_held(1));
-    assert_eq!(scratch.founded.passes, before);
+    assert_eq!(scratch.common.founded.passes, before);
     // The new narrowing discards foreign projection authority even though
     // inherited completion itself survives and needs no foundation pass.
-    assert!(scratch.founded.owner.is_none());
+    assert!(scratch.common.founded.owner.is_none());
 }
 
 #[test]
@@ -273,7 +274,8 @@ struct RefuseAfter {
     failure: Stop,
 }
 
-impl NarrowingQuota for RefuseAfter {
+impl zetesis_algebra::Quota for RefuseAfter {
+    type Error = Stop;
     fn reserve(&mut self, _wanted: u64) -> Result<u64, Stop> {
         if self.remaining == 0 {
             return Err(self.failure);
@@ -300,7 +302,7 @@ fn refused_passes_do_not_publish_completion() {
     for failure in [Stop::WorkLimit, Stop::Cancelled, Stop::Deadline] {
         for ceiling in 0..statistics.work {
             let (_, _, mut scratch) = program.closed();
-            let before = scratch.founded.passes;
+            let before = scratch.common.founded.passes;
             let mut input = parent.clone();
             input.hold(2);
             let mut partial = inherited.clone();
@@ -315,7 +317,7 @@ fn refused_passes_do_not_publish_completion() {
             );
             assert_eq!(attempt.result, Err(failure));
             assert_eq!(attempt.statistics.work, ceiling);
-            if scratch.founded.passes > before {
+            if scratch.common.founded.passes > before {
                 assert!(!completed(&partial));
                 interrupted_passes += 1;
             }
@@ -339,17 +341,17 @@ fn inherited_completion_still_polls_cancellation() {
     let (mut region, mut knowledge, mut scratch) = program.closed();
     let cancellation = Cancellation::default();
     cancellation.cancel();
-    let attempt = program.index.propagate_known_reserved(
+    let attempt = crate::test_support::stop_narrowing(&program.index.propagate_known_reserved(
         OriginalSubject::carrier(&program.learning, Some(&program.producers)),
         &mut region,
         &mut knowledge,
         &mut scratch,
         &cancellation,
-        &mut Allowance(0),
-    );
+        &mut zetesis_algebra::Meter::reserved(&mut Allowance(0)),
+    ));
     assert_eq!(attempt.result, Err(Stop::Cancelled));
     assert_eq!(attempt.statistics.work, 0);
-    assert_eq!(scratch.founded.passes, 1);
+    assert_eq!(scratch.common.founded.passes, 1);
 }
 
 #[test]
@@ -361,10 +363,11 @@ fn interrupted_projection_publishes_neither_index() {
             &program.owner,
             &program.index,
             &program.producers,
-            &mut Work::new(u64::MAX),
+            &mut Meter::local(u64::MAX),
         )
+        .map_err(zetesis_algebra::Failure::into_stop)
         .unwrap();
-    let mut complete = Work::new(u64::MAX);
+    let mut complete = Meter::local(u64::MAX);
     prepared
         .prepare_bodies(
             &program.owner,
@@ -372,35 +375,39 @@ fn interrupted_projection_publishes_neither_index() {
             &program.producers,
             &mut complete,
         )
+        .map_err(zetesis_algebra::Failure::into_stop)
         .unwrap();
     assert!(prepared.projected.is_some());
     for failure in [Stop::Cancelled, Stop::Deadline] {
-        for ceiling in 0..complete.spent() {
+        for ceiling in 0..complete.charged() {
             let mut scratch = Scratch::default();
             scratch
                 .prepare_bodies(
                     &program.owner,
                     &program.index,
                     &program.producers,
-                    &mut Work::new(u64::MAX),
+                    &mut Meter::local(u64::MAX),
                 )
+                .map_err(zetesis_algebra::Failure::into_stop)
                 .unwrap();
             let retained = scratch.retained_bytes();
             let mut quota = RefuseAfter {
                 remaining: ceiling,
                 failure,
             };
-            let mut work = Work::reserved(&mut quota);
+            let mut work = Meter::reserved(&mut quota);
             assert_eq!(
-                scratch.prepare_bodies(
-                    &program.owner,
-                    &program.index,
-                    &program.producers,
-                    &mut work
-                ),
+                scratch
+                    .prepare_bodies(
+                        &program.owner,
+                        &program.index,
+                        &program.producers,
+                        &mut work
+                    )
+                    .map_err(zetesis_algebra::Failure::into_stop),
                 Err(failure)
             );
-            assert_eq!(work.spent(), ceiling);
+            assert_eq!(work.charged(), ceiling);
             assert!(scratch.owner.is_none());
             assert!(scratch.projected.is_none());
             assert_eq!(scratch.retained_bytes(), retained);

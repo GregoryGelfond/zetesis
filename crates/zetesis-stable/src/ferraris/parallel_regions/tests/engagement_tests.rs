@@ -273,12 +273,12 @@ struct Pass {
 
 struct PassWorker(Arc<AtomicUsize>);
 
-impl crate::RegionFilter for Pass {
+impl crate::region_filter::tests::injection::Source for Pass {
     fn worker(
         &self,
         theory: &Theory,
         cancellation: &Cancellation,
-    ) -> Result<Box<dyn crate::RegionFilterWorker + '_>, Incomplete> {
+    ) -> Result<Box<dyn crate::region_filter::tests::injection::Worker + '_>, Incomplete> {
         cancellation.poll()?;
         if !theory.same_instance(&self.theory) {
             return Err(Incomplete::WrongTheory);
@@ -288,7 +288,7 @@ impl crate::RegionFilter for Pass {
     }
 }
 
-impl crate::RegionFilterWorker for PassWorker {
+impl crate::region_filter::tests::injection::Worker for PassWorker {
     fn check(
         &mut self,
         _: &Theory,
@@ -321,12 +321,12 @@ struct FaultyWorker {
     checked: usize,
 }
 
-impl crate::RegionFilter for Faulty {
+impl crate::region_filter::tests::injection::Source for Faulty {
     fn worker(
         &self,
         theory: &Theory,
         cancellation: &Cancellation,
-    ) -> Result<Box<dyn crate::RegionFilterWorker + '_>, Incomplete> {
+    ) -> Result<Box<dyn crate::region_filter::tests::injection::Worker + '_>, Incomplete> {
         cancellation.poll()?;
         if !theory.same_instance(&self.theory) {
             return Err(Incomplete::WrongTheory);
@@ -339,7 +339,7 @@ impl crate::RegionFilter for Faulty {
     }
 }
 
-impl crate::RegionFilterWorker for FaultyWorker {
+impl crate::region_filter::tests::injection::Worker for FaultyWorker {
     fn check(
         &mut self,
         _: &Theory,
@@ -377,7 +377,7 @@ impl Drop for FaultyWorker {
 fn handoff(
     theory: &Theory,
     certificate: Option<&Arc<Certification>>,
-    filter: Option<&Arc<dyn crate::RegionFilter>>,
+    filter: Option<&Arc<dyn crate::region_filter::tests::injection::Source>>,
     refuted: bool,
     skip: usize,
 ) -> (ParallelRegions, Vec<Vec<usize>>) {
@@ -389,7 +389,9 @@ fn handoff(
     }
     if let Some(filter) = filter {
         search
-            .set_filter(crate::region_filter::Filter::new(Arc::clone(filter)))
+            .set_filter(crate::region_filter::Filter::new(
+                crate::region_filter::Source::Fixture(Arc::clone(filter)),
+            ))
             .unwrap();
     }
     let cancellation = search.shared.cancellation.clone();
@@ -525,7 +527,7 @@ fn a_handoff_counts_the_coordinators_tight_checks_once() {
 fn a_filtered_handoff_prepares_at_most_one_checker_more_than_its_workers() {
     let theory = loop_beside_choices(3);
     let live = Arc::new(AtomicUsize::new(0));
-    let filter: Arc<dyn crate::RegionFilter> = Arc::new(Pass {
+    let filter: Arc<dyn crate::region_filter::tests::injection::Source> = Arc::new(Pass {
         theory: theory.clone(),
         live: Arc::clone(&live),
     });
@@ -811,11 +813,13 @@ fn a_failed_release_at_engagement_starts_no_thread() {
     let theory = tautologies(3);
     let (mut search, index) = walk(&theory, LATE);
     search
-        .set_filter(crate::region_filter::Filter::new(Arc::new(Faulty {
-            theory: theory.clone(),
-            panic_on_drop: true,
-            panic_at: Arc::new(AtomicUsize::new(0)),
-        })))
+        .set_filter(crate::region_filter::Filter::new(
+            crate::region_filter::Source::Fixture(Arc::new(Faulty {
+                theory: theory.clone(),
+                panic_on_drop: true,
+                panic_at: Arc::new(AtomicUsize::new(0)),
+            })),
+        ))
         .unwrap();
     let cancellation = search.shared.cancellation.clone();
     let mut budget = caller(&search, &cancellation);
@@ -841,11 +845,13 @@ fn a_panic_in_a_coordinator_step_merges_nothing_of_its_pull() {
     omit_producers_for_membership_test(&mut search);
     let panic_at = Arc::new(AtomicUsize::new(0));
     search
-        .set_filter(crate::region_filter::Filter::new(Arc::new(Faulty {
-            theory: theory.clone(),
-            panic_on_drop: false,
-            panic_at: Arc::clone(&panic_at),
-        })))
+        .set_filter(crate::region_filter::Filter::new(
+            crate::region_filter::Source::Fixture(Arc::new(Faulty {
+                theory: theory.clone(),
+                panic_on_drop: false,
+                panic_at: Arc::clone(&panic_at),
+            })),
+        ))
         .unwrap();
     let cancellation = search.shared.cancellation.clone();
     let mut budget = caller(&search, &cancellation);
@@ -954,10 +960,12 @@ fn configuration_is_refused_once_the_walk_has_begun() {
         .unwrap()
         .unwrap();
     assert_eq!(
-        search.set_filter(crate::region_filter::Filter::new(Arc::new(Pass {
-            theory: theory.clone(),
-            live: Arc::new(AtomicUsize::new(0)),
-        }))),
+        search.set_filter(crate::region_filter::Filter::new(
+            crate::region_filter::Source::Fixture(Arc::new(Pass {
+                theory: theory.clone(),
+                live: Arc::new(AtomicUsize::new(0)),
+            }))
+        )),
         Err(Incomplete::LateRegionFilter)
     );
     let candidate = Interpretation::new(&theory, []).unwrap();

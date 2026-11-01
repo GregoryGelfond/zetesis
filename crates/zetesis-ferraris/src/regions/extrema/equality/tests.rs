@@ -1,7 +1,7 @@
 //! Class identity is authenticated once, including fingerprint collisions.
 
 use super::EqualWitnesses;
-use crate::regions::{Work, chain_position};
+use crate::regions::{Meter, chain_position};
 use crate::test_support::push_committed;
 use crate::{
     AdmissionLimits, EvaluationLimits, EvaluationWorkspace, ExtremumCutRule, ExtremumRow,
@@ -45,7 +45,7 @@ fn chain(index: &Narrower, node: usize) -> usize {
 fn members(index: &Narrower, node: usize) -> Vec<usize> {
     let mut result = index
         .equal_extrema
-        .members(chain(index, node), &mut Work::new(u64::MAX))
+        .members(chain(index, node), &mut Meter::local(u64::MAX))
         .unwrap()
         .to_vec();
     result.sort_unstable();
@@ -112,9 +112,11 @@ fn repeated_class(atoms: usize) -> Theory {
 
 /// The reads a complete preparation of `index`'s classes makes.
 fn preparation_work(index: &Narrower) -> u64 {
-    let mut work = Work::new(u64::MAX);
-    EqualWitnesses::prepare_with_work(index, &mut work).unwrap();
-    work.spent()
+    let mut work = Meter::local(u64::MAX);
+    EqualWitnesses::prepare_with_work(index, &mut work)
+        .map_err(zetesis_algebra::Failure::into_stop)
+        .unwrap();
+    work.charged()
 }
 
 #[test]
@@ -150,19 +152,22 @@ fn authentication_refuses_every_incomplete_work_prefix() {
     let receipt = preparation_work(&index);
     // This checks the private metered operation, not a new constructor quota.
     for budget in 0..receipt {
-        let mut work = Work::new(budget);
+        let mut work = Meter::local(budget);
         assert!(matches!(
-            EqualWitnesses::prepare_with_work(&index, &mut work),
+            EqualWitnesses::prepare_with_work(&index, &mut work)
+                .map_err(zetesis_algebra::Failure::into_stop),
             Err(Stop::WorkLimit)
         ));
-        assert_eq!(work.spent(), budget);
+        assert_eq!(work.charged(), budget);
     }
-    let mut work = Work::new(receipt);
-    let actual = EqualWitnesses::prepare_with_work(&index, &mut work).unwrap();
+    let mut work = Meter::local(receipt);
+    let actual = EqualWitnesses::prepare_with_work(&index, &mut work)
+        .map_err(zetesis_algebra::Failure::into_stop)
+        .unwrap();
     assert_eq!(actual.members, expected.members);
     assert_eq!(actual.classes, expected.classes);
     assert_eq!(actual.by_chain, expected.by_chain);
-    assert_eq!(work.spent(), receipt);
+    assert_eq!(work.charged(), receipt);
 }
 
 #[test]
@@ -207,7 +212,7 @@ fn exact_classes_preserve_arbitrary_frozen_models() {
                 .narrow_frozen_known(
                     FrozenSubject::new(&theory, truth.truth()),
                     &mut region,
-                    &mut index.knowledge(),
+                    &mut index.frozen_knowledge(),
                     &mut NarrowingScratch::default(),
                     RegionLimits::default(),
                     &cancellation,
@@ -246,7 +251,7 @@ fn collision_partition_preserves_target_chain_order() {
     // Inspect the actual runtime slice; the convenience helper sorts a copy.
     let actual = index
         .equal_extrema
-        .members(chain(&index, roots[4]), &mut Work::new(u64::MAX))
+        .members(chain(&index, roots[4]), &mut Meter::local(u64::MAX))
         .unwrap();
     assert_eq!(actual, expected);
 }

@@ -8,9 +8,9 @@ use super::*;
 /// this, so a carrier without producers relies on the row.
 fn presence_row(program: &Program) -> NarrowingScratch {
     let mut scratch = NarrowingScratch::default();
-    scratch.explanations.prepare(&program.owner);
+    scratch.learning.explanations.prepare(&program.owner);
     assert!(add(
-        &mut scratch.explanations,
+        &mut scratch.learning.explanations,
         &[(0, true), (3, true)],
         &[(2, true)]
     ));

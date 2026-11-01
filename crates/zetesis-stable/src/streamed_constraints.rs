@@ -21,13 +21,13 @@ use std::sync::{Mutex, PoisonError};
 use zetesis_algebra::{Cancellation, region::Region};
 use zetesis_ferraris::Theory;
 use zetesis_themelios::{
-    ConstraintAllowance, ConstraintCheckFailure, ConstraintChecker, ConstraintConsequence,
-    ConstraintRegionPass, ConstraintRegionVerdict, StreamedCore,
+    ConstraintAllowance, ConstraintCheckFailure, ConstraintChecker, ConstraintRegionPass,
+    ConstraintRegionVerdict, StreamedCore,
 };
 
-use crate::{
-    Incomplete, RegionConsequence, RegionFeasibility, RegionFilter, RegionFilterWorker, RegionPass,
-};
+pub(crate) use zetesis_themelios::ConstraintConsequence;
+
+use crate::{Incomplete, RegionFeasibility, subject::Pass};
 
 /// The streamed integrity constraints of an admitted hybrid program, checked
 /// over candidate regions of its core theory. Install it on a candidate stream
@@ -89,12 +89,17 @@ impl std::fmt::Debug for StreamedConstraints {
     }
 }
 
-impl RegionFilter for StreamedConstraints {
-    fn worker(
+impl StreamedConstraints {
+    /// Prepare once for an actual non-refuted candidate region. The borrowed
+    /// checker is retained across pulls by each serial/native worker or joined
+    /// producer; determined-candidate checks retain their per-operation scope.
+    /// Its original-source allowance and failure receipt are separate from
+    /// search work, including failed preparation and interrupted checks.
+    pub(crate) fn worker(
         &self,
         theory: &Theory,
         cancellation: &Cancellation,
-    ) -> Result<Box<dyn RegionFilterWorker + '_>, Incomplete> {
+    ) -> Result<Box<Worker<'_>>, Incomplete> {
         cancellation.poll()?;
         // Authenticate the subject at worker preparation; the checker repeats
         // it at each operation before interpreting any dense position.
@@ -115,35 +120,29 @@ impl RegionFilter for StreamedConstraints {
     }
 }
 
-struct Worker<'a> {
+pub(crate) struct Worker<'a> {
     source: &'a StreamedConstraints,
     checker: ConstraintChecker<'a>,
 }
 
-impl RegionFilterWorker for Worker<'_> {
-    fn consequence(
+impl Worker<'_> {
+    pub(crate) fn consequence(
         &mut self,
         theory: &Theory,
         region: &Region,
         cancellation: &Cancellation,
-        pass: RegionPass,
-    ) -> Result<RegionConsequence, Incomplete> {
+        pass: Pass,
+    ) -> Result<ConstraintConsequence, Incomplete> {
         let pass = match pass {
-            RegionPass::First => ConstraintRegionPass::First,
-            RegionPass::Continue => ConstraintRegionPass::Continue,
+            Pass::First => ConstraintRegionPass::First,
+            Pass::Continue => ConstraintRegionPass::Continue,
         };
         self.checker
             .consequence_region(theory, region, cancellation, pass)
-            .map(|consequence| match consequence {
-                ConstraintConsequence::NoConsequence => RegionConsequence::Unchanged,
-                ConstraintConsequence::Refuted { .. } => RegionConsequence::Refuted,
-                ConstraintConsequence::Hold { atom, .. } => RegionConsequence::Hold(atom),
-                ConstraintConsequence::Cut { atom, .. } => RegionConsequence::Cut(atom),
-            })
             .map_err(|error| self.source.stopped(error))
     }
 
-    fn check(
+    pub(crate) fn check(
         &mut self,
         theory: &Theory,
         region: &Region,

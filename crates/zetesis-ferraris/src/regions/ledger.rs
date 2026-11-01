@@ -14,10 +14,12 @@
 //! collector, or from the store those sources filled: no caller supplies,
 //! edits or reads a row.
 
+use zetesis_algebra::{Failure, Quota};
+
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use super::founded::explanations::{self, Explanation, Input, Limits};
-use crate::regions::{SupportExplanationStatistics, Theory, Work};
+use crate::regions::{Meter, SupportExplanationStatistics, Theory};
 use zetesis_algebra::{Stop, words::Words};
 
 mod row;
@@ -509,12 +511,12 @@ impl Ledger {
     /// Retain a founded row under the capture allowance, as capture does
     /// after collection; true when the row was added.
     #[cfg(test)]
-    pub(in crate::regions) fn retain_founded(
+    pub(in crate::regions) fn retain_founded<Q: Quota + ?Sized>(
         &mut self,
         literals: Literals,
-        work: &mut Work<'_>,
+        work: &mut Meter<'_, Q>,
         peak: &mut u128,
-    ) -> Result<bool, Stop> {
+    ) -> Result<bool, Failure<Q::Error>> {
         let mut remaining = self.remaining;
         let result = self.retain(
             Proposed {
@@ -552,12 +554,12 @@ impl Ledger {
     /// only its own atoms. A row none of whose atoms was decided since the
     /// last step therefore has the deduction that step already applied, so
     /// the index loses no deduction.
-    pub(in crate::regions) fn candidates(
+    pub(in crate::regions) fn candidates<Q: Quota + ?Sized>(
         &mut self,
         decided: &[usize],
         rows: &mut Vec<usize>,
-        work: &mut Work<'_>,
-    ) -> Result<(), Stop> {
+        work: &mut Meter<'_, Q>,
+    ) -> Result<(), Failure<Q::Error>> {
         rows.clear();
         if self.rows.len() <= SCAN_ROWS || self.full {
             self.full = false;
@@ -597,14 +599,14 @@ impl Ledger {
         entry.unshared = entry.unshared.saturating_add(1);
     }
 
-    pub(in crate::regions) fn next_publication_output(
+    pub(in crate::regions) fn next_publication_output<Q: Quota + ?Sized>(
         &self,
         row: usize,
         cursor: &mut OutputCursor,
         held: &[u64],
         cut: &[u64],
-        work: &mut Work<'_>,
-    ) -> Result<Option<(usize, bool)>, Stop> {
+        work: &mut Meter<'_, Q>,
+    ) -> Result<Option<(usize, bool)>, Failure<Q::Error>> {
         self.rows[row]
             .row
             .next_publication_output(cursor, held, cut, work)
@@ -624,7 +626,10 @@ impl Ledger {
 
     /// Discovery, subsumption and conversion share the optional capture allowance.
     /// Its exhaustion declines retention; a real quota stop still propagates.
-    pub(in crate::regions) fn capture_read(&mut self, work: &mut Work<'_>) -> Result<bool, Stop> {
+    pub(in crate::regions) fn capture_read<Q: Quota + ?Sized>(
+        &mut self,
+        work: &mut Meter<'_, Q>,
+    ) -> Result<bool, Failure<Q::Error>> {
         capture_read(&mut self.remaining, work)
     }
 
@@ -633,23 +638,23 @@ impl Ledger {
     /// fail. An opposite premise or two open premises supply no deduction.
     /// This scans scalar entries or compact word groups and allocates no
     /// matching state.
-    pub(in crate::regions) fn deduction(
+    pub(in crate::regions) fn deduction<Q: Quota + ?Sized>(
         &self,
         row: usize,
         held: &[u64],
         cut: &[u64],
-        work: &mut Work<'_>,
-    ) -> Result<Deduction, Stop> {
+        work: &mut Meter<'_, Q>,
+    ) -> Result<Deduction, Failure<Q::Error>> {
         self.rows[row].row.deduction(held, cut, work)
     }
 
-    pub(in crate::regions) fn capture(
+    pub(in crate::regions) fn capture<Q: Quota + ?Sized>(
         &mut self,
         input: Input<'_>,
         atom: usize,
-        work: &mut Work<'_>,
+        work: &mut Meter<'_, Q>,
         counts: &mut SupportExplanationStatistics,
-    ) -> Result<(), Stop> {
+    ) -> Result<(), Failure<Q::Error>> {
         if !self.can_capture() {
             return Ok(());
         }
@@ -657,7 +662,7 @@ impl Ledger {
         self.attempts += 1;
         counts.attempts += 1;
         let mut temporary_peak = 0;
-        let before = work.spent();
+        let before = work.charged();
         let result = explanations::collect(
             input,
             atom,
@@ -670,7 +675,7 @@ impl Ledger {
             work,
             &mut temporary_peak,
         );
-        self.remaining = self.remaining.saturating_sub(work.spent() - before);
+        self.remaining = self.remaining.saturating_sub(work.charged() - before);
         self.peak_bytes = self.peak_bytes.max(self.retained_bytes() + temporary_peak);
         let Some(explanation) = result? else {
             counts.declined += 1;
@@ -708,11 +713,11 @@ impl Ledger {
     /// completely before reads only the rows retained there since, at one
     /// read for each row it passes over. Charges the tier's sharing
     /// allowance; its exhaustion ends seeding, never the run.
-    pub(in crate::regions) fn seed(
+    pub(in crate::regions) fn seed<Q: Quota + ?Sized>(
         &mut self,
         store: &mut LearningStore,
-        work: &mut Work<'_>,
-    ) -> Result<(), Stop> {
+        work: &mut Meter<'_, Q>,
+    ) -> Result<(), Failure<Q::Error>> {
         let Some(owner) = self.owner.clone() else {
             return Ok(());
         };
@@ -749,14 +754,14 @@ impl Ledger {
 
     /// Retain each of `rows` retained after `read`, each starting at its
     /// store hit count; true when every row was read.
-    fn seed_rows(
+    fn seed_rows<Q: Quota + ?Sized>(
         &mut self,
         rows: &[Entry],
         read: u64,
         founded_outputs: usize,
         transfer: &mut Transfer,
-        work: &mut Work<'_>,
-    ) -> Result<bool, Stop> {
+        work: &mut Meter<'_, Q>,
+    ) -> Result<bool, Failure<Q::Error>> {
         for entry in rows {
             if entry.born <= read {
                 work.tick()?;
@@ -803,11 +808,11 @@ impl Ledger {
     /// row that keeps them. Each row examined costs one read; delivering one
     /// is charged to the tier's sharing allowance, whose exhaustion ends
     /// delivery, never the run.
-    pub(in crate::regions) fn deliver(
+    pub(in crate::regions) fn deliver<Q: Quota + ?Sized>(
         &mut self,
         store: &mut LearningStore,
-        work: &mut Work<'_>,
-    ) -> Result<(), Stop> {
+        work: &mut Meter<'_, Q>,
+    ) -> Result<(), Failure<Q::Error>> {
         let Some(owner) = self.owner.clone() else {
             return Ok(());
         };
@@ -844,13 +849,13 @@ impl Ledger {
     /// positions are private to a matching pass; retention runs between
     /// passes. `remaining` is the allowance the caller charges: the founded
     /// capture's, or the tier's sharing allowance.
-    fn retain(
+    fn retain<Q: Quota + ?Sized>(
         &mut self,
         proposed: Proposed,
         remaining: &mut u64,
-        work: &mut Work<'_>,
+        work: &mut Meter<'_, Q>,
         peak: &mut u128,
-    ) -> Result<Retained, Stop> {
+    ) -> Result<Retained, Failure<Q::Error>> {
         let Proposed {
             mut literals,
             source,
@@ -902,14 +907,14 @@ impl Ledger {
     /// Compare a proposed row with every retained row, changing neither: an
     /// existing row that subsumes it, or the rows it replaces once it holds
     /// the outputs of every row with identical conditions.
-    fn compare(
+    fn compare<Q: Quota + ?Sized>(
         &self,
         literals: &mut Literals,
         maximum_outputs: usize,
         remaining: &mut u64,
-        work: &mut Work<'_>,
+        work: &mut Meter<'_, Q>,
         peak: &mut u128,
-    ) -> Result<Compared, Stop> {
+    ) -> Result<Compared, Failure<Q::Error>> {
         let rows = self.rows.len();
         let mut replaced = Words::new(Vec::new());
         replaced
@@ -1018,7 +1023,10 @@ impl Ledger {
 
     /// Rebuild the occurrence index, one read per posting. A stop leaves
     /// `stale` set, so a partial index is never read.
-    fn rebuild_postings(&mut self, work: &mut Work<'_>) -> Result<(), Stop> {
+    fn rebuild_postings<Q: Quota + ?Sized>(
+        &mut self,
+        work: &mut Meter<'_, Q>,
+    ) -> Result<(), Failure<Q::Error>> {
         self.postings.clear();
         let count = self.rows.iter().fold(0_usize, |count, entry| {
             let (conditions, outputs) = entry.row.lengths();
@@ -1051,13 +1059,13 @@ struct Transfer {
 
 /// Deliver each of a tier's `rows` new or hit since its last delivery that
 /// passes the quality filter into `class`, one read per row examined.
-fn deliver_rows(
+fn deliver_rows<Q: Quota + ?Sized>(
     rows: &mut [Entry],
     class: &mut Ledger,
     limits: LearningLimits,
     transfer: &mut Transfer,
-    work: &mut Work<'_>,
-) -> Result<(), Stop> {
+    work: &mut Meter<'_, Q>,
+) -> Result<(), Failure<Q::Error>> {
     for entry in rows {
         work.tick()?;
         if entry.delivered && entry.unshared == 0 {
@@ -1104,11 +1112,9 @@ fn deliver_rows(
 }
 
 /// One finite allowance covers discovery, comparison and conversion.
-fn capture_read(remaining: &mut u64, work: &mut Work<'_>) -> Result<bool, Stop> {
-    if *remaining == 0 {
-        return Ok(false);
-    }
-    work.tick()?;
-    *remaining -= 1;
-    Ok(true)
+fn capture_read<Q: Quota + ?Sized>(
+    remaining: &mut u64,
+    work: &mut Meter<'_, Q>,
+) -> Result<bool, Failure<Q::Error>> {
+    work.tick_within(remaining)
 }

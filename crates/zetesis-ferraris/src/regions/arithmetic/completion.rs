@@ -4,6 +4,8 @@
 //! truth masks. Every nested conjunction occurrence is visited on each pass;
 //! repeated or contradictory literals are never skipped during decoding.
 
+use zetesis_algebra::Quota;
+
 use std::mem::size_of;
 
 use zetesis_algebra::Stop;
@@ -27,11 +29,11 @@ pub(super) struct Completion {
     pub forbidden: Words<u64, [u64; 4]>,
 }
 
-fn include(
+fn include<Q: Quota + ?Sized>(
     support: &mut Support,
     atom: usize,
-    budget: &mut Budget<'_, '_>,
-) -> Result<bool, BudgetError> {
+    budget: &mut Budget<'_, '_, Q>,
+) -> Result<bool, BudgetError<Q::Error>> {
     for known in &support.atoms[..support.len] {
         budget.charge(1)?;
         if *known == atom {
@@ -50,7 +52,10 @@ fn include(
     Ok(true)
 }
 
-fn sort(support: &mut Support, budget: &mut Budget<'_, '_>) -> Result<(), BudgetError> {
+fn sort<Q: Quota + ?Sized>(
+    support: &mut Support,
+    budget: &mut Budget<'_, '_, Q>,
+) -> Result<(), BudgetError<Q::Error>> {
     for position in 1..support.len {
         budget.charge(1)?;
         let atom = support.atoms[position];
@@ -70,11 +75,11 @@ fn sort(support: &mut Support, budget: &mut Budget<'_, '_>) -> Result<(), Budget
     Ok(())
 }
 
-fn local_bit(
+fn local_bit<Q: Quota + ?Sized>(
     support: &Support,
     atom: usize,
-    budget: &mut Budget<'_, '_>,
-) -> Result<u64, BudgetError> {
+    budget: &mut Budget<'_, '_, Q>,
+) -> Result<u64, BudgetError<Q::Error>> {
     for (position, known) in support.atoms[..support.len].iter().enumerate() {
         budget.charge(1)?;
         if *known == atom {
@@ -89,13 +94,13 @@ fn local_bit(
 /// Reconstruct all forbidden patterns of a head's complete normal definition.
 /// The returned table proposes consequences of answer sets, not arbitrary
 /// classical models. A trusted row check must call this again for each proposal.
-pub(super) fn completion(
+pub(super) fn completion<Q: Quota + ?Sized>(
     theory: &Theory,
     producers: &Producers,
     head: usize,
     live_bytes: u128,
-    budget: &mut Budget<'_, '_>,
-) -> Result<Option<Completion>, BudgetError> {
+    budget: &mut Budget<'_, '_, Q>,
+) -> Result<Option<Completion>, BudgetError<Q::Error>> {
     budget.charge(1)?;
     if !producers.belongs_to(theory) {
         budget.charge(1)?;
@@ -163,15 +168,15 @@ pub(super) fn completion(
     Ok(Some(output))
 }
 
-fn completion_table<'a>(
+fn completion_table<'a, Q: Quota + ?Sized>(
     theory: &'a Theory,
     producers: &Producers,
     definitions: &[usize],
     output: &mut Completion,
     frames: &mut Conjunction<'a>,
     storage: &mut Storage,
-    budget: &mut Budget<'_, '_>,
-) -> Result<bool, BudgetError> {
+    budget: &mut Budget<'_, '_, Q>,
+) -> Result<bool, BudgetError<Q::Error>> {
     let head_bit = local_bit(&output.support, output.head, budget)?;
     budget.charge(1)?;
     let head_coordinate = head_bit.trailing_zeros() as usize;
@@ -253,12 +258,12 @@ fn completion_table<'a>(
 
 /// Intersect the selected signed columns. The occurrence decoder has already
 /// checked and charged every literal; duplicate masks preserve conjunction.
-fn intersect_literals(
+fn intersect_literals<Q: Quota + ?Sized>(
     table: &mut [u64],
     selected: u64,
     positive: bool,
-    budget: &mut Budget<'_, '_>,
-) -> Result<(), BudgetError> {
+    budget: &mut Budget<'_, '_, Q>,
+) -> Result<(), BudgetError<Q::Error>> {
     words::visit_set_bits(
         std::slice::from_ref(&selected),
         budget,
@@ -283,11 +288,11 @@ fn intersect_literals(
 /// Column `coordinate` has bit `pattern` iff that coordinate is true in the
 /// pattern. Coordinates below six alternate within a word; six and seven are
 /// constant within each word. The caller supplies coordinates below eight.
-fn truth_column(
+fn truth_column<Q: Quota + ?Sized>(
     coordinate: usize,
     word: usize,
-    budget: &mut Budget<'_, '_>,
-) -> Result<u64, BudgetError> {
+    budget: &mut Budget<'_, '_, Q>,
+) -> Result<u64, BudgetError<Q::Error>> {
     // Mathematical column constants, shared read-only rather than prepared
     // per definition. Universe padding is masked by the caller.
     static LOW_COLUMNS: [u64; 6] = [
@@ -311,15 +316,15 @@ fn truth_column(
     }
 }
 
-fn collect_support<'a>(
+fn collect_support<'a, Q: Quota + ?Sized>(
     theory: &'a Theory,
     producers: &Producers,
     definitions: &[usize],
     output: &mut Completion,
     frames: &mut Conjunction<'a>,
     storage: &mut Storage,
-    budget: &mut Budget<'_, '_>,
-) -> Result<bool, BudgetError> {
+    budget: &mut Budget<'_, '_, Q>,
+) -> Result<bool, BudgetError<Q::Error>> {
     for rule in definitions {
         budget.charge(2)?; // rule identity and range check
         let rule = *rule;

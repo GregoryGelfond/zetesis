@@ -1,3 +1,5 @@
+use zetesis_algebra::Meter;
+
 use super::*;
 
 /// Each authored body selects exactly one local pattern. Repeated literals and
@@ -35,9 +37,15 @@ fn every_column_matches_the_original_body_truth() {
             for pattern in [0, last, 0x55 & last, 0xaa & last] {
                 let owner = pattern_definitions(atoms, head, &[pattern]);
                 let producers = inventory(&owner);
-                let record = completion(&owner, &producers, head, 0, &mut budget(&cancellation))
-                    .unwrap()
-                    .unwrap();
+                let record = completion(
+                    &owner,
+                    &producers,
+                    head,
+                    0,
+                    &mut budget(&mut Meter::local(u64::MAX), &cancellation),
+                )
+                .unwrap()
+                .unwrap();
                 assert_eq!(record.support.len, atoms);
                 assert_eq!(
                     record.support.atoms[..atoms],
@@ -55,9 +63,15 @@ fn producer_union_matches_truth_across_word_boundaries() {
     let producers = inventory(&owner);
     let cancellation = Cancellation::default();
     assert_eq!(producers.by_head[7].len(), 8);
-    let record = completion(&owner, &producers, 7, 0, &mut budget(&cancellation))
-        .unwrap()
-        .unwrap();
+    let record = completion(
+        &owner,
+        &producers,
+        7,
+        0,
+        &mut budget(&mut Meter::local(u64::MAX), &cancellation),
+    )
+    .unwrap()
+    .unwrap();
     assert_eq!(record.support.len, 8);
     assert_matches_original_bodies(&owner, &producers, &record);
 }
@@ -68,13 +82,15 @@ fn full_width_tables_preserve_every_optional_refusal() {
     let producers = inventory(&owner);
     let cancellation = Cancellation::default();
     let live_bytes = 29;
-    let mut complete = budget(&cancellation);
+    let mut complete_work = Meter::local(u64::MAX);
+    let mut complete = budget(&mut complete_work, &cancellation);
     let expected = completion(&owner, &producers, 7, live_bytes, &mut complete)
         .unwrap()
         .unwrap();
     assert_matches_original_bodies(&owner, &producers, &expected);
     for maximum in 0..complete.work() {
-        let mut limited = Budget::new(Work::new(u64::MAX), maximum, usize::MAX, &cancellation);
+        let mut limited_work = Meter::local(u64::MAX);
+        let mut limited = Budget::new(&mut limited_work, maximum, usize::MAX, &cancellation);
         assert_eq!(
             completion(&owner, &producers, 7, live_bytes, &mut limited),
             Err(BudgetError::WorkDeclined),
@@ -83,7 +99,8 @@ fn full_width_tables_preserve_every_optional_refusal() {
         assert!(limited.work() <= maximum);
     }
     for maximum in 0..usize::try_from(complete.peak_bytes()).unwrap() {
-        let mut limited = Budget::new(Work::new(u64::MAX), u64::MAX, maximum, &cancellation);
+        let mut limited_work = Meter::local(u64::MAX);
+        let mut limited = Budget::new(&mut limited_work, u64::MAX, maximum, &cancellation);
         assert!(
             matches!(completion(&owner, &producers, 7, live_bytes, &mut limited),
                 Err(BudgetError::StorageDeclined { required, limit })
@@ -97,7 +114,7 @@ fn full_width_tables_preserve_every_optional_refusal() {
             &producers,
             7,
             live_bytes,
-            &mut budget(&cancellation)
+            &mut budget(&mut Meter::local(u64::MAX), &cancellation)
         ),
         Ok(Some(expected))
     );

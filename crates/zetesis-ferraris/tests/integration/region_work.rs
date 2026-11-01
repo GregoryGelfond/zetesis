@@ -1,10 +1,10 @@
 //! Injected quotas admit each original or frozen read and retain failed prefixes,
-//! with the quota's typed refusal kept beside it.
+//! with the quota's typed refusal carried by the common meter.
 
-use zetesis_algebra::{Cancellation, Stop};
+use zetesis_algebra::{Cancellation, Failure, Meter, Quota, Stop};
 use zetesis_ferraris::{
     AdmissionLimits, EvaluationLimits, EvaluationWorkspace, Interpretation, Narrower,
-    NarrowingAttempt, NarrowingQuota, Node, Region, RegionLimits, Theory, producers,
+    NarrowingAttempt, Node, Region, RegionLimits, Theory, producers,
 };
 
 #[derive(Debug, PartialEq, Eq)]
@@ -46,24 +46,31 @@ fn theory() -> Theory {
     .unwrap()
 }
 
-/// A caller's per-read charge as a quota: one permit per reservation, with
-/// the caller's own refusal kept to be returned unchanged, as the solver's
-/// budget adapter keeps its typed refusal.
-struct PerRead<F> {
-    charge: F,
-    failure: Option<Refusal>,
-}
-
-impl<F: FnMut() -> Result<(), Refusal>> NarrowingQuota for PerRead<F> {
-    fn reserve(&mut self, _wanted: u64) -> Result<u64, Stop> {
-        match (self.charge)() {
-            Ok(()) => Ok(1),
-            Err(refusal) => {
-                self.failure = Some(refusal);
-                Err(Stop::WorkLimit)
-            }
+impl zetesis_algebra::Refusal for Refusal {
+    fn is_resource_refusal(&self) -> bool {
+        match self {
+            Self::Quota => true,
+            Self::Stopped(stop) => zetesis_algebra::Refusal::is_resource_refusal(stop),
         }
     }
+
+    fn from_stop(stop: Stop) -> Self {
+        Self::Stopped(stop)
+    }
+}
+
+/// A caller's per-read charge grants one permit or retains its exact refusal.
+struct PerRead<F> {
+    charge: F,
+}
+
+impl<F: FnMut() -> Result<(), Refusal>> Quota for PerRead<F> {
+    type Error = Refusal;
+
+    fn reserve(&mut self, _wanted: u64) -> Result<u64, Refusal> {
+        (self.charge)().map(|()| 1)
+    }
+
     fn refund(&mut self, unspent: u64) {
         assert_eq!(unspent, 0, "a single permit is spent as it is granted");
     }
@@ -75,23 +82,22 @@ fn run(
     frozen: Option<&[bool]>,
     cancellation: &Cancellation,
     charge: impl FnMut() -> Result<(), Refusal>,
-) -> (NarrowingAttempt<Refusal>, Region) {
+) -> (NarrowingAttempt<Failure<Refusal>>, Region) {
     let mut region = Region::all_open(theory.atom_count());
-    let mut knowledge = narrower.knowledge();
-    let mut quota = PerRead {
-        charge,
-        failure: None,
-    };
+    let mut quota = PerRead { charge };
+    let mut meter = Meter::reserved(&mut quota);
     let attempt = if let Some(truth) = frozen {
+        let mut knowledge = narrower.frozen_knowledge();
         narrower.narrow_frozen_known_reserved(
             zetesis_ferraris::FrozenSubject::new(theory, truth),
             &mut region,
             &mut knowledge,
             &mut zetesis_ferraris::NarrowingScratch::default(),
             cancellation,
-            &mut quota,
+            &mut meter,
         )
     } else {
+        let mut knowledge = narrower.knowledge();
         let extracted =
             producers(theory, RegionLimits::default(), &Cancellation::default()).unwrap();
         narrower.narrow_known_reserved(
@@ -100,15 +106,8 @@ fn run(
             &mut knowledge,
             &mut zetesis_ferraris::NarrowingScratch::default(),
             cancellation,
-            &mut quota,
+            &mut meter,
         )
-    };
-    let attempt = NarrowingAttempt {
-        preferred: attempt.preferred,
-        result: attempt
-            .result
-            .map_err(|stop| quota.failure.take().unwrap_or(Refusal::Stopped(stop))),
-        statistics: attempt.statistics,
     };
     (attempt, region)
 }
@@ -130,8 +129,8 @@ fn metered_narrowing_matches_local_wrappers() {
             Ok(())
         });
         let mut local_region = Region::all_open(theory.atom_count());
-        let mut knowledge = narrower.knowledge();
         let local = if let Some(mask) = frozen {
+            let mut knowledge = narrower.frozen_knowledge();
             narrower.narrow_frozen_known(
                 zetesis_ferraris::FrozenSubject::new(&theory, mask),
                 &mut local_region,
@@ -141,6 +140,7 @@ fn metered_narrowing_matches_local_wrappers() {
                 &cancellation,
             )
         } else {
+            let mut knowledge = narrower.knowledge();
             let extracted = producers(&theory, RegionLimits::default(), &cancellation).unwrap();
             narrower.narrow_known(
                 zetesis_ferraris::OriginalSubject::new(&theory, extracted.producers.as_ref()),
@@ -181,7 +181,7 @@ fn every_refused_prefix_stops_before_the_next_read() {
                 permits += 1;
                 Ok(())
             });
-            assert_eq!(attempt.result, Err(Refusal::Quota));
+            assert_eq!(attempt.result, Err(Failure::Refused(Refusal::Quota)));
             assert_eq!(permits, allowance);
             assert_eq!(attempt.statistics.work, allowance);
         }
@@ -211,13 +211,16 @@ fn cancellation_retains_the_admitted_prefix() {
             }
             Ok(())
         });
-        assert_eq!(attempt.result, Err(Refusal::Stopped(Stop::Cancelled)));
+        assert_eq!(
+            attempt.result,
+            Err(Failure::Refused(Refusal::Stopped(Stop::Cancelled)))
+        );
         assert_eq!(attempt.statistics.work, 2);
         assert_eq!(permits, 2);
         let (stopped, _) = run(&theory, &narrower, frozen, &cancellation, || {
             panic!("entry cancellation must precede any quota acquisition");
         });
-        assert_eq!(stopped.result, Err(Refusal::Stopped(Stop::Cancelled)));
+        assert_eq!(stopped.result, Err(Failure::Stopped(Stop::Cancelled)));
         assert_eq!(stopped.statistics.work, 0);
     }
 }

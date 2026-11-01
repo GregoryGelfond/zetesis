@@ -73,7 +73,10 @@ fn an_unattainable_value_with_unit_gcd_refutes() {
         .0,
         Narrowing::Refuted
     );
-    assert!(scratch.possible_sums.capacity() > 0, "the packed route ran");
+    assert!(
+        scratch.common.possible_sums.capacity() > 0,
+        "the packed route ran"
+    );
     assert!((0..16).all(|mask| {
         terms
             .iter()
@@ -122,7 +125,7 @@ fn every_small_completed_mask_matches_independent_subsets() {
                             });
                             // The mathematical operation is checked independently
                             // of the deliberately smaller production allowance.
-                            let mut work = Work::new(u64::MAX);
+                            let mut work = Meter::local(u64::MAX);
                             let actual = attempt(
                                 &data,
                                 &[sure],
@@ -130,7 +133,7 @@ fn every_small_completed_mask_matches_independent_subsets() {
                                 &mut words,
                                 plan,
                                 &mut Allowance {
-                                    remaining: usize::MAX,
+                                    remaining: u64::MAX,
                                     work: &mut work,
                                 },
                             )
@@ -177,8 +180,8 @@ fn boundary_offsets_and_nonzero_bases_keep_exact_answers() {
                     &mut Words::new(Vec::new()),
                     plan,
                     &mut Allowance {
-                        remaining: usize::MAX,
-                        work: &mut Work::new(u64::MAX),
+                        remaining: u64::MAX,
+                        work: &mut Meter::local(u64::MAX),
                     },
                 )
                 .unwrap();
@@ -193,7 +196,7 @@ fn a_witness_stops_inside_the_current_shift() {
     let data = row(&[63, 64, 65, 66]);
     let plan = Plan::for_row(&data, state(&data, 0, 0, [129, 130])).unwrap();
     let mut words = Words::new(Vec::new());
-    let mut work = Work::new(u64::MAX);
+    let mut work = Meter::local(u64::MAX);
     assert!(matches!(
         attempt(
             &data,
@@ -202,7 +205,7 @@ fn a_witness_stops_inside_the_current_shift() {
             &mut words,
             plan,
             &mut Allowance {
-                remaining: plan.visits,
+                remaining: plan.visits as u64,
                 work: &mut work,
             },
         ),
@@ -210,7 +213,7 @@ fn a_witness_stops_inside_the_current_shift() {
     ));
     // Allocate, clear three words and seed; then three coefficients and three
     // source words. The 64+65 witness precedes the lower source word for +65.
-    assert_eq!(work.spent(), 11);
+    assert_eq!(work.charged(), 11);
     assert!(bit(&words, 129));
     assert!(
         !bit(&words, 128),
@@ -232,32 +235,37 @@ fn a_witness_publishes_no_knowledge() {
     let masks = known.masks.slices().map(<[u64]>::to_vec);
     let mut scratch = NarrowingScratch::default();
     assert!(matches!(
-        Closure {
+        Closure::<_, zetesis_algebra::AnswerSetsSought> {
             known: known.borrow(),
-            lists: &mut scratch,
+            lists: &mut scratch.common,
+            learning: &mut scratch.learning,
         }
-        .threshold_possible_sums(&index, 0, &mut Work::new(u64::MAX)),
+        .threshold_possible_sums(&index, 0, &mut Meter::local(u64::MAX))
+        .map_err(zetesis_algebra::Failure::into_stop),
         Ok(Step::Unchanged)
     ));
     assert_eq!(known.thresholds[0], before);
     assert_eq!(known.masks.slices(), masks.each_ref().map(Vec::as_slice));
-    assert!(scratch.possible_sums.capacity() > 0, "the packed route ran");
     assert!(
-        scratch.possible_sums.is_empty(),
+        scratch.common.possible_sums.capacity() > 0,
+        "the packed route ran"
+    );
+    assert!(
+        scratch.common.possible_sums.is_empty(),
         "partial output is discarded"
     );
-    assert!(scratch.nodes.is_empty());
-    assert!(scratch.threshold_rows.is_empty());
-    assert!(scratch.heads.is_empty());
+    assert!(scratch.common.nodes.is_empty());
+    assert!(scratch.common.threshold_rows.is_empty());
+    assert!(scratch.common.heads.is_empty());
 }
 
 #[test]
 fn optional_refusal_before_a_witness_remains_incomplete() {
     let data = row(&[63, 64, 65, 66]);
     let plan = Plan::for_row(&data, state(&data, 0, 0, [129, 130])).unwrap();
-    for limit in 0..11 {
+    for limit in 0_u64..11 {
         let mut words = Words::new(Vec::new());
-        let mut work = Work::new(u64::MAX);
+        let mut work = Meter::local(u64::MAX);
         assert!(matches!(
             attempt(
                 &data,
@@ -270,9 +278,9 @@ fn optional_refusal_before_a_witness_remains_incomplete() {
                     work: &mut work,
                 },
             ),
-            Err(Failure::Declined)
+            Err(AttemptFailure::Declined)
         ));
-        assert_eq!(work.spent(), u64::try_from(limit).unwrap());
+        assert_eq!(work.charged(), limit);
         assert!(matches!(
             attempt(
                 &data,
@@ -281,8 +289,8 @@ fn optional_refusal_before_a_witness_remains_incomplete() {
                 &mut words,
                 plan,
                 &mut Allowance {
-                    remaining: plan.visits,
-                    work: &mut Work::new(u64::MAX),
+                    remaining: plan.visits as u64,
+                    work: &mut Meter::local(u64::MAX),
                 },
             ),
             Ok(Step::Unchanged)
@@ -295,9 +303,9 @@ fn global_refusal_before_a_witness_keeps_its_kind() {
     let data = row(&[63, 64, 65, 66]);
     let plan = Plan::for_row(&data, state(&data, 0, 0, [129, 130])).unwrap();
     for failure in [Stop::WorkLimit, Stop::Cancelled, Stop::Deadline] {
-        for limit in 0..11 {
+        for limit in 0_u64..11 {
             let mut quota = SinglePermits::new(limit, failure);
-            let mut work = Work::reserved(&mut quota);
+            let mut work = Meter::reserved(&mut quota);
             let mut words = Words::new(Vec::new());
             assert!(matches!(
                 attempt(
@@ -307,13 +315,13 @@ fn global_refusal_before_a_witness_keeps_its_kind() {
                     &mut words,
                     plan,
                     &mut Allowance {
-                        remaining: plan.visits,
+                        remaining: plan.visits as u64,
                         work: &mut work,
                     },
                 ),
-                Err(Failure::Stopped(actual)) if actual == failure
+                Err(AttemptFailure::Stopped(actual)) if actual.into_stop() == failure
             ));
-            assert_eq!(work.spent(), limit);
+            assert_eq!(work.charged(), limit);
             assert!(matches!(
                 attempt(
                     &data,
@@ -322,8 +330,8 @@ fn global_refusal_before_a_witness_keeps_its_kind() {
                     &mut words,
                     plan,
                     &mut Allowance {
-                        remaining: plan.visits,
-                        work: &mut Work::new(u64::MAX),
+                        remaining: plan.visits as u64,
+                        work: &mut Meter::local(u64::MAX),
                     },
                 ),
                 Ok(Step::Unchanged)
@@ -336,7 +344,7 @@ fn global_refusal_before_a_witness_keeps_its_kind() {
 fn optional_declines_do_not_become_refutations() {
     let data = row(&[4, 6, 7, 9]);
     let plan = Plan::for_row(&data, state(&data, 0, 0, [12, 13])).unwrap();
-    let mut complete_work = Work::new(u64::MAX);
+    let mut complete_work = Meter::local(u64::MAX);
     assert!(matches!(
         attempt(
             &data,
@@ -345,15 +353,15 @@ fn optional_declines_do_not_become_refutations() {
             &mut Words::new(Vec::new()),
             plan,
             &mut Allowance {
-                remaining: plan.visits,
+                remaining: plan.visits as u64,
                 work: &mut complete_work,
             },
         ),
         Ok(Step::Contradiction)
     ));
-    assert!(complete_work.spent() <= plan.visits as u64);
-    for limit in 0..complete_work.spent() {
-        let mut work = Work::new(u64::MAX);
+    assert!(complete_work.charged() <= plan.visits as u64);
+    for limit in 0..complete_work.charged() {
+        let mut work = Meter::local(u64::MAX);
         let mut words = Words::new(Vec::new());
         assert!(matches!(
             attempt(
@@ -363,13 +371,13 @@ fn optional_declines_do_not_become_refutations() {
                 &mut words,
                 plan,
                 &mut Allowance {
-                    remaining: usize::try_from(limit).unwrap(),
+                    remaining: limit,
                     work: &mut work,
                 },
             ),
-            Err(Failure::Declined)
+            Err(AttemptFailure::Declined)
         ));
-        assert_eq!(work.spent(), limit);
+        assert_eq!(work.charged(), limit);
         assert!(matches!(
             attempt(
                 &data,
@@ -378,8 +386,8 @@ fn optional_declines_do_not_become_refutations() {
                 &mut words,
                 plan,
                 &mut Allowance {
-                    remaining: plan.visits,
-                    work: &mut Work::new(u64::MAX),
+                    remaining: plan.visits as u64,
+                    work: &mut Meter::local(u64::MAX),
                 },
             ),
             Ok(Step::Contradiction)
@@ -391,7 +399,7 @@ fn optional_declines_do_not_become_refutations() {
 fn global_refusals_keep_their_kind_and_retry_from_zero() {
     let data = row(&[4, 6, 7, 9]);
     let plan = Plan::for_row(&data, state(&data, 0, 0, [12, 13])).unwrap();
-    let mut complete_work = Work::new(u64::MAX);
+    let mut complete_work = Meter::local(u64::MAX);
     attempt(
         &data,
         &[0],
@@ -399,15 +407,15 @@ fn global_refusals_keep_their_kind_and_retry_from_zero() {
         &mut Words::new(Vec::new()),
         plan,
         &mut Allowance {
-            remaining: plan.visits,
+            remaining: plan.visits as u64,
             work: &mut complete_work,
         },
     )
     .unwrap();
     for failure in [Stop::WorkLimit, Stop::Cancelled, Stop::Deadline] {
-        for limit in 0..complete_work.spent() {
+        for limit in 0..complete_work.charged() {
             let mut quota = SinglePermits::new(limit, failure);
-            let mut work = Work::reserved(&mut quota);
+            let mut work = Meter::reserved(&mut quota);
             let mut words = Words::new(Vec::new());
             assert!(matches!(
                 attempt(
@@ -417,13 +425,13 @@ fn global_refusals_keep_their_kind_and_retry_from_zero() {
                     &mut words,
                     plan,
                     &mut Allowance {
-                        remaining: plan.visits,
+                        remaining: plan.visits as u64,
                         work: &mut work,
                     },
                 ),
-                Err(Failure::Stopped(actual)) if actual == failure
+                Err(AttemptFailure::Stopped(actual)) if actual.into_stop() == failure
             ));
-            assert_eq!(work.spent(), limit);
+            assert_eq!(work.charged(), limit);
             assert!(matches!(
                 attempt(
                     &data,
@@ -432,8 +440,8 @@ fn global_refusals_keep_their_kind_and_retry_from_zero() {
                     &mut words,
                     plan,
                     &mut Allowance {
-                        remaining: plan.visits,
-                        work: &mut Work::new(u64::MAX),
+                        remaining: plan.visits as u64,
+                        work: &mut Meter::local(u64::MAX),
                     },
                 ),
                 Ok(Step::Contradiction)
@@ -466,17 +474,19 @@ fn representation_ineligibility_has_no_work_or_storage() {
     known.thresholds[0].lower = 2;
     known.thresholds[0].upper = Some(3);
     let mut scratch = NarrowingScratch::default();
-    let mut work = Work::new(0);
+    let mut work = Meter::local(0);
     assert!(matches!(
-        Closure {
+        Closure::<_, zetesis_algebra::AnswerSetsSought> {
             known: known.borrow(),
-            lists: &mut scratch,
+            lists: &mut scratch.common,
+            learning: &mut scratch.learning,
         }
-        .threshold_possible_sums(&index, 0, &mut work),
+        .threshold_possible_sums(&index, 0, &mut work)
+        .map_err(zetesis_algebra::Failure::into_stop),
         Ok(Step::Unchanged)
     ));
-    assert_eq!(work.spent(), 0);
-    assert_eq!(scratch.possible_sums.capacity(), 0);
+    assert_eq!(work.charged(), 0);
+    assert_eq!(scratch.common.possible_sums.capacity(), 0);
 }
 
 #[test]
@@ -493,11 +503,11 @@ fn allocation_refusal_keeps_typed_failure_and_allows_retry() {
             &mut words,
             impossible,
             &mut Allowance {
-                remaining: usize::MAX,
-                work: &mut Work::new(u64::MAX),
+                remaining: u64::MAX,
+                work: &mut Meter::local(u64::MAX),
             }
         ),
-        Err(Failure::Stopped(Stop::Allocation))
+        Err(AttemptFailure::Stopped(Failure::Stopped(Stop::Allocation)))
     ));
     let data = row(&[4, 6, 7, 9]);
     let plan = Plan::for_row(&data, state(&data, 0, 0, [12, 13])).unwrap();
@@ -509,8 +519,8 @@ fn allocation_refusal_keeps_typed_failure_and_allows_retry() {
             &mut words,
             plan,
             &mut Allowance {
-                remaining: plan.visits,
-                work: &mut Work::new(u64::MAX),
+                remaining: plan.visits as u64,
+                work: &mut Meter::local(u64::MAX),
             }
         ),
         Ok(Step::Contradiction)
@@ -531,13 +541,13 @@ fn scratch_is_accounted_and_contains_no_sibling_authority() {
             &mut scratch,
         );
         assert_eq!(result.0 == Narrowing::Refuted, target == 12);
-        assert!(scratch.possible_sums.capacity() > 0);
+        assert!(scratch.common.possible_sums.capacity() > 0);
         let before = scratch.retained_bytes();
-        let capacity = scratch.possible_sums.capacity();
-        scratch.prepare(4);
-        assert!(scratch.possible_sums.is_empty());
+        let capacity = scratch.common.possible_sums.capacity();
+        scratch.common.prepare(4);
+        assert!(scratch.common.possible_sums.is_empty());
         assert_eq!(scratch.retained_bytes(), before);
-        scratch.possible_sums = Words::new(Vec::new());
+        scratch.common.possible_sums = Words::new(Vec::new());
         assert_eq!(
             scratch.retained_bytes() + capacity as u128 * size_of::<u64>() as u128,
             before
@@ -649,8 +659,8 @@ fn an_independent_sum_does_not_establish_a_model() {
             &mut Words::new(Vec::new()),
             plan,
             &mut Allowance {
-                remaining: plan.visits,
-                work: &mut Work::new(u64::MAX),
+                remaining: plan.visits as u64,
+                work: &mut Meter::local(u64::MAX),
             }
         ),
         Ok(Step::Unchanged)

@@ -11,6 +11,7 @@ use std::borrow::Borrow;
 use std::mem::size_of;
 use std::sync::Arc;
 
+use zetesis_algebra::AnswerSetsSought;
 use zetesis_ferraris::{Knowledge, Narrower, Theory};
 
 use crate::Incomplete;
@@ -106,7 +107,7 @@ impl<R: Borrow<(Theory, Narrower)>> Conditions<R> {
 pub(super) struct CandidateKnowledge {
     /// Original theory first, then permanent restrictions, then the optional
     /// bound. Keeping one vector avoids another allocation on each region copy.
-    entries: Vec<Knowledge>,
+    entries: Vec<Knowledge<AnswerSetsSought>>,
     bound_generation: Option<u64>,
 }
 
@@ -145,7 +146,7 @@ impl CandidateKnowledge {
         &mut self,
         index: usize,
         narrower: &Narrower,
-    ) -> Result<&mut Knowledge, Incomplete> {
+    ) -> Result<&mut Knowledge<AnswerSetsSought>, Incomplete> {
         let permanent = self.entries.len() - usize::from(self.bound_generation.is_some());
         if index == permanent {
             let reserved = if self.entries.is_empty() {
@@ -161,7 +162,10 @@ impl CandidateKnowledge {
         Ok(&mut self.entries[index])
     }
 
-    pub(super) fn bound(&mut self, bound: &Bound) -> Result<&mut Knowledge, Incomplete> {
+    pub(super) fn bound(
+        &mut self,
+        bound: &Bound,
+    ) -> Result<&mut Knowledge<AnswerSetsSought>, Incomplete> {
         match self.bound_generation {
             Some(generation) if generation == bound.generation => {}
             Some(_) => {
@@ -190,7 +194,7 @@ impl CandidateKnowledge {
     pub(super) fn preference_subjects<R>(
         &self,
         conditions: &Conditions<R>,
-    ) -> (&Knowledge, &Knowledge) {
+    ) -> (&Knowledge<AnswerSetsSought>, &Knowledge<AnswerSetsSought>) {
         let current = conditions.permanent.len() + usize::from(conditions.bound.is_some());
         (&self.entries[0], &self.entries[current])
     }
@@ -198,11 +202,13 @@ impl CandidateKnowledge {
     /// Owned allocations only; the enclosing frontier counts this value's
     /// inline vector and generation headers.
     pub(super) fn allocated_bytes(&self) -> u128 {
-        self.entries.capacity() as u128 * size_of::<Knowledge>() as u128
+        self.entries.capacity() as u128 * size_of::<Knowledge<AnswerSetsSought>>() as u128
             + self
                 .entries
                 .iter()
-                .map(|known| known.retained_bytes() - size_of::<Knowledge>() as u128)
+                .map(|known| {
+                    known.retained_bytes() - size_of::<Knowledge<AnswerSetsSought>>() as u128
+                })
                 .sum::<u128>()
     }
 }

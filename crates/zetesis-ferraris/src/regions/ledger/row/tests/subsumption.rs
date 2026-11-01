@@ -11,7 +11,8 @@ fn copy(source: &Literals) -> Literals {
 
 fn verdict(row: &Row, proposed: &Literals) -> bool {
     let mut remaining = u64::MAX;
-    row.subsumes(proposed, &mut remaining, &mut Work::new(u64::MAX))
+    row.subsumes(proposed, &mut remaining, &mut Meter::local(u64::MAX))
+        .map_err(zetesis_algebra::Failure::into_stop)
         .unwrap()
         .unwrap()
 }
@@ -139,38 +140,42 @@ fn every_interrupted_inclusion_prefix_preserves_its_stop() {
         &[63, 127],
     );
     for row in [Row::Scalar(copy(&retained)), packed(&retained)] {
-        let mut complete = Work::new(u64::MAX);
+        let mut complete = Meter::local(u64::MAX);
         let mut remaining = u64::MAX;
         assert_eq!(
             row.subsumes(&proposed, &mut remaining, &mut complete)
+                .map_err(zetesis_algebra::Failure::into_stop)
                 .unwrap(),
             Some(true)
         );
         // Four proposed premises and four retained outputs are compared; the
         // extra final premise cannot change inclusion and is not traversed.
-        assert_eq!(complete.spent(), 8);
+        assert_eq!(complete.charged(), 8);
         for failure in [Stop::WorkLimit, Stop::Cancelled, Stop::Deadline] {
-            for prefix in 0..complete.spent() {
+            for prefix in 0..complete.charged() {
                 let mut permits = SinglePermits::new(prefix, failure);
-                let mut work = Work::reserved(&mut permits);
+                let mut work = Meter::reserved(&mut permits);
                 let mut remaining = u64::MAX;
                 assert_eq!(
-                    row.subsumes(&proposed, &mut remaining, &mut work),
+                    row.subsumes(&proposed, &mut remaining, &mut work)
+                        .map_err(zetesis_algebra::Failure::into_stop),
                     Err(failure)
                 );
-                assert_eq!(work.spent(), prefix);
+                assert_eq!(work.charged(), prefix);
                 assert_eq!(row.conditions().collect::<Vec<_>>(), retained.conditions);
                 assert_eq!(row.outputs().collect::<Vec<_>>(), retained.outputs);
             }
         }
-        for prefix in 0..complete.spent() {
+        for prefix in 0..complete.charged() {
             let mut remaining = prefix;
-            let mut work = Work::new(u64::MAX);
+            let mut work = Meter::local(u64::MAX);
             assert_eq!(
-                row.subsumes(&proposed, &mut remaining, &mut work).unwrap(),
+                row.subsumes(&proposed, &mut remaining, &mut work)
+                    .map_err(zetesis_algebra::Failure::into_stop)
+                    .unwrap(),
                 None
             );
-            assert_eq!(work.spent(), prefix);
+            assert_eq!(work.charged(), prefix);
             assert_eq!(remaining, 0);
             assert!(verdict(&row, &proposed));
         }

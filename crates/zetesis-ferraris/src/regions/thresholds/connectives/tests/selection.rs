@@ -1,7 +1,7 @@
 //! Select useful row requirements before retaining discovery IDs.
 
 use super::*;
-use crate::regions::{Closure, Known, Step, Subject, Width, Work, chain_position, witnesses};
+use crate::regions::{Closure, Context, Known, Meter, Step, Width, chain_position, witnesses};
 
 const ROWS: usize = 8;
 
@@ -102,11 +102,14 @@ fn warmed(index: &Narrower, chain: usize) -> NarrowingScratch {
     assert!(witnesses::expands(index, chain));
     let mut scratch = NarrowingScratch::default();
     scratch
+        .common
         .prepare_thresholds(index.thresholds.rows.len())
         .unwrap();
     scratch
+        .common
         .witnesses
-        .cone(index, chain, &mut Work::new(u64::MAX))
+        .cone(index, chain, &mut Meter::local(u64::MAX))
+        .map_err(zetesis_algebra::Failure::into_stop)
         .unwrap();
     scratch
 }
@@ -141,14 +144,16 @@ fn selected_rows_preserve_order_and_closed_knowledge() {
                 .map(|(_, &guard)| index.thresholds.row(&theory, guard))
                 .collect();
             let mut scratch = warmed(&index, chain);
-            let bytes = scratch.witnesses.retained_bytes();
-            let mut work = Work::new(u64::MAX);
-            let mut closure = Closure {
+            let bytes = scratch.common.witnesses.retained_bytes();
+            let mut work = Meter::local(u64::MAX);
+            let mut closure = Closure::<_, zetesis_algebra::AnswerSetsSought> {
                 known: compact(&mut actual).borrow(),
-                lists: &mut scratch,
+                lists: &mut scratch.common,
+                learning: &mut scratch.learning,
             };
             let result = closure
                 .threshold_connective(&index, chain, positive, &mut work)
+                .map_err(zetesis_algebra::Failure::into_stop)
                 .unwrap();
             assert!(result != Step::Contradiction);
             assert_eq!(closure.lists.witnesses.candidates(), expected_rows);
@@ -160,12 +165,13 @@ fn selected_rows_preserve_order_and_closed_knowledge() {
             }
             let result = closure
                 .close(
-                    Subject::from(OriginalSubject::new(&theory, None)),
+                    Context::from(OriginalSubject::new(&theory, None)),
                     &index,
                     &region,
                     &mut work,
                     &mut NarrowingStatistics::default(),
                 )
+                .map_err(zetesis_algebra::Failure::into_stop)
                 .unwrap();
             assert!(result != Step::Contradiction);
             let mut expected = index.knowledge();
@@ -205,13 +211,15 @@ fn opposite_bounds_survive_selection_until_refuted() {
             state.lower = 4;
         }
         let mut scratch = warmed(&index, chain);
-        let mut closure = Closure {
+        let mut closure = Closure::<_, zetesis_algebra::AnswerSetsSought> {
             known: compact(&mut known).borrow(),
-            lists: &mut scratch,
+            lists: &mut scratch.common,
+            learning: &mut scratch.learning,
         };
         assert!(
             closure
-                .threshold_connective(&index, chain, positive, &mut Work::new(u64::MAX))
+                .threshold_connective(&index, chain, positive, &mut Meter::local(u64::MAX))
+                .map_err(zetesis_algebra::Failure::into_stop)
                 .unwrap()
                 == Step::Contradiction
         );
@@ -243,35 +251,58 @@ fn opposite_bounds_survive_selection_until_refuted() {
 
 #[test]
 fn interrupted_selection_retries_without_partial_ids() {
+    fn run<Q: zetesis_algebra::Quota<Error = Stop> + ?Sized>(
+        index: &Narrower,
+        chain: usize,
+        knowledge: &mut Knowledge,
+        scratch: &mut NarrowingScratch,
+        work: &mut Meter<'_, Q>,
+    ) -> Result<Step, Stop> {
+        Closure::<_, zetesis_algebra::AnswerSetsSought> {
+            known: compact(knowledge).borrow(),
+            lists: &mut scratch.common,
+            learning: &mut scratch.learning,
+        }
+        .threshold_connective(index, chain, true, work)
+        .map_err(zetesis_algebra::Failure::into_stop)
+    }
+
     let (theory, source, _) = fixture(true, &(0..ROWS).collect::<Vec<_>>());
     let index = Narrower::new(&theory);
     let chain = chain_position(index.chain_of[source].unwrap());
     let (_, before) = delayed(&theory, &index);
     let mut scratch = warmed(&index, chain);
-    let run = |knowledge: &mut Knowledge, scratch: &mut NarrowingScratch, work: &mut Work<'_>| {
-        Closure {
-            known: compact(knowledge).borrow(),
-            lists: scratch,
-        }
-        .threshold_connective(&index, chain, true, work)
-    };
-    let mut complete = Work::new(u64::MAX);
-    assert!(run(&mut before.clone(), &mut scratch, &mut complete).unwrap() == Step::Unchanged);
-    for remaining in 0..complete.spent() {
+
+    let mut complete = Meter::local(u64::MAX);
+    assert!(
+        run(
+            &index,
+            chain,
+            &mut before.clone(),
+            &mut scratch,
+            &mut complete
+        )
+        .unwrap()
+            == Step::Unchanged
+    );
+    for remaining in 0..complete.charged() {
         for failure in [Stop::WorkLimit, Stop::Cancelled, Stop::Deadline] {
             let mut quota = Allowance { remaining, failure };
-            let mut work = Work::reserved(&mut quota);
+            let mut work = Meter::reserved(&mut quota);
             let mut known = before.clone();
             assert!(
-                matches!(run(&mut known, &mut scratch, &mut work), Err(stop) if stop == failure)
+                matches!(run(&index, chain, &mut known, &mut scratch, &mut work), Err(stop) if stop == failure)
             );
-            assert_eq!(work.spent(), remaining);
+            assert_eq!(work.charged(), remaining);
             work.refund();
             assert_closed(compact(&mut known), compact(&mut before.clone()));
-            let mut retry = Work::new(complete.spent());
-            assert!(run(&mut known, &mut scratch, &mut retry).unwrap() == Step::Unchanged);
-            assert_eq!(retry.spent(), complete.spent());
-            assert!(scratch.witnesses.candidates().is_empty());
+            let mut retry = Meter::local(complete.charged());
+            assert!(
+                run(&index, chain, &mut known, &mut scratch, &mut retry).unwrap()
+                    == Step::Unchanged
+            );
+            assert_eq!(retry.charged(), complete.charged());
+            assert!(scratch.common.witnesses.candidates().is_empty());
         }
     }
 }

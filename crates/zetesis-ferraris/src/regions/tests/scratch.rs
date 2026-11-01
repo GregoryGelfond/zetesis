@@ -4,8 +4,7 @@
 use zetesis_algebra::{Cancellation, Stop};
 
 use crate::{
-    Narrower, Narrowing, NarrowingQuota, NarrowingScratch, NarrowingStatistics, Region,
-    RegionLimits, Theory,
+    Narrower, Narrowing, NarrowingScratch, NarrowingStatistics, Region, RegionLimits, Theory,
 };
 
 use super::implication_chain;
@@ -43,7 +42,9 @@ fn narrow_open(theory: &Theory, narrower: &Narrower, scratch: &mut NarrowingScra
 
 /// Whether a narrowing left entries in the scratch.
 fn holds_entries(scratch: &NarrowingScratch) -> bool {
-    !(scratch.learned.is_empty() && scratch.nodes.is_empty() && scratch.heads.is_empty())
+    !(scratch.common.learned.is_empty()
+        && scratch.common.nodes.is_empty()
+        && scratch.common.heads.is_empty())
 }
 
 /// The next region's narrowing with `scratch`, which an earlier failure left
@@ -98,7 +99,8 @@ fn a_work_limit_stop_leaves_nothing_for_the_next_region() {
 /// Grants single permits, then reports cancellation.
 struct CancelledAfter(u64);
 
-impl NarrowingQuota for CancelledAfter {
+impl zetesis_algebra::Quota for CancelledAfter {
+    type Error = Stop;
     fn reserve(&mut self, _wanted: u64) -> Result<u64, Stop> {
         if self.0 == 0 {
             return Err(Stop::Cancelled);
@@ -114,14 +116,14 @@ fn a_cancelled_narrowing_leaves_nothing_for_the_next_region() {
     let theory = implication_chain(40);
     let narrower = Narrower::new(&theory);
     let mut scratch = NarrowingScratch::default();
-    let attempt = narrower.narrow_known_reserved(
+    let attempt = crate::test_support::stop_narrowing(&narrower.narrow_known_reserved(
         crate::OriginalSubject::new(&theory, None),
         &mut Region::all_open(theory.atom_count()),
         &mut narrower.knowledge(),
         &mut scratch,
         &Cancellation::default(),
-        &mut CancelledAfter(5),
-    );
+        &mut zetesis_algebra::Meter::reserved(&mut CancelledAfter(5)),
+    ));
     assert_eq!(attempt.result.unwrap_err(), Stop::Cancelled);
     assert_clean_after(&theory, &narrower, scratch);
 }
@@ -146,58 +148,58 @@ fn knowledge_retains_no_worklist_capacity() {
         .unwrap();
     assert_eq!(knowledge.retained_bytes(), before);
     // The worklists the narrowing grew stay with the walker's scratch.
-    assert!(scratch.nodes.capacity() > 0);
+    assert!(scratch.common.nodes.capacity() > 0);
 }
 
 #[test]
 fn pending_masks_reuse_storage_across_word_boundaries() {
     let mut scratch = NarrowingScratch::default();
-    scratch.prepare(130);
-    scratch.prepare_thresholds(130).unwrap();
-    scratch.prepare_residuals(130).unwrap();
+    scratch.common.prepare(130);
+    scratch.common.prepare_thresholds(130).unwrap();
+    scratch.common.prepare_residuals(130).unwrap();
     let pointers = (
-        scratch.pending.as_ptr(),
-        scratch.pending_thresholds.as_ptr(),
-        scratch.pending_residuals.as_ptr(),
+        scratch.common.pending.as_ptr(),
+        scratch.common.pending_thresholds.as_ptr(),
+        scratch.common.pending_residuals.as_ptr(),
     );
     let bytes = scratch.retained_bytes();
     for atom in [0, 63, 64, 129, 64] {
-        scratch.queue_recheck(atom);
-        scratch.queue_threshold(atom);
-        scratch.queue_residual(atom);
+        scratch.common.queue_recheck(atom);
+        scratch.common.queue_threshold(atom);
+        scratch.common.queue_residual(atom);
     }
-    assert_eq!(scratch.heads, [0, 63, 64, 129]);
-    assert_eq!(scratch.threshold_rows, scratch.heads);
-    assert_eq!(scratch.residual_rows, scratch.heads);
-    assert_eq!(scratch.next_recheck(), Some(129));
-    assert_eq!(scratch.next_threshold(), Some(129));
-    assert_eq!(scratch.next_residual(), Some(129));
-    scratch.queue_recheck(129);
-    scratch.queue_threshold(129);
-    scratch.queue_residual(129);
+    assert_eq!(scratch.common.heads, [0, 63, 64, 129]);
+    assert_eq!(scratch.common.threshold_rows, scratch.common.heads);
+    assert_eq!(scratch.common.residual_rows, scratch.common.heads);
+    assert_eq!(scratch.common.next_recheck(), Some(129));
+    assert_eq!(scratch.common.next_threshold(), Some(129));
+    assert_eq!(scratch.common.next_residual(), Some(129));
+    scratch.common.queue_recheck(129);
+    scratch.common.queue_threshold(129);
+    scratch.common.queue_residual(129);
     // Resetting for a smaller subject must clear the still-queued high bits,
     // retaining the existing capacity rather than truncating their storage.
-    scratch.prepare(1);
-    assert!(scratch.heads.is_empty());
-    assert!(scratch.threshold_rows.is_empty());
-    assert!(scratch.residual_rows.is_empty());
-    assert_eq!(&*scratch.pending, [0, 0, 0]);
-    assert_eq!(&*scratch.pending_thresholds, [0, 0, 0]);
-    assert_eq!(&*scratch.pending_residuals, [0, 0, 0]);
+    scratch.common.prepare(1);
+    assert!(scratch.common.heads.is_empty());
+    assert!(scratch.common.threshold_rows.is_empty());
+    assert!(scratch.common.residual_rows.is_empty());
+    assert_eq!(&*scratch.common.pending, [0, 0, 0]);
+    assert_eq!(&*scratch.common.pending_thresholds, [0, 0, 0]);
+    assert_eq!(&*scratch.common.pending_residuals, [0, 0, 0]);
     assert_eq!(
         pointers,
         (
-            scratch.pending.as_ptr(),
-            scratch.pending_thresholds.as_ptr(),
-            scratch.pending_residuals.as_ptr(),
+            scratch.common.pending.as_ptr(),
+            scratch.common.pending_thresholds.as_ptr(),
+            scratch.common.pending_residuals.as_ptr(),
         )
     );
     // Only the head list can grow here: row lists were fully reserved above.
     assert_eq!(
         scratch.retained_bytes(),
-        bytes + scratch.heads.capacity() as u128 * std::mem::size_of::<usize>() as u128
+        bytes + scratch.common.heads.capacity() as u128 * std::mem::size_of::<usize>() as u128
     );
-    scratch.queue_recheck(0);
-    assert_eq!(scratch.next_recheck(), Some(0));
-    assert_eq!(scratch.next_recheck(), None);
+    scratch.common.queue_recheck(0);
+    assert_eq!(scratch.common.next_recheck(), Some(0));
+    assert_eq!(scratch.common.next_recheck(), None);
 }

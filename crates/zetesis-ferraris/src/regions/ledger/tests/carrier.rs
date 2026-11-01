@@ -31,7 +31,7 @@ fn a_plain_original_subject_captures_no_row() {
     );
     assert_eq!(result, Narrowing::Refuted);
     assert_eq!(counts.support_explanations.attempts, 0);
-    assert_eq!(scratch.explanations.len(), 0);
+    assert_eq!(scratch.learning.explanations.len(), 0);
 }
 
 #[test]
@@ -47,7 +47,7 @@ fn a_plain_original_subject_matches_no_row() {
     );
     assert_eq!(counts.support_explanations.matched, 0);
     assert_eq!(counts.support_explanations.work, 0);
-    assert_eq!(scratch.explanations.len(), 1);
+    assert_eq!(scratch.learning.explanations.len(), 1);
 }
 
 #[test]

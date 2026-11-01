@@ -3,7 +3,7 @@
 //! must reconstruct enough evidence to hold outside the region that supplied it.
 
 use super::{Program, assert_sound, explain, limits, partial};
-use crate::regions::Work;
+use crate::regions::Meter;
 use crate::test_support::{SinglePermits, constructed_theory, push};
 use crate::{ExtremumCut, ExtremumCutRule, ExtremumRow, FormulaTransaction, NodeView, Threshold};
 use zetesis_algebra::Stop;
@@ -39,15 +39,15 @@ fn ordinary_closure_reuses_native_aggregate_explanations() {
         let (result, captured) = close(&mut first, &mut program.index.knowledge(), &mut scratch);
         assert!(matches!(result, Narrowing::Fixed { .. }));
         assert_eq!(captured.support_explanations.certified, 1);
-        assert_eq!(scratch.explanations.len(), 1);
-        let passes = scratch.founded.passes;
+        assert_eq!(scratch.learning.explanations.len(), 1);
+        let passes = scratch.common.founded.passes;
         let mut sibling = Region::all_open(4);
         assert!(sibling.hold(0) && sibling.cut(2) && sibling.cut(3));
         let (result, reused) = close(&mut sibling, &mut program.index.knowledge(), &mut scratch);
         assert_eq!(result, Narrowing::Refuted);
         assert_eq!(reused.support_explanations.refuted, 1);
         assert_eq!(reused.support_explanations.attempts, 0);
-        assert_eq!(scratch.founded.passes, passes);
+        assert_eq!(scratch.common.founded.passes, passes);
     }
 }
 
@@ -119,7 +119,7 @@ fn check_all_regions(program: &Program, body: usize) -> (usize, usize) {
                 &completed,
                 start,
                 limits(),
-                &mut Work::new(u64::MAX),
+                &mut Meter::local(u64::MAX),
             )
             .unwrap()
             {
@@ -203,9 +203,15 @@ fn unproved_contributions_remain_possible() {
     });
     let completed = program.complete(&[(0, true), (2, false), (3, false)], &[body]);
     assert!(
-        explain(&program, &completed, 0, limits(), &mut Work::new(u64::MAX))
-            .unwrap()
-            .is_none()
+        explain(
+            &program,
+            &completed,
+            0,
+            limits(),
+            &mut Meter::local(u64::MAX)
+        )
+        .unwrap()
+        .is_none()
     );
     assert!(
         program.answers().contains(&0b0111),
@@ -223,9 +229,15 @@ fn failed_contribution_discards_its_partial_witness() {
         threshold(nodes, &[alternative, 3], &[1, 2], 2)
     });
     let completed = program.complete(&[(0, true), (2, true), (3, false)], &[body]);
-    let record = explain(&program, &completed, 0, limits(), &mut Work::new(u64::MAX))
-        .unwrap()
-        .unwrap();
+    let record = explain(
+        &program,
+        &completed,
+        0,
+        limits(),
+        &mut Meter::local(u64::MAX),
+    )
+    .unwrap()
+    .unwrap();
     assert_eq!(record.conditions, [(3, false)]);
     assert_sound(&program, &completed, &record, &program.answers());
 }
@@ -257,9 +269,15 @@ fn failed_middle_contribution_preserves_only_earlier_evidence() {
     });
     let program = Program::new(owner);
     let completed = program.complete(&[(2, true), (3, true), (4, true)], &[body]);
-    let record = explain(&program, &completed, 0, limits(), &mut Work::new(u64::MAX))
-        .unwrap()
-        .unwrap();
+    let record = explain(
+        &program,
+        &completed,
+        0,
+        limits(),
+        &mut Meter::local(u64::MAX),
+    )
+    .unwrap()
+    .unwrap();
     assert_eq!(record.conditions, [(2, true), (4, true)]);
     assert_eq!(record.unsupported, [0]);
     assert_sound(&program, &completed, &record, &program.answers());
@@ -270,9 +288,15 @@ fn nonqualifying_extremum_conditions_are_not_premises() {
     let (program, body) =
         program(|nodes| extremum(nodes, &[2, 3], &[1, 4], ExtremumCutRule::Prefix(2)));
     let completed = program.complete(&[(0, true), (2, false)], &[body]);
-    let record = explain(&program, &completed, 0, limits(), &mut Work::new(u64::MAX))
-        .unwrap()
-        .unwrap();
+    let record = explain(
+        &program,
+        &completed,
+        0,
+        limits(),
+        &mut Meter::local(u64::MAX),
+    )
+    .unwrap()
+    .unwrap();
     assert_eq!(record.conditions, [(2, false)]);
     assert_sound(&program, &completed, &record, &program.answers());
 }
@@ -282,16 +306,29 @@ fn empty_numeric_witnesses_are_handled_as_constants() {
     for rule in [ExtremumCutRule::Prefix(2), ExtremumCutRule::Suffix(4)] {
         let (program, body) = program(|nodes| extremum(nodes, &[], &[], rule));
         let completed = program.complete(&[], &[body]);
-        let record = explain(&program, &completed, 0, limits(), &mut Work::new(u64::MAX))
-            .unwrap()
-            .unwrap();
+        let record = explain(
+            &program,
+            &completed,
+            0,
+            limits(),
+            &mut Meter::local(u64::MAX),
+        )
+        .unwrap()
+        .unwrap();
         assert!(record.conditions.is_empty());
         assert_sound(&program, &completed, &record, &program.answers());
     }
     for bound in [0, 1] {
         let (program, body) = program(|nodes| threshold(nodes, &[], &[], bound));
         let completed = program.complete(&[], &[body]);
-        let record = explain(&program, &completed, 0, limits(), &mut Work::new(u64::MAX)).unwrap();
+        let record = explain(
+            &program,
+            &completed,
+            0,
+            limits(),
+            &mut Meter::local(u64::MAX),
+        )
+        .unwrap();
         assert_eq!(record.is_some(), bound > 0);
     }
 }
@@ -305,20 +342,20 @@ fn nonqualifying_rows_preserve_every_interruption() {
         let (program, body) = program(|nodes| extremum(nodes, &[2, 3], &ranks, rule));
         assert!(program.index.chain_of[body].is_none());
         let completed = program.complete(&[], &[body]);
-        let mut measured = Work::new(u64::MAX);
+        let mut measured = Meter::local(u64::MAX);
         let record = explain(&program, &completed, 0, limits(), &mut measured)
             .unwrap()
             .unwrap();
         assert!(record.conditions.is_empty());
         assert_sound(&program, &completed, &record, &program.answers());
         for failure in [Stop::WorkLimit, Stop::Cancelled, Stop::Deadline] {
-            for prefix in 0..measured.spent() {
+            for prefix in 0..measured.charged() {
                 let mut quota = SinglePermits::new(prefix, failure);
-                let mut work = Work::reserved(&mut quota);
+                let mut work = Meter::reserved(&mut quota);
                 assert!(
                     matches!(explain(&program, &completed, 0, limits(), &mut work), Err(actual) if actual == failure)
                 );
-                assert_eq!(work.spent(), prefix);
+                assert_eq!(work.charged(), prefix);
             }
         }
     }
@@ -336,19 +373,19 @@ fn nested_program() -> (Program, usize) {
 fn nested_numeric_witnesses_preserve_every_interruption() {
     let (program, body) = nested_program();
     let completed = program.complete(&[(2, false), (3, false)], &[body]);
-    let mut measured = Work::new(u64::MAX);
+    let mut measured = Meter::local(u64::MAX);
     let record = explain(&program, &completed, 0, limits(), &mut measured)
         .unwrap()
         .unwrap();
     assert_sound(&program, &completed, &record, &program.answers());
     for failure in [Stop::WorkLimit, Stop::Cancelled, Stop::Deadline] {
-        for prefix in 0..measured.spent() {
+        for prefix in 0..measured.charged() {
             let mut quota = SinglePermits::new(prefix, failure);
-            let mut work = Work::reserved(&mut quota);
+            let mut work = Meter::reserved(&mut quota);
             assert!(
                 matches!(explain(&program, &completed, 0, limits(), &mut work), Err(actual) if actual == failure)
             );
-            assert_eq!(work.spent(), prefix);
+            assert_eq!(work.charged(), prefix);
         }
     }
 }
@@ -376,9 +413,15 @@ fn local_numeric_capture_limits_publish_no_partial_reason() {
         },
     ] {
         assert!(
-            explain(&program, &completed, 0, limited, &mut Work::new(u64::MAX))
-                .unwrap()
-                .is_none()
+            explain(
+                &program,
+                &completed,
+                0,
+                limited,
+                &mut Meter::local(u64::MAX)
+            )
+            .unwrap()
+            .is_none()
         );
     }
 }

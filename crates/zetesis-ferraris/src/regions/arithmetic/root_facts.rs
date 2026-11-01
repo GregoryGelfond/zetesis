@@ -4,6 +4,8 @@
 //! starts empty and uses only earlier checked facts, so an unsupported cycle
 //! cannot certify itself. The original Theory and its reduct are unchanged.
 
+use zetesis_algebra::Quota;
+
 mod prepare;
 mod reader;
 #[cfg(test)]
@@ -44,11 +46,11 @@ impl CheckedRootFacts {
     }
 
     /// Consumers authenticate the owner once before interpreting coordinates.
-    pub(super) fn contains(
+    pub(super) fn contains<Q: Quota + ?Sized>(
         &self,
         atom: usize,
-        budget: &mut Budget<'_, '_>,
-    ) -> Result<bool, BudgetError> {
+        budget: &mut Budget<'_, '_, Q>,
+    ) -> Result<bool, BudgetError<Q::Error>> {
         membership(&self.owner, &self.words, atom, budget)
     }
 
@@ -61,11 +63,11 @@ impl CheckedRootFacts {
 
 /// Prepare selected-source witnesses and independently replay them. A refusal
 /// returns no evidence prefix. The caller discards its preparation on failure.
-pub(super) fn build(
+pub(super) fn build<Q: Quota + ?Sized>(
     theory: &Theory,
     storage: &mut Storage,
-    budget: &mut Budget<'_, '_>,
-) -> Result<CheckedRootFacts, BudgetError> {
+    budget: &mut Budget<'_, '_, Q>,
+) -> Result<CheckedRootFacts, BudgetError<Q::Error>> {
     let steps = budget.in_phase(Phase::Recognition, |budget| {
         prepare::propose(theory, storage, budget)
     })?;
@@ -94,13 +96,13 @@ pub(super) fn build(
 /// Check actual original witnesses, never a proposed final mask or graph.
 /// A well-formed but unsupported/false witness rejects the proposal; a bad
 /// source coordinate keeps the canonical typed admission error.
-fn replay(
+fn replay<Q: Quota + ?Sized>(
     theory: &Theory,
     owner: &Theory,
     steps: &[Step],
     storage: &mut Storage,
-    budget: &mut Budget<'_, '_>,
-) -> Result<Option<Words<u64>>, BudgetError> {
+    budget: &mut Budget<'_, '_, Q>,
+) -> Result<Option<Words<u64>>, BudgetError<Q::Error>> {
     budget.charge(1)?;
     if !theory.same_instance(owner) {
         budget.charge(1)?;
@@ -137,12 +139,12 @@ fn replay(
     Ok(Some(words))
 }
 
-fn membership(
+fn membership<Q: Quota + ?Sized>(
     theory: &Theory,
     words: &[u64],
     atom: usize,
-    budget: &mut Budget<'_, '_>,
-) -> Result<bool, BudgetError> {
+    budget: &mut Budget<'_, '_, Q>,
+) -> Result<bool, BudgetError<Q::Error>> {
     budget.charge(1)?;
     if atom >= theory.atom_count() {
         budget.charge(1)?;

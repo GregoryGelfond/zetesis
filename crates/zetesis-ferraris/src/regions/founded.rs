@@ -99,10 +99,12 @@
 //! to the original narrowing that completes it; concurrent first users may each
 //! perform a charged test. Only a completed Boolean result is shared.
 
+use zetesis_algebra::{Failure, Quota};
+
 use zetesis_algebra::words::Words;
 
 use super::{
-    Adjacency, Narrower, NodeView, Producers, Theory, Work, bit, chain_position, flag_words,
+    Adjacency, Meter, Narrower, NodeView, Producers, Theory, bit, chain_position, flag_words,
 };
 use std::mem::size_of;
 use zetesis_algebra::Stop;
@@ -213,13 +215,13 @@ impl Scratch {
 
     /// An acyclic positive projection cannot strengthen ordinary support. The
     /// existing subject contract binds both inventories to this exact original.
-    pub(super) fn needed(
+    pub(super) fn needed<Q: Quota + ?Sized>(
         &mut self,
         theory: &Theory,
         index: &Narrower,
         producers: &Producers,
-        work: &mut Work<'_>,
-    ) -> Result<bool, Stop> {
+        work: &mut Meter<'_, Q>,
+    ) -> Result<bool, Failure<Q::Error>> {
         if let Some(&cyclic) = producers.founded_cycles.get() {
             return Ok(cyclic);
         }
@@ -229,13 +231,13 @@ impl Scratch {
         Ok(*producers.founded_cycles.get_or_init(|| cyclic))
     }
 
-    fn cyclic(
+    fn cyclic<Q: Quota + ?Sized>(
         &mut self,
         theory: &Theory,
         index: &Narrower,
         producers: &Producers,
-        work: &mut Work<'_>,
-    ) -> Result<bool, Stop> {
+        work: &mut Meter<'_, Q>,
+    ) -> Result<bool, Failure<Q::Error>> {
         // Cycle preparation uses the same state cells as body preparation.
         // Even an interrupted cycle pass invalidates their previous authority.
         self.owner = None;
@@ -328,33 +330,33 @@ impl Scratch {
         Ok(next != vertices)
     }
 
-    fn remove_dependency(
+    fn remove_dependency<Q: Quota + ?Sized>(
         &mut self,
         node: usize,
         atoms: usize,
-        work: &mut Work<'_>,
-    ) -> Result<(), Stop> {
+        work: &mut Meter<'_, Q>,
+    ) -> Result<(), Failure<Q::Error>> {
         match self.states[node] {
             State::Awaiting(1) => self.activate_node(node, atoms, work),
             State::Awaiting(remaining) if remaining > 1 => {
                 self.states[node] = State::Awaiting(remaining - 1);
                 Ok(())
             }
-            _ => Err(Stop::InvalidProgram),
+            _ => Err(Failure::Stopped(Stop::InvalidProgram)),
         }
     }
 
     /// Complete the upper closure before its caller may cut any atom. No state
     /// from an earlier theory, region or interrupted prefix is authoritative.
-    pub(super) fn complete(
+    pub(super) fn complete<Q: Quota + ?Sized>(
         &mut self,
         theory: &Theory,
         index: &Narrower,
         producers: &Producers,
         never: &[u64],
         atom_never: &[u64],
-        work: &mut Work<'_>,
-    ) -> Result<(), Stop> {
+        work: &mut Meter<'_, Q>,
+    ) -> Result<(), Failure<Q::Error>> {
         #[cfg(test)]
         {
             self.passes += 1;
@@ -408,7 +410,9 @@ impl Scratch {
                 };
                 if matches!(state, State::True | State::Awaiting(0)) {
                     self.states[node] = State::True;
-                    self.propagate_node::<false>(index, producers, node, atoms, atom_never, work)?;
+                    self.propagate_node::<false, Q>(
+                        index, producers, node, atoms, atom_never, work,
+                    )?;
                 } else {
                     self.states[node] = state;
                 }
@@ -427,7 +431,7 @@ impl Scratch {
                 }
                 continue;
             }
-            self.propagate_node::<false>(
+            self.propagate_node::<false, Q>(
                 index,
                 producers,
                 vertex - atoms,
@@ -441,15 +445,15 @@ impl Scratch {
 
     /// Replay the same original or projected incidences for a newly true node,
     /// whether it came from a seed or from the ordinary closure queue.
-    fn propagate_node<const LOCAL: bool>(
+    fn propagate_node<const LOCAL: bool, Q: Quota + ?Sized>(
         &mut self,
         index: &Narrower,
         producers: &Producers,
         node: usize,
         atoms: usize,
         atom_never: &[u64],
-        work: &mut Work<'_>,
-    ) -> Result<(), Stop> {
+        work: &mut Meter<'_, Q>,
+    ) -> Result<(), Failure<Q::Error>> {
         let parents = self
             .projected
             .as_ref()
@@ -467,7 +471,7 @@ impl Scratch {
                     self.states[parent] = State::Awaiting(remaining - 1);
                 }
                 State::Outside | State::Inactive | State::True => {}
-                State::Visiting(_) => return Err(Stop::InvalidProgram),
+                State::Visiting(_) => return Err(Failure::Stopped(Stop::InvalidProgram)),
             }
         }
         if let Some(projected) = &self.projected {
@@ -487,7 +491,7 @@ impl Scratch {
             }
         } else {
             if LOCAL {
-                return Err(Stop::InvalidProgram);
+                return Err(Failure::Stopped(Stop::InvalidProgram));
             }
             for &producer in &producers.by_body[node] {
                 work.tick()?;
@@ -506,13 +510,13 @@ impl Scratch {
     /// Roots without heads and head-only subformulas cannot contribute to P.
     /// Existing state cells mark discovery; only cyclic head membership adds a mask.
     /// Prepare incidence rows only when the same exact body projection is reused.
-    fn prepare_bodies(
+    fn prepare_bodies<Q: Quota + ?Sized>(
         &mut self,
         theory: &Theory,
         index: &Narrower,
         producers: &Producers,
-        work: &mut Work<'_>,
-    ) -> Result<(), Stop> {
+        work: &mut Meter<'_, Q>,
+    ) -> Result<(), Failure<Q::Error>> {
         if self
             .owner
             .as_ref()
@@ -551,14 +555,14 @@ impl Scratch {
         Ok(())
     }
 
-    fn prepare_cone(
+    fn prepare_cone<Q: Quota + ?Sized>(
         &mut self,
         theory: &Theory,
         index: &Narrower,
         producers: &Producers,
         cyclic_only: bool,
-        work: &mut Work<'_>,
-    ) -> Result<(), Stop> {
+        work: &mut Meter<'_, Q>,
+    ) -> Result<(), Failure<Q::Error>> {
         // No incidence row may survive replacement of its included body set.
         self.projected = None;
         self.body_nodes.clear();
@@ -602,7 +606,7 @@ impl Scratch {
                 // A body root has an implication parent; a flattened chain leaf
                 // is never absorbed. Both are active original index positions.
                 if index.absorbed[node] {
-                    return Err(Stop::InvalidProgram);
+                    return Err(Failure::Stopped(Stop::InvalidProgram));
                 }
                 let chain = index.chain_of[node].ok_or(Stop::InvalidProgram)?;
                 for &child in index.chains[chain_position(chain)].leaves(&index.extrema) {
@@ -613,7 +617,11 @@ impl Scratch {
         Ok(())
     }
 
-    fn include_body(&mut self, node: usize, work: &mut Work<'_>) -> Result<(), Stop> {
+    fn include_body<Q: Quota + ?Sized>(
+        &mut self,
+        node: usize,
+        work: &mut Meter<'_, Q>,
+    ) -> Result<(), Failure<Q::Error>> {
         work.tick()?;
         if matches!(self.states[node], State::Outside) {
             self.body_nodes
@@ -625,14 +633,14 @@ impl Scratch {
         Ok(())
     }
 
-    fn initialize(
+    fn initialize<Q: Quota + ?Sized>(
         &mut self,
         theory: &Theory,
         index: &Narrower,
         never: &[u64],
         atom_never: &[u64],
-        work: &mut Work<'_>,
-    ) -> Result<(), Stop> {
+        work: &mut Meter<'_, Q>,
+    ) -> Result<(), Failure<Q::Error>> {
         self.atoms.storage_mut().clear();
         self.queue.clear();
         let vertices = theory
@@ -673,21 +681,21 @@ impl Scratch {
         Ok(())
     }
 
-    fn activate_node(
+    fn activate_node<Q: Quota + ?Sized>(
         &mut self,
         node: usize,
         atoms: usize,
-        work: &mut Work<'_>,
-    ) -> Result<(), Stop> {
+        work: &mut Meter<'_, Q>,
+    ) -> Result<(), Failure<Q::Error>> {
         activate_node(&mut self.states, &mut self.queue, node, atoms, work)
     }
 
-    fn activate_atom(
+    fn activate_atom<Q: Quota + ?Sized>(
         &mut self,
         atom: usize,
         atom_never: &[u64],
-        work: &mut Work<'_>,
-    ) -> Result<(), Stop> {
+        work: &mut Meter<'_, Q>,
+    ) -> Result<(), Failure<Q::Error>> {
         activate_atom(
             &mut self.atoms,
             &self.cyclic_atoms,
@@ -701,14 +709,14 @@ impl Scratch {
 
 /// Split atom/worklist borrows retain one immutable projected-head row while
 /// applying the same activation as the original producer traversal.
-fn activate_atom(
+fn activate_atom<Q: Quota + ?Sized>(
     atoms: &mut Words<u64>,
     cyclic_atoms: &Words<u64>,
     queue: &mut Vec<usize>,
     atom: usize,
     atom_never: &[u64],
-    work: &mut Work<'_>,
-) -> Result<(), Stop> {
+    work: &mut Meter<'_, Q>,
+) -> Result<(), Failure<Q::Error>> {
     if cyclic_atoms.contains(atom) && !bit(atom_never, atom) && !atoms.contains(atom) {
         work.tick()?;
         atoms.insert(atom);
@@ -719,15 +727,15 @@ fn activate_atom(
 
 /// Split state/worklist borrows let a closure keep one immutable parent-row
 /// borrow throughout traversal. This is the same activation used in preparation.
-fn activate_node(
+fn activate_node<Q: Quota + ?Sized>(
     states: &mut [State],
     queue: &mut Vec<usize>,
     node: usize,
     atoms: usize,
-    work: &mut Work<'_>,
-) -> Result<(), Stop> {
+    work: &mut Meter<'_, Q>,
+) -> Result<(), Failure<Q::Error>> {
     if matches!(states[node], State::Outside) {
-        return Err(Stop::InvalidProgram);
+        return Err(Failure::Stopped(Stop::InvalidProgram));
     }
     if !matches!(states[node], State::True) {
         work.tick()?;

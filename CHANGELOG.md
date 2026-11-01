@@ -378,6 +378,12 @@ Notable changes by release. Versions follow Semantic Versioning.
 
 ### Compatibility
 
+- Formula narrowing distinguishes candidate knowledge from frozen-reduct
+  knowledge. `Narrower::knowledge()` returns `Knowledge<AnswerSetsSought>`;
+  frozen callers use `frozen_knowledge()` and `Knowledge<Countermodels>`.
+  Both sealed markers are exported by `zetesis-algebra`. Frozen execution
+  has no access to the candidate worker's learned rows.
+
 - In the Lean library, `Zetesis.Cube` and its geometry namespace become
   `Zetesis.Region`; the temporary `Zetesis.Algebra.Region` abbreviation is
   removed. `Pending.cube` becomes `Pending.region`, and `sampleCube` becomes

@@ -64,7 +64,7 @@ fn unrelated_shared_components_keep_flat_discovery() {
         assert!((0..4).chain(5..69).all(|atom| actual.is_open(atom)));
         // One anchor and its direct flat parents are sufficient. In particular
         // no candidate/cone materialization is performed for this bridge.
-        assert!(scratch.witnesses.candidates().is_empty());
+        assert!(scratch.common.witnesses.candidates().is_empty());
         assert!(
             result.1.work <= reference.1.work + 8,
             "positive={positive}: actual={:?}, flat={:?}",
@@ -135,8 +135,12 @@ fn mixed_cut_anchors_keep_dynamic_discovery() {
     for disjunction in [false, true] {
         let (theory, _) = connected(disjunction);
         let index = Narrower::new(&theory);
-        let mut work = crate::regions::Work::new(u64::MAX);
-        assert!(super::super::needs_ancestor_discovery(&index, 2, &mut work).unwrap());
+        let mut work = crate::regions::Meter::local(u64::MAX);
+        assert!(
+            super::super::needs_ancestor_discovery(&index, 2, &mut work)
+                .map_err(zetesis_algebra::Failure::into_stop)
+                .unwrap()
+        );
         let mut region = Region::all_open(5);
         let result = close(
             &theory,
@@ -156,9 +160,13 @@ fn compound_anchors_keep_their_self_candidate() {
     for disjunction in [false, true] {
         let (theory, compound) = connected(disjunction);
         let index = Narrower::new(&theory);
-        let mut work = crate::regions::Work::new(u64::MAX);
-        assert!(super::super::needs_ancestor_discovery(&index, compound, &mut work).unwrap());
-        assert_eq!(work.spent(), 1);
+        let mut work = crate::regions::Meter::local(u64::MAX);
+        assert!(
+            super::super::needs_ancestor_discovery(&index, compound, &mut work)
+                .map_err(zetesis_algebra::Failure::into_stop)
+                .unwrap()
+        );
+        assert_eq!(work.charged(), 1);
     }
 }
 
@@ -166,34 +174,44 @@ fn compound_anchors_keep_their_self_candidate() {
 fn flat_theories_need_no_geometry_probes() {
     let index = Narrower::new(&witness(true, true));
     assert!(index.witness_chains.is_empty());
-    let mut work = crate::regions::Work::new(0);
-    assert!(!super::super::needs_ancestor_discovery(&index, 0, &mut work).unwrap());
-    assert_eq!(work.spent(), 0);
+    let mut work = crate::regions::Meter::local(0);
+    assert!(
+        !super::super::needs_ancestor_discovery(&index, 0, &mut work)
+            .map_err(zetesis_algebra::Failure::into_stop)
+            .unwrap()
+    );
+    assert_eq!(work.charged(), 0);
 }
 
 #[test]
 fn applicability_probes_preserve_typed_refusals() {
+    fn query<Q: zetesis_algebra::Quota<Error = Stop> + ?Sized>(
+        index: &Narrower,
+        work: &mut zetesis_algebra::Meter<'_, Q>,
+    ) -> Result<bool, Stop> {
+        super::super::needs_ancestor_discovery(index, 0, work)
+            .map_err(zetesis_algebra::Failure::into_stop)
+    }
+
     let index = Narrower::new(&disconnected(true));
-    let query = |work: &mut crate::regions::Work<'_>| {
-        super::super::needs_ancestor_discovery(&index, 0, work)
-    };
-    let mut complete = crate::regions::Work::new(u64::MAX);
-    assert!(!query(&mut complete).unwrap());
-    assert!(complete.spent() > 1);
-    for remaining in 0..complete.spent() {
-        let mut bounded = crate::regions::Work::new(remaining);
-        assert_eq!(query(&mut bounded), Err(Stop::WorkLimit));
-        assert_eq!(bounded.spent(), remaining);
+
+    let mut complete = crate::regions::Meter::local(u64::MAX);
+    assert!(!query(&index, &mut complete).unwrap());
+    assert!(complete.charged() > 1);
+    for remaining in 0..complete.charged() {
+        let mut bounded = crate::regions::Meter::local(remaining);
+        assert_eq!(query(&index, &mut bounded), Err(Stop::WorkLimit));
+        assert_eq!(bounded.charged(), remaining);
         for failure in [Stop::WorkLimit, Stop::Cancelled, Stop::Deadline] {
             let mut quota = Allowance { remaining, failure };
-            let mut interrupted = crate::regions::Work::reserved(&mut quota);
-            assert_eq!(query(&mut interrupted), Err(failure));
-            assert_eq!(interrupted.spent(), remaining);
+            let mut interrupted = crate::regions::Meter::reserved(&mut quota);
+            assert_eq!(query(&index, &mut interrupted), Err(failure));
+            assert_eq!(interrupted.charged(), remaining);
         }
         // The query retains no state that could survive a partial probe.
-        let mut exact = crate::regions::Work::new(complete.spent());
-        assert!(!query(&mut exact).unwrap());
-        assert_eq!(exact.spent(), complete.spent());
+        let mut exact = crate::regions::Meter::local(complete.charged());
+        assert!(!query(&index, &mut exact).unwrap());
+        assert_eq!(exact.charged(), complete.charged());
     }
 }
 
@@ -236,15 +254,16 @@ fn ordinal_parents_keep_their_discovery_order() {
         super::super::needs_ancestor_discovery(
             &index,
             0,
-            &mut crate::regions::Work::new(u64::MAX),
+            &mut crate::regions::Meter::local(u64::MAX),
         )
+        .map_err(zetesis_algebra::Failure::into_stop)
         .unwrap()
     );
 }
 
 #[test]
 fn native_requirement_authentication_collects_no_cone_result() {
-    use crate::regions::{Closure, Step, Width, Work, witnesses};
+    use crate::regions::{Closure, Meter, Step, Width, witnesses};
 
     for disjunction in [false, true] {
         let (theory, _) = connected(disjunction);
@@ -267,17 +286,21 @@ fn native_requirement_authentication_collects_no_cone_result() {
         };
         let mut scratch = NarrowingScratch::default();
         scratch
+            .common
             .prepare_thresholds(index.thresholds.rows.len())
             .unwrap();
-        let result = Closure {
+        let result = Closure::<_, zetesis_algebra::AnswerSetsSought> {
             known: known.borrow(),
-            lists: &mut scratch,
+            lists: &mut scratch.common,
+            learning: &mut scratch.learning,
         }
-        .threshold_requirements(&index, 0, &mut Work::new(u64::MAX))
+        .threshold_requirements(&index, 0, &mut Meter::local(u64::MAX))
+        .map_err(zetesis_algebra::Failure::into_stop)
         .unwrap();
         assert!(result == Step::Changed);
         assert!(
             scratch
+                .common
                 .witnesses
                 .candidates()
                 .iter()
@@ -285,6 +308,6 @@ fn native_requirement_authentication_collects_no_cone_result() {
         );
         // This operation consumes membership marks only. Replacing its adapter
         // with the collecting cone preserves truth but fails this route check.
-        assert!(scratch.witnesses.prepared().is_empty());
+        assert!(scratch.common.witnesses.prepared().is_empty());
     }
 }

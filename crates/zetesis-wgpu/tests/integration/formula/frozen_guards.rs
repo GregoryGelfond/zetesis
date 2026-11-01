@@ -65,7 +65,7 @@ fn required_bound_closes_the_frozen_candidate_without_splitting() {
                 .narrow_frozen_known(
                     FrozenSubject::new(&theory, truth.truth()),
                     &mut region,
-                    &mut narrower.knowledge(),
+                    &mut narrower.frozen_knowledge(),
                     &mut NarrowingScratch::default(),
                     RegionLimits::default(),
                     &cancellation,

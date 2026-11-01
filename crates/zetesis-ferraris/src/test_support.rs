@@ -4,8 +4,8 @@ use zetesis_algebra::{Cancellation, Stop};
 
 use crate::{
     AdmissionLimits, FormulaNodes, FormulaParts, FormulaTransaction, Interpretation, Knowledge,
-    LearningLimits, LearningOwner, Narrower, Narrowing, NarrowingQuota, NarrowingScratch,
-    NarrowingStatistics, Node, NodeView, OriginalSubject, Region, RegionLimits, Theory,
+    LearningLimits, LearningOwner, Narrower, Narrowing, NarrowingScratch, NarrowingStatistics,
+    Node, NodeView, OriginalSubject, Region, RegionLimits, Theory,
 };
 
 /// The interpretation of `theory` holding the atoms whose bits `mask` sets.
@@ -74,7 +74,8 @@ pub(crate) struct Allowance {
     pub(crate) failure: Stop,
 }
 
-impl NarrowingQuota for Allowance {
+impl zetesis_algebra::Quota for Allowance {
+    type Error = Stop;
     fn reserve(&mut self, wanted: u64) -> Result<u64, Stop> {
         let granted = wanted.min(self.remaining);
         if granted == 0 {
@@ -129,7 +130,8 @@ impl SinglePermits {
     }
 }
 
-impl NarrowingQuota for SinglePermits {
+impl zetesis_algebra::Quota for SinglePermits {
+    type Error = Stop;
     fn reserve(&mut self, _wanted: u64) -> Result<u64, Stop> {
         self.calls += 1;
         if self.remaining == 0 {
@@ -141,5 +143,55 @@ impl NarrowingQuota for SinglePermits {
 
     fn refund(&mut self, unspent: u64) {
         self.remaining += unspent;
+    }
+}
+
+/// Compare the historical Stop-valued local and reserved narrowing traces.
+/// Typed-refusal tests inspect the unconverted public attempt separately.
+pub(crate) fn stop_narrowing(
+    attempt: &crate::NarrowingAttempt<zetesis_algebra::Failure<Stop>>,
+) -> crate::NarrowingAttempt {
+    crate::NarrowingAttempt {
+        result: attempt.result.map_err(zetesis_algebra::Failure::into_stop),
+        statistics: attempt.statistics,
+        preferred: attempt.preferred,
+    }
+}
+
+/// Observe a Stop-valued quota preference beside the local reference trace.
+pub(crate) fn stop_preference(
+    attempt: &crate::PreferenceAttempt<zetesis_algebra::Failure<Stop>>,
+) -> crate::PreferenceAttempt {
+    crate::PreferenceAttempt {
+        result: attempt.result.map_err(zetesis_algebra::Failure::into_stop),
+        work: attempt.work,
+    }
+}
+
+/// Observe the original sharing trace under a Stop-valued account.
+pub(crate) fn stop_learning(
+    attempt: &crate::LearningAttempt<zetesis_algebra::Failure<Stop>>,
+) -> crate::LearningAttempt {
+    crate::LearningAttempt {
+        result: attempt.result.map_err(zetesis_algebra::Failure::into_stop),
+        work: attempt.work,
+    }
+}
+
+/// Keep storage payloads intact when comparing local and reserved preparation.
+pub(crate) fn stop_generator(
+    attempt: crate::GeneratorOrderAttempt<zetesis_algebra::Failure<Stop>>,
+) -> crate::GeneratorOrderAttempt {
+    crate::GeneratorOrderAttempt {
+        result: attempt.result.map_err(|error| match error {
+            crate::GeneratorOrderError::Storage { required, limit } => {
+                crate::GeneratorOrderError::Storage { required, limit }
+            }
+            crate::GeneratorOrderError::Stopped(failure) => {
+                crate::GeneratorOrderError::Stopped(failure.into_stop())
+            }
+        }),
+        work: attempt.work,
+        peak_bytes: attempt.peak_bytes,
     }
 }

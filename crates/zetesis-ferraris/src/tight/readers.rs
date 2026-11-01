@@ -252,14 +252,14 @@ fn incidences(
     let view = theory.view();
     let mut seen = Words::new(filled(theory.parts().rows().len().div_ceil(64), 0_u64)?);
     for index in 0..view.len() {
-        meter.tick()?;
+        Tick::tick(meter)?;
         let node = view.node(index).map_err(|_| Stop::InvalidProgram)?;
         match node {
             NodeView::Atom(atom) => emit(Incidence::AtomNode(atom, index))?,
             NodeView::False => {}
             NodeView::And(operands) | NodeView::Or(operands) => {
                 for &operand in operands {
-                    meter.tick()?;
+                    Tick::tick(meter)?;
                     emit(Incidence::Reader(
                         operand,
                         Reader::new(ReaderKind::Node, index)?,
@@ -268,7 +268,7 @@ fn incidences(
             }
             NodeView::Implies(antecedent, consequent) => {
                 for operand in [antecedent, consequent] {
-                    meter.tick()?;
+                    Tick::tick(meter)?;
                     emit(Incidence::Reader(
                         operand,
                         Reader::new(ReaderKind::Node, index)?,
@@ -280,7 +280,7 @@ fn incidences(
                 emit(Incidence::Guard(row, index))?;
                 if first(&mut seen, row)? {
                     for (position, &condition) in threshold.conditions.iter().enumerate() {
-                        meter.tick()?;
+                        Tick::tick(meter)?;
                         emit(Incidence::Reader(condition, Reader::row(row, position)?))?;
                     }
                 }
@@ -290,7 +290,7 @@ fn incidences(
                 emit(Incidence::Guard(row, index))?;
                 if first(&mut seen, row)? {
                     for (position, &condition) in cut.row.conditions.iter().enumerate() {
-                        meter.tick()?;
+                        Tick::tick(meter)?;
                         emit(Incidence::Reader(condition, Reader::row(row, position)?))?;
                     }
                 }
@@ -298,7 +298,7 @@ fn incidences(
         }
     }
     for (index, producer) in producers.iter().enumerate() {
-        meter.tick()?;
+        Tick::tick(meter)?;
         if let Some(body) = producer.body {
             emit(Incidence::Reader(
                 body,
@@ -307,7 +307,7 @@ fn incidences(
         }
     }
     for (position, &root) in theory.roots().iter().enumerate() {
-        meter.tick()?;
+        Tick::tick(meter)?;
         emit(Incidence::Reader(
             root,
             Reader::new(ReaderKind::Root, position)?,

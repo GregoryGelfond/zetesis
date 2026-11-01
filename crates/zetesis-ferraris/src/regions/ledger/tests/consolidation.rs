@@ -34,7 +34,8 @@ fn contents(ledger: &Ledger) -> Contents {
 fn retain(ledger: &mut Ledger, value: Literals) {
     assert!(
         ledger
-            .retain_founded(value, &mut Work::new(u64::MAX), &mut 0)
+            .retain_founded(value, &mut Meter::local(u64::MAX), &mut 0)
+            .map_err(zetesis_algebra::Failure::into_stop)
             .unwrap()
     );
 }
@@ -51,7 +52,9 @@ fn identical_conditions_share_outputs_and_partial_forcing() {
     assert_eq!(ledger.absent_outputs(0), [63, 64, 127]);
     let held = [1, 1 << 63];
     assert_eq!(
-        ledger.deduction(0, &held, &[0, 0], &mut Work::new(u64::MAX)),
+        ledger
+            .deduction(0, &held, &[0, 0], &mut Meter::local(u64::MAX))
+            .map_err(zetesis_algebra::Failure::into_stop),
         Ok(Deduction::Require {
             atom: 1,
             value: true
@@ -90,7 +93,9 @@ fn merely_overlapping_conditions_do_not_collapse() {
     retain(&mut ledger, explanation(&[(0, true)], &[5]));
     assert_eq!(ledger.len(), 4);
     assert_eq!(
-        ledger.deduction(0, &[1], &[0], &mut Work::new(u64::MAX)),
+        ledger
+            .deduction(0, &[1], &[0], &mut Meter::local(u64::MAX))
+            .map_err(zetesis_algebra::Failure::into_stop),
         Ok(Deduction::None)
     );
 }
@@ -130,43 +135,47 @@ fn initial() -> Ledger {
 #[test]
 fn every_interrupted_replacement_preserves_retained_certificates() {
     let mut completed = initial();
-    let mut measured = Work::new(u64::MAX);
+    let mut measured = Meter::local(u64::MAX);
     assert!(
         completed
             .retain_founded(explanation(&[(0, true)], &[4]), &mut measured, &mut 0)
+            .map_err(zetesis_algebra::Failure::into_stop)
             .unwrap()
     );
     assert_eq!(completed.len(), 1);
     for stop in [Stop::WorkLimit, Stop::Cancelled, Stop::Deadline] {
-        for prefix in 0..measured.spent() {
+        for prefix in 0..measured.charged() {
             let mut ledger = initial();
             let owner = ledger.owner.clone().unwrap();
             let before = contents(&ledger);
             let mut permits = SinglePermits::new(prefix, stop);
-            let mut work = Work::reserved(&mut permits);
+            let mut work = Meter::reserved(&mut permits);
             assert_eq!(
-                ledger.retain_founded(explanation(&[(0, true)], &[4]), &mut work, &mut 0),
+                ledger
+                    .retain_founded(explanation(&[(0, true)], &[4]), &mut work, &mut 0)
+                    .map_err(zetesis_algebra::Failure::into_stop),
                 Err(stop)
             );
-            assert_eq!(work.spent(), prefix);
+            assert_eq!(work.charged(), prefix);
             assert_eq!(contents(&ledger), before);
             assert!(ledger.owner.as_ref().unwrap().same_class(&owner.theory));
             retain(&mut ledger, explanation(&[(0, true)], &[4]));
             assert_eq!(contents(&ledger), contents(&completed));
         }
     }
-    for prefix in 0..measured.spent() {
+    for prefix in 0..measured.charged() {
         let mut ledger = initial();
         let before = contents(&ledger);
         ledger.remaining = prefix;
-        let mut work = Work::new(u64::MAX);
+        let mut work = Meter::local(u64::MAX);
         assert!(
             !ledger
                 .retain_founded(explanation(&[(0, true)], &[4]), &mut work, &mut 0)
+                .map_err(zetesis_algebra::Failure::into_stop)
                 .unwrap()
         );
         assert_eq!(contents(&ledger), before);
-        assert_eq!(work.spent(), prefix);
+        assert_eq!(work.charged(), prefix);
         assert_eq!(ledger.remaining, 0);
     }
 }
@@ -224,8 +233,11 @@ fn independent_cycles_share_a_captured_condition() {
         assert_eq!(result, Narrowing::Refuted);
         assert_eq!(counts.support_explanations.certified, 1);
     }
-    assert_eq!(scratch.explanations.len(), 1);
-    assert_eq!(scratch.explanations.absent_outputs(0), [0, 1, 2, 3]);
+    assert_eq!(scratch.learning.explanations.len(), 1);
+    assert_eq!(
+        scratch.learning.explanations.absent_outputs(0),
+        [0, 1, 2, 3]
+    );
     let (result, counts) = program.close(
         &mut region(&[(3, true)]),
         &mut program.index.knowledge(),

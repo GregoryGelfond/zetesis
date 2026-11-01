@@ -18,7 +18,7 @@ fn a_requested_stop_precedes_the_work_limit_between_boundaries() {
                 if stop {
                     cancellation.cancel();
                 }
-                Ok::<_, TightError>(meter.tick())
+                Ok::<_, TightError>(Tick::tick(meter))
             })
             .result
             .unwrap()

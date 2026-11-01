@@ -129,12 +129,11 @@ fn compare_closures(theory: &Theory, frozen: Option<&[bool]>) {
     for code in 0..3_usize.pow(4) {
         let close = |index: &Narrower| {
             let mut region = partial_region(code);
-            let mut knowledge = index.knowledge();
             let result = if let Some(truth) = frozen {
                 index.narrow_frozen_known(
                     crate::FrozenSubject::new(theory, truth),
                     &mut region,
-                    &mut knowledge,
+                    &mut index.frozen_knowledge(),
                     &mut crate::NarrowingScratch::default(),
                     RegionLimits::default(),
                     &cancellation,
@@ -143,7 +142,7 @@ fn compare_closures(theory: &Theory, frozen: Option<&[bool]>) {
                 index.narrow_known(
                     crate::OriginalSubject::new(theory, None),
                     &mut region,
-                    &mut knowledge,
+                    &mut index.knowledge(),
                     &mut crate::NarrowingScratch::default(),
                     RegionLimits::default(),
                     &cancellation,

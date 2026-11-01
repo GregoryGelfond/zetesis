@@ -30,12 +30,14 @@
 //! a masked same-kind child is an opaque falsum. Numeric bound bridges remain
 //! original-only and are never transplanted into a frozen reduct.
 
+use zetesis_algebra::{Failure, Quota};
+
 use std::num::NonZeroUsize;
 use std::ops::ControlFlow;
 
 use zetesis_algebra::{Stop, words::Words};
 
-use super::{Chain, Closure, Count, Narrower, Step, Work, chain_position, flag_words};
+use super::{Chain, Closure, Count, Meter, Narrower, Step, chain_position, flag_words};
 
 const EXPAND: u8 = 1;
 const DIRTY: u8 = 2;
@@ -170,13 +172,13 @@ impl Scratch {
     /// Borrow the ordinary leaves or prepare one expanded view. Every view has
     /// distinct node IDs in first left-to-right occurrence order. A shared child
     /// may occur on several paths, but its descendants are expanded only once.
-    pub(super) fn read<'a>(
+    pub(super) fn read<'a, Q: Quota + ?Sized>(
         &'a mut self,
         index: &'a Narrower,
         chain: usize,
         frozen: Option<&[bool]>,
-        work: &mut Work<'_>,
-    ) -> Result<&'a [usize], Stop> {
+        work: &mut Meter<'_, Q>,
+    ) -> Result<&'a [usize], Failure<Q::Error>> {
         if !expands(index, chain) {
             return Ok(index.chains[chain].leaves(&index.extrema));
         }
@@ -204,14 +206,14 @@ impl Scratch {
     /// Frames use O(D) scratch for active depth D, counted at actual capacity.
     /// Breaks and errors may leave frames; the next walk clears them and advances
     /// the same generation marks. A fold never allocates a leaf-result vector.
-    fn visit_expanded(
+    fn visit_expanded<Q: Quota + ?Sized>(
         &mut self,
         index: &Narrower,
         chain: usize,
         frozen: Option<&[bool]>,
-        work: &mut Work<'_>,
-        mut leaf: impl FnMut(usize, &mut Work<'_>) -> Result<ControlFlow<()>, Stop>,
-    ) -> Result<ControlFlow<()>, Stop> {
+        work: &mut Meter<'_, Q>,
+        mut leaf: impl FnMut(usize, &mut Meter<'_, Q>) -> Result<ControlFlow<()>, Failure<Q::Error>>,
+    ) -> Result<ControlFlow<()>, Failure<Q::Error>> {
         self.visit_nodes(index, chain, frozen, work, |node, branch, work| {
             if branch {
                 Ok(Visit::Descend)
@@ -230,14 +232,14 @@ impl Scratch {
     /// serves witness folds, cover authentication and complete cone collection.
     /// Every encountered node and consumed edge is charged, including duplicate
     /// node encounters. Failure leaves only scratch; the next begin discards it.
-    fn visit_nodes(
+    fn visit_nodes<Q: Quota + ?Sized>(
         &mut self,
         index: &Narrower,
         chain: usize,
         frozen: Option<&[bool]>,
-        work: &mut Work<'_>,
-        mut visit: impl FnMut(usize, bool, &mut Work<'_>) -> Result<Visit, Stop>,
-    ) -> Result<ControlFlow<()>, Stop> {
+        work: &mut Meter<'_, Q>,
+        mut visit: impl FnMut(usize, bool, &mut Meter<'_, Q>) -> Result<Visit, Failure<Q::Error>>,
+    ) -> Result<ControlFlow<()>, Failure<Q::Error>> {
         self.begin(index.parents.len(), work)?;
         let mut node = index.chains[chain].root;
         let disjunction = index.chains[chain].disjunction;
@@ -273,7 +275,11 @@ impl Scratch {
     /// Resume the deepest unfinished chain, discarding completed frames.
     /// Each advance consumes one previously unread edge; a completed frame is
     /// popped once. A refusal precedes the edge read and leaves its cursor intact.
-    fn next_child(&mut self, index: &Narrower, work: &mut Work<'_>) -> Result<Option<usize>, Stop> {
+    fn next_child<Q: Quota + ?Sized>(
+        &mut self,
+        index: &Narrower,
+        work: &mut Meter<'_, Q>,
+    ) -> Result<Option<usize>, Failure<Q::Error>> {
         while let Some(frame) = self.frames.last_mut() {
             let children = index.chains[frame.chain].leaves(&index.extrema);
             if frame.next_child == children.len() {
@@ -307,12 +313,12 @@ impl Scratch {
     /// Collect the same-kind cone, including compound conditions and its root.
     /// A native row can name a cut through this cone, rather than just its
     /// opaque or fully unfolded boundary. Distinct nodes occur once.
-    pub(super) fn cone(
+    pub(super) fn cone<Q: Quota + ?Sized>(
         &mut self,
         index: &Narrower,
         chain: usize,
-        work: &mut Work<'_>,
-    ) -> Result<(), Stop> {
+        work: &mut Meter<'_, Q>,
+    ) -> Result<(), Failure<Q::Error>> {
         // Keep the collecting allocation observable even after a refused walk.
         let mut nodes = std::mem::take(&mut self.leaves);
         nodes.clear();
@@ -328,12 +334,12 @@ impl Scratch {
     /// Membership-only consumers use the same traversal, generation marks and
     /// node/edge receipt as `cone`; no result-vector capacity is requested.
     /// The next walk invalidates these marks, including after a refused prefix.
-    pub(super) fn mark_cone(
+    pub(super) fn mark_cone<Q: Quota + ?Sized>(
         &mut self,
         index: &Narrower,
         chain: usize,
-        work: &mut Work<'_>,
-    ) -> Result<(), Stop> {
+        work: &mut Meter<'_, Q>,
+    ) -> Result<(), Failure<Q::Error>> {
         self.visit_nodes(index, chain, None, work, |_, _, _| Ok(Visit::Descend))
             .map(|_| ())
     }
@@ -347,13 +353,13 @@ impl Scratch {
     /// An uncovered opaque endpoint refutes this structural implication only.
     /// Its unread siblings are neither scheduled nor charged. Complete coverage
     /// retains the previous node/edge receipt and first-occurrence callback order.
-    pub(super) fn covered_by(
+    pub(super) fn covered_by<Q: Quota + ?Sized>(
         &mut self,
         index: &Narrower,
         chain: usize,
-        work: &mut Work<'_>,
-        mut covers: impl FnMut(usize, &mut Work<'_>) -> Result<bool, Stop>,
-    ) -> Result<bool, Stop> {
+        work: &mut Meter<'_, Q>,
+        mut covers: impl FnMut(usize, &mut Meter<'_, Q>) -> Result<bool, Failure<Q::Error>>,
+    ) -> Result<bool, Failure<Q::Error>> {
         self.visit_nodes(index, chain, None, work, |node, branch, work| {
             Ok(if covers(node, work)? {
                 Visit::Prune
@@ -374,13 +380,13 @@ impl Scratch {
     /// a branch only when no same-kind ancestor needs this requirement: either
     /// its polarity is irrelevant, or this root already has the absorbing truth
     /// that ordinary node events propagate to every same-kind ancestor.
-    pub(super) fn parent_chains(
+    pub(super) fn parent_chains<Q: Quota + ?Sized>(
         &mut self,
         index: &Narrower,
         condition: usize,
-        work: &mut Work<'_>,
+        work: &mut Meter<'_, Q>,
         mut relevant: impl FnMut(&Chain) -> bool,
-    ) -> Result<(), Stop> {
+    ) -> Result<(), Failure<Q::Error>> {
         self.begin(index.parents.len(), work)?;
         self.candidates.clear();
         if index.chain_of[condition].is_some() {
@@ -416,7 +422,11 @@ impl Scratch {
         Ok(())
     }
 
-    fn begin(&mut self, nodes: usize, work: &mut Work<'_>) -> Result<(), Stop> {
+    fn begin<Q: Quota + ?Sized>(
+        &mut self,
+        nodes: usize,
+        work: &mut Meter<'_, Q>,
+    ) -> Result<(), Failure<Q::Error>> {
         self.stack.clear();
         self.frames.clear();
         self.leaves.clear();
@@ -445,7 +455,7 @@ fn push(values: &mut Vec<usize>, value: usize) -> Result<(), Stop> {
     Ok(())
 }
 
-impl<C: Count> Closure<'_, C> {
+impl<W: Count, C: crate::regions::ReadingClass> Closure<'_, W, C> {
     /// Select a change that can still inform a shared ancestor or establish
     /// an expanded unit consequence. Counts describe processed events, so callers
     /// first account for a changed operand. Truth bits may precede their events:
@@ -484,13 +494,13 @@ impl<C: Count> Closure<'_, C> {
         !neutral.contains(source.root) && (role & EXPAND != 0 || !required.contains(source.root))
     }
 
-    pub(super) fn witness_changed(
+    pub(super) fn witness_changed<Q: Quota + ?Sized>(
         &mut self,
         index: &Narrower,
         chain: usize,
         frozen: Option<&[bool]>,
-        work: &mut Work<'_>,
-    ) -> Result<Step, Stop> {
+        work: &mut Meter<'_, Q>,
+    ) -> Result<Step, Failure<Q::Error>> {
         work.tick()?;
         let source = &index.chains[chain];
         if frozen.is_some_and(|truth| !truth[source.root]) {

@@ -5,6 +5,8 @@
 //! the frozen reduct's proper-subset search. Root preparation precedes region
 //! narrowing; the later region subjects will consume the same immutable rows.
 
+use zetesis_algebra::Quota;
+
 mod budget;
 mod cardinality_source;
 mod completion;
@@ -27,9 +29,9 @@ mod tests;
 use std::{fmt, mem::size_of};
 
 use zetesis_algebra::region::Region;
-use zetesis_algebra::{Cancellation, Stop};
+use zetesis_algebra::{Cancellation, Failure, Meter, Stop};
 
-use super::{NarrowingQuota, Producers, Work};
+use super::Producers;
 use crate::{AdmissionError, Theory};
 use budget::{Budget, BudgetError};
 use storage::Storage;
@@ -160,14 +162,14 @@ pub struct CardinalityStatistics {
 
 /// A mandatory failure: never an optional decline or a semantic refutation.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum PreparationError {
+pub enum PreparationError<E = Stop> {
     /// The cancellation token, global work quota or allocator refused work.
-    Stopped(Stop),
+    Stopped(E),
     /// A source identity or admitted formula read failed.
     Source(AdmissionError),
 }
 
-impl fmt::Display for PreparationError {
+impl<E: fmt::Display> fmt::Display for PreparationError<E> {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Stopped(error) => error.fmt(formatter),
@@ -176,7 +178,7 @@ impl fmt::Display for PreparationError {
     }
 }
 
-impl std::error::Error for PreparationError {
+impl<E: std::error::Error + 'static> std::error::Error for PreparationError<E> {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
             Self::Stopped(error) => Some(error),
@@ -282,9 +284,9 @@ enum Stage {
 }
 
 /// Preparation result and the executed prefix on every outcome.
-pub struct PreparationAttempt {
+pub struct PreparationAttempt<E = Stop> {
     /// `None` means optional work or storage declined; no partial system escapes.
-    pub result: Result<Option<RootPreparation>, PreparationError>,
+    pub result: Result<Option<RootPreparation>, PreparationError<E>>,
     /// Work settled once against the supplied global quota.
     pub work: u64,
     /// Maximum named simultaneous capacity or request, not process RSS.
@@ -301,19 +303,14 @@ impl RootPreparation {
     /// Optional limits publish no partial rows or units; global refusals keep
     /// their typed error. Spare global work grants are refunded on every exit.
     #[must_use]
-    pub fn prepare_reserved(
+    pub fn prepare_reserved<Q: Quota + ?Sized>(
         theory: &Theory,
         producers: Option<&Producers>,
         limits: PreparationLimits,
         cancellation: &Cancellation,
-        quota: &mut dyn NarrowingQuota,
-    ) -> PreparationAttempt {
-        let mut budget = Budget::new(
-            Work::reserved(quota),
-            limits.work,
-            limits.bytes,
-            cancellation,
-        );
+        meter: &mut Meter<'_, Q>,
+    ) -> PreparationAttempt<Failure<Q::Error>> {
+        let mut budget = Budget::new(meter, limits.work, limits.bytes, cancellation);
         let mut parity = ParityStatistics::default();
         let mut cardinality = CardinalityStatistics::default();
         let mut stage = Stage::Parity;
@@ -340,7 +337,7 @@ impl RootPreparation {
                 let status = match error {
                     BudgetError::WorkDeclined => PreparationStatus::WorkDeclined,
                     BudgetError::StorageDeclined { .. } => PreparationStatus::StorageDeclined,
-                    BudgetError::Stopped(_) | BudgetError::Source(_) => {
+                    BudgetError::Stopped(_) | BudgetError::Refused(_) | BudgetError::Source(_) => {
                         PreparationStatus::Incomplete
                     }
                 };
@@ -367,7 +364,12 @@ impl RootPreparation {
                 cardinality.retained_bytes = 0;
                 match error {
                     BudgetError::WorkDeclined | BudgetError::StorageDeclined { .. } => Ok(None),
-                    BudgetError::Stopped(stop) => Err(PreparationError::Stopped(stop)),
+                    BudgetError::Stopped(stop) => {
+                        Err(PreparationError::Stopped(Failure::Stopped(stop)))
+                    }
+                    BudgetError::Refused(error) => {
+                        Err(PreparationError::Stopped(Failure::Refused(error)))
+                    }
                     BudgetError::Source(source) => Err(PreparationError::Source(source)),
                 }
             }
@@ -422,14 +424,14 @@ impl RootPreparation {
     }
 }
 
-fn build(
+fn build<Q: Quota + ?Sized>(
     theory: &Theory,
     producers: Option<&Producers>,
     parity_statistics: &mut ParityStatistics,
     cardinality_statistics: &mut CardinalityStatistics,
     stage: &mut Stage,
-    budget: &mut Budget<'_, '_>,
-) -> Result<RootPreparation, BudgetError> {
+    budget: &mut Budget<'_, '_, Q>,
+) -> Result<RootPreparation, BudgetError<Q::Error>> {
     let mut storage = Storage::default();
     // The returned owner has fixed optional slots even when a root refutation
     // leaves them empty. Admit them before any conclusive arithmetic step.
@@ -518,10 +520,10 @@ fn build(
 }
 
 impl ParityStatistics {
-    fn from_preparation(
+    fn from_preparation<Q: Quota + ?Sized>(
         recognized: &rows::Recognized,
         prepared: &parity::Prepared,
-        budget: &Budget<'_, '_>,
+        budget: &Budget<'_, '_, Q>,
     ) -> Self {
         Self {
             status: PreparationStatus::Prepared,
@@ -552,12 +554,12 @@ impl ParityStatistics {
 
 /// Root decisions are part of preparation: failure publishes no partial seed.
 /// The all-open masks are initialized once; every unit has a distinct pivot.
-fn seed_root(
+fn seed_root<Q: Quota + ?Sized>(
     theory: &Theory,
     parity: &ParitySystem,
     storage: &mut Storage,
-    budget: &mut Budget<'_, '_>,
-) -> Result<Option<Region>, BudgetError> {
+    budget: &mut Budget<'_, '_, Q>,
+) -> Result<Option<Region>, BudgetError<Q::Error>> {
     budget.charge(1)?;
     if parity.prepared.units.is_empty() {
         budget.charge(1)?;
@@ -594,12 +596,12 @@ fn seed_root(
     Ok(Some(root))
 }
 
-fn checked_bounds(
+fn checked_bounds<Q: Quota + ?Sized>(
     theory: &Theory,
     statistics: &mut CardinalityStatistics,
     storage: &mut Storage,
-    budget: &mut Budget<'_, '_>,
-) -> Result<Vec<cardinality_source::Bound>, BudgetError> {
+    budget: &mut Budget<'_, '_, Q>,
+) -> Result<Vec<cardinality_source::Bound>, BudgetError<Q::Error>> {
     let mut checked = storage.reserve(0, budget)?;
     for root in 0..theory.roots().len() {
         let mut proposed = cardinality_source::read_root(theory, root, storage, budget)?;

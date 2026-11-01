@@ -629,7 +629,7 @@ fn a_frozen_mask_on_a_chain_node_reads_as_its_operands_masks() {
             .narrow_frozen_known(
                 zetesis_ferraris::FrozenSubject::new(&t, truth),
                 &mut subsets,
-                &mut narrower.knowledge(),
+                &mut narrower.frozen_knowledge(),
                 &mut zetesis_ferraris::NarrowingScratch::default(),
                 RegionLimits::default(),
                 &Cancellation::default(),

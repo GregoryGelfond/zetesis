@@ -46,7 +46,6 @@ fn finish(owner: FormulaNodes, atoms: usize, roots: Vec<usize>) -> Theory {
 fn close(theory: &Theory, region: &mut Region, original: Option<usize>) -> Narrowing {
     let index = Narrower::new(theory);
     let cancellation = Cancellation::default();
-    let mut known = index.knowledge();
     let mut scratch = NarrowingScratch::default();
     if let Some(mask) = original {
         let candidate = Interpretation::new(
@@ -61,7 +60,7 @@ fn close(theory: &Theory, region: &mut Region, original: Option<usize>) -> Narro
             .narrow_frozen_known(
                 FrozenSubject::new(theory, truth.truth()),
                 region,
-                &mut known,
+                &mut index.frozen_knowledge(),
                 &mut scratch,
                 RegionLimits::default(),
                 &cancellation,
@@ -73,7 +72,7 @@ fn close(theory: &Theory, region: &mut Region, original: Option<usize>) -> Narro
             .narrow_known(
                 OriginalSubject::new(theory, None),
                 region,
-                &mut known,
+                &mut index.knowledge(),
                 &mut scratch,
                 RegionLimits::default(),
                 &cancellation,

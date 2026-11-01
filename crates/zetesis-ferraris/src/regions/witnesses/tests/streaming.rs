@@ -2,7 +2,7 @@
 
 use std::ops::ControlFlow;
 
-use super::super::{Scratch, Work, chain_position, expands};
+use super::super::{Meter, Scratch, chain_position, expands};
 use super::*;
 use crate::{EvaluationLimits, EvaluationWorkspace};
 use zetesis_algebra::Stop;
@@ -57,8 +57,10 @@ fn required_witness_checks_stop_after_two_open_leaves() {
         // Isolate repeated closure cost from the separately tested first-use
         // O(nodes) mark initialization. No witness leaves have been collected.
         scratch
+            .common
             .witnesses
-            .begin(index.parents.len(), &mut Work::new(u64::MAX))
+            .begin(index.parents.len(), &mut Meter::local(u64::MAX))
+            .map_err(zetesis_algebra::Failure::into_stop)
             .unwrap();
         let mut region = Region::all_open(theory.atom_count());
         let attempt = index.narrow_known(
@@ -73,9 +75,9 @@ fn required_witness_checks_stop_after_two_open_leaves() {
         let statistics = attempt.statistics;
         assert_ne!(outcome, Narrowing::Refuted);
         assert!((0..theory.atom_count()).all(|atom| region.is_open(atom)));
-        assert!(scratch.witnesses.visited(0) && scratch.witnesses.visited(1));
-        assert!(!scratch.witnesses.visited(tail));
-        assert_eq!(scratch.witnesses.leaves.capacity(), 0);
+        assert!(scratch.common.witnesses.visited(0) && scratch.common.witnesses.visited(1));
+        assert!(!scratch.common.witnesses.visited(tail));
+        assert_eq!(scratch.common.witnesses.leaves.capacity(), 0);
         // Includes the ordinary atom-preference scan. The old whole read also
         // expands the long tail, exceeding this bound and allocating its leaves.
         assert!(
@@ -99,7 +101,8 @@ fn streaming_and_collection_share_distinct_order_and_frozen_gates() {
     for frozen in [None, Some(truth.truth())] {
         let mut scratch = Scratch::default();
         let collected = scratch
-            .read(&index, chain, frozen, &mut Work::new(u64::MAX))
+            .read(&index, chain, frozen, &mut Meter::local(u64::MAX))
+            .map_err(zetesis_algebra::Failure::into_stop)
             .unwrap()
             .to_vec();
         let mut streamed = Vec::new();
@@ -108,13 +111,14 @@ fn streaming_and_collection_share_distinct_order_and_frozen_gates() {
                 &index,
                 chain,
                 frozen,
-                &mut Work::new(u64::MAX),
+                &mut Meter::local(u64::MAX),
                 |leaf, work| {
-                    work.tick()?;
+                    work.tick().map_err(zetesis_algebra::Failure::into_stop)?;
                     streamed.push(leaf);
                     Ok(ControlFlow::Continue(()))
                 },
             )
+            .map_err(zetesis_algebra::Failure::into_stop)
             .unwrap();
         assert!(outcome.is_continue());
         let expected = if frozen.is_some() {
@@ -127,12 +131,12 @@ fn streaming_and_collection_share_distinct_order_and_frozen_gates() {
     }
 }
 
-fn stop_after_two(scratch: &mut Scratch, index: &Narrower, chain: usize, work: &mut Work<'_>) {
+fn stop_after_two(scratch: &mut Scratch, index: &Narrower, chain: usize, work: &mut Meter<'_>) {
     let mut count = 0;
     assert!(
         scratch
             .visit_expanded(index, chain, None, work, |_, work| {
-                work.tick()?;
+                work.tick().map_err(zetesis_algebra::Failure::into_stop)?;
                 count += 1;
                 Ok(if count == 2 {
                     ControlFlow::Break(())
@@ -140,6 +144,7 @@ fn stop_after_two(scratch: &mut Scratch, index: &Narrower, chain: usize, work: &
                     ControlFlow::Continue(())
                 })
             })
+            .map_err(zetesis_algebra::Failure::into_stop)
             .unwrap()
             .is_break()
     );
@@ -152,16 +157,17 @@ fn fresh_streaming_charges_its_mark_initialization() {
     let index = Narrower::new(&theory);
     let chain = chain_position(index.chain_of[root].unwrap());
     let mut scratch = Scratch::default();
-    let mut cold = Work::new(u64::MAX);
+    let mut cold = Meter::local(u64::MAX);
     stop_after_two(&mut scratch, &index, chain, &mut cold);
-    let mut warm = Work::new(u64::MAX);
+    let mut warm = Meter::local(u64::MAX);
     stop_after_two(&mut scratch, &index, chain, &mut warm);
-    assert_eq!(cold.spent() - warm.spent(), index.parents.len() as u64);
+    assert_eq!(cold.charged() - warm.charged(), index.parents.len() as u64);
     assert!(!scratch.visited(tail));
     assert_eq!(scratch.leaves.capacity(), 0);
     assert_eq!(
         scratch
-            .read(&index, chain, None, &mut Work::new(u64::MAX))
+            .read(&index, chain, None, &mut Meter::local(u64::MAX))
+            .map_err(zetesis_algebra::Failure::into_stop)
             .unwrap(),
         &(0..32).collect::<Vec<_>>()
     );
@@ -176,24 +182,31 @@ fn refused_collection_restores_its_reusable_leaf_allocation() {
     let expected = (0..16).collect::<Vec<_>>();
     assert_eq!(
         scratch
-            .read(&index, chain, None, &mut Work::new(u64::MAX))
+            .read(&index, chain, None, &mut Meter::local(u64::MAX))
+            .map_err(zetesis_algebra::Failure::into_stop)
             .unwrap(),
         expected
     );
     let capacity = scratch.leaves.capacity();
-    let mut complete = Work::new(u64::MAX);
-    scratch.read(&index, chain, None, &mut complete).unwrap();
-    for limit in 0..complete.spent() {
-        let mut work = Work::new(limit);
+    let mut complete = Meter::local(u64::MAX);
+    scratch
+        .read(&index, chain, None, &mut complete)
+        .map_err(zetesis_algebra::Failure::into_stop)
+        .unwrap();
+    for limit in 0..complete.charged() {
+        let mut work = Meter::local(limit);
         assert!(matches!(
-            scratch.read(&index, chain, None, &mut work),
+            scratch
+                .read(&index, chain, None, &mut work)
+                .map_err(zetesis_algebra::Failure::into_stop),
             Err(Stop::WorkLimit)
         ));
-        assert_eq!(work.spent(), limit);
+        assert_eq!(work.charged(), limit);
         assert_eq!(scratch.leaves.capacity(), capacity);
         assert_eq!(
             scratch
-                .read(&index, chain, None, &mut Work::new(u64::MAX))
+                .read(&index, chain, None, &mut Meter::local(u64::MAX))
+                .map_err(zetesis_algebra::Failure::into_stop)
                 .unwrap(),
             expected
         );
@@ -206,16 +219,24 @@ fn a_stopped_visitor_cannot_leak_traversal_marks_into_collection() {
     let index = Narrower::new(&theory);
     let chain = chain_position(index.chain_of[root].unwrap());
     let mut scratch = Scratch::default();
-    let result =
-        scratch.visit_expanded(&index, chain, None, &mut Work::new(u64::MAX), |leaf, _| {
-            assert_eq!(leaf, 0);
-            Err(Stop::Cancelled)
-        });
+    let result = scratch
+        .visit_expanded(
+            &index,
+            chain,
+            None,
+            &mut Meter::local(u64::MAX),
+            |leaf, _| {
+                assert_eq!(leaf, 0);
+                Err(Stop::Cancelled.into())
+            },
+        )
+        .map_err(zetesis_algebra::Failure::into_stop);
     assert_eq!(result, Err(Stop::Cancelled));
     assert!(!scratch.visited(tail));
     assert_eq!(
         scratch
-            .read(&index, chain, None, &mut Work::new(u64::MAX))
+            .read(&index, chain, None, &mut Meter::local(u64::MAX))
+            .map_err(zetesis_algebra::Failure::into_stop)
             .unwrap(),
         &(0..16).collect::<Vec<_>>()
     );
@@ -263,13 +284,14 @@ fn early_open_witnesses_do_not_read_later_sibling_edges() {
             assert_eq!(index.chains[chain].leaves(&index.extrema).len(), width - 1);
             let mut scratch = Scratch::default();
             scratch
-                .begin(index.parents.len(), &mut Work::new(u64::MAX))
+                .begin(index.parents.len(), &mut Meter::local(u64::MAX))
+                .map_err(zetesis_algebra::Failure::into_stop)
                 .unwrap();
-            let mut work = Work::new(u64::MAX);
+            let mut work = Meter::local(u64::MAX);
             stop_after_two(&mut scratch, &index, chain, &mut work);
             // Four nodes, three reached child edges and two visitor reads.
             // The eager sibling stack instead reads every root edge first.
-            assert_eq!(work.spent(), 9, "width={width}");
+            assert_eq!(work.charged(), 9, "width={width}");
             assert!(scratch.visited(0) && scratch.visited(1));
             assert!(!scratch.visited(2));
             assert_eq!(scratch.stack.capacity(), 0);
@@ -286,14 +308,15 @@ fn a_late_second_open_witness_still_reads_the_tail() {
     let chain = chain_position(index.chain_of[root].unwrap());
     let mut scratch = Scratch::default();
     scratch
-        .begin(index.parents.len(), &mut Work::new(u64::MAX))
+        .begin(index.parents.len(), &mut Meter::local(u64::MAX))
+        .map_err(zetesis_algebra::Failure::into_stop)
         .unwrap();
-    let mut work = Work::new(u64::MAX);
+    let mut work = Meter::local(u64::MAX);
     let mut candidate = None;
     let mut visited = Vec::new();
     let outcome = scratch
         .visit_expanded(&index, chain, None, &mut work, |leaf, work| {
-            work.tick()?;
+            work.tick().map_err(zetesis_algebra::Failure::into_stop)?;
             visited.push(leaf);
             // All other leaves are neutral, so two open witnesses are not
             // established until the final sibling has actually been read.
@@ -305,11 +328,12 @@ fn a_late_second_open_witness_still_reads_the_tail() {
             }
             Ok(ControlFlow::Continue(()))
         })
+        .map_err(zetesis_algebra::Failure::into_stop)
         .unwrap();
     assert!(outcome.is_break());
     assert_eq!(visited, (0..width).collect::<Vec<_>>());
     // width+2 nodes, width+1 edges, width visitor reads: full old receipt.
-    assert_eq!(work.spent(), (3 * width + 3) as u64);
+    assert_eq!(work.charged(), (3 * width + 3) as u64);
 }
 
 #[test]
@@ -318,7 +342,7 @@ fn continuation_capacity_is_included_in_scratch_bytes() {
     let index = Narrower::new(&theory);
     let chain = chain_position(index.chain_of[root].unwrap());
     let mut scratch = Scratch::default();
-    stop_after_two(&mut scratch, &index, chain, &mut Work::new(u64::MAX));
+    stop_after_two(&mut scratch, &index, chain, &mut Meter::local(u64::MAX));
     assert_eq!(scratch.frames.len(), 2);
     assert_eq!(scratch.stack.capacity(), 0);
     assert_eq!(scratch.leaves.capacity(), 0);
@@ -338,24 +362,28 @@ fn refused_continuations_restart_without_skipping_edges() {
     for limit in 0..9 {
         let mut scratch = Scratch::default();
         scratch
-            .begin(index.parents.len(), &mut Work::new(u64::MAX))
+            .begin(index.parents.len(), &mut Meter::local(u64::MAX))
+            .map_err(zetesis_algebra::Failure::into_stop)
             .unwrap();
         let mut count = 0;
-        let mut work = Work::new(limit);
-        let result = scratch.visit_expanded(&index, chain, None, &mut work, |_, work| {
-            work.tick()?;
-            count += 1;
-            Ok(if count == 2 {
-                ControlFlow::Break(())
-            } else {
-                ControlFlow::Continue(())
+        let mut work = Meter::local(limit);
+        let result = scratch
+            .visit_expanded(&index, chain, None, &mut work, |_, work| {
+                work.tick().map_err(zetesis_algebra::Failure::into_stop)?;
+                count += 1;
+                Ok(if count == 2 {
+                    ControlFlow::Break(())
+                } else {
+                    ControlFlow::Continue(())
+                })
             })
-        });
+            .map_err(zetesis_algebra::Failure::into_stop);
         assert_eq!(result, Err(Stop::WorkLimit));
-        assert_eq!(work.spent(), limit);
+        assert_eq!(work.charged(), limit);
         assert_eq!(
             scratch
-                .read(&index, chain, None, &mut Work::new(u64::MAX))
+                .read(&index, chain, None, &mut Meter::local(u64::MAX))
+                .map_err(zetesis_algebra::Failure::into_stop)
                 .unwrap(),
             &(0..16).collect::<Vec<_>>()
         );

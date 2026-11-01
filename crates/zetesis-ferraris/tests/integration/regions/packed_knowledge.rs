@@ -1,6 +1,6 @@
 //! Carried knowledge and fresh closure agree across atom and node mask words.
 
-use zetesis_algebra::{Cancellation, Stop};
+use zetesis_algebra::{Cancellation, Countermodels, Stop};
 use zetesis_ferraris::{
     EvaluationLimits, EvaluationWorkspace, Interpretation, Knowledge, Narrower, Narrowing,
     NarrowingStatistics, Node, Region, RegionLimits, Theory,
@@ -28,43 +28,60 @@ fn with_frozen(action: impl FnOnce(&Theory, Option<&[bool]>)) {
     action(&theory, Some(evaluation.truth()));
 }
 
+#[derive(Clone)]
+enum QueryKnowledge<'a> {
+    Original(Knowledge),
+    Frozen {
+        truth: &'a [bool],
+        knowledge: Knowledge<Countermodels>,
+    },
+}
+
+fn query_knowledge<'a>(narrower: &Narrower, frozen: Option<&'a [bool]>) -> QueryKnowledge<'a> {
+    match frozen {
+        Some(truth) => QueryKnowledge::Frozen {
+            truth,
+            knowledge: narrower.frozen_knowledge(),
+        },
+        None => QueryKnowledge::Original(narrower.knowledge()),
+    }
+}
+
 fn narrow(
     theory: &Theory,
     narrower: &Narrower,
-    frozen: Option<&[bool]>,
     region: &mut Region,
-    knowledge: &mut Knowledge,
+    knowledge: &mut QueryKnowledge<'_>,
     limits: RegionLimits,
 ) -> Result<(Narrowing, NarrowingStatistics), Stop> {
     let cancellation = Cancellation::default();
-    let attempt = if let Some(truth) = frozen {
-        narrower.narrow_frozen_known(
+    let attempt = match knowledge {
+        QueryKnowledge::Frozen { truth, knowledge } => narrower.narrow_frozen_known(
             zetesis_ferraris::FrozenSubject::new(theory, truth),
             region,
             knowledge,
             &mut zetesis_ferraris::NarrowingScratch::default(),
             limits,
             &cancellation,
-        )
-    } else {
+        ),
         // No support extraction: unrelated atoms must remain undecided.
-        narrower.narrow_known(
+        QueryKnowledge::Original(knowledge) => narrower.narrow_known(
             zetesis_ferraris::OriginalSubject::new(theory, None),
             region,
             knowledge,
             &mut zetesis_ferraris::NarrowingScratch::default(),
             limits,
             &cancellation,
-        )
+        ),
     };
     attempt.result.map(|outcome| (outcome, attempt.statistics))
 }
 
-fn closed_parent(
+fn closed_parent<'a>(
     theory: &Theory,
     narrower: &Narrower,
-    frozen: Option<&[bool]>,
-) -> (Region, Knowledge) {
+    frozen: Option<&'a [bool]>,
+) -> (Region, QueryKnowledge<'a>) {
     let mut region = Region::all_open(ATOMS);
     if frozen.is_some() {
         for atom in (0..ATOMS).filter(|atom| !CANDIDATE.contains(atom)) {
@@ -73,11 +90,10 @@ fn closed_parent(
     }
     assert!(region.hold(0));
     assert!(region.cut(128));
-    let mut knowledge = narrower.knowledge();
+    let mut knowledge = query_knowledge(narrower, frozen);
     let (outcome, _) = narrow(
         theory,
         narrower,
-        frozen,
         &mut region,
         &mut knowledge,
         RegionLimits::default(),
@@ -104,7 +120,6 @@ fn children_match_fresh(theory: &Theory, frozen: Option<&[bool]>) {
         let carried_outcome = narrow(
             theory,
             &narrower,
-            frozen,
             &mut carried,
             &mut inherited,
             RegionLimits::default(),
@@ -114,9 +129,8 @@ fn children_match_fresh(theory: &Theory, frozen: Option<&[bool]>) {
         let fresh_outcome = narrow(
             theory,
             &narrower,
-            frozen,
             &mut fresh,
-            &mut narrower.knowledge(),
+            &mut query_knowledge(&narrower, frozen),
             RegionLimits::default(),
         )
         .unwrap()
@@ -141,7 +155,6 @@ fn repeated_closure_is_idle(theory: &Theory, frozen: Option<&[bool]>) {
     let (outcome, _) = narrow(
         theory,
         &narrower,
-        frozen,
         &mut child,
         &mut knowledge,
         RegionLimits::default(),
@@ -153,7 +166,6 @@ fn repeated_closure_is_idle(theory: &Theory, frozen: Option<&[bool]>) {
     let (outcome, statistics) = narrow(
         theory,
         &narrower,
-        frozen,
         &mut child,
         &mut knowledge,
         RegionLimits::default(),
@@ -175,7 +187,6 @@ fn conflicting_descendant_is_refuted(theory: &Theory, frozen: Option<&[bool]>) {
     let carried_outcome = narrow(
         theory,
         &narrower,
-        frozen,
         &mut carried,
         &mut knowledge,
         RegionLimits::default(),
@@ -185,9 +196,8 @@ fn conflicting_descendant_is_refuted(theory: &Theory, frozen: Option<&[bool]>) {
     let fresh_outcome = narrow(
         theory,
         &narrower,
-        frozen,
         &mut fresh,
-        &mut narrower.knowledge(),
+        &mut query_knowledge(&narrower, frozen),
         RegionLimits::default(),
     )
     .unwrap()
@@ -206,7 +216,6 @@ fn zero_work_refuses_both_paths(theory: &Theory, frozen: Option<&[bool]>) {
     let carried_result = narrow(
         theory,
         &narrower,
-        frozen,
         &mut carried,
         &mut knowledge,
         RegionLimits { max_work: 0 },
@@ -214,9 +223,8 @@ fn zero_work_refuses_both_paths(theory: &Theory, frozen: Option<&[bool]>) {
     let fresh_result = narrow(
         theory,
         &narrower,
-        frozen,
         &mut fresh,
-        &mut narrower.knowledge(),
+        &mut query_knowledge(&narrower, frozen),
         RegionLimits { max_work: 0 },
     );
     assert_eq!(carried_result, Err(Stop::WorkLimit));

@@ -24,7 +24,7 @@ fn refused_parent_and_peer_partition_the_query_before_retirement() {
     let cell = Arc::new(QueryCell::new(&truth, &candidate, 2).unwrap());
     let root = Entry::new(
         Region::all_open(theory.atom_count()),
-        Narrower::new(&theory).knowledge(),
+        Narrower::new(&theory).frozen_knowledge(),
     );
     let (mut parent, peer) = root.split_with(0, |state| (state.clone(), state));
     parent.prefer(1);

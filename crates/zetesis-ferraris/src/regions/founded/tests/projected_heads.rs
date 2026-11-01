@@ -114,8 +114,9 @@ fn every_small_mask_matches_original_heads() {
                             &producers,
                             &never,
                             &[cut_atoms],
-                            &mut Work::new(u64::MAX),
+                            &mut Meter::local(u64::MAX),
                         )
+                        .map_err(zetesis_algebra::Failure::into_stop)
                         .unwrap();
                 }
                 assert_eq!(
@@ -147,7 +148,7 @@ fn warm(extra: usize, projected: bool) -> u64 {
     if !projected {
         scratch.projected.as_mut().unwrap().heads = original_rows(&owner, &producers);
     }
-    let mut work = Work::new(u64::MAX);
+    let mut work = Meter::local(u64::MAX);
     scratch
         .complete(
             &owner,
@@ -157,10 +158,11 @@ fn warm(extra: usize, projected: bool) -> u64 {
             &[0],
             &mut work,
         )
+        .map_err(zetesis_algebra::Failure::into_stop)
         .unwrap();
     assert_eq!(&*scratch.atoms, [0b011]);
     assert_eq!(scratch.body_nodes.len(), 3);
-    work.spent()
+    work.charged()
 }
 
 #[test]

@@ -128,7 +128,7 @@ fn a_foreign_owner_cannot_force_a_partial_premise() {
     assert!(matches!(result, Narrowing::Fixed { .. }));
     assert_eq!(narrowed.decision(2), None);
     assert_eq!(counts.support_explanations.forced, 0);
-    assert_eq!(scratch.explanations.len(), 0);
+    assert_eq!(scratch.learning.explanations.len(), 0);
 }
 
 #[test]
@@ -151,7 +151,7 @@ fn an_inventory_free_visit_cannot_force_a_partial_premise() {
     assert_eq!(narrowed.decision(2), None);
     assert_eq!(counts.support_explanations.work, 0);
     assert_eq!(counts.support_explanations.forced, 0);
-    assert_eq!(scratch.explanations.len(), 1);
+    assert_eq!(scratch.learning.explanations.len(), 1);
 
     let mut original = initial;
     let (result, counts) =
@@ -188,7 +188,7 @@ fn a_frozen_visit_cannot_force_a_partial_premise() {
         .narrow_frozen_known(
             subject,
             &mut without_row,
-            &mut program.index.knowledge(),
+            &mut program.index.frozen_knowledge(),
             &mut NarrowingScratch::default(),
             RegionLimits::default(),
             &Cancellation::default(),
@@ -198,7 +198,7 @@ fn a_frozen_visit_cannot_force_a_partial_premise() {
     let attempt = program.index.narrow_frozen_known(
         subject,
         &mut with_row,
-        &mut program.index.knowledge(),
+        &mut program.index.frozen_knowledge(),
         &mut scratch,
         RegionLimits::default(),
         &Cancellation::default(),
@@ -211,7 +211,7 @@ fn a_frozen_visit_cannot_force_a_partial_premise() {
     }
     assert_eq!(counts.support_explanations.work, 0);
     assert_eq!(counts.support_explanations.forced, 0);
-    assert_eq!(scratch.explanations.len(), 1);
+    assert_eq!(scratch.learning.explanations.len(), 1);
 }
 
 #[test]
@@ -224,29 +224,37 @@ fn every_interrupted_partial_match_preserves_its_typed_failure() {
         atom: 2,
         value: true,
     };
-    let mut measured = Work::new(u64::MAX);
+    let mut measured = Meter::local(u64::MAX);
     assert_eq!(
         scratch
+            .learning
             .explanations
             .deduction(0, &held, &cut, &mut measured)
+            .map_err(zetesis_algebra::Failure::into_stop)
             .unwrap(),
         expected
     );
-    assert!(measured.spent() > 0);
+    assert!(measured.charged() > 0);
     for failure in [Stop::WorkLimit, Stop::Cancelled, Stop::Deadline] {
-        for prefix in 0..measured.spent() {
+        for prefix in 0..measured.charged() {
             let mut permits = SinglePermits::new(prefix, failure);
-            let mut work = Work::reserved(&mut permits);
-            assert_eq!(
-                scratch.explanations.deduction(0, &held, &cut, &mut work),
-                Err(failure)
-            );
-            assert_eq!(work.spent(), prefix);
-            assert_eq!(scratch.explanations.len(), 1);
+            let mut work = Meter::reserved(&mut permits);
             assert_eq!(
                 scratch
+                    .learning
                     .explanations
-                    .deduction(0, &held, &cut, &mut Work::new(u64::MAX))
+                    .deduction(0, &held, &cut, &mut work)
+                    .map_err(zetesis_algebra::Failure::into_stop),
+                Err(failure)
+            );
+            assert_eq!(work.charged(), prefix);
+            assert_eq!(scratch.learning.explanations.len(), 1);
+            assert_eq!(
+                scratch
+                    .learning
+                    .explanations
+                    .deduction(0, &held, &cut, &mut Meter::local(u64::MAX))
+                    .map_err(zetesis_algebra::Failure::into_stop)
                     .unwrap(),
                 expected
             );

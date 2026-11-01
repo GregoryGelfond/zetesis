@@ -5,6 +5,8 @@
 //! Thus a productive atom activation identifies its original witness without
 //! storing source identities on generic activation edges.
 
+use zetesis_algebra::Quota;
+
 use crate::{
     Theory,
     positive::activation::{self, Edge, Effects, Point, State},
@@ -37,11 +39,11 @@ struct Graph {
     words: Words<u64>,
 }
 
-pub(super) fn propose(
+pub(super) fn propose<Q: Quota + ?Sized>(
     theory: &Theory,
     storage: &mut Storage,
-    budget: &mut Budget<'_, '_>,
-) -> Result<Vec<Step>, BudgetError> {
+    budget: &mut Budget<'_, '_, Q>,
+) -> Result<Vec<Step>, BudgetError<Q::Error>> {
     let selected = select(theory, storage, budget)?;
     let mut steps = storage.reserve(0, budget)?;
     budget.charge(1)?;
@@ -86,11 +88,11 @@ pub(super) fn propose(
     Ok(steps)
 }
 
-fn select(
+fn select<Q: Quota + ?Sized>(
     theory: &Theory,
     storage: &mut Storage,
-    budget: &mut Budget<'_, '_>,
-) -> Result<Selected, BudgetError> {
+    budget: &mut Budget<'_, '_, Q>,
+) -> Result<Selected, BudgetError<Q::Error>> {
     let mut rules = storage.reserve(0, budget)?;
     let mut premises = storage.reserve(0, budget)?;
     for root in 0..theory.roots().len() {
@@ -135,12 +137,12 @@ fn select(
     Ok(Selected { rules, premises })
 }
 
-fn transpose(
+fn transpose<Q: Quota + ?Sized>(
     atoms: usize,
     selected: &Selected,
     storage: &mut Storage,
-    budget: &mut Budget<'_, '_>,
-) -> Result<Graph, BudgetError> {
+    budget: &mut Budget<'_, '_, Q>,
+) -> Result<Graph, BudgetError<Q::Error>> {
     budget.charge(3)?;
     let vertices = atoms
         .checked_add(selected.rules.len())
@@ -213,12 +215,12 @@ fn transpose(
 
 /// Each call visits exactly the retained occurrence edges and one head edge
 /// per selected source. Both CSR passes use this one incidence definition.
-fn incidences(
+fn incidences<Q: Quota + ?Sized>(
     atoms: usize,
     selected: &Selected,
-    budget: &mut Budget<'_, '_>,
-    mut visit: impl FnMut(usize, Edge, &mut Budget<'_, '_>) -> Result<(), BudgetError>,
-) -> Result<(), BudgetError> {
+    budget: &mut Budget<'_, '_, Q>,
+    mut visit: impl FnMut(usize, Edge, &mut Budget<'_, '_, Q>) -> Result<(), BudgetError<Q::Error>>,
+) -> Result<(), BudgetError<Q::Error>> {
     for (index, rule) in selected.rules.iter().enumerate() {
         budget.charge(4)?; // rule occurrence, rule vertex and span boundaries
         let target = atoms + index;
@@ -240,7 +242,7 @@ fn incidences(
 }
 
 impl Graph {
-    fn release(self, storage: &mut Storage) -> Result<(), BudgetError> {
+    fn release(self, storage: &mut Storage) -> Result<(), Stop> {
         storage.release(self.offsets)?;
         storage.release(self.edges)?;
         storage.release(self.states)?;
@@ -249,16 +251,16 @@ impl Graph {
     }
 }
 
-struct Recording<'r, 's, 'b, 'a, 'q> {
+struct Recording<'r, 's, 'b, 'a, 'q, Q: Quota + ?Sized> {
     atoms: usize,
     rules: &'r [Rule],
     steps: &'s mut Vec<Step>,
     storage: &'b mut Storage,
-    budget: &'b mut Budget<'a, 'q>,
+    budget: &'b mut Budget<'a, 'q, Q>,
 }
 
-impl Effects for Recording<'_, '_, '_, '_, '_> {
-    type Error = BudgetError;
+impl<Q: Quota + ?Sized> Effects for Recording<'_, '_, '_, '_, '_, Q> {
+    type Error = BudgetError<Q::Error>;
 
     fn before(&mut self, _point: Point, work: u64) -> Result<(), Self::Error> {
         self.budget.charge(work)

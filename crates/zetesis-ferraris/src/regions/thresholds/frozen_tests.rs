@@ -116,7 +116,7 @@ fn narrowing_keeps_all_arbitrary_frozen_models() {
                         .narrow_frozen_known(
                             FrozenSubject::new(&theory, &truth),
                             &mut after,
-                            &mut narrower.knowledge(),
+                            &mut narrower.frozen_knowledge(),
                             &mut NarrowingScratch::default(),
                             RegionLimits::default(),
                             &cancellation,

@@ -21,12 +21,20 @@ fn limited(limits: LearningLimits) -> Program {
 }
 
 fn deliver(program: &Program, scratch: &mut NarrowingScratch, store: &mut LearningStore) {
-    let attempt = scratch.deliver_learning(&program.owner, store, &mut unlimited());
+    let attempt = crate::test_support::stop_learning(&scratch.deliver_learning(
+        &program.owner,
+        store,
+        &mut zetesis_algebra::Meter::reserved(&mut unlimited()),
+    ));
     assert_eq!(attempt.result, Ok(()));
 }
 
 fn seed(program: &Program, scratch: &mut NarrowingScratch, store: &mut LearningStore) {
-    let attempt = scratch.seed_learning(&program.owner, store, &mut unlimited());
+    let attempt = crate::test_support::stop_learning(&scratch.seed_learning(
+        &program.owner,
+        store,
+        &mut zetesis_algebra::Meter::reserved(&mut unlimited()),
+    ));
     assert_eq!(attempt.result, Ok(()));
 }
 
@@ -92,7 +100,7 @@ fn a_delivered_row_returns_only_its_new_hits() {
     deliver(&program, &mut scratch, &mut store);
     assert_eq!(store.deliveries(), 1);
     assert_eq!(store.classes[0].rows[0].hits, 0);
-    scratch.explanations.hit(0);
+    scratch.learning.explanations.hit(0);
     deliver(&program, &mut scratch, &mut store);
     assert_eq!(store.deliveries(), 1);
     assert_eq!(store.len(), 1);
@@ -107,11 +115,11 @@ fn a_seeded_row_starts_at_the_store_hits() {
     let (_, mut source) = program.captured();
     let mut store = LearningStore::new();
     deliver(&program, &mut source, &mut store);
-    source.explanations.hit(0);
+    source.learning.explanations.hit(0);
     deliver(&program, &mut source, &mut store);
     let mut scratch = NarrowingScratch::default();
     seed(&program, &mut scratch, &mut store);
-    assert_eq!(scratch.explanations.rows[0].hits, 1);
+    assert_eq!(scratch.learning.explanations.rows[0].hits, 1);
 }
 
 #[test]
@@ -147,7 +155,11 @@ fn a_seeded_row_is_not_delivered_back() {
     let mut store = delivered(&program);
     let mut scratch = NarrowingScratch::default();
     seed(&program, &mut scratch, &mut store);
-    let attempt = scratch.deliver_learning(&program.owner, &mut store, &mut unlimited());
+    let attempt = crate::test_support::stop_learning(&scratch.deliver_learning(
+        &program.owner,
+        &mut store,
+        &mut zetesis_algebra::Meter::reserved(&mut unlimited()),
+    ));
     assert_eq!(attempt.result, Ok(()));
     // One read examines the seeded row, which goes nowhere.
     assert_eq!(attempt.work, 1);
@@ -165,13 +177,13 @@ fn tier_with(program: &Program, atoms: &[usize]) -> Ledger {
 }
 
 fn deliver_tier(tier: &mut Ledger, store: &mut LearningStore) {
-    tier.deliver(store, &mut Work::new(u64::MAX)).unwrap();
+    tier.deliver(store, &mut Meter::local(u64::MAX)).unwrap();
 }
 
 fn seed_tier(tier: &mut Ledger, store: &mut LearningStore) -> u64 {
-    let mut work = Work::new(u64::MAX);
+    let mut work = Meter::local(u64::MAX);
     tier.seed(store, &mut work).unwrap();
-    work.spent()
+    work.charged()
 }
 
 #[test]
@@ -226,7 +238,8 @@ fn a_full_store_evicts_the_row_with_fewest_hits() {
     assert!(add(&mut tier, &[(1, true)], &[(4, false)]));
     tier.hit(1);
     let mut store = LearningStore::new();
-    tier.deliver(&mut store, &mut Work::new(u64::MAX)).unwrap();
+    tier.deliver(&mut store, &mut Meter::local(u64::MAX))
+        .unwrap();
     assert_eq!(store.len(), 1);
     assert_eq!(store.classes[0].evicted(), 1);
     assert_eq!(
@@ -254,15 +267,22 @@ fn an_exhausted_sharing_allowance_ends_delivery_not_the_run() {
 fn an_interrupted_delivery_publishes_no_partial_row() {
     let program = Program::new(false);
     let (_, mut complete) = program.captured();
-    let measured =
-        complete.deliver_learning(&program.owner, &mut LearningStore::new(), &mut unlimited());
+    let measured = crate::test_support::stop_learning(&complete.deliver_learning(
+        &program.owner,
+        &mut LearningStore::new(),
+        &mut zetesis_algebra::Meter::reserved(&mut unlimited()),
+    ));
     assert!(measured.work > 0);
     for failure in [Stop::WorkLimit, Stop::Cancelled, Stop::Deadline] {
         for prefix in 0..measured.work {
             let (_, mut scratch) = program.captured();
             let mut store = LearningStore::new();
             let mut permits = SinglePermits::new(prefix, failure);
-            let attempt = scratch.deliver_learning(&program.owner, &mut store, &mut permits);
+            let attempt = crate::test_support::stop_learning(&scratch.deliver_learning(
+                &program.owner,
+                &mut store,
+                &mut zetesis_algebra::Meter::reserved(&mut permits),
+            ));
             assert_eq!(attempt.result, Err(failure));
             assert_eq!(attempt.work, prefix);
             assert!(store.is_empty());
@@ -276,12 +296,16 @@ fn an_interrupted_delivery_publishes_no_partial_row() {
 fn an_interrupted_delivery_pays_for_its_prefix() {
     let program = Program::new(false);
     let (_, mut scratch) = program.captured();
-    let before = scratch.explanations.sharing;
+    let before = scratch.learning.explanations.sharing;
     // One read examines the row; the next is the delivery's first.
     let mut permits = SinglePermits::new(2, Stop::WorkLimit);
-    let attempt = scratch.deliver_learning(&program.owner, &mut LearningStore::new(), &mut permits);
+    let attempt = crate::test_support::stop_learning(&scratch.deliver_learning(
+        &program.owner,
+        &mut LearningStore::new(),
+        &mut zetesis_algebra::Meter::reserved(&mut permits),
+    ));
     assert_eq!(attempt.result, Err(Stop::WorkLimit));
-    assert_eq!(scratch.explanations.sharing, before - 1);
+    assert_eq!(scratch.learning.explanations.sharing, before - 1);
 }
 
 #[test]
@@ -289,26 +313,37 @@ fn an_interrupted_seeding_pays_for_its_prefix() {
     let program = Program::new(false);
     let mut store = delivered(&program);
     let mut scratch = NarrowingScratch::default();
-    scratch.explanations.prepare(&program.owner);
-    let before = scratch.explanations.sharing;
+    scratch.learning.explanations.prepare(&program.owner);
+    let before = scratch.learning.explanations.sharing;
     let mut permits = SinglePermits::new(1, Stop::WorkLimit);
-    let attempt = scratch.seed_learning(&program.owner, &mut store, &mut permits);
+    let attempt = crate::test_support::stop_learning(&scratch.seed_learning(
+        &program.owner,
+        &mut store,
+        &mut zetesis_algebra::Meter::reserved(&mut permits),
+    ));
     assert_eq!(attempt.result, Err(Stop::WorkLimit));
-    assert_eq!(scratch.explanations.sharing, before - 1);
+    assert_eq!(scratch.learning.explanations.sharing, before - 1);
 }
 
 #[test]
 fn an_interrupted_seeding_adds_no_partial_row() {
     let program = Program::new(false);
     let mut store = delivered(&program);
-    let measured =
-        NarrowingScratch::default().seed_learning(&program.owner, &mut store, &mut unlimited());
+    let measured = crate::test_support::stop_learning(&NarrowingScratch::default().seed_learning(
+        &program.owner,
+        &mut store,
+        &mut zetesis_algebra::Meter::reserved(&mut unlimited()),
+    ));
     assert!(measured.work > 0);
     for failure in [Stop::WorkLimit, Stop::Cancelled, Stop::Deadline] {
         for prefix in 0..measured.work {
             let mut scratch = NarrowingScratch::default();
             let mut permits = SinglePermits::new(prefix, failure);
-            let attempt = scratch.seed_learning(&program.owner, &mut store, &mut permits);
+            let attempt = crate::test_support::stop_learning(&scratch.seed_learning(
+                &program.owner,
+                &mut store,
+                &mut zetesis_algebra::Meter::reserved(&mut permits),
+            ));
             assert_eq!(attempt.result, Err(failure));
             assert_eq!(attempt.work, prefix);
             assert_eq!(scratch.learned_rows(), 0);

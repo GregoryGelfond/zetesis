@@ -4,6 +4,8 @@
 //! describe each row's initial check; trusted addition establishes subsequent
 //! consequences of those checked premises. No region or owner is changed.
 
+use zetesis_algebra::Quota;
+
 use std::convert::Infallible;
 use std::mem::size_of;
 
@@ -65,25 +67,25 @@ pub(super) struct Index {
 impl Index {
     /// Insert an admitted atom/row incidence: locate costs three, OR and its
     /// observation counter cost two. Callers establish both coordinate bounds.
-    pub(super) fn insert(
+    pub(super) fn insert<Q: Quota + ?Sized>(
         &mut self,
         atom: usize,
         row: usize,
-        budget: &mut Budget<'_, '_>,
-    ) -> Result<(), BudgetError> {
+        budget: &mut Budget<'_, '_, Q>,
+    ) -> Result<(), BudgetError<Q::Error>> {
         assert!(row < self.rows, "index row is admitted");
         budget.charge(3)?;
         let (word, bit) = Words::<u64>::locate(row);
         self.insert_bit(atom, word, bit, budget)
     }
 
-    fn insert_bit(
+    fn insert_bit<Q: Quota + ?Sized>(
         &mut self,
         atom: usize,
         word: usize,
         bit: u64,
-        budget: &mut Budget<'_, '_>,
-    ) -> Result<(), BudgetError> {
+        budget: &mut Budget<'_, '_, Q>,
+    ) -> Result<(), BudgetError<Q::Error>> {
         budget.charge(2)?;
         self.words[atom * self.row_words + word] |= bit;
         self.insertions += 1;
@@ -118,12 +120,12 @@ impl Index {
 /// A refuting path omits those suffix terms. The shared first-bit primitive's
 /// result tag, counter increments, vector lengths and headers explain the
 /// differences from the scalar reference coefficients.
-pub(super) fn prepare(
+pub(super) fn prepare<Q: Quota + ?Sized>(
     rows: &mut [Equation],
     atom_count: usize,
     storage: &mut Storage,
-    budget: &mut Budget<'_, '_>,
-) -> Result<Prepared, BudgetError> {
+    budget: &mut Budget<'_, '_, Q>,
+) -> Result<Prepared, BudgetError<Q::Error>> {
     let mut pivots = storage.filled(atom_count, 0usize, 1, budget)?;
     let basis = storage.reserve(rows.len().min(atom_count), budget)?;
     let units = storage.reserve(0, budget)?;
@@ -195,13 +197,13 @@ pub(super) fn prepare(
 /// `W+2` chunk covers every XOR, the constant XOR and the observation counter.
 /// Equal padded lengths and an earlier source are established by preparation;
 /// the shared kernel's callbacks cannot refuse inside this admitted chunk.
-fn add(
+fn add<Q: Quota + ?Sized>(
     rows: &mut [Equation],
     target: usize,
     source: usize,
     counts: &mut Counts,
-    budget: &mut Budget<'_, '_>,
-) -> Result<(), BudgetError> {
+    budget: &mut Budget<'_, '_, Q>,
+) -> Result<(), BudgetError<Q::Error>> {
     assert!(source < target, "a pivot belongs to an earlier checked row");
     let (earlier, remaining) = rows.split_at_mut(target);
     let source = &earlier[source];
@@ -217,12 +219,12 @@ fn add(
     Ok(())
 }
 
-fn collect_units(
+fn collect_units<Q: Quota + ?Sized>(
     rows: &[Equation],
     prepared: &mut Prepared,
     storage: &mut Storage,
-    budget: &mut Budget<'_, '_>,
-) -> Result<(), BudgetError> {
+    budget: &mut Budget<'_, '_, Q>,
+) -> Result<(), BudgetError<Q::Error>> {
     for row in &prepared.basis {
         budget.charge(1)?;
         let row = &rows[*row];
@@ -258,12 +260,12 @@ fn collect_units(
 /// an insertion counter per incidence. Guard insertions later cost five each.
 /// Matrix/byte dimension checks precede allocation; unrepresentable allocation
 /// dimensions remain an allocation failure, never a logical contradiction.
-pub(super) fn build_index<'a>(
+pub(super) fn build_index<'a, Q: Quota + ?Sized>(
     atom_count: usize,
     supports: impl ExactSizeIterator<Item = &'a [u64]>,
     storage: &mut Storage,
-    budget: &mut Budget<'_, '_>,
-) -> Result<Index, BudgetError> {
+    budget: &mut Budget<'_, '_, Q>,
+) -> Result<Index, BudgetError<Q::Error>> {
     budget.charge(0)?; // global control precedes allocation-dimension refusal
     let rows = supports.len();
     let row_words = rows.div_ceil(128) * 2;

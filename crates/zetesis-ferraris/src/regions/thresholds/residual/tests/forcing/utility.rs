@@ -12,22 +12,25 @@ fn coprime_complements_need_no_suffix_storage() {
     };
     let before = known.thresholds[0];
     let mut scratch = NarrowingScratch::default();
-    let mut work = Work::new(8);
-    let mut closure = Closure {
+    let mut work = Meter::local(8);
+    let mut closure = Closure::<_, zetesis_algebra::AnswerSetsSought> {
         known: known.borrow(),
-        lists: &mut scratch,
+        lists: &mut scratch.common,
+        learning: &mut scratch.learning,
     };
     assert!(matches!(
-        closure.threshold_residual(&index, 0, &mut work),
+        closure
+            .threshold_residual(&index, 0, &mut work)
+            .map_err(zetesis_algebra::Failure::into_stop),
         Ok(Step::Unchanged)
     ));
     // One whole-row witness, three ascending reads, and gcd(2,3).
-    assert_eq!(work.spent(), 8);
+    assert_eq!(work.charged(), 8);
     assert_eq!(closure.known.thresholds[0], before);
     assert!(closure.known.sure.iter().all(|&word| word == 0));
     assert!(closure.known.never.iter().all(|&word| word == 0));
-    assert!(scratch.nodes.is_empty());
-    assert_eq!(scratch.residual_suffix.capacity(), 0);
+    assert!(scratch.common.nodes.is_empty());
+    assert_eq!(scratch.common.residual_suffix.capacity(), 0);
     assert_eq!(scratch.retained_bytes(), 0);
 }
 
@@ -41,19 +44,21 @@ fn a_partial_gcd_witness_avoids_the_unread_tail() {
         unreachable!();
     };
     let mut scratch = NarrowingScratch::default();
-    let mut work = Work::new(8);
+    let mut work = Meter::local(8);
     assert!(matches!(
-        Closure {
+        Closure::<_, zetesis_algebra::AnswerSetsSought> {
             known: known.borrow(),
-            lists: &mut scratch,
+            lists: &mut scratch.common,
+            learning: &mut scratch.learning,
         }
-        .threshold_residual(&index, 0, &mut work),
+        .threshold_residual(&index, 0, &mut work)
+        .map_err(zetesis_algebra::Failure::into_stop),
         Ok(Step::Unchanged)
     ));
     // The same allowance as the three-term case cannot read the other 27
     // conditions, allocate a suffix, or perform the complement sweep.
-    assert_eq!(work.spent(), 8);
-    assert_eq!(scratch.residual_suffix.capacity(), 0);
+    assert_eq!(work.charged(), 8);
+    assert_eq!(scratch.common.residual_suffix.capacity(), 0);
     assert_eq!(scratch.retained_bytes(), 0);
 }
 
@@ -76,7 +81,7 @@ fn a_large_complement_gcd_retains_productive_forcing() {
     );
     assert!(region.is_held(0) && region.is_held(1));
     assert!(region.is_open(2) && region.is_open(3));
-    assert!(scratch.residual_suffix.capacity() >= 5);
+    assert!(scratch.common.residual_suffix.capacity() >= 5);
 }
 
 #[test]
@@ -101,7 +106,7 @@ fn decided_coefficients_supply_neither_utility_witness() {
             Narrowing::Refuted
         );
         assert!(region.is_held(1) && region.is_held(2) && region.is_cut(3));
-        assert!(scratch.residual_suffix.capacity() >= 5);
+        assert!(scratch.common.residual_suffix.capacity() >= 5);
 
         // A decided odd coefficient cannot reduce the open even complement's
         // gcd from 2 to 1 and conceal the forced open unit.
@@ -128,7 +133,7 @@ fn decided_coefficients_supply_neither_utility_witness() {
         );
         assert!(region.is_held(0) && region.is_held(2));
         assert!(region.is_open(3) && region.is_open(4));
-        assert!(scratch.residual_suffix.capacity() >= 6);
+        assert!(scratch.common.residual_suffix.capacity() >= 6);
     }
 }
 
@@ -145,26 +150,29 @@ fn interrupted_utility_checks_publish_no_state() {
             };
             let before = known.thresholds[0];
             let mut scratch = NarrowingScratch::default();
-            let mut closure = Closure {
+            let mut closure = Closure::<_, zetesis_algebra::AnswerSetsSought> {
                 known: known.borrow(),
-                lists: &mut scratch,
+                lists: &mut scratch.common,
+                learning: &mut scratch.learning,
             };
             let mut allowance = Allowance {
                 remaining: cutoff,
                 failure,
             };
-            let mut work = Work::reserved(&mut allowance);
+            let mut work = Meter::reserved(&mut allowance);
             assert!(
-                matches!(closure.threshold_residual(&index, 0, &mut work), Err(stop) if stop == failure)
+                matches!(closure.threshold_residual(&index, 0, &mut work).map_err(zetesis_algebra::Failure::into_stop), Err(stop) if stop == failure)
             );
-            assert_eq!(work.spent(), cutoff);
+            assert_eq!(work.charged(), cutoff);
             assert_eq!(closure.known.thresholds[0], before);
             assert!(closure.known.sure.iter().all(|&word| word == 0));
             assert!(closure.known.never.iter().all(|&word| word == 0));
             assert!(closure.lists.nodes.is_empty());
             assert_eq!(closure.lists.residual_suffix.capacity(), 0);
             assert!(matches!(
-                closure.threshold_residual(&index, 0, &mut Work::new(8)),
+                closure
+                    .threshold_residual(&index, 0, &mut Meter::local(8))
+                    .map_err(zetesis_algebra::Failure::into_stop),
                 Ok(Step::Unchanged)
             ));
         }

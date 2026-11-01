@@ -8,22 +8,24 @@
 //! Forward searches then reuse queue and the same original outgoing postings.
 //! No component IDs survive: only the packed cyclic-atom mask is retained.
 
+use zetesis_algebra::{Failure, Quota};
+
 use zetesis_algebra::words::Words;
 
 use super::{
-    Narrower, NodeView, Producers, Scratch, State, Theory, Work, chain_position, flag_words,
+    Meter, Narrower, NodeView, Producers, Scratch, State, Theory, chain_position, flag_words,
     reserve,
 };
 use zetesis_algebra::Stop;
 
 impl Scratch {
-    pub(super) fn prepare_components(
+    pub(super) fn prepare_components<Q: Quota + ?Sized>(
         &mut self,
         theory: &Theory,
         index: &Narrower,
         producers: &Producers,
-        work: &mut Work<'_>,
-    ) -> Result<(), Stop> {
+        work: &mut Meter<'_, Q>,
+    ) -> Result<(), Failure<Q::Error>> {
         debug_assert!(
             self.owner.is_none(),
             "component scratch is never authoritative"
@@ -68,7 +70,7 @@ impl Scratch {
             }
         }
         if self.body_nodes.len() != projected {
-            return Err(Stop::InvalidProgram);
+            return Err(Failure::Stopped(Stop::InvalidProgram));
         }
         Self::zero_words(&mut self.atoms, atoms, work)?;
         for &vertex in &self.body_nodes {
@@ -80,7 +82,11 @@ impl Scratch {
         self.classify_components(theory, index, producers, work)
     }
 
-    fn zero_words(words: &mut Words<u64>, atoms: usize, work: &mut Work<'_>) -> Result<(), Stop> {
+    fn zero_words<Q: Quota + ?Sized>(
+        words: &mut Words<u64>,
+        atoms: usize,
+        work: &mut Meter<'_, Q>,
+    ) -> Result<(), Failure<Q::Error>> {
         let words = words.storage_mut();
         words.clear();
         reserve(words, flag_words(atoms))?;
@@ -112,14 +118,14 @@ impl Scratch {
     }
 
     /// The cursor advances only after the inspected incidence is charged.
-    fn predecessor(
+    fn predecessor<Q: Quota + ?Sized>(
         &mut self,
         vertex: usize,
         theory: &Theory,
         index: &Narrower,
         producers: &Producers,
-        work: &mut Work<'_>,
-    ) -> Result<Option<usize>, Stop> {
+        work: &mut Meter<'_, Q>,
+    ) -> Result<Option<usize>, Failure<Q::Error>> {
         let atoms = theory.atom_count();
         if vertex < atoms {
             while let Some(&row) = producers.by_head[vertex].get(self.dependencies[vertex]) {
@@ -127,7 +133,7 @@ impl Scratch {
                 self.dependencies[vertex] += 1;
                 if let Some(body) = producers.rules[row].body {
                     if matches!(self.states[body], State::Outside) {
-                        return Err(Stop::InvalidProgram);
+                        return Err(Failure::Stopped(Stop::InvalidProgram));
                     }
                     return Ok(Some(atoms + body));
                 }
@@ -136,7 +142,7 @@ impl Scratch {
         }
         let node = vertex - atoms;
         let State::Visiting(next) = self.states[node] else {
-            return Err(Stop::InvalidProgram);
+            return Err(Failure::Stopped(Stop::InvalidProgram));
         };
         let previous = match theory.view().node(node).map_err(|_| Stop::InvalidProgram)? {
             NodeView::Atom(atom) => (next == 0).then_some(atom),
@@ -156,13 +162,13 @@ impl Scratch {
         Ok(previous)
     }
 
-    fn classify_components(
+    fn classify_components<Q: Quota + ?Sized>(
         &mut self,
         theory: &Theory,
         index: &Narrower,
         producers: &Producers,
-        work: &mut Work<'_>,
-    ) -> Result<(), Stop> {
+        work: &mut Meter<'_, Q>,
+    ) -> Result<(), Failure<Q::Error>> {
         let atoms = theory.atom_count();
         while let Some(root) = self.body_nodes.pop() {
             work.tick()?;
@@ -198,14 +204,14 @@ impl Scratch {
         self.queue.push(vertex);
     }
 
-    fn successors(
+    fn successors<Q: Quota + ?Sized>(
         &mut self,
         vertex: usize,
         theory: &Theory,
         index: &Narrower,
         producers: &Producers,
-        work: &mut Work<'_>,
-    ) -> Result<(), Stop> {
+        work: &mut Meter<'_, Q>,
+    ) -> Result<(), Failure<Q::Error>> {
         let atoms = theory.atom_count();
         if vertex < atoms {
             for &node in &index.atom_nodes[vertex] {

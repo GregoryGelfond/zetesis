@@ -29,7 +29,9 @@
 //! truth. Only a completed outcome may cut a head or force its sole body. The
 //! caller still abandons interrupted closure knowledge and pending work.
 
-use super::{Producers, Work, bit, counters::Count};
+use zetesis_algebra::{Failure, Quota};
+
+use super::{Meter, Producers, bit, counters::Count};
 use zetesis_algebra::Stop;
 
 #[cfg(test)]
@@ -84,7 +86,11 @@ impl Progress {
         }
     }
 
-    fn prepare(&mut self, producers: &Producers, work: &mut Work<'_>) -> Result<(), Stop> {
+    fn prepare<Q: Quota + ?Sized>(
+        &mut self,
+        producers: &Producers,
+        work: &mut Meter<'_, Q>,
+    ) -> Result<(), Failure<Q::Error>> {
         if matches!(self, Self::Vacant) {
             let atoms = producers.by_head.len();
             let bound = producers.rules.len();
@@ -99,20 +105,20 @@ impl Progress {
         Ok(())
     }
 
-    pub(super) fn check(
+    pub(super) fn check<Q: Quota + ?Sized>(
         &mut self,
         producers: &Producers,
         atom: usize,
         held: bool,
         never: &[u64],
         atom_sure: &[u64],
-        work: &mut Work<'_>,
-    ) -> Result<Support, Stop> {
+        work: &mut Meter<'_, Q>,
+    ) -> Result<Support, Failure<Q::Error>> {
         let rows = &producers.by_head[atom];
         if rows.len() > 2 {
             self.prepare(producers, work)?;
         }
-        let mut possible = |position: usize| {
+        let mut possible = |position: usize| -> Result<bool, Failure<Q::Error>> {
             work.tick()?;
             let producer = &producers.rules[rows[position]];
             let body_impossible = producer.body.is_some_and(|body| bit(never, body));
@@ -143,7 +149,10 @@ impl Progress {
     }
 }
 
-fn zeros<C: Count>(atoms: usize, work: &mut Work<'_>) -> Result<Vec<[C; 2]>, Stop> {
+fn zeros<C: Count, Q: Quota + ?Sized>(
+    atoms: usize,
+    work: &mut Meter<'_, Q>,
+) -> Result<Vec<[C; 2]>, Failure<Q::Error>> {
     // No allocation occurs after a refused initial work request. Only the
     // completed private vector becomes a source of inherited cursor authority.
     work.tick()?;
@@ -164,12 +173,12 @@ enum Outcome {
     Enough,
 }
 
-fn scan<C: Count>(
+fn scan<C: Count, E>(
     positions: &mut [C; 2],
     length: usize,
     held: bool,
-    mut possible: impl FnMut(usize) -> Result<bool, Stop>,
-) -> Result<Outcome, Stop> {
+    mut possible: impl FnMut(usize) -> Result<bool, E>,
+) -> Result<Outcome, E> {
     let [mut first, mut second] = (*positions).map(Count::get);
     let result = (|| {
         while first < length {

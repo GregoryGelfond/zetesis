@@ -15,9 +15,11 @@
 //! row length K and E grouped terms, and leaves the existing logical index
 //! receipt unchanged. It creates neither guard pairs nor new formula nodes.
 
+use zetesis_algebra::{Failure, Quota};
+
 use zetesis_algebra::Stop;
 
-use crate::regions::{Closure, Count, Narrower, Step, Work};
+use crate::regions::{Closure, Count, Meter, Narrower, Step};
 
 use super::{Adjacency, Row, reserve};
 
@@ -84,7 +86,7 @@ fn links(rows: &[Row]) -> Result<Vec<(usize, usize)>, Stop> {
     Ok(links)
 }
 
-impl<C: Count> Closure<'_, C> {
+impl<W: Count, C: crate::regions::ReadingClass> Closure<'_, W, C> {
     /// Consume one dirty row and its actual neighbour visits. Tightening a
     /// requirement queues the target even when it has no guard at that bound;
     /// absent intermediate guards therefore cannot interrupt transitive closure.
@@ -92,12 +94,12 @@ impl<C: Count> Closure<'_, C> {
     /// guard requirement can successfully tighten a target across each edge at
     /// most once per direction; neighbour visits may repeat.
     /// No arithmetic is needed, including for extreme admitted i128 bounds.
-    pub(in crate::regions) fn threshold_prefixes(
+    pub(in crate::regions) fn threshold_prefixes<Q: Quota + ?Sized>(
         &mut self,
         index: &Narrower,
         row: usize,
-        work: &mut Work<'_>,
-    ) -> Result<Step, Stop> {
+        work: &mut Meter<'_, Q>,
+    ) -> Result<Step, Failure<Q::Error>> {
         work.tick()?;
         let source = self.known.thresholds[row];
         let length = index.thresholds.rows[row].terms.len();

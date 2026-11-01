@@ -59,7 +59,7 @@ fn old_false_parents_are_not_rediscovered() {
     let (mut never, cuts) = example.masks(0, 0);
     never[barrier / 64] |= 1 << (barrier % 64);
     example
-        .complete(&mut actual, &never, &cuts, &mut Work::new(u64::MAX))
+        .complete(&mut actual, &never, &cuts, &mut Meter::local(u64::MAX))
         .unwrap();
     assert_eq!(actual.atoms[0], 63);
     // The barrier already failed in the parent. Only its newly false operand
@@ -69,7 +69,8 @@ fn old_false_parents_are_not_rediscovered() {
     actual.record_false(10);
     assert_eq!(
         actual
-            .local_forward(&example.index, (&never, &cuts), &mut Work::new(u64::MAX))
+            .local_forward(&example.index, (&never, &cuts), &mut Meter::local(u64::MAX))
+            .map_err(zetesis_algebra::Failure::into_stop)
             .unwrap(),
         0
     );
@@ -77,10 +78,10 @@ fn old_false_parents_are_not_rediscovered() {
     assert_eq!(actual.local.marks[actual.local.atoms + barrier], 0);
     let mut expected = example.prepared();
     example
-        .complete(&mut expected, &never, &cuts, &mut Work::new(u64::MAX))
+        .complete(&mut expected, &never, &cuts, &mut Meter::local(u64::MAX))
         .unwrap();
     example
-        .complete(&mut actual, &never, &cuts, &mut Work::new(u64::MAX))
+        .complete(&mut actual, &never, &cuts, &mut Meter::local(u64::MAX))
         .unwrap();
     assert_eq!(actual.local.passes, 1);
     assert_eq!(actual.atoms, expected.atoms);
@@ -100,13 +101,14 @@ fn newly_false_parents_keep_their_input_events() {
         assert_eq!(actual.queue.len(), 2);
         assert_eq!(
             actual
-                .local_forward(&example.index, (&never, &cuts), &mut Work::new(u64::MAX))
+                .local_forward(&example.index, (&never, &cuts), &mut Meter::local(u64::MAX))
+                .map_err(zetesis_algebra::Failure::into_stop)
                 .unwrap(),
             2
         );
         assert!(actual.local.head(0) && actual.local.head(1));
         example
-            .complete(&mut actual, &never, &cuts, &mut Work::new(u64::MAX))
+            .complete(&mut actual, &never, &cuts, &mut Meter::local(u64::MAX))
             .unwrap();
         assert_eq!(actual.local.passes, 1);
         assert_eq!(actual.atoms[0], 60);
@@ -121,17 +123,18 @@ fn cut_occurrences_still_reach_live_heads() {
     example.start(&mut actual, &never);
     assert_eq!(
         actual
-            .local_forward(&example.index, (&never, &cuts), &mut Work::new(u64::MAX))
+            .local_forward(&example.index, (&never, &cuts), &mut Meter::local(u64::MAX))
+            .map_err(zetesis_algebra::Failure::into_stop)
             .unwrap(),
         1
     );
     assert!(!actual.local.head(0) && actual.local.head(1));
     example
-        .complete(&mut actual, &never, &cuts, &mut Work::new(u64::MAX))
+        .complete(&mut actual, &never, &cuts, &mut Meter::local(u64::MAX))
         .unwrap();
     let mut expected = example.prepared();
     example
-        .complete(&mut expected, &never, &cuts, &mut Work::new(u64::MAX))
+        .complete(&mut expected, &never, &cuts, &mut Meter::local(u64::MAX))
         .unwrap();
     assert_eq!(actual.local.passes, 1);
     assert_eq!(actual.atoms, expected.atoms);
@@ -146,7 +149,7 @@ fn all_live_heads_affected_keeps_the_full_fallback() {
         let mut actual = example.prepared();
         example.start(&mut actual, &never);
         example
-            .complete(&mut actual, &never, &cuts, &mut Work::new(u64::MAX))
+            .complete(&mut actual, &never, &cuts, &mut Meter::local(u64::MAX))
             .unwrap();
         assert_eq!(actual.local.passes, 0);
         assert_eq!(actual.atoms[0], 0);
@@ -162,7 +165,12 @@ fn stopped_filtered_replay_requires_a_complete_retry() {
     let prepare = || {
         let mut scratch = example.prepared();
         example
-            .complete(&mut scratch, &parent_never, &cuts, &mut Work::new(u64::MAX))
+            .complete(
+                &mut scratch,
+                &parent_never,
+                &cuts,
+                &mut Meter::local(u64::MAX),
+            )
             .unwrap();
         assert_eq!(scratch.atoms[0], 63);
         scratch.begin_local(&example.owner, true);
@@ -173,11 +181,11 @@ fn stopped_filtered_replay_requires_a_complete_retry() {
     never[0] |= 1 << 12;
     let mut expected = example.prepared();
     example
-        .complete(&mut expected, &never, &cuts, &mut Work::new(u64::MAX))
+        .complete(&mut expected, &never, &cuts, &mut Meter::local(u64::MAX))
         .unwrap();
     assert_eq!(expected.atoms[0], 12);
     let mut measured = prepare();
-    let mut completed = Work::new(u64::MAX);
+    let mut completed = Meter::local(u64::MAX);
     example
         .complete(&mut measured, &never, &cuts, &mut completed)
         .unwrap();
@@ -189,13 +197,13 @@ fn stopped_filtered_replay_requires_a_complete_retry() {
         Stop::Deadline,
         Stop::Allocation,
     ] {
-        for ceiling in 0..completed.spent() {
+        for ceiling in 0..completed.charged() {
             let mut actual = prepare();
             let mut allowance = Allowance {
                 remaining: ceiling,
                 failure,
             };
-            let mut work = Work::reserved(&mut allowance);
+            let mut work = Meter::reserved(&mut allowance);
             assert_eq!(
                 example.complete(&mut actual, &never, &cuts, &mut work),
                 Err(failure)
@@ -204,7 +212,7 @@ fn stopped_filtered_replay_requires_a_complete_retry() {
             assert_eq!(actual.local.passes, 0);
             work.refund();
             example
-                .complete(&mut actual, &never, &cuts, &mut Work::new(u64::MAX))
+                .complete(&mut actual, &never, &cuts, &mut Meter::local(u64::MAX))
                 .unwrap();
             assert_eq!(actual.local.passes, 0);
             assert_eq!(actual.atoms, expected.atoms);

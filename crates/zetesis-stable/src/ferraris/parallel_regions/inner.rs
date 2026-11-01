@@ -52,6 +52,7 @@ use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard, OnceLock, PoisonError, TryLockError};
 use std::time::{Duration, Instant};
 
+use zetesis_algebra::Countermodels;
 use zetesis_algebra::{region::Entry, walk::Walk};
 use zetesis_ferraris::{Interpretation, Knowledge};
 
@@ -161,12 +162,12 @@ impl QueryCell {
 
 /// A region of a published query, with its knowledge and the query's cell.
 pub(super) struct InnerEntry {
-    entry: Entry<Knowledge>,
+    entry: Entry<Knowledge<Countermodels>>,
     cell: Arc<QueryCell>,
 }
 
 impl InnerEntry {
-    fn new(entry: Entry<Knowledge>, cell: &Arc<QueryCell>) -> Self {
+    fn new(entry: Entry<Knowledge<Countermodels>>, cell: &Arc<QueryCell>) -> Self {
         Self {
             entry,
             cell: Arc::clone(cell),
@@ -233,7 +234,7 @@ impl InnerDeques {
         &self,
         index: usize,
         cell: &Arc<QueryCell>,
-        traversal: &mut Walk<Knowledge>,
+        traversal: &mut Walk<Knowledge<Countermodels>>,
         termination: &Termination,
         reserve: impl FnOnce(&mut VecDeque<InnerEntry>, usize) -> Result<(), Incomplete>,
     ) -> Result<(), Incomplete> {
@@ -259,7 +260,7 @@ impl InnerDeques {
         index: usize,
         pending: &mut Option<InnerEntry>,
         atom: usize,
-        cut_knowledge: Knowledge,
+        cut_knowledge: Knowledge<Countermodels>,
         termination: &Termination,
         reserve: impl FnOnce(&mut VecDeque<InnerEntry>, usize) -> Result<(), Incomplete>,
     ) -> Result<(), Incomplete> {
@@ -385,7 +386,7 @@ impl Publication for WalkPublication<'_, '_> {
         &mut self,
         truth: &[bool],
         candidate: &Interpretation,
-        traversal: &mut Walk<Knowledge>,
+        traversal: &mut Walk<Knowledge<Countermodels>>,
     ) -> Option<()> {
         let pending = traversal.pending();
         // A cell counting no region would never be decided.

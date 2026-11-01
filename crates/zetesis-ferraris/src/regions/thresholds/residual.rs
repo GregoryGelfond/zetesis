@@ -18,7 +18,9 @@
 //! Mandatory propagation drains those decisions before another residual batch.
 //! Every new wave fixes an open condition; no numeric bound or reason is cached.
 
-use crate::regions::{Closure, Count, Narrower, Step, Work, bit};
+use zetesis_algebra::{Failure, Quota};
+
+use crate::regions::{Closure, Count, Meter, Narrower, Step, bit};
 use zetesis_algebra::Stop;
 
 use super::State;
@@ -34,15 +36,15 @@ impl State {
     }
 }
 
-impl<C: Count> Closure<'_, C> {
+impl<W: Count, C: crate::regions::ReadingClass> Closure<'_, W, C> {
     /// Called only for original subjects after all mandatory propagation drains.
     /// Thus every sure/never term has updated the processed sums.
-    pub(in crate::regions) fn threshold_residual(
+    pub(in crate::regions) fn threshold_residual<Q: Quota + ?Sized>(
         &mut self,
         index: &Narrower,
         row: usize,
-        work: &mut Work<'_>,
-    ) -> Result<Step, Stop> {
+        work: &mut Meter<'_, Q>,
+    ) -> Result<Step, Failure<Q::Error>> {
         let checked = self.threshold_residual_check(index, row, work)?;
         if checked == Step::Contradiction {
             return Ok(checked);
@@ -141,12 +143,12 @@ impl<C: Count> Closure<'_, C> {
     /// A partial gcd admitting an interval point cannot lead to refutation:
     /// every later gcd divides it and retains that point. Reading the small
     /// coefficients first exposes this exit without another immutable order.
-    fn threshold_residual_check(
+    fn threshold_residual_check<Q: Quota + ?Sized>(
         &self,
         index: &Narrower,
         row: usize,
-        work: &mut Work<'_>,
-    ) -> Result<Step, Stop> {
+        work: &mut Meter<'_, Q>,
+    ) -> Result<Step, Failure<Q::Error>> {
         let data = &index.thresholds.rows[row];
         // Existing unit-row transport acquires no arithmetic scan or work tick.
         if !data.has_nonunit_coefficient() {
@@ -216,13 +218,13 @@ impl<C: Count> Closure<'_, C> {
 /// Rebuild one reversed reduction from the drained condition masks. Capacity is
 /// retained by the walker, but no truth-dependent entry survives a new batch.
 /// The initial empty suffix and every copied/reduced position are charged.
-fn prepare_suffix(
+fn prepare_suffix<Q: Quota + ?Sized>(
     terms: &[(usize, i128)],
     sure: &[u64],
     never: &[u64],
     suffixes: &mut Vec<i128>,
-    work: &mut Work<'_>,
-) -> Result<(), Stop> {
+    work: &mut Meter<'_, Q>,
+) -> Result<(), Failure<Q::Error>> {
     suffixes.clear();
     let length = terms.len().checked_add(1).ok_or(Stop::Allocation)?;
     work.tick()?;
@@ -261,7 +263,11 @@ fn branch_misses(
 
 /// Positive grouped coefficients fit i128, even when they exceed u64. Each
 /// Euclidean step strictly decreases the nonnegative right operand.
-fn gcd(mut left: i128, mut right: i128, work: &mut Work<'_>) -> Result<i128, Stop> {
+fn gcd<Q: Quota + ?Sized>(
+    mut left: i128,
+    mut right: i128,
+    work: &mut Meter<'_, Q>,
+) -> Result<i128, Failure<Q::Error>> {
     if left == 0 || left == right {
         return Ok(right);
     }

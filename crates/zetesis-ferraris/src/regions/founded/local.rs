@@ -15,10 +15,12 @@
 //! consumes the premise and leaves marks that require a full retry. Publication
 //! and explanation capture retain their existing complete-result boundary.
 
+use zetesis_algebra::{Failure, Quota};
+
 use zetesis_algebra::words::Words;
 
 use super::{
-    Initial, Narrower, NodeView, Producers, Scratch, State, Theory, Work, bit, chain_position,
+    Initial, Meter, Narrower, NodeView, Producers, Scratch, State, Theory, bit, chain_position,
     flag_words, reserve,
 };
 use std::mem::size_of;
@@ -55,14 +57,14 @@ impl Replay {
 
     /// Preparation publishes under the same exact owner as the immutable rows.
     /// Reserve false-event slots before infallible ordinary propagation begins.
-    pub(super) fn prepare(
+    pub(super) fn prepare<Q: Quota + ?Sized>(
         &mut self,
         atoms: usize,
         nodes: usize,
         bodies: usize,
         cyclic: &[u64],
-        work: &mut Work<'_>,
-    ) -> Result<(), Stop> {
+        work: &mut Meter<'_, Q>,
+    ) -> Result<(), Failure<Q::Error>> {
         self.end();
         self.clear(work)?;
         let vertices = atoms.checked_add(nodes).ok_or(Stop::Allocation)?;
@@ -82,7 +84,10 @@ impl Replay {
         Ok(())
     }
 
-    pub(super) fn clear(&mut self, work: &mut Work<'_>) -> Result<(), Stop> {
+    pub(super) fn clear<Q: Quota + ?Sized>(
+        &mut self,
+        work: &mut Meter<'_, Q>,
+    ) -> Result<(), Failure<Q::Error>> {
         while let Some(&vertex) = self.touched.last() {
             work.tick()?;
             self.marks[vertex] = 0;
@@ -101,13 +106,13 @@ impl Replay {
 
     /// Discovery can grow beyond the initial false inputs. Reserve before
     /// publishing a mark so every prefix remains clearable after allocation fails.
-    fn enqueue(
+    fn enqueue<Q: Quota + ?Sized>(
         &mut self,
         queue: &mut Vec<usize>,
         vertex: usize,
         flag: u8,
-        work: &mut Work<'_>,
-    ) -> Result<(), Stop> {
+        work: &mut Meter<'_, Q>,
+    ) -> Result<(), Failure<Q::Error>> {
         work.tick()?;
         if self.marks[vertex] & flag != 0 {
             return Ok(());
@@ -166,15 +171,15 @@ impl Scratch {
 
     /// Consume first-pass authority before any fallible work. A declined local
     /// plan leaves only disposable marks; the caller must complete a full pass.
-    pub(super) fn complete_local(
+    pub(super) fn complete_local<Q: Quota + ?Sized>(
         &mut self,
         theory: &Theory,
         index: &Narrower,
         producers: &Producers,
         never: &[u64],
         atom_never: &[u64],
-        work: &mut Work<'_>,
-    ) -> Result<bool, Stop> {
+        work: &mut Meter<'_, Q>,
+    ) -> Result<bool, Failure<Q::Error>> {
         let inherited = std::mem::take(&mut self.local.collecting);
         if !inherited
             || !self
@@ -229,12 +234,12 @@ impl Scratch {
     /// A false destination therefore either has its own input event or was
     /// already inactive in the inherited closure. Neither case needs another
     /// incoming traversal. Current masks, not sibling scratch truth, decide this.
-    fn local_forward(
+    fn local_forward<Q: Quota + ?Sized>(
         &mut self,
         index: &Narrower,
         (never, atom_never): (&[u64], &[u64]),
-        work: &mut Work<'_>,
-    ) -> Result<usize, Stop> {
+        work: &mut Meter<'_, Q>,
+    ) -> Result<usize, Failure<Q::Error>> {
         let projected = self.projected.as_ref().ok_or(Stop::InvalidProgram)?;
         let mut heads = 0;
         let mut next = 0;
@@ -282,7 +287,11 @@ impl Scratch {
     /// Group discovered heads before producer selection. Discovery has finished,
     /// so its vertex order is no longer needed; marks and the forward boundary
     /// remain unchanged. A stopped partition is disposable on the full retry.
-    fn partition_heads(&mut self, heads: usize, work: &mut Work<'_>) -> Result<(), Stop> {
+    fn partition_heads<Q: Quota + ?Sized>(
+        &mut self,
+        heads: usize,
+        work: &mut Meter<'_, Q>,
+    ) -> Result<(), Failure<Q::Error>> {
         let mut placed = 0;
         for position in 0..self.queue.len() {
             if placed == heads {
@@ -300,19 +309,19 @@ impl Scratch {
         if placed == heads {
             Ok(())
         } else {
-            Err(Stop::InvalidProgram)
+            Err(Failure::Stopped(Stop::InvalidProgram))
         }
     }
 
-    fn local_bodies(
+    fn local_bodies<Q: Quota + ?Sized>(
         &mut self,
         theory: &Theory,
         index: &Narrower,
         producers: &Producers,
         (heads, forward_end): (usize, usize),
         (never, atom_never): (&[u64], &[u64]),
-        work: &mut Work<'_>,
-    ) -> Result<(), Stop> {
+        work: &mut Meter<'_, Q>,
+    ) -> Result<(), Failure<Q::Error>> {
         for position in 0..heads {
             work.tick()?;
             let head = self.queue[position];
@@ -338,7 +347,7 @@ impl Scratch {
             next += 1;
             let node = vertex - self.local.atoms;
             if matches!(self.states[node], State::Outside) || index.absorbed[node] {
-                return Err(Stop::InvalidProgram);
+                return Err(Failure::Stopped(Stop::InvalidProgram));
             }
             // Keep the body selected: current initialization makes it Inactive.
             // Its operands cannot enable it. A descendant needed through another
@@ -361,15 +370,15 @@ impl Scratch {
         Ok(())
     }
 
-    fn local_initialize(
+    fn local_initialize<Q: Quota + ?Sized>(
         &mut self,
         theory: &Theory,
         index: &Narrower,
         (forward_end, body_end, heads): (usize, usize, usize),
         never: &[u64],
         atom_never: &[u64],
-        work: &mut Work<'_>,
-    ) -> Result<(), Stop> {
+        work: &mut Meter<'_, Q>,
+    ) -> Result<(), Failure<Q::Error>> {
         let events = (body_end - forward_end)
             .checked_add(heads)
             .ok_or(Stop::Allocation)?;
@@ -431,14 +440,14 @@ impl Scratch {
         Ok(Initial::read(theory, index, &self.cyclic_atoms, node)?.state(atom_never))
     }
 
-    fn local_events(
+    fn local_events<Q: Quota + ?Sized>(
         &mut self,
         index: &Narrower,
         producers: &Producers,
         mut next: usize,
         atom_never: &[u64],
-        work: &mut Work<'_>,
-    ) -> Result<(), Stop> {
+        work: &mut Meter<'_, Q>,
+    ) -> Result<(), Failure<Q::Error>> {
         while let Some(&vertex) = self.queue.get(next) {
             work.tick()?;
             next += 1;
@@ -456,7 +465,7 @@ impl Scratch {
                     }
                 }
             } else {
-                self.propagate_node::<true>(
+                self.propagate_node::<true, Q>(
                     index,
                     producers,
                     vertex - self.local.atoms,

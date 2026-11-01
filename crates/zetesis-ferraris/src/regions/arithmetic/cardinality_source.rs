@@ -5,6 +5,8 @@
 //! recognized. Trivial thresholds and compound contributions stay with the
 //! ordinary formula narrower.
 
+use zetesis_algebra::{Quota, Stop};
+
 use super::{
     budget::{Budget, BudgetError},
     conjunction::Conjunction,
@@ -44,13 +46,13 @@ pub(super) struct Bound {
 /// Every payload field, including ordered guard occurrences and padded support,
 /// must agree with a freshly recognized bound. Temporary readings are released
 /// before either successful acceptance or semantic rejection is returned.
-pub(super) fn check(
+pub(super) fn check<Q: Quota + ?Sized>(
     theory: &Theory,
     owner: &Theory,
     candidate: &Bound,
     storage: &mut Storage,
-    budget: &mut Budget<'_, '_>,
-) -> Result<bool, BudgetError> {
+    budget: &mut Budget<'_, '_, Q>,
+) -> Result<bool, BudgetError<Q::Error>> {
     budget.charge(1)?;
     if !owner.same_instance(theory) {
         budget.charge(1)?;
@@ -76,11 +78,11 @@ pub(super) fn check(
     Ok(matched)
 }
 
-fn same_bound(
+fn same_bound<Q: Quota + ?Sized>(
     proposed: &Bound,
     actual: &Bound,
-    budget: &mut Budget<'_, '_>,
-) -> Result<bool, BudgetError> {
+    budget: &mut Budget<'_, '_, Q>,
+) -> Result<bool, BudgetError<Q::Error>> {
     budget.charge(1)?;
     if proposed.source.kind != actual.source.kind {
         budget.charge(1)?;
@@ -146,12 +148,12 @@ fn same_bound(
 
 /// Propose every admitted count row in this exact asserted root context.
 /// The caller independently repeats this reading before accepting a proposal.
-pub(super) fn read_root(
+pub(super) fn read_root<Q: Quota + ?Sized>(
     theory: &Theory,
     ordinal: usize,
     storage: &mut Storage,
-    budget: &mut Budget<'_, '_>,
-) -> Result<Vec<Bound>, BudgetError> {
+    budget: &mut Budget<'_, '_, Q>,
+) -> Result<Vec<Bound>, BudgetError<Q::Error>> {
     budget.charge(2)?;
     let root = *theory
         .roots()
@@ -170,14 +172,14 @@ pub(super) fn read_root(
 
 /// Publish no family prefix: every nested leaf must be an eligible threshold.
 /// The local vector is only returned after the complete occurrence walk accepts.
-fn read_asserted<'a>(
+fn read_asserted<'a, Q: Quota + ?Sized>(
     theory: &'a Theory,
     ordinal: usize,
     asserted: (usize, NodeView<'a>),
     bounds: &mut Vec<Bound>,
     storage: &mut Storage,
-    budget: &mut Budget<'_, '_>,
-) -> Result<(), BudgetError> {
+    budget: &mut Budget<'_, '_, Q>,
+) -> Result<(), BudgetError<Q::Error>> {
     let mut conjunction = Conjunction::new(storage, budget)?;
     let accepted = conjunction.walk_view(
         theory,
@@ -216,13 +218,13 @@ fn read_asserted<'a>(
     Ok(())
 }
 
-fn read_constraint(
+fn read_constraint<Q: Quota + ?Sized>(
     theory: &Theory,
     (ordinal, root): (usize, usize),
     view: NodeView<'_>,
     storage: &mut Storage,
-    budget: &mut Budget<'_, '_>,
-) -> Result<Option<Bound>, BudgetError> {
+    budget: &mut Budget<'_, '_, Q>,
+) -> Result<Option<Bound>, BudgetError<Q::Error>> {
     budget.charge(1)?;
     let NodeView::Implies(body, consequent) = view else {
         budget.charge(1)?;
@@ -320,12 +322,12 @@ fn read_constraint(
 }
 
 /// At most one outer double negation. This helper does not flatten formulas.
-fn asserted_node<'a>(
+fn asserted_node<'a, Q: Quota + ?Sized>(
     theory: &'a Theory,
     node: usize,
     view: NodeView<'a>,
-    budget: &mut Budget<'_, '_>,
-) -> Result<Option<(usize, NodeView<'a>)>, BudgetError> {
+    budget: &mut Budget<'_, '_, Q>,
+) -> Result<Option<(usize, NodeView<'a>)>, BudgetError<Q::Error>> {
     budget.charge(1)?;
     if matches!(view, NodeView::Threshold(_) | NodeView::And(_)) {
         budget.charge(2)?;
@@ -349,12 +351,12 @@ fn asserted_node<'a>(
 /// One positive or negated threshold leaf; retain the earlier double-negated
 /// positive leaf as well. Every negation is authenticated against its False
 /// consequent, and no conjunction or further negation is hidden inside a leaf.
-fn asserted_threshold(
+fn asserted_threshold<Q: Quota + ?Sized>(
     theory: &Theory,
     node: usize,
     view: NodeView<'_>,
-    budget: &mut Budget<'_, '_>,
-) -> Result<Option<(usize, BoundSide)>, BudgetError> {
+    budget: &mut Budget<'_, '_, Q>,
+) -> Result<Option<(usize, BoundSide)>, BudgetError<Q::Error>> {
     budget.charge(1)?;
     if matches!(view, NodeView::Threshold(_)) {
         budget.charge(3)?;
@@ -399,11 +401,11 @@ fn asserted_threshold(
     }
 }
 
-fn double_negative(
+fn double_negative<Q: Quota + ?Sized>(
     theory: &Theory,
     view: NodeView<'_>,
-    budget: &mut Budget<'_, '_>,
-) -> Result<Option<usize>, BudgetError> {
+    budget: &mut Budget<'_, '_, Q>,
+) -> Result<Option<usize>, BudgetError<Q::Error>> {
     budget.charge(1)?;
     let NodeView::Implies(inner, right) = view else {
         budget.charge(1)?;
@@ -431,12 +433,12 @@ fn double_negative(
     Ok(Some(node))
 }
 
-fn constraint_threshold(
+fn constraint_threshold<Q: Quota + ?Sized>(
     theory: &Theory,
     node: usize,
     view: NodeView<'_>,
-    budget: &mut Budget<'_, '_>,
-) -> Result<Option<(usize, BoundSide)>, BudgetError> {
+    budget: &mut Budget<'_, '_, Q>,
+) -> Result<Option<(usize, BoundSide)>, BudgetError<Q::Error>> {
     budget.charge(1)?;
     if matches!(view, NodeView::Threshold(_)) {
         budget.charge(3)?;
@@ -464,15 +466,15 @@ fn constraint_threshold(
     }
 }
 
-fn threshold(
+fn threshold<Q: Quota + ?Sized>(
     theory: &Theory,
     node: usize,
     side: BoundSide,
     guard: Vec<Literal>,
     source: Source,
     storage: &mut Storage,
-    budget: &mut Budget<'_, '_>,
-) -> Result<Option<Bound>, BudgetError> {
+    budget: &mut Budget<'_, '_, Q>,
+) -> Result<Option<Bound>, BudgetError<Q::Error>> {
     let view = budget.node(theory, node)?;
     budget.charge(1)?;
     let NodeView::Threshold(row) = view else {
@@ -502,13 +504,13 @@ fn threshold(
     }
 }
 
-fn threshold_content(
+fn threshold_content<Q: Quota + ?Sized>(
     theory: &Theory,
     row: crate::Threshold<'_>,
     support: &mut [u64],
     side: BoundSide,
-    budget: &mut Budget<'_, '_>,
-) -> Result<Option<(u64, u64)>, BudgetError> {
+    budget: &mut Budget<'_, '_, Q>,
+) -> Result<Option<(u64, u64)>, BudgetError<Q::Error>> {
     budget.charge(1)?;
     if row.conditions.len() != row.weights.len() {
         budget.charge(1)?;
@@ -570,13 +572,13 @@ fn threshold_content(
     }
 }
 
-fn clause_lower(
+fn clause_lower<Q: Quota + ?Sized>(
     theory: &Theory,
     literals: Vec<Literal>,
     source: Source,
     storage: &mut Storage,
-    budget: &mut Budget<'_, '_>,
-) -> Result<Option<Bound>, BudgetError> {
+    budget: &mut Budget<'_, '_, Q>,
+) -> Result<Option<Bound>, BudgetError<Q::Error>> {
     let mut support =
         Words::new(storage.filled(theory.atom_count().div_ceil(128) * 2, 0_u64, 1, budget)?);
     for literal in &literals {
@@ -614,19 +616,19 @@ fn clause_lower(
     }))
 }
 
-pub(super) fn release(bound: Bound, storage: &mut Storage) -> Result<(), BudgetError> {
+pub(super) fn release(bound: Bound, storage: &mut Storage) -> Result<(), Stop> {
     storage.release_embedded(bound.support.into_storage())?;
     storage.release_embedded(bound.guard)
 }
 
 /// Payload headers are contained by the outer row allocation once published.
-fn push_bound(
+fn push_bound<Q: Quota + ?Sized>(
     bounds: &mut Vec<Bound>,
     bound: Bound,
     storage: &mut Storage,
-    budget: &mut Budget<'_, '_>,
-) -> Result<(), BudgetError> {
+    budget: &mut Budget<'_, '_, Q>,
+) -> Result<(), BudgetError<Q::Error>> {
     storage.push(bounds, bound, 12, budget)?;
     storage.embed::<u64>()?;
-    storage.embed::<Literal>()
+    storage.embed::<Literal>().map_err(BudgetError::Stopped)
 }

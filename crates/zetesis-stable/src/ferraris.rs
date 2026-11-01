@@ -834,17 +834,11 @@ impl StableModels {
                 .is_some_and(|regions| regions.counts.regions != 0)
     }
 
-    /// Install an original-program condition before traversal: the streamed
-    /// constraints, or a test's filter. Certificates may already be prepared.
-    /// The filter can narrow or refute candidate regions; it never participates
-    /// in frozen-reduct queries. Exhaustion then covers the family allowed by
-    /// this filter as well as explicit candidate restrictions.
-    ///
-    /// # Errors
-    /// Refuses a closed or started stream, or replacement.
-    pub(crate) fn set_region_filter(
+    /// Install one original source before traversal. The same installation
+    /// checks apply to the admitted source and internal test fixtures.
+    fn set_filter_source(
         &mut self,
-        filter: std::sync::Arc<dyn crate::RegionFilter>,
+        source: crate::region_filter::Source,
     ) -> Result<(), Incomplete> {
         if self.terminal {
             return Err(Incomplete::ClosedEnumerator);
@@ -855,7 +849,7 @@ impl StableModels {
         if self.proposer.filter().is_some() {
             return Err(Incomplete::RegionFilterAlreadySet);
         }
-        let filter = crate::region_filter::Filter::new(filter);
+        let filter = crate::region_filter::Filter::new(source);
         match &mut self.proposer {
             Proposer::Refuted(root) => root.filter = Some(filter),
             Proposer::Regions(regions) => regions.set_filter(filter),
@@ -863,6 +857,14 @@ impl StableModels {
             Proposer::Parallel(parallel) => parallel.set_filter(filter)?,
         }
         Ok(())
+    }
+
+    #[cfg(test)]
+    pub(crate) fn set_region_filter(
+        &mut self,
+        source: std::sync::Arc<dyn crate::region_filter::tests::injection::Source>,
+    ) -> Result<(), Incomplete> {
+        self.set_filter_source(crate::region_filter::Source::Fixture(source))
     }
 
     /// Check an admitted hybrid program's streamed integrity constraints over
@@ -879,7 +881,7 @@ impl StableModels {
         &mut self,
         constraints: std::sync::Arc<crate::StreamedConstraints>,
     ) -> Result<(), Incomplete> {
-        self.set_region_filter(constraints)
+        self.set_filter_source(crate::region_filter::Source::Streamed(constraints))
     }
 
     /// Share learned rows through `store` with every other stream given the

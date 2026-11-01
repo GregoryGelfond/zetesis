@@ -32,7 +32,8 @@ fn prepare(theory: &Theory) -> super::GeneratorOrderAttempt {
 
 fn choose(order: &GeneratorOrder, theory: &Theory, region: &Region) -> Option<usize> {
     order
-        .preferred(theory, region, &mut crate::regions::Work::new(u64::MAX))
+        .preferred(theory, region, &mut crate::regions::Meter::local(u64::MAX))
+        .map_err(zetesis_algebra::Failure::into_stop)
         .unwrap()
 }
 
@@ -256,16 +257,20 @@ fn an_order_refuses_an_unrelated_same_shape_owner() {
     let other = upstream();
     let order = prepare(&theory).result.unwrap().unwrap();
     assert!(order.belongs_to(&theory.clone()));
-    let mut work = crate::regions::Work::new(u64::MAX);
+    let mut work = crate::regions::Meter::local(u64::MAX);
     assert_eq!(
-        order.preferred(&other, &Region::all_open(2), &mut work),
+        order
+            .preferred(&other, &Region::all_open(2), &mut work)
+            .map_err(zetesis_algebra::Failure::into_stop),
         Err(Stop::InvalidProgram)
     );
     assert_eq!(
-        order.preferred(&theory, &Region::all_open(3), &mut work),
+        order
+            .preferred(&theory, &Region::all_open(3), &mut work)
+            .map_err(zetesis_algebra::Failure::into_stop),
         Err(Stop::InvalidProgram)
     );
-    assert_eq!(work.spent(), 0);
+    assert_eq!(work.charged(), 0);
 }
 
 #[test]
@@ -305,7 +310,8 @@ struct Allowance {
     spent: u64,
 }
 
-impl crate::NarrowingQuota for Allowance {
+impl zetesis_algebra::Quota for Allowance {
+    type Error = Stop;
     fn reserve(&mut self, wanted: u64) -> Result<u64, Stop> {
         let grant = wanted.min(self.remaining).min(self.batch);
         if grant == 0 {
@@ -336,12 +342,12 @@ fn every_preparation_prefix_has_exact_quota_work() {
                 batch,
                 spent: 0,
             };
-            let attempt = GeneratorOrder::prepare_reserved(
+            let attempt = crate::test_support::stop_generator(GeneratorOrder::prepare_reserved(
                 original,
                 usize::MAX,
                 &Cancellation::default(),
-                &mut quota,
-            );
+                &mut zetesis_algebra::Meter::reserved(&mut quota),
+            ));
             assert_eq!(attempt.work, limit.min(needed));
             assert_eq!(quota.spent, attempt.work);
             if limit < needed {
@@ -373,12 +379,12 @@ fn storage_refusal_keeps_its_spent_prefix() {
             batch: 7,
             spent: 0,
         };
-        let attempt = GeneratorOrder::prepare_reserved(
+        let attempt = crate::test_support::stop_generator(GeneratorOrder::prepare_reserved(
             original,
             allowance,
             &Cancellation::default(),
-            &mut quota,
-        );
+            &mut zetesis_algebra::Meter::reserved(&mut quota),
+        ));
         assert_eq!(quota.spent, attempt.work);
         if allowance < peak {
             assert!(
@@ -478,12 +484,12 @@ fn a_refused_selection_publishes_no_partial_winner() {
             batch: 7,
             spent: 0,
         };
-        let attempt = order.preferred_atom_reserved(
+        let attempt = crate::test_support::stop_preference(&order.preferred_atom_reserved(
             &theory,
             &Region::all_open(2),
             &Cancellation::default(),
-            &mut quota,
-        );
+            &mut zetesis_algebra::Meter::reserved(&mut quota),
+        ));
         assert_eq!(attempt.work, limit.min(2));
         assert_eq!(quota.spent, attempt.work);
         assert_eq!(

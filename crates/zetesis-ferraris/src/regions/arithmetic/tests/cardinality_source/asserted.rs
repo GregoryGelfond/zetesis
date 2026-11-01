@@ -1,5 +1,7 @@
 //! Asserted intervals retain their original context and every occurrence.
 
+use zetesis_algebra::Meter;
+
 use super::*;
 
 fn intervals() -> Theory {
@@ -23,7 +25,8 @@ fn intervals() -> Theory {
 fn nested_mixed_bounds_agree_with_original_truth() {
     let owner = intervals();
     let cancellation = Cancellation::default();
-    let mut meter = budget(&cancellation);
+    let mut meter_work = Meter::local(u64::MAX);
+    let mut meter = budget(&mut meter_work, &cancellation);
     let mut storage = Storage::default();
     let mut evaluator = EvaluationWorkspace::default();
     for ordinal in 0..owner.roots().len() {
@@ -87,8 +90,13 @@ fn shared_conjunctions_keep_each_source_occurrence() {
     });
     let cancellation = Cancellation::default();
     let mut storage = Storage::default();
-    let bounds =
-        cardinality_source::read_root(&owner, 0, &mut storage, &mut budget(&cancellation)).unwrap();
+    let bounds = cardinality_source::read_root(
+        &owner,
+        0,
+        &mut storage,
+        &mut budget(&mut Meter::local(u64::MAX), &cancellation),
+    )
+    .unwrap();
     assert_eq!(bounds.len(), 4);
     assert_eq!(bounds[0].source, bounds[2].source);
     assert_eq!(bounds[1].source, bounds[3].source);
@@ -145,7 +153,8 @@ fn an_ineligible_last_child_discards_every_tentative_bound() {
     });
     let cancellation = Cancellation::default();
     let mut storage = Storage::default();
-    let mut meter = budget(&cancellation);
+    let mut meter_work = Meter::local(u64::MAX);
+    let mut meter = budget(&mut meter_work, &cancellation);
     for ordinal in 0..owner.roots().len() {
         let bounds =
             cardinality_source::read_root(&owner, ordinal, &mut storage, &mut meter).unwrap();
@@ -163,7 +172,8 @@ fn independent_rereading_authenticates_the_entire_asserted_context() {
         vec![row, push(nodes, NodeView::And(&[row, invalid]))]
     });
     let cancellation = Cancellation::default();
-    let mut meter = budget(&cancellation);
+    let mut meter_work = Meter::local(u64::MAX);
+    let mut meter = budget(&mut meter_work, &cancellation);
     let mut storage = Storage::default();
     let mut bounds = cardinality_source::read_root(&owner, 0, &mut storage, &mut meter).unwrap();
     assert_eq!(bounds.len(), 1);
@@ -195,7 +205,8 @@ fn asserted_count_support_has_no_eight_atom_parity_limit() {
     });
     let cancellation = Cancellation::default();
     let mut storage = Storage::default();
-    let mut meter = budget(&cancellation);
+    let mut meter_work = Meter::local(u64::MAX);
+    let mut meter = budget(&mut meter_work, &cancellation);
     let bounds = cardinality_source::read_root(&owner, 0, &mut storage, &mut meter).unwrap();
     assert_eq!(bounds.len(), 2);
     for bound in &bounds {
@@ -216,13 +227,15 @@ fn asserted_count_support_has_no_eight_atom_parity_limit() {
 fn every_nested_work_refusal_prefix_publishes_no_family() {
     let owner = intervals();
     let cancellation = Cancellation::default();
-    let mut full = budget(&cancellation);
+    let mut full_work = Meter::local(u64::MAX);
+    let mut full = budget(&mut full_work, &cancellation);
     let mut storage = Storage::default();
     let bounds = cardinality_source::read_root(&owner, 1, &mut storage, &mut full).unwrap();
     assert_eq!(bounds.len(), 3);
     release(bounds, &mut storage);
     for maximum in 0..full.work() {
-        let mut meter = Budget::new(Work::new(u64::MAX), maximum, usize::MAX, &cancellation);
+        let mut meter_work = Meter::local(u64::MAX);
+        let mut meter = Budget::new(&mut meter_work, maximum, usize::MAX, &cancellation);
         assert!(matches!(
             cardinality_source::read_root(&owner, 1, &mut Storage::default(), &mut meter),
             Err(BudgetError::WorkDeclined)
@@ -235,14 +248,16 @@ fn every_nested_work_refusal_prefix_publishes_no_family() {
 fn every_nested_storage_refusal_prefix_publishes_no_family() {
     let owner = intervals();
     let cancellation = Cancellation::default();
-    let mut full = budget(&cancellation);
+    let mut full_work = Meter::local(u64::MAX);
+    let mut full = budget(&mut full_work, &cancellation);
     let mut storage = Storage::default();
     let bounds = cardinality_source::read_root(&owner, 1, &mut storage, &mut full).unwrap();
     assert_eq!(bounds.len(), 3);
     release(bounds, &mut storage);
     let peak = usize::try_from(full.peak_bytes()).unwrap();
     for maximum in 0..peak {
-        let mut meter = Budget::new(Work::new(u64::MAX), u64::MAX, maximum, &cancellation);
+        let mut meter_work = Meter::local(u64::MAX);
+        let mut meter = Budget::new(&mut meter_work, u64::MAX, maximum, &cancellation);
         assert!(matches!(
             cardinality_source::read_root(&owner, 1, &mut Storage::default(), &mut meter),
             Err(BudgetError::StorageDeclined { limit, .. }) if limit == maximum
@@ -255,16 +270,23 @@ fn every_nested_checker_refusal_prefix_stays_incomplete() {
     let owner = intervals();
     let cancellation = Cancellation::default();
     let mut storage = Storage::default();
-    let bounds =
-        cardinality_source::read_root(&owner, 1, &mut storage, &mut budget(&cancellation)).unwrap();
+    let bounds = cardinality_source::read_root(
+        &owner,
+        1,
+        &mut storage,
+        &mut budget(&mut Meter::local(u64::MAX), &cancellation),
+    )
+    .unwrap();
     let base = storage.bytes();
-    let mut full = budget(&cancellation);
+    let mut full_work = Meter::local(u64::MAX);
+    let mut full = budget(&mut full_work, &cancellation);
     assert!(
         cardinality_source::check(&owner, &owner, &bounds[1], &mut storage, &mut full).unwrap()
     );
     assert_eq!(storage.bytes(), base);
     for maximum in 0..full.work() {
-        let mut meter = Budget::new(Work::new(u64::MAX), maximum, usize::MAX, &cancellation);
+        let mut meter_work = Meter::local(u64::MAX);
+        let mut meter = Budget::new(&mut meter_work, maximum, usize::MAX, &cancellation);
         assert_eq!(
             cardinality_source::check(
                 &owner,

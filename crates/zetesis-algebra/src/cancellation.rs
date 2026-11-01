@@ -52,6 +52,80 @@ pub trait Refusal: Sized {
     fn from_stop(stop: Stop) -> Self;
 }
 
+/// A caller-owned account granting permits to one metered operation.
+/// A refusal grants nothing. A successful grant is in `1..=wanted`; zero is
+/// treated as a local work refusal. The cumulative grant retained by one meter
+/// must fit `u64`, including already performed work. The account retains its
+/// own typed errors.
+pub trait Quota {
+    /// The account's exact refusal, including any resource or source payload.
+    type Error: Refusal;
+
+    /// Reserve at most `wanted` permits before their operations execute.
+    ///
+    /// # Errors
+    /// Returns the account's refusal without granting any permits.
+    fn reserve(&mut self, wanted: u64) -> Result<u64, Self::Error>;
+
+    /// Return granted permits whose operations did not execute.
+    fn refund(&mut self, unspent: u64);
+}
+
+/// A caller refusal or a stop originating in the common work boundary.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Failure<E> {
+    /// The caller's original error, unchanged.
+    Refused(E),
+    /// Control or a local work, allocation or invariant refusal.
+    Stopped(Stop),
+}
+
+impl<E> From<Stop> for Failure<E> {
+    fn from(stop: Stop) -> Self {
+        Self::Stopped(stop)
+    }
+}
+
+impl<E: Refusal> Refusal for Failure<E> {
+    fn is_resource_refusal(&self) -> bool {
+        match self {
+            Self::Refused(error) => error.is_resource_refusal(),
+            Self::Stopped(stop) => stop.is_resource_refusal(),
+        }
+    }
+
+    fn from_stop(stop: Stop) -> Self {
+        Self::Stopped(stop)
+    }
+}
+
+impl Failure<Stop> {
+    /// Recover the original stop for an operation with no distinct caller error.
+    #[must_use]
+    pub const fn into_stop(self) -> Stop {
+        match self {
+            Self::Refused(stop) | Self::Stopped(stop) => stop,
+        }
+    }
+}
+
+/// The default meter has a local ceiling and no borrowed account.
+/// This uninhabited marker adds no account or public construction policy.
+#[derive(Debug)]
+pub enum LocalQuota {}
+
+impl Quota for LocalQuota {
+    type Error = Stop;
+
+    fn reserve(&mut self, _: u64) -> Result<u64, Stop> {
+        match *self {}
+    }
+
+    fn refund(&mut self, _: u64) {
+        match *self {}
+    }
+}
+
 impl Refusal for Stop {
     fn is_resource_refusal(&self) -> bool {
         match self {
@@ -96,51 +170,30 @@ fn settled<E: Refusal>(poll: CancellationPoll<'_>, error: E) -> E {
     error
 }
 
-/// The metered charge behind [`Meter::charge`]: observe control at a boundary of
-/// `charged`, observe it again before refusing the limit, and count an admitted
-/// charge.
-#[inline]
-fn metered_charge(
-    charged: &mut u64,
-    limit: u64,
-    poll: impl Fn() -> Result<(), Stop>,
-) -> Result<(), ChargeError> {
-    if poll_due(*charged, 1) {
-        poll().map_err(ChargeError::Stopped)?;
-    }
-    if *charged >= limit {
-        // A requested stop takes precedence over the work limit.
-        poll().map_err(ChargeError::Stopped)?;
-        return Err(ChargeError::WorkLimit);
-    }
-    *charged += 1;
-    Ok(())
-}
-
-/// One metered operation's charged work, its local work limit and its view of
-/// control.
+/// One operation's performed work and admitted allowance.
 ///
-/// A meter exists only inside [`Cancellation::metered`], which settles the
-/// operation's outcome where it returns, so an operation that charges through
-/// a meter always gives a requested stop precedence over its resource
-/// refusals. A charge costs a boundary test and a limit test. The view of
-/// control is borrowed in place and read only at a boundary. The count sits
-/// between two padding words that are never read, so no paired load can
-/// combine it with another value: on aarch64 such a load cannot be forwarded
-/// from the previous charge's pending store, and every charge in a per-node
-/// loop would wait for that store to retire.
+/// Local charges under [`Cancellation::metered`] retain the existing 256-step
+/// polling cadence. [`Self::local`] leaves control to its caller, while
+/// [`Self::reserved`] consults a borrowed account only when permits run out.
+/// The same count and reservation body serve all three arrangements. Unspent
+/// permits are `admitted - charged`, never a second independent account.
 ///
-/// A metered operation that runs another metered operation's body passes it
-/// this meter. The nested work then counts toward this operation's limit, the
-/// cadence of observations continues across the boundary, and this
-/// operation's exit settles both. An operation of another arrangement, which
-/// observes control by its own rule and reports the work it charged, runs
-/// under [`Self::remaining`] and is counted by [`Self::absorb`].
+/// The count retains unread padding on both sides: a paired load cannot combine
+/// it with another live value, preserving forwarding of its previous store on
+/// aarch64. The meter owns no heap storage. A borrowed account adds stack
+/// metadata; it does not change the caller's charged storage or work receipt.
+///
+/// Refund explicitly at the existing completed-attempt boundary.
+/// Drop does not refund: a panicking bounded
+/// operation has supplied no actual-work receipt, so its grant remains consumed
+/// conservatively by the caller's account.
 #[derive(Debug)]
-pub struct Meter<'a> {
+pub struct Meter<'a, Q: Quota + ?Sized = LocalQuota> {
     count: Isolated,
+    /// Local ceiling, or the total granted and not refunded.
     limit: u64,
-    poll: CancellationPoll<'a>,
+    poll: Option<CancellationPoll<'a>>,
+    quota: Option<&'a mut Q>,
 }
 
 /// A count whose neighbouring words are its own padding.
@@ -152,6 +205,24 @@ struct Isolated {
     _after: u64,
 }
 
+impl Meter<'static> {
+    /// A fixed local allowance with control observed by the enclosing operation.
+    /// No poll or allocation occurs at construction or at a local refusal.
+    #[must_use]
+    pub const fn local(limit: u64) -> Self {
+        Self {
+            count: Isolated {
+                _before: 0,
+                value: 0,
+                _after: 0,
+            },
+            limit,
+            poll: None,
+            quota: None,
+        }
+    }
+}
+
 impl<'a> Meter<'a> {
     const fn new(poll: CancellationPoll<'a>, limit: u64) -> Self {
         Self {
@@ -161,81 +232,213 @@ impl<'a> Meter<'a> {
                 _after: 0,
             },
             limit,
-            poll,
+            poll: Some(poll),
+            quota: None,
         }
     }
 
-    /// Charge one operation. Control is observed first when the operations
-    /// charged so far complete a run of [`POLL_INTERVAL`], so an operation that
-    /// charges each of its steps observes it before its first step and at least
-    /// once every [`POLL_INTERVAL`] steps. At the limit control is observed again
-    /// before refusing, so a requested stop takes precedence over the work
-    /// limit. An admitted charge counts the operation; a refused one does not.
+    /// Charge one operation with the existing local meter error shape.
+    /// Poll before operation zero and each 256-step boundary, and again before
+    /// refusing the local ceiling. A refused charge performs no operation.
     ///
     /// # Errors
-    /// [`ChargeError::Stopped`] when an observation finds a requested stop or an
-    /// expired deadline; otherwise [`ChargeError::WorkLimit`] at the limit.
+    /// Returns the requested stop, otherwise the exhausted work limit.
     #[inline]
     pub fn charge(&mut self) -> Result<(), ChargeError> {
-        // The closure borrows the view in place; it is read only at a boundary.
-        metered_charge(&mut self.count.value, self.limit, || self.poll.poll())
+        self.tick().map_err(|failure| match failure.into_stop() {
+            Stop::WorkLimit => ChargeError::WorkLimit,
+            stop => ChargeError::Stopped(stop),
+        })
     }
 
-    /// Operations admitted so far.
-    #[must_use]
-    #[inline]
-    pub const fn charged(&self) -> u64 {
-        self.count.value
-    }
-
-    /// The operation's work limit.
+    /// The local operation's original work limit.
     #[must_use]
     #[inline]
     pub const fn limit(&self) -> u64 {
         self.limit
     }
 
-    /// Operations the limit still admits: the work limit to give a nested
-    /// operation of another arrangement, whose reported work [`Self::absorb`]
-    /// then counts. The count never exceeds the limit (an admitted charge stops
-    /// at it, and an absorb counts at most up to it), so this never underflows.
+    /// Count another arrangement's actual work under [`Self::remaining`].
+    /// Its own polling cadence applies within that operation. This meter's
+    /// cadence resumes from the completed count.
+    ///
+    /// # Errors
+    /// An overrun counts up to the local limit, then polls control before
+    /// returning [`ChargeError::WorkLimit`].
+    pub fn absorb(&mut self, nested: u64) -> Result<(), ChargeError> {
+        if nested > self.remaining() {
+            self.count.value = self.limit;
+            self.poll().map_err(ChargeError::Stopped)?;
+            return Err(ChargeError::WorkLimit);
+        }
+        self.record(nested);
+        Ok(())
+    }
+}
+
+impl<'a, Q: Quota + ?Sized> Meter<'a, Q> {
+    /// Borrow a caller's account without reserving, polling or allocating.
+    /// Per-read refills request [`POLL_INTERVAL`] permits. The account owns
+    /// control polling at those refills; the meter adds no per-read poll.
+    #[must_use]
+    pub fn reserved(quota: &'a mut Q) -> Self {
+        Self {
+            count: Isolated {
+                _before: 0,
+                value: 0,
+                _after: 0,
+            },
+            limit: 0,
+            poll: None,
+            quota: Some(quota),
+        }
+    }
+
+    /// Operations actually admitted as performed, on every outcome.
+    #[must_use]
+    #[inline]
+    pub const fn charged(&self) -> u64 {
+        self.count.value
+    }
+
+    /// Currently admitted permits whose operations have not executed.
     #[must_use]
     #[inline]
     pub const fn remaining(&self) -> u64 {
         self.limit - self.count.value
     }
 
-    /// Count the operations a nested operation of another arrangement reports
-    /// having charged under the allowance [`Self::remaining`] gave it. That
-    /// operation observed control by its own rule; this meter's cadence resumes
-    /// from the new count, so its next observation follows within
-    /// [`POLL_INTERVAL`] charges.
+    /// Charge one read before it runs, refilling only when no permits remain.
     ///
     /// # Errors
-    /// When `nested` exceeds the remaining allowance, the nested operation
-    /// overran the limit it was given. Its work was done, so the count reaches
-    /// the limit and the operation can charge nothing more; then control is
-    /// observed, as for a refused charge, and [`ChargeError::WorkLimit`] is
-    /// reported otherwise.
-    pub fn absorb(&mut self, nested: u64) -> Result<(), ChargeError> {
-        if nested > self.remaining() {
-            self.count.value = self.limit;
-            // A requested stop takes precedence over the work limit.
-            self.poll.poll().map_err(ChargeError::Stopped)?;
-            return Err(ChargeError::WorkLimit);
+    /// Returns the exact caller refusal or a local stop before the next read.
+    #[inline]
+    pub fn tick(&mut self) -> Result<(), Failure<Q::Error>> {
+        if let Some(poll) = &self.poll
+            && poll_due(self.count.value, 1)
+        {
+            poll.poll()?;
         }
-        self.count.value += nested;
+        if self.count.value == self.limit {
+            self.admit()?;
+        }
+        self.record(1);
         Ok(())
     }
 
-    /// Observe control now, as [`Cancellation::poll`] does, for example before
-    /// a fallible reservation.
+    /// Admit a local optional visit before charging the global account.
+    /// An exhausted optional allowance returns false without a global charge;
+    /// a refused global charge leaves the optional allowance unchanged.
+    ///
+    /// # Errors
+    /// Returns the exact failure from [`Self::tick`].
+    #[inline]
+    pub fn tick_within(&mut self, remaining: &mut u64) -> Result<bool, Failure<Q::Error>> {
+        if *remaining == 0 {
+            return Ok(false);
+        }
+        self.tick()?;
+        *remaining -= 1;
+        Ok(true)
+    }
+
+    /// Reserve a complete bounded operation before running it, then count only
+    /// its reported actual work. The returned value can itself contain a typed
+    /// failure; that does not discard its performed prefix. Control follows the
+    /// account's refill policy; explicit per-operation polls remain the caller's.
+    ///
+    /// # Errors
+    /// A refused top-up or unrepresentable count runs no part of `operation`.
+    /// Earlier partial grants remain refundable.
+    ///
+    /// # Panics
+    /// The caller must report `actual <= maximum`. Debug builds assert this
+    /// precondition, as the original private reservation boundary did.
+    pub fn bounded<T>(
+        &mut self,
+        maximum: u64,
+        operation: impl FnOnce() -> (T, u64),
+    ) -> Result<T, Failure<Q::Error>> {
+        self.top_up(maximum)?;
+        let (value, actual) = operation();
+        debug_assert!(
+            actual <= maximum,
+            "the operation exceeds its reserved bound"
+        );
+        self.record(actual);
+        Ok(value)
+    }
+
+    /// Return only known unused permits, preserving the performed receipt.
+    /// Call after normal completion or refusal, not during unwinding when a
+    /// bounded operation has not reported its actual work. Repeated calls are
+    /// harmless and retain the account's existing zero-refund behavior.
+    pub fn refund(&mut self) {
+        if let Some(quota) = &mut self.quota {
+            let unspent = self.limit - self.count.value;
+            self.limit = self.count.value;
+            quota.refund(unspent);
+        }
+    }
+
+    /// Observe this local meter's control view, if it has one.
+    /// A reserved meter's account owns its control observations; this method
+    /// does not obtain permits or add an account poll.
     ///
     /// # Errors
     /// Returns cancellation first, otherwise an expired deadline.
     #[inline]
     pub fn poll(&self) -> Result<(), Stop> {
-        self.poll.poll()
+        self.poll.as_ref().map_or(Ok(()), CancellationPoll::poll)
+    }
+
+    #[inline]
+    fn record(&mut self, actual: u64) {
+        self.count.value += actual;
+    }
+
+    #[cold]
+    fn admit(&mut self) -> Result<(), Failure<Q::Error>> {
+        let Some(quota) = &mut self.quota else {
+            self.poll()?;
+            return Err(Stop::WorkLimit.into());
+        };
+        let granted = quota.reserve(POLL_INTERVAL).map_err(Failure::Refused)?;
+        debug_assert!(
+            granted <= POLL_INTERVAL,
+            "a quota grants at most what is asked"
+        );
+        if granted == 0 {
+            return Err(Stop::WorkLimit.into());
+        }
+        // The per-read boundary preserves the existing account contract:
+        // its cumulative granted count must remain representable. Bounded
+        // top-ups below additionally limit each request by representability.
+        self.limit += granted;
+        Ok(())
+    }
+
+    fn top_up(&mut self, minimum: u64) -> Result<(), Failure<Q::Error>> {
+        self.count
+            .value
+            .checked_add(minimum)
+            .ok_or(Stop::WorkLimit)?;
+        while self.remaining() < minimum {
+            let Some(quota) = &mut self.quota else {
+                return Err(Stop::WorkLimit.into());
+            };
+            let wanted = POLL_INTERVAL.min(u64::MAX - self.limit);
+            let granted = quota.reserve(wanted).map_err(Failure::Refused)?;
+            if granted == 0 {
+                return Err(Stop::WorkLimit.into());
+            }
+            if granted > wanted {
+                quota.refund(granted);
+                return Err(Stop::InvalidProgram.into());
+            }
+            self.limit += granted;
+        }
+        Ok(())
     }
 }
 
@@ -494,6 +697,8 @@ impl std::error::Error for Stop {}
 
 #[cfg(test)]
 mod tests {
+    mod quota;
+
     use super::*;
     use std::sync::mpsc;
     use std::time::Duration;
@@ -553,7 +758,8 @@ mod tests {
                 _after: 0,
             },
             limit,
-            poll: cancellation.polling(),
+            poll: Some(cancellation.polling()),
+            quota: None,
         };
         let result = meter.charge();
         (result, meter.charged())

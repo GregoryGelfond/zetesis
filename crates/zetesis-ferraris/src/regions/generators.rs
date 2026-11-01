@@ -23,10 +23,10 @@
 
 use std::{fmt, mem::size_of};
 
-use zetesis_algebra::{Cancellation, Stop, words::Words};
+use zetesis_algebra::{Cancellation, Failure, Meter, Quota, Stop, words::Words};
 
 use super::{
-    NarrowingQuota, NodeView, OriginalSubject, PreferenceAttempt, Producers, Region, Theory, Work,
+    NodeView, OriginalSubject, PreferenceAttempt, Producers, Region, Theory,
     adjacency::{Adjacency, Construction},
     flag_words,
 };
@@ -45,7 +45,7 @@ pub struct GeneratorOrderLimits {
 
 /// An incomplete preference preparation, never a semantic verdict.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum GeneratorOrderError {
+pub enum GeneratorOrderError<E = Stop> {
     /// Named storage exceeds its independent allowance.
     Storage {
         /// Complete request or actual capacity just observed.
@@ -54,10 +54,10 @@ pub enum GeneratorOrderError {
         limit: usize,
     },
     /// Cancellation, deadline, work exhaustion, allocation or malformed identity.
-    Stopped(Stop),
+    Stopped(E),
 }
 
-impl fmt::Display for GeneratorOrderError {
+impl<E: fmt::Display> fmt::Display for GeneratorOrderError<E> {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Storage { required, limit } => write!(
@@ -69,13 +69,25 @@ impl fmt::Display for GeneratorOrderError {
     }
 }
 
-impl std::error::Error for GeneratorOrderError {}
+impl<E: std::error::Error> std::error::Error for GeneratorOrderError<E> {}
+
+impl<E> From<Stop> for GeneratorOrderError<Failure<E>> {
+    fn from(stop: Stop) -> Self {
+        Self::Stopped(Failure::Stopped(stop))
+    }
+}
+
+impl<E> From<Failure<E>> for GeneratorOrderError<Failure<E>> {
+    fn from(failure: Failure<E>) -> Self {
+        Self::Stopped(failure)
+    }
+}
 
 /// Preparation receipt, including an incomplete prefix.
 #[derive(Debug)]
-pub struct GeneratorOrderAttempt {
+pub struct GeneratorOrderAttempt<E = Stop> {
     /// No order when complete producer coverage or a generating head is absent.
-    pub result: Result<Option<GeneratorOrder>, GeneratorOrderError>,
+    pub result: Result<Option<GeneratorOrder>, GeneratorOrderError<E>>,
     /// Head, cell, vertex and edge operations charged on every outcome.
     pub work: u64,
     /// Largest named simultaneous request or capacity observed in this attempt.
@@ -103,60 +115,69 @@ impl GeneratorOrder {
         limits: GeneratorOrderLimits,
         cancellation: &Cancellation,
     ) -> GeneratorOrderAttempt {
-        Self::prepare_with(
+        let attempt = Self::prepare_with(
             original,
             limits.max_bytes,
             cancellation,
-            Work::new(limits.max_work),
-        )
+            &mut Meter::local(limits.max_work),
+        );
+        GeneratorOrderAttempt {
+            result: attempt.result.map_err(|error| match error {
+                GeneratorOrderError::Storage { required, limit } => {
+                    GeneratorOrderError::Storage { required, limit }
+                }
+                GeneratorOrderError::Stopped(failure) => {
+                    GeneratorOrderError::Stopped(failure.into_stop())
+                }
+            }),
+            work: attempt.work,
+            peak_bytes: attempt.peak_bytes,
+        }
     }
 
-    /// Prepare under a caller's streaming work quota. Every admitted operation
+    /// Prepare under a caller's streaming work meter. Every admitted operation
     /// keeps exactly one permit; unused permits are refunded on every outcome.
     /// `max_bytes` has the same ownership scope as [`GeneratorOrderLimits`].
     #[must_use]
-    pub fn prepare_reserved(
+    pub fn prepare_reserved<Q: Quota + ?Sized>(
         original: OriginalSubject<'_>,
         max_bytes: usize,
         cancellation: &Cancellation,
-        quota: &mut dyn NarrowingQuota,
-    ) -> GeneratorOrderAttempt {
-        Self::prepare_with(original, max_bytes, cancellation, Work::reserved(quota))
+        work: &mut Meter<'_, Q>,
+    ) -> GeneratorOrderAttempt<Failure<Q::Error>> {
+        Self::prepare_with(original, max_bytes, cancellation, work)
     }
 
-    fn prepare_with(
+    fn prepare_with<Q: Quota + ?Sized>(
         original: OriginalSubject<'_>,
         max_bytes: usize,
         cancellation: &Cancellation,
-        work: Work<'_>,
-    ) -> GeneratorOrderAttempt {
+        work: &mut Meter<'_, Q>,
+    ) -> GeneratorOrderAttempt<Failure<Q::Error>> {
+        let before = work.charged();
         let mut budget = Budget {
             max_bytes,
             cancellation,
             work,
             bytes: 0,
             peak: 0,
-            failure: None,
         };
-        let result = cancellation.poll().and_then(|()| {
-            let Some(producers) = original.producers else {
-                return Ok(None);
-            };
-            if !producers.has_competing_heads && !producers.has_choice_heads {
-                return Ok(None);
-            }
-            build(original.theory, producers, &mut budget)
-        });
-        let result = result.map_err(|stop| {
-            budget
-                .failure
-                .take()
-                .unwrap_or(GeneratorOrderError::Stopped(stop))
-        });
+        let result = cancellation
+            .poll()
+            .map_err(GeneratorOrderError::from)
+            .and_then(|()| {
+                let Some(producers) = original.producers else {
+                    return Ok(None);
+                };
+                if !producers.has_competing_heads && !producers.has_choice_heads {
+                    return Ok(None);
+                }
+                build(original.theory, producers, &mut budget)
+            });
         budget.work.refund();
         GeneratorOrderAttempt {
             result,
-            work: budget.work.spent(),
+            work: budget.work.charged() - before,
             peak_bytes: budget.peak,
         }
     }
@@ -179,32 +200,33 @@ impl GeneratorOrder {
     /// atoms when none remain. Atom identity breaks component ties. The theory
     /// is authenticated before reading the region; region atom coordinates must
     /// belong to it. Both split children remain necessary for complete coverage.
-    pub fn preferred_atom_reserved(
+    pub fn preferred_atom_reserved<Q: Quota + ?Sized>(
         &self,
         theory: &Theory,
         region: &Region,
         cancellation: &Cancellation,
-        quota: &mut dyn NarrowingQuota,
-    ) -> PreferenceAttempt {
-        let mut work = Work::reserved(quota);
+        work: &mut Meter<'_, Q>,
+    ) -> PreferenceAttempt<Failure<Q::Error>> {
+        let before = work.charged();
         let result = cancellation
             .poll()
-            .and_then(|()| self.preferred(theory, region, &mut work));
+            .map_err(Failure::from)
+            .and_then(|()| self.preferred(theory, region, work));
         work.refund();
         PreferenceAttempt {
             result,
-            work: work.spent(),
+            work: work.charged() - before,
         }
     }
 
-    pub(super) fn preferred(
+    pub(super) fn preferred<Q: Quota + ?Sized>(
         &self,
         theory: &Theory,
         region: &Region,
-        work: &mut Work<'_>,
-    ) -> Result<Option<usize>, Stop> {
+        work: &mut Meter<'_, Q>,
+    ) -> Result<Option<usize>, Failure<Q::Error>> {
         if !self.belongs_to(theory) || region.len() != self.ranks.len() {
-            return Err(Stop::InvalidProgram);
+            return Err(Failure::Stopped(Stop::InvalidProgram));
         }
         let mut marked = region.open_in(&self.heads).peekable();
         let any_marked = marked.peek().is_some();
@@ -221,6 +243,12 @@ impl GeneratorOrder {
     }
 }
 
+/// Classified original heads and whether graph preparation has a consumer.
+struct GeneratorHeads {
+    heads: Words<u64>,
+    any: bool,
+}
+
 struct Graph {
     outgoing: Adjacency,
     incoming: Adjacency,
@@ -232,18 +260,18 @@ struct Frame {
     next: usize,
 }
 
-fn build(
+fn build<Q: Quota + ?Sized>(
     theory: &Theory,
     producers: &Producers,
-    budget: &mut Budget<'_, '_>,
-) -> Result<Option<GeneratorOrder>, Stop> {
+    budget: &mut Budget<'_, '_, Q>,
+) -> Result<Option<GeneratorOrder>, GeneratorOrderError<Failure<Q::Error>>> {
     let headers = size_of::<GeneratorOrder>()
         + size_of::<Graph>()
         + size_of::<Vec<u8>>() * 2
         + size_of::<Vec<usize>>() * 4
         + size_of::<Vec<Frame>>();
     budget.observe(headers as u128)?;
-    let (heads, any) = generator_heads(theory.atom_count(), producers, budget)?;
+    let GeneratorHeads { heads, any } = generator_heads(theory.atom_count(), producers, budget)?;
     if !any {
         return Ok(None);
     }
@@ -268,7 +296,7 @@ fn build(
         for &to in &graph.outgoing[from] {
             budget.tick()?;
             if components[from] > components[to] {
-                return Err(Stop::InvalidProgram);
+                return Err(Stop::InvalidProgram.into());
             }
         }
     }
@@ -288,11 +316,11 @@ fn build(
     }))
 }
 
-fn generator_heads(
+fn generator_heads<Q: Quota + ?Sized>(
     atoms: usize,
     producers: &Producers,
-    budget: &mut Budget<'_, '_>,
-) -> Result<(Words<u64>, bool), Stop> {
+    budget: &mut Budget<'_, '_, Q>,
+) -> Result<GeneratorHeads, GeneratorOrderError<Failure<Q::Error>>> {
     let mut any = false;
     let mut heads = Words::new(budget.filled(flag_words(atoms), 0_u64)?);
     for atom in 0..atoms {
@@ -311,7 +339,7 @@ fn generator_heads(
             any = true;
         }
     }
-    Ok((heads, any))
+    Ok(GeneratorHeads { heads, any })
 }
 
 /// A marker charges each node/producer inspection even when it has no edge.
@@ -355,11 +383,11 @@ fn inputs(view: NodeView<'_>, atoms: usize) -> impl Iterator<Item = usize> + Clo
     )
 }
 
-fn finishing_order(
+fn finishing_order<Q: Quota + ?Sized>(
     graph: &Graph,
     vertices: usize,
-    budget: &mut Budget<'_, '_>,
-) -> Result<Vec<usize>, Stop> {
+    budget: &mut Budget<'_, '_, Q>,
+) -> Result<Vec<usize>, GeneratorOrderError<Failure<Q::Error>>> {
     let mut seen = budget.filled(vertices, 0_u8)?;
     let mut stack: Vec<Frame> = budget.reserve(vertices)?;
     let mut finished = budget.reserve(vertices)?;
@@ -395,12 +423,12 @@ fn finishing_order(
     Ok(finished)
 }
 
-fn components(
+fn components<Q: Quota + ?Sized>(
     graph: &Graph,
     finished: &[usize],
     vertices: usize,
-    budget: &mut Budget<'_, '_>,
-) -> Result<Vec<usize>, Stop> {
+    budget: &mut Budget<'_, '_, Q>,
+) -> Result<Vec<usize>, GeneratorOrderError<Failure<Q::Error>>> {
     let mut assigned = budget.filled(vertices, 0_u8)?;
     let mut components = budget.filled(vertices, 0_usize)?;
     let mut queue = budget.reserve(vertices)?;
@@ -434,35 +462,36 @@ fn components(
     Ok(components)
 }
 
-struct Budget<'a, 'q> {
+struct Budget<'a, 'q, Q: Quota + ?Sized> {
     max_bytes: usize,
     cancellation: &'a Cancellation,
-    work: Work<'q>,
+    work: &'a mut Meter<'q, Q>,
     bytes: u128,
     peak: u128,
-    failure: Option<GeneratorOrderError>,
 }
 
-impl Budget<'_, '_> {
-    fn tick(&mut self) -> Result<(), Stop> {
+impl<Q: Quota + ?Sized> Budget<'_, '_, Q> {
+    fn tick(&mut self) -> Result<(), GeneratorOrderError<Failure<Q::Error>>> {
         self.cancellation.poll()?;
-        self.work.tick()
+        self.work.tick().map_err(GeneratorOrderError::from)
     }
 
-    fn observe(&mut self, bytes: u128) -> Result<(), Stop> {
+    fn observe(&mut self, bytes: u128) -> Result<(), GeneratorOrderError<Failure<Q::Error>>> {
         self.peak = self.peak.max(bytes);
         if bytes > self.max_bytes as u128 {
-            self.failure = Some(GeneratorOrderError::Storage {
+            return Err(GeneratorOrderError::Storage {
                 required: bytes,
                 limit: self.max_bytes,
             });
-            return Err(Stop::Allocation);
         }
         self.bytes = bytes;
         Ok(())
     }
 
-    fn reserve<T>(&mut self, count: usize) -> Result<Vec<T>, Stop> {
+    fn reserve<T>(
+        &mut self,
+        count: usize,
+    ) -> Result<Vec<T>, GeneratorOrderError<Failure<Q::Error>>> {
         self.cancellation.poll()?;
         let prior = self.bytes;
         self.observe(prior + count as u128 * size_of::<T>() as u128)?;
@@ -474,7 +503,11 @@ impl Budget<'_, '_> {
         Ok(values)
     }
 
-    fn filled<T: Copy>(&mut self, count: usize, value: T) -> Result<Vec<T>, Stop> {
+    fn filled<T: Copy>(
+        &mut self,
+        count: usize,
+        value: T,
+    ) -> Result<Vec<T>, GeneratorOrderError<Failure<Q::Error>>> {
         let mut values = self.reserve(count)?;
         for _ in 0..count {
             self.tick()?;
@@ -483,7 +516,7 @@ impl Budget<'_, '_> {
         Ok(values)
     }
 
-    fn release<T>(&mut self, values: Vec<T>) -> Result<(), Stop> {
+    fn release<T>(&mut self, values: Vec<T>) -> Result<(), GeneratorOrderError<Failure<Q::Error>>> {
         self.bytes = self
             .bytes
             .checked_sub(values.capacity() as u128 * size_of::<T>() as u128)
@@ -493,17 +526,27 @@ impl Budget<'_, '_> {
     }
 }
 
-impl Construction for Budget<'_, '_> {
-    fn tick(&mut self) -> Result<(), Stop> {
+impl<Q: Quota + ?Sized> Construction for Budget<'_, '_, Q> {
+    type Error = GeneratorOrderError<Failure<Q::Error>>;
+    fn tick(&mut self) -> Result<(), GeneratorOrderError<Failure<Q::Error>>> {
         Self::tick(self)
     }
-    fn zeros(&mut self, count: usize) -> Result<Vec<usize>, Stop> {
+    fn zeros(
+        &mut self,
+        count: usize,
+    ) -> Result<Vec<usize>, GeneratorOrderError<Failure<Q::Error>>> {
         self.filled(count, 0)
     }
-    fn reserve(&mut self, count: usize) -> Result<Vec<usize>, Stop> {
+    fn reserve(
+        &mut self,
+        count: usize,
+    ) -> Result<Vec<usize>, GeneratorOrderError<Failure<Q::Error>>> {
         Self::reserve(self, count)
     }
-    fn release(&mut self, values: Vec<usize>) -> Result<(), Stop> {
+    fn release(
+        &mut self,
+        values: Vec<usize>,
+    ) -> Result<(), GeneratorOrderError<Failure<Q::Error>>> {
         Self::release(self, values)
     }
 }

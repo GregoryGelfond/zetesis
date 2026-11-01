@@ -8516,6 +8516,96 @@
       "name": "Zetesis.StreamedRegions.pending_can_retain_answer"
     },
     {
+      "file": "Zetesis/StreamedSubjects.lean",
+      "line": 40,
+      "name": "Zetesis.StreamedSubjects.holds_truth_iff"
+    },
+    {
+      "file": "Zetesis/StreamedSubjects.lean",
+      "line": 50,
+      "name": "Zetesis.StreamedSubjects.holds_opposite_iff"
+    },
+    {
+      "file": "Zetesis/StreamedSubjects.lean",
+      "line": 61,
+      "name": "Zetesis.StreamedSubjects.decides_truth_iff"
+    },
+    {
+      "file": "Zetesis/StreamedSubjects.lean",
+      "line": 70,
+      "name": "Zetesis.StreamedSubjects.decides_occurrences_iff"
+    },
+    {
+      "file": "Zetesis/StreamedSubjects.lean",
+      "line": 89,
+      "name": "Zetesis.StreamedSubjects.occurrence_row"
+    },
+    {
+      "file": "Zetesis/StreamedSubjects.lean",
+      "line": 118,
+      "name": "Zetesis.StreamedSubjects.body_excludes"
+    },
+    {
+      "file": "Zetesis/StreamedSubjects.lean",
+      "line": 146,
+      "name": "Zetesis.StreamedSubjects.occurrence_narrow_eq_falsify"
+    },
+    {
+      "file": "Zetesis/StreamedSubjects.lean",
+      "line": 191,
+      "name": "Zetesis.StreamedSubjects.fresh_step_reaches"
+    },
+    {
+      "file": "Zetesis/StreamedSubjects.lean",
+      "line": 209,
+      "name": "Zetesis.StreamedSubjects.occurrence_conditions_persist"
+    },
+    {
+      "file": "Zetesis/StreamedSubjects.lean",
+      "line": 228,
+      "name": "Zetesis.StreamedSubjects.completed_fixed_iff"
+    },
+    {
+      "file": "Zetesis/StreamedSubjects.lean",
+      "line": 240,
+      "name": "Zetesis.StreamedSubjects.grouped_closed_iff"
+    },
+    {
+      "file": "Zetesis/StreamedSubjects.lean",
+      "line": 261,
+      "name": "Zetesis.StreamedSubjects.grouped_joint_eq"
+    },
+    {
+      "file": "Zetesis/StreamedSubjects.lean",
+      "line": 281,
+      "name": "Zetesis.StreamedSubjects.falsify_fixed_of_not_sure_not_fresh"
+    },
+    {
+      "file": "Zetesis/StreamedSubjects.lean",
+      "line": 331,
+      "name": "Zetesis.StreamedSubjects.no_consequence_occurrence_fixed"
+    },
+    {
+      "file": "Zetesis/StreamedSubjects.lean",
+      "line": 368,
+      "name": "Zetesis.StreamedSubjects.no_consequence_exclusion_fixed"
+    },
+    {
+      "file": "Zetesis/StreamedSubjects.lean",
+      "line": 402,
+      "name": "Zetesis.StreamedSubjects.no_consequence_occurrences_closed"
+    },
+    {
+      "file": "Zetesis/StreamedSubjects.lean",
+      "line": 438,
+      "name": "Zetesis.StreamedSubjects.no_consequence_constraint_closed"
+    },
+    {
+      "file": "Zetesis/StreamedSubjects.lean",
+      "line": 485,
+      "name": "Zetesis.StreamedSubjects.complete_no_consequence_closed"
+    },
+    {
       "file": "Zetesis/StrongNegation.lean",
       "line": 44,
       "name": "Zetesis.StrongNegation.satisfies_rename"
@@ -10334,6 +10424,7 @@
     "Zetesis/StreamedConstraints.lean",
     "Zetesis/StreamedOptimization.lean",
     "Zetesis/StreamedRegions.lean",
+    "Zetesis/StreamedSubjects.lean",
     "Zetesis/StrongNegation.lean",
     "Zetesis/StructuralBindings.lean",
     "Zetesis/StructuredWitnesses.lean",
@@ -10365,8 +10456,8 @@
     "Zetesis/WorldViews.lean"
   ],
   "source_sha256": {
-    "Audit.lean": "f02fdb16af08dc229dfccfcc975e717192c12d5defccfbc3021b076b21c75046",
-    "Zetesis.lean": "b5d36a770b36265c730425ce3d0e988966150db13c19bd89e59a221424c98bdb",
+    "Audit.lean": "b4251c074b0689e85ba526aff00193496336fcb67e1738a8bacf70513ecf2932",
+    "Zetesis.lean": "e26cb01388e930994adf99a9b83bc79732410df747f9b0363879d5276b5dc055",
     "Zetesis/AcyclicEvaluation.lean": "1a9c77283876cf1f61cb92031da04780aada5d0b256f79db5b64bfb6b129d0dc",
     "Zetesis/AdjacencyRows.lean": "38a19b1c74483a157636321a56e95fea660a2192a04c77930d609e411c8d30d4",
     "Zetesis/AggregateAssignment.lean": "def2eac0ae638f3801d35c11a3162afaa3e0b9e393601cf899952e449e309639",
@@ -10534,6 +10625,7 @@
     "Zetesis/StreamedConstraints.lean": "5ae15a28881fc4e372d3aaeacbb4b64b48f00cb4e1135ec9ff4f10476e09f233",
     "Zetesis/StreamedOptimization.lean": "589ba2b11810c0f6e86c188a7eab5414de4221b4ad7b9a8356196eb375ffd5fe",
     "Zetesis/StreamedRegions.lean": "a7c986e2374949131d5a8ed36d66ca7e0ba400a5b55d530fe81a35ae26e2ae46",
+    "Zetesis/StreamedSubjects.lean": "b7e1815a228d60200d1dee70eef334876a0f4a1b36d525aeb64f3be9a0c165b2",
     "Zetesis/StrongNegation.lean": "4f99901e0dfc2e777d12110aca36c2c3be4964f5cbcf88d0a3d87b355a5730c6",
     "Zetesis/StructuralBindings.lean": "8606044bbfeab1c9238e9c2311206d0dd894bb6482463c02613e759a44f06894",
     "Zetesis/StructuredWitnesses.lean": "035fda4f2857801d516f26c1dca179233a561581beffbfbc69c1897e8926be8c",

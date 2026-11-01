@@ -1,9 +1,9 @@
 //! Packed storage preserves the closure's logical tails and stopping boundary.
 
-use zetesis_algebra::{Cancellation, Stop};
+use zetesis_algebra::{Cancellation, Class, Stop};
 
 use crate::{
-    AdmissionLimits, FormulaParts, FrozenSubject, Narrower, NarrowingScratch, Node,
+    AdmissionLimits, FormulaParts, FrozenSubject, Knowledge, Narrower, NarrowingScratch, Node,
     OriginalSubject, Region, RegionLimits, Theory,
 };
 
@@ -71,65 +71,76 @@ fn processed_witnesses_preserve_word_boundaries() {
     }
 }
 
+fn assert_mask_padding<C: Class>(
+    theory: &Theory,
+    index: &Narrower,
+    source: &Knowledge<C>,
+    narrow: impl FnOnce(&mut Region, &mut Knowledge<C>),
+) {
+    let mut state = source.clone();
+    let mut region = Region::all_open(theory.atom_count());
+    narrow(&mut region, &mut state);
+    let mut copied = source.clone();
+    copied.clone_from(&state);
+    let masks = match &copied.width {
+        Width::Compact16(known) => known.masks.slices(),
+        Width::Compact32(known) => known.masks.slices(),
+        Width::Native(known) => known.masks.slices(),
+    };
+    let lengths = [
+        theory.view().len(),
+        theory.view().len(),
+        65,
+        65,
+        65,
+        index.chains.len(),
+    ];
+    for (mask, length) in masks.into_iter().zip(lengths) {
+        assert_eq!(mask.len(), length.div_ceil(64));
+        if length % 64 != 0 {
+            let valid = (1u64 << (length % 64)) - 1;
+            assert_eq!(mask.last().unwrap() & !valid, 0);
+        }
+    }
+}
+
 #[test]
 fn narrowing_keeps_mask_padding_clear() {
     let theory = implication_chain(65);
     let index = Narrower::new(&theory);
     let compact = index.knowledge();
+    let frozen_compact = index.frozen_knowledge();
     let truth = vec![true; theory.view().len()];
-    for source in [compact.clone(), native(&compact)] {
-        for frozen in [false, true] {
-            let mut state = source.clone();
-            let mut region = Region::all_open(theory.atom_count());
-            let mut scratch = NarrowingScratch::default();
-            if frozen {
-                index
-                    .narrow_frozen_known(
-                        FrozenSubject::new(&theory, &truth),
-                        &mut region,
-                        &mut state,
-                        &mut scratch,
-                        RegionLimits::default(),
-                        &Cancellation::default(),
-                    )
-                    .result
-                    .unwrap();
-            } else {
-                index
-                    .narrow_known(
-                        OriginalSubject::new(&theory, None),
-                        &mut region,
-                        &mut state,
-                        &mut scratch,
-                        RegionLimits::default(),
-                        &Cancellation::default(),
-                    )
-                    .result
-                    .unwrap();
-            }
-            let mut copied = source.clone();
-            copied.clone_from(&state);
-            let masks = match &copied.width {
-                Width::Compact16(known) => known.masks.slices(),
-                Width::Compact32(known) => known.masks.slices(),
-                Width::Native(known) => known.masks.slices(),
-            };
-            let lengths = [
-                theory.view().len(),
-                theory.view().len(),
-                65,
-                65,
-                65,
-                index.chains.len(),
-            ];
-            for (mask, length) in masks.into_iter().zip(lengths) {
-                assert_eq!(mask.len(), length.div_ceil(64));
-                if length % 64 != 0 {
-                    let valid = (1u64 << (length % 64)) - 1;
-                    assert_eq!(mask.last().unwrap() & !valid, 0);
-                }
-            }
-        }
+    for (source, frozen_source) in [
+        (compact.clone(), frozen_compact.clone()),
+        (native(&compact), native(&frozen_compact)),
+    ] {
+        assert_mask_padding(&theory, &index, &source, |region, state| {
+            index
+                .narrow_known(
+                    OriginalSubject::new(&theory, None),
+                    region,
+                    state,
+                    &mut NarrowingScratch::default(),
+                    RegionLimits::default(),
+                    &Cancellation::default(),
+                )
+                .result
+                .unwrap();
+        });
+        assert_mask_padding(&theory, &index, &frozen_source, |region, state| {
+            index
+                .narrow_frozen_known(
+                    FrozenSubject::new(&theory, &truth),
+                    region,
+                    state,
+                    &mut NarrowingScratch::default(),
+                    RegionLimits::default(),
+                    &Cancellation::default(),
+                )
+                .result
+                .unwrap();
+        });
     }
 }
 

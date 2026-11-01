@@ -5,32 +5,42 @@
 //! preparation exhaustion does not conceal cancellation or a refused global
 //! reservation. The existing narrowing meter retains and refunds spare permits.
 
-use zetesis_algebra::{Cancellation, Stop};
+use zetesis_algebra::{Cancellation, Failure, LocalQuota, Meter, Quota, Stop};
 
 use crate::{AdmissionError, NodeView, Theory};
 
-use super::super::Work;
 use super::work::{Phase, PreparationWork};
 
 /// The largest admitted node-view path, including an ordinal cut's checks.
 const VIEW_MAX_WORK: u64 = 24;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(super) enum BudgetError {
+pub(super) enum BudgetError<E = Stop> {
     WorkDeclined,
     StorageDeclined { required: u128, limit: usize },
     Stopped(Stop),
+    Refused(E),
     Source(AdmissionError),
 }
 
-impl From<Stop> for BudgetError {
+impl<E> From<Stop> for BudgetError<E> {
     fn from(stop: Stop) -> Self {
         Self::Stopped(stop)
     }
 }
 
-pub(super) struct Budget<'a, 'q> {
-    work: Work<'q>,
+impl<E> From<Failure<E>> for BudgetError<E> {
+    fn from(error: Failure<E>) -> Self {
+        match error {
+            Failure::Stopped(stop) => Self::Stopped(stop),
+            Failure::Refused(error) => Self::Refused(error),
+        }
+    }
+}
+
+pub(super) struct Budget<'a, 'q, Q: Quota + ?Sized = LocalQuota> {
+    work: &'a mut Meter<'q, Q>,
+    start: u64,
     cancellation: &'a Cancellation,
     max_work: u64,
     max_bytes: usize,
@@ -38,14 +48,15 @@ pub(super) struct Budget<'a, 'q> {
     phases: PreparationWork,
 }
 
-impl<'a, 'q> Budget<'a, 'q> {
+impl<'a, 'q, Q: Quota + ?Sized> Budget<'a, 'q, Q> {
     pub(super) fn new(
-        work: Work<'q>,
+        work: &'a mut Meter<'q, Q>,
         max_work: u64,
         max_bytes: usize,
         cancellation: &'a Cancellation,
     ) -> Self {
         Self {
+            start: work.charged(),
             work,
             cancellation,
             max_work,
@@ -57,7 +68,7 @@ impl<'a, 'q> Budget<'a, 'q> {
 
     /// Charge a bounded primitive immediately before its logical operation.
     /// Meter bookkeeping and cancellation polling do not charge themselves.
-    pub(super) fn charge(&mut self, count: u64) -> Result<(), BudgetError> {
+    pub(super) fn charge(&mut self, count: u64) -> Result<(), BudgetError<Q::Error>> {
         self.bounded(count, || ((), count))
     }
 
@@ -65,9 +76,9 @@ impl<'a, 'q> Budget<'a, 'q> {
         &mut self,
         maximum: u64,
         operation: impl FnOnce() -> (T, u64),
-    ) -> Result<T, BudgetError> {
+    ) -> Result<T, BudgetError<Q::Error>> {
         self.cancellation.poll().map_err(BudgetError::Stopped)?;
-        let fits = maximum <= self.max_work.saturating_sub(self.work.spent());
+        let fits = maximum <= self.max_work.saturating_sub(self.work());
         self.work
             .bounded(maximum, || {
                 if fits {
@@ -77,7 +88,7 @@ impl<'a, 'q> Budget<'a, 'q> {
                     (Err(BudgetError::WorkDeclined), 0)
                 }
             })
-            .map_err(BudgetError::Stopped)?
+            .map_err(BudgetError::from)?
     }
 
     /// Read through the canonical formula view of an admitted owner.
@@ -89,7 +100,7 @@ impl<'a, 'q> Budget<'a, 'q> {
         &mut self,
         theory: &'t Theory,
         id: usize,
-    ) -> Result<NodeView<'t>, BudgetError> {
+    ) -> Result<NodeView<'t>, BudgetError<Q::Error>> {
         self.bounded(VIEW_MAX_WORK, || {
             let result = theory.view().node(id);
             let actual = match &result {
@@ -117,7 +128,7 @@ impl<'a, 'q> Budget<'a, 'q> {
     /// Check the caller's total live requirement without allocating anything.
     /// The caller supplies both requested and actual-capacity observations.
     /// Peak includes a refused requirement, not only retained allocations.
-    pub(super) fn admit_bytes(&mut self, required: u128) -> Result<(), BudgetError> {
+    pub(super) fn admit_bytes(&mut self, required: u128) -> Result<(), BudgetError<Q::Error>> {
         self.cancellation.poll().map_err(BudgetError::Stopped)?;
         self.peak_bytes = self.peak_bytes.max(required);
         if required > self.max_bytes as u128 {
@@ -130,7 +141,7 @@ impl<'a, 'q> Budget<'a, 'q> {
     }
 
     pub(super) fn work(&self) -> u64 {
-        self.work.spent()
+        self.work.charged() - self.start
     }
 
     /// Observe a phase's own prefix, excluding work already attributed to its
@@ -138,8 +149,8 @@ impl<'a, 'q> Budget<'a, 'q> {
     pub(super) fn in_phase<T>(
         &mut self,
         phase: Phase,
-        operation: impl FnOnce(&mut Self) -> Result<T, BudgetError>,
-    ) -> Result<T, BudgetError> {
+        operation: impl FnOnce(&mut Self) -> Result<T, BudgetError<Q::Error>>,
+    ) -> Result<T, BudgetError<Q::Error>> {
         let start = self.work();
         let nested = self.phases.total();
         let result = operation(self);

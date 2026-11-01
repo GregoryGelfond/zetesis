@@ -81,8 +81,7 @@ impl State {
                 match positive_closure(&mut evaluated, candidate, limits, budget, statistics) {
                     Ok(Some(verdict)) => Ok(Queried::Decided(verdict)),
                     Ok(None) => query.check_publishing(
-                        zetesis_ferraris::FrozenSubject::new(theory, evaluated.truth.truth()),
-                        candidate,
+                        &evaluated.truth,
                         limits,
                         budget,
                         (statistics, evaluated.narrowing),

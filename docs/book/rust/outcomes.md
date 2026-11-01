@@ -353,8 +353,9 @@ Repeated polls can retain `Cancellation::polling()`'s borrowed
 `CancellationPoll` view. Preparing the view resolves the token's flag references
 and slot identity once, without allocation or reference-count updates. Each poll
 still reads the live flags in the same order. The view borrows the token; it
-neither owns a run guard nor extends a deadline. Every metered operation's meter
-retains this view for its repeated polls.
+neither owns a run guard nor extends a deadline. A locally polled meter
+retains this view for its repeated polls; a reserved meter delegates control
+observations to its caller-owned account.
 
 Metered operations charge work per formula node or edge against a local work
 limit and observe control at metered boundaries: before their first charged
@@ -370,9 +371,9 @@ are original and frozen formula evaluation (with the exhaustive reference check
 and native aggregate eligibility), the tight, positive and stratified
 certificates, support construction, partition construction and restriction
 emission, and static closure checks. Each charges a `zetesis_algebra::Meter`, which
-carries the cadence, and runs inside `Cancellation::metered`, the only source of
-a meter, which settles the outcome where the operation returns with its error
-type's `Refusal` classification; none of them can skip the precedence.
+carries the cadence, and runs inside `Cancellation::metered`. That scope settles
+the outcome where the operation returns with its error type's `Refusal`
+classification; none of those operations can skip the precedence.
 
 Grounding's cumulative work account uses the same 256-unit cadence through
 `zetesis_algebra::poll_due(charged, amount)`. Its controlled scopes are charged
@@ -412,14 +413,25 @@ allowance is counted up to the limit and refused as the emission's work limit.
 So a refusal of the meter's own limit, by a charge or by an overrunning
 lowering, leaves the count at the limit.
 
-Narrowing meters its reads through a second arrangement: permits from a
-`NarrowingQuota`, at most `NARROWING_BATCH` (`POLL_INTERVAL`) at a time. A quota
+Narrowing uses the same `Meter` with a borrowed `zetesis_algebra::Quota`: permits
+arrive at most `NARROWING_BATCH` (`POLL_INTERVAL`) at a time. A quota
 that polls control does so when it grants a batch; the solver's quota observes
 control before every grant, so a requested stop takes precedence over its
 exhausted allowance. The library's fixed-ceiling route (`Narrower::narrow_known`,
 `Narrower::narrow_frozen_known` and `producers`) has no quota: it observes
 control once, before its first read, and refuses its ceiling without observing
-control again. Coarser operations, such as objective reduction, search decisions
+control again. Its unpolled local meter keeps that boundary.
+
+Reserved operations return `Failure::Refused(error)` for the caller's original
+typed error and `Failure::Stopped(stop)` for a local stop. The solver returns
+caller errors unchanged, including storage sizes and limits. Every completed or
+failed attempt retains its performed prefix and refunds only known unused
+permits; publishing that receipt does not charge the account a second time.
+A bounded operation that panics has returned no actual-work receipt, so its
+outstanding reservation is conservatively consumed. Nested helpers share the
+meter; they do not add another refund or exit-settlement boundary.
+
+Coarser operations, such as objective reduction, search decisions
 and aggregate lowering, still poll before every charged step. A computation that
 completes between two boundaries may return its complete result before observing
 a stop requested since its last observation; static closure checks and partition

@@ -257,7 +257,7 @@ fn native_frozen_narrowing_keeps_every_reduct_model_in_each_region() {
                         .narrow_frozen_known(
                             FrozenSubject::new(&theory, truth.truth()),
                             &mut region,
-                            &mut narrower.knowledge(),
+                            &mut narrower.frozen_knowledge(),
                             &mut NarrowingScratch::default(),
                             RegionLimits::default(),
                             &cancellation,
@@ -332,7 +332,7 @@ fn frozen_negation_keeps_masked_atom_decisions_free() {
                 .narrow_frozen_known(
                     FrozenSubject::new(&theory, truth.truth()),
                     &mut region,
-                    &mut narrower.knowledge(),
+                    &mut narrower.frozen_knowledge(),
                     &mut NarrowingScratch::default(),
                     RegionLimits::default(),
                     &cancellation,
@@ -375,7 +375,7 @@ fn frozen_atom_root_stays_false_when_its_atom_is_held() {
         .narrow_frozen_known(
             FrozenSubject::new(&theory, truth.truth()),
             &mut region,
-            &mut narrower.knowledge(),
+            &mut narrower.frozen_knowledge(),
             &mut NarrowingScratch::default(),
             RegionLimits::default(),
             &cancellation,

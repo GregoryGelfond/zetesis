@@ -18,8 +18,10 @@
 //! charges each read scalar entry or sparse word; no machine SIMD or full
 //! atom-universe buffer is required.
 
+use zetesis_algebra::{Failure, Quota};
+
 use super::{Deduction, Literals, capture_read};
-use crate::regions::{Work, bit};
+use crate::regions::{Meter, bit};
 use zetesis_algebra::{Stop, words::Words};
 
 mod merge;
@@ -56,12 +58,12 @@ pub(in crate::regions) struct OutputCursor {
 }
 
 impl Row {
-    pub(super) fn prepare(
+    pub(super) fn prepare<Q: Quota + ?Sized>(
         literals: Literals,
         remaining: &mut u64,
-        work: &mut Work<'_>,
+        work: &mut Meter<'_, Q>,
         peak: &mut u128,
-    ) -> Result<Option<Self>, Stop> {
+    ) -> Result<Option<Self>, Failure<Q::Error>> {
         let scalar_bytes = literals.retained_bytes();
         let simultaneous = size_of::<Self>() as u128 + size_of::<Literals>() as u128 + scalar_bytes;
         *peak = (*peak).max(simultaneous);
@@ -122,12 +124,12 @@ impl Row {
     /// This row's literals as owned lists, for retention into another tier or
     /// the store. Each decoded literal consumes the caller's allowance; None
     /// means it ran out. The copy's buffers join the caller's peak.
-    pub(super) fn to_literals(
+    pub(super) fn to_literals<Q: Quota + ?Sized>(
         &self,
         remaining: &mut u64,
-        work: &mut Work<'_>,
+        work: &mut Meter<'_, Q>,
         peak: &mut u128,
-    ) -> Result<Option<Literals>, Stop> {
+    ) -> Result<Option<Literals>, Failure<Q::Error>> {
         let (conditions, outputs) = self.lengths();
         let mut literals = Literals {
             conditions: Vec::new(),
@@ -181,12 +183,12 @@ impl Row {
     /// every proposed output. It therefore makes the proposed row redundant.
     /// Both logical streams are canonical; physical packing is immaterial.
     /// None means optional comparison allowance was exhausted, not a verdict.
-    pub(super) fn subsumes(
+    pub(super) fn subsumes<Q: Quota + ?Sized>(
         &self,
         other: &Literals,
         remaining: &mut u64,
-        work: &mut Work<'_>,
-    ) -> Result<Option<bool>, Stop> {
+        work: &mut Meter<'_, Q>,
+    ) -> Result<Option<bool>, Failure<Q::Error>> {
         let (conditions, outputs) = self.lengths();
         if conditions > other.conditions.len() || outputs < other.outputs.len() {
             return Ok(Some(false));
@@ -210,12 +212,12 @@ impl Row {
     /// The proposed row requires no more premises and gives all of this row's
     /// outputs. Retiring this row then preserves its deductions, or lets the
     /// stronger row refute the region before a formerly unit deduction.
-    pub(super) fn subsumed_by(
+    pub(super) fn subsumed_by<Q: Quota + ?Sized>(
         &self,
         other: &Literals,
         remaining: &mut u64,
-        work: &mut Work<'_>,
-    ) -> Result<Option<bool>, Stop> {
+        work: &mut Meter<'_, Q>,
+    ) -> Result<Option<bool>, Failure<Q::Error>> {
         let (conditions, outputs) = self.lengths();
         if conditions < other.conditions.len() || outputs > other.outputs.len() {
             return Ok(Some(false));
@@ -239,14 +241,14 @@ impl Row {
     /// Extend a temporary row with this row's outputs when their signed
     /// conditions are identical and the distinct union stays within maximum.
     /// Optional refusal or a typed stop leaves both inputs unchanged.
-    pub(super) fn union_outputs(
+    pub(super) fn union_outputs<Q: Quota + ?Sized>(
         &self,
         other: &mut Literals,
         maximum: usize,
         remaining: &mut u64,
-        work: &mut Work<'_>,
+        work: &mut Meter<'_, Q>,
         peak: &mut u128,
-    ) -> Result<Option<bool>, Stop> {
+    ) -> Result<Option<bool>, Failure<Q::Error>> {
         merge::union_outputs(self, other, maximum, remaining, work, peak)
     }
 
@@ -341,13 +343,13 @@ impl Row {
     /// read. The cursor owns only this traversal's remaining bits, not knowledge
     /// reusable by another row or region. Between visits the caller may decide
     /// the returned atom; other mask changes require starting a fresh cursor.
-    pub(super) fn next_publication_output(
+    pub(super) fn next_publication_output<Q: Quota + ?Sized>(
         &self,
         cursor: &mut OutputCursor,
         held: &[u64],
         cut: &[u64],
-        work: &mut Work<'_>,
-    ) -> Result<Option<(usize, bool)>, Stop> {
+        work: &mut Meter<'_, Q>,
+    ) -> Result<Option<(usize, bool)>, Failure<Q::Error>> {
         match self {
             Self::Scalar(row) => {
                 let Some(output) = row.outputs.get(cursor.next) else {
@@ -378,12 +380,12 @@ impl Row {
         }
     }
 
-    pub(super) fn deduction(
+    pub(super) fn deduction<Q: Quota + ?Sized>(
         &self,
         held: &[u64],
         cut: &[u64],
-        work: &mut Work<'_>,
-    ) -> Result<Deduction, Stop> {
+        work: &mut Meter<'_, Q>,
+    ) -> Result<Deduction, Failure<Q::Error>> {
         work.tick()?;
         match self {
             Self::Scalar(row) => scalar_deduction(row, held, cut, work),
@@ -421,12 +423,12 @@ impl OutputCursor {
 
 /// Ordered inclusion uses constant scratch and linear comparisons. Each visited
 /// candidate consumes the existing capture allowance; exhaustion is undecided.
-fn includes<T: Ord>(
+fn includes<T: Ord, Q: Quota + ?Sized>(
     mut candidates: impl Iterator<Item = T>,
     required: impl Iterator<Item = T>,
     remaining: &mut u64,
-    work: &mut Work<'_>,
-) -> Result<Option<bool>, Stop> {
+    work: &mut Meter<'_, Q>,
+) -> Result<Option<bool>, Failure<Q::Error>> {
     for wanted in required {
         loop {
             if !capture_read(remaining, work)? {
@@ -445,11 +447,11 @@ fn includes<T: Ord>(
     Ok(Some(true))
 }
 
-fn count_words(
+fn count_words<Q: Quota + ?Sized>(
     atoms: impl Iterator<Item = usize>,
     remaining: &mut u64,
-    work: &mut Work<'_>,
-) -> Result<Option<usize>, Stop> {
+    work: &mut Meter<'_, Q>,
+) -> Result<Option<usize>, Failure<Q::Error>> {
     let mut previous = None;
     let mut count = 0_usize;
     for atom in atoms {
@@ -487,12 +489,12 @@ fn append(words: &mut Vec<Word>, start: usize, atom: usize, held: bool) {
     }
 }
 
-fn scalar_deduction(
+fn scalar_deduction<Q: Quota + ?Sized>(
     row: &Literals,
     held: &[u64],
     cut: &[u64],
-    work: &mut Work<'_>,
-) -> Result<Deduction, Stop> {
+    work: &mut Meter<'_, Q>,
+) -> Result<Deduction, Failure<Q::Error>> {
     let mut open = None;
     for &(atom, value) in &row.conditions {
         work.tick()?;
@@ -516,13 +518,13 @@ fn scalar_deduction(
     Ok(Deduction::None)
 }
 
-fn packed_deduction(
+fn packed_deduction<Q: Quota + ?Sized>(
     premises: &[Word],
     outputs: &[Word],
     held: &[u64],
     cut: &[u64],
-    work: &mut Work<'_>,
-) -> Result<Deduction, Stop> {
+    work: &mut Meter<'_, Q>,
+) -> Result<Deduction, Failure<Q::Error>> {
     let mut open = None;
     for group in premises {
         work.tick()?;

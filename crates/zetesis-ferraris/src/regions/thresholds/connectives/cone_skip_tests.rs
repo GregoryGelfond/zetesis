@@ -6,7 +6,7 @@
 
 use proptest::prelude::*;
 
-use crate::regions::Work;
+use crate::regions::Meter;
 use crate::{
     AdmissionLimits, FormulaNodes, FormulaParts, Narrower, NarrowingScratch, Node, NodeView, Theory,
 };
@@ -92,8 +92,8 @@ proptest! {
         prop_assume!(index.thresholds.connectives.is_some());
         let anchors = index.thresholds.connectives.as_ref().unwrap();
         let mut scratch = NarrowingScratch::default();
-        scratch.prepare_thresholds(index.thresholds.rows.len()).unwrap();
-        let mut work = Work::new(u64::MAX);
+        scratch.common.prepare_thresholds(index.thresholds.rows.len()).unwrap();
+        let mut work = Meter::local(u64::MAX);
         for chain in 0..index.chains.len() {
             if anchors.anchored_cone(chain) {
                 continue;
@@ -102,10 +102,10 @@ proptest! {
                 anchors.rows(chain, &mut work).unwrap().is_empty(),
                 "chain {} posts a row under its least leaf", chain
             );
-            scratch.witnesses.cone(&index, chain, &mut work).unwrap();
-            for &node in scratch.witnesses.prepared() {
+            scratch.common.witnesses.cone(&index, chain, &mut work).map_err(zetesis_algebra::Failure::into_stop).unwrap();
+            for &node in scratch.common.witnesses.prepared() {
                 prop_assert!(
-                    anchors.rows_at(node, &mut work).unwrap().is_empty(),
+                    anchors.rows_at(node, &mut work).map_err(zetesis_algebra::Failure::into_stop).unwrap().is_empty(),
                     "node {} in the cone of chain {} anchors a row", node, chain
                 );
             }

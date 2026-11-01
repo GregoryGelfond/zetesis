@@ -2,10 +2,10 @@
 //! stops it at, records the same work, and returns every unspent permit; a
 //! fixed ceiling stops it at the same read.
 
-use zetesis_algebra::{Cancellation, Stop};
+use zetesis_algebra::{Cancellation, Failure, Stop};
 
-use crate::regions::{NARROWING_BATCH, Work};
-use crate::{Narrower, NarrowingQuota, Region, RegionLimits, Theory};
+use crate::regions::{Meter, NARROWING_BATCH};
+use crate::{Narrower, Region, RegionLimits, Theory};
 
 use super::implication_chain;
 
@@ -17,7 +17,8 @@ struct Allowance {
     refunded: u64,
 }
 
-impl NarrowingQuota for Allowance {
+impl zetesis_algebra::Quota for Allowance {
+    type Error = Stop;
     fn reserve(&mut self, wanted: u64) -> Result<u64, Stop> {
         let grant = wanted.min(self.batch).min(self.remaining);
         if grant == 0 {
@@ -51,14 +52,14 @@ fn reserved(theory: &Theory, limit: u64, batch: u64) -> (Run, Allowance) {
         granted: 0,
         refunded: 0,
     };
-    let attempt = narrower.narrow_known_reserved(
+    let attempt = crate::test_support::stop_narrowing(&narrower.narrow_known_reserved(
         crate::OriginalSubject::new(theory, None),
         &mut region,
         &mut knowledge,
         &mut crate::NarrowingScratch::default(),
         &Cancellation::default(),
-        &mut allowance,
-    );
+        &mut zetesis_algebra::Meter::reserved(&mut allowance),
+    ));
     let outcome = attempt
         .result
         .map(|narrowing| matches!(narrowing, crate::Narrowing::Refuted));
@@ -114,7 +115,8 @@ impl Grants {
     }
 }
 
-impl NarrowingQuota for Grants {
+impl zetesis_algebra::Quota for Grants {
+    type Error = Stop;
     fn reserve(&mut self, wanted: u64) -> Result<u64, Stop> {
         self.requests.push(wanted);
         if self.batches.is_empty() {
@@ -130,19 +132,19 @@ impl NarrowingQuota for Grants {
 #[test]
 fn work_spends_each_grant_before_reserving_again() {
     let mut quota = Grants::new(&[3, 2]);
-    let mut work = Work::reserved(&mut quota);
+    let mut work = Meter::reserved(&mut quota);
     for _ in 0..5 {
         work.tick().unwrap();
     }
-    assert_eq!(work.tick(), Err(Stop::WorkLimit));
-    assert_eq!(work.spent(), 5);
+    assert_eq!(work.tick(), Err(Failure::Refused(Stop::WorkLimit)));
+    assert_eq!(work.charged(), 5);
     assert_eq!(quota.requests, [NARROWING_BATCH; 3]);
 }
 
 #[test]
 fn refund_returns_exactly_the_unspent_permits() {
     let mut quota = Grants::new(&[10, 4]);
-    let mut work = Work::reserved(&mut quota);
+    let mut work = Meter::reserved(&mut quota);
     for _ in 0..3 {
         work.tick().unwrap();
     }
@@ -155,26 +157,30 @@ fn refund_returns_exactly_the_unspent_permits() {
 #[test]
 fn refund_keeps_the_charged_reads() {
     let mut quota = Grants::new(&[10, 4]);
-    let mut work = Work::reserved(&mut quota);
+    let mut work = Meter::reserved(&mut quota);
     for _ in 0..3 {
         work.tick().unwrap();
     }
     work.refund();
-    assert_eq!(work.spent(), 3);
+    assert_eq!(work.charged(), 3);
     work.tick().unwrap();
     work.refund();
-    assert_eq!(work.spent(), 4);
+    assert_eq!(work.charged(), 4);
 }
 
 #[test]
 fn a_fixed_ceiling_admits_exactly_its_reads() {
     for ceiling in [0, 1, 5] {
-        let mut work = Work::new(ceiling);
+        let mut work = Meter::local(ceiling);
         for _ in 0..ceiling {
             work.tick().unwrap();
         }
-        assert_eq!(work.tick(), Err(Stop::WorkLimit), "ceiling {ceiling}");
-        assert_eq!(work.spent(), ceiling, "ceiling {ceiling}");
+        assert_eq!(
+            work.tick(),
+            Err(Failure::Stopped(Stop::WorkLimit)),
+            "ceiling {ceiling}"
+        );
+        assert_eq!(work.charged(), ceiling, "ceiling {ceiling}");
     }
 }
 

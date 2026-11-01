@@ -1,3 +1,4 @@
+use crate::region_filter::tests::injection::{Source as InjectedSource, Worker as InjectedWorker};
 use std::num::NonZeroUsize;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
@@ -8,8 +9,8 @@ use super::{
 };
 use crate::budget::{Budget, LocalQuota, SharedBudget};
 use crate::{
-    Cancellation, Incomplete, Limits, RegionFeasibility, RegionFilter, RegionFilterWorker,
-    SearchLimits, SearchStatistics, StableModels,
+    Cancellation, Incomplete, Limits, RegionFeasibility, SearchLimits, SearchStatistics,
+    StableModels,
 };
 use zetesis_ferraris::{AdmissionLimits, Interpretation, Narrower, Node, Region, Theory};
 
@@ -876,17 +877,17 @@ struct PanicOnDecided;
 
 struct PanicOnDecidedWorker;
 
-impl RegionFilter for PanicOnDecided {
+impl InjectedSource for PanicOnDecided {
     fn worker(
         &self,
         _: &Theory,
         _: &Cancellation,
-    ) -> Result<Box<dyn RegionFilterWorker + '_>, Incomplete> {
+    ) -> Result<Box<dyn InjectedWorker + '_>, Incomplete> {
         Ok(Box::new(PanicOnDecidedWorker))
     }
 }
 
-impl RegionFilterWorker for PanicOnDecidedWorker {
+impl InjectedWorker for PanicOnDecidedWorker {
     fn check(
         &mut self,
         theory: &Theory,
@@ -905,7 +906,9 @@ impl RegionFilterWorker for PanicOnDecidedWorker {
 fn a_panicking_producers_counts_reach_the_merged_receipts() {
     let theory = tautologies(2);
     let mut proposals = proposals(&theory, 1);
-    proposals.set_filter(crate::region_filter::Filter::new(Arc::new(PanicOnDecided)));
+    proposals.set_filter(crate::region_filter::Filter::new(
+        crate::region_filter::Source::Fixture(Arc::new(PanicOnDecided)),
+    ));
     let before = proposals.statistics().counts.regions;
     let (produced, output) = fill(&mut proposals, &theory, 4);
     assert_eq!(produced.stopped, Some(Incomplete::WorkerPanicked));
@@ -928,17 +931,17 @@ impl Drop for PanickingWorker<'_> {
     }
 }
 
-impl RegionFilter for PanickingFilter {
+impl InjectedSource for PanickingFilter {
     fn worker(
         &self,
         _: &Theory,
         _: &Cancellation,
-    ) -> Result<Box<dyn RegionFilterWorker + '_>, Incomplete> {
+    ) -> Result<Box<dyn InjectedWorker + '_>, Incomplete> {
         Ok(Box::new(PanickingWorker(self)))
     }
 }
 
-impl RegionFilterWorker for PanickingWorker<'_> {
+impl InjectedWorker for PanickingWorker<'_> {
     fn check(
         &mut self,
         _: &Theory,

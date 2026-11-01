@@ -1,7 +1,7 @@
 //! Ordered cut implications retain the full scan's effects, including masks
 //! and contradictory targets, while skipping the unrelated end of a column.
 
-use crate::regions::{ChainOperands, Closure, Known, Narrower, NarrowingScratch, Step, Work};
+use crate::regions::{ChainOperands, Closure, Known, Meter, Narrower, NarrowingScratch, Step};
 use crate::test_support::SinglePermits;
 use crate::{ExtremumCutRule, Theory};
 use zetesis_algebra::Stop;
@@ -39,12 +39,12 @@ struct Attempt {
 
 /// The former complete column scan is an independent effects oracle: it never
 /// calls the new range selection and retains both original frozen-mask gates.
-fn scan(
+fn scan<Q: zetesis_algebra::Quota<Error = Stop> + ?Sized>(
     closure: &mut Closure<'_, u16>,
     index: &Narrower,
     chain: usize,
     frozen: Option<&[bool]>,
-    work: &mut Work<'_>,
+    work: &mut Meter<'_, Q>,
 ) -> Result<Step, Stop> {
     let source = &index.chains[chain];
     let ChainOperands::Ordinal { column, length } = source.operands else {
@@ -56,7 +56,7 @@ fn scan(
     let value = closure.known.sure.contains(source.root);
     let mut step = Step::Unchanged;
     for &(size, node) in &index.extrema.columns[column].guards {
-        work.tick()?;
+        work.tick().map_err(zetesis_algebra::Failure::into_stop)?;
         if (value && size < length)
             || (!value && size > length)
             || frozen.is_some_and(|truth| !truth[node])
@@ -75,18 +75,19 @@ fn scan(
     Ok(step)
 }
 
-fn attempt(
+fn attempt<Q: zetesis_algebra::Quota<Error = Stop> + ?Sized>(
     index: &Narrower,
     event: Event,
     frozen: Option<&[bool]>,
     scanning: bool,
-    work: &mut Work<'_>,
+    work: &mut Meter<'_, Q>,
 ) -> Attempt {
     let mut known = index.root_known::<u16>();
     let mut lists = NarrowingScratch::default();
-    let mut closure = Closure {
+    let mut closure = Closure::<_, zetesis_algebra::AnswerSetsSought> {
         known: known.borrow(),
-        lists: &mut lists,
+        lists: &mut lists.common,
+        learning: &mut lists.learning,
     };
     if let Some(node) = event.opposing {
         let result = if event.value {
@@ -107,12 +108,14 @@ fn attempt(
     let result = if scanning {
         scan(&mut closure, index, chain, frozen, work)
     } else {
-        closure.extremum_order(index, chain, frozen, work)
+        closure
+            .extremum_order(index, chain, frozen, work)
+            .map_err(zetesis_algebra::Failure::into_stop)
     };
     Attempt {
         result,
         known,
-        events: lists.nodes,
+        events: lists.common.nodes,
     }
 }
 
@@ -140,8 +143,8 @@ fn ordered_ranges_preserve_equal_cuts_and_contradictions() {
                         value,
                         opposing,
                     };
-                    let selected = attempt(&index, event, None, false, &mut Work::new(u64::MAX));
-                    let scanned = attempt(&index, event, None, true, &mut Work::new(u64::MAX));
+                    let selected = attempt(&index, event, None, false, &mut Meter::local(u64::MAX));
+                    let scanned = attempt(&index, event, None, true, &mut Meter::local(u64::MAX));
                     same_effects(&selected, &scanned);
                 }
             }
@@ -168,12 +171,18 @@ fn ordered_ranges_preserve_both_frozen_gates() {
                     value,
                     opposing: None,
                 };
-                let mut work = Work::new(u64::MAX);
+                let mut work = Meter::local(u64::MAX);
                 let selected = attempt(&index, event, Some(&frozen), false, &mut work);
-                let scanned = attempt(&index, event, Some(&frozen), true, &mut Work::new(u64::MAX));
+                let scanned = attempt(
+                    &index,
+                    event,
+                    Some(&frozen),
+                    true,
+                    &mut Meter::local(u64::MAX),
+                );
                 same_effects(&selected, &scanned);
                 if !frozen[source] {
-                    assert_eq!(work.spent(), 0);
+                    assert_eq!(work.charged(), 0);
                 }
             }
         }
@@ -195,10 +204,10 @@ fn sparse_ordered_implications_skip_unrelated_guards() {
             value,
             opposing: None,
         };
-        let selected = attempt(&index, event, None, false, &mut Work::new(allowance));
+        let selected = attempt(&index, event, None, false, &mut Meter::local(allowance));
         assert!(matches!(selected.result, Ok(Step::Changed)));
         assert_eq!(selected.events, [(target, value)]);
-        let scanned = attempt(&index, event, None, true, &mut Work::new(allowance));
+        let scanned = attempt(&index, event, None, true, &mut Meter::local(allowance));
         assert!(scanned.result == Err(Stop::WorkLimit));
     }
 }
@@ -214,7 +223,7 @@ fn interrupted_ordering_retains_only_a_charged_effect_prefix() {
                 value,
                 opposing: None,
             };
-            let mut complete_work = Work::new(u64::MAX);
+            let mut complete_work = Meter::local(u64::MAX);
             let complete = attempt(&index, event, None, false, &mut complete_work);
             let chain = crate::regions::chain_position(index.chain_of[source].unwrap());
             let ChainOperands::Ordinal { column, length } = index.chains[chain].operands else {
@@ -234,23 +243,24 @@ fn interrupted_ordering_retains_only_a_charged_effect_prefix() {
             // Even a source that teaches nothing must pay for every admitted
             // target visit. Full-range endpoints detect deletion of those
             // charges independently of the measured interruption bound.
-            assert!(complete_work.spent() >= targets as u64);
+            assert!(complete_work.charged() >= targets as u64);
             for stop in [Stop::WorkLimit, Stop::Cancelled, Stop::Deadline] {
-                for limit in 0..=complete_work.spent() {
+                for limit in 0..=complete_work.charged() {
                     let mut quota = SinglePermits::new(limit, stop);
-                    let mut work = Work::reserved(&mut quota);
+                    let mut work = Meter::reserved(&mut quota);
                     let partial = attempt(&index, event, None, false, &mut work);
-                    assert_eq!(work.spent(), limit);
-                    if limit == complete_work.spent() {
+                    assert_eq!(work.charged(), limit);
+                    if limit == complete_work.charged() {
                         same_effects(&partial, &complete);
                     } else {
                         assert!(partial.result == Err(stop));
                         assert!(complete.events.starts_with(&partial.events));
                         let mut expected = index.root_known::<u16>();
                         let mut scratch = NarrowingScratch::default();
-                        let mut closure = Closure {
+                        let mut closure = Closure::<_, zetesis_algebra::AnswerSetsSought> {
                             known: expected.borrow(),
-                            lists: &mut scratch,
+                            lists: &mut scratch.common,
+                            learning: &mut scratch.learning,
                         };
                         for (node, truth) in
                             std::iter::once((source, value)).chain(partial.events.iter().copied())

@@ -243,7 +243,7 @@ fn frozen_closure_ignores_capacity_projection() {
         let a = index.narrow_frozen_known(
             subject,
             &mut actual,
-            &mut index.knowledge(),
+            &mut index.frozen_knowledge(),
             &mut NarrowingScratch::default(),
             RegionLimits { max_work: u64::MAX },
             &Cancellation::default(),
@@ -251,7 +251,7 @@ fn frozen_closure_ignores_capacity_projection() {
         let b = without.narrow_frozen_known(
             subject,
             &mut expected,
-            &mut without.knowledge(),
+            &mut without.frozen_knowledge(),
             &mut NarrowingScratch::default(),
             RegionLimits { max_work: u64::MAX },
             &Cancellation::default(),

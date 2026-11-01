@@ -160,6 +160,7 @@ import Zetesis.Frontier
 import Zetesis.AxisFolds
 import Zetesis.AlgebraicRows
 import Zetesis.Algebra
+import Zetesis.StreamedSubjects
 import Zetesis.InnerQuery
 import Zetesis.KeptCertificates
 import Zetesis.ModelSelections

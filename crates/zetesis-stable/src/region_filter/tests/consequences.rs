@@ -1,13 +1,17 @@
 //! Original consequences compose with closure, never frozen membership.
 
+use crate::region_filter::tests::injection::{Source as InjectedSource, Worker as InjectedWorker};
+use crate::streamed_constraints::ConstraintConsequence;
+use crate::subject::Pass;
+use zetesis_themelios::ProgramSite;
+
 use std::collections::BTreeSet;
 use std::num::NonZeroUsize;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 
 use crate::{
-    BatchError, Cancellation, Incomplete, Limits, RegionConsequence, RegionFeasibility,
-    RegionFilter, RegionFilterWorker, RegionPass, SearchLimits, StableModels,
+    BatchError, Cancellation, Incomplete, Limits, RegionFeasibility, SearchLimits, StableModels,
 };
 use zetesis_algebra::region::Region;
 use zetesis_ferraris::{Node, Theory};
@@ -15,11 +19,11 @@ use zetesis_theory_support::theories::theory;
 
 use super::support::{ROUTES, Route, batch, choices, residual, stable_models};
 
-type Callback = fn(&Region, RegionPass, &Cancellation) -> Result<RegionConsequence, Incomplete>;
+type Callback = fn(&Region, Pass, &Cancellation) -> Result<ConstraintConsequence, Incomplete>;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 struct Observation {
-    pass: RegionPass,
+    pass: Pass,
     decisions: Vec<Option<bool>>,
 }
 
@@ -56,12 +60,12 @@ impl Drop for Worker<'_> {
     }
 }
 
-impl RegionFilter for Filter {
+impl InjectedSource for Filter {
     fn worker(
         &self,
         subject: &Theory,
         cancellation: &Cancellation,
-    ) -> Result<Box<dyn RegionFilterWorker + '_>, Incomplete> {
+    ) -> Result<Box<dyn InjectedWorker + '_>, Incomplete> {
         cancellation.poll()?;
         if !subject.same_instance(&self.subject) {
             return Err(Incomplete::WrongTheory);
@@ -71,7 +75,7 @@ impl RegionFilter for Filter {
     }
 }
 
-impl RegionFilterWorker for Worker<'_> {
+impl InjectedWorker for Worker<'_> {
     fn check(
         &mut self,
         subject: &Theory,
@@ -89,8 +93,8 @@ impl RegionFilterWorker for Worker<'_> {
         subject: &Theory,
         region: &Region,
         cancellation: &Cancellation,
-        pass: RegionPass,
-    ) -> Result<RegionConsequence, Incomplete> {
+        pass: Pass,
+    ) -> Result<ConstraintConsequence, Incomplete> {
         assert!(subject.same_instance(&self.0.subject));
         cancellation.poll()?;
         self.0.observations.lock().unwrap().push(Observation {
@@ -141,33 +145,46 @@ fn limited(route: Route, subject: &Theory, max_work: u64) -> StableModels {
 
 fn require_first(
     region: &Region,
-    _: RegionPass,
+    _: Pass,
     cancellation: &Cancellation,
-) -> Result<RegionConsequence, Incomplete> {
+) -> Result<ConstraintConsequence, Incomplete> {
     cancellation.poll()?;
     Ok(match region.decision(0) {
-        None => RegionConsequence::Hold(0),
-        Some(false) => RegionConsequence::Refuted,
-        Some(true) => RegionConsequence::Unchanged,
+        None => ConstraintConsequence::Hold {
+            atom: 0,
+            site: ProgramSite::program(),
+        },
+        Some(false) => ConstraintConsequence::Refuted {
+            site: ProgramSite::program(),
+        },
+        Some(true) => ConstraintConsequence::NoConsequence,
     })
 }
 
 fn cascade(
     region: &Region,
-    _: RegionPass,
+    _: Pass,
     cancellation: &Cancellation,
-) -> Result<RegionConsequence, Incomplete> {
+) -> Result<ConstraintConsequence, Incomplete> {
     cancellation.poll()?;
     // The external original constraints are :- not a. and :- b,c.
     Ok(
         if region.is_cut(0) || (region.is_held(1) && region.is_held(2)) {
-            RegionConsequence::Refuted
+            ConstraintConsequence::Refuted {
+                site: ProgramSite::program(),
+            }
         } else if region.is_open(0) {
-            RegionConsequence::Hold(0)
+            ConstraintConsequence::Hold {
+                atom: 0,
+                site: ProgramSite::program(),
+            }
         } else if region.is_held(1) && region.is_open(2) {
-            RegionConsequence::Cut(2)
+            ConstraintConsequence::Cut {
+                atom: 2,
+                site: ProgramSite::program(),
+            }
         } else {
-            RegionConsequence::Unchanged
+            ConstraintConsequence::NoConsequence
         },
     )
 }
@@ -213,15 +230,15 @@ fn source_decisions_reenter_original_closure() {
             filter.observations(),
             vec![
                 Observation {
-                    pass: RegionPass::First,
+                    pass: Pass::First,
                     decisions: vec![None, None, None]
                 },
                 Observation {
-                    pass: RegionPass::Continue,
+                    pass: Pass::Continue,
                     decisions: vec![Some(true), Some(true), None]
                 },
                 Observation {
-                    pass: RegionPass::Continue,
+                    pass: Pass::Continue,
                     decisions: vec![Some(true), Some(true), Some(false)]
                 },
             ]
@@ -268,13 +285,13 @@ fn child_regions_begin_fresh_source_passes() {
         assert_eq!(
             observations
                 .iter()
-                .filter(|row| row.pass == RegionPass::First)
+                .filter(|row| row.pass == Pass::First)
                 .count(),
             7
         );
         let continued: Vec<_> = observations
             .iter()
-            .filter(|row| row.pass == RegionPass::Continue)
+            .filter(|row| row.pass == Pass::Continue)
             .collect();
         assert_eq!(continued.len(), 1);
         assert_eq!(continued[0].decisions, vec![Some(true), None, None]);
@@ -307,11 +324,11 @@ fn source_consequences_never_enter_frozen_queries() {
             filter.observations(),
             vec![
                 Observation {
-                    pass: RegionPass::First,
+                    pass: Pass::First,
                     decisions: vec![None, None]
                 },
                 Observation {
-                    pass: RegionPass::Continue,
+                    pass: Pass::Continue,
                     decisions: vec![Some(true), Some(true)]
                 },
             ]
@@ -329,11 +346,14 @@ fn source_consequences_never_enter_frozen_queries() {
 
 fn out_of_range(
     _: &Region,
-    _: RegionPass,
+    _: Pass,
     cancellation: &Cancellation,
-) -> Result<RegionConsequence, Incomplete> {
+) -> Result<ConstraintConsequence, Incomplete> {
     cancellation.poll()?;
-    Ok(RegionConsequence::Hold(usize::MAX))
+    Ok(ConstraintConsequence::Hold {
+        atom: usize::MAX,
+        site: ProgramSite::program(),
+    })
 }
 
 #[test]
@@ -360,23 +380,32 @@ fn out_of_range_consequences_are_typed_failures() {
 
 fn stale_hold(
     _: &Region,
-    _: RegionPass,
+    _: Pass,
     cancellation: &Cancellation,
-) -> Result<RegionConsequence, Incomplete> {
+) -> Result<ConstraintConsequence, Incomplete> {
     cancellation.poll()?;
-    Ok(RegionConsequence::Hold(0))
+    Ok(ConstraintConsequence::Hold {
+        atom: 0,
+        site: ProgramSite::program(),
+    })
 }
 
 fn stale_cut(
     _: &Region,
-    pass: RegionPass,
+    pass: Pass,
     cancellation: &Cancellation,
-) -> Result<RegionConsequence, Incomplete> {
+) -> Result<ConstraintConsequence, Incomplete> {
     cancellation.poll()?;
-    Ok(if pass == RegionPass::First {
-        RegionConsequence::Hold(0)
+    Ok(if pass == Pass::First {
+        ConstraintConsequence::Hold {
+            atom: 0,
+            site: ProgramSite::program(),
+        }
     } else {
-        RegionConsequence::Cut(0)
+        ConstraintConsequence::Cut {
+            atom: 0,
+            site: ProgramSite::program(),
+        }
     })
 }
 
@@ -402,7 +431,7 @@ fn decided_consequences_are_typed_failures() {
             assert_eq!(
                 filter.observations()[1],
                 Observation {
-                    pass: RegionPass::Continue,
+                    pass: Pass::Continue,
                     decisions: vec![Some(true)],
                 }
             );
@@ -412,12 +441,15 @@ fn decided_consequences_are_typed_failures() {
 
 fn cancelled_force(
     _: &Region,
-    _: RegionPass,
+    _: Pass,
     cancellation: &Cancellation,
-) -> Result<RegionConsequence, Incomplete> {
+) -> Result<ConstraintConsequence, Incomplete> {
     cancellation.poll()?;
     cancellation.cancel();
-    Ok(RegionConsequence::Hold(0))
+    Ok(ConstraintConsequence::Hold {
+        atom: 0,
+        site: ProgramSite::program(),
+    })
 }
 
 #[test]
@@ -443,11 +475,14 @@ fn cancellation_refuses_a_returned_consequence() {
 
 fn failed_continuation(
     _: &Region,
-    pass: RegionPass,
+    pass: Pass,
     _: &Cancellation,
-) -> Result<RegionConsequence, Incomplete> {
-    if pass == RegionPass::First {
-        Ok(RegionConsequence::Hold(0))
+) -> Result<ConstraintConsequence, Incomplete> {
+    if pass == Pass::First {
+        Ok(ConstraintConsequence::Hold {
+            atom: 0,
+            site: ProgramSite::program(),
+        })
     } else {
         Err(Incomplete::RegionFilter)
     }
@@ -477,14 +512,19 @@ fn failed_continuation_retains_the_applied_prefix() {
 
 fn refuted_continuation(
     _: &Region,
-    pass: RegionPass,
+    pass: Pass,
     cancellation: &Cancellation,
-) -> Result<RegionConsequence, Incomplete> {
+) -> Result<ConstraintConsequence, Incomplete> {
     cancellation.poll()?;
-    Ok(if pass == RegionPass::First {
-        RegionConsequence::Hold(0)
+    Ok(if pass == Pass::First {
+        ConstraintConsequence::Hold {
+            atom: 0,
+            site: ProgramSite::program(),
+        }
     } else {
-        RegionConsequence::Refuted
+        ConstraintConsequence::Refuted {
+            site: ProgramSite::program(),
+        }
     })
 }
 
@@ -509,9 +549,9 @@ fn refuted_continuation_preserves_the_attempt_receipt() {
 
 fn refused_pass(
     _: &Region,
-    _: RegionPass,
+    _: Pass,
     _: &Cancellation,
-) -> Result<RegionConsequence, Incomplete> {
+) -> Result<ConstraintConsequence, Incomplete> {
     Err(Incomplete::RegionFilter)
 }
 

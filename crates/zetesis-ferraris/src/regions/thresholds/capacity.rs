@@ -21,7 +21,9 @@
 //! is reached or exceeded. All runtime visits are charged and cancellable.
 //! Original-only row notifications are coalesced by the existing queue.
 
-use crate::regions::{Chain, Closure, Count, Narrower, Step, Work};
+use zetesis_algebra::{Failure, Quota};
+
+use crate::regions::{Chain, Closure, Count, Meter, Narrower, Step};
 use crate::{NodeView, Theory};
 use zetesis_algebra::Stop;
 
@@ -216,13 +218,13 @@ fn aliases(
     Ok(result)
 }
 
-impl<C: Count> Closure<'_, C> {
-    pub(in crate::regions) fn threshold_capacity(
+impl<W: Count, C: crate::regions::ReadingClass> Closure<'_, W, C> {
+    pub(in crate::regions) fn threshold_capacity<Q: Quota + ?Sized>(
         &mut self,
         index: &Narrower,
         row: usize,
-        work: &mut Work<'_>,
-    ) -> Result<Step, Stop> {
+        work: &mut Meter<'_, Q>,
+    ) -> Result<Step, Failure<Q::Error>> {
         let Some(capacity) = &index.thresholds.capacity else {
             return Ok(Step::Unchanged);
         };
