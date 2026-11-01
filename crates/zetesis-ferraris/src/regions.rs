@@ -48,7 +48,7 @@ use std::num::NonZeroUsize;
 use std::sync::OnceLock;
 
 use zetesis_algebra::region::{Narrowing, Region};
-use zetesis_algebra::{Cancellation, Stop};
+use zetesis_algebra::{Cancellation, Stop, words::Words};
 
 use crate::{FormulaView, NodeView, Theory};
 
@@ -119,7 +119,9 @@ struct Subject<'a> {
 }
 
 /// The marks of a subject that ranks no atom as a choice.
-static NO_CHOICES: ChoiceHeads = ChoiceHeads { words: Vec::new() };
+static NO_CHOICES: ChoiceHeads = ChoiceHeads {
+    words: Words::new(Vec::new()),
+};
 
 /// A theory read for its candidates, with the producers of its support
 /// fragment when the support cut applies: what original narrowing reads.
@@ -291,7 +293,7 @@ impl Producers {
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct ChoiceHeads {
     /// One bit per atom of the theory's universe.
-    words: Vec<u64>,
+    words: Words<u64>,
 }
 
 impl ChoiceHeads {
@@ -299,9 +301,7 @@ impl ChoiceHeads {
     /// the universe the marks were taken over.
     #[must_use]
     pub fn contains(&self, atom: usize) -> bool {
-        self.words
-            .get(atom / 64)
-            .is_some_and(|word| word & (1u64 << (atom % 64)) != 0)
+        atom / 64 < self.words.len() && self.words.contains(atom)
     }
 
     /// Choices dominate every degree score. Visit only the open choices when
@@ -318,10 +318,9 @@ impl ChoiceHeads {
         let choice = |word: usize| self.words.get(word).copied().unwrap_or(0);
         let choosing = (0..words).any(|word| region.open_word(word, choice(word)) != 0);
         for word in 0..words {
-            let mut open = region.open_word(word, if choosing { choice(word) } else { u64::MAX });
-            while open != 0 {
-                visit(word * 64 + open.trailing_zeros() as usize)?;
-                open &= open - 1;
+            let open = region.open_word(word, if choosing { choice(word) } else { u64::MAX });
+            for bit in Words::<u64>::bits(open) {
+                visit(word * 64 + bit)?;
             }
         }
         Ok(())
@@ -370,7 +369,7 @@ pub fn producers(
 /// Mark the head of every atomic choice root, one charged visit per root.
 fn choice_heads(theory: &Theory, work: &mut Work<'_>) -> Result<ChoiceHeads, Stop> {
     let nodes = theory.view();
-    let mut words = vec![0; flag_words(theory.atom_count())];
+    let mut words = Words::<u64>::new(vec![0; flag_words(theory.atom_count())]);
     for &root in theory.roots() {
         work.tick()?;
         let head = match nodes.node(root).map_err(|_| Stop::InvalidProgram)? {
@@ -378,7 +377,7 @@ fn choice_heads(theory: &Theory, work: &mut Work<'_>) -> Result<ChoiceHeads, Sto
             _ => root,
         };
         if let Some(atom) = crate::atomic_choice::atom(theory, head) {
-            words[atom / 64] |= 1u64 << (atom % 64);
+            words.insert(atom);
         }
     }
     Ok(ChoiceHeads { words })
@@ -1589,7 +1588,7 @@ impl Narrower {
         let mut changed = false;
         for atom in closure.lists.learned.drain(..) {
             let was_open = region.is_open(atom);
-            let decided = if bit(closure.known.atom_sure, atom) {
+            let decided = if closure.known.atom_sure.contains(atom) {
                 statistics.held += u64::from(was_open);
                 region.hold(atom)
             } else {
@@ -1599,7 +1598,7 @@ impl Narrower {
             debug_assert!(decided, "a learned atom agrees with the region");
             changed |= was_open;
         }
-        region.snapshot_decided(closure.known.seen);
+        region.snapshot_decided(&mut closure.known.seen);
         Ok(Narrowing::Fixed { changed })
     }
 }
@@ -1724,20 +1723,20 @@ pub struct NarrowingScratch {
     heads: Vec<usize>,
     /// One bit per atom, set exactly while the atom is in `heads`, so an
     /// atom's recheck is queued once until it runs.
-    pending: Vec<u64>,
+    pending: Words<u64>,
     /// Original-subject rows awaiting prefix/Boolean requirement transport.
     threshold_rows: Vec<usize>,
     /// One bit per row, set exactly while it is in `threshold_rows`.
-    pending_thresholds: Vec<u64>,
+    pending_thresholds: Words<u64>,
     /// Original-subject arithmetic checks, deferred until mandatory propagation
     /// reaches a fixed point. These entries never change transport order.
     residual_rows: Vec<usize>,
     /// One bit per row, set exactly while it is in `residual_rows`.
-    pending_residuals: Vec<u64>,
+    pending_residuals: Words<u64>,
     /// Reversed suffix gcds for one drained residual row; never inherited.
     residual_suffix: Vec<i128>,
     /// Optional reachable-sum scratch; rebuilt from each drained row snapshot.
-    possible_sums: Vec<u64>,
+    possible_sums: Words<u64>,
     /// Shared connective views and dirty worklists belong to the walker.
     witnesses: witnesses::Scratch,
     /// Possible founded atoms, computed only with complete original producers.
@@ -1836,13 +1835,13 @@ impl NarrowingScratch {
     fn prepare(&mut self, atoms: usize) {
         self.witnesses.clear();
         for &atom in &self.heads {
-            self.pending[atom / 64] &= !(1u64 << (atom % 64));
+            self.pending.remove(atom);
         }
         for &row in &self.threshold_rows {
-            self.pending_thresholds[row / 64] &= !(1u64 << (row % 64));
+            self.pending_thresholds.remove(row);
         }
         for &row in &self.residual_rows {
-            self.pending_residuals[row / 64] &= !(1u64 << (row % 64));
+            self.pending_residuals.remove(row);
         }
         self.learned.clear();
         self.nodes.clear();
@@ -1850,9 +1849,9 @@ impl NarrowingScratch {
         self.threshold_rows.clear();
         self.residual_rows.clear();
         self.residual_suffix.clear();
-        self.possible_sums.clear();
+        self.possible_sums.storage_mut().clear();
         if self.pending.len() < flag_words(atoms) {
-            self.pending.resize(flag_words(atoms), 0);
+            self.pending.storage_mut().resize(flag_words(atoms), 0);
         }
     }
 
@@ -1869,13 +1868,14 @@ impl NarrowingScratch {
 
     fn prepare_rows(
         entries: &mut Vec<usize>,
-        pending: &mut Vec<u64>,
+        pending: &mut Words<u64>,
         rows: usize,
     ) -> Result<(), Stop> {
         entries
             .try_reserve_exact(rows.saturating_sub(entries.len()))
             .map_err(|_| Stop::Allocation)?;
         let words = flag_words(rows);
+        let pending = pending.storage_mut();
         if pending.len() < words {
             pending
                 .try_reserve_exact(words - pending.len())
@@ -1898,10 +1898,9 @@ impl NarrowingScratch {
         Self::queue_row(&mut self.residual_rows, &mut self.pending_residuals, row);
     }
 
-    fn queue_row(entries: &mut Vec<usize>, pending: &mut [u64], row: usize) {
-        let (word, flag) = (row / 64, 1u64 << (row % 64));
-        if pending[word] & flag == 0 {
-            pending[word] |= flag;
+    fn queue_row(entries: &mut Vec<usize>, pending: &mut Words<u64>, row: usize) {
+        if !pending.contains(row) {
+            pending.insert(row);
             entries.push(row);
         }
     }
@@ -1914,9 +1913,9 @@ impl NarrowingScratch {
         Self::next_row(&mut self.residual_rows, &mut self.pending_residuals)
     }
 
-    fn next_row(entries: &mut Vec<usize>, pending: &mut [u64]) -> Option<usize> {
+    fn next_row(entries: &mut Vec<usize>, pending: &mut Words<u64>) -> Option<usize> {
         let row = entries.pop()?;
-        pending[row / 64] &= !(1u64 << (row % 64));
+        pending.remove(row);
         Some(row)
     }
 
@@ -1924,9 +1923,8 @@ impl NarrowingScratch {
     /// supporters only fall as knowledge grows, so the pending recheck,
     /// made with the later knowledge, derives what this one would have.
     fn queue_recheck(&mut self, atom: usize) {
-        let (word, flag) = (atom / 64, 1u64 << (atom % 64));
-        if self.pending[word] & flag == 0 {
-            self.pending[word] |= flag;
+        if !self.pending.contains(atom) {
+            self.pending.insert(atom);
             self.heads.push(atom);
         }
     }
@@ -1935,7 +1933,7 @@ impl NarrowingScratch {
     /// or after its recheck queues it again.
     fn next_recheck(&mut self) -> Option<usize> {
         let atom = self.heads.pop()?;
-        self.pending[atom / 64] &= !(1u64 << (atom % 64));
+        self.pending.remove(atom);
         Some(atom)
     }
 }
@@ -1947,17 +1945,18 @@ struct Closure<'a, C> {
     lists: &'a mut NarrowingScratch,
 }
 
-/// Disjoint borrows of one knowledge for a narrowing. Mask boundaries are
-/// checked once here; hot bit accesses retain ordinary slice indexing.
+/// Disjoint word views of one knowledge for a narrowing. Mask boundaries are
+/// checked once; the transparent views retain the same borrowed slices and
+/// inline bit operations, with no extra allocation or extent metadata.
 struct KnownMut<'a, C> {
-    sure: &'a mut [u64],
-    never: &'a mut [u64],
-    atom_sure: &'a mut [u64],
-    atom_never: &'a mut [u64],
+    sure: Words<u64, &'a mut [u64]>,
+    never: Words<u64, &'a mut [u64]>,
+    atom_sure: Words<u64, &'a mut [u64]>,
+    atom_never: Words<u64, &'a mut [u64]>,
     /// Region decisions already incorporated into the closure.
-    seen: &'a mut [u64],
+    seen: Words<u64, &'a mut [u64]>,
     /// A processed absorbing operand: true for OR, false for AND.
-    witnessed: &'a mut [u64],
+    witnessed: Words<u64, &'a mut [u64]>,
     neutral_operands: &'a mut Counters<C>,
     unknown: &'a mut Counters<C>,
     thresholds: &'a mut [thresholds::State],
@@ -2017,11 +2016,15 @@ const fn flag_words(n: usize) -> usize {
 /// Whether flag `index` is set in a bitset.
 #[inline]
 fn bit(mask: &[u64], index: usize) -> bool {
-    mask[index / 64] & (1u64 << (index % 64)) != 0
+    Words::<u64, _>::new(mask).contains(index)
 }
 
-fn learn(known: &mut [u64], opposite: &[u64], index: usize) -> Step {
-    let (word, flag) = (index / 64, 1u64 << (index % 64));
+fn learn(
+    known: &mut Words<u64, &mut [u64]>,
+    opposite: &Words<u64, &mut [u64]>,
+    index: usize,
+) -> Step {
+    let (word, flag) = Words::<u64>::locate(index);
     if known[word] & flag != 0 {
         Step::Unchanged
     } else if opposite[word] & flag != 0 {
@@ -2049,7 +2052,7 @@ impl<C: Count> Known<C> {
 impl<C: Count> Closure<'_, C> {
     /// A node learns to hold; it is revisited if that is new.
     fn sure(&mut self, index: usize) -> Step {
-        let step = learn(self.known.sure, self.known.never, index);
+        let step = learn(&mut self.known.sure, &self.known.never, index);
         if step == Step::Changed {
             self.lists.nodes.push((index, true));
         }
@@ -2058,7 +2061,7 @@ impl<C: Count> Closure<'_, C> {
 
     /// A node learns to fail; it is revisited if that is new.
     fn never(&mut self, index: usize) -> Step {
-        let step = learn(self.known.never, self.known.sure, index);
+        let step = learn(&mut self.known.never, &self.known.sure, index);
         if step == Step::Changed {
             self.lists.founded.record_false(index);
             if *self.known.founded_closed && self.lists.founded.may_affect_body(index) {
@@ -2082,9 +2085,9 @@ impl<C: Count> Closure<'_, C> {
         value: bool,
     ) -> Step {
         let step = if value {
-            learn(self.known.atom_sure, self.known.atom_never, atom)
+            learn(&mut self.known.atom_sure, &self.known.atom_never, atom)
         } else {
-            learn(self.known.atom_never, self.known.atom_sure, atom)
+            learn(&mut self.known.atom_never, &self.known.atom_sure, atom)
         };
         if step != Step::Changed {
             return step;
@@ -2204,15 +2207,15 @@ impl<C: Count> Closure<'_, C> {
         }
         // Move only the disjoint seen borrow so the iterator leaves
         // `self.atom` free to update the other masks. No words are copied.
-        let seen = std::mem::take(&mut self.known.seen);
-        for (atom, value) in region.decided_since(seen) {
+        let mut seen = std::mem::replace(&mut self.known.seen, Words::new(&mut []));
+        for (atom, value) in region.decided_since(&seen) {
             step = step.join(self.atom(index, producers, frozen, atom, value));
             if step == Step::Contradiction {
                 break;
             }
         }
         if step != Step::Contradiction {
-            region.snapshot_decided(seen);
+            region.snapshot_decided(&mut seen);
         }
         // Restore the borrowed storage even when this knowledge is discarded;
         // only a completed incorporation may record all decisions as seen.
@@ -2328,8 +2331,8 @@ impl<C: Count> Closure<'_, C> {
             theory,
             index,
             producers,
-            self.known.never,
-            self.known.atom_never,
+            &self.known.never,
+            &self.known.atom_never,
             work,
         )?;
         let before = work.spent();
@@ -2343,14 +2346,13 @@ impl<C: Count> Closure<'_, C> {
         let mut step = Step::Unchanged;
         for word in 0..self.lists.founded.publication_words() {
             work.tick()?;
-            let mut missing = self
+            let missing = self
                 .lists
                 .founded
                 .missing_in_word(word, self.known.atom_never[word]);
-            while missing != 0 {
-                work.tick()?;
-                let atom = word * 64 + missing.trailing_zeros() as usize;
-                missing &= missing - 1;
+            let mut missing = Words::<u64>::bits(missing);
+            while let Some(bit) = missing.next_with(|| work.tick())? {
+                let atom = word * 64 + bit;
                 step = step.join(self.atom(index, Some(producers), None, atom, false));
                 if step == Step::Contradiction {
                     return Ok(step);
@@ -2390,12 +2392,14 @@ impl<C: Count> Closure<'_, C> {
                 .founded
                 .missing_in_word(word, self.known.atom_never[word]);
             let held_missing = missing & self.known.atom_sure[word];
-            if held_missing != 0 {
-                start = Some(word * 64 + held_missing.trailing_zeros() as usize);
+            if let Some(bit) = Words::<u64>::bits(held_missing).next() {
+                start = Some(word * 64 + bit);
                 break;
             }
-            if start.is_none() && missing != 0 {
-                start = Some(word * 64 + missing.trailing_zeros() as usize);
+            if start.is_none() {
+                start = Words::<u64>::bits(missing)
+                    .next()
+                    .map(|bit| word * 64 + bit);
             }
         }
         if let Some(atom) = start {
@@ -2405,8 +2409,8 @@ impl<C: Count> Closure<'_, C> {
                     index,
                     producers,
                     completed: &self.lists.founded,
-                    atom_sure: self.known.atom_sure,
-                    atom_never: self.known.atom_never,
+                    atom_sure: Words::new(&self.known.atom_sure[..]),
+                    atom_never: Words::new(&self.known.atom_never[..]),
                 },
                 atom,
                 work,
@@ -2456,8 +2460,8 @@ impl<C: Count> Closure<'_, C> {
         for &row in rows {
             match self.lists.explanations.deduction(
                 row,
-                self.known.atom_sure,
-                self.known.atom_never,
+                &self.known.atom_sure,
+                &self.known.atom_never,
                 work,
             )? {
                 ledger::Deduction::None => continue,
@@ -2479,8 +2483,8 @@ impl<C: Count> Closure<'_, C> {
             while let Some((atom, present)) = self.lists.explanations.next_publication_output(
                 row,
                 &mut outputs,
-                self.known.atom_sure,
-                self.known.atom_never,
+                &self.known.atom_sure,
+                &self.known.atom_never,
                 work,
             )? {
                 let (agrees, opposes) = if present {
@@ -2580,7 +2584,7 @@ impl<C: Count> Closure<'_, C> {
                 // Its neutral count and witness notices cannot teach anything
                 // further. Keep this parent visit and every other event: node
                 // truth, support wakeups and split ranking remain independent.
-                if bit(self.known.witnessed, chain) {
+                if self.known.witnessed.contains(chain) {
                     continue;
                 }
                 let step = self.operand_changed(index, chain, value, work)?;
@@ -2621,7 +2625,7 @@ impl<C: Count> Closure<'_, C> {
         let operands = source.leaves(&index.extrema);
         let total = operands.len();
         if value == disjunction {
-            self.known.witnessed[chain / 64] |= 1u64 << (chain % 64);
+            self.known.witnessed.insert(chain);
             return Ok(if disjunction {
                 self.sure(root)
             } else {
@@ -2632,11 +2636,11 @@ impl<C: Count> Closure<'_, C> {
         let neutral = self.known.neutral_operands.get(chain);
         Ok(match disjunction {
             true if neutral == total => self.never(root),
-            true if bit(self.known.sure, root) && neutral + 1 == total => {
+            true if self.known.sure.contains(root) && neutral + 1 == total => {
                 self.unit(index, chain, work)?
             }
             false if neutral == total => self.sure(root),
-            false if bit(self.known.never, root) && neutral + 1 == total => {
+            false if self.known.never.contains(root) && neutral + 1 == total => {
                 self.unit(index, chain, work)?
             }
             _ => Step::Unchanged,
@@ -2659,15 +2663,15 @@ impl<C: Count> Closure<'_, C> {
         // Callers have counted all but one operand at the opposite polarity.
         // A processed witness is therefore the sole possible target, already
         // known as required. Bits precede their events, but counts never do.
-        if bit(self.known.witnessed, chain) {
+        if self.known.witnessed.contains(chain) {
             return Ok(Step::Unchanged);
         }
         for &operand in operands {
             work.tick()?;
             let open = if disjunction {
-                !bit(self.known.never, operand)
+                !self.known.never.contains(operand)
             } else {
-                !bit(self.known.sure, operand)
+                !self.known.sure.contains(operand)
             };
             if open {
                 return Ok(if disjunction {
@@ -2727,13 +2731,13 @@ impl<C: Count> Closure<'_, C> {
             return Ok(step.join(self.threshold_connective(
                 index,
                 chain,
-                bit(self.known.sure, node),
+                self.known.sure.contains(node),
                 work,
             )?));
         }
         Ok(match nodes.node(node).expect("admitted node") {
             NodeView::Atom(atom) => {
-                if bit(self.known.sure, node) {
+                if self.known.sure.contains(node) {
                     // A held head blocks the other heads of its producers.
                     if let Some(producers) = producers
                         && producers.has_competing_heads
@@ -2747,13 +2751,13 @@ impl<C: Count> Closure<'_, C> {
                         }
                     }
                     self.atom(index, producers, frozen, atom, true)
-                } else if bit(self.known.never, node) {
+                } else if self.known.never.contains(node) {
                     self.atom(index, producers, frozen, atom, false)
                 } else {
                     Step::Unchanged
                 }
             }
-            NodeView::False if bit(self.known.sure, node) => Step::Contradiction,
+            NodeView::False if self.known.sure.contains(node) => Step::Contradiction,
             NodeView::False | NodeView::And(..) | NodeView::Or(..) | NodeView::ExtremumCut(_) => {
                 Step::Unchanged
             }
@@ -2767,16 +2771,16 @@ impl<C: Count> Closure<'_, C> {
     /// The same downward implication rules serve a node's own event and a
     /// known parent's response to an operand. Neither adds a charged visit.
     fn teach_implication(&mut self, node: usize, a: usize, b: usize) -> Step {
-        if bit(self.known.sure, node) {
-            return if bit(self.known.sure, a) {
+        if self.known.sure.contains(node) {
+            return if self.known.sure.contains(a) {
                 self.sure(b)
-            } else if bit(self.known.never, b) {
+            } else if self.known.never.contains(b) {
                 self.never(a)
             } else {
                 Step::Unchanged
             };
         }
-        if bit(self.known.never, node) {
+        if self.known.never.contains(node) {
             let step = self.sure(a);
             if step == Step::Contradiction {
                 return step;
@@ -2803,7 +2807,7 @@ impl<C: Count> Closure<'_, C> {
         let operands = source.leaves(&index.extrema);
         let total = operands.len();
         let mut step = Step::Unchanged;
-        if bit(self.known.sure, root) {
+        if self.known.sure.contains(root) {
             if disjunction {
                 if self.known.neutral_operands.get(chain) + 1 == total {
                     step = step.join(self.unit(index, chain, work)?);
@@ -2817,7 +2821,7 @@ impl<C: Count> Closure<'_, C> {
                     }
                 }
             }
-        } else if bit(self.known.never, root) {
+        } else if self.known.never.contains(root) {
             if disjunction {
                 if self.known.neutral_operands.get(chain) != total {
                     for &operand in operands {
@@ -2853,9 +2857,9 @@ impl<C: Count> Closure<'_, C> {
         };
         debug_assert!(changed == a || changed == b);
         debug_assert!(if value {
-            bit(self.known.sure, changed)
+            self.known.sure.contains(changed)
         } else {
-            bit(self.known.never, changed)
+            self.known.never.contains(changed)
         });
         // An aliased operand a -> a also takes this branch at either truth.
         if (changed == a && !value) || (changed == b && value) {
@@ -2863,30 +2867,30 @@ impl<C: Count> Closure<'_, C> {
         }
         let other = if changed == a { b } else { a };
         let satisfied = if value {
-            bit(self.known.sure, other)
+            self.known.sure.contains(other)
         } else {
-            bit(self.known.never, other)
+            self.known.never.contains(other)
         };
         if satisfied {
             return self.sure(node);
         }
         let refuted = if value {
-            bit(self.known.never, other)
+            self.known.never.contains(other)
         } else {
-            bit(self.known.sure, other)
+            self.known.sure.contains(other)
         };
         if refuted {
             return self.never(node);
         }
         // The changed operand already has its required bit, and the other
         // is open. Only the latter can learn from a known parent.
-        if bit(self.known.sure, node) {
+        if self.known.sure.contains(node) {
             if value {
                 self.sure(other)
             } else {
                 self.never(other)
             }
-        } else if bit(self.known.never, node) {
+        } else if self.known.never.contains(node) {
             if value {
                 self.never(other)
             } else {
@@ -2916,16 +2920,16 @@ impl<C: Count> Closure<'_, C> {
         atom: usize,
         work: &mut Work<'_>,
     ) -> Result<Step, Stop> {
-        if bit(self.known.atom_never, atom) {
+        if self.known.atom_never.contains(atom) {
             return Ok(Step::Unchanged);
         }
-        let held = bit(self.known.atom_sure, atom);
+        let held = self.known.atom_sure.contains(atom);
         let support = self.known.support_progress.check(
             producers,
             atom,
             held,
-            self.known.never,
-            self.known.atom_sure,
+            &self.known.never,
+            &self.known.atom_sure,
             work,
         )?;
         Ok(match support {

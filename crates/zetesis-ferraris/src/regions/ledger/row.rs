@@ -20,7 +20,7 @@
 
 use super::{Deduction, Literals, capture_read};
 use crate::regions::{Work, bit};
-use zetesis_algebra::Stop;
+use zetesis_algebra::{Stop, words::Words};
 
 mod merge;
 
@@ -30,8 +30,8 @@ mod tests;
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) struct Word {
     index: usize,
-    held: u64,
-    cut: u64,
+    held: Words<u64, [u64; 1]>,
+    cut: Words<u64, [u64; 1]>,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -51,8 +51,8 @@ pub(super) enum Row {
 pub(in crate::regions) struct OutputCursor {
     next: usize,
     word: usize,
-    present: u64,
-    absent: u64,
+    present: Words<u64, [u64; 1]>,
+    absent: Words<u64, [u64; 1]>,
 }
 
 impl Row {
@@ -266,21 +266,21 @@ impl Row {
         let mut groups = words.iter();
         let mut current = Word {
             index: 0,
-            held: 0,
-            cut: 0,
+            held: Words::new([0]),
+            cut: Words::new([0]),
         };
         std::iter::from_fn(move || {
             if let Some(values) = &mut scalar {
                 return values.next().copied();
             }
-            if current.held | current.cut == 0 {
+            if current.held[0] | current.cut[0] == 0 {
                 current = *groups.next()?;
             }
-            let bit = (current.held | current.cut).trailing_zeros() as usize;
-            let mask = 1 << bit;
-            let held = current.held & mask != 0;
-            current.held &= !mask;
-            current.cut &= !mask;
+            let bit = Words::<u64>::first_bit(current.held[0] | current.cut[0]);
+            let mask = Words::<u64>::locate(bit).1;
+            let held = current.held[0] & mask != 0;
+            current.held[0] &= !mask;
+            current.cut[0] &= !mask;
             Some((current.index * 64 + bit, held))
         })
     }
@@ -320,12 +320,12 @@ impl Row {
                 premise_words,
                 ..
             } => {
-                if cursor.absent | cursor.present == 0 {
+                if cursor.absent[0] | cursor.present[0] == 0 {
                     let group = words.get(*premise_words + cursor.next)?;
                     cursor.next += 1;
                     cursor.word = group.index;
-                    cursor.absent = group.cut;
-                    cursor.present = group.held;
+                    cursor.absent[0] = group.cut[0];
+                    cursor.present[0] = group.held[0];
                 }
                 Some(cursor.take())
             }
@@ -362,14 +362,14 @@ impl Row {
                 premise_words,
                 ..
             } => {
-                while cursor.absent | cursor.present == 0 {
+                while cursor.absent[0] | cursor.present[0] == 0 {
                     let Some(group) = words.get(*premise_words + cursor.next) else {
                         return Ok(None);
                     };
                     work.tick()?;
                     cursor.word = group.index;
-                    cursor.absent = group.cut & (held[group.index] | !cut[group.index]);
-                    cursor.present = group.held & (cut[group.index] | !held[group.index]);
+                    cursor.absent[0] = group.cut[0] & (held[group.index] | !cut[group.index]);
+                    cursor.present[0] = group.held[0] & (cut[group.index] | !held[group.index]);
                     cursor.next += 1;
                 }
                 work.tick()?;
@@ -406,19 +406,16 @@ impl OutputCursor {
     /// The lowest pending output of the current word, an absence before a
     /// presence on the same atom, as the canonical order sorts them.
     fn take(&mut self) -> (usize, bool) {
-        let absent = self.absent & self.absent.wrapping_neg();
-        let present = self.present & self.present.wrapping_neg();
+        let absent = Words::<u64>::lowest_bit(self.absent[0]);
+        let present = Words::<u64>::lowest_bit(self.present[0]);
         let take_absent = present == 0 || (absent != 0 && absent <= present);
         let mask = if take_absent { absent } else { present };
         if take_absent {
-            self.absent &= !mask;
+            self.absent[0] &= !mask;
         } else {
-            self.present &= !mask;
+            self.present[0] &= !mask;
         }
-        (
-            self.word * 64 + mask.trailing_zeros() as usize,
-            !take_absent,
-        )
+        (self.word * 64 + Words::<u64>::first_bit(mask), !take_absent)
     }
 }
 
@@ -475,18 +472,18 @@ fn append(words: &mut Vec<Word>, start: usize, atom: usize, held: bool) {
     if words.len() == start || words.last().is_none_or(|word| word.index != index) {
         words.push(Word {
             index,
-            held: 0,
-            cut: 0,
+            held: Words::new([0]),
+            cut: Words::new([0]),
         });
     }
     let word = words
         .last_mut()
         .expect("the input appended or matched one word");
-    let mask = 1 << (atom % 64);
+    let mask = Words::<u64>::locate(atom).1;
     if held {
-        word.held |= mask;
+        word.held[0] |= mask;
     } else {
-        word.cut |= mask;
+        word.cut[0] |= mask;
     }
 }
 
@@ -531,8 +528,8 @@ fn packed_deduction(
         work.tick()?;
         let present = held[group.index];
         let absent = cut[group.index];
-        let matched = (group.held & present) | (group.cut & absent);
-        let unknown = (group.held | group.cut) & !matched;
+        let matched = (group.held[0] & present) | (group.cut[0] & absent);
+        let unknown = (group.held[0] | group.cut[0]) & !matched;
         // Preserve scalar precedence even if both knowledge bits are set:
         // an expected sign already present satisfies that premise.
         if unknown & (present | absent) != 0 {
@@ -544,8 +541,8 @@ fn packed_deduction(
         if open.is_some() || unknown & (unknown - 1) != 0 {
             return Ok(Deduction::None);
         }
-        let bit = unknown.trailing_zeros() as usize;
-        open = Some((group.index * 64 + bit, group.cut & unknown != 0));
+        let bit = Words::<u64>::first_bit(unknown);
+        open = Some((group.index * 64 + bit, group.cut[0] & unknown != 0));
     }
     let Some((atom, value)) = open else {
         return Ok(Deduction::ForceOutputs);
@@ -554,7 +551,7 @@ fn packed_deduction(
         work.tick()?;
         // An output's negation is decided: a required absence held, or a
         // required presence cut.
-        if (group.cut & held[group.index]) | (group.held & cut[group.index]) != 0 {
+        if (group.cut[0] & held[group.index]) | (group.held[0] & cut[group.index]) != 0 {
             return Ok(Deduction::Require { atom, value });
         }
     }

@@ -73,7 +73,7 @@ fn head_projection_keeps_order_and_multiplicity() {
     let mut scratch = Scratch::default();
     scratch.prepare_projected(&owner, &index, &producers);
     assert_rows(&scratch, &owner, &producers);
-    assert_eq!(scratch.cyclic_atoms, [0b011]);
+    assert_eq!(&*scratch.cyclic_atoms, [0b011]);
     let projected = scratch.projected.as_ref().unwrap();
     assert_eq!(&projected.heads[1], &[0, 0]);
     assert_eq!(projected.fact_heads(), &[0]);
@@ -127,8 +127,8 @@ fn every_small_mask_matches_original_heads() {
                     original.missing_in_word(0, cut_atoms)
                 );
                 if cut_atoms == 0 {
-                    supported |= projected.atoms == [0b011];
-                    unsupported |= projected.atoms == [0];
+                    supported |= *projected.atoms == [0b011];
+                    unsupported |= *projected.atoms == [0];
                 }
             }
         }
@@ -158,7 +158,7 @@ fn warm(extra: usize, projected: bool) -> u64 {
             &mut work,
         )
         .unwrap();
-    assert_eq!(scratch.atoms, [0b011]);
+    assert_eq!(&*scratch.atoms, [0b011]);
     assert_eq!(scratch.body_nodes.len(), 3);
     work.spent()
 }

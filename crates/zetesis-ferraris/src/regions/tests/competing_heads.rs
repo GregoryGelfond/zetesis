@@ -316,6 +316,6 @@ fn multiple_heads_keep_ordered_competitor_wakeups() {
     assert_eq!(closure.lists.heads, [1, 0]);
     assert_eq!(closure.lists.nodes, [(0, true), (1, true)]);
     assert_eq!(closure.lists.learned, [0]);
-    assert_eq!(closure.lists.pending, [3]);
+    assert_eq!(&*closure.lists.pending, [3]);
     assert_eq!(work.spent(), 0);
 }

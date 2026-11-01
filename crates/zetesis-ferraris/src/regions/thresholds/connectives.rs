@@ -42,6 +42,8 @@
 //! Frozen subjects skip this bridge: these are original-subject consequences,
 //! never an assumption about arbitrary frozen-reduct interpretations.
 
+use zetesis_algebra::words::Words;
+
 use std::cmp::Ordering;
 use std::num::NonZeroUsize;
 
@@ -70,7 +72,7 @@ pub(super) struct Connectives {
     by_chain: Vec<(usize, usize)>,
     /// One bit per chain: set when its same-kind cone, the nodes an expanded
     /// discovery walk collects, contains a row anchor.
-    anchored_cones: Vec<u64>,
+    anchored_cones: Words<u64>,
 }
 
 impl Connectives {
@@ -133,7 +135,7 @@ impl Connectives {
     /// Whether the chain's same-kind cone contains any row anchor. When it
     /// does not, neither discovery from this chain can reach a row.
     fn anchored_cone(&self, chain: usize) -> bool {
-        bit(&self.anchored_cones, chain)
+        self.anchored_cones.contains(chain)
     }
 
     /// A cone node is only a discovery key, not proof of a row relation.
@@ -167,9 +169,9 @@ fn anchored_cones(
     chain_of: &[Option<NonZeroUsize>],
     extrema: &crate::regions::extrema::Extrema,
     anchors: &[usize],
-) -> Result<Vec<u64>, Stop> {
-    let mut marks = reserve(chains.len().div_ceil(64))?;
-    marks.resize(chains.len().div_ceil(64), 0);
+) -> Result<Words<u64>, Stop> {
+    let mut marks = Words::<u64>::new(reserve(chains.len().div_ceil(64))?);
+    marks.storage_mut().resize(chains.len().div_ceil(64), 0);
     for &link in chain_of.iter().flatten() {
         let chain = chain_position(link);
         let source = &chains[chain];
@@ -177,13 +179,13 @@ fn anchored_cones(
             || source.leaves(extrema).iter().any(|&leaf| {
                 match chain_of.get(leaf).copied().flatten().map(chain_position) {
                     Some(inner) if chains[inner].disjunction == source.disjunction => {
-                        bit(&marks, inner)
+                        marks.contains(inner)
                     }
                     _ => anchors.binary_search(&leaf).is_ok(),
                 }
             });
         if reaches {
-            marks[chain / 64] |= 1u64 << (chain % 64);
+            marks.insert(chain);
         }
     }
     Ok(marks)
@@ -510,10 +512,11 @@ impl<C: Count> Closure<'_, C> {
             work.tick()?;
             let chain = &index.chains[chain_index];
             // Keep the cheap truth and bound filters before any cone walk.
-            let sure = chain.disjunction && source.lower >= 1 && !bit(self.known.sure, chain.root);
+            let sure =
+                chain.disjunction && source.lower >= 1 && !self.known.sure.contains(chain.root);
             let never = !chain.disjunction
                 && source.upper.is_some_and(|upper| upper <= length as i128)
-                && !bit(self.known.never, chain.root);
+                && !self.known.never.contains(chain.root);
             if !(sure || never) {
                 continue;
             }

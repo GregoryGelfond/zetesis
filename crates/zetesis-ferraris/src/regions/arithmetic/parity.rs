@@ -7,8 +7,8 @@
 use std::convert::Infallible;
 use std::mem::size_of;
 
-use zetesis_algebra::Stop;
 use zetesis_algebra::words;
+use zetesis_algebra::{Stop, words::Words};
 
 use super::{
     budget::{Budget, BudgetError},
@@ -55,7 +55,7 @@ impl Prepared {
 /// Atom-major incidence bits; row identifiers are the input enumeration order.
 #[derive(Debug)]
 pub(super) struct Index {
-    pub words: Vec<u64>,
+    pub words: Words<u64>,
     pub row_words: usize,
     pub rows: usize,
     /// Executed insertions, including repeated insertion of the same bit.
@@ -73,8 +73,7 @@ impl Index {
     ) -> Result<(), BudgetError> {
         assert!(row < self.rows, "index row is admitted");
         budget.charge(3)?;
-        let word = row / 64;
-        let bit = 1 << (row % 64);
+        let (word, bit) = Words::<u64>::locate(row);
         self.insert_bit(atom, word, bit, budget)
     }
 
@@ -177,7 +176,7 @@ pub(super) fn prepare(
     let index = budget.in_phase(super::work::Phase::Index, |budget| {
         build_index(
             atom_count,
-            prepared.basis.iter().map(|&row| rows[row].words.as_slice()),
+            prepared.basis.iter().map(|&row| &rows[row].words[..]),
             storage,
             budget,
         )
@@ -271,7 +270,7 @@ pub(super) fn build_index<'a>(
     let length = atom_count
         .checked_mul(row_words)
         .ok_or(BudgetError::Stopped(Stop::Allocation))?;
-    let words = storage.filled(length, 0, 1, budget)?;
+    let words = Words::new(storage.filled(length, 0, 1, budget)?);
     storage.admit_record((size_of::<Index>() - size_of::<Vec<u64>>()) as u128, budget)?;
     budget.charge(3)?;
     let mut index = Index {
@@ -282,8 +281,7 @@ pub(super) fn build_index<'a>(
     };
     for (row, support) in supports.enumerate() {
         budget.charge(3)?;
-        let word = row / 64;
-        let bit = 1 << (row % 64);
+        let (word, bit) = Words::<u64>::locate(row);
         words::visit_set_bits(
             support,
             budget,

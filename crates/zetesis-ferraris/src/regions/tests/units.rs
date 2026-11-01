@@ -55,9 +55,9 @@ fn scan<C: Count>(
     for &operand in chain.ordinary_leaves() {
         work.tick()?;
         let opposite: &[u64] = if chain.disjunction {
-            closure.known.never
+            &closure.known.never
         } else {
-            closure.known.sure
+            &closure.known.sure
         };
         if !bit(opposite, operand) {
             return Ok(if chain.disjunction {
@@ -105,7 +105,7 @@ struct Attempt {
 /// 0 is open; 1/2 fail pending/counted; 3/4 hold pending/counted.
 fn state(index: &Narrower, values: [usize; 4]) -> (Knowledge, NarrowingScratch) {
     let mut knowledge = index.knowledge();
-    let known = compact_mut(&mut knowledge);
+    let mut known = compact_mut(&mut knowledge);
     let mut scratch = NarrowingScratch::default();
     scratch.prepare(3);
     let root = index.chains[0].root;
@@ -158,7 +158,7 @@ fn attempt(
     let (mut knowledge, mut scratch) = state(index, values);
     if matches!(teaching, Teaching::Operands) {
         let root = index.chains[0].root;
-        let known = compact_mut(&mut knowledge);
+        let mut known = compact_mut(&mut knowledge);
         known.sure[0] ^= 1 << root;
         known.never[0] ^= 1 << root;
         scratch.nodes[0].1 = !index.chains[0].disjunction;
@@ -376,17 +376,17 @@ fn the_last_opposite_event_still_refutes_the_chain() {
         assert_eq!(work.spent(), 4);
         assert!(bit(
             if disjunction {
-                closure.known.sure
+                &closure.known.sure
             } else {
-                closure.known.never
+                &closure.known.never
             },
             7
         ));
         assert!(!bit(
             if disjunction {
-                closure.known.never
+                &closure.known.never
             } else {
-                closure.known.sure
+                &closure.known.sure
             },
             7
         ));
@@ -399,7 +399,7 @@ fn an_absorbing_operand_still_refutes_an_opposite_root() {
         let index = Narrower::new(&chain(disjunction));
         let value = if disjunction { 3 } else { 1 };
         let (mut knowledge, mut scratch) = state(&index, [0, 0, 0, value]);
-        let known = compact_mut(&mut knowledge);
+        let mut known = compact_mut(&mut knowledge);
         // A fresh witness's event contradicts the parent before any unit scan.
         known.sure[0] ^= 1 << 7;
         known.never[0] ^= 1 << 7;
@@ -446,7 +446,7 @@ fn processed_body(index: &Narrower) -> (Knowledge, NarrowingScratch) {
     assert_eq!(index.chains[0].root, 2);
     assert_eq!(index.chains[0].ordinary_leaves(), [0, 1]);
     let mut knowledge = index.knowledge();
-    let known = compact_mut(&mut knowledge);
+    let mut known = compact_mut(&mut knowledge);
     if index.chains[0].disjunction {
         known.never[0] = 0b111;
         known.atom_never[0] = 0b11;
@@ -488,7 +488,7 @@ fn processed_roots_keep_the_node_and_parent_permits() {
                 .revisit(subject, &index, 2, !disjunction, &mut work);
                 assert_eq!(work.spent(), limit);
                 work.refund();
-                let known = compact_mut(&mut expected);
+                let mut known = compact_mut(&mut expected);
                 if limit > 0 {
                     known.unknown.decrement(0);
                     known.unknown.decrement(1);
@@ -512,7 +512,7 @@ fn processed_roots_keep_the_node_and_parent_permits() {
                 assert!(scratch.learned.is_empty());
                 let woke_head = disjunction && limit > 0;
                 assert_eq!(scratch.heads, if woke_head { vec![2] } else { vec![] });
-                assert_eq!(scratch.pending, if woke_head { vec![4] } else { vec![0] });
+                assert_eq!(&*scratch.pending, if woke_head { [4] } else { [0] });
                 assert_eq!(quota.calls, (limit + 1).min(2));
                 assert_eq!(quota.remaining, 0);
             }
@@ -547,7 +547,7 @@ fn a_processed_false_body_still_removes_support() {
         Ok(Step::Changed)
     ));
     assert_eq!(work.spent(), 3);
-    assert!(bit(closure.known.atom_never, 2));
+    assert!(closure.known.atom_never.contains(2));
     assert_eq!(closure.lists.nodes, [(3, false)]);
     assert_eq!(closure.lists.learned, [2]);
     assert!(closure.lists.heads.is_empty());
@@ -614,7 +614,7 @@ fn witnessed_units_keep_the_node_and_parent_permits() {
                 .revisit(subject, &index, 2, !disjunction, &mut work);
                 assert_eq!(work.spent(), limit);
                 work.refund();
-                let expected_known = compact_mut(&mut expected);
+                let mut expected_known = compact_mut(&mut expected);
                 if limit > 0 {
                     if disjunction {
                         expected_known.atom_never[0] |= 1 << 1;

@@ -1,7 +1,7 @@
 //! Residual notifications do not change mandatory transport order.
 //! Both pending schedules must reach the same closed facts and split score.
 
-use crate::regions::{Closure, NarrowingStatistics, Step, Subject, Width, Work, bit};
+use crate::regions::{Closure, NarrowingStatistics, Step, Subject, Width, Work};
 use crate::{
     AdmissionLimits, FormulaNodes, FormulaParts, Knowledge, Narrower, Narrowing, NarrowingScratch,
     Node, NodeView, Region, Theory,
@@ -161,13 +161,13 @@ fn finish_pending(
         return true;
     }
     for atom in closure.lists.learned.drain(..) {
-        assert!(if bit(closure.known.atom_sure, atom) {
+        assert!(if closure.known.atom_sure.contains(atom) {
             region.hold(atom)
         } else {
             region.cut(atom)
         });
     }
-    region.snapshot_decided(closure.known.seen);
+    region.snapshot_decided(&mut closure.known.seen);
     assert!(closure.lists.threshold_rows.is_empty());
     assert!(closure.lists.residual_rows.is_empty());
     assert!(

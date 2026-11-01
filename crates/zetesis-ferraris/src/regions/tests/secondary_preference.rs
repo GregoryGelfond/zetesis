@@ -363,7 +363,9 @@ fn filtered_rankings_match_all_small_score_orderings() {
                     }
                 }
                 for mask in 0_u64..8 {
-                    let choices = ChoiceHeads { words: vec![mask] };
+                    let choices = ChoiceHeads {
+                        words: vec![mask].into(),
+                    };
                     let marked = region.open().filter(|&atom| choices.contains(atom)).count();
                     let eligible = if marked == 0 {
                         region.open().count()

@@ -21,7 +21,7 @@
 //! failures. No condition-dependent result or proof is retained between calls.
 
 use crate::regions::{Closure, Count, Narrower, Step, Work, bit};
-use zetesis_algebra::Stop;
+use zetesis_algebra::{Stop, words::Words};
 
 use super::{Row, State};
 
@@ -111,8 +111,8 @@ impl<C: Count> Closure<'_, C> {
         );
         let result = attempt(
             data,
-            self.known.sure,
-            self.known.never,
+            &self.known.sure,
+            &self.known.never,
             &mut self.lists.possible_sums,
             plan,
             &mut Allowance {
@@ -120,7 +120,7 @@ impl<C: Count> Closure<'_, C> {
                 work,
             },
         );
-        self.lists.possible_sums.clear();
+        self.lists.possible_sums.storage_mut().clear();
         match result {
             Ok(step) => Ok(step),
             Err(Failure::Declined) => Ok(Step::Unchanged),
@@ -133,7 +133,7 @@ fn attempt(
     row: &Row,
     sure: &[u64],
     never: &[u64],
-    words: &mut Vec<u64>,
+    words: &mut Words<u64>,
     plan: Plan,
     allowance: &mut Allowance<'_, '_>,
 ) -> Result<Step, Failure> {
@@ -173,28 +173,29 @@ fn attempt(
 }
 
 fn prepare(
-    words: &mut Vec<u64>,
+    words: &mut Words<u64>,
     plan: Plan,
     allowance: &mut Allowance<'_, '_>,
 ) -> Result<(), Failure> {
-    words.clear();
+    words.storage_mut().clear();
     if words.capacity() < plan.words {
         allowance.tick()?;
         // These values have no authority outside one attempt. Releasing an
         // undersized allocation first avoids old/replacement payload overlap.
-        *words = Vec::new();
+        *words = Words::new(Vec::new());
         words
+            .storage_mut()
             .try_reserve_exact(plan.words)
             .map_err(|_| Stop::Allocation)?;
         // Admission uses actual capacity, including allocator over-allocation.
         if words.capacity() > plan.visits {
-            *words = Vec::new();
+            *words = Words::new(Vec::new());
             return Err(Failure::Declined);
         }
     }
     for _ in 0..plan.words {
         allowance.tick()?;
-        words.push(0);
+        words.storage_mut().push(0);
     }
     allowance.tick()?;
     words[0] = 1;

@@ -14,7 +14,7 @@ use std::{mem::size_of, ops::Range};
 
 use crate::{Value, catalog::TermRef, relation::Relation};
 
-use zetesis_algebra::{Cancellation, Stop};
+use zetesis_algebra::{Cancellation, Stop, words::Words};
 
 mod accounting;
 mod selection;
@@ -189,8 +189,8 @@ pub struct Table<'owner, 'source> {
     scope: Vec<usize>,
     variables: Vec<Range<usize>>,
     values: Vec<TermRef<'source>>,
-    supports: Vec<u32>,
-    coherent: Vec<u32>,
+    supports: Words<u32>,
+    coherent: Words<u32>,
     statistics: Statistics,
 }
 
@@ -201,7 +201,7 @@ pub struct Table<'owner, 'source> {
 /// table/domain intersection is empty, not that an ASP program is inconsistent.
 pub struct Projection<'table, 'owner, 'source> {
     table: &'table Table<'owner, 'source>,
-    rows: Vec<u32>,
+    rows: Words<u32>,
     supported: Vec<bool>,
     statistics: Statistics,
 }
@@ -294,11 +294,11 @@ impl<'owner, 'source> Table<'owner, 'source> {
                 copied_scope.push(variable);
             }
             let words = relation.row_count().div_ceil(WORD_BITS);
-            let mut coherent = work.zeros(words)?;
+            let mut coherent = Words::<u32>::new(work.zeros(words)?);
             for row in 0..relation.row_count() {
                 if coherent_row(relation, scope, &first_columns, row, &mut work)? {
                     work.tick(1)?;
-                    coherent[row / WORD_BITS] |= 1 << (row % WORD_BITS);
+                    coherent.insert(row);
                 }
             }
             let mut table = Self {
@@ -306,7 +306,7 @@ impl<'owner, 'source> Table<'owner, 'source> {
                 scope: copied_scope,
                 variables: work.reserve(first_columns.len())?,
                 values: Vec::new(),
-                supports: Vec::new(),
+                supports: Words::new(Vec::new()),
                 coherent,
                 statistics: Statistics {
                     work: 0,
@@ -413,7 +413,7 @@ impl<'owner, 'source> Table<'owner, 'source> {
         cancellation: &Cancellation,
     ) -> Result<Projection<'_, 'owner, 'source>, Failure> {
         let external = self.retained_inputs()?;
-        let scratch_header = size_of::<Vec<u32>>();
+        let scratch_header = size_of::<Words<u32>>();
         let mut work = Work::new(
             limits,
             control(cancellation),
@@ -477,7 +477,7 @@ impl<'owner, 'source> Table<'owner, 'source> {
         let mut rows = work.reserve(self.relation.row_count())?;
         for row in 0..self.relation.row_count() {
             work.tick(1)?;
-            if self.coherent[row / WORD_BITS] & (1 << (row % WORD_BITS)) != 0 {
+            if self.coherent.contains(row) {
                 let value = self
                     .relation
                     .row(row)
@@ -500,16 +500,17 @@ impl<'owner, 'source> Table<'owner, 'source> {
                 work.grow(&mut self.values, 1)?;
                 work.tick(1)?;
                 self.values.push(row.value);
-                work.grow(&mut self.supports, self.coherent.len())?;
+                work.grow(self.supports.storage_mut(), self.coherent.len())?;
                 for _ in 0..self.coherent.len() {
                     work.tick(1)?;
-                    self.supports.push(0);
+                    self.supports.storage_mut().push(0);
                 }
             }
             work.tick(1)?;
             let entry = self.values.len() - 1;
-            self.supports[entry * self.coherent.len() + row.row / WORD_BITS] |=
-                1 << (row.row % WORD_BITS);
+            let start = entry * self.coherent.len();
+            Words::<u32, _>::new(&mut self.supports[start..start + self.coherent.len()])
+                .insert(row.row);
             previous = Some(row.value);
         }
         work.tick(1)?;
@@ -558,8 +559,7 @@ impl<'table, 'owner, 'source> Projection<'table, 'owner, 'source> {
     /// Whether one in-range original occurrence survives.
     #[must_use]
     pub fn contains(&self, row: usize) -> bool {
-        row < self.table.relation.row_count()
-            && self.rows[row / WORD_BITS] & (1 << (row % WORD_BITS)) != 0
+        row < self.table.relation.row_count() && self.rows.contains(row)
     }
 
     /// Borrow supported typed values for one variable, in typed value order.
@@ -614,13 +614,7 @@ fn intersects<E>(
     right: &[u32],
     work: &mut Work<impl FnMut(usize) -> Result<(), E>>,
 ) -> Result<bool, MeteredCause<E>> {
-    for (&left, &right) in left.iter().zip(right) {
-        work.tick(1)?;
-        if left & right != 0 {
-            return Ok(true);
-        }
-    }
-    Ok(false)
+    Words::<u32, _>::new(left).intersects(Words::new(right), &mut || work.tick(1))
 }
 
 fn sort<E>(

@@ -6,6 +6,8 @@
 //! This is the existing positive propagation schedule, not another source
 //! evaluator or an answer-set certificate.
 
+use zetesis_algebra::words::Words;
+
 #[cfg(test)]
 mod tests;
 
@@ -92,6 +94,7 @@ pub(crate) fn drain<E: Effects>(
     words: &mut [u64],
     effects: &mut E,
 ) -> Result<(), E::Error> {
+    let mut words = Words::<u64, _>::new(words);
     let mut next = 0;
     while next < queue.len() {
         effects.before(Point::Dequeue, 1)?; // read the queued vertex
@@ -100,7 +103,7 @@ pub(crate) fn drain<E: Effects>(
         effects.before(Point::Operation, 1)?;
         if vertex < atoms {
             effects.before(Point::Operation, 4)?; // word, bit, shift and OR
-            words[vertex / 64] |= 1 << (vertex % 64);
+            words.insert(vertex);
         }
         effects.before(Point::Operation, 2)?; // the outgoing span's endpoints
         let first = offsets[vertex];

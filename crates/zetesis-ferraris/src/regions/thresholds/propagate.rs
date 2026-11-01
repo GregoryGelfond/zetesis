@@ -3,7 +3,7 @@
 //! monotonically, so each completed scan position is paid once per branch.
 
 use crate::Theory;
-use crate::regions::{Closure, Count, Narrower, Step, Work, bit};
+use crate::regions::{Closure, Count, Narrower, Step, Work};
 use zetesis_algebra::Stop;
 
 impl<C: Count> Closure<'_, C> {
@@ -34,7 +34,7 @@ impl<C: Count> Closure<'_, C> {
     ) -> Result<Step, Stop> {
         let row = index.thresholds.row(theory, node);
         let state = &mut self.known.thresholds[row];
-        if bit(self.known.sure, node) {
+        if self.known.sure.contains(node) {
             if state.lower >= bound {
                 return Ok(Step::Unchanged);
             }
@@ -211,7 +211,8 @@ impl<C: Count> Closure<'_, C> {
                 break;
             };
             work.tick()?;
-            let decided = bit(self.known.sure, condition) || bit(self.known.never, condition);
+            let decided =
+                self.known.sure.contains(condition) || self.known.never.contains(condition);
             if !decided
                 && if value {
                     weight <= cutoff

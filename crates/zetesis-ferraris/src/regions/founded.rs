@@ -99,6 +99,8 @@
 //! to the original narrowing that completes it; concurrent first users may each
 //! perform a charged test. Only a completed Boolean result is shared.
 
+use zetesis_algebra::words::Words;
+
 use super::{
     Adjacency, Narrower, NodeView, Producers, Theory, Work, bit, chain_position, flag_words,
 };
@@ -134,9 +136,9 @@ enum State {
 pub(super) struct Scratch {
     local: local::Replay,
     states: Vec<State>,
-    atoms: Vec<u64>,
+    atoms: Words<u64>,
     /// Exact positive cyclic heads; immutable under the prepared owner.
-    cyclic_atoms: Vec<u64>,
+    cyclic_atoms: Words<u64>,
     queue: Vec<usize>,
     /// Kahn indegrees, then atom cursors during exact component preparation.
     dependencies: Vec<usize>,
@@ -178,7 +180,7 @@ impl Scratch {
     }
 
     fn contains(&self, atom: usize) -> bool {
-        bit(&self.atoms, atom)
+        self.atoms.contains(atom)
     }
 
     /// Every producer-backed original narrowing authenticates cached projection
@@ -574,7 +576,7 @@ impl Scratch {
             let mut selected = false;
             for &head in &producer.heads {
                 work.tick()?;
-                selected |= !cyclic_only || bit(&self.cyclic_atoms, head);
+                selected |= !cyclic_only || self.cyclic_atoms.contains(head);
             }
             if !selected {
                 continue;
@@ -631,17 +633,17 @@ impl Scratch {
         atom_never: &[u64],
         work: &mut Work<'_>,
     ) -> Result<(), Stop> {
-        self.atoms.clear();
+        self.atoms.storage_mut().clear();
         self.queue.clear();
         let vertices = theory
             .atom_count()
             .checked_add(self.body_nodes.len())
             .ok_or(Stop::Allocation)?;
-        reserve(&mut self.atoms, flag_words(theory.atom_count()))?;
+        reserve(self.atoms.storage_mut(), flag_words(theory.atom_count()))?;
         reserve(&mut self.queue, vertices)?;
         for _ in 0..flag_words(theory.atom_count()) {
             work.tick()?;
-            self.atoms.push(0);
+            self.atoms.storage_mut().push(0);
         }
         let reset = self
             .projected
@@ -700,16 +702,16 @@ impl Scratch {
 /// Split atom/worklist borrows retain one immutable projected-head row while
 /// applying the same activation as the original producer traversal.
 fn activate_atom(
-    atoms: &mut [u64],
-    cyclic_atoms: &[u64],
+    atoms: &mut Words<u64>,
+    cyclic_atoms: &Words<u64>,
     queue: &mut Vec<usize>,
     atom: usize,
     atom_never: &[u64],
     work: &mut Work<'_>,
 ) -> Result<(), Stop> {
-    if bit(cyclic_atoms, atom) && !bit(atom_never, atom) && !bit(atoms, atom) {
+    if cyclic_atoms.contains(atom) && !bit(atom_never, atom) && !atoms.contains(atom) {
         work.tick()?;
-        atoms[atom / 64] |= 1u64 << (atom % 64);
+        atoms.insert(atom);
         queue.push(atom);
     }
     Ok(())

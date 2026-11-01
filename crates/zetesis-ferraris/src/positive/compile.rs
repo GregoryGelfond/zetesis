@@ -114,7 +114,7 @@ pub(super) fn build(
     drop(graph);
     let least = Interpretation {
         theory: theory.clone(),
-        words,
+        words: words.into(),
     };
     let failed = validation::complete(&least, budget)?;
     Ok((least, failed))

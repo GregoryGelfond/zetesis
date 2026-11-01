@@ -7,7 +7,7 @@
 use std::mem::size_of;
 
 use zetesis_algebra::Stop;
-use zetesis_algebra::words;
+use zetesis_algebra::words::{self, Words};
 
 use crate::{AdmissionError, Producers, Theory};
 
@@ -24,7 +24,7 @@ pub(super) struct Completion {
     pub support: Support,
     /// Exactly the patterns that disagree with the head's completion.
     /// Unused bits and words are zero.
-    pub forbidden: [u64; 4],
+    pub forbidden: Words<u64, [u64; 4]>,
 }
 
 fn include(
@@ -121,7 +121,7 @@ pub(super) fn completion(
             atoms: [0; MAX_SUPPORT],
             len: 1,
         },
-        forbidden: [0; 4],
+        forbidden: Words::new([0; 4]),
     };
     output.support.atoms[0] = head;
     let mut frames = Conjunction::new(&mut storage, budget)?;
@@ -187,7 +187,7 @@ fn completion_table<'a>(
         u64::MAX
     };
     budget.charge(4)?;
-    let mut body_table = [0_u64; 4];
+    let mut body_table = Words::<u64, _>::new([0; 4]);
     for rule in definitions {
         budget.charge(1)?; // read the retained rule identity
         let rule = *rule;

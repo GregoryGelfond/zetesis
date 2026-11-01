@@ -1,6 +1,13 @@
-//! Allocation-free operations on caller-owned packed sets of nonnegative positions.
+//! Storage-transparent packed words and operations on nonnegative positions.
+//!
+//! [`Words`] wraps existing storage without assigning a logical universe or
+//! changing its tail bits. Semantic owners retain identity, allocation and
+//! admission; slice kernels preserve their stated callback boundaries.
 
 use std::ops::RangeInclusive;
+
+mod storage;
+pub use storage::{SetBits, Words};
 
 const WORD_BITS: usize = u64::BITS as usize;
 
@@ -21,11 +28,7 @@ pub fn union_assign<E>(
     before: &mut impl FnMut(u64) -> Result<(), E>,
 ) -> Result<(), E> {
     assert_eq!(left.len(), right.len(), "packed rows have equal lengths");
-    for (left, right) in left.iter_mut().zip(right) {
-        before(1)?;
-        *left |= *right;
-    }
-    Ok(())
+    Words::<u64, _>::new(left).union_assign(Words::new(right), || before(1))
 }
 
 /// Decide disjointness, stopping at the first shared position.
@@ -76,7 +79,7 @@ pub fn count<E>(words: &[u64], before: &mut impl FnMut(u64) -> Result<(), E>) ->
     let mut total = 0;
     for word in words {
         before(1)?;
-        let count = word.count_ones() as usize;
+        let count = Words::<u64>::popcount(*word) as usize;
         before(1)?;
         total += count;
     }
@@ -107,7 +110,7 @@ pub fn first<E>(
         before(1)?;
         if *word != 0 {
             before(4)?;
-            return Ok(Some(index * WORD_BITS + word.trailing_zeros() as usize));
+            return Ok(Some(index * WORD_BITS + Words::<u64>::first_bit(*word)));
         }
     }
     before(1)?;
@@ -139,12 +142,9 @@ pub fn visit_set_bits<C, E>(
     );
     for (index, word) in words.iter().enumerate() {
         before(context, 1)?;
-        let mut remaining = *word;
-        while remaining != 0 {
-            before(context, 5)?;
-            let position = index * WORD_BITS + remaining.trailing_zeros() as usize;
-            remaining &= remaining - 1;
-            visit(context, position)?;
+        let mut remaining = Words::<u64>::bits(*word);
+        while let Some(bit) = remaining.next_with(|| before(context, 5))? {
+            visit(context, index * WORD_BITS + bit)?;
         }
     }
     Ok(())
@@ -175,11 +175,7 @@ pub fn xor_assign<E>(
     before: &mut impl FnMut() -> Result<(), E>,
 ) -> Result<(), E> {
     assert_eq!(left.len(), right.len(), "packed rows have equal lengths");
-    for (left, right) in left.iter_mut().zip(right) {
-        before()?;
-        *left ^= *right;
-    }
-    Ok(())
+    Words::<u64, _>::new(left).xor_assign(Words::new(right), before)
 }
 
 /// Count the positions present in both word-aligned sets.
@@ -220,7 +216,7 @@ pub fn intersection_count<E>(
         before()?;
         let common = *left & *right;
         before()?;
-        let count = common.count_ones();
+        let count = Words::<u64>::popcount(common);
         total += usize::try_from(count).expect("one word's popcount fits usize");
     }
     Ok(total)

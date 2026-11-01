@@ -88,7 +88,7 @@ fn weighted_read_failures_do_not_publish_cached_measures() {
         reads, 3,
         "zero weight remains a charged callback occurrence"
     );
-    assert_eq!(scratch.valid, [0]);
+    assert_eq!(&scratch.valid[..], [0]);
     reads = 0;
     assert!(
         scratch
@@ -116,7 +116,7 @@ fn changing_an_unmeasured_sum_does_not_publish_it() {
     scratch.reset(&theory, || Ok::<_, Stop>(())).unwrap();
     scratch.change_condition(&theory, 0, 0, true).unwrap();
     scratch.change_condition(&theory, 0, 1, true).unwrap();
-    assert_eq!(scratch.valid, [0]);
+    assert_eq!(&scratch.valid[..], [0]);
     let mut reads = 0;
     assert!(
         scratch

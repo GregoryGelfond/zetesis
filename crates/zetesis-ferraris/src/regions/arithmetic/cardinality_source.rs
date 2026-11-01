@@ -13,6 +13,7 @@ use super::{
     uniform::{BoundSide, UniformBound, uniform_bound},
 };
 use crate::{AdmissionError, NodeView, Theory};
+use zetesis_algebra::words::Words;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) enum Kind {
@@ -31,7 +32,7 @@ pub(super) struct Source {
 
 #[derive(Debug)]
 pub(super) struct Bound {
-    pub support: Vec<u64>,
+    pub support: Words<u64>,
     pub guard: Vec<Literal>,
     pub side: BoundSide,
     pub value: u64,
@@ -479,7 +480,8 @@ fn threshold(
         budget.charge(1)?;
         return Ok(None);
     };
-    let mut support = storage.filled(theory.atom_count().div_ceil(128) * 2, 0_u64, 1, budget)?;
+    let mut support =
+        Words::new(storage.filled(theory.atom_count().div_ceil(128) * 2, 0_u64, 1, budget)?);
     let decoded = threshold_content(theory, row, &mut support, side, budget)?;
     budget.charge(1)?;
     if let Some((value, cardinality)) = decoded {
@@ -493,7 +495,7 @@ fn threshold(
             source,
         }))
     } else {
-        storage.release(support)?;
+        storage.release(support.into_storage())?;
         storage.release(guard)?;
         budget.charge(1)?;
         Ok(None)
@@ -541,13 +543,13 @@ fn threshold_content(
             return Err(BudgetError::Source(AdmissionError::Atom));
         }
         budget.charge(5)?;
-        let bit = 1 << (atom % 64);
-        if support[atom / 64] & bit != 0 {
+        let (word, bit) = Words::<u64>::locate(atom);
+        if support[word] & bit != 0 {
             budget.charge(1)?;
             return Ok(None);
         }
         budget.charge(1)?;
-        support[atom / 64] |= bit;
+        support[word] |= bit;
     }
     budget.charge(1)?;
     let cardinality = u64::try_from(row.conditions.len())
@@ -575,25 +577,26 @@ fn clause_lower(
     storage: &mut Storage,
     budget: &mut Budget<'_, '_>,
 ) -> Result<Option<Bound>, BudgetError> {
-    let mut support = storage.filled(theory.atom_count().div_ceil(128) * 2, 0_u64, 1, budget)?;
+    let mut support =
+        Words::new(storage.filled(theory.atom_count().div_ceil(128) * 2, 0_u64, 1, budget)?);
     for literal in &literals {
         budget.charge(1)?;
         if literal.positive {
-            storage.release(support)?;
+            storage.release(support.into_storage())?;
             storage.release(literals)?;
             budget.charge(1)?;
             return Ok(None);
         }
         budget.charge(5)?;
-        let bit = 1 << (literal.atom % 64);
-        if support[literal.atom / 64] & bit != 0 {
-            storage.release(support)?;
+        let (word, bit) = Words::<u64>::locate(literal.atom);
+        if support[word] & bit != 0 {
+            storage.release(support.into_storage())?;
             storage.release(literals)?;
             budget.charge(1)?;
             return Ok(None);
         }
         budget.charge(1)?;
-        support[literal.atom / 64] |= bit;
+        support[word] |= bit;
     }
     budget.charge(1)?;
     let cardinality =
@@ -612,7 +615,7 @@ fn clause_lower(
 }
 
 pub(super) fn release(bound: Bound, storage: &mut Storage) -> Result<(), BudgetError> {
-    storage.release_embedded(bound.support)?;
+    storage.release_embedded(bound.support.into_storage())?;
     storage.release_embedded(bound.guard)
 }
 

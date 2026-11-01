@@ -722,3 +722,26 @@ fn warmed(index: &Narrower) -> super::Scratch {
         .unwrap();
     scratch
 }
+
+#[test]
+fn dirty_masks_keep_capacity_when_subjects_shrink() {
+    let mut scratch = super::Scratch::default();
+    scratch.prepare_dirty(130).unwrap();
+    let pointer = scratch.pending.as_ptr();
+    let bytes = scratch.retained_bytes();
+    for chain in [0, 63, 64, 129, 64] {
+        scratch.queue_dirty(chain);
+    }
+    assert_eq!(scratch.dirty, [0, 63, 64, 129]);
+    assert_eq!(scratch.next_dirty(), Some(129));
+    scratch.queue_dirty(129);
+    scratch.clear();
+    scratch.prepare_dirty(1).unwrap();
+    assert!(scratch.dirty.is_empty());
+    assert_eq!(&*scratch.pending, [0, 0, 0]);
+    assert_eq!(scratch.pending.as_ptr(), pointer);
+    assert_eq!(scratch.retained_bytes(), bytes);
+    scratch.queue_dirty(0);
+    assert_eq!(scratch.next_dirty(), Some(0));
+    assert_eq!(scratch.next_dirty(), None);
+}

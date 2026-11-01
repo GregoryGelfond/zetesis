@@ -48,7 +48,7 @@ fn nested_repeated_premises_reach_ordered_original_witnesses() {
     let facts = checked(&owner);
     let cancellation = Cancellation::default();
     let mut meter = budget(&cancellation);
-    assert_eq!(facts.words, [15]);
+    assert_eq!(&*facts.words, [15]);
     assert_eq!(facts.steps.len(), 4);
     let mut prior = 0_u64;
     for step in &facts.steps {
@@ -101,7 +101,7 @@ fn cycles_and_unsupported_sources_do_not_supply_facts() {
     });
     let facts = checked(&owner);
     assert!(facts.steps.is_empty());
-    assert_eq!(facts.words, [0]);
+    assert_eq!(&*facts.words, [0]);
 }
 
 #[test]
@@ -113,7 +113,7 @@ fn two_producers_publish_one_witness_for_the_same_head() {
         vec![first, second, 0]
     });
     let facts = checked(&owner);
-    assert_eq!(facts.words, [3]);
+    assert_eq!(&*facts.words, [3]);
     assert_eq!(facts.steps.iter().filter(|step| step.atom == 1).count(), 1);
 }
 
@@ -170,7 +170,8 @@ fn independent_replay_rejects_wrong_repeated_and_reordered_witnesses() {
             &mut budget(&cancellation)
         )
         .unwrap()
-        .unwrap(),
+        .unwrap()
+        .into_storage(),
         [15]
     );
     let proposals = [

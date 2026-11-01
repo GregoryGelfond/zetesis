@@ -123,7 +123,7 @@ fn pending_truth_waits_for_its_counted_event() {
             .unwrap()
             == Step::Unchanged
     );
-    assert!(!bit(closure.known.never, first));
+    assert!(!closure.known.never.contains(first));
     assert_eq!(closure.lists.next_threshold(), None);
     // The pending true bit is not a counted contribution yet. Processing its
     // event must request another row visit, even though the upper did not move.
@@ -141,7 +141,7 @@ fn pending_truth_waits_for_its_counted_event() {
             .unwrap()
             == Step::Changed
     );
-    assert!(bit(closure.known.never, first));
+    assert!(closure.known.never.contains(first));
 }
 
 struct Attempt {

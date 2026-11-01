@@ -5,6 +5,8 @@
 //! These equations describe the affine hull of the allowed patterns; an
 //! independent source check must establish every row before it can be retained.
 
+use zetesis_algebra::words::Words;
+
 /// One local GF(2) equation: the selected variables sum to `constant`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) struct LocalEquation {
@@ -231,5 +233,5 @@ fn is_forbidden<E>(
 ) -> Result<bool, E> {
     before(5)?; // quotient, remainder, shift, AND, zero comparison
     let index = usize::from(pattern);
-    Ok(forbidden[index / 64] & (1 << (index % 64)) != 0)
+    Ok(Words::<u64, _>::new(forbidden).contains(index))
 }

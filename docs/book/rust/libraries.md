@@ -84,6 +84,13 @@ relations; the semantic solver libraries retain theory and answer-set meaning.
 | Share device resources | `zetesis_wgpu::GpuContext`, `GpuFormulaProfile`, `ExecutionResources` | [Device ownership](../architecture/ownership.md#device-resource-scope) |
 | Select relation masks on a device | `zetesis_wgpu::GpuRelationExecutor` | [Relation selection](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-wgpu/README.md#immutable-relation-selection) |
 
+`zetesis_algebra::words::Words` wraps existing packed storage or a borrowed slice
+without allocating, normalizing tails or acquiring semantic owner identity.
+Region and interpretation owners retain their logical extents; interpretations
+also retain the exact theory. The same primitive home supplies 64-bit membership
+and ascending bit traversal, numeric 32-bit halves, and 32-bit borrowed table
+intersection. Each caller retains its allocation and work-admission contract.
+
 `PreparedInput` borrows a coherent formula, hybrid, terminal-definition or
 certified source owner. Keep the theory, atom catalog, objectives and source
 observations from the same admission together. Borrowing a prepared owner does

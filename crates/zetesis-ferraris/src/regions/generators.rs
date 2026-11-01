@@ -23,7 +23,7 @@
 
 use std::{fmt, mem::size_of};
 
-use zetesis_algebra::{Cancellation, Stop};
+use zetesis_algebra::{Cancellation, Stop, words::Words};
 
 use super::{
     NarrowingQuota, NodeView, OriginalSubject, PreferenceAttempt, Producers, Region, Theory, Work,
@@ -86,7 +86,7 @@ pub struct GeneratorOrderAttempt {
 #[derive(Debug)]
 pub struct GeneratorOrder {
     theory: Theory,
-    heads: Vec<u64>,
+    heads: Words<u64>,
     ranks: Vec<usize>,
 }
 
@@ -292,9 +292,9 @@ fn generator_heads(
     atoms: usize,
     producers: &Producers,
     budget: &mut Budget<'_, '_>,
-) -> Result<(Vec<u64>, bool), Stop> {
+) -> Result<(Words<u64>, bool), Stop> {
     let mut any = false;
-    let mut heads = budget.filled(flag_words(atoms), 0_u64)?;
+    let mut heads = Words::new(budget.filled(flag_words(atoms), 0_u64)?);
     for atom in 0..atoms {
         budget.tick()?;
         let rows = &producers.by_head[atom];
@@ -307,7 +307,7 @@ fn generator_heads(
             pure &= rule.choice || rule.heads.len() > 1;
         }
         if choice || pure {
-            heads[atom / 64] |= 1_u64 << (atom % 64);
+            heads.insert(atom);
             any = true;
         }
     }

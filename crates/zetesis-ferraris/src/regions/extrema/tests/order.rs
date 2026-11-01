@@ -1,7 +1,7 @@
 //! Ordered cut implications retain the full scan's effects, including masks
 //! and contradictory targets, while skipping the unrelated end of a column.
 
-use crate::regions::{ChainOperands, Closure, Known, Narrower, NarrowingScratch, Step, Work, bit};
+use crate::regions::{ChainOperands, Closure, Known, Narrower, NarrowingScratch, Step, Work};
 use crate::test_support::SinglePermits;
 use crate::{ExtremumCutRule, Theory};
 use zetesis_algebra::Stop;
@@ -53,7 +53,7 @@ fn scan(
     if frozen.is_some_and(|truth| !truth[source.root]) {
         return Ok(Step::Unchanged);
     }
-    let value = bit(closure.known.sure, source.root);
+    let value = closure.known.sure.contains(source.root);
     let mut step = Step::Unchanged;
     for &(size, node) in &index.extrema.columns[column].guards {
         work.tick()?;

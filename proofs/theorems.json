@@ -6267,42 +6267,57 @@
   {
     "name": "Zetesis.Refinement.PackedInterpretations.mask_bit",
     "file": "Zetesis/PackedInterpretations.lean",
-    "line": 68
+    "line": 84
+  },
+  {
+    "name": "Zetesis.Refinement.PackedInterpretations.insert_bit_exact",
+    "file": "Zetesis/PackedInterpretations.lean",
+    "line": 100
+  },
+  {
+    "name": "Zetesis.Refinement.PackedInterpretations.clear_bit_exact",
+    "file": "Zetesis/PackedInterpretations.lean",
+    "line": 134
+  },
+  {
+    "name": "Zetesis.Refinement.PackedInterpretations.combine_prefix_exact",
+    "file": "Zetesis/PackedInterpretations.lean",
+    "line": 183
   },
   {
     "name": "Zetesis.Refinement.PackedInterpretations.contains_eq_bit",
     "file": "Zetesis/PackedInterpretations.lean",
-    "line": 79
+    "line": 220
   },
   {
     "name": "Zetesis.Refinement.PackedInterpretations.insert_exact",
     "file": "Zetesis/PackedInterpretations.lean",
-    "line": 90
+    "line": 231
   },
   {
     "name": "Zetesis.Refinement.PackedInterpretations.insertAll_exact",
     "file": "Zetesis/PackedInterpretations.lean",
-    "line": 118
+    "line": 242
   },
   {
     "name": "Zetesis.Refinement.PackedInterpretations.pack_exact",
     "file": "Zetesis/PackedInterpretations.lean",
-    "line": 146
+    "line": 270
   },
   {
     "name": "Zetesis.Refinement.PackedInterpretations.export32_exact",
     "file": "Zetesis/PackedInterpretations.lean",
-    "line": 211
+    "line": 335
   },
   {
     "name": "Zetesis.Refinement.PackedInterpretations.pack_denotes",
     "file": "Zetesis/PackedInterpretations.lean",
-    "line": 261
+    "line": 385
   },
   {
     "name": "Zetesis.Refinement.PackedInterpretations.export32_denotes",
     "file": "Zetesis/PackedInterpretations.lean",
-    "line": 272
+    "line": 396
   },
   {
     "name": "Zetesis.PackedQueryLiterals.decode_encode",
@@ -6332,182 +6347,192 @@
   {
     "name": "Zetesis.Refinement.PackedSubsets.pack_represents",
     "file": "Zetesis/PackedSubsets.lean",
-    "line": 59
+    "line": 45
   },
   {
     "name": "Zetesis.Refinement.PackedSubsets.coordinate_stored",
     "file": "Zetesis/PackedSubsets.lean",
-    "line": 76
+    "line": 62
   },
   {
     "name": "Zetesis.Refinement.PackedSubsets.bit_member",
     "file": "Zetesis/PackedSubsets.lean",
-    "line": 85
+    "line": 71
   },
   {
     "name": "Zetesis.Refinement.PackedSubsets.insert_represents",
     "file": "Zetesis/PackedSubsets.lean",
-    "line": 99
+    "line": 85
   },
   {
     "name": "Zetesis.Refinement.PackedSubsets.clear_represents",
     "file": "Zetesis/PackedSubsets.lean",
-    "line": 111
+    "line": 97
   },
   {
     "name": "Zetesis.Refinement.PackedSubsets.represented_shape",
     "file": "Zetesis/PackedSubsets.lean",
-    "line": 129
+    "line": 115
   },
   {
     "name": "Zetesis.Refinement.PackedSubsets.absent_selected",
     "file": "Zetesis/PackedSubsets.lean",
-    "line": 162
+    "line": 148
   },
   {
     "name": "Zetesis.Refinement.PackedSubsets.carry_refines",
     "file": "Zetesis/PackedSubsets.lean",
-    "line": 177
+    "line": 163
   },
   {
     "name": "Zetesis.Refinement.PackedSubsets.carry_counted",
     "file": "Zetesis/PackedSubsets.lean",
-    "line": 224
+    "line": 210
   },
   {
     "name": "Zetesis.Refinement.PackedSubsets.walk_refines",
     "file": "Zetesis/PackedSubsets.lean",
-    "line": 261
+    "line": 247
   },
   {
     "name": "Zetesis.Refinement.PackedSubsets.selected_false",
     "file": "Zetesis/PackedSubsets.lean",
-    "line": 317
+    "line": 303
   },
   {
     "name": "Zetesis.Refinement.PackedSubsets.population_zero",
     "file": "Zetesis/PackedSubsets.lean",
-    "line": 324
+    "line": 310
   },
   {
     "name": "Zetesis.Refinement.PackedSubsets.empty_walk_refines",
     "file": "Zetesis/PackedSubsets.lean",
-    "line": 333
+    "line": 319
   },
   {
     "name": "Zetesis.Refinement.PackedSubsets.states_semantics",
     "file": "Zetesis/PackedSubsets.lean",
-    "line": 355
+    "line": 341
   },
   {
     "name": "Zetesis.Refinement.PackedSubsets.states_shape",
     "file": "Zetesis/PackedSubsets.lean",
-    "line": 366
+    "line": 352
   },
   {
     "name": "Zetesis.Refinement.PackedSubsets.proper_iff_visited",
     "file": "Zetesis/PackedSubsets.lean",
-    "line": 378
+    "line": 364
   },
   {
     "name": "Zetesis.Refinement.PackedSubsets.countermodel_search_iff",
     "file": "Zetesis/PackedSubsets.lean",
-    "line": 402
+    "line": 388
   },
   {
     "name": "Zetesis.Refinement.PackedSubsets.check_iff_answer_set",
     "file": "Zetesis/PackedSubsets.lean",
-    "line": 433
+    "line": 419
   },
   {
     "name": "Zetesis.Refinement.PackedSubsets.selected_atoms_nodup",
     "file": "Zetesis/PackedSubsets.lean",
-    "line": 454
+    "line": 440
   },
   {
     "name": "Zetesis.Refinement.PackedSubsets.selected_atoms_ordered",
     "file": "Zetesis/PackedSubsets.lean",
-    "line": 464
+    "line": 450
   },
   {
     "name": "Zetesis.Refinement.PackedSubsets.selected_atoms_truth",
     "file": "Zetesis/PackedSubsets.lean",
-    "line": 475
+    "line": 461
   },
   {
     "name": "Zetesis.Refinement.PackedSubsets.selected_atoms_representation",
     "file": "Zetesis/PackedSubsets.lean",
-    "line": 483
+    "line": 469
   },
   {
     "name": "Zetesis.Refinement.PackedSubsets.check_packed_iff_answer_set",
     "file": "Zetesis/PackedSubsets.lean",
-    "line": 501
+    "line": 487
   },
   {
     "name": "Zetesis.Refinement.PackedSubsets.carry_crosses_word_boundary",
     "file": "Zetesis/PackedSubsets.lean",
-    "line": 511
+    "line": 497
   },
   {
     "name": "Zetesis.Refinement.PackedWordIterator.start_invariant",
     "file": "Zetesis/PackedWordIterator.lean",
-    "line": 65
+    "line": 75
   },
   {
     "name": "Zetesis.Refinement.PackedWordIterator.exhausted_iff",
     "file": "Zetesis/PackedWordIterator.lean",
-    "line": 70
+    "line": 80
   },
   {
     "name": "Zetesis.Refinement.PackedWordIterator.step_active",
     "file": "Zetesis/PackedWordIterator.lean",
-    "line": 80
+    "line": 90
   },
   {
     "name": "Zetesis.Refinement.PackedWordIterator.advance_invariant",
     "file": "Zetesis/PackedWordIterator.lean",
-    "line": 97
+    "line": 107
   },
   {
     "name": "Zetesis.Refinement.PackedWordIterator.suffix_cons",
     "file": "Zetesis/PackedWordIterator.lean",
-    "line": 109
+    "line": 119
   },
   {
     "name": "Zetesis.Refinement.PackedWordIterator.step_refines",
     "file": "Zetesis/PackedWordIterator.lean",
-    "line": 122
+    "line": 132
   },
   {
     "name": "Zetesis.Refinement.PackedWordIterator.remaining_exact",
     "file": "Zetesis/PackedWordIterator.lean",
-    "line": 141
+    "line": 151
   },
   {
     "name": "Zetesis.Refinement.PackedWordIterator.run_prefix",
     "file": "Zetesis/PackedWordIterator.lean",
-    "line": 162
+    "line": 172
   },
   {
     "name": "Zetesis.Refinement.PackedWordIterator.run_complete",
     "file": "Zetesis/PackedWordIterator.lean",
-    "line": 188
+    "line": 198
   },
   {
     "name": "Zetesis.Refinement.PackedWordIterator.run_exhausted",
     "file": "Zetesis/PackedWordIterator.lean",
-    "line": 211
+    "line": 221
   },
   {
     "name": "Zetesis.Refinement.PackedWordIterator.initialized_exact",
     "file": "Zetesis/PackedWordIterator.lean",
-    "line": 222
+    "line": 232
   },
   {
     "name": "Zetesis.Refinement.PackedWordIterator.packed_exact",
     "file": "Zetesis/PackedWordIterator.lean",
-    "line": 242
+    "line": 252
+  },
+  {
+    "name": "Zetesis.Refinement.PackedWordIterator.SetBits.least_clear_suffix",
+    "file": "Zetesis/PackedWordIterator.lean",
+    "line": 279
+  },
+  {
+    "name": "Zetesis.Refinement.PackedWordIterator.SetBits.lowest_bit_arithmetic",
+    "file": "Zetesis/PackedWordIterator.lean",
+    "line": 320
   },
   {
     "name": "Zetesis.PairwiseExclusions.masked_unit_sum_two",

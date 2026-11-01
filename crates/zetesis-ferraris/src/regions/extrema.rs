@@ -19,7 +19,7 @@ use zetesis_algebra::Stop;
 
 use crate::{ExtremumCutRule, NodeView, Theory};
 
-use super::{Adjacency, Chain, ChainOperands, Closure, Count, Narrower, Step, Work, bit};
+use super::{Adjacency, Chain, ChainOperands, Closure, Count, Narrower, Step, Work};
 
 #[derive(Clone, Debug, Default)]
 pub(super) struct Extrema {
@@ -345,7 +345,7 @@ impl<C: Count> Closure<'_, C> {
         if frozen.is_some_and(|truth| !truth[source.root]) {
             return Ok(Step::Unchanged);
         }
-        let value = bit(self.known.sure, source.root);
+        let value = self.known.sure.contains(source.root);
         let guards = index.extrema.columns[column].consequences(length, value, work)?;
         let mut step = Step::Unchanged;
         for &(_, node) in guards {

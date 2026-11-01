@@ -25,7 +25,7 @@ fn canonical_true_and_bare_facts_have_identical_completion() {
         // The fact body contributes no atom. Only its completion head remains.
         assert_eq!(record.support.len, 1);
         assert_eq!(record.support.atoms, [1, 0, 0, 0, 0, 0, 0, 0]);
-        assert_eq!(record.forbidden, [1, 0, 0, 0]);
+        assert_eq!(&*record.forbidden, [1, 0, 0, 0]);
         assert_matches_original_bodies(owner, &producers, &record);
         records.push(record);
     }
@@ -50,7 +50,7 @@ fn a_true_body_does_not_skip_later_normal_producers() {
         .unwrap();
     assert_eq!(record.support.len, 3);
     assert_eq!(record.support.atoms, [0, 1, 2, 0, 0, 0, 0, 0]);
-    assert_eq!(record.forbidden, [0b1111, 0, 0, 0]);
+    assert_eq!(&*record.forbidden, [0b1111, 0, 0, 0]);
     assert_matches_original_bodies(&owner, &producers, &record);
 }
 

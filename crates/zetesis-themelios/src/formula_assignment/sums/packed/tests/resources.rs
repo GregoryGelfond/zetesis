@@ -145,6 +145,7 @@ fn retained_updates_need_no_new_header_or_payload_allowance() {
                 1
             };
             let before = counters.workspace_bytes();
+            let storage = (packed.words.slice().as_ptr(), packed.words.capacity());
             let limits = FormulaLimits {
                 max_support_bytes: live_bytes(computation, &defaults),
                 ..defaults
@@ -158,6 +159,10 @@ fn retained_updates_need_no_new_header_or_payload_allowance() {
             assert_eq!(packed.maximum, 32 + usize::try_from(weight).unwrap());
             assert_eq!(packed.count, packed.maximum + 1);
             assert_eq!(context.work.counters.workspace_bytes(), before);
+            assert_eq!(
+                (packed.words.slice().as_ptr(), packed.words.capacity()),
+                storage
+            );
         });
     }
 }

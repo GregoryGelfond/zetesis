@@ -19,7 +19,7 @@ use std::mem::size_of;
 use crate::{
     EvaluationError, EvaluationLimits, FormulaEvaluation, Interpretation, NodeView, Theory,
 };
-use zetesis_algebra::{Cancellation, Meter, Stop};
+use zetesis_algebra::{Cancellation, Meter, Stop, words::Words};
 
 #[cfg(test)]
 mod tests;
@@ -90,7 +90,7 @@ pub struct FrozenPositiveWorkspace {
     classes: Vec<Classification>,
     heads: Vec<Option<usize>>,
     queue: Vec<usize>,
-    words: Vec<u64>,
+    words: Words<u64>,
 }
 
 impl FrozenPositiveWorkspace {
@@ -220,7 +220,7 @@ impl FrozenPositiveWorkspace {
         reserve(&mut self.classes, theory.nodes().len())?;
         reserve(&mut self.heads, theory.roots().len())?;
         reserve(&mut self.queue, vertices)?;
-        reserve(&mut self.words, theory.atom_count().div_ceil(64))?;
+        reserve(self.words.storage_mut(), theory.atom_count().div_ceil(64))?;
         storage(self.retained_bytes(), max_bytes)
     }
 
@@ -270,7 +270,7 @@ impl FrozenPositiveWorkspace {
             tick(meter)?;
             next += 1;
             if vertex < atoms {
-                self.words[vertex / 64] |= 1 << (vertex % 64);
+                self.words.insert(vertex);
             } else if vertex >= rules
                 && let Some(head) = self.heads[vertex - rules]
             {
@@ -291,7 +291,7 @@ impl FrozenPositiveWorkspace {
         let mut proper = false;
         for atom in 0..atoms {
             tick(meter)?;
-            let derived = self.words[atom / 64] & (1 << (atom % 64)) != 0;
+            let derived = self.words.contains(atom);
             let candidate = evaluated.interpretation().contains(atom);
             if derived && !candidate {
                 return Err(Stop::InvalidProgram.into());
@@ -317,7 +317,7 @@ impl FrozenPositiveWorkspace {
         }
         Ok(FrozenPositiveOutcome::NonMinimal(Interpretation {
             theory: theory.clone(),
-            words,
+            words: words.into(),
         }))
     }
 
@@ -334,10 +334,10 @@ impl FrozenPositiveWorkspace {
             tick(meter)?;
             self.states.push(State::Inactive);
         }
-        self.words.clear();
+        self.words.storage_mut().clear();
         for _ in 0..theory.atom_count().div_ceil(64) {
             tick(meter)?;
-            self.words.push(0);
+            self.words.storage_mut().push(0);
         }
         for atom in 0..atoms {
             tick(meter)?;

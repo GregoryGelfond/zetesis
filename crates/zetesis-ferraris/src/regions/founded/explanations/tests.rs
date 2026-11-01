@@ -119,8 +119,8 @@ fn explain(
             index: &program.index,
             producers: &program.producers,
             completed: &completed.scratch,
-            atom_sure: &completed.sure,
-            atom_never: &completed.never,
+            atom_sure: completed.sure.as_slice().into(),
+            atom_never: completed.never.as_slice().into(),
         },
         start,
         limits,
@@ -565,4 +565,43 @@ fn duplicate_atom_occurrences_do_not_spend_literal_capacity_twice() {
     assert_eq!(record.conditions, [(2, false)]);
     assert_eq!(record.unsupported, [0, 1]);
     assert_sound(&program, &completed, &record, &program.answers());
+}
+
+#[test]
+fn input_words_preserve_borrowed_record_layout() {
+    use std::mem::{align_of, offset_of, size_of};
+    struct RawInput<'a> {
+        theory: &'a Theory,
+        index: &'a Narrower,
+        producers: &'a Producers,
+        completed: &'a Scratch,
+        atom_sure: &'a [u64],
+        atom_never: &'a [u64],
+    }
+    assert_eq!(size_of::<Input<'_>>(), size_of::<RawInput<'_>>());
+    assert_eq!(align_of::<Input<'_>>(), align_of::<RawInput<'_>>());
+    assert_eq!(
+        offset_of!(Input<'_>, theory),
+        offset_of!(RawInput<'_>, theory)
+    );
+    assert_eq!(
+        offset_of!(Input<'_>, index),
+        offset_of!(RawInput<'_>, index)
+    );
+    assert_eq!(
+        offset_of!(Input<'_>, producers),
+        offset_of!(RawInput<'_>, producers)
+    );
+    assert_eq!(
+        offset_of!(Input<'_>, completed),
+        offset_of!(RawInput<'_>, completed)
+    );
+    assert_eq!(
+        offset_of!(Input<'_>, atom_sure),
+        offset_of!(RawInput<'_>, atom_sure)
+    );
+    assert_eq!(
+        offset_of!(Input<'_>, atom_never),
+        offset_of!(RawInput<'_>, atom_never)
+    );
 }

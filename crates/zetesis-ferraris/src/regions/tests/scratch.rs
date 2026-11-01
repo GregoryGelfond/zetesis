@@ -148,3 +148,56 @@ fn knowledge_retains_no_worklist_capacity() {
     // The worklists the narrowing grew stay with the walker's scratch.
     assert!(scratch.nodes.capacity() > 0);
 }
+
+#[test]
+fn pending_masks_reuse_storage_across_word_boundaries() {
+    let mut scratch = NarrowingScratch::default();
+    scratch.prepare(130);
+    scratch.prepare_thresholds(130).unwrap();
+    scratch.prepare_residuals(130).unwrap();
+    let pointers = (
+        scratch.pending.as_ptr(),
+        scratch.pending_thresholds.as_ptr(),
+        scratch.pending_residuals.as_ptr(),
+    );
+    let bytes = scratch.retained_bytes();
+    for atom in [0, 63, 64, 129, 64] {
+        scratch.queue_recheck(atom);
+        scratch.queue_threshold(atom);
+        scratch.queue_residual(atom);
+    }
+    assert_eq!(scratch.heads, [0, 63, 64, 129]);
+    assert_eq!(scratch.threshold_rows, scratch.heads);
+    assert_eq!(scratch.residual_rows, scratch.heads);
+    assert_eq!(scratch.next_recheck(), Some(129));
+    assert_eq!(scratch.next_threshold(), Some(129));
+    assert_eq!(scratch.next_residual(), Some(129));
+    scratch.queue_recheck(129);
+    scratch.queue_threshold(129);
+    scratch.queue_residual(129);
+    // Resetting for a smaller subject must clear the still-queued high bits,
+    // retaining the existing capacity rather than truncating their storage.
+    scratch.prepare(1);
+    assert!(scratch.heads.is_empty());
+    assert!(scratch.threshold_rows.is_empty());
+    assert!(scratch.residual_rows.is_empty());
+    assert_eq!(&*scratch.pending, [0, 0, 0]);
+    assert_eq!(&*scratch.pending_thresholds, [0, 0, 0]);
+    assert_eq!(&*scratch.pending_residuals, [0, 0, 0]);
+    assert_eq!(
+        pointers,
+        (
+            scratch.pending.as_ptr(),
+            scratch.pending_thresholds.as_ptr(),
+            scratch.pending_residuals.as_ptr(),
+        )
+    );
+    // Only the head list can grow here: row lists were fully reserved above.
+    assert_eq!(
+        scratch.retained_bytes(),
+        bytes + scratch.heads.capacity() as u128 * std::mem::size_of::<usize>() as u128
+    );
+    scratch.queue_recheck(0);
+    assert_eq!(scratch.next_recheck(), Some(0));
+    assert_eq!(scratch.next_recheck(), None);
+}

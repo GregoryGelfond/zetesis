@@ -21,7 +21,7 @@
 //! is reached or exceeded. All runtime visits are charged and cancellable.
 //! Original-only row notifications are coalesced by the existing queue.
 
-use crate::regions::{Chain, Closure, Count, Narrower, Step, Work, bit};
+use crate::regions::{Chain, Closure, Count, Narrower, Step, Work};
 use crate::{NodeView, Theory};
 use zetesis_algebra::Stop;
 
@@ -234,7 +234,7 @@ impl<C: Count> Closure<'_, C> {
         for &entry in &capacity.by_row[row] {
             work.tick()?;
             let required = &capacity.requirements[entry];
-            if bit(self.known.never, required.root) {
+            if self.known.never.contains(required.root) {
                 continue;
             }
             let mut minimum = state.known;
@@ -243,7 +243,7 @@ impl<C: Count> Closure<'_, C> {
                 // known counts processed events. A pending true condition can
                 // make this an underestimate, never an overestimate. Its later
                 // processed event schedules this row again.
-                minimum += i128::from(!bit(self.known.sure, condition));
+                minimum += i128::from(!self.known.sure.contains(condition));
                 if minimum >= upper {
                     break;
                 }

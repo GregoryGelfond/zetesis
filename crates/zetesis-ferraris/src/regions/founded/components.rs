@@ -8,8 +8,10 @@
 //! Forward searches then reuse queue and the same original outgoing postings.
 //! No component IDs survive: only the packed cyclic-atom mask is retained.
 
+use zetesis_algebra::words::Words;
+
 use super::{
-    Narrower, NodeView, Producers, Scratch, State, Theory, Work, bit, chain_position, flag_words,
+    Narrower, NodeView, Producers, Scratch, State, Theory, Work, chain_position, flag_words,
     reserve,
 };
 use zetesis_algebra::Stop;
@@ -78,7 +80,8 @@ impl Scratch {
         self.classify_components(theory, index, producers, work)
     }
 
-    fn zero_words(words: &mut Vec<u64>, atoms: usize, work: &mut Work<'_>) -> Result<(), Stop> {
+    fn zero_words(words: &mut Words<u64>, atoms: usize, work: &mut Work<'_>) -> Result<(), Stop> {
+        let words = words.storage_mut();
         words.clear();
         reserve(words, flag_words(atoms))?;
         for _ in 0..flag_words(atoms) {
@@ -90,7 +93,7 @@ impl Scratch {
 
     fn discovered(&self, vertex: usize, atoms: usize) -> bool {
         if vertex < atoms {
-            bit(&self.atoms, vertex)
+            self.atoms.contains(vertex)
         } else {
             matches!(
                 self.states[vertex - atoms],
@@ -101,7 +104,7 @@ impl Scratch {
 
     fn discover_reverse(&mut self, vertex: usize, atoms: usize) {
         if vertex < atoms {
-            self.atoms[vertex / 64] |= 1 << (vertex % 64);
+            self.atoms.insert(vertex);
         } else {
             self.states[vertex - atoms] = State::Visiting(0);
         }
@@ -176,7 +179,7 @@ impl Scratch {
             // Atom vertices point only to separate formula vertices. Thus an
             // atom in a singleton component cannot have a positive self edge.
             if members == 1 && root < atoms {
-                self.cyclic_atoms[root / 64] &= !(1 << (root % 64));
+                self.cyclic_atoms.remove(root);
             }
         }
         Ok(())
@@ -187,8 +190,8 @@ impl Scratch {
             return;
         }
         if vertex < atoms {
-            self.atoms[vertex / 64] |= 1 << (vertex % 64);
-            self.cyclic_atoms[vertex / 64] |= 1 << (vertex % 64);
+            self.atoms.insert(vertex);
+            self.cyclic_atoms.insert(vertex);
         } else {
             self.states[vertex - atoms] = State::True;
         }

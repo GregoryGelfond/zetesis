@@ -1,14 +1,13 @@
 //! Borrowed domain restrictions and complete ordered row masks.
 
-use std::{convert::Infallible, mem::size_of};
+use std::mem::size_of;
 
 use crate::{Value, catalog::TermRef, relation::Relation};
 
-use zetesis_algebra::Cancellation;
+use zetesis_algebra::{Cancellation, words::Words};
 
 use super::{
-    Failure, Limits, MeteredCause, MeteredFailure, Statistics, Table, WORD_BITS, Work, control,
-    unmetered,
+    Failure, Limits, MeteredCause, MeteredFailure, Statistics, Table, Work, control, unmetered,
 };
 
 /// A permitted set of whole typed values, borrowed for one operation.
@@ -140,7 +139,7 @@ impl ExactSizeIterator for ValuesIter<'_> {
 /// advancing a caller's bindings cannot change these selected row occurrences.
 pub struct Selection<'owner, 'source> {
     relation: &'owner Relation<'source>,
-    rows: Vec<u32>,
+    rows: Words<u32>,
     statistics: Statistics,
 }
 
@@ -193,7 +192,7 @@ impl<'owner, 'source> Table<'owner, 'source> {
         before: impl FnMut(usize) -> Result<(), E>,
     ) -> Result<Selection<'owner, 'source>, MeteredFailure<E>> {
         let external = self.retained_inputs()?;
-        let scratch_header = size_of::<Vec<u32>>();
+        let scratch_header = size_of::<Words<u32>>();
         let mut work = Work::new(
             limits,
             before,
@@ -222,10 +221,10 @@ impl<'owner, 'source> Table<'owner, 'source> {
         domains: impl ExactSizeIterator<Item = Domain<'domain>>,
         mut permitted: Option<&mut [bool]>,
         work: &mut Work<impl FnMut(usize) -> Result<(), E>>,
-    ) -> Result<Vec<u32>, MeteredCause<E>> {
-        let mut rows = work.reserve(self.coherent.len())?;
+    ) -> Result<Words<u32>, MeteredCause<E>> {
+        let mut rows = Words::<u32>::new(work.reserve(self.coherent.len())?);
         let mut initialized = false;
-        let mut union = Vec::new();
+        let mut union = Words::<u32>::new(Vec::new());
         for (variable, domain) in domains.enumerate() {
             work.tick(1)?;
             match domain {
@@ -258,7 +257,7 @@ impl<'owner, 'source> Table<'owner, 'source> {
                         if union.len() == rows.len() {
                             clear(&mut union, work)?;
                         } else {
-                            union = work.zeros(rows.len())?;
+                            union = Words::new(work.zeros(rows.len())?);
                         }
                         &mut union
                     } else {
@@ -279,7 +278,7 @@ impl<'owner, 'source> Table<'owner, 'source> {
         if !initialized {
             initialize(&mut rows, self.coherent.iter().copied(), work)?;
         }
-        work.release(union);
+        work.release(union.into_storage());
         Ok(rows)
     }
 
@@ -297,10 +296,8 @@ impl<'owner, 'source> Table<'owner, 'source> {
                 if let Some(permitted) = permitted {
                     permit(permitted, entry, work)?;
                 }
-                for (target, &word) in target.iter_mut().zip(self.support(entry)) {
-                    work.tick(1)?;
-                    *target |= word;
-                }
+                Words::<u32, _>::new(&mut *target)
+                    .union_assign(Words::new(self.support(entry)), || work.tick(1))?;
             }
         }
         Ok(())
@@ -323,8 +320,7 @@ impl<'owner, 'source> Selection<'owner, 'source> {
     /// Whether an in-range original row occurrence is selected.
     #[must_use]
     pub fn contains(&self, row: usize) -> bool {
-        row < self.relation.row_count()
-            && self.rows[row / WORD_BITS] & (1 << (row % WORD_BITS)) != 0
+        row < self.relation.row_count() && self.rows.contains(row)
     }
 
     /// First selected occurrence at or after `from`, or explicit exhaustion.
@@ -333,7 +329,7 @@ impl<'owner, 'source> Selection<'owner, 'source> {
     /// is separate from the completed selection's construction statistics.
     #[must_use]
     pub fn next_row(&self, from: usize) -> Option<usize> {
-        next_row(&self.rows, from)
+        self.rows.next_from(from)
     }
 
     /// First selected occurrence, checking before each inspected mask word.
@@ -353,7 +349,7 @@ impl<'owner, 'source> Selection<'owner, 'source> {
         from: usize,
         before_word: impl FnMut() -> Result<(), E>,
     ) -> Result<Option<usize>, E> {
-        next_row_with(&self.rows, from, before_word)
+        self.rows.next_from_with(from, before_word)
     }
 
     /// Increasing original row occurrences, without a position-vector owner.
@@ -362,7 +358,7 @@ impl<'owner, 'source> Selection<'owner, 'source> {
     /// consuming operation rather than the earlier selection construction.
     pub fn rows(&self) -> impl Iterator<Item = usize> + Clone + '_ {
         Rows {
-            words: &self.rows,
+            words: Words::new(&self.rows[..]),
             next: 0,
         }
     }
@@ -376,7 +372,7 @@ impl<'owner, 'source> Selection<'owner, 'source> {
 
 #[derive(Clone)]
 struct Rows<'mask> {
-    words: &'mask [u32],
+    words: Words<u32, &'mask [u32]>,
     next: usize,
 }
 
@@ -384,39 +380,11 @@ impl Iterator for Rows<'_> {
     type Item = usize;
 
     fn next(&mut self) -> Option<Self::Item> {
-        let row = next_row(self.words, self.next)?;
+        let row = self.words.next_from(self.next)?;
         // A valid occurrence is strictly below the relation's usize row count.
         self.next = row + 1;
         Some(row)
     }
-}
-
-fn next_row(words: &[u32], from: usize) -> Option<usize> {
-    match next_row_with(words, from, || Ok::<(), Infallible>(())) {
-        Ok(row) => row,
-        Err(never) => match never {},
-    }
-}
-
-fn next_row_with<E>(
-    words: &[u32],
-    from: usize,
-    mut before_word: impl FnMut() -> Result<(), E>,
-) -> Result<Option<usize>, E> {
-    let first = from / WORD_BITS;
-    let mut index = first;
-    while index < words.len() {
-        before_word()?;
-        let mut word = words[index];
-        if index == first {
-            word &= u32::MAX << (from % WORD_BITS);
-        }
-        if word != 0 {
-            return Ok(Some(index * WORD_BITS + word.trailing_zeros() as usize));
-        }
-        index += 1;
-    }
-    Ok(None)
 }
 
 fn permit<E>(
@@ -430,13 +398,13 @@ fn permit<E>(
 }
 
 fn initialize<E>(
-    rows: &mut Vec<u32>,
+    rows: &mut Words<u32>,
     words: impl Iterator<Item = u32>,
     work: &mut Work<impl FnMut(usize) -> Result<(), E>>,
 ) -> Result<(), MeteredCause<E>> {
     for word in words {
         work.tick(1)?;
-        rows.push(word);
+        rows.storage_mut().push(word);
     }
     Ok(())
 }
@@ -445,11 +413,7 @@ fn clear<E>(
     words: &mut [u32],
     work: &mut Work<impl FnMut(usize) -> Result<(), E>>,
 ) -> Result<(), MeteredCause<E>> {
-    for word in words {
-        work.tick(1)?;
-        *word = 0;
-    }
-    Ok(())
+    Words::<u32, _>::new(words).fill_with(0, || work.tick(1))
 }
 
 fn intersect<E>(
@@ -457,9 +421,5 @@ fn intersect<E>(
     support: &[u32],
     work: &mut Work<impl FnMut(usize) -> Result<(), E>>,
 ) -> Result<(), MeteredCause<E>> {
-    for (row, &word) in rows.iter_mut().zip(support) {
-        work.tick(1)?;
-        *row &= word;
-    }
-    Ok(())
+    Words::<u32, _>::new(rows).intersect_assign(Words::new(support), || work.tick(1))
 }

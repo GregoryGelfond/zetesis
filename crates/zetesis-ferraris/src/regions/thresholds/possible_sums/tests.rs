@@ -90,7 +90,7 @@ fn every_small_completed_mask_matches_independent_subsets() {
         for b in 0..=4 {
             for c in 0..=4 {
                 let data = row(&[a, b, c]);
-                let mut words = Vec::new();
+                let mut words = Words::new(Vec::new());
                 for code in 0..27 {
                     let mut remaining = code;
                     let (mut sure, mut never) = (0, 0);
@@ -174,7 +174,7 @@ fn boundary_offsets_and_nonzero_bases_keep_exact_answers() {
                     &data,
                     &[sure],
                     &[never],
-                    &mut Vec::new(),
+                    &mut Words::new(Vec::new()),
                     plan,
                     &mut Allowance {
                         remaining: usize::MAX,
@@ -192,7 +192,7 @@ fn boundary_offsets_and_nonzero_bases_keep_exact_answers() {
 fn a_witness_stops_inside_the_current_shift() {
     let data = row(&[63, 64, 65, 66]);
     let plan = Plan::for_row(&data, state(&data, 0, 0, [129, 130])).unwrap();
-    let mut words = Vec::new();
+    let mut words = Words::new(Vec::new());
     let mut work = Work::new(u64::MAX);
     assert!(matches!(
         attempt(
@@ -256,7 +256,7 @@ fn optional_refusal_before_a_witness_remains_incomplete() {
     let data = row(&[63, 64, 65, 66]);
     let plan = Plan::for_row(&data, state(&data, 0, 0, [129, 130])).unwrap();
     for limit in 0..11 {
-        let mut words = Vec::new();
+        let mut words = Words::new(Vec::new());
         let mut work = Work::new(u64::MAX);
         assert!(matches!(
             attempt(
@@ -298,7 +298,7 @@ fn global_refusal_before_a_witness_keeps_its_kind() {
         for limit in 0..11 {
             let mut quota = SinglePermits::new(limit, failure);
             let mut work = Work::reserved(&mut quota);
-            let mut words = Vec::new();
+            let mut words = Words::new(Vec::new());
             assert!(matches!(
                 attempt(
                     &data,
@@ -342,7 +342,7 @@ fn optional_declines_do_not_become_refutations() {
             &data,
             &[0],
             &[0],
-            &mut Vec::new(),
+            &mut Words::new(Vec::new()),
             plan,
             &mut Allowance {
                 remaining: plan.visits,
@@ -354,7 +354,7 @@ fn optional_declines_do_not_become_refutations() {
     assert!(complete_work.spent() <= plan.visits as u64);
     for limit in 0..complete_work.spent() {
         let mut work = Work::new(u64::MAX);
-        let mut words = Vec::new();
+        let mut words = Words::new(Vec::new());
         assert!(matches!(
             attempt(
                 &data,
@@ -396,7 +396,7 @@ fn global_refusals_keep_their_kind_and_retry_from_zero() {
         &data,
         &[0],
         &[0],
-        &mut Vec::new(),
+        &mut Words::new(Vec::new()),
         plan,
         &mut Allowance {
             remaining: plan.visits,
@@ -408,7 +408,7 @@ fn global_refusals_keep_their_kind_and_retry_from_zero() {
         for limit in 0..complete_work.spent() {
             let mut quota = SinglePermits::new(limit, failure);
             let mut work = Work::reserved(&mut quota);
-            let mut words = Vec::new();
+            let mut words = Words::new(Vec::new());
             assert!(matches!(
                 attempt(
                     &data,
@@ -487,7 +487,7 @@ fn allocation_refusal_keeps_typed_failure_and_allows_retry() {
         words: usize::MAX,
         visits: usize::MAX,
     };
-    let mut words = vec![u64::MAX];
+    let mut words = Words::new(vec![u64::MAX]);
     assert!(matches!(
         prepare(
             &mut words,
@@ -537,7 +537,7 @@ fn scratch_is_accounted_and_contains_no_sibling_authority() {
         scratch.prepare(4);
         assert!(scratch.possible_sums.is_empty());
         assert_eq!(scratch.retained_bytes(), before);
-        scratch.possible_sums = Vec::new();
+        scratch.possible_sums = Words::new(Vec::new());
         assert_eq!(
             scratch.retained_bytes() + capacity as u128 * size_of::<u64>() as u128,
             before
@@ -646,7 +646,7 @@ fn an_independent_sum_does_not_establish_a_model() {
             data,
             &[0],
             &[0],
-            &mut Vec::new(),
+            &mut Words::new(Vec::new()),
             plan,
             &mut Allowance {
                 remaining: plan.visits,

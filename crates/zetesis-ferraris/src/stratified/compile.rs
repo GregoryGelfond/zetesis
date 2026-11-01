@@ -84,7 +84,7 @@ pub(super) fn build(
     budget.release(kinds)?;
     let consequences = Interpretation {
         theory: theory.clone(),
-        words,
+        words: words.into(),
     };
     let failed_constraint = evaluate::validate(&consequences, budget)?;
     Ok((consequences, failed_constraint))

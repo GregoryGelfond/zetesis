@@ -703,7 +703,7 @@ impl GpuTightOracle {
                     timer: self.timer.as_ref(),
                 };
                 let call = Call {
-                    seeds: self.candidates.words(),
+                    seeds: self.candidates.words().into(),
                     plan: &plan,
                 };
                 let submitted = resident.submit(&execution, &call, &mut self.activity)?;

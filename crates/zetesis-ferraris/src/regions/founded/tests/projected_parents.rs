@@ -70,7 +70,7 @@ fn parent_projection_retains_ordered_alias_occurrences() {
     let mut scratch = Scratch::default();
     scratch.prepare_projected(&owner, &index, &producers);
     assert_rows(&scratch, &owner, &index);
-    assert_eq!(scratch.cyclic_atoms, [0b011]);
+    assert_eq!(&*scratch.cyclic_atoms, [0b011]);
     assert!(index.absorbed[6]);
     assert!(!scratch.body_nodes.contains(&6));
     let projected = &scratch.projected.as_ref().unwrap().parents;
@@ -158,8 +158,8 @@ fn every_small_mask_matches_original_parent_postings() {
                 original.missing_in_word(0, cut_atoms)
             );
             if cut_atoms == 0 {
-                supports_cycle |= projected.atoms == [0b011];
-                excludes_cycle |= projected.atoms == [0];
+                supports_cycle |= *projected.atoms == [0b011];
+                excludes_cycle |= *projected.atoms == [0];
             }
         }
     }
@@ -191,7 +191,11 @@ fn warm(extra: usize, projected: bool) -> u64 {
             &mut work,
         )
         .unwrap();
-    assert_eq!(scratch.atoms, [0b011], "fanout source a actually activates");
+    assert_eq!(
+        &*scratch.atoms,
+        [0b011],
+        "fanout source a actually activates"
+    );
     assert_eq!(scratch.body_nodes.len(), 7);
     work.spent()
 }
@@ -323,7 +327,7 @@ fn boundary_roles_reapply_both_false_masks() {
     let producers = producers(&owner);
     let mut scratch = Scratch::default();
     scratch.prepare_projected(&owner, &index, &producers);
-    assert_eq!(scratch.cyclic_atoms, [0b011]);
+    assert_eq!(&*scratch.cyclic_atoms, [0b011]);
     let position = scratch
         .body_nodes
         .iter()
@@ -353,10 +357,10 @@ fn boundary_roles_reapply_both_false_masks() {
             .unwrap();
         if seeded {
             assert!(matches!(scratch.states[2], State::True));
-            assert_eq!(scratch.atoms, [0b011]);
+            assert_eq!(&*scratch.atoms, [0b011]);
         } else {
             assert!(matches!(scratch.states[2], State::Inactive));
-            assert_eq!(scratch.atoms, [0]);
+            assert_eq!(&*scratch.atoms, [0]);
         }
     }
 }

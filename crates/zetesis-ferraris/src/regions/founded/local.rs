@@ -15,6 +15,8 @@
 //! consumes the premise and leaves marks that require a full retry. Publication
 //! and explanation capture retain their existing complete-result boundary.
 
+use zetesis_algebra::words::Words;
+
 use super::{
     Initial, Narrower, NodeView, Producers, Scratch, State, Theory, Work, bit, chain_position,
     flag_words, reserve,
@@ -75,7 +77,7 @@ impl Replay {
         self.cyclic = 0;
         for &word in cyclic {
             work.tick()?;
-            self.cyclic += word.count_ones() as usize;
+            self.cyclic += Words::<u64>::popcount(word) as usize;
         }
         Ok(())
     }
@@ -189,7 +191,7 @@ impl Scratch {
         let mut live = self.local.cyclic;
         for (&cyclic, &cut) in self.cyclic_atoms.iter().zip(atom_never) {
             work.tick()?;
-            live -= (cyclic & cut).count_ones() as usize;
+            live -= Words::<u64>::popcount(cyclic & cut) as usize;
         }
         if heads == live {
             return Ok(false);
@@ -375,16 +377,16 @@ impl Scratch {
             &mut self.queue,
             body_end.checked_add(events).ok_or(Stop::Allocation)?,
         )?;
-        self.atoms.clear();
-        reserve(&mut self.atoms, flag_words(theory.atom_count()))?;
+        self.atoms.storage_mut().clear();
+        reserve(self.atoms.storage_mut(), flag_words(theory.atom_count()))?;
         for (&cyclic, &never) in self.cyclic_atoms.iter().zip(atom_never) {
             work.tick()?;
-            self.atoms.push(cyclic & !never);
+            self.atoms.storage_mut().push(cyclic & !never);
         }
         for position in 0..heads {
             work.tick()?;
             let head = self.queue[position];
-            self.atoms[head / 64] &= !(1_u64 << (head % 64));
+            self.atoms.remove(head);
         }
         for position in forward_end..body_end {
             work.tick()?;

@@ -433,7 +433,7 @@ fn exhaustive_check(
     words.resize(candidate.words.len(), 0);
     let mut subset = Interpretation {
         theory: theory.clone(),
-        words,
+        words: words.into(),
     };
     let mut values = reserve(theory.nodes().len())?;
     let verdict = if find_countermodel(

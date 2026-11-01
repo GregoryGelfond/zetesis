@@ -9,7 +9,7 @@ use super::{
 use crate::formula_graph::dependency;
 use crate::runtime::Variant;
 use crate::{GpuError, GpuErrorKind};
-use zetesis_algebra::Cancellation;
+use zetesis_algebra::{Cancellation, words::Words};
 use zetesis_ferraris::{Interpretation, Theory, TightPlan, TightVerdict};
 
 pub(super) const PARAM_BYTES: u64 = 64;
@@ -832,9 +832,8 @@ pub(super) fn decode(
             },
             (STATUS_RESIDUAL, atom)
                 if atom < graph.atoms
-                    && seeds[world * graph.words as usize + atom as usize / 32]
-                        & (1 << (atom % 32))
-                        != 0 =>
+                    && Words::<u32, _>::new(&seeds[world * graph.words as usize..])
+                        .contains(atom as usize) =>
             {
                 TightVerdict::Residual {
                     unsupported_atom: atom as usize,

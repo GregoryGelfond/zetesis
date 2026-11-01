@@ -58,7 +58,7 @@ impl Counts {
                 closure.never(chain.root)
             }
             (true, false)
-                if bit(closure.known.sure, chain.root)
+                if closure.known.sure.contains(chain.root)
                     && self.never + 1 == chain.ordinary_leaves().len() =>
             {
                 self.unit(closure, index, work)?
@@ -66,7 +66,7 @@ impl Counts {
             (false, false) => closure.never(chain.root),
             (false, true) if self.sure == chain.ordinary_leaves().len() => closure.sure(chain.root),
             (false, true)
-                if bit(closure.known.never, chain.root)
+                if closure.known.never.contains(chain.root)
                     && self.sure + 1 == chain.ordinary_leaves().len() =>
             {
                 self.unit(closure, index, work)?
@@ -82,7 +82,7 @@ impl Counts {
         work: &mut Work<'_>,
     ) -> Result<Step, Stop> {
         let chain = &index.chains[0];
-        if bit(closure.known.sure, chain.root) {
+        if closure.known.sure.contains(chain.root) {
             if chain.disjunction {
                 if self.never + 1 == chain.ordinary_leaves().len() {
                     return self.unit(closure, index, work);
@@ -90,7 +90,7 @@ impl Counts {
             } else if self.sure != chain.ordinary_leaves().len() {
                 return Self::force(closure, index, true, work);
             }
-        } else if bit(closure.known.never, chain.root) {
+        } else if closure.known.never.contains(chain.root) {
             if chain.disjunction {
                 if self.never != chain.ordinary_leaves().len() {
                     return Self::force(closure, index, false, work);
@@ -141,7 +141,7 @@ fn state(
     root: Option<bool>,
 ) -> (Knowledge, NarrowingScratch) {
     let (mut knowledge, mut scratch) = super::state(index, values);
-    let known = compact_mut(&mut knowledge);
+    let mut known = compact_mut(&mut knowledge);
     let flag = 1 << index.chains[0].root;
     known.sure[0] &= !flag;
     known.never[0] &= !flag;

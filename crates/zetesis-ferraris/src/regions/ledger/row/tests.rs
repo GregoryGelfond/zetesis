@@ -398,3 +398,43 @@ fn a_subsumption_comparison_cannot_hide_a_stop() {
 
 mod publication;
 mod subsumption;
+
+#[test]
+fn sparse_lanes_keep_the_original_inline_layout() {
+    use std::mem::offset_of;
+
+    struct OriginalWord {
+        index: usize,
+        held: u64,
+        cut: u64,
+    }
+    struct OriginalCursor {
+        next: usize,
+        word: usize,
+        present: u64,
+        absent: u64,
+    }
+    assert_eq!(size_of::<Word>(), size_of::<OriginalWord>());
+    assert_eq!(align_of::<Word>(), align_of::<OriginalWord>());
+    assert_eq!(offset_of!(Word, index), offset_of!(OriginalWord, index));
+    assert_eq!(offset_of!(Word, held), offset_of!(OriginalWord, held));
+    assert_eq!(offset_of!(Word, cut), offset_of!(OriginalWord, cut));
+    assert_eq!(size_of::<OutputCursor>(), size_of::<OriginalCursor>());
+    assert_eq!(align_of::<OutputCursor>(), align_of::<OriginalCursor>());
+    assert_eq!(
+        offset_of!(OutputCursor, next),
+        offset_of!(OriginalCursor, next)
+    );
+    assert_eq!(
+        offset_of!(OutputCursor, word),
+        offset_of!(OriginalCursor, word)
+    );
+    assert_eq!(
+        offset_of!(OutputCursor, present),
+        offset_of!(OriginalCursor, present)
+    );
+    assert_eq!(
+        offset_of!(OutputCursor, absent),
+        offset_of!(OriginalCursor, absent)
+    );
+}

@@ -8,7 +8,7 @@ use crate::{
     RegionLimits, Theory,
 };
 
-use super::super::{Closure, NarrowingScratch, Step, Subject, Work, bit, producers};
+use super::super::{Closure, NarrowingScratch, Step, Subject, Work, producers};
 use super::compact_mut;
 
 fn chain(disjunction: bool, atoms: usize) -> Theory {
@@ -41,7 +41,7 @@ fn chain_refutation_visits_only_its_prefix() {
             for failure in [Stop::WorkLimit, Stop::Cancelled, Stop::Deadline] {
                 for limit in [needed - 1, needed] {
                     let mut knowledge = index.knowledge();
-                    let known = compact_mut(&mut knowledge);
+                    let mut known = compact_mut(&mut knowledge);
                     // These bits are known before their events update the
                     // counters. Teaching the root conflicts at this operand.
                     if disjunction {
@@ -96,7 +96,7 @@ fn parent_refutation_visits_only_its_prefix() {
     for failure in [Stop::WorkLimit, Stop::Cancelled, Stop::Deadline] {
         for limit in 0..=2 {
             let mut knowledge = index.knowledge();
-            let known = compact_mut(&mut knowledge);
+            let mut known = compact_mut(&mut knowledge);
             known.sure[0] |= 1;
             known.never[0] |= 1 << 1;
             for parent in 9..17 {
@@ -121,7 +121,7 @@ fn parent_refutation_visits_only_its_prefix() {
             // The first parent conflicts; none of its siblings can force its
             // consequent after that refutation, even with a fresh work permit.
             let known = compact_mut(&mut knowledge);
-            assert!((2..9).all(|atom| !bit(known.sure, atom)));
+            assert!((2..9).all(|atom| !known.sure.contains(atom)));
             assert!(scratch.nodes.is_empty());
         }
     }
@@ -152,7 +152,7 @@ fn downward_refutation_omits_support_wakeups() {
         .producers
         .unwrap();
     let mut knowledge = index.knowledge();
-    let known = compact_mut(&mut knowledge);
+    let mut known = compact_mut(&mut knowledge);
     known.sure[0] |= 1;
     known.never[0] |= 1 << 3;
     let mut scratch = NarrowingScratch::default();
@@ -180,7 +180,7 @@ fn early_refutation_leaves_no_scratch_authority() {
     let theory = chain(false, 9);
     let index = Narrower::new(&theory);
     let mut knowledge = index.knowledge();
-    let known = compact_mut(&mut knowledge);
+    let mut known = compact_mut(&mut knowledge);
     known.sure[0] |= 1 << 9;
     known.never[0] |= 1 << 4;
     let mut scratch = NarrowingScratch::default();
@@ -236,7 +236,7 @@ fn atom_refutation_stops_before_later_occurrences() {
     assert!(result == Step::Contradiction);
     assert_eq!(scratch.nodes, [(0, true)]);
     assert!(scratch.heads.is_empty());
-    assert!(!bit(compact_mut(&mut knowledge).sure, 2));
+    assert!(!compact_mut(&mut knowledge).sure.contains(2));
 }
 
 #[test]
@@ -269,7 +269,7 @@ fn root_refutation_stops_seeding() {
     assert_eq!(receipt.work, 0);
     assert_eq!(scratch.nodes, [(0, false)]);
     assert!(scratch.heads.is_empty());
-    assert!(!bit(compact_mut(&mut knowledge).sure, 1));
+    assert!(!compact_mut(&mut knowledge).sure.contains(1));
 }
 
 #[test]
@@ -299,6 +299,6 @@ fn decision_refutation_restores_unadvanced_seen_storage() {
         .unwrap();
     assert_eq!(result, crate::Narrowing::Refuted);
     let known = compact_mut(&mut knowledge);
-    assert_eq!(known.seen, &[0]);
-    assert!(!bit(known.atom_sure, 1));
+    assert_eq!(&*known.seen, &[0]);
+    assert!(!known.atom_sure.contains(1));
 }

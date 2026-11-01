@@ -9,7 +9,7 @@ use std::mem::size_of;
 use std::ops::Range;
 
 use zetesis_algebra::Stop;
-use zetesis_algebra::words;
+use zetesis_algebra::words::{self, Words};
 
 use crate::AdmissionError;
 
@@ -244,11 +244,7 @@ fn reduce_pair(
 }
 
 fn clear(words: &mut [u64], budget: &mut Budget<'_, '_>) -> Result<(), BudgetError> {
-    for word in words {
-        budget.charge(1)?;
-        *word = 0;
-    }
-    Ok(())
+    Words::<u64, _>::new(words).fill_with(0, || budget.charge(1))
 }
 
 #[derive(Clone, Copy)]
@@ -542,7 +538,7 @@ fn support_order(
         budget.charge(1)?;
         if left != right {
             budget.charge(5)?;
-            let first = 1u64 << (left ^ right).trailing_zeros();
+            let first = 1u64 << Words::<u64>::first_bit(left ^ right);
             return Ok(if left & first != 0 {
                 Ordering::Less
             } else {
@@ -712,7 +708,7 @@ fn discover(
     }
     let mut selected = storage.reserve(0, budget)?;
     let mut proposals = storage.reserve(0, budget)?;
-    let mut union = storage.filled(atom_count.div_ceil(128) * 2, 0u64, 1, budget)?;
+    let mut union = Words::new(storage.filled(atom_count.div_ceil(128) * 2, 0u64, 1, budget)?);
     storage.admit_record(size_of::<[Range<usize>; 4]>() as u128, budget)?;
     let keys = Keys {
         bounds,
@@ -773,7 +769,7 @@ fn discover(
         first = end;
     }
     storage.release_record(size_of::<[Range<usize>; 4]>() as u128)?;
-    storage.release(union)?;
+    storage.release(union.into_storage())?;
     storage.release(descending)?;
     storage.release(members)?;
     storage.release(scratch)?;
@@ -886,8 +882,8 @@ pub(super) fn prepare(
     let (selected, proposals) = budget.in_phase(super::work::Phase::Discovery, |budget| {
         discover(bounds, atom_count, &mut families.counts, storage, budget)
     })?;
-    let mut lower_union = storage.filled(width, 0u64, 1, budget)?;
-    let mut upper_union = storage.filled(width, 0u64, 1, budget)?;
+    let mut lower_union = Words::new(storage.filled(width, 0u64, 1, budget)?);
+    let mut upper_union = Words::new(storage.filled(width, 0u64, 1, budget)?);
     for proposal in &proposals {
         budget.charge(1)?;
         families.counts.attempts += 1;
@@ -915,8 +911,8 @@ pub(super) fn prepare(
         budget.charge(1)?;
         if refuted {
             budget.charge(1)?;
-            storage.release(lower_union)?;
-            storage.release(upper_union)?;
+            storage.release(lower_union.into_storage())?;
+            storage.release(upper_union.into_storage())?;
             storage.release(selected)?;
             storage.release(proposals)?;
             storage.release_embedded(families.pairs)?;
@@ -926,8 +922,8 @@ pub(super) fn prepare(
             });
         }
     }
-    storage.release(lower_union)?;
-    storage.release(upper_union)?;
+    storage.release(lower_union.into_storage())?;
+    storage.release(upper_union.into_storage())?;
     storage.release(selected)?;
     storage.release(proposals)?;
     let index = budget.in_phase(super::work::Phase::Index, |budget| {
@@ -936,7 +932,7 @@ pub(super) fn prepare(
             families
                 .occurrences
                 .iter()
-                .map(|occurrence| bounds[occurrence.row].support.as_slice()),
+                .map(|occurrence| &bounds[occurrence.row].support[..]),
             storage,
             budget,
         )?;

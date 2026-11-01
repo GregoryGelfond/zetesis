@@ -106,7 +106,7 @@ fn contradictory_literals_do_not_support_the_head() {
     let record = completion(&owner, &producers, 1, 0, &mut budget(&cancellation))
         .unwrap()
         .unwrap();
-    assert_eq!(record.forbidden, [0b1100, 0, 0, 0]);
+    assert_eq!(&*record.forbidden, [0b1100, 0, 0, 0]);
     assert_matches_original_bodies(&owner, &producers, &record);
 }
 
@@ -121,7 +121,7 @@ fn empty_and_fact_definitions_have_opposite_tables() {
             .unwrap();
         assert_eq!(record.support.len, 1);
         assert_eq!(record.support.atoms[0], head);
-        assert_eq!(record.forbidden, [bits, 0, 0, 0]);
+        assert_eq!(&*record.forbidden, [bits, 0, 0, 0]);
         assert_matches_original_bodies(&owner, &producers, &record);
     }
 }
@@ -224,7 +224,7 @@ fn deep_bodies_use_borrowed_frames_without_recursion() {
     let record = completion(&owner, &producers, 1, 0, &mut budget(&cancellation))
         .unwrap()
         .unwrap();
-    assert_eq!(record.forbidden, [0b0110, 0, 0, 0]);
+    assert_eq!(&*record.forbidden, [0b0110, 0, 0, 0]);
     assert_matches_original_bodies(&owner, &producers, &record);
 }
 
@@ -239,7 +239,7 @@ fn repeated_occurrences_remain_in_the_work_receipt() {
         let record = completion(&owner, &producers, 1, 0, &mut meter)
             .unwrap()
             .unwrap();
-        assert_eq!(record.forbidden, [0b0110, 0, 0, 0]);
+        assert_eq!(&*record.forbidden, [0b0110, 0, 0, 0]);
         assert!(meter.work() > previous);
         previous = meter.work();
     }
@@ -263,7 +263,7 @@ fn repeated_literals_are_charged_on_both_traversals() {
         let record = completion(&owner, &producers, 1, 0, &mut meter)
             .unwrap()
             .unwrap();
-        assert_eq!(record.forbidden, [0b0110, 0, 0, 0]);
+        assert_eq!(&*record.forbidden, [0b0110, 0, 0, 0]);
         receipts.push(meter.work());
     }
     // Every additional repeated atom costs 13 on support collection and 15 on

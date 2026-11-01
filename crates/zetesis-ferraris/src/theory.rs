@@ -1,6 +1,8 @@
 use std::fmt;
 use std::sync::Arc;
 
+use zetesis_algebra::words::Words;
+
 mod copying;
 mod numeric;
 
@@ -8,6 +10,8 @@ mod numeric;
 mod extremum_tests;
 #[cfg(test)]
 mod threshold_tests;
+#[cfg(test)]
+mod words_tests;
 
 use crate::ExtremumCut;
 use numeric::NumericStorage;
@@ -1115,7 +1119,7 @@ fn insert_atoms(
         if atom >= atom_count {
             return Err(AdmissionError::Atom);
         }
-        words[atom / 64] |= 1 << (atom % 64);
+        Words::<u64, _>::new(&mut *words).insert(atom);
     }
     Ok(())
 }
@@ -1126,7 +1130,7 @@ fn insert_atoms(
 #[derive(Clone, Debug)]
 pub struct Interpretation {
     pub(crate) theory: Theory,
-    pub(crate) words: Vec<u64>,
+    pub(crate) words: Words<u64>,
 }
 impl Interpretation {
     /// Construct an interpretation, coalescing repeated atom indices.
@@ -1151,7 +1155,7 @@ impl Interpretation {
         insert_atoms(theory.atom_count(), iterator, &mut words)?;
         Ok(Self {
             theory: theory.clone(),
-            words,
+            words: words.into(),
         })
     }
 
@@ -1173,7 +1177,7 @@ impl Interpretation {
         words.extend_from_slice(&self.words);
         Ok(Self {
             theory: self.theory.clone(),
-            words,
+            words: words.into(),
         })
     }
 
@@ -1186,7 +1190,7 @@ impl Interpretation {
     /// Constant-time membership; an out-of-universe index is false.
     #[must_use]
     pub fn contains(&self, atom: usize) -> bool {
-        atom < self.theory.atom_count() && self.words[atom / 64] & (1 << (atom % 64)) != 0
+        atom < self.theory.atom_count() && self.words.contains(atom)
     }
 
     /// Atom indices in ascending order, without materializing a second carrier.
@@ -1194,17 +1198,7 @@ impl Interpretation {
     /// packed words and S selected atoms in O(ceil(U/64) + S) time, with constant
     /// auxiliary space. Each nonzero word loses its least set bit at each step.
     pub fn atoms(&self) -> impl Iterator<Item = usize> + '_ {
-        self.words.iter().enumerate().flat_map(|(index, &word)| {
-            let mut remaining = word;
-            std::iter::from_fn(move || {
-                if remaining == 0 {
-                    return None;
-                }
-                let bit = remaining.trailing_zeros() as usize;
-                remaining &= remaining - 1;
-                Some(index * 64 + bit)
-            })
-        })
+        self.words.positions()
     }
 
     /// Borrow membership as ascending low-bit-first 32-bit words.
@@ -1251,9 +1245,7 @@ impl Iterator for InterpretationWords<'_> {
         if self.next == self.end {
             return None;
         }
-        let word = self.interpretation.words[self.next / 2];
-        let bytes = (word >> ((self.next % 2) * 32)).to_le_bytes();
-        let half = u32::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]);
+        let half = self.interpretation.words.half32(self.next);
         self.next += 1;
         Some(half)
     }

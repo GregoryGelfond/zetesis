@@ -8,6 +8,8 @@
 use std::cmp::Ordering;
 use std::mem::size_of;
 
+use zetesis_algebra::words::Words;
+
 use crate::{Theory, regions::Producers};
 
 use super::{
@@ -30,7 +32,7 @@ pub(super) enum Source {
 /// Row addition is the only subsequent coefficient/constant mutation.
 #[derive(Debug)]
 pub(super) struct Equation {
-    pub words: Vec<u64>,
+    pub words: Words<u64>,
     pub constant: bool,
     pub source: Source,
 }
@@ -155,14 +157,13 @@ fn from_clauses(
             end += 1;
         }
         budget.charge(4)?;
-        let mut forbidden = [0_u64; 4];
+        let mut forbidden = Words::<u64, _>::new([0; 4]);
         for clause in &clauses[first..end] {
             budget.charge(4)?;
-            forbidden[usize::from(clause.forbidden) / 64] |=
-                1 << (usize::from(clause.forbidden) % 64);
+            forbidden.insert(usize::from(clause.forbidden));
         }
         let proposed = storage.with_record(hull::SCRATCH_BYTES as u128, budget, |_, budget| {
-            propose(support, &forbidden, counts, budget)
+            propose(support, forbidden.storage(), counts, budget)
         })?;
         for &local in proposed.equations() {
             let words = materialize(theory, support, local, storage, budget)?;
@@ -232,7 +233,7 @@ fn from_definitions(
             storage.admit_record(fixed, budget)?;
             let proposed =
                 storage.with_record(hull::SCRATCH_BYTES as u128, budget, |_, budget| {
-                    propose(group.support, &group.forbidden, counts, budget)
+                    propose(group.support, group.forbidden.storage(), counts, budget)
                 })?;
             for &local in proposed.equations() {
                 let words = materialize(theory, group.support, local, storage, budget)?;
@@ -296,13 +297,14 @@ fn materialize(
     local: LocalEquation,
     storage: &mut Storage,
     budget: &mut Budget<'_, '_>,
-) -> Result<Vec<u64>, BudgetError> {
-    let mut words = storage.filled(theory.atom_count().div_ceil(128) * 2, 0, 1, budget)?;
+) -> Result<Words<u64>, BudgetError> {
+    let mut words =
+        Words::new(storage.filled(theory.atom_count().div_ceil(128) * 2, 0_u64, 1, budget)?);
     for (coordinate, &atom) in support.atoms[..support.len].iter().enumerate() {
         budget.charge(3)?;
         if local.coefficients & (1 << coordinate) != 0 {
             budget.charge(4)?;
-            words[atom / 64] |= 1 << (atom % 64);
+            words.insert(atom);
         }
     }
     Ok(words)
@@ -356,7 +358,7 @@ fn check(
                 return Ok(false);
             };
             source::implied_by_table(
-                &reread.forbidden,
+                reread.forbidden.storage(),
                 support.len,
                 coefficients,
                 candidate.constant,
@@ -379,7 +381,7 @@ fn retain(
     if !valid {
         budget.charge(1)?;
         counts.provenance_rejected += 1;
-        storage.release(candidate.words)?;
+        storage.release(candidate.words.into_storage())?;
         debug_assert!(valid, "a proposed equation must follow from its sources");
         return Ok(());
     }

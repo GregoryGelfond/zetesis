@@ -2,7 +2,6 @@
 
 use super::*;
 use crate::Knowledge;
-use crate::regions::bit;
 
 fn unopened_snapshot(index: &Narrower, bounds: [i128; 2]) -> Knowledge {
     let mut knowledge = index.knowledge();
@@ -40,8 +39,8 @@ fn a_batch_keeps_its_processed_snapshot_until_events_drain() {
         assert_eq!(closure.known.thresholds[0], before);
         assert_eq!(closure.lists.nodes.len(), 3);
         for (condition, truth) in expected.into_iter().enumerate() {
-            assert_eq!(bit(closure.known.sure, condition), truth);
-            assert_eq!(bit(closure.known.never, condition), !truth);
+            assert_eq!(closure.known.sure.contains(condition), truth);
+            assert_eq!(closure.known.never.contains(condition), !truth);
             assert!(closure.lists.nodes.contains(&(condition, truth)));
         }
         let mut region = Region::all_open(3);

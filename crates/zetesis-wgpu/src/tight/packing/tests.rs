@@ -1373,3 +1373,44 @@ fn retained_truth_work_overflow_keeps_complete_scan() {
     assert!(!selected.original_truth_reused);
     assert_eq!(selected.work, u32::MAX);
 }
+
+#[test]
+fn dispatch_call_keeps_its_original_borrowed_layout() {
+    use super::super::transport::Call;
+    use std::mem::{align_of, offset_of, size_of};
+    use zetesis_algebra::words::Words;
+
+    struct Original<'a> {
+        seeds: &'a [u32],
+        plan: &'a Plan,
+    }
+    assert_eq!(size_of::<Call<'_>>(), size_of::<Original<'_>>());
+    assert_eq!(align_of::<Call<'_>>(), align_of::<Original<'_>>());
+    assert_eq!(offset_of!(Call<'_>, seeds), offset_of!(Original<'_>, seeds));
+    assert_eq!(offset_of!(Call<'_>, plan), offset_of!(Original<'_>, plan));
+    let graph = graph();
+    let plan = plan(&graph, 2, true);
+    let candidates = [
+        Interpretation::new(&graph.theory, [0]).unwrap(),
+        Interpretation::new(&graph.theory, [1, 2]).unwrap(),
+    ];
+    let mut staging = crate::candidates::Staging::default();
+    plan.pack(
+        &graph,
+        &candidates,
+        &mut staging,
+        u64::MAX,
+        &Cancellation::default(),
+    )
+    .unwrap();
+    let call = Call {
+        seeds: Words::new(staging.words()),
+        plan: &plan,
+    };
+    assert_eq!(
+        (call.seeds.as_ptr(), call.seeds.len()),
+        (staging.words().as_ptr(), staging.words().len())
+    );
+    assert!(std::ptr::eq(call.plan, &raw const plan));
+    assert_eq!(&*call.seeds, &[1, 6]);
+}

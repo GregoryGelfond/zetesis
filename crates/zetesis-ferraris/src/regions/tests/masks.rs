@@ -158,3 +158,74 @@ fn cancelled_narrowing_preserves_copied_knowledge() {
         same_knowledge(&copied, &source);
     }
 }
+
+#[test]
+fn known_views_keep_the_same_disjoint_spans() {
+    use super::super::{Counters, Known};
+
+    let mut known = Known::<u16>::empty(130, 65, Counters::zeros(65));
+    let pointer = known.masks.words.as_ptr();
+    let expected = known.masks.slices().map(|span| (span.as_ptr(), span.len()));
+    {
+        let mut view = known.borrow();
+        let spans = [
+            &mut view.sure,
+            &mut view.never,
+            &mut view.atom_sure,
+            &mut view.atom_never,
+            &mut view.seen,
+            &mut view.witnessed,
+        ];
+        for (index, span) in spans.into_iter().enumerate() {
+            assert_eq!((span.as_ptr(), span.len()), expected[index]);
+            span.fill(1 << index);
+        }
+    }
+    assert_eq!(known.masks.words.as_ptr(), pointer);
+    for (index, span) in known.masks.slices().into_iter().enumerate() {
+        assert!(span.iter().all(|&word| word == 1 << index));
+    }
+}
+
+#[test]
+fn known_view_keeps_the_original_borrowed_record_layout() {
+    use super::super::{Counters, KnownMut, support, thresholds};
+    use std::mem::{align_of, offset_of, size_of};
+
+    struct Original<'a> {
+        sure: &'a mut [u64],
+        never: &'a mut [u64],
+        atom_sure: &'a mut [u64],
+        atom_never: &'a mut [u64],
+        seen: &'a mut [u64],
+        witnessed: &'a mut [u64],
+        neutral_operands: &'a mut Counters<u16>,
+        unknown: &'a mut Counters<u16>,
+        thresholds: &'a mut [thresholds::State],
+        seeded: &'a mut bool,
+        founded_closed: &'a mut bool,
+        support_progress: &'a mut support::Progress,
+    }
+    assert_eq!(size_of::<KnownMut<'_, u16>>(), size_of::<Original<'_>>());
+    assert_eq!(align_of::<KnownMut<'_, u16>>(), align_of::<Original<'_>>());
+    macro_rules! offset {
+        ($field:ident) => {
+            assert_eq!(
+                offset_of!(KnownMut<'_, u16>, $field),
+                offset_of!(Original<'_>, $field)
+            );
+        };
+    }
+    offset!(sure);
+    offset!(never);
+    offset!(atom_sure);
+    offset!(atom_never);
+    offset!(seen);
+    offset!(witnessed);
+    offset!(neutral_operands);
+    offset!(unknown);
+    offset!(thresholds);
+    offset!(seeded);
+    offset!(founded_closed);
+    offset!(support_progress);
+}

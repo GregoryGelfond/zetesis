@@ -13,6 +13,7 @@
 
 use std::hash::{DefaultHasher, Hasher};
 use std::num::NonZeroUsize;
+use zetesis_algebra::words::Words;
 
 use super::{ProjectionError, ProjectionResource, Work, bytes, ceiling};
 
@@ -21,7 +22,7 @@ type Slot = Option<NonZeroUsize>;
 pub(super) struct History {
     width: usize,
     entries: usize,
-    keys: Vec<u64>,
+    keys: Words<u64>,
     slots: Vec<Slot>,
 }
 
@@ -30,7 +31,7 @@ impl History {
         Self {
             width,
             entries: 0,
-            keys: Vec::new(),
+            keys: Words::new(Vec::new()),
             slots: Vec::new(),
         }
     }
@@ -90,7 +91,7 @@ impl History {
         let start = self.keys.len();
         let result = self.append(key, work);
         if let Err(error) = result {
-            self.keys.truncate(start);
+            self.keys.storage_mut().truncate(start);
             return Err(error);
         }
         // Both dimensions and the positive successor were admitted above.
@@ -103,7 +104,7 @@ impl History {
     fn append(&mut self, key: &[u64], work: &mut Work<'_>) -> Result<(), ProjectionError> {
         for word in key {
             work.charge(1)?;
-            self.keys.push(*word);
+            self.keys.storage_mut().push(*word);
         }
         work.charge(1)
     }
@@ -152,7 +153,7 @@ impl History {
             work.charge(1)?;
             replacement.push(*word);
         }
-        self.keys = replacement;
+        self.keys = Words::new(replacement);
         work.observe(self.retained(base)?, 0)
     }
 

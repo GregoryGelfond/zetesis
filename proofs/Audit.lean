@@ -1254,6 +1254,9 @@ import Zetesis
 #print axioms Zetesis.Refinement.PackedCounterSearch.check_iff_answer_set
 #print axioms Zetesis.Refinement.PackedCounterSearch.cross_word_stream_accepts_facts
 #print axioms Zetesis.Refinement.PackedInterpretations.mask_bit
+#print axioms Zetesis.Refinement.PackedInterpretations.insert_bit_exact
+#print axioms Zetesis.Refinement.PackedInterpretations.clear_bit_exact
+#print axioms Zetesis.Refinement.PackedInterpretations.combine_prefix_exact
 #print axioms Zetesis.Refinement.PackedInterpretations.contains_eq_bit
 #print axioms Zetesis.Refinement.PackedInterpretations.insert_exact
 #print axioms Zetesis.Refinement.PackedInterpretations.insertAll_exact
@@ -1302,6 +1305,8 @@ import Zetesis
 #print axioms Zetesis.Refinement.PackedWordIterator.run_exhausted
 #print axioms Zetesis.Refinement.PackedWordIterator.initialized_exact
 #print axioms Zetesis.Refinement.PackedWordIterator.packed_exact
+#print axioms Zetesis.Refinement.PackedWordIterator.SetBits.least_clear_suffix
+#print axioms Zetesis.Refinement.PackedWordIterator.SetBits.lowest_bit_arithmetic
 #print axioms Zetesis.PairwiseExclusions.masked_unit_sum_two
 #print axioms Zetesis.PairwiseExclusions.original
 #print axioms Zetesis.PairwiseExclusions.constraint_frozen_iff

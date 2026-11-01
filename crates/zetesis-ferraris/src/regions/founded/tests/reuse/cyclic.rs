@@ -105,13 +105,13 @@ fn acyclic_bridges_delay_cuts_without_changing_the_fixed_point() {
             &mut Work::new(u64::MAX),
         )
         .unwrap();
-    assert_eq!(restricted.cyclic_atoms, [0b0_1111]);
+    assert_eq!(&*restricted.cyclic_atoms, [0b0_1111]);
     assert_eq!(
-        restricted.atoms,
+        &*restricted.atoms,
         [0b0_1100],
         "the bridge initially supports the downstream cycle"
     );
-    assert_eq!(global.founded.atoms, [0]);
+    assert_eq!(&*global.founded.atoms, [0]);
     let global_before = global.founded.passes;
     let mut left = Region::all_open(5);
     let mut right = left.clone();
@@ -241,7 +241,7 @@ fn component_preparation_requires_the_exact_owner() {
                 &mut Work::new(u64::MAX),
             )
             .unwrap();
-        assert_eq!(scratch.cyclic_atoms, [expected]);
+        assert_eq!(&*scratch.cyclic_atoms, [expected]);
         assert!(
             scratch
                 .owner
@@ -346,8 +346,8 @@ fn boundary_seeds_skip_unrelated_atom_occurrences() {
                 &mut work,
             )
             .unwrap();
-        assert_eq!(scratch.cyclic_atoms, [0b011]);
-        assert_eq!(scratch.atoms, [0b011]);
+        assert_eq!(&*scratch.cyclic_atoms, [0b011]);
+        assert_eq!(&*scratch.atoms, [0b011]);
         assert_eq!(scratch.body_nodes.len(), 3);
         work.spent()
     }

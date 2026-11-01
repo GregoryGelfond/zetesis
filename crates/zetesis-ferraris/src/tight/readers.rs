@@ -13,7 +13,7 @@ use std::mem::size_of;
 
 use super::{Tick, TightError, TightProducer, filled};
 use crate::{NodeView, Theory};
-use zetesis_algebra::{Meter, Stop};
+use zetesis_algebra::{Meter, Stop, words::Words};
 
 /// What a reader is: the kind of the reading object.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -250,7 +250,7 @@ fn incidences(
     mut emit: impl FnMut(Incidence) -> Result<(), TightError>,
 ) -> Result<(), TightError> {
     let view = theory.view();
-    let mut seen = filled(theory.parts().rows().len().div_ceil(64), 0_u64)?;
+    let mut seen = Words::new(filled(theory.parts().rows().len().div_ceil(64), 0_u64)?);
     for index in 0..view.len() {
         meter.tick()?;
         let node = view.node(index).map_err(|_| Stop::InvalidProgram)?;
@@ -338,11 +338,10 @@ pub(super) fn numeric_row(theory: &Theory, node: usize) -> Result<usize, TightEr
 }
 
 /// Mark `row` seen, reporting whether this was its first sighting.
-fn first(seen: &mut [u64], row: usize) -> Result<bool, TightError> {
-    let word = seen.get_mut(row / 64).ok_or(Stop::InvalidProgram)?;
-    let bit = 1_u64 << (row % 64);
-    let fresh = *word & bit == 0;
-    *word |= bit;
+fn first(seen: &mut Words<u64>, row: usize) -> Result<bool, TightError> {
+    // The checked view preserves invalid-row refusal before bit-mask creation.
+    let fresh = !seen.get_bit(row).ok_or(Stop::InvalidProgram)?;
+    seen.insert(row);
     Ok(fresh)
 }
 

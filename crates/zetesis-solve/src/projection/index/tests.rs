@@ -88,9 +88,24 @@ fn colliding_slots_preserve_complete_key_equality() {
         max_keys: 8,
         ..ProjectionLimits::default()
     };
+    let storage = (
+        history.keys.as_ptr(),
+        history.keys.capacity(),
+        history.slots.as_ptr(),
+        history.slots.capacity(),
+    );
     for key in &colliding {
         assert!(contains(&history, key));
         assert!(!insert(&mut history, key, full, &mut stats).unwrap());
+        assert_eq!(
+            (
+                history.keys.as_ptr(),
+                history.keys.capacity(),
+                history.slots.as_ptr(),
+                history.slots.capacity(),
+            ),
+            storage
+        );
     }
     assert_eq!(history.entries, 8);
     assert_eq!(history.keys.len(), 16);

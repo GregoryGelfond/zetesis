@@ -4,7 +4,8 @@ import Init.Data.BitVec.Lemmas
 /-!
 # Packed interpretations and exact word export
 
-This representation model constructs a finite interpretation in a list of
+This representation model gives width-general physical bit updates and common-
+prefix lane combinations, then constructs a finite interpretation in a list of
 64-bit words. It starts with zero words and inserts each atom by setting its
 least-significant-bit-first position. Export reads successive numeric low and
 high 32-bit halves, stopping at the declared universe's final word.
@@ -33,6 +34,21 @@ def count32 (size : Nat) : Nat := (size + 31) / 32
     declared atom has a stored word, independently of this total default. -/
 def word {width : Nat} (words : List (BitVec width)) (index : Nat) : BitVec width :=
   words[index]?.getD 0
+
+/-- Read a physical storage bit at any positive lane width. Missing lanes read
+    as zero; no logical universe or zero-padding convention is imposed. -/
+def bit {width : Nat} (words : List (BitVec width)) (atom : Nat) : Bool :=
+  (word words (atom / width)).getLsbD (atom % width)
+
+/-- Insert a physical coordinate by OR-ing its one-bit mask. Exactness requires
+    a positive lane width and an existing destination lane. -/
+def insertBit {width : Nat} (words : List (BitVec width)) (atom : Nat) : List (BitVec width) :=
+  words.set (atom / width) (word words (atom / width) ||| (1#width <<< (atom % width)))
+
+/-- Clear a physical coordinate by AND-ing the complement of its one-bit mask.
+    Like insertion, it neither changes storage shape nor normalizes padding. -/
+def clearBit {width : Nat} (words : List (BitVec width)) (atom : Nat) : List (BitVec width) :=
+  words.set (atom / width) (word words (atom / width) &&& ~~~(1#width <<< (atom % width)))
 
 /-- Read a raw storage bit; unlike `contains`, this also observes padding. -/
 def bit64 (words : List (BitVec 64)) (atom : Nat) : Bool :=
@@ -74,6 +90,131 @@ theorem mask_bit {width : Nat} (value : BitVec width) (offset : Nat) (inside : o
     simp [inside] at selected
   cases present : value.getLsbD offset <;> simp [nonzero]
 
+/-- At every positive lane width, an admitted mask insertion preserves length
+    and changes exactly its physical coordinate. Other coordinates, including
+    caller-owned padding, retain their old bits.
+
+    The proof first separates lanes. Within the destination lane, equal
+    quotient and remainder identify the coordinate; the one-bit mask therefore
+    selects exactly that coordinate. -/
+theorem insert_bit_exact {width : Nat} (positive : 0 < width)
+    (words : List (BitVec width)) (atom : Nat) (stored : atom / width < words.length) :
+    (insertBit words atom).length = words.length ∧
+      ∀ tested, bit (insertBit words atom) tested =
+        (bit words tested || decide (tested = atom)) := by
+  have length : (insertBit words atom).length = words.length := by simp [insertBit]
+  have membership : ∀ tested, bit (insertBit words atom) tested =
+      (bit words tested || decide (tested = atom)) := by
+    intro tested
+    by_cases sameWord : atom / width = tested / width
+    · have sameAtom : tested % width = atom % width ↔ tested = atom := by
+        constructor
+        · intro sameOffset
+          calc
+            tested = tested % width + width * (tested / width) := (Nat.mod_add_div _ _).symm
+            _ = atom % width + width * (atom / width) := by rw [sameOffset, ← sameWord]
+            _ = atom := Nat.mod_add_div _ _
+        · intro same
+          exact congrArg (fun value => value % width) same
+      simp only [bit, insertBit, word]
+      rw [← sameWord, List.getElem?_set_self stored]
+      simp only [Option.getD_some, BitVec.getLsbD_or]
+      rw [← BitVec.twoPow_eq]
+      simp [Nat.mod_lt _ positive, ← sameAtom, eq_comm]
+    · have distinct : tested ≠ atom := by
+        intro same
+        exact sameWord (congrArg (fun value => value / width) same.symm)
+      simp [bit, insertBit, word, List.getElem?_set_ne sameWord, distinct]
+  exact ⟨length, membership⟩
+
+/-- At every positive lane width, an admitted complement-mask clear preserves
+    length and removes exactly its physical coordinate. No zero-padding or
+    set-membership premise is required. The lane/offset argument is the same
+    as for insertion; the complemented mask changes union to exclusion. -/
+theorem clear_bit_exact {width : Nat} (positive : 0 < width)
+    (words : List (BitVec width)) (atom : Nat) (stored : atom / width < words.length) :
+    (clearBit words atom).length = words.length ∧
+      ∀ tested, bit (clearBit words atom) tested =
+        (bit words tested && decide (tested ≠ atom)) := by
+  have length : (clearBit words atom).length = words.length := by simp [clearBit]
+  have membership : ∀ tested, bit (clearBit words atom) tested =
+      (bit words tested && decide (tested ≠ atom)) := by
+    intro tested
+    by_cases sameWord : atom / width = tested / width
+    · have sameAtom : tested % width = atom % width ↔ tested = atom := by
+        constructor
+        · intro sameOffset
+          calc
+            tested = tested % width + width * (tested / width) := (Nat.mod_add_div _ _).symm
+            _ = atom % width + width * (atom / width) := by rw [sameOffset, ← sameWord]
+            _ = atom := Nat.mod_add_div _ _
+        · intro same
+          exact congrArg (fun value => value % width) same
+      simp only [bit, clearBit, word]
+      rw [← sameWord, List.getElem?_set_self stored]
+      simp only [Option.getD_some, BitVec.getLsbD_and, BitVec.getLsbD_not]
+      rw [← BitVec.twoPow_eq]
+      simp [Nat.mod_lt _ positive, ← sameAtom, eq_comm]
+    · have distinct : tested ≠ atom := by
+        intro same
+        exact sameWord (congrArg (fun value => value / width) same.symm)
+      simp [bit, clearBit, word, List.getElem?_set_ne sameWord, distinct]
+  exact ⟨length, membership⟩
+
+/-- Combine at most `steps` paired lanes, preserving all unmatched destination
+    lanes. `steps` counts successful writes, not work units or attempted
+    callbacks. This representation model therefore names both a completed
+    common-prefix operation and the stored prefix after an interrupted one. -/
+def combinePrefix {α : Type} (combine : α → α → α) : Nat → List α → List α → List α
+  | 0, left, _ => left
+  | _ + 1, [], _ => []
+  | _ + 1, left, [] => left
+  | steps + 1, first :: left, second :: right =>
+      combine first second :: combinePrefix combine steps left right
+
+/-- Common-prefix combination preserves destination length. Exactly those
+    paired lanes below the successful-write count are combined; every other
+    destination lane is unchanged. In particular, empty inputs, shorter source
+    storage and a refused next write do not silently zero the remaining suffix.
+
+    The proof follows paired heads; the induction hypothesis describes every
+    tail position. Applying the existing `BitVec.getLsbD_or`, `getLsbD_and` or
+    `getLsbD_xor` law then supplies the lane's bitwise set interpretation. -/
+theorem combine_prefix_exact {α : Type} (combine : α → α → α)
+    (steps : Nat) (left right : List α) :
+    (combinePrefix combine steps left right).length = left.length ∧
+      ∀ index, (combinePrefix combine steps left right)[index]? =
+        if index < steps then
+          match left[index]?, right[index]? with
+          | some first, some second => some (combine first second)
+          | original, _ => original
+        else left[index]? := by
+  induction steps generalizing left right with
+  | zero => simp [combinePrefix]
+  | succ steps induction =>
+    cases left with
+    | nil => simp [combinePrefix]
+    | cons first left =>
+      cases right with
+      | nil =>
+        constructor
+        · rfl
+        · intro index
+          by_cases active : index < steps + 1
+          · cases observed : (first :: left)[index]? <;>
+              simp [combinePrefix, active, observed]
+          · simp [combinePrefix, active]
+      | cons second right =>
+        obtain ⟨sameLength, positions⟩ := induction left right
+        constructor
+        · simp [combinePrefix, sameLength]
+        · intro index
+          cases index with
+          | zero => simp [combinePrefix]
+          | succ index =>
+            simpa only [combinePrefix, List.getElem?_cons_succ, Nat.succ_lt_succ_iff] using
+              positions index
+
 /-- A guarded mask test equals the raw bit read conjoined with the universe
     bound. This identity holds even for short storage or nonzero padding. -/
 theorem contains_eq_bit (size : Nat) (words : List (BitVec 64)) (atom : Nat) :
@@ -92,25 +233,8 @@ theorem insert_exact (words : List (BitVec 64)) (atom : Nat)
     (insert words atom).length = words.length ∧
       ∀ tested, bit64 (insert words atom) tested =
         (bit64 words tested || decide (tested = atom)) := by
-  have length : (insert words atom).length = words.length := by
-    simp [insert]
-  have membership : ∀ tested, bit64 (insert words atom) tested =
-      (bit64 words tested || decide (tested = atom)) := by
-    intro tested
-    by_cases sameWord : atom / 64 = tested / 64
-    · have sameAtom : tested % 64 = atom % 64 ↔ tested = atom := by
-        omega
-      simp only [bit64, insert, word]
-      rw [← sameWord, List.getElem?_set_self stored]
-      simp only [Option.getD_some, BitVec.getLsbD_or]
-      rw [← BitVec.twoPow_eq]
-      simp [Nat.mod_lt _ (by decide : 0 < 64),
-        ← sameAtom, eq_comm]
-    · have distinct : tested ≠ atom := by
-        intro same
-        exact sameWord (congrArg (fun value => value / 64) same.symm)
-      simp [bit64, insert, word, List.getElem?_set_ne sameWord, distinct]
-  exact ⟨length, membership⟩
+  simpa only [insertBit, bit, insert, bit64] using
+    insert_bit_exact (by decide : 0 < 64) words atom stored
 
 /-- A completed sequence of admitted writes keeps the initial storage and
     denotes its old bits union the inserted coordinates. No input ordering or

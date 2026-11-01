@@ -37,9 +37,9 @@
 //! pass, before publishing any of its cuts, using the same original masks.
 //! Scratch preparation ownership alone does not certify pass completion.
 
-use super::{
-    Narrower, NodeView, Producers, Scratch, Theory, Work, bit, chain_position, flag_words,
-};
+use zetesis_algebra::words::Words;
+
+use super::{Narrower, NodeView, Producers, Scratch, Theory, Work, chain_position, flag_words};
 use std::mem::size_of;
 use zetesis_algebra::Stop;
 
@@ -53,8 +53,8 @@ pub(in crate::regions) struct Input<'a> {
     pub(in crate::regions) index: &'a Narrower,
     pub(in crate::regions) producers: &'a Producers,
     pub(in crate::regions) completed: &'a Scratch,
-    pub(in crate::regions) atom_sure: &'a [u64],
-    pub(in crate::regions) atom_never: &'a [u64],
+    pub(in crate::regions) atom_sure: Words<u64, &'a [u64]>,
+    pub(in crate::regions) atom_never: Words<u64, &'a [u64]>,
 }
 
 /// Optional capture bounds, independent of the caller's global Work quota.
@@ -237,14 +237,14 @@ impl Collector<'_, '_, '_> {
             return Err(Stop::InvalidProgram.into());
         }
         self.meter.tick()?;
-        if bit(input.atom_never, start) || !self.missing(start) {
+        if input.atom_never.contains(start) || !self.missing(start) {
             return Err(Failure::Declined);
         }
         Ok(())
     }
 
     fn missing(&self, atom: usize) -> bool {
-        bit(&self.input.completed.cyclic_atoms, atom) && !self.input.completed.contains(atom)
+        self.input.completed.cyclic_atoms.contains(atom) && !self.input.completed.contains(atom)
     }
 
     fn add_atom(&mut self, atom: usize) -> Result<(), Failure> {
@@ -324,8 +324,8 @@ impl Collector<'_, '_, '_> {
 
     fn positive(&mut self, atom: usize) -> Result<bool, Failure> {
         self.meter.tick()?;
-        if bit(self.input.atom_never, atom) {
-            if bit(self.input.atom_sure, atom) {
+        if self.input.atom_never.contains(atom) {
+            if self.input.atom_sure.contains(atom) {
                 return Err(Failure::Declined);
             }
             self.add_condition(atom, false)?;
@@ -351,10 +351,10 @@ impl Collector<'_, '_, '_> {
             return Ok(false);
         };
         self.meter.tick()?;
-        if !bit(self.input.atom_sure, atom) {
+        if !self.input.atom_sure.contains(atom) {
             return Ok(false);
         }
-        if bit(self.input.atom_never, atom) {
+        if self.input.atom_never.contains(atom) {
             return Err(Failure::Declined);
         }
         self.add_condition(atom, true)?;

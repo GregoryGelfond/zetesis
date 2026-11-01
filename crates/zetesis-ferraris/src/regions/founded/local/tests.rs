@@ -299,8 +299,8 @@ fn capture_reads_the_complete_current_atom_result() {
         index: &example.index,
         producers: &example.producers,
         completed: &actual,
-        atom_sure: &atom_sure,
-        atom_never: &cuts,
+        atom_sure: atom_sure.as_slice().into(),
+        atom_never: cuts.as_slice().into(),
     };
     let limits = Limits {
         atoms: 32,

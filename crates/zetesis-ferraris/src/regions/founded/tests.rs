@@ -49,7 +49,7 @@ impl Scratch {
         producers: &Producers,
     ) {
         self.owner = None;
-        self.cyclic_atoms = vec![0; flag_words(owner.atom_count())];
+        self.cyclic_atoms = vec![0; flag_words(owner.atom_count())].into();
         for atom in 0..owner.atom_count() {
             self.cyclic_atoms[atom / 64] |= 1 << (atom % 64);
         }

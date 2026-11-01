@@ -238,7 +238,7 @@ impl<'owner, 'source> PreparedGpuRelation<'_, 'owner, 'source> {
                 relation: self.relation,
                 queries: queries.len(),
                 words_per_query: plan.words as usize,
-                words: Vec::new(),
+                words: Vec::new().into(),
             });
         }
         let packed = plan.pack(queries, cancellation, limits.max_bytes)?;

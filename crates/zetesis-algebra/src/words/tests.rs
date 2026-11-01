@@ -1,6 +1,7 @@
 use super::{union_shifted, union_shifted_until_hit};
 
 mod rows;
+mod storage;
 
 fn reference(words: &[u64], source_words: usize, shift: usize) -> Vec<u64> {
     let mut expected = words.to_vec();

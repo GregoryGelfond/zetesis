@@ -33,9 +33,9 @@
 use std::num::NonZeroUsize;
 use std::ops::ControlFlow;
 
-use zetesis_algebra::Stop;
+use zetesis_algebra::{Stop, words::Words};
 
-use super::{Chain, Closure, Count, Narrower, Step, Work, bit, chain_position, flag_words};
+use super::{Chain, Closure, Count, Narrower, Step, Work, chain_position, flag_words};
 
 const EXPAND: u8 = 1;
 const DIRTY: u8 = 2;
@@ -113,7 +113,7 @@ pub(super) struct Scratch {
     leaves: Vec<usize>,
     candidates: Vec<usize>,
     dirty: Vec<usize>,
-    pending: Vec<u64>,
+    pending: Words<u64>,
 }
 
 impl Scratch {
@@ -130,7 +130,7 @@ impl Scratch {
 
     pub(super) fn clear(&mut self) {
         for &chain in &self.dirty {
-            self.pending[chain / 64] &= !(1u64 << (chain % 64));
+            self.pending.remove(chain);
         }
         self.dirty.clear();
         self.candidates.clear();
@@ -144,26 +144,26 @@ impl Scratch {
             .try_reserve_exact(chains.saturating_sub(self.dirty.len()))
             .map_err(|_| Stop::Allocation)?;
         let words = flag_words(chains);
-        if self.pending.len() < words {
-            self.pending
-                .try_reserve_exact(words - self.pending.len())
+        let pending = self.pending.storage_mut();
+        if pending.len() < words {
+            pending
+                .try_reserve_exact(words - pending.len())
                 .map_err(|_| Stop::Allocation)?;
-            self.pending.resize(words, 0);
+            pending.resize(words, 0);
         }
         Ok(())
     }
 
     pub(super) fn queue_dirty(&mut self, chain: usize) {
-        let (word, flag) = (chain / 64, 1u64 << (chain % 64));
-        if self.pending[word] & flag == 0 {
-            self.pending[word] |= flag;
+        if !self.pending.contains(chain) {
+            self.pending.insert(chain);
             self.dirty.push(chain);
         }
     }
 
     pub(super) fn next_dirty(&mut self) -> Option<usize> {
         let chain = self.dirty.pop()?;
-        self.pending[chain / 64] &= !(1u64 << (chain % 64));
+        self.pending.remove(chain);
         Some(chain)
     }
 
@@ -469,7 +469,7 @@ impl<C: Count> Closure<'_, C> {
         // A processed witness establishes the required root truth in the same
         // operand event. Contradictory events stop before reaching this helper;
         // otherwise that truth persists, so neither relay nor unit work remains.
-        if bit(self.known.witnessed, chain) {
+        if self.known.witnessed.contains(chain) {
             return false;
         }
         let source = &index.chains[chain];
@@ -481,7 +481,7 @@ impl<C: Count> Closure<'_, C> {
         } else {
             (&self.known.never, &self.known.sure)
         };
-        !bit(neutral, source.root) && (role & EXPAND != 0 || !bit(required, source.root))
+        !neutral.contains(source.root) && (role & EXPAND != 0 || !required.contains(source.root))
     }
 
     pub(super) fn witness_changed(
@@ -500,7 +500,7 @@ impl<C: Count> Closure<'_, C> {
         // already informed its parents: an absorbing value settles them, and a
         // neutral value forces this source's operands. Only an unknown source
         // must relay a change in its possible witnesses through the shared DAG.
-        if !bit(self.known.sure, source.root) && !bit(self.known.never, source.root) {
+        if !self.known.sure.contains(source.root) && !self.known.never.contains(source.root) {
             for parent in index.logical_parents(source.root) {
                 work.tick()?;
                 if let Some(link) = index.chain_of[parent] {
@@ -515,11 +515,11 @@ impl<C: Count> Closure<'_, C> {
         }
         if !expands(index, chain)
             || !if source.disjunction {
-                bit(self.known.sure, source.root)
+                self.known.sure.contains(source.root)
             } else {
-                bit(self.known.never, source.root)
+                self.known.never.contains(source.root)
             }
-            || bit(self.known.witnessed, chain)
+            || self.known.witnessed.contains(chain)
         {
             return Ok(Step::Unchanged);
         }
@@ -531,9 +531,9 @@ impl<C: Count> Closure<'_, C> {
                 .visit_expanded(index, chain, frozen, work, |leaf, work| {
                     work.tick()?;
                     let (witness, neutral) = if source.disjunction {
-                        (bit(known.sure, leaf), bit(known.never, leaf))
+                        (known.sure.contains(leaf), known.never.contains(leaf))
                     } else {
-                        (bit(known.never, leaf), bit(known.sure, leaf))
+                        (known.never.contains(leaf), known.sure.contains(leaf))
                     };
                     if witness {
                         return Ok(ControlFlow::Break(()));

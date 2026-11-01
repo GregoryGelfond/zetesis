@@ -24,7 +24,7 @@ fn implication(consequent: usize) -> Theory {
 
 fn knowledge(index: &Narrower, values: [Option<bool>; 3]) -> Knowledge {
     let mut knowledge = index.knowledge();
-    let known = compact_mut(&mut knowledge);
+    let mut known = compact_mut(&mut knowledge);
     for (node, value) in values.into_iter().enumerate() {
         match value {
             Some(true) => known.sure[0] |= 1 << node,

@@ -151,14 +151,18 @@ fn witness_retirement_preserves_every_operand_order() {
 }
 
 fn assign(knowledge: &mut Knowledge, node: usize, value: bool) {
-    let known = compact_mut(knowledge);
-    let mask = if value { known.sure } else { known.never };
+    let mut known = compact_mut(knowledge);
+    let mask = if value {
+        &mut known.sure
+    } else {
+        &mut known.never
+    };
     mask[0] |= 1 << node;
     if node < 4 {
         let atoms = if value {
-            known.atom_sure
+            &mut known.atom_sure
         } else {
-            known.atom_never
+            &mut known.atom_never
         };
         atoms[0] |= 1 << node;
     }

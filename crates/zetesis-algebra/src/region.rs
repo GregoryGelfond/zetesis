@@ -7,7 +7,7 @@
 
 use std::mem::size_of;
 
-use crate::Stop;
+use crate::{Stop, words::Words};
 
 /// A region of candidates: every atom held, cut or open. Its decisions are two
 /// atom bitmasks, one for held and one for cut; a narrowing that carries
@@ -17,9 +17,9 @@ use crate::Stop;
 pub struct Region {
     /// Bit set iff the atom is held. Disjoint from `cut` word for word, and
     /// bits at `[atoms, 64*words)` are always zero and are not atoms.
-    held: Box<[u64]>,
+    held: Words<u64, Box<[u64]>>,
     /// Bit set iff the atom is cut.
-    cut: Box<[u64]>,
+    cut: Words<u64, Box<[u64]>>,
     /// The atom universe; each mask is `words(atoms)` words long.
     atoms: usize,
 }
@@ -27,36 +27,6 @@ pub struct Region {
 /// The number of 64-bit words a mask over `atoms` atoms needs.
 const fn words(atoms: usize) -> usize {
     atoms.div_ceil(64)
-}
-
-/// The word index and single-bit mask of an atom.
-const fn locate(atom: usize) -> (usize, u64) {
-    (atom / 64, 1u64 << (atom % 64))
-}
-
-/// The set-bit positions of a mask, ascending, keeping only real atoms.
-fn set_bits(mask: &[u64], atoms: usize) -> impl Iterator<Item = usize> + '_ {
-    mask.iter().enumerate().flat_map(move |(word, &bits)| {
-        let base = word * 64;
-        SetBits { bits }
-            .map(move |bit| base + bit)
-            .filter(move |&atom| atom < atoms)
-    })
-}
-
-/// Iterates the set-bit positions of one word, ascending.
-struct SetBits {
-    bits: u64,
-}
-impl Iterator for SetBits {
-    type Item = usize;
-    fn next(&mut self) -> Option<usize> {
-        (self.bits != 0).then(|| {
-            let bit = self.bits.trailing_zeros() as usize;
-            self.bits &= self.bits - 1;
-            bit
-        })
-    }
 }
 
 /// Two regions are the same when they decide the same atoms the same way over
@@ -162,7 +132,11 @@ impl Region {
         let retained =
             size_of::<Self>() as u128 + held_bytes + cut.len() as u128 * size_of::<u64>() as u128;
         publish(context, retained)?;
-        Ok(Self { held, cut, atoms })
+        Ok(Self {
+            held: held.into(),
+            cut: cut.into(),
+            atoms,
+        })
     }
     /// The number of atoms the region decides over.
     #[must_use]
@@ -188,7 +162,7 @@ impl Region {
         if atom >= self.atoms {
             return false;
         }
-        let (word, bit) = locate(atom);
+        let (word, bit) = Words::<u64>::locate(atom);
         if self.held[word] & bit != 0 {
             return value;
         }
@@ -208,7 +182,7 @@ impl Region {
         if atom >= self.atoms {
             return None;
         }
-        let (word, bit) = locate(atom);
+        let (word, bit) = Words::<u64>::locate(atom);
         if self.held[word] & bit != 0 {
             Some(true)
         } else if self.cut[word] & bit != 0 {
@@ -231,7 +205,7 @@ impl Region {
     #[must_use]
     pub fn is_open(&self, atom: usize) -> bool {
         atom < self.atoms && {
-            let (word, bit) = locate(atom);
+            let (word, bit) = Words::<u64>::locate(atom);
             (self.held[word] | self.cut[word]) & bit == 0
         }
     }
@@ -242,14 +216,14 @@ impl Region {
         for word in (0..self.mask_words()).rev() {
             let open = self.open_word(word, u64::MAX);
             if open != 0 {
-                return Some(word * 64 + (63 - open.leading_zeros() as usize));
+                return Some(word * 64 + Words::<u64>::last_bit(open));
             }
         }
         None
     }
     /// The atoms every candidate holds, ascending.
     pub fn held(&self) -> impl Iterator<Item = usize> + '_ {
-        set_bits(&self.held, self.atoms)
+        self.held.positions().filter(|&atom| atom < self.atoms)
     }
     /// The open atoms, ascending.
     pub fn open(&self) -> impl Iterator<Item = usize> + '_ {
@@ -296,10 +270,7 @@ impl Region {
             .zip(selected)
             .flat_map(move |(word, selected)| {
                 let base = word * 64;
-                SetBits {
-                    bits: self.open_word(word, selected),
-                }
-                .map(move |bit| base + bit)
+                Words::<u64>::bits(self.open_word(word, selected)).map(move |bit| base + bit)
             })
     }
     /// The atoms this region decides that are not set in `seen`, each paired
@@ -315,7 +286,7 @@ impl Region {
             let fresh = (self.held[word] | self.cut[word]) & !seen_word;
             let held = self.held[word];
             let base = word * 64;
-            SetBits { bits: fresh }
+            Words::<u64>::bits(fresh)
                 .map(move |bit| (base + bit, held & (1u64 << bit) != 0))
                 .filter(move |&(atom, _)| atom < self.atoms)
         })
@@ -361,7 +332,7 @@ impl Region {
             self.is_open(atom),
             "a region is split on one of its open atoms"
         );
-        let (word, bit) = locate(atom);
+        let (word, bit) = Words::<u64>::locate(atom);
         // Clone once for the held child; reuse this region as the cut child
         // rather than cloning it a second time.
         let mut held = self.clone();
@@ -450,3 +421,6 @@ pub enum Narrowing {
         changed: bool,
     },
 }
+
+#[cfg(test)]
+mod tests;

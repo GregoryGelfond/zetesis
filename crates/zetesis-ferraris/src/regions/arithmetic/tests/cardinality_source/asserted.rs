@@ -199,7 +199,7 @@ fn asserted_count_support_has_no_eight_atom_parity_limit() {
     let bounds = cardinality_source::read_root(&owner, 0, &mut storage, &mut meter).unwrap();
     assert_eq!(bounds.len(), 2);
     for bound in &bounds {
-        assert_eq!(bound.support, [u64::MAX, u64::MAX, 1, 0]);
+        assert_eq!(&*bound.support, [u64::MAX, u64::MAX, 1, 0]);
         assert_eq!(bound.cardinality, 129);
         assert!(bound.guard.is_empty());
         assert!(

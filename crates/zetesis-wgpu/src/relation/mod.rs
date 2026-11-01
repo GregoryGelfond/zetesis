@@ -15,7 +15,7 @@ use std::{
     mem::{size_of, size_of_val},
     time::Duration,
 };
-use zetesis_algebra::{Cancellation, Stop};
+use zetesis_algebra::{Cancellation, Stop, words::Words};
 use zetesis_core::relation::{self, Relation, Selection};
 
 use crate::{GpuError, GpuErrorKind};
@@ -113,7 +113,7 @@ pub struct RelationGpuMasks<'owner, 'source> {
     relation: &'owner Relation<'source>,
     queries: usize,
     words_per_query: usize,
-    words: Vec<u32>,
+    words: Words<u32>,
 }
 
 impl<'owner, 'source> RelationGpuMasks<'owner, 'source> {

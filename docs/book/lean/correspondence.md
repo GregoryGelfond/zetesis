@@ -618,6 +618,24 @@ width. Predicate-set equalities connect these representations to the semantic
 library. The supplied in-range coordinates are a structural premise, not an
 assumption that membership is correct.
 
+The current `zetesis_algebra::words::Words` storage and borrowed views share the
+membership, ascending bit traversal and numeric-half operations used by
+`Interpretation`. The width-general `insert_bit_exact` and `clear_bit_exact`
+laws establish single-coordinate updates at any positive lane width; the
+existing 64-bit laws specialize them. `combine_prefix_exact` models a successful
+prefix of common-prefix lane combinations, preserving the destination's shape
+and unmatched suffix. Its operation parameter takes the existing bit-vector
+OR, AND or XOR operation; the corresponding `BitVec.getLsbD_*` laws give each
+lane's set interpretation. The successful-write count is not a work allowance
+or a claim about which callback was executed.
+
+`Region` and the six-span knowledge masks retain their own extents and
+allocation boundaries. Wrapping storage does not establish padding, owner
+identity or a semantic interval: those remain the caller's invariants.
+The representation laws are correspondence targets for these shared operations,
+not a proof that the Rust wrapper, its refused-write boundary or every packed
+consumer refines them.
+
 This is newly authored Lean, not a fresh extraction of `Interpretation::new`,
 `contains` or `words32`. The historical membership extraction retains its own
 source identity and toolchain. A current implementation proof must establish
@@ -810,6 +828,18 @@ the packed export. It proves cursor progress, exact remaining output and fused
 exhaustion. Composing construction and iteration derives membership and zero
 padding without an output-agreement premise. Rust's byte conversions, borrowing
 and machine indices remain separate implementation obligations.
+
+`Refinement.PackedWordIterator.SetBits.least_clear_suffix` separately proves
+that a nonzero lane's trailing-zero count selects its least true coordinate,
+and that complement-mask clearing leaves precisely the greater true
+coordinates. `BitVec.zero_iff_eq_false` supplies the zero-lane exhaustion
+criterion. These are physical set-bit laws, not the half-word export theorem.
+`SetBits.lowest_bit_arithmetic` identifies fixed-width `x & (x - 1)` clearing
+and `x & -x` isolation with the same least-bit mask. This closes the mathematical
+arithmetic identity, including modular negation; it does not identify Rust
+intrinsics with Lean primitives. Composing repeated cursor steps and preserving
+machine bounds, effectful callbacks and refusal order remain refinement
+obligations.
 
 `Refinement.PackedSubsets` derives distinct selected coordinates by scanning
 finite packed truth. Its set/clear operations preserve correspondence with the

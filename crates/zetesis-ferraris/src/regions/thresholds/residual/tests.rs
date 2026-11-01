@@ -106,10 +106,10 @@ fn completed_residue_reuses_its_last_interval_check() {
         known: known.borrow(),
         lists: &mut NarrowingScratch::default(),
     };
-    assert!((0..8).all(
-        |condition| !crate::regions::bit(closure.known.sure, condition)
-            && !crate::regions::bit(closure.known.never, condition)
-    ));
+    assert!(
+        (0..8).all(|condition| !closure.known.sure.contains(condition)
+            && !closure.known.never.contains(condition))
+    );
     let outcome = closure.threshold_residual_check(&index, 0, &mut work);
     assert!(matches!(outcome, Ok(Step::Contradiction)));
     assert_eq!(work.spent(), 10);

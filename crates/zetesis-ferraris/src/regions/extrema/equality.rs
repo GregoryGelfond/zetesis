@@ -14,9 +14,9 @@
 
 use std::ops::Range;
 
-use zetesis_algebra::Stop;
+use zetesis_algebra::{Stop, words::Words};
 
-use super::{Closure, Count, Narrower, Step, Work, bit, push, reserve};
+use super::{Closure, Count, Narrower, Step, Work, push, reserve};
 use crate::regions::{flag_words, witnesses};
 
 type Signature = (usize, usize, usize, usize);
@@ -155,7 +155,7 @@ fn has_ordinal(index: &Narrower, entries: &[Entry], work: &mut Work<'_>) -> Resu
 struct Equality {
     walker: witnesses::Scratch,
     reference: Vec<usize>,
-    membership: Vec<u64>,
+    membership: Words<u64>,
 }
 
 impl Equality {
@@ -194,12 +194,14 @@ impl Equality {
         self.reference.clear();
         let result = (|| {
             let words = flag_words(index.parents.len());
+            let additional = words.saturating_sub(self.membership.len());
             self.membership
-                .try_reserve(words.saturating_sub(self.membership.len()))
+                .storage_mut()
+                .try_reserve(additional)
                 .map_err(|_| Stop::Allocation)?;
             while self.membership.len() < words {
                 work.tick()?;
-                self.membership.push(0);
+                self.membership.storage_mut().push(0);
             }
             let leaves = self.walker.read(index, left, None, work)?;
             self.reference
@@ -208,7 +210,7 @@ impl Equality {
             for &leaf in leaves {
                 work.tick()?;
                 work.tick()?;
-                self.membership[leaf / 64] |= 1u64 << (leaf % 64);
+                self.membership.insert(leaf);
                 self.reference.push(leaf);
             }
             let leaves = self.walker.read(index, right, None, work)?;
@@ -217,14 +219,14 @@ impl Equality {
             }
             for &leaf in leaves {
                 work.tick()?;
-                if self.membership[leaf / 64] & (1u64 << (leaf % 64)) == 0 {
+                if !self.membership.contains(leaf) {
                     return Ok(false);
                 }
             }
             Ok(true)
         })();
         for &leaf in &self.reference {
-            self.membership[leaf / 64] &= !(1u64 << (leaf % 64));
+            self.membership.remove(leaf);
         }
         result
     }
@@ -245,7 +247,7 @@ impl<C: Count> Closure<'_, C> {
         if !source.disjunction || frozen.is_some_and(|truth| !truth[source.root]) {
             return Ok(Step::Unchanged);
         }
-        let value = bit(self.known.sure, source.root);
+        let value = self.known.sure.contains(source.root);
         let mut step = Step::Unchanged;
         for &target in index.equal_extrema.members(chain, work)? {
             work.tick()?;
@@ -254,9 +256,9 @@ impl<C: Count> Closure<'_, C> {
                 continue;
             }
             let already = if value {
-                bit(self.known.sure, root)
+                self.known.sure.contains(root)
             } else {
-                bit(self.known.never, root)
+                self.known.never.contains(root)
             };
             if !already {
                 step = step.join(if value {

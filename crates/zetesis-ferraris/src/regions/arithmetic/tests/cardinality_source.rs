@@ -280,7 +280,7 @@ fn clause_lower_has_no_eight_atom_pattern_limit() {
     let bounds =
         cardinality_source::read_root(&owner, 0, &mut storage, &mut budget(&cancellation)).unwrap();
     assert_eq!(bounds.len(), 1);
-    assert_eq!(bounds[0].support, [u64::MAX, u64::MAX, 1, 0]);
+    assert_eq!(&*bounds[0].support, [u64::MAX, u64::MAX, 1, 0]);
     assert_eq!(bounds[0].cardinality, 129);
     assert_eq!(bounds[0].value, 1);
     assert_eq!(bounds[0].side, BoundSide::Lower);
@@ -313,7 +313,7 @@ fn independent_reread_rejects_every_corrupted_proposal_field() {
             9 => candidate.guard[0].positive = false,
             10 => candidate.guard[0].atom = 2,
             11 => {
-                candidate.support.pop();
+                candidate.support.storage_mut().pop();
             }
             _ => {
                 candidate.guard.pop();
@@ -480,4 +480,67 @@ fn every_checker_work_refusal_prefix_remains_a_failure_not_acceptance() {
     }
     release(rows, &mut retained);
     assert_eq!(retained.bytes(), 0);
+}
+
+#[test]
+fn bound_keeps_its_original_record_layout() {
+    use cardinality_source::Source;
+    use std::mem::{align_of, offset_of, size_of};
+
+    struct Original {
+        support: Vec<u64>,
+        guard: Vec<Literal>,
+        side: BoundSide,
+        value: u64,
+        cardinality: u64,
+        source: Source,
+    }
+    assert_eq!(size_of::<Bound>(), size_of::<Original>());
+    assert_eq!(align_of::<Bound>(), align_of::<Original>());
+    macro_rules! offset {
+        ($field:ident) => {
+            assert_eq!(offset_of!(Bound, $field), offset_of!(Original, $field));
+        };
+    }
+    offset!(support);
+    offset!(guard);
+    offset!(side);
+    offset!(value);
+    offset!(cardinality);
+    offset!(source);
+}
+
+#[test]
+fn checked_support_keeps_its_padded_allocation() {
+    for atoms in [2usize, 63, 64, 65, 127, 128, 129] {
+        let owner = constructed_theory(atoms, |nodes| {
+            vec![threshold(nodes, &[0, atoms - 1], &[1, 1], 1)]
+        });
+        let cancellation = Cancellation::default();
+        let mut meter = budget(&cancellation);
+        let mut storage = Storage::default();
+        let bounds = cardinality_source::read_root(&owner, 0, &mut storage, &mut meter).unwrap();
+        assert_eq!(bounds.len(), 1);
+        let bound = &bounds[0];
+        assert_eq!(bound.support.len(), atoms.div_ceil(128) * 2);
+        for (word, &bits) in bound.support.iter().enumerate() {
+            let mut expected = u64::from(word == 0);
+            if word == (atoms - 1) / 64 {
+                expected |= 1 << ((atoms - 1) % 64);
+            }
+            assert_eq!(bits, expected, "atoms {atoms}, word {word}");
+        }
+        let allocation = (bound.support.as_ptr(), bound.support.capacity());
+        let retained = storage.bytes();
+        assert!(
+            cardinality_source::check(&owner, &owner, bound, &mut storage, &mut meter).unwrap()
+        );
+        assert_eq!(
+            (bound.support.as_ptr(), bound.support.capacity()),
+            allocation
+        );
+        assert_eq!(storage.bytes(), retained);
+        release(bounds, &mut storage);
+        assert_eq!(storage.bytes(), 0);
+    }
 }

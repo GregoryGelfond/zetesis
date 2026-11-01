@@ -12,7 +12,7 @@ mod tests;
 use std::mem::size_of;
 
 use crate::{AdmissionError, Theory};
-use zetesis_algebra::Stop;
+use zetesis_algebra::{Stop, words::Words};
 
 use super::{
     budget::{Budget, BudgetError},
@@ -31,7 +31,7 @@ struct Step {
 pub(super) struct CheckedRootFacts {
     owner: Theory,
     steps: Vec<Step>,
-    words: Vec<u64>,
+    words: Words<u64>,
 }
 
 impl CheckedRootFacts {
@@ -100,23 +100,24 @@ fn replay(
     steps: &[Step],
     storage: &mut Storage,
     budget: &mut Budget<'_, '_>,
-) -> Result<Option<Vec<u64>>, BudgetError> {
+) -> Result<Option<Words<u64>>, BudgetError> {
     budget.charge(1)?;
     if !theory.same_instance(owner) {
         budget.charge(1)?;
         return Ok(None);
     }
-    let mut words = storage.filled(theory.atom_count().div_ceil(64), 0_u64, 1, budget)?;
+    let mut words =
+        Words::new(storage.filled(theory.atom_count().div_ceil(64), 0_u64, 1, budget)?);
     for step in steps {
         budget.charge(3)?; // occurrence, root and claimed head
         let Some(rule) = reader::rule(theory, step.root, budget)? else {
-            storage.release(words)?;
+            storage.release(words.into_storage())?;
             budget.charge(1)?;
             return Ok(None);
         };
         budget.charge(1)?;
         if rule.head != step.atom || membership(theory, &words, step.atom, budget)? {
-            storage.release(words)?;
+            storage.release(words.into_storage())?;
             budget.charge(1)?;
             return Ok(None);
         }
@@ -125,12 +126,12 @@ fn replay(
         })?;
         budget.charge(1)?;
         if !ready {
-            storage.release(words)?;
+            storage.release(words.into_storage())?;
             budget.charge(1)?;
             return Ok(None);
         }
         budget.charge(4)?; // divide, remainder, shift and OR (including its load/store)
-        words[step.atom / 64] |= 1 << (step.atom % 64);
+        words.insert(step.atom);
     }
     budget.charge(1)?;
     Ok(Some(words))
@@ -148,5 +149,5 @@ fn membership(
         return Err(BudgetError::Source(AdmissionError::Atom));
     }
     budget.charge(5)?; // divide, remainder, shift, AND and truth test
-    Ok(words[atom / 64] & (1 << (atom % 64)) != 0)
+    Ok(Words::<u64, _>::new(words).contains(atom))
 }

@@ -7,6 +7,7 @@ use super::*;
 mod selection;
 mod metered;
 mod canonical;
+mod words;
 
 fn atoms(predicate: &Predicate, rows: &[Vec<Value>]) -> Vec<Atom> {
     rows.iter()

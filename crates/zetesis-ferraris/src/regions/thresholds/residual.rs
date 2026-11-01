@@ -66,7 +66,7 @@ impl<C: Count> Closure<'_, C> {
             if !fitting && weight > width {
                 break;
             }
-            if bit(self.known.sure, condition) || bit(self.known.never, condition) {
+            if self.known.sure.contains(condition) || self.known.never.contains(condition) {
                 continue;
             }
             if !fitting {
@@ -83,8 +83,8 @@ impl<C: Count> Closure<'_, C> {
         }
         prepare_suffix(
             &data.terms,
-            self.known.sure,
-            self.known.never,
+            &self.known.sure,
+            &self.known.never,
             &mut self.lists.residual_suffix,
             work,
         )?;
@@ -95,7 +95,7 @@ impl<C: Count> Closure<'_, C> {
             work.tick()?;
             // Earlier publications touch only earlier, distinct conditions.
             // This condition still has its initial snapshot truth.
-            if bit(self.known.sure, condition) || bit(self.known.never, condition) {
+            if self.known.sure.contains(condition) || self.known.never.contains(condition) {
                 continue;
             }
             let suffix = self.lists.residual_suffix[data.terms.len() - position - 1];
@@ -177,7 +177,7 @@ impl<C: Count> Closure<'_, C> {
         // the same immutable coefficients from the small end.
         for &(condition, weight) in data.terms.iter().rev() {
             work.tick()?;
-            if bit(self.known.sure, condition) || bit(self.known.never, condition) {
+            if self.known.sure.contains(condition) || self.known.never.contains(condition) {
                 continue;
             }
             // This first undecided term was already read and charged. A

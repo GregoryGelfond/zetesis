@@ -18,7 +18,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 
 use super::founded::explanations::{self, Explanation, Input, Limits};
 use crate::regions::{SupportExplanationStatistics, Theory, Work};
-use zetesis_algebra::Stop;
+use zetesis_algebra::{Stop, words::Words};
 
 mod row;
 
@@ -355,7 +355,7 @@ enum Compared {
     Declined,
     /// The rows, one bit per position, the proposed row replaces: identical
     /// conditions whose outputs it now includes, or rows it dominates.
-    Replaces(Vec<u64>),
+    Replaces(Words<u64>),
 }
 
 /// Where a retention left a proposed row.
@@ -911,11 +911,12 @@ impl Ledger {
         peak: &mut u128,
     ) -> Result<Compared, Stop> {
         let rows = self.rows.len();
-        let mut replaced = Vec::new();
+        let mut replaced = Words::new(Vec::new());
         replaced
+            .storage_mut()
             .try_reserve_exact(rows.div_ceil(64))
             .map_err(|_| Stop::Allocation)?;
-        replaced.resize(rows.div_ceil(64), 0_u64);
+        replaced.storage_mut().resize(rows.div_ceil(64), 0_u64);
         for position in 0..rows {
             if !capture_read(remaining, work)? {
                 return Ok(Compared::Declined);
@@ -933,13 +934,13 @@ impl Ledger {
                 return Ok(Compared::Declined);
             };
             if combined {
-                replaced[position / 64] |= 1 << (position % 64);
+                replaced.insert(position);
             }
         }
         // A union can dominate a row examined before its outputs were added.
         // Compare the completed proposed row against every other row.
         for position in 0..rows {
-            if replaced[position / 64] & (1 << (position % 64)) != 0 {
+            if replaced.contains(position) {
                 continue;
             }
             if !capture_read(remaining, work)? {
@@ -952,7 +953,7 @@ impl Ledger {
                 return Ok(Compared::Declined);
             };
             if dominated {
-                replaced[position / 64] |= 1 << (position % 64);
+                replaced.insert(position);
             }
         }
         Ok(Compared::Replaces(replaced))
@@ -964,7 +965,7 @@ impl Ledger {
     fn place(
         &mut self,
         entry: Entry,
-        replaced: &[u64],
+        replaced: &Words<u64>,
         victim: Option<usize>,
     ) -> Result<usize, Stop> {
         if let Some(victim) = victim {
@@ -972,17 +973,12 @@ impl Ledger {
             self.evicted += 1;
             return Ok(victim);
         }
-        let first = replaced
-            .iter()
-            .enumerate()
-            .find(|(_, word)| **word != 0)
-            .map(|(index, word)| index * 64 + word.trailing_zeros() as usize);
+        let first = replaced.next_from(0);
         if let Some(first) = first {
             self.rows[first] = entry;
             let mut position = 0;
             self.rows.retain(|_| {
-                let keep =
-                    position == first || replaced[position / 64] & (1 << (position % 64)) == 0;
+                let keep = position == first || !replaced.contains(position);
                 position += 1;
                 keep
             });

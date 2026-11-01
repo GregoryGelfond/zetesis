@@ -2,6 +2,8 @@
 
 use std::{fmt, mem::size_of};
 
+use zetesis_algebra::words::Words;
+
 use crate::catalog::TermRef;
 
 use super::{Failure, Limits, Relation, Row, Work, storage};
@@ -204,7 +206,7 @@ impl<'owner, 'source> Selection<'owner, 'source> {
 /// it does not establish full pattern matching or answer-set membership.
 pub struct Mask<'owner, 'source> {
     relation: &'owner Relation<'source>,
-    words: Vec<u32>,
+    words: Words<u32>,
     bytes: usize,
     work: u128,
 }
@@ -484,6 +486,7 @@ impl<'source> Relation<'source> {
             return Err(Failure::Mask);
         }
         let mask_bytes = std::mem::size_of_val(words);
+        let words = Words::<u32, _>::new(words);
         let extra = mask_bytes
             .checked_add(size_of::<Selection<'_, '_>>())
             .ok_or(Failure::Overflow)?;
@@ -496,17 +499,15 @@ impl<'source> Relation<'source> {
                 return Err(Failure::Mask);
             }
             count = count
-                .checked_add(word.count_ones() as usize)
+                .checked_add(Words::<u32>::popcount(word) as usize)
                 .ok_or(Failure::Overflow)?;
         }
         let mut positions = work.reserve(count)?;
         for (index, &word) in words.iter().enumerate() {
             work.tick(1)?;
-            let mut remaining = word;
-            while remaining != 0 {
-                work.tick(2)?;
-                positions.push(index * bits + remaining.trailing_zeros() as usize);
-                remaining &= remaining - 1;
+            let mut selected = Words::<u32>::bits(word);
+            while let Some(bit) = selected.next_with(|| work.tick(2))? {
+                positions.push(index * bits + bit);
             }
         }
         Ok(Selection {
@@ -606,8 +607,9 @@ impl<'source> Relation<'source> {
         let mut words = work.reserve(count)?;
         work.tick(count as u128)?;
         words.resize(count, 0_u32);
+        let mut words = Words::<u32>::new(words);
         self.visit_matches(query, input, &mut work, |position| {
-            words[position / bits] |= 1 << (position % bits);
+            words.insert(position);
         })?;
         Ok(Mask {
             relation: self,

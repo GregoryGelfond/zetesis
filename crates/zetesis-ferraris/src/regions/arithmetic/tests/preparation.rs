@@ -327,3 +327,69 @@ fn absent_and_refuted_seeds_do_not_charge_a_constructor() {
         );
     }
 }
+
+#[test]
+fn prepared_equations_keep_padded_owned_words() {
+    for atoms in [1usize, 63, 64, 65, 127, 128, 129] {
+        let theory = constructed_theory(atoms, |nodes| {
+            let falsum = push(nodes, NodeView::False);
+            vec![push(nodes, NodeView::Implies(atoms - 1, falsum))]
+        });
+        let mut quota = Quota {
+            ceiling: u64::MAX,
+            held: 0,
+        };
+        let attempt = RootPreparation::prepare_reserved(
+            &theory,
+            None,
+            limits(),
+            &Cancellation::default(),
+            &mut quota,
+        );
+        assert_eq!(attempt.parity.rows, 1, "atoms {atoms}");
+        let prepared = attempt.result.unwrap().unwrap();
+        assert!(prepared.parity.belongs_to(&theory));
+        let equation = &prepared.parity.recognized.equations[0];
+        assert_eq!(equation.words.len(), atoms.div_ceil(128) * 2);
+        for (word, &bits) in equation.words.iter().enumerate() {
+            let expected = if word == (atoms - 1) / 64 {
+                1 << ((atoms - 1) % 64)
+            } else {
+                0
+            };
+            assert_eq!(bits, expected, "atoms {atoms}, word {word}");
+        }
+        let allocation = (equation.words.as_ptr(), equation.words.capacity());
+        let bytes = prepared.parity.retained_bytes();
+        let moved = prepared.parity;
+        let moved_equation = &moved.recognized.equations[0];
+        assert_eq!(
+            (
+                moved_equation.words.as_ptr(),
+                moved_equation.words.capacity()
+            ),
+            allocation
+        );
+        assert_eq!(moved.retained_bytes(), bytes);
+    }
+}
+
+#[test]
+fn equation_keeps_its_original_record_layout() {
+    use super::super::rows::{Equation, Source};
+    use std::mem::{align_of, offset_of, size_of};
+
+    struct Original {
+        words: Vec<u64>,
+        constant: bool,
+        source: Source,
+    }
+    assert_eq!(size_of::<Equation>(), size_of::<Original>());
+    assert_eq!(align_of::<Equation>(), align_of::<Original>());
+    assert_eq!(offset_of!(Equation, words), offset_of!(Original, words));
+    assert_eq!(
+        offset_of!(Equation, constant),
+        offset_of!(Original, constant)
+    );
+    assert_eq!(offset_of!(Equation, source), offset_of!(Original, source));
+}

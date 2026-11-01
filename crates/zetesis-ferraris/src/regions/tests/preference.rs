@@ -361,7 +361,7 @@ fn closed_and_outside_choice_bits_do_not_hide_open_atoms() {
     assert!(region.cut(64));
     assert!(region.cut(129));
     let choices = ChoiceHeads {
-        words: vec![1, 1, !3, u64::MAX],
+        words: vec![1, 1, !3, u64::MAX].into(),
     };
     let attempt = known.preferred_atom_reserved(
         &region,
@@ -372,7 +372,7 @@ fn closed_and_outside_choice_bits_do_not_hide_open_atoms() {
     assert_eq!(attempt.result, Ok(Some(1)));
     assert_eq!(attempt.work, 127);
     let choices = ChoiceHeads {
-        words: vec![1, 1 | (1 << 63), !1, u64::MAX],
+        words: vec![1, 1 | (1 << 63), !1, u64::MAX].into(),
     };
     let attempt = known.preferred_atom_reserved(
         &region,
@@ -426,4 +426,24 @@ fn a_refuted_narrowing_publishes_no_preference() {
     );
     assert_eq!(attempt.result.unwrap(), Narrowing::Refuted);
     assert_eq!(attempt.preferred, None);
+}
+
+#[test]
+fn choice_storage_preserves_the_vector_layout() {
+    use std::mem::{align_of, size_of};
+    assert_eq!(size_of::<ChoiceHeads>(), size_of::<Vec<u64>>());
+    assert_eq!(align_of::<ChoiceHeads>(), align_of::<Vec<u64>>());
+    let words = vec![1_u64, 2, 0];
+    let pointer = words.as_ptr();
+    let capacity = words.capacity();
+    let choices = ChoiceHeads {
+        words: words.into(),
+    };
+    assert_eq!(choices.words.as_ptr(), pointer);
+    assert_eq!(choices.words.capacity(), capacity);
+    assert!(choices.contains(0));
+    assert!(choices.contains(65));
+    assert!(!choices.contains(64));
+    assert!(!choices.contains(192));
+    assert!(!choices.contains(usize::MAX));
 }

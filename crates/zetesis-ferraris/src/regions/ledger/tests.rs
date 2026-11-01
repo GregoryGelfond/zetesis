@@ -181,8 +181,8 @@ fn input<'a>(
         index: &program.index,
         producers: &program.producers,
         completed: &scratch.founded,
-        atom_sure,
-        atom_never,
+        atom_sure: atom_sure.into(),
+        atom_never: atom_never.into(),
     }
 }
 

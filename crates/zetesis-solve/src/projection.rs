@@ -4,7 +4,7 @@ use std::{fmt, mem::size_of};
 
 mod index;
 
-use zetesis_algebra::{Cancellation, Stop};
+use zetesis_algebra::{Cancellation, Stop, words::Words};
 use zetesis_core::Model;
 use zetesis_themelios::PreparedProjection;
 
@@ -115,7 +115,7 @@ pub(crate) struct Projection<'a> {
     domain: &'a PreparedProjection,
     limits: ProjectionLimits,
     history: index::History,
-    current: Vec<u64>,
+    current: Words<u64>,
     stats: ProjectionStatistics,
 }
 
@@ -132,7 +132,7 @@ impl<'a> Projection<'a> {
             domain,
             limits,
             history: index::History::new(words),
-            current: Vec::new(),
+            current: Words::new(Vec::new()),
             stats: ProjectionStatistics::default(),
         };
         ceiling(
@@ -142,6 +142,7 @@ impl<'a> Projection<'a> {
         )?;
         result
             .current
+            .storage_mut()
             .try_reserve_exact(words)
             .map_err(|_| ProjectionError::Allocation)?;
         result.stats.retained_bytes = result.base_bytes();
@@ -151,7 +152,7 @@ impl<'a> Projection<'a> {
             result.stats.retained_bytes,
             limits.max_bytes as u128,
         )?;
-        result.current.resize(words, 0);
+        result.current.storage_mut().resize(words, 0);
         Ok(result)
     }
 
@@ -177,14 +178,14 @@ impl<'a> Projection<'a> {
             stats: &mut self.stats,
             cancellation,
         };
-        for word in &mut self.current {
+        for word in self.current.iter_mut() {
             work.charge(1)?;
             *word = 0;
         }
         for (index, atom) in self.domain.atoms().iter().enumerate() {
             work.charge(1)?;
             if model.contains(atom) {
-                self.current[index / 64] |= 1_u64 << (index % 64);
+                self.current.insert(index);
             }
         }
         let inserted = self.history.insert(&self.current, base, &mut work)?;

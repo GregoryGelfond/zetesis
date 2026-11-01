@@ -20,7 +20,7 @@ fn equations(atom_count: usize, specifications: &[(usize, bool)]) -> Vec<Equatio
                 *first = u64::try_from(coefficients).unwrap();
             }
             Equation {
-                words,
+                words: words.into(),
                 constant,
                 source: Source::Clauses { first: 0, count: 0 },
             }

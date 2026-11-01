@@ -1282,9 +1282,7 @@
 'Zetesis.Refinement.PackedCounterSearch.represented_truth' depends on axioms: [propext, Quot.sound]
 'Zetesis.Refinement.PackedCounterSearch.query_refines' depends on axioms: [propext, Quot.sound]
 'Zetesis.Refinement.PackedCounterSearch.search_refines' depends on axioms: [propext, Classical.choice, Quot.sound]
-'Zetesis.Refinement.PackedCounterSearch.Candidate.of_atoms_denotes' depends on axioms: [propext,
- Classical.choice,
- Quot.sound]
+'Zetesis.Refinement.PackedCounterSearch.Candidate.of_atoms_denotes' depends on axioms: [propext, Quot.sound]
 'Zetesis.Refinement.PackedCounterSearch.Candidate.coordinate_stored' depends on axioms: [propext, Quot.sound]
 'Zetesis.Refinement.PackedCounterSearch.check_refines' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.Refinement.PackedCounterSearch.check_exact' depends on axioms: [propext, Classical.choice, Quot.sound]
@@ -1296,26 +1294,27 @@
  Classical.choice,
  Quot.sound]
 'Zetesis.Refinement.PackedCounterSearch.check_iff_answer_set' depends on axioms: [propext, Classical.choice, Quot.sound]
-'Zetesis.Refinement.PackedCounterSearch.cross_word_stream_accepts_facts' depends on axioms: [propext,
- Classical.choice,
- Quot.sound]
+'Zetesis.Refinement.PackedCounterSearch.cross_word_stream_accepts_facts' depends on axioms: [propext, Quot.sound]
 'Zetesis.Refinement.PackedInterpretations.mask_bit' depends on axioms: [propext, Quot.sound]
+'Zetesis.Refinement.PackedInterpretations.insert_bit_exact' depends on axioms: [propext, Quot.sound]
+'Zetesis.Refinement.PackedInterpretations.clear_bit_exact' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.Refinement.PackedInterpretations.combine_prefix_exact' depends on axioms: [propext, Quot.sound]
 'Zetesis.Refinement.PackedInterpretations.contains_eq_bit' depends on axioms: [propext, Quot.sound]
-'Zetesis.Refinement.PackedInterpretations.insert_exact' depends on axioms: [propext, Classical.choice, Quot.sound]
-'Zetesis.Refinement.PackedInterpretations.insertAll_exact' depends on axioms: [propext, Classical.choice, Quot.sound]
-'Zetesis.Refinement.PackedInterpretations.pack_exact' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.Refinement.PackedInterpretations.insert_exact' depends on axioms: [propext, Quot.sound]
+'Zetesis.Refinement.PackedInterpretations.insertAll_exact' depends on axioms: [propext, Quot.sound]
+'Zetesis.Refinement.PackedInterpretations.pack_exact' depends on axioms: [propext, Quot.sound]
 'Zetesis.Refinement.PackedInterpretations.export32_exact' depends on axioms: [propext, Quot.sound]
-'Zetesis.Refinement.PackedInterpretations.pack_denotes' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.Refinement.PackedInterpretations.pack_denotes' depends on axioms: [propext, Quot.sound]
 'Zetesis.Refinement.PackedInterpretations.export32_denotes' depends on axioms: [propext, Quot.sound]
 'Zetesis.PackedQueryLiterals.decode_encode' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.PackedQueryLiterals.encode_injective' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.PackedQueryLiterals.encode_lt' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.PackedQueryLiterals.packed_truth' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.Refinement.PackedSubsets.clear_exact' depends on axioms: [propext, Classical.choice, Quot.sound]
-'Zetesis.Refinement.PackedSubsets.pack_represents' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.Refinement.PackedSubsets.pack_represents' depends on axioms: [propext, Quot.sound]
 'Zetesis.Refinement.PackedSubsets.coordinate_stored' depends on axioms: [propext, Quot.sound]
 'Zetesis.Refinement.PackedSubsets.bit_member' depends on axioms: [propext, Quot.sound]
-'Zetesis.Refinement.PackedSubsets.insert_represents' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.Refinement.PackedSubsets.insert_represents' depends on axioms: [propext, Quot.sound]
 'Zetesis.Refinement.PackedSubsets.clear_represents' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.Refinement.PackedSubsets.represented_shape' depends on axioms: [propext, Quot.sound]
 'Zetesis.Refinement.PackedSubsets.absent_selected' depends on axioms: [propext, Classical.choice, Quot.sound]
@@ -1349,7 +1348,13 @@
 'Zetesis.Refinement.PackedWordIterator.run_complete' depends on axioms: [propext, Quot.sound]
 'Zetesis.Refinement.PackedWordIterator.run_exhausted' depends on axioms: [propext]
 'Zetesis.Refinement.PackedWordIterator.initialized_exact' depends on axioms: [propext, Quot.sound]
-'Zetesis.Refinement.PackedWordIterator.packed_exact' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.Refinement.PackedWordIterator.packed_exact' depends on axioms: [propext, Quot.sound]
+'Zetesis.Refinement.PackedWordIterator.SetBits.least_clear_suffix' depends on axioms: [propext,
+ Classical.choice,
+ Quot.sound]
+'Zetesis.Refinement.PackedWordIterator.SetBits.lowest_bit_arithmetic' depends on axioms: [propext,
+ Classical.choice,
+ Quot.sound]
 'Zetesis.PairwiseExclusions.masked_unit_sum_two' depends on axioms: [propext, Quot.sound]
 'Zetesis.PairwiseExclusions.original' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.PairwiseExclusions.constraint_frozen_iff' depends on axioms: [propext, Classical.choice, Quot.sound]

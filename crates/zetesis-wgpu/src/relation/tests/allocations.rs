@@ -214,7 +214,7 @@ fn decode_refuses_an_incomplete_output_allocation() {
     let mut packed = plan
         .pack(&queries, &Cancellation::default(), u64::MAX)
         .unwrap();
-    packed.masks.pop();
+    packed.masks.storage_mut().pop();
     let error = plan
         .decode(
             &relation,
@@ -273,4 +273,36 @@ fn cancellation_after_reservation_stops_preparation() {
         RelationGpuError::Stopped(Stop::Cancelled)
     ));
     assert_eq!(reservations, 1);
+}
+
+#[test]
+fn relation_masks_keep_the_original_owner_layout() {
+    use std::mem::{align_of, offset_of, size_of};
+
+    struct Original<'a> {
+        relation: &'a Relation<'a>,
+        queries: usize,
+        words_per_query: usize,
+        words: Vec<u32>,
+    }
+    assert_eq!(
+        size_of::<RelationGpuMasks<'_, '_>>(),
+        size_of::<Original<'_>>()
+    );
+    assert_eq!(
+        align_of::<RelationGpuMasks<'_, '_>>(),
+        align_of::<Original<'_>>()
+    );
+    macro_rules! offset {
+        ($field:ident) => {
+            assert_eq!(
+                offset_of!(RelationGpuMasks<'_, '_>, $field),
+                offset_of!(Original<'_>, $field)
+            );
+        };
+    }
+    offset!(relation);
+    offset!(queries);
+    offset!(words_per_query);
+    offset!(words);
 }

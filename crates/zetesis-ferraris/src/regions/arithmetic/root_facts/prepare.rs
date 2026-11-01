@@ -9,7 +9,7 @@ use crate::{
     Theory,
     positive::activation::{self, Edge, Effects, Point, State},
 };
-use zetesis_algebra::Stop;
+use zetesis_algebra::{Stop, words::Words};
 
 use super::super::{
     budget::{Budget, BudgetError},
@@ -34,7 +34,7 @@ struct Graph {
     edges: Vec<Edge>,
     states: Vec<State>,
     queue: Vec<usize>,
-    words: Vec<u64>,
+    words: Words<u64>,
 }
 
 pub(super) fn propose(
@@ -200,7 +200,7 @@ fn transpose(
         };
     }
     let queue = storage.reserve(vertices, budget)?;
-    let words = storage.filled(atoms.div_ceil(64), 0_u64, 1, budget)?;
+    let words = Words::new(storage.filled(atoms.div_ceil(64), 0_u64, 1, budget)?);
     budget.charge(1)?;
     Ok(Graph {
         offsets,
@@ -245,7 +245,7 @@ impl Graph {
         storage.release(self.edges)?;
         storage.release(self.states)?;
         storage.release(self.queue)?;
-        storage.release(self.words)
+        storage.release(self.words.into_storage())
     }
 }
 

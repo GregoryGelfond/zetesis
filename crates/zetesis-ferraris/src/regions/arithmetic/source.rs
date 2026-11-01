@@ -5,6 +5,8 @@
 //! ordinals from the exact admitted owner before trusting an equation. No
 //! formula, atom coordinate or reduct is rewritten.
 
+use zetesis_algebra::words::Words;
+
 use crate::{AdmissionError, NodeView, Theory};
 
 use super::{
@@ -322,7 +324,7 @@ pub(super) fn check_clause_equation(
         return Ok(false);
     };
     budget.charge(4)?;
-    let mut forbidden = [0_u64; 4];
+    let mut forbidden = Words::<u64, _>::new([0; 4]);
     for proposed in roots {
         budget.charge(1)?;
         let Some(checked) = conditioned_clause(theory, facts, proposed.root, storage, budget)?
@@ -343,10 +345,15 @@ pub(super) fn check_clause_equation(
             }
         }
         budget.charge(4)?;
-        forbidden[usize::from(checked.forbidden) / 64] |=
-            1 << (usize::from(checked.forbidden) % 64);
+        forbidden.insert(usize::from(checked.forbidden));
     }
-    implied_by_table(&forbidden, support.len, coefficients, constant, budget)
+    implied_by_table(
+        forbidden.storage(),
+        support.len,
+        coefficients,
+        constant,
+        budget,
+    )
 }
 
 /// Check dense coefficients against an authenticated bounded coordinate map.
@@ -410,7 +417,7 @@ pub(super) fn implied_by_table(
         let value = (pattern & u16::from(coefficients)).count_ones() & 1 != 0;
         if value != constant {
             budget.charge(5)?;
-            if forbidden[usize::from(pattern) / 64] & (1 << (usize::from(pattern) % 64)) == 0 {
+            if !Words::<u64, _>::new(forbidden).contains(usize::from(pattern)) {
                 budget.charge(1)?;
                 return Ok(false);
             }

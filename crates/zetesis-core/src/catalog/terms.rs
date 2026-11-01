@@ -2,6 +2,8 @@
 
 use std::{fmt, mem::size_of};
 
+use zetesis_algebra::words::Words;
+
 use super::{CatalogRead, Error, ReadError, TermRead, TermRef, storage};
 use crate::BindingView;
 
@@ -34,7 +36,7 @@ pub struct AssignmentSlice<'a> {
 #[derive(Debug)]
 pub struct TermSet {
     scope: storage::VocabularyScope,
-    words: Vec<u64>,
+    words: Words<u64>,
     count: usize,
 }
 
@@ -163,7 +165,7 @@ impl<'a> TermRead<'a> {
     pub fn term_set(self) -> TermSet {
         TermSet {
             scope: self.scope(),
-            words: Vec::new(),
+            words: Words::new(Vec::new()),
             count: 0,
         }
     }
@@ -682,10 +684,7 @@ impl TermSet {
         check_scope(&self.scope, &key.scope)?;
         before().map_err(AssignmentFailure::Stopped)?;
         let position = key.id.position();
-        Ok(self
-            .words
-            .get(position / 64)
-            .is_some_and(|word| word & (1 << (position % 64)) != 0))
+        Ok(position / 64 < self.words.len() && self.words.contains(position))
     }
     /// Select a root once. A duplicate does not reserve or charge another term.
     /// Bytes bound this set's header and old/replacement word capacities.
@@ -706,12 +705,12 @@ impl TermSet {
             .checked_add(1)
             .ok_or(AssignmentError::Storage(Error::Overflow))?;
         let position = key.id.position();
-        let word = position / 64;
+        let (word, _) = Words::<u64>::locate(position);
         let len = word
             .checked_add(1)
             .ok_or(AssignmentError::Storage(Error::Overflow))?;
         reserve(
-            &mut self.words,
+            self.words.storage_mut(),
             len,
             size_of::<Self>(),
             max_bytes,
@@ -721,8 +720,9 @@ impl TermSet {
             before().map_err(AssignmentFailure::Stopped)?;
         }
         before().map_err(AssignmentFailure::Stopped)?;
-        self.words.resize(self.words.len().max(len), 0);
-        self.words[word] |= 1 << (position % 64);
+        let length = self.words.len().max(len);
+        self.words.storage_mut().resize(length, 0);
+        self.words.insert(position);
         self.count = count;
         Ok(true)
     }

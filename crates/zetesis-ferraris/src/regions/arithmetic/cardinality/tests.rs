@@ -11,7 +11,7 @@ fn bound(atoms: usize, support: &[usize], side: BoundSide, value: u64) -> Bound 
         words[atom / 64] |= 1 << (atom % 64);
     }
     Bound {
-        support: words,
+        support: words.into(),
         guard: Vec::new(),
         side,
         value,
