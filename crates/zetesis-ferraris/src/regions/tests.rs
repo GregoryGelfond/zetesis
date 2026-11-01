@@ -297,8 +297,8 @@ fn propagated_decisions_are_seen(frozen: bool) {
                 &cancellation,
             )
         }
+        .result
         .unwrap()
-        .0
     };
     assert_eq!(
         close(&mut region, &mut knowledge),

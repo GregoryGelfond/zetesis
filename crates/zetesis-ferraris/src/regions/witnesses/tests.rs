@@ -123,7 +123,7 @@ fn theory(preparation: Preparation, repeated_condition: bool) -> Theory {
 fn close(theory: &Theory) -> (Narrowing, Region) {
     let narrower = Narrower::new(theory);
     let mut region = Region::all_open(4);
-    let (outcome, _) = narrower
+    let outcome = narrower
         .narrow_known(
             OriginalSubject::new(theory, None),
             &mut region,
@@ -132,6 +132,7 @@ fn close(theory: &Theory) -> (Narrowing, Region) {
             RegionLimits::default(),
             &Cancellation::default(),
         )
+        .result
         .unwrap();
     (outcome, region)
 }
@@ -223,8 +224,8 @@ fn an_undecided_shared_parent_forwards_a_child_wakeup() {
                     RegionLimits::default(),
                     &Cancellation::default(),
                 )
+                .result
                 .unwrap()
-                .0
         };
     assert_ne!(
         close(&mut region, &mut known, &mut scratch),
@@ -299,8 +300,8 @@ fn associative_units_preserve_every_original_and_frozen_model() {
                     &cancellation,
                 )
             }
-            .unwrap()
-            .0;
+            .result
+            .unwrap();
             for inner in 0..8 {
                 if (0..3).any(|atom| {
                     before
@@ -398,7 +399,7 @@ fn shared_conjunctions_retain_the_dual_unit_consequence() {
     let index = Narrower::new(&theory);
     let mut region = Region::all_open(3);
     assert!(region.hold(1));
-    let (outcome, _) = index
+    let outcome = index
         .narrow_known(
             OriginalSubject::new(&theory, None),
             &mut region,
@@ -407,6 +408,7 @@ fn shared_conjunctions_retain_the_dual_unit_consequence() {
             RegionLimits::default(),
             &Cancellation::default(),
         )
+        .result
         .unwrap();
     assert_ne!(outcome, Narrowing::Refuted);
     assert_eq!(region.decision(0), Some(false));
@@ -436,7 +438,7 @@ fn opaque_and_expanded_native_bridges_both_survive() {
     .unwrap();
     let index = Narrower::new(&theory);
     let mut region = Region::all_open(5);
-    let (outcome, _) = index
+    let outcome = index
         .narrow_known(
             OriginalSubject::new(&theory, None),
             &mut region,
@@ -445,6 +447,7 @@ fn opaque_and_expanded_native_bridges_both_survive() {
             RegionLimits::default(),
             &Cancellation::default(),
         )
+        .result
         .unwrap();
     assert_ne!(outcome, Narrowing::Refuted);
     assert_eq!(region.decision(3), Some(true));
@@ -526,7 +529,7 @@ fn compound_cuts_transport_boolean_witnesses() {
             let theory = mixed_cut(disjunction, transfer);
             let index = Narrower::new(&theory);
             let mut region = Region::all_open(5);
-            let (outcome, _) = index
+            let outcome = index
                 .narrow_known(
                     OriginalSubject::new(&theory, None),
                     &mut region,
@@ -535,6 +538,7 @@ fn compound_cuts_transport_boolean_witnesses() {
                     RegionLimits::default(),
                     &Cancellation::default(),
                 )
+                .result
                 .unwrap();
             assert_ne!(outcome, Narrowing::Refuted);
             assert_eq!(region.decision(4), Some(true));
@@ -576,7 +580,7 @@ fn compound_cut_inference_preserves_original_models() {
                     choices /= 3;
                 }
                 let mut after = before.clone();
-                let (outcome, _) = index
+                let outcome = index
                     .narrow_known(
                         OriginalSubject::new(&theory, None),
                         &mut after,
@@ -585,6 +589,7 @@ fn compound_cut_inference_preserves_original_models() {
                         RegionLimits::default(),
                         &cancellation,
                     )
+                    .result
                     .unwrap();
                 for &(mask, satisfies) in &worlds {
                     if !satisfies
@@ -626,7 +631,7 @@ fn compound_cut_inference_leaves_arbitrary_frozen_worlds_sound() {
                     workspace.evaluate(&candidate, EvaluationLimits::default(), &cancellation);
                 let truth = evaluation.result.unwrap();
                 let mut after = Region::all_open(5);
-                let (outcome, _) = index
+                let outcome = index
                     .narrow_frozen_known(
                         FrozenSubject::new(&theory, truth.truth()),
                         &mut after,
@@ -635,6 +640,7 @@ fn compound_cut_inference_leaves_arbitrary_frozen_worlds_sound() {
                         RegionLimits::default(),
                         &cancellation,
                     )
+                    .result
                     .unwrap();
                 for inner in 0_u32..32 {
                     let world = Interpretation::new(
@@ -692,7 +698,7 @@ fn a_native_upper_bound_refutes_its_smaller_boolean_conjunction() {
     .unwrap();
     let index = Narrower::new(&theory);
     let mut region = Region::all_open(5);
-    let (outcome, _) = index
+    let outcome = index
         .narrow_known(
             OriginalSubject::new(&theory, None),
             &mut region,
@@ -701,6 +707,7 @@ fn a_native_upper_bound_refutes_its_smaller_boolean_conjunction() {
             RegionLimits::default(),
             &Cancellation::default(),
         )
+        .result
         .unwrap();
     assert_ne!(outcome, Narrowing::Refuted);
     assert_eq!(region.decision(4), Some(true));

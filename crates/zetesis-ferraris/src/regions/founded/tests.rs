@@ -79,8 +79,8 @@ fn narrow(owner: &Theory, region: &mut Region) -> Narrowing {
             RegionLimits::default(),
             &Cancellation::default(),
         )
+        .result
         .unwrap()
-        .0
 }
 
 fn cycle() -> Theory {
@@ -320,7 +320,7 @@ fn every_tiny_cut_preserves_stable_completions() {
             for code in 0..27 {
                 let mut region = partial_region(code, 3);
                 let expected: Vec<_> = answers.iter().filter(|m| compatible(&region, m)).collect();
-                let (result, _) = index
+                let result = index
                     .narrow_known(
                         OriginalSubject::carrier(&learning, Some(&producers)),
                         &mut region,
@@ -329,6 +329,7 @@ fn every_tiny_cut_preserves_stable_completions() {
                         RegionLimits::default(),
                         &Cancellation::default(),
                     )
+                    .result
                     .unwrap();
                 match result {
                     Narrowing::Refuted => {
@@ -357,7 +358,7 @@ fn frozen_queries_do_not_compute_possible_support() {
     let truth = vec![true; owner.nodes().len()];
     let mut region = Region::all_open(2);
     let mut scratch = NarrowingScratch::default();
-    let (result, _) = index
+    let result = index
         .narrow_frozen_known(
             FrozenSubject::new(&owner, &truth),
             &mut region,
@@ -366,6 +367,7 @@ fn frozen_queries_do_not_compute_possible_support() {
             RegionLimits::default(),
             &Cancellation::default(),
         )
+        .result
         .unwrap();
     assert_eq!(result, Narrowing::Fixed { changed: false });
     assert_eq!(region.open().count(), 2);
@@ -378,7 +380,7 @@ fn incomplete_producer_inventory_does_not_cut_cycles() {
     let index = Narrower::new(&owner);
     let mut region = Region::all_open(2);
     let mut scratch = NarrowingScratch::default();
-    let (result, _) = index
+    let result = index
         .narrow_known(
             OriginalSubject::new(&owner, None),
             &mut region,
@@ -387,6 +389,7 @@ fn incomplete_producer_inventory_does_not_cut_cycles() {
             RegionLimits::default(),
             &Cancellation::default(),
         )
+        .result
         .unwrap();
     assert_eq!(result, Narrowing::Fixed { changed: false });
     assert_eq!(region.open().count(), 2);

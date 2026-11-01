@@ -240,29 +240,25 @@ fn frozen_closure_ignores_capacity_projection() {
         let subject = FrozenSubject::new(&theory, &truth);
         let mut actual = Region::all_open(6);
         let mut expected = actual.clone();
-        let a = index
-            .narrow_frozen_known(
-                subject,
-                &mut actual,
-                &mut index.knowledge(),
-                &mut NarrowingScratch::default(),
-                RegionLimits { max_work: u64::MAX },
-                &Cancellation::default(),
-            )
-            .unwrap();
-        let b = without
-            .narrow_frozen_known(
-                subject,
-                &mut expected,
-                &mut without.knowledge(),
-                &mut NarrowingScratch::default(),
-                RegionLimits { max_work: u64::MAX },
-                &Cancellation::default(),
-            )
-            .unwrap();
-        assert_eq!(a.0, b.0);
+        let a = index.narrow_frozen_known(
+            subject,
+            &mut actual,
+            &mut index.knowledge(),
+            &mut NarrowingScratch::default(),
+            RegionLimits { max_work: u64::MAX },
+            &Cancellation::default(),
+        );
+        let b = without.narrow_frozen_known(
+            subject,
+            &mut expected,
+            &mut without.knowledge(),
+            &mut NarrowingScratch::default(),
+            RegionLimits { max_work: u64::MAX },
+            &Cancellation::default(),
+        );
+        assert_eq!(a.result.unwrap(), b.result.unwrap());
         assert_eq!(actual, expected);
-        assert_eq!(a.1.work, b.1.work);
+        assert_eq!(a.statistics.work, b.statistics.work);
     }
 }
 mod events;

@@ -15,16 +15,16 @@ use zetesis_algebra::Stop;
 
 use super::adjacency::Adjacency;
 
-mod connectives;
 mod capacity;
+mod connectives;
 #[cfg(test)]
 mod frozen_tests;
 #[cfg(test)]
 mod incremental_tests;
+mod possible_sums;
 mod prefixes;
 mod propagate;
 mod residual;
-mod possible_sums;
 
 #[derive(Clone, Debug)]
 pub(super) struct Thresholds {
@@ -353,8 +353,8 @@ mod tests {
                 RegionLimits::default(),
                 &Cancellation::default(),
             )
+            .result
             .unwrap()
-            .0
     }
 
     #[test]

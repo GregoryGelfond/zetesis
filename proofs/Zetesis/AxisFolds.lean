@@ -431,7 +431,7 @@ regions, folds its emitted leaves to the fold of the tree's outputs: a
 reduction over an axis searched by several workers does not depend on the
 schedule. This is order independence applied to `Pending.Walk.exhausted`. -/
 theorem walk_exhausted_fold {α : Type w} {valid : Atoms α → Prop} {V : Type u}
-    (r : Reduction V) (value : Atoms α → V) {c : Cube α} (tree : CoverageTree valid c)
+    (r : Reduction V) (value : Atoms α → V) {c : Region α} (tree : CoverageTree valid c)
     {emitted : List (Atoms α)} (walk : Pending.Walk [⟨c, tree⟩] [] [] emitted) :
     r.fold value emitted = r.fold value tree.outputs :=
   r.fold_perm value (Pending.Walk.exhausted tree walk).1

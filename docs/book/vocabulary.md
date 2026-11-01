@@ -17,7 +17,7 @@ representations. A representation name does not confer a semantic property.
 | Frozen reduct | `zetesis_ferraris::FrozenReduct` | `Ferraris.ReductTheory` / `Semantics.ReductModel` |
 | Display | Source observations selecting shown atoms and terms | Distinct from full interpretation |
 | Proved optimum | `SemanticOutcome::optimum_proved()` and retained objective evidence | Objective ordering and completed-search laws |
-| The sides of a region: held, cut, open | `Region::is_held`, `is_cut`, `is_open`; the carrier's `held_gate_atoms` and `cut_gate_atoms`; the cube's `must` is the held set and the complement of `may` the cut set | `Cube`, `Bounds.undecided` for the open cube |
+| The sides of a region: held, cut, open | `Region::is_held`, `is_cut`, `is_open`; the carrier's `held_gate_atoms` and `cut_gate_atoms`; the region's `must` is the held set and the complement of `may` the cut set | `Region`, `Bounds.undecided` for the open region |
 | The two readings of a formula under a region: sure, never | `Knowledge`, known to hold or known never | `FormulaBounds.Sure`, `FormulaBounds.Never` |
 | A region visited as a leaf | `RegionStatistics::leaves`, the carrier's `regions_leaves`, the proposers' `leaves` | `decided_leaf_models` |
 | The carrier's narrowing by its two closures | `NarrowingState`, `narrowing_passes`, `narrowing_stop`, `root_refuted`; the record key `carrier_narrowing` | `Bounds.lean` |

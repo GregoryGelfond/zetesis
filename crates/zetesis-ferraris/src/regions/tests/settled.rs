@@ -125,7 +125,10 @@ fn witness_retirement_preserves_every_operand_order() {
                                     &Cancellation::default(),
                                 )
                             };
-                            assert_eq!(attempt.unwrap().0, Narrowing::Fixed { changed: false });
+                            assert_eq!(
+                                attempt.result.unwrap(),
+                                Narrowing::Fixed { changed: false }
+                            );
                             let root = if witnessed {
                                 Some(disjunction)
                             } else if position == 3 {

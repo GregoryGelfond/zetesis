@@ -61,7 +61,7 @@ Not proved here: which rows, groups, completions, thresholds and guards a
 recognizer accepts; elimination, flow, or any search that finds a combination
 or a certificate; coordinate assignment, bit packing and word operations;
 resource accounting; and the narrower's use of a consequence. A probe of an atom
-is `Cube.split_partition` with its held half excluded.
+is `Region.split_partition` with its held half excluded.
 -/
 
 namespace Zetesis.AlgebraicRows
@@ -287,7 +287,7 @@ theorem holds_truth (M : Atoms α) (a : α) : Holds M (a, truth M a) := by
 
 /-- A region decides the literal giving an atom its held value when it holds or
 has cut the atom. -/
-theorem decides_truth (c : Cube α) (a : α) (decided : c.lower a ∨ ¬ c.upper a) :
+theorem decides_truth (c : Region α) (a : α) (decided : c.lower a ∨ ¬ c.upper a) :
     Decides c (a, truth c.lower a) := by
   by_cases held : c.lower a
   · have sign : truth c.lower a = true := by simp [truth, held]
@@ -410,7 +410,7 @@ theorem equation_excludes_given (r : Reduction V) (C : Atoms α → Prop) (e : E
 /-- Conditions that exclude a class exclude every member of it in a region that
 decides them. -/
 theorem excludes_region (C : Atoms α → Prop) (B : List (Literal α)) (excluded : Excludes C B)
-    (c : Cube α) (decided : ∀ l ∈ B, Decides c l) : ∀ z, c.Contains z → ¬ C z :=
+    (c : Region α) (decided : ∀ l ∈ B, Decides c l) : ∀ z, c.Contains z → ¬ C z :=
   fun z inside member => excluded z member (fun l listed => decides_holds inside (decided l listed))
 
 /-! ## Bounds in an ordered commutative monoid -/
@@ -440,12 +440,12 @@ def UpperOf (o : OrderedReduction V) (C : Atoms α → Prop) (terms : List (Term
   ∀ M, C M → o.le (measure o.toReduction M terms) bound
 
 /-- A lower bound of the class's members in a region. -/
-def LowerIn (o : OrderedReduction V) (C : Atoms α → Prop) (c : Cube α)
+def LowerIn (o : OrderedReduction V) (C : Atoms α → Prop) (c : Region α)
     (terms : List (Term α V)) (bound : V) : Prop :=
   ∀ z, c.Contains z → C z → o.le bound (measure o.toReduction z terms)
 
 /-- An upper bound of the class's members in a region. -/
-def UpperIn (o : OrderedReduction V) (C : Atoms α → Prop) (c : Cube α)
+def UpperIn (o : OrderedReduction V) (C : Atoms α → Prop) (c : Region α)
     (terms : List (Term α V)) (bound : V) : Prop :=
   ∀ z, c.Contains z → C z → o.le (measure o.toReduction z terms) bound
 
@@ -492,24 +492,24 @@ theorem measure_mono (o : OrderedReduction V) {M N : Atoms α} (included : Sub M
       exact o.le_refl o.unit
 
 /-- In a region, the held atoms' measure is a lower bound of every member. -/
-theorem lower_in_of_held (o : OrderedReduction V) (C : Atoms α → Prop) (c : Cube α)
+theorem lower_in_of_held (o : OrderedReduction V) (C : Atoms α → Prop) (c : Region α)
     (terms : List (Term α V)) (positive : Positive o terms) :
     LowerIn o C c terms (measure o.toReduction c.lower terms) :=
   fun _ inside _ => measure_mono o inside.1 terms positive
 
 /-- In a region, the measure of the atoms not cut is an upper bound of every
 member. -/
-theorem upper_in_of_possible (o : OrderedReduction V) (C : Atoms α → Prop) (c : Cube α)
+theorem upper_in_of_possible (o : OrderedReduction V) (C : Atoms α → Prop) (c : Region α)
     (terms : List (Term α V)) (positive : Positive o terms) :
     UpperIn o C c terms (measure o.toReduction c.upper terms) :=
   fun _ inside _ => measure_mono o inside.2 terms positive
 
-theorem lower_in_of_class (o : OrderedReduction V) (C : Atoms α → Prop) (c : Cube α)
+theorem lower_in_of_class (o : OrderedReduction V) (C : Atoms α → Prop) (c : Region α)
     {terms : List (Term α V)} {bound : V} (lower : LowerOf o C terms bound) :
     LowerIn o C c terms bound :=
   fun z _ member => lower z member
 
-theorem upper_in_of_class (o : OrderedReduction V) (C : Atoms α → Prop) (c : Cube α)
+theorem upper_in_of_class (o : OrderedReduction V) (C : Atoms α → Prop) (c : Region α)
     {terms : List (Term α V)} {bound : V} (upper : UpperOf o C terms bound) :
     UpperIn o C c terms bound :=
   fun z _ member => upper z member
@@ -530,7 +530,7 @@ Proof. Measure the covered terms twice. The first family's bounds lie below thei
 rows' measures, whose fold is the terms' measure (`measure_rows`, `measure_perm`);
 so does the second family's, whose bounds lie above. -/
 theorem double_count_excludes_region (o : OrderedReduction V) (C : Atoms α → Prop)
-    (c : Cube α) (S : List (Term α V)) (first second : List (List (Term α V) × V))
+    (c : Region α) (S : List (Term α V)) (first second : List (List (Term α V) × V))
     (firstCovers : (first.map Prod.fst).flatten.Perm S)
     (secondCovers : (second.map Prod.fst).flatten.Perm S)
     (lower : ∀ row ∈ first, LowerIn o C c row.1 row.2)
@@ -559,7 +559,7 @@ theorem double_count_excludes (o : OrderedReduction V) (C : Atoms α → Prop)
     (exceeds : ¬ o.le (o.toReduction.fold Prod.snd first) (o.toReduction.fold Prod.snd second)) :
     ∀ M, ¬ C M := by
   intro M member
-  let everything : Cube α := ⟨Empty, Full⟩
+  let everything : Region α := ⟨Empty, Full⟩
   have inside : everything.Contains M := ⟨fun _ absent => absent.elim, fun _ _ => trivial⟩
   exact double_count_excludes_region o C everything S first second firstCovers secondCovers
     (fun row listed => lower_in_of_class o C everything (lower row listed))
@@ -579,7 +579,7 @@ the measure of the shared terms combined with that of the missed ones. The share
 terms lie among the second rows' terms, whose measure the upper bounds cap, since
 the rest's measure is at least the identity; the missed terms measure at most as
 the atoms not cut do. -/
-theorem cut_excludes_region (o : OrderedReduction V) (C : Atoms α → Prop) (c : Cube α)
+theorem cut_excludes_region (o : OrderedReduction V) (C : Atoms α → Prop) (c : Region α)
     (first second : List (List (Term α V) × V)) (shared missed rest : List (Term α V))
     (firstSplit : (first.map Prod.fst).flatten.Perm (shared ++ missed))
     (secondSplit : (second.map Prod.fst).flatten.Perm (shared ++ rest))

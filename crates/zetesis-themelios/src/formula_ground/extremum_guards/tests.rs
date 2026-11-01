@@ -186,7 +186,7 @@ fn shared_extrema_preserve_nonempty_unit_consequences() {
         }));
         let narrower = Narrower::new(theory);
         let mut region = Region::all_open(theory.atom_count());
-        let (outcome, _) = narrower
+        let outcome = narrower
             .narrow_known(
                 OriginalSubject::new(theory, None),
                 &mut region,
@@ -195,6 +195,7 @@ fn shared_extrema_preserve_nonempty_unit_consequences() {
                 RegionLimits::default(),
                 &Cancellation::default(),
             )
+            .result
             .unwrap();
         assert_ne!(outcome, Narrowing::Refuted);
         for (index, atom) in admitted.atoms.atoms().iter().enumerate() {

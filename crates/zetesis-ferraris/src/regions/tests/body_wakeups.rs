@@ -63,8 +63,8 @@ fn close(
                 RegionLimits::default(),
                 &Cancellation::default(),
             )
-            .unwrap()
-            .0,
+            .result
+            .unwrap(),
         Narrowing::Fixed { .. }
     ));
     assert!(scratch.nodes.is_empty());
@@ -291,8 +291,8 @@ fn frozen_failed_bodies_do_not_apply_original_support() {
                         RegionLimits::default(),
                         &cancellation,
                     )
-                    .unwrap()
-                    .0,
+                    .result
+                    .unwrap(),
                 Narrowing::Fixed { .. }
             ));
             assert!(scratch.nodes.is_empty());
@@ -335,16 +335,16 @@ fn refused_body_propagation_keeps_exact_work_receipts() {
     let mut expected = input.clone();
     let mut expected_known = index.knowledge();
     let mut scratch = NarrowingScratch::default();
-    let (_, statistics) = index
-        .narrow_known(
-            OriginalSubject::new(&theory, Some(&producers)),
-            &mut expected,
-            &mut expected_known,
-            &mut scratch,
-            RegionLimits::default(),
-            &Cancellation::default(),
-        )
-        .unwrap();
+    let attempt = index.narrow_known(
+        OriginalSubject::new(&theory, Some(&producers)),
+        &mut expected,
+        &mut expected_known,
+        &mut scratch,
+        RegionLimits::default(),
+        &Cancellation::default(),
+    );
+    attempt.result.unwrap();
+    let statistics = attempt.statistics;
     assert_eq!(expected.decision(1), Some(false));
     for failure in [Stop::WorkLimit, Stop::Cancelled, Stop::Deadline] {
         for limit in 0..statistics.work {

@@ -117,7 +117,7 @@ fn compare_closures(theory: &Theory, frozen: Option<&[bool]>, max_work: u64) {
         let mut intermediate_region = compact_region.clone();
         let mut native = native(&fresh);
         let close = |region: &mut Region, knowledge: &mut Knowledge| {
-            if let Some(truth) = frozen {
+            let attempt = if let Some(truth) = frozen {
                 narrower.narrow_frozen_known(
                     crate::FrozenSubject::new(theory, truth),
                     region,
@@ -138,7 +138,8 @@ fn compare_closures(theory: &Theory, frozen: Option<&[bool]>, max_work: u64) {
                     RegionLimits { max_work },
                     &cancellation,
                 )
-            }
+            };
+            (attempt.result, attempt.statistics, attempt.preferred)
         };
         let expected = close(&mut native_region, &mut native);
         assert_eq!(
@@ -188,19 +189,23 @@ fn child_propagation_keeps_parent_knowledge_unchanged() {
     let mut parent = narrower.knowledge();
     let mut parent_region = Region::all_open(4);
     let cancellation = Cancellation::default();
-    narrower
-        .narrow_known(
-            crate::OriginalSubject::new(&theory, None),
-            &mut parent_region,
-            &mut parent,
-            &mut crate::NarrowingScratch::default(),
-            RegionLimits::default(),
-            &cancellation,
-        )
-        .unwrap();
+    let attempt = narrower.narrow_known(
+        crate::OriginalSubject::new(&theory, None),
+        &mut parent_region,
+        &mut parent,
+        &mut crate::NarrowingScratch::default(),
+        RegionLimits::default(),
+        &cancellation,
+    );
+    attempt.result.unwrap();
     let before = native(&parent);
     let mut child = parent.clone();
-    let atom = parent_region.split_atom().unwrap();
+    let mut entry = zetesis_algebra::region::Entry::new(parent_region, ());
+    if let Some(atom) = attempt.preferred {
+        entry.prefer(atom);
+    }
+    let atom = entry.split_atom().unwrap();
+    let parent_region = entry.region;
     let (mut child_region, _) = parent_region.split(atom);
     narrower
         .narrow_known(
@@ -211,6 +216,7 @@ fn child_propagation_keeps_parent_knowledge_unchanged() {
             RegionLimits::default(),
             &cancellation,
         )
+        .result
         .unwrap();
     assert_ne!(counts(&child), counts(&before));
     same_knowledge(&parent, &before);
@@ -329,6 +335,7 @@ fn chain_counts_cross_the_smallest_width_without_truncation() {
                 RegionLimits::default(),
                 &Cancellation::default(),
             )
+            .result
             .unwrap();
         assert_eq!(counts(&knowledge)[0], [atoms]);
         assert!((0..atoms).all(|atom| region.is_held(atom)));
@@ -367,6 +374,7 @@ fn atom_counts_include_every_node_occurrence() {
                 RegionLimits::default(),
                 &Cancellation::default(),
             )
+            .result
             .unwrap();
         assert_eq!(counts(&knowledge)[1], [0]);
     }

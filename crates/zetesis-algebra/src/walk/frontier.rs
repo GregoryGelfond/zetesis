@@ -51,6 +51,13 @@ pub trait Payload {
     fn allocated_bytes(&self) -> u128;
 }
 
+impl<S: Payload> Payload for crate::region::Entry<S> {
+    fn allocated_bytes(&self) -> u128 {
+        self.region.retained_bytes() - size_of::<crate::region::Region>() as u128
+            + self.state.allocated_bytes()
+    }
+}
+
 /// Idle steal rounds a worker spins (yielding) before it waits for the walk
 /// to end or the wait to time out: the busy-wait/wait backoff crossover.
 const SPIN_ROUNDS_BEFORE_WAIT: u32 = 16;
@@ -475,13 +482,12 @@ impl<E: Payload, R: From<Stop>> Frontier<E, R> {
     /// Return a region to worker `index`'s deque without changing the count:
     /// a region taken but neither resolved nor split goes back. The injected
     /// reservation is the sole fallible storage effect, as in
-    /// [`Self::publish_split`]. When it refuses entry capacity the region is
-    /// dropped and the refusal returned, for the caller to record as a stop:
-    /// the count still includes the region, so the run cannot claim
-    /// exhaustion, and the stop says why.
+    /// [`Self::publish_split_with`]. Refusal returns the still-owned entry
+    /// beside the exact error. The caller retains unresolved coverage until
+    /// it records a terminal stop; only then may it abandon that entry.
     ///
     /// # Errors
-    /// Propagates the injected reservation refusal without publishing the entry.
+    /// Returns the reservation refusal and unchanged entry, without publication.
     ///
     /// # Panics
     /// Panics if `index` is outside the worker deques.
@@ -490,10 +496,12 @@ impl<E: Payload, R: From<Stop>> Frontier<E, R> {
         index: usize,
         entry: E,
         reserve: impl FnOnce(&mut VecDeque<E>, usize) -> Result<(), R>,
-    ) -> Result<(), R> {
+    ) -> Result<(), (R, E)> {
         let mut queue = self.queue(index);
         let before = queue.capacity();
-        reserve(&mut queue, 1)?;
+        if let Err(error) = reserve(&mut queue, 1) {
+            return Err((error, entry));
+        }
         self.resized(before, queue.capacity());
         self.inserted(&entry);
         queue.push_back(entry);
@@ -557,33 +565,48 @@ impl<E: Payload, R: From<Stop>> Frontier<E, R> {
         None
     }
 
-    /// Publish a split's children on worker `index`'s deque: reserve their
-    /// entry capacity, count the split's net gain of one, push them, release
-    /// the deque, then wake one idle worker. The injected reservation is the
-    /// sole fallible storage effect; success must reserve `N` entries, as
-    /// [`reserve_entries`] does. A refused reservation publishes nothing and
-    /// leaves the count unchanged. A publication of no child would count a
-    /// region that no deque or hand holds, so the count could never reach
-    /// zero; it is refused when the call is compiled. The split is binary even
-    /// when only one child is queued: the caller retains the other in hand.
-    /// Therefore its unresolved count always grows by one, never by `N-1`.
+    /// Reserve publication storage while retaining the unsplit parent, then
+    /// construct and publish its children on worker `index`'s deque.
+    ///
+    /// The injected reservation must admit `N` entries, as [`reserve_entries`]
+    /// does. `children` runs only after success, under the same deque lock, so
+    /// no other publisher can consume the admitted capacity. Prepare expensive
+    /// lineage copies before calling; move them in `children` without copying
+    /// again. The parent remains owned on every reservation refusal.
+    ///
+    /// A binary split grows the unresolved count by one, even when `N` is one
+    /// and the returned value retains the other child in hand. Children are
+    /// pushed in array order. The deque is released before waking an idle worker.
+    /// No polling or semantic decision is performed by this boundary.
     ///
     /// # Errors
-    /// Propagates the injected reservation refusal before changing the count.
+    /// Returns the exact reservation refusal and parent without invoking
+    /// `children`, publishing an entry or changing the unresolved count.
     ///
     /// # Panics
-    /// Panics if `index` is outside the worker deques.
-    pub fn publish_split<const N: usize>(
+    /// Panics if `index` is outside the worker deques. A panic or process-level
+    /// allocation abort in `children` is outside the fallible reservation
+    /// contract; callers retain their existing panic/abort handling.
+    pub fn publish_split_with<const N: usize, H>(
         &self,
         index: usize,
-        children: [E; N],
+        parent: E,
         reserve: impl FnOnce(&mut VecDeque<E>, usize) -> Result<(), R>,
-    ) -> Result<(), R> {
-        const { assert!(N > 0, "a split publishes at least one child") };
+        children: impl FnOnce(E) -> ([E; N], H),
+    ) -> Result<H, (R, E)> {
+        const {
+            assert!(
+                N > 0 && N <= 2,
+                "a binary split publishes one or two children"
+            );
+        };
         let mut queue = self.queue(index);
         let before = queue.capacity();
-        reserve(&mut queue, N)?;
+        if let Err(error) = reserve(&mut queue, N) {
+            return Err((error, parent));
+        }
         self.resized(before, queue.capacity());
+        let (children, held) = children(parent);
         // The parent is still outstanding. Count its net gain before making
         // any child visible; the reserved pushes cannot allocate.
         self.termination.grow();
@@ -595,7 +618,7 @@ impl<E: Payload, R: From<Stop>> Frontier<E, R> {
         // while it tries the deques, and never waits for a queue lock.
         drop(queue);
         self.termination.wake_one();
-        Ok(())
+        Ok(held)
     }
 
     /// Look for a region, waiting while any remains. `None` when the whole

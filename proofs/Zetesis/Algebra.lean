@@ -85,8 +85,8 @@ split only if the Rust closure equals the inductive closure `FormulaBounds.Known
 The support cut, the streamed constraints and the objective bound are not yet
 instances.
 
-The library calls a region `Cube`. `Region` abbreviates it until the library's
-rename, which retires the abbreviation.
+The region type and its geometry are `Zetesis.Region`, defined in
+`Zetesis.Search`; this module uses that original owner directly.
 -/
 
 namespace Zetesis.Algebra
@@ -98,12 +98,6 @@ universe u v
 variable {α : Type u}
 
 /-! ## Regions and the precision order -/
-
-/-- A **region**: the atoms every member holds (`lower`) and the atoms a member may
-hold (`upper`). Its members are the interpretations between the two
-(`Cube.Contains`). The library calls it `Cube`; this abbreviation is the
-algebra's name until the library's rename. -/
-abbrev Region (α : Type u) := Cube α
 
 /-- Every region is inside itself. -/
 theorem inside_refl (r : Region α) : Inside r r :=
@@ -136,7 +130,7 @@ theorem narrow_to_inside {r r' : Region α} (inside : Inside r' r) :
       atoms_ext fun a => ⟨fun held => Or.elim held (inside.1 a) id, Or.inr⟩
     have sameUpper : Inter r.upper upper' = upper' :=
       atoms_ext fun a => ⟨And.right, fun possible => ⟨inside.2 a possible, possible⟩⟩
-    show Cube.mk (Union r.lower lower') (Inter r.upper upper') = Cube.mk lower' upper'
+    show Region.mk (Union r.lower lower') (Inter r.upper upper') = Region.mk lower' upper'
     rw [sameLower, sameUpper]
 
 /-! ## Classes -/
@@ -223,6 +217,97 @@ theorem apply_sound (schedule : List (Subject C)) {r : Region α} {z : Atoms α}
   induction schedule generalizing r with
   | nil => exact inside
   | cons s rest ih => exact ih (s.sound inside member)
+
+/-! ### Pointwise lifting to a finite cohort
+
+A cohort here is just a finite indexed family of existing regions. Each position
+keeps its own class and subject. Applying those subjects pointwise introduces no
+new region representation and no schedule, storage layout or leaf decision.
+The class may be the same at every position, or may differ, as for countermodel
+queries belonging to different candidates. No membership assumption passes from
+one position to another.
+-/
+
+/-- Pointwise application of subjects only adds decisions in each region.
+The finite product uses the componentwise precision order. -/
+theorem cohort_extensive {n : Nat} {classes : Fin n → Class α}
+    (subjects : (i : Fin n) → Subject (classes i))
+    (regions : Fin n → Region α) :
+    ∀ i, Inside ((subjects i).narrow (regions i)) (regions i) := by
+  intro i
+  exact (subjects i).extensive (regions i)
+
+/-- Pointwise application is monotone when each position uses the same subject
+on both families. This does not compare different learned rows, objective bounds
+or subject families. -/
+theorem cohort_monotone {n : Nat} {classes : Fin n → Class α}
+    (subjects : (i : Fin n) → Subject (classes i))
+    {regions smaller : Fin n → Region α}
+    (inside : ∀ i, Inside (smaller i) (regions i)) :
+    ∀ i, Inside ((subjects i).narrow (smaller i))
+      ((subjects i).narrow (regions i)) := by
+  intro i
+  exact (subjects i).monotone (inside i)
+
+/-- Pointwise application retains every supplied class member in its own
+region. Class membership is a premise; a cohort of candidate regions does not
+thereby become a cohort of accepted answer sets. -/
+theorem cohort_sound {n : Nat} {classes : Fin n → Class α}
+    (subjects : (i : Fin n) → Subject (classes i))
+    {regions : Fin n → Region α} {members : Fin n → Atoms α}
+    (inside : ∀ i, (regions i).Contains (members i))
+    (member : ∀ i, classes i (members i)) :
+    ∀ i, ((subjects i).narrow (regions i)).Contains (members i) := by
+  intro i
+  exact (subjects i).sound (inside i) (member i)
+
+/-- Each position keeps exactly its original class members. Extensivity gives
+containment back in the original region; soundness gives the reverse direction.
+The other positions need not have any members. -/
+theorem cohort_members_iff {n : Nat} {classes : Fin n → Class α}
+    (subjects : (i : Fin n) → Subject (classes i))
+    (regions : Fin n → Region α) (i : Fin n) (z : Atoms α) :
+    (((subjects i).narrow (regions i)).Contains z ∧ classes i z) ↔
+      ((regions i).Contains z ∧ classes i z) := by
+  constructor
+  · intro narrowed
+    have original : (regions i).Contains z :=
+      StreamedConsequences.contains_of_inside
+        ((subjects i).extensive (regions i)) narrowed.1
+    exact ⟨original, narrowed.2⟩
+  · intro original
+    have retained : ((subjects i).narrow (regions i)).Contains z :=
+      (subjects i).sound original.1 original.2
+    exact ⟨retained, original.2⟩
+
+/-- A position has no class member after pointwise narrowing exactly when it
+had none before. This is a local semantic refutation law, not an executable
+procedure for detecting emptiness and not a refutation of any other position.
+
+Proof outline. A witness on either side transfers by `cohort_members_iff`,
+contradicting the corresponding absence premise. -/
+theorem cohort_refuted_iff {n : Nat} {classes : Fin n → Class α}
+    (subjects : (i : Fin n) → Subject (classes i))
+    (regions : Fin n → Region α) (i : Fin n) :
+    (¬ ∃ z, ((subjects i).narrow (regions i)).Contains z ∧ classes i z) ↔
+      (¬ ∃ z, (regions i).Contains z ∧ classes i z) := by
+  constructor
+  · intro noNarrowed original
+    rcases original with ⟨z, witness⟩
+    exact noNarrowed ⟨z, (cohort_members_iff subjects regions i z).mpr witness⟩
+  · intro noOriginal narrowed
+    rcases narrowed with ⟨z, witness⟩
+    exact noOriginal ⟨z, (cohort_members_iff subjects regions i z).mp witness⟩
+
+/-- Applying subjects to an empty indexed family leaves that family unchanged.
+There is no position to visit. This creates neither an interpretation nor a
+claim that a search is complete. -/
+theorem cohort_empty (classes : Fin 0 → Class α)
+    (subjects : (i : Fin 0) → Subject (classes i))
+    (regions : Fin 0 → Region α) :
+    (fun i => (subjects i).narrow (regions i)) = regions := by
+  funext i
+  exact Fin.elim0 i
 
 end Subject
 
@@ -714,9 +799,9 @@ def row {C : Class α} (B O : List (Literal α)) (of : RowOf C B O) : Subject C 
     refine ⟨fun a held => ?_, fun a present => ⟨inside.2 a present, fun decided => ?_⟩⟩
     · rcases held with held | ⟨decided, req⟩
       · exact inside.1 a held
-      · exact (Cube.contains_narrow.mp
+      · exact (Region.contains_narrow.mp
           (consequence_row_narrows C B O of r decided z inside member)).2.1 a req
-    · exact (Cube.contains_narrow.mp
+    · exact (Region.contains_narrow.mp
         (consequence_row_narrows C B O of r decided z inside member)).2.2 a present
 
 /-- **A refuting subject**: it refutes every region a condition marks, narrowing it
@@ -917,11 +1002,11 @@ singleton. An undecided verdict gives none, so a stopped leaf decision certifies
 neither acceptance nor exhaustion. With these leaves, `CoverageTree.mem_outputs_iff`
 (L2) says the completed walk's accepted leaves are exactly the members of `C` in
 its root: L2 is a statement about accepted leaves, not about candidates. -/
-def node : LeafVerdict C z → Option (CoverageTree C (Cube.singleton z))
+def node : LeafVerdict C z → Option (CoverageTree C (Region.singleton z))
   | .accepted member => some (.accepted z member)
   | .refuted excluded =>
-    some (.refuted (Cube.singleton z) fun _ inside member =>
-      excluded ((Cube.contains_singleton.mp inside) ▸ member))
+    some (.refuted (Region.singleton z) fun _ inside member =>
+      excluded ((Region.contains_singleton.mp inside) ▸ member))
   | .undecided => none
 
 end LeafVerdict

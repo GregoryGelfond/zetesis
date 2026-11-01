@@ -6,14 +6,14 @@ import Zetesis.SeedSelections
 
 A completed root retains fixed-held atoms and finitely many remaining atom
 coordinates. A descendant holds, cuts or leaves each coordinate open. Reading
-those decisions through an exact partial lookup denotes the same cube as
+those decisions through an exact partial lookup denotes the same region as
 materializing the held and uncut atom selections.
 
 `materialization_exact` reuses the shared-selection law for each bound;
 `gate_readings_exact` and `narrowing_exact` transfer that equality to the
 existing must/may semantics and its completed narrowing operation. They add no
 candidate-acceptance rule: `Bounds.acceptance_survives_narrowing` still supplies
-the preservation argument for an accepted seed contained in the original cube.
+the preservation argument for an accepted seed contained in the original region.
 
 Exact lookup includes coverage and unique coordinate identity. Rust additionally
 maintains canonical root order, fixed/root disjointness and matching region
@@ -70,13 +70,13 @@ theorem lookup_selection_exact
       choice.2⟩
   exact ⟨sound, complete⟩
 
-/-- The owned cube after ordering and coalescing both selected atom lists. -/
-def materialized [BEq Atom] (fixed : Atoms Atom) (lower upper : List Atom) : Cube Atom :=
+/-- The owned region after ordering and coalescing both selected atom lists. -/
+def materialized [BEq Atom] (fixed : Atoms Atom) (lower upper : List Atom) : Region Atom :=
   ⟨Union fixed (SeedSelections.owned lower), Union fixed (SeedSelections.owned upper)⟩
 
 /-- The same fixed atoms, with lower and upper membership read from coordinates. -/
 def borrowed (fixed : Atoms Atom) (locate : Atom → Option Index)
-    (decision : Index → Option Bool) : Cube Atom :=
+    (decision : Index → Option Bool) : Region Atom :=
   ⟨Union fixed (read locate (held decision)),
     Union fixed (read locate (possible decision))⟩
 
@@ -93,7 +93,7 @@ variable (upper_values : upper.Perm ((indices.filter (possible decision)).map de
 
 include exact_lookup lower_values upper_values
 
-/-- Materializing the two finite selections preserves the entire borrowed cube.
+/-- Materializing the two finite selections preserves the entire borrowed region.
 First apply selection materialization to each ordered list; exact lookup then
 identifies that selection with the borrowed reading. Adding the same fixed-held
 atoms preserves each equality. -/
@@ -133,7 +133,7 @@ theorem gate_readings_exact (rule : Semantics.Rule Atom) :
   exact ⟨Iff.rfl, Iff.rfl⟩
 
 /-- The existing complete narrowing operation is identical under this change
-of representation. Both closures read the same pre-pass cube; this statement
+of representation. Both closures read the same pre-pass region; this statement
 does not authorize an upper reading after lower decisions have been committed.
 It concerns complete semantic closures, not partial operational prefixes. -/
 theorem narrowing_exact (program : Semantics.Program Atom) (carrier : Atoms Atom) :

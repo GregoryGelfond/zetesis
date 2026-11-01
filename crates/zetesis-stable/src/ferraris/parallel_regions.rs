@@ -21,7 +21,7 @@
 //! does, by the class certificate when one applies and else by the
 //! proper-subset query as a region tree; a stable model is sent to the
 //! enumeration. The regions partition the candidate space exactly
-//! (`Cube.split_partition`, `Cube.split_disjoint` of `Search.lean`), so every
+//! (`Region.split_partition`, `Region.split_disjoint` of `Search.lean`), so every
 //! leaf is visited once, by the coordinator or a worker, whatever the
 //! interleaving. Before engagement models arrive in the scalar walk's order;
 //! afterwards their order is the schedule's and is not a property of the result.
@@ -79,7 +79,8 @@ use std::sync::{Arc, Mutex, PoisonError, RwLock};
 use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
 
-use zetesis_algebra::region::{Narrowing, Region};
+use zetesis_algebra::region::Region;
+use zetesis_algebra::walk::{self, Counting};
 use zetesis_ferraris::{
     Interpretation, Narrower, NarrowingScratch, SupportExplanationStatistics, Theory,
 };
@@ -435,16 +436,31 @@ fn phases(timings: &SearchPhaseTimings) -> impl Iterator<Item = &PhaseMeasuremen
 }
 
 impl Shared {
-    /// Publish a split's older and newer children on this worker's deque, the
-    /// newer on top, through the frontier's one publication protocol.
+    /// Reserve before consuming the narrowed parent. The cut lineage was
+    /// copied outside the deque lock; only the interval split occurs inside.
+    /// Success empties the occupied caller slot; refusal restores its exact
+    /// parent before returning the original typed error.
     fn publish_split(
         &self,
         index: usize,
-        older: Entry,
-        next: Entry,
+        pending: &mut Option<Entry>,
+        atom: usize,
+        cut_knowledge: CandidateKnowledge,
         reserve: impl FnOnce(&mut std::collections::VecDeque<Entry>, usize) -> Result<(), Incomplete>,
     ) -> Result<(), Incomplete> {
-        self.frontier.publish_split(index, [older, next], reserve)
+        let parent = pending.take().expect("publication has a pending parent");
+        match self
+            .frontier
+            .publish_split_with(index, parent, reserve, |parent| {
+                let (cut, held) = parent.split_with(atom, |knowledge| (cut_knowledge, knowledge));
+                ([cut, held], ())
+            }) {
+            Ok(()) => Ok(()),
+            Err((error, parent)) => {
+                *pending = Some(parent);
+                Err(error)
+            }
+        }
     }
 
     /// Close for a normal end of work (no error): workers exit when they next
@@ -661,7 +677,7 @@ impl ParallelRegions {
         } = opened;
         let root = root.ok_or(Incomplete::InvalidWitness)?;
         let (sender, receiver) = sync_channel(workers.get() * CHANNEL_SLACK);
-        let root = Entry(root, CandidateKnowledge::default());
+        let root = Entry::new(root, CandidateKnowledge::default());
         let frontier = RegionFrontier::new(workers.get(), root)?;
         let inner = InnerDeques::new(workers.get())?;
         Ok(Self {
@@ -1849,7 +1865,7 @@ impl Workspaces<'_> {
 fn step<'a>(
     shared: &'a Shared,
     original: &IndexedTheory,
-    (Entry(mut region, mut knowledge), index): (Entry, usize),
+    (mut entry, index): (Entry, usize),
     workspaces: &mut Workspaces<'a>,
     budget: &mut Budget<'a, WorkLease<'a>>,
     report: &mut WorkerReport,
@@ -1889,7 +1905,7 @@ fn step<'a>(
             super::regions::narrow(
                 (subject, original.narrower()),
                 &restrictions,
-                (&mut region, &mut knowledge),
+                &mut entry,
                 &mut workspaces.scratch,
                 budget,
                 &mut report.regions,
@@ -1914,31 +1930,43 @@ fn step<'a>(
     );
     publish_counts(shared, &before, &report.regions);
     let narrowing = narrowing?;
-    if narrowing == Narrowing::Refuted {
-        report.regions.refuted += 1;
-        Live::add(&shared.live.refuted, 1);
-        workspaces.retired_knowledge = Some(knowledge);
-        return Ok(Stepped::Resolved(None));
-    }
-    let Some(atom) = region.split_atom() else {
-        report.regions.leaves += 1;
-        Live::add(&shared.live.leaves, 1);
-        return leaf(
-            shared,
-            original,
-            &region,
-            budget,
-            (&mut workspaces.membership, &mut workspaces.certificate),
-            report,
-            WalkPublication::new(shared, index, timing),
-        );
+    let atom = match walk::inspect(&entry, narrowing, Counting::Never, false) {
+        walk::Step::Refuted => {
+            report.regions.refuted += 1;
+            Live::add(&shared.live.refuted, 1);
+            workspaces.retired_knowledge = Some(entry.state);
+            return Ok(Stepped::Resolved(None));
+        }
+        walk::Step::Leaf => {
+            report.regions.leaves += 1;
+            Live::add(&shared.live.leaves, 1);
+            return leaf(
+                shared,
+                original,
+                &entry.region,
+                budget,
+                (&mut workspaces.membership, &mut workspaces.certificate),
+                report,
+                WalkPublication::new(shared, index, timing),
+            );
+        }
+        walk::Step::Split(atom) => atom,
+        walk::Step::Counted => unreachable!("Counting::Never cannot count a region"),
     };
     budget.decide()?;
     // Each child carries its own copy of the knowledge, linear in the theory:
     // what the parent learned holds in both.
-    let (cut, held) = region.split(atom);
-    let cut = Entry(cut, workspaces.copy_knowledge(&knowledge));
-    shared.publish_split(index, cut, Entry(held, knowledge), reserve_regions)?;
+    let cut_knowledge = workspaces.copy_knowledge(&entry.state);
+    let mut pending = Some(entry);
+    if let Err(error) =
+        shared.publish_split(index, &mut pending, atom, cut_knowledge, reserve_regions)
+    {
+        // Keep the unresolved parent until the typed stop is committed. This
+        // non-resumable walk then abandons it; it was never resolved or split.
+        shared.stop(error);
+        drop(pending);
+        return Err(error);
+    }
     Ok(Stepped::Split)
 }
 

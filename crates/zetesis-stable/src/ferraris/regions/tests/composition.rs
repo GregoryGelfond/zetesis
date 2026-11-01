@@ -4,6 +4,7 @@ use super::super::{CandidateKnowledge, Conditions, Narrower, Region, RegionCount
 use super::{NARROWING_ATTEMPTS, budget, enumeration, theory};
 use crate::ferraris::conditions::Bound;
 use crate::{Cancellation, Limits};
+use zetesis_algebra::region::Entry;
 use zetesis_ferraris::{Interpretation, Narrowing, NarrowingScratch, Node, Theory};
 
 /// `b <- a` and the choice of c. The first root makes a either a fact or a choice.
@@ -99,9 +100,8 @@ fn close(original: &Theory, conditions: &Conditions<(Theory, Narrower)>) -> (Reg
     let cancellation = Cancellation::default();
     let mut budget = budget(&cancellation, u64::MAX);
     let narrower = Narrower::new(original);
-    let mut region = Region::all_open(3);
+    let mut entry = Entry::new(Region::all_open(3), CandidateKnowledge::default());
     let mut counts = RegionCounts::default();
-    let mut knowledge = CandidateKnowledge::default();
     let mut scratch = NarrowingScratch::default();
     let before = NARROWING_ATTEMPTS.get();
     assert_eq!(
@@ -111,7 +111,7 @@ fn close(original: &Theory, conditions: &Conditions<(Theory, Narrower)>) -> (Reg
                 &narrower
             ),
             conditions,
-            (&mut region, &mut knowledge),
+            &mut entry,
             &mut scratch,
             &mut budget,
             &mut counts,
@@ -122,8 +122,8 @@ fn close(original: &Theory, conditions: &Conditions<(Theory, Narrower)>) -> (Reg
     );
     let attempts = NARROWING_ATTEMPTS.get() - before;
     assert_eq!(counts.work, budget.statistics.work);
-    assert!(region.is_held(0) && region.is_held(1) && region.is_open(2));
-    assert_eq!(region.split_atom(), Some(2));
+    assert!(entry.region.is_held(0) && entry.region.is_held(1) && entry.region.is_open(2));
+    assert_eq!(entry.split_atom(), Some(2));
     // A joint fixed point has no further atom decisions. Reuse the exact
     // knowledge and scratch so stale pending work cannot hide in a fresh state.
     assert_eq!(
@@ -133,7 +133,7 @@ fn close(original: &Theory, conditions: &Conditions<(Theory, Narrower)>) -> (Reg
                 &narrower
             ),
             conditions,
-            (&mut region, &mut knowledge),
+            &mut entry,
             &mut scratch,
             &mut budget,
             &mut counts,
@@ -143,7 +143,7 @@ fn close(original: &Theory, conditions: &Conditions<(Theory, Narrower)>) -> (Reg
         Narrowing::Fixed { changed: false },
     );
     assert_eq!(counts.work, budget.statistics.work);
-    (region, attempts)
+    (entry.region, attempts)
 }
 
 #[test]

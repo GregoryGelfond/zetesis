@@ -54,6 +54,7 @@ fn processed_witnesses_preserve_word_boundaries() {
                 RegionLimits::default(),
                 &Cancellation::default(),
             )
+            .result
             .unwrap();
         assert_eq!(region, expected);
         let known = super::compact(&knowledge);
@@ -91,6 +92,7 @@ fn narrowing_keeps_mask_padding_clear() {
                         RegionLimits::default(),
                         &Cancellation::default(),
                     )
+                    .result
                     .unwrap();
             } else {
                 index
@@ -102,6 +104,7 @@ fn narrowing_keeps_mask_padding_clear() {
                         RegionLimits::default(),
                         &Cancellation::default(),
                     )
+                    .result
                     .unwrap();
             }
             let mut copied = source.clone();
@@ -150,7 +153,7 @@ fn cancelled_narrowing_preserves_copied_knowledge() {
             RegionLimits::default(),
             &cancellation,
         );
-        assert_eq!(result, Err(Stop::Cancelled));
+        assert_eq!(result.result, Err(Stop::Cancelled));
         assert_eq!(region, before);
         same_knowledge(&copied, &source);
     }

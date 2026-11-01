@@ -330,6 +330,50 @@ def bodyUpper (P : Atoms α) (knownFalse : Formula α → Prop) : Formula α →
   | .disj F G => ¬ knownFalse (.disj F G) ∧ (bodyUpper P knownFalse F ∨ bodyUpper P knownFalse G)
   | .imp F G => ¬ knownFalse (.imp F G)
 
+/-- Shrinking the possible atoms and extending known-false evidence cannot
+make a previously impossible relaxed body possible.
+
+Equivalently, every body possible with the smaller atom set and the additional
+false marks was possible before. Induction on the formula preserves each
+unmasked node through inclusion of false evidence, transfers atom membership,
+and reuses the conjunction or disjunction witnesses. Implications remain opaque.
+
+This is a law of the existing body relaxation, not a theorem that an arbitrary
+chosen closed set, or a partially computed founded closure, is monotone. The
+false marks need not be semantically valid for this structural law; using them
+to exclude answer sets separately requires `body_upper_sound`'s validity premise.
+-/
+theorem body_upper_mono {smaller larger : Atoms α}
+    {knownFalse moreFalse : Formula α → Prop}
+    (atoms : Sub smaller larger) (marks : ∀ F, knownFalse F → moreFalse F)
+    (F : Formula α) : bodyUpper smaller moreFalse F → bodyUpper larger knownFalse F := by
+  induction F with
+  | atom a =>
+    intro possible
+    have unmasked : ¬ knownFalse (.atom a) :=
+      fun marked => possible.1 (marks (.atom a) marked)
+    exact ⟨unmasked, atoms a possible.2⟩
+  | bot =>
+    intro impossible
+    exact False.elim impossible
+  | conj F G ihF ihG =>
+    intro possible
+    have unmasked : ¬ knownFalse (.conj F G) :=
+      fun marked => possible.1 (marks (.conj F G) marked)
+    exact ⟨unmasked, ihF possible.2.1, ihG possible.2.2⟩
+  | disj F G ihF ihG =>
+    intro possible
+    have unmasked : ¬ knownFalse (.disj F G) :=
+      fun marked => possible.1 (marks (.disj F G) marked)
+    have branch : bodyUpper larger knownFalse F ∨ bodyUpper larger knownFalse G := by
+      rcases possible.2 with left | right
+      · exact Or.inl (ihF left)
+      · exact Or.inr (ihG right)
+    exact ⟨unmasked, branch⟩
+  | imp F G _ _ =>
+    intro possible
+    exact fun marked => possible (marks (.imp F G) marked)
+
 /-- The positive Boolean relaxation is upper-sound when each known-false mark
 is valid in M. Reduct truth implies original truth, so no true reduct node is
 removed by the mask; atoms transfer through J below P and Boolean cases recurse.

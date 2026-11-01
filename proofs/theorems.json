@@ -442,242 +442,272 @@
   {
     "name": "Zetesis.Algebra.inside_refl",
     "file": "Zetesis/Algebra.lean",
-    "line": 109
+    "line": 103
   },
   {
     "name": "Zetesis.Algebra.inside_trans",
     "file": "Zetesis/Algebra.lean",
-    "line": 113
+    "line": 107
   },
   {
     "name": "Zetesis.Algebra.inside_antisymm",
     "file": "Zetesis/Algebra.lean",
-    "line": 120
+    "line": 114
   },
   {
     "name": "Zetesis.Algebra.narrow_to_inside",
     "file": "Zetesis/Algebra.lean",
-    "line": 131
+    "line": 125
   },
   {
     "name": "Zetesis.Algebra.Subject.sound_of_narrower",
     "file": "Zetesis/Algebra.lean",
-    "line": 192
+    "line": 186
   },
   {
     "name": "Zetesis.Algebra.Subject.apply_sound",
     "file": "Zetesis/Algebra.lean",
-    "line": 221
+    "line": 215
   },
   {
-    "name": "Zetesis.Algebra.joint_least",
+    "name": "Zetesis.Algebra.Subject.cohort_extensive",
     "file": "Zetesis/Algebra.lean",
-    "line": 247
+    "line": 233
   },
   {
-    "name": "Zetesis.Algebra.joint_most_precise_bound",
+    "name": "Zetesis.Algebra.Subject.cohort_monotone",
     "file": "Zetesis/Algebra.lean",
-    "line": 253
+    "line": 243
   },
   {
-    "name": "Zetesis.Algebra.joint_extensive",
+    "name": "Zetesis.Algebra.Subject.cohort_sound",
     "file": "Zetesis/Algebra.lean",
-    "line": 260
+    "line": 255
   },
   {
-    "name": "Zetesis.Algebra.joint_closed",
+    "name": "Zetesis.Algebra.Subject.cohort_members_iff",
     "file": "Zetesis/Algebra.lean",
-    "line": 274
+    "line": 267
   },
   {
-    "name": "Zetesis.Algebra.joint_monotone",
+    "name": "Zetesis.Algebra.Subject.cohort_refuted_iff",
     "file": "Zetesis/Algebra.lean",
-    "line": 286
+    "line": 289
   },
   {
-    "name": "Zetesis.Algebra.joint_of_closed",
-    "file": "Zetesis/Algebra.lean",
-    "line": 291
-  },
-  {
-    "name": "Zetesis.Algebra.joint_idempotent",
-    "file": "Zetesis/Algebra.lean",
-    "line": 299
-  },
-  {
-    "name": "Zetesis.Algebra.joint_more_subjects",
+    "name": "Zetesis.Algebra.Subject.cohort_empty",
     "file": "Zetesis/Algebra.lean",
     "line": 305
   },
   {
-    "name": "Zetesis.Algebra.ideal_contains",
+    "name": "Zetesis.Algebra.joint_least",
     "file": "Zetesis/Algebra.lean",
-    "line": 319
+    "line": 332
   },
   {
-    "name": "Zetesis.Algebra.ideal_inside",
+    "name": "Zetesis.Algebra.joint_most_precise_bound",
     "file": "Zetesis/Algebra.lean",
-    "line": 324
+    "line": 338
   },
   {
-    "name": "Zetesis.Algebra.Subject.narrow_ideal",
+    "name": "Zetesis.Algebra.joint_extensive",
     "file": "Zetesis/Algebra.lean",
-    "line": 329
+    "line": 345
   },
   {
-    "name": "Zetesis.Algebra.ideal_closed",
+    "name": "Zetesis.Algebra.joint_closed",
     "file": "Zetesis/Algebra.lean",
-    "line": 336
+    "line": 359
   },
   {
-    "name": "Zetesis.Algebra.joint_sound",
+    "name": "Zetesis.Algebra.joint_monotone",
     "file": "Zetesis/Algebra.lean",
-    "line": 349
+    "line": 371
   },
   {
-    "name": "Zetesis.Algebra.Reaches.inside",
+    "name": "Zetesis.Algebra.joint_of_closed",
     "file": "Zetesis/Algebra.lean",
-    "line": 368
+    "line": 376
   },
   {
-    "name": "Zetesis.Algebra.Reaches.sound",
+    "name": "Zetesis.Algebra.joint_idempotent",
     "file": "Zetesis/Algebra.lean",
-    "line": 375
+    "line": 384
   },
   {
-    "name": "Zetesis.Algebra.Reaches.snoc",
-    "file": "Zetesis/Algebra.lean",
-    "line": 382
-  },
-  {
-    "name": "Zetesis.Algebra.Reaches.below_closed",
+    "name": "Zetesis.Algebra.joint_more_subjects",
     "file": "Zetesis/Algebra.lean",
     "line": 390
   },
   {
-    "name": "Zetesis.Algebra.Reaches.eq_joint",
+    "name": "Zetesis.Algebra.ideal_contains",
+    "file": "Zetesis/Algebra.lean",
+    "line": 404
+  },
+  {
+    "name": "Zetesis.Algebra.ideal_inside",
     "file": "Zetesis/Algebra.lean",
     "line": 409
   },
   {
+    "name": "Zetesis.Algebra.Subject.narrow_ideal",
+    "file": "Zetesis/Algebra.lean",
+    "line": 414
+  },
+  {
+    "name": "Zetesis.Algebra.ideal_closed",
+    "file": "Zetesis/Algebra.lean",
+    "line": 421
+  },
+  {
+    "name": "Zetesis.Algebra.joint_sound",
+    "file": "Zetesis/Algebra.lean",
+    "line": 434
+  },
+  {
+    "name": "Zetesis.Algebra.Reaches.inside",
+    "file": "Zetesis/Algebra.lean",
+    "line": 453
+  },
+  {
+    "name": "Zetesis.Algebra.Reaches.sound",
+    "file": "Zetesis/Algebra.lean",
+    "line": 460
+  },
+  {
+    "name": "Zetesis.Algebra.Reaches.snoc",
+    "file": "Zetesis/Algebra.lean",
+    "line": 467
+  },
+  {
+    "name": "Zetesis.Algebra.Reaches.below_closed",
+    "file": "Zetesis/Algebra.lean",
+    "line": 475
+  },
+  {
+    "name": "Zetesis.Algebra.Reaches.eq_joint",
+    "file": "Zetesis/Algebra.lean",
+    "line": 494
+  },
+  {
     "name": "Zetesis.Algebra.Reaches.terminal_agreement",
     "file": "Zetesis/Algebra.lean",
-    "line": 417
+    "line": 502
   },
   {
     "name": "Zetesis.Algebra.iterate_reaches",
     "file": "Zetesis/Algebra.lean",
-    "line": 438
+    "line": 523
   },
   {
     "name": "Zetesis.Algebra.iterate_inside",
     "file": "Zetesis/Algebra.lean",
-    "line": 445
+    "line": 530
   },
   {
     "name": "Zetesis.Algebra.iterate_stabilizes",
     "file": "Zetesis/Algebra.lean",
-    "line": 457
+    "line": 542
   },
   {
     "name": "Zetesis.Algebra.fair_iteration_reaches_joint",
     "file": "Zetesis/Algebra.lean",
-    "line": 490
+    "line": 575
   },
   {
     "name": "Zetesis.Algebra.countP_lt",
     "file": "Zetesis/Algebra.lean",
-    "line": 512
+    "line": 597
   },
   {
     "name": "Zetesis.Algebra.unheld_le",
     "file": "Zetesis/Algebra.lean",
-    "line": 562
+    "line": 647
   },
   {
     "name": "Zetesis.Algebra.admitted_le",
     "file": "Zetesis/Algebra.lean",
-    "line": 570
+    "line": 655
   },
   {
     "name": "Zetesis.Algebra.openness_lt",
     "file": "Zetesis/Algebra.lean",
-    "line": 580
+    "line": 665
   },
   {
     "name": "Zetesis.Algebra.refines_wf",
     "file": "Zetesis/Algebra.lean",
-    "line": 617
+    "line": 702
   },
   {
     "name": "Zetesis.Algebra.fair_iteration_reaches_joint_of_atoms",
     "file": "Zetesis/Algebra.lean",
-    "line": 624
+    "line": 709
   },
   {
     "name": "Zetesis.Algebra.decides_mono",
     "file": "Zetesis/Algebra.lean",
-    "line": 686
+    "line": 771
   },
   {
     "name": "Zetesis.Algebra.foldVerdict_absorbed",
     "file": "Zetesis/Algebra.lean",
-    "line": 818
+    "line": 903
   },
   {
     "name": "Zetesis.Algebra.foldVerdict_complete",
     "file": "Zetesis/Algebra.lean",
-    "line": 835
+    "line": 920
   },
   {
     "name": "Zetesis.Algebra.foldVerdict_empty",
     "file": "Zetesis/Algebra.lean",
-    "line": 851
+    "line": 936
   },
   {
     "name": "Zetesis.Algebra.foldVerdict_undecided",
     "file": "Zetesis/Algebra.lean",
-    "line": 866
+    "line": 951
   },
   {
     "name": "Zetesis.Algebra.foldVerdict_without_absorber",
     "file": "Zetesis/Algebra.lean",
-    "line": 881
+    "line": 966
   },
   {
     "name": "Zetesis.Algebra.any_true_eq_false_iff",
     "file": "Zetesis/Algebra.lean",
-    "line": 932
+    "line": 1017
   },
   {
     "name": "Zetesis.Algebra.inner_verdict",
     "file": "Zetesis/Algebra.lean",
-    "line": 950
+    "line": 1035
   },
   {
     "name": "Zetesis.Algebra.countermodelVerdict_accepts",
     "file": "Zetesis/Algebra.lean",
-    "line": 967
+    "line": 1052
   },
   {
     "name": "Zetesis.Algebra.answerSetVerdict_accepts",
     "file": "Zetesis/Algebra.lean",
-    "line": 996
+    "line": 1081
   },
   {
     "name": "Zetesis.Algebra.answer_sets_nested",
     "file": "Zetesis/Algebra.lean",
-    "line": 1010
+    "line": 1095
   },
   {
     "name": "Zetesis.Algebra.countermodel_outputs_empty_iff",
     "file": "Zetesis/Algebra.lean",
-    "line": 1017
+    "line": 1102
   },
   {
     "name": "Zetesis.Algebra.countermodel_verdict_independent",
     "file": "Zetesis/Algebra.lean",
-    "line": 1035
+    "line": 1120
   },
   {
     "name": "Zetesis.AlgebraicRows.contribution_of_holds",
@@ -4095,49 +4125,59 @@
     "line": 368
   },
   {
+    "name": "Zetesis.FormulaBounds.known_blocked_mono",
+    "file": "Zetesis/FormulaBounds.lean",
+    "line": 401
+  },
+  {
+    "name": "Zetesis.FormulaBounds.known_choice_blocked_mono",
+    "file": "Zetesis/FormulaBounds.lean",
+    "line": 415
+  },
+  {
     "name": "Zetesis.FormulaBounds.known_blocked_no_support",
     "file": "Zetesis/FormulaBounds.lean",
-    "line": 398
+    "line": 428
   },
   {
     "name": "Zetesis.FormulaBounds.known_choice_blocked_no_support",
     "file": "Zetesis/FormulaBounds.lean",
-    "line": 411
+    "line": 441
   },
   {
     "name": "Zetesis.FormulaBounds.unsupported_cut_with_choices",
     "file": "Zetesis/FormulaBounds.lean",
-    "line": 434
+    "line": 464
   },
   {
     "name": "Zetesis.FormulaBounds.sole_rule_forces_with_choices",
     "file": "Zetesis/FormulaBounds.lean",
-    "line": 453
+    "line": 483
   },
   {
     "name": "Zetesis.FormulaBounds.sole_choice_forces",
     "file": "Zetesis/FormulaBounds.lean",
-    "line": 474
+    "line": 504
   },
   {
     "name": "Zetesis.FormulaBounds.restriction_forces",
     "file": "Zetesis/FormulaBounds.lean",
-    "line": 499
+    "line": 529
   },
   {
     "name": "Zetesis.FormulaBounds.restriction_cuts",
     "file": "Zetesis/FormulaBounds.lean",
-    "line": 505
+    "line": 535
   },
   {
     "name": "Zetesis.FormulaBounds.restriction_contradiction_refutes",
     "file": "Zetesis/FormulaBounds.lean",
-    "line": 511
+    "line": 541
   },
   {
     "name": "Zetesis.FormulaBounds.restricted_stable_narrowing",
     "file": "Zetesis/FormulaBounds.lean",
-    "line": 524
+    "line": 554
   },
   {
     "name": "Zetesis.FormulaBounds.position_in_append",
@@ -6735,9 +6775,14 @@
     "line": 302
   },
   {
+    "name": "Zetesis.PossibleFoundedness.body_upper_mono",
+    "file": "Zetesis/PossibleFoundedness.lean",
+    "line": 346
+  },
+  {
     "name": "Zetesis.PossibleFoundedness.body_upper_sound",
     "file": "Zetesis/PossibleFoundedness.lean",
-    "line": 337
+    "line": 381
   },
   {
     "name": "Zetesis.ProducerScheduling.stable_of_reads_only",
@@ -7255,14 +7300,19 @@
     "line": 174
   },
   {
+    "name": "Zetesis.ReductRegions.masked_known_mono",
+    "file": "Zetesis/ReductRegions.lean",
+    "line": 247
+  },
+  {
     "name": "Zetesis.ReductRegions.masked_known_sound",
     "file": "Zetesis/ReductRegions.lean",
-    "line": 244
+    "line": 284
   },
   {
     "name": "Zetesis.ReductRegions.masked_known_narrows",
     "file": "Zetesis/ReductRegions.lean",
-    "line": 281
+    "line": 321
   },
   {
     "name": "Zetesis.RegionBounds.lookup_selection_exact",
@@ -7545,47 +7595,47 @@
     "line": 138
   },
   {
-    "name": "Zetesis.Cube.contains_singleton",
+    "name": "Zetesis.Region.contains_singleton",
     "file": "Zetesis/Search.lean",
     "line": 40
   },
   {
-    "name": "Zetesis.Cube.contains_splitFalse",
+    "name": "Zetesis.Region.contains_splitFalse",
     "file": "Zetesis/Search.lean",
     "line": 49
   },
   {
-    "name": "Zetesis.Cube.contains_splitTrue",
+    "name": "Zetesis.Region.contains_splitTrue",
     "file": "Zetesis/Search.lean",
     "line": 63
   },
   {
-    "name": "Zetesis.Cube.split_partition",
+    "name": "Zetesis.Region.split_partition",
     "file": "Zetesis/Search.lean",
     "line": 77
   },
   {
-    "name": "Zetesis.Cube.split_disjoint",
+    "name": "Zetesis.Region.split_disjoint",
     "file": "Zetesis/Search.lean",
     "line": 92
   },
   {
-    "name": "Zetesis.Cube.fresh_branches",
+    "name": "Zetesis.Region.fresh_branches",
     "file": "Zetesis/Search.lean",
     "line": 98
   },
   {
-    "name": "Zetesis.Cube.contains_narrow",
+    "name": "Zetesis.Region.contains_narrow",
     "file": "Zetesis/Search.lean",
     "line": 109
   },
   {
-    "name": "Zetesis.Cube.narrow_preserves_valid",
+    "name": "Zetesis.Region.narrow_preserves_valid",
     "file": "Zetesis/Search.lean",
     "line": 125
   },
   {
-    "name": "Zetesis.Cube.consequence_narrow_preserves",
+    "name": "Zetesis.Region.consequence_narrow_preserves",
     "file": "Zetesis/Search.lean",
     "line": 138
   },

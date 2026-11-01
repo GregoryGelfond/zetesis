@@ -81,16 +81,15 @@ impl Program {
         known: &mut Knowledge,
         scratch: &mut NarrowingScratch,
     ) -> (Narrowing, NarrowingStatistics) {
-        self.index
-            .narrow_known(
-                OriginalSubject::carrier(&self.owner, Some(&self.producers)),
-                region,
-                known,
-                scratch,
-                RegionLimits::default(),
-                &Cancellation::default(),
-            )
-            .unwrap()
+        let attempt = self.index.narrow_known(
+            OriginalSubject::carrier(&self.owner, Some(&self.producers)),
+            region,
+            known,
+            scratch,
+            RegionLimits::default(),
+            &Cancellation::default(),
+        );
+        (attempt.result.unwrap(), attempt.statistics)
     }
 
     fn captured(&self) -> (Knowledge, NarrowingScratch) {
@@ -343,31 +342,29 @@ fn frozen_and_inventory_free_visits_suspend_original_explanations() {
         .unwrap();
     assert!(evaluated.is_model());
     let decisions = [(0, true), (2, false), (3, true), (4, false)];
-    let (frozen, frozen_counts) = program
-        .index
-        .narrow_frozen_known(
-            FrozenSubject::new(&program.theory, evaluated.truth()),
-            &mut region(&decisions),
-            &mut program.index.knowledge(),
-            &mut scratch,
-            RegionLimits::default(),
-            &Cancellation::default(),
-        )
-        .unwrap();
+    let attempt = program.index.narrow_frozen_known(
+        FrozenSubject::new(&program.theory, evaluated.truth()),
+        &mut region(&decisions),
+        &mut program.index.knowledge(),
+        &mut scratch,
+        RegionLimits::default(),
+        &Cancellation::default(),
+    );
+    let frozen = attempt.result.unwrap();
+    let frozen_counts = attempt.statistics;
     assert!(matches!(frozen, Narrowing::Fixed { .. }));
     assert_eq!(frozen_counts.support_explanations.work, 0);
     assert_eq!(scratch.explanations.len(), 1);
-    let (without_inventory, inventory_counts) = program
-        .index
-        .narrow_known(
-            OriginalSubject::new(&program.theory, None),
-            &mut region(&decisions),
-            &mut program.index.knowledge(),
-            &mut scratch,
-            RegionLimits::default(),
-            &Cancellation::default(),
-        )
-        .unwrap();
+    let attempt = program.index.narrow_known(
+        OriginalSubject::new(&program.theory, None),
+        &mut region(&decisions),
+        &mut program.index.knowledge(),
+        &mut scratch,
+        RegionLimits::default(),
+        &Cancellation::default(),
+    );
+    let without_inventory = attempt.result.unwrap();
+    let inventory_counts = attempt.statistics;
     assert!(matches!(without_inventory, Narrowing::Fixed { .. }));
     assert_eq!(inventory_counts.support_explanations.work, 0);
     assert_eq!(scratch.explanations.len(), 1);

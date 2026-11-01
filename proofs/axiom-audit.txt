@@ -92,6 +92,12 @@
 'Zetesis.Algebra.narrow_to_inside' depends on axioms: [propext, Quot.sound]
 'Zetesis.Algebra.Subject.sound_of_narrower' does not depend on any axioms
 'Zetesis.Algebra.Subject.apply_sound' does not depend on any axioms
+'Zetesis.Algebra.Subject.cohort_extensive' does not depend on any axioms
+'Zetesis.Algebra.Subject.cohort_monotone' does not depend on any axioms
+'Zetesis.Algebra.Subject.cohort_sound' does not depend on any axioms
+'Zetesis.Algebra.Subject.cohort_members_iff' does not depend on any axioms
+'Zetesis.Algebra.Subject.cohort_refuted_iff' does not depend on any axioms
+'Zetesis.Algebra.Subject.cohort_empty' depends on axioms: [Quot.sound]
 'Zetesis.Algebra.joint_least' does not depend on any axioms
 'Zetesis.Algebra.joint_most_precise_bound' does not depend on any axioms
 'Zetesis.Algebra.joint_extensive' does not depend on any axioms
@@ -837,6 +843,8 @@
 'Zetesis.FormulaBounds.unsupported_cut' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.FormulaBounds.sole_support_forces' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.FormulaBounds.choice_blocked_no_support' does not depend on any axioms
+'Zetesis.FormulaBounds.known_blocked_mono' does not depend on any axioms
+'Zetesis.FormulaBounds.known_choice_blocked_mono' does not depend on any axioms
 'Zetesis.FormulaBounds.known_blocked_no_support' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.FormulaBounds.known_choice_blocked_no_support' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.FormulaBounds.unsupported_cut_with_choices' depends on axioms: [propext, Classical.choice, Quot.sound]
@@ -1399,6 +1407,7 @@
 'Zetesis.PossibleFoundedness.conditional_unsupported_forces_complement' depends on axioms: [propext,
  Classical.choice,
  Quot.sound]
+'Zetesis.PossibleFoundedness.body_upper_mono' does not depend on any axioms
 'Zetesis.PossibleFoundedness.body_upper_sound' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.ProducerScheduling.stable_of_reads_only' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.ProducerScheduling.selective_step_exact_of_stable' depends on axioms: [propext, Classical.choice, Quot.sound]
@@ -1507,6 +1516,7 @@
 'Zetesis.ReductRegions.reduct_atom' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.ReductRegions.masked_read_eq_reduct' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.ReductRegions.masked_reads_falsum' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.ReductRegions.masked_known_mono' does not depend on any axioms
 'Zetesis.ReductRegions.masked_known_sound' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.ReductRegions.masked_known_narrows' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.RegionBounds.lookup_selection_exact' depends on axioms: [propext, Quot.sound]
@@ -1569,15 +1579,15 @@
 'Zetesis.ScalarArithmetic.operation_agreement' does not depend on any axioms
 'Zetesis.ScalarArithmetic.first_failure' depends on axioms: [propext]
 'Zetesis.ScalarArithmetic.successful_step' depends on axioms: [propext]
-'Zetesis.Cube.contains_singleton' depends on axioms: [propext, Quot.sound]
-'Zetesis.Cube.contains_splitFalse' does not depend on any axioms
-'Zetesis.Cube.contains_splitTrue' does not depend on any axioms
-'Zetesis.Cube.split_partition' depends on axioms: [propext, Classical.choice, Quot.sound]
-'Zetesis.Cube.split_disjoint' does not depend on any axioms
-'Zetesis.Cube.fresh_branches' does not depend on any axioms
-'Zetesis.Cube.contains_narrow' does not depend on any axioms
-'Zetesis.Cube.narrow_preserves_valid' does not depend on any axioms
-'Zetesis.Cube.consequence_narrow_preserves' does not depend on any axioms
+'Zetesis.Region.contains_singleton' depends on axioms: [propext, Quot.sound]
+'Zetesis.Region.contains_splitFalse' does not depend on any axioms
+'Zetesis.Region.contains_splitTrue' does not depend on any axioms
+'Zetesis.Region.split_partition' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.Region.split_disjoint' does not depend on any axioms
+'Zetesis.Region.fresh_branches' does not depend on any axioms
+'Zetesis.Region.contains_narrow' does not depend on any axioms
+'Zetesis.Region.narrow_preserves_valid' does not depend on any axioms
+'Zetesis.Region.consequence_narrow_preserves' does not depend on any axioms
 'Zetesis.CoverageTree.mem_outputs_iff' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.CoverageTree.outputs_sound' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.CoverageTree.outputs_complete' depends on axioms: [propext, Classical.choice, Quot.sound]

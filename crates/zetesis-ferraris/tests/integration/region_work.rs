@@ -104,6 +104,7 @@ fn run(
         )
     };
     let attempt = NarrowingAttempt {
+        preferred: attempt.preferred,
         result: attempt
             .result
             .map_err(|stop| quota.failure.take().unwrap_or(Refusal::Stopped(stop))),
@@ -149,10 +150,10 @@ fn metered_narrowing_matches_local_wrappers() {
                 RegionLimits::default(),
                 &cancellation,
             )
-        }
-        .unwrap();
-        assert_eq!(attempt.result.unwrap(), local.0);
-        assert_eq!(attempt.statistics, local.1);
+        };
+        assert_eq!(attempt.result.unwrap(), local.result.unwrap());
+        assert_eq!(attempt.statistics, local.statistics);
+        assert_eq!(attempt.preferred, local.preferred);
         assert_eq!(attempt.statistics.work, permits);
         assert_eq!(region, local_region);
     }

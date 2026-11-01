@@ -303,7 +303,7 @@ fn producers(builder: &mut Builder<'_, '_, '_>, atoms: [usize; 5], shape: Shape)
 fn closed(theory: &Theory) -> Region {
     let narrower = zetesis_ferraris::Narrower::new(theory);
     let mut region = Region::all_open(theory.atom_count());
-    let (outcome, _) = narrower
+    let outcome = narrower
         .narrow_known(
             zetesis_ferraris::OriginalSubject::new(theory, None),
             &mut region,
@@ -312,6 +312,7 @@ fn closed(theory: &Theory) -> Region {
             zetesis_ferraris::RegionLimits::default(),
             &Cancellation::default(),
         )
+        .result
         .unwrap();
     assert!(matches!(outcome, zetesis_ferraris::Narrowing::Fixed { .. }));
     region

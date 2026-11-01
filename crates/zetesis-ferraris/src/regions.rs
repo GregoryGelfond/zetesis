@@ -533,11 +533,16 @@ pub struct NarrowingStatistics {
 /// admitted work prefix on either outcome. A failed attempt leaves sound but
 /// partially closed knowledge and region state; both must be abandoned.
 #[derive(Debug)]
+#[must_use = "inspect the narrowing result before using the region or knowledge"]
 pub struct NarrowingAttempt<E = Stop> {
     /// Complete narrowing or the unchanged failure supplied by its quota.
     pub result: Result<Narrowing, E>,
     /// Charged reads and propagation progress, including a failed prefix.
     pub statistics: NarrowingStatistics,
+    /// A completed split preference, to be installed in the caller's walk entry.
+    /// Propagation-only attempts, refutations and failures return `None`; no
+    /// previously retained entry preference is cleared by that absence.
+    pub preferred: Option<usize>,
 }
 
 /// One split-selection result and its charged reads, including a refused
@@ -1345,9 +1350,8 @@ impl Narrower {
     /// one under the same `producers` and `frozen` mask, as [`Knowledge`]
     /// states; the narrowing cannot tell a foreign knowledge from its own.
     ///
-    /// # Errors
-    /// Returns the stop when the narrowing exceeds its work or propagation
-    /// ceiling, or control stops it. The region then holds the decisions the
+    /// The attempt reports the stop when narrowing exceeds its work or
+    /// propagation ceiling, or control stops it. The region then holds the decisions the
     /// closure had learned before the stop, and the knowledge is partly
     /// closed: both sound, neither to be reused; the proposers abandon the
     /// region.
@@ -1359,19 +1363,16 @@ impl Narrower {
         scratch: &mut NarrowingScratch,
         limits: RegionLimits,
         cancellation: &Cancellation,
-    ) -> Result<(Narrowing, NarrowingStatistics), Stop> {
+    ) -> NarrowingAttempt {
         let subject = Subject::from(subject);
-        let attempt = self.narrow_with(
+        self.narrow_with(
             (subject, SplitSelection::Choose),
             region,
             knowledge,
             scratch,
             Work::new(limits.max_work),
             cancellation,
-        );
-        attempt
-            .result
-            .map(|narrowing| (narrowing, attempt.statistics))
+        )
     }
 
     /// Narrow a region of the theory's frozen reduct under a candidate from
@@ -1384,8 +1385,7 @@ impl Narrower {
     /// enclosing region of the same query under the same truth, with the
     /// precondition [`Knowledge`] states.
     ///
-    /// # Errors
-    /// As [`Self::narrow_known`].
+    /// Failures and receipts follow [`Self::narrow_known`].
     pub fn narrow_frozen_known(
         &self,
         subject: FrozenSubject<'_>,
@@ -1394,19 +1394,16 @@ impl Narrower {
         scratch: &mut NarrowingScratch,
         limits: RegionLimits,
         cancellation: &Cancellation,
-    ) -> Result<(Narrowing, NarrowingStatistics), Stop> {
+    ) -> NarrowingAttempt {
         let subject = Subject::from(subject);
-        let attempt = self.narrow_with(
+        self.narrow_with(
             (subject, SplitSelection::Choose),
             region,
             knowledge,
             scratch,
             Work::new(limits.max_work),
             cancellation,
-        );
-        attempt
-            .result
-            .map(|narrowing| (narrowing, attempt.statistics))
+        )
     }
 
     /// Narrow original candidates with work granted in batches by `quota`
@@ -1444,7 +1441,7 @@ impl Narrower {
     /// Close original-candidate knowledge without selecting a split atom.
     /// This has the propagation, ownership and failure contracts of
     /// [`Self::narrow_known_reserved`], but charges no preference scan and
-    /// leaves any existing preference unchanged. Compose several such
+    /// returns no preference. Compose several such
     /// closures to a joint fixed point, then select once with
     /// [`Knowledge::preferred_atom_reserved`].
     pub fn propagate_known_reserved(
@@ -1499,6 +1496,7 @@ impl Narrower {
         cancellation: &Cancellation,
     ) -> NarrowingAttempt {
         let mut statistics = NarrowingStatistics::default();
+        let mut preferred = None;
         let result = cancellation.poll().and_then(|()| {
             // Select the counter width once for the closure.
             let narrowing = match &mut knowledge.width {
@@ -1530,20 +1528,21 @@ impl Narrower {
             if matches!(narrowing, Narrowing::Fixed { .. })
                 && matches!(selection, SplitSelection::Choose)
             {
-                let preferred = match subject.generator_order {
+                preferred = match subject.generator_order {
                     Some(order) => order.preferred(subject.theory, region, &mut work)?,
                     None => knowledge.preferred_atom(region, subject.choices, &mut work)?,
                 };
-                if let Some(atom) = preferred {
-                    region.prefer(atom);
-                }
             }
             Ok(narrowing)
         });
         work.refund();
         statistics.work = work.spent();
         statistics.support_explanations.peak_bytes = scratch.explanations.peak_bytes();
-        NarrowingAttempt { result, statistics }
+        NarrowingAttempt {
+            result,
+            statistics,
+            preferred,
+        }
     }
 
     /// The closure and the region's new decisions, at the knowledge's

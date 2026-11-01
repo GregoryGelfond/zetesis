@@ -228,16 +228,15 @@ fn frozen_closure_ignores_connective_links() {
                     let mut scratch = NarrowingScratch::default();
                     let run =
                         |index: &Narrower, region: &mut Region, scratch: &mut NarrowingScratch| {
-                            index
-                                .narrow_frozen_known(
-                                    FrozenSubject::new(&theory, &truth),
-                                    region,
-                                    &mut index.knowledge(),
-                                    scratch,
-                                    RegionLimits::default(),
-                                    &Cancellation::default(),
-                                )
-                                .unwrap()
+                            let attempt = index.narrow_frozen_known(
+                                FrozenSubject::new(&theory, &truth),
+                                region,
+                                &mut index.knowledge(),
+                                scratch,
+                                RegionLimits::default(),
+                                &Cancellation::default(),
+                            );
+                            (attempt.result.unwrap(), attempt.statistics)
                         };
                     let actual = run(&index, &mut actual_region, &mut scratch);
                     let expected = run(

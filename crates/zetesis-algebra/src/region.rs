@@ -1,7 +1,7 @@
 //! Regions of a candidate space and the outcome of narrowing them.
 //!
 //! A region decides some atoms in, some out, and leaves the rest open. Its
-//! candidates are the sets agreeing with those decisions, the `Cube` of
+//! candidates are the sets agreeing with those decisions, the `Region` of
 //! `Search.lean` indexed over a root's atoms. [`crate::walk::Walk`] covers
 //! the region by applying the caller's narrowing and splitting open atoms.
 
@@ -9,8 +9,7 @@ use std::mem::size_of;
 
 use crate::Stop;
 
-/// A region of candidates: every atom held, cut or open, and, once
-/// narrowed, the open atom its narrowing would split on. Its decisions are two
+/// A region of candidates: every atom held, cut or open. Its decisions are two
 /// atom bitmasks, one for held and one for cut; a narrowing that carries
 /// knowledge from the region's parent applies only the decisions the parent
 /// had not yet seen, by diffing this region's decided mask against a snapshot.
@@ -23,7 +22,6 @@ pub struct Region {
     cut: Box<[u64]>,
     /// The atom universe; each mask is `words(atoms)` words long.
     atoms: usize,
-    preferred: Option<usize>,
 }
 
 /// The number of 64-bit words a mask over `atoms` atoms needs.
@@ -62,14 +60,11 @@ impl Iterator for SetBits {
 }
 
 /// Two regions are the same when they decide the same atoms the same way over
-/// the same universe and prefer the same split; the order the decisions were
-/// made in is history, not identity.
+/// the same universe. Decision order and a walk's split preference are history
+/// and policy, not the interval's identity.
 impl PartialEq for Region {
     fn eq(&self, other: &Self) -> bool {
-        self.atoms == other.atoms
-            && self.held == other.held
-            && self.cut == other.cut
-            && self.preferred == other.preferred
+        self.atoms == other.atoms && self.held == other.held && self.cut == other.cut
     }
 }
 impl Eq for Region {}
@@ -108,9 +103,9 @@ impl Region {
     ///
     /// `before` admits each logical word operation before it executes. Each
     /// mask initializes a three-word vector header, two words per appended zero
-    /// (the value and length), and its two-word boxed-slice header. Final atom
-    /// and preference fields cost two. A complete construction therefore costs
-    /// `12 + 4 * atoms.div_ceil(64)`; a refusal retains only its executed prefix.
+    /// (the value and length), and its two-word boxed-slice header. The final
+    /// atom-count field costs one. A complete construction therefore costs
+    /// `11 + 4 * atoms.div_ceil(64)`; a refusal retains only its executed prefix.
     /// Allocator internals are outside this logical operation count.
     ///
     /// `admit` observes this constructor's total named storage, excluding any
@@ -150,7 +145,7 @@ impl Region {
             },
             |(context, before, admit), retained| {
                 admit(context, retained)?;
-                before(context, 2)
+                before(context, 1)
             },
         )
     }
@@ -167,12 +162,7 @@ impl Region {
         let retained =
             size_of::<Self>() as u128 + held_bytes + cut.len() as u128 * size_of::<u64>() as u128;
         publish(context, retained)?;
-        Ok(Self {
-            held,
-            cut,
-            atoms,
-            preferred: None,
-        })
+        Ok(Self { held, cut, atoms })
     }
     /// The number of atoms the region decides over.
     #[must_use]
@@ -256,19 +246,6 @@ impl Region {
             }
         }
         None
-    }
-    /// Prefer an open atom for the next split, as a narrowing may after
-    /// reading the region; a decided atom is not retained.
-    pub fn prefer(&mut self, atom: usize) {
-        self.preferred = Some(atom).filter(|&atom| self.is_open(atom));
-    }
-    /// The atom the next split decides: the preferred open atom, else the
-    /// highest open one.
-    #[must_use]
-    pub fn split_atom(&self) -> Option<usize> {
-        self.preferred
-            .filter(|&atom| self.is_open(atom))
-            .or_else(|| self.highest_open())
     }
     /// The atoms every candidate holds, ascending.
     pub fn held(&self) -> impl Iterator<Item = usize> + '_ {
@@ -371,7 +348,6 @@ impl Region {
         (&self.held, &self.cut)
     }
     /// The two regions an open atom splits this one into: cut, then held.
-    /// Neither inherits a preference; their narrowing sets their own.
     ///
     /// # Panics
     /// Panics unless `atom` is one of the region's open atoms.
@@ -390,10 +366,76 @@ impl Region {
         // rather than cloning it a second time.
         let mut held = self.clone();
         held.held[word] |= bit;
-        held.preferred = None;
         self.cut[word] |= bit;
-        self.preferred = None;
         (self, held)
+    }
+}
+
+/// A region with its walk policy and caller-owned lineage state.
+///
+/// Preference is not part of the region's interval identity. It is accepted
+/// only for an open atom, checked again after narrowing, and reset in both
+/// children. Pending entries retain this policy when handed to another schedule.
+#[derive(Clone, Debug)]
+pub struct Entry<S = ()> {
+    /// The interval this entry still represents.
+    pub region: Region,
+    /// Knowledge or other state carried along this entry's lineage.
+    pub state: S,
+    preferred: Option<usize>,
+}
+
+impl<S> Entry<S> {
+    /// Start an entry with no preference, using the highest open atom by default.
+    #[must_use]
+    pub const fn new(region: Region, state: S) -> Self {
+        Self {
+            region,
+            state,
+            preferred: None,
+        }
+    }
+
+    /// Borrow the semantic interval and lineage state without discarding policy.
+    pub fn parts_mut(&mut self) -> (&mut Region, &mut S) {
+        (&mut self.region, &mut self.state)
+    }
+
+    /// Consume a terminal entry, releasing its no-longer-needed walk policy.
+    /// Pending entries should be transferred as entries instead.
+    #[must_use]
+    pub fn into_parts(self) -> (Region, S) {
+        (self.region, self.state)
+    }
+
+    /// Prefer an open atom for the next split; a decided atom is not retained.
+    pub fn prefer(&mut self, atom: usize) {
+        self.preferred = Some(atom).filter(|&atom| self.region.is_open(atom));
+    }
+
+    /// The preferred atom if still open, otherwise the highest open atom.
+    #[must_use]
+    pub fn split_atom(&self) -> Option<usize> {
+        self.preferred
+            .filter(|&atom| self.region.is_open(atom))
+            .or_else(|| self.region.highest_open())
+    }
+
+    /// Split an admitted open atom, carrying each returned state in its child.
+    ///
+    /// The callback returns the cut child's state followed by the held child's.
+    /// It lets each schedule preserve its existing cloning or allocation-reuse
+    /// policy. To retain the parent on a pending-capacity refusal, the schedule
+    /// admits that capacity before this consuming operation. This method does
+    /// not reserve queue storage. Both children start without a preference.
+    ///
+    /// # Panics
+    /// Panics unless `atom` is one of the region's open atoms.
+    #[must_use]
+    pub fn split_with(self, atom: usize, states: impl FnOnce(S) -> (S, S)) -> (Self, Self) {
+        let (cut, held) = self.region.split(atom);
+        let (cut_state, held_state) = states(self.state);
+        (Self::new(cut, cut_state), Self::new(held, held_state))
     }
 }
 

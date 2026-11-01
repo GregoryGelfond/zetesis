@@ -15,7 +15,7 @@ fn observer(source: &str, native_guards: usize) -> Option<bool> {
     assert_eq!(program.theory().parts().thresholds().len(), native_guards);
     let narrower = Narrower::new(program.theory());
     let mut region = Region::all_open(program.atoms().len());
-    let (outcome, _) = narrower
+    let outcome = narrower
         .narrow_known(
             OriginalSubject::new(program.theory(), None),
             &mut region,
@@ -24,6 +24,7 @@ fn observer(source: &str, native_guards: usize) -> Option<bool> {
             RegionLimits::default(),
             &Cancellation::default(),
         )
+        .result
         .unwrap();
     assert_ne!(outcome, Narrowing::Refuted);
     let mut observer = None;

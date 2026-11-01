@@ -340,8 +340,8 @@ fn original_false_events_collect_the_whole_interval() {
                     RegionLimits::default(),
                     &Cancellation::default(),
                 )
+                .result
                 .unwrap()
-                .0
         };
     assert!(matches!(
         close(&mut parent, &mut known, &mut scratch),

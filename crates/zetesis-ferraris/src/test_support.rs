@@ -98,16 +98,15 @@ pub(crate) fn close(
     knowledge: &mut Knowledge,
     scratch: &mut NarrowingScratch,
 ) -> (Narrowing, NarrowingStatistics) {
-    index
-        .narrow_known(
-            OriginalSubject::new(theory, None),
-            region,
-            knowledge,
-            scratch,
-            RegionLimits::default(),
-            &Cancellation::default(),
-        )
-        .unwrap()
+    let attempt = index.narrow_known(
+        OriginalSubject::new(theory, None),
+        region,
+        knowledge,
+        scratch,
+        RegionLimits::default(),
+        &Cancellation::default(),
+    );
+    (attempt.result.unwrap(), attempt.statistics)
 }
 
 /// A narrowing quota that grants one permit per request, `remaining` in all,

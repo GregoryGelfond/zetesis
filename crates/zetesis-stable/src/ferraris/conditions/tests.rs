@@ -2,7 +2,7 @@ use super::*;
 use crate::budget::{Budget, LocalQuota};
 use crate::ferraris::{Limits, StableModels};
 use crate::{Cancellation, SearchLimits, SearchStatistics};
-use zetesis_algebra::region::{Narrowing, Region};
+use zetesis_algebra::region::{Entry, Narrowing, Region};
 use zetesis_ferraris::Node;
 use zetesis_objective::PlanIdentity;
 use zetesis_theory_support::theories::theory;
@@ -27,14 +27,13 @@ fn guard(conjunction: bool) -> Theory {
 fn a_new_generation_discards_old_dag_knowledge() {
     let original = theory(2, vec![], vec![]);
     let narrower = Narrower::new(&original);
-    let mut knowledge = CandidateKnowledge::default();
     let mut conditions = Conditions::<(Theory, Narrower)> {
         bound: Some(
             Bound::prepare(&guard(false), 1, u64::MAX, &crate::Cancellation::default()).unwrap(),
         ),
         ..Conditions::default()
     };
-    let mut region = Region::all_open(2);
+    let mut entry = Entry::new(Region::all_open(2), CandidateKnowledge::default());
     let cancellation = Cancellation::default();
     let mut budget = Budget {
         quota: LocalQuota,
@@ -49,14 +48,14 @@ fn a_new_generation_discards_old_dag_knowledge() {
             &narrower,
         ),
         &conditions,
-        (&mut region, &mut knowledge),
+        &mut entry,
         &mut zetesis_ferraris::NarrowingScratch::default(),
         &mut budget,
         &mut counts,
         None,
     )
     .unwrap();
-    assert!(!region.is_held(0) && !region.is_held(1));
+    assert!(!entry.region.is_held(0) && !entry.region.is_held(1));
     // Equal node counts and coordinates are insufficient: OR and AND learn
     // different consequences even though both have already asserted root 2.
     conditions.bound =
@@ -68,7 +67,7 @@ fn a_new_generation_discards_old_dag_knowledge() {
                 &narrower
             ),
             &conditions,
-            (&mut region, &mut knowledge),
+            &mut entry,
             &mut zetesis_ferraris::NarrowingScratch::default(),
             &mut budget,
             &mut counts,
@@ -77,7 +76,7 @@ fn a_new_generation_discards_old_dag_knowledge() {
         .unwrap(),
         Narrowing::Refuted
     );
-    assert!(region.is_held(0) && region.is_held(1));
+    assert!(entry.region.is_held(0) && entry.region.is_held(1));
 }
 
 #[test]
@@ -241,14 +240,13 @@ fn cancellation_does_not_advance_the_bound_generation() {
 fn a_late_permanent_condition_keeps_bound_knowledge_separate() {
     let original = theory(2, vec![], vec![]);
     let narrower = Narrower::new(&original);
-    let mut knowledge = CandidateKnowledge::default();
     let mut conditions = Conditions::<(Theory, Narrower)> {
         bound: Some(
             Bound::prepare(&guard(false), 1, u64::MAX, &crate::Cancellation::default()).unwrap(),
         ),
         ..Conditions::default()
     };
-    let mut region = Region::all_open(2);
+    let mut entry = Entry::new(Region::all_open(2), CandidateKnowledge::default());
     let cancellation = Cancellation::default();
     let mut budget = Budget {
         quota: LocalQuota,
@@ -263,7 +261,7 @@ fn a_late_permanent_condition_keeps_bound_knowledge_separate() {
             &narrower,
         ),
         &conditions,
-        (&mut region, &mut knowledge),
+        &mut entry,
         &mut zetesis_ferraris::NarrowingScratch::default(),
         &mut budget,
         &mut counts,
@@ -283,14 +281,14 @@ fn a_late_permanent_condition_keeps_bound_knowledge_separate() {
             &narrower,
         ),
         &conditions,
-        (&mut region, &mut knowledge),
+        &mut entry,
         &mut zetesis_ferraris::NarrowingScratch::default(),
         &mut budget,
         &mut counts,
         None,
     )
     .unwrap();
-    assert!(region.is_cut(0) && region.is_held(1));
+    assert!(entry.region.is_cut(0) && entry.region.is_held(1));
 }
 
 #[test]
@@ -366,4 +364,72 @@ fn compatible_copies_reuse_the_knowledge_vector() {
     destination.clone_from(&source);
     assert_eq!(destination.entries.as_ptr(), before);
     assert_ne!(destination.entries.as_ptr(), source.entries.as_ptr());
+}
+
+#[test]
+fn candidate_capacity_and_entry_policy_are_counted_once() {
+    use std::collections::VecDeque;
+    use std::sync::Mutex;
+    use zetesis_algebra::walk::frontier::Payload;
+
+    use super::super::region_frontier::{RegionFrontier, reserve_regions};
+
+    let original = guard(false);
+    let narrower = Narrower::new(&original);
+    let bound = Bound::prepare(&guard(true), 1, u64::MAX, &Cancellation::default()).unwrap();
+    let mut known = CandidateKnowledge::default();
+    let permanent_payload =
+        known.permanent(0, &narrower).unwrap().retained_bytes() - size_of::<Knowledge>() as u128;
+    let bound_payload =
+        known.bound(&bound).unwrap().retained_bytes() - size_of::<Knowledge>() as u128;
+    // Deliberately retain unused slot capacity; only initialized knowledge owns
+    // subordinate allocations. The bound is still the last initialized slot.
+    known.entries.reserve_exact(7);
+    assert!(known.entries.capacity() > known.entries.len());
+    let known_payload = known.entries.capacity() as u128 * size_of::<Knowledge>() as u128
+        + permanent_payload
+        + bound_payload;
+    assert_eq!(known.allocated_bytes(), known_payload);
+    let mut entry = Entry::new(Region::all_open(2), known);
+    entry.prefer(1);
+    let payload = 2 * size_of::<u64>() as u128 + known_payload;
+    assert_eq!(entry.allocated_bytes(), payload);
+    let frontier = RegionFrontier::measured(2, entry).unwrap();
+    let headers = (size_of::<Vec<Mutex<VecDeque<Entry<CandidateKnowledge>>>>>()
+        + frontier.queues.capacity() * size_of::<Mutex<VecDeque<Entry<CandidateKnowledge>>>>())
+        as u128;
+    let initial = frontier.statistics().unwrap();
+    assert_eq!(
+        initial.retained_bytes,
+        headers
+            + initial.capacity as u128 * size_of::<Entry<CandidateKnowledge>>() as u128
+            + payload
+    );
+    let hand = frontier.take_local(0).unwrap();
+    let empty = frontier.statistics().unwrap();
+    assert_eq!(empty.regions, 0);
+    assert_eq!(empty.capacity, initial.capacity);
+    assert_eq!(empty.retained_bytes, initial.retained_bytes - payload);
+    assert_eq!(empty.peak_retained_bytes, initial.retained_bytes);
+    assert_eq!(hand.split_atom(), Some(1));
+    frontier.requeue(1, hand, reserve_regions).unwrap();
+    let moved = frontier.statistics().unwrap();
+    assert_eq!(moved.regions, 1);
+    assert_eq!(
+        moved.capacity,
+        frontier.queue(0).capacity() + frontier.queue(1).capacity()
+    );
+    assert_eq!(
+        moved.retained_bytes,
+        headers + moved.capacity as u128 * size_of::<Entry<CandidateKnowledge>>() as u128 + payload
+    );
+    assert_eq!(
+        moved.peak_retained_bytes,
+        initial.retained_bytes.max(moved.retained_bytes)
+    );
+    frontier.release();
+    let released = frontier.statistics().unwrap();
+    assert_eq!((released.regions, released.capacity), (0, 0));
+    assert_eq!(released.retained_bytes, headers);
+    assert_eq!(released.peak_retained_bytes, moved.peak_retained_bytes);
 }

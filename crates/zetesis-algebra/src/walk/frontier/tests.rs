@@ -5,6 +5,8 @@ use std::time::Instant;
 
 use super::*;
 
+mod publication;
+
 const WAIT: Duration = Duration::from_secs(2);
 
 #[derive(Debug, PartialEq, Eq)]
@@ -51,8 +53,11 @@ fn reserve(queue: &mut VecDeque<Packet>, count: usize) -> Result<(), Refused> {
 #[test]
 fn a_single_child_publication_grows_the_count_by_one_and_pushes_one_entry() {
     let frontier = TestFrontier::new(2, entry()).unwrap();
-    let _held = frontier.take_local(0).unwrap();
-    frontier.publish_split(0, [entry()], reserve).unwrap();
+    let parent = frontier.take_local(0).unwrap();
+    let held = frontier
+        .publish_split_with(0, parent, reserve, |parent| ([entry()], parent))
+        .unwrap();
+    assert_eq!(held.id, 0);
     assert_eq!(frontier.termination.unresolved(), 2);
     assert_eq!(frontier.queue(0).len(), 1);
 }
@@ -117,9 +122,9 @@ fn an_unmeasured_frontier_keeps_no_receipts() {
 #[test]
 fn local_removal_is_newest_and_stealing_is_oldest() {
     let frontier = TestFrontier::new(3, packet(0)).unwrap();
-    let _hand = frontier.take_local(0).unwrap();
+    let parent = frontier.take_local(0).unwrap();
     frontier
-        .publish_split(0, [packet(1), packet(2)], reserve)
+        .publish_split_with(0, parent, reserve, |_| ([packet(1), packet(2)], ()))
         .unwrap();
     assert_eq!(frontier.take_local(0).unwrap().id, 2);
     assert_eq!(frontier.steal(1).unwrap().id, 1);
@@ -128,24 +133,40 @@ fn local_removal_is_newest_and_stealing_is_oldest() {
 #[test]
 fn a_refused_split_preserves_queue_count_and_receipts() {
     let frontier = TestFrontier::measured(1, entry()).unwrap();
+    let parent = frontier.take_local(0).unwrap();
     let before = frontier.statistics();
-    let result = frontier.publish_split(0, [packet(1), packet(2)], |_, count| {
-        assert_eq!(count, 2);
-        Err(Refused::Injected)
-    });
-    assert_eq!(result, Err(Refused::Injected));
+    let result = frontier.publish_split_with::<2, ()>(
+        0,
+        parent,
+        |_, count| {
+            assert_eq!(count, 2);
+            Err(Refused::Injected)
+        },
+        |_| panic!("a refused reservation must not construct children"),
+    );
+    let (error, parent) = result.unwrap_err();
+    assert_eq!(error, Refused::Injected);
+    assert_eq!(parent.id, 0);
     assert_eq!(frontier.statistics(), before);
     assert_eq!(frontier.termination.unresolved(), 1);
-    assert_eq!(frontier.take_local(0).unwrap().id, 0);
+    assert!(frontier.take_local(0).is_none());
 }
 
 #[test]
 fn capacity_overflow_preserves_the_typed_allocation_refusal() {
     let frontier = TestFrontier::new(1, entry()).unwrap();
-    let result = frontier.publish_split(0, [packet(1)], |queue, _| reserve(queue, usize::MAX));
-    assert_eq!(result, Err(Refused::Stopped(Stop::Allocation)));
+    let parent = frontier.take_local(0).unwrap();
+    let result = frontier.publish_split_with::<1, ()>(
+        0,
+        parent,
+        |queue, _| reserve(queue, usize::MAX),
+        |_| panic!("capacity overflow must precede child construction"),
+    );
+    let (error, parent) = result.unwrap_err();
+    assert_eq!(error, Refused::Stopped(Stop::Allocation));
+    assert_eq!(parent.id, 0);
     assert_eq!(frontier.termination.unresolved(), 1);
-    assert_eq!(frontier.queue(0).len(), 1);
+    assert!(frontier.queue(0).is_empty());
 }
 
 #[test]
@@ -180,10 +201,12 @@ fn idle_cancellation_keeps_its_type_and_poll_cadence() {
 #[test]
 fn release_drops_owned_storage_but_keeps_receipt_peaks() {
     let frontier = TestFrontier::measured(2, packet(2)).unwrap();
-    let _hand = frontier.take_local(0).unwrap();
+    let parent = frontier.take_local(0).unwrap();
     let children = [packet(3), packet(4)];
     let payload: usize = children.iter().map(|entry| entry.bytes.capacity()).sum();
-    frontier.publish_split(1, children, reserve).unwrap();
+    frontier
+        .publish_split_with(1, parent, reserve, |_| (children, ()))
+        .unwrap();
     let populated = frontier.statistics().unwrap();
     let headers = size_of::<Vec<Mutex<VecDeque<Packet>>>>()
         + frontier.queues.capacity() * size_of::<Mutex<VecDeque<Packet>>>();

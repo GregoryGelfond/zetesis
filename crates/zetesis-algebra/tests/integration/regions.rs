@@ -6,6 +6,7 @@
 //! in the counter's order.
 
 use std::mem::size_of;
+use zetesis_algebra::region::Entry;
 
 use zetesis_algebra::Stop;
 use zetesis_algebra::{
@@ -17,7 +18,7 @@ use zetesis_algebra::{
 fn visits(mut traversal: Walk) -> Vec<Visit> {
     let mut visits = Vec::new();
     while let Some(visit) = traversal
-        .next(|_, ()| Ok::<_, Stop>(Narrowing::Fixed { changed: false }))
+        .next(|_| Ok::<_, Stop>(Narrowing::Fixed { changed: false }))
         .unwrap()
     {
         visits.push(visit);
@@ -254,7 +255,7 @@ fn tail_bits_beyond_the_atom_count_are_never_open() {
         assert!(region.hold(atom));
     }
     assert_eq!(region.highest_open(), None);
-    assert_eq!(region.split_atom(), None);
+    assert_eq!(Entry::new(region.clone(), ()).split_atom(), None);
     assert_eq!(region.open().count(), 0);
     assert_eq!(region.len(), 65);
 }
@@ -359,16 +360,16 @@ fn a_fully_decided_region_has_no_open_atom_to_split() {
     assert!(region.hold(1));
     assert!(region.cut(0));
     assert_eq!(region.highest_open(), None);
-    assert_eq!(region.split_atom(), None);
+    assert_eq!(Entry::new(region.clone(), ()).split_atom(), None);
 }
 
 #[test]
 fn a_split_decides_the_atom_both_ways_and_drops_the_preference() {
-    let mut region = Region::all_open(4);
-    region.prefer(1);
-    assert_eq!(region.split_atom(), Some(1));
-    let (cut, held) = region.split(3);
-    assert!(cut.is_cut(3) && held.is_held(3));
+    let mut entry = Entry::new(Region::all_open(4), ());
+    entry.prefer(1);
+    assert_eq!(entry.split_atom(), Some(1));
+    let (cut, held) = entry.split_with(3, |()| ((), ()));
+    assert!(cut.region.is_cut(3) && held.region.is_held(3));
     // Neither child inherits the parent's preference; each falls back to its
     // highest open atom.
     assert_eq!(cut.split_atom(), Some(2));
@@ -406,7 +407,8 @@ fn a_narrowing_that_decides_an_atom_keeps_splitting_below_it() {
     let mut traversal = Walk::new(Region::all_open(3), Counting::Unchanged);
     let mut seen = Vec::new();
     while let Some(visit) = traversal
-        .next(|region, ()| {
+        .next(|entry| {
+            let region = &mut entry.region;
             if region.is_held(2) && region.is_open(0) {
                 assert!(region.cut(0));
                 Ok::<_, Stop>(Narrowing::Fixed { changed: true })
@@ -429,7 +431,8 @@ fn a_refuted_region_is_skipped_with_its_whole_subtree() {
     let mut traversal = Walk::new(Region::all_open(3), Counting::Never);
     let mut leaves = Vec::new();
     while let Some(visit) = traversal
-        .next(|region, ()| {
+        .next(|entry| {
+            let region = &mut entry.region;
             if region.is_held(2) {
                 Ok::<_, Stop>(Narrowing::Refuted)
             } else {
@@ -464,7 +467,7 @@ fn a_decided_root_is_one_leaf() {
 fn a_stopped_narrowing_stops_the_traversal_and_keeps_the_region() {
     let mut traversal = Walk::new(Region::all_open(2), Counting::Never);
     assert_eq!(
-        traversal.next(|_, ()| Err(Stop::WorkLimit)).unwrap_err(),
+        traversal.next(|_| Err(Stop::WorkLimit)).unwrap_err(),
         Stop::WorkLimit
     );
     // The region whose narrowing stopped is visited again on the next call.
@@ -479,8 +482,8 @@ fn a_narrowing_may_choose_the_split_atom() {
     let mut traversal = Walk::new(Region::all_open(2), Counting::Never);
     let mut leaves = Vec::new();
     while let Some(visit) = traversal
-        .next(|region, ()| {
-            region.prefer(0);
+        .next(|entry| {
+            entry.prefer(0);
             Ok::<_, Stop>(Narrowing::Fixed { changed: false })
         })
         .unwrap()
@@ -490,10 +493,10 @@ fn a_narrowing_may_choose_the_split_atom() {
         }
     }
     assert_eq!(leaves, vec![vec![], vec![1], vec![0], vec![0, 1]]);
-    let mut region = Region::all_open(2);
-    region.prefer(1);
-    assert!(region.hold(1));
-    assert_eq!(region.split_atom(), Some(0), "a decided preference lapses");
+    let mut entry = Entry::new(Region::all_open(2), ());
+    entry.prefer(1);
+    assert!(entry.region.hold(1));
+    assert_eq!(entry.split_atom(), Some(0), "a decided preference lapses");
 }
 
 #[test]
@@ -505,8 +508,8 @@ fn each_leaf_carries_the_state_of_its_own_lineage() {
     let mut traversal = Walk::with_state(Region::all_open(2), Counting::Never, 0usize);
     let mut depths = Vec::new();
     while let Some(visit) = traversal
-        .next(|_, seen: &mut usize| {
-            *seen += 1;
+        .next(|entry| {
+            entry.state += 1;
             Ok::<_, Stop>(Narrowing::Fixed { changed: false })
         })
         .unwrap()
@@ -523,10 +526,12 @@ fn a_traversal_from_a_narrowed_root_does_not_narrow_it_again() {
     // The caller narrowed the root before the traversal began: the root is
     // split without a narrowing, and every region below it is narrowed
     // once, the counting never counting the root as a flat interval.
-    let mut traversal = Walk::with_narrowed_root(Region::all_open(2), Counting::Unchanged, ());
+    let mut traversal =
+        Walk::with_narrowed_root(Entry::new(Region::all_open(2), ()), Counting::Unchanged);
     let mut narrowed = Vec::new();
     while let Some(visit) = traversal
-        .next(|region, ()| {
+        .next(|entry| {
+            let region = &mut entry.region;
             narrowed.push(region.decided().collect::<Vec<_>>());
             Ok::<_, Stop>(Narrowing::Fixed { changed: false })
         })
@@ -556,7 +561,8 @@ fn held_first_preserves_refuted_coverage_and_lineage() {
         }
         let mut family = Vec::new();
         while let Some(visit) = walk
-            .next(|region, depth| {
+            .next(|entry| {
+                let (region, depth) = entry.parts_mut();
                 *depth += 1;
                 if region.is_held(3) && region.is_held(2) {
                     Ok::<_, Stop>(Narrowing::Refuted)
@@ -585,10 +591,7 @@ fn held_first_preserves_refuted_coverage_and_lineage() {
 #[test]
 fn held_first_keeps_a_refused_region_pending() {
     let mut walk = Walk::new(Region::all_open(3), Counting::Never).with_held_first();
-    assert_eq!(
-        walk.next(|_, ()| Err(Stop::WorkLimit)),
-        Err(Stop::WorkLimit)
-    );
+    assert_eq!(walk.next(|_| Err(Stop::WorkLimit)), Err(Stop::WorkLimit));
     let after_refusal = visits(walk);
     let complete = visits(Walk::new(Region::all_open(3), Counting::Never).with_held_first());
     assert_eq!(after_refusal, complete);
@@ -599,19 +602,15 @@ fn held_first_keeps_a_refused_region_pending() {
 fn surrendered_regions_list_the_next_visit_last() {
     let mut traversal = Walk::new(Region::all_open(2), Counting::Never);
     let first = traversal
-        .next(|_, ()| Ok::<_, Stop>(Narrowing::Fixed { changed: false }))
+        .next(|_| Ok::<_, Stop>(Narrowing::Fixed { changed: false }))
         .unwrap();
     assert!(matches!(first, Some(Visit::Leaf(region, ())) if held(&region).is_empty()));
     assert_eq!(traversal.pending(), 2);
-    let pending: Vec<Region> = traversal
-        .surrender()
-        .into_iter()
-        .map(|(region, ())| region)
-        .collect();
+    let pending = traversal.surrender();
     // The older region is the root's held child; the newer, on top, is the
     // leaf {0} the counter's order visits next.
-    assert!(pending[0].is_held(1) && pending[0].is_open(0));
-    assert_eq!(held(&pending[1]), vec![0]);
+    assert!(pending[0].region.is_held(1) && pending[0].region.is_open(0));
+    assert_eq!(held(&pending[1].region), vec![0]);
     assert!(pending[1].split_atom().is_none());
 }
 
@@ -619,13 +618,13 @@ fn surrendered_regions_list_the_next_visit_last() {
 fn a_surrendering_traversal_ends_with_its_statistics() {
     let mut traversal = Walk::new(Region::all_open(2), Counting::Never);
     traversal
-        .next(|_, ()| Ok::<_, Stop>(Narrowing::Fixed { changed: false }))
+        .next(|_| Ok::<_, Stop>(Narrowing::Fixed { changed: false }))
         .unwrap();
     let visited = traversal.statistics();
     assert!(!traversal.surrender().is_empty());
     assert_eq!(traversal.pending(), 0);
     assert_eq!(
-        traversal.next(|_, ()| -> Result<Narrowing, Stop> { panic!("nothing is left to narrow") }),
+        traversal.next(|_| -> Result<Narrowing, Stop> { panic!("nothing is left to narrow") }),
         Ok(None)
     );
     assert_eq!(traversal.statistics(), visited);
@@ -639,15 +638,15 @@ fn surrendered_regions_cover_the_leaves_not_yet_visited() {
     let mut leaves = Vec::new();
     for _ in 0..2 {
         let Some(Visit::Leaf(region, ())) = traversal
-            .next(|_, ()| Ok::<_, Stop>(Narrowing::Fixed { changed: false }))
+            .next(|_| Ok::<_, Stop>(Narrowing::Fixed { changed: false }))
             .unwrap()
         else {
             panic!("a leaf remains")
         };
         leaves.push(held(&region));
     }
-    for (region, ()) in traversal.surrender() {
-        for visit in visits(Walk::new(region, Counting::Never)) {
+    for entry in traversal.surrender() {
+        for visit in visits(Walk::with_entry(entry, Counting::Never)) {
             let Visit::Leaf(region, ()) = visit else {
                 panic!("never counted")
             };
@@ -666,12 +665,12 @@ fn surrendered_regions_cover_the_leaves_not_yet_visited() {
 fn a_stopped_narrowing_surrenders_its_region() {
     let mut traversal = Walk::new(Region::all_open(2), Counting::Never);
     assert_eq!(
-        traversal.next(|_, ()| Err::<Narrowing, _>(Stop::WorkLimit)),
+        traversal.next(|_| Err::<Narrowing, _>(Stop::WorkLimit)),
         Err(Stop::WorkLimit)
     );
     let pending = traversal.surrender();
     assert_eq!(pending.len(), 1);
-    assert_eq!(pending[0].0, Region::all_open(2));
+    assert_eq!(pending[0].region, Region::all_open(2));
 }
 
 #[test]
@@ -735,7 +734,7 @@ fn metered_open_regions_charge_their_initialization() {
         assert_eq!(region, Region::all_open(atoms));
         assert_eq!(
             state.work,
-            12 + 4 * u64::try_from(atoms.div_ceil(64)).unwrap()
+            11 + 4 * u64::try_from(atoms.div_ceil(64)).unwrap()
         );
     }
 }
@@ -790,7 +789,7 @@ fn work_refusal_precedes_any_mask_initialization() {
 
 #[test]
 fn each_work_refusal_retains_only_completed_initialization() {
-    let chunks = [3, 2, 2, 2, 3, 2, 2, 2, 2];
+    let chunks = [3, 2, 2, 2, 3, 2, 2, 2, 1];
     for refused in 0..chunks.len() {
         let mut state = Construction::default();
         let result = Region::try_all_open_with(
@@ -841,4 +840,49 @@ fn storage_refusal_does_not_charge_the_next_initialization() {
         assert_eq!(state.work, expected_work);
         assert_eq!(state.storage_calls, refused + 1);
     }
+}
+
+#[test]
+fn region_identity_does_not_depend_on_walk_preference() {
+    let mut left = Entry::new(Region::all_open(4), ());
+    let mut right = Entry::new(Region::all_open(4), ());
+    left.prefer(0);
+    right.prefer(2);
+    assert_eq!(left.region, right.region);
+    assert_eq!(left.split_atom(), Some(0));
+    assert_eq!(right.split_atom(), Some(2));
+    assert!(right.region.cut(1));
+    assert_ne!(left.region, right.region);
+}
+
+#[test]
+fn a_surrendered_entry_keeps_its_preference_on_restart() {
+    let mut original = Walk::new(Region::all_open(3), Counting::Never);
+    assert_eq!(
+        original.next(|entry| {
+            entry.prefer(0);
+            Err::<Narrowing, _>(Stop::WorkLimit)
+        }),
+        Err(Stop::WorkLimit)
+    );
+    let mut pending = original.surrender();
+    assert_eq!(pending.len(), 1);
+    let entry = pending.pop().unwrap();
+    assert_eq!(entry.split_atom(), Some(0));
+    let resumed = visits(Walk::with_narrowed_root(entry, Counting::Unchanged));
+    assert_eq!(resumed.len(), 2);
+    assert!(matches!(&resumed[0], Visit::Counted(region, ()) if region.is_cut(0)));
+    assert!(matches!(&resumed[1], Visit::Counted(region, ()) if region.is_held(0)));
+}
+
+#[test]
+fn an_invalid_preference_uses_the_highest_open_atom() {
+    let mut entry = Entry::new(Region::all_open(4), ());
+    entry.prefer(0);
+    assert_eq!(entry.split_atom(), Some(0));
+    entry.prefer(4);
+    assert_eq!(entry.split_atom(), Some(3));
+    entry.prefer(1);
+    assert!(entry.region.cut(1));
+    assert_eq!(entry.split_atom(), Some(3));
 }

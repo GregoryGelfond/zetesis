@@ -273,7 +273,8 @@ fn secondary_preference_keeps_every_satisfying_assignment_once() {
     let mut actual = BTreeSet::new();
     let mut scratch = NarrowingScratch::default();
     while let Some(visit) = walk
-        .next(|region, known| {
+        .next(|entry| {
+            let (region, known) = entry.parts_mut();
             let attempt = index.propagate_known_reserved(
                 OriginalSubject::new(&theory, None),
                 region,
@@ -292,7 +293,7 @@ fn secondary_preference_keeps_every_satisfying_assignment_once() {
                     &mut Allowance::new(u64::MAX),
                 );
                 if let Some(atom) = selected.result? {
-                    region.prefer(atom);
+                    entry.prefer(atom);
                 }
             }
             Ok::<_, Stop>(result)

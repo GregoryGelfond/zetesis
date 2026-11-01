@@ -140,6 +140,14 @@ Notable changes by release. Versions follow Semantic Versioning.
 
 ### Changed
 
+- **Breaking Rust API:** a split preference belongs to
+  `zetesis_algebra::region::Entry<S>`, alongside its `Region` and lineage state.
+  Region equality compares the atom universe and decisions only. `Walk` passes
+  entries to narrowing and surrenders entries intact; `with_entry` and
+  `with_narrowed_root` retain an existing entry's preference. Ferraris's
+  `narrow_known` and `narrow_frozen_known` now return `NarrowingAttempt`, like
+  their quota variants, with the result, work receipt and completed preference.
+  Propagation-only, refuted and stopped attempts return no new preference.
 - **Breaking Rust API:** `zetesis-cpu` is renamed `zetesis-algebra`, with no
   compatibility alias. Its scalar region walk is now
   `zetesis_algebra::walk::Walk` instead of `zetesis_cpu::regions::Traversal`;
@@ -370,6 +378,11 @@ Notable changes by release. Versions follow Semantic Versioning.
 
 ### Compatibility
 
+- In the Lean library, `Zetesis.Cube` and its geometry namespace become
+  `Zetesis.Region`; the temporary `Zetesis.Algebra.Region` abbreviation is
+  removed. `Pending.cube` becomes `Pending.region`, and `sampleCube` becomes
+  `sampleRegion`. The statements and proofs retain the same mathematical
+  meaning; callers must use the new names.
 - `ExecutionObservation::HybridGrounding` carries one `streamed:
   StreamedConstraints` in place of `streamed_templates` and `streamed_instances`.
   `StreamedConstraints` adds `retained_templates` and `retained_instances`,

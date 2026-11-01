@@ -55,7 +55,7 @@ fn boundary_consequence(weights: [i32; 3], bounds: &[i64], premise: bool) -> Reg
     let theory = Theory::new(4, nodes.into_parts(), roots, AdmissionLimits::default()).unwrap();
     let narrower = Narrower::new(&theory);
     let mut region = Region::all_open(4);
-    let (outcome, _) = narrower
+    let outcome = narrower
         .narrow_known(
             OriginalSubject::new(&theory, None),
             &mut region,
@@ -64,6 +64,7 @@ fn boundary_consequence(weights: [i32; 3], bounds: &[i64], premise: bool) -> Reg
             RegionLimits::default(),
             &cancellation,
         )
+        .result
         .unwrap();
     assert_ne!(outcome, Narrowing::Refuted);
     region
@@ -131,7 +132,7 @@ fn an_interval_between_attainable_sums_is_refuted_without_decisions() {
     .unwrap();
     let narrower = Narrower::new(&theory);
     let mut region = Region::all_open(3);
-    let (outcome, _) = narrower
+    let outcome = narrower
         .narrow_known(
             OriginalSubject::new(&theory, None),
             &mut region,
@@ -140,6 +141,7 @@ fn an_interval_between_attainable_sums_is_refuted_without_decisions() {
             RegionLimits::default(),
             &cancellation,
         )
+        .result
         .unwrap();
     assert_eq!(outcome, Narrowing::Refuted);
     assert!((0..3).all(|atom| region.is_open(atom)));

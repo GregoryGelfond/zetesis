@@ -116,16 +116,16 @@ pub(super) fn benchmark(criterion: &mut Criterion) {
                 let narrower = Narrower::new(&theory);
                 let mut scratch = NarrowingScratch::default();
                 let mut verified = Region::all_open(theory.atom_count());
-                let (outcome, receipt) = narrower
-                    .narrow_known(
-                        OriginalSubject::new(&theory, None),
-                        &mut verified,
-                        &mut narrower.knowledge(),
-                        &mut scratch,
-                        RegionLimits::default(),
-                        &cancellation,
-                    )
-                    .unwrap();
+                let attempt = narrower.narrow_known(
+                    OriginalSubject::new(&theory, None),
+                    &mut verified,
+                    &mut narrower.knowledge(),
+                    &mut scratch,
+                    RegionLimits::default(),
+                    &cancellation,
+                );
+                let outcome = attempt.result.unwrap();
+                let receipt = attempt.statistics;
                 assert_eq!(outcome, Narrowing::Fixed { changed: true });
                 assert_eq!(verified.decision(width), Some(true));
                 assert!((0..width).all(|atom| verified.is_open(atom)));
@@ -137,18 +137,15 @@ pub(super) fn benchmark(criterion: &mut Criterion) {
                     bencher.iter_batched(
                         || (Region::all_open(theory.atom_count()), narrower.knowledge()),
                         |(mut region, mut knowledge)| {
-                            black_box(
-                                narrower
-                                    .narrow_known(
-                                        OriginalSubject::new(&theory, None),
-                                        &mut region,
-                                        &mut knowledge,
-                                        &mut scratch,
-                                        RegionLimits::default(),
-                                        &cancellation,
-                                    )
-                                    .unwrap(),
-                            )
+                            let attempt = narrower.narrow_known(
+                                OriginalSubject::new(&theory, None),
+                                &mut region,
+                                &mut knowledge,
+                                &mut scratch,
+                                RegionLimits::default(),
+                                &cancellation,
+                            );
+                            black_box((attempt.result.unwrap(), attempt.statistics))
                         },
                         BatchSize::PerIteration,
                     );

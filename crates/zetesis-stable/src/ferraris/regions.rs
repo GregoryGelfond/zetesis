@@ -25,8 +25,8 @@ use std::sync::Arc;
 
 use zetesis_algebra::Stop;
 use zetesis_algebra::{
-    region::{Narrowing, Region},
-    walk::{Counting, Visit, Walk},
+    region::{Entry, Narrowing, Region},
+    walk::{self, Counting, Visit, Walk},
 };
 use zetesis_ferraris::{
     ChoiceHeads, FrozenSubject, GeneratorOrder, GeneratorOrderError, Interpretation, Knowledge,
@@ -915,11 +915,11 @@ impl RegionSearch {
         parts.seed_tier(tier, scratch, budget, &mut statistics.counts)?;
         let before = traversal.statistics();
         let mut advance = |mut check: Option<crate::region_filter::Check<'_, '_>>| {
-            traversal.next(|region, knowledge| -> Result<Narrowing, Incomplete> {
+            traversal.next(|entry| -> Result<Narrowing, Incomplete> {
                 let narrowing = narrow(
                     (parts.subject(formulas)?, narrower),
                     restrictions,
-                    (region, knowledge),
+                    entry,
                     scratch,
                     budget,
                     &mut statistics.counts,
@@ -981,12 +981,13 @@ impl Drop for RegionSearch {
 pub(super) fn narrow<Q: Quota, R: std::borrow::Borrow<(Theory, Narrower)>>(
     (original, narrower): (OriginalSubject<'_>, &Narrower),
     restrictions: &Conditions<R>,
-    (region, knowledge): (&mut Region, &mut CandidateKnowledge),
+    entry: &mut Entry<CandidateKnowledge>,
     scratch: &mut NarrowingScratch,
     budget: &mut Budget<'_, Q>,
     counts: &mut RegionCounts,
     mut filter: Option<&mut crate::region_filter::Check<'_, '_>>,
 ) -> Result<Narrowing, Incomplete> {
+    let (region, knowledge) = entry.parts_mut();
     let mut changed = false;
     let mut pass = crate::RegionPass::First;
     loop {
@@ -1055,7 +1056,11 @@ pub(super) fn narrow<Q: Quota, R: std::borrow::Borrow<(Theory, Narrower)>>(
                     }
                 }
             }
-            prefer_split(original, restrictions, region, knowledge, budget, counts)?;
+            let preferred =
+                prefer_split(original, restrictions, region, knowledge, budget, counts)?;
+            if let Some(atom) = preferred {
+                entry.prefer(atom);
+            }
             return Ok(Narrowing::Fixed { changed });
         }
     }
@@ -1067,11 +1072,11 @@ pub(super) fn narrow<Q: Quota, R: std::borrow::Borrow<(Theory, Narrower)>>(
 fn prefer_split<Q: Quota, R>(
     original: OriginalSubject<'_>,
     conditions: &Conditions<R>,
-    region: &mut Region,
+    region: &Region,
     knowledge: &CandidateKnowledge,
     budget: &mut Budget<'_, Q>,
     counts: &mut RegionCounts,
-) -> Result<(), Incomplete> {
+) -> Result<Option<usize>, Incomplete> {
     let (original_known, primary) = knowledge.preference_subjects(conditions);
     let cancellation = budget.cancellation;
     let mut quota = BudgetQuota {
@@ -1103,10 +1108,7 @@ fn prefer_split<Q: Quota, R>(
     let preferred = attempt
         .result
         .map_err(|stop| quota.failure.take().unwrap_or_else(|| stopped(stop)))?;
-    if let Some(atom) = preferred {
-        region.prefer(atom);
-    }
-    Ok(())
+    Ok(preferred)
 }
 
 /// Charge one fresh mask update before publishing it. Its validity was checked
@@ -1230,6 +1232,7 @@ impl<'b, 'a, Q: Quota> BudgetQuota<'b, 'a, Q> {
                 .result
                 .map_err(|stop| quota.failure.take().unwrap_or_else(|| stopped(stop))),
             statistics: attempt.statistics,
+            preferred: attempt.preferred,
         }
     }
 }
@@ -1356,7 +1359,7 @@ impl<'a> ReductQuery<'a> {
         let mut offered = false;
         loop {
             let before = traversal.statistics();
-            let visit = traversal.next(|region, knowledge| {
+            let visit = traversal.next(|entry| {
                 if !offered && publication.due() {
                     // Before the narrowing: the region stays pending.
                     return Err(Interrupt::Publish);
@@ -1364,8 +1367,7 @@ impl<'a> ReductQuery<'a> {
                 narrow_frozen(
                     narrower,
                     FrozenSubject::new(theory, truth),
-                    region,
-                    knowledge,
+                    entry,
                     scratch,
                     budget,
                     &mut statistics.reduct.regions,
@@ -1422,7 +1424,7 @@ impl<'a> ReductQuery<'a> {
         self,
         truth: &[bool],
         candidate: &Interpretation,
-        (region, knowledge): (&mut Region, &mut Knowledge),
+        entry: &mut Entry<Knowledge>,
         limits: crate::Limits,
         budget: &mut Budget<'_, Q>,
         (statistics, scratch): (&mut crate::Statistics, &mut NarrowingScratch),
@@ -1431,28 +1433,32 @@ impl<'a> ReductQuery<'a> {
         let narrowing = narrow_frozen(
             narrower,
             FrozenSubject::new(theory, truth),
-            region,
-            knowledge,
+            entry,
             scratch,
             budget,
             &mut statistics.reduct.regions,
         )?;
         let counts = &mut statistics.reduct.regions;
         counts.regions += 1;
-        if narrowing == Narrowing::Refuted {
-            counts.refuted += 1;
-            return Ok(Served::Empty);
-        }
-        let Some(atom) = region.split_atom() else {
-            counts.leaves += 1;
-            if candidate.atoms().all(|atom| region.is_held(atom)) {
+        let atom = match walk::inspect(entry, narrowing, Counting::Never, false) {
+            walk::Step::Refuted => {
+                counts.refuted += 1;
                 return Ok(Served::Empty);
             }
-            let subset = leaf_interpretation(theory, region)?;
-            return crate::ferraris::validated_countermodel(
-                theory, candidate, subset, limits, budget, statistics,
-            )
-            .map(Served::Countermodel);
+            walk::Step::Leaf => {
+                let region = &entry.region;
+                counts.leaves += 1;
+                if candidate.atoms().all(|atom| region.is_held(atom)) {
+                    return Ok(Served::Empty);
+                }
+                let subset = leaf_interpretation(theory, region)?;
+                return crate::ferraris::validated_countermodel(
+                    theory, candidate, subset, limits, budget, statistics,
+                )
+                .map(Served::Countermodel);
+            }
+            walk::Step::Split(atom) => atom,
+            walk::Step::Counted => unreachable!("Counting::Never cannot count a region"),
         };
         budget.decide()?;
         Ok(Served::Split(atom))
@@ -1534,12 +1540,12 @@ impl From<Stop> for Interrupt {
 fn narrow_frozen<Q: Quota>(
     narrower: &Narrower,
     subject: FrozenSubject<'_>,
-    region: &mut Region,
-    knowledge: &mut Knowledge,
+    entry: &mut Entry<Knowledge>,
     scratch: &mut NarrowingScratch,
     budget: &mut Budget<'_, Q>,
     counts: &mut RegionCounts,
 ) -> Result<Narrowing, Incomplete> {
+    let (region, knowledge) = entry.parts_mut();
     let attempt = BudgetQuota::narrow(budget, |cancellation, quota| {
         narrower.narrow_frozen_known_reserved(
             subject,
@@ -1550,7 +1556,11 @@ fn narrow_frozen<Q: Quota>(
             quota,
         )
     });
-    account(&attempt, counts)
+    let result = account(&attempt, counts)?;
+    if let Some(atom) = attempt.preferred {
+        entry.prefer(atom);
+    }
+    Ok(result)
 }
 
 #[cfg(test)]

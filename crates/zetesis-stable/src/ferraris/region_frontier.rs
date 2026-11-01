@@ -5,9 +5,7 @@
 //! the existing semantic conversion from `Stop` to `Incomplete`.
 
 use std::collections::VecDeque;
-use std::mem::size_of;
 
-use zetesis_algebra::region::Region;
 use zetesis_algebra::walk::frontier::{Frontier, Payload, reserve_entries};
 
 pub(super) use zetesis_algebra::walk::frontier::{Attempt, Busy, Termination};
@@ -18,13 +16,12 @@ use crate::Incomplete;
 #[cfg(test)]
 mod tests;
 
-/// A candidate region and the knowledge retained for that region.
-#[derive(Clone, Debug)]
-pub(super) struct Entry(pub(super) Region, pub(super) CandidateKnowledge);
+/// A candidate interval and its lineage, using the shared entry policy.
+pub(super) type Entry = zetesis_algebra::region::Entry<CandidateKnowledge>;
 
-impl Payload for Entry {
+impl Payload for CandidateKnowledge {
     fn allocated_bytes(&self) -> u128 {
-        self.0.retained_bytes() - size_of::<Region>() as u128 + self.1.allocated_bytes()
+        Self::allocated_bytes(self)
     }
 }
 

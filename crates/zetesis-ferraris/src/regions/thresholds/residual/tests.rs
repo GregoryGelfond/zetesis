@@ -630,6 +630,7 @@ fn frozen_subjects_do_not_run_residual_checks() {
                     RegionLimits::default(),
                     &cancellation,
                 )
+                .result
                 .unwrap();
             assert_eq!(scratch.threshold_rows.capacity(), 0);
             assert_eq!(scratch.pending_thresholds.capacity(), 0);

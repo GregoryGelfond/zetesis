@@ -4,6 +4,7 @@ use super::super::{CandidateKnowledge, Conditions, Narrower, Region, RegionCount
 use super::{budget, theory};
 use crate::ferraris::conditions::Bound;
 use crate::{Cancellation, Incomplete};
+use zetesis_algebra::region::Entry;
 use zetesis_ferraris::{
     ChoiceHeads, LearningLimits, Narrowing, NarrowingScratch, Node, OriginalSubject, RegionLimits,
     Theory,
@@ -69,7 +70,12 @@ fn permanent(theory: Theory) -> (Theory, Narrower) {
 fn closed(
     conditions: &Conditions<(Theory, Narrower)>,
     limit: u64,
-) -> (Result<Narrowing, Incomplete>, Region, RegionCounts, u64) {
+) -> (
+    Result<Narrowing, Incomplete>,
+    Entry<CandidateKnowledge>,
+    RegionCounts,
+    u64,
+) {
     closed_with(&original(), &ChoiceHeads::default(), conditions, limit)
 }
 
@@ -80,32 +86,37 @@ fn closed_with(
     choices: &ChoiceHeads,
     conditions: &Conditions<(Theory, Narrower)>,
     limit: u64,
-) -> (Result<Narrowing, Incomplete>, Region, RegionCounts, u64) {
+) -> (
+    Result<Narrowing, Incomplete>,
+    Entry<CandidateKnowledge>,
+    RegionCounts,
+    u64,
+) {
     let narrower = Narrower::new(original);
     let cancellation = Cancellation::default();
     let mut budget = budget(&cancellation, limit);
     let mut counts = RegionCounts::default();
-    let mut region = Region::all_open(3);
+    let mut entry = Entry::new(Region::all_open(3), CandidateKnowledge::default());
     let result = narrow(
         (
             OriginalSubject::new(original, None).with_choices(choices),
             &narrower,
         ),
         conditions,
-        (&mut region, &mut CandidateKnowledge::default()),
+        &mut entry,
         &mut NarrowingScratch::default(),
         &mut budget,
         &mut counts,
         None,
     );
-    (result, region, counts, budget.statistics.work)
+    (result, entry, counts, budget.statistics.work)
 }
 
 #[test]
 fn the_original_theory_supplies_an_unrestricted_preference() {
-    let (result, region, _, _) = closed(&Conditions::default(), u64::MAX);
+    let (result, entry, _, _) = closed(&Conditions::default(), u64::MAX);
     assert_eq!(result.unwrap(), Narrowing::Fixed { changed: false });
-    assert_eq!(region.split_atom(), Some(1));
+    assert_eq!(entry.split_atom(), Some(1));
 }
 
 #[test]
@@ -116,9 +127,9 @@ fn original_degree_breaks_a_zero_score_bound_tie() {
             Bound::prepare(&tautology(), 1, u64::MAX, &crate::Cancellation::default()).unwrap(),
         ),
     };
-    let (result, region, _, _) = closed(&conditions, u64::MAX);
+    let (result, entry, _, _) = closed(&conditions, u64::MAX);
     assert_eq!(result.unwrap(), Narrowing::Fixed { changed: false });
-    assert_eq!(region.split_atom(), Some(1));
+    assert_eq!(entry.split_atom(), Some(1));
 }
 
 #[test]
@@ -127,9 +138,9 @@ fn the_latest_permanent_restriction_supplies_the_preference() {
         permanent: vec![permanent(prefer_c()), permanent(prefer_a())],
         bound: None,
     };
-    let (result, region, _, _) = closed(&conditions, u64::MAX);
+    let (result, entry, _, _) = closed(&conditions, u64::MAX);
     assert_eq!(result.unwrap(), Narrowing::Fixed { changed: false });
-    assert_eq!(region.split_atom(), Some(0));
+    assert_eq!(entry.split_atom(), Some(0));
 }
 
 #[test]
@@ -142,9 +153,9 @@ fn the_current_bound_supplies_the_preference() {
             Bound::prepare(&prefer_c(), 1, u64::MAX, &crate::Cancellation::default()).unwrap(),
         ),
     };
-    let (result, region, _, _) = closed(&conditions, u64::MAX);
+    let (result, entry, _, _) = closed(&conditions, u64::MAX);
     assert_eq!(result.unwrap(), Narrowing::Fixed { changed: false });
-    assert_eq!(region.split_atom(), Some(2));
+    assert_eq!(entry.split_atom(), Some(2));
 }
 
 #[test]
@@ -153,10 +164,14 @@ fn a_restriction_still_propagates_before_split_selection() {
         permanent: vec![permanent(theory(vec![Node::atom(1)], vec![0]))],
         bound: None,
     };
-    let (result, region, _, _) = closed(&conditions, u64::MAX);
+    let (result, entry, _, _) = closed(&conditions, u64::MAX);
     assert_eq!(result.unwrap(), Narrowing::Fixed { changed: true });
-    assert!(region.is_held(1));
-    assert!(region.split_atom().is_some_and(|atom| region.is_open(atom)));
+    assert!(entry.region.is_held(1));
+    assert!(
+        entry
+            .split_atom()
+            .is_some_and(|atom| entry.region.is_open(atom))
+    );
 }
 
 #[test]
@@ -166,16 +181,16 @@ fn joint_closure_charges_one_composed_preference_scan() {
     let mut separate_work = 0;
     for subject in [&original, &bound] {
         let narrower = Narrower::new(subject);
-        let (result, statistics) = narrower
-            .narrow_known(
-                OriginalSubject::new(subject, None),
-                &mut Region::all_open(3),
-                &mut narrower.knowledge(),
-                &mut NarrowingScratch::default(),
-                RegionLimits::default(),
-                &Cancellation::default(),
-            )
-            .unwrap();
+        let attempt = narrower.narrow_known(
+            OriginalSubject::new(subject, None),
+            &mut Region::all_open(3),
+            &mut narrower.knowledge(),
+            &mut NarrowingScratch::default(),
+            RegionLimits::default(),
+            &Cancellation::default(),
+        );
+        let result = attempt.result.unwrap();
+        let statistics = attempt.statistics;
         assert_eq!(result, Narrowing::Fixed { changed: false });
         separate_work += statistics.work;
     }
@@ -199,13 +214,13 @@ fn a_selector_refusal_retains_the_shared_budget_prefix() {
     result.unwrap();
     assert_eq!(complete.work, work);
     // All three original atoms are still open. Refuse the final selector read.
-    let (result, region, incomplete, work) = closed(&conditions, work - 1);
+    let (result, entry, incomplete, work) = closed(&conditions, work - 1);
     assert_eq!(result, Err(Incomplete::WorkLimit));
     assert_eq!(incomplete.work, complete.work - 1);
     assert_eq!(incomplete.work, work);
-    assert_eq!(region.open().collect::<Vec<_>>(), [0, 1, 2]);
+    assert_eq!(entry.region.open().collect::<Vec<_>>(), [0, 1, 2]);
     assert_eq!(
-        region.split_atom(),
+        entry.split_atom(),
         Some(2),
         "no partial preference is installed"
     );
@@ -226,12 +241,12 @@ fn a_bound_selector_refusal_retains_the_shared_budget_prefix() {
     // Each cutoff is inside that final six-read scan; all subjects completed
     // propagation without ranking.
     for missing in 1..=6 {
-        let (result, region, prefix, work) = closed(&conditions, complete.work - missing);
+        let (result, entry, prefix, work) = closed(&conditions, complete.work - missing);
         assert_eq!(result, Err(Incomplete::WorkLimit));
         assert_eq!(prefix.work, complete.work - missing);
         assert_eq!(prefix.work, work);
         assert_eq!(
-            region.split_atom(),
+            entry.split_atom(),
             Some(2),
             "no partial preference is installed"
         );
@@ -262,9 +277,9 @@ fn composed_splits(conditions: &Conditions<(Theory, Narrower)>) -> (Option<usize
             .unwrap()
             .choice_heads;
     let split = |choices: &ChoiceHeads| {
-        let (result, region, _, _) = closed_with(&original, choices, conditions, u64::MAX);
+        let (result, entry, _, _) = closed_with(&original, choices, conditions, u64::MAX);
         assert_eq!(result.unwrap(), Narrowing::Fixed { changed: false });
-        region.split_atom()
+        entry.split_atom()
     };
     (split(&choices), split(&ChoiceHeads::default()))
 }
@@ -360,18 +375,18 @@ fn active_restrictions_keep_primary_preference() {
     };
     let narrower = Narrower::new(&original);
     for (conditions, expected) in [(Conditions::default(), 1), (restriction, 0), (bound, 2)] {
-        let mut region = Region::all_open(3);
+        let mut entry = Entry::new(Region::all_open(3), CandidateKnowledge::default());
         let mut allowance = budget(&cancellation, u64::MAX);
         let result = narrow(
             (opened.parts.subject(&original).unwrap(), &narrower),
             &conditions,
-            (&mut region, &mut CandidateKnowledge::default()),
+            &mut entry,
             &mut NarrowingScratch::default(),
             &mut allowance,
             &mut RegionCounts::default(),
             None,
         );
         assert_eq!(result.unwrap(), Narrowing::Fixed { changed: false });
-        assert_eq!(region.split_atom(), Some(expected));
+        assert_eq!(entry.split_atom(), Some(expected));
     }
 }

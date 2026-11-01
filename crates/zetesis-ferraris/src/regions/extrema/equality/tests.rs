@@ -203,7 +203,7 @@ fn exact_classes_preserve_arbitrary_frozen_models() {
             } else {
                 assert!(region.hold(1));
             }
-            let (outcome, _) = index
+            let outcome = index
                 .narrow_frozen_known(
                     FrozenSubject::new(&theory, truth.truth()),
                     &mut region,
@@ -212,6 +212,7 @@ fn exact_classes_preserve_arbitrary_frozen_models() {
                     RegionLimits::default(),
                     &cancellation,
                 )
+                .result
                 .unwrap();
             assert_ne!(outcome, Narrowing::Refuted, "M={outer}, J={inner}");
             for atom in 0..3 {

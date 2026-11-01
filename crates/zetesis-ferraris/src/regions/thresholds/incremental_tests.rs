@@ -266,14 +266,15 @@ fn close(
     scratch: &mut NarrowingScratch,
     limit: u64,
 ) -> Result<(crate::Narrowing, NarrowingStatistics), Stop> {
-    index.narrow_known(
+    let attempt = index.narrow_known(
         crate::OriginalSubject::new(theory, None),
         region,
         knowledge,
         scratch,
         RegionLimits { max_work: limit },
         &Cancellation::default(),
-    )
+    );
+    attempt.result.map(|outcome| (outcome, attempt.statistics))
 }
 
 #[test]
@@ -500,8 +501,8 @@ fn copied_rows_preserve_arbitrary_frozen_children() {
                         RegionLimits::default(),
                         &Cancellation::default(),
                     )
+                    .result
                     .unwrap()
-                    .0
             };
         let mut parent = index.knowledge();
         let mut scratch = NarrowingScratch::default();
@@ -631,6 +632,7 @@ fn frozen_false_guard_updates_its_parent_row() {
             RegionLimits::default(),
             &Cancellation::default(),
         )
+        .result
         .unwrap();
     assert!(region.is_open(0));
     assert!(region.is_held(1));

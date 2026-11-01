@@ -128,17 +128,21 @@ fn traverse(
     let mut scratch = crate::NarrowingScratch::default();
     let mut leaves = BTreeSet::new();
     while let Some(visit) = traversal
-        .next(|region, measured| {
-            narrower
-                .narrow_known(
-                    crate::OriginalSubject::new(theory, None),
-                    region,
-                    &mut measured.knowledge,
-                    &mut scratch,
-                    RegionLimits::default(),
-                    &cancellation,
-                )
-                .map(|(narrowing, _)| narrowing)
+        .next(|entry| {
+            let (region, measured) = entry.parts_mut();
+            let attempt = narrower.narrow_known(
+                crate::OriginalSubject::new(theory, None),
+                region,
+                &mut measured.knowledge,
+                &mut scratch,
+                RegionLimits::default(),
+                &cancellation,
+            );
+            let result = attempt.result?;
+            if let Some(atom) = attempt.preferred {
+                entry.prefer(atom);
+            }
+            Ok::<_, zetesis_algebra::Stop>(result)
         })
         .unwrap()
     {

@@ -37,7 +37,7 @@ fn narrow(
     limits: RegionLimits,
 ) -> Result<(Narrowing, NarrowingStatistics), Stop> {
     let cancellation = Cancellation::default();
-    if let Some(truth) = frozen {
+    let attempt = if let Some(truth) = frozen {
         narrower.narrow_frozen_known(
             zetesis_ferraris::FrozenSubject::new(theory, truth),
             region,
@@ -56,7 +56,8 @@ fn narrow(
             limits,
             &cancellation,
         )
-    }
+    };
+    attempt.result.map(|outcome| (outcome, attempt.statistics))
 }
 
 fn closed_parent(

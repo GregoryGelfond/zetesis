@@ -5,7 +5,7 @@ use std::sync::Mutex;
 
 use super::super::regions::RegionFrontierStatistics;
 
-use zetesis_ferraris::{AdmissionLimits, Narrower, Node, Theory};
+use zetesis_ferraris::{AdmissionLimits, Narrower, Node, Region, Theory};
 
 use super::*;
 
@@ -24,13 +24,14 @@ fn index() -> Narrower {
 fn entry() -> Entry {
     let mut knowledge = CandidateKnowledge::default();
     knowledge.permanent(0, &index()).unwrap();
-    Entry(Region::all_open(2), knowledge)
+    Entry::new(Region::all_open(2), knowledge)
 }
 
 /// An entry's header and owned payload, computed from its parts rather than
 /// from the generic payload method.
-fn entry_bytes(Entry(region, knowledge): &Entry) -> u128 {
-    region.retained_bytes() + size_of::<CandidateKnowledge>() as u128 + knowledge.allocated_bytes()
+fn entry_bytes(entry: &Entry) -> u128 {
+    size_of::<Entry>() as u128 + entry.region.retained_bytes() - size_of::<Region>() as u128
+        + entry.state.allocated_bytes()
 }
 
 /// The deque vector's and deques' headers of a frontier of `workers`.
@@ -48,11 +49,18 @@ fn receipts_count_unused_entry_capacity() {
     let root = entry();
     let bytes = entry_bytes(&root);
     let frontier = RegionFrontier::measured(1, root).unwrap();
-    let _hand = frontier.take_local(0).unwrap();
-    frontier
-        .publish_split(0, [entry()], |queue, additional| {
-            reserve_regions(queue, additional + 7)
-        })
+    let hand = frontier.take_local(0).unwrap();
+    let cut_state = hand.state.clone();
+    let _held = frontier
+        .publish_split_with(
+            0,
+            hand,
+            |queue, additional| reserve_regions(queue, additional + 7),
+            |parent| {
+                let (cut, held) = parent.split_with(0, |state| (cut_state, state));
+                ([cut], held)
+            },
+        )
         .unwrap();
     let observed = receipts(&frontier);
     assert_eq!(observed.regions, 1);
@@ -66,9 +74,13 @@ fn receipts_count_unused_entry_capacity() {
 #[test]
 fn removing_entries_keeps_capacity_and_peaks() {
     let frontier = RegionFrontier::measured(1, entry()).unwrap();
-    let _hand = frontier.take_local(0).unwrap();
+    let hand = frontier.take_local(0).unwrap();
+    let cut_state = hand.state.clone();
     frontier
-        .publish_split(0, [entry(), entry()], reserve_regions)
+        .publish_split_with(0, hand, reserve_regions, |parent| {
+            let (cut, held) = parent.split_with(0, |state| (cut_state, state));
+            ([cut, held], ())
+        })
         .unwrap();
     let populated = receipts(&frontier);
     assert_eq!(populated.peak_regions, 2);
@@ -91,10 +103,10 @@ fn a_returned_region_counts_its_new_knowledge_capacity() {
     let frontier = RegionFrontier::measured(1, entry()).unwrap();
     let initial = receipts(&frontier);
     let mut hand = frontier.take_local(0).unwrap();
-    assert!(hand.0.hold(1));
+    assert!(hand.region.hold(1));
     // Restrictions added while a region was pending acquire fresh knowledge
     // only when it is narrowed, outside the frontier's ownership.
-    hand.1.permanent(1, &index()).unwrap();
+    hand.state.permanent(1, &index()).unwrap();
     frontier.requeue(0, hand, reserve_regions).unwrap();
     let returned = receipts(&frontier);
     assert!(returned.retained_bytes > initial.retained_bytes);
@@ -119,7 +131,8 @@ fn receipts_follow_entries_across_steals_and_deques() {
 
 #[test]
 fn the_peak_is_the_maximum_of_the_counter_history() {
-    let frontier = RegionFrontier::measured(2, entry()).unwrap();
+    let root = Entry::new(Region::all_open(6), entry().state);
+    let frontier = RegionFrontier::measured(2, root).unwrap();
     let mut history = vec![1usize];
     let mut hand = frontier.take_local(0).unwrap();
     history.push(0);
@@ -129,11 +142,16 @@ fn the_peak_is_the_maximum_of_the_counter_history() {
             hand = frontier.take_local(step % 2).unwrap();
             history.extend([*history.last().unwrap() + 1, *history.last().unwrap()]);
         } else {
+            let atom = hand.split_atom().unwrap();
+            let cut_state = hand.state.clone();
             frontier
-                .publish_split(step % 2, [entry(), entry()], reserve_regions)
+                .publish_split_with(step % 2, hand, reserve_regions, |parent| {
+                    let (cut, held) = parent.split_with(atom, |state| (cut_state, state));
+                    ([cut, held], ())
+                })
                 .unwrap();
             history.push(history.last().unwrap() + 2);
-            let _taken = frontier.take_local(step % 2).unwrap();
+            hand = frontier.take_local(step % 2).unwrap();
             history.push(history.last().unwrap() - 1);
         }
     }
@@ -143,14 +161,16 @@ fn the_peak_is_the_maximum_of_the_counter_history() {
 }
 
 #[test]
-fn the_candidate_entry_preserves_tuple_layout_and_payload() {
+fn the_candidate_entry_accounts_policy_and_payload_once() {
+    // The interval no longer owns the preference. Include its actual storage
+    // beside the interval and state; the old two-field tuple is incomplete.
     assert_eq!(
         size_of::<Entry>(),
-        size_of::<(Region, CandidateKnowledge)>()
+        size_of::<(Region, CandidateKnowledge, Option<usize>)>()
     );
     assert_eq!(
         align_of::<Entry>(),
-        align_of::<(Region, CandidateKnowledge)>()
+        align_of::<(Region, CandidateKnowledge, Option<usize>)>()
     );
     let entry = entry();
     assert_eq!(

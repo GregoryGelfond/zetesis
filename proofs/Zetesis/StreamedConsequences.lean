@@ -73,29 +73,29 @@ theorem body_satisfied (M : Atoms A) (literals : List (Literal A)) :
   simp [body, NormalFerraris.satisfies_conjunction]
 
 /-- Every model of a subregion also belongs to its enclosing region. -/
-theorem contains_of_inside {smaller larger : Cube A}
+theorem contains_of_inside {smaller larger : Region A}
     (inside : Inside smaller larger) {M : Atoms A} (member : smaller.Contains M) :
     larger.Contains M :=
   ⟨fun a held => member.1 a (inside.1 a held),
     fun a present => inside.2 a (member.2 a present)⟩
 
 /-- A fresh atom cannot make any of its three signed occurrences sure. -/
-theorem fresh_not_sure (c : Cube A) (literal : Literal A)
+theorem fresh_not_sure (c : Region A) (literal : Literal A)
     (fresh : c.Fresh literal.atom) : ¬ Sure c literal.formula := by
   cases literal with
   | mk sign atom =>
     cases sign <;>
-      simp_all [Literal.formula, Sure, FormulaBounds.read, Ferraris.Neg, Cube.Fresh]
+      simp_all [Literal.formula, Sure, FormulaBounds.read, Ferraris.Neg, Region.Fresh]
 
 /-- Exactly one occurrence may remain open; every other occurrence must be sure.
 This is deliberately conservative when several occurrences share an open atom. -/
-def UnitBody (c : Cube A) (before : List (Literal A)) (pivot : Literal A)
+def UnitBody (c : Region A) (before : List (Literal A)) (pivot : Literal A)
     (after : List (Literal A)) : Prop :=
   c.Fresh pivot.atom ∧ ∀ literal ∈ before ++ after, Sure c literal.formula
 
 /-- A second occurrence of the same open atom blocks this occurrence-based test,
 regardless of its sign. No alias coalescing or pivot-query completeness is assumed. -/
-theorem aliased_open_occurrence_blocks (c : Cube A) (before after : List (Literal A))
+theorem aliased_open_occurrence_blocks (c : Region A) (before after : List (Literal A))
     (pivot other : Literal A) (present : other ∈ before ++ after)
     (sameAtom : other.atom = pivot.atom) : ¬ UnitBody c before pivot after := by
   intro unit
@@ -104,7 +104,7 @@ theorem aliased_open_occurrence_blocks (c : Cube A) (before after : List (Litera
 
 /-- One authenticated all-true body refutes every classical model of its region.
 Only this occurrence is needed; the remaining source need not be exhausted. -/
-theorem all_true_refutes (T : Theory A) (c : Cube A) (literals : List (Literal A))
+theorem all_true_refutes (T : Theory A) (c : Region A) (literals : List (Literal A))
     (scalarPassed : Bool) (passed : scalarPassed = true)
     (original : Ferraris.Neg (body scalarPassed literals) ∈ T)
     (sure : ∀ literal ∈ literals, Sure c literal.formula) :
@@ -117,10 +117,10 @@ theorem all_true_refutes (T : Theory A) (c : Cube A) (literals : List (Literal A
 
 /-- A scalar-passing original constraint forces its sole open occurrence false.
 
-Proof outline: each other occurrence is true in any interpretation in the cube.
+Proof outline: each other occurrence is true in any interpretation in the region.
 If the pivot were also true, the entire original body would hold, contradicting
 that interpretation's satisfaction of its authenticated integrity constraint. -/
-theorem unit_literal_false (T : Theory A) (c : Cube A)
+theorem unit_literal_false (T : Theory A) (c : Region A)
     (before after : List (Literal A)) (pivot : Literal A)
     (scalarPassed : Bool) (passed : scalarPassed = true)
     (original : Ferraris.Neg (body scalarPassed (before ++ pivot :: after)) ∈ T)
@@ -139,7 +139,7 @@ theorem unit_literal_false (T : Theory A) (c : Cube A)
   exact models _ original satisfied
 
 /-- Falsifying the open default-negated occurrence holds its atom. -/
-theorem unit_negative_holds (T : Theory A) (c : Cube A)
+theorem unit_negative_holds (T : Theory A) (c : Region A)
     (before after : List (Literal A)) (atom : A)
     (original : Ferraris.Neg (body true (before ++ ⟨.negative, atom⟩ :: after)) ∈ T)
     (unit : UnitBody c before ⟨.negative, atom⟩ after)
@@ -149,7 +149,7 @@ theorem unit_negative_holds (T : Theory A) (c : Cube A)
   simpa [Literal.formula, Ferraris.Neg, Satisfies] using forced
 
 /-- Falsifying the open positive occurrence cuts its atom. -/
-theorem unit_positive_cuts (T : Theory A) (c : Cube A)
+theorem unit_positive_cuts (T : Theory A) (c : Region A)
     (before after : List (Literal A)) (atom : A)
     (original : Ferraris.Neg (body true (before ++ ⟨.positive, atom⟩ :: after)) ∈ T)
     (unit : UnitBody c before ⟨.positive, atom⟩ after)
@@ -157,7 +157,7 @@ theorem unit_positive_cuts (T : Theory A) (c : Cube A)
   unit_literal_false T c before after ⟨.positive, atom⟩ true rfl original unit member models
 
 /-- Double negation also cuts its atom, by original truth rather than reduct rewriting. -/
-theorem unit_double_negative_cuts (T : Theory A) (c : Cube A)
+theorem unit_double_negative_cuts (T : Theory A) (c : Region A)
     (before after : List (Literal A)) (atom : A)
     (original : Ferraris.Neg (body true (before ++ ⟨.doubleNegative, atom⟩ :: after)) ∈ T)
     (unit : UnitBody c before ⟨.doubleNegative, atom⟩ after)
@@ -167,13 +167,13 @@ theorem unit_double_negative_cuts (T : Theory A) (c : Cube A)
   simpa [Literal.formula, Ferraris.Neg, Satisfies] using forced
 
 /-- Restrict candidate interpretations to those falsifying this occurrence. -/
-def falsify (c : Cube A) (literal : Literal A) : Cube A :=
+def falsify (c : Region A) (literal : Literal A) : Region A :=
   match literal.sign with
   | .negative => c.splitTrue literal.atom
   | .positive | .doubleNegative => c.splitFalse literal.atom
 
 /-- The signed decision only strengthens bounds; it cannot reopen an atom. -/
-theorem falsify_inside (c : Cube A) (literal : Literal A) : Inside (falsify c literal) c := by
+theorem falsify_inside (c : Region A) (literal : Literal A) : Inside (falsify c literal) c := by
   cases literal with
   | mk sign atom =>
     cases sign with
@@ -182,16 +182,16 @@ theorem falsify_inside (c : Cube A) (literal : Literal A) : Inside (falsify c li
     | doubleNegative => exact ⟨fun _ held => held, fun _ possible => possible.1⟩
 
 /-- A signed decision retains precisely interpretations falsifying its occurrence. -/
-theorem contains_falsify (c : Cube A) (literal : Literal A) (M : Atoms A) :
+theorem contains_falsify (c : Region A) (literal : Literal A) (M : Atoms A) :
     (falsify c literal).Contains M ↔ c.Contains M ∧ ¬ Satisfies M literal.formula := by
   cases literal with
   | mk sign atom =>
-    cases sign <;> simp [falsify, Cube.contains_splitFalse, Cube.contains_splitTrue,
+    cases sign <;> simp [falsify, Region.contains_splitFalse, Region.contains_splitTrue,
       Literal.formula, Ferraris.Neg, Satisfies]
 
-/-- Unit narrowing preserves exactly the original classical models in the cube.
+/-- Unit narrowing preserves exactly the original classical models in the region.
 The model predicate, including every original constraint, is unchanged. -/
-theorem unit_preserves_models (T : Theory A) (c : Cube A)
+theorem unit_preserves_models (T : Theory A) (c : Region A)
     (before after : List (Literal A)) (pivot : Literal A)
     (scalarPassed : Bool) (passed : scalarPassed = true)
     (original : Ferraris.Neg (body scalarPassed (before ++ pivot :: after)) ∈ T)
@@ -207,7 +207,7 @@ theorem unit_preserves_models (T : Theory A) (c : Cube A)
 
 /-- The same restriction preserves exactly all answer sets. It does not establish
 that any retained interpretation is stable; that still requires its frozen reduct. -/
-theorem unit_preserves_answers (T : Theory A) (c : Cube A)
+theorem unit_preserves_answers (T : Theory A) (c : Region A)
     (before after : List (Literal A)) (pivot : Literal A)
     (scalarPassed : Bool) (passed : scalarPassed = true)
     (original : Ferraris.Neg (body scalarPassed (before ++ pivot :: after)) ∈ T)
@@ -222,7 +222,7 @@ theorem unit_preserves_answers (T : Theory A) (c : Cube A)
     exact ⟨(contains_falsify c pivot M).mpr ⟨accepted.1, forced⟩, accepted.2⟩
 
 /-- A sound unit consequence remains true after any further bound strengthening. -/
-theorem unit_survives_narrowing (T : Theory A) (c smaller : Cube A)
+theorem unit_survives_narrowing (T : Theory A) (c smaller : Region A)
     (inside : Inside smaller c) (before after : List (Literal A)) (pivot : Literal A)
     (original : Ferraris.Neg (body true (before ++ pivot :: after)) ∈ T)
     (unit : UnitBody c before pivot after)
@@ -234,12 +234,12 @@ theorem unit_survives_narrowing (T : Theory A) (c smaller : Cube A)
 /-- Falsifying this occurrence is necessary for every valid interpretation in
 one immutable snapshot. Validity may be original modelhood or answer-set membership;
 neither current openness nor a successful source lookup is implicit. -/
-def SnapshotConsequence (valid : Atoms A → Prop) (snapshot : Cube A)
+def SnapshotConsequence (valid : Atoms A → Prop) (snapshot : Region A)
     (literal : Literal A) : Prop :=
   ∀ M, snapshot.Contains M → valid M → ¬ Satisfies M literal.formula
 
 /-- The existing authenticated unit rule supplies a snapshot consequence. -/
-theorem unit_snapshot_consequence (T : Theory A) (snapshot : Cube A)
+theorem unit_snapshot_consequence (T : Theory A) (snapshot : Region A)
     (before after : List (Literal A)) (pivot : Literal A)
     (original : Ferraris.Neg (body true (before ++ pivot :: after)) ∈ T)
     (unit : UnitBody snapshot before pivot after) :
@@ -250,7 +250,7 @@ theorem unit_snapshot_consequence (T : Theory A) (snapshot : Cube A)
 /-- A proved snapshot consequence remains valid after any bound strengthening.
 The old pivot need not still be open; this is semantic validity, not progress. -/
 theorem snapshot_consequence_survives (valid : Atoms A → Prop)
-    (snapshot smaller : Cube A) (inside : Inside smaller snapshot) (literal : Literal A)
+    (snapshot smaller : Region A) (inside : Inside smaller snapshot) (literal : Literal A)
     (sound : SnapshotConsequence valid snapshot literal) :
     SnapshotConsequence valid smaller literal := by
   intro M member accepted
@@ -258,13 +258,13 @@ theorem snapshot_consequence_survives (valid : Atoms A → Prop)
 
 /-- Apply a finite batch in list order. Repetitions and conflicting signed
 decisions are allowed; consistency and successful atom updates are not assumed. -/
-def falsifyBatch (c : Cube A) : List (Literal A) → Cube A
+def falsifyBatch (c : Region A) : List (Literal A) → Region A
   | [] => c
   | literal :: rest => falsifyBatch (falsify c literal) rest
 
 /-- A batch retains exactly the old interpretations falsifying each listed
 occurrence. Induction separates the first decision from the remaining batch. -/
-theorem contains_falsify_batch (c : Cube A) (pending : List (Literal A)) (M : Atoms A) :
+theorem contains_falsify_batch (c : Region A) (pending : List (Literal A)) (M : Atoms A) :
     (falsifyBatch c pending).Contains M ↔
       c.Contains M ∧ ∀ literal ∈ pending, ¬ Satisfies M literal.formula := by
   induction pending generalizing c with
@@ -289,7 +289,7 @@ prefix as `pending`; no completed scan or exhausted search follows.
 Proof outline: batch membership is old membership plus the listed falsities.
 Every valid old member also belongs to the snapshot, where each falsity was
 proved. Conversely, restriction never adds an interpretation. -/
-theorem batch_preserves_valid (valid : Atoms A → Prop) (snapshot current : Cube A)
+theorem batch_preserves_valid (valid : Atoms A → Prop) (snapshot current : Region A)
     (inside : Inside current snapshot) (pending : List (Literal A))
     (sound : ∀ literal ∈ pending, SnapshotConsequence valid snapshot literal)
     (M : Atoms A) :
@@ -308,7 +308,7 @@ theorem batch_preserves_valid (valid : Atoms A → Prop) (snapshot current : Cub
 
 /-- Applying only a prefix of a valid batch preserves the same interpretations.
 The unconsumed suffix is not claimed checked, applied or exhausted. -/
-theorem batch_prefix_preserves_valid (valid : Atoms A → Prop) (snapshot current : Cube A)
+theorem batch_prefix_preserves_valid (valid : Atoms A → Prop) (snapshot current : Region A)
     (inside : Inside current snapshot) (applied pending : List (Literal A))
     (sound : ∀ literal ∈ applied ++ pending, SnapshotConsequence valid snapshot literal)
     (M : Atoms A) :
@@ -321,7 +321,7 @@ theorem batch_prefix_preserves_valid (valid : Atoms A → Prop) (snapshot curren
 
 /-- Batching original-model consequences preserves answer sets too, without
 replacing original satisfaction or frozen-reduct minimality by those decisions. -/
-theorem batch_preserves_answers (T : Theory A) (snapshot current : Cube A)
+theorem batch_preserves_answers (T : Theory A) (snapshot current : Region A)
     (inside : Inside current snapshot) (pending : List (Literal A))
     (sound : ∀ literal ∈ pending, SnapshotConsequence (fun M => Models M T) snapshot literal)
     (M : Atoms A) :
@@ -335,12 +335,12 @@ theorem batch_preserves_answers (T : Theory A) (snapshot current : Cube A)
 
 /-- Exact agreement on both bounds of every atom in an explicit dependency.
 Equal decided unions are insufficient: they can hide a held/cut polarity swap. -/
-def SameBoundsOn (left right : Cube A) (dependency : Atoms A) : Prop :=
+def SameBoundsOn (left right : Region A) (dependency : Atoms A) : Prop :=
   ∀ atom, dependency atom →
     (left.lower atom ↔ right.lower atom) ∧ (left.upper atom ↔ right.upper atom)
 
 /-- A signed literal's sure reading is unchanged when its atom's bounds agree. -/
-theorem literal_sure_unchanged (left right : Cube A) (dependency : Atoms A)
+theorem literal_sure_unchanged (left right : Region A) (dependency : Atoms A)
     (same : SameBoundsOn left right dependency) (literal : Literal A)
     (covered : dependency literal.atom) :
     Sure left literal.formula ↔ Sure right literal.formula := by
@@ -351,7 +351,7 @@ theorem literal_sure_unchanged (left right : Cube A) (dependency : Atoms A)
 
 /-- The occurrence-based unit test is unchanged when every body atom's bounds
 agree. Aliases retain their occurrence positions and the conservative old test. -/
-theorem unit_body_unchanged (left right : Cube A) (dependency : Atoms A)
+theorem unit_body_unchanged (left right : Region A) (dependency : Atoms A)
     (same : SameBoundsOn left right dependency)
     (before after : List (Literal A)) (pivot : Literal A)
     (covered : ∀ literal ∈ before ++ pivot :: after, dependency literal.atom) :
@@ -376,14 +376,14 @@ theorem unit_body_unchanged (left right : Cube A) (dependency : Atoms A)
 
 /-- The sufficient witnesses sought for one successfully evaluated instance:
 either its whole body is sure, or its occurrence-based unit test succeeds. -/
-def HasConsequence (c : Cube A) (scalarPassed : Bool) (literals : List (Literal A)) : Prop :=
+def HasConsequence (c : Region A) (scalarPassed : Bool) (literals : List (Literal A)) : Prop :=
   scalarPassed = true ∧ ((∀ literal ∈ literals, Sure c literal.formula) ∨
     ∃ before pivot after, literals = before ++ pivot :: after ∧ UnitBody c before pivot after)
 
 /-- A completed instance has the same sufficient witnesses if its complete atom
 dependency is unchanged. The scalar result and original occurrences are identical
 on both sides; faulting or newly enabled scalar evaluation is outside this law. -/
-theorem consequence_unchanged (left right : Cube A) (dependency : Atoms A)
+theorem consequence_unchanged (left right : Region A) (dependency : Atoms A)
     (same : SameBoundsOn left right dependency) (scalarPassed : Bool)
     (literals : List (Literal A))
     (covered : ∀ literal ∈ literals, dependency literal.atom) :
@@ -420,7 +420,7 @@ the same successfully evaluated scalar results and grounded occurrences. A stopp
 scan cannot supply `complete`; no runtime cursor or dirty-set coverage is proved. -/
 theorem completed_template_unchanged {I : Type v} (instances : List I)
     (scalarPassed : I → Bool) (literals : I → List (Literal A))
-    (left right : Cube A) (dependency : Atoms A)
+    (left right : Region A) (dependency : Atoms A)
     (same : SameBoundsOn left right dependency)
     (covered : ∀ entry ∈ instances, ∀ literal ∈ literals entry, dependency literal.atom)
     (complete : ∀ entry ∈ instances,
@@ -439,7 +439,7 @@ has been completely checked without a consequence.
 Proof outline: if every occurrence read unchanged bounds, the existing
 consequence would also have existed before, contradicting the completed check.
 The law does not establish which source rows enumerate those occurrences. -/
-theorem consequence_reads_change (left right : Cube A) (changed : Atoms A)
+theorem consequence_reads_change (left right : Region A) (changed : Atoms A)
     (same : SameBoundsOn left right (fun atom => ¬ changed atom))
     (scalarPassed : Bool) (literals : List (Literal A))
     (absent : ¬ HasConsequence left scalarPassed literals)
@@ -466,7 +466,7 @@ bindings and occurrence-based unit test. Negative or double-negative readers
 do not satisfy the positive-read premise. -/
 theorem positive_changes_cover_consequences {I : Type v} (instances : List I)
     (scalarPassed : I → Bool) (literals : I → List (Literal A))
-    (left right : Cube A) (changed : Atoms A)
+    (left right : Region A) (changed : Atoms A)
     (same : SameBoundsOn left right (fun atom => ¬ changed atom))
     (positive : ∀ entry ∈ instances, ∀ literal ∈ literals entry,
       changed literal.atom → literal.sign = .positive)
@@ -481,15 +481,15 @@ theorem positive_changes_cover_consequences {I : Type v} (instances : List I)
   exact ⟨literal, occurrence, positive entry member literal occurrence altered, altered⟩
 
 /-- Strengthening both bounds cannot turn a decided atom back into an open one. -/
-theorem fresh_of_inside {smaller larger : Cube A} (inside : Inside smaller larger)
+theorem fresh_of_inside {smaller larger : Region A} (inside : Inside smaller larger)
     {atom : A} (fresh : smaller.Fresh atom) : larger.Fresh atom :=
   ⟨fun held => fresh.1 (inside.1 atom held), inside.2 atom fresh.2⟩
 
 /-- A cut positive occurrence prevents both sufficient witnesses in a consistent
-cube: it cannot be sure, and it cannot be the fresh pivot of a unit body.
+region: it cannot be sure, and it cannot be the fresh pivot of a unit body.
 This concerns a currently available witness, not the validity of a previously
 emitted consequence. Repeated occurrences retain their positions. -/
-theorem positive_cut_blocks_consequence (c : Cube A) (scalarPassed : Bool)
+theorem positive_cut_blocks_consequence (c : Region A) (scalarPassed : Bool)
     (literals : List (Literal A)) (literal : Literal A)
     (consistent : ∀ atom, c.lower atom → c.upper atom)
     (member : literal ∈ literals) (positive : literal.sign = .positive)
@@ -512,7 +512,7 @@ theorem positive_cut_blocks_consequence (c : Cube A) (scalarPassed : Bool)
 
 /-- A completed unproductive template scan remains unproductive after positive
 cuts. Both bounds agree outside the supplied changed set; every affected occurrence
-is positive and its atom is now excluded by the upper bound. The new cube is
+is positive and its atom is now excluded by the upper bound. The new region is
 consistent. Scalars and instances are unchanged.
 
 Proof outline: change coverage supplies a positive changed occurrence for any
@@ -521,7 +521,7 @@ premise is needed. Runtime lineage, instance coverage, fault handling and retain
 storage remain separate obligations. -/
 theorem completed_template_positive_cuts {I : Type v} (instances : List I)
     (scalarPassed : I → Bool) (literals : I → List (Literal A))
-    (left right : Cube A) (changed : Atoms A)
+    (left right : Region A) (changed : Atoms A)
     (consistent : ∀ atom, right.lower atom → right.upper atom)
     (same : SameBoundsOn left right (fun atom => ¬ changed atom))
     (positive : ∀ entry ∈ instances, ∀ literal ∈ literals entry,
@@ -543,13 +543,13 @@ decided cover each new consequence through a held atom. Cut occurrences cannot
 witness one. The changed set is arbitrary; aliases are not coalesced.
 
 Bounds agree outside that set, scalar results and instances are fixed, and the
-current cube is consistent. The runtime additionally authenticates monotone
+current region is consistent. The runtime additionally authenticates monotone
 lineage and derives changed IDs from both masks: that makes a retained held ID
 newly held, rather than merely an overapproximation of the possible changes.
 The theorem does not authorize omitting negative or double-negative readers. -/
 theorem positive_holds_cover_consequences {I : Type v} (instances : List I)
     (scalarPassed : I → Bool) (literals : I → List (Literal A))
-    (left right : Cube A) (changed : Atoms A)
+    (left right : Region A) (changed : Atoms A)
     (consistent : ∀ atom, right.lower atom → right.upper atom)
     (same : SameBoundsOn left right (fun atom => ¬ changed atom))
     (positive : ∀ entry ∈ instances, ∀ literal ∈ literals entry,
@@ -570,15 +570,15 @@ theorem positive_holds_cover_consequences {I : Type v} (instances : List I)
       literal consistent occurrence sign cut consequence).elim
 
 /-- A signed occurrence that is never true prevents both sufficient witnesses
-in a consistent cube. It cannot be sure or have a fresh atom. A negative
+in a consistent region. It cannot be sure or have a fresh atom. A negative
 occurrence is disabled by holding its atom; a positive or double-negative
 occurrence is disabled by cutting its atom. Their reducts are not identified.
 
-Proof outline: the lower bound is an interpretation in the consistent cube,
+Proof outline: the lower bound is an interpretation in the consistent region,
 so an occurrence cannot be both sure and never. Its sign also excludes
 freshness. Every occurrence is either the unit pivot or one of the sure
 occurrences, and either position therefore blocks a witness. -/
-theorem never_literal_blocks_consequence (c : Cube A) (scalarPassed : Bool)
+theorem never_literal_blocks_consequence (c : Region A) (scalarPassed : Bool)
     (literals : List (Literal A)) (literal : Literal A)
     (consistent : ∀ atom, c.lower atom → c.upper atom)
     (member : literal ∈ literals) (impossible : Never c literal.formula) :
@@ -617,7 +617,7 @@ theorem never_literal_blocks_consequence (c : Cube A) (scalarPassed : Bool)
 
 /-- New consequences remain covered by changed positive held occurrences when
 all other changed reads are disabled. Bounds agree outside the changed set;
-instances and scalar results are fixed, and the current cube is consistent.
+instances and scalar results are fixed, and the current region is consistent.
 The sign condition is checked per occurrence, so aliases with different signs
 remain distinct. Enabling negative or double-negative reads are not admitted.
 
@@ -627,7 +627,7 @@ A concrete traversal must still enumerate every matching occurrence and retain
 its scalar and unit tests; this law does not establish cursor completeness. -/
 theorem positive_holds_cover_signed_changes {I : Type v} (instances : List I)
     (scalarPassed : I → Bool) (literals : I → List (Literal A))
-    (left right : Cube A) (changed : Atoms A)
+    (left right : Region A) (changed : Atoms A)
     (consistent : ∀ atom, right.lower atom → right.upper atom)
     (same : SameBoundsOn left right (fun atom => ¬ changed atom))
     (classified : ∀ entry ∈ instances, ∀ literal ∈ literals entry,
@@ -652,7 +652,7 @@ theorem positive_holds_cover_signed_changes {I : Type v} (instances : List I)
 
 /-- A completed unproductive family stays unproductive when every changed read
 is now never true. Both bounds agree outside the supplied changed set; the
-current cube is consistent, and instances and scalar results are unchanged.
+current region is consistent, and instances and scalar results are unchanged.
 
 Proof outline: any new witness must read a changed atom. That occurrence is
 never true by hypothesis, so it blocks the witness. The hypothesis concerns
@@ -660,7 +660,7 @@ every affected signed occurrence, including aliases. It needs no nesting
 premise and establishes no concrete change-history or scan certificate. -/
 theorem completed_template_disabling_changes {I : Type v} (instances : List I)
     (scalarPassed : I → Bool) (literals : I → List (Literal A))
-    (left right : Cube A) (changed : Atoms A)
+    (left right : Region A) (changed : Atoms A)
     (consistent : ∀ atom, right.lower atom → right.upper atom)
     (same : SameBoundsOn left right (fun atom => ¬ changed atom))
     (disabled : ∀ entry ∈ instances, ∀ literal ∈ literals entry,
@@ -689,7 +689,7 @@ the snapshot-consequence and batch-preservation laws supply that separate duty.
 A queue position or a delivered prefix does not establish discharge. -/
 theorem completed_template_discharged {I : Type v} (instances : List I)
     (scalarPassed : I → Bool) (literals : I → List (Literal A))
-    (left right : Cube A) (changed : Atoms A) (emitted : List (Literal A))
+    (left right : Region A) (changed : Atoms A) (emitted : List (Literal A))
     (consistent : ∀ atom, right.lower atom → right.upper atom)
     (same : SameBoundsOn left right (fun atom => ¬ changed atom))
     (disabled : ∀ entry ∈ instances, ∀ literal ∈ literals entry,
@@ -711,21 +711,21 @@ theorem completed_template_discharged {I : Type v} (instances : List I)
       literal consistent occurrence (discharged literal recorded) witness
 
 /-- A signed decision leaves its own atom decided. -/
-theorem falsify_not_fresh (c : Cube A) (literal : Literal A) :
+theorem falsify_not_fresh (c : Region A) (literal : Literal A) :
     ¬ (falsify c literal).Fresh literal.atom := by
   cases literal with
   | mk sign atom =>
-    cases sign <;> simp [falsify, Cube.Fresh, Cube.splitFalse, Cube.splitTrue]
+    cases sign <;> simp [falsify, Region.Fresh, Region.splitFalse, Region.splitTrue]
 
 open Classical in
 /-- The number of open atoms in a finite supplied carrier. A distinct carrier
 counts atoms once; duplicates can only make this conservative bound larger. -/
-noncomputable def openCount (carrier : List A) (c : Cube A) : Nat :=
+noncomputable def openCount (carrier : List A) (c : Region A) : Nat :=
   carrier.countP (fun atom => decide (c.Fresh atom))
 
 /-- Any sound or unsound strengthening decreases this geometric measure weakly;
 semantic preservation is a separate obligation, never inferred from the measure. -/
-theorem open_count_mono (carrier : List A) {smaller larger : Cube A}
+theorem open_count_mono (carrier : List A) {smaller larger : Region A}
     (inside : Inside smaller larger) : openCount carrier smaller ≤ openCount carrier larger := by
   classical
   apply List.countP_mono_left
@@ -735,7 +735,7 @@ theorem open_count_mono (carrier : List A) {smaller larger : Cube A}
 /-- Deciding a fresh carrier atom strictly decreases the finite open-atom count.
 The finite carrier need only contain this pivot; every later pivot has the same
 explicit membership obligation. The result bounds decisions, not source work. -/
-theorem falsify_decreases_open (carrier : List A) (c : Cube A) (pivot : Literal A)
+theorem falsify_decreases_open (carrier : List A) (c : Region A) (pivot : Literal A)
     (member : pivot.atom ∈ carrier) (fresh : c.Fresh pivot.atom) :
     openCount carrier (falsify c pivot) < openCount carrier c := by
   classical
@@ -767,9 +767,9 @@ formula closure before each decision. The selected atom must still be open.
 The constructor requires the actual semantic consequence, not an attempted or
 interrupted lookup. It is not a concrete runtime or a completion certificate. -/
 inductive ConsequenceSteps (carrier : List A) (valid : Atoms A → Prop) :
-    Cube A → Cube A → Nat → Prop where
-  | done (c : Cube A) : ConsequenceSteps carrier valid c c 0
-  | next {c closed final : Cube A} {count : Nat}
+    Region A → Region A → Nat → Prop where
+  | done (c : Region A) : ConsequenceSteps carrier valid c c 0
+  | next {c closed final : Region A} {count : Nat}
       (inside : Inside closed c)
       (closurePreserves : ∀ M, c.Contains M → valid M → closed.Contains M)
       (pivot : Literal A) (member : pivot.atom ∈ carrier) (fresh : closed.Fresh pivot.atom)
@@ -781,7 +781,7 @@ inductive ConsequenceSteps (carrier : List A) (valid : Atoms A → Prop) :
 valid interpretations of the initial region. An interrupted prefix can use this
 preservation law but cannot claim that its final region has been searched. -/
 theorem steps_preserve (carrier : List A) (valid : Atoms A → Prop)
-    {first last : Cube A} {count : Nat}
+    {first last : Region A} {count : Nat}
     (steps : ConsequenceSteps carrier valid first last count) (M : Atoms A) :
     last.Contains M ∧ valid M ↔ first.Contains M ∧ valid M := by
   induction steps with
@@ -800,7 +800,7 @@ Thus a run has at most the initial open count many completed decisions. This
 measure does not count source calls, resource work or interruptions, and grants
 no renewed allowance. -/
 theorem steps_bounded (carrier : List A) (valid : Atoms A → Prop)
-    {first last : Cube A} {count : Nat}
+    {first last : Region A} {count : Nat}
     (steps : ConsequenceSteps carrier valid first last count) :
     count + openCount carrier last ≤ openCount carrier first := by
   induction steps with
@@ -813,7 +813,7 @@ theorem steps_bounded (carrier : List A) (valid : Atoms A → Prop)
 /-- There cannot be successful decision prefixes of every finite length from
 one finite region. The operation can still stop earlier for an incomplete cause;
 this theorem does not manufacture a completed query or an exhaustion verdict. -/
-theorem no_unbounded_steps (carrier : List A) (valid : Atoms A → Prop) (first : Cube A) :
+theorem no_unbounded_steps (carrier : List A) (valid : Atoms A → Prop) (first : Region A) :
     ¬ ∀ count, ∃ last, ConsequenceSteps carrier valid first last count := by
   intro unbounded
   obtain ⟨last, steps⟩ := unbounded (openCount carrier first + 1)
@@ -824,23 +824,23 @@ theorem no_unbounded_steps (carrier : List A) (valid : Atoms A → Prop) (first 
 Even a complete search for these sufficient consequences cannot replace the
 final original-satisfaction check or establish an answer set. -/
 theorem no_unit_can_hide_violation :
-    let c : Cube Bool := ⟨Empty, Full⟩
+    let c : Region Bool := ⟨Empty, Full⟩
     let p : Literal Bool := ⟨.positive, false⟩
     let q : Literal Bool := ⟨.positive, true⟩
     ¬ UnitBody c [] p [q] ∧ ¬ UnitBody c [p] q [] ∧ c.Contains Full ∧
       ¬ Models Full [Ferraris.Neg (body true [p, q])] := by
-  simp [UnitBody, Sure, FormulaBounds.read, Literal.formula, Cube.Fresh,
-    Cube.Contains, Sub, Empty, Full, Models, body, NormalFerraris.conjunction,
+  simp [UnitBody, Sure, FormulaBounds.read, Literal.formula, Region.Fresh,
+    Region.Contains, Sub, Empty, Full, Models, body, NormalFerraris.conjunction,
     Ferraris.Neg, Satisfies]
 
 /-- A stopped scan after a sound decision can still retain an original answer.
 Even useful narrowing cannot turn interruption into refutation or exhaustion. -/
 theorem pending_after_decision_retains_answer :
-    let c : Cube Bool := ⟨Empty, Full⟩
+    let c : Region Bool := ⟨Empty, Full⟩
     StreamedConstraints.scan (fun _ : Bool => false) 0 [true] = .pending [true] ∧
       (falsify c ⟨.positive, false⟩).Contains Empty ∧
       Stable Empty [Ferraris.Neg (.atom false), Ferraris.Neg (.atom true)] := by
-  simp [StreamedConstraints.scan, falsify, Cube.Contains, Cube.splitFalse, Sub,
+  simp [StreamedConstraints.scan, falsify, Region.Contains, Region.splitFalse, Sub,
     Empty, Full, Stable, Models, Ferraris.Neg, Satisfies, ProperSub]
 
 end Zetesis.StreamedConsequences

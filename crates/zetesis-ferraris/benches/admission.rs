@@ -264,7 +264,7 @@ fn verify_narrower(theory: &Theory, conjunction: bool) {
             assert!(region.cut(atom));
         }
     }
-    let (result, _) = narrower
+    let result = narrower
         .narrow_known(
             OriginalSubject::new(theory, None),
             &mut region,
@@ -273,6 +273,7 @@ fn verify_narrower(theory: &Theory, conjunction: bool) {
             RegionLimits::default(),
             &Cancellation::default(),
         )
+        .result
         .unwrap();
     assert_eq!(result, Narrowing::Fixed { changed: true });
     assert_eq!(

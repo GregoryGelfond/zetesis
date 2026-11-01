@@ -22,17 +22,15 @@ fn carrier(
     region: &mut Region,
     scratch: &mut NarrowingScratch,
 ) -> (Narrowing, NarrowingStatistics) {
-    program
-        .index
-        .narrow_known(
-            OriginalSubject::carrier(&program.owner, None),
-            region,
-            &mut program.index.knowledge(),
-            scratch,
-            RegionLimits::default(),
-            &Cancellation::default(),
-        )
-        .unwrap()
+    let attempt = program.index.narrow_known(
+        OriginalSubject::carrier(&program.owner, None),
+        region,
+        &mut program.index.knowledge(),
+        scratch,
+        RegionLimits::default(),
+        &Cancellation::default(),
+    );
+    (attempt.result.unwrap(), attempt.statistics)
 }
 
 #[test]

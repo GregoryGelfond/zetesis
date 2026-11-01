@@ -121,8 +121,8 @@ fn narrowing_keeps_all_arbitrary_frozen_models() {
                             RegionLimits::default(),
                             &cancellation,
                         )
-                        .unwrap()
-                        .0;
+                        .result
+                        .unwrap();
                     for &tested in &frozen_models {
                         if agrees(&before, tested) {
                             assert_ne!(

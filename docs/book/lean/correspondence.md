@@ -1334,13 +1334,13 @@ original program. A stopped upper-closure prefix cannot justify a smaller root;
 position calculation, not this semantic bound or executable enumeration proof.
 
 [`RegionBounds.materialization_exact`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/RegionBounds.lean)
-relates a descendant's borrowed root-coordinate bounds to the owned cube formed
+relates a descendant's borrowed root-coordinate bounds to the owned region formed
 from its held and uncut atom selections. It assumes exact partial key lookup
 and that each materialized list is a permutation of its selected denotations;
 `SeedSelections.materialization_exact` supplies ordering and coalescing equality.
 `gate_readings_exact` and `narrowing_exact` then identify both must/may readings
 and the complete narrowing operation. The existing `Bounds` preservation and
-conflict laws apply to that same cube, not to a new acceptance test.
+conflict laws apply to that same region, not to a new acceptance test.
 
 The removed closure-region consumer retained distinct canonical root coordinates
 disjoint from fixed-held atoms. The concrete publication and control obligations
@@ -1351,7 +1351,7 @@ length, signed and typed atom comparison, binary-search direction, original
 program ownership and complete-root publication remain executable obligations.
 An indexed missing key denotes false only in that completed-root representation;
 the symbolic unbounded root and stopped root preparation keep their existing
-owned-cube/fallback semantics. Both closures must borrow the same pre-pass
+owned-region/fallback semantics. Both closures must borrow the same pre-pass
 decisions. All conflicts must be checked before committing any new decision,
 including a previously held atom missing from the upper result or a lower-derived
 gate already cut from the region. An upper constraint verdict does not refute
@@ -1889,6 +1889,28 @@ giving at most `atom_count + 1` live entries per deque. Entry capacity grows
 fallibly as needed and is released after joining, including a partially launched
 worker set. This reservation does not make region/knowledge payload cloning
 fallible.
+The owned publication boundary distinguishes a semantic split from a refused
+attempt to publish it. `Frontier::publish_split_with` reserves before consuming
+the narrowed parent; refusal returns that parent and the original typed error.
+`requeue` also returns its owner on refusal. Queues together with in-hand or
+returned parents therefore remain the pending partition at this boundary.
+`Region.split_partition` and `split_disjoint` justify a successful split, including
+a slate with one queued child and the other in hand. The refused boundary makes
+no further coverage-tree step: it corresponds to the identity case
+`Pending.Walk.done`, after any already completed sound narrowing. Rust must still
+establish exact ownership, fresh-atom selection, queue order, counter updates,
+capacity admission and receipt preservation; the abstract laws do not verify them.
+
+After a typed terminal stop is committed, a non-resumable concurrent schedule may
+explicitly abandon the returned owner and its remaining queues. This cleanup is
+not a `Pending.Step.refuted`, and an empty container after cleanup does not meet
+`Pending.Walk.exhausted`'s premise of a covered walk to an empty frontier. Served
+queries must record their stop before abandonment/retirement, so neither query
+count teardown nor a released queue supplies `InnerQuery.exhausted_walk_stable`.
+The scalar walk's retry and surrender contract instead retains the parent after
+returning a capacity refusal. These lifetime distinctions are executable
+correspondence obligations, not additional semantic outcomes or recovery APIs.
+
 A native worker may retain one refuted region's knowledge allocation for its
 next split. `Knowledge::clone_from` and `CandidateKnowledge::clone_from` must
 overwrite every logical field from the parent, preserving the same knowledge as
@@ -1972,9 +1994,21 @@ still requires. Each object is also an instance of a standard structure, recorde
 in the second column; the code uses the domain names, and these descriptions are
 for the reader.
 
+`Algebra.Subject.cohort_extensive`, `cohort_monotone` and `cohort_sound`
+lift existing subjects pointwise to a finite indexed family of regions.
+Each position retains its own class and subject; `cohort_members_iff` preserves
+exactly that position's class members, and `cohort_refuted_iff` keeps refutation
+local to it. `cohort_empty` leaves the empty family unchanged. These laws specify
+no batching layout or execution schedule and establish no candidate's membership.
+For countermodel queries, different candidates keep their different
+`Countermodels T M` classes. The candidate and countercandidate quantifiers,
+and their reductions, remain those of `answer_sets_nested`; the atom axis stays
+inside each region. Concrete cohort rounds, their receipts, and their refinement
+to these pointwise applications remain implementation obligations.
+
 | Object and laws | Is a | Rust today | Remaining correspondence |
 | --- | --- | --- | --- |
-| `Region`, the library's `Cube` until the library renames it; `inside_refl`, `inside_trans`, `inside_antisymm` | An interval of interpretations; under `FormulaBounds.Inside`, the precision order, a poset, so a thin category | `zetesis_algebra::region::Region` | The library-wide rename of `Cube`, and the region's word representation (`Words`); that the held and possible words denote `lower` and `upper` |
+| `Zetesis.Region` in `Search`; `Algebra.inside_refl`, `inside_trans`, `inside_antisymm` | An interval of interpretations; under `FormulaBounds.Inside`, the precision order, a poset, so a thin category | `zetesis_algebra::region::Region` | The region's word representation (`Words`); that the held and possible words denote `lower` and `upper` |
 | `Class`: `AnswerSetsSought`, `Countermodels` | A set of interpretations | Implicit: the candidate walk's models still sought, and the reduct query's subsets of the candidate | Subjects typed by their class in Rust |
 | `Subject`; `Subject.sound_of_narrower`, `Subject.apply_sound`, `Subject.narrow_ideal` | A monotone inflationary map of the region poset: a pointed endofunctor of the thin category. A subject lies between its region and the region's ideal narrowing, the abstraction of the class's members under a Galois insertion | `zetesis_ferraris::OriginalSubject` and `FrozenSubject`, and the rules of `Narrower::narrow_known` | A crate-private subject interface, typed by class, with each rule family an instance |
 | `joint`; `joint_closed`, `joint_least`, `joint_extensive`, `joint_monotone`, `joint_idempotent`, `joint_sound`, `joint_more_subjects`, `terminal_agreement`, `Reaches.eq_joint`, `fair_iteration_reaches_joint`, `refines_wf` | A closure operator on the region poset, that is, an idempotent monad on its thin category; the closed regions are its algebras. `Reaches.eq_joint` and `fair_iteration_reaches_joint` are the chaotic iteration theorem (Apt 1999) | The joint loop `narrow` in `zetesis-stable`'s `ferraris/regions.rs`, which ranks open atoms only after all subjects agree | That the loop applies each subject until none decides more, within its work bound; its order is then immaterial by `terminal_agreement`, for a fixed family. The candidate subjects change during a walk (learned rows, the bound, added restrictions, declined allowances), so answer sets stay identical across schedules while regions and trees do so only with those held fixed. The split is chosen from the knowledge after the fixed point, so the same region gives the same split only if the Rust closure equals `FormulaBounds.Known`'s inductive closure |
@@ -1986,8 +2020,13 @@ The shared word kernels now live in `zetesis_algebra::words`; their denotation
 still rests on the `PackedInterpretations` laws and the concrete Rust
 correspondence remains an obligation. The generic queue and termination
 protocol is `zetesis_algebra::walk::frontier::Frontier`, instantiated by stable
-with region knowledge and its typed refusal. Moving these owners does not
-establish the remaining one-Walk schedule, entry-policy or stop correspondence.
+with region knowledge and its typed refusal. `Region` denotes only the interval;
+`region::Entry` carries split preference and lineage state. `walk::inspect`
+provides the shared refuted/leaf/counted/split classification, without establishing
+membership or consuming a pending entry. A returned split atom must still be
+fresh when consumed. The classification, ownership and stopped-prefix behavior
+must be related to the coverage-tree laws; sharing their Rust owners is not a
+formal refinement proof or completion of the remaining schedule migration.
 
 The retained [native replay](https://github.com/GregoryGelfond/zetesis/blob/main/refinement/evaluation/REPRODUCING.md)
 records the earlier `zetesis_cpu::cancellation` namespace. Its generated Lean,
@@ -2023,7 +2062,7 @@ original program or the reduct used to check membership.
 | --- | --- | --- |
 | [`GateRestrictions.answer_set_avoids`, `suffix_region_rejected`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/GateRestrictions.lean) | The closure route's source-derived gate restrictions and seed-region skipping, removed with that route | None now; the law remains as a statement. |
 | [`Bounds.narrowed_contains_accepted`, `lower_constraint_refutes`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/Bounds.lean) | The closure route's `Candidates::bounded`, removed with that route | None now; the law remains as a statement. |
-| [The `split` constructor of `Search.CoverageTree`, `Cube.split_partition`, `Cube.split_disjoint`, `CoverageTree.mem_outputs_iff`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/Search.lean), [`Bounds.conflicting_atom_refutes`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/Bounds.lean) | `zetesis_algebra::walk::Walk`, the scalar walk used for candidates and proper-subset queries: a region is narrowed by the caller's narrowing, refuted, offered as one candidate when decided, split on the atom its narrowing preferred or else its highest open atom into the out and in regions, or counted as a flat interval when its narrowing decided nothing beyond the split and the caller counts; each caller supplies its original-theory or frozen-reduct narrowing. Under several workers the formula route walks the same tree in `zetesis_stable`'s parallel regions, a second implementation of the same law: each worker takes its newest region from a deque and idle workers steal older regions from peers | That the Rust split chooses a fresh atom and forms the two cubes of the law, in the traversal and in the parallel walk alike, that the counted interval offers exactly the region's seeds, and that the leaf order is the counter's order when no atom is preferred and one worker walks are Rust obligations; with several workers, [`Pending.Step.perm`, `Pending.Walk.exhausted`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/Frontier.lean) is the law: the frontier of pending regions, whoever holds each, and the leaves emitted are together a permutation of the tree's outputs after every step in any interleaving, so a walk that empties the frontier emits every accepted leaf once, in the schedule's order; that the workers' deque removals, transfers and active regions form one frontier of the tree is the Rust obligation; the tree's leaves are exactly the accepted seeds only because each leaf seed is checked in full. |
+| [The `split` constructor of `Search.CoverageTree`, `Region.split_partition`, `Region.split_disjoint`, `CoverageTree.mem_outputs_iff`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/Search.lean), [`Bounds.conflicting_atom_refutes`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/Bounds.lean) | `zetesis_algebra::walk::Walk`, the scalar walk used for candidates and proper-subset queries: a region is narrowed by the caller's narrowing, refuted, offered as one candidate when decided, split on the atom its narrowing preferred or else its highest open atom into the out and in regions, or counted as a flat interval when its narrowing decided nothing beyond the split and the caller counts; each caller supplies its original-theory or frozen-reduct narrowing. Under several workers the formula route walks the same tree in `zetesis_stable`'s parallel regions, a second implementation of the same law: each worker takes its newest region from a deque and idle workers steal older regions from peers | That the Rust split chooses a fresh atom and forms the two regions of the law, in the traversal and in the parallel walk alike, that the counted interval offers exactly the region's seeds, and that the leaf order is the counter's order when no atom is preferred and one worker walks are Rust obligations; with several workers, [`Pending.Step.perm`, `Pending.Walk.exhausted`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/Frontier.lean) is the law: the frontier of pending regions, whoever holds each, and the leaves emitted are together a permutation of the tree's outputs after every step in any interleaving, so a walk that empties the frontier emits every accepted leaf once, in the schedule's order; that the workers' deque removals, transfers and active regions form one frontier of the tree is the Rust obligation; the tree's leaves are exactly the accepted seeds only because each leaf seed is checked in full. |
 | [`TightPlans.stable_supported`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/TightPlans.lean) | A candidate the complete tight certificate finds with an unsupported present atom is rejected as `Check::Unsupported` without a reduct query; the candidate without that atom is the law's witness | The plan's coverage of the theory's producers is established by its construction, not yet by a proved refinement of that construction; the Rust check's evaluation of producer bodies remains executable evidence. |
 | [`DisjunctiveSupport.answer_set_supported`, `answer_set_supported_with_choices`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/DisjunctiveSupport.lean) | Necessary ordinary sole-head support and enabled atomic-choice support | Extraction must cover every asserted root, coalesce repeated ordinary head atoms and recognize exact atomic choices in either operand order using semantic atom identity. Choice bodies remain arbitrary original formulas; they supply permission, not a self-premise. The original theory remains the reduct subject. This is necessary support, not ranked sufficiency. The retained binary recognizer is refined by `AtomicChoice.atom_meaning_iff`; native recognizer refinement, complete Rust DAG extraction, Boolean encoding and bounded failure remain unproved. |
 | [`PackedQueryLiterals.decode_encode`, `packed_truth`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/PackedQueryLiterals.lean) | None: the removed clause search's packed classical literals in `Cnf` and borrowed clause views | No current Rust correspondence; the law remains as a statement. |
@@ -2032,7 +2071,7 @@ original program or the reduct used to check membership.
 | [`FormulaRegions.classical_consequence_forces`, `classical_consequence_cuts`, `no_model_refutes`, `restricted_consequence_forces`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/FormulaRegions.lean) | The removed clause search read as the coverage tree of `Search.lean`: a search node is a cube, the atoms its propagation forces or cuts narrow it, a conflict refutes it, and a complete assignment is a leaf the reduct decides; the support restriction is a restriction every stable model satisfies | No current Rust correspondence; the law remains as a statement of how a classical search relates to the region tree. |
 | [`FormulaBounds.read_sound`, `never_root_refutes`, `known_sound`, `known_mono`, `unsupported_cut`, `sole_support_forces`, `unsupported_cut_with_choices`, `sole_rule_forces_with_choices`, `sole_choice_forces`, `known_blocked_no_support`, `known_choice_blocked_no_support`, `restriction_forces`, `restriction_cuts`, `restriction_contradiction_refutes`, `restricted_stable_narrowing`, `decided_leaf_models`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/FormulaBounds.lean), [`FormulaBounds.disj_chain_sure`, `disj_chain_never`, `disj_chain_unit`, `conj_chain_sure`, `conj_chain_never`, `conj_chain_unit`, declared in `FormulaChains.lean`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/FormulaChains.lean) | `zetesis_ferraris::Narrower::narrow_known`, the narrowing of the regions proposer in `zetesis-stable`: the sure and never readings of every node under a region, the knowledge closed in both directions over the DAG, the support cut and the sole-support rule, to a fixed point; `zetesis_algebra::walk::Walk` walks the tree of `Search.lean` for candidate generation and proper-subset queries with one worker, and `zetesis_stable`'s parallel regions walk it for the formula route with several | The Rust closure must agree with `Known` on the admitted DAG, and `producers` must extract the covered fragment from the roots. The Rust closure must derive only `Known` judgements; the fixed point is the least one because every rule only adds knowledge, and a child region may start from its parent's knowledge by `known_mono`. The closure reads each maximal tree of one connective as one node with a neutral-operand count exact until a processed absorbing witness, and applies the chain rules, each admissible in `Known` as a sequence of the binary rules along the chain (`FormulaChains`); that the Rust chains are such trees, with inner nodes that have that one parent, and that a node false under the frozen mask is read by its operands' masks, are Rust obligations. That a fully decided region no reading refutes is a classical model is `decided_leaf_models`, which is why a leaf is proposed to the reduct without a classical check. An atomic choice is a producer of its atom that only an impossible body blocks, a choice having no other head: `unsupported_cut_with_choices`, `sole_rule_forces_with_choices` and `sole_choice_forces` state the support cut and the sole-support rule over ordinary producers and choices together, from `DisjunctiveSupport.answer_set_supported_with_choices`. The narrowing blocks a producer by the theory's knowledge, a body known to fail or another head known to hold, and not by the readings alone; `known_blocked_no_support` and `known_choice_blocked_no_support` say such a producer supports its atom in no classical model of the theory inside the region, which is the premise those laws ask. That `producers` recognizes the choices of the theory, in either operand order, remains a Rust obligation. A restriction, the support restriction or an objective bound, is narrowed by its readings alone, without producers: `restriction_forces` and `restriction_cuts` are its knowledge sound in its models, and `restricted_stable_narrowing` is the region narrowed by both the theory's and the restriction's knowledge keeping every stable model that satisfies the restriction; that every model still sought satisfies each restriction the enumeration adds is the Rust obligation. |
 | [`InnerQuery.exhausted_walk_stable`, `emitted_refutes`, `exhausted_walk_decides`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/InnerQuery.lean) | A published subset query in `zetesis-stable`'s parallel regions: its pending regions, served by any worker, decide the candidate through the query cell | That the surrendered and visited regions partition the query's root, and the cell's counting, ordering, resolution and stop rules, are Rust obligations, stated with the walk's frontier protocols above. |
-| [`ReductRegions.leaf_refutes`, `exhausted_stable`, `countermodels_exact`, `stable_iff_no_countermodel`, `masked_read_eq_reduct`, `masked_reads_falsum`, `masked_known_sound`, `masked_known_narrows`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/ReductRegions.lean) | The reduct's proper-subset query as a region tree: `ReductQuery` in `zetesis-stable` walks the subsets of a classical model with the frozen reduct's knowledge, returns a leaf other than the candidate as the countermodel and a covered tree as stability | That evaluation of the original DAG under the mask is the reduct's is `FerrarisMask`'s law. That the narrowing's two readings under the mask are the readings of the reduct is `masked_read_eq_reduct`; a masked node reads as falsum whatever its operands read (`masked_reads_falsum`), so it has no rules of its own, and the nodes above it combine that reading as any operand's. `masked_known_sound` says propagation under the mask, where every rule relating a connective to its operands asks that the connective be unmasked and a masked node is known to fail, knows of an original formula only what propagation over the reduct theory knows of its reduct, and `masked_known_narrows` that the query may narrow by it. That the stored mask is each node's truth in the candidate, and that the Rust propagates by those rules over the shared DAG, are Rust obligations; that the traversal covers the query root exactly is `Search.CoverageTree`; the countermodel is validated independently before it is returned. |
+| [`ReductRegions.leaf_refutes`, `exhausted_stable`, `countermodels_exact`, `stable_iff_no_countermodel`, `masked_read_eq_reduct`, `masked_reads_falsum`, `masked_known_sound`, `masked_known_mono`, `masked_known_narrows`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/ReductRegions.lean) | The reduct's proper-subset query as a region tree: `ReductQuery` in `zetesis-stable` walks the subsets of a classical model with the frozen reduct's knowledge, returns a leaf other than the candidate as the countermodel and a covered tree as stability | That evaluation of the original DAG under the mask is the reduct's is `FerrarisMask`'s law. That the narrowing's two readings under the mask are the readings of the reduct is `masked_read_eq_reduct`; a masked node reads as falsum whatever its operands read (`masked_reads_falsum`), so it has no rules of its own, and the nodes above it combine that reading as any operand's. `masked_known_sound` says propagation under the mask, where every rule relating a connective to its operands asks that the connective be unmasked and a masked node is known to fail, knows of an original formula only what propagation over the reduct theory knows of its reduct, and `masked_known_narrows` that the query may narrow by it. `masked_known_mono` preserves this abstract knowledge in a more precise region with the same theory and candidate; every connective keeps its own-node mask premise. This does not establish equality with a concrete worklist closure or authorize transferring knowledge between candidates. That the stored mask is each node's truth in the candidate, and that the Rust propagates by those rules over the shared DAG, are Rust obligations; that the traversal covers the query root exactly is `Search.CoverageTree`; the countermodel is validated independently before it is returned. |
 | [`CandidateCursor.completed_coverage`, `stable_outputs_exact`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/CandidateCursor.lean) | None: the removed clause search's retained candidate traversal, completed checks and exhaustion | No current Rust correspondence; the law remains as a statement. |
 
 The [execution chapter](../architecture/execution.md) explains these operations
@@ -2073,9 +2112,14 @@ are monotone within descendants under the same original subject. Both remaining
 endpoints are rechecked; only complete coverage can establish no support or sole
 support. An open head's first witness cannot substitute for the second witness
 required after that head becomes held. Choices keep their existing support rule.
-`known_mono`, `known_blocked_no_support`, `known_choice_blocked_no_support`,
-`unsupported_cut_with_choices` and the sole-support laws supply these semantic
-premises. They do not verify the Rust cursor. Exact row identities and bounds,
+`known_blocked_mono` and `known_choice_blocked_mono` transfer the existing
+ordinary and atomic-choice blocking judgments to every region inside the first,
+using `known_mono`. These laws preserve blocked witnesses, not the number of
+unblocked witnesses: a sole remaining supporter may later become blocked too.
+`known_blocked_no_support`, `known_choice_blocked_no_support`,
+`unsupported_cut_with_choices` and the sole-support laws establish their semantic
+consequences. They do not verify the Rust cursor or define a complete support
+Subject. Exact row identities and bounds,
 complete prefix coverage, independent cloning and parent restoration, metered
 initialization, typed interruption and actual-capacity receipts remain executable
 representation obligations. No continuation state is used for frozen-reduct or
@@ -2761,8 +2805,12 @@ choice coverage implies that each compatible answer set is contained in `P`.
 The proof intersects an answer set with `P`, establishes a model of the whole
 reduct, and applies minimality. It requires a closed upper set, not necessarily
 the least one; it does not choose one disjunctive head. `body_upper_sound` justifies the positive Boolean relaxation
-with candidate-valid false masks. Rust must additionally establish complete
-extraction, native aggregate relaxation, flattened-incidence correspondence,
+with candidate-valid false masks. `body_upper_mono` establishes the relaxation's
+order property: shrinking possible atoms and adding false marks cannot make an
+impossible body possible. It does not assert monotonicity of an arbitrary closed
+set selected by a computation. A founded Subject still needs an explicitly
+related regional result and closure computation. Rust must additionally establish
+complete extraction, native aggregate relaxation, flattened-incidence correspondence,
 completed closure, valid cached acyclicity and exact interruption/accounting.
 Those obligations are not discharged by the semantic theorem or the small
 exhaustive tests.
@@ -2974,10 +3022,10 @@ accounting. These laws do not prove the ledger's representation or propagation.
 states the general row. A row pairs condition literals `B` with output literals
 `O`, each an atom required present or absent, and belongs to a consequence class
 `C`, a predicate on interpretations, when every member of `C` satisfying `B`
-satisfies `O` (`RowOf`). For a cube whose bounds decide every condition,
-`consequence_row_refutes` excludes every member of `C` when the cube also decides
+satisfies `O` (`RowOf`). For a region whose bounds decide every condition,
+`consequence_row_refutes` excludes every member of `C` when the region also decides
 an output's negation, `consequence_row_forces` gives every member every output,
-and `consequence_row_narrows` restates that as `Cube.narrow_preserves_valid`'s
+and `consequence_row_narrows` restates that as `Region.narrow_preserves_valid`'s
 premise with `C` as the valid predicate. `consequence_row_forces_complement` is
 the unit rule: with every condition but one decided and an output's negation
 decided, the remaining condition fails in every member. `row_of_narrower_class`
@@ -2987,7 +3035,7 @@ sets also holds for the answer sets satisfying a streamed core. `row_union` and
 `founded_row` is the possible-foundedness collector's discharge of `RowOf`: it
 restates `conditional_unsupported_absent` for a condition given as signed
 literals and outputs given as absences, with the theory's answer sets as `C`.
-The laws are over interpretations and cubes; the ledger's encoding, matching,
+The laws are over interpretations and regions; the ledger's encoding, matching,
 retention, eviction, ownership, delivery between workers and resource handling
 remain Rust obligations, stated with the ledger below.
 
@@ -3228,7 +3276,7 @@ ordering, priority-vector scoring, checked arithmetic, candidate-bound feedback
 and interruption handling remain separate implementation obligations.
 
 [`StreamedRegions`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/StreamedRegions.lean)
-adds a sufficient original-candidate region test using the existing `Cube` and
+adds a sufficient original-candidate region test using the existing `Region` and
 `FormulaBounds.Sure` readings. Positive and double-negated atoms held in the
 lower bound, and default-negated atoms absent from the upper bound, make a
 normalized body true in every interpretation between those bounds. One
@@ -4187,7 +4235,7 @@ Complete `Producers` supply generator marks and body-to-head dependencies. Both
 signs of every formula operand participate in the temporary graph; its component
 order is a preference, not a foundedness or normal-program certificate. Every
 selected atom is checked against the region's open mask. The existing
-`Search.CoverageTree.split` and `Cube.split_partition`/`Cube.split_disjoint` laws
+`Search.CoverageTree.split` and `Region.split_partition`/`Region.split_disjoint` laws
 therefore supply the semantic coverage obligation. Rust refinement separately
 owes exact theory ownership, valid graph incidences, correct component ordering,
 open-only selection and preservation of both children on every execution route.

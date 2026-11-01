@@ -137,17 +137,16 @@ fn an_inventory_free_visit_cannot_force_a_partial_premise() {
     let (_, mut scratch) = program.captured();
     let initial = region(&[(0, true), (3, true)]);
     let mut narrowed = initial.clone();
-    let (result, counts) = program
-        .index
-        .narrow_known(
-            OriginalSubject::new(&program.theory, None),
-            &mut narrowed,
-            &mut program.index.knowledge(),
-            &mut scratch,
-            RegionLimits::default(),
-            &Cancellation::default(),
-        )
-        .unwrap();
+    let attempt = program.index.narrow_known(
+        OriginalSubject::new(&program.theory, None),
+        &mut narrowed,
+        &mut program.index.knowledge(),
+        &mut scratch,
+        RegionLimits::default(),
+        &Cancellation::default(),
+    );
+    let result = attempt.result.unwrap();
+    let counts = attempt.statistics;
     assert!(matches!(result, Narrowing::Fixed { .. }));
     assert_eq!(narrowed.decision(2), None);
     assert_eq!(counts.support_explanations.work, 0);
@@ -184,7 +183,7 @@ fn a_frozen_visit_cannot_force_a_partial_premise() {
     let mut with_row = initial.clone();
     let mut without_row = initial;
     let subject = FrozenSubject::new(&program.theory, evaluated.truth());
-    let (expected, _) = program
+    let expected = program
         .index
         .narrow_frozen_known(
             subject,
@@ -194,18 +193,18 @@ fn a_frozen_visit_cannot_force_a_partial_premise() {
             RegionLimits::default(),
             &Cancellation::default(),
         )
+        .result
         .unwrap();
-    let (actual, counts) = program
-        .index
-        .narrow_frozen_known(
-            subject,
-            &mut with_row,
-            &mut program.index.knowledge(),
-            &mut scratch,
-            RegionLimits::default(),
-            &Cancellation::default(),
-        )
-        .unwrap();
+    let attempt = program.index.narrow_frozen_known(
+        subject,
+        &mut with_row,
+        &mut program.index.knowledge(),
+        &mut scratch,
+        RegionLimits::default(),
+        &Cancellation::default(),
+    );
+    let actual = attempt.result.unwrap();
+    let counts = attempt.statistics;
     assert_eq!(actual, expected);
     for atom in 0..5 {
         assert_eq!(with_row.decision(atom), without_row.decision(atom));

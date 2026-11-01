@@ -194,16 +194,15 @@ fn early_refutation_leaves_no_scratch_authority() {
     assert_eq!(scratch.nodes.len(), 4);
     let close = |scratch: &mut NarrowingScratch| {
         let mut region = Region::all_open(9);
-        let result = index
-            .narrow_known(
-                OriginalSubject::new(&theory, None),
-                &mut region,
-                &mut index.knowledge(),
-                scratch,
-                RegionLimits::default(),
-                &Cancellation::default(),
-            )
-            .unwrap();
+        let result = index.narrow_known(
+            OriginalSubject::new(&theory, None),
+            &mut region,
+            &mut index.knowledge(),
+            scratch,
+            RegionLimits::default(),
+            &Cancellation::default(),
+        );
+        let result = (result.result.unwrap(), result.statistics, result.preferred);
         (result, region)
     };
     let reused = close(&mut scratch);
@@ -256,16 +255,16 @@ fn root_refutation_stops_seeding() {
         .unwrap();
     let mut knowledge = index.knowledge();
     let mut scratch = NarrowingScratch::default();
-    let (result, receipt) = index
-        .narrow_known(
-            OriginalSubject::new(&theory, Some(&producers)),
-            &mut Region::all_open(1),
-            &mut knowledge,
-            &mut scratch,
-            RegionLimits::default(),
-            &Cancellation::default(),
-        )
-        .unwrap();
+    let attempt = index.narrow_known(
+        OriginalSubject::new(&theory, Some(&producers)),
+        &mut Region::all_open(1),
+        &mut knowledge,
+        &mut scratch,
+        RegionLimits::default(),
+        &Cancellation::default(),
+    );
+    let result = attempt.result.unwrap();
+    let receipt = attempt.statistics;
     assert_eq!(result, crate::Narrowing::Refuted);
     assert_eq!(receipt.work, 0);
     assert_eq!(scratch.nodes, [(0, false)]);
@@ -287,7 +286,7 @@ fn decision_refutation_restores_unadvanced_seen_storage() {
     let mut region = Region::all_open(2);
     assert!(region.cut(0));
     assert!(region.hold(1));
-    let (result, _) = index
+    let result = index
         .narrow_known(
             OriginalSubject::new(&theory, None),
             &mut region,
@@ -296,6 +295,7 @@ fn decision_refutation_restores_unadvanced_seen_storage() {
             RegionLimits::default(),
             &Cancellation::default(),
         )
+        .result
         .unwrap();
     assert_eq!(result, crate::Narrowing::Refuted);
     let known = compact_mut(&mut knowledge);

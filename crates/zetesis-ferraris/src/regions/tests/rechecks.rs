@@ -49,16 +49,15 @@ fn narrow(
     knowledge: &mut crate::Knowledge,
     scratch: &mut NarrowingScratch,
 ) -> (Narrowing, NarrowingStatistics) {
-    narrower
-        .narrow_known(
-            OriginalSubject::new(theory, Some(producers)),
-            region,
-            knowledge,
-            scratch,
-            RegionLimits::default(),
-            &Cancellation::default(),
-        )
-        .unwrap()
+    let attempt = narrower.narrow_known(
+        OriginalSubject::new(theory, Some(producers)),
+        region,
+        knowledge,
+        scratch,
+        RegionLimits::default(),
+        &Cancellation::default(),
+    );
+    (attempt.result.unwrap(), attempt.statistics)
 }
 
 /// The work of narrowing a held head with `bodies` producers, all but two of

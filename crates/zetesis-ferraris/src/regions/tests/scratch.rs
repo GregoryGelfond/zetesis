@@ -11,7 +11,12 @@ use crate::{
 use super::implication_chain;
 
 /// Outcome, receipt and region of one narrowing.
-type Run = (Result<Narrowing, Stop>, Option<NarrowingStatistics>, Region);
+type Run = (
+    Result<Narrowing, Stop>,
+    Option<NarrowingStatistics>,
+    Region,
+    Option<usize>,
+);
 
 /// Narrow the all-open region of `theory` from fresh knowledge.
 fn narrow_open(theory: &Theory, narrower: &Narrower, scratch: &mut NarrowingScratch) -> Run {
@@ -25,9 +30,14 @@ fn narrow_open(theory: &Theory, narrower: &Narrower, scratch: &mut NarrowingScra
         RegionLimits::default(),
         &Cancellation::default(),
     );
-    match result {
-        Ok((narrowing, statistics)) => (Ok(narrowing), Some(statistics), region),
-        Err(stop) => (Err(stop), None, region),
+    match result.result {
+        Ok(narrowing) => (
+            Ok(narrowing),
+            Some(result.statistics),
+            region,
+            result.preferred,
+        ),
+        Err(stop) => (Err(stop), None, region, result.preferred),
     }
 }
 
@@ -53,7 +63,7 @@ fn a_refuted_narrowing_leaves_nothing_for_the_next_region() {
     // The held root forces the last atom, which the region cuts.
     let mut region = Region::all_open(theory.atom_count());
     region.cut(39);
-    let (narrowing, _) = narrower
+    let narrowing = narrower
         .narrow_known(
             crate::OriginalSubject::new(&theory, None),
             &mut region,
@@ -62,6 +72,7 @@ fn a_refuted_narrowing_leaves_nothing_for_the_next_region() {
             RegionLimits::default(),
             &Cancellation::default(),
         )
+        .result
         .unwrap();
     assert_eq!(narrowing, Narrowing::Refuted);
     assert_clean_after(&theory, &narrower, scratch);
@@ -80,7 +91,7 @@ fn a_work_limit_stop_leaves_nothing_for_the_next_region() {
         RegionLimits { max_work: 5 },
         &Cancellation::default(),
     );
-    assert_eq!(stopped.unwrap_err(), Stop::WorkLimit);
+    assert_eq!(stopped.result.unwrap_err(), Stop::WorkLimit);
     assert_clean_after(&theory, &narrower, scratch);
 }
 
@@ -131,6 +142,7 @@ fn knowledge_retains_no_worklist_capacity() {
             RegionLimits::default(),
             &Cancellation::default(),
         )
+        .result
         .unwrap();
     assert_eq!(knowledge.retained_bytes(), before);
     // The worklists the narrowing grew stay with the walker's scratch.

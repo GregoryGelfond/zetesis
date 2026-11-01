@@ -1,6 +1,7 @@
 //! Fault injection at the production worker accounting and failure boundaries.
 
 use super::*;
+use zetesis_algebra::region::Narrowing;
 
 /// The original index the enumeration would build and hand the workers.
 fn original(theory: &Theory) -> Arc<IndexedTheory> {
@@ -48,8 +49,10 @@ fn shared_narrowing_never_executes_an_unleased_read() {
         statistics: SearchStatistics::default(),
     };
     let narrower = Narrower::new(&theory);
-    let mut region = Region::all_open(theory.atom_count());
-    let mut knowledge = CandidateKnowledge::default();
+    let mut entry = Entry::new(
+        Region::all_open(theory.atom_count()),
+        CandidateKnowledge::default(),
+    );
     let mut counts = RegionCounts::default();
     let result = super::super::regions::narrow(
         (
@@ -57,7 +60,7 @@ fn shared_narrowing_never_executes_an_unleased_read() {
             &narrower,
         ),
         &Conditions::<(Theory, Narrower)>::default(),
-        (&mut region, &mut knowledge),
+        &mut entry,
         &mut zetesis_ferraris::NarrowingScratch::default(),
         &mut budget,
         &mut counts,

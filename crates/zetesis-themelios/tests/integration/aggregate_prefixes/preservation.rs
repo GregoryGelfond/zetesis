@@ -132,7 +132,7 @@ fn source_prefix_closure_preserves_every_compatible_original_model() {
         for code in 0..3_usize.pow(u32::try_from(count).unwrap()) {
             let before = partial_region(count, code);
             let mut after = before.clone();
-            let (outcome, _) = narrower
+            let outcome = narrower
                 .narrow_known(
                     OriginalSubject::new(theory, None),
                     &mut after,
@@ -141,6 +141,7 @@ fn source_prefix_closure_preserves_every_compatible_original_model() {
                     RegionLimits::default(),
                     &cancellation,
                 )
+                .result
                 .unwrap();
             preserves(
                 count,
@@ -196,7 +197,7 @@ fn source_prefix_closure_preserves_arbitrary_frozen_models() {
             for code in 0..3_usize.pow(u32::try_from(count).unwrap()) {
                 let before = partial_region(count, code);
                 let mut after = before.clone();
-                let (outcome, _) = narrower
+                let outcome = narrower
                     .narrow_frozen_known(
                         FrozenSubject::new(theory, &truth),
                         &mut after,
@@ -205,6 +206,7 @@ fn source_prefix_closure_preserves_arbitrary_frozen_models() {
                         RegionLimits::default(),
                         &cancellation,
                     )
+                    .result
                     .unwrap();
                 preserves(
                     count,

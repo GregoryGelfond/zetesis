@@ -230,3 +230,100 @@ fn mandatory_refusal_is_not_optional_decline_or_refutation() {
     assert!(!attempt.parity.root_refuted);
     assert_eq!(attempt.work, quota.held);
 }
+
+#[test]
+fn seeded_root_receipts_follow_actual_constructor_and_units() {
+    use super::super::{CardinalitySystem, ParitySystem};
+    use std::mem::size_of;
+    use zetesis_algebra::region::Region;
+
+    for atoms in [1usize, 2, 64, 65] {
+        let theory = constructed_theory(atoms, |_| vec![0]);
+        let cancellation = Cancellation::default();
+        let extracted = producers(&theory, RegionLimits::default(), &cancellation).unwrap();
+        let mut quota = Quota {
+            ceiling: u64::MAX,
+            held: 0,
+        };
+        let attempt = RootPreparation::prepare_reserved(
+            &theory,
+            extracted.producers.as_ref(),
+            limits(),
+            &cancellation,
+            &mut quota,
+        );
+        let mut prepared = attempt.result.unwrap().unwrap();
+        assert!(!prepared.root_refuted());
+        assert_eq!(prepared.parity.units().count(), atoms);
+        // Empty-unit test (1), actual Region constructor (11+4W), each
+        // distinct pivot's branch and decision (12), Some publication (1).
+        let expected = 13
+            + 4 * u64::try_from(atoms.div_ceil(64)).unwrap()
+            + 12 * u64::try_from(atoms).unwrap();
+        assert_eq!(attempt.parity.phases.root_seed, expected, "atoms {atoms}");
+        assert_eq!(attempt.cardinality.phases.root_seed, 0);
+        assert_eq!(attempt.work, quota.held);
+        assert_eq!(
+            attempt.work,
+            attempt.parity.phases.total() + attempt.cardinality.phases.total()
+        );
+        assert_eq!(
+            attempt.parity.retained_bytes,
+            prepared.parity.retained_bytes()
+        );
+        let cardinality = prepared.cardinality.as_ref().unwrap();
+        assert_eq!(
+            attempt.cardinality.retained_bytes,
+            cardinality.retained_bytes()
+        );
+        // The actual composite owns its inline Option slots even after take.
+        // Add only the allocations beyond each embedded system/header.
+        let systems = size_of::<RootPreparation>() as u128 + prepared.parity.retained_bytes()
+            - size_of::<ParitySystem>() as u128
+            + cardinality.retained_bytes()
+            - size_of::<CardinalitySystem>() as u128;
+        let root = prepared.seeded_root.as_ref().unwrap();
+        let masks = 2 * atoms.div_ceil(64) as u128 * size_of::<u64>() as u128;
+        assert_eq!(root.retained_bytes() - size_of::<Region>() as u128, masks);
+        assert!(attempt.peak_bytes >= systems + masks);
+        assert_eq!(
+            attempt.peak_bytes,
+            attempt
+                .parity
+                .preparation_bytes
+                .max(attempt.cardinality.preparation_bytes)
+        );
+        let seeded = prepared.take_seeded_root().unwrap();
+        assert_eq!(seeded.held().collect::<Vec<_>>(), [0]);
+        assert!((1..atoms).all(|atom| seeded.decision(atom) == Some(false)));
+        assert!(prepared.take_seeded_root().is_none());
+    }
+}
+
+#[test]
+fn absent_and_refuted_seeds_do_not_charge_a_constructor() {
+    for (atoms, refuted, seed_work) in [(4, false, 2), (3, true, 0)] {
+        let theory = cycle(atoms);
+        let mut quota = Quota {
+            ceiling: u64::MAX,
+            held: 0,
+        };
+        let attempt = RootPreparation::prepare_reserved(
+            &theory,
+            None,
+            limits(),
+            &Cancellation::default(),
+            &mut quota,
+        );
+        let mut prepared = attempt.result.unwrap().unwrap();
+        assert_eq!(prepared.root_refuted(), refuted);
+        assert!(prepared.take_seeded_root().is_none());
+        assert_eq!(attempt.parity.phases.root_seed, seed_work);
+        assert_eq!(attempt.cardinality.phases.root_seed, 0);
+        assert_eq!(attempt.work, quota.held);
+        assert_eq!(
+            attempt.work,
+            attempt.parity.phases.total() + attempt.cardinality.phases.total()
+        );
+    }
+}

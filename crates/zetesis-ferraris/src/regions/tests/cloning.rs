@@ -20,14 +20,15 @@ fn narrow(
     knowledge: &mut Knowledge,
     max_work: u64,
 ) -> Result<(Narrowing, crate::NarrowingStatistics), zetesis_algebra::Stop> {
-    narrower.narrow_known(
+    let attempt = narrower.narrow_known(
         crate::OriginalSubject::new(theory, None),
         region,
         knowledge,
         &mut NarrowingScratch::default(),
         RegionLimits { max_work },
         &Cancellation::default(),
-    )
+    );
+    attempt.result.map(|outcome| (outcome, attempt.statistics))
 }
 
 fn refuted(theory: &Theory, narrower: &Narrower) -> Knowledge {

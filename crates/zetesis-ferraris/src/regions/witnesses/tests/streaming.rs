@@ -61,16 +61,16 @@ fn required_witness_checks_stop_after_two_open_leaves() {
             .begin(index.parents.len(), &mut Work::new(u64::MAX))
             .unwrap();
         let mut region = Region::all_open(theory.atom_count());
-        let (outcome, statistics) = index
-            .narrow_known(
-                OriginalSubject::new(&theory, None),
-                &mut region,
-                &mut index.knowledge(),
-                &mut scratch,
-                RegionLimits::default(),
-                &Cancellation::default(),
-            )
-            .unwrap();
+        let attempt = index.narrow_known(
+            OriginalSubject::new(&theory, None),
+            &mut region,
+            &mut index.knowledge(),
+            &mut scratch,
+            RegionLimits::default(),
+            &Cancellation::default(),
+        );
+        let outcome = attempt.result.unwrap();
+        let statistics = attempt.statistics;
         assert_ne!(outcome, Narrowing::Refuted);
         assert!((0..theory.atom_count()).all(|atom| region.is_open(atom)));
         assert!(scratch.witnesses.visited(0) && scratch.witnesses.visited(1));

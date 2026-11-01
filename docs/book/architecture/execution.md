@@ -529,6 +529,18 @@ or a region whose check stopped never becomes a stable verdict
 engagement deadline has passed, and then engages the workers to serve the
 query. A refused allocation keeps the query inline.
 
+The allocation refusal that keeps a query inline belongs to the initial handoff:
+its pending entries have not yet been surrendered. A later served-query split
+retains its parent until child capacity is admitted. If that reservation fails,
+the server records the query stop and the outer typed stop before abandoning the
+returned owner. Retirement after that stop is cleanup, not evidence of a stable
+candidate. Candidate workers and slate producers follow the same owned failure
+boundary; queued and in-hand entries preserve the unresolved partition until
+terminal abandonment. A failed return to a deque also returns its entry to the
+caller, including when a thief's home has no capacity or a shared home has gained
+other work. These paths preserve the original allocation error and claim no
+exhaustive result.
+
 Answer sets are the same under every division. A query that ends stable narrows
 each region once, wherever it is divided; a refuted query, divided, may narrow
 regions beside the subtree its witness lies in until a server finds a witness,
@@ -694,10 +706,10 @@ counted region and no more. The statistics report the regions visited,
 refuted, reached as leaves and counted, and the narrowing passes below the root. Each
 offered seed is still checked in full against the whole gate carrier. The
 laws are `Bounds.narrowed_contains_accepted`, the iterated narrowing of the
-open cube (`Bounds.undecided` in the Lean), `Bounds.lower_constraint_refutes` and
+open region (`Bounds.undecided` in the Lean), `Bounds.lower_constraint_refutes` and
 `Bounds.conflicting_atom_refutes` for the refutations, and the coverage
-tree of `Search.lean`, whose `split` node with `Cube.split_partition` and
-`Cube.split_disjoint` makes the regions a partition of their parent and
+tree of `Search.lean`, whose `split` node with `Region.split_partition` and
+`Region.split_disjoint` makes the regions a partition of their parent and
 whose `CoverageTree.mem_outputs_iff` makes the leaves exactly the accepted
 seeds of the root.
 The program is prepared once for the narrowing and charged as one

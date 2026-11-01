@@ -148,8 +148,8 @@ fn compare_closures(theory: &Theory, frozen: Option<&[bool]>) {
                     RegionLimits::default(),
                     &cancellation,
                 )
-            }
-            .unwrap();
+            };
+            let result = (result.result.unwrap(), result.statistics, result.preferred);
             (result, region)
         };
         // This includes the complete work receipt and the region's split

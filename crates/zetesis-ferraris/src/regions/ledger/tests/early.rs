@@ -122,7 +122,7 @@ fn early_rows_are_suspended_without_original_producer_coverage() {
     let mut frozen = initial.clone();
     let mut reference = initial.clone();
     let subject = FrozenSubject::new(&program.theory, evaluated.truth());
-    let (expected, _) = program
+    let expected = program
         .index
         .narrow_frozen_known(
             subject,
@@ -132,18 +132,18 @@ fn early_rows_are_suspended_without_original_producer_coverage() {
             RegionLimits::default(),
             &Cancellation::default(),
         )
+        .result
         .unwrap();
-    let (actual, counts) = program
-        .index
-        .narrow_frozen_known(
-            subject,
-            &mut frozen,
-            &mut program.index.knowledge(),
-            &mut scratch,
-            RegionLimits::default(),
-            &Cancellation::default(),
-        )
-        .unwrap();
+    let attempt = program.index.narrow_frozen_known(
+        subject,
+        &mut frozen,
+        &mut program.index.knowledge(),
+        &mut scratch,
+        RegionLimits::default(),
+        &Cancellation::default(),
+    );
+    let actual = attempt.result.unwrap();
+    let counts = attempt.statistics;
     assert_eq!(actual, expected);
     for atom in 0..5 {
         assert_eq!(frozen.decision(atom), reference.decision(atom));
@@ -151,17 +151,16 @@ fn early_rows_are_suspended_without_original_producer_coverage() {
     assert_eq!(counts.support_explanations.work, 0);
     assert_eq!(scratch.explanations.len(), 1);
     let mut restriction = initial;
-    let (_, counts) = program
-        .index
-        .narrow_known(
-            OriginalSubject::new(&program.theory, None),
-            &mut restriction,
-            &mut program.index.knowledge(),
-            &mut scratch,
-            RegionLimits::default(),
-            &Cancellation::default(),
-        )
-        .unwrap();
+    let attempt = program.index.narrow_known(
+        OriginalSubject::new(&program.theory, None),
+        &mut restriction,
+        &mut program.index.knowledge(),
+        &mut scratch,
+        RegionLimits::default(),
+        &Cancellation::default(),
+    );
+    attempt.result.unwrap();
+    let counts = attempt.statistics;
     assert_eq!(restriction.decision(2), None);
     assert_eq!(counts.support_explanations.work, 0);
     assert_eq!(scratch.explanations.len(), 1);

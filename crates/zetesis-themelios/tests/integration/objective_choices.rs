@@ -363,8 +363,8 @@ fn narrow_holding(theory: &Theory, held: usize) -> zetesis_algebra::region::Narr
             RegionLimits::default(),
             &Cancellation::default(),
         )
+        .result
         .unwrap()
-        .0
 }
 
 #[test]

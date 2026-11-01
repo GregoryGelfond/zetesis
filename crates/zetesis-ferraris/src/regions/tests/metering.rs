@@ -196,13 +196,12 @@ fn a_fixed_ceiling_stops_at_the_per_read_point() {
             &Cancellation::default(),
         );
         let ceiling_outcome = ceiling
+            .result
             .as_ref()
-            .map(|(narrowing, _)| matches!(narrowing, crate::Narrowing::Refuted))
+            .map(|narrowing| matches!(narrowing, crate::Narrowing::Refuted))
             .map_err(|stop| *stop);
         assert_eq!(ceiling_outcome, outcome, "limit {limit}");
-        if let Ok((_, statistics)) = &ceiling {
-            assert_eq!(statistics.work, work, "limit {limit}");
-        }
+        assert_eq!(ceiling.statistics.work, work, "limit {limit}");
         assert_eq!(ceiling_region, region, "limit {limit}");
     }
 }

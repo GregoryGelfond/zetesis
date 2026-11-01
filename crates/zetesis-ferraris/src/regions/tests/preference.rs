@@ -4,7 +4,7 @@ use crate::{
     AdmissionLimits, ChoiceHeads, FormulaParts, Knowledge, Narrower, Narrowing, NarrowingQuota,
     NarrowingScratch, Node, OriginalSubject, Region, RegionLimits, Theory,
 };
-use zetesis_algebra::{Cancellation, Stop};
+use zetesis_algebra::{Cancellation, Stop, region::Entry};
 
 #[derive(Default)]
 struct Allowance {
@@ -74,6 +74,7 @@ fn closed(theory: &Theory) -> (Region, Knowledge) {
             RegionLimits::default(),
             &Cancellation::default(),
         )
+        .result
         .unwrap();
     (region, known)
 }
@@ -83,18 +84,19 @@ fn deferred_preference_preserves_existing_split_choice() {
     let theory = theory();
     let narrower = Narrower::new(&theory);
     let mut known = narrower.knowledge();
-    let mut region = Region::all_open(3);
-    region.prefer(2);
+    let mut entry = Entry::new(Region::all_open(3), ());
+    entry.prefer(2);
     let attempt = narrower.propagate_known_reserved(
         OriginalSubject::new(&theory, None),
-        &mut region,
+        &mut entry.region,
         &mut known,
         &mut NarrowingScratch::default(),
         &Cancellation::default(),
         &mut Allowance::new(1000),
     );
     assert_eq!(attempt.result.unwrap(), Narrowing::Fixed { changed: false });
-    assert_eq!(region.split_atom(), Some(2));
+    assert_eq!(attempt.preferred, None);
+    assert_eq!(entry.split_atom(), Some(2));
 }
 
 #[test]
@@ -102,16 +104,16 @@ fn separate_preference_has_the_original_narrowing_receipt() {
     let theory = theory();
     let narrower = Narrower::new(&theory);
     let mut ordinary = Region::all_open(3);
-    let (_, expected) = narrower
-        .narrow_known(
-            OriginalSubject::new(&theory, None),
-            &mut ordinary,
-            &mut narrower.knowledge(),
-            &mut NarrowingScratch::default(),
-            RegionLimits::default(),
-            &Cancellation::default(),
-        )
-        .unwrap();
+    let attempt = narrower.narrow_known(
+        OriginalSubject::new(&theory, None),
+        &mut ordinary,
+        &mut narrower.knowledge(),
+        &mut NarrowingScratch::default(),
+        RegionLimits::default(),
+        &Cancellation::default(),
+    );
+    attempt.result.unwrap();
+    let expected = attempt.statistics;
     let mut region = Region::all_open(3);
     let mut known = narrower.knowledge();
     let mut allowance = Allowance::new(1000);
@@ -130,7 +132,7 @@ fn separate_preference_has_the_original_narrowing_receipt() {
         &Cancellation::default(),
         &mut allowance,
     );
-    region.prefer(preference.result.unwrap().unwrap());
+    assert_eq!(preference.result.unwrap(), attempt.preferred);
     assert_eq!(region, ordinary);
     assert_eq!(preference.work, 3);
     assert_eq!(propagated.statistics.work + preference.work, expected.work);
@@ -276,6 +278,7 @@ fn choice_heads_rank_before_more_constrained_atoms() {
             RegionLimits::default(),
             &Cancellation::default(),
         )
+        .result
         .unwrap();
     assert_eq!(region.open().collect::<Vec<_>>(), [0, 1, 2, 3, 4]);
     let ordinary = known.preferred_atom_reserved(
@@ -320,18 +323,20 @@ fn a_subject_with_choices_splits_on_a_choice_head() {
         crate::producers(&theory, RegionLimits::default(), &Cancellation::default()).unwrap();
     let narrower = Narrower::new(&theory);
     let split = |subject: OriginalSubject<'_>| {
-        let mut region = Region::all_open(theory.atom_count());
-        narrower
-            .narrow_known(
-                subject,
-                &mut region,
-                &mut narrower.knowledge(),
-                &mut NarrowingScratch::default(),
-                RegionLimits::default(),
-                &Cancellation::default(),
-            )
-            .unwrap();
-        region.split_atom()
+        let mut entry = Entry::new(Region::all_open(theory.atom_count()), ());
+        let attempt = narrower.narrow_known(
+            subject,
+            &mut entry.region,
+            &mut narrower.knowledge(),
+            &mut NarrowingScratch::default(),
+            RegionLimits::default(),
+            &Cancellation::default(),
+        );
+        attempt.result.unwrap();
+        if let Some(atom) = attempt.preferred {
+            entry.prefer(atom);
+        }
+        entry.split_atom()
     };
     let producers = extraction.producers.as_ref();
     // The premise: without choices the subject splits on a busier atom.
@@ -377,4 +382,48 @@ fn closed_and_outside_choice_bits_do_not_hide_open_atoms() {
     );
     assert_eq!(attempt.result, Ok(Some(127)));
     assert_eq!(attempt.work, 1);
+}
+
+#[test]
+fn a_stopped_narrowing_publishes_no_partial_preference() {
+    let owner = theory();
+    let narrower = Narrower::new(&owner);
+    let run = |max_work| {
+        narrower.narrow_known(
+            OriginalSubject::new(&owner, None),
+            &mut Region::all_open(owner.atom_count()),
+            &mut narrower.knowledge(),
+            &mut NarrowingScratch::default(),
+            RegionLimits { max_work },
+            &Cancellation::default(),
+        )
+    };
+    let complete = run(u64::MAX);
+    assert_eq!(
+        complete.result.unwrap(),
+        Narrowing::Fixed { changed: false }
+    );
+    assert_eq!(complete.preferred, Some(1));
+    for limit in 0..complete.statistics.work {
+        let stopped = run(limit);
+        assert_eq!(stopped.result, Err(Stop::WorkLimit), "limit {limit}");
+        assert_eq!(stopped.preferred, None, "limit {limit}");
+        assert_eq!(stopped.statistics.work, limit, "limit {limit}");
+    }
+}
+
+#[test]
+fn a_refuted_narrowing_publishes_no_preference() {
+    let owner = crate::test_support::theory(3, vec![Node::falsum()], vec![0]);
+    let narrower = Narrower::new(&owner);
+    let attempt = narrower.narrow_known(
+        OriginalSubject::new(&owner, None),
+        &mut Region::all_open(owner.atom_count()),
+        &mut narrower.knowledge(),
+        &mut NarrowingScratch::default(),
+        RegionLimits::default(),
+        &Cancellation::default(),
+    );
+    assert_eq!(attempt.result.unwrap(), Narrowing::Refuted);
+    assert_eq!(attempt.preferred, None);
 }

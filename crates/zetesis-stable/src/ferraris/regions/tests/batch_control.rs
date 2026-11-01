@@ -98,9 +98,9 @@ fn cancelled_narrowing<Q: Quota>(quota: Q, cancellation: &Cancellation) -> (Inco
             &narrower,
         ),
         &Conditions::<(Theory, Narrower)>::default(),
-        (
-            &mut Region::all_open(theory.atom_count()),
-            &mut CandidateKnowledge::default(),
+        &mut zetesis_algebra::region::Entry::new(
+            Region::all_open(theory.atom_count()),
+            CandidateKnowledge::default(),
         ),
         &mut zetesis_ferraris::NarrowingScratch::default(),
         &mut budget,

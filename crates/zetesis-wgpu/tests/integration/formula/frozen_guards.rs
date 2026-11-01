@@ -61,7 +61,7 @@ fn required_bound_closes_the_frozen_candidate_without_splitting() {
             assert!(truth.is_model());
             let narrower = Narrower::new(&theory);
             let mut region = Region::all_open(3);
-            let (outcome, _) = narrower
+            let outcome = narrower
                 .narrow_frozen_known(
                     FrozenSubject::new(&theory, truth.truth()),
                     &mut region,
@@ -70,6 +70,7 @@ fn required_bound_closes_the_frozen_candidate_without_splitting() {
                     RegionLimits::default(),
                     &cancellation,
                 )
+                .result
                 .unwrap();
             assert!(matches!(outcome, Narrowing::Fixed { .. }));
             assert_eq!(region.held().collect::<Vec<_>>(), [0, 1, 2]);

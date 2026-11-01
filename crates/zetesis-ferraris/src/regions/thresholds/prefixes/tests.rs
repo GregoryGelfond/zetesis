@@ -389,16 +389,15 @@ fn frozen_closure_never_consumes_prefix_relations() {
                            region: &mut Region,
                            knowledge: &mut Knowledge,
                            scratch: &mut NarrowingScratch| {
-                    index
-                        .narrow_frozen_known(
-                            FrozenSubject::new(&theory, &truth),
-                            region,
-                            knowledge,
-                            scratch,
-                            RegionLimits::default(),
-                            &Cancellation::default(),
-                        )
-                        .unwrap()
+                    let attempt = index.narrow_frozen_known(
+                        FrozenSubject::new(&theory, &truth),
+                        region,
+                        knowledge,
+                        scratch,
+                        RegionLimits::default(),
+                        &Cancellation::default(),
+                    );
+                    (attempt.result.unwrap(), attempt.statistics)
                 };
                 let actual = run(&index, &mut region, &mut knowledge, &mut scratch);
                 let expected = run(

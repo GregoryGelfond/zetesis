@@ -156,16 +156,19 @@ impl Driver {
                 .admit(index, Attempt::Outside, &lease)
                 .expect("a queued region remains");
             match step(&slate, &mut entry) {
-                Step::Split(cut, held) => {
-                    let published = cut.0.clone();
-                    let _hand = slate.hand_over(index, (cut, held), reserve_regions);
+                Step::Split(atom) => {
+                    let mut published = entry.region.clone();
+                    assert!(published.cut(atom));
+                    let _hand = slate
+                        .hand_over(index, &mut Some(entry), atom, reserve_regions)
+                        .unwrap();
                     return (0..producers)
                         .find(|&deque| {
                             slate
                                 .frontier
                                 .queue(deque)
                                 .back()
-                                .is_some_and(|newest| newest.0 == published)
+                                .is_some_and(|newest| newest.region == published)
                         })
                         .expect("the published child is queued");
                 }
@@ -220,7 +223,7 @@ fn step(slate: &SlateFill<'_, '_>, entry: &mut Entry) -> Step {
 }
 
 fn open(atoms: usize) -> Entry {
-    Entry(Region::all_open(atoms), CandidateKnowledge::default())
+    Entry::new(Region::all_open(atoms), CandidateKnowledge::default())
 }
 
 fn slots(slate: &SlateFill<'_, '_>) -> usize {
@@ -406,17 +409,21 @@ fn a_step_failing_after_the_filling_emission_keeps_the_full_output() {
     let slate = driver.slate(2);
     let lease = driver.allowance.lease(&driver.cancellation);
     let mut root = slate.admit(0, Attempt::Outside, &lease).unwrap();
-    let Step::Split(cut, held) = step(&slate, &mut root) else {
+    let Step::Split(atom) = step(&slate, &mut root) else {
         panic!("a tautology's root splits");
     };
-    let mut first = slate.hand_over(0, (cut, held), reserve_regions).unwrap();
+    let mut first = slate
+        .hand_over(0, &mut Some(root), atom, reserve_regions)
+        .unwrap();
     // The peer steals the published child and is under way when the slate
     // fills from the other child's two leaves.
     let under_way = slate.admit(1, Attempt::Outside, &lease).unwrap();
-    let Step::Split(cut, held) = step(&slate, &mut first) else {
+    let Step::Split(atom) = step(&slate, &mut first) else {
         panic!("a region with an open atom splits");
     };
-    let mut newer = slate.hand_over(0, (cut, held), reserve_regions).unwrap();
+    let mut newer = slate
+        .hand_over(0, &mut Some(first), atom, reserve_regions)
+        .unwrap();
     let mut older = slate.frontier.take_local(0).unwrap();
     for leaf in [&mut newer, &mut older] {
         let Step::Candidate(candidate) = step(&slate, leaf) else {
@@ -455,12 +462,14 @@ fn a_split_keeps_the_newer_child_in_hand_and_publishes_the_older() {
     let slate = driver.slate(1);
     let lease = driver.allowance.lease(&driver.cancellation);
     let mut root = slate.admit(0, Attempt::Outside, &lease).unwrap();
-    let Step::Split(cut, held) = step(&slate, &mut root) else {
+    let Step::Split(atom) = step(&slate, &mut root) else {
         panic!("a tautology's root splits");
     };
-    let hand = slate.hand_over(0, (cut, held), reserve_regions).unwrap();
-    assert!(hand.0.is_held(0));
-    assert!(slate.frontier.take_local(0).unwrap().0.is_cut(0));
+    let hand = slate
+        .hand_over(0, &mut Some(root), atom, reserve_regions)
+        .unwrap();
+    assert!(hand.region.is_held(0));
+    assert!(slate.frontier.take_local(0).unwrap().region.is_cut(0));
     assert_eq!(slate.frontier.termination.unresolved(), 2);
     assert_eq!(hands(&slate), 1, "the newer child kept the parent's hand");
 }
@@ -540,9 +549,8 @@ fn admission_takes_nothing_once_the_output_is_spoken_for() {
     assert_eq!(hands(&slate), 0);
 }
 
-/// A region returned to a deque that refuses entry capacity is dropped, and
-/// the refusal becomes the slate's stop, so the run never claims coverage of
-/// a region it lost.
+/// A refused return commits the typed terminal stop before abandoning its
+/// entry. The unresolved count is not a proof of exhausted coverage.
 #[test]
 fn a_return_refused_entry_capacity_records_an_allocation_stop() {
     let driver = driver(tautologies(1), 2);
@@ -551,27 +559,50 @@ fn a_return_refused_entry_capacity_records_an_allocation_stop() {
     slate.give_back(0, root, |queue, _| reserve_regions(queue, usize::MAX));
     assert_eq!(stopped(&slate), Some(Incomplete::Allocation));
     assert!(slate.frontier.termination.is_closed());
+    assert!(!slate.frontier.termination.is_resolved());
+    assert_eq!(slate.frontier.termination.unresolved(), 1);
+    assert!(slate.frontier.queue(0).is_empty());
 }
 
 #[test]
-fn a_refused_publication_requeues_the_held_child_and_leaves_the_count() {
-    let driver = driver(tautologies(1), 2);
+fn a_refused_publication_returns_the_unsplit_parent() {
+    let driver = driver(tautologies(2), 2);
     let slate = driver.slate(1);
     let lease = driver.allowance.lease(&driver.cancellation);
     let mut root = slate.admit(0, Attempt::Outside, &lease).unwrap();
-    let Step::Split(cut, held) = step(&slate, &mut root) else {
+    let Step::Split(atom) = step(&slate, &mut root) else {
         panic!("a tautology's root splits");
     };
-    // Exercise the actual reservation and error conversion, using guaranteed
-    // capacity overflow rather than attempting host OOM.
-    let refused = slate.hand_over(0, (cut, held), |queue, _| {
-        reserve_regions(queue, usize::MAX)
-    });
-    assert!(refused.is_none());
+    root.prefer(0);
+    let interval = root.region.clone();
+    let knowledge_before = format!("{:?}", root.state);
+    let receipts = slate.frontier.statistics();
+    // Guaranteed capacity overflow exercises the actual typed reservation.
+    let mut pending = Some(root);
+    let error = slate
+        .hand_over(0, &mut pending, atom, |queue, _| {
+            reserve_regions(queue, usize::MAX)
+        })
+        .unwrap_err();
+    let parent = pending.take().expect("refusal retains the whole parent");
+    assert_eq!(error, Incomplete::Allocation);
+    assert_eq!(parent.region, interval);
+    assert_eq!(parent.split_atom(), Some(0));
+    assert_eq!(format!("{:?}", parent.state), knowledge_before);
+    assert_eq!(slate.frontier.statistics(), receipts);
+    assert_eq!(slate.frontier.termination.unresolved(), 1);
+    assert!(slate.frontier.queue(0).is_empty());
+    assert_eq!(hands(&slate), 1);
+    assert!(stopped(&slate).is_none());
+    assert!(!slate.frontier.termination.is_closed());
+    // The unchanged all-open parent still covers all four interpretations.
+    assert_eq!(parent.region.open().count(), 2);
+    // Production commits the stop while owning this parent, then abandons it.
+    slate.stop(error);
+    drop(parent);
     assert_eq!(stopped(&slate), Some(Incomplete::Allocation));
     assert!(slate.frontier.termination.is_closed());
-    assert_eq!(slate.frontier.termination.unresolved(), 1);
-    assert!(slate.frontier.take_local(0).unwrap().0.is_held(0));
+    assert!(!slate.frontier.termination.is_resolved());
 }
 
 #[test]
@@ -646,10 +677,12 @@ fn a_producer_leaving_a_stopped_slate_returns_its_hand() {
     let slate = driver.slate(3);
     let lease = driver.allowance.lease(&driver.cancellation);
     let mut root = slate.admit(0, Attempt::Outside, &lease).unwrap();
-    let Step::Split(cut, held) = step(&slate, &mut root) else {
+    let Step::Split(atom) = step(&slate, &mut root) else {
         panic!("a tautology's root splits");
     };
-    let _first = slate.hand_over(0, (cut, held), reserve_regions).unwrap();
+    let _first = slate
+        .hand_over(0, &mut Some(root), atom, reserve_regions)
+        .unwrap();
     // The peer steals the published child, and a stop ends the slate.
     let second = slate.admit(1, Attempt::Outside, &lease).unwrap();
     slate.stop(Incomplete::WorkLimit);
@@ -664,10 +697,12 @@ fn a_shared_order_publishes_every_split_on_the_shared_deque() {
     let slate = driver.slate_in(2, FrontierOrder::Shared);
     let lease = driver.allowance.lease(&driver.cancellation);
     let mut root = slate.admit(1, Attempt::Outside, &lease).unwrap();
-    let Step::Split(cut, held) = step(&slate, &mut root) else {
+    let Step::Split(atom) = step(&slate, &mut root) else {
         panic!("a tautology's root splits");
     };
-    let _hand = slate.hand_over(1, (cut, held), reserve_regions).unwrap();
+    let _hand = slate
+        .hand_over(1, &mut Some(root), atom, reserve_regions)
+        .unwrap();
     assert_eq!(slate.frontier.queue(0).len(), 1);
     assert!(slate.frontier.queue(1).is_empty());
 }
@@ -678,25 +713,31 @@ fn a_shared_order_resumes_with_the_region_published_last() {
     let slate = driver.slate_in(3, FrontierOrder::Shared);
     let lease = driver.allowance.lease(&driver.cancellation);
     let mut root = slate.admit(0, Attempt::Outside, &lease).unwrap();
-    let Step::Split(cut, held) = step(&slate, &mut root) else {
+    let Step::Split(atom) = step(&slate, &mut root) else {
         panic!("a tautology's root splits");
     };
-    let mut first = slate.hand_over(0, (cut, held), reserve_regions).unwrap();
+    let mut first = slate
+        .hand_over(0, &mut Some(root), atom, reserve_regions)
+        .unwrap();
     // The peer takes the published child and publishes a newer region.
     let mut second = slate.admit(1, Attempt::Outside, &lease).unwrap();
-    let Step::Split(cut, held) = step(&slate, &mut second) else {
+    let Step::Split(atom) = step(&slate, &mut second) else {
         panic!("a region with an open atom splits");
     };
-    let _peer = slate.hand_over(1, (cut, held), reserve_regions).unwrap();
-    let Step::Split(cut, held) = step(&slate, &mut first) else {
+    let _peer = slate
+        .hand_over(1, &mut Some(second), atom, reserve_regions)
+        .unwrap();
+    let Step::Split(atom) = step(&slate, &mut first) else {
         panic!("a region with an open atom splits");
     };
-    let _own = slate.hand_over(0, (cut, held), reserve_regions).unwrap();
-    let published_last = slate.frontier.queue(0).back().unwrap().0.clone();
+    let _own = slate
+        .hand_over(0, &mut Some(first), atom, reserve_regions)
+        .unwrap();
+    let published_last = slate.frontier.queue(0).back().unwrap().region.clone();
     // Producer 1 published its region before producer 0 published this one,
     // so after a refutation producer 1 takes producer 0's.
     let next = slate.after_resolution(1, &lease).unwrap();
-    assert_eq!(next.0, published_last);
+    assert_eq!(next.region, published_last);
 }
 
 #[test]
@@ -706,10 +747,12 @@ fn a_per_producer_order_publishes_each_split_on_its_producers_deque() {
     let lease = driver.allowance.lease(&driver.cancellation);
     // Producer 1's deque is empty, so it steals the root from deque 0.
     let mut root = slate.admit(1, Attempt::Outside, &lease).unwrap();
-    let Step::Split(cut, held) = step(&slate, &mut root) else {
+    let Step::Split(atom) = step(&slate, &mut root) else {
         panic!("a tautology's root splits");
     };
-    let _hand = slate.hand_over(1, (cut, held), reserve_regions).unwrap();
+    let _hand = slate
+        .hand_over(1, &mut Some(root), atom, reserve_regions)
+        .unwrap();
     assert_eq!(slate.frontier.queue(1).len(), 1);
     assert!(slate.frontier.queue(0).is_empty());
 }
@@ -1000,7 +1043,7 @@ fn proposals_split_on_the_original_choice_head_first() {
     assert_eq!(output.len(), 1);
     let pending = proposals.frontier.queue(0);
     assert!(!pending.is_empty());
-    assert!(pending.iter().all(|Entry(region, _)| !region.is_open(0)));
+    assert!(pending.iter().all(|entry| !entry.region.is_open(0)));
 }
 
 /// `a0 <- a1`, `a1 <- a0` beside two atomic choices: the root's pass
@@ -1053,3 +1096,5 @@ fn every_producer_draws_a_joined_peers_rows_at_the_next_slate() {
     });
     assert_eq!(held, [1, 1]);
 }
+
+mod publication;

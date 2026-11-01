@@ -24,17 +24,15 @@ fn ordinary_closure_reuses_native_aggregate_explanations() {
         let mut scratch = NarrowingScratch::default();
         let learning = crate::test_support::learning(&program.owner);
         let close = |region: &mut Region, known: &mut Knowledge, scratch: &mut NarrowingScratch| {
-            program
-                .index
-                .narrow_known(
-                    OriginalSubject::carrier(&learning, Some(&program.producers)),
-                    region,
-                    known,
-                    scratch,
-                    RegionLimits::default(),
-                    &Cancellation::default(),
-                )
-                .unwrap()
+            let attempt = program.index.narrow_known(
+                OriginalSubject::carrier(&learning, Some(&program.producers)),
+                region,
+                known,
+                scratch,
+                RegionLimits::default(),
+                &Cancellation::default(),
+            );
+            (attempt.result.unwrap(), attempt.statistics)
         };
         let mut first = Region::all_open(4);
         assert!(first.cut(2) && first.cut(3));

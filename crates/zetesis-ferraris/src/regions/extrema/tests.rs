@@ -66,8 +66,8 @@ fn close(theory: &Theory, region: &mut Region, original: Option<usize>) -> Narro
                 RegionLimits::default(),
                 &cancellation,
             )
+            .result
             .unwrap()
-            .0
     } else {
         index
             .narrow_known(
@@ -78,8 +78,8 @@ fn close(theory: &Theory, region: &mut Region, original: Option<usize>) -> Narro
                 RegionLimits::default(),
                 &cancellation,
             )
+            .result
             .unwrap()
-            .0
     }
 }
 
@@ -352,7 +352,7 @@ fn failed_native_closure_reuses_only_clean_scratch() {
         RegionLimits { max_work: 0 },
         &cancellation,
     );
-    assert_eq!(result, Err(Stop::WorkLimit));
+    assert_eq!(result.result, Err(Stop::WorkLimit));
     let mut region = Region::all_open(3);
     index
         .narrow_known(
@@ -363,6 +363,7 @@ fn failed_native_closure_reuses_only_clean_scratch() {
             RegionLimits::default(),
             &cancellation,
         )
+        .result
         .unwrap();
     assert_eq!(region.decision(0), Some(true));
 }

@@ -100,7 +100,7 @@ use std::sync::{Mutex, MutexGuard, PoisonError};
 use std::time::Duration;
 
 use rayon::prelude::*;
-use zetesis_algebra::region::{Narrowing, Region};
+use zetesis_algebra::walk::{self, Counting};
 use zetesis_ferraris::{Interpretation, Narrower, NarrowingScratch, Theory};
 
 use super::conditions::{Bound, CandidateKnowledge, Conditions};
@@ -198,8 +198,10 @@ impl RegionProposals {
             .thread_name(|index| format!("zetesis-proposal-{index}"))
             .build()
             .map_err(|_| Incomplete::Allocation)?;
-        let frontier =
-            RegionFrontier::measured(workers.get(), Entry(root, CandidateKnowledge::default()))?;
+        let frontier = RegionFrontier::measured(
+            workers.get(),
+            Entry::new(root, CandidateKnowledge::default()),
+        )?;
         Ok(Self {
             parts,
             restrictions: Conditions::default(),
@@ -555,7 +557,7 @@ struct SlateFill<'a, 'filter> {
 
 enum Step {
     Refuted,
-    Split(Entry, Entry),
+    Split(usize),
     Candidate(Interpretation),
     /// A leaf that found the output spoken for: unresolved, its region waits
     /// for a later slate.
@@ -700,24 +702,30 @@ impl<'filter> SlateFill<'_, 'filter> {
         )
     }
 
-    /// Publish a split's older child and keep its newer one in the same hand.
-    /// A refused publication drops the older child
-    /// unpublished, leaving the count unchanged, and fails the newer child
-    /// (see [`Self::fail`]).
+    /// Publish the older child and retain the newer in the same hand. The
+    /// lineage copy precedes locking; the parent is consumed only after deque
+    /// storage is admitted. Success empties the occupied caller slot and
+    /// returns held; refusal restores the exact parent before returning its
+    /// original typed error.
     fn hand_over(
         &self,
         index: usize,
-        (cut, held): (Entry, Entry),
+        pending: &mut Option<Entry>,
+        atom: usize,
         reserve: impl FnOnce(&mut VecDeque<Entry>, usize) -> Result<(), Incomplete>,
-    ) -> Option<Entry> {
+    ) -> Result<Entry, Incomplete> {
+        let parent = pending.take().expect("publication has a pending parent");
+        let cut_knowledge = parent.state.clone();
         match self
             .frontier
-            .publish_split(self.home(index), [cut], reserve)
-        {
-            Ok(()) => Some(held),
-            Err(error) => {
-                self.fail(index, held, error);
-                None
+            .publish_split_with(self.home(index), parent, reserve, |parent| {
+                let (cut, held) = parent.split_with(atom, |knowledge| (cut_knowledge, knowledge));
+                ([cut], held)
+            }) {
+            Ok(held) => Ok(held),
+            Err((error, parent)) => {
+                *pending = Some(parent);
+                Err(error)
             }
         }
     }
@@ -736,17 +744,19 @@ impl<'filter> SlateFill<'_, 'filter> {
     }
 
     /// Return `entry` to producer `index`'s home deque, reserving its entry
-    /// capacity through `reserve`. A refused return drops the region and
-    /// records the refusal as a stop, unless one is recorded, so no region is
-    /// lost while the run could still claim coverage.
+    /// capacity through `reserve`. A refused return keeps its owner until the
+    /// typed stop closes this non-resumable production; only then is the entry
+    /// deliberately abandoned, without resolving its outstanding region.
     fn give_back(
         &self,
         index: usize,
         entry: Entry,
         reserve: impl FnOnce(&mut VecDeque<Entry>, usize) -> Result<(), Incomplete>,
     ) {
-        if let Err(error) = self.frontier.requeue(self.home(index), entry, reserve) {
+        if let Err((error, entry)) = self.frontier.requeue(self.home(index), entry, reserve) {
             self.stop(error);
+            // Terminal abandonment, not a resolution or a failed restoration.
+            drop(entry);
         }
     }
 
@@ -862,10 +872,18 @@ impl<'filter> SlateFill<'_, 'filter> {
                     self.frontier.termination.resolve();
                     hand = self.after_resolution(index, &lease);
                 }
-                Ok(Step::Split(cut, held)) => {
-                    match self.hand_over(index, (cut, held), reserve_regions) {
-                        Some(held) => hand = Some(held),
-                        None => break,
+                Ok(Step::Split(atom)) => {
+                    let mut pending = Some(entry);
+                    match self.hand_over(index, &mut pending, atom, reserve_regions) {
+                        Ok(held) => hand = Some(held),
+                        Err(error) => {
+                            // The whole narrowed parent remains owned until
+                            // production becomes terminal. No restoration
+                            // allocation or child publication follows refusal.
+                            self.stop(error);
+                            drop(pending);
+                            break;
+                        }
                     }
                 }
                 Ok(Step::Candidate(candidate)) => {
@@ -893,7 +911,7 @@ impl<'filter> SlateFill<'_, 'filter> {
 
     fn step<'a>(
         &'a self,
-        Entry(region, knowledge): &mut Entry,
+        entry: &mut Entry,
         workspace: &mut Workspace<'filter>,
         budget: &mut Budget<'a, WorkLease<'a>>,
         counts: &mut RegionCounts,
@@ -906,7 +924,7 @@ impl<'filter> SlateFill<'_, 'filter> {
         let narrowing = regions::narrow(
             (self.parts.subject(self.theory)?, self.narrower),
             self.restrictions,
-            (region, knowledge),
+            entry,
             &mut workspace.scratch,
             budget,
             counts,
@@ -916,18 +934,17 @@ impl<'filter> SlateFill<'_, 'filter> {
         // trigger.
         self.parts
             .visited(&mut workspace.tier, &mut workspace.scratch, budget, counts)?;
-        if narrowing == Narrowing::Refuted {
-            counts.refuted = 1;
-            return Ok(Step::Refuted);
-        }
-        if let Some(atom) = region.split_atom() {
-            budget.decide()?;
-            // Take the region out to split it by value; the emptied placeholder
-            // (no atoms, no allocation) is discarded with this entry.
-            let (cut, held) = std::mem::replace(region, Region::all_open(0)).split(atom);
-            let cut = Entry(cut, knowledge.clone());
-            let held = Entry(held, std::mem::take(knowledge));
-            return Ok(Step::Split(cut, held));
+        match walk::inspect(entry, narrowing, Counting::Never, false) {
+            walk::Step::Refuted => {
+                counts.refuted = 1;
+                return Ok(Step::Refuted);
+            }
+            walk::Step::Split(atom) => {
+                budget.decide()?;
+                return Ok(Step::Split(atom));
+            }
+            walk::Step::Leaf => {}
+            walk::Step::Counted => unreachable!("Counting::Never cannot count a region"),
         }
         if self.remaining == 0 {
             return Err(Incomplete::CandidateLimit);
@@ -935,7 +952,7 @@ impl<'filter> SlateFill<'_, 'filter> {
         if !self.reserve_output_slot() {
             return Ok(Step::Deferred);
         }
-        let candidate = regions::leaf_interpretation(self.theory, region)?;
+        let candidate = regions::leaf_interpretation(self.theory, &entry.region)?;
         counts.leaves = 1;
         Ok(Step::Candidate(candidate))
     }

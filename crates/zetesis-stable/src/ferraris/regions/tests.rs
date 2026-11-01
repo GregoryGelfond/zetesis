@@ -200,17 +200,17 @@ fn an_enumeration_builds_one_original_index() {
         let mut region = Region::all_open(theory.atom_count());
         // The walk's subject carries its learned rows; so does this one.
         let learning = LearningOwner::theory(&theory, LearningLimits::default());
-        let (closed, direct) = narrower
-            .narrow_known(
-                OriginalSubject::carrier(&learning, extraction.producers.as_ref())
-                    .with_choices(&extraction.choice_heads),
-                &mut region,
-                &mut narrower.knowledge(),
-                &mut NarrowingScratch::default(),
-                RegionLimits::default(),
-                &cancellation,
-            )
-            .unwrap();
+        let attempt = narrower.narrow_known(
+            OriginalSubject::carrier(&learning, extraction.producers.as_ref())
+                .with_choices(&extraction.choice_heads),
+            &mut region,
+            &mut narrower.knowledge(),
+            &mut NarrowingScratch::default(),
+            RegionLimits::default(),
+            &cancellation,
+        );
+        let closed = attempt.result.unwrap();
+        let direct = attempt.statistics;
         assert!(matches!(closed, Narrowing::Fixed { .. }));
         assert_eq!(region.open().count(), 0);
         assert_eq!(region.held().count(), 0);
@@ -619,6 +619,7 @@ fn failed_narrowing_keeps_support_explanation_receipts() {
     statistics.work = 31;
     statistics.support_explanations = explanations;
     let attempt = NarrowingAttempt {
+        preferred: None,
         result: Err(Incomplete::WorkLimit),
         statistics,
     };

@@ -137,6 +137,41 @@ re-exports the shared frontier's statistics. The unified schedules and the
 separate Reduction/Verdict interface are subsequent changes, not effects of
 moving these owners.
 
+### Region intervals and walk entries
+
+`Region` contains the atom universe and its held/cut masks. Equality compares
+that interval; selection policy is carried by `region::Entry<S>`, with the
+caller's lineage state. `Entry::prefer` records an open atom, `split_atom`
+rechecks it after narrowing, and `split_with` clears it in both children.
+
+`Walk::next` borrows the complete entry. `Walk::surrender` transfers pending
+entries, including preference and state; resume them through `with_entry`, or
+`with_narrowed_root` when their closure is already established. `Visit` hands
+terminal regions and state to its consumer, where split policy is no longer
+needed.
+
+`walk::inspect` is the shared allocation-free classification after narrowing:
+refuted, fully decided, counted, or split on an open atom. Scalar, parallel,
+slate and published countermodel paths use it. The schedules keep their own
+receipt publication and capacity admission; the classifier neither checks
+answer-set membership nor declares a counted region accepted.
+
+`Frontier::publish_split_with` reserves queue capacity while retaining the parent,
+then constructs the children only after admission. Failure returns the original
+typed error and that parent, with its preference and state intact. One queued
+child and one child kept in hand still increase unresolved work by one.
+`Frontier::requeue` likewise returns the entry on refusal. The scalar walk keeps
+its parent for retry or surrender. Concurrent schedules retain returned owners
+until they commit the terminal stop, then may deliberately abandon them; such
+cleanup is not resolution or exhaustion and does not promise failed-search resumption.
+
+Ferraris's fixed-ceiling and quota narrowing calls return one
+`NarrowingAttempt`: inspect `result`, account `statistics` even on failure, and
+install a completed `preferred` atom in the entry only after success. `None`
+leaves existing policy untouched; it accompanies propagation-only attempts,
+refutations and failures. A failed attempt's partially closed knowledge retains
+the abandonment contract documented on `Narrower`.
+
 ## Migrating from 0.5.0
 
 The changes below affect direct library callers. Source syntax is unchanged;

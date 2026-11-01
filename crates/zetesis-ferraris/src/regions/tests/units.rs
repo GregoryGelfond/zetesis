@@ -668,9 +668,8 @@ fn narrow(
             RegionLimits::default(),
             &Cancellation::default(),
         )
-    }
-    .unwrap();
-    assert!(matches!(result.0, Narrowing::Fixed { .. }));
+    };
+    assert!(matches!(result.result.unwrap(), Narrowing::Fixed { .. }));
     assert!(scratch.nodes.is_empty() && scratch.learned.is_empty() && scratch.heads.is_empty());
     assert!(scratch.pending.iter().all(|word| *word == 0));
 }
