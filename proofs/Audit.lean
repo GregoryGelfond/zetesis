@@ -613,6 +613,10 @@ import Zetesis
 #print axioms Zetesis.Refinement.CounterSearch.witness_stops_search
 #print axioms Zetesis.Refinement.CounterSearch.insufficient_fuel_is_unfinished
 #print axioms Zetesis.Refinement.CounterSearch.empty_candidate_skips_queries
+#print axioms Zetesis.LearnedRegions.antimonotone_superset_refutes
+#print axioms Zetesis.LearnedRegions.signed_body_reduct_antitone
+#print axioms Zetesis.LearnedRegions.witness_rules_persistent
+#print axioms Zetesis.LearnedRegions.falsum_free_countermodel_does_not_refute_superset
 #print axioms Zetesis.DagSharing.getD_append_left
 #print axioms Zetesis.DagSharing.getD_snoc_end
 #print axioms Zetesis.DagSharing.fold_length

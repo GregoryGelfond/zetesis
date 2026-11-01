@@ -625,6 +625,12 @@
 'Zetesis.Refinement.CounterSearch.witness_stops_search' does not depend on any axioms
 'Zetesis.Refinement.CounterSearch.insufficient_fuel_is_unfinished' does not depend on any axioms
 'Zetesis.Refinement.CounterSearch.empty_candidate_skips_queries' does not depend on any axioms
+'Zetesis.LearnedRegions.antimonotone_superset_refutes' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.LearnedRegions.signed_body_reduct_antitone' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.LearnedRegions.witness_rules_persistent' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.LearnedRegions.falsum_free_countermodel_does_not_refute_superset' depends on axioms: [propext,
+ Classical.choice,
+ Quot.sound]
 'Zetesis.DagSharing.getD_append_left' depends on axioms: [propext]
 'Zetesis.DagSharing.getD_snoc_end' depends on axioms: [propext, Quot.sound]
 'Zetesis.DagSharing.fold_length' depends on axioms: [propext, Quot.sound]

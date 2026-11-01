@@ -159,6 +159,7 @@ import Zetesis.FormulaRegions
 import Zetesis.FormulaBounds
 import Zetesis.FormulaChains
 import Zetesis.ReductRegions
+import Zetesis.CountermodelReuse
 import Zetesis.Frontier
 import Zetesis.AxisFolds
 import Zetesis.AlgebraicRows

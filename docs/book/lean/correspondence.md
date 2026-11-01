@@ -3589,6 +3589,18 @@ The laws are over interpretations and regions; the ledger's encoding, matching,
 retention, eviction, ownership, delivery between workers and resource handling
 remain Rust obligations, stated with the ledger below.
 
+[`CountermodelReuse`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/CountermodelReuse.lean)
+states when a proper subset that refutes one candidate also refutes a larger
+one. `LearnedRegions.antimonotone_superset_refutes` requires that enlarging a
+classical candidate preserve reduct models below the smaller one.
+`witness_rules_persistent` proves that premise for positive facts and rules
+with a positive head and a conjunction of positive formulas and default-negated
+atoms in the body. This includes disjunctive heads and integrity constraints.
+`falsum_free_countermodel_does_not_refute_superset` gives a theory with no
+occurrence of falsum where the implication fails. Recognizing a proved
+fragment in a Rust formula DAG and attaching its witness to a candidate row
+remain implementation obligations.
+
 [`AlgebraicRows`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/AlgebraicRows.lean)
 states algebraic consequences for any consequence class, as `RowOf` does. A term
 pairs an atom with a value, and a list of terms is measured in an interpretation

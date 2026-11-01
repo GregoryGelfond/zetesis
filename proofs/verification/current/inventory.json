@@ -3066,6 +3066,26 @@
       "name": "Zetesis.Refinement.CounterSearch.empty_candidate_skips_queries"
     },
     {
+      "file": "Zetesis/CountermodelReuse.lean",
+      "line": 33,
+      "name": "Zetesis.LearnedRegions.antimonotone_superset_refutes"
+    },
+    {
+      "file": "Zetesis/CountermodelReuse.lean",
+      "line": 53,
+      "name": "Zetesis.LearnedRegions.signed_body_reduct_antitone"
+    },
+    {
+      "file": "Zetesis/CountermodelReuse.lean",
+      "line": 76,
+      "name": "Zetesis.LearnedRegions.witness_rules_persistent"
+    },
+    {
+      "file": "Zetesis/CountermodelReuse.lean",
+      "line": 107,
+      "name": "Zetesis.LearnedRegions.falsum_free_countermodel_does_not_refute_superset"
+    },
+    {
       "file": "Zetesis/DagSharing.lean",
       "line": 57,
       "name": "Zetesis.DagSharing.getD_append_left"
@@ -10662,6 +10682,7 @@
     "Zetesis/CountHeadActivity.lean",
     "Zetesis/CountHeads.lean",
     "Zetesis/CounterSearch.lean",
+    "Zetesis/CountermodelReuse.lean",
     "Zetesis/DagSharing.lean",
     "Zetesis/DeltaJoins.lean",
     "Zetesis/DeltaRounds.lean",
@@ -10814,8 +10835,8 @@
     "Zetesis/WorldViews.lean"
   ],
   "source_sha256": {
-    "Audit.lean": "8061bd5bb5215fa370e5e64450d71b6ea21a6bea26d47f7b6dc9475829967785",
-    "Zetesis.lean": "47966619f7bb01581457a3794db8c829fcb5eb81cc1a6cb4267b9ba386bf5db4",
+    "Audit.lean": "132a645a96583598de65606224469e7cb3ee3b316ee3db55787dae49507ab5bc",
+    "Zetesis.lean": "199a8f38da0e50c20ac494e9d4eb0f54ecaee00a4d68320d631c32b8887b7722",
     "Zetesis/AcyclicEvaluation.lean": "1a9c77283876cf1f61cb92031da04780aada5d0b256f79db5b64bfb6b129d0dc",
     "Zetesis/AdjacencyRows.lean": "38a19b1c74483a157636321a56e95fea660a2192a04c77930d609e411c8d30d4",
     "Zetesis/AggregateAssignment.lean": "def2eac0ae638f3801d35c11a3162afaa3e0b9e393601cf899952e449e309639",
@@ -10866,6 +10887,7 @@
     "Zetesis/CountHeadActivity.lean": "245128dd761e2643d9b2dca4af1c36220923f6f5ae0f24d0bd5dc9a2accae4a7",
     "Zetesis/CountHeads.lean": "0596a0b812f26450121781a1faecaddd86f815f56f7c7909d6399551a752f5db",
     "Zetesis/CounterSearch.lean": "d3c5531cd6edecb7056feb3e3a606efeddb2016c471d978587f006e84c4228b0",
+    "Zetesis/CountermodelReuse.lean": "f65f5f1dca7e85c40088798c920f572e9a5b9d8e704d1b5814bbad70978f420a",
     "Zetesis/DagSharing.lean": "3ab6ee2ed129b98c326e85ef46a3828449d5f82c076fa6b6d4159baef9703e11",
     "Zetesis/DeltaJoins.lean": "fc76708d9b7d8eb3c8c1222496329824bb25ea76428c61afbf4864ce144b3f9c",
     "Zetesis/DeltaRounds.lean": "55c43f1f5c546648dff7e0c073fd6097edc38af37f8319e3bfb423f12e8e86c5",

@@ -3065,6 +3065,26 @@
     "line": 247
   },
   {
+    "name": "Zetesis.LearnedRegions.antimonotone_superset_refutes",
+    "file": "Zetesis/CountermodelReuse.lean",
+    "line": 33
+  },
+  {
+    "name": "Zetesis.LearnedRegions.signed_body_reduct_antitone",
+    "file": "Zetesis/CountermodelReuse.lean",
+    "line": 53
+  },
+  {
+    "name": "Zetesis.LearnedRegions.witness_rules_persistent",
+    "file": "Zetesis/CountermodelReuse.lean",
+    "line": 76
+  },
+  {
+    "name": "Zetesis.LearnedRegions.falsum_free_countermodel_does_not_refute_superset",
+    "file": "Zetesis/CountermodelReuse.lean",
+    "line": 107
+  },
+  {
     "name": "Zetesis.DagSharing.getD_append_left",
     "file": "Zetesis/DagSharing.lean",
     "line": 57
