@@ -10,6 +10,7 @@ fn support_shader_validates_without_optional_features() {
     )
     .validate(&module)
     .expect("topology and cooperative barriers validate");
+    crate::formula_graph::assert_candidate_word_binding(&module, &info, 4);
     let (module, _) = naga::back::pipeline_constants::process_overrides(
         &module,
         &info,

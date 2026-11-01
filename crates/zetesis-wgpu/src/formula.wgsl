@@ -17,7 +17,7 @@ struct Node { tag: u32, left: u32, right: u32, output: u32, }
 @group(0) @binding(0) var<uniform> params: Params;
 @group(0) @binding(1) var<storage, read> nodes: array<u32>;
 @group(0) @binding(2) var<storage, read> roots: array<u32>;
-@group(0) @binding(3) var<storage, read> seeds: array<u32>;
+@group(0) @binding(3) var<storage, read> candidates: array<u32>;
 @group(0) @binding(4) var<storage, read_write> frozen: array<u32>;
 @group(0) @binding(5) var<storage, read_write> domains: array<atomic<u32>>;
 @group(0) @binding(6) var<storage, read_write> results: array<u32>;
@@ -68,14 +68,11 @@ fn wake(index: u32, removed: u32) {
         atomicOr(&domains[next + gate / 32u], bit);
     }
 }
-fn contains(world: u32, atom: u32) -> bool {
-    return (seeds[world * params.words + atom / 32u] & (1u << (atom % 32u))) != 0u;
-}
 // Formula truth is always fresh; the shared pass reserves reuse for tight checking.
 fn original(world: u32, mask_base: u32, index: u32, _reuse: bool) {
     let node = node_at(index);
     var value = false;
-    if (node.tag == 1u) { value = contains(world, node.left); }
+    if (node.tag == 1u) { value = candidate_contains(world, node.left); }
     if (node.tag >= 2u && node.tag <= 4u) {
         value = operation(node.tag, frozen[mask_base + node.left] != 0u,
             frozen[mask_base + node.right] != 0u);
@@ -331,7 +328,7 @@ fn propagate(@builtin(workgroup_id) group: vec3<u32>,
     storageBarrier();
     workgroupBarrier();
     for (var atom = lane; atom < params.atoms; atom += WORKGROUP_SIZE) {
-        atomicStore(&domains[base + atom], select(1u, 3u, contains(world, atom)));
+        atomicStore(&domains[base + atom], select(1u, 3u, candidate_contains(world, atom)));
     }
     for (var index = lane; index < params.nodes; index += WORKGROUP_SIZE) {
         let node = node_at(index);
@@ -406,7 +403,7 @@ fn propagate(@builtin(workgroup_id) group: vec3<u32>,
         var available = 0u;
         var last = 0u;
         for (var atom = lane; atom < params.atoms; atom += WORKGROUP_SIZE) {
-            if (contains(world, atom) && (atomicLoad(&domains[base + atom]) & 1u) != 0u) {
+            if (candidate_contains(world, atom) && (atomicLoad(&domains[base + atom]) & 1u) != 0u) {
                 available += 1u;
                 last = atom;
             }

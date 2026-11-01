@@ -238,4 +238,6 @@ fn append(words: &mut Vec<u32>, values: &[u32]) -> Result<(), GpuError> {
 }
 
 #[cfg(test)]
+pub(crate) use tests::assert_candidate_word_binding;
+#[cfg(test)]
 mod tests;

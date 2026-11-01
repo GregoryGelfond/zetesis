@@ -45,6 +45,7 @@ fn projection_variants_preserve_the_device_interface() {
         )
         .validate(&module)
         .expect("portable shader validation");
+        crate::formula_graph::assert_candidate_word_binding(&module, &info, 3);
         let (module, _) = naga::back::pipeline_constants::process_overrides(
             &module,
             &info,

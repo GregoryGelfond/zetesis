@@ -127,10 +127,6 @@ var<workgroup> chosen_route: u32;
 var<workgroup> summary_flag: u32;
 var<workgroup> verdict_counts: vec2<u32>;
 
-fn contains(world: u32, atom: u32) -> bool {
-    return (candidates[world * params.words + atom / 32u] & (1u << (atom % 32u))) != 0u;
-}
-
 fn producer_at(index: u32) -> Producer {
     let base = index * 4u;
     return Producer(producers[base], producers[base + 1u],
@@ -148,7 +144,7 @@ fn enabled(producer: Producer, values: u32) -> bool {
 // Every child has already been evaluated in dependency order, so skipping its
 // value here does not skip a required child computation or diagnostic.
 fn boolean_original(world: u32, values: u32, node: Node) -> bool {
-    if (node.tag == NODE_ATOM) { return contains(world, node.left); }
+    if (node.tag == NODE_ATOM) { return candidate_contains(world, node.left); }
     if (node.tag >= NODE_AND && node.tag <= NODE_IMPLIES) {
         return operation(node.tag, (frozen[values + node.left] & 1u) != 0u,
             (frozen[values + node.right] & 1u) != 0u);

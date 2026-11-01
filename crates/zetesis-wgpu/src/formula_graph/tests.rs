@@ -3,6 +3,33 @@ mod shared_rows;
 use super::*;
 use zetesis_ferraris::{AdmissionLimits, FormulaParts, Node, OperandSpan};
 
+/// The same packed reader must load the host's candidate buffer for each
+/// route. Both modules already contain other read-only u32 arrays.
+pub(crate) fn assert_candidate_word_binding(
+    module: &naga::Module,
+    info: &naga::valid::ModuleInfo,
+    candidate_binding: u32,
+) {
+    let (reader, _) = module
+        .functions
+        .iter()
+        .find(|(_, f)| f.name.as_deref() == Some("candidate_contains"))
+        .expect("shared candidate reader");
+    let mut reads = Vec::new();
+    for (handle, global) in module.global_variables.iter() {
+        let usage = info[reader][handle];
+        if !usage.is_empty() {
+            assert_eq!(usage, naga::valid::GlobalUse::READ);
+            let binding = global
+                .binding
+                .expect("candidate reader loads bound storage");
+            reads.push((binding.group, binding.binding));
+        }
+    }
+    reads.sort_unstable();
+    assert_eq!(reads, [(0, 0), (0, candidate_binding)]);
+}
+
 fn theory() -> Theory {
     Theory::new(
         2,

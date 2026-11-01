@@ -1,7 +1,13 @@
-// Shared immutable reads and binary truth for the formula and tight kernels.
+// Shared immutable graph and candidate reads for the formula and tight kernels.
 // Node's fourth word belongs to its consumer; the header read preserves it.
 // Callers retain graph validation, dependency order and all synchronization.
 // Headers occupy 4*N words; wide rows occupy the checked appended tail.
+// One admitted world occupies params.words consecutive u32 words. Callers
+// supply a semantic atom in that row; padding is outside this operation.
+fn candidate_contains(world: u32, atom: u32) -> bool {
+    return (candidates[world * params.words + atom / 32u] & (1u << (atom % 32u))) != 0u;
+}
+
 fn node_at(index: u32) -> Node {
     let base = index * 4u;
     return Node(nodes[base], nodes[base + 1u], nodes[base + 2u], nodes[base + 3u]);

@@ -59,7 +59,7 @@ fn formula_preserves_the_declared_bindings() {
             ("params", 0, 0, AddressSpace::Uniform),
             ("nodes", 0, 1, read),
             ("roots", 0, 2, read),
-            ("seeds", 0, 3, read),
+            ("candidates", 0, 3, read),
             ("frozen", 0, 4, write),
             ("domains", 0, 5, write),
             ("results", 0, 6, write),
