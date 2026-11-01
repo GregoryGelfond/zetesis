@@ -2596,6 +2596,41 @@
       "name": "Zetesis.CompactColumns.selection_exact"
     },
     {
+      "file": "Zetesis/ComponentClosure.lean",
+      "line": 63,
+      "name": "Zetesis.ComponentClosure.lowerClosure_monotone"
+    },
+    {
+      "file": "Zetesis/ComponentClosure.lean",
+      "line": 73,
+      "name": "Zetesis.ComponentClosure.upperTransform_monotone"
+    },
+    {
+      "file": "Zetesis/ComponentClosure.lean",
+      "line": 93,
+      "name": "Zetesis.ComponentClosure.bekic"
+    },
+    {
+      "file": "Zetesis/ComponentClosure.lean",
+      "line": 142,
+      "name": "Zetesis.ComponentClosure.ordered_components"
+    },
+    {
+      "file": "Zetesis/ComponentClosure.lean",
+      "line": 157,
+      "name": "Zetesis.ComponentClosure.completed_ordered_rounds"
+    },
+    {
+      "file": "Zetesis/ComponentClosure.lean",
+      "line": 188,
+      "name": "Zetesis.ComponentClosure.settled_producer_covered"
+    },
+    {
+      "file": "Zetesis/ComponentClosure.lean",
+      "line": 209,
+      "name": "Zetesis.ComponentClosure.completed_producers_closed"
+    },
+    {
       "file": "Zetesis/ConditionalConsumers.lean",
       "line": 28,
       "name": "Zetesis.ConditionalConsumers.original_body"
@@ -10605,6 +10640,7 @@
     "Zetesis/ClosedCatalog.lean",
     "Zetesis/ColumnRelations.lean",
     "Zetesis/CompactColumns.lean",
+    "Zetesis/ComponentClosure.lean",
     "Zetesis/ConditionalConsumers.lean",
     "Zetesis/ConditionalHeadSupport.lean",
     "Zetesis/ConditionalHeads.lean",
@@ -10768,8 +10804,8 @@
     "Zetesis/WorldViews.lean"
   ],
   "source_sha256": {
-    "Audit.lean": "388fc1d35cfe83bae1be4540ee564a47fc83d0816e957eb7006ae4b80148c17b",
-    "Zetesis.lean": "36c1a19ebecba8eb6d7e014309f9877474956860ad9589557cf6d189910ee495",
+    "Audit.lean": "e6a7113fc01fa7638f7aa17524313e79ca275bf82132c7170ef41da36068d6d7",
+    "Zetesis.lean": "47966619f7bb01581457a3794db8c829fcb5eb81cc1a6cb4267b9ba386bf5db4",
     "Zetesis/AcyclicEvaluation.lean": "1a9c77283876cf1f61cb92031da04780aada5d0b256f79db5b64bfb6b129d0dc",
     "Zetesis/AdjacencyRows.lean": "38a19b1c74483a157636321a56e95fea660a2192a04c77930d609e411c8d30d4",
     "Zetesis/AggregateAssignment.lean": "def2eac0ae638f3801d35c11a3162afaa3e0b9e393601cf899952e449e309639",
@@ -10808,6 +10844,7 @@
     "Zetesis/ClosedCatalog.lean": "7737e15e89e65edecb015f3f2e106803c6f8f2aefbb986e227a6e442114b5c9a",
     "Zetesis/ColumnRelations.lean": "d4af6d98f76e143bdef15095a0f2db9afeeed56cbb85585cf097e2767a6ee6c6",
     "Zetesis/CompactColumns.lean": "910aaf69f5c349092f781b17bdf91c92ee0ba899590df519ac4a719a0d480252",
+    "Zetesis/ComponentClosure.lean": "7ca3e0ef92ebe6d9f40e76bfa1562900c5959fed5eec71bb810f164e94592dca",
     "Zetesis/ConditionalConsumers.lean": "448c154cb481418551f21c0516fa74e63ccfe16d32e00ff1109d7d68874c5bca",
     "Zetesis/ConditionalHeadSupport.lean": "10bbf703c3d7a89622ddaa12fe0857572cc6714d2a39281f5837f9715a9f64b1",
     "Zetesis/ConditionalHeads.lean": "96710ef9ca93e0765f566eb2c85dde88e8e821c6cd85fe46f863d22d8d59b5ea",

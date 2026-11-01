@@ -14,6 +14,7 @@ use zetesis_ferraris::TightVerdict;
 
 const SHADER: &str = concat!(
     include_str!("check.wgsl"),
+    include_str!("../formula_graph/truth.wgsl"),
     include_str!("../formula_graph/numeric.wgsl")
 );
 

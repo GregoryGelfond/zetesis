@@ -43,6 +43,7 @@ impl GateProjection {
     pub(super) fn shader(self) -> Result<Cow<'static, str>, GpuError> {
         const BASELINE: &str = concat!(
             include_str!("../formula.wgsl"),
+            include_str!("../formula_graph/truth.wgsl"),
             include_str!("../formula_graph/numeric.wgsl"),
             include_str!("numeric.wgsl"),
             include_str!("subset.wgsl")

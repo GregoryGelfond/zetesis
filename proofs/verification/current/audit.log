@@ -529,6 +529,13 @@
 'Zetesis.CompactColumns.encoded_cell_exact' depends on axioms: [propext]
 'Zetesis.CompactColumns.accepts_exact' depends on axioms: [propext, Quot.sound]
 'Zetesis.CompactColumns.selection_exact' depends on axioms: [propext, Quot.sound]
+'Zetesis.ComponentClosure.lowerClosure_monotone' does not depend on any axioms
+'Zetesis.ComponentClosure.upperTransform_monotone' does not depend on any axioms
+'Zetesis.ComponentClosure.bekic' depends on axioms: [propext, Quot.sound]
+'Zetesis.ComponentClosure.ordered_components' depends on axioms: [propext, Quot.sound]
+'Zetesis.ComponentClosure.completed_ordered_rounds' depends on axioms: [propext, Quot.sound]
+'Zetesis.ComponentClosure.settled_producer_covered' does not depend on any axioms
+'Zetesis.ComponentClosure.completed_producers_closed' does not depend on any axioms
 'Zetesis.ConditionalConsumers.original_body' depends on axioms: [propext, Quot.sound]
 'Zetesis.ConditionalConsumers.frozen_body' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.ConditionalConsumers.empty_body_equivalent' depends on axioms: [propext, Classical.choice, Quot.sound]

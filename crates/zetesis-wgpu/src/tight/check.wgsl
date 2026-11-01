@@ -127,22 +127,8 @@ var<workgroup> chosen_route: u32;
 var<workgroup> summary_flag: u32;
 var<workgroup> verdict_counts: vec2<u32>;
 
-// Headers occupy 4*N words; wide rows occupy the checked appended tail.
-fn node_at(index: u32) -> Node {
-    let base = index * 4u;
-    return Node(nodes[base], nodes[base + 1u], nodes[base + 2u], nodes[base + 3u]);
-}
-fn operand_at(node: Node, index: u32) -> u32 {
-    return nodes[params.nodes * 4u + node.left + index];
-}
-
 fn contains(world: u32, atom: u32) -> bool {
     return (candidates[world * params.words + atom / 32u] & (1u << (atom % 32u))) != 0u;
-}
-fn operation(tag: u32, left: bool, right: bool) -> bool {
-    if (tag == NODE_AND) { return left && right; }
-    if (tag == NODE_OR) { return left || right; }
-    return !left || right;
 }
 
 fn producer_at(index: u32) -> Producer {
@@ -222,6 +208,18 @@ fn support_count(slot: Slot, head: u32) -> u32 {
     let word = atomicLoad(&state[location.x]);
     if (params.count_bits == 32u) { return word; }
     return (word >> location.y) & ((1u << params.count_bits) - 1u);
+}
+// Filter selected atoms by their final packed counts, folding into retained bits.
+// Both callers follow count publication; only private scalar state changes here.
+fn accumulate_zero_counts(slot: Slot, word: u32, selected: u32, retained: u32) -> u32 {
+    var missing = retained;
+    var remaining = selected;
+    while (remaining != 0u) {
+        let bit = firstTrailingBit(remaining);
+        remaining &= remaining - 1u;
+        if (support_count(slot, word * 32u + bit) == 0u) { missing |= 1u << bit; }
+    }
+    return missing;
 }
 fn adjust_count(slot: Slot, head: u32, holds: bool) {
     let location = count_location(slot, head);
@@ -397,13 +395,7 @@ fn summarize(lane: u32, values: u32, slot: Slot, pathed: bool,
     tally = 0u;
     for (var word = lane; word < params.words; word += WORKGROUP_SIZE) {
         let present = atomicLoad(&state[slot.retained + word]);
-        var missing = 0u;
-        var remaining = present;
-        while (remaining != 0u) {
-            let bit = firstTrailingBit(remaining);
-            remaining &= remaining - 1u;
-            if (support_count(slot, word * 32u + bit) == 0u) { missing |= 1u << bit; }
-        }
+        let missing = accumulate_zero_counts(slot, word, present, 0u);
         atomicStore(&state[slot.unsupported + word], missing);
         atomicAdd(&state[slot.unsupported_count], countOneBits(missing));
         tally += 1u + countOneBits(present);
@@ -494,13 +486,9 @@ fn update_slot(world: u32, lane: u32, values: u32, current: u32, slot: Slot,
         if (touched != 0u) {
             tally += countOneBits(touched);
             let old = atomicLoad(&state[slot.unsupported + word]);
-            var missing = old & ~touched;
-            var remaining = touched & candidates[current + word];
-            while (remaining != 0u) {
-                let bit = firstTrailingBit(remaining);
-                remaining &= remaining - 1u;
-                if (support_count(slot, word * 32u + bit) == 0u) { missing |= 1u << bit; }
-            }
+            let retained = old & ~touched;
+            let selected = touched & candidates[current + word];
+            let missing = accumulate_zero_counts(slot, word, selected, retained);
             atomicStore(&state[slot.unsupported + word], missing);
             let before = countOneBits(old);
             let after = countOneBits(missing);
@@ -541,24 +529,7 @@ fn update_slot(world: u32, lane: u32, values: u32, current: u32, slot: Slot,
 // The complete route, or dense reuse of a retained evaluation.
 fn evaluate_dense(world: u32, lane: u32, grouped: bool, values: u32, supported: u32,
     reuse: bool) {
-    if (params.levels == 0u) {
-        if (lane == 0u) {
-            for (var index = 0u; index < params.nodes; index++) {
-                original(world, values, index, reuse);
-            }
-        }
-    } else {
-        let offsets = params.roots;
-        let order = offsets + params.levels + 1u;
-        for (var level = 0u; level < params.levels; level++) {
-            let end = roots[offsets + level + 1u];
-            for (var position = roots[offsets + level] + lane; position < end; position += WORKGROUP_SIZE) {
-                original(world, values, roots[order + position], reuse);
-            }
-            storageBarrier();
-            workgroupBarrier();
-        }
-    }
+    evaluate_original(world, lane, values, reuse);
 
     if (!grouped) {
         for (var word = lane; word < params.words; word += WORKGROUP_SIZE) {

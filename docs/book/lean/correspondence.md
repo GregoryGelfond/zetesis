@@ -1754,6 +1754,24 @@ IDs and proving concurrent writes and barriers refine the sequential schedule
 remain implementation obligations. A cached order alone does not authorize
 candidate truth reuse; tight checking separately authenticates its retained batch.
 
+Both kernels compose the immutable header/operand reads and binary Boolean
+truth operation from `formula_graph/truth.wgsl`. The shared operation computes
+conjunction, disjunction and implication over the same wire tags; each consumer
+keeps its own original-truth traversal and publications. This factors those
+local equations without identifying formula propagation with tight incremental
+re-evaluation. Header/operand addressing and the consumer-specific fourth header
+word remain representation obligations, not consequences of the schedule law.
+
+`evaluate_original` in that fragment also owns the common serial or level-ordered
+original-truth traversal. Both consumers retain their local node evaluation and
+publication rules; tight evaluation keeps its reuse flag, while formula
+evaluation requests fresh truth. Each level retains its storage/workgroup
+barriers, and the callers keep their distinct final publication boundaries.
+`DependencySchedule.execution_preserves_agreement` and `observed_roots_equal`
+state the local-read, readiness and coverage obligations. They do not establish
+WGSL uniformity, bounds or device visibility. Frozen propagation and the tight
+incremental update traversal remain distinct.
+
 The general kernel starts frozen propagation with a reverse visit to those levels,
 then alternates reverse and forward visits.
 This is not an application of the evaluation theorem: the local operations are
@@ -4707,7 +4725,17 @@ shader reduces the first set bit of every nonempty difference. The CPU update
 route reports the least atom of its maintained unsupported set instead. All
 yield the least unsupported atom;
 an original-root failure still takes precedence. `support_true_iff` states the
-corresponding per-atom support obligation. The concrete word conversion,
+corresponding per-atom support obligation. The tight shader's
+`accumulate_zero_counts` shares the selected-bit filter used to construct its
+retained unsupported set and update its touched portion. It preserves an initial
+mask and adds exactly the selected atoms whose final packed support count is
+zero. `PackedWordIterator.SetBits.least_clear_suffix` and
+`lowest_bit_arithmetic` describe each least-bit selection and decrement-clear
+step; `List.mem_filter` supplies the pointwise selection law. Relating the
+shader's 32-bit operations and packed counters to that law, including completed
+producer coverage and barriers before count reads, remains an implementation
+obligation. The helper retains the actual count-read order and its callers own
+all publication and work receipts. The concrete word conversion,
 set-bit iterator, witness reduction and their resource bounds require separate
 executable refinement; the retained proof of `Interpretation::contains` does
 not cover these operations.

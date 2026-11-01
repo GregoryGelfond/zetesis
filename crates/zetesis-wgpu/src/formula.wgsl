@@ -68,24 +68,11 @@ fn wake(index: u32, removed: u32) {
         atomicOr(&domains[next + gate / 32u], bit);
     }
 }
-// Headers occupy 4*N words; wide rows occupy the checked appended tail.
-fn node_at(index: u32) -> Node {
-    let base = index * 4u;
-    return Node(nodes[base], nodes[base + 1u], nodes[base + 2u], nodes[base + 3u]);
-}
-fn operand_at(node: Node, index: u32) -> u32 {
-    return nodes[params.nodes * 4u + node.left + index];
-}
-
 fn contains(world: u32, atom: u32) -> bool {
     return (seeds[world * params.words + atom / 32u] & (1u << (atom % 32u))) != 0u;
 }
-fn operation(tag: u32, left: bool, right: bool) -> bool {
-    if (tag == 2u) { return left && right; }
-    if (tag == 3u) { return left || right; }
-    return !left || right;
-}
-fn original(world: u32, mask_base: u32, index: u32) {
+// Formula truth is always fresh; the shared pass reserves reuse for tight checking.
+fn original(world: u32, mask_base: u32, index: u32, _reuse: bool) {
     let node = node_at(index);
     var value = false;
     if (node.tag == 1u) { value = contains(world, node.left); }
@@ -315,24 +302,7 @@ fn propagate(@builtin(workgroup_id) group: vec3<u32>,
     // Original truth precedes every frozen simplification. Pure chains retain
     // serial order; other DAGs visit each original node in its dependency level.
     if (lane == 0u) { atomicStore(&bad_root, 0u); }
-    if (params.levels == 0u) {
-        if (lane == 0u) {
-            for (var index = 0u; index < params.nodes; index++) {
-                original(world, mask_base, index);
-            }
-        }
-    } else {
-        let order = params.roots + params.levels + 1u;
-        for (var level = 0u; level < params.levels; level++) {
-            let start = roots[params.roots + level];
-            let end = roots[params.roots + level + 1u];
-            for (var offset = start + lane; offset < end; offset += WORKGROUP_SIZE) {
-                original(world, mask_base, roots[order + offset]);
-            }
-            storageBarrier();
-            workgroupBarrier();
-        }
-    }
+    evaluate_original(world, lane, mask_base, false);
     storageBarrier();
     workgroupBarrier();
     for (var atom = lane; atom < params.atoms; atom += WORKGROUP_SIZE) {
