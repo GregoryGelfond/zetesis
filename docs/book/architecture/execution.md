@@ -447,8 +447,11 @@ Both systems share an optional allowance of 100,000,000 logical word operations
 and the inherited preparation-byte allowance. Exhausting an optional allowance
 discards the whole preparation and keeps ordinary candidate generation.
 Cancellation, global work refusal, allocation and invalid source reads remain
-typed failures. No partially prepared rows or units escape. Per-region parity
-and counting subjects are not installed by this root preparation.
+typed failures. No partially prepared rows or units escape. If a candidate
+walk starts, it runs the parity check only when the prepared basis has a row,
+and the counting check only when preparation retained a checked pair of
+families. Empty systems consume no per-region arithmetic passes. Preparation
+work and candidate-state copies retain their own charges.
 
 With an active restriction or without a prepared generator order, the existing
 preference applies. Open atoms that head an atomic choice root of the

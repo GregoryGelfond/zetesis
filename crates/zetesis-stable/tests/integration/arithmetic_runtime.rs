@@ -2,52 +2,13 @@
 
 use std::collections::BTreeSet;
 
+use crate::support::choice_theories::exclusive_choices;
 use crate::support::interpretations::stable_models;
 use crate::support::routes::{ROUTES, Route};
 use zetesis_ferraris::{
-    AdmissionLimits, FormulaNodes, FormulaParts, Node, NodeView, PreparationStatus, Theory,
+    AdmissionLimits, FormulaNodes, FormulaParts, Node, PreparationStatus, Theory,
 };
 use zetesis_stable::{Cancellation, RegionWalkEngagement, StableModels};
-
-/// {a}. {b}. :- a, b. :- not a, not b.
-/// The clauses give the nonunit parity row. An equivalent native threshold
-/// interval 1 <= count{a,b} <= 1 gives explicit recognized C1 lower/upper rows.
-fn exclusive_choices() -> Theory {
-    let mut nodes = FormulaNodes::new(
-        FormulaParts::new(
-            vec![
-                Node::atom(0),          // a
-                Node::atom(1),          // b
-                Node::falsum(),         // 2
-                Node::implies(0, 2),    // not a
-                Node::implies(1, 2),    // not b
-                Node::or_pair([0, 3]),  // a | not a
-                Node::or_pair([1, 4]),  // b | not b
-                Node::and_pair([0, 1]), // a & b
-                Node::and_pair([3, 4]), // not a & not b
-                Node::implies(7, 2),    // :- a, b
-                Node::implies(8, 2),    // :- not a, not b
-            ],
-            vec![],
-        )
-        .unwrap(),
-    );
-    let mut transaction = nodes.transaction();
-    let bounds = transaction
-        .push_threshold_family(&[0, 1], &[1, 1], &[1, 2], usize::MAX, usize::MAX)
-        .unwrap();
-    let at_most_one = transaction
-        .push(NodeView::Implies(bounds[1], 2), usize::MAX, usize::MAX)
-        .unwrap();
-    transaction.commit();
-    Theory::new(
-        2,
-        nodes.into_parts(),
-        vec![5, 6, 9, 10, bounds[0], at_most_one],
-        AdmissionLimits::default(),
-    )
-    .unwrap()
-}
 
 fn assert_route(route: Route, search: &StableModels) {
     let regions = search.statistics().regions.unwrap();
@@ -118,5 +79,159 @@ fn every_candidate_schedule_checks_arithmetic_and_returns_the_exact_family() {
         assert!(regions.parity.refuted <= regions.parity.region_passes);
         assert!(regions.cardinality.refuted <= regions.cardinality.region_passes);
         assert_eq!(search.statistics(), statistics);
+    }
+}
+
+#[test]
+fn a_prepared_empty_basis_and_unpaired_bounds_skip_only_runtime_batches() {
+    for native_lower in [false, true] {
+        let mut nodes = FormulaNodes::new(
+            FormulaParts::new(
+                vec![Node::atom(0), Node::atom(1), Node::or_pair([0, 1])],
+                vec![],
+            )
+            .unwrap(),
+        );
+        let root = if native_lower {
+            let mut edit = nodes.transaction();
+            let lower = edit
+                .push_threshold_family(&[0, 1], &[1, 1], &[1], usize::MAX, usize::MAX)
+                .unwrap()[0];
+            edit.commit();
+            lower
+        } else {
+            2
+        };
+        let theory = Theory::new(
+            2,
+            nodes.into_parts(),
+            vec![root],
+            AdmissionLimits::default(),
+        )
+        .unwrap();
+        let expected = BTreeSet::from([vec![0], vec![1]]);
+        assert_eq!(stable_models(&theory), expected);
+        for route in ROUTES {
+            let mut search = route.search(&theory, Cancellation::default());
+            assert_eq!(route.collect(&mut search), expected);
+            let stats = search.statistics().regions.unwrap();
+            assert!(stats.counts.regions > 0);
+            assert_eq!(stats.parity.status, PreparationStatus::Prepared);
+            assert_eq!(stats.cardinality.status, PreparationStatus::Prepared);
+            assert_eq!(stats.cardinality.rows, usize::from(native_lower));
+            assert_eq!((stats.parity.rank, stats.cardinality.families), (0, 0));
+            assert_eq!(
+                (stats.parity.region_passes, stats.cardinality.region_passes),
+                (0, 0)
+            );
+            assert!(stats.parity.preparation_work > 0 && stats.cardinality.preparation_work > 0);
+        }
+    }
+}
+
+#[test]
+fn a_false_constant_equation_refutes_before_any_runtime_subject() {
+    // (false -> false) -> false forbids the sole assignment on empty support.
+    let theory = Theory::new(
+        0,
+        FormulaParts::new(
+            vec![Node::falsum(), Node::implies(0, 0), Node::implies(1, 0)],
+            vec![],
+        )
+        .unwrap(),
+        vec![2],
+        AdmissionLimits::default(),
+    )
+    .unwrap();
+    assert!(stable_models(&theory).is_empty());
+    for route in ROUTES {
+        let mut search = route.search(&theory, Cancellation::default());
+        assert!(search.root_refuted());
+        assert!(route.collect(&mut search).is_empty());
+        let stats = search.statistics().regions.unwrap();
+        assert_eq!(stats.parity.rank, 0);
+        assert!(stats.parity.root_refuted);
+        assert_eq!(stats.cardinality.status, PreparationStatus::NotPrepared);
+        assert_eq!(
+            (
+                stats.counts.regions,
+                stats.parity.region_passes,
+                stats.cardinality.region_passes
+            ),
+            (0, 0, 0)
+        );
+    }
+}
+
+#[test]
+fn a_checked_unit_keeps_its_seed_and_nonempty_runtime_basis() {
+    let theory = Theory::new(
+        1,
+        FormulaParts::new(
+            vec![
+                Node::atom(0),
+                Node::falsum(),
+                Node::implies(0, 1),
+                Node::implies(2, 1),
+                Node::or_pair([0, 2]),
+            ],
+            vec![],
+        )
+        .unwrap(),
+        vec![3, 4],
+        AdmissionLimits::default(),
+    )
+    .unwrap();
+    let expected = BTreeSet::from([vec![0]]);
+    assert_eq!(stable_models(&theory), expected);
+    for route in ROUTES {
+        let mut search = route.search(&theory, Cancellation::default());
+        assert_eq!(route.collect(&mut search), expected);
+        let stats = search.statistics().regions.unwrap();
+        assert_eq!((stats.parity.rank, stats.parity.units), (1, 1));
+        assert!(stats.parity.phases.root_seed > 0);
+        assert!(stats.parity.region_passes > 0);
+        assert_eq!(stats.cardinality.region_passes, 0);
+    }
+}
+
+#[test]
+fn a_guarded_counting_pair_remains_active_on_a_region_with_the_guard_cut() {
+    use zetesis_ferraris::NodeView;
+    let mut nodes = FormulaNodes::new(
+        FormulaParts::new(
+            vec![Node::atom(0), Node::atom(1), Node::atom(2), Node::falsum()],
+            vec![],
+        )
+        .unwrap(),
+    );
+    let mut edit = nodes.transaction();
+    let bounds = edit
+        .push_threshold_family(&[0, 1], &[1, 1], &[1, 2], usize::MAX, usize::MAX)
+        .unwrap();
+    let missing = edit
+        .push(NodeView::Implies(bounds[0], 3), usize::MAX, usize::MAX)
+        .unwrap();
+    let mut roots = vec![];
+    for prohibited in [missing, bounds[1]] {
+        let guarded = edit
+            .push(NodeView::And(&[2, prohibited]), usize::MAX, usize::MAX)
+            .unwrap();
+        roots.push(
+            edit.push(NodeView::Implies(guarded, 3), usize::MAX, usize::MAX)
+                .unwrap(),
+        );
+    }
+    edit.commit();
+    let theory = Theory::new(3, nodes.into_parts(), roots, AdmissionLimits::default()).unwrap();
+    let expected = BTreeSet::from([vec![]]);
+    assert_eq!(stable_models(&theory), expected);
+    for route in ROUTES {
+        let mut search = route.search(&theory, Cancellation::default());
+        assert_eq!(route.collect(&mut search), expected);
+        let stats = search.statistics().regions.unwrap();
+        assert_eq!((stats.cardinality.rows, stats.cardinality.guarded), (2, 2));
+        assert!(stats.cardinality.families > 0);
+        assert!(stats.cardinality.region_passes > 0);
     }
 }

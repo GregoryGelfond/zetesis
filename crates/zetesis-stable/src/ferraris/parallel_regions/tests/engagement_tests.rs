@@ -26,7 +26,7 @@ pub(super) fn record_candidate_worker(report: &WorkerReport) {
     if report.regions.regions != 0 {
         CANDIDATE_WORKERS.set(CANDIDATE_WORKERS.get() + 1);
         if report.regions.arithmetic.parity_passes > 0
-            && report.regions.arithmetic.cardinality_passes > 0
+            && report.regions.arithmetic.cardinality_passes == 0
         {
             ARITHMETIC_WORKERS.set(ARITHMETIC_WORKERS.get() + 1);
         }
@@ -45,54 +45,39 @@ fn cold_arithmetic_scratch_work(theory: &Theory) -> u64 {
         .reading(index.theory(), index.narrower())
         .unwrap();
     let prepared = reading.arithmetic.expect("the fixture prepares arithmetic");
-    let cardinality = prepared
-        .cardinality()
-        .expect("the nonrefuted fixture retains both owners");
+    let parity_system = prepared
+        .parity()
+        .expect("the positive loops yield parity rows");
+    assert!(
+        prepared.cardinality().is_none(),
+        "these loops have no checked counting family"
+    );
     let cancellation = Cancellation::default();
     let inspect = |region: &mut Region,
                    parity: &mut zetesis_ferraris::ParityKnowledge,
-                   counts: &mut zetesis_ferraris::CardinalityKnowledge,
                    scratch: &mut NarrowingScratch| {
         let before = region.clone();
         let mut meter = zetesis_algebra::Meter::local(u64::MAX);
         let parity =
-            prepared
-                .parity()
-                .inspect_reserved(region, parity, scratch, &cancellation, &mut meter);
+            parity_system.inspect_reserved(region, parity, scratch, &cancellation, &mut meter);
         assert_eq!(
             parity.result,
             Ok(zetesis_algebra::region::SubjectStep::Unchanged)
         );
-        let counts =
-            cardinality.inspect_reserved(region, counts, scratch, &cancellation, &mut meter);
-        assert_eq!(
-            counts.result,
-            Ok(zetesis_algebra::region::SubjectStep::Unchanged)
-        );
         assert_eq!(*region, before);
-        assert_eq!(
-            meter.charged(),
-            parity.statistics.work + counts.statistics.work
-        );
+        assert_eq!(meter.charged(), parity.statistics.work);
         meter.charged()
     };
     let mut region = Region::all_open(theory.atom_count());
-    let mut parity = prepared.parity().knowledge();
-    let mut counts = cardinality.knowledge();
+    let mut parity = parity_system.knowledge();
     let mut retained = NarrowingScratch::default();
-    inspect(&mut region, &mut parity, &mut counts, &mut retained);
+    inspect(&mut region, &mut parity, &mut retained);
     let warm = inspect(
         &mut region.clone(),
         &mut parity.clone(),
-        &mut counts.clone(),
         &mut retained,
     );
-    let cold = inspect(
-        &mut region,
-        &mut parity,
-        &mut counts,
-        &mut NarrowingScratch::default(),
-    );
+    let cold = inspect(&mut region, &mut parity, &mut NarrowingScratch::default());
     let difference = cold.checked_sub(warm).expect("cold scratch does not reuse");
     assert!(
         difference > 0,
@@ -112,7 +97,7 @@ fn retain_single_workspace_work(actual: &mut Outcome, expected: &Outcome, cold: 
     assert_eq!(
         ARITHMETIC_WORKERS.get(),
         active,
-        "every active worker inspected both arithmetic owners"
+        "every active worker inspected parity and omitted the empty counting family"
     );
     let extra = u64::try_from(active).unwrap().checked_mul(cold).unwrap();
     assert_eq!(

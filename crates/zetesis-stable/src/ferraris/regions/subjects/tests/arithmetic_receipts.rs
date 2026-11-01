@@ -4,7 +4,7 @@ use crate::ferraris::regions::arithmetic_counts::ArithmeticCounts;
 #[test]
 fn parity_application_records_the_real_changed_batch() {
     let (_, prepared) = fixture();
-    let mut subject = CandidateSubject::Parity(prepared.parity());
+    let mut subject = CandidateSubject::Parity(prepared.owner.parity());
     let cancellation = Cancellation::default();
     let mut budget = budget(&cancellation, u64::MAX);
     let mut region = Region::all_open(2);
@@ -36,8 +36,8 @@ fn parity_application_records_the_real_changed_batch() {
 #[test]
 fn parity_refutation_counts_a_batch_but_not_a_root_refutation() {
     let (_, prepared) = fixture();
-    assert!(!prepared.root_refuted());
-    let mut subject = CandidateSubject::Parity(prepared.parity());
+    assert!(!prepared.owner.root_refuted());
+    let mut subject = CandidateSubject::Parity(prepared.owner.parity());
     let cancellation = Cancellation::default();
     let mut budget = budget(&cancellation, u64::MAX);
     let mut region = Region::all_open(2);
@@ -62,13 +62,13 @@ fn parity_refutation_counts_a_batch_but_not_a_root_refutation() {
             ..ArithmeticCounts::default()
         }
     );
-    assert!(!prepared.root_refuted());
+    assert!(!prepared.owner.root_refuted());
 }
 
 #[test]
 fn an_entry_cancellation_produces_no_arithmetic_activity() {
     let (_, prepared) = fixture();
-    let mut subject = CandidateSubject::Parity(prepared.parity());
+    let mut subject = CandidateSubject::Parity(prepared.owner.parity());
     let cancellation = Cancellation::default();
     cancellation.cancel();
     let mut budget = budget(&cancellation, 0);
@@ -96,7 +96,7 @@ fn every_parity_refusal_preserves_its_applied_decision_receipt() {
     let mut full_budget = budget(&cancellation, u64::MAX);
     let mut full_region = Region::all_open(2);
     assert!(full_region.hold(0));
-    let full = CandidateSubject::Parity(prepared.parity()).narrow(
+    let full = CandidateSubject::Parity(prepared.owner.parity()).narrow(
         &mut full_region,
         &mut CandidateKnowledge::default(),
         &mut NarrowingScratch::default(),
@@ -112,7 +112,7 @@ fn every_parity_refusal_preserves_its_applied_decision_receipt() {
     // The successful attempt supplies the finite cutoff range. Every prefix
     // is checked against the actual mutation, not a duplicate charge formula.
     for maximum in 0..=complete_work {
-        let mut subject = CandidateSubject::Parity(prepared.parity());
+        let mut subject = CandidateSubject::Parity(prepared.owner.parity());
         let cancellation = Cancellation::default();
         let mut budget = budget(&cancellation, maximum);
         let mut region = Region::all_open(2);
@@ -153,7 +153,7 @@ fn every_parity_refusal_preserves_its_applied_decision_receipt() {
 #[test]
 fn cardinality_completion_does_not_become_parity_activity() {
     let (_, prepared) = fixture();
-    let mut subject = CandidateSubject::Cardinality(prepared.cardinality().unwrap());
+    let mut subject = CandidateSubject::Cardinality(prepared.owner.cardinality().unwrap());
     let cancellation = Cancellation::default();
     let mut budget = budget(&cancellation, u64::MAX);
     let mut counts = RegionCounts::default();

@@ -457,7 +457,7 @@ pub(crate) struct OriginalParts {
     producers: Option<Producers>,
     choice_heads: ChoiceHeads,
     generator_order: Option<GeneratorOrder>,
-    arithmetic: Option<RootPreparation>,
+    arithmetic: Option<subjects::PreparedArithmetic>,
     learning: LearningOwner,
     learned: Option<Arc<LearnedStore>>,
 }
@@ -470,7 +470,7 @@ pub(crate) struct OriginalParts {
 pub(super) struct CandidateReading<'a> {
     pub(super) original: OriginalSubject<'a>,
     pub(super) narrower: &'a Narrower,
-    pub(super) arithmetic: Option<&'a RootPreparation>,
+    pub(super) arithmetic: Option<&'a subjects::PreparedArithmetic>,
 }
 
 /// Which way a walk boundary moves a tier's rows.
@@ -489,7 +489,7 @@ impl OriginalParts {
             || self
                 .arithmetic
                 .as_ref()
-                .is_some_and(|prepared| !prepared.belongs_to(theory))
+                .is_some_and(|prepared| !prepared.owner.belongs_to(theory))
         {
             return Err(Incomplete::WrongTheory);
         }
@@ -690,15 +690,24 @@ fn open_recording(
         cancellation,
         &mut meter,
     );
+    let prepared = arithmetic.result.map(|published| {
+        published.map(|owner| {
+            subjects::PreparedArithmetic::new(
+                owner,
+                arithmetic.parity.rank,
+                arithmetic.cardinality.families,
+            )
+        })
+    });
     statistics.parity = arithmetic.parity;
     statistics.cardinality = arithmetic.cardinality;
-    let mut arithmetic = arithmetic.result.map_err(|error| match error {
+    let mut arithmetic = prepared.map_err(|error| match error {
         PreparationError::Stopped(error) => meter_failure(error),
         PreparationError::Source(source) => Incomplete::ArithmeticSource(source),
     })?;
     let refuted = arithmetic
         .as_ref()
-        .is_some_and(RootPreparation::root_refuted);
+        .is_some_and(|prepared| prepared.owner.root_refuted());
     let generator_order = if refuted {
         None
     } else {
@@ -739,7 +748,7 @@ fn open_recording(
         Some(
             arithmetic
                 .as_mut()
-                .and_then(RootPreparation::take_seeded_root)
+                .and_then(|prepared| prepared.owner.take_seeded_root())
                 .unwrap_or_else(|| Region::all_open(theory.atom_count())),
         )
     };

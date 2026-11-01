@@ -193,9 +193,8 @@ fn unchanged_arithmetic_work(
     scratch: &mut NarrowingScratch,
     cancellation: &Cancellation,
 ) -> u64 {
-    // Independently inspect the settled region through the two actual
-    // arithmetic owners, using the same scratch lifetime as the walk.
-    // Neither may change this complete candidate or trigger another pass.
+    // The fixture has a checked parity basis and no counting pair.
+    // Independently inspect its one active owner with the walk's scratch lifetime.
     let mut arithmetic = Meter::local(u64::MAX);
     let parity = prepared.parity().inspect_reserved(
         region,
@@ -206,25 +205,7 @@ fn unchanged_arithmetic_work(
     );
     assert_eq!(parity.result, Ok(SubjectStep::Unchanged));
     assert_eq!((parity.statistics.held, parity.statistics.cut), (0, 0));
-    let system = prepared
-        .cardinality()
-        .expect("nonrefuting preparation retains its cardinality owner");
-    let cardinality = system.inspect_reserved(
-        region,
-        &mut system.knowledge(),
-        scratch,
-        cancellation,
-        &mut arithmetic,
-    );
-    assert_eq!(cardinality.result, Ok(SubjectStep::Unchanged));
-    assert_eq!(
-        (cardinality.statistics.held, cardinality.statistics.cut),
-        (0, 0)
-    );
-    assert_eq!(
-        arithmetic.charged(),
-        parity.statistics.work + cardinality.statistics.work
-    );
+    assert_eq!(arithmetic.charged(), parity.statistics.work);
     arithmetic.charged()
 }
 
@@ -250,10 +231,19 @@ fn an_enumeration_builds_one_original_index() {
             },
             &cancellation,
             &mut Meter::local(u64::MAX),
-        )
-        .result
-        .unwrap()
-        .expect("the tiny original arithmetic is prepared");
+        );
+        assert!(
+            prepared.parity.rank > 0,
+            "cycle supplies a real parity basis"
+        );
+        assert_eq!(
+            prepared.cardinality.families, 0,
+            "cycle supplies no counting pair"
+        );
+        let prepared = prepared
+            .result
+            .unwrap()
+            .expect("the tiny original arithmetic is prepared");
         assert!(!prepared.root_refuted());
         // The walk's subject carries its learned rows; so does this one.
         let learning = LearningOwner::theory(&theory, LearningLimits::default());
@@ -305,10 +295,9 @@ fn an_enumeration_builds_one_original_index() {
             counts.arithmetic,
             arithmetic_counts::ArithmeticCounts {
                 parity_passes: 1,
-                cardinality_passes: 1,
                 ..Default::default()
             },
-            "{route}: each unchanged arithmetic owner is inspected once"
+            "{route}: only the nonempty basis is inspected"
         );
         assert_eq!(statistics.reduct.regions.work, 0, "{route}");
         assert_eq!(statistics.reduct.frozen_positive_attempts, 1, "{route}");

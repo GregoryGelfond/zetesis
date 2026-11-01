@@ -3,7 +3,7 @@
 use zetesis_algebra::{AnswerSetsSought, Countermodels, Failure, Meter};
 use zetesis_ferraris::{
     ArithmeticAttempt, CardinalitySystem, Knowledge, Narrower, NarrowingScratch, OriginalSubject,
-    ParitySystem, Theory,
+    ParitySystem, RootPreparation, Theory,
 };
 
 use super::super::conditions::{Bound, CandidateKnowledge};
@@ -15,6 +15,38 @@ use crate::streamed_constraints::ConstraintConsequence;
 use crate::subject::{Pass, Subject, SubjectAttempt, SubjectContext, SubjectStep};
 use crate::{Cancellation, Incomplete, RegionCounts};
 use zetesis_algebra::region::Region;
+
+/// Preserve the complete preparation for root and ownership checks. Only a
+/// nonempty echelon basis or a checked family pair has a late-region action.
+#[derive(Debug)]
+pub(in crate::ferraris) struct PreparedArithmetic {
+    pub(super) owner: RootPreparation,
+    parity: bool,
+    cardinality: bool,
+}
+
+impl PreparedArithmetic {
+    pub(super) fn new(owner: RootPreparation, rank: usize, families: u64) -> Self {
+        let parity = rank != 0 || owner.parity().root_refuted();
+        let cardinality = families != 0
+            || owner
+                .cardinality()
+                .is_some_and(CardinalitySystem::root_refuted);
+        Self {
+            owner,
+            parity,
+            cardinality,
+        }
+    }
+
+    pub(in crate::ferraris) fn parity(&self) -> Option<&ParitySystem> {
+        self.parity.then(|| self.owner.parity())
+    }
+
+    pub(in crate::ferraris) fn cardinality(&self) -> Option<&CardinalitySystem> {
+        self.cardinality.then(|| self.owner.cardinality()).flatten()
+    }
+}
 
 /// Borrowed candidate owners; knowledge remains in its existing lazy slots.
 /// Source state retains its independent worker lifetime and allowance.
@@ -129,10 +161,11 @@ pub(super) fn late<'theory, 'check, 'factory, 'state>(
     [
         reading
             .arithmetic
-            .map(|prepared| CandidateSubject::Parity(prepared.parity())),
+            .and_then(PreparedArithmetic::parity)
+            .map(CandidateSubject::Parity),
         reading
             .arithmetic
-            .and_then(|prepared| prepared.cardinality())
+            .and_then(PreparedArithmetic::cardinality)
             .map(CandidateSubject::Cardinality),
         filter.map(|check| CandidateSubject::Streamed {
             theory: reading.original.theory(),

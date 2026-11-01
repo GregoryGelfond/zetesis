@@ -589,6 +589,12 @@ are zero. `preparation_bytes` is the maximum shared named storage request throug
 that stage, including a refused request, not process memory. Shared peaks are
 not additive.
 
+A completed preparation with an empty echelon basis performs no regional parity
+inspections. Counting also skips regional inspections when preparation retained
+no checked family pair, even if it recognized individual bounds. A retained
+guarded pair participates because later decisions can activate its guards.
+Root units and root contradictions are decided during preparation.
+
 Each object's `region_passes` counts completed runtime inspections, including
 unchanged and refuting inspections. Repeated inspections of one region count
 separately. `refuted` counts runtime semantic refutations, excluding preparation

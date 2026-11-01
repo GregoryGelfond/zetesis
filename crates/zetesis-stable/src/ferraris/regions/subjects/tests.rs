@@ -3,12 +3,12 @@
 use super::*;
 use crate::budget::LocalQuota;
 use crate::{SearchLimits, SearchStatistics};
-use zetesis_ferraris::{Node, PreparationLimits, RootPreparation};
+use zetesis_ferraris::{Node, PreparationLimits};
 use zetesis_theory_support::theories::theory;
 
-fn fixture() -> (Theory, RootPreparation) {
-    let theory = theory(
-        2,
+fn fixture() -> (Theory, PreparedArithmetic) {
+    use zetesis_ferraris::{AdmissionLimits, FormulaNodes, FormulaParts, NodeView};
+    let parts = FormulaParts::new(
         vec![
             Node::atom(0),
             Node::atom(1),
@@ -20,8 +20,27 @@ fn fixture() -> (Theory, RootPreparation) {
             Node::implies(5, 2),
             Node::implies(6, 2),
         ],
-        vec![7, 8],
-    );
+        vec![],
+    )
+    .unwrap();
+    let mut nodes = FormulaNodes::new(parts);
+    let mut edit = nodes.transaction();
+    let bounds = edit
+        .push_threshold_family(&[0, 1], &[1, 1], &[1, 2], usize::MAX, usize::MAX)
+        .unwrap();
+    let upper = edit
+        .push(NodeView::Implies(bounds[1], 2), usize::MAX, usize::MAX)
+        .unwrap();
+    edit.commit();
+    // Both equivalent presentations are deliberate: parity clauses and a
+    // checked counting pair give the late-order test two real subjects.
+    let theory = Theory::new(
+        2,
+        nodes.into_parts(),
+        vec![7, 8, bounds[0], upper],
+        AdmissionLimits::default(),
+    )
+    .unwrap();
     let attempt = RootPreparation::prepare_reserved(
         &theory,
         None,
@@ -33,7 +52,15 @@ fn fixture() -> (Theory, RootPreparation) {
         &mut Meter::local(u64::MAX),
     );
     assert_eq!(attempt.parity.rank, 1);
-    (theory, attempt.result.unwrap().unwrap())
+    assert!(attempt.cardinality.families > 0);
+    (
+        theory,
+        PreparedArithmetic::new(
+            attempt.result.unwrap().unwrap(),
+            attempt.parity.rank,
+            attempt.cardinality.families,
+        ),
+    )
 }
 
 fn budget(cancellation: &Cancellation, work: u64) -> Budget<'_> {
@@ -81,7 +108,7 @@ fn prepared_arithmetic_uses_the_declared_late_order() {
 #[test]
 fn parity_progress_keeps_its_decisions_and_receipt() {
     let (_, prepared) = fixture();
-    let mut subject = CandidateSubject::Parity(prepared.parity());
+    let mut subject = CandidateSubject::Parity(prepared.owner.parity());
     let mut region = Region::all_open(2);
     assert!(region.hold(0));
     let mut knowledge = CandidateKnowledge::default();
@@ -118,7 +145,7 @@ fn parity_progress_keeps_its_decisions_and_receipt() {
 #[test]
 fn arithmetic_refusal_is_not_a_semantic_refutation() {
     let (_, prepared) = fixture();
-    let mut subject = CandidateSubject::Parity(prepared.parity());
+    let mut subject = CandidateSubject::Parity(prepared.owner.parity());
     let mut region = Region::all_open(2);
     let before = region.clone();
     let cancellation = Cancellation::default();
