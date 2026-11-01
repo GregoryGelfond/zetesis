@@ -3616,6 +3616,25 @@ signed nodes to the same original theory and use node knowledge sound for every
 answer set in the region. Shared node IDs, supported lowered operators, extraction
 cost, row limits and publication remain implementation obligations.
 
+[`NumericWitnessReplay`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/NumericWitnessReplay.lean)
+uses one index into both columns of a numeric row. An occurrence retains its
+condition node even when it has zero weight or shares that node with another
+position. The original node mask and the guard on frozen predecessor values
+determine the reduct reading. The guards cover an inclusive signed threshold
+and both ordinal cuts with their empty endpoints. The corresponding Rust owners
+are `NumericStorage::view` and `cut_view` in `zetesis-ferraris/src/theory/numeric.rs`,
+the threshold and extremum reductions, and `oracle::evaluate` and `oracle::evaluate_node`.
+The proof starts at the admitted span, using exact arithmetic. Extraction of
+descriptor and owner identity, machine bounds, cache validity and source tuple
+coalescing remain implementation obligations.
+
+For a candidate region that already holds a proper witness and another atom,
+`known_countermodel_refutes_region` discharges a selected original root from
+modelhood. Other selected signs must be known in the same original theory and
+region. `FormulaBounds.Known` suffices for that theorem. A deduction specific
+to stable completions needs its own preservation argument, as does reading the
+Rust node-knowledge mask. No learned fact enters a membership check.
+
 [`AlgebraicRows`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/AlgebraicRows.lean)
 states algebraic consequences for any consequence class, as `RowOf` does. A term
 pairs an atom with a value, and a list of terms is measured in an interpretation

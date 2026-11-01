@@ -5616,6 +5616,26 @@
       "name": "Zetesis.NormalSupport.answer_set_inside_closed"
     },
     {
+      "file": "Zetesis/NumericWitnessReplay.lean",
+      "line": 41,
+      "name": "Zetesis.Refinement.NumericWitnessReplay.read_occurrence"
+    },
+    {
+      "file": "Zetesis/NumericWitnessReplay.lean",
+      "line": 73,
+      "name": "Zetesis.Refinement.NumericWitnessReplay.frozen_read"
+    },
+    {
+      "file": "Zetesis/NumericWitnessReplay.lean",
+      "line": 84,
+      "name": "Zetesis.Refinement.NumericWitnessReplay.selected_replay"
+    },
+    {
+      "file": "Zetesis/NumericWitnessReplay.lean",
+      "line": 117,
+      "name": "Zetesis.LearnedRegions.known_countermodel_refutes_region"
+    },
+    {
       "file": "Zetesis/ObjectiveBounds.lean",
       "line": 30,
       "name": "Zetesis.ObjectiveBounds.mem_prune"
@@ -10754,6 +10774,7 @@
     "Zetesis/NegativeHeads.lean",
     "Zetesis/NormalFerraris.lean",
     "Zetesis/NormalSupport.lean",
+    "Zetesis/NumericWitnessReplay.lean",
     "Zetesis/ObjectiveBounds.lean",
     "Zetesis/ObjectiveConditionTable.lean",
     "Zetesis/ObjectiveConditions.lean",
@@ -10851,8 +10872,8 @@
     "Zetesis/WorldViews.lean"
   ],
   "source_sha256": {
-    "Audit.lean": "80347e7664cb82589c9345fb106dc04b7c87cbe583cb6f677f801612f620a1c6",
-    "Zetesis.lean": "18f3b9323d0fb9ffeb510cd1816b4ff74564c8d3e01a25680b73e56fd923b7ce",
+    "Audit.lean": "6bc8d94f1fe61de1a2079a3010fc1029c019b736f893d8ff8111e5569d747c85",
+    "Zetesis.lean": "f5d557dacaf7f6bf94055fe5fe47323f5092b8352b5f198ed11729df76777bbb",
     "Zetesis/AcyclicEvaluation.lean": "1a9c77283876cf1f61cb92031da04780aada5d0b256f79db5b64bfb6b129d0dc",
     "Zetesis/AdjacencyRows.lean": "38a19b1c74483a157636321a56e95fea660a2192a04c77930d609e411c8d30d4",
     "Zetesis/AggregateAssignment.lean": "def2eac0ae638f3801d35c11a3162afaa3e0b9e393601cf899952e449e309639",
@@ -10960,6 +10981,7 @@
     "Zetesis/NegativeHeads.lean": "8167d8b182fe903c5d477df2418beb37b9eed1411068f4c400e044d5c8d2b10b",
     "Zetesis/NormalFerraris.lean": "8d66055e9bf2fdee4472bc15f8f661e287234b5629de22f479c7005d8707ad9a",
     "Zetesis/NormalSupport.lean": "9ca25abe6f87c8872ba036719099a044e2a366aea5005809ad12a24095ea89f3",
+    "Zetesis/NumericWitnessReplay.lean": "4b37ab01acd45e85e2cd66b6b0c2ea9fdae3038c64188ea7f506a7c77fd17698",
     "Zetesis/ObjectiveBounds.lean": "57f357f3e2eb99f15499509e134db56fb59c7cd9342df7d3219eae6b59679b2e",
     "Zetesis/ObjectiveConditionTable.lean": "80e4d32f56ed11d6c69b938636fec39dbab3240810f9137a84f722f39fe0d23c",
     "Zetesis/ObjectiveConditions.lean": "1f8509838dce8b587fe8aa74829e9d1b0c4275b96572c062ef3504fe6ab50fde",

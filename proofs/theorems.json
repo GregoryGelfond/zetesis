@@ -5615,6 +5615,26 @@
     "line": 130
   },
   {
+    "name": "Zetesis.Refinement.NumericWitnessReplay.read_occurrence",
+    "file": "Zetesis/NumericWitnessReplay.lean",
+    "line": 41
+  },
+  {
+    "name": "Zetesis.Refinement.NumericWitnessReplay.frozen_read",
+    "file": "Zetesis/NumericWitnessReplay.lean",
+    "line": 73
+  },
+  {
+    "name": "Zetesis.Refinement.NumericWitnessReplay.selected_replay",
+    "file": "Zetesis/NumericWitnessReplay.lean",
+    "line": 84
+  },
+  {
+    "name": "Zetesis.LearnedRegions.known_countermodel_refutes_region",
+    "file": "Zetesis/NumericWitnessReplay.lean",
+    "line": 117
+  },
+  {
     "name": "Zetesis.ObjectiveBounds.mem_prune",
     "file": "Zetesis/ObjectiveBounds.lean",
     "line": 30

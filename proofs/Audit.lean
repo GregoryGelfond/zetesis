@@ -1123,6 +1123,10 @@ import Zetesis
 #print axioms Zetesis.NormalSupport.projection_compatible
 #print axioms Zetesis.NormalSupport.projection_compatible_of_coverage
 #print axioms Zetesis.NormalSupport.answer_set_inside_closed
+#print axioms Zetesis.Refinement.NumericWitnessReplay.read_occurrence
+#print axioms Zetesis.Refinement.NumericWitnessReplay.frozen_read
+#print axioms Zetesis.Refinement.NumericWitnessReplay.selected_replay
+#print axioms Zetesis.LearnedRegions.known_countermodel_refutes_region
 #print axioms Zetesis.ObjectiveBounds.mem_prune
 #print axioms Zetesis.ObjectiveBounds.incumbent_survives
 #print axioms Zetesis.ObjectiveBounds.tighten
