@@ -63,6 +63,10 @@ pub(crate) struct BatchQueue {
     batching: batching::Batching,
     #[cfg(feature = "gpu")]
     demand: Demand,
+    /// The general GPU route's private run owner. It spans candidate streams
+    /// and keeps raw samples out of cloneable solver statistics.
+    #[cfg(feature = "gpu")]
+    samples: Option<crate::residual_handovers::sampling::RunSamples>,
     #[cfg(feature = "gpu")]
     lookahead: LookaheadReceipts,
     /// The last decoded device submission, when it was checked while the
@@ -109,7 +113,27 @@ impl BatchQueue {
 
     #[cfg(feature = "gpu")]
     pub(crate) fn for_joint_oracle(options: &SolveConfig) -> Result<Self, SolveError> {
-        Self::joint(options, options.completion_workers)
+        let mut queue = Self::joint(options, options.completion_workers)?;
+        queue.samples =
+            crate::residual_handovers::sampling::RunSamples::new(options.max_batch_bytes);
+        Ok(queue)
+    }
+
+    /// Polling copies population counts and, after settlement, bounded cached
+    /// summaries. A snapshot never clones or rearranges a run's raw samples.
+    #[cfg(feature = "gpu")]
+    pub(crate) fn observe_samples(&self, stats: &mut crate::ResidualHandoverStatistics) {
+        if let Some(samples) = &self.samples {
+            stats.samples = Some(samples.snapshot());
+        }
+    }
+
+    /// Materialize quantiles at most once, then release both raw reservoirs.
+    #[cfg(feature = "gpu")]
+    pub(crate) fn settle_samples(&mut self) {
+        if let Some(samples) = &mut self.samples {
+            samples.settle();
+        }
     }
 
     #[cfg(feature = "gpu")]
@@ -433,7 +457,7 @@ impl BatchQueue {
         if let Some((proposal, selected)) = ahead {
             self.proposed_ahead(models, proposal.map_err(Failure::from)?, selected, count);
         }
-        self.complete_device_slate(models, device, ticket, rows, ceiling)?;
+        self.complete_device_slate(models, device, ticket, rows, options)?;
         Ok(false)
     }
 
@@ -444,8 +468,9 @@ impl BatchQueue {
         device: &mut D,
         ticket: zetesis_stable::SlateTicket,
         rows: regional::CheckedRows,
-        ceiling: u64,
+        options: &SolveConfig,
     ) -> Result<(), Failure> {
+        let ceiling = options.max_batch_bytes;
         let prior_completion = models.batch_statistics().completion_calls;
         let slate = ticket.slate();
         let mut observed = None;
@@ -468,7 +493,7 @@ impl BatchQueue {
             }
         }
         let result = rows.finish(models, ticket, &mut self.completion);
-        if let Some((ordinal, mandatory_bytes)) = observed {
+        let receipt = if let Some((ordinal, mandatory_bytes)) = observed {
             let may_have_queried = models.batch_statistics().completion_calls != prior_completion
                 && self
                     .completion
@@ -490,13 +515,26 @@ impl BatchQueue {
                 }
                 stats.join(receipt.as_ref(), &decoded, may_have_queried);
             }
-        }
+            receipt
+        } else {
+            None
+        };
         if models.batch_statistics().completion_calls != prior_completion
             && let Some(progress) = self.completion.last_statistics()
         {
             self.accounting.record(progress);
         }
         let batch = result?;
+        // Each successful commit enters the run exactly once, even when the
+        // optional slot receipt or its decode journal could not be retained.
+        if let Some(samples) = &mut self.samples {
+            let counts = device
+                .handovers()
+                .and_then(|stats| stats.last_attempt.as_ref())
+                .filter(|attempt| attempt.decode_complete)
+                .map(|attempt| attempt.residuals);
+            samples.commit(counts, &decoded, receipt.as_ref(), options.stats);
+        }
         // The bound generation is read after the commit and before any of the
         // slate's models is scored.
         self.batching.committed_in_flight(models.bound_generation());

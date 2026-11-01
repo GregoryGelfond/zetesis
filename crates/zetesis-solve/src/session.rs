@@ -771,29 +771,15 @@ impl<'a> Session<'a> {
     /// optimized outcome can be available while retained ties await delivery.
     #[must_use]
     pub fn outcome(&self) -> Option<SemanticOutcome> {
-        if self.projection_done {
-            return Some(self.progress());
-        }
-        let mut outcome = match &self.state {
-            State::Source(state) => state.finished().then(|| state.outcome()),
-            State::Formula(state) => state
-                .finished()
-                .then(|| state.outcome(self.phases.recorder())),
-            State::Hybrid(state) => state
-                .finished()
-                .then(|| state.outcome(self.phases.recorder())),
-            State::TerminalDefinitions(state) => state
-                .finished()
-                .then(|| state.outcome(self.phases.recorder())),
-            State::Stopped(outcome) => Some((**outcome).clone()),
-        };
-        if let Some(outcome) = &mut outcome {
-            outcome.projection = self
-                .projection
-                .as_ref()
-                .map(crate::projection::Projection::statistics);
-        }
-        outcome
+        let finished = self.projection_done
+            || match &self.state {
+                State::Source(state) => state.finished(),
+                State::Formula(state) => state.finished(),
+                State::Hybrid(state) => state.finished(),
+                State::TerminalDefinitions(state) => state.finished(),
+                State::Stopped(_) => true,
+            };
+        finished.then(|| self.progress())
     }
     /// End an unfinished session and retain its settled evidence. Native workers
     /// are joined without cancelling the caller's token. Coverage stays unavailable
@@ -826,12 +812,45 @@ impl<'a> Session<'a> {
     pub fn phase_timings(&self) -> Option<PhaseTimings> {
         self.phases.snapshot()
     }
+    /// Enrich only the snapshot returned to the caller. Inner formula,
+    /// streamed and reconstructed outcomes can cache and clone one another;
+    /// none of those caches needs its own copy of the terminal sample groups.
+    #[cfg(feature = "gpu")]
+    fn report_samples(&self, outcome: &mut SemanticOutcome) {
+        if let Some(stats) = outcome
+            .formula_execution
+            .as_mut()
+            .and_then(|execution| execution.gpu_residual_handovers.as_mut())
+        {
+            match &self.state {
+                State::Formula(formula) => formula.observe_samples(stats),
+                State::Hybrid(hybrid) => hybrid.formula_core().observe_samples(stats),
+                State::TerminalDefinitions(terminal) => {
+                    terminal.formula_core().observe_samples(stats);
+                }
+                State::Source(_) | State::Stopped(_) => {}
+            }
+        }
+    }
+
     /// Current checked evidence, including results buffered before delivery.
     ///
     /// A snapshot does not stop search. Missing completion remains absent; only
     /// the recorded coverage determines whether enumeration is complete.
     #[must_use]
     pub fn progress(&self) -> SemanticOutcome {
+        let outcome = self.current_evidence();
+        #[cfg(feature = "gpu")]
+        {
+            let mut outcome = outcome;
+            self.report_samples(&mut outcome);
+            outcome
+        }
+        #[cfg(not(feature = "gpu"))]
+        outcome
+    }
+
+    fn current_evidence(&self) -> SemanticOutcome {
         let mut outcome = match &self.state {
             State::Source(state) => state.outcome(),
             State::Formula(state) => state.outcome(self.phases.recorder()),
@@ -913,7 +932,7 @@ impl<'a> Session<'a> {
                 None => {
                     self.projection_done = true;
                     let complete =
-                        self.progress().completion() == Some(crate::Completion::Exhausted);
+                        self.current_evidence().completion() == Some(crate::Completion::Exhausted);
                     self.projection
                         .as_mut()
                         .expect("projected stream")

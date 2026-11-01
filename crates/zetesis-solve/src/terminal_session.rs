@@ -57,6 +57,14 @@ pub(crate) struct TerminalSession<'a> {
 }
 
 impl<'a> TerminalSession<'a> {
+    #[cfg(feature = "gpu")]
+    pub(crate) fn formula_core(&self) -> &FormulaSession<'a, Execution> {
+        match &self.base {
+            BaseSession::Eager(core) => core,
+            BaseSession::Hybrid(hybrid) => hybrid.formula_core(),
+        }
+    }
+
     pub(crate) fn new(
         owner: &'a TerminalFormula,
         config: &SolveConfig,

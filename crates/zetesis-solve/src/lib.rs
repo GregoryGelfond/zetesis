@@ -127,6 +127,10 @@ pub use optimization::{Optimization, OptimizationStop};
 pub use phase_timing::{PhaseTimings, SolvePhase};
 pub use policy::{GpuBatching, Grounder, OptimumSearch, Oracle};
 pub use projection::{ProjectionError, ProjectionLimits, ProjectionResource, ProjectionStatistics};
+pub use residual_handovers::sampling::{
+    ResidualQuantiles, ResidualRunSamples, ResidualSampleGroup, ResidualSampleMetric,
+    ResidualSamplePopulation,
+};
 pub use residual_handovers::{
     ResidualHandoverAttempt, ResidualHandoverByReason, ResidualHandoverStatistics,
     ResidualReasonSearch, ResidualSearchStatistics,

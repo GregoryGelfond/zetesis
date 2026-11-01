@@ -6,6 +6,7 @@ use crate::FormulaResidualStatistics;
 
 #[cfg(feature = "gpu")]
 pub(crate) mod decoded;
+pub(crate) mod sampling;
 
 /// Cumulative handover attempts and the latest attempt in this solver session.
 /// A retry retains previously performed work. Only successful publication counts a slate.
@@ -28,6 +29,10 @@ pub struct ResidualHandoverStatistics {
     pub counts_exact: bool,
     /// Latest attempted slate, absent before the first ticket or after ordinal overflow.
     pub last_attempt: Option<ResidualHandoverAttempt>,
+    /// Observation coverage for committed worlds and batches. At settlement this
+    /// includes available quantiles over the committed prefix. The enclosing
+    /// outcome reports whether the solve completed or stopped.
+    pub samples: Option<sampling::ResidualRunSamples>,
 }
 
 impl Default for ResidualHandoverStatistics {
@@ -41,6 +46,7 @@ impl Default for ResidualHandoverStatistics {
             complete_work: true,
             counts_exact: true,
             last_attempt: None,
+            samples: None,
         }
     }
 }

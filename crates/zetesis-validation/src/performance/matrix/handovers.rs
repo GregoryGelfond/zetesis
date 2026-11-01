@@ -24,6 +24,9 @@ pub struct ResidualHandoverStatistics {
     /// Latest ticket attempt when its ordinal was retained.
     #[serde(deserialize_with = "nullable")]
     pub last_attempt: Option<ResidualHandoverAttempt>,
+    /// Committed general-GPU samples when the observation owner was admitted.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub samples: Option<Box<super::ResidualRunSamples>>,
 }
 
 /// The observed stages of one ticket, including an interrupted prefix.
@@ -123,7 +126,7 @@ pub struct ResidualSearchStatistics {
 
 // An optional observation is explicit null inside a present typed receipt.
 // Historical documents may omit the entire handover object.
-fn nullable<'de, T: Deserialize<'de>, D: Deserializer<'de>>(
+pub(super) fn nullable<'de, T: Deserialize<'de>, D: Deserializer<'de>>(
     input: D,
 ) -> Result<Option<T>, D::Error> {
     Option::deserialize(input)
@@ -180,6 +183,9 @@ pub(super) fn attach(
 
 impl ResidualHandoverStatistics {
     fn check(&self) -> Result<(), String> {
+        if let Some(samples) = &self.samples {
+            samples.check(self.counts_exact.then_some(self.committed_slates))?;
+        }
         if self.counts_exact
             && (self
                 .committed_slates

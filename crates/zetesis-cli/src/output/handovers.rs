@@ -1,4 +1,5 @@
 //! Exact GPU residual handovers, independently of device reason totals.
+mod samples;
 use super::{Buffer, RunError, optional_number};
 use zetesis_solve::{
     FormulaResidualStatistics, ResidualHandoverAttempt, ResidualHandoverStatistics,
@@ -38,6 +39,10 @@ pub(super) fn write(
         attempt(out, last)?;
     } else {
         out.text("null")?;
+    }
+    if let Some(value) = &stats.samples {
+        out.text(",\"samples\":")?;
+        samples::write(out, value)?;
     }
     out.text("}")
 }

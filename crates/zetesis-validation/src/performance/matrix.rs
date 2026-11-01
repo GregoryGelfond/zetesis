@@ -22,11 +22,16 @@
 
 mod config;
 mod handovers;
+mod residual_samples;
 pub use handovers::{
     ResidualHandoverAttempt, ResidualHandoverByReason, ResidualHandoverStatistics,
     ResidualReasonSearch, ResidualSearchStatistics,
 };
 mod invocation;
+pub use residual_samples::{
+    ResidualQuantiles, ResidualRunSamples, ResidualSampleGroup, ResidualSampleGroups,
+    ResidualSampleMetric, ResidualSamplePopulation,
+};
 mod native_family;
 mod outcome;
 mod record;

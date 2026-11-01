@@ -22,6 +22,8 @@ use crate::formula_execution::Failure;
 use crate::phase_timing::Recorder;
 use crate::{GpuBatching, GpuLookahead, GpuLookaheadDeclined, SolveConfig, SolveError};
 
+mod sampling;
+
 /// When the double raises the control during a slate's last submission.
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Stop {
@@ -199,7 +201,22 @@ impl SlateDevice for Double {
         offered: usize,
         rows: &mut super::device::CheckedRows,
     ) -> Result<Decoded, Failure> {
-        let receipt = checked?;
+        let (verdicts, timing) = self.unpack(checked?, slate, offset, offered)?;
+        for verdict in verdicts {
+            rows.classified(verdict)?;
+        }
+        Ok(timing)
+    }
+}
+
+impl Double {
+    fn unpack(
+        &self,
+        receipt: Receipt,
+        slate: SlateId,
+        offset: usize,
+        offered: usize,
+    ) -> Result<(Vec<BatchVerdict>, Decoded), Failure> {
         // As a device receipt does, refuse another slate's or another offset's.
         if receipt.slate != slate
             || receipt.offset != offset
@@ -215,13 +232,13 @@ impl SlateDevice for Double {
             .index
             .checked_sub(1)
             .and_then(|previous| self.intervals.get(previous).copied().flatten());
-        for verdict in receipt.verdicts {
-            rows.classified(verdict)?;
-        }
-        Ok(Decoded {
-            compute,
-            finish_wait: receipt.finish_wait,
-        })
+        Ok((
+            receipt.verdicts,
+            Decoded {
+                compute,
+                finish_wait: receipt.finish_wait,
+            },
+        ))
     }
 }
 

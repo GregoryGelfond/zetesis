@@ -996,7 +996,28 @@ of open atoms to the CPU receipt at the same original slot. It totals work and
 outcomes by reason. A slate's width is the maximum number of visited regions
 at a single depth, summed across its queries at that depth. Host time sums the
 individual query intervals, which may overlap. Unavailable measurements appear
-as null. The latest-attempt statistics do not estimate run-wide percentiles.
+as null.
+
+The optional `gpu_residual_handovers.samples` report describes two populations
+across the run. Use `worlds` to ask how difficult the residual queries were.
+Use `batches` to ask how much work was handed over at each dispatch. Every
+successful batch enters once, including one with zero residuals. A failed
+attempt contributes to the attempt's work receipt. Its retry enters the batch
+population upon successful commit.
+
+While the session is live, the report gives population sizes and storage use.
+At settlement, `groups` gives the combined view and a view for each device
+stopping reason when recording space permits. Each measurement shows how many
+members were eligible, measured and retained. Its median uses the integer
+midpoint for an even sample. Its 90th percentile uses nearest rank. Ranks
+are marked `exact`, `estimated` or `unavailable`. Disabled timing stays
+unavailable. A stopped run describes the committed prefix of that run.
+
+The collector aims for 65,536 worlds and 4,096 batches. Its separate byte
+allowance is one eighth of the general GPU batch allowance. Lowering memory
+can reduce either sample or omit the report. The arrays belong to the
+session. Reading a snapshot never advances the samples. Per-run medians
+cannot be averaged to recover the median across several problem instances.
 
 The optional slot journal uses idle CPU completion scratch during decoding.
 Before the CPU starts, the coordinator retains the journal only when the

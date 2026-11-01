@@ -460,6 +460,9 @@ impl Buffer {
             .map_err(|error| self.error(error))
     }
     fn string(&mut self, value: &str) -> Result<(), RunError> {
+        self.json(value)
+    }
+    fn json<T: serde::Serialize + ?Sized>(&mut self, value: &T) -> Result<(), RunError> {
         serde_json::to_writer(&mut *self, value)
             .map_err(|error| self.error(io::Error::other(error)))
     }

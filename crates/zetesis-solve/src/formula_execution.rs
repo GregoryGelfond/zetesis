@@ -578,6 +578,7 @@ impl MembershipExecution for Execution {
                 // The last submission's interval arrives only with the flush;
                 // without one, an overlapped last submission is unmeasured.
                 queue.flushed(flushed);
+                queue.settle_samples();
             }
             #[cfg(feature = "gpu")]
             Self::Tight {

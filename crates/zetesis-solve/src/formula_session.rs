@@ -886,6 +886,13 @@ impl<'a, E: MembershipExecution> FormulaSession<'a, E> {
 mod tests;
 
 impl<'a> FormulaSession<'a, crate::formula_execution::Execution> {
+    #[cfg(feature = "gpu")]
+    pub(crate) fn observe_samples(&self, stats: &mut crate::ResidualHandoverStatistics) {
+        if let Some(crate::formula_execution::Execution::Hybrid { queue, .. }) = &self.execution {
+            queue.observe_samples(stats);
+        }
+    }
+
     /// Own semantic preparation before choosing its execution route. A stopped
     /// preparation retains its receipts without constructing a device pipeline.
     /// Route construction keeps the ordinary session's fallible start door.

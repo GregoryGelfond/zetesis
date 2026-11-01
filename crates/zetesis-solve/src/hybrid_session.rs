@@ -100,6 +100,11 @@ fn accept(
 }
 
 impl<'a> HybridSession<'a> {
+    #[cfg(feature = "gpu")]
+    pub(crate) fn formula_core(&self) -> &FormulaSession<'a, Execution> {
+        &self.core
+    }
+
     /// A hybrid owner's session: the route is recorded as lazy grounding and
     /// observed as hybrid grounding before the core session starts. A terminal
     /// owner's hybrid base is observed by its terminal session instead.
