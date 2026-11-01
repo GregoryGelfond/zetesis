@@ -319,6 +319,52 @@ fn returned_witness_is_admitted_with_the_live_workspace() {
 }
 
 #[test]
+fn a_warmed_witness_fits_its_exact_observed_peak() {
+    let owner = theory(
+        2,
+        vec![Node::atom(0), Node::atom(1), Node::implies(1, 1)],
+        vec![0, 2],
+    );
+    let candidate = world(&owner, 3);
+    let mut workspace = FrozenPositiveWorkspace::default();
+    let first = attempt(&mut workspace, &candidate, EvaluationLimits::default());
+    assert!(matches!(
+        first.result,
+        Ok(FrozenPositiveOutcome::NonMinimal(_))
+    ));
+    assert!(first.preparation_work > 0);
+    let baseline = attempt(&mut workspace, &candidate, EvaluationLimits::default());
+    let Ok(FrozenPositiveOutcome::NonMinimal(expected)) = baseline.result else {
+        panic!("the unseeded self-cycle needs a strict-subset witness")
+    };
+    assert!(expected.theory().same_instance(&owner));
+    assert_eq!(expected.atoms().collect::<Vec<_>>(), vec![0]);
+    assert_eq!(baseline.preparation_work, 0);
+    assert!(baseline.peak_bytes > baseline.retained_bytes);
+
+    let limited = attempt(
+        &mut workspace,
+        &candidate,
+        EvaluationLimits {
+            max_bytes: usize::try_from(baseline.peak_bytes).unwrap(),
+            ..EvaluationLimits::default()
+        },
+    );
+    let Ok(FrozenPositiveOutcome::NonMinimal(witness)) = limited.result else {
+        panic!("the complete witness must fit its measured simultaneous capacity")
+    };
+    assert!(witness.theory().same_instance(&owner));
+    assert_eq!(
+        witness.atoms().collect::<Vec<_>>(),
+        expected.atoms().collect::<Vec<_>>()
+    );
+    assert_eq!(limited.preparation_work, baseline.preparation_work);
+    assert_eq!(limited.work, baseline.work);
+    assert_eq!(limited.retained_bytes, baseline.retained_bytes);
+    assert_eq!(limited.peak_bytes, baseline.peak_bytes);
+}
+
+#[test]
 fn repeated_queries_reuse_only_the_original_incidence_structure() {
     let owner = theory(
         1,

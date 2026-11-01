@@ -65,14 +65,15 @@ impl Compiler<'_> {
                 .poll()
                 .map_err(|reason| self.error(ErrorKind::Stopped(reason)))?;
         }
-        if observed > limit {
-            return Err(self.error(ErrorKind::Limit {
-                resource,
-                observed: observed as u128,
-                limit: limit as u128,
-            }));
-        }
-        Ok(())
+        zetesis_algebra::Meter::check_count(observed, 0, limit)
+            .map(|_| ())
+            .map_err(|_| {
+                self.error(ErrorKind::Limit {
+                    resource,
+                    observed: observed as u128,
+                    limit: limit as u128,
+                })
+            })
     }
     fn unsupported(&self, feature: Feature) -> Error {
         self.error(ErrorKind::Unsupported(feature))

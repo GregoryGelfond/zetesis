@@ -130,3 +130,35 @@ fn consuming_observations_transfers_the_canonical_values() {
         expected
     );
 }
+
+#[test]
+fn anonymous_key_capacity_has_an_inclusive_ceiling() {
+    let input = source("#show. #show N:N={not p(_);not p((0,));not p((1,0));not p((2,0))}.");
+    let model = Model::default();
+    let cancellation = Cancellation::default();
+    let run = |max_term_storage_bytes| {
+        input.metadata().observations().evaluate(
+            &model,
+            Limits {
+                max_term_storage_bytes,
+                ..Limits::default()
+            },
+            &cancellation,
+        )
+    };
+    let complete = run(Limits::default().max_term_storage_bytes).unwrap();
+    let peak = usize::try_from(complete.statistics().peak_term_storage_bytes).unwrap();
+    assert!(peak > 0);
+    let exact = run(peak).unwrap();
+    assert_eq!(exact.symbols(), complete.symbols());
+    assert_eq!(exact.statistics(), complete.statistics());
+    let error = run(peak - 1).unwrap_err();
+    assert!(matches!(
+        error.kind(),
+        ErrorKind::Limit {
+            resource: Resource::TermStorageBytes,
+            observed,
+            limit,
+        } if *observed > *limit && *limit == (peak - 1) as u128
+    ));
+}

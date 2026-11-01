@@ -17,7 +17,7 @@ use zetesis_themelios::logical::{
 use zetesis_themelios::{
     AdmissionOptions, AdmittedFormula, CompilationFailure, ExpansionLimits, FormulaFailure,
     FormulaLimits, ParsedSource, ProfileFeature, ProgramAdmissionOptions, ProgramFailureKind,
-    ProgramResource, ProgramSubject, admit_program_formula, validate_program_formula,
+    ProgramOriginal, ProgramResource, admit_program_formula, validate_program_formula,
 };
 
 const SOURCE: &str = include_str!("../fixtures/program-admission.lp");
@@ -277,7 +277,7 @@ fn constructed_failures_need_no_source_location() {
         error.cause(),
         FormulaFailure::Expansion(zetesis_themelios::ExpansionFailure::Evaluation { error: zetesis_themelios::logical::term::EvalError::NotGround { variable: Variable::Named(name) }, .. }) if name.as_str() == "X"
     ));
-    let ProgramSubject::Statement(statement) = error.subject().unwrap() else {
+    let ProgramOriginal::Statement(statement) = error.original().unwrap() else {
         panic!("actual statement");
     };
     assert!(std::ptr::eq(
@@ -304,7 +304,7 @@ fn scripts_are_refused_as_statements() {
         ProgramFailureKind::Compilation(CompilationFailure::Profile(ProfileFeature::Statement))
     ));
     assert!(
-        matches!(error.subject, ProgramSubject::Statement(statement) if matches!(statement.get(), Statement::Script(_)))
+        matches!(error.original, ProgramOriginal::Statement(statement) if matches!(statement.get(), Statement::Script(_)))
     );
 }
 
@@ -335,8 +335,10 @@ fn logical_body_width_has_its_own_ceiling() {
     assert!(
         matches!(error.kind, ProgramFailureKind::Limit(limit) if limit.resource == ProgramResource::BodyElements)
     );
-    assert!(matches!(error.subject, ProgramSubject::Statement(statement)
-        if program.statements().any(|original| std::ptr::eq(original, statement))));
+    assert!(
+        matches!(error.original, ProgramOriginal::Statement(statement)
+        if program.statements().any(|original| std::ptr::eq(original, statement)))
+    );
 }
 
 #[test]
@@ -359,7 +361,7 @@ fn text_limits_accumulate_across_rules() {
 fn named_parts_are_refused_without_a_fake_span() {
     let program = raised("#program step(t). p(t).");
     let error = validate_program_formula(&program, ProgramAdmissionOptions::default()).unwrap_err();
-    assert!(matches!(error.subject, ProgramSubject::Part(key) if key.name.as_str() == "step"));
+    assert!(matches!(error.original, ProgramOriginal::Part(key) if key.name.as_str() == "step"));
 }
 
 #[test]

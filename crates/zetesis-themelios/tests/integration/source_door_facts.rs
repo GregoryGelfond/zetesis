@@ -190,7 +190,7 @@ fn overlapping_intervals_keep_duplicate_occurrences_and_family_evidence() {
 
 #[test]
 fn fact_admission_refusals_resolve_the_original_fact_evidence() {
-    use zetesis_themelios::{FormulaFailure, FormulaResource, ProgramSubject, admit_formula};
+    use zetesis_themelios::{FormulaFailure, FormulaResource, ProgramOriginal, admit_formula};
     let text = "p(1). q(2,3).";
     let logical = Arc::new(raised(text));
     let limits = zetesis_core::AdmissionLimits {
@@ -229,7 +229,7 @@ fn fact_admission_refusals_resolve_the_original_fact_evidence() {
             ..usize::try_from(location.span.end().get()).unwrap()],
         "q(2,3)."
     );
-    let ProgramSubject::Statement(statement) = typed.subject().unwrap() else {
+    let ProgramOriginal::Statement(statement) = typed.original().unwrap() else {
         panic!("original fact statement");
     };
     assert!(std::ptr::eq(
@@ -240,7 +240,7 @@ fn fact_admission_refusals_resolve_the_original_fact_evidence() {
 
 #[test]
 fn typed_rule_count_includes_fact_occurrences_before_later_rules() {
-    use zetesis_themelios::{ExpansionFailure, ExpansionResource, FormulaFailure, ProgramSubject};
+    use zetesis_themelios::{ExpansionFailure, ExpansionResource, FormulaFailure, ProgramOriginal};
     let logical = Arc::new(raised("p(1). q(2). r(X) :- p(X)."));
     let options = ProgramAdmissionOptions {
         core_limits: zetesis_core::AdmissionLimits {
@@ -265,7 +265,7 @@ fn typed_rule_count_includes_fact_occurrences_before_later_rules() {
             ..
         })
     ));
-    let ProgramSubject::Statement(statement) = failure.subject().unwrap() else {
+    let ProgramOriginal::Statement(statement) = failure.original().unwrap() else {
         panic!("second original rule");
     };
     assert!(std::ptr::eq(

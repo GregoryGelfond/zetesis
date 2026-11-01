@@ -1,16 +1,17 @@
 //! Typed view consumers need no CLI, solver, output writer or ASP-text parser.
 
 use serde_json::{Value as Json, json};
-use zetesis_algebra::Cancellation;
+use zetesis_algebra::{Cancellation, Stop};
 use zetesis_core::catalog::AtomCatalog;
 use zetesis_core::{Atom, Model, Predicate, Sign, Value, ValueLimits, ValueNode};
 use zetesis_reference_support::formula;
 use zetesis_test_support::programs::atom;
-use zetesis_themelios::OutputSelection;
 use zetesis_themelios::observation::json::{self, AtomTable};
 use zetesis_themelios::observation::{
-    Limits, ModelView, ObservationProgram, Symbol, SymbolSign, ViewError, ViewLimits,
+    ErrorKind, Limits, ModelView, ObservationProgram, Resource, Symbol, SymbolSign, ViewError,
+    ViewLimits,
 };
+use zetesis_themelios::{OutputSelection, ProgramSite};
 
 #[test]
 fn evaluated_views_resume_the_original_rendering_budget() {
@@ -52,6 +53,94 @@ fn evaluated_views_resume_the_original_rendering_budget() {
             ..
         }
     ));
+}
+
+#[test]
+fn resumed_rendering_checks_its_first_real_request() {
+    let fixture = ObservationFixture::with_directives(
+        Model::new([atom("p", vec![Value::Number(1)])]).unwrap(),
+        "p(1). #show p/1. #show f(X):p(X).",
+    );
+    let view = fixture.view();
+    let preceding = view.observation_statistics();
+    assert!(preceding.work > 0);
+    let limit = preceding.work - 1;
+    let error = view
+        .render(
+            Limits {
+                max_work: limit,
+                ..Limits::default()
+            },
+            &fixture.cancellation,
+        )
+        .unwrap_err();
+    // The first atom charges one visit plus its one-byte predicate name. An
+    // early constructor or zero-step check would report only preceding.work.
+    assert_eq!(
+        error.kind(),
+        &ErrorKind::Limit {
+            resource: Resource::Work,
+            observed: u128::from(preceding.work) + 2,
+            limit: u128::from(limit),
+        }
+    );
+    assert_eq!(error.statistics(), preceding);
+    assert_eq!(error.site(), ProgramSite::program());
+    assert_eq!(view.observation_statistics(), preceding);
+}
+
+#[test]
+fn empty_rendering_still_checks_its_retained_work() {
+    let fixture = ObservationFixture::with_directives(Model::new([]).unwrap(), "#show X:p(X).");
+    let view = fixture.view();
+    let preceding = view.observation_statistics();
+    assert!(preceding.work > 0);
+    assert_eq!(view.shown_atoms().count(), 0);
+    assert!(view.shown_terms().is_empty());
+    let limit = preceding.work - 1;
+    let error = view
+        .render(
+            Limits {
+                max_work: limit,
+                ..Limits::default()
+            },
+            &fixture.cancellation,
+        )
+        .unwrap_err();
+    assert_eq!(
+        error.kind(),
+        &ErrorKind::Limit {
+            resource: Resource::Work,
+            observed: u128::from(preceding.work),
+            limit: u128::from(limit),
+        }
+    );
+    assert_eq!(error.statistics(), preceding);
+    assert_eq!(error.site(), ProgramSite::program());
+}
+
+#[test]
+fn stopped_rendering_preserves_its_imported_receipt() {
+    let fixture = ObservationFixture::with_directives(
+        Model::new([atom("p", vec![Value::Number(1)])]).unwrap(),
+        "p(1). #show f(X):p(X).",
+    );
+    let view = fixture.view();
+    let preceding = view.observation_statistics();
+    assert!(preceding.work > 0);
+    fixture.cancellation.cancel();
+    let error = view
+        .render(
+            Limits {
+                max_work: 0,
+                ..Limits::default()
+            },
+            &fixture.cancellation,
+        )
+        .unwrap_err();
+    assert_eq!(error.kind(), &ErrorKind::Stopped(Stop::Cancelled));
+    assert_eq!(error.statistics(), preceding);
+    assert_eq!(error.site(), ProgramSite::program());
 }
 
 #[test]

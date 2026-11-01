@@ -27,7 +27,7 @@ fn preparation_stops_publish_incomplete_coverage() {
             Some(Interruption::Preparation(reason))
         );
         assert_eq!(semantic.verified_models(), 0);
-        assert!(semantic.subject().is_none());
+        assert!(semantic.original().is_none());
         assert!(semantic.countermodel_statistics().is_none());
         assert!(semantic.formula_execution().is_none());
         assert!(progress.publication.summary());

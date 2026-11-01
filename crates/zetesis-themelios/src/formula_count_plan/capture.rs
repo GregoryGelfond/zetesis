@@ -96,12 +96,7 @@ pub(crate) struct Collector {
 impl Collector {
     pub(crate) fn new(request: Request<'_>, location: ProgramSite) -> Self {
         Self {
-            work: Work {
-                limits: request.limits,
-                cancellation: request.cancellation.clone(),
-                statistics: super::CountPlanStatistics::default(),
-                location,
-            },
+            work: Work::new(request.limits, request.cancellation.clone(), location),
             groups: Vec::new(),
             failure: None,
             partition: true,
@@ -188,23 +183,16 @@ impl Collector {
         if !unconditional && !self.retained {
             return Ok(None);
         }
-        let next = self
-            .work
-            .statistics
-            .groups
-            .checked_add(1)
-            .ok_or(Fault::Overflow)?;
+        let next = self.work.groups.checked_add(1).ok_or(Fault::Overflow)?;
         ceiling(next, self.work.limits.max_groups, Resource::Groups)?;
         let count = self
             .work
-            .statistics
             .members
             .checked_add(input.eligible.len())
             .ok_or(Fault::Overflow)?;
         ceiling(count, self.work.limits.max_members, Resource::Members)?;
         let origin_count = self
             .work
-            .statistics
             .origins
             .checked_add(input.origins.len())
             .ok_or(Fault::Overflow)?;
@@ -291,30 +279,23 @@ impl Collector {
         if lower == 0 && upper == members.atoms.len() {
             return Ok(());
         }
-        let groups = self
-            .work
-            .statistics
-            .groups
-            .checked_add(1)
-            .ok_or(Fault::Overflow)?;
+        let groups = self.work.groups.checked_add(1).ok_or(Fault::Overflow)?;
         let count = self
             .work
-            .statistics
             .members
             .checked_add(members.atoms.len())
             .ok_or(Fault::Overflow)?;
         let origins = self
             .work
-            .statistics
             .origins
             .checked_add(members.origins.len())
             .ok_or(Fault::Overflow)?;
         ceiling(groups, self.work.limits.max_groups, Resource::Groups)?;
         ceiling(count, self.work.limits.max_members, Resource::Members)?;
         ceiling(origins, self.work.limits.max_origins, Resource::Origins)?;
-        self.work.statistics.groups = groups;
-        self.work.statistics.members = count;
-        self.work.statistics.origins = origins;
+        self.work.groups = groups;
+        self.work.members = count;
+        self.work.origins = origins;
         self.work.payload(bytes::<Group>(1)?)?;
         self.groups
             .try_reserve_exact(1)
@@ -339,14 +320,14 @@ impl Collector {
     }
 
     pub(crate) fn finish(mut self, theory: &Theory) -> (Outcome, Option<super::RequiredChoices>) {
-        let capture = self.work.statistics;
+        let capture = self.work.statistics();
         let outcome = if self.partition {
             if let Some(error) = self.failure {
                 Outcome::Incomplete(error)
             } else {
                 match super::derive::plan(&self.groups, theory, &mut self.work) {
                     Ok(Some(plan)) => Outcome::Ready(plan),
-                    Ok(None) => Outcome::NoPlan(self.work.statistics),
+                    Ok(None) => Outcome::NoPlan(self.work.statistics()),
                     Err(kind) => Outcome::Incomplete(self.work.failure(kind)),
                 }
             }

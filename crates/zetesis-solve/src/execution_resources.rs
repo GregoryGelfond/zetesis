@@ -1,6 +1,6 @@
 //! Explicit device ownership reused across independent ordinary solves.
 
-/// Caller-owned execution infrastructure, independent of any semantic subject.
+/// Caller-owned execution infrastructure, independent of any semantic input.
 ///
 /// The default retains no device and preserves ordinary per-session device
 /// selection. With the `gpu` feature, `with_gpu` retains the supplied context

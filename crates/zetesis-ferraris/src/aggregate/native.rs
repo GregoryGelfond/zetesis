@@ -9,7 +9,7 @@
 
 use std::fmt;
 
-use zetesis_algebra::{Cancellation, Refusal, Stop};
+use zetesis_algebra::{Cancellation, Meter, Refusal, Stop};
 use zetesis_core::catalog::{CatalogRead, TermRef, Vocabulary};
 use zetesis_core::{TemplateComponents, TemplateComponentsRef, TemplateTerm, Value as Term};
 
@@ -579,29 +579,54 @@ impl<'a> GroupRef<'a> {
 }
 
 struct Work<'a> {
-    maximum: u64,
     cancellation: &'a Cancellation,
-    statistics: Statistics,
+    meter: Meter<'static>,
+    resident_bytes: u64,
+    peak_bytes: u64,
+    storage_bytes: u64,
+    storage_peak_bytes: u64,
 }
-impl Work<'_> {
+impl<'a> Work<'a> {
+    fn new(maximum: u64, cancellation: &'a Cancellation) -> Self {
+        Self {
+            cancellation,
+            meter: Meter::local(maximum),
+            resident_bytes: 0,
+            peak_bytes: 0,
+            storage_bytes: 0,
+            storage_peak_bytes: 0,
+        }
+    }
+
+    fn statistics(&self) -> Statistics {
+        Statistics {
+            work: self.meter.charged(),
+            resident_bytes: self.resident_bytes,
+            peak_bytes: self.peak_bytes,
+            storage_bytes: self.storage_bytes,
+            storage_peak_bytes: self.storage_peak_bytes,
+        }
+    }
+
     fn poll(&self) -> Result<(), ErrorKind> {
         self.cancellation.poll().map_err(ErrorKind::Stopped)
     }
 
     fn charge(&mut self, amount: u64) -> Result<(), ErrorKind> {
+        // Admission and reduction observe control on every complete charge.
         self.poll()?;
-        let remaining = self.maximum - self.statistics.work;
-        if amount > remaining {
-            return Err(ErrorKind::Limit(Resource::Work));
-        }
-        self.statistics.work += amount;
-        Ok(())
+        self.meter
+            .bounded(amount, || ((), amount))
+            .map_err(|failure| match failure.into_stop() {
+                Stop::WorkLimit => ErrorKind::Limit(Resource::Work),
+                other => ErrorKind::Stopped(other),
+            })
     }
 
     fn failure(&self, kind: ErrorKind) -> Error {
         Error {
             kind,
-            statistics: self.statistics,
+            statistics: self.statistics(),
         }
     }
 }
@@ -627,8 +652,8 @@ fn add(left: u64, right: u64) -> Result<u64, ErrorKind> {
 
 #[cfg(test)]
 mod tests {
-    use super::{ErrorKind, Phase, Resource};
-    use zetesis_algebra::{Refusal, Stop};
+    use super::{ErrorKind, Phase, Resource, Statistics, Work};
+    use zetesis_algebra::{Cancellation, Refusal, Stop};
 
     #[test]
     fn native_errors_classify_resource_refusals() {
@@ -654,6 +679,32 @@ mod tests {
             ErrorKind::Stopped(Stop::Cancelled),
         ] {
             assert!(!other.is_resource_refusal(), "{other:?}");
+        }
+    }
+
+    #[test]
+    fn native_work_retains_the_refused_charge_prefix() {
+        for limit in [0, 7, u64::MAX] {
+            let cancellation = Cancellation::default();
+            let mut work = Work::new(limit, &cancellation);
+            let initial = limit.min(2);
+            work.charge(initial).unwrap();
+            let expected = Statistics {
+                work: initial,
+                ..Default::default()
+            };
+            // A bulk overrun must not consume the unused part of the allowance.
+            let refused = work.charge(limit - initial + 1).unwrap_err();
+            assert_eq!(refused, ErrorKind::Limit(Resource::Work));
+            assert_eq!(work.failure(refused).statistics(), expected);
+
+            cancellation.cancel();
+            // Every fresh call observes control, including zero-sized charges.
+            for amount in [0, limit - initial + 1] {
+                let stopped = work.charge(amount).unwrap_err();
+                assert_eq!(stopped, ErrorKind::Stopped(Stop::Cancelled));
+                assert_eq!(work.failure(stopped).statistics(), expected);
+            }
         }
     }
 }

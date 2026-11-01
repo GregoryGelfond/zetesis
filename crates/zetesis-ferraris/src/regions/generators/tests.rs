@@ -502,3 +502,48 @@ fn a_refused_selection_publishes_no_partial_winner() {
         );
     }
 }
+
+#[test]
+fn a_refused_byte_observation_records_peak_without_committing_current() {
+    let cancellation = Cancellation::default();
+    let mut work = zetesis_algebra::Meter::local(0);
+    let mut budget = super::Budget {
+        max_bytes: 16,
+        cancellation: &cancellation,
+        work: &mut work,
+        bytes: 5,
+        peak: 5,
+    };
+    assert_eq!(
+        budget.observe(20),
+        Err(GeneratorOrderError::Storage {
+            required: 20,
+            limit: 16
+        })
+    );
+    assert_eq!(
+        (budget.bytes, budget.peak, budget.work.charged()),
+        (5, 20, 0)
+    );
+}
+
+#[test]
+fn historical_peak_does_not_refuse_a_fitting_unpolled_observation() {
+    let cancellation = Cancellation::default();
+    cancellation.cancel();
+    let mut work = zetesis_algebra::Meter::local(0);
+    let mut budget = super::Budget {
+        max_bytes: 16,
+        cancellation: &cancellation,
+        work: &mut work,
+        bytes: 5,
+        peak: 20,
+    };
+    for bytes in [0, 16] {
+        assert_eq!(budget.observe(bytes), Ok(()));
+        assert_eq!(
+            (budget.bytes, budget.peak, budget.work.charged()),
+            (bytes, 20, 0)
+        );
+    }
+}

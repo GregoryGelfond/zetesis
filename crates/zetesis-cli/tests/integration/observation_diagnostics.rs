@@ -91,7 +91,7 @@ fn observation_failure_preserves_verified_unpublished_evidence() {
     assert!(crate::support::human::preamble(
         std::str::from_utf8(&output).unwrap()
     ));
-    assert!(failure.subject().is_some());
+    assert!(failure.original().is_some());
     assert!(failure.semantic().is_some());
     assert_eq!(failure.publication().unwrap().models(), 0);
     assert!(!failure.publication().unwrap().summary());

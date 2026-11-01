@@ -1,7 +1,8 @@
 //! Statically selected quota ownership for local and joined parallel queries.
 
-use super::shared_budget::WorkLease;
+use super::shared_budget::{WorkLease, WorkReservation};
 use crate::Incomplete;
+use zetesis_algebra::{Meter, MeterWorkError};
 
 /// Reservations precede the operation's local counter increment. This policy
 /// changes quota ownership only; polling and charged operation order stay in Budget.
@@ -16,16 +17,20 @@ pub(crate) trait Quota {
     /// a grant never passes the ceiling, so the operation is refused at the
     /// read [`Self::work`] would refuse.
     fn reserve_up_to(&self, spent: u64, ceiling: u64, wanted: u64) -> Result<u64, Incomplete>;
-    /// Run one bounded operation under a whole-operation reservation. The
-    /// operation returns its admitted work even on refusal. A shared quota
-    /// settles its current lease before waiting and refunds unused permits.
-    fn with_reservation<T>(
+    /// Ownership of an admitted whole-kernel allowance. The common meter
+    /// validates the returned receipt before committing it through this guard.
+    type Reservation<'call>: zetesis_algebra::Reservation
+    where
+        Self: 'call;
+
+    /// Admit one whole-kernel reservation. A shared quota settles its current
+    /// lease before waiting; the guard retains its unreceipted-work policy.
+    fn reserve_kernel(
         &mut self,
         spent: u64,
         ceiling: u64,
         wanted: u64,
-        run: impl FnOnce(u64) -> (T, u64),
-    ) -> Result<(T, u64), Incomplete>;
+    ) -> Result<Self::Reservation<'_>, Incomplete>;
     /// Take back permits granted by [`Self::reserve_up_to`] and not spent.
     fn refund(&self, unspent: u64);
 }
@@ -33,29 +38,47 @@ pub(crate) trait Quota {
 /// Ordinary queries have no shared pointer or per-operation execution-mode test.
 pub(crate) struct LocalQuota;
 
+/// A local grant has no shared account to settle; Budget publishes its receipt.
+pub(crate) struct LocalReservation {
+    granted: u64,
+}
+
+impl zetesis_algebra::Reservation for LocalReservation {
+    fn allowance(&self) -> u64 {
+        self.granted
+    }
+
+    fn commit(self, _used: u64) {}
+}
+
 impl Quota for LocalQuota {
+    type Reservation<'call> = LocalReservation;
+
     fn work(&self, spent: u64, ceiling: u64) -> Result<(), Incomplete> {
-        if spent >= ceiling {
-            Err(Incomplete::WorkLimit)
-        } else {
-            Ok(())
-        }
+        Meter::check_receipt(spent, 1, ceiling)
+            .map(|_| ())
+            .map_err(|_| Incomplete::WorkLimit)
     }
 
     fn charge(&self, spent: u64, ceiling: u64, amount: u64) -> Result<(), Incomplete> {
-        if spent.saturating_add(amount) > ceiling {
-            Err(Incomplete::WorkLimit)
-        } else {
-            Ok(())
+        match Meter::check_receipt(spent, u128::from(amount), ceiling) {
+            Ok(_) => Ok(()),
+            // Preserve this quota's saturating admission at the largest ceiling.
+            // Budget then reports the native receipt carry as CounterOverflow,
+            // at its existing post-quota publication boundary.
+            Err(MeterWorkError::Limit { observed, .. })
+                if ceiling == u64::MAX && observed > u128::from(u64::MAX) =>
+            {
+                Ok(())
+            }
+            Err(_) => Err(Incomplete::WorkLimit),
         }
     }
 
     fn decision(&self, spent: u64, ceiling: u64) -> Result<(), Incomplete> {
-        if spent >= ceiling {
-            Err(Incomplete::DecisionLimit)
-        } else {
-            Ok(())
-        }
+        Meter::check_wide_count(u128::from(spent), 1, u128::from(ceiling))
+            .map(|_| ())
+            .map_err(|_| Incomplete::DecisionLimit)
     }
 
     fn reserve_up_to(&self, spent: u64, ceiling: u64, wanted: u64) -> Result<u64, Incomplete> {
@@ -65,19 +88,14 @@ impl Quota for LocalQuota {
         }
     }
 
-    fn with_reservation<T>(
+    fn reserve_kernel(
         &mut self,
         spent: u64,
         ceiling: u64,
         wanted: u64,
-        run: impl FnOnce(u64) -> (T, u64),
-    ) -> Result<(T, u64), Incomplete> {
+    ) -> Result<LocalReservation, Incomplete> {
         let granted = self.reserve_up_to(spent, ceiling, wanted)?;
-        let (result, used) = run(granted);
-        if used > granted {
-            return Err(Incomplete::InvalidWitness);
-        }
-        Ok((result, used))
+        Ok(LocalReservation { granted })
     }
 
     // The ledger is the budget's own count, which the caller lowers.
@@ -87,6 +105,11 @@ impl Quota for LocalQuota {
 // Worker counters start at zero and measure deltas; the shared budget is seeded
 // with previously spent work and owns the cumulative reservation authority.
 impl Quota for WorkLease<'_> {
+    type Reservation<'call>
+        = WorkReservation<'call>
+    where
+        Self: 'call;
+
     fn work(&self, _spent: u64, _ceiling: u64) -> Result<(), Incomplete> {
         self.tick()
     }
@@ -103,21 +126,13 @@ impl Quota for WorkLease<'_> {
         self.take_up_to(wanted)
     }
 
-    fn with_reservation<T>(
+    fn reserve_kernel(
         &mut self,
         _spent: u64,
         _ceiling: u64,
         wanted: u64,
-        run: impl FnOnce(u64) -> (T, u64),
-    ) -> Result<(T, u64), Incomplete> {
-        let reservation = self.reserve(wanted)?;
-        let granted = reservation.allowance();
-        if granted == 0 {
-            return Err(Incomplete::WorkLimit);
-        }
-        let (result, used) = run(granted);
-        reservation.finish(used)?;
-        Ok((result, used))
+    ) -> Result<WorkReservation<'_>, Incomplete> {
+        self.reserve(wanted)
     }
 
     fn refund(&self, unspent: u64) {

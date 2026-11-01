@@ -96,7 +96,7 @@ impl<'a> SourceSession<'a> {
     pub(crate) fn outcome(&self) -> SemanticOutcome {
         SemanticOutcome {
             projection: None,
-            subject: Some(crate::Subject::Source(self.owner.clone())),
+            original: Some(crate::Original::Source(self.owner.clone())),
             selection: Some(AnswerSelection::All),
             verified: self.verified,
             scored: 0,

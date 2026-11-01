@@ -78,7 +78,7 @@ contains an optional `StatementId` in that owner's canonical statement order
 and an optional real `Location`; a constructed statement needs no source span.
 Emitted roots, objectives, warnings and delayed work retain these sites. Typed
 formula failures retain the original owner and expose `site()`,
-`original_program()` and `subject()`. Observation errors expose `site()` for
+`original_program()` and `original()`. Observation errors expose `site()` for
 resolution through the formula owner. IDs belong to that original program and
 cannot be transferred between owners. Formula owners' `source()` is optional:
 it returns `Some` for single-source input and `None` for this door, even if a
@@ -1065,7 +1065,7 @@ Do not transfer IDs between programs or invent locations for constructed input.
 Update exhaustive failure matches: `FormulaFailure` adds `Program` and `Logical`
 and removes `ChoiceSource`; `ExpansionFailure` adds `Interrupted`. A typed-input
 formula failure can wrap its cause while retaining the original program. Use
-`cause()` for the underlying failure and `subject()` for its original statement,
+`cause()` for the underlying failure and `original()` for its original statement,
 part or program. Resource refusals remain distinct from cancellation and deadlines.
 
 The public themelios types also use a newer shared dependency revision. Prefer

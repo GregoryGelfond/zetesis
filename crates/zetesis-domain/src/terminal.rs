@@ -190,9 +190,7 @@ struct Engine<'p> {
 
 impl<'p> Engine<'p> {
     fn work(&mut self) -> Result<(), Failure> {
-        let observed = u128::from(self.result.statistics.work) + 1;
-        check(Resource::Work, observed, u128::from(self.limits.max_work))?;
-        self.result.statistics.work += 1;
+        crate::limits::charge_work(&mut self.result.statistics.work, 1, self.limits.max_work)?;
         Ok(())
     }
 

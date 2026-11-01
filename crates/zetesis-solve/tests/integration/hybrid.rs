@@ -6,8 +6,8 @@ use crate::support::models::Family;
 use zetesis_algebra::Cancellation;
 use zetesis_core::{Model, Sign};
 use zetesis_solve::{
-    Backend, Completion, Grounder, Interruption, Oracle, PreparedInput, SemanticOutcome, Session,
-    SolveConfig, SolveError, Subject,
+    Backend, Completion, Grounder, Interruption, Oracle, Original, PreparedInput, SemanticOutcome,
+    Session, SolveConfig, SolveError,
 };
 use zetesis_test_support::programs::{signed as atom, unary as number};
 use zetesis_themelios::{
@@ -329,21 +329,21 @@ fn cloned_hybrid_subjects_share_only_their_owner() {
     let (_, separate) = capture(PreparedInput::hybrid(&other), configuration());
     assert!(
         first
-            .subject()
+            .original()
             .unwrap()
-            .same_instance(repeated.subject().unwrap())
+            .same_instance(repeated.original().unwrap())
     );
     assert!(
         !first
-            .subject()
+            .original()
             .unwrap()
-            .same_instance(separate.subject().unwrap())
+            .same_instance(separate.original().unwrap())
     );
     assert!(
         !first
-            .subject()
+            .original()
             .unwrap()
-            .same_instance(&Subject::Theory(original.core_theory().clone()))
+            .same_instance(&Original::Theory(original.core_theory().clone()))
     );
 }
 
@@ -401,9 +401,9 @@ fn checker_setup_refusal_retains_the_source_subject() {
     assert_eq!(error.statistics.work, 0);
     assert!(
         failure
-            .subject()
+            .original()
             .unwrap()
-            .same_instance(&Subject::Hybrid(admitted))
+            .same_instance(&Original::Hybrid(admitted))
     );
     assert!(failure.semantic().is_none());
 }
@@ -477,8 +477,8 @@ fn cancellation_preserves_only_the_verified_prefix() {
     let answer = session.next().unwrap().unwrap();
     assert!(
         answer
-            .subject()
-            .same_instance(&Subject::Hybrid(admitted.clone()))
+            .original()
+            .same_instance(&Original::Hybrid(admitted.clone()))
     );
     assert_eq!(answer.interpretation().atoms().len(), 1);
     cancellation.cancel();

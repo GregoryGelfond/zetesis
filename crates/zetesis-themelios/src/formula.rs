@@ -549,7 +549,7 @@ impl FormulaFailure {
 
     /// Resolve a typed-input refusal to the caller's original logical object.
     #[must_use]
-    pub fn subject(&self) -> Option<crate::ProgramSubject<'_>> {
+    pub fn original(&self) -> Option<crate::ProgramOriginal<'_>> {
         let Self::Program { program, error } = self else {
             return None;
         };
@@ -557,7 +557,7 @@ impl FormulaFailure {
             return program
                 .statements()
                 .nth(statement.index())
-                .map(crate::ProgramSubject::Statement);
+                .map(crate::ProgramOriginal::Statement);
         }
         if let Self::Logical {
             part: Some(index), ..
@@ -566,9 +566,9 @@ impl FormulaFailure {
             return program
                 .parts()
                 .nth(*index)
-                .map(|part| crate::ProgramSubject::Part(part.key()));
+                .map(|part| crate::ProgramOriginal::Part(part.key()));
         }
-        Some(crate::ProgramSubject::Program)
+        Some(crate::ProgramOriginal::Program)
     }
 
     /// Located diagnostics; bundle identities resolve through its retained catalog.
@@ -1356,15 +1356,15 @@ pub(crate) fn logical_failure(
     program: &SourceProgram,
     error: crate::ProgramAdmissionFailure<'_>,
 ) -> FormulaFailure {
-    let (part, location) = match error.subject {
-        crate::ProgramSubject::Program => (None, ProgramSite::program()),
-        crate::ProgramSubject::Part(key) => (
+    let (part, location) = match error.original {
+        crate::ProgramOriginal::Program => (None, ProgramSite::program()),
+        crate::ProgramOriginal::Part(key) => (
             program
                 .parts()
                 .position(|part| std::ptr::eq(part.key(), key)),
             ProgramSite::program(),
         ),
-        crate::ProgramSubject::Statement(statement) => {
+        crate::ProgramOriginal::Statement(statement) => {
             let index = program
                 .statements()
                 .position(|carrier| std::ptr::eq(carrier, statement))

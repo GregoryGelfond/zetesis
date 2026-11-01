@@ -140,6 +140,14 @@ Notable changes by release. Versions follow Semantic Versioning.
 
 ### Changed
 
+- The native session owner `zetesis_solve::Subject`, also re-exported by
+  `zetesis_cli`, is renamed to `Original`. Themelios
+  `ProgramSubject` becomes `ProgramOriginal`. Result fields and accessors
+  named `subject` become `original`, including solve, world-view, formula
+  admission and publication failures. Variants, owner identity, typed failures
+  and retained evidence are unchanged. Update imports, field patterns and
+  accessor calls; no aliases retain the old names. `OriginalSubject` and
+  `FrozenSubject` keep their distinct narrowing contracts.
 - **Breaking Rust API:** a split preference belongs to
   `zetesis_algebra::region::Entry<S>`, alongside its `Region` and lineage state.
   Region equality compares the atom universe and decisions only. `Walk` passes

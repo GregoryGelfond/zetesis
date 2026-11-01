@@ -6,8 +6,8 @@ use zetesis_reference_support::formula;
 use zetesis_algebra::Cancellation;
 use zetesis_core::Value;
 use zetesis_solve::{
-    AnswerSelection, AnswerSet, Backend, Completion, Oracle, PreparedInput, SemanticOutcome,
-    Session, SolveConfig, Subject, WorldView, WorldViewLimits,
+    AnswerSelection, AnswerSet, Backend, Completion, Oracle, Original, PreparedInput,
+    SemanticOutcome, Session, SolveConfig, WorldView, WorldViewLimits,
 };
 use zetesis_themelios::AdmittedFormula;
 
@@ -90,8 +90,8 @@ fn config(workers: usize, batch: usize) -> SolveConfig {
     }
 }
 
-fn record(answer: &AnswerSet, subject: &Subject) -> Record {
-    assert!(answer.subject().same_instance(subject));
+fn record(answer: &AnswerSet, original: &Original) -> Record {
+    assert!(answer.original().same_instance(original));
     let score = answer.score().expect("the numeric objective is present");
     assert!(score.is_present());
     (
@@ -105,8 +105,8 @@ fn record(answer: &AnswerSet, subject: &Subject) -> Record {
     )
 }
 
-fn exhausted(outcome: &SemanticOutcome, subject: &Subject, workers: usize, batch: usize) {
-    assert!(outcome.subject().unwrap().same_instance(subject));
+fn exhausted(outcome: &SemanticOutcome, original: &Original, workers: usize, batch: usize) {
+    assert!(outcome.original().unwrap().same_instance(original));
     assert_eq!(outcome.completion(), Some(Completion::Exhausted));
     assert!(outcome.interruption().is_none());
     assert_eq!(outcome.formula_execution().is_some(), workers > 1);
@@ -130,7 +130,7 @@ fn exhausted(outcome: &SemanticOutcome, subject: &Subject, workers: usize, batch
 fn count_dependencies_preserve_complete_scored_families() {
     for case in CASES {
         let input = case.admit();
-        let subject = Subject::Theory(input.theory().clone());
+        let original = Original::Theory(input.theory().clone());
         let expected = case.records(AnswerSelection::All);
         for workers in [1, 4] {
             for batch in [1, 8] {
@@ -141,16 +141,16 @@ fn count_dependencies_preserve_complete_scored_families() {
                     Cancellation::default(),
                 )
                 .unwrap();
-                assert!(family.subject().same_instance(&subject));
+                assert!(family.original().same_instance(&original));
                 let actual: BTreeSet<_> = family
                     .answer_sets()
                     .iter()
-                    .map(|answer| record(answer, &subject))
+                    .map(|answer| record(answer, &original))
                     .collect();
                 assert_eq!(family.len(), expected.len(), "{}", case.source);
                 assert_eq!(actual, expected, "{}", case.source);
                 let outcome = family.outcome();
-                exhausted(outcome, &subject, workers, batch);
+                exhausted(outcome, &original, workers, batch);
                 assert_eq!(outcome.selection(), Some(AnswerSelection::All));
                 assert_eq!(outcome.unsatisfiable(), expected.is_empty());
                 assert_eq!(
@@ -177,7 +177,7 @@ fn count_dependencies_preserve_complete_scored_families() {
 fn count_dependencies_preserve_every_optimal_answer() {
     for case in CASES {
         let input = case.admit();
-        let subject = Subject::Theory(input.theory().clone());
+        let original = Original::Theory(input.theory().clone());
         let expected = case.records(AnswerSelection::Optimal);
         for workers in [1, 4] {
             for batch in [1, 8] {
@@ -189,7 +189,7 @@ fn count_dependencies_preserve_every_optimal_answer() {
                 .unwrap();
                 let actual: Vec<_> = session
                     .by_ref()
-                    .map(|answer| record(&answer.unwrap(), &subject))
+                    .map(|answer| record(&answer.unwrap(), &original))
                     .collect();
                 assert_eq!(actual.len(), expected.len(), "{}", case.source);
                 assert_eq!(
@@ -199,7 +199,7 @@ fn count_dependencies_preserve_every_optimal_answer() {
                     case.source
                 );
                 let outcome = session.outcome().unwrap();
-                exhausted(&outcome, &subject, workers, batch);
+                exhausted(&outcome, &original, workers, batch);
                 assert_eq!(outcome.selection(), Some(AnswerSelection::Optimal));
                 assert_eq!(outcome.unsatisfiable(), expected.is_empty());
                 assert_eq!(outcome.optimum_proved(), !expected.is_empty());

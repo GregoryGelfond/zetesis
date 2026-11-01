@@ -66,3 +66,17 @@ fn certificate_errors_classify_resource_refusals() {
         assert!(!shape.is_resource_refusal(), "{shape:?}");
     }
 }
+
+#[test]
+fn logical_byte_refusal_preserves_the_native_width_boundary() {
+    assert_eq!(bytes(0, 0), Ok(0));
+    assert_eq!(bytes(u128::from(u64::MAX), u64::MAX), Ok(u64::MAX));
+    assert_eq!(
+        bytes(u128::from(u64::MAX) + 1, u64::MAX),
+        Err(TightError::Limit(TightResource::Bytes))
+    );
+    assert_eq!(
+        bytes(u128::MAX, 0),
+        Err(TightError::Limit(TightResource::Bytes))
+    );
+}

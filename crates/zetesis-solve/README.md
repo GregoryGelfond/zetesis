@@ -51,7 +51,7 @@ inconsistency; an empty partial result, or one answer with no true atoms, does n
 
 Keep the admitted theory, atom catalog, objectives and observations together.
 A prepared input borrows one coherent owner; it cannot combine unrelated source
-admissions. Returned answers retain their subject and full interpretation,
+admissions. Returned answers retain their original input and full interpretation,
 independently of displayed projections.
 
 ## Execution and cancellation

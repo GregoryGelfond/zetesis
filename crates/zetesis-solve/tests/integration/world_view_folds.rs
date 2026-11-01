@@ -191,7 +191,7 @@ fn membership_witnesses_are_answer_sets_that_settle_the_literal() {
                         panic!("{source}: {name}: {witnesses:?}");
                     };
                     assert_eq!(witness.interpretation().contains(&atom), holds);
-                    assert!(witness.subject().same_instance(decision.subject()));
+                    assert!(witness.original().same_instance(decision.original()));
                     witnessed += 1;
                 }
             }

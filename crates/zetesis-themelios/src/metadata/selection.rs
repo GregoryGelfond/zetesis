@@ -208,21 +208,21 @@ impl OutputSelection {
         signatures: &[OwnedPredicate],
         limits: AtomSelectionLimits,
     ) -> Result<Self, AtomSelectionError> {
-        if signatures.len() > limits.max_signatures {
-            return Err(AtomSelectionError::Signatures {
+        zetesis_algebra::Meter::check_count(signatures.len(), 0, limits.max_signatures).map_err(
+            |_| AtomSelectionError::Signatures {
                 limit: limits.max_signatures,
                 observed: signatures.len(),
-            });
-        }
+            },
+        )?;
         let mut bytes = 0u128;
         for signature in signatures {
             bytes += signature.name().len() as u128;
-            if bytes > limits.max_name_bytes as u128 {
-                return Err(AtomSelectionError::NameBytes {
+            zetesis_algebra::MeterBytes::check(bytes, limits.max_name_bytes as u128).map_err(
+                |_| AtomSelectionError::NameBytes {
                     limit: limits.max_name_bytes,
                     observed: bytes,
-                });
-            }
+                },
+            )?;
         }
         if signatures.is_empty() {
             return Ok(Self::none());

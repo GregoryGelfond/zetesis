@@ -14,7 +14,9 @@ mod tests;
 use std::{fmt, mem::size_of};
 
 use crate::{Interpretation, Theory};
-use zetesis_algebra::{Cancellation, ChargeError, Meter, Refusal, Stop};
+use zetesis_algebra::{
+    Cancellation, ChargeError, Meter, MeterBytes, MeterBytesError, MeterCountError, Refusal, Stop,
+};
 
 /// Bounds for checked classification, stratification and direct evaluation.
 #[derive(Clone, Copy, Debug)]
@@ -222,7 +224,7 @@ impl StratifiedPlan {
                     cancellation,
                     meter,
                     statistics: &mut statistics,
-                    current_bytes: 0,
+                    bytes: MeterBytes::new(),
                 },
             )
         });
@@ -281,7 +283,7 @@ struct Budget<'a, 'c> {
     cancellation: &'c Cancellation,
     meter: &'a mut Meter<'c>,
     statistics: &'a mut StratifiedPlanStatistics,
-    current_bytes: u128,
+    bytes: MeterBytes,
 }
 
 impl Budget<'_, '_> {
@@ -298,51 +300,41 @@ impl Budget<'_, '_> {
     }
 
     fn dependency(&mut self) -> Result<(), StratifiedError> {
-        let next = self
-            .statistics
-            .dependencies
-            .checked_add(1)
-            .ok_or(StratifiedError::Overflow)?;
-        Self::ceiling(
-            StratifiedResource::Dependencies,
-            next as u128,
-            self.limits.max_dependencies as u128,
-        )?;
-        self.statistics.dependencies = next;
+        self.statistics.dependencies = Meter::check_count(
+            self.statistics.dependencies,
+            1,
+            self.limits.max_dependencies,
+        )
+        .map_err(|error| match error {
+            MeterCountError::Limit { observed, limit } => StratifiedError::Limit {
+                resource: StratifiedResource::Dependencies,
+                observed: observed as u128,
+                limit: limit as u128,
+            },
+            MeterCountError::Overflow => StratifiedError::Overflow,
+        })?;
         Ok(())
     }
 
     fn observe_bytes(&mut self, bytes: u128) -> Result<(), StratifiedError> {
-        self.current_bytes = bytes;
-        self.statistics.peak_bytes = self.statistics.peak_bytes.max(bytes);
-        self.check_bytes(bytes)
-    }
-
-    fn check_bytes(&self, bytes: u128) -> Result<(), StratifiedError> {
-        Self::ceiling(
-            StratifiedResource::Bytes,
-            bytes,
-            self.limits.max_bytes as u128,
-        )
+        self.bytes
+            .observe(
+                bytes,
+                self.limits.max_bytes as u128,
+                &mut self.statistics.peak_bytes,
+            )
+            .map_err(Self::byte_error)
     }
 
     fn reserve<T>(&mut self, count: usize) -> Result<Vec<T>, StratifiedError> {
         self.meter.poll()?;
-        let requested = self
-            .current_bytes
-            .checked_add(count as u128 * size_of::<T>() as u128)
-            .ok_or(StratifiedError::Overflow)?;
-        self.check_bytes(requested)?;
-        let mut values = Vec::new();
-        values
-            .try_reserve_exact(count)
-            .map_err(|_| Stop::Allocation)?;
-        let actual = self
-            .current_bytes
-            .checked_add(values.capacity() as u128 * size_of::<T>() as u128)
-            .ok_or(StratifiedError::Overflow)?;
-        self.observe_bytes(actual)?;
-        Ok(values)
+        self.bytes
+            .reserve(
+                count,
+                self.limits.max_bytes as u128,
+                &mut self.statistics.peak_bytes,
+            )
+            .map_err(Self::byte_error)
     }
 
     fn filled<T: Copy>(&mut self, count: usize, value: T) -> Result<Vec<T>, StratifiedError> {
@@ -355,27 +347,18 @@ impl Budget<'_, '_> {
     }
 
     fn release<T>(&mut self, vector: Vec<T>) -> Result<(), StratifiedError> {
-        let bytes = vector.capacity() as u128 * size_of::<T>() as u128;
-        drop(vector);
-        self.current_bytes = self
-            .current_bytes
-            .checked_sub(bytes)
-            .ok_or(StratifiedError::Overflow)?;
-        Ok(())
+        self.bytes.release(vector).map_err(Self::byte_error)
     }
 
-    fn ceiling(
-        resource: StratifiedResource,
-        observed: u128,
-        limit: u128,
-    ) -> Result<(), StratifiedError> {
-        if observed > limit {
-            return Err(StratifiedError::Limit {
-                resource,
+    fn byte_error(error: MeterBytesError) -> StratifiedError {
+        match error {
+            MeterBytesError::Limit { observed, limit } => StratifiedError::Limit {
+                resource: StratifiedResource::Bytes,
                 observed,
                 limit,
-            });
+            },
+            MeterBytesError::Overflow => StratifiedError::Overflow,
+            MeterBytesError::Allocation => StratifiedError::Stopped(Stop::Allocation),
         }
-        Ok(())
     }
 }

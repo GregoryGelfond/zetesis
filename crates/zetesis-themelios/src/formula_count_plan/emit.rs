@@ -45,7 +45,6 @@ pub(super) fn restriction(
         .try_fold(0_usize, |n, c| n.checked_add(c.origins.len()))
         .ok_or(Fault::Overflow)?;
     let total_origins = work
-        .statistics
         .origins
         .checked_add(origin_count)
         .ok_or(Fault::Overflow)?;
@@ -55,7 +54,7 @@ pub(super) fn restriction(
         super::CountPlanResource::Origins,
     )?;
     let mut origins = work.vector(origin_count)?;
-    work.statistics.origins = total_origins;
+    work.origins = total_origins;
     for consequence in consequences {
         work.location = consequence.location;
         work.charge(1)?;
@@ -95,9 +94,7 @@ fn lower(
     let mut limits = work.limits.aggregate;
     limits.max_nodes = limits.max_nodes.min(limit.max_nodes);
     limits.max_operands = limits.max_operands.min(limit.max_operands);
-    limits.max_work = limits
-        .max_work
-        .min(work.limits.max_work - work.statistics.work);
+    limits.max_work = limits.max_work.min(work.meter.remaining());
     // Positive unit-weight Ge uses at most one shared numeric row and one
     // threshold, or a cheaper Boolean boundary case. Charge the temporary
     // columns, requested bound and returned root as well as all output arenas.

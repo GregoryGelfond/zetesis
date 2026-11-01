@@ -5,7 +5,7 @@
 //! preparation exhaustion does not conceal cancellation or a refused global
 //! reservation. The existing narrowing meter retains and refunds spare permits.
 
-use zetesis_algebra::{Cancellation, Failure, LocalQuota, Meter, Quota, Stop};
+use zetesis_algebra::{Cancellation, Failure, LocalQuota, Meter, MeterBytes, Quota, Stop};
 
 use crate::{AdmissionError, NodeView, Theory};
 
@@ -130,14 +130,12 @@ impl<'a, 'q, Q: Quota + ?Sized> Budget<'a, 'q, Q> {
     /// Peak includes a refused requirement, not only retained allocations.
     pub(super) fn admit_bytes(&mut self, required: u128) -> Result<(), BudgetError<Q::Error>> {
         self.cancellation.poll().map_err(BudgetError::Stopped)?;
-        self.peak_bytes = self.peak_bytes.max(required);
-        if required > self.max_bytes as u128 {
-            return Err(BudgetError::StorageDeclined {
+        MeterBytes::observe_peak(required, self.max_bytes as u128, &mut self.peak_bytes).map_err(
+            |_| BudgetError::StorageDeclined {
                 required,
                 limit: self.max_bytes,
-            });
-        }
-        Ok(())
+            },
+        )
     }
 
     pub(super) fn work(&self) -> u64 {

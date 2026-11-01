@@ -1,7 +1,7 @@
 use std::fmt;
 use std::sync::Arc;
 
-use zetesis_algebra::words::Words;
+use zetesis_algebra::{Meter, words::Words};
 
 mod copying;
 mod numeric;
@@ -615,9 +615,9 @@ impl<'a> FormulaTransaction<'a> {
             .occurrences
             .checked_add(added_edges)
             .ok_or(AdmissionError::Limit)?;
-        if node_count > max_nodes
-            || arena_count > max_operands
-            || occurrences > max_operands
+        if Meter::check_count(node_count, 0, max_nodes).is_err()
+            || Meter::check_count(arena_count, 0, max_operands).is_err()
+            || Meter::check_count(occurrences, 0, max_operands).is_err()
             || !self.parts.numeric.within_limits(max_nodes, max_operands)
         {
             return Err(AdmissionError::Limit);
@@ -976,10 +976,10 @@ fn admit_dimensions(
     roots: &[usize],
     limits: AdmissionLimits,
 ) -> Result<(usize, bool), AdmissionError> {
-    if atoms > limits.max_atoms
-        || parts.nodes.len() > limits.max_nodes
-        || roots.len() > limits.max_roots
-        || parts.operands.len() > limits.max_operands
+    if Meter::check_count(atoms, 0, limits.max_atoms).is_err()
+        || Meter::check_count(parts.nodes.len(), 0, limits.max_nodes).is_err()
+        || Meter::check_count(roots.len(), 0, limits.max_roots).is_err()
+        || Meter::check_count(parts.operands.len(), 0, limits.max_operands).is_err()
         || !parts
             .numeric
             .within_limits(limits.max_nodes, limits.max_operands)
@@ -988,9 +988,7 @@ fn admit_dimensions(
         return Err(AdmissionError::Limit);
     }
     let (occurrences, numeric_nodes) = count_shape(&parts.nodes, &parts.numeric)?;
-    if occurrences > limits.max_operands {
-        return Err(AdmissionError::Limit);
-    }
+    Meter::check_count(occurrences, 0, limits.max_operands).map_err(|_| AdmissionError::Limit)?;
     Ok((occurrences, numeric_nodes))
 }
 

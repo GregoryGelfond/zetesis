@@ -72,6 +72,8 @@ struct RecordingQuota {
 }
 
 impl Quota for RecordingQuota {
+    type Reservation<'call> = <LocalQuota as Quota>::Reservation<'call>;
+
     fn work(&self, spent: u64, ceiling: u64) -> Result<(), Incomplete> {
         self.work_calls.set(self.work_calls.get() + 1);
         LocalQuota.work(spent, ceiling)
@@ -90,14 +92,13 @@ impl Quota for RecordingQuota {
         LocalQuota.reserve_up_to(spent, ceiling, wanted)
     }
 
-    fn with_reservation<T>(
+    fn reserve_kernel(
         &mut self,
         spent: u64,
         ceiling: u64,
         wanted: u64,
-        run: impl FnOnce(u64) -> (T, u64),
-    ) -> Result<(T, u64), Incomplete> {
-        LocalQuota.with_reservation(spent, ceiling, wanted, run)
+    ) -> Result<Self::Reservation<'_>, Incomplete> {
+        LocalQuota.reserve_kernel(spent, ceiling, wanted)
     }
 
     fn refund(&self, unspent: u64) {

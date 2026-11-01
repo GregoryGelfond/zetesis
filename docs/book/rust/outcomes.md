@@ -12,11 +12,11 @@ the [library reference](libraries.md#api-reference).
 
 | Evidence | What it establishes | What it does not establish |
 | --- | --- | --- |
-| Verified model | Completed membership for the original subject | Exhaustive enumeration or optimality |
+| Verified model | Completed membership for the original input | Exhaustive enumeration or optimality |
 | Evaluated score | Cost of that verified model | A globally best cost |
 | Exhausted search | Relevant candidate coverage completed | Successful external publication |
 | Proved optimum | Complete relevant search establishes the incumbent | Every optimal tie was delivered |
-| `WorldView` | All full answers of the original subject were captured after unrestricted exhaustion | Successful external publication |
+| `WorldView` | All full answers of the original input were captured after unrestricted exhaustion | Successful external publication |
 | Decided world-view question | A fold over checked answer sets reached its absorbing value, which holds over the whole world view | The world view itself, or completed search |
 | Published record | The sink accepted one whole record | Flush, durability or complete search |
 
@@ -153,9 +153,9 @@ iterator has not completed the final exhaustion step. Thus the failure carries
 `verified_models() == 2` and `completion() == None`; its checked prefix cannot be
 relabelled a complete one-answer world view. Larger batches can also retain
 queued membership results in verification accounting before those answers are
-scored or yielded. The retained answer's subject remains the original owner.
+scored or yielded. The retained answer's original input retains its owner.
 The example uses `WorldViewFailure::into_parts()` to move that prefix and its
-typed cause, subject and outcome together. This transfers ownership without
+typed cause, original input and outcome together. This transfers ownership without
 cloning answers or strengthening the incomplete evidence. `into_answer_sets()`
 instead deliberately discards the cause and coverage context.
 
@@ -163,7 +163,7 @@ instead deliberately discards the cause and coverage context.
 retained incumbents. Streaming all answers can release each answer after use;
 complete collection retains the full family. With `K` answers and full payload
 sizes `s₁, …, sₖ`, collection requires space proportional to their sum in addition
-to the search engine and shared subject. `K` can be exponential in the atom
+to the search engine and shared original input. `K` can be exponential in the atom
 carrier. Objective selection retains incumbent ties under its separate limits;
 the one optimum in this fixture does not bound the number of ties in general.
 
@@ -495,7 +495,7 @@ PublicationFailure>`. `PublicationOutcome::Completed` carries a
 it cannot retract that proof, and it cannot claim a partially written record as
 fully published. `PublicationFailure` preserves the original cause and available
 semantic, publication and timing evidence. The solver library's `SolveFailure`
-retains only execution cause, subject, semantics and timings. Its owned
+retains only execution cause, original input, semantics and timings. Its owned
 decomposition allows a consumer to preserve those values in its own failure
 representation without constructing new semantic evidence.
 

@@ -5,8 +5,8 @@ use zetesis_reference_support::formula;
 
 use zetesis_algebra::Cancellation;
 use zetesis_solve::{
-    Backend, ExecutionObservation, ExecutionObserver, PreparedInput, Session, SolveConfig,
-    SolveError, SolveFailure, Subject,
+    Backend, ExecutionObservation, ExecutionObserver, Original, PreparedInput, Session,
+    SolveConfig, SolveError, SolveFailure,
 };
 
 #[derive(Debug)]
@@ -56,10 +56,10 @@ fn config() -> SolveConfig {
 
 fn decompose(
     failure: SolveFailure,
-    subject: &Subject,
+    expected_original: &Original,
     token: &Arc<()>,
 ) -> zetesis_solve::FailureParts {
-    assert!(failure.subject().unwrap().same_instance(subject));
+    assert!(failure.original().unwrap().same_instance(expected_original));
     assert_eq!(
         failure.to_string(),
         "execution observer: host observation refused"
@@ -77,7 +77,13 @@ fn decompose(
     let semantic = failure.semantic().map(std::ptr::from_ref);
     let phases = failure.phase_timings.as_deref().copied();
     let parts = failure.into_parts();
-    assert!(parts.subject.as_ref().unwrap().same_instance(subject));
+    assert!(
+        parts
+            .original
+            .as_ref()
+            .unwrap()
+            .same_instance(expected_original)
+    );
     assert!(std::ptr::eq(parts.cause.as_ref(), cause));
     assert_eq!(parts.semantic.as_deref().map(std::ptr::from_ref), semantic);
     assert_eq!(parts.phase_timings.as_deref().copied(), phases);
@@ -101,7 +107,7 @@ fn setup_failure_decomposition_preserves_evidence() {
     .start_observed(&mut RefuseRoute(Arc::clone(&token)))
     .err()
     .unwrap();
-    let parts = decompose(failure, &Subject::Theory(owner.theory().clone()), &token);
+    let parts = decompose(failure, &Original::Theory(owner.theory().clone()), &token);
     assert!(parts.semantic.is_none());
     assert!(parts.phase_timings.is_some());
 }
@@ -121,13 +127,13 @@ fn execution_failure_decomposition_preserves_evidence() {
         .next_observed(&mut Refuse(Arc::clone(&token)))
         .unwrap()
         .unwrap_err();
-    let parts = decompose(failure, &Subject::Theory(owner.theory().clone()), &token);
+    let parts = decompose(failure, &Original::Theory(owner.theory().clone()), &token);
     let semantic = parts.semantic.unwrap();
     assert!(
         semantic
-            .subject()
+            .original()
             .unwrap()
-            .same_instance(parts.subject.as_ref().unwrap())
+            .same_instance(parts.original.as_ref().unwrap())
     );
     assert_eq!(semantic.verified_models(), 1);
     assert_eq!(semantic.scored_models(), 1);

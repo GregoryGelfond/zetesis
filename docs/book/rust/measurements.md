@@ -23,7 +23,7 @@ The observer's error must implement `Error + Send + Sync + 'static`.
 an observer failure cannot cause GPU fallback and a second observation attempt.
 Initialization may return a setup failure or retain it for the first pull, as
 documented on `Session::new_observed`. After a failed pull, subsequent pulls
-return `None`. The failure retains any established evidence and original subject.
+return `None`. The failure retains any established evidence and original input.
 
 ## Define a measurement scope
 

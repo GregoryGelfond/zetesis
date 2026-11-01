@@ -74,8 +74,8 @@ pub use zetesis_solve::{
     AnswerSelection, AnswerSet, Backend, Completion, CompletionAccounting, ExecutionObservation,
     ExecutionObserver, ExecutionResources, FormulaDeviceLimits, FormulaExecutionStatistics,
     FormulaResidualStatistics, Grounder, GroundingMeasurement, GroundingTimings, Interruption,
-    MeasurementSpan, Optimization, OptimizationStop, OptimumSearch, Oracle, PhaseTimings,
+    MeasurementSpan, Optimization, OptimizationStop, OptimumSearch, Oracle, Original, PhaseTimings,
     PreparedInput, PreparedProfile, SearchState, SemanticOutcome, Session, SessionBuilder,
-    SessionModel, SolveConfig, SolveError, SolveFailure, SolveMeasurements, SolvePhase, Subject,
-    WorldView, WorldViewError, WorldViewFailure, WorldViewFailureParts, WorldViewLimits,
+    SessionModel, SolveConfig, SolveError, SolveFailure, SolveMeasurements, SolvePhase, WorldView,
+    WorldViewError, WorldViewFailure, WorldViewFailureParts, WorldViewLimits,
 };

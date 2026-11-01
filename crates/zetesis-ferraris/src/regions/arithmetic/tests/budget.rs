@@ -248,6 +248,33 @@ fn cancellation_precedes_storage_decline() {
     assert_eq!(budget.peak_bytes(), 0);
 }
 
+#[test]
+fn exact_byte_admission_preserves_the_work_receipt() {
+    let cancellation = Cancellation::default();
+    let mut budget_work = Meter::local(0);
+    let mut budget = Budget::new(&mut budget_work, 0, 12, &cancellation);
+    assert_eq!(budget.admit_bytes(12), Ok(()));
+    assert_eq!(budget.peak_bytes(), 12);
+    assert_eq!(budget.admit_bytes(0), Ok(()));
+    assert_eq!(budget.peak_bytes(), 12);
+    assert_eq!(budget.work(), 0);
+}
+
+#[test]
+fn cancelled_zero_byte_admission_preserves_the_peak() {
+    let cancellation = Cancellation::default();
+    let mut budget_work = Meter::local(0);
+    let mut budget = Budget::new(&mut budget_work, 0, 12, &cancellation);
+    budget.admit_bytes(12).unwrap();
+    cancellation.cancel();
+    assert_eq!(
+        budget.admit_bytes(0),
+        Err(BudgetError::Stopped(Stop::Cancelled))
+    );
+    assert_eq!(budget.peak_bytes(), 12);
+    assert_eq!(budget.work(), 0);
+}
+
 // The owned payload intentionally implements neither Clone nor Copy. The
 // caller refusal must travel through the real meter without a saved-error slot.
 #[derive(Debug, PartialEq, Eq)]

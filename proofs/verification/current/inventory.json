@@ -972,47 +972,67 @@
     },
     {
       "file": "Zetesis/AlgebraicRows.lean",
-      "line": 957,
+      "line": 961,
+      "name": "Zetesis.AlgebraicRows.counting_fold_one"
+    },
+    {
+      "file": "Zetesis/AlgebraicRows.lean",
+      "line": 976,
+      "name": "Zetesis.AlgebraicRows.bounded_counting_fold"
+    },
+    {
+      "file": "Zetesis/AlgebraicRows.lean",
+      "line": 991,
+      "name": "Zetesis.AlgebraicRows.bounded_counting_fold_one"
+    },
+    {
+      "file": "Zetesis/AlgebraicRows.lean",
+      "line": 1004,
+      "name": "Zetesis.AlgebraicRows.bounded_counting_overflow_iff"
+    },
+    {
+      "file": "Zetesis/AlgebraicRows.lean",
+      "line": 1014,
       "name": "Zetesis.AlgebraicRows.parity_forces"
     },
     {
       "file": "Zetesis/AlgebraicRows.lean",
-      "line": 972,
+      "line": 1029,
       "name": "Zetesis.AlgebraicRows.xor_definition"
     },
     {
       "file": "Zetesis/AlgebraicRows.lean",
-      "line": 1001,
+      "line": 1058,
       "name": "Zetesis.AlgebraicRows.threshold_measure"
     },
     {
       "file": "Zetesis/AlgebraicRows.lean",
-      "line": 1026,
+      "line": 1083,
       "name": "Zetesis.AlgebraicRows.lower_of_threshold"
     },
     {
       "file": "Zetesis/AlgebraicRows.lean",
-      "line": 1034,
+      "line": 1091,
       "name": "Zetesis.AlgebraicRows.upper_of_negated_threshold"
     },
     {
       "file": "Zetesis/AlgebraicRows.lean",
-      "line": 1052,
+      "line": 1109,
       "name": "Zetesis.AlgebraicRows.bounds_of_asserted_conjunction"
     },
     {
       "file": "Zetesis/AlgebraicRows.lean",
-      "line": 1073,
+      "line": 1130,
       "name": "Zetesis.AlgebraicRows.count_measure"
     },
     {
       "file": "Zetesis/AlgebraicRows.lean",
-      "line": 1095,
+      "line": 1152,
       "name": "Zetesis.AlgebraicRows.lower_of_clause"
     },
     {
       "file": "Zetesis/AlgebraicRows.lean",
-      "line": 1123,
+      "line": 1180,
       "name": "Zetesis.AlgebraicRows.double_count_groups"
     },
     {
@@ -1166,6 +1186,61 @@
       "name": "Zetesis.AtomKeys.membership_identity"
     },
     {
+      "file": "Zetesis/AtomicWork.lean",
+      "line": 40,
+      "name": "Zetesis.AtomicWork.accepted_iff"
+    },
+    {
+      "file": "Zetesis/AtomicWork.lean",
+      "line": 50,
+      "name": "Zetesis.AtomicWork.accepts_iff_fits"
+    },
+    {
+      "file": "Zetesis/AtomicWork.lean",
+      "line": 63,
+      "name": "Zetesis.AtomicWork.refused_iff"
+    },
+    {
+      "file": "Zetesis/AtomicWork.lean",
+      "line": 73,
+      "name": "Zetesis.AtomicWork.accepted_additive"
+    },
+    {
+      "file": "Zetesis/AtomicWork.lean",
+      "line": 80,
+      "name": "Zetesis.AtomicWork.accepted_within_limit"
+    },
+    {
+      "file": "Zetesis/AtomicWork.lean",
+      "line": 89,
+      "name": "Zetesis.AtomicWork.refused_preserves_prefix"
+    },
+    {
+      "file": "Zetesis/AtomicWork.lean",
+      "line": 96,
+      "name": "Zetesis.AtomicWork.above_new_limit_refused"
+    },
+    {
+      "file": "Zetesis/AtomicWork.lean",
+      "line": 104,
+      "name": "Zetesis.AtomicWork.charge_zero"
+    },
+    {
+      "file": "Zetesis/AtomicWork.lean",
+      "line": 110,
+      "name": "Zetesis.AtomicWork.zero_accepted_iff"
+    },
+    {
+      "file": "Zetesis/AtomicWork.lean",
+      "line": 115,
+      "name": "Zetesis.AtomicWork.zero_preserves_receipt"
+    },
+    {
+      "file": "Zetesis/AtomicWork.lean",
+      "line": 127,
+      "name": "Zetesis.AtomicWork.accepted_composition"
+    },
+    {
       "file": "Zetesis/AxisFolds.lean",
       "line": 81,
       "name": "Zetesis.AxisFolds.Reduction.op_unit"
@@ -1297,17 +1372,152 @@
     },
     {
       "file": "Zetesis/AxisFolds.lean",
-      "line": 433,
+      "line": 448,
+      "name": "Zetesis.AxisFolds.BoundedSum.encode_exact"
+    },
+    {
+      "file": "Zetesis/AxisFolds.lean",
+      "line": 454,
+      "name": "Zetesis.AxisFolds.BoundedSum.encode_overflow_iff"
+    },
+    {
+      "file": "Zetesis/AxisFolds.lean",
+      "line": 463,
+      "name": "Zetesis.AxisFolds.BoundedSum.none_op"
+    },
+    {
+      "file": "Zetesis/AxisFolds.lean",
+      "line": 467,
+      "name": "Zetesis.AxisFolds.BoundedSum.op_none"
+    },
+    {
+      "file": "Zetesis/AxisFolds.lean",
+      "line": 474,
+      "name": "Zetesis.AxisFolds.BoundedSum.op_encode"
+    },
+    {
+      "file": "Zetesis/AxisFolds.lean",
+      "line": 486,
+      "name": "Zetesis.AxisFolds.BoundedSum.op_comm"
+    },
+    {
+      "file": "Zetesis/AxisFolds.lean",
+      "line": 493,
+      "name": "Zetesis.AxisFolds.BoundedSum.op_assoc"
+    },
+    {
+      "file": "Zetesis/AxisFolds.lean",
+      "line": 511,
+      "name": "Zetesis.AxisFolds.BoundedSum.zero_op"
+    },
+    {
+      "file": "Zetesis/AxisFolds.lean",
+      "line": 533,
+      "name": "Zetesis.AxisFolds.BoundedSum.overflow_absorbs"
+    },
+    {
+      "file": "Zetesis/AxisFolds.lean",
+      "line": 551,
+      "name": "Zetesis.AxisFolds.Minimum.choose_le_left"
+    },
+    {
+      "file": "Zetesis/AxisFolds.lean",
+      "line": 561,
+      "name": "Zetesis.AxisFolds.Minimum.choose_le_right"
+    },
+    {
+      "file": "Zetesis/AxisFolds.lean",
+      "line": 571,
+      "name": "Zetesis.AxisFolds.Minimum.le_choose_iff"
+    },
+    {
+      "file": "Zetesis/AxisFolds.lean",
+      "line": 587,
+      "name": "Zetesis.AxisFolds.Minimum.choose_comm"
+    },
+    {
+      "file": "Zetesis/AxisFolds.lean",
+      "line": 603,
+      "name": "Zetesis.AxisFolds.Minimum.choose_assoc"
+    },
+    {
+      "file": "Zetesis/AxisFolds.lean",
+      "line": 618,
+      "name": "Zetesis.AxisFolds.Minimum.choose_idempotent"
+    },
+    {
+      "file": "Zetesis/AxisFolds.lean",
+      "line": 630,
+      "name": "Zetesis.AxisFolds.Minimum.op_comm"
+    },
+    {
+      "file": "Zetesis/AxisFolds.lean",
+      "line": 637,
+      "name": "Zetesis.AxisFolds.Minimum.op_assoc"
+    },
+    {
+      "file": "Zetesis/AxisFolds.lean",
+      "line": 662,
+      "name": "Zetesis.AxisFolds.Minimum.reduction_idempotent"
+    },
+    {
+      "file": "Zetesis/AxisFolds.lean",
+      "line": 681,
+      "name": "Zetesis.AxisFolds.Minimum.step_initial"
+    },
+    {
+      "file": "Zetesis/AxisFolds.lean",
+      "line": 686,
+      "name": "Zetesis.AxisFolds.Minimum.step_equal_retains_current"
+    },
+    {
+      "file": "Zetesis/AxisFolds.lean",
+      "line": 694,
+      "name": "Zetesis.AxisFolds.Minimum.step_value"
+    },
+    {
+      "file": "Zetesis/AxisFolds.lean",
+      "line": 714,
+      "name": "Zetesis.AxisFolds.Minimum.step_value_map"
+    },
+    {
+      "file": "Zetesis/AxisFolds.lean",
+      "line": 752,
+      "name": "Zetesis.AxisFolds.SetStreams.selected_inter"
+    },
+    {
+      "file": "Zetesis/AxisFolds.lean",
+      "line": 788,
+      "name": "Zetesis.AxisFolds.SetStreams.append_union"
+    },
+    {
+      "file": "Zetesis/AxisFolds.lean",
+      "line": 823,
+      "name": "Zetesis.AxisFolds.SetStreams.ordered_union_mem"
+    },
+    {
+      "file": "Zetesis/AxisFolds.lean",
+      "line": 867,
+      "name": "Zetesis.AxisFolds.SetStreams.ordered_union_value"
+    },
+    {
+      "file": "Zetesis/AxisFolds.lean",
+      "line": 878,
+      "name": "Zetesis.AxisFolds.SetStreams.ordered_union_equal_left"
+    },
+    {
+      "file": "Zetesis/AxisFolds.lean",
+      "line": 894,
       "name": "Zetesis.AxisFolds.walk_exhausted_fold"
     },
     {
       "file": "Zetesis/AxisFolds.lean",
-      "line": 443,
+      "line": 904,
       "name": "Zetesis.AxisFolds.world_view_fold_complete"
     },
     {
       "file": "Zetesis/AxisFolds.lean",
-      "line": 460,
+      "line": 921,
       "name": "Zetesis.AxisFolds.world_view_fold_decided"
     },
     {
@@ -1654,6 +1864,41 @@
       "file": "Zetesis/Bounds.lean",
       "line": 232,
       "name": "Zetesis.Bounds.lower_prefix_constraint_refutes"
+    },
+    {
+      "file": "Zetesis/BytePeak.lean",
+      "line": 41,
+      "name": "Zetesis.BytePeak.accepted_iff"
+    },
+    {
+      "file": "Zetesis/BytePeak.lean",
+      "line": 50,
+      "name": "Zetesis.BytePeak.refused_iff"
+    },
+    {
+      "file": "Zetesis/BytePeak.lean",
+      "line": 61,
+      "name": "Zetesis.BytePeak.receipt_eq_max"
+    },
+    {
+      "file": "Zetesis/BytePeak.lean",
+      "line": 69,
+      "name": "Zetesis.BytePeak.receipt_covers_inputs"
+    },
+    {
+      "file": "Zetesis/BytePeak.lean",
+      "line": 80,
+      "name": "Zetesis.BytePeak.observe_zero"
+    },
+    {
+      "file": "Zetesis/BytePeak.lean",
+      "line": 87,
+      "name": "Zetesis.BytePeak.acceptance_independent_of_previous"
+    },
+    {
+      "file": "Zetesis/BytePeak.lean",
+      "line": 110,
+      "name": "Zetesis.BytePeak.successive_receipts"
     },
     {
       "file": "Zetesis/CandidateCursor.lean",
@@ -10152,27 +10397,47 @@
     },
     {
       "file": "Zetesis/WorkPermits.lean",
-      "line": 43,
+      "line": 56,
+      "name": "Zetesis.WorkPermits.take_preserves_window"
+    },
+    {
+      "file": "Zetesis/WorkPermits.lean",
+      "line": 64,
+      "name": "Zetesis.WorkPermits.take_partitions_remaining"
+    },
+    {
+      "file": "Zetesis/WorkPermits.lean",
+      "line": 78,
+      "name": "Zetesis.WorkPermits.refund_preserves_window"
+    },
+    {
+      "file": "Zetesis/WorkPermits.lean",
+      "line": 95,
+      "name": "Zetesis.WorkPermits.settlement_partitions_grant"
+    },
+    {
+      "file": "Zetesis/WorkPermits.lean",
+      "line": 127,
       "name": "Zetesis.WorkPermits.grant_conserves"
     },
     {
       "file": "Zetesis/WorkPermits.lean",
-      "line": 52,
+      "line": 136,
       "name": "Zetesis.WorkPermits.settle_conserves"
     },
     {
       "file": "Zetesis/WorkPermits.lean",
-      "line": 61,
+      "line": 145,
       "name": "Zetesis.WorkPermits.consumed_within_limit"
     },
     {
       "file": "Zetesis/WorkPermits.lean",
-      "line": 69,
+      "line": 153,
       "name": "Zetesis.WorkPermits.settled_exhaustion"
     },
     {
       "file": "Zetesis/WorkPermits.lean",
-      "line": 76,
+      "line": 160,
       "name": "Zetesis.WorkPermits.unused_return_enables_work"
     },
     {
@@ -10273,6 +10538,7 @@
     "Zetesis/AssociativeWitnesses.lean",
     "Zetesis/AtomCatalogs.lean",
     "Zetesis/AtomKeys.lean",
+    "Zetesis/AtomicWork.lean",
     "Zetesis/AxisFolds.lean",
     "Zetesis/BatchAccounting.lean",
     "Zetesis/BinaryWatch.lean",
@@ -10281,6 +10547,7 @@
     "Zetesis/BooleanHeads.lean",
     "Zetesis/BoundedMultiples.lean",
     "Zetesis/Bounds.lean",
+    "Zetesis/BytePeak.lean",
     "Zetesis/CandidateCursor.lean",
     "Zetesis/CanonicalCatalog.lean",
     "Zetesis/CanonicalTemplates.lean",
@@ -10456,8 +10723,8 @@
     "Zetesis/WorldViews.lean"
   ],
   "source_sha256": {
-    "Audit.lean": "b4251c074b0689e85ba526aff00193496336fcb67e1738a8bacf70513ecf2932",
-    "Zetesis.lean": "e26cb01388e930994adf99a9b83bc79732410df747f9b0363879d5276b5dc055",
+    "Audit.lean": "8300e75b13a50408a864e48ca9952167131ff2d813f85e5baccf73572551bd16",
+    "Zetesis.lean": "36c1a19ebecba8eb6d7e014309f9877474956860ad9589557cf6d189910ee495",
     "Zetesis/AcyclicEvaluation.lean": "1a9c77283876cf1f61cb92031da04780aada5d0b256f79db5b64bfb6b129d0dc",
     "Zetesis/AdjacencyRows.lean": "38a19b1c74483a157636321a56e95fea660a2192a04c77930d609e411c8d30d4",
     "Zetesis/AggregateAssignment.lean": "def2eac0ae638f3801d35c11a3162afaa3e0b9e393601cf899952e449e309639",
@@ -10469,12 +10736,13 @@
     "Zetesis/AggregateRanges.lean": "d19d56b57cd98e862e730f498441c5e94d41c679d170d187f0726897b7b4e64f",
     "Zetesis/AggregateReduct.lean": "c5901d211c3bd3fffe388d87fa77efd1b66a79c3024cdec6dd63b7e77521a556",
     "Zetesis/Algebra.lean": "57a4c95503a34d95683fc41b665b66d3d12f1cf11776083ec53e32f51b719308",
-    "Zetesis/AlgebraicRows.lean": "49c9b53162667ffc18a89f5649617ec8de9e9e34407a0303043f5f86677dc14f",
+    "Zetesis/AlgebraicRows.lean": "92fda0d1cc476c33714d8575c0b12a554a07c288337ae7483f5d7d11cfd120da",
     "Zetesis/ArithmeticFamilies.lean": "b228302826c0d8f034c6b593e7cd1d85616a3bd41770822394c9059cb9079e15",
     "Zetesis/AssociativeWitnesses.lean": "6a964da8e22d66799054c2b02677ee5d8496807ca5a28637f9173c5d077aef37",
     "Zetesis/AtomCatalogs.lean": "2a90dd7c129290ffc3f9609f51378e6e45014a55f31b74cca9e7284a4e320eec",
     "Zetesis/AtomKeys.lean": "0188ea220bf8484db130ea674d01bad0db3db80f62678cbb0fcd930403cf1ae0",
-    "Zetesis/AxisFolds.lean": "f3e0ec8712ab8818308920e9c75c8b84a60d1e2613142920b1b01e7fe70aa1fb",
+    "Zetesis/AtomicWork.lean": "ebe299cace9d668c97193e4718016f2e18741754d0e44574da4094c42155b2e7",
+    "Zetesis/AxisFolds.lean": "e771cc398d9bc5aa255523cec1439270e84eb562e3014c8ca7f70f68c7619571",
     "Zetesis/BatchAccounting.lean": "c6ff03ea70ee1eb9afbbba472bfe10c0bd77e231b8623c4157da91fbb5a5c615",
     "Zetesis/BinaryWatch.lean": "c6391510df44d983c95f3c084aaba1336fdf88c47eded51b16e193ccd88110b4",
     "Zetesis/BindingScopes.lean": "1ccfde0f879702572dbc25ed20531f2b85e04eeedb59fd7eeea45ad7972486a7",
@@ -10482,6 +10750,7 @@
     "Zetesis/BooleanHeads.lean": "6c1bdb43ab5b5a4d5753f9396e89adc2e9c52cfa9a1df56860ad8d54005d4c27",
     "Zetesis/BoundedMultiples.lean": "f9d6e28fda82ac5155caf99b49f5b02b713eeb899ac79465a8d7506120ddcb82",
     "Zetesis/Bounds.lean": "8d5e90d550c1af0811c21270089b10aea9b2b6bf1ea4e10c0872d0830dbcbda1",
+    "Zetesis/BytePeak.lean": "9cff51f360a16a70f3a19d33b3677a3d9a68a3857474111c51a60704bc84dd67",
     "Zetesis/CandidateCursor.lean": "09bba309247ba7b7300dd8f6994ecb8482ac5b14fbfd356ab8c24103fbfe1039",
     "Zetesis/CanonicalCatalog.lean": "39c7a2f525f3f71d39e023d3dbcf8646a49d71b8740ebe5bc3184ac1478639cf",
     "Zetesis/CanonicalTemplates.lean": "9758c9b87550c7a528d62ea4aa1452635876de4cb6a53d9c8c6b3e97bbb8de9b",
@@ -10652,7 +10921,7 @@
     "Zetesis/ValueExtrema.lean": "1c8cbda687b98d9a866eec959fd264e05e7f894d55cd7d6439d49d76a95ada24",
     "Zetesis/WeightedHeadActivity.lean": "ee64529c78f7a3746b89029c04abfcd797c0fa52a9ecac7ea96df2f9caea3ad9",
     "Zetesis/WorkCharge.lean": "22a76b934960f6b636463fba8d1a39a1a43f42bebb3524951b10b59b6b54c213",
-    "Zetesis/WorkPermits.lean": "39ac55807deacb91b76b37804d62729f02541511175a1fe74484605460d1dc8c",
+    "Zetesis/WorkPermits.lean": "5f3700cd7fbfdea127e10623f8dcf3d2ae600de1df7d52db0be388ac6cd7ef37",
     "Zetesis/WorldMasks.lean": "ad0145f55bf5c1b0faffda9a20182bb9ff6f84226b7749760ffa290aeb451c59",
     "Zetesis/WorldViews.lean": "581ab6a65fc2659b8695d49af1bae6ef61008cdc59156aaba5b0c164c23cef89",
     "lake-manifest.json": "69364e6460074266ebff2f411cee9d04264803f6f813e49150fa5daa67da8ddd",

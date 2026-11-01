@@ -162,17 +162,13 @@ impl<'a> GroupRef<'a> {
         limits: ReductionLimits,
         cancellation: &Cancellation,
     ) -> Result<Reduction<'a>, Error> {
-        let mut work = Work {
-            maximum: limits.max_work,
-            cancellation,
-            statistics: Statistics::default(),
-        };
+        let mut work = Work::new(limits.max_work, cancellation);
         let result = self.reduce_checked(original, frozen, &mut work);
         result
             .map(|(original, frozen)| Reduction {
                 original,
                 frozen,
-                statistics: work.statistics,
+                statistics: work.statistics(),
             })
             .map_err(|kind| work.failure(kind))
     }

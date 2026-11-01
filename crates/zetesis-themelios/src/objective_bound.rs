@@ -11,12 +11,14 @@ mod bound;
 mod choices;
 mod join;
 mod score;
+#[cfg(test)]
+mod tests;
 pub use score::{ObjectiveScore, ObjectiveScoreError, ObjectiveScoreErrorKind};
 
 use std::collections::BTreeMap;
 use std::fmt;
 
-use zetesis_algebra::{Cancellation, Stop};
+use zetesis_algebra::{Cancellation, Meter, MeterCountError, Stop};
 use zetesis_core::catalog::Atoms;
 use zetesis_ferraris::{
     AggregateElement, AggregateError, AggregateLimits, FormulaNodes, FormulaParts, NodeView, Theory,
@@ -369,14 +371,39 @@ struct Work<'a> {
     cancellation: &'a Cancellation,
     limits: ObjectivePlanLimits,
     template: Option<usize>,
-    statistics: ObjectiveBoundStatistics,
+    meter: Meter<'static>,
+    bindings: u64,
+    keys: usize,
+    key_bytes: usize,
+    nodes: usize,
 }
-impl Work<'_> {
+impl<'a> Work<'a> {
+    fn new(limits: ObjectivePlanLimits, cancellation: &'a Cancellation) -> Self {
+        Self {
+            cancellation,
+            limits,
+            template: None,
+            meter: Meter::local(limits.max_work),
+            bindings: 0,
+            keys: 0,
+            key_bytes: 0,
+            nodes: 0,
+        }
+    }
+    fn statistics(&self) -> ObjectiveBoundStatistics {
+        ObjectiveBoundStatistics {
+            work: self.meter.charged(),
+            bindings: self.bindings,
+            keys: self.keys,
+            key_bytes: self.key_bytes,
+            nodes: self.nodes,
+        }
+    }
     fn error(&self, kind: ObjectiveBoundErrorKind) -> ObjectiveBoundError {
         ObjectiveBoundError {
             kind,
             template: self.template,
-            statistics: self.statistics,
+            statistics: self.statistics(),
         }
     }
     fn limit(&self, resource: ObjectiveBoundResource) -> ObjectiveBoundError {
@@ -391,16 +418,17 @@ impl Work<'_> {
     // Imported kernel work has already happened, including on cancellation.
     // Record it without another cancellation check discarding that evidence.
     fn account(&mut self, amount: u64) -> Result<(), ObjectiveBoundError> {
-        let next = self
-            .statistics
-            .work
-            .checked_add(amount)
-            .ok_or_else(|| self.error(ObjectiveBoundErrorKind::Overflow))?;
-        if next > self.limits.max_work {
-            return Err(self.limit(ObjectiveBoundResource::Work));
+        // The native contract distinguishes an unrepresentable total from an
+        // exhausted allowance; the shared meter owns the accepted count.
+        if self.meter.charged().checked_add(amount).is_none() {
+            return Err(self.error(ObjectiveBoundErrorKind::Overflow));
         }
-        self.statistics.work = next;
-        Ok(())
+        self.meter
+            .bounded(amount, || ((), amount))
+            .map_err(|failure| match failure.into_stop() {
+                Stop::WorkLimit => self.limit(ObjectiveBoundResource::Work),
+                stop => self.error(ObjectiveBoundErrorKind::Control(stop)),
+            })
     }
     fn tick(&mut self) -> Result<(), ObjectiveBoundError> {
         self.charge(1)
@@ -427,22 +455,18 @@ impl Work<'_> {
             NodeView::Implies(_, _) => (1, 2),
             NodeView::Atom(_) | NodeView::False => (1, 0),
         };
-        let count = nodes
-            .view()
-            .len()
-            .checked_add(added_nodes)
-            .ok_or_else(|| self.error(ObjectiveBoundErrorKind::Overflow))?;
-        if count > self.limits.max_nodes {
-            return Err(self.limit(ObjectiveBoundResource::Nodes));
-        }
-        let occurrences = nodes
-            .parts()
-            .occurrences()
-            .checked_add(edges)
-            .ok_or_else(|| self.error(ObjectiveBoundErrorKind::Overflow))?;
-        if occurrences > self.limits.max_operands {
-            return Err(self.limit(ObjectiveBoundResource::Operands));
-        }
+        Meter::check_count(nodes.view().len(), added_nodes, self.limits.max_nodes).map_err(
+            |error| match error {
+                MeterCountError::Overflow => self.error(ObjectiveBoundErrorKind::Overflow),
+                MeterCountError::Limit { .. } => self.limit(ObjectiveBoundResource::Nodes),
+            },
+        )?;
+        Meter::check_count(nodes.parts().occurrences(), edges, self.limits.max_operands).map_err(
+            |error| match error {
+                MeterCountError::Overflow => self.error(ObjectiveBoundErrorKind::Overflow),
+                MeterCountError::Limit { .. } => self.limit(ObjectiveBoundResource::Operands),
+            },
+        )?;
         // Charge child validation and copied arena cells before publication.
         // Numeric copies include both columns and row/threshold descriptors.
         // The range-returning append allocates no root vector. The builder has
@@ -493,7 +517,7 @@ impl Work<'_> {
                 })
             })?;
         transaction.commit();
-        self.statistics.nodes = nodes.view().len();
+        self.nodes = nodes.view().len();
         Ok(index)
     }
 }

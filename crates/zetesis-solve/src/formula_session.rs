@@ -837,7 +837,7 @@ impl<'a, E: MembershipExecution> FormulaSession<'a, E> {
         );
         SemanticOutcome {
             projection: None,
-            subject: Some(crate::Subject::Theory(self.input.theory.clone())),
+            original: Some(crate::Original::Theory(self.input.theory.clone())),
             selection: Some(self.selection),
             verified: statistics.map_or(0, |s| s.stable_models),
             scored: self.incumbents.scored(),

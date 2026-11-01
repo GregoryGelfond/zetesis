@@ -3,7 +3,7 @@ use super::{
     RelationGpuMasks, RelationGpuStats, capacity, poll,
 };
 use crate::{GpuError, GpuErrorKind};
-use zetesis_algebra::{Cancellation, words::Words};
+use zetesis_algebra::{Cancellation, Meter, words::Words};
 use zetesis_core::relation::{Query, Relation};
 
 const CONTROL_INTERVAL: usize = 1024;
@@ -207,14 +207,13 @@ impl Plan {
             result_stride,
         };
         for query in queries {
-            plan.work = plan
-                .work
-                .checked_add(u64::from(plan.query_work(query)?))
-                .ok_or_else(|| capacity("relation work sum exceeds u64"))?;
+            let work = plan.query_work(query)?;
+            Meter::charge_receipt(&mut plan.work, u128::from(work), u64::MAX)
+                .map_err(|_| capacity("relation work sum exceeds u64"))?;
         }
-        if plan.work > limits.max_work {
-            return Err(capacity("relation full-scan work exceeds ceiling"));
-        }
+        // Finish all query-cost checks before the authored whole-plan ceiling.
+        Meter::charge_receipt(&mut plan.work, 0, limits.max_work)
+            .map_err(|_| capacity("relation full-scan work exceeds ceiling"))?;
         Ok(plan)
     }
 

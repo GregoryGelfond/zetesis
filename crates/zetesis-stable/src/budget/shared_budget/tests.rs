@@ -5,6 +5,7 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 use super::*;
+use zetesis_algebra::{Meter, Reservation as _};
 
 fn budget(work: u64) -> SharedBudget {
     SharedBudget::new(
@@ -365,7 +366,7 @@ fn an_accounted_attempt_refunds_its_unused_allowance() {
     assert_eq!(reservation.allowance(), 20);
     state(&shared, (1, 79, 20));
     // The same receipt is settled after success or a typed kernel refusal.
-    reservation.finish(3).unwrap();
+    Meter::under_reservation(reservation, |_| Ok::<_, Incomplete>(((), 3))).unwrap();
     state(&shared, (4, 96, 0));
 }
 
@@ -377,7 +378,7 @@ fn a_kernel_can_execute_only_the_reserved_remainder() {
     let reservation = lease.reserve(20).unwrap();
     assert_eq!(reservation.allowance(), 7);
     state(&shared, (0, 0, 7));
-    reservation.finish(7).unwrap();
+    Meter::under_reservation(reservation, |_| Ok::<_, Incomplete>(((), 7))).unwrap();
     state(&shared, (7, 0, 0));
     assert_eq!(lease.tick(), Err(Incomplete::WorkLimit));
 }
@@ -400,12 +401,12 @@ fn a_kernel_reservation_returns_its_lease_before_waiting() {
             started.send(()).unwrap();
             let reservation = lease.reserve(4).unwrap();
             assert_eq!(reservation.allowance(), 4);
-            reservation.finish(2).unwrap();
+            Meter::under_reservation(reservation, |_| Ok::<_, Incomplete>(((), 2))).unwrap();
             done.send(()).unwrap();
         });
         starting.recv_timeout(Duration::from_secs(2)).unwrap();
         assert_eq!(result.try_recv(), Err(mpsc::TryRecvError::Empty));
-        reservation.finish(3).unwrap();
+        Meter::under_reservation(reservation, |_| Ok::<_, Incomplete>(((), 3))).unwrap();
         result.recv_timeout(Duration::from_secs(2)).unwrap();
     });
     state(&shared, (6, 4, 0));
@@ -449,4 +450,158 @@ fn a_batched_grant_is_refused_only_when_no_permit_remains() {
     assert_eq!(lease.take_up_to(1), Err(Incomplete::WorkLimit));
     drop(lease);
     state(&shared, (3, 0, 0));
+}
+
+#[test]
+fn the_common_transaction_keeps_a_native_failed_receipt() {
+    let shared = budget(7);
+    let cancellation = Cancellation::default();
+    let mut lease = shared.lease(&cancellation);
+    let reservation = lease.reserve(20).unwrap();
+    let native = Err::<(), _>(Incomplete::Allocation);
+    let result = Meter::under_reservation(reservation, |allowance| {
+        assert_eq!(allowance, 7);
+        state(&shared, (0, 0, 7));
+        Ok::<_, Incomplete>((native, 5))
+    });
+    assert_eq!(result, Ok((native, 5)));
+    state(&shared, (5, 2, 0));
+}
+
+#[test]
+fn the_common_transaction_enters_a_direct_zero_allowance() {
+    let shared = budget(0);
+    let cancellation = Cancellation::default();
+    let mut lease = shared.lease(&cancellation);
+    let reservation = lease.reserve(10).unwrap();
+    let mut calls = 0;
+    let result = Meter::under_reservation(reservation, |allowance| {
+        calls += 1;
+        assert_eq!(allowance, 0);
+        Ok::<_, Incomplete>((Err::<(), _>(Incomplete::WorkLimit), 0))
+    });
+    assert_eq!(result, Ok((Err(Incomplete::WorkLimit), 0)));
+    assert_eq!(calls, 1);
+    state(&shared, (0, 0, 0));
+}
+
+#[test]
+fn an_unreceipted_common_transaction_conservatively_settles_its_grant() {
+    for invalid_receipt in [false, true] {
+        let shared = budget(10);
+        let cancellation = Cancellation::default();
+        let mut lease = shared.lease(&cancellation);
+        let reservation = lease.reserve(7).unwrap();
+        let result = Meter::under_reservation(reservation, |allowance| {
+            assert_eq!(allowance, 7);
+            state(&shared, (0, 3, 7));
+            if invalid_receipt {
+                Ok(((), 8))
+            } else {
+                Err(Incomplete::CounterOverflow)
+            }
+        })
+        .map_err(crate::budget::reservation_failure);
+        let expected = if invalid_receipt {
+            Incomplete::InvalidWitness
+        } else {
+            Incomplete::CounterOverflow
+        };
+        assert_eq!(result, Err(expected));
+        state(&shared, (7, 3, 0));
+    }
+}
+
+#[test]
+fn unwinding_through_the_common_transaction_consumes_the_grant() {
+    let shared = budget(10);
+    let cancellation = Cancellation::default();
+    let mut lease = shared.lease(&cancellation);
+    let stopped = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        let reservation = lease.reserve(7).unwrap();
+        Meter::under_reservation(reservation, |allowance| -> Result<((), u64), Incomplete> {
+            assert_eq!(allowance, 7);
+            panic!("kernel unwound before returning its work receipt");
+        })
+    }));
+    assert!(stopped.is_err());
+    state(&shared, (7, 3, 0));
+}
+
+#[test]
+fn direct_zero_charge_preserves_an_imported_prefix_above_the_ceiling() {
+    let before = SearchStatistics {
+        work: 7,
+        decisions: 2,
+    };
+    let shared = SharedBudget::new(
+        SearchLimits {
+            max_work: 3,
+            max_decisions: 2,
+        },
+        before,
+    );
+    for (amount, expected) in [(0, Ok(())), (1, Err(Incomplete::WorkLimit)), (0, Ok(()))] {
+        assert_eq!(shared.charge(amount), expected);
+        let permits = shared.lock();
+        assert_eq!(
+            (permits.spent, permits.available, permits.outstanding),
+            (7, 0, 0)
+        );
+    }
+    let mut after = SearchStatistics::default();
+    shared.record(&mut after);
+    assert_eq!(after, before);
+}
+
+#[test]
+fn direct_charge_keeps_the_last_representable_permit() {
+    let shared = SharedBudget::new(
+        SearchLimits {
+            max_work: u64::MAX,
+            max_decisions: 7,
+        },
+        SearchStatistics {
+            work: u64::MAX - 1,
+            decisions: 7,
+        },
+    );
+    assert_eq!(shared.charge(u64::MAX), Err(Incomplete::WorkLimit));
+    state(&shared, (u64::MAX - 1, 1, 0));
+    assert_eq!(shared.charge(1), Ok(()));
+    state(&shared, (u64::MAX, 0, 0));
+    assert_eq!(shared.charge(0), Ok(()));
+    assert_eq!(shared.charge(1), Err(Incomplete::WorkLimit));
+    state(&shared, (u64::MAX, 0, 0));
+    let mut after = SearchStatistics::default();
+    shared.record(&mut after);
+    assert_eq!(after.work, u64::MAX);
+    assert_eq!(after.decisions, 7);
+}
+
+#[test]
+fn zero_bulk_consumption_does_not_observe_cancellation_or_acquire_a_grant() {
+    let shared = budget(3);
+    let cancellation = Cancellation::default();
+    cancellation.cancel();
+    let lease = shared.lease(&cancellation);
+    assert_eq!(lease.take(0), Ok(()));
+    state(&shared, (0, 3, 0));
+    assert_eq!(lease.take_up_to(0), Err(Incomplete::Cancelled));
+    state(&shared, (0, 3, 0));
+}
+
+#[test]
+fn a_zero_batched_request_refills_once_and_retains_the_whole_grant() {
+    let shared = budget(3);
+    let cancellation = Cancellation::default();
+    let lease = shared.lease(&cancellation);
+    assert_eq!(lease.take_up_to(0), Ok(0));
+    state(&shared, (0, 0, 3));
+    cancellation.cancel();
+    // An existing grant does not refill or poll, even for a zero request.
+    assert_eq!(lease.take_up_to(0), Ok(0));
+    state(&shared, (0, 0, 3));
+    lease.settle();
+    state(&shared, (0, 3, 0));
 }

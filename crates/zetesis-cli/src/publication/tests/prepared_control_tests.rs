@@ -1,4 +1,4 @@
-//! Cancellation after admission must retain the already established subject.
+//! Cancellation after admission must retain the already established original input.
 
 use clap::Parser;
 use zetesis_algebra::Cancellation;
@@ -25,7 +25,7 @@ fn stopped_formula_adapter_retains_admitted_subject() {
     )
     .unwrap();
     let semantic = progress.semantic().unwrap();
-    let crate::Subject::Theory(theory) = semantic.subject().unwrap() else {
+    let crate::Original::Theory(theory) = semantic.original().unwrap() else {
         panic!("original theory")
     };
     assert!(theory.same_instance(admitted.theory()));

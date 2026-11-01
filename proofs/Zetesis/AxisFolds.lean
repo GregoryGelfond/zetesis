@@ -424,6 +424,467 @@ theorem pair_idempotent {V : Type u} {W : Type v} (left : Reduction V) (right : 
   show (left.op a.1 a.1, right.op a.2 a.2) = a
   rw [leftIdempotent, rightIdempotent]
 
+/-! ## Bounded nonnegative sums -/
+
+namespace BoundedSum
+
+/-- Exact values through an explicit inclusive limit, or overflow (`none`).
+The finite carrier rules out an allegedly exact value above the limit. This is
+not a capped-count query: overflow records loss of an exact representable sum. -/
+abbrev Value (limit : Nat) := Option (Fin (limit + 1))
+
+/-- Preserve an exact natural value when it fits; otherwise record overflow. -/
+def encode (limit count : Nat) : Value limit :=
+  if fits : count < limit + 1 then some ⟨count, fits⟩ else none
+
+/-- Add exact nonnegative values; a previous overflow cannot be recovered by
+adding further nonnegative values. No membership or coverage is asserted. -/
+def op (limit : Nat) : Value limit → Value limit → Value limit
+  | none, _ => none
+  | some _, none => none
+  | some first, some second => encode limit (first.val + second.val)
+
+/-- An already bounded value is preserved, including its exact numeric value. -/
+theorem encode_exact (limit : Nat) (value : Fin (limit + 1)) :
+    encode limit value.val = some value := by
+  rcases value with ⟨count, fits⟩
+  simp [encode, fits]
+
+/-- Overflow means precisely that the exact natural result exceeds the limit. -/
+theorem encode_overflow_iff (limit count : Nat) :
+    encode limit count = none ↔ limit < count := by
+  by_cases fits : count < limit + 1
+  · have within : ¬ limit < count := by omega
+    simp [encode, fits, within]
+  · have exceeds : limit < count := by omega
+    simp [encode, fits, exceeds]
+
+/-- A previous overflow remains overflow when another value is added. -/
+theorem none_op (limit : Nat) (value : Value limit) :
+    op limit none value = none := rfl
+
+/-- Overflow is preserved in either operand position. -/
+theorem op_none (limit : Nat) (value : Value limit) :
+    op limit value none = none := by
+  cases value <;> rfl
+
+/-- Encoding commutes with nonnegative addition. If either input already
+exceeds the limit, their sum also exceeds it; otherwise the operation encodes
+their exact sum. This is the link to ordinary natural counting. -/
+theorem op_encode (limit first second : Nat) :
+    op limit (encode limit first) (encode limit second) =
+      encode limit (first + second) := by
+  by_cases firstFits : first < limit + 1
+  · by_cases secondFits : second < limit + 1
+    · simp [encode, firstFits, secondFits, op]
+    · have sumExceeds : ¬ first + second < limit + 1 := by omega
+      simp [encode, firstFits, secondFits, sumExceeds, op]
+  · have sumExceeds : ¬ first + second < limit + 1 := by omega
+    simp [encode, firstFits, sumExceeds, op]
+
+/-- Interchanging operands preserves exact sums and overflow. -/
+theorem op_comm (limit : Nat) (first second : Value limit) :
+    op limit first second = op limit second first := by
+  cases first <;> cases second <;> simp [op, Nat.add_comm]
+
+/-- Bracketing does not affect a bounded sum. A previous overflow settles the
+claim. For three exact values, encoding commutes with each addition and natural
+associativity identifies the two complete sums. -/
+theorem op_assoc (limit : Nat) (first second third : Value limit) :
+    op limit (op limit first second) third =
+      op limit first (op limit second third) := by
+  cases first with
+  | none => rfl
+  | some first =>
+    cases second with
+    | none => rfl
+    | some second =>
+      cases third with
+      | none => exact op_none limit (encode limit (first.val + second.val))
+      | some third =>
+        change op limit (encode limit (first.val + second.val)) (some third) =
+          op limit (some first) (encode limit (second.val + third.val))
+        rw [← encode_exact limit third, ← encode_exact limit first]
+        rw [op_encode, op_encode, Nat.add_assoc]
+
+/-- Exact zero is an identity even when the other value has overflowed. -/
+theorem zero_op (limit : Nat) (value : Value limit) :
+    op limit (encode limit 0) value = value := by
+  cases value with
+  | none => exact op_none limit (encode limit 0)
+  | some value =>
+    calc op limit (encode limit 0) (some value)
+        = op limit (encode limit 0) (encode limit value.val) := by
+          rw [encode_exact]
+      _ = encode limit (0 + value.val) := op_encode limit 0 value.val
+      _ = some value := by simpa only [Nat.zero_add] using encode_exact limit value
+
+/-- The bounded image of natural addition is one commutative value reduction.
+Its identity is exact zero, not an empty-family verdict. -/
+def reduction (limit : Nat) : Reduction (Value limit) where
+  op := op limit
+  unit := encode limit 0
+  assoc := op_assoc limit
+  comm := op_comm limit
+  unit_op := zero_op limit
+
+/-- Overflow absorbs all continuations mathematically. An exact-count API must
+report it as failure, not use it as a successful early cardinality verdict. -/
+theorem overflow_absorbs (limit : Nat) : (reduction limit).Absorbing none :=
+  fun value => op_none limit value
+
+end BoundedSum
+
+/-! ## Minimum under an explicit total order -/
+
+namespace Minimum
+
+variable {V : Type u}
+
+/-- Choose the smaller value, keeping the left value on equality. The relation
+is explicit; the laws below state the order assumptions they require. -/
+def choose (le : V → V → Prop) [DecidableRel le] (left right : V) : V :=
+  if le left right then left else right
+
+/-- The chosen value is below the first input, by totality when the second is
+selected. No claim about a comparator implementation follows from this law. -/
+theorem choose_le_left (le : V → V → Prop) [DecidableRel le]
+    (reflexive : ∀ value, le value value)
+    (total : ∀ left right, le left right ∨ le right left) (left right : V) :
+    le (choose le left right) left := by
+  by_cases ordered : le left right
+  · simpa only [choose, if_pos ordered] using reflexive left
+  · have reverse : le right left := (total left right).resolve_left ordered
+    simpa only [choose, if_neg ordered] using reverse
+
+/-- The chosen value is below the second input as well. -/
+theorem choose_le_right (le : V → V → Prop) [DecidableRel le]
+    (reflexive : ∀ value, le value value) (left right : V) :
+    le (choose le left right) right := by
+  by_cases ordered : le left right
+  · simpa only [choose, if_pos ordered] using ordered
+  · simpa only [choose, if_neg ordered] using reflexive right
+
+/-- A value is below the chosen minimum exactly when it is below both inputs.
+The forward direction uses transitivity and the two selected-value bounds; the
+reverse direction follows whichever input was selected. -/
+theorem le_choose_iff (le : V → V → Prop) [DecidableRel le]
+    (reflexive : ∀ value, le value value)
+    (transitive : ∀ first second third, le first second → le second third → le first third)
+    (total : ∀ left right, le left right ∨ le right left) (value left right : V) :
+    le value (choose le left right) ↔ le value left ∧ le value right := by
+  constructor
+  · intro below
+    exact ⟨transitive _ _ _ below (choose_le_left le reflexive total left right),
+      transitive _ _ _ below (choose_le_right le reflexive left right)⟩
+  · rintro ⟨belowLeft, belowRight⟩
+    by_cases ordered : le left right
+    · simpa only [choose, if_pos ordered] using belowLeft
+    · simpa only [choose, if_neg ordered] using belowRight
+
+/-- Interchanging the inputs preserves the minimum value. When both directions
+hold, antisymmetry identifies the values; this is not a witness-order claim. -/
+theorem choose_comm (le : V → V → Prop) [DecidableRel le]
+    (antisymmetric : ∀ left right, le left right → le right left → left = right)
+    (total : ∀ left right, le left right ∨ le right left) (left right : V) :
+    choose le left right = choose le right left := by
+  by_cases forward : le left right
+  · by_cases reverse : le right left
+    · have same : left = right := antisymmetric left right forward reverse
+      simp only [choose, if_pos forward, if_pos reverse]
+      exact same
+    · simp only [choose, if_pos forward, if_neg reverse]
+  · have reverse : le right left := (total left right).resolve_left forward
+    simp only [choose, if_neg forward, if_pos reverse]
+
+/-- Minimum is associative. Both bracketings have the same lower bounds: a
+value lies below either exactly when it lies below each of the three inputs.
+Reflexivity and antisymmetry then identify the two minimum values. -/
+theorem choose_assoc (le : V → V → Prop) [DecidableRel le]
+    (reflexive : ∀ value, le value value)
+    (transitive : ∀ first second third, le first second → le second third → le first third)
+    (antisymmetric : ∀ left right, le left right → le right left → left = right)
+    (total : ∀ left right, le left right ∨ le right left) (first second third : V) :
+    choose le (choose le first second) third = choose le first (choose le second third) := by
+  have sameLowerBounds (value : V) :
+      le value (choose le (choose le first second) third) ↔
+        le value (choose le first (choose le second third)) := by
+    simp only [le_choose_iff le reflexive transitive total, and_assoc]
+  apply antisymmetric
+  · exact (sameLowerBounds _).mp (reflexive _)
+  · exact (sameLowerBounds _).mpr (reflexive _)
+
+/-- Repeating a value does not change the minimum. -/
+theorem choose_idempotent (le : V → V → Prop) [DecidableRel le]
+    (reflexive : ∀ value, le value value) (value : V) :
+    choose le value value = value := by
+  simp only [choose, if_pos (reflexive value)]
+
+/-- Absence is the minimum's identity, not an empty-family or optimum verdict. -/
+def op (le : V → V → Prop) [DecidableRel le] : Option V → Option V → Option V
+  | none, right => right
+  | some left, none => some left
+  | some left, some right => some (choose le left right)
+
+/-- Optional minimum is commutative under the stated value order. -/
+theorem op_comm (le : V → V → Prop) [DecidableRel le]
+    (antisymmetric : ∀ left right, le left right → le right left → left = right)
+    (total : ∀ left right, le left right ∨ le right left) (left right : Option V) :
+    op le left right = op le right left := by
+  cases left <;> cases right <;> simp only [op, choose_comm le antisymmetric total]
+
+/-- Optional minimum inherits associativity; absent operands are identities. -/
+theorem op_assoc (le : V → V → Prop) [DecidableRel le]
+    (reflexive : ∀ value, le value value)
+    (transitive : ∀ first second third, le first second → le second third → le first third)
+    (antisymmetric : ∀ left right, le left right → le right left → left = right)
+    (total : ∀ left right, le left right ∨ le right left) (first second third : Option V) :
+    op le (op le first second) third = op le first (op le second third) := by
+  cases first <;> cases second <;> cases third <;>
+    simp only [op, choose_assoc le reflexive transitive antisymmetric total]
+
+/-- One minimum reduction from an explicitly supplied decidable total order.
+Order laws concern mathematical values. They do not prove the purity or lawfulness
+of a Rust Ord implementation, select a stored witness, or establish coverage. -/
+def reduction (le : V → V → Prop) [DecidableRel le]
+    (reflexive : ∀ value, le value value)
+    (transitive : ∀ first second third, le first second → le second third → le first third)
+    (antisymmetric : ∀ left right, le left right → le right left → left = right)
+    (total : ∀ left right, le left right ∨ le right left) : Reduction (Option V) where
+  op := op le
+  unit := none
+  assoc := op_assoc le reflexive transitive antisymmetric total
+  comm := op_comm le antisymmetric total
+  unit_op := fun _ => rfl
+
+/-- The minimum reduction is idempotent. This does not imply that retaining two
+equal-valued answer sets is redundant: their answer identities can differ. -/
+theorem reduction_idempotent (le : V → V → Prop) [DecidableRel le]
+    (reflexive : ∀ value, le value value)
+    (transitive : ∀ first second third, le first second → le second third → le first third)
+    (antisymmetric : ∀ left right, le left right → le right left → left = right)
+    (total : ∀ left right, le left right ∨ le right left) :
+    (reduction le reflexive transitive antisymmetric total).Idempotent := by
+  intro value
+  cases value <;> simp only [reduction, op, choose_idempotent le reflexive]
+
+/-- A single comparison decides the incoming value's step. Equality and greater
+cost retain the prior representative; with no prior value no comparison is read.
+The returned order describes this step, not a commutative accumulated value. -/
+def step (compare : V → V → Ordering) : Option V → V → V × Ordering
+  | none, incoming => (incoming, .lt)
+  | some current, incoming =>
+      let ordering := compare incoming current
+      (if ordering = .lt then incoming else current, ordering)
+
+/-- A first value establishes the minimum without comparing it to a sentinel. -/
+theorem step_initial (compare : V → V → Ordering) (incoming : V) :
+    step compare none incoming = (incoming, .lt) := rfl
+
+/-- Equal comparison retains the prior representative, independently of whether
+comparison equality identifies two representations structurally. -/
+theorem step_equal_retains_current (compare : V → V → Ordering) (current incoming : V)
+    (equal : compare incoming current = .eq) :
+    step compare (some current) incoming = (current, .eq) := by
+  simp [step, equal]
+
+/-- The one-comparison step realizes the chosen minimum when strict comparison
+agrees with the explicit order. The premise is about values, not a Rust trait
+name. No purity, machine cost, witness retention or enumeration is inferred. -/
+theorem step_value (le : V → V → Prop) [DecidableRel le]
+    (compare : V → V → Ordering)
+    (agrees : ∀ current incoming, compare incoming current = .lt ↔ ¬ le current incoming)
+    (current : Option V) (incoming : V) :
+    some (step compare current incoming).1 = op le current (some incoming) := by
+  cases current with
+  | none => rfl
+  | some current =>
+    by_cases ordered : le current incoming
+    · have notBetter : compare incoming current ≠ .lt := by
+        intro better
+        exact (agrees current incoming).mp better ordered
+      simp only [step, notBetter, ↓reduceIte, op, choose, if_pos ordered]
+    · have better : compare incoming current = .lt := (agrees current incoming).mpr ordered
+      simp only [step, better, ↓reduceIte, op, choose, if_neg ordered]
+
+/-- Selecting a stored representative realizes minimum of its denoted values
+when its comparison agrees with that value order. Different representatives may
+denote the same value. The old representative is still retained on equality;
+commutativity is asserted only after applying the denotation, not for its storage. -/
+theorem step_value_map {R : Type v} (le : V → V → Prop) [DecidableRel le]
+    (value : R → V) (compare : R → R → Ordering)
+    (agrees : ∀ current incoming,
+      compare incoming current = .lt ↔ ¬ le (value current) (value incoming))
+    (current : Option R) (incoming : R) :
+    some (value (step compare current incoming).1) =
+      op le (current.map value) (some (value incoming)) := by
+  cases current with
+  | none => rfl
+  | some current =>
+    by_cases ordered : le (value current) (value incoming)
+    · have notBetter : compare incoming current ≠ .lt := by
+        intro better
+        exact (agrees current incoming).mp better ordered
+      simp only [step, notBetter, ↓reduceIte, Option.map, op, choose, if_pos ordered]
+    · have better : compare incoming current = .lt := (agrees current incoming).mpr ordered
+      simp only [step, better, ↓reduceIte, Option.map, op, choose, if_neg ordered]
+
+end Minimum
+
+/-! ## Occurrence-stream refinements of set operations -/
+
+namespace SetStreams
+
+variable {ρ : Type u} {α : Type v}
+
+/-- Select occurrences carrying a true membership read. The record is data,
+not a new set owner; the lookup's faithfulness is a separate premise. -/
+def selected (records : List (ρ × Bool)) : List ρ :=
+  records.filterMap fun record => if record.2 then some record.1 else none
+
+/-- Faithful membership reads refine intersection after decoding occurrences.
+The left universe is supplied by its decoding; the right set need not use its
+coordinates. Repeated occurrences are allowed and no coverage is inferred.
+
+Proof. Every selected occurrence has a true read, hence belongs to the right
+set. Conversely, a left occurrence denoting a right member has a true read and
+is selected. Existing map/filterMap membership laws supply the witnesses. -/
+theorem selected_inter (decode : ρ → α) (records : List (ρ × Bool))
+    (right : Atoms α)
+    (faithful : ∀ record ∈ records, record.2 = true ↔ right (decode record.1)) :
+    (fun atom => atom ∈ (selected records).map decode) =
+      (inter α).op (fun atom => atom ∈ records.map (fun record => decode record.1)) right := by
+  funext atom
+  apply propext
+  change atom ∈ (selected records).map decode ↔
+    atom ∈ records.map (fun record => decode record.1) ∧ right atom
+  constructor
+  · intro present
+    obtain ⟨occurrence, chosen, decoded⟩ := List.mem_map.mp present
+    obtain ⟨record, listed, selection⟩ := List.mem_filterMap.mp chosen
+    have accepted : record.2 = true := by
+      cases flag : record.2 with
+      | false => simp [flag] at selection
+      | true => rfl
+    have same : record.1 = occurrence := by
+      simpa [accepted] using selection
+    have decodedRecord : decode record.1 = atom := by
+      simpa only [same] using decoded
+    have inLeft : atom ∈ records.map (fun record => decode record.1) :=
+      List.mem_map.mpr ⟨record, listed, decodedRecord⟩
+    have inRight : right (decode record.1) := (faithful record listed).mp accepted
+    exact ⟨inLeft, decodedRecord ▸ inRight⟩
+  · rintro ⟨present, inRight⟩
+    obtain ⟨record, listed, decoded⟩ := List.mem_map.mp present
+    have accepted : record.2 = true :=
+      (faithful record listed).mpr (decoded.symm ▸ inRight)
+    have chosen : record.1 ∈ selected records := by
+      apply List.mem_filterMap.mpr
+      exact ⟨record, listed, by simp [accepted]⟩
+    exact List.mem_map.mpr ⟨record.1, chosen, decoded⟩
+
+/-- Concatenating occurrence streams realizes set union. Duplicate occurrences
+and their order remain in the lists; only their decoded set is compared. -/
+theorem append_union (decode : ρ → α) (left right : List ρ) :
+    (fun atom => atom ∈ (left ++ right).map decode) =
+      (union α).op (fun atom => atom ∈ left.map decode)
+        (fun atom => atom ∈ right.map decode) := by
+  funext atom
+  apply propext
+  change atom ∈ (left ++ right).map decode ↔
+    atom ∈ left.map decode ∨ atom ∈ right.map decode
+  rw [List.map_append, List.mem_append]
+
+/-- The three-way union merge. Equality emits the left representative and
+consumes both heads. The recursion consumes at least one input occurrence;
+strictly ordered unique inputs are an additional executable representation
+premise, not needed merely to preserve the decoded set. -/
+def orderedUnion (compare : ρ → ρ → Ordering) (left right : List ρ) : List ρ :=
+  match left, right with
+  | [], _ => right
+  | _, [] => left
+  | first :: leftRest, second :: rightRest =>
+    match compare first second with
+    | .lt => first :: orderedUnion compare leftRest (second :: rightRest)
+    | .eq => first :: orderedUnion compare leftRest rightRest
+    | .gt => second :: orderedUnion compare (first :: leftRest) rightRest
+termination_by left.length + right.length
+decreasing_by
+  all_goals simp_wf
+  all_goals omega
+
+/-- Merging preserves exactly the decoded union if discarded equal heads denote
+the same value. This membership law does not assert sortedness or completeness of an answer
+family. Distinct representatives may decode to the same logical atom.
+
+Proof. An emitted head belongs to the corresponding input. The recursive
+membership law accounts for the remaining inputs. In the equal case the
+unemitted right head has the emitted left head's denotation. -/
+theorem ordered_union_mem (decode : ρ → α) (compare : ρ → ρ → Ordering)
+    (equal : ∀ first second, compare first second = .eq → decode first = decode second)
+    (left right : List ρ) (atom : α) :
+    atom ∈ (orderedUnion compare left right).map decode ↔
+      atom ∈ left.map decode ∨ atom ∈ right.map decode := by
+  cases left with
+  | nil => simp [orderedUnion]
+  | cons first leftRest =>
+    cases right with
+    | nil => simp [orderedUnion]
+    | cons second rightRest =>
+      cases order : compare first second with
+      | lt =>
+        have continued :
+            atom ∈ (orderedUnion compare leftRest (second :: rightRest)).map decode ↔
+              atom ∈ leftRest.map decode ∨ atom ∈ (second :: rightRest).map decode :=
+          ordered_union_mem decode compare equal leftRest (second :: rightRest) atom
+        rw [orderedUnion, order]
+        simp only [List.map_cons, List.mem_cons, continued, or_assoc]
+      | eq =>
+        have continued :
+            atom ∈ (orderedUnion compare leftRest rightRest).map decode ↔
+              atom ∈ leftRest.map decode ∨ atom ∈ rightRest.map decode :=
+          ordered_union_mem decode compare equal leftRest rightRest atom
+        have same : decode first = decode second := equal first second order
+        rw [orderedUnion, order]
+        simp only [List.map_cons, List.mem_cons, continued, ← same,
+          or_assoc, or_left_comm, or_self_left]
+      | gt =>
+        have continued :
+            atom ∈ (orderedUnion compare (first :: leftRest) rightRest).map decode ↔
+              atom ∈ (first :: leftRest).map decode ∨ atom ∈ rightRest.map decode :=
+          ordered_union_mem decode compare equal (first :: leftRest) rightRest atom
+        rw [orderedUnion, order]
+        simp only [List.map_cons, List.mem_cons, continued,
+          or_assoc, or_left_comm]
+termination_by left.length + right.length
+decreasing_by
+  all_goals simp_wf
+  all_goals omega
+
+/-- The merge's decoded value is the existing set-union reduction operation.
+This is a value refinement; no allocation, lookup, control or failure trace is
+claimed commutative, and it is not a proof of the Rust cursor. -/
+theorem ordered_union_value (decode : ρ → α) (compare : ρ → ρ → Ordering)
+    (equal : ∀ first second, compare first second = .eq → decode first = decode second)
+    (left right : List ρ) :
+    (fun atom => atom ∈ (orderedUnion compare left right).map decode) =
+      (union α).op (fun atom => atom ∈ left.map decode)
+        (fun atom => atom ∈ right.map decode) := by
+  funext atom
+  exact propext (ordered_union_mem decode compare equal left right atom)
+
+/-- An equal comparison keeps the exact left representative, not a synthesized
+or normalized representative. Both input heads are consumed in the suffix. -/
+theorem ordered_union_equal_left (compare : ρ → ρ → Ordering)
+    (first second : ρ) (leftRest rightRest : List ρ)
+    (equal : compare first second = .eq) :
+    orderedUnion compare (first :: leftRest) (second :: rightRest) =
+      first :: orderedUnion compare leftRest rightRest := by
+  simp only [orderedUnion, equal]
+
+end SetStreams
+
+
 /-! ## Where the rules apply -/
 
 /-- A walk of a coverage tree that empties its frontier, whoever held its

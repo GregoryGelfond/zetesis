@@ -101,9 +101,9 @@ pub(super) fn run_consuming(
     let outcome = session.outcome(&phases);
     assert!(
         outcome
-            .subject()
+            .original()
             .unwrap()
-            .same_instance(&crate::Subject::Theory(owner.theory().clone()))
+            .same_instance(&crate::Original::Theory(owner.theory().clone()))
     );
     Capture {
         answers,

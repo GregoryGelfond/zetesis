@@ -4,6 +4,8 @@
 
 use std::mem::size_of;
 
+use zetesis_algebra::MeterBytes;
+
 use super::Fault;
 
 #[derive(Clone, Debug)]
@@ -28,13 +30,10 @@ impl Budget {
 
     pub(super) fn check_extra(&self, extra: u128) -> Result<(), Fault> {
         let required = self.used.checked_add(extra).ok_or(Fault::Overflow)?;
-        if required > self.limit as u128 {
-            return Err(Fault::Storage {
-                required,
-                limit: self.limit,
-            });
-        }
-        Ok(())
+        MeterBytes::check(required, self.limit as u128).map_err(|_| Fault::Storage {
+            required,
+            limit: self.limit,
+        })
     }
 
     pub(super) fn add(&mut self, bytes: u128) -> Result<(), Fault> {
@@ -49,18 +48,18 @@ impl Budget {
         // a conservative overlap envelope; rejected preflight checks never
         // contribute to this peak. This is not an allocator trace.
         let overlap = self.used.checked_add(after).ok_or(Fault::Overflow)?;
-        self.peak = self.peak.max(overlap);
+        let overlap_admission =
+            MeterBytes::observe_peak(overlap, self.limit as u128, &mut self.peak);
+        // Retained-size overflow still takes precedence over overlap refusal.
         self.used = self
             .used
             .checked_sub(before)
             .and_then(|n| n.checked_add(after))
             .ok_or(Fault::Overflow)?;
-        if overlap > self.limit as u128 {
-            return Err(Fault::Storage {
-                required: overlap,
-                limit: self.limit,
-            });
-        }
+        overlap_admission.map_err(|_| Fault::Storage {
+            required: overlap,
+            limit: self.limit,
+        })?;
         self.check()
     }
 }
@@ -125,6 +124,28 @@ mod tests {
     use super::*;
 
     #[test]
+    fn requested_bytes_leave_current_and_peak_unchanged() {
+        let budget = Budget {
+            used: 8,
+            peak: 32,
+            limit: 12,
+        };
+        assert_eq!(budget.check_extra(4), Ok(()));
+        assert_eq!(
+            budget.check_extra(5),
+            Err(Fault::Storage {
+                required: 13,
+                limit: 12,
+            })
+        );
+        // The complete addition must fail before the byte ceiling can refuse.
+        assert_eq!(budget.check_extra(u128::MAX), Err(Fault::Overflow));
+        assert_eq!(budget.used, 8);
+        assert_eq!(budget.peak, 32);
+        assert_eq!(budget.limit, 12);
+    }
+
+    #[test]
     fn observed_overlap_refuses_excess_allocator_capacity() {
         let mut budget = Budget::new(24, 12);
         assert_eq!(
@@ -144,6 +165,45 @@ mod tests {
     fn observed_overlap_accepts_the_exact_allowance() {
         let mut budget = Budget::new(28, 12);
         assert_eq!(budget.observed(8, 16), Ok(()));
+        assert_eq!(budget.used, 20);
+        assert_eq!(budget.peak, 28);
+    }
+
+    #[test]
+    fn retained_arithmetic_failure_precedes_overlap_refusal() {
+        let mut budget = Budget::new(24, 12);
+        assert_eq!(budget.observed(13, 16), Err(Fault::Overflow));
+        // The overlap was observed, but invalid retained arithmetic cannot
+        // commit a replacement or be flattened into the overlapping refusal.
+        assert_eq!(budget.used, 12);
+        assert_eq!(budget.peak, 28);
+        assert_eq!(budget.limit, 24);
+    }
+
+    #[test]
+    fn overlap_overflow_leaves_accounting_unchanged() {
+        let mut budget = Budget {
+            used: u128::MAX,
+            peak: u128::MAX,
+            limit: usize::MAX,
+        };
+        assert_eq!(budget.observed(0, 1), Err(Fault::Overflow));
+        assert_eq!(budget.used, u128::MAX);
+        assert_eq!(budget.peak, u128::MAX);
+        assert_eq!(budget.limit, usize::MAX);
+    }
+
+    #[test]
+    fn a_higher_historical_peak_does_not_refuse_a_fitting_total() {
+        let mut budget = Budget::new(24, 12);
+        assert_eq!(
+            budget.observed(8, 16),
+            Err(Fault::Storage {
+                required: 28,
+                limit: 24,
+            })
+        );
+        assert_eq!(budget.observed(0, 0), Ok(()));
         assert_eq!(budget.used, 20);
         assert_eq!(budget.peak, 28);
     }

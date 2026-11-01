@@ -9,7 +9,7 @@ use super::{
 use crate::formula_graph::dependency;
 use crate::runtime::Variant;
 use crate::{GpuError, GpuErrorKind};
-use zetesis_algebra::{Cancellation, words::Words};
+use zetesis_algebra::{Cancellation, Meter, words::Words};
 use zetesis_ferraris::{Interpretation, Theory, TightPlan, TightVerdict};
 
 pub(super) const PARAM_BYTES: u64 = 64;
@@ -34,6 +34,18 @@ fn sum(values: &[u64]) -> Result<u64, GpuError> {
             .ok_or_else(|| capacity("tight byte sum overflow"))
     })
 }
+// This is a proposed device-work allowance, not a performed-work receipt.
+// Optional routes must fit both the authored ceiling and the unchanged wire word.
+fn extend_work(recorded: u32, extra: u32, ceiling: u64) -> Option<u32> {
+    Meter::check_receipt(
+        u64::from(recorded),
+        u128::from(extra),
+        ceiling.min(u64::from(u32::MAX)),
+    )
+    .ok()
+    .map(|work| u32::try_from(work).expect("optional work checked against u32 ceiling"))
+}
+
 fn buffer(bytes: u64, device: &wgpu::Limits) -> Result<(), GpuError> {
     if bytes > device.max_buffer_size || bytes > device.max_storage_buffer_binding_size {
         return Err(capacity("tight storage exceeds granted device limits"));
@@ -519,10 +531,7 @@ impl Plan {
         }
         // A resident schedule may be bypassed under a tighter work allowance.
         // Its real retained storage is still charged below.
-        let (levels, work) = graph
-            .work
-            .checked_add(graph.levels)
-            .filter(|work| u64::from(*work) <= limits.max_work_per_candidate)
+        let (levels, work) = extend_work(graph.work, graph.levels, limits.max_work_per_candidate)
             .map_or((0, graph.work), |work| (graph.levels, work));
         let array = |length: u32| -> Result<u64, GpuError> {
             let elements = u64::from(length) * u64::from(count);
@@ -603,8 +612,8 @@ impl Plan {
             .checked_mul(2)
             .and_then(|n| n.checked_add(graph.edges))
             .and_then(|n| n.checked_add(4))
-            .and_then(|extra| self.work.checked_add(extra));
-        if let Some(work) = work.filter(|work| u64::from(*work) <= ceiling) {
+            .and_then(|extra| extend_work(self.work, extra, ceiling));
+        if let Some(work) = work {
             self.work = work;
             self.allowance = work;
             self.original_truth_reused = true;

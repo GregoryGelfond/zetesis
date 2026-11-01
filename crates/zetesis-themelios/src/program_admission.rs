@@ -85,7 +85,7 @@ impl std::error::Error for CompilationFailure {
 /// The logical object associated with a refusal. A constructed statement need
 /// not have a parsed location; its actual identity remains available here.
 #[derive(Clone, Copy, Debug)]
-pub enum ProgramSubject<'a> {
+pub enum ProgramOriginal<'a> {
     /// A whole-program validation failure.
     Program,
     /// A named or parameterized part excluded by this single-shot profile.
@@ -126,7 +126,7 @@ impl std::error::Error for ProgramFailureKind {
 #[derive(Debug)]
 pub struct ProgramAdmissionFailure<'a> {
     /// The input object responsible for the refusal.
-    pub subject: ProgramSubject<'a>,
+    pub original: ProgramOriginal<'a>,
     /// The typed cause.
     pub kind: ProgramFailureKind,
 }

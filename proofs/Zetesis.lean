@@ -140,6 +140,8 @@ import Zetesis.GateRestrictions
 import Zetesis.PackedQueryLiterals
 import Zetesis.RelationExtension
 import Zetesis.WorkCharge
+import Zetesis.AtomicWork
+import Zetesis.BytePeak
 import Zetesis.DeltaJoins
 import Zetesis.DeltaRounds
 import Zetesis.WorkPermits

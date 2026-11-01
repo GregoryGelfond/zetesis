@@ -86,7 +86,7 @@ pub(super) fn build<'source>(
             peak_construction_bytes: work.peak,
             referenced_encoding_bytes: encoding_bytes,
             borrowed_mapping_bytes: mapping,
-            construction_work: work.used,
+            construction_work: work.charged(),
         },
     })
 }

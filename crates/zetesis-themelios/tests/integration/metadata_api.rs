@@ -701,3 +701,50 @@ fn constructed_metadata_failure_keeps_subject_without_fabricated_diagnostic() {
     assert_eq!(location.location(), None);
     assert_eq!(location.statement_id().unwrap().index(), 0);
 }
+
+#[test]
+fn signature_count_refusal_precedes_text_and_storage() {
+    let signatures = [Predicate::new("p", 0).unwrap()];
+    let error = AtomSelection::from_signatures(
+        &signatures,
+        AtomSelectionLimits {
+            max_signatures: 0,
+            max_name_bytes: 0,
+            storage: zetesis_themelios::MetadataStorageLimits { max_bytes: 0 },
+        },
+    )
+    .unwrap_err();
+    assert_eq!(
+        error,
+        AtomSelectionError::Signatures {
+            limit: 0,
+            observed: 1
+        }
+    );
+}
+
+#[test]
+fn signature_text_refusal_precedes_storage_at_the_first_excess() {
+    let signatures = [
+        Predicate::new("a", 0).unwrap(),
+        Predicate::new("bb", 0).unwrap(),
+        Predicate::new("cccc", 0).unwrap(),
+    ];
+    let error = AtomSelection::from_signatures(
+        &signatures,
+        AtomSelectionLimits {
+            max_signatures: 3,
+            max_name_bytes: 2,
+            storage: zetesis_themelios::MetadataStorageLimits { max_bytes: 0 },
+        },
+    )
+    .unwrap_err();
+    // The third input and canonical storage have not been admitted.
+    assert_eq!(
+        error,
+        AtomSelectionError::NameBytes {
+            limit: 2,
+            observed: 3
+        }
+    );
+}

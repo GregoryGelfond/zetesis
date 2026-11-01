@@ -15,8 +15,8 @@ use zetesis_themelios::logical::{
 };
 use zetesis_themelios::{
     ExpansionFailure, ExpansionResource, FormulaFailure, FormulaPurpose, FormulaResource,
-    GroundingObserver, GroundingPhase, ProgramAdmissionOptions, ProgramFormulaOptions, ProgramSite,
-    ProgramSubject, prepare_program_formula_with, validate_program_formula,
+    GroundingObserver, GroundingPhase, ProgramAdmissionOptions, ProgramFormulaOptions,
+    ProgramOriginal, ProgramSite, prepare_program_formula_with, validate_program_formula,
 };
 
 fn atom(name: &str) -> Atom {
@@ -73,10 +73,10 @@ fn excluded_declarations_are_not_evaluated() {
             prepare_program_formula_with(Arc::clone(&program), ProgramFormulaOptions::default())
                 .and_then(zetesis_themelios::PreparedFormula::ground)
                 .unwrap_err();
-        let ProgramSubject::Statement(subject) = ordinary.subject().unwrap() else {
+        let ProgramOriginal::Statement(retained_statement) = ordinary.original().unwrap() else {
             panic!("the undefined directive retains its original subject");
         };
-        assert_eq!(subject.get(), &directive);
+        assert_eq!(retained_statement.get(), &directive);
         let input = prepare_program_formula_with(Arc::clone(&program), answers())
             .unwrap()
             .ground()
@@ -161,10 +161,10 @@ fn excluded_objective_keeps_later_failure_identity() {
         panic!("the refusal retains its original canonical program");
     };
     assert!(Arc::ptr_eq(retained, &program));
-    let ProgramSubject::Statement(subject) = error.subject().unwrap() else {
+    let ProgramOriginal::Statement(retained_statement) = error.original().unwrap() else {
         panic!("the unbound show term refuses its original declaration");
     };
-    assert!(std::ptr::eq(subject, original));
+    assert!(std::ptr::eq(retained_statement, original));
     let site = error.site().unwrap();
     assert_eq!(site.statement_id().unwrap().index(), index);
     assert!(site.location().is_none());
@@ -260,7 +260,7 @@ fn rule_instantiation_observes_shared_cancellation() {
         .expect("the rule instantiation phase ran");
     assert_eq!(error.site(), Some(site));
     assert!(matches!(
-        error.subject(),
-        Some(ProgramSubject::Statement(_))
+        error.original(),
+        Some(ProgramOriginal::Statement(_))
     ));
 }

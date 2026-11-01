@@ -483,3 +483,163 @@ fn construction_records_transient_sort_capacity() {
     assert_eq!(storage.borrowed_mapping_bytes, 0);
     assert!(storage.construction_work > 0);
 }
+
+#[test]
+fn work_preserves_wide_limits_and_overflow() {
+    let mut work = Work::new(
+        Limits {
+            max_work: u64::MAX,
+            ..Limits::default()
+        },
+        7,
+    )
+    .unwrap();
+    assert_eq!(
+        work.tick(u128::MAX),
+        Err(Failure::Limit {
+            resource: Resource::Work,
+            observed: u128::MAX,
+            limit: u128::from(u64::MAX),
+        })
+    );
+    assert_eq!(work.charged(), 0);
+    work.tick(1).unwrap();
+    assert_eq!(work.tick(u128::MAX), Err(Failure::Overflow));
+    assert_eq!(work.charged(), 1);
+    let refused = Failure::Limit {
+        resource: Resource::Work,
+        observed: u128::from(u64::MAX) + 1,
+        limit: u128::from(u64::MAX),
+    };
+    assert_eq!(work.tick(u128::from(u64::MAX)), Err(refused.clone()));
+    assert_eq!(work.charged(), 1);
+    work.tick(u128::from(u64::MAX) - 1).unwrap();
+    work.tick(0).unwrap();
+    assert_eq!(work.charged(), u128::from(u64::MAX));
+    assert_eq!(work.tick(1), Err(refused));
+    assert_eq!(work.charged(), u128::from(u64::MAX));
+    assert_eq!((work.live, work.peak), (7, 7));
+}
+
+#[test]
+fn caller_permits_share_the_completed_work_prefix() {
+    let mut work = Work::new(
+        Limits {
+            max_work: 3,
+            ..Limits::default()
+        },
+        7,
+    )
+    .unwrap();
+    work.tick(2).unwrap();
+    let calls = std::cell::Cell::new(0);
+    let failure = (41, "caller allowance");
+    assert_eq!(
+        work.tick_with(1, || {
+            calls.set(calls.get() + 1);
+            Err(failure)
+        }),
+        Err(QueryFailure::Stopped(failure))
+    );
+    assert_eq!(work.charged(), 2);
+    work.tick_with(1, || {
+        calls.set(calls.get() + 1);
+        Ok::<_, (i32, &str)>(())
+    })
+    .unwrap();
+    assert_eq!(work.charged(), 3);
+    assert_eq!(
+        work.tick_with(1, || {
+            calls.set(calls.get() + 1);
+            Err(failure)
+        }),
+        Err(QueryFailure::Relation(Failure::Limit {
+            resource: Resource::Work,
+            observed: 4,
+            limit: 3,
+        }))
+    );
+    assert_eq!(calls.get(), 2);
+    assert_eq!(work.charged(), 3);
+    assert_eq!((work.live, work.peak), (7, 7));
+}
+
+#[test]
+fn a_panicking_permit_keeps_the_completed_prefix() {
+    let mut work = Work::new(
+        Limits {
+            max_work: 3,
+            ..Limits::default()
+        },
+        7,
+    )
+    .unwrap();
+    work.tick(2).unwrap();
+    let panic = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        work.tick_with(1, || -> Result<(), ()> { panic!("caller panic") })
+    }));
+    assert!(panic.is_err());
+    assert_eq!(work.charged(), 2);
+    work.tick(1).unwrap();
+    assert_eq!(work.charged(), 3);
+    assert_eq!((work.live, work.peak), (7, 7));
+}
+
+#[test]
+fn replacement_refusal_retains_actual_live_and_overlap() {
+    let mut work = Work::new(
+        Limits {
+            max_bytes: 11,
+            ..Limits::default()
+        },
+        7,
+    )
+    .unwrap();
+    // Observe the real post-allocation accounting step without depending on
+    // allocator slack. Actual retained bytes and overlap have distinct values.
+    assert_eq!(
+        work.replacement(3, 8),
+        Err(Failure::Limit {
+            resource: Resource::Bytes,
+            observed: 15,
+            limit: 11,
+        })
+    );
+    assert_eq!((work.live, work.peak, work.charged()), (12, 15, 0));
+}
+
+#[test]
+fn retained_capacity_overflow_precedes_observation() {
+    let initial = usize::MAX - 1;
+    let mut work = Work::new(
+        Limits {
+            max_bytes: usize::MAX,
+            ..Limits::default()
+        },
+        initial as u128,
+    )
+    .unwrap();
+    assert_eq!(work.replacement(0, 2), Err(Failure::Overflow));
+    assert_eq!(
+        (work.live, work.peak, work.charged()),
+        (initial, initial, 0)
+    );
+}
+
+#[test]
+fn overlap_overflow_preserves_the_retained_commit() {
+    let initial = usize::MAX - 2;
+    let mut work = Work::new(
+        Limits {
+            max_bytes: usize::MAX,
+            ..Limits::default()
+        },
+        initial as u128,
+    )
+    .unwrap();
+    assert_eq!(work.replacement(3, 4), Err(Failure::Overflow));
+    assert_eq!(
+        (work.live, work.peak, work.charged()),
+        (initial + 1, initial, 0)
+    );
+}

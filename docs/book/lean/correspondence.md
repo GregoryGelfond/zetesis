@@ -1088,20 +1088,119 @@ accumulator computes the named reduction's operation, and that it tests for the
 absorbing element exactly are implementation obligations, as is the
 `WorldViews.Represents` premise of a complete capture.
 
+The shared Rust value operations in
+[`zetesis_algebra::reduction`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-algebra/src/reduction.rs)
+include the sealed, statically dispatched `Reduction` implementations `All`, `Any`
+and tuple products. These correspond to `AxisFolds.all`, `any` and `pair`:
+conjunction has unit true and absorber false; disjunction has unit false and
+absorber true; a product combines both coordinates and absorbs when both do.
+These operations contain no answer-set, witness, allocation or control policy.
+Their laws concern values, not a reordering of fallible effects.
+
 The native session's world-view questions
 ([`world_view/fold.rs`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-solve/src/world_view/fold.rs))
-fold these reductions: `known` and `possible` the module's `all` and `any`,
-`cautious` and `brave` its `inter` and `union`, and the three-valued answer its
-`pair`, all idempotent. Each folds only checked answer sets of the original
-subject, the membership premise of `world_view_fold_decided`. The request is the
-one `WorldView::collect` runs, unrestricted, and a complete verdict requires
-collection's exhaustion predicate, so it rests on the `Represents` premise a
-complete capture does. An empty family is reported as inconsistent rather than
-as the reduction's identity. The
-union's absorbing element, every atom, is never tested, so brave consequences
-are decided only by exhaustion. That the accumulators compute these operations
-and test absorption exactly is checked by comparing every question with the
-complete family and the three-valued answer with the agent's, not by the laws.
+use `All` for `known`, `Any` for `possible`, and `(Any, Any)` for the query's
+not-true/not-false flags. Only checked answer sets of the original input reach
+the accumulators. The request selects all answers with full identity and clears
+the requested answer limit, so objective selection or projection cannot narrow
+the questioned family. Cautious and brave consequences still use their existing
+fallible Model intersection and union. First-value seeding distinguishes no
+answers from one empty answer; the intersection's mathematical unit is the
+universal set, not an empty Model. Brave's universal-set absorber is not tested,
+so brave consequences still require exhaustion.
+
+The shared `Verdict` separates `Absorbed`, `Complete`, `Empty` and `Undecided`.
+Solve projects these into its existing `WorldViewVerdict::Decided`, `Complete`,
+`Inconsistent` and typed `WorldViewDecisionFailure`, retaining the original input and
+session evidence. A step publishes absorption only after its fallible witness
+retention succeeds; an absorbing flag left by a failed step is not a decided
+result. Accepted absorption remains decisive after the session is stopped.
+Otherwise a value or empty-family verdict requires unrestricted exhaustion.
+`Verdict::completed` classifies an optional value only under that caller-supplied
+coverage premise; it does not establish membership or completion itself.
+
+`Algebra.FoldVerdict` and `foldVerdict_absorbed`, `foldVerdict_complete`,
+`foldVerdict_empty` and `foldVerdict_undecided` describe these four cases. The
+mathematical absorbed witness field contains the whole emitted list. Rust keeps
+one Membership witness, one or two Query witnesses, and no cautious witnesses.
+The correspondence therefore concerns the reduced value and its accepted
+history, with compact witness selection as a separate obligation; it is not
+literal equality of witness fields. Source identity, coverage, typed stops,
+allocation failures and receipt ordering remain executable obligations. The
+complete-family and query conformance tests check concrete readings; the general
+laws do not prove the Rust implementation.
+
+`zetesis_algebra::reduction::sets` supplies occurrence-stream refinements of
+intersection and union. `intersection` selects faithful membership records;
+`union` preserves left-then-right occurrences, including duplicates; and
+`ordered_union` owns the canonical two-input merge with left representatives on
+equality. `Model` remains the sole retained set and owns catalog coordinates,
+reservation, copying, typed failures and publication. Its fallible construction
+does not implement the pure fixed-value `Reduction` contract.
+
+`AxisFolds.SetStreams.selected_inter`, `append_union` and
+`ordered_union_value` relate decoded finite occurrences to the existing set
+operations; `ordered_union_equal_left` preserves the exact left representative.
+Membership reads must be faithful, and comparison equality must imply equal
+decoded values. Strictly ordered unique inputs and a lawful pure order justify
+the executable canonical merge; the membership theorem alone does not establish
+sortedness. Rust's iterator and order traits do not enforce these premises.
+Cursor read order, unread suffixes after failure and successful Model
+materialization remain concrete correspondence obligations. No set law commutes
+allocation or failure effects. First-answer seeding, cautious empty absorption
+and brave exhaustion retain their existing coverage and verdict contracts.
+
+`CheckedSum` shares checked count addition across search counters, scored
+incumbents, optimal ties, hybrid core answers and terminal base answers. Its
+value is an exact `Some(n)` or overflow `None`, with identity `Some(0)`.
+`AxisFolds.BoundedSum` gives the corresponding bounded nonnegative sum:
+`op_assoc`, `op_comm`, `zero_op` and `overflow_absorbs` state its value laws.
+At the bound `u64::MAX`, every representable exact Rust value is in that
+carrier. Rust's checked addition must refine `BoundedSum.encode`; the laws do
+not verify machine arithmetic or the adapters' failure order. Overflow remains
+each caller's existing typed failure and is never successful early absorption.
+
+`AlgebraicRows.bounded_counting_fold` and `bounded_counting_fold_one` relate
+this bounded operation to natural sums and occurrence counts;
+`bounded_counting_overflow_iff` characterizes the overflow boundary. A family
+cardinality additionally requires complete coverage and distinct identities.
+`SemanticOutcome::complete_answer_count` retains those existing selection and
+coverage checks through a private `Verdict`: zero is Empty, a positive exact
+count is Complete, and missing coverage or pruned optimal ties is Undecided.
+The count includes verified queued answers and unretained optimal ties, not
+merely published or retained models. Counts, typed failures and their mutation
+order remain owned by the existing sessions; no alternate enumeration or
+membership operation is introduced.
+
+`Minimum` is the built-in optional-value minimum under a pure, allocation-free,
+total order consistent with value equality. Rust's `Ord` bound does not establish
+these premises. Solve uses a private borrowed `ScoreValue` that delegates to
+`Score::compare_costs`, leaving public Score equality, priority slots, objective
+presence and payload unchanged. `Minimum::step` returns both the selected value
+and its incoming comparison: no comparison for the first incumbent, one for each
+later decision. Ties retain the earlier representative. The existing retention
+and typed failure effects still occur after comparison at their original sites.
+
+`AxisFolds.Minimum.reduction`, `choose_assoc`, `choose_comm` and
+`reduction_idempotent` establish the value laws under explicit order premises.
+`step_equal_retains_current` describes the tie representative;
+`step_value_map` relates a selected representative's denotation to the optional
+minimum. For Score, that denotation is the finite-support priority-cost function,
+with missing slots read as zero. The law does not identify structurally different
+Scores or prove the sparse Rust comparator. Comparison purity, the comparator's
+agreement with that denotation, exact retention effects and bounded-search
+completion remain implementation obligations. An incumbent minimum never by
+itself establishes optimality, and the runtime instance reports no early absorber.
+
+`SemanticOutcome::optimum_proved` projects a private minimum `Verdict` from the
+existing retained score and completion evidence. Complete borrows that score;
+Empty requires exhausted relevant search with no verified model; otherwise the
+minimum is Undecided. There is no minimum absorber or new optimum witness.
+An exhausted strict pass may establish Complete cost evidence even when its
+later tie pass stops, while the exact-family count remains Undecided. Typed
+stops and receipts stay in the original outcome. The classifier and public
+query remain const without changing the generic completed-value constructor;
+this classification does not prove the bounded search's coverage premises.
 
 The facade re-exports the upstream `zetesis::query::WorldView`, a nonempty live
 stream that may still be incomplete. Its materialized `Snapshot` is complete
@@ -1711,6 +1810,167 @@ remains as a statement. It equates an available work prefix with repeated unit
 charging under unchanged control, including exact quota exhaustion. Formula source
 admission instead checks an entire proposed charge before changing its counter.
 
+The pure `zetesis_algebra::Meter::check_wide_receipt` checks a whole request
+with checked u128 addition and an inclusive ceiling. It returns a proposed
+total without changing a receipt or establishing that the work ran.
+`Meter::check_receipt` widens its u64 receipt and ceiling into that same
+calculation; `Meter::charge_receipt` delegates to the narrow check, then commits
+a successful total into the caller's sole accepted counter. The observation
+evaluator keeps its explicit cancellation/deadline poll before this operation
+and preserves its source site and complete Statistics on failure. Importing evaluation work for
+later rendering does not reconstruct a meter or reject a lower limit early;
+the next charge, including zero, checks that limit.
+[`AtomicWork`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/AtomicWork.lean)
+characterizes complete-demand admission, additive success and unchanged refusal.
+`above_new_limit_refused` and `charge_zero` cover imported receipts and checked
+zero requests. `accepted_composition` equates two successful receipts under one
+ceiling with their combined request; it does not equate refused traces or permit
+combining the caller's control observations.
+
+Formula source `check_work` classifies admission before its control observation:
+refused requests observe control before returning their native failure, while
+admitted requests use the existing cadence. `count_work` records actual work in
+Pending before updating the local count; checking a maximum does not count it.
+A smaller actual charge requires an unchanged prefix and ceiling and an actual
+amount within that maximum. `Counters::absorb` instead checks admission, counts
+completed work, then observes control: interruption cannot erase that work,
+and admission refusal performs no internal poll. Source overflow preserves its
+saturated attempted-demand diagnostic. `AtomicWork.accepts_iff_fits` describes
+the scalar preflight, not these caller invariants, native errors, control traces
+or Pending settlement.
+
+Source term expansion retains its u128 accepted-work field and leading
+site-bearing control poll, including for zero requests. It uses
+`check_wide_receipt`; on supported 32/64-bit hosts, its usize ceiling is below
+u128::MAX, so mapping overflow to the native saturated attempted-demand
+diagnostic preserves refusal. TermWork does not publish through `Pending.work`.
+A tentative budget clone copies enforcement history but forks an empty pending
+account; only its newly accepted ScalarBytes charges enter Pending, before
+their local count is committed. Return, unwind and drop settlement publish the
+pending charges. These control and publication steps remain Rust correspondence
+obligations.
+
+Search budgets reuse the same pure check for local work admission and the
+committing operation for a bulk receipt after its quota succeeds. Their explicit
+control poll and work-before-decision order remain unchanged. The local quota
+retains its existing saturating admission at the largest u64 ceiling; a carry
+then reports `CounterOverflow` at receipt publication. Shared leases can instead
+consume part of a request before refusing, leaving the unsuccessful local bulk
+receipt unchanged while retaining that work in the joined account. These native
+error and permit protocols are separate from AtomicWork's scalar laws.
+
+Shared direct charges check the real committed count against that count plus
+currently available permits. This accepts exactly the requests covered by
+available permits; outstanding grants remain unavailable. The conserved total
+is the greater of the initial limit and imported work, so this derived ceiling
+fits u64 even when the imported prefix exceeds the authored limit. Refusal
+retains all fields; success subtracts available permits before publishing the
+new committed count. The scalar law does not prove mutex behavior, concurrent
+settlement or progress of waiting workers.
+
+Domain analysis and answer projection use the same borrowed operation.
+`zetesis_domain::numeric::Budget::work` keeps its existing `Cell<Statistics>`
+mutation boundary; `KeyWork::step` retains its own accepted-step receipt.
+Neither adds a control poll. Terminal-definition classification's `Engine::work`
+uses the same domain helper for its single-unit requests, preserving typed stops
+and withholding partial certificates. These requests fit u128, and a refused
+charge reports the exact wide `Stop` for work.
+The projection `Work` in `zetesis-solve` retains its explicit poll before
+admission and preserves its native u64 overflow priority: a refused demand
+above `u64::MAX` maps to `ProjectionError::Overflow`, while other refusals
+retain the exact work-limit payload. Every u64 carry exceeds every u64 ceiling,
+so this mapping occurs before any receipt can change. Each caller retains one
+work counter and its other statistics; no stored meter or duplicate account is
+introduced. `AtomicWork` describes their representable-sum admission and
+unchanged refusal, not these native error mappings or control observations.
+
+GPU relation planning also uses `charge_receipt` for its full-scan estimate.
+Each query retains its validation before its representable u64 accumulation;
+the authored whole-plan ceiling is checked only after all query costs. This
+estimate is neither scheduled nor completed device work. Those receipts are
+still published at submission and validated completion respectively. The scalar
+laws do not establish query costs, transport correctness or device execution.
+
+These are natural-number scalar laws. They do not verify the public
+`MeterWorkError::Overflow` branch, u64/u128 conversions, exact error payloads,
+polling or Rust execution. The observation adapter's invariant assertion relies
+on its inspected count producers making a representable u128 sum; hypothetical
+overflowing private calls are outside that correspondence. The existing
+prefix-consuming `WorkCharge` laws remain unchanged and do not establish atomic
+refusal. The [reading guide](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/guide/atomic-work.md)
+separates those policies and the remaining implementation obligations.
+
+The byte dimension's `zetesis_algebra::MeterBytes::observe_peak`,
+`observe_peak_usize` and `observe_peak_u64` share one scalar calculation at
+u128, usize and u64 widths.
+Each borrows the caller's actual peak, publishes `max(previous, total)`, then
+checks only the supplied total against its inclusive ceiling. Diagnostic
+widening preserves the native values; no converted peak or current/live account
+is introduced.
+The stateful `observe` assigns current before delegation; arithmetic preparation
+retains its leading poll and records requested envelopes, while frozen-positive
+witness completion retains its requested preflight, allocation, actual-capacity
+observation and charged-copy order. Refusal retains the selected observation in
+peak; a historical peak above a new ceiling does not itself refuse a fitting
+total. These are distinct caller policies around one shared maximum/check.
+Catalog replacement observation retains checked overlap construction, then peak
+publication, retained-size arithmetic and commit, then any overlap refusal.
+Retained-size overflow still takes precedence over that refusal. Answer
+projection likewise keeps its retained-capacity write before constructing the
+live total; an unrepresentable total leaves peak unchanged. Its constructor
+observes actual capacity only after the existing preflight and allocation.
+Neither consumer treats refused proposals as observed allocation or adds a
+control poll.
+
+Table and relation capacity observers retain their usize peak fields. Table
+requested admission raises peak only on success; relation requested preflight
+does not raise it. Both retain actual observations before byte-ceiling refusal.
+Table checks actual usize arithmetic and observes peak before committing live.
+Relation reserve converts and commits actual live before observing peak;
+replacement commits retained live before converting the overlap. A refused
+overlap conversion therefore preserves that live commit and the old peak,
+whereas an actual byte-ceiling refusal retains both updated fields. Requested
+checks, allocation, copy-work charges and release order remain distinct from
+this shared scalar observation.
+
+Observation wildcard-key replacement retains requested preflight, charged
+allocation preparation and actual-capacity refusal before replacing its old
+buffer. Compiled metadata likewise records its actual peak before refusal;
+component errors propagate before the enclosing capacity refusal. These callers
+borrow their existing u128 peak. Source attribution, nested-owner receipts and
+the distinction between requested and actual storage remain unchanged.
+
+Generator dependency preparation also borrows its existing u128 peak. It records
+requested envelopes and actual capacity before refusal, but commits its current
+byte count only after admission succeeds. Reservation keeps its leading control
+poll and existing requested-before-allocation order; the shared observation adds
+no work charge or poll and does not change the selected dependency preference.
+
+`MeterBytes::check` exposes the same pure inclusive-ceiling calculation without
+recording a peak. Native aggregate admission uses it for requested storage and
+logical byte envelopes, while its actual-capacity observations borrow the
+existing u64 peak. Current-capacity conversion and publication still precede
+peak conversion; an unrepresentable peak fails before the storage ceiling is
+checked. Logical peak assignment remains distinct from an observed maximum.
+Source support publishes its existing byte event before checking the ceiling;
+shared storage leases retain their atomic replacement and release ownership.
+These adapters add no polling, allocation or second byte account.
+The same pure check serves catalog requests, evaluation workspace admission,
+tight-plan logical bytes, partition construction, projection capacity and
+count-plan payloads. Each caller retains its preceding checked arithmetic and
+native width conversion. Partition dimensions are recorded before refusal;
+count-plan payloads commit only after admission. Domain inspection also uses
+this decision, on cumulative inspected text rather than retained storage, with
+its original Cell receipt and success-only publication.
+
+[`BytePeak`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/BytePeak.lean)
+proves the two decisions, retained maximum, coverage, zero behavior and
+independence from the historical peak. `successive_receipts` composes only the
+retained maxima; it neither equates decisions nor permits continuing after a
+refusal. The [reading guide](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/guide/byte-peak.md)
+separates these scalar laws from actual capacity, allocation/release ownership,
+finite-width total construction, typed failures, polling and Rust correctness.
+
 The closure route's `PreparedQueries`, one exact-program preparation that
 candidates reused with private truth state, was removed with that route. The
 reuse argument stated for it remains as text and has no Rust counterpart now.
@@ -1804,6 +2064,49 @@ exact posting and interval intersection, row ordering, snapshot lifetime and
 charged preparation. Neither the arithmetic nor partition laws verify those
 Rust operations or allow generic computed-table selection during a support round.
 
+`Meter::check_count` shares the checked-addition and inclusive-ceiling body with
+wide work admission, while keeping named resource counts at their native usize
+width. Positive and stratified dependency counters retain native Overflow;
+source-program counts retain their saturated diagnostic on overflow, including
+when the authored limit is usize::MAX. Original counters publish only successful
+results, and no poll is added. `AtomicWork` supplies the whole-request admission
+laws under the count's natural-number interpretation; `AxisFolds.BoundedSum`
+characterizes native-width overflow separately from the configured ceiling.
+These scalar laws do not identify counted source events with solver work or
+verify the adapters' diagnostic and mutation order.
+Objective construction also uses this count admission for proposed formula
+nodes and operand occurrences. Its work tick still precedes node admission,
+which precedes operand admission; subsequent validation and the sole graph
+transaction retain their existing order and failures.
+Projection keys and retained world-view counts use the same operation. Key
+lookup still precedes new-key admission; answer-count refusal precedes atom-count
+refusal, which precedes retained-payload admission and allocation. Formula
+transactions compute all checked dimensions before applying their original
+ordered ceilings; whole-theory admission still recounts actual occurrences.
+These decisions neither change the graph's shape requirements nor authorize a
+cached-count shortcut.
+
+`Meter::check_wide_count` shares that calculation at u128 width. Source
+expansion uses it for templates, values, origins and cumulative scalar-byte
+charges, preserving the resource names and existing counters. These byte charges
+are not actual storage or peak observations. Representable excesses retain the
+full demand; overflow maps to the existing saturated source-limit diagnostic.
+That mapping relies on supported 32/64-bit hosts having usize ceilings below
+u128::MAX. Polling still precedes admission; successful scalar-byte charges
+publish to their existing pending receipt before the local counter commits.
+Domain count checks use this pure operation on already-computed demands, with
+zero additional demand and the original named refusal. Output conversion uses
+the corresponding wide work check after polling and publishing each attempted
+symbol step. A refusal retains that attempt; cancellation before the increment
+does not add one. The inherited increment's finite-width behavior is unchanged;
+the scalar admission laws do not prove that this earlier increment cannot
+overflow.
+
+Tight GPU planning uses the same pure work check for optional schedule and
+retained-truth increments, bounded by both the authored allowance and the u32
+wire representation. The returned total is a proposed device allowance, not
+executed work; route selection and physical execution remain separate contracts.
+
 Parallel exact queries lease bounded work allowances from one shared owner.
 `WorkPermits` partitions the allowance into spent, available and outstanding
 permits. Granting preserves that total; settlement records consumed work and
@@ -1820,6 +2123,38 @@ notification obligations under word arithmetic, locking, unwinding and
 cancellation; the Lean laws do not prove condition-variable progress. A joined
 batch records spent operations only after all leases settle; a lease is not
 evidence of candidate execution or membership.
+
+`zetesis_algebra::PermitLease` supplies the incremental window used by the
+stable search lease. It and `Meter` share the consume-one, bounded-prefix and
+detach-before-publication operations over borrowed views of their actual fields.
+`WorkPermits.take_preserves_window` and `take_partitions_remaining` justify
+bounded consumption; `refund_preserves_window` and
+`settlement_partitions_grant` describe returned permits and the exact transfer
+receipt. The local lease clears its grant; the cumulative meter retains its
+charged history. These are different post-settlement states governed by the
+same used/unused partition, not interchangeable admission policies.
+
+Renewal remains inside the source's existing lock, with control observed before
+locking. Its callback must operate only on that source account, without
+re-entering the same lease, and successful refill leaves a positive unconsumed
+grant. Ordinary settlement still detaches before acquiring the source lock.
+The stable wrapper retains drop settlement; the common window owns neither a
+source nor a destructor refund. Its scalar laws do not authenticate callback
+discipline, finite-width arithmetic, cancellation, locking or unwinding.
+Whole-request admission retains refundable partial top-ups; incremental takes
+retain consumed prefixes when a later refill fails. Their zero-request and
+polling rules remain distinct and are checked at the concrete Rust boundaries.
+
+Whole-kernel attempts use `Meter::under_reservation` with an already admitted
+`Reservation`. The common operation validates that returned work does not exceed
+the grant before committing it. This supplies the consumed-within-grant premise
+of `WorkPermits.settle_conserves`; a native failed result with a valid receipt
+settles that receipt in the same way as success. Without a usable receipt, the
+shared guard retains its existing conservative settlement of the full grant.
+The caller retains its zero-allowance policy and cumulative receipt publication;
+acquiring, waiting for and dropping a shared grant remain Rust obligations.
+These laws do not verify the callback, the guard's destructor or the concrete
+transaction implementation.
 
 The parallel region walk keeps one lease per worker across its consecutive
 regions and settles it before stealing or waiting for another region and
@@ -2033,13 +2368,26 @@ and parent boundaries. They do not formally verify the concrete queue.
 
 ## The solver's algebra
 
+The session's `zetesis_solve::Original` retains the immutable input identity
+against which its results were established; their `original` fields and
+accessors retain that association. `zetesis_themelios::ProgramOriginal`
+identifies retained program, part or statement evidence. Neither is the
+algebraic `Subject C` below. Renaming these owner APIs supplies no additional
+membership, coverage or refinement theorem.
+
 [`Algebra`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/Algebra.lean) names the objects that candidate generation and the
-membership check share and states the laws every instance obeys. Each object has
-one name, the same in Lean and in Rust; the Rust side takes the names as the
-algebraic-core refactor proceeds, and the table records what each correspondence
-still requires. Each object is also an instance of a standard structure, recorded
-in the second column; the code uses the domain names, and these descriptions are
-for the reader.
+membership check share and states the laws required of their mathematical
+instances. The tables give concrete Rust declaration identities and Lean
+identities with their kinds. Some declarations are private implementation
+boundaries: public callers use the crate re-exports, including
+`zetesis_algebra::{Meter, MeterBytes, PermitLease, Reservation}` and
+`zetesis_algebra::words::Words`. An exact name locates a declaration; it does not
+prove the relation sentence or a Rust refinement.
+
+The representations need not have identical names or fields. In particular,
+Rust `Entry` relates to Lean `Pending`, while a concrete `Frontier` must realize
+the pending-partition invariant of a Lean walk. The tables state those relations
+and their remaining obligations explicitly.
 
 `Algebra.Subject.cohort_extensive`, `cohort_monotone` and `cohort_sound`
 lift existing subjects pointwise to a finite indexed family of regions.
@@ -2053,27 +2401,128 @@ and their reductions, remain those of `answer_sets_nested`; the atom axis stays
 inside each region. Concrete cohort rounds, their receipts, and their refinement
 to these pointwise applications remain implementation obligations.
 
-| Object and laws | Is a | Rust today | Remaining correspondence |
-| --- | --- | --- | --- |
-| `Zetesis.Region` in `Search`; `Algebra.inside_refl`, `inside_trans`, `inside_antisymm` | An interval of interpretations; under `FormulaBounds.Inside`, the precision order, a poset, so a thin category | `zetesis_algebra::region::Region` | The region's word representation (`Words`); that the held and possible words denote `lower` and `upper` |
-| `Class`: `AnswerSetsSought`, `Countermodels` | A set of interpretations | Sealed markers in `zetesis_algebra`, indexing Ferraris's `Knowledge` and private reading context; frozen execution cannot borrow the candidate ledger | Markers separate kinds of search, not particular theories, candidates or restriction generations; their runtime identities and semantic class correspondence remain obligations |
-| `Subject`; `Subject.sound_of_narrower`, `Subject.apply_sound`, `Subject.narrow_ideal` | A monotone inflationary map of the region poset: a pointed endofunctor of the thin category. A subject lies between its region and the region's ideal narrowing, the abstraction of the class's members under a Galois insertion | Private `zetesis_stable::subject::Subject<C>` applications: original, restriction, bound and streamed candidate adapters, and a frozen adapter over Ferraris's class-indexed readings | Each concrete rule family's soundness and knowledge correspondence; a one-consequence streamed result is progress, not a completed Subject closure |
-| `joint`; `joint_closed`, `joint_least`, `joint_extensive`, `joint_monotone`, `joint_idempotent`, `joint_sound`, `joint_more_subjects`, `terminal_agreement`, `Reaches.eq_joint`, `fair_iteration_reaches_joint`, `refines_wf` | A closure operator on the region poset, that is, an idempotent monad on its thin category; the closed regions are its algebras. `Reaches.eq_joint` and `fair_iteration_reaches_joint` are the chaotic iteration theorem (Apt 1999) | Private `zetesis_stable::subject::joint`, called by candidate `ferraris::regions::narrow`; the caller ranks open atoms only after eager and late agreement | That the loop applies each subject until none decides more, within its work bound; its order is then immaterial by `terminal_agreement`, for a fixed family. The candidate subjects change during a walk (learned rows, the bound, added restrictions, declined allowances), so answer sets stay identical across schedules while regions and trees do so only with those held fixed. The split is chosen from the knowledge after the fixed point, so the same region gives the same split only if the Rust closure equals `FormulaBounds.Known`'s inductive closure |
-| Walk: a class, subjects, a leaf decision and a schedule. `Search.CoverageTree` certifies it and `Frontier.Pending.Walk` steps it; `Subject.node`, `LeafVerdict`, `LeafVerdict.node`, `answerSetVerdict`, `countermodelVerdict` | A recursive coalgebra whose unfold is the covering tree. A decided region no subject refutes is a candidate; the leaf decision accepts it, refutes it or leaves it undecided, and L2 (`CoverageTree.mem_outputs_iff`) is about accepted leaves | `zetesis_algebra::walk::Walk`, and `zetesis-stable`'s parallel and slate walks, whose `leaf` runs the class certificate or the reduct query; the reduct query skips the leaf equal to the candidate and validates every other leaf independently | One `Walk`, with the parallel and slate walks as its schedules and the leaf decision part of it; an interrupted leaf decision stays undecided |
-| `AxisFolds.Reduction`, and `FoldVerdict` for a walk that may stop; `foldVerdict_absorbed`, `foldVerdict_complete`, `foldVerdict_empty`, `foldVerdict_undecided`, `foldVerdict_without_absorber`, `inner_verdict`, `answer_sets_nested`, `countermodel_verdict_independent` | A commutative monoid, optionally with a zero; a fold is a monoid homomorphism. A fold decides early only at a zero and otherwise only on completion; an empty family is never the unit, and `min` decides only on completion. The answer sets are a nested walk whose inner `any` stops at the first countermodel | The private `Fold` of `zetesis-solve`'s `world_view/fold.rs`, a verdict protocol with witnesses, completion and an empty family, and the reduct query's stop at a countermodel | `Reduction` stays the monoid; the verdict protocol corresponds to `FoldVerdict`. Their separation follows the ownership migration, with answer-specific accumulators remaining in `zetesis-solve`. Early decision over a world view needs an idempotent reduction or distinct members |
-| Meter | A cost monoid with a ceiling | `zetesis_algebra::Meter`, with local or typed `Quota` admission and `Failure` preserving refusal identity; `Budget` supplies the existing search account | `WorkCharge` and `ChargeCadence` describe charge traces. Concrete grants, refunds, failure prefixes and exact exit settlement remain Rust correspondence obligations; migration of other resource dimensions is still pending |
+### Intervals, classes and coverage
 
-The shared word kernels now live in `zetesis_algebra::words`; their denotation
-still rests on the `PackedInterpretations` laws and the concrete Rust
-correspondence remains an obligation. The generic queue and termination
-protocol is `zetesis_algebra::walk::frontier::Frontier`, instantiated by stable
-with region knowledge and its typed refusal. `Region` denotes only the interval;
-`region::Entry` carries split preference and lineage state. `walk::inspect`
-provides the shared refuted/leaf/counted/split classification, without establishing
-membership or consuming a pending entry. A returned split atom must still be
-fresh when consumed. The classification, ownership and stopped-prefix behavior
-must be related to the coverage-tree laws; sharing their Rust owners is not a
-formal refinement proof or completion of the remaining schedule migration.
+| Rust declaration (kind) | Lean declaration (kind) | Relation and remaining obligations |
+| --- | --- | --- |
+| `zetesis_algebra::region::Region` (struct) | `Zetesis.Region` (structure) | For a fixed finite atom carrier, the held mask denotes lower and the real atoms not cut denote upper; the owner must establish disjointness, bounds, padding and the corresponding interpretation identity. This relates the concrete interval to Region, not its storage layout. |
+| `zetesis_algebra::region::Region::split` (method) | `Zetesis.Region.split_partition` (theorem) | Splitting on a fresh open atom produces false and true children partitioning the parent interval; freshness, matching carrier identity and preservation of concrete masks are Rust obligations. |
+| `zetesis_algebra::class::Class` (trait) | `Zetesis.Algebra.Class` (abbrev) | The sealed Rust trait separates classes of search; runtime theory, candidate and restriction identities instantiate the Lean membership predicate, which is not stored or proved by the marker trait. |
+| `zetesis_algebra::class::AnswerSetsSought` (enum) | `Zetesis.Algebra.AnswerSetsSought` (def) | The candidate marker denotes answer sets of the authenticated theory satisfying the current restrictions; the marker alone does not authenticate any particular theory, restriction generation or accepted member. |
+| `zetesis_algebra::class::Countermodels` (enum) | `Zetesis.Algebra.Countermodels` (def) | The frozen marker denotes proper-subset reduct countermodels for the authenticated theory and candidate; those identities and independent reduct membership remain concrete obligations. |
+| `zetesis_stable::subject::Subject` (private trait) | `Zetesis.Algebra.Subject` (structure) | A fixed-class Rust subject must realize sound, monotone, decision-adding narrowing. An eager closure and one streamed late consequence have different completion meanings; the trait supplies neither the law nor interpretation authentication. |
+| `zetesis_stable::subject::joint` (private function) | `Zetesis.Algebra.joint` (def) | Completed eager/late iteration must realize the common closure for a fixed authenticated subject family. Learned rows, bounds, restrictions and declined allowances can change that family; fixed-family order independence does not cover those changes, and stopped prefixes are not agreement. |
+| `zetesis_algebra::walk::Walk` (struct) | `Zetesis.Pending.Walk` (inductive) | The runtime traversal must realize pending coverage and accepted-leaf steps of the Lean walk; scheduling and splitting do not provide the semantic leaf decision, and stopping does not establish exhaustion. |
+| `zetesis_algebra::region::Entry` (struct) | `Zetesis.Pending` (structure) | An Entry owns a concrete interval, lineage state and split preference, while Pending carries the interval and a coverage subtree. Their relation is a coverage invariant, not field or layout equality. |
+| `zetesis_algebra::walk::frontier::Frontier` (struct) | `Zetesis.Pending.Walk.exhausted` (theorem) | For stable search instantiated with Entry, queued and active ownership together must realize the Lean pending partition. Only resolved complete coverage yields the theorem; closing or abandoning workers is not exhaustion. |
+| `zetesis_algebra::words::Words` (struct, re-export) | `Zetesis.Refinement.PackedInterpretations.pack` (def) | Words is storage-transparent and has no logical universe. Its 64-bit interpretation instances are related to pack under the owners' carrier, length, bounds and zero-padding invariants; this is not identification of the entire generic lane/storage owner with a 64-bit packing function. |
+| `zetesis_algebra::words::storage::Words::half32` (method) | `Zetesis.Refinement.PackedInterpretations.half32` (def) | For an in-bounds half index in a 64-bit backing word, low-half-first extraction denotes the Lean numeric 32-bit half. Matching the byte round trip, logical export length and padding remain concrete obligations; other u32/u64 method families are separate instances. |
+
+### Values and enumeration verdicts
+
+| Rust declaration (kind) | Lean declaration (kind) | Relation and remaining obligations |
+| --- | --- | --- |
+| `zetesis_algebra::reduction::Reduction` (trait) | `Zetesis.AxisFolds.Reduction` (structure) | The sealed statically dispatched trait supplies pure value operations related to a commutative monoid. Each instance retains its order, bounded-carrier or denotation premises. Value laws neither commute effects nor prove accepted-member coverage. |
+| `zetesis_algebra::reduction::All` (struct) | `Zetesis.AxisFolds.all` (def) | All combines Boolean accepted-member values by conjunction with true as identity and false as absorber; using absorption requires an authenticated nonempty deciding prefix. |
+| `zetesis_algebra::reduction::Any` (struct) | `Zetesis.AxisFolds.any` (def) | Any combines Boolean accepted-member values by disjunction with false as identity and true as absorber; inner existence still concerns the authenticated proper-subset countermodel class. |
+| `zetesis_algebra::reduction::CheckedSum` (struct) | `Zetesis.AxisFolds.BoundedSum.reduction` (def) | CheckedSum denotes bounded nonnegative addition at u64::MAX: Some is exact and None denotes overflow. Although overflow absorbs mathematically, the runtime never advertises early successful absorption; publishing an exact answer count requires complete distinct-member coverage. |
+| `zetesis_algebra::reduction::Minimum` (struct) | `Zetesis.AxisFolds.Minimum.reduction` (def) | Minimum denotes optional minimum under an explicit pure lawful total order consistent with denoted value equality; Rust Ord does not prove that premise. Left representatives on ties, witness retention and optimality proof remain separate from the commutative value law. |
+| `zetesis_algebra::reduction::Minimum::step` (method) | `Zetesis.AxisFolds.Minimum.step_value_map` (theorem) | The first incumbent requires no comparison; later steps compare once and retain the incumbent on equality. Value selection refines denoted minimum when comparison agrees with that order, including distinct Score representations of equal costs. Ordering receipts and retained witnesses are not commutative values. |
+| `zetesis_algebra::reduction::Verdict` (enum) | `Zetesis.Algebra.FoldVerdict` (inductive) | Empty, Complete, Absorbed and Undecided classify authenticated accepted-member coverage. Compact Rust witnesses must relate to the Lean emitted history, and typed stops remain concrete payloads; the carrier itself proves neither membership, exhaustion nor minimum optimality. |
+| `zetesis_algebra::reduction::sets::intersection` (function) | `Zetesis.AxisFolds.SetStreams.selected_inter` (theorem) | Filtering a finite occurrence stream denotes intersection only when decoded occurrences faithfully cover the left set and each membership flag faithfully states membership in the right set. Cursor/materialization failures and Model allocation remain outside the pure set-value law. |
+| `zetesis_algebra::reduction::sets::union` (function) | `Zetesis.AxisFolds.SetStreams.append_union` (theorem) | Chaining the two finite occurrence streams denotes union after decoding; duplicates are allowed in the stream, while Model retains canonicalization, allocation and failure order. Iterator exhaustion and finite denotation are required. |
+| `zetesis_algebra::reduction::sets::ordered_union` (function) | `Zetesis.AxisFolds.SetStreams.ordered_union_value` (theorem) | The merge advances one head or both on equality, retaining the left representative. Decoded union requires comparator equality to imply decoded equality and faithful finite streams. The Rust cursor additionally requires strictly increasing unique inputs; allocation and publication order are separate obligations. |
+
+Tuple products are the `zetesis_algebra::reduction::Reduction` implementation
+for `(L, R)`; there is no separate Rust `Product` owner. Both coordinates are
+combined, and both must absorb for the product to absorb.
+`Zetesis.AxisFolds.pair` (def), `pair_absorbing` and `pair_idempotent` (theorems)
+state the corresponding laws under the component reductions' premises.
+Set-stream functions refine the set values of `Zetesis.AxisFolds.inter` and
+`Zetesis.AxisFolds.union`; they do not implement a fallible `Reduction` or
+represent its universal-set identity. An empty stream is not an empty-family
+verdict. Minimum selection, proof of the optimal cost, exact counting and
+exhaustion of optimal ties retain distinct contracts.
+
+### Work, counts and control
+
+| Rust declaration (kind) | Lean declaration (kind) | Relation and remaining obligations |
+| --- | --- | --- |
+| `zetesis_algebra::cancellation::Meter` (struct) | `Zetesis.WorkCharge.charge` (def) | A local Meter under a fixed inclusive bound relates to prefix charging from an admitted starting count. Whole-request checks, borrowed receipts and shared quota/refund ownership are distinct operations; finite-width arithmetic, cancellation and typed refusal remain concrete contracts. |
+| `zetesis_algebra::cancellation::Meter::absorb` (method) | `Zetesis.WorkCharge.repeated_eq_charge` (theorem) | Absorbing nested work consumes the available local prefix and records the limit on overrun, under an initially valid count. The overrun control poll and the nested operation's own cadence remain outside the natural-number bookkeeping law. |
+| `zetesis_algebra::cancellation::Meter::charge_receipt` (method) | `Zetesis.AtomicWork.charge` (def) | The operation checks the u64 recorded count plus the u128 request for u128 overflow, then against a u64 ceiling. Only acceptance writes the exact total to the borrowed receipt; refusal leaves it unchanged, including zero above a lowered ceiling. AtomicWork models representable sums, not machine overflow or effect order. |
+| `zetesis_algebra::cancellation::Meter::check_receipt` (method) | `Zetesis.AtomicWork.charge` (def) | The u64/u128 adapter checks the complete sum for u128 overflow and against a u64 ceiling, returning a proposed u64 total without mutation. Zero still checks an imported prefix. AtomicWork gives the scalar decision; later partial publication requires unchanged prefix/ceiling and actual work no greater than the checked request. |
+| `zetesis_algebra::cancellation::Meter::check_wide_receipt` (method) | `Zetesis.AtomicWork.charge` (def) | The pure u128 work check refuses addition overflow before its inclusive ceiling and returns only a proposed total. It neither records performed work nor reserves it. AtomicWork covers representable sums; native errors, polls and later publication remain concrete obligations. |
+| `zetesis_algebra::cancellation::Meter::check_count` (method) | `Zetesis.AtomicWork.charge` (def) | The pure usize count check refuses addition overflow before its inclusive ceiling and returns only a proposed total, including for zero under a lowered bound. AtomicWork supplies the representable-sum admission law; resource meaning, attribution and commit order stay with the caller. |
+| `zetesis_algebra::cancellation::Meter::check_wide_count` (method) | `Zetesis.AtomicWork.charge` (def) | The pure u128 named-count check has the same atomic decision on representable sums; it neither saturates nor commits. Counts can include cumulative byte charges, which are distinct from actual capacity and byte-peak observations. Native overflow and source publication remain concrete obligations. |
+| `zetesis_algebra::cancellation::poll_due` (function) | `Zetesis.ChargeCadence.dueRule` (def) | At the positive POLL_INTERVAL, the zero-based half-open charged range is tested by dueRule without adding its endpoints; zero is never due. Actual cancellation/deadline observations and their sequencing are separate control obligations. |
+
+### Grant ownership and settlement
+
+| Rust declaration (kind) | Lean declaration (kind) | Relation and remaining obligations |
+| --- | --- | --- |
+| `zetesis_algebra::cancellation::Reservation` (trait) | `Zetesis.WorkPermits.Window` (structure) | An admitted reservation exposes a finite allowance and commits actual use; interpreting it as a valid grant window requires used no greater than granted and the concrete exactly-once settlement/refund ownership contract. |
+| `zetesis_algebra::cancellation::Meter::under_reservation` (method) | `Zetesis.WorkPermits.settlement_partitions_grant` (theorem) | A returned valid work receipt is checked against the admitted allowance before commit, including when the returned value carries an inner failure. Valid use partitions granted work into used and unused. An outer typed error, overrun refusal, drop/refund and panic behavior remain concrete owner obligations. |
+| `zetesis_algebra::cancellation::permits::PermitLease` (struct) | `Zetesis.WorkPermits.Window` (structure) | The lease stores a granted/remaining window whose used amount is their difference; native-width and callback invariants must realize the valid natural-number window without creating a second charge owner. |
+| `zetesis_algebra::cancellation::permits::PermitLease::take_up_to` (method) | `Zetesis.WorkPermits.Window.take` (def) | Within a valid installed grant, the operation consumes min(wanted, remaining). Refill preserves its native error boundary and occurs on an exhausted lease even for wanted = 0; the pure Window.take law specifies neither refill nor control observations. |
+| `zetesis_algebra::cancellation::permits::PermitLease::give_back` (method) | `Zetesis.WorkPermits.Window.refund` (def) | Returning unused permits realizes a window refund only under the bound that they were previously consumed; native overflow and callback/lease ownership are separate runtime invariants. |
+| `zetesis_algebra::cancellation::permits::PermitLease::settle` (method) | `Zetesis.WorkPermits.settlement_partitions_grant` (theorem) | Detaching a nonempty valid lease invokes publication once with its granted/used/unused partition; an empty lease does not invoke it. The scalar partition law does not prove callback, reentrancy, unwind or exactly-once source-ledger behavior. |
+
+### Byte requirements and observations
+
+| Rust declaration (kind) | Lean declaration (kind) | Relation and remaining obligations |
+| --- | --- | --- |
+| `zetesis_algebra::cancellation::bytes::MeterBytes` (struct) | `Zetesis.BytePeak.observe` (def) | MeterBytes owns current capacity; observations update a separately borrowed peak and test the supplied ceiling. BytePeak specifies the scalar observation, not allocations, release lifetimes, logical requests or the whole owner layout. |
+| `zetesis_algebra::cancellation::bytes::MeterBytes::check` (method) | `Zetesis.BytePeak.accepted_iff` (theorem) | The pure byte ceiling uses only the decision projection total ≤ limit of BytePeak; it records no peak or current bytes and does not turn requested envelopes into actual observations. |
+| `zetesis_algebra::cancellation::bytes::MeterBytes::observe_peak` (method) | `Zetesis.BytePeak.observe` (def) | The borrowed u128 peak becomes max(previous, total) before either ceiling result; only total is compared with the ceiling. The caller retains current-byte ownership and distinguishes requested envelopes from actual capacity. Width conversion, observation identity and refusal order remain concrete obligations. |
+| `zetesis_algebra::cancellation::bytes::MeterBytes::observe_peak_usize` (method) | `Zetesis.BytePeak.observe` (def) | The borrowed usize peak becomes max(previous, total) before either ceiling result; only total is compared with the ceiling. The caller retains current-byte ownership and distinguishes requested envelopes from actual capacity. Width conversion, observation identity and refusal order remain concrete obligations. |
+| `zetesis_algebra::cancellation::bytes::MeterBytes::observe_peak_u64` (method) | `Zetesis.BytePeak.observe` (def) | The borrowed u64 peak becomes max(previous, total) before either ceiling result; only total is compared with the ceiling. The caller retains current-byte ownership and distinguishes requested envelopes from actual capacity. Width conversion, observation identity and refusal order remain concrete obligations. |
+
+### From the object laws to an execution
+
+`Zetesis.Algebra.inside_refl`, `inside_trans` and `inside_antisymm` describe the
+region precision order. A Subject is a monotone inflationary map of that poset,
+or a pointed endofunctor of its thin category; `Subject.sound_of_narrower`,
+`Subject.apply_sound` and `Subject.narrow_ideal` relate it to the abstraction of
+its class members under the stated Galois insertion. The common `joint` closure
+is an idempotent monad on that thin category, with the closed regions as its
+algebras; an individual streamed progress step need not be idempotent. The `joint_closed`, `joint_least`,
+`joint_extensive`, `joint_monotone`, `joint_idempotent`, `joint_sound` and
+`joint_more_subjects` theorems, with `terminal_agreement`, `Reaches.eq_joint`
+and `fair_iteration_reaches_joint`, retain their fixed-family premises.
+`Zetesis.Algebra.refines_wf` supplies the finite strict-progress argument.
+
+Rust ranks open atoms only after eager and late agreement. Knowledge must
+correspond to the intended closure before the same-region/same-split argument
+applies; the marker trait alone cannot establish that correspondence.
+`zetesis_algebra::walk::inspect` classifies a narrowed entry without proving
+membership or consuming it, and a chosen atom must still be fresh when split.
+`Zetesis.CoverageTree.mem_outputs_iff` supplies the accepted-leaf coverage law;
+`Zetesis.Pending.Step.perm` and `Zetesis.Pending.Walk.exhausted` describe pending
+ownership and exhaustion. A walk unfolds a covering tree;
+`Zetesis.Algebra.Subject.node`, `LeafVerdict`, `LeafVerdict.node`,
+`answerSetVerdict` and `countermodelVerdict` keep the semantic leaf decision
+separate from the schedule. An interrupted leaf decision stays undecided.
+Scalar, parallel, slate and served-query schedules
+must realize these transitions, including stopped prefixes. Sharing their Rust
+operations does not itself prove that refinement.
+
+For pure reductions, `Zetesis.AxisFolds.Reduction.fold_perm` and
+`fold_decided_prefix` give value permutation and absorption laws. Complete
+world-view folding also needs complete accepted-member coverage; repeated
+members require idempotence or a distinct-member stream as appropriate.
+`Zetesis.Algebra.foldVerdict_absorbed`, `foldVerdict_complete`,
+`foldVerdict_empty`, `foldVerdict_undecided` and `foldVerdict_without_absorber`
+keep those outcomes separate. `inner_verdict`, `answer_sets_nested` and
+`countermodel_verdict_independent` retain the separate answer-set and
+countermodel quantifiers. No value reduction or verdict carrier supplies the
+semantic leaf decision, original-input authentication or optimality proof.
+
+The word, meter and permit laws likewise state representation or scalar
+obligations. They do not prove all concrete layouts, width conversions,
+allocation failures, polling, synchronization, callback or settlement traces.
+The correspondence of each consumer and physical implementation remains
+separate from the existence of its shared Rust operation.
 
 The retained [native replay](https://github.com/GregoryGelfond/zetesis/blob/main/refinement/evaluation/REPRODUCING.md)
 records the earlier `zetesis_cpu::cancellation` namespace. Its generated Lean,
@@ -3268,7 +3717,7 @@ Its partition matches the exact normalized source to every selected IR producer
 and scans remaining semantic reads. Reconstruction joins true base-model rows
 and publishes their union with derived heads through one canonical descendant
 store. [`TerminalSession`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-solve/src/terminal_session.rs)
-retains the original subject, counts only completed extensions as original
+retains the original input, counts only completed extensions as original
 answers, and records an unfinished extension separately. Over a hybrid base its
 base session yields only core answers the streamed constraints accepted, so
 each answer is checked, then extended, then published: the composition rests on

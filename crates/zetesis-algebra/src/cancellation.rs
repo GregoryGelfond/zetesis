@@ -7,8 +7,13 @@ use std::sync::{Arc, Condvar, Mutex, PoisonError};
 use std::thread;
 use std::time::Instant;
 
+mod bytes;
+mod permits;
 mod slot;
 
+pub use bytes::{MeterBytes, MeterBytesError};
+use permits::{Counted, State as _};
+pub use permits::{PermitLease, PermitSettlement};
 pub use slot::{CancellationRun, CancellationSlot, CancellationSlotError};
 
 /// The most operations a metered computation charges between two observations
@@ -37,6 +42,54 @@ pub enum ChargeError {
     Stopped(Stop),
     /// The computation has charged every operation its work limit admits.
     WorkLimit,
+}
+
+/// A caller-owned accepted-work receipt could not admit a complete request.
+/// Neither failure changes the receipt or observes cancellation.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum MeterWorkError {
+    /// The representable complete demand exceeds the inclusive work ceiling.
+    Limit {
+        /// Prior accepted work plus the complete requested increment.
+        observed: u128,
+        /// The caller's current, unchanged ceiling.
+        limit: u128,
+    },
+    /// Prior accepted work plus the requested increment does not fit u128.
+    /// The operation neither wraps nor substitutes a saturated demand.
+    Overflow,
+}
+
+/// A whole request cannot be admitted into a machine-sized named count.
+/// The caller retains its resource identity, sole counter and commit boundary.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum MeterCountError {
+    /// The representable complete demand exceeds the inclusive count ceiling.
+    Limit {
+        /// The existing count plus the complete requested increment.
+        observed: usize,
+        /// The caller's current, unchanged ceiling.
+        limit: usize,
+    },
+    /// The existing count plus the increment does not fit usize.
+    /// This precedes the ceiling check, including at a maximum ceiling.
+    Overflow,
+}
+
+/// A whole request cannot be admitted into a wide named count.
+/// The caller retains the resource identity, counter and commit boundary.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum MeterWideCountError {
+    /// The representable complete demand exceeds its inclusive count ceiling.
+    Limit {
+        /// The existing count plus the complete requested increment.
+        observed: u128,
+        /// The caller's current, unchanged ceiling.
+        limit: u128,
+    },
+    /// The existing count plus the increment does not fit u128.
+    /// This precedes the ceiling check, including at a maximum ceiling.
+    Overflow,
 }
 
 /// An error a metered operation reports, classified so that a requested stop
@@ -69,6 +122,21 @@ pub trait Quota {
 
     /// Return granted permits whose operations did not execute.
     fn refund(&mut self, unspent: u64);
+}
+
+/// An already-admitted whole-kernel allowance and its settlement authority.
+/// Obtaining the guard remains the originating account's operation. Dropping it
+/// without committing preserves that account's policy for unreceipted work.
+/// This is ownership of a reservation, not a second work counter.
+pub trait Reservation {
+    /// The fixed allowance for this attempt; zero is representable.
+    fn allowance(&self) -> u64;
+
+    /// Settle a returned receipt, consuming the guard without polling or running
+    /// the kernel. The caller must establish `used <= self.allowance()` first;
+    /// [`Meter::under_reservation`] supplies that check. The guard's existing
+    /// settlement policy determines how unused permits return to its account.
+    fn commit(self, used: u64);
 }
 
 /// A caller refusal or a stop originating in the common work boundary.
@@ -206,6 +274,177 @@ struct Isolated {
 }
 
 impl Meter<'static> {
+    /// Admit one whole increment into a caller-owned accepted-work receipt.
+    ///
+    /// The receipt remains the sole stored work counter. This operation checks
+    /// the current inclusive ceiling even when `count` is zero. A receipt
+    /// imported under a lower new ceiling is permitted as input and is refused
+    /// without modification at this charge boundary, not at construction.
+    ///
+    /// No Meter is constructed. There is no polling, allocation, callback,
+    /// reservation, refund or retained state. The caller owns control polling,
+    /// source identity and construction of its typed failure.
+    ///
+    /// # Errors
+    /// Returns `Overflow` if the complete demand cannot fit u128; otherwise
+    /// returns `Limit` with the exact demand and limit if admission fails.
+    /// Both failures leave `accepted` unchanged. Success records the whole
+    /// demand, which fits u64 because it does not exceed the supplied ceiling.
+    ///
+    /// # Panics
+    /// The final conversion asserts the preceding u64-ceiling check. No input
+    /// can violate that invariant while this check is preserved.
+    pub fn charge_receipt(
+        accepted: &mut u64,
+        count: u128,
+        limit: u64,
+    ) -> Result<(), MeterWorkError> {
+        *accepted = Self::check_receipt(*accepted, count, limit)?;
+        Ok(())
+    }
+
+    /// Check a whole work request without changing the caller's receipt.
+    ///
+    /// Success returns the proposed complete receipt, not work already performed
+    /// or a reservation. The caller retains its sole recorded count and decides
+    /// when to publish work. A later partial commit is justified only while the
+    /// relevant recorded prefix and ceiling are unchanged and the actual work
+    /// does not exceed this checked request.
+    ///
+    /// This pure check has no polling, allocation, callback, refund or retained
+    /// state. Zero still checks the current ceiling, including when the recorded
+    /// prefix was imported under a larger earlier ceiling.
+    ///
+    /// # Errors
+    /// Returns `Overflow` if the complete demand cannot fit u128; otherwise
+    /// returns `Limit` with the exact demand and ceiling when it does not fit.
+    ///
+    /// # Panics
+    /// The final conversion asserts the preceding u64-ceiling check. No input
+    /// can violate that invariant while this check is preserved.
+    pub fn check_receipt(recorded: u64, count: u128, limit: u64) -> Result<u64, MeterWorkError> {
+        let observed = Self::check_wide_receipt(u128::from(recorded), count, u128::from(limit))?;
+        Ok(u64::try_from(observed).expect("work checked against u64 ceiling"))
+    }
+
+    /// Check a whole request against an existing wide accepted-work receipt.
+    ///
+    /// Like [`Self::check_receipt`], this pure operation returns only a proposed
+    /// total. It neither changes the caller's u128 counter nor establishes that
+    /// work was performed or reserved. Zero checks the supplied ceiling; an
+    /// imported prefix above a new ceiling is valid input and is refused.
+    /// There is no polling, allocation, callback, quota, refund or retained state.
+    ///
+    /// # Errors
+    /// Returns `Overflow` if the complete demand does not fit u128, even when
+    /// the ceiling is `u128::MAX`. Otherwise an excess returns `Limit` with the
+    /// exact demand and ceiling. Neither operation saturates or commits a count.
+    pub fn check_wide_receipt(
+        recorded: u128,
+        count: u128,
+        limit: u128,
+    ) -> Result<u128, MeterWorkError> {
+        check_sum_as(
+            recorded,
+            count,
+            limit,
+            u128::checked_add,
+            MeterWorkError::Overflow,
+            |observed, limit| MeterWorkError::Limit { observed, limit },
+        )
+    }
+
+    /// Check a whole increment of a caller-owned, machine-sized named count.
+    ///
+    /// Returns the proposed complete count without changing any owner or
+    /// establishing that the requested event occurred. The caller retains the
+    /// resource name, source attribution and publication/commit boundary.
+    /// No Meter is constructed. There is no polling, allocation, callback,
+    /// reservation or refund. A zero increment still checks the current ceiling,
+    /// including when a prefix was imported under an earlier larger ceiling.
+    ///
+    /// # Errors
+    /// Returns [`MeterCountError::Overflow`] when the sum does not fit usize,
+    /// before considering the ceiling. Otherwise an excess returns the exact
+    /// proposed count and ceiling in [`MeterCountError::Limit`].
+    pub fn check_count(
+        recorded: usize,
+        amount: usize,
+        limit: usize,
+    ) -> Result<usize, MeterCountError> {
+        check_sum_as(
+            recorded,
+            amount,
+            limit,
+            usize::checked_add,
+            MeterCountError::Overflow,
+            |observed, limit| MeterCountError::Limit { observed, limit },
+        )
+    }
+
+    /// Check a complete increment of a caller-owned wide named count.
+    ///
+    /// This is the u128 counterpart of [`Self::check_count`]. Counts may name
+    /// objects, occurrences or cumulative byte charges; this does not observe
+    /// actual storage or a peak. The caller retains those meanings and the
+    /// original publication point. The result is only a proposed total.
+    /// No counter is changed, and no event is established as performed.
+    /// There is no polling, allocation, callback, reservation or refund.
+    /// Zero still checks the supplied ceiling, including an imported prefix
+    /// admitted under an earlier larger ceiling.
+    ///
+    /// # Errors
+    /// Returns [`MeterWideCountError::Overflow`] when the sum does not fit u128,
+    /// before checking the ceiling. Otherwise an excess returns the exact
+    /// proposed count and ceiling in [`MeterWideCountError::Limit`]. Neither
+    /// operation wraps, saturates or commits a count.
+    pub fn check_wide_count(
+        recorded: u128,
+        amount: u128,
+        limit: u128,
+    ) -> Result<u128, MeterWideCountError> {
+        check_sum_as(
+            recorded,
+            amount,
+            limit,
+            u128::checked_add,
+            MeterWideCountError::Overflow,
+            |observed, limit| MeterWideCountError::Limit { observed, limit },
+        )
+    }
+
+    /// Execute once under an admitted whole-kernel reservation and commit its
+    /// valid work receipt. The callback receives the fixed allowance, including
+    /// zero; the caller retains its admission and polling policy. This operation
+    /// adds constant work without allocating, polling or creating another meter.
+    ///
+    /// `T` may carry a native failed attempt with performed work. Such a receipt
+    /// is committed just like success, before returning the value and used work.
+    /// An outer `Err(E)` supplies no receipt. On that error, an invalid receipt,
+    /// or unwinding, the guard is dropped without commit under its account's
+    /// existing abandonment policy.
+    ///
+    /// # Errors
+    /// Returns the callback's original error as [`Failure::Refused`], without
+    /// observing control again. Returns [`Stop::InvalidProgram`] when reported
+    /// work exceeds the admitted allowance; that receipt is not committed.
+    pub fn under_reservation<R, T, E>(
+        reservation: R,
+        run: impl FnOnce(u64) -> Result<(T, u64), E>,
+    ) -> Result<(T, u64), Failure<E>>
+    where
+        R: Reservation,
+        E: Refusal,
+    {
+        let granted = reservation.allowance();
+        let (value, used) = run(granted).map_err(Failure::Refused)?;
+        if used > granted {
+            return Err(Failure::Stopped(Stop::InvalidProgram));
+        }
+        reservation.commit(used);
+        Ok((value, used))
+    }
+
     /// A fixed local allowance with control observed by the enclosing operation.
     /// No poll or allocation occurs at construction or at a local refusal.
     #[must_use]
@@ -266,12 +505,17 @@ impl<'a> Meter<'a> {
     /// An overrun counts up to the local limit, then polls control before
     /// returning [`ChargeError::WorkLimit`].
     pub fn absorb(&mut self, nested: u64) -> Result<(), ChargeError> {
-        if nested > self.remaining() {
-            self.count.value = self.limit;
+        let taken = permits::take_available(
+            &mut Counted {
+                charged: &mut self.count.value,
+                admitted: &mut self.limit,
+            },
+            nested,
+        );
+        if taken < nested {
             self.poll().map_err(ChargeError::Stopped)?;
             return Err(ChargeError::WorkLimit);
         }
-        self.record(nested);
         Ok(())
     }
 }
@@ -319,11 +563,17 @@ impl<'a, Q: Quota + ?Sized> Meter<'a, Q> {
         {
             poll.poll()?;
         }
-        if self.count.value == self.limit {
-            self.admit()?;
-        }
-        self.record(1);
-        Ok(())
+        let Self {
+            count,
+            limit,
+            poll,
+            quota,
+        } = self;
+        let mut state = Counted {
+            charged: &mut count.value,
+            admitted: limit,
+        };
+        permits::tick(&mut state, |state| Self::admit(state, quota, poll.as_ref()))
     }
 
     /// Admit a local optional visit before charging the global account.
@@ -375,9 +625,13 @@ impl<'a, Q: Quota + ?Sized> Meter<'a, Q> {
     /// harmless and retain the account's existing zero-refund behavior.
     pub fn refund(&mut self) {
         if let Some(quota) = &mut self.quota {
-            let unspent = self.limit - self.count.value;
-            self.limit = self.count.value;
-            quota.refund(unspent);
+            permits::settle(
+                &mut Counted {
+                    charged: &mut self.count.value,
+                    admitted: &mut self.limit,
+                },
+                |prior| quota.refund(prior.unused()),
+            );
         }
     }
 
@@ -394,13 +648,21 @@ impl<'a, Q: Quota + ?Sized> Meter<'a, Q> {
 
     #[inline]
     fn record(&mut self, actual: u64) {
-        self.count.value += actual;
+        Counted {
+            charged: &mut self.count.value,
+            admitted: &mut self.limit,
+        }
+        .consume(actual);
     }
 
     #[cold]
-    fn admit(&mut self) -> Result<(), Failure<Q::Error>> {
-        let Some(quota) = &mut self.quota else {
-            self.poll()?;
+    fn admit(
+        state: &mut Counted<'_>,
+        quota: &mut Option<&mut Q>,
+        poll: Option<&CancellationPoll<'_>>,
+    ) -> Result<(), Failure<Q::Error>> {
+        let Some(quota) = quota else {
+            poll.map_or(Ok(()), CancellationPoll::poll)?;
             return Err(Stop::WorkLimit.into());
         };
         let granted = quota.reserve(POLL_INTERVAL).map_err(Failure::Refused)?;
@@ -414,7 +676,7 @@ impl<'a, Q: Quota + ?Sized> Meter<'a, Q> {
         // The per-read boundary preserves the existing account contract:
         // its cumulative granted count must remain representable. Bounded
         // top-ups below additionally limit each request by representability.
-        self.limit += granted;
+        *state.admitted += granted;
         Ok(())
     }
 
@@ -695,287 +957,23 @@ impl fmt::Display for Stop {
 
 impl std::error::Error for Stop {}
 
-#[cfg(test)]
-mod tests {
-    mod quota;
-
-    use super::*;
-    use std::sync::mpsc;
-    use std::time::Duration;
-
-    #[test]
-    fn charge_ranges_observe_exactly_the_contained_boundaries() {
-        for charged in 0..1024 {
-            for amount in 0..=1024 {
-                let boundary = u128::from(charged).div_ceil(u128::from(POLL_INTERVAL))
-                    * u128::from(POLL_INTERVAL);
-                assert_eq!(
-                    poll_due(charged, amount),
-                    boundary < u128::from(charged) + u128::from(amount),
-                    "charged={charged}, amount={amount}"
-                );
-            }
-        }
-    }
-
-    #[test]
-    fn boundary_decisions_do_not_overflow_at_the_counter_limit() {
-        for charged in [0, 1, u64::MAX - 256, u64::MAX - 1, u64::MAX] {
-            for amount in [0, 1, 255, 256, 257, u64::MAX] {
-                let boundary = u128::from(charged).div_ceil(u128::from(POLL_INTERVAL))
-                    * u128::from(POLL_INTERVAL);
-                assert_eq!(
-                    poll_due(charged, amount),
-                    boundary < u128::from(charged) + u128::from(amount),
-                    "charged={charged}, amount={amount}"
-                );
-            }
-        }
-    }
-
-    fn wait_for_expiry(cancellation: &Cancellation) {
-        let deadline = &cancellation.deadline.as_ref().unwrap().deadline;
-        let timeout = Instant::now() + Duration::from_secs(5);
-        // Observe the flag directly: a boundary poll must not cause the expiry.
-        // The bound detects a stalled timer, not a promised scheduling latency.
-        while !deadline.expired.load(Ordering::Relaxed) {
-            assert!(Instant::now() < timeout, "deadline timer did not expire");
-            thread::sleep(Duration::from_millis(1));
-        }
-    }
-
-    /// Charge once through a meter that has admitted `charged` operations under
-    /// `limit`; returns the result and the count after it.
-    fn charge_from(
-        cancellation: &Cancellation,
-        charged: u64,
-        limit: u64,
-    ) -> (Result<(), ChargeError>, u64) {
-        let mut meter = Meter {
-            count: Isolated {
-                _before: 0,
-                value: charged,
-                _after: 0,
-            },
-            limit,
-            poll: Some(cancellation.polling()),
-            quota: None,
-        };
-        let result = meter.charge();
-        (result, meter.charged())
-    }
-
-    #[test]
-    fn charges_observe_a_stop_only_at_metered_boundaries() {
-        let cancellation = Cancellation::default();
-        cancellation.cancel();
-        for charged in 0..=3 * POLL_INTERVAL {
-            let expected = if charged.is_multiple_of(POLL_INTERVAL) {
-                (Err(ChargeError::Stopped(Stop::Cancelled)), charged)
-            } else {
-                (Ok(()), charged + 1)
-            };
-            assert_eq!(
-                charge_from(&cancellation, charged, u64::MAX),
-                expected,
-                "{charged}"
-            );
-        }
-    }
-
-    #[test]
-    fn a_requested_stop_precedes_the_work_limit_between_boundaries() {
-        let cancellation = Cancellation::default();
-        cancellation.cancel();
-        // Seven is not a boundary, so only the precedence observation sees the stop.
-        assert_eq!(
-            charge_from(&cancellation, 7, 7),
-            (Err(ChargeError::Stopped(Stop::Cancelled)), 7)
-        );
-    }
-
-    #[test]
-    fn the_work_limit_refuses_without_counting() {
-        let cancellation = Cancellation::default();
-        assert_eq!(
-            charge_from(&cancellation, 7, 7),
-            (Err(ChargeError::WorkLimit), 7)
-        );
-        assert_eq!(
-            charge_from(&cancellation, 0, 0),
-            (Err(ChargeError::WorkLimit), 0)
-        );
-    }
-
-    #[test]
-    fn an_admitted_charge_counts_its_operation() {
-        let cancellation = Cancellation::default();
-        assert_eq!(charge_from(&cancellation, 6, 7), (Ok(()), 7));
-    }
-
-    #[test]
-    fn nested_work_counts_within_the_remaining_allowance() {
-        let cancellation = Cancellation::default();
-        let metered = cancellation.metered(10, |meter| {
-            for _ in 0..3 {
-                meter.charge().unwrap();
-            }
-            assert_eq!(meter.remaining(), 7);
-            meter.absorb(7).map_err(ChargeError::into_stop)
-        });
-        assert_eq!(metered.result, Ok(()));
-        assert_eq!(metered.charged, 10);
-    }
-
-    #[test]
-    fn an_overrun_absorb_counts_up_to_the_limit() {
-        // The refusal is returned as a value, so the exit leaves it alone.
-        let cancellation = Cancellation::default();
-        let metered = cancellation.metered(10, |meter| {
-            for _ in 0..3 {
-                meter.charge().unwrap();
-            }
-            Ok::<_, Stop>((meter.absorb(8), meter.remaining()))
-        });
-        assert_eq!(metered.result, Ok((Err(ChargeError::WorkLimit), 0)));
-        assert_eq!(metered.charged, 10);
-    }
-
-    #[test]
-    fn an_overrun_absorb_reports_a_requested_stop() {
-        // The refusal is returned as a value, so the exit leaves it alone.
-        let cancellation = Cancellation::default();
-        let metered = cancellation.metered(10, |meter| {
-            cancellation.cancel();
-            Ok::<_, Stop>(meter.absorb(11))
-        });
-        assert_eq!(
-            metered.result,
-            Ok(Err(ChargeError::Stopped(Stop::Cancelled)))
-        );
-        assert_eq!(metered.charged, 10);
-    }
-
-    /// The settled outcome of an operation that returns `outcome`, with a stop
-    /// requested inside it when `stop` holds.
-    fn metered_outcome(stop: bool, outcome: Result<u8, Stop>) -> Result<u8, Stop> {
-        let cancellation = Cancellation::default();
-        cancellation
-            .metered(u64::MAX, |_| {
-                if stop {
-                    cancellation.cancel();
-                }
-                outcome
-            })
-            .result
-    }
-
-    #[test]
-    fn a_requested_stop_settles_a_resource_refusal() {
-        assert_eq!(
-            metered_outcome(false, Err(Stop::StorageLimit)),
-            Err(Stop::StorageLimit)
-        );
-        assert_eq!(
-            metered_outcome(true, Err(Stop::StorageLimit)),
-            Err(Stop::Cancelled)
-        );
-    }
-
-    #[test]
-    fn settling_leaves_results_and_shape_errors_alone() {
-        assert_eq!(metered_outcome(true, Ok(3)), Ok(3));
-        for shape in [Stop::WrongProgram, Stop::InvalidProgram] {
-            assert_eq!(metered_outcome(true, Err(shape)), Err(shape));
-        }
-    }
-
-    #[test]
-    fn a_metered_operation_reports_its_work_on_every_outcome() {
-        let cancellation = Cancellation::default();
-        let metered = cancellation.metered(5, |meter| {
-            while meter.charge().is_ok() {}
-            Err::<(), _>(Stop::WorkLimit)
-        });
-        assert_eq!(metered.result, Err(Stop::WorkLimit));
-        assert_eq!(metered.charged, 5);
-    }
-
-    #[test]
-    fn the_count_has_padding_on_both_sides() {
-        assert_eq!(std::mem::offset_of!(Isolated, value), size_of::<u64>());
-        assert_eq!(size_of::<Isolated>(), 3 * size_of::<u64>());
-    }
-
-    #[test]
-    fn stops_classify_resource_refusals() {
-        for stop in [
-            Stop::WorkLimit,
-            Stop::RoundLimit,
-            Stop::StorageLimit,
-            Stop::DerivedAtomLimit,
-            Stop::CandidateLimit,
-            Stop::CarrierLimit,
-            Stop::Allocation,
-        ] {
-            assert!(stop.is_resource_refusal(), "{stop:?}");
-        }
-        for stop in [
-            Stop::Cancelled,
-            Stop::Deadline,
-            Stop::WrongProgram,
-            Stop::InvalidProgram,
-        ] {
-            assert!(!stop.is_resource_refusal(), "{stop:?}");
-        }
-    }
-
-    #[test]
-    fn a_deadline_expires_without_polling() {
-        let cancellation =
-            Cancellation::with_deadline(Instant::now() + Duration::from_millis(30)).unwrap();
-        let polling = cancellation.polling();
-        wait_for_expiry(&cancellation);
-        assert_eq!(polling.poll(), Err(Stop::Deadline));
-        assert_eq!(cancellation.poll(), Err(Stop::Deadline));
-    }
-
-    #[test]
-    fn clones_share_the_deadline() {
-        let cancellation =
-            Cancellation::with_deadline(Instant::now() + Duration::from_millis(30)).unwrap();
-        let clone = cancellation.clone();
-        assert!(Arc::ptr_eq(
-            cancellation.deadline.as_ref().unwrap(),
-            clone.deadline.as_ref().unwrap(),
-        ));
-        wait_for_expiry(&cancellation);
-        assert_eq!(clone.poll(), Err(Stop::Deadline));
-        assert_eq!(cancellation.poll(), Err(Stop::Deadline));
-    }
-
-    #[test]
-    fn dropping_the_last_clone_retires_the_timer() {
-        // A second waiter on the same deadline stands in for the timer thread,
-        // whose handle is not retained: retirement wakes every waiter.
-        let owner = DeadlineOwner::arm(Instant::now() + Duration::from_hours(1)).unwrap();
-        let deadline = Arc::clone(&owner.deadline);
-        let (retired, observer) = mpsc::channel();
-        thread::spawn(move || {
-            deadline.wait();
-            retired.send(()).unwrap();
-        });
-        assert!(observer.recv_timeout(Duration::from_millis(100)).is_err());
-        drop(owner);
-        assert!(observer.recv_timeout(Duration::from_secs(5)).is_ok());
-    }
-
-    #[test]
-    fn retirement_does_not_expire_the_deadline() {
-        let owner = DeadlineOwner::arm(Instant::now() + Duration::from_hours(1)).unwrap();
-        let deadline = Arc::clone(&owner.deadline);
-        drop(owner);
-        deadline.wait();
-        assert!(!deadline.expired.load(Ordering::Relaxed));
+// Only primitive checked addition and native error construction vary between
+// dimensions. Both use their actual width; this private operation owns no state.
+fn check_sum_as<T: Copy + Ord, E>(
+    recorded: T,
+    amount: T,
+    limit: T,
+    add: impl FnOnce(T, T) -> Option<T>,
+    overflow: E,
+    excess: impl FnOnce(T, T) -> E,
+) -> Result<T, E> {
+    let observed = add(recorded, amount).ok_or(overflow)?;
+    if observed > limit {
+        Err(excess(observed, limit))
+    } else {
+        Ok(observed)
     }
 }
+
+#[cfg(test)]
+mod tests;

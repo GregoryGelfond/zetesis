@@ -192,6 +192,10 @@
 'Zetesis.AlgebraicRows.guard_releases' does not depend on any axioms
 'Zetesis.AlgebraicRows.parity_measure_odd' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.AlgebraicRows.parity_equation_of_xor' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.AlgebraicRows.counting_fold_one' depends on axioms: [propext]
+'Zetesis.AlgebraicRows.bounded_counting_fold' depends on axioms: [propext, Quot.sound]
+'Zetesis.AlgebraicRows.bounded_counting_fold_one' depends on axioms: [propext, Quot.sound]
+'Zetesis.AlgebraicRows.bounded_counting_overflow_iff' depends on axioms: [propext, Quot.sound]
 'Zetesis.AlgebraicRows.parity_forces' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.AlgebraicRows.xor_definition' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.AlgebraicRows.threshold_measure' depends on axioms: [propext, Classical.choice, Quot.sound]
@@ -233,6 +237,17 @@
 'Zetesis.AtomKeys.tuple_agrees' depends on axioms: [propext, Quot.sound]
 'Zetesis.AtomKeys.key_identity' depends on axioms: [propext]
 'Zetesis.AtomKeys.membership_identity' depends on axioms: [propext, Quot.sound]
+'Zetesis.AtomicWork.accepted_iff' depends on axioms: [propext]
+'Zetesis.AtomicWork.accepts_iff_fits' depends on axioms: [propext]
+'Zetesis.AtomicWork.refused_iff' depends on axioms: [propext, Quot.sound]
+'Zetesis.AtomicWork.accepted_additive' depends on axioms: [propext]
+'Zetesis.AtomicWork.accepted_within_limit' depends on axioms: [propext]
+'Zetesis.AtomicWork.refused_preserves_prefix' depends on axioms: [propext, Quot.sound]
+'Zetesis.AtomicWork.above_new_limit_refused' depends on axioms: [propext, Quot.sound]
+'Zetesis.AtomicWork.charge_zero' depends on axioms: [propext]
+'Zetesis.AtomicWork.zero_accepted_iff' depends on axioms: [propext]
+'Zetesis.AtomicWork.zero_preserves_receipt' depends on axioms: [propext]
+'Zetesis.AtomicWork.accepted_composition' depends on axioms: [propext, Quot.sound]
 'Zetesis.AxisFolds.Reduction.op_unit' does not depend on any axioms
 'Zetesis.AxisFolds.Reduction.foldFrom_eq_op' does not depend on any axioms
 'Zetesis.AxisFolds.Reduction.fold_cons' does not depend on any axioms
@@ -259,6 +274,33 @@
 'Zetesis.AxisFolds.pair_absorbing' does not depend on any axioms
 'Zetesis.AxisFolds.pair_foldFrom_left_absorbing' does not depend on any axioms
 'Zetesis.AxisFolds.pair_idempotent' does not depend on any axioms
+'Zetesis.AxisFolds.BoundedSum.encode_exact' depends on axioms: [propext]
+'Zetesis.AxisFolds.BoundedSum.encode_overflow_iff' depends on axioms: [propext, Quot.sound]
+'Zetesis.AxisFolds.BoundedSum.none_op' does not depend on any axioms
+'Zetesis.AxisFolds.BoundedSum.op_none' does not depend on any axioms
+'Zetesis.AxisFolds.BoundedSum.op_encode' depends on axioms: [propext, Quot.sound]
+'Zetesis.AxisFolds.BoundedSum.op_comm' depends on axioms: [propext]
+'Zetesis.AxisFolds.BoundedSum.op_assoc' depends on axioms: [propext, Quot.sound]
+'Zetesis.AxisFolds.BoundedSum.zero_op' depends on axioms: [propext, Quot.sound]
+'Zetesis.AxisFolds.BoundedSum.overflow_absorbs' depends on axioms: [propext, Quot.sound]
+'Zetesis.AxisFolds.Minimum.choose_le_left' does not depend on any axioms
+'Zetesis.AxisFolds.Minimum.choose_le_right' does not depend on any axioms
+'Zetesis.AxisFolds.Minimum.le_choose_iff' does not depend on any axioms
+'Zetesis.AxisFolds.Minimum.choose_comm' depends on axioms: [propext]
+'Zetesis.AxisFolds.Minimum.choose_assoc' depends on axioms: [propext]
+'Zetesis.AxisFolds.Minimum.choose_idempotent' depends on axioms: [propext]
+'Zetesis.AxisFolds.Minimum.op_comm' depends on axioms: [propext]
+'Zetesis.AxisFolds.Minimum.op_assoc' depends on axioms: [propext]
+'Zetesis.AxisFolds.Minimum.reduction_idempotent' depends on axioms: [propext]
+'Zetesis.AxisFolds.Minimum.step_initial' does not depend on any axioms
+'Zetesis.AxisFolds.Minimum.step_equal_retains_current' depends on axioms: [propext]
+'Zetesis.AxisFolds.Minimum.step_value' depends on axioms: [propext]
+'Zetesis.AxisFolds.Minimum.step_value_map' depends on axioms: [propext]
+'Zetesis.AxisFolds.SetStreams.selected_inter' depends on axioms: [propext, Quot.sound]
+'Zetesis.AxisFolds.SetStreams.append_union' depends on axioms: [propext, Quot.sound]
+'Zetesis.AxisFolds.SetStreams.ordered_union_mem' depends on axioms: [propext, Quot.sound]
+'Zetesis.AxisFolds.SetStreams.ordered_union_value' depends on axioms: [propext, Quot.sound]
+'Zetesis.AxisFolds.SetStreams.ordered_union_equal_left' depends on axioms: [propext, Quot.sound]
 'Zetesis.AxisFolds.walk_exhausted_fold' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.AxisFolds.world_view_fold_complete' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.AxisFolds.world_view_fold_decided' depends on axioms: [propext, Classical.choice, Quot.sound]
@@ -331,6 +373,13 @@
 'Zetesis.Bounds.conflicting_atom_refutes' does not depend on any axioms
 'Zetesis.Bounds.lower_constraint_refutes' does not depend on any axioms
 'Zetesis.Bounds.lower_prefix_constraint_refutes' does not depend on any axioms
+'Zetesis.BytePeak.accepted_iff' depends on axioms: [propext]
+'Zetesis.BytePeak.refused_iff' depends on axioms: [propext, Quot.sound]
+'Zetesis.BytePeak.receipt_eq_max' depends on axioms: [propext]
+'Zetesis.BytePeak.receipt_covers_inputs' depends on axioms: [propext]
+'Zetesis.BytePeak.observe_zero' depends on axioms: [propext]
+'Zetesis.BytePeak.acceptance_independent_of_previous' depends on axioms: [propext]
+'Zetesis.BytePeak.successive_receipts' depends on axioms: [propext]
 'Zetesis.CandidateCursor.next_preserves' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.CandidateCursor.enough_fuel_no_interruption' depends on axioms: [propext, Quot.sound]
 'Zetesis.CandidateCursor.mem_eligible' depends on axioms: [propext, Quot.sound]
@@ -2124,6 +2173,10 @@
 'Zetesis.WorkCharge.repeated_eq_charge' depends on axioms: [propext, Quot.sound]
 'Zetesis.WorkCharge.exhausted_records_limit' depends on axioms: [propext]
 'Zetesis.WorkCharge.accepted_within_limit' depends on axioms: [propext, Quot.sound]
+'Zetesis.WorkPermits.take_preserves_window' does not depend on any axioms
+'Zetesis.WorkPermits.take_partitions_remaining' depends on axioms: [propext, Quot.sound]
+'Zetesis.WorkPermits.refund_preserves_window' depends on axioms: [propext, Quot.sound]
+'Zetesis.WorkPermits.settlement_partitions_grant' depends on axioms: [propext, Quot.sound]
 'Zetesis.WorkPermits.grant_conserves' depends on axioms: [propext, Quot.sound]
 'Zetesis.WorkPermits.settle_conserves' depends on axioms: [propext, Quot.sound]
 'Zetesis.WorkPermits.consumed_within_limit' depends on axioms: [propext, Quot.sound]

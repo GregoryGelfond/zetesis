@@ -433,8 +433,31 @@ impl Budget {
                 unreachable!("source occurrence and family bounds are checked directly")
             }
         };
-        let observed = used.saturating_add(amount);
-        check(resource, observed, ceiling, location)?;
+        let observed = if matches!(resource, ExpansionResource::TermWork) {
+            zetesis_algebra::Meter::check_wide_receipt(*used, amount, ceiling as u128).map_err(
+                |error| ExpansionFailure::Limit {
+                    resource,
+                    observed: match error {
+                        zetesis_algebra::MeterWorkError::Limit { observed, .. } => observed,
+                        zetesis_algebra::MeterWorkError::Overflow => u128::MAX,
+                    },
+                    limit: ceiling as u128,
+                    location,
+                },
+            )?
+        } else {
+            zetesis_algebra::Meter::check_wide_count(*used, amount, ceiling as u128).map_err(
+                |error| ExpansionFailure::Limit {
+                    resource,
+                    observed: match error {
+                        zetesis_algebra::MeterWideCountError::Limit { observed, .. } => observed,
+                        zetesis_algebra::MeterWideCountError::Overflow => u128::MAX,
+                    },
+                    limit: ceiling as u128,
+                    location,
+                },
+            )?
+        };
         if matches!(resource, ExpansionResource::ScalarBytes)
             && let Some(allowance) = &mut self.allowance
         {
@@ -486,16 +509,14 @@ pub(crate) fn check(
     ceiling: usize,
     location: ProgramSite,
 ) -> Result<(), ExpansionFailure> {
-    if observed > ceiling as u128 {
-        Err(ExpansionFailure::Limit {
+    zetesis_algebra::Meter::check_wide_count(observed, 0, ceiling as u128)
+        .map(|_| ())
+        .map_err(|_| ExpansionFailure::Limit {
             resource,
             limit: ceiling as u128,
             observed,
             location,
         })
-    } else {
-        Ok(())
-    }
 }
 
 /// Settlement does not reset enforcement history or retain runtime control.

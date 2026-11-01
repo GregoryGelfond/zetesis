@@ -4,6 +4,8 @@ use std::cmp::Ordering;
 use std::fmt;
 
 use zetesis_algebra::Cancellation;
+use zetesis_algebra::reduction::Minimum;
+use zetesis_algebra::reduction::{CheckedSum, Reduction as _};
 use zetesis_core::Model;
 use zetesis_core::retention::{ModelRetention, RetentionError};
 use zetesis_ferraris::Interpretation;
@@ -62,6 +64,32 @@ impl From<RetentionError> for OptimizationStop {
             RetentionError::Overflow => Self::Overflow,
             RetentionError::Allocation => Self::Allocation,
         }
+    }
+}
+
+/// Borrowed cost value, distinct from the stored Score's structural equality.
+/// Missing priorities denote zero and objective presence does not affect rank.
+/// Comparison borrows the original slots; it never normalizes or copies them.
+#[derive(Clone, Copy, Debug)]
+struct ScoreValue<'a>(&'a Score);
+
+impl PartialEq for ScoreValue<'_> {
+    fn eq(&self, other: &Self) -> bool {
+        self.cmp(other) == Ordering::Equal
+    }
+}
+
+impl Eq for ScoreValue<'_> {}
+
+impl PartialOrd for ScoreValue<'_> {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for ScoreValue<'_> {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.0.compare_costs(other.0)
     }
 }
 
@@ -136,9 +164,8 @@ impl Incumbents {
                 }
             }
         };
-        self.scored = self
-            .scored
-            .checked_add(1)
+        self.scored = CheckedSum
+            .combine(Some(self.scored), Some(1))
             .ok_or(Interruption::Incumbent(OptimizationStop::Overflow))?;
         if let Some(best) = &mut self.best {
             best.scored_models = self.scored;
@@ -155,14 +182,14 @@ impl Incumbents {
         prepared: Option<(&ObjectivePlan, &Interpretation)>,
     ) -> Result<bool, Interruption> {
         let score = self.evaluate(program, &model, options, cancellation, prepared)?;
-        let order = self
-            .best
-            .as_ref()
-            .map_or(Ordering::Less, |best| score.compare_costs(&best.score));
-        if order == Ordering::Less {
+        let minimum = Minimum::new().step(
+            self.best.as_ref().map(|best| ScoreValue(&best.score)),
+            ScoreValue(&score),
+        );
+        if minimum.incoming == Ordering::Less {
             // The score is retained once for this entire tied family. Admission
             // of its full replacement precedes dropping any previous incumbent.
-            let score_bytes = score_payload_bytes(Some(&score))
+            let score_bytes = score_payload_bytes(Some(minimum.value.0))
                 .map_err(OptimizationStop::from)
                 .map_err(Interruption::Incumbent)?;
             self.retain(model, score_bytes, options, true)
@@ -176,14 +203,13 @@ impl Incumbents {
             });
             return Ok(true);
         }
-        if order == Ordering::Equal {
+        if minimum.incoming == Ordering::Equal {
             let best = self
                 .best
                 .as_mut()
                 .expect("first score establishes an incumbent");
-            best.tied_models = best
-                .tied_models
-                .checked_add(1)
+            best.tied_models = CheckedSum
+                .combine(Some(best.tied_models), Some(1))
                 .ok_or(Interruption::Incumbent(OptimizationStop::Overflow))?;
             if options.models == 0 || self.models.len() < options.models {
                 self.retain(model, 0, options, false)

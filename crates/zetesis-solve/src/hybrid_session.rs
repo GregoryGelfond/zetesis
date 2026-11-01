@@ -1,7 +1,7 @@
 //! Source restrictions on candidate regions and complete answer checking.
 //!
 //! The retained core uses the ordinary formula session. Its answers
-//! become answers of the original subject only after all streamed constraints
+//! become answers of the original input only after all streamed constraints
 //! are satisfied. Only those complete original answers enter scoring, incumbent
 //! retention and objective-bound feedback. The retained formula core uses the
 //! selected backend;
@@ -12,6 +12,7 @@
 
 use std::sync::Arc;
 use zetesis_algebra::Cancellation;
+use zetesis_algebra::reduction::{CheckedSum, Reduction as _};
 use zetesis_core::Model;
 use zetesis_objective::Score;
 use zetesis_themelios::{ConstraintAllowance, ConstraintChecker, ConstraintVerdict, StreamedCore};
@@ -47,17 +48,17 @@ pub struct HybridExecutionStatistics {
 #[cfg(test)]
 mod tests;
 
-/// A streamed core and the subject its outcomes report: the hybrid owner, or
+/// A streamed core and the original input its outcomes report: the hybrid owner, or
 /// the terminal owner whose base the core is.
 pub(crate) struct HybridInput<'a> {
     pub(crate) core: &'a StreamedCore,
-    pub(crate) subject: crate::Subject,
+    pub(crate) original: crate::Original,
 }
 
 pub(crate) struct HybridSession<'a> {
-    /// The subject an outcome reports: the hybrid owner, or the terminal owner
+    /// The original input an outcome reports: the hybrid owner, or the terminal owner
     /// whose base this core is.
-    subject: crate::Subject,
+    original: crate::Original,
     core: FormulaSession<'a, Execution>,
     checker: ConstraintChecker<'a>,
     allowance: ConstraintAllowance,
@@ -75,9 +76,8 @@ fn accept(
     cancellation: &Cancellation,
     phases: &Recorder,
 ) -> Result<bool, SolveError> {
-    let count = statistics
-        .core_answers
-        .checked_add(1)
+    let count = CheckedSum
+        .combine(Some(statistics.core_answers), Some(1))
         .ok_or(SolveError::HybridStatisticsOverflow)?;
     statistics.core_answers = count;
     statistics.pending = 1;
@@ -139,7 +139,7 @@ impl<'a> HybridSession<'a> {
     ) -> Result<Self, SolveError> {
         let HybridInput {
             core: owner,
-            subject,
+            original,
         } = input;
         let allowance = ConstraintAllowance::new(config.constraints);
         let checker = owner
@@ -183,7 +183,7 @@ impl<'a> HybridSession<'a> {
             regions
         });
         Ok(Self {
-            subject,
+            original,
             core,
             checker,
             allowance,
@@ -235,7 +235,7 @@ impl<'a> HybridSession<'a> {
 
     fn snapshot(&self, phases: &Recorder) -> SemanticOutcome {
         let mut outcome = self.core.outcome(phases);
-        outcome.subject = Some(self.subject.clone());
+        outcome.original = Some(self.original.clone());
         outcome.verified = self.statistics.accepted;
         // Core exhaustion cannot establish completion of an unfinished source check.
         outcome.search_state = None;

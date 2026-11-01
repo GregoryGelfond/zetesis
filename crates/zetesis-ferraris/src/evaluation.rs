@@ -5,7 +5,7 @@ use std::{fmt, mem::size_of_val};
 use crate::numeric_evaluation::NumericRowScratch;
 use crate::oracle::{Work, evaluate, failed_root};
 use crate::{Interpretation, Limits, Theory};
-use zetesis_algebra::{Cancellation, Meter, Refusal, Stop};
+use zetesis_algebra::{Cancellation, Meter, MeterBytes, Refusal, Stop};
 
 /// Per-evaluation bounds, including storage retained from earlier evaluations.
 #[derive(Clone, Copy, Debug)]
@@ -223,11 +223,8 @@ impl EvaluationWorkspace {
     }
 
     fn check_bytes(required: u128, limit: usize) -> Result<(), EvaluationError> {
-        if required > limit as u128 {
-            Err(EvaluationError::Storage { required, limit })
-        } else {
-            Ok(())
-        }
+        MeterBytes::check(required, limit as u128)
+            .map_err(|_| EvaluationError::Storage { required, limit })
     }
 
     fn bytes(&self, capacity: usize, numeric_bytes: u128) -> u128 {

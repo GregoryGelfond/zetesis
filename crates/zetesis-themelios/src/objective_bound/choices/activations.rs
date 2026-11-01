@@ -78,7 +78,7 @@ pub(super) fn prepare(
     }
     memory.retire(&needed);
     memory.retire(&copied);
-    work.statistics.nodes = parts.view().len();
+    work.nodes = parts.view().len();
     Ok(parts)
 }
 
@@ -276,6 +276,6 @@ pub(super) fn append(
         )
         .map_err(|error| work.error(Kind::Theory(error)))?;
     transaction.commit();
-    work.statistics.nodes = nodes.view().len();
+    work.nodes = nodes.view().len();
     Ok(copied)
 }

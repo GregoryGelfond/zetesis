@@ -1,6 +1,6 @@
 use std::cmp::Ordering;
 
-use zetesis_algebra::Cancellation;
+use zetesis_algebra::{Cancellation, Meter};
 use zetesis_core::catalog::{AtomRef, TermRef};
 use zetesis_core::{AtomRows, Model, PatternRef, TemplateTerm, ValueNodeRef};
 
@@ -10,17 +10,47 @@ use crate::{
 };
 
 pub(super) struct Work<'a> {
-    pub(super) limits: Limits,
-    pub(super) cancellation: &'a Cancellation,
-    pub(super) statistics: Statistics,
-    pub(super) template: Option<usize>,
+    limits: Limits,
+    cancellation: &'a Cancellation,
+    meter: Meter<'static>,
+    bindings: u64,
+    active_bindings: u64,
+    duplicates: u64,
+    keys: usize,
+    key_bytes: usize,
+    template: Option<usize>,
 }
-impl Work<'_> {
+impl<'control> Work<'control> {
+    pub(super) fn new(limits: Limits, cancellation: &'control Cancellation) -> Self {
+        Self {
+            limits,
+            cancellation,
+            meter: Meter::local(limits.max_work),
+            bindings: 0,
+            active_bindings: 0,
+            duplicates: 0,
+            keys: 0,
+            key_bytes: 0,
+            template: None,
+        }
+    }
+
+    pub(super) fn statistics(&self) -> Statistics {
+        Statistics {
+            work: self.meter.charged(),
+            bindings: self.bindings,
+            active_bindings: self.active_bindings,
+            duplicates: self.duplicates,
+            keys: self.keys,
+            key_bytes: self.key_bytes,
+        }
+    }
+
     pub(super) fn error(&self, kind: ErrorKind) -> Error {
         Error {
             kind,
             template: self.template,
-            statistics: self.statistics,
+            statistics: self.statistics(),
         }
     }
     pub(super) fn stop(&self, reason: Stop) -> Error {
@@ -36,12 +66,14 @@ impl Work<'_> {
         })
     }
     pub(super) fn tick(&mut self) -> Result<(), Error> {
+        // Objective operations observe control at every tick, including refusals.
         self.poll()?;
-        if self.statistics.work >= self.limits.max_work {
-            return Err(self.stop(Stop::WorkLimit));
-        }
-        self.statistics.work += 1;
-        Ok(())
+        self.meter.tick().map_err(|failure| {
+            self.stop(match failure.into_stop() {
+                zetesis_algebra::Stop::WorkLimit => Stop::WorkLimit,
+                other => Stop::Control(other),
+            })
+        })
     }
     pub(super) fn reserve<T>(&self, count: usize) -> Result<Vec<T>, Error> {
         let mut result = Vec::new();
@@ -129,12 +161,7 @@ pub fn evaluate<'input>(
     limits: Limits,
     cancellation: &Cancellation,
 ) -> Result<Evaluation<'input>, Error> {
-    let mut work = Work {
-        limits,
-        cancellation,
-        statistics: Statistics::default(),
-        template: None,
-    };
+    let mut work = Work::new(limits, cancellation);
     work.tick()?;
     let mut totals = work.reserve(program.priorities().len())?;
     for _ in program.priorities() {
@@ -170,7 +197,7 @@ pub fn evaluate<'input>(
             costs,
         },
         contributions: evaluator.keys,
-        statistics: evaluator.work.statistics,
+        statistics: evaluator.work.statistics(),
     })
 }
 
@@ -297,10 +324,10 @@ impl<'input> Evaluator<'input, '_> {
         slot: usize,
     ) -> Result<(), Error> {
         self.work.tick()?;
-        if self.work.statistics.bindings >= self.work.limits.max_bindings {
+        if self.work.bindings >= self.work.limits.max_bindings {
             return Err(self.work.stop(Stop::BindingLimit));
         }
-        self.work.statistics.bindings += 1;
+        self.work.bindings += 1;
         for index in 0..template.filters().len() {
             self.work.tick()?;
             let filter = template.filters().at(index).expect("bounded filter index");
@@ -312,8 +339,7 @@ impl<'input> Evaluator<'input, '_> {
                 return Ok(());
             }
         }
-        self.work.statistics.active_bindings =
-            self.work.increment(self.work.statistics.active_bindings)?;
+        self.work.active_bindings = self.work.increment(self.work.active_bindings)?;
         let weight = self.work.resolve(template.weight(), binding)?;
         self.work.tick()?;
         let ValueNodeRef::Number(weight) = weight.descriptor() else {
@@ -369,8 +395,7 @@ impl<'input> Evaluator<'input, '_> {
                 Ordering::Less => low = middle + 1,
                 Ordering::Greater => high = middle,
                 Ordering::Equal => {
-                    self.work.statistics.duplicates =
-                        self.work.increment(self.work.statistics.duplicates)?;
+                    self.work.duplicates = self.work.increment(self.work.duplicates)?;
                     return Ok(());
                 }
             }
@@ -379,7 +404,7 @@ impl<'input> Evaluator<'input, '_> {
             return Err(self.work.stop(Stop::KeyLimit));
         }
         let bytes = self.key_bytes(&tuple)?;
-        let total_bytes = self.work.add_size(self.work.statistics.key_bytes, bytes)?;
+        let total_bytes = self.work.add_size(self.work.key_bytes, bytes)?;
         if total_bytes > self.work.limits.max_key_bytes {
             return Err(self.work.stop(Stop::KeyBytesLimit));
         }
@@ -403,8 +428,8 @@ impl<'input> Evaluator<'input, '_> {
             },
         );
         self.totals[slot] = total;
-        self.work.statistics.keys = self.keys.len();
-        self.work.statistics.key_bytes = total_bytes;
+        self.work.keys = self.keys.len();
+        self.work.key_bytes = total_bytes;
         Ok(())
     }
 
@@ -438,12 +463,7 @@ mod tests {
         let allocation = tuple.as_ptr();
         let cancellation = zetesis_algebra::Cancellation::default();
         let mut evaluator = super::Evaluator {
-            work: super::Work {
-                limits: crate::Limits::default(),
-                cancellation: &cancellation,
-                statistics: crate::Statistics::default(),
-                template: None,
-            },
+            work: super::Work::new(crate::Limits::default(), &cancellation),
             keys: Vec::new(),
             totals: vec![0],
         };

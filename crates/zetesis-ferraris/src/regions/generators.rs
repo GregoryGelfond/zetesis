@@ -23,7 +23,7 @@
 
 use std::{fmt, mem::size_of};
 
-use zetesis_algebra::{Cancellation, Failure, Meter, Quota, Stop, words::Words};
+use zetesis_algebra::{Cancellation, Failure, Meter, MeterBytes, Quota, Stop, words::Words};
 
 use super::{
     NodeView, OriginalSubject, PreferenceAttempt, Producers, Region, Theory,
@@ -477,13 +477,12 @@ impl<Q: Quota + ?Sized> Budget<'_, '_, Q> {
     }
 
     fn observe(&mut self, bytes: u128) -> Result<(), GeneratorOrderError<Failure<Q::Error>>> {
-        self.peak = self.peak.max(bytes);
-        if bytes > self.max_bytes as u128 {
-            return Err(GeneratorOrderError::Storage {
+        MeterBytes::observe_peak(bytes, self.max_bytes as u128, &mut self.peak).map_err(|_| {
+            GeneratorOrderError::Storage {
                 required: bytes,
                 limit: self.max_bytes,
-            });
-        }
+            }
+        })?;
         self.bytes = bytes;
         Ok(())
     }

@@ -287,12 +287,8 @@ impl Counters {
         location: crate::ProgramSite,
     ) -> Result<(), crate::FormulaFailure> {
         let before = self.accounting.work;
-        super::ceiling(
-            crate::FormulaResource::Work,
-            u128::from(before).saturating_add(amount),
-            u128::from(limits.max_work),
-            location,
-        )?;
+        zetesis_algebra::Meter::check_receipt(before, amount, limits.max_work)
+            .map_err(|error| super::work_failure(error, limits.max_work, location))?;
         let amount = u64::try_from(amount).expect("absorbed work fits its supplied allowance");
         self.count_work(amount);
         if let Some(control) = &self.control {

@@ -5,7 +5,7 @@ use zetesis_reference_support::formula;
 
 use zetesis_algebra::Cancellation;
 
-use crate::{Backend, Completion, PreparedInput, RunError, Session, SolveConfig, Subject};
+use crate::{Backend, Completion, Original, PreparedInput, RunError, Session, SolveConfig};
 
 use super::Progress;
 
@@ -31,7 +31,7 @@ fn unentered_progress_has_no_success_report() {
     ));
     let failure = progress.finalize().unwrap_err();
     assert!(matches!(*failure.cause, RunError::CompletionUnavailable));
-    assert!(failure.subject().is_none());
+    assert!(failure.original().is_none());
     assert!(failure.semantic().is_none());
     let partial = failure.partial_report.unwrap();
     assert_eq!(partial.completion, None);
@@ -57,7 +57,7 @@ fn unclassified_membership_cannot_make_a_success_report() {
     assert_eq!(semantic.verified_models(), 1);
     assert_eq!(semantic.completion(), None);
     assert!(!semantic.unsatisfiable());
-    let Subject::Theory(theory) = failure.subject().unwrap() else {
+    let Original::Theory(theory) = failure.original().unwrap() else {
         panic!("original theory");
     };
     assert!(theory.same_instance(admitted.theory()));
@@ -132,7 +132,7 @@ fn scoring_stop_remains_distinct_from_publication() {
     assert_eq!(partial.interruption, semantic.interruption());
     assert!(partial.optimization.is_none());
     assert!(!semantic.unsatisfiable());
-    let Subject::Theory(theory) = failure.subject().unwrap() else {
+    let Original::Theory(theory) = failure.original().unwrap() else {
         panic!("original theory");
     };
     assert!(theory.same_instance(admitted.theory()));

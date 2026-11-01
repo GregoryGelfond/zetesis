@@ -39,7 +39,7 @@ impl Fixture {
         let mut session = HybridSession::new(
             super::HybridInput {
                 core: self.owner.core(),
-                subject: crate::Subject::Hybrid(self.owner.clone()),
+                original: crate::Original::Hybrid(self.owner.clone()),
             },
             &self.config,
             &resources,
@@ -190,7 +190,7 @@ fn a_construction_stop_precedes_a_later_source_worker_failure() {
     let mut session = HybridSession::new(
         super::HybridInput {
             core: fixture.owner.core(),
-            subject: crate::Subject::Hybrid(fixture.owner.clone()),
+            original: crate::Original::Hybrid(fixture.owner.clone()),
         },
         &fixture.config,
         &resources,

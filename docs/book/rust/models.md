@@ -431,7 +431,7 @@ in isolation; summing it does not account for sharing.
 Canonical identities outside an occurrence map are excluded from that measure,
 even when the catalog keeps their shared prefix alive. The measure also excludes
 spare vector/hash capacity, owner-index entries, Arc and allocator overhead,
-shared subject data and execution state. Replacement
+shared original input data and execution state. Replacement
 admits the new retained family, not transient overlap with the still-live old
 family. Successful reservations can leave capacity after an abandoned admission.
 It is not RSS. `AtomCatalog::capacity` exposes occurrence-map capacity and

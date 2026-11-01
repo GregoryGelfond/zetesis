@@ -163,9 +163,8 @@ impl AtomTable {
     /// `0..len` in model order, without indexing them.
     pub(super) fn defer(&mut self, model: &Model) -> Result<(), Error> {
         debug_assert!(self.is_empty(), "only the first record is deferred");
-        if model.atoms().len() > self.max_atoms {
-            return Err(Error::Table);
-        }
+        zetesis_algebra::Meter::check_count(model.atoms().len(), 0, self.max_atoms)
+            .map_err(|_| Error::Table)?;
         self.deferred = Some(model.clone());
         Ok(())
     }
@@ -211,9 +210,7 @@ impl AtomTable {
     pub(super) fn enter(&mut self, atom: AtomRef<'_>) -> Result<usize, Error> {
         self.flush()?;
         let index = self.indices.len();
-        if index >= self.max_atoms {
-            return Err(Error::Table);
-        }
+        zetesis_algebra::Meter::check_count(index, 1, self.max_atoms).map_err(|_| Error::Table)?;
         self.indices.try_reserve(1).map_err(|_| Error::Allocation)?;
         self.indices.insert(Entry::copy(atom)?, index);
         let _ = self.identities.insert(atom, index);

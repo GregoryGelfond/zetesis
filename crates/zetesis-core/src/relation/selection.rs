@@ -324,7 +324,7 @@ impl<'source> Relation<'source> {
         let result = self.resolve_query(equalities, &mut work, &mut before);
         QueryAttempt {
             result,
-            work: work.used,
+            work: work.charged(),
             peak_bytes: work.peak,
         }
     }
@@ -361,7 +361,7 @@ impl<'source> Relation<'source> {
         EqualityAttempt {
             relation: self,
             result,
-            work: work.used,
+            work: work.charged(),
             peak_bytes: work.peak,
         }
     }
@@ -386,7 +386,7 @@ impl<'source> Relation<'source> {
             equalities: resolved,
             possible,
             bytes: work.live - self.storage.retained_bytes,
-            work: work.used,
+            work: work.charged(),
         })
     }
 
@@ -397,17 +397,7 @@ impl<'source> Relation<'source> {
         work: &mut Work,
         before: &mut impl FnMut() -> Result<(), E>,
     ) -> Result<Option<Equality>, QueryFailure<E>> {
-        let mut tick = || -> Result<(), QueryFailure<E>> {
-            let next = work.used.checked_add(1).ok_or(Failure::Overflow)?;
-            super::ceiling(
-                super::Resource::Work,
-                next,
-                u128::from(work.limits.max_work),
-            )?;
-            before().map_err(QueryFailure::Stopped)?;
-            work.used = next;
-            Ok(())
-        };
+        let mut tick = || work.tick_with(1, &mut *before);
         tick()?;
         if column >= self.predicate.arity() {
             return Err(Failure::Column.into());
@@ -452,7 +442,7 @@ impl<'source> Relation<'source> {
             relation: self,
             positions: copied,
             bytes: work.live - self.storage.retained_bytes,
-            work: work.used,
+            work: work.charged(),
         })
     }
 
@@ -514,7 +504,7 @@ impl<'source> Relation<'source> {
             relation: self,
             positions,
             bytes: work.live - self.storage.retained_bytes - mask_bytes,
-            work: work.used,
+            work: work.charged(),
         })
     }
 
@@ -536,7 +526,7 @@ impl<'source> Relation<'source> {
             relation: self,
             positions,
             bytes: work.live - self.storage.retained_bytes,
-            work: work.used,
+            work: work.charged(),
         })
     }
 
@@ -574,7 +564,7 @@ impl<'source> Relation<'source> {
             relation: self,
             positions,
             bytes: work.live - self.storage.retained_bytes - inputs,
-            work: work.used,
+            work: work.charged(),
         })
     }
 
@@ -615,7 +605,7 @@ impl<'source> Relation<'source> {
             relation: self,
             words,
             bytes: work.live - self.storage.retained_bytes - inputs,
-            work: work.used,
+            work: work.charged(),
         })
     }
 

@@ -951,6 +951,63 @@ def counting : OrderedReduction Nat where
   le_trans := fun _ _ _ => Nat.le_trans
   op_le_op := fun _ _ _ _ => Nat.add_le_add
 
+/-- Folding one for each member with natural addition gives the list's length.
+This counts occurrences, including repetitions, and the empty list contributes
+zero. Reading the result as a family's cardinality additionally requires a
+complete list without duplicate members.
+
+Proof. The empty fold is zero. Adding a head contributes one to the tail's
+count, which the induction hypothesis identifies with its length. -/
+theorem counting_fold_one (members : List α) :
+    counting.toReduction.fold (fun _ => 1) members = members.length := by
+  induction members with
+  | nil => rfl
+  | cons head rest counted =>
+    rw [counting.toReduction.fold_cons, counted]
+    show 1 + rest.length = (head :: rest).length
+    simp only [List.length_cons, Nat.add_comm]
+
+/-- Encoding every nonnegative contribution before folding gives the encoding
+of the exact natural sum. Complete enumeration, membership and distinctness
+are separate premises whenever that sum is read as a family cardinality.
+
+Proof. Both empty folds encode zero. At a head, the induction hypothesis gives
+the encoded tail and bounded addition commutes with encoding the exact sum. -/
+theorem bounded_counting_fold (limit : Nat) (value : α → Nat) (members : List α) :
+    (AxisFolds.BoundedSum.reduction limit).fold
+        (fun member => AxisFolds.BoundedSum.encode limit (value member)) members =
+      AxisFolds.BoundedSum.encode limit (counting.toReduction.fold value members) := by
+  induction members with
+  | nil => rfl
+  | cons head rest counted =>
+    rw [(AxisFolds.BoundedSum.reduction limit).fold_cons,
+      counting.toReduction.fold_cons, counted]
+    exact AxisFolds.BoundedSum.op_encode limit (value head)
+      (counting.toReduction.fold value rest)
+
+/-- A bounded count is exact list length when representable and overflow
+otherwise. Repeated members still count repeatedly; no set-cardinality or
+coverage conclusion is inferred from this value law. -/
+theorem bounded_counting_fold_one (limit : Nat) (members : List α) :
+    (AxisFolds.BoundedSum.reduction limit).fold
+        (fun _ => AxisFolds.BoundedSum.encode limit 1) members =
+      AxisFolds.BoundedSum.encode limit members.length := by
+  calc
+    (AxisFolds.BoundedSum.reduction limit).fold
+        (fun _ => AxisFolds.BoundedSum.encode limit 1) members =
+        AxisFolds.BoundedSum.encode limit (counting.toReduction.fold (fun _ => 1) members) :=
+      bounded_counting_fold limit (fun _ => 1) members
+    _ = AxisFolds.BoundedSum.encode limit members.length :=
+      congrArg (AxisFolds.BoundedSum.encode limit) (counting_fold_one members)
+
+/-- Overflow of the complete occurrence count is exactly excess list length. -/
+theorem bounded_counting_overflow_iff (limit : Nat) (members : List α) :
+    (AxisFolds.BoundedSum.reduction limit).fold
+        (fun _ => AxisFolds.BoundedSum.encode limit 1) members = none ↔
+      limit < members.length := by
+  rw [bounded_counting_fold_one]
+  exact AxisFolds.BoundedSum.encode_overflow_iff limit members.length
+
 /-- In parity an atom of odd coefficient is forced, under literals giving every
 other atom of an equation its value in σ, to the constant plus the others'
 parity in σ. -/

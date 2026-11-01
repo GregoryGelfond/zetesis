@@ -2011,6 +2011,7 @@ dependencies = [
  "themelios-base",
  "themelios-program",
  "themelios-syntax",
+ "zetesis-algebra",
 ]
 
 [[package]]
@@ -2064,6 +2065,7 @@ dependencies = [
  "sha2",
  "syn 2.0.119",
  "tempfile",
+ "zetesis-algebra",
  "zetesis-backend",
  "zetesis-test-support",
  "zetesis-validation",
@@ -2197,6 +2199,7 @@ dependencies = [
  "tempfile",
  "themelios-program",
  "themelios-syntax",
+ "zetesis-algebra",
  "zetesis-backend",
  "zetesis-clingo-support",
  "zetesis-core",

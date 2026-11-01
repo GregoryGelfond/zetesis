@@ -528,22 +528,36 @@ fn check_work(
     limits: &FormulaLimits,
     location: ProgramSite,
 ) -> Result<(), FormulaFailure> {
-    let observed = u128::from(work).saturating_add(amount);
-    let refused = observed > u128::from(limits.max_work);
+    let admission = zetesis_algebra::Meter::check_receipt(work, amount, limits.max_work);
     if let Some(control) = control {
-        let observation = if refused {
+        let observation = if admission.is_err() {
             control.observe()
         } else {
             control.observe_charge(work, u64::try_from(amount).expect("admitted work fits u64"))
         };
         observation.map_err(|reason| interrupted(reason, location))?;
     }
-    ceiling(
-        FormulaResource::Work,
+    admission
+        .map(|_| ())
+        .map_err(|error| work_failure(error, limits.max_work, location))
+}
+
+/// Preserve the source account's saturated attempted-demand diagnostic.
+fn work_failure(
+    error: zetesis_algebra::MeterWorkError,
+    limit: u64,
+    location: ProgramSite,
+) -> FormulaFailure {
+    let (observed, limit) = match error {
+        zetesis_algebra::MeterWorkError::Limit { observed, limit } => (observed, limit),
+        zetesis_algebra::MeterWorkError::Overflow => (u128::MAX, u128::from(limit)),
+    };
+    FormulaFailure::Limit {
+        resource: FormulaResource::Work,
         observed,
-        u128::from(limits.max_work),
+        limit,
         location,
-    )
+    }
 }
 
 /// A charge's count: record the local pending receipt, then count `amount`.

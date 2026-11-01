@@ -6,6 +6,7 @@
 
 mod cancellation;
 pub mod class;
+pub mod reduction;
 pub mod region;
 pub mod walk;
 pub mod words;
@@ -14,6 +15,7 @@ pub use class::{AnswerSetsSought, Class, Countermodels};
 
 pub use cancellation::{
     Cancellation, CancellationPoll, CancellationRun, CancellationSlot, CancellationSlotError,
-    ChargeError, Failure, LocalQuota, Meter, Metered, POLL_INTERVAL, Quota, Refusal, Stop,
-    poll_due,
+    ChargeError, Failure, LocalQuota, Meter, MeterBytes, MeterBytesError, MeterCountError,
+    MeterWideCountError, MeterWorkError, Metered, POLL_INTERVAL, PermitLease, PermitSettlement,
+    Quota, Refusal, Reservation, Stop, poll_due,
 };

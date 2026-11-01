@@ -19,7 +19,7 @@ use std::mem::size_of;
 use crate::{
     EvaluationError, EvaluationLimits, FormulaEvaluation, Interpretation, NodeView, Theory,
 };
-use zetesis_algebra::{Cancellation, Meter, Stop, words::Words};
+use zetesis_algebra::{Cancellation, Meter, MeterBytes, Stop, words::Words};
 
 #[cfg(test)]
 mod tests;
@@ -309,8 +309,12 @@ impl FrozenPositiveWorkspace {
         let mut words = Vec::new();
         reserve(&mut words, self.words.len())?;
         let simultaneous = base + words.capacity() as u128 * size_of::<u64>() as u128;
-        *peak_bytes = (*peak_bytes).max(simultaneous);
-        storage(simultaneous, max_bytes)?;
+        MeterBytes::observe_peak(simultaneous, max_bytes as u128, peak_bytes).map_err(|_| {
+            EvaluationError::Storage {
+                required: simultaneous,
+                limit: max_bytes,
+            }
+        })?;
         for &word in &self.words {
             tick(meter)?;
             words.push(word);

@@ -12,15 +12,15 @@ which state those operations may share and when that state can be released.
 
 ## Three distinct lifetimes
 
-**The logical subject** is an immutable admitted program or theory. It supplies
+**The original input** is an immutable admitted program or theory. It supplies
 the meaning of atoms, rules and formulas. Source provenance and observations
 remain associated with their admitted owner. Borrowed prepared inputs let a
 caller reuse that owner without parsing or admitting it again.
 
-**Prepared execution data** describes that subject for a particular operation:
+**Prepared execution data** describes that input for a particular operation:
 a complete ground graph, typed relation columns, an indexed formula graph or a
-certified support plan. It may retain a shared subject handle and derived
-storage. Reusing it requires the same subject, compatible capabilities and a
+certified support plan. It may retain a shared input handle and derived
+storage. Reusing it requires the same original input, compatible capabilities and a
 valid physical owner. Sharing that storage alone does not establish that a
 candidate is an answer set; a semantic certificate has its own applicability
 and membership contract.
@@ -32,7 +32,7 @@ allocation must not reuse a previous search's truth, coverage or budget.
 
 | State | What makes reuse valid | When it is no longer needed |
 | --- | --- | --- |
-| Original program or theory | Exact immutable subject identity | After its readers and checked results release it |
+| Original program or theory | Exact immutable original-input identity | After its readers and checked results release it |
 | Construction indexes and support | The construction phase's atom and formula domains | After the final consumer has produced the retained representation |
 | Relation columns and postings | Exact source, tuple dictionary and row domain | After the last query against that snapshot |
 | Prepared reduct encoding | Exact immutable original theory | After its enumeration and borrowed queries release it |

@@ -13,9 +13,9 @@
 
 use std::hash::{DefaultHasher, Hasher};
 use std::num::NonZeroUsize;
-use zetesis_algebra::words::Words;
+use zetesis_algebra::{Meter, MeterCountError, words::Words};
 
-use super::{ProjectionError, ProjectionResource, Work, bytes, ceiling};
+use super::{ProjectionError, ProjectionResource, Work, bytes};
 
 type Slot = Option<NonZeroUsize>;
 
@@ -69,15 +69,17 @@ impl History {
         if !self.slots.is_empty() && self.contains(key, hash, work)? {
             return Ok(false);
         }
-        let count = self
-            .entries
-            .checked_add(1)
-            .ok_or(ProjectionError::Overflow)?;
-        ceiling(
-            ProjectionResource::Keys,
-            count as u128,
-            work.limits.max_keys as u128,
-        )?;
+        let count =
+            Meter::check_count(self.entries, 1, work.limits.max_keys).map_err(
+                |error| match error {
+                    MeterCountError::Overflow => ProjectionError::Overflow,
+                    MeterCountError::Limit { observed, limit } => ProjectionError::Limit {
+                        resource: ProjectionResource::Keys,
+                        observed: observed as u128,
+                        limit: limit as u128,
+                    },
+                },
+            )?;
         if self.width == 0 {
             self.entries = count;
             return Ok(true);

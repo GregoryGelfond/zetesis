@@ -776,3 +776,110 @@ fn checker_failure_settlement_preserves_its_receipt() {
     );
     assert_eq!(account.work, 7);
 }
+
+#[test]
+fn preflight_does_not_publish_unperformed_work() {
+    let allowance = crate::ConstraintAllowance::new(crate::ConstraintCheckLimits::default());
+    let mut account = Accounting::with_allowance(allowance.clone());
+    let limits = FormulaLimits {
+        max_work: 7,
+        ..Default::default()
+    };
+    OBSERVATIONS.set(0);
+    run(&mut account, &Cancellation::default(), |counters| {
+        counters.check_work(7, &limits, location())?;
+        assert_eq!(counters.accounting.work, 0);
+        assert_eq!(allowance.statistics().work, 0);
+        let observed = OBSERVATIONS.get();
+        counters.count_work(3);
+        assert_eq!(counters.accounting.work, 3);
+        assert_eq!(allowance.statistics().work, 0);
+        assert_eq!(OBSERVATIONS.get(), observed);
+        Ok::<_, FormulaFailure>(())
+    })
+    .unwrap();
+    assert_eq!(account.work, 3);
+    assert_eq!(allowance.statistics().work, 3);
+    assert_eq!(OBSERVATIONS.get(), 3);
+}
+
+#[test]
+fn source_work_refusals_preserve_saturated_demand() {
+    let limits = FormulaLimits {
+        max_work: u64::MAX,
+        ..Default::default()
+    };
+    for absorb in [false, true] {
+        let mut account = Accounting {
+            work: 1,
+            ..Default::default()
+        };
+        let result = run(&mut account, &Cancellation::default(), |counters| {
+            if absorb {
+                counters.absorb(u128::MAX, &limits, location())
+            } else {
+                counters.charge_work(u128::MAX, &limits, location())
+            }
+        });
+        assert!(matches!(
+            result,
+            Err(FormulaFailure::Limit {
+                resource: FormulaResource::Work,
+                observed: u128::MAX,
+                limit,
+                location: site,
+            }) if limit == u128::from(u64::MAX) && site == location()
+        ));
+        assert_eq!(account.work, 1);
+    }
+}
+
+#[test]
+fn preflight_stop_precedes_saturated_work_refusal() {
+    let cancellation = Cancellation::default();
+    let mut account = Accounting {
+        work: 1,
+        ..Default::default()
+    };
+    let result = run(&mut account, &cancellation, |counters| {
+        cancellation.cancel();
+        counters.check_work(u128::MAX, &FormulaLimits::default(), location())
+    });
+    assert!(matches!(
+        result,
+        Err(FormulaFailure::Interrupted {
+            reason: Stop::Cancelled,
+            location: site,
+        }) if site == location()
+    ));
+    assert_eq!(account.work, 1);
+}
+
+#[test]
+fn refused_absorption_neither_polls_nor_publishes() {
+    let cancellation = Cancellation::default();
+    let allowance = crate::ConstraintAllowance::new(crate::ConstraintCheckLimits::default());
+    let mut account = Accounting::with_allowance(allowance.clone());
+    account.work = 1;
+    run(&mut account, &cancellation, |counters| {
+        cancellation.cancel();
+        let observed = OBSERVATIONS.get();
+        let result = counters.absorb(u128::MAX, &FormulaLimits::default(), location());
+        assert!(matches!(
+            result,
+            Err(FormulaFailure::Limit {
+                resource: FormulaResource::Work,
+                observed: u128::MAX,
+                location: site,
+                ..
+            }) if site == location()
+        ));
+        assert_eq!(OBSERVATIONS.get(), observed);
+        assert_eq!(counters.accounting.work, 1);
+        assert_eq!(allowance.statistics().work, 0);
+        result
+    })
+    .unwrap_err();
+    assert_eq!(account.work, 1);
+    assert_eq!(allowance.statistics().work, 0);
+}

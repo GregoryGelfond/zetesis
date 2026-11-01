@@ -165,12 +165,12 @@ impl<'a> PreparedInput<'a> {
     pub const fn projection(self) -> Option<&'a zetesis_themelios::PreparedProjection> {
         self.projection
     }
-    pub(crate) fn subject(self) -> Subject {
+    pub(crate) fn original(self) -> Original {
         match self.input {
-            Prepared::Source(owner) => Subject::Source(owner.clone()),
-            Prepared::Formula(input) => Subject::Theory(input.theory.clone()),
-            Prepared::Hybrid(owner) => Subject::Hybrid(owner.clone()),
-            Prepared::TerminalDefinitions(owner) => Subject::TerminalDefinitions(owner.clone()),
+            Prepared::Source(owner) => Original::Source(owner.clone()),
+            Prepared::Formula(input) => Original::Theory(input.theory.clone()),
+            Prepared::Hybrid(owner) => Original::Hybrid(owner.clone()),
+            Prepared::TerminalDefinitions(owner) => Original::TerminalDefinitions(owner.clone()),
         }
     }
     fn selection(self, requested: AnswerSelection) -> AnswerSelection {
@@ -221,11 +221,11 @@ impl<'a> PreparedInput<'a> {
     }
 }
 
-/// Immutable identity of the original semantic subject checked by a session.
+/// Immutable identity of the original semantic input checked by a session.
 /// Handles are cheap shared owners. Equality of printed atoms is not identity;
 /// use the contained program/theory's `same_instance` method.
 #[derive(Clone, Debug)]
-pub enum Subject {
+pub enum Original {
     /// Original source with a complete dependency-order certificate. No formula
     /// theory is substituted for the source or its arbitrary reduct queries.
     Source(zetesis_themelios::AcyclicSource),
@@ -234,10 +234,10 @@ pub enum Subject {
     /// Original producer core together with its admitted source constraints.
     Hybrid(zetesis_themelios::HybridFormula),
     /// Original source with a checked base/terminal-definition correspondence.
-    /// The contained base theory alone is not this semantic subject.
+    /// The contained base theory alone is not this semantic input.
     TerminalDefinitions(zetesis_themelios::TerminalFormula),
 }
-impl Subject {
+impl Original {
     /// Whether both handles retain the same original immutable semantic instance.
     /// Structural equality of independently admitted programs is insufficient.
     #[must_use]
@@ -255,31 +255,31 @@ impl Subject {
 }
 
 /// A full stable interpretation produced by the session's membership engine.
-/// Private construction preserves its subject association after detachment.
+/// Private construction preserves its association with the original input after detachment.
 /// This is semantic evidence, independently of display selection or publication.
 /// It records completed membership under the selected implementation, not a Lean
-/// proof or enumeration coverage. Cloning shares the subject, atom catalog and
+/// proof or enumeration coverage. Cloning shares the original input, atom catalog and
 /// selected interpretation; the optional score's cost vector is cloned. Retained
 /// interpretations keep the entire shared catalog alive, including unselected atoms.
 ///
 /// ```compile_fail
-/// use zetesis_solve::{AnswerSet, Subject};
+/// use zetesis_solve::{AnswerSet, Original};
 /// use zetesis_core::Model;
-/// fn forge(subject: Subject, interpretation: Model) -> AnswerSet {
-///     AnswerSet { subject, interpretation, score: None }
+/// fn forge(original: Original, interpretation: Model) -> AnswerSet {
+///     AnswerSet { original, interpretation, score: None }
 /// }
 /// ```
 #[derive(Clone, Debug)]
 pub struct AnswerSet {
-    subject: Subject,
+    original: Original,
     interpretation: Model,
     score: Option<Score>,
 }
 impl AnswerSet {
-    /// Original immutable subject used by the membership engine.
+    /// Original immutable input used by the membership engine.
     #[must_use]
-    pub const fn subject(&self) -> &Subject {
-        &self.subject
+    pub const fn original(&self) -> &Original {
+        &self.original
     }
     /// Complete interpretation, including atoms hidden by source observations.
     #[must_use]
@@ -293,7 +293,7 @@ impl AnswerSet {
     pub const fn score(&self) -> Option<&Score> {
         self.score.as_ref()
     }
-    /// Discard the subject association explicitly for raw-model interoperability.
+    /// Discard the association with the original input explicitly for raw-model interoperability.
     #[must_use]
     pub fn into_interpretation(self) -> Model {
         self.interpretation
@@ -405,7 +405,7 @@ impl<'a> SessionBuilder<'a> {
     /// # Errors
     /// Preserves [`WorldView::collect`]'s typed setup, execution, incomplete
     /// coverage and storage failures, including the checked prefix and original
-    /// subject. Supplied device failures retain their ordinary session boundary.
+    /// input. Supplied device failures retain their ordinary session boundary.
     pub fn collect(self, limits: WorldViewLimits) -> Result<WorldView, WorldViewFailure> {
         WorldView::collect_request(self, limits, &mut Ignore)
     }
@@ -466,8 +466,8 @@ impl<'a> SessionBuilder<'a> {
         self.start_with(&mut Observer(observer))
     }
 
-    pub(crate) fn subject(&self) -> Subject {
-        self.input.subject()
+    pub(crate) fn original(&self) -> Original {
+        self.input.original()
     }
 
     pub(crate) fn start_with(
@@ -505,7 +505,7 @@ impl<'a> SessionBuilder<'a> {
             .transpose()
             .map_err(|error| {
                 let mut failure = SolveFailure::from(SolveError::Projection(error));
-                failure.subject = Some(self.input.subject());
+                failure.original = Some(self.input.original());
                 failure.phase_timings = phases.snapshot().map(Box::new);
                 failure
             })?;
@@ -527,14 +527,14 @@ impl<'a> SessionBuilder<'a> {
                 config,
                 cancellation: self.cancellation,
                 phases,
-                subject: self.input.subject(),
+                original: self.input.original(),
                 projection,
                 projected_limit,
                 projection_done: false,
             }),
             Err(error) => {
                 let mut failure = SolveFailure::from(error);
-                failure.subject = Some(self.input.subject());
+                failure.original = Some(self.input.original());
                 failure.phase_timings = phases.snapshot().map(Box::new);
                 Err(failure)
             }
@@ -582,7 +582,7 @@ pub struct Session<'a> {
     config: SolveConfig,
     cancellation: Cancellation,
     phases: crate::SolveMeasurements,
-    subject: Subject,
+    original: Original,
     projection: Option<crate::projection::Projection<'a>>,
     projected_limit: usize,
     projection_done: bool,
@@ -659,7 +659,7 @@ impl<'a> Session<'a> {
     /// session the observer may also serve. No event queue is retained.
     ///
     /// # Errors
-    /// Execution-setup failures return immediately, retaining the known subject.
+    /// Execution-setup failures return immediately, retaining the known original input.
     /// Formula initialization owns its terminal failure: an observer failure at
     /// formula, certificate or objective setup stops further initialization and
     /// is returned by the first pull. No later callback runs for that failure.
@@ -709,7 +709,7 @@ impl<'a> Session<'a> {
             return Ok((
                 State::Stopped(Box::new(SemanticOutcome {
                     projection: None,
-                    subject: Some(input.subject()),
+                    original: Some(input.original()),
                     selection: Some(selection),
                     verified: 0,
                     scored: 0,
@@ -745,7 +745,7 @@ impl<'a> Session<'a> {
             Prepared::Hybrid(owner) => State::Hybrid(Box::new(HybridSession::observed(
                 crate::hybrid_session::HybridInput {
                     core: owner.core(),
-                    subject: crate::Subject::Hybrid(owner.clone()),
+                    original: crate::Original::Hybrid(owner.clone()),
                 },
                 &config,
                 resources,
@@ -899,7 +899,7 @@ impl<'a> Session<'a> {
                         Err(error) => {
                             self.projection_done = true;
                             let mut failure = SolveFailure::from(SolveError::Projection(error));
-                            failure.subject = Some(self.subject.clone());
+                            failure.original = Some(self.original.clone());
                             failure.semantic = Some(Box::new(self.progress()));
                             failure.phase_timings = self.phase_timings().map(Box::new);
                             return Some(Err(failure));
@@ -956,7 +956,7 @@ impl<'a> Session<'a> {
         drop(solving);
         next.map(|result| match result {
             Ok((interpretation, score)) => Ok(AnswerSet {
-                subject: self.subject.clone(),
+                original: self.original.clone(),
                 interpretation,
                 score,
             }),

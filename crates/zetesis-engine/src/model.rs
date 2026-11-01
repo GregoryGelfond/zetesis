@@ -14,7 +14,7 @@ use themelios_solve::{
     contract::Fault,
     outcome::{Conclusion, Model},
 };
-use zetesis_algebra::{Cancellation, Stop};
+use zetesis_algebra::{Cancellation, Meter, Stop};
 use zetesis_themelios::{SourceMetadata, observation, symbols};
 
 use crate::faults;
@@ -84,24 +84,21 @@ impl Exporter {
         cancellation.poll().map_err(OutputError::Control)?;
         let native = answer.interpretation();
         let count = native.atoms().len();
-        if count > self.limits.max_atoms {
-            return Err(OutputError::Atoms {
-                observed: count,
-                limit: self.limits.max_atoms,
-            });
-        }
+        Meter::check_count(count, 0, self.limits.max_atoms).map_err(|_| OutputError::Atoms {
+            observed: count,
+            limit: self.limits.max_atoms,
+        })?;
         let mut atoms = AnswerSet::new();
         for atom in native.atoms() {
             let symbol = symbols::atom_with(atom, self.limits.max_atom_bytes, || {
                 cancellation.poll().map_err(SymbolStop::Control)?;
                 self.work += 1;
-                if self.work > u128::from(self.limits.max_symbol_work) {
-                    return Err(SymbolStop::Work {
+                Meter::check_wide_receipt(self.work, 0, u128::from(self.limits.max_symbol_work))
+                    .map(|_| ())
+                    .map_err(|_| SymbolStop::Work {
                         observed: self.work,
                         limit: self.limits.max_symbol_work,
-                    });
-                }
-                Ok(())
+                    })
             })
             .map_err(OutputError::Symbol)?;
             atoms.insert(symbol);

@@ -79,6 +79,7 @@ use std::sync::{Arc, Mutex, PoisonError, RwLock};
 use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
 
+use zetesis_algebra::Meter;
 use zetesis_algebra::region::Region;
 use zetesis_algebra::walk::{self, Counting};
 use zetesis_ferraris::{
@@ -1999,28 +2000,31 @@ fn leaf<'a>(
                 .checking_work_bound()?
                 .min(shared.limits.max_verification_work);
             let reservation = budget.quota.reserve(wanted)?;
-            let allowance = reservation.allowance();
-            let mut limits = shared.limits;
-            limits.max_verification_work = allowance;
-            if allowance < wanted {
-                // Only a shortage of global work lowers the search ceiling.
-                // A complete reservation preserves a stricter verification
-                // ceiling's own error attribution.
-                limits.search.max_work = search
-                    .work
-                    .checked_add(allowance)
-                    .ok_or(Incomplete::CounterOverflow)?;
-            }
-            let verdict = certified::classify(
-                certificate,
-                workspace,
-                &candidate,
-                limits,
-                budget.cancellation,
-                &mut report.statistics,
-                &mut search,
-            );
-            reservation.finish(search.work - budget.statistics.work)?;
+            let (verdict, _used) = Meter::under_reservation(reservation, |allowance| {
+                let mut limits = shared.limits;
+                limits.max_verification_work = allowance;
+                if allowance < wanted {
+                    // Only a shortage of global work lowers the search ceiling.
+                    // A complete reservation preserves a stricter verification
+                    // ceiling's own error attribution.
+                    limits.search.max_work = search
+                        .work
+                        .checked_add(allowance)
+                        .ok_or(Incomplete::CounterOverflow)?;
+                }
+                let verdict = certified::classify(
+                    certificate,
+                    workspace,
+                    &candidate,
+                    limits,
+                    budget.cancellation,
+                    &mut report.statistics,
+                    &mut search,
+                );
+                let used = search.work - budget.statistics.work;
+                Ok::<_, Incomplete>((verdict, used))
+            })
+            .map_err(crate::budget::reservation_failure)?;
             budget.statistics = search;
             verdict.map(|verdict| Some(Decision::from(verdict)))
         } else {

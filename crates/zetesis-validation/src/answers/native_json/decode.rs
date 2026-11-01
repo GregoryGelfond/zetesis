@@ -159,11 +159,13 @@ fn record(
         });
     }
     let raw_atoms = values::array(&raw["full_model"], "native full model")?;
-    count.atoms = count
-        .atoms
-        .checked_add(raw_atoms.len())
-        .ok_or_else(|| invalid(Issue::CountOverflow, "native atom count"))?;
-    check(Resource::Atoms, limits.max_atoms, count.atoms)?;
+    super::record_attempt(
+        &mut count.atoms,
+        raw_atoms.len(),
+        limits.max_atoms,
+        Resource::Atoms,
+        "native atom count",
+    )?;
     let mut atoms = Vec::new();
     atoms
         .try_reserve_exact(raw_atoms.len())
@@ -177,11 +179,13 @@ fn record(
                 "native atom index is outside the document's table",
             ));
         };
-        count.nodes = count
-            .nodes
-            .checked_add(entry.value_nodes)
-            .ok_or_else(|| invalid(Issue::CountOverflow, "native value node count"))?;
-        check(Resource::ValueNodes, limits.max_value_nodes, count.nodes)?;
+        super::record_attempt(
+            &mut count.nodes,
+            entry.value_nodes,
+            limits.max_value_nodes,
+            Resource::ValueNodes,
+            "native value node count",
+        )?;
         positions.insert(index, position);
         atoms.push(entry.atom.clone());
     }
@@ -237,11 +241,13 @@ fn record(
 /// executables can still be compared.
 fn spelled_record(raw: &Json, limits: Limits, count: &mut Counts) -> Result<ModelRecord, Error> {
     let raw_atoms = values::array(&raw["full_model"], "native full model")?;
-    count.atoms = count
-        .atoms
-        .checked_add(raw_atoms.len())
-        .ok_or_else(|| invalid(Issue::CountOverflow, "native atom count"))?;
-    check(Resource::Atoms, limits.max_atoms, count.atoms)?;
+    super::record_attempt(
+        &mut count.atoms,
+        raw_atoms.len(),
+        limits.max_atoms,
+        Resource::Atoms,
+        "native atom count",
+    )?;
     let mut atoms = Vec::new();
     atoms
         .try_reserve_exact(raw_atoms.len())
@@ -343,3 +349,6 @@ fn decode_atom(atom: &Json, limits: Limits, nodes: &mut usize) -> Result<Atom, E
     }
     Atom::new(predicate, arguments).map_err(Error::Atom)
 }
+
+#[cfg(test)]
+mod tests;

@@ -7,7 +7,8 @@ use crate::support::sessions::config;
 use zetesis_algebra::Cancellation;
 use zetesis_solve::{
     AnswerSelection, Backend, Completion, ExecutionObservation, ExecutionObserver,
-    ExecutionResources, GpuApi, Grounder, PreparedInput, Session, SolveConfig, SolveError, Subject,
+    ExecutionResources, GpuApi, Grounder, Original, PreparedInput, Session, SolveConfig,
+    SolveError,
 };
 use zetesis_themelios::AdmittedFormula;
 
@@ -34,8 +35,8 @@ fn all_selection_preserves_nonoptimal_answers() {
             let answer = answer.unwrap();
             assert!(
                 answer
-                    .subject()
-                    .same_instance(&Subject::Theory(owner.theory().clone()))
+                    .original()
+                    .same_instance(&Original::Theory(owner.theory().clone()))
             );
             let atoms: Vec<_> = answer
                 .interpretation()
@@ -132,9 +133,9 @@ fn invalid_request_retains_its_original_subject() {
     assert!(failure.semantic().is_none());
     assert!(
         failure
-            .subject()
+            .original()
             .unwrap()
-            .same_instance(&Subject::Theory(owner.theory().clone()))
+            .same_instance(&Original::Theory(owner.theory().clone()))
     );
 }
 
@@ -176,8 +177,8 @@ fn observed_start_preserves_the_external_failure() {
     assert!(failure.semantic().is_none());
     assert!(
         failure
-            .subject()
+            .original()
             .unwrap()
-            .same_instance(&Subject::Theory(owner.theory().clone()))
+            .same_instance(&Original::Theory(owner.theory().clone()))
     );
 }

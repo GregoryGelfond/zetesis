@@ -8,6 +8,8 @@ pub(crate) use quota::{LocalQuota, Quota};
 pub(crate) use shared_budget::{SharedBudget, WorkLease};
 
 use crate::{Cancellation, Incomplete};
+use zetesis_algebra::reduction::{CheckedSum, Reduction as _};
+use zetesis_algebra::{Failure, Meter, Reservation as _, Stop};
 
 /// Cumulative search ceilings. Zero permits no operation of that kind.
 #[derive(Clone, Copy, Debug)]
@@ -82,9 +84,15 @@ impl<Q: Quota> Budget<'_, Q> {
         run: impl FnOnce(u64) -> (T, u64),
     ) -> Result<T, Incomplete> {
         self.cancellation.poll()?;
-        let (result, used) =
+        let reservation =
             self.quota
-                .with_reservation(self.statistics.work, self.limits.max_work, wanted, run)?;
+                .reserve_kernel(self.statistics.work, self.limits.max_work, wanted)?;
+        if reservation.allowance() == 0 {
+            return Err(Incomplete::WorkLimit);
+        }
+        let (result, used) =
+            Meter::under_reservation(reservation, |granted| Ok::<_, Incomplete>(run(granted)))
+                .map_err(reservation_failure)?;
         self.statistics.work = self
             .statistics
             .work
@@ -111,17 +119,25 @@ impl<Q: Quota> Budget<'_, Q> {
         self.cancellation.poll()?;
         self.quota
             .charge(self.statistics.work, self.limits.max_work, work)?;
-        self.statistics.work = self
-            .statistics
-            .work
-            .checked_add(work)
-            .ok_or(Incomplete::CounterOverflow)?;
-        Ok(())
+        Meter::charge_receipt(&mut self.statistics.work, u128::from(work), u64::MAX)
+            .map_err(|_| Incomplete::CounterOverflow)
+    }
+}
+
+/// Preserve callback errors and the existing invalid-receipt classification
+/// at the whole-kernel boundary, without another control observation.
+pub(crate) fn reservation_failure(error: Failure<Incomplete>) -> Incomplete {
+    match error {
+        Failure::Refused(error) => error,
+        Failure::Stopped(Stop::InvalidProgram) => Incomplete::InvalidWitness,
+        Failure::Stopped(other) => Incomplete::Verification(other),
     }
 }
 
 pub(crate) fn increment(counter: &mut u64) -> Result<(), Incomplete> {
-    *counter = counter.checked_add(1).ok_or(Incomplete::CounterOverflow)?;
+    *counter = CheckedSum
+        .combine(Some(*counter), Some(1))
+        .ok_or(Incomplete::CounterOverflow)?;
     Ok(())
 }
 
@@ -132,3 +148,6 @@ pub(crate) fn storage<T>(count: usize) -> Result<Vec<T>, Incomplete> {
         .map_err(|_| Incomplete::Allocation)?;
     Ok(result)
 }
+
+#[cfg(test)]
+mod tests;

@@ -51,7 +51,7 @@ fn distinct_keys_retain_full_membership() {
                 .iter()
                 .any(|original| original.interpretation() == answer.interpretation())
         );
-        assert!(answer.subject().same_instance(full.subject()));
+        assert!(answer.original().same_instance(full.original()));
         let key: Vec<_> = owner
             .projection()
             .atoms()
@@ -312,7 +312,7 @@ fn cancellation_keeps_the_delivered_projected_prefix() {
     let outcome = session.outcome().unwrap();
     assert!(!outcome.projection().unwrap().complete);
     assert_eq!(outcome.projection().unwrap().representatives, 1);
-    assert!(first.subject().same_instance(outcome.subject().unwrap()));
+    assert!(first.original().same_instance(outcome.original().unwrap()));
     assert!(!outcome.unsatisfiable());
 }
 

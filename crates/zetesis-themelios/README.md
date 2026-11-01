@@ -49,7 +49,7 @@ The typed door shares the supplied `Arc` rather than cloning the entire input.
 That retention has a memory cost: it is separate from named support-storage
 ceilings and is not an RSS limit. `ProgramSite` keeps a statement ID and optional
 real location; the ID refers to `original_program()` even for constructed input.
-Typed formula failures retain the same original owner, and `subject()` resolves
+Typed formula failures retain the same original owner, and `original()` resolves
 the offending statement or part. Source and parser checks still run on authored
 text before canonicalization. Formula owners expose source bytes through an
 optional `source()`; logical input returns `None`, even when its provenance has

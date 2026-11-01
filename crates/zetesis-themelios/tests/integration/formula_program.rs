@@ -19,8 +19,8 @@ use zetesis_themelios::logical::{
 use zetesis_themelios::{
     AdmissionOptions, AdmittedFormula, ConstraintCheckCause, ConstraintCheckLimits,
     ConstraintVerdict, ExpansionFailure, ExpansionLimits, FormulaFailure, FormulaLimits,
-    FormulaMaterialization, ParsedSource, PreparedFormula, ProgramAdmissionOptions, ProgramSubject,
-    ReconstructionError, prepare_program_formula,
+    FormulaMaterialization, ParsedSource, PreparedFormula, ProgramAdmissionOptions,
+    ProgramOriginal, ReconstructionError, prepare_program_formula,
 };
 
 const SOURCE: &str = include_str!("../fixtures/formula-program.lp");
@@ -270,7 +270,7 @@ fn late_constructed_refusal_retains_the_original_statement() {
         ));
         assert!(failure.site().unwrap().location().is_none());
         assert!(failure.diagnostics().is_empty());
-        let ProgramSubject::Statement(statement) = failure.subject().unwrap() else {
+        let ProgramOriginal::Statement(statement) = failure.original().unwrap() else {
             panic!("the failed division belongs to its original rule");
         };
         assert!(
@@ -332,7 +332,7 @@ fn constructed_hybrid_check_refusal_retains_its_statement() {
     };
     assert!(matches!(error.cause(), FormulaFailure::Limit { .. }));
     assert_retained_program(&error, &original);
-    let ProgramSubject::Statement(statement) = error.subject().unwrap() else {
+    let ProgramOriginal::Statement(statement) = error.original().unwrap() else {
         panic!("the failed check belongs to the original constraint");
     };
     assert!(

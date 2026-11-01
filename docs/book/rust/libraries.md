@@ -137,12 +137,32 @@ replace the reduct check or change the available execution backends.
 | `zetesis_cpu::regions::{Traversal, Counting, Visit, RegionStatistics}` | `zetesis_algebra::walk::{Walk, Counting, Visit, RegionStatistics}` |
 | `zetesis_core::packed` | `zetesis_algebra::words` |
 | `zetesis_cpu::table` | `zetesis_core::table` |
+| `zetesis_solve::Subject` (also re-exported by `zetesis_cli`) | `zetesis_solve::Original`, also re-exported as `zetesis_cli::Original` |
+| `zetesis_themelios::ProgramSubject` | `zetesis_themelios::ProgramOriginal` |
+| Original-input result fields and accessors named `subject` | `original` |
+
+`Original` retains the session's immutable source or theory identity.
+`ProgramOriginal` identifies the program, part or statement retained by an
+admission failure. Result owners and typed failure wrappers expose this
+evidence through `original`; `FormulaFailure::original_program()` still
+returns the whole retained program. These names do not change
+`OriginalSubject`, `FrozenSubject` or the class-indexed narrowing subjects.
 
 The scalar walk's type is `Walk`; there is no old-package forwarding crate.
 `zetesis_stable::RegionFrontierStatistics` keeps its public fields and now
-re-exports the shared frontier's statistics. The unified schedules and the
-separate Reduction/Verdict interface are subsequent changes, not effects of
-moving these owners.
+re-exports the shared frontier's statistics. The schedules use the shared
+`walk::inspect` classifier and retain their receipt and publication boundaries.
+These operations and the separate `Reduction`/`Verdict` interface are described
+below; moving their namespaces alone establishes none of their contracts.
+
+`zetesis_algebra::reduction::Reduction` combines pure values: `All` and `Any`
+combine Booleans, tuple products combine both coordinates, `CheckedSum` records
+exact nonnegative sums or overflow, and `Minimum` selects a value under its
+lawful-order contract. `Verdict` separately carries accepted absorption,
+completion, emptiness or a typed undecided result. The `reduction::sets` cursors
+refine intersection and union on finite occurrence streams; they introduce no
+set owner and leave canonical `Model` construction and its failures with the
+caller. None of these value operations proves membership, coverage or optimality.
 
 ### Candidate and countermodel knowledge
 

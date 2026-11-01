@@ -4,14 +4,14 @@ use std::{cmp::Ordering, mem::size_of};
 
 use crate::catalog::TermRef;
 
-use zetesis_algebra::{Cancellation, Stop};
+use zetesis_algebra::{Cancellation, Meter, MeterBytes, Stop};
 
 use super::{Cause, Failure, Limits, MeteredCause, MeteredFailure, Resource, Statistics};
 
 pub(super) struct Work<F> {
     limits: Limits,
     before: F,
-    used: u64,
+    meter: Meter<'static>,
     live: usize,
     peak: usize,
 }
@@ -26,7 +26,7 @@ impl<E, F: FnMut(usize) -> Result<(), E>> Work<F> {
         let mut work = Self {
             limits,
             before,
-            used: 0,
+            meter: Meter::local(limits.max_work),
             live: 0,
             peak: 0,
         };
@@ -44,14 +44,14 @@ impl<E, F: FnMut(usize) -> Result<(), E>> Work<F> {
     pub(super) fn failure(&self, cause: MeteredCause<E>) -> MeteredFailure<E> {
         MeteredFailure {
             cause,
-            work: self.used,
+            work: self.meter.charged(),
             peak_bytes: self.peak,
         }
     }
 
     pub(super) fn statistics(&self, external: usize) -> Statistics {
         Statistics {
-            work: self.used,
+            work: self.meter.charged(),
             retained_bytes: self.live - external,
             peak_bytes: self.peak,
         }
@@ -71,12 +71,27 @@ impl<E, F: FnMut(usize) -> Result<(), E>> Work<F> {
             return Ok(());
         }
         self.poll()?;
-        let next = u128::from(self.used) + amount as u128;
-        ceiling(Resource::Work, next, u128::from(self.limits.max_work))?;
-        let next = u64::try_from(next).map_err(|_| Cause::Overflow)?;
-        (self.before)(amount).map_err(MeteredCause::Stopped)?;
-        self.used = next;
-        Ok(())
+        let observed = u128::from(self.meter.charged()) + amount as u128;
+        let limit = u128::from(self.limits.max_work);
+        let refusal = || Cause::Limit {
+            resource: Resource::Work,
+            observed,
+            limit,
+        };
+        let charge = u64::try_from(amount).map_err(|_| refusal())?;
+        let before = &mut self.before;
+        // Local admission precedes the caller's permit. A refused caller group
+        // contributes no completed work, and its typed error remains intact.
+        self.meter
+            .bounded(charge, || {
+                let result = before(amount).map_err(MeteredCause::Stopped);
+                let actual = if result.is_ok() { charge } else { 0 };
+                (result, actual)
+            })
+            .map_err(|failure| match failure.into_stop() {
+                Stop::WorkLimit => refusal(),
+                stop => Cause::Interrupted(stop),
+            })?
     }
 
     fn poll(&mut self) -> Result<(), MeteredCause<E>> {
@@ -101,6 +116,16 @@ impl<E, F: FnMut(usize) -> Result<(), E>> Work<F> {
         Ok(())
     }
 
+    fn observe(&mut self, bytes: usize) -> Result<(), MeteredCause<E>> {
+        MeterBytes::observe_peak_usize(bytes, self.limits.max_bytes, &mut self.peak).map_err(|_| {
+            MeteredCause::Table(Cause::Limit {
+                resource: Resource::Bytes,
+                observed: bytes as u128,
+                limit: self.limits.max_bytes as u128,
+            })
+        })
+    }
+
     pub(super) fn reserve<T>(&mut self, count: usize) -> Result<Vec<T>, MeteredCause<E>> {
         self.poll()?;
         let proposed = bytes::<T>(count)?
@@ -114,8 +139,7 @@ impl<E, F: FnMut(usize) -> Result<(), E>> Work<F> {
         let actual = bytes::<T>(values.capacity())?
             .checked_add(self.live)
             .ok_or(Cause::Overflow)?;
-        self.peak = self.peak.max(actual);
-        self.admit(actual)?;
+        self.observe(actual)?;
         self.live = actual;
         Ok(values)
     }
@@ -155,8 +179,7 @@ impl<E, F: FnMut(usize) -> Result<(), E>> Work<F> {
             .map_err(|_| Cause::Allocation)?;
         let actual = bytes::<T>(values.capacity())?;
         let simultaneous = self.live.checked_add(actual).ok_or(Cause::Overflow)?;
-        self.peak = self.peak.max(simultaneous);
-        self.admit(simultaneous)?;
+        self.observe(simultaneous)?;
         self.live = self.live - old + actual;
         Ok(())
     }
@@ -376,5 +399,122 @@ mod tests {
             assert_eq!(work.failure(cause).work, 3);
         }
         assert_eq!(requested, [3, 4]);
+    }
+
+    #[test]
+    fn wide_work_refusal_preserves_callback_order_and_prefix() {
+        let requests = std::cell::RefCell::new(Vec::new());
+        let stopped = std::cell::Cell::new(false);
+        let limit = u64::try_from(usize::MAX).unwrap_or(u64::MAX);
+        let mut work = Work::new(
+            Limits {
+                max_work: limit,
+                ..Limits::default()
+            },
+            |amount| {
+                requests.borrow_mut().push(amount);
+                if stopped.get() {
+                    Err("caller stop")
+                } else {
+                    Ok(())
+                }
+            },
+            0,
+            0,
+        )
+        .unwrap();
+        let amount = usize::try_from(limit).unwrap();
+        work.tick(amount).unwrap();
+        assert_eq!(*requests.borrow(), [0, 0, amount]);
+        assert_eq!(work.statistics(0).work, limit);
+        stopped.set(true);
+        work.tick(0).unwrap();
+        assert_eq!(*requests.borrow(), [0, 0, amount]);
+        let cause = work.tick(1).unwrap_err();
+        assert_eq!(cause, MeteredCause::Stopped("caller stop"));
+        assert_eq!(work.failure(cause).work, limit);
+        stopped.set(false);
+        let cause = work.tick(1).unwrap_err();
+        assert_eq!(
+            cause,
+            MeteredCause::Table(Cause::Limit {
+                resource: Resource::Work,
+                observed: u128::from(limit) + 1,
+                limit: u128::from(limit),
+            })
+        );
+        assert_eq!(work.failure(cause).work, limit);
+        assert_eq!(*requests.borrow(), [0, 0, amount, 0, 0]);
+        assert_eq!(work.statistics(0).peak_bytes, 0);
+    }
+
+    #[test]
+    fn a_panicking_caller_does_not_commit_its_group() {
+        let mut work = Work::new(
+            Limits::default(),
+            |amount| {
+                assert_ne!(amount, 4, "caller panic");
+                Ok::<_, ()>(())
+            },
+            0,
+            0,
+        )
+        .unwrap();
+        work.tick(3).unwrap();
+        let panic = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| work.tick(4)));
+        assert!(panic.is_err());
+        assert_eq!(work.statistics(0).work, 3);
+        assert_eq!(work.statistics(0).peak_bytes, 0);
+    }
+
+    #[test]
+    fn a_requested_capacity_refusal_preserves_the_peak() {
+        let mut work = Work::new(
+            Limits {
+                max_bytes: 10,
+                ..Limits::default()
+            },
+            |_| Ok::<_, ()>(()),
+            7,
+            0,
+        )
+        .unwrap();
+        let cause = work.reserve::<u8>(4).unwrap_err();
+        assert_eq!(
+            cause,
+            MeteredCause::Table(Cause::Limit {
+                resource: Resource::Bytes,
+                observed: 11,
+                limit: 10,
+            })
+        );
+        assert_eq!((work.live, work.peak, work.meter.charged()), (7, 7, 0));
+    }
+
+    #[test]
+    fn an_observed_capacity_refusal_keeps_live_uncommitted() {
+        let mut work = Work::new(
+            Limits {
+                max_bytes: 10,
+                ..Limits::default()
+            },
+            |_| Ok::<_, ()>(()),
+            7,
+            0,
+        )
+        .unwrap();
+        // Exercise the actual-capacity publication boundary without requiring
+        // an allocator to return a particular amount of excess capacity.
+        let cause = work.observe(11).unwrap_err();
+        assert_eq!(
+            cause,
+            MeteredCause::Table(Cause::Limit {
+                resource: Resource::Bytes,
+                observed: 11,
+                limit: 10,
+            })
+        );
+        let failure = work.failure(cause);
+        assert_eq!((work.live, failure.peak_bytes, failure.work), (7, 11, 0));
     }
 }

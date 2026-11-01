@@ -38,6 +38,11 @@ struct CancelAfterFirstGrant<'c, Q> {
 }
 
 impl<Q: Quota> Quota for CancelAfterFirstGrant<'_, Q> {
+    type Reservation<'call>
+        = Q::Reservation<'call>
+    where
+        Self: 'call;
+
     fn work(&self, spent: u64, ceiling: u64) -> Result<(), Incomplete> {
         self.inner.work(spent, ceiling)
     }
@@ -54,22 +59,19 @@ impl<Q: Quota> Quota for CancelAfterFirstGrant<'_, Q> {
         }
         Ok(granted)
     }
-    fn with_reservation<T>(
+    fn reserve_kernel(
         &mut self,
         spent: u64,
         ceiling: u64,
         wanted: u64,
-        run: impl FnOnce(u64) -> (T, u64),
-    ) -> Result<(T, u64), Incomplete> {
-        let cancellation = self.cancellation;
-        let first = &self.granted;
-        self.inner
-            .with_reservation(spent, ceiling, wanted, |granted| {
-                if !first.replace(true) {
-                    cancellation.cancel();
-                }
-                run(granted)
-            })
+    ) -> Result<Self::Reservation<'_>, Incomplete> {
+        let reservation = self.inner.reserve_kernel(spent, ceiling, wanted)?;
+        // Budget enters the kernel only for a nonzero whole-kernel grant.
+        if zetesis_algebra::Reservation::allowance(&reservation) != 0 && !self.granted.replace(true)
+        {
+            self.cancellation.cancel();
+        }
+        Ok(reservation)
     }
     fn refund(&self, unspent: u64) {
         self.inner.refund(unspent);
