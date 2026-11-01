@@ -72,11 +72,7 @@ fn cold_arithmetic_scratch_work(theory: &Theory) -> u64 {
     let mut parity = parity_system.knowledge();
     let mut retained = NarrowingScratch::default();
     inspect(&mut region, &mut parity, &mut retained);
-    let warm = inspect(
-        &mut region.clone(),
-        &mut parity.clone(),
-        &mut retained,
-    );
+    let warm = inspect(&mut region.clone(), &mut parity.clone(), &mut retained);
     let cold = inspect(&mut region, &mut parity, &mut NarrowingScratch::default());
     let difference = cold.checked_sub(warm).expect("cold scratch does not reuse");
     assert!(
