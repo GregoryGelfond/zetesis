@@ -155,6 +155,11 @@ pub struct RunOptions {
         conflicts_with_all = ["suite", "cases", "examples", "include_einstein", "without_clingo"]
     )]
     pub workloads: Option<PathBuf>,
+    /// Capture mergeable GPU residual samples for a named fixture family.
+    /// Select its members explicitly with --case or --workloads. Each
+    /// requested GPU profile has its own pool; this campaign is untimed.
+    #[arg(long, value_name = "COHORT", conflicts_with_all = ["warmups", "repetitions", "memory_runs"])]
+    pub residual_evidence: Option<String>,
     /// Authored examples root for --suite scalability; defaults to examples.
     #[arg(long)]
     pub examples: Option<PathBuf>,
@@ -384,14 +389,24 @@ impl RunOptions {
                 }
             }
         }
-        let plan = matrix::Plan::new(
-            self.suite.into(),
-            profiles,
-            self.clingo_threads,
-            self.warmups,
-            self.repetitions,
-        )?
-        .with_memory(self.memory_runs)?;
+        let plan = if let Some(cohort) = &self.residual_evidence {
+            if self.cases.is_empty() && self.workloads.is_none() {
+                return Err(performance::Error::Configuration(
+                    "--residual-evidence requires explicit --case or --workloads family members",
+                ));
+            }
+            matrix::Plan::qualification(self.suite.into(), profiles, self.clingo_threads)?
+                .with_residual_evidence(cohort.clone())?
+        } else {
+            matrix::Plan::new(
+                self.suite.into(),
+                profiles,
+                self.clingo_threads,
+                self.warmups,
+                self.repetitions,
+            )?
+            .with_memory(self.memory_runs)?
+        };
         if self.cases.is_empty() {
             Ok(plan)
         } else {

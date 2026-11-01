@@ -755,7 +755,10 @@ pub fn publish_prepared(
     let mut result = crate::publication::solve(
         input,
         config,
-        &crate::ExecutionResources::default(),
+        crate::publication::RunResources {
+            execution: &crate::ExecutionResources::default(),
+            evidence_request: None,
+        },
         renderer,
         &mut diagnostics,
         cancellation,

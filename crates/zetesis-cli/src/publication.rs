@@ -1,6 +1,9 @@
 //! Presentation consumes the public semantic session and its checked answers.
 
 use std::io::Write;
+use std::path::Path;
+
+mod residual_evidence;
 
 use zetesis_algebra::Cancellation;
 use zetesis_themelios::{OutputSelection, observation::ObservationProgram};
@@ -15,6 +18,13 @@ use crate::{
     PublicationView, Session, SummaryDelivery, SummaryStage,
 };
 
+/// Execution resources and optional qualification request for a single publication.
+#[derive(Clone, Copy)]
+pub(crate) struct RunResources<'a> {
+    pub(crate) execution: &'a crate::ExecutionResources,
+    pub(crate) evidence_request: Option<&'a Path>,
+}
+
 /// Run `input`'s session under `config` and publish its answers. The
 /// session uses `resources`, which the command line fills with an adapter
 /// enumeration begun before reading; every library entry point passes the
@@ -22,7 +32,7 @@ use crate::{
 pub(crate) fn solve(
     input: PreparedInput<'_>,
     config: &PublicationConfig,
-    resources: &zetesis_solve::ExecutionResources,
+    resources: RunResources<'_>,
     renderer: &mut impl AnswerRenderer,
     diagnostics: &mut Diagnostics<impl Write>,
     cancellation: &Cancellation,
@@ -41,7 +51,7 @@ pub(crate) fn solve(
         cancellation,
     );
     let mut request = Session::builder(input, config.solve, cancellation.clone())
-        .resources(resources)
+        .resources(resources.execution)
         .measurements(phases);
     if config.mode == PublicationMode::Count {
         request = request.counting();
@@ -63,6 +73,9 @@ pub(crate) fn solve(
         phases,
     ))?;
     let mut progress = Progress::new();
+    let mut evidence = resources
+        .evidence_request
+        .and_then(|path| residual_evidence::Publication::open(path, &mut session).ok());
     loop {
         let next = session.next_observed(&mut Observer::new(
             renderer,
@@ -71,6 +84,15 @@ pub(crate) fn solve(
             phases,
         ));
         progress.apply(session.progress());
+        if evidence.is_some()
+            && let Some(receipt) = session.finish_residual_evidence()
+            && let Some(publication) = evidence.take()
+            && receipt.is_ok()
+        {
+            // Artifact failure is a separate benchmark outcome. The primary
+            // answer stream and its exit classification remain authoritative.
+            let _ = publication.publish();
+        }
         match next {
             Some(Ok(_)) if config.mode == PublicationMode::Count => {}
             Some(Ok(answer)) => {

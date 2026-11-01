@@ -65,6 +65,14 @@ impl<'a> TerminalSession<'a> {
         }
     }
 
+    #[cfg(feature = "gpu")]
+    pub(crate) fn formula_core_mut(&mut self) -> &mut FormulaSession<'a, Execution> {
+        match &mut self.base {
+            BaseSession::Eager(core) => core,
+            BaseSession::Hybrid(hybrid) => hybrid.formula_core_mut(),
+        }
+    }
+
     pub(crate) fn new(
         owner: &'a TerminalFormula,
         config: &SolveConfig,

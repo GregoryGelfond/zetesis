@@ -31,12 +31,12 @@ impl Schedule<'_> {
     }
 }
 
-pub(super) fn campaign(
+/// Admit the finite schedule before loading sources or launching any child.
+fn admit_schedule<'a>(
     request: &Request<'_>,
     workloads: Option<&[Workload]>,
-    invocation: NativeInvocation,
-    cancelled: &AtomicBool,
-) -> Result<Report, Error> {
+    cancelled: &'a AtomicBool,
+) -> Result<Schedule<'a>, Error> {
     if !cfg!(any(target_os = "linux", target_os = "macos")) {
         return Err(Error::Configuration(
             "bounded process capture requires Linux or macOS",
@@ -47,8 +47,6 @@ pub(super) fn campaign(
         .ok_or(Error::Configuration(
             "campaign deadline is not representable",
         ))?;
-    let started =
-        capture::unix_ns().ok_or(Error::Configuration("UTC metadata precedes Unix epoch"))?;
     if request.plan.memory_runs() > 0 && !request.helper.is_some_and(Path::is_absolute) {
         return Err(Error::Configuration(
             "memory rounds require an absolute helper executable",
@@ -61,6 +59,29 @@ pub(super) fn campaign(
             "a case selection applies to suite cases, not to explicit workloads",
         ));
     }
+    if request.plan.residual_cohort.is_some()
+        && workloads.is_none()
+        && request.plan.selection().is_none()
+    {
+        return Err(Error::Configuration(
+            "residual evidence requires explicit cohort members",
+        ));
+    }
+    Ok(Schedule {
+        deadline,
+        cancelled,
+    })
+}
+
+pub(super) fn campaign(
+    request: &Request<'_>,
+    workloads: Option<&[Workload]>,
+    invocation: NativeInvocation,
+    cancelled: &AtomicBool,
+) -> Result<Report, Error> {
+    let schedule = admit_schedule(request, workloads, cancelled)?;
+    let started =
+        capture::unix_ns().ok_or(Error::Configuration("UTC metadata precedes Unix epoch"))?;
     let corpus = examples::load(request.corpus, request.limits.corpus).map_err(Error::Corpus)?;
     let cases = prepare(&corpus, request, workloads)?;
     let sources: BTreeSet<_> = cases
@@ -77,7 +98,9 @@ pub(super) fn campaign(
         .map_err(|e| super::super::io(Path::new("private matrix sources"), e))?;
     let mut report = Report {
         schema: if workloads.is_some() { 2 } else { 1 },
-        protocol: if workloads.is_some() {
+        protocol: if request.plan.residual_cohort.is_some() {
+            "gpu_residual_evidence_qualification_v1"
+        } else if workloads.is_some() {
             "instrumented_derived_workload_matrix_v2"
         } else {
             "instrumented_explicit_profile_matrix_v1"
@@ -98,7 +121,11 @@ pub(super) fn campaign(
         workloads: workloads.map(<[Workload]>::to_vec),
         started_unix_ns: started,
         finished_unix_ns: None,
-        wall_scope: wall_scope(request.reference.is_some()),
+        wall_scope: if request.plan.residual_cohort.is_some() {
+            "supplementary qualification including optional sample export; no timing population"
+        } else {
+            wall_scope(request.reference.is_some())
+        },
         comparison_scope: comparison_scope(request.reference.is_some()),
         peak_rss: if request.plan.memory_runs() > 0 {
             "memory_rounds: separate_fresh_helper_RUSAGE_CHILDREN; excludes_helper; may_include_usage_propagated_by_waited_descendants; not_simultaneous_tree_RSS_or_device_memory; macOS_bytes_Linux_KiB_converted_to_bytes"
@@ -113,6 +140,9 @@ pub(super) fn campaign(
         metadata: Vec::new(),
         samples: Vec::new(),
         total_capture_bytes: 0,
+        residual_evidence: request.plan.residual_cohort.as_ref().map(|name| {
+            super::ResidualEvidence::new(name.clone(), cases.len(), request.plan.profiles.len())
+        }),
         faults: Vec::new(),
         unresolved_children: Vec::new(),
         destination,
@@ -124,10 +154,7 @@ pub(super) fn campaign(
                 request,
                 &cases,
                 directory.path(),
-                Schedule {
-                    deadline,
-                    cancelled,
-                },
+                schedule,
                 &mut report,
                 invocation,
             )?;
@@ -153,6 +180,17 @@ fn close(report: &mut Report, directory: tempfile::TempDir) {
     report.finished_unix_ns = capture::unix_ns();
     if report.finished_unix_ns.is_none() {
         report.faults.push(Fault::Clock);
+    }
+    if let Some(evidence) = &mut report.residual_evidence {
+        evidence.finish(
+            report.after.iter().all(crate::selected::Change::unchanged)
+                && report
+                    .executed_after
+                    .as_ref()
+                    .is_none_or(crate::selected::Change::unchanged)
+                && report.faults.is_empty()
+                && report.unresolved_children.is_empty(),
+        );
     }
 }
 
@@ -544,13 +582,14 @@ fn execute(
             continue;
         }
         let case_directory = directory.join(&selected.directory);
-        let (executable, arguments) = arguments(
+        let (executable, mut arguments) = arguments(
             request,
             &case_directory,
             selected.input.path(),
             slot.producer,
             invocation,
         );
+        let offer = super::evidence::prepare(request, report, slot, &mut arguments);
         let record = case_directory.join("child-rss.json");
         let launched = launch(
             request,
@@ -597,6 +636,7 @@ fn execute(
             blocked[cell] = Some(report.samples.len());
         }
         stopped = !report.unresolved_children.is_empty();
+        super::evidence::collect(report, &sample, offer);
         report.samples.push(sample);
     }
     Ok(())

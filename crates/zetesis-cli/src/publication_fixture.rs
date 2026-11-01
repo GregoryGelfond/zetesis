@@ -61,7 +61,10 @@ pub(crate) fn with_diagnostics(
     let result = crate::publication::solve(
         input,
         config,
-        &crate::ExecutionResources::default(),
+        crate::publication::RunResources {
+            execution: &crate::ExecutionResources::default(),
+            evidence_request: options.residual_evidence_request.as_deref(),
+        },
         &mut invocation,
         &mut diagnostics,
         cancellation,

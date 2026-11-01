@@ -53,6 +53,9 @@ pub struct CellSummary {
 /// failure details. It never serializes or decodes raw captured answer streams.
 #[derive(Debug, Serialize)]
 pub struct Summary<'a> {
+    /// Artifact dispositions and one independent pool per requested GPU profile.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub residual_evidence: Option<&'a super::ResidualEvidence>,
     /// Version of this compact view, distinct from full campaign report schemas.
     pub schema: u32,
     /// Stable machine-view identifier.
@@ -159,6 +162,7 @@ pub(super) fn summarize(report: &Report) -> Summary<'_> {
         }
     }
     Summary {
+        residual_evidence: report.residual_evidence(),
         schema: 1,
         format: "zetesis_benchmark_summary",
         passed: report.passed(),

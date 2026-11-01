@@ -130,7 +130,10 @@ impl FormulaInput {
         crate::publication::solve(
             self.prepared(),
             &crate::PublicationConfig::from(options),
-            resources,
+            crate::publication::RunResources {
+                execution: resources,
+                evidence_request: options.residual_evidence_request.as_deref(),
+            },
             renderer,
             diagnostics,
             cancellation,

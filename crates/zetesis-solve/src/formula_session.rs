@@ -893,6 +893,16 @@ impl<'a> FormulaSession<'a, crate::formula_execution::Execution> {
         }
     }
 
+    #[cfg(feature = "gpu")]
+    pub(crate) fn run_samples_mut(
+        &mut self,
+    ) -> Option<&mut crate::residual_handovers::sampling::RunSamples> {
+        match self.execution.as_mut()? {
+            crate::formula_execution::Execution::Hybrid { queue, .. } => queue.run_samples_mut(),
+            _ => None,
+        }
+    }
+
     /// Own semantic preparation before choosing its execution route. A stopped
     /// preparation retains its receipts without constructing a device pipeline.
     /// Route construction keeps the ordinary session's fallible start door.

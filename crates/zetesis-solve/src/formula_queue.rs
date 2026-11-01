@@ -128,6 +128,13 @@ impl BatchQueue {
         }
     }
 
+    #[cfg(feature = "gpu")]
+    pub(crate) fn run_samples_mut(
+        &mut self,
+    ) -> Option<&mut crate::residual_handovers::sampling::RunSamples> {
+        self.samples.as_mut()
+    }
+
     /// Materialize quantiles at most once, then release both raw reservoirs.
     #[cfg(feature = "gpu")]
     pub(crate) fn settle_samples(&mut self) {

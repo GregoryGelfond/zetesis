@@ -1016,8 +1016,21 @@ unavailable. A stopped run describes the committed prefix of that run.
 The collector aims for 65,536 worlds and 4,096 batches. Its separate byte
 allowance is one eighth of the general GPU batch allowance. Lowering memory
 can reduce either sample or omit the report. The arrays belong to the
-session. Reading a snapshot never advances the samples. Per-run medians
-cannot be averaged to recover the median across several problem instances.
+session. Reading a snapshot never advances the samples. The
+[benchmark evidence campaign](../reference/benchmarking.md#pool-gpu-residual-observations)
+can request the actual records at settlement and combine separately qualified
+instances at their original population weights.
+
+For a separately requested benchmark capture, a Rust caller can offer an
+empty, privately held file with `Session::request_residual_evidence` and
+retrieve its one-shot receipt with `Session::finish_residual_evidence` after
+settlement. The host streams the two retained populations before selecting
+terminal ranks or releasing their storage. Only a sealed artifact carries the
+slot identity, population sizes, seed and complete-family or prefix status.
+An unavailable collector, insufficient file allowance or failed write leaves
+the ordinary solver outcome available. The benchmark's child request uses a
+private directory, verifies the matching answer document, and keeps the raw
+records outside ordinary CLI output.
 
 The optional slot journal uses idle CPU completion scratch during decoding.
 Before the CPU starts, the coordinator retains the journal only when the

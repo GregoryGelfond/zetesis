@@ -372,3 +372,69 @@ fn answer_bytes_default_follows_the_answer_decoder() {
         zetesis_validation::answers::Limits::default().max_input_bytes
     );
 }
+
+#[test]
+fn residual_evidence_has_no_timing_positions() {
+    let run = options(&[
+        "--residual-evidence",
+        "two-qbf",
+        "--backend",
+        "metal",
+        "--case",
+        "example.lp",
+    ]);
+    let plan = run.plan().unwrap();
+    assert!(
+        plan.slots(2, None)
+            .unwrap()
+            .iter()
+            .all(|s| s.phase == zetesis_validation::performance::Phase::Qualification)
+    );
+    assert_eq!(plan.memory_runs(), 0);
+}
+
+#[test]
+fn residual_evidence_requires_an_explicit_gpu_cohort() {
+    for values in [
+        vec!["--residual-evidence", "two-qbf", "--backend", "metal"],
+        vec!["--residual-evidence", "two-qbf", "--case", "example.lp"],
+        vec![
+            "--residual-evidence",
+            "two/qbf",
+            "--case",
+            "example.lp",
+            "--backend",
+            "metal",
+        ],
+    ] {
+        assert!(options(&values).plan().is_err());
+    }
+}
+
+#[test]
+fn documented_two_qbf_evidence_command_selects_qualification() {
+    let run = options(&[
+        "--residual-evidence",
+        "two-qbf",
+        "--workloads",
+        "examples/scalability/two-qbf/manifest.json",
+        "--backend",
+        "metal",
+        "--grounder",
+        "eager",
+        "--oracle",
+        "countermodel",
+        "--report",
+        "two-qbf-residuals.json",
+    ]);
+    let plan = run.plan().unwrap();
+    assert!(
+        plan.slots(
+            1,
+            Some(zetesis_validation::performance::matrix::ReferencePolicy::QualificationOnly)
+        )
+        .unwrap()
+        .iter()
+        .all(|slot| slot.phase == zetesis_validation::performance::Phase::Qualification)
+    );
+}

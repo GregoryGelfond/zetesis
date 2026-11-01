@@ -211,6 +211,9 @@ struct Sampler {
 /// capacity plans. The public snapshot never owns either raw reservoir.
 pub(crate) struct RunSamples {
     state: Vec<Sampler>,
+    // Keep transport state outside the charged ordinary sampling header.
+    // Its one slot is allocated only for a separately requested export.
+    export: Vec<export::Export>,
 }
 
 fn capacities(payload: u128) -> (usize, usize) {
@@ -264,7 +267,10 @@ impl RunSamples {
             groups: Default::default(),
             settled: None,
         });
-        Some(Self { state })
+        Some(Self {
+            state,
+            export: Vec::new(),
+        })
     }
 
     pub(crate) fn commit(
@@ -295,6 +301,10 @@ impl RunSamples {
         let state = &mut self.state[0];
         if state.settled.is_some() {
             return;
+        }
+        // Preserve the reservoir order before rank selection permutes the records.
+        if let Some(offer) = self.export.first_mut() {
+            offer.write(state);
         }
         let live = state.retained_bytes();
         let mut result = state.snapshot();
@@ -523,3 +533,5 @@ fn add_time(sum: &mut Option<Duration>, query: Query) {
 
 #[cfg(test)]
 mod tests;
+
+mod export;

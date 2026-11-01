@@ -16,6 +16,8 @@ use zetesis_objective::Score;
 use zetesis_themelios::{AdmittedFormula, AdmittedFormulaBundle, SourceMetadata};
 
 use crate::formula_execution::Execution;
+mod residual_evidence;
+
 use crate::formula_session::FormulaSession;
 use crate::hybrid_session::HybridSession;
 use crate::phase_timing::Recorder;

@@ -13,7 +13,10 @@ fn stopped_formula_adapter_retains_admitted_subject() {
     let progress = super::solve(
         crate::PreparedInput::formula(&admitted),
         &crate::PublicationConfig::from(&options),
-        &crate::ExecutionResources::default(),
+        crate::publication::RunResources {
+            execution: &crate::ExecutionResources::default(),
+            evidence_request: None,
+        },
         &mut crate::HumanRenderer::new(
             std::io::sink(),
             crate::ColorMode::Never,

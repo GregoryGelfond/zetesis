@@ -115,7 +115,7 @@ pub struct ResidualRunSamples {
 }
 
 impl ResidualRunSamples {
-    pub(super) fn check(&self, committed: Option<u64>) -> Result<(), String> {
+    pub(crate) fn check(&self, committed: Option<u64>) -> Result<(), String> {
         if self.version != 1 || self.algorithm != "splitmix64-reject-v1" {
             return Err("unsupported GPU residual sampling protocol".into());
         }

@@ -2,34 +2,12 @@
 
 use std::mem::size_of;
 use zetesis_algebra::MeterBytes;
+use zetesis_backend::residual_evidence::Draw;
 
 use super::ResidualSamplePopulation;
 
 pub(super) const WORLD_TAG: u64 = 0x574f_524c_445f_5631;
 pub(super) const BATCH_TAG: u64 = 0x4241_5443_485f_5631;
-
-fn mix(mut value: u64) -> u64 {
-    value = (value ^ (value >> 30)).wrapping_mul(0xbf58_476d_1ce4_e5b9);
-    value = (value ^ (value >> 27)).wrapping_mul(0x94d0_49bb_1331_11eb);
-    value ^ (value >> 31)
-}
-
-/// `SplitMix64` rejection sampling, version one. Distinct tagged streams never
-/// consume one another's draws. Discard the incomplete residue class prefix.
-struct Draw(u64);
-
-impl Draw {
-    fn below(&mut self, upper: u64) -> u64 {
-        let minimum = upper.wrapping_neg() % upper;
-        loop {
-            self.0 = self.0.wrapping_add(0x9e37_79b9_7f4a_7c15);
-            let next = mix(self.0);
-            if next >= minimum {
-                return next % upper;
-            }
-        }
-    }
-}
 
 pub(super) fn bytes<T>(count: usize) -> u128 {
     count as u128 * size_of::<T>() as u128
@@ -59,7 +37,7 @@ impl<T> Reservoir<T> {
         Self {
             limit,
             seen: Some(0),
-            draws: Draw(mix(seed ^ tag)),
+            draws: Draw::new(seed, tag),
             records: Vec::new(),
         }
     }
