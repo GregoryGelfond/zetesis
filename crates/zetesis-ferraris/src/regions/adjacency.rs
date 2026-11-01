@@ -7,7 +7,7 @@
 
 use std::ops::Index;
 
-use zetesis_cpu::Stop;
+use zetesis_algebra::Stop;
 
 #[derive(Clone, Debug)]
 pub(super) struct Adjacency {

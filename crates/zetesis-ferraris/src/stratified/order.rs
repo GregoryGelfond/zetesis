@@ -1,7 +1,7 @@
 //! Iterative dependency components; negative edges require strict precedence.
 
 use super::{Budget, StratifiedError, compile::Graph};
-use zetesis_cpu::Stop;
+use zetesis_algebra::Stop;
 
 /// One explicit DFS frame; child progress is retained before descending.
 #[derive(Clone, Copy)]

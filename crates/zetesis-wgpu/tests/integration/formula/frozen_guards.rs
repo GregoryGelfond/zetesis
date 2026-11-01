@@ -1,6 +1,6 @@
 //! Shared threshold requirements are useful even before a condition is known.
 
-use zetesis_cpu::Cancellation;
+use zetesis_algebra::Cancellation;
 use zetesis_ferraris::{
     AdmissionLimits, EvaluationLimits, EvaluationWorkspace, FormulaNodes, FrozenSubject,
     Interpretation, Narrower, Narrowing, NarrowingScratch, NodeView, Region, RegionLimits, Theory,

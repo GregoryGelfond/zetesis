@@ -3,8 +3,8 @@
 use std::{collections::BTreeSet, num::NonZeroUsize};
 use zetesis_reference_support::formula;
 
+use zetesis_algebra::Cancellation;
 use zetesis_core::{Atom, Model, Predicate};
-use zetesis_cpu::Cancellation;
 use zetesis_solve::{
     AnswerSet, Backend, Completion, Interruption, OptimizationStop, Oracle, PreparedInput, Session,
     SolveConfig, WorldView, WorldViewError, WorldViewLimits,

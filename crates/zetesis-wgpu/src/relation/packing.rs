@@ -3,8 +3,8 @@ use super::{
     RelationGpuMasks, RelationGpuStats, capacity, poll,
 };
 use crate::{GpuError, GpuErrorKind};
+use zetesis_algebra::Cancellation;
 use zetesis_core::relation::{Query, Relation};
-use zetesis_cpu::Cancellation;
 
 const CONTROL_INTERVAL: usize = 1024;
 

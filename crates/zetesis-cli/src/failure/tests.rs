@@ -3,7 +3,7 @@
 use std::{io, num::NonZeroUsize};
 use zetesis_reference_support::formula;
 
-use zetesis_cpu::Cancellation;
+use zetesis_algebra::Cancellation;
 
 use crate::{Backend, Completion, PreparedInput, RunError, Session, SolveConfig, Subject};
 

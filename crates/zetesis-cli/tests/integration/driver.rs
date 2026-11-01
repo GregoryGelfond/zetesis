@@ -2,8 +2,8 @@
 use crate::support::options::plain as options;
 use clap::Parser;
 use std::io;
+use zetesis_algebra::{Cancellation, Stop};
 use zetesis_cli::{Completion, Options, RunError, run};
-use zetesis_cpu::{Cancellation, Stop};
 
 fn bounded_candidates(source: &str, maximum: u64) -> (zetesis_cli::Report, String) {
     let mut config = crate::support::prepared::config(&["--oracle", "countermodel"]);

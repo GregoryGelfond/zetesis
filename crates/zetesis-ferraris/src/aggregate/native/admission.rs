@@ -6,6 +6,7 @@ use super::{
 };
 use crate::Theory;
 use std::cmp::Ordering;
+use zetesis_algebra::Cancellation;
 use zetesis_core::catalog::{
     CatalogRead, Error as CatalogError, Limits, TermKey, TermRef, VocabularyBuilder,
     VocabularyFailure,
@@ -13,7 +14,6 @@ use zetesis_core::catalog::{
 use zetesis_core::{
     TemplateCatalogFailure, TemplateComponents, TemplateTerm, Value as Term, ValueNodeRef,
 };
-use zetesis_cpu::Cancellation;
 
 pub(super) fn build(
     theory: &Theory,
@@ -498,7 +498,7 @@ fn reserve<T>(
 fn catalog(error: CatalogError) -> ErrorKind {
     match error {
         CatalogError::Storage { .. } => ErrorKind::Limit(Resource::StorageBytes),
-        CatalogError::Allocation => ErrorKind::Stopped(zetesis_cpu::Stop::Allocation),
+        CatalogError::Allocation => ErrorKind::Stopped(zetesis_algebra::Stop::Allocation),
         other => ErrorKind::Catalog(other),
     }
 }

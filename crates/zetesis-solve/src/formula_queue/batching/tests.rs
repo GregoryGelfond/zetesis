@@ -4,7 +4,7 @@
 
 use std::{collections::BTreeSet, num::NonZeroUsize};
 
-use zetesis_cpu::Cancellation;
+use zetesis_algebra::Cancellation;
 use zetesis_ferraris::{AdmissionLimits, FormulaParts, Node, Theory};
 use zetesis_objective::{PlanIdentity, Score};
 use zetesis_stable::{BatchVerdict, Incomplete, Limits, StableModels};

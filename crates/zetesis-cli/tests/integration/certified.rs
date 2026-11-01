@@ -2,8 +2,8 @@
 use crate::support::prepared;
 use crate::support::runs::detailed as cli_solve;
 use clap::Parser;
+use zetesis_algebra::Cancellation;
 use zetesis_cli::{Completion, Options, Oracle, RunFailure, SolvePhase, StatisticsView};
-use zetesis_cpu::Cancellation;
 
 fn options(oracle: Oracle) -> Options {
     let mut o =

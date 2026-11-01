@@ -7,7 +7,7 @@ mod transport;
 
 use crate::{GpuError, GpuErrorKind};
 use std::{fmt, time::Duration};
-use zetesis_cpu::{Cancellation, Stop};
+use zetesis_algebra::{Cancellation, Stop};
 
 pub use device::GpuAggregateOracle;
 pub use preparation::AggregateGpuPlan;

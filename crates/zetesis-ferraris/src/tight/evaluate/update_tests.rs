@@ -11,7 +11,7 @@ use crate::{
     Node, NodeView, Theory, TightCheckLimits, TightError, TightPlan, TightPlanLimits,
     TightResource, TightVerdict,
 };
-use zetesis_cpu::{Cancellation, Stop};
+use zetesis_algebra::{Cancellation, Stop};
 
 /// `atoms` atomic choices, a constraint over a chain of conjunctions forbidding
 /// all of them together, and one forbidding the first two together.

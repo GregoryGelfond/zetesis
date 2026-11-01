@@ -3,12 +3,12 @@
 use crate::support::physical;
 
 use std::time::{Duration, Instant};
+use zetesis_algebra::{Cancellation, Stop};
 use zetesis_backend::{BatchComputeTime, ComputeTimingStatus, GpuApi};
 use zetesis_core::{
     Atom, Predicate, Value,
     relation::{Limits, Relation},
 };
-use zetesis_cpu::{Cancellation, Stop};
 use zetesis_ferraris::{
     AdmissionLimits, Interpretation, Node, SlateId, SlateRef, Theory, TightPlan, TightPlanLimits,
 };

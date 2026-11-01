@@ -3,8 +3,8 @@
 use std::collections::BTreeSet;
 use zetesis_reference_support::{admit, formula, resource_limits};
 
+use zetesis_algebra::Cancellation;
 use zetesis_core::{Atom, Predicate, Value};
-use zetesis_cpu::Cancellation;
 use zetesis_stable::{Limits, StableModels};
 use zetesis_themelios::{ExpansionFailure, FormulaFailure, FormulaLimits, FormulaResource};
 

@@ -97,8 +97,8 @@ fn relation(error: &zetesis_core::relation::Failure) -> bool {
     }
 }
 
-fn table(error: &zetesis_cpu::table::Cause) -> bool {
-    use zetesis_cpu::table::Cause;
+fn table(error: &zetesis_core::table::Cause) -> bool {
+    use zetesis_core::table::Cause;
     match error {
         Cause::Overflow | Cause::Allocation | Cause::Limit { .. } => true,
         Cause::Scope | Cause::Domains | Cause::Relation | Cause::Interrupted(_) => false,

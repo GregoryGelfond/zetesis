@@ -140,6 +140,12 @@ Notable changes by release. Versions follow Semantic Versioning.
 
 ### Changed
 
+- **Breaking Rust API:** `zetesis-cpu` is renamed `zetesis-algebra`, with no
+  compatibility alias. Its scalar region walk is now
+  `zetesis_algebra::walk::Walk` instead of `zetesis_cpu::regions::Traversal`;
+  `Region` and `Narrowing` live in `zetesis_algebra::region`. Finite tables move
+  from `zetesis_cpu::table` to `zetesis_core::table`, and packed-word operations
+  from `zetesis_core::packed` to `zetesis_algebra::words`.
 - `--grounder lazy` and the hybrid formula schedule stream an integrity constraint
   only when its instances do not fit in the formula. Once the producer core and its
   completion are built, each eligible template is grounded into the core, in

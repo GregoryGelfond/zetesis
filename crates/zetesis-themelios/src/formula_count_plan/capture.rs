@@ -111,7 +111,7 @@ impl Collector {
 
     pub(crate) fn objective(
         limits: &crate::FormulaLimits,
-        cancellation: &zetesis_cpu::Cancellation,
+        cancellation: &zetesis_algebra::Cancellation,
         location: ProgramSite,
     ) -> Self {
         let mut collector = Self::new(
@@ -318,7 +318,7 @@ impl Collector {
         self.work.payload(bytes::<Group>(1)?)?;
         self.groups
             .try_reserve_exact(1)
-            .map_err(|_| Fault::Stopped(zetesis_cpu::Stop::Allocation))?;
+            .map_err(|_| Fault::Stopped(zetesis_algebra::Stop::Allocation))?;
         self.groups.push(Group {
             body: members.body,
             unconditional_members: members.unconditional,

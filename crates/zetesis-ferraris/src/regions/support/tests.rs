@@ -1,6 +1,6 @@
 use super::{Outcome, Progress, Support, scan};
 use crate::{Node, RegionLimits, test_support::theory};
-use zetesis_cpu::{Cancellation, Stop};
+use zetesis_algebra::{Cancellation, Stop};
 
 use super::super::{NarrowingQuota, Producers, Work};
 

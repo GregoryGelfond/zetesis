@@ -348,7 +348,7 @@ pub(crate) struct Counters {
     observed: Work,
 }
 impl Counters {
-    pub(crate) fn cancellation(&self) -> Option<&zetesis_cpu::Cancellation> {
+    pub(crate) fn cancellation(&self) -> Option<&zetesis_algebra::Cancellation> {
         self.control
             .as_ref()
             .and_then(accounting::AccountControl::cancellation)
@@ -562,7 +562,7 @@ fn count_work(
 /// The failure of a charge stopped by cancellation or a deadline.
 #[cold]
 #[inline(never)]
-fn interrupted(reason: zetesis_cpu::Stop, location: ProgramSite) -> FormulaFailure {
+fn interrupted(reason: zetesis_algebra::Stop, location: ProgramSite) -> FormulaFailure {
     FormulaFailure::Interrupted { reason, location }
 }
 

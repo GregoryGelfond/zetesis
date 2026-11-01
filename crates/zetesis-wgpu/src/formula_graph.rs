@@ -6,7 +6,7 @@
 //! expansion or second numeric semantic owner is introduced.
 
 use crate::{GpuError, GpuErrorKind};
-use zetesis_cpu::Cancellation;
+use zetesis_algebra::Cancellation;
 use zetesis_ferraris::{ExtremumCutRule, NodeView, Theory};
 
 pub(crate) mod dependency;

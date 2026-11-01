@@ -50,7 +50,7 @@ fn legacy_metadata_cannot_establish_optimality() {
         &crate::PublicationConfig::from(&options),
         1000,
         &mut Vec::new(),
-        &zetesis_cpu::Cancellation::default(),
+        &zetesis_algebra::Cancellation::default(),
     )
     .unwrap_err()
     .into_legacy();
@@ -85,7 +85,7 @@ fn input_failure_survives_a_broken_json_prefix() {
 
 #[test]
 fn source_stops_have_distinct_machine_codes() {
-    use zetesis_cpu::Stop;
+    use zetesis_algebra::Stop;
     for (stop, code) in [
         (Stop::Cancelled, "cancelled"),
         (Stop::Deadline, "deadline"),
@@ -243,7 +243,7 @@ fn failure_envelopes_never_invent_search_coverage() {
             "prepared_input",
         ),
         (
-            RunError::PublicationStopped(zetesis_cpu::Stop::Cancelled),
+            RunError::PublicationStopped(zetesis_algebra::Stop::Cancelled),
             "publication_stopped",
         ),
         (

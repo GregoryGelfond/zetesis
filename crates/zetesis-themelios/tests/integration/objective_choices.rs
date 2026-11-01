@@ -6,7 +6,7 @@ use crate::support::objective_bound_resources;
 use crate::support::objective_plans::exact;
 use std::cmp::Ordering;
 
-use zetesis_cpu::Cancellation;
+use zetesis_algebra::Cancellation;
 use zetesis_ferraris::{Interpretation, Limits, Theory, models};
 use zetesis_objective::Score;
 use zetesis_reference_support::{formula, prepared};
@@ -344,8 +344,8 @@ fn named_mask(input: &AdmittedFormula, names: &[&str]) -> usize {
     })
 }
 
-fn narrow_holding(theory: &Theory, held: usize) -> zetesis_cpu::regions::Narrowing {
-    use zetesis_cpu::regions::Region;
+fn narrow_holding(theory: &Theory, held: usize) -> zetesis_algebra::region::Narrowing {
+    use zetesis_algebra::region::Region;
     use zetesis_ferraris::{Narrower, NarrowingScratch, OriginalSubject, RegionLimits};
     let mut region = Region::all_open(theory.atom_count());
     for atom in 0..theory.atom_count() {
@@ -386,7 +386,7 @@ fn prepaid_cost_refutes_an_unaffordable_open_group() {
         .unwrap();
     assert!(matches!(
         narrow_holding(exact_bound.theory(), held),
-        zetesis_cpu::regions::Narrowing::Fixed { .. }
+        zetesis_algebra::region::Narrowing::Fixed { .. }
     ));
     prepare(&mut plan, input.required_choices().unwrap());
     assert_eq!(plan.choice_bound_groups(), 2);
@@ -402,7 +402,7 @@ fn prepaid_cost_refutes_an_unaffordable_open_group() {
     // contributes at least two, exceeding the incumbent seven.
     assert_eq!(
         narrow_holding(strengthened.theory(), held),
-        zetesis_cpu::regions::Narrowing::Refuted
+        zetesis_algebra::region::Narrowing::Refuted
     );
     preserves_models(SOURCE, 2);
 }

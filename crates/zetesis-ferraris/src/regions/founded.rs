@@ -103,7 +103,7 @@ use super::{
     Adjacency, Narrower, NodeView, Producers, Theory, Work, bit, chain_position, flag_words,
 };
 use std::mem::size_of;
-use zetesis_cpu::Stop;
+use zetesis_algebra::Stop;
 
 mod components;
 pub(super) mod explanations;

@@ -690,7 +690,7 @@ fn cancellation_prevents_completed_results() {
         )
         .unwrap_err(),
     ] {
-        assert_eq!(error.interruption, Some(zetesis_cpu::Stop::Cancelled));
+        assert_eq!(error.interruption, Some(zetesis_algebra::Stop::Cancelled));
     }
 }
 
@@ -1299,7 +1299,7 @@ fn interrupted_schedule_preparation_retains_no_publishable_buffers() {
             .err()
             .unwrap()
             .interruption,
-        Some(zetesis_cpu::Stop::Cancelled)
+        Some(zetesis_algebra::Stop::Cancelled)
     );
     assert_eq!(graph.levels, 0);
 }

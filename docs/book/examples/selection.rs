@@ -3,8 +3,8 @@
 // ANCHOR: example
 use std::collections::BTreeSet;
 use std::num::NonZeroUsize;
+use zetesis_algebra::Cancellation;
 use zetesis_core::{Atom, Model, Predicate};
-use zetesis_cpu::Cancellation;
 use zetesis_solve::{
     AnswerSelection, Backend, Completion, PreparedInput, Session, SolveConfig, WorldView,
     WorldViewError, WorldViewFailureParts, WorldViewLimits,

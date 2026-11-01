@@ -9,7 +9,7 @@ use crate::{
     FrozenSubject, Interpretation, Knowledge, Narrower, Narrowing, NarrowingScratch,
     NarrowingStatistics, Node, NodeView, OriginalSubject, Region, RegionLimits, Theory,
 };
-use zetesis_cpu::{Cancellation, Stop};
+use zetesis_algebra::{Cancellation, Stop};
 
 /// Atom 4 reports the endpoint truth. All contributing atoms can stay open.
 fn witness(native_source: bool, positive: bool) -> Theory {

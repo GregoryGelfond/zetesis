@@ -1,8 +1,8 @@
 use std::cmp::Ordering;
 
+use zetesis_algebra::Cancellation;
 use zetesis_core::catalog::{AtomRef, TermRef};
 use zetesis_core::{AtomRows, Model, PatternRef, TemplateTerm, ValueNodeRef};
-use zetesis_cpu::Cancellation;
 
 use crate::{
     Condition, ConditionNode, Contribution, Error, ErrorKind, Evaluation, Limits, ObjectiveProgram,
@@ -29,8 +29,8 @@ impl Work<'_> {
     pub(super) fn poll(&self) -> Result<(), Error> {
         self.cancellation.poll().map_err(|reason| {
             self.stop(match reason {
-                zetesis_cpu::Stop::Cancelled => Stop::Cancelled,
-                zetesis_cpu::Stop::Deadline => Stop::Deadline,
+                zetesis_algebra::Stop::Cancelled => Stop::Cancelled,
+                zetesis_algebra::Stop::Deadline => Stop::Deadline,
                 other => Stop::Control(other),
             })
         })
@@ -436,7 +436,7 @@ mod tests {
             .map(zetesis_core::catalog::TermRef::from)
             .collect();
         let allocation = tuple.as_ptr();
-        let cancellation = zetesis_cpu::Cancellation::default();
+        let cancellation = zetesis_algebra::Cancellation::default();
         let mut evaluator = super::Evaluator {
             work: super::Work {
                 limits: crate::Limits::default(),
@@ -479,7 +479,7 @@ mod tests {
             &program,
             &model,
             Limits::default(),
-            &zetesis_cpu::Cancellation::default(),
+            &zetesis_algebra::Cancellation::default(),
         )
         .unwrap();
         let ValueNodeRef::String(source) = model

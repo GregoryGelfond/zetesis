@@ -84,7 +84,7 @@ fn cancelled_operand_packing_returns_a_typed_interruption() {
         )
         .unwrap_err()
         .interruption(),
-        Some(zetesis_cpu::Stop::Cancelled)
+        Some(zetesis_algebra::Stop::Cancelled)
     );
 }
 
@@ -229,7 +229,7 @@ fn native_shape_scan_preserves_cancellation() {
         .err()
         .unwrap()
         .interruption(),
-        Some(zetesis_cpu::Stop::Cancelled)
+        Some(zetesis_algebra::Stop::Cancelled)
     );
 }
 
@@ -324,7 +324,7 @@ fn ordinal_transport_preserves_original_and_arbitrary_frozen_truth() {
                 if let NodeView::ExtremumCut(cut) = theory.view().node(index).unwrap() {
                     let measure = cut
                         .row
-                        .reduce(|child| Ok::<_, zetesis_cpu::Stop>(reduct[child]))
+                        .reduce(|child| Ok::<_, zetesis_algebra::Stop>(reduct[child]))
                         .unwrap();
                     assert_eq!(reduct[index], original[index] && cut.rule.holds(measure));
                 }
@@ -386,14 +386,14 @@ fn ordinal_shape_scan_and_packing_preserve_cancellation() {
             .err()
             .unwrap()
             .interruption(),
-        Some(zetesis_cpu::Stop::Cancelled)
+        Some(zetesis_algebra::Stop::Cancelled)
     );
     let mut words = Vec::with_capacity(usize::try_from(shape.bytes).unwrap() / 4);
     assert_eq!(
         pack(&theory, &shape.rows, &mut words, &cancellation)
             .unwrap_err()
             .interruption(),
-        Some(zetesis_cpu::Stop::Cancelled)
+        Some(zetesis_algebra::Stop::Cancelled)
     );
     assert!(words.is_empty());
 }

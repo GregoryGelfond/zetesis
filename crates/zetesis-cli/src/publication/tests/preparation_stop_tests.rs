@@ -2,7 +2,7 @@
 
 use std::io;
 
-use zetesis_cpu::Stop;
+use zetesis_algebra::Stop;
 use zetesis_test_support::io::BoundedWriter;
 
 use crate::phase_timing::Recorder;

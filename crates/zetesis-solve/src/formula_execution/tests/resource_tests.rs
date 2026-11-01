@@ -2,7 +2,7 @@
 
 use super::Execution;
 use crate::{Backend, ExecutionResources, GpuApi, SolveConfig};
-use zetesis_cpu::Cancellation;
+use zetesis_algebra::Cancellation;
 use zetesis_wgpu::{GpuContext, GpuOptions};
 
 fn supplied_context(backend: Backend, expected_api: &str) {
@@ -39,7 +39,7 @@ fn supplied_context(backend: Backend, expected_api: &str) {
         zetesis_ferraris::TightPlan::compile(
             &theory,
             zetesis_ferraris::TightPlanLimits::default(),
-            &zetesis_cpu::Cancellation::default(),
+            &zetesis_algebra::Cancellation::default(),
         )
         .unwrap(),
     );
@@ -146,7 +146,7 @@ fn supplied_profile(backend: Backend, expected_api: &str) {
                 &theory,
                 &candidates,
                 &options,
-                &zetesis_cpu::Cancellation::default(),
+                &zetesis_algebra::Cancellation::default(),
                 &crate::phase_timing::Recorder::new(false),
             );
             assert!(result.is_ok());
@@ -180,7 +180,7 @@ fn qualify_prefix_orchestration(
 
     let admitted = zetesis_reference_support::formula("{a;b;c}.");
     let theory = admitted.theory();
-    let cancellation = zetesis_cpu::Cancellation::default();
+    let cancellation = zetesis_algebra::Cancellation::default();
     let mut models = StableModels::new(theory, Limits::default(), cancellation.clone()).unwrap();
     let logical = SolveConfig {
         backend,
@@ -266,7 +266,7 @@ fn steady_enumeration(backend: Backend) {
         let mut session = crate::Session::new(
             crate::PreparedInput::formula(&owner),
             config,
-            zetesis_cpu::Cancellation::default(),
+            zetesis_algebra::Cancellation::default(),
         )
         .unwrap();
         let answers: BTreeSet<_> = session

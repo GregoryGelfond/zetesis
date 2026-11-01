@@ -1,7 +1,7 @@
 mod conditioning;
 mod views;
 
-use zetesis_cpu::Cancellation;
+use zetesis_algebra::Cancellation;
 
 use crate::{
     AdmissionError, NodeView, Theory,

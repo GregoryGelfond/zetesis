@@ -26,8 +26,8 @@ mod tests;
 
 use std::{fmt, mem::size_of};
 
-use zetesis_cpu::regions::Region;
-use zetesis_cpu::{Cancellation, Stop};
+use zetesis_algebra::region::Region;
+use zetesis_algebra::{Cancellation, Stop};
 
 use super::{NarrowingQuota, Producers, Work};
 use crate::{AdmissionError, Theory};

@@ -1,6 +1,6 @@
 use std::mem::size_of;
 
-use zetesis_cpu::Cancellation;
+use zetesis_algebra::Cancellation;
 
 use super::super::{
     budget::{Budget, BudgetError},

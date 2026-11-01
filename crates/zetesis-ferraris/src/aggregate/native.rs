@@ -9,9 +9,9 @@
 
 use std::fmt;
 
+use zetesis_algebra::{Cancellation, Refusal, Stop};
 use zetesis_core::catalog::{CatalogRead, TermRef, Vocabulary};
 use zetesis_core::{TemplateComponents, TemplateComponentsRef, TemplateTerm, Value as Term};
-use zetesis_cpu::{Cancellation, Refusal, Stop};
 
 use crate::{AggregateComparison, Theory};
 
@@ -628,7 +628,7 @@ fn add(left: u64, right: u64) -> Result<u64, ErrorKind> {
 #[cfg(test)]
 mod tests {
     use super::{ErrorKind, Phase, Resource};
-    use zetesis_cpu::{Refusal, Stop};
+    use zetesis_algebra::{Refusal, Stop};
 
     #[test]
     fn native_errors_classify_resource_refusals() {

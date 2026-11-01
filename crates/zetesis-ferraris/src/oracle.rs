@@ -3,7 +3,7 @@ use crate::{
     EvaluationError, EvaluationLimits, EvaluationWorkspace, FrozenReduct, Interpretation, NodeView,
     Theory,
 };
-use zetesis_cpu::{Cancellation, ChargeError, Meter, Stop};
+use zetesis_algebra::{Cancellation, ChargeError, Meter, Stop};
 
 /// Per-call bounds for exact finite checking. Exceeding a bound is incomplete,
 /// never a proof of stability or nonminimality.
@@ -459,7 +459,7 @@ fn exhaustive_check(
 mod tests {
     use super::{Limits, Statistics, Work, advance_subset, reserve, select_atoms};
     use crate::{AdmissionLimits, Interpretation, Theory};
-    use zetesis_cpu::{Cancellation, Stop};
+    use zetesis_algebra::{Cancellation, Stop};
 
     /// Run `test` on work whose meter has admitted seven operations, between
     /// metered boundaries, under a limit `allowance` operations further, with

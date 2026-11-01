@@ -5,7 +5,7 @@ use super::{
     finish_read, overlapping, wait_for_submission, wait_observing,
 };
 use std::{cell::Cell, time::Duration};
-use zetesis_cpu::{Cancellation, Stop};
+use zetesis_algebra::{Cancellation, Stop};
 
 #[test]
 fn wait_quanta_respect_the_remaining_timeout() {

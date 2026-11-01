@@ -48,7 +48,7 @@ pub use ferraris::{
     RegionWalkEngagement, RegionWorkerStatistics, SlateProposal, SlateTicket, StableModels,
     Statistics, check,
 };
-pub use zetesis_cpu::Cancellation;
+pub use zetesis_algebra::Cancellation;
 pub use zetesis_ferraris::{
     CardinalityStatistics, ParityStatistics, PreparationStatus, PreparationWork,
 };

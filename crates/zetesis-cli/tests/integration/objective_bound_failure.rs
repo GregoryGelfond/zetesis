@@ -1,7 +1,7 @@
 //! Optional bound refusal after planning must preserve every exact optimal tie.
 
+use zetesis_algebra::Cancellation;
 use zetesis_cli::{Completion, Report};
-use zetesis_cpu::Cancellation;
 
 const SOURCE: &str = "1 {a;b} 1. {hidden}. #minimize { 5,a:a; 2,b:b }.";
 const STOPPED: &str = "Objective pruning stopped: objective candidate bound Limit(Work) \

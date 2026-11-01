@@ -1,6 +1,6 @@
 //! A processed absorbing witness retires only its chain's bookkeeping.
 
-use zetesis_cpu::{Cancellation, Stop};
+use zetesis_algebra::{Cancellation, Stop};
 
 use crate::test_support::SinglePermits;
 use crate::{

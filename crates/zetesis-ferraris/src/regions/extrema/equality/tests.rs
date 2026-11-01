@@ -8,7 +8,7 @@ use crate::{
     FormulaNodes, FormulaParts, FrozenSubject, Interpretation, Limits, Narrower, Narrowing,
     NarrowingScratch, Node, NodeView, Region, RegionLimits, Theory, models_reduct,
 };
-use zetesis_cpu::{Cancellation, Stop};
+use zetesis_algebra::{Cancellation, Stop};
 
 fn owner(atoms: usize) -> FormulaNodes {
     FormulaNodes::new(FormulaParts::new((0..atoms).map(Node::atom).collect(), vec![]).unwrap())

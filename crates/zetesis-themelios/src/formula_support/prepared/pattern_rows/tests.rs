@@ -7,7 +7,7 @@ use crate::formula_support::{
 use crate::grounding_observer::Profile;
 use crate::test_support::Observer;
 use crate::{FormulaLimits, FormulaResource, GroundingWork as Receipt};
-use zetesis_cpu::Cancellation;
+use zetesis_algebra::Cancellation;
 
 fn fixture(source: &str) -> (CompletedCatalog, Prepared) {
     let preparation = testing::prepare(source);

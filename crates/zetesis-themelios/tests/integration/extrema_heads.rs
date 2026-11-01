@@ -303,7 +303,7 @@ fn logical_extrema_do_not_certify_atom_counts() {
         .unwrap()
         .ground_with_count_plan(
             zetesis_themelios::CountPlanLimits::default(),
-            &zetesis_cpu::Cancellation::default(),
+            &zetesis_algebra::Cancellation::default(),
             None,
         )
         .unwrap();

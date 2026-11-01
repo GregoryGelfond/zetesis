@@ -4,7 +4,7 @@ use crate::execution_observation::Ignore;
 use crate::formula_execution::Execution;
 use crate::phase_timing::Recorder;
 use crate::{AnswerSelection, Backend, Completion, Interruption, Oracle, SolveConfig};
-use zetesis_cpu::Cancellation;
+use zetesis_algebra::Cancellation;
 use zetesis_reference_support::formula;
 use zetesis_stable::{Incomplete, StableModels};
 use zetesis_themelios::AdmittedFormula;

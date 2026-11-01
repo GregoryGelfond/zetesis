@@ -5,7 +5,7 @@
 //! tests establish preservation, not that frozen prefix propagation is enabled
 //! or disabled; that policy needs the internal same-index control test.
 
-use zetesis_cpu::Cancellation;
+use zetesis_algebra::Cancellation;
 use zetesis_ferraris::{
     EvaluationLimits, EvaluationWorkspace, FrozenSubject, Interpretation, Limits, Narrower,
     Narrowing, NarrowingScratch, OriginalSubject, Region, RegionLimits, Theory, models,

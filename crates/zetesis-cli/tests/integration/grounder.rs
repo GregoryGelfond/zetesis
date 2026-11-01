@@ -6,8 +6,8 @@ use std::fmt::Write as _;
 use crate::support::options::plain as options;
 use crate::support::prepared;
 use clap::Parser;
+use zetesis_algebra::Cancellation;
 use zetesis_cli::{Backend, Completion, Grounder, Options, Report, RunError, run_with_diagnostics};
-use zetesis_cpu::Cancellation;
 
 fn solve(source: &str, arguments: &[&str]) -> (Report, String, String) {
     let mut configured = options(arguments);
@@ -160,7 +160,7 @@ fn both_cpu_modes_keep_work_and_candidate_stops_incomplete() {
         assert_eq!(
             report.interruption,
             Some(zetesis_cli::Interruption::Countermodel(
-                zetesis_stable::Incomplete::Verification(zetesis_cpu::Stop::WorkLimit)
+                zetesis_stable::Incomplete::Verification(zetesis_algebra::Stop::WorkLimit)
             ))
         );
         assert_eq!(report.models, 0);

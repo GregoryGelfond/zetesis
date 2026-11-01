@@ -2,7 +2,7 @@
 
 use crate::support::sessions::config as cpu_config;
 use std::{sync::mpsc, thread, time::Duration};
-use zetesis_cpu::Cancellation;
+use zetesis_algebra::Cancellation;
 use zetesis_reference_support::formula;
 use zetesis_solve::{
     Completion, ExecutionObservation, ExecutionObserver, GroundingOutcome, GroundingPhase,

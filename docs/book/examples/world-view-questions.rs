@@ -2,8 +2,8 @@
 
 // ANCHOR: example
 use std::num::NonZeroUsize;
+use zetesis_algebra::Cancellation;
 use zetesis_core::{Atom, ConstructionError, Predicate};
-use zetesis_cpu::Cancellation;
 use zetesis_solve::{Backend, PreparedInput, QueryAnswer, Session, SolveConfig, WorldViewVerdict};
 use zetesis_themelios::{AdmissionOptions, ExpansionLimits, FormulaLimits, admit_formula};
 

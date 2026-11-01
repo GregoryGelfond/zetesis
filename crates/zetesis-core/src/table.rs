@@ -12,9 +12,9 @@
 
 use std::{mem::size_of, ops::Range};
 
-use zetesis_core::{Value, catalog::TermRef, relation::Relation};
+use crate::{Value, catalog::TermRef, relation::Relation};
 
-use crate::{Cancellation, Stop};
+use zetesis_algebra::{Cancellation, Stop};
 
 mod accounting;
 mod selection;
@@ -222,7 +222,8 @@ impl<'owner, 'source> Table<'owner, 'source> {
     /// # Examples
     /// ```
     /// use zetesis_core::{Atom, Predicate, Value, catalog::TermRef, relation::Relation};
-    /// use zetesis_cpu::{Cancellation, table::{Limits, Table}};
+    /// use zetesis_algebra::Cancellation;
+    /// use zetesis_core::table::{Limits, Table};
     /// let predicate = Predicate::new("pair", 2)?;
     /// let rows = [Atom::new(predicate.clone(), vec![Value::Number(1), Value::Number(2)])?];
     /// let relation = Relation::from_atoms(&predicate, &rows, Default::default())?;

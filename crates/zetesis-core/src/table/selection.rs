@@ -2,9 +2,9 @@
 
 use std::{convert::Infallible, mem::size_of};
 
-use zetesis_core::{Value, catalog::TermRef, relation::Relation};
+use crate::{Value, catalog::TermRef, relation::Relation};
 
-use crate::Cancellation;
+use zetesis_algebra::Cancellation;
 
 use super::{
     Failure, Limits, MeteredCause, MeteredFailure, Statistics, Table, WORD_BITS, Work, control,
@@ -34,7 +34,7 @@ pub enum Domain<'value> {
 ///
 /// ```
 /// use zetesis_core::{Value, catalog::TermRef};
-/// use zetesis_cpu::table::Values;
+/// use zetesis_core::table::Values;
 /// let ingress = [Value::Number(7)];
 /// let references = [TermRef::from(&ingress[0])];
 /// let source = Values::from(ingress.as_slice());

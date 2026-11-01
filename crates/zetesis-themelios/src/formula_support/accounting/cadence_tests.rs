@@ -7,8 +7,8 @@ use crate::{
     ConstraintCheckCause, ConstraintCheckFailure, FormulaFailure, FormulaLimits, FormulaResource,
     ProgramSite, ReconstructionError,
 };
+use zetesis_algebra::{Cancellation, Stop};
 use zetesis_core::{AtomIndexError, ModelError, ModelFailure};
-use zetesis_cpu::{Cancellation, Stop};
 
 fn run<T, E: StopPrecedence>(
     account: &mut Accounting,
@@ -120,7 +120,7 @@ fn charged_ranges_observe_the_boundary_and_preserve_counts() {
             assert_eq!(account.work, initial + amount);
             assert_eq!(
                 OBSERVATIONS.get(),
-                2 + u64::from(zetesis_cpu::poll_due(initial, amount))
+                2 + u64::from(zetesis_algebra::poll_due(initial, amount))
             );
         }
     }
@@ -458,11 +458,11 @@ fn terminal_baseline_tail_refusal_is_settled() {
     assert_eq!(account.work, 7);
 }
 
-fn table_failure(error: zetesis_cpu::table::MeteredFailure<FormulaFailure>) -> FormulaFailure {
+fn table_failure(error: zetesis_core::table::MeteredFailure<FormulaFailure>) -> FormulaFailure {
     match error.cause {
-        zetesis_cpu::table::MeteredCause::Stopped(error) => error,
-        zetesis_cpu::table::MeteredCause::Table(cause) => FormulaFailure::SupportTable {
-            error: zetesis_cpu::table::Failure {
+        zetesis_core::table::MeteredCause::Stopped(error) => error,
+        zetesis_core::table::MeteredCause::Table(cause) => FormulaFailure::SupportTable {
+            error: zetesis_core::table::Failure {
                 cause,
                 work: error.work,
                 peak_bytes: error.peak_bytes,
@@ -474,8 +474,8 @@ fn table_failure(error: zetesis_cpu::table::MeteredFailure<FormulaFailure>) -> F
 
 #[test]
 fn table_zero_callbacks_do_not_observe_grounding_control() {
+    use zetesis_core::table::{Limits, Table};
     use zetesis_core::{Atom, Predicate, Value, relation};
-    use zetesis_cpu::table::{Limits, Table};
     let predicate = Predicate::new("p", 1).unwrap();
     let atoms: Vec<_> = (0..300)
         .map(|n| Atom::new(predicate.clone(), vec![Value::Number(n)]).unwrap())
@@ -497,7 +497,7 @@ fn table_zero_callbacks_do_not_observe_grounding_control() {
             } else {
                 positive += 1;
             }
-            due += u64::from(zetesis_cpu::poll_due(
+            due += u64::from(zetesis_algebra::poll_due(
                 counters.accounting.work,
                 amount as u64,
             ));
@@ -514,8 +514,8 @@ fn table_zero_callbacks_do_not_observe_grounding_control() {
 
 #[test]
 fn table_capacity_refusal_under_pending_stop_settles_at_exit() {
+    use zetesis_core::table::{Cause, Limits, MeteredCause, Table};
     use zetesis_core::{Predicate, relation};
-    use zetesis_cpu::table::{Cause, Limits, MeteredCause, Table};
     let predicate = Predicate::new("p", 0).unwrap();
     let relation =
         relation::Relation::from_atoms(&predicate, &[], relation::Limits::default()).unwrap();
@@ -633,8 +633,8 @@ fn nested_formula_resource_families_settle_at_their_own_site() {
             location: site,
         },
         FormulaFailure::SupportTable {
-            error: zetesis_cpu::table::Failure {
-                cause: zetesis_cpu::table::Cause::Allocation,
+            error: zetesis_core::table::Failure {
+                cause: zetesis_core::table::Cause::Allocation,
                 work: 7,
                 peak_bytes: 0,
             },
@@ -707,8 +707,8 @@ fn nested_formula_shape_families_survive_a_pending_stop() {
             location: site,
         },
         FormulaFailure::SupportTable {
-            error: zetesis_cpu::table::Failure {
-                cause: zetesis_cpu::table::Cause::Scope,
+            error: zetesis_core::table::Failure {
+                cause: zetesis_core::table::Cause::Scope,
                 work: 0,
                 peak_bytes: 0,
             },

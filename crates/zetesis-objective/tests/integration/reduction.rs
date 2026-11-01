@@ -1,7 +1,7 @@
 //! Numeric reduction consumes established key eligibility without reconstructing evidence.
 
+use zetesis_algebra::Cancellation;
 use zetesis_core::{Term, Value};
-use zetesis_cpu::Cancellation;
 use zetesis_objective::{ErrorKind, ObjectiveProgram, ObjectiveTemplate, Stop, reduce_costs};
 
 fn program() -> ObjectiveProgram {

@@ -6,11 +6,11 @@ use std::collections::BTreeSet;
 use std::num::NonZeroUsize;
 
 use clap::Parser;
+use zetesis_algebra::Cancellation;
 use zetesis_cli::{
     Backend, Completion, Options, Oracle, PreparedInput, Session, SolveConfig, run_with_diagnostics,
 };
 use zetesis_clingo_support as oracle;
-use zetesis_cpu::Cancellation;
 use zetesis_reference_support as reference;
 use zetesis_test_support::records::Records;
 use zetesis_themelios::FormulaLimits;

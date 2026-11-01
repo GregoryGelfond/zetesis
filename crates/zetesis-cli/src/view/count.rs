@@ -2,7 +2,7 @@
 
 use std::io::Write;
 
-use zetesis_cpu::Cancellation;
+use zetesis_algebra::Cancellation;
 
 use crate::{AnswerRenderer, AnswerView, PublicationView, RunError, SummaryDelivery};
 

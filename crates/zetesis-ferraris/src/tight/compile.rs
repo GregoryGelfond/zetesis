@@ -5,7 +5,7 @@ use super::{
     TightProducerKind, TightResource, bytes, filled, reserve,
 };
 use crate::{ExtremumCut, NodeView, Theory, Threshold};
-use zetesis_cpu::{Cancellation, Meter, Stop};
+use zetesis_algebra::{Cancellation, Meter, Stop};
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Body {
@@ -461,7 +461,7 @@ fn derive_ranks(
         }
         // Formula edges are topological, so a remaining cycle necessarily
         // passes through an atom. Keep a typed failure if that invariant fails.
-        return Err(zetesis_cpu::Stop::InvalidProgram.into());
+        return Err(zetesis_algebra::Stop::InvalidProgram.into());
     }
     let mut atoms = reserve(theory.atom_count())?;
     atoms.extend_from_slice(&rank[..theory.atom_count()]);

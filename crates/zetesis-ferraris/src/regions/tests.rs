@@ -130,7 +130,7 @@ fn compact_support_keeps_original_producer_occurrences() {
     let extracted = super::producers(
         &theory,
         super::RegionLimits::default(),
-        &zetesis_cpu::Cancellation::default(),
+        &zetesis_algebra::Cancellation::default(),
     )
     .unwrap();
     let producers = extracted.producers.unwrap();
@@ -177,7 +177,7 @@ fn compact_adjacency_uses_less_retained_storage() {
     let extracted = super::producers(
         &theory,
         super::RegionLimits::default(),
-        &zetesis_cpu::Cancellation::default(),
+        &zetesis_algebra::Cancellation::default(),
     )
     .unwrap();
     let producers = extracted.producers.unwrap();
@@ -246,7 +246,7 @@ fn propagated_decisions_are_seen(frozen: bool) {
         AdmissionLimits, EvaluationLimits, EvaluationWorkspace, Interpretation, Narrower,
         Narrowing, Node, Region, RegionLimits, Theory,
     };
-    use zetesis_cpu::Cancellation;
+    use zetesis_algebra::Cancellation;
 
     let mut nodes: Vec<_> = (0..130).map(Node::atom).collect();
     nodes.extend([Node::or_pair([63, 64]), Node::implies(64, 129)]);

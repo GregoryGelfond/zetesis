@@ -228,7 +228,7 @@ fn cancelled_shape_preserves_residency(
         )
         .err()
         .unwrap();
-    assert_eq!(error.interruption(), Some(zetesis_cpu::Stop::Cancelled));
+    assert_eq!(error.interruption(), Some(zetesis_algebra::Stop::Cancelled));
     assert!(
         oracle
             .resident
@@ -699,7 +699,10 @@ fn submission_receipt(backend: GpuApi) {
     let failure = oracle
         .propagate_batch_with_cancellation(&theory, &candidates, limits, &cancelled)
         .unwrap_err();
-    assert_eq!(failure.interruption(), Some(zetesis_cpu::Stop::Cancelled));
+    assert_eq!(
+        failure.interruption(),
+        Some(zetesis_algebra::Stop::Cancelled)
+    );
     assert_eq!(oracle.last_submission_candidates(), None);
     for work in [0, 3] {
         let failure = oracle
@@ -768,7 +771,10 @@ fn submitted_interruption(
         .complete(scopes, Ok(dispatched.completion))
         .unwrap_err();
     assert_eq!(failure.kind(), GpuErrorKind::Interrupted);
-    assert_eq!(failure.interruption(), Some(zetesis_cpu::Stop::Cancelled));
+    assert_eq!(
+        failure.interruption(),
+        Some(zetesis_algebra::Stop::Cancelled)
+    );
     assert!(oracle.last.is_none());
     assert_eq!(
         runtime.check_health().unwrap_err().kind(),

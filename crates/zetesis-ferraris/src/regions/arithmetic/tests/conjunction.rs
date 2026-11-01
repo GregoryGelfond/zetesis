@@ -1,6 +1,6 @@
 //! A borrowed entry saves its read without dropping occurrence evidence.
 
-use zetesis_cpu::{Cancellation, Stop};
+use zetesis_algebra::{Cancellation, Stop};
 
 use crate::{
     AdmissionError, NodeView, Theory,

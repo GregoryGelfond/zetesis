@@ -9,7 +9,7 @@ use crate::{
     Theory,
     positive::activation::{self, Edge, Effects, Point, State},
 };
-use zetesis_cpu::Stop;
+use zetesis_algebra::Stop;
 
 use super::super::{
     budget::{Budget, BudgetError},

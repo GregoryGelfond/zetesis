@@ -1,7 +1,7 @@
 //! Cancellation after admission must retain the already established subject.
 
 use clap::Parser;
-use zetesis_cpu::Cancellation;
+use zetesis_algebra::Cancellation;
 use zetesis_reference_support::formula;
 
 #[test]
@@ -34,7 +34,7 @@ fn stopped_formula_adapter_retains_admitted_subject() {
     assert_eq!(
         semantic.interruption(),
         Some(crate::Interruption::Preparation(
-            zetesis_cpu::Stop::Cancelled
+            zetesis_algebra::Stop::Cancelled
         ))
     );
     assert!(semantic.countermodel_statistics().is_none());

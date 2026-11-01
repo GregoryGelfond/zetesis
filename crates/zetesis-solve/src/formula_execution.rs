@@ -326,7 +326,7 @@ pub(crate) trait MembershipExecution {
         &mut self,
         models: &mut StableModels,
         options: &SolveConfig,
-        cancellation: &zetesis_cpu::Cancellation,
+        cancellation: &zetesis_algebra::Cancellation,
         phases: &Recorder,
     ) -> Option<Result<Interpretation, Failure>>;
     fn statistics(&self, models: &StableModels) -> Option<FormulaExecutionStatistics>;
@@ -357,13 +357,13 @@ pub(crate) trait MembershipExecution {
 /// limits' default timeout.
 #[cfg(feature = "gpu")]
 pub(crate) struct Settlement {
-    control: zetesis_cpu::Cancellation,
+    control: zetesis_algebra::Cancellation,
     wait: std::time::Duration,
 }
 
 #[cfg(feature = "gpu")]
 impl Settlement {
-    pub(crate) fn new(control: &zetesis_cpu::Cancellation, wait: std::time::Duration) -> Self {
+    pub(crate) fn new(control: &zetesis_algebra::Cancellation, wait: std::time::Duration) -> Self {
         Self {
             control: control.clone(),
             wait,
@@ -400,7 +400,7 @@ impl Execution {
         options: &SolveConfig,
         resources: &ExecutionResources,
         tight_plan: Option<Arc<zetesis_ferraris::TightPlan>>,
-        control: &zetesis_cpu::Cancellation,
+        control: &zetesis_algebra::Cancellation,
         observations: &mut impl ExecutionSink,
     ) -> Result<Self, SolveError> {
         if options.backend == Backend::Cpu {
@@ -433,7 +433,7 @@ impl Execution {
         _: &SolveConfig,
         _: &ExecutionResources,
         _: Option<Arc<zetesis_ferraris::TightPlan>>,
-        _: &zetesis_cpu::Cancellation,
+        _: &zetesis_algebra::Cancellation,
         _: &mut impl ExecutionSink,
     ) -> Result<Self, SolveError> {
         Err(SolveError::BackendUnavailable)
@@ -444,7 +444,7 @@ impl Execution {
         options: &SolveConfig,
         resources: &ExecutionResources,
         tight_plan: Option<Arc<zetesis_ferraris::TightPlan>>,
-        control: &zetesis_cpu::Cancellation,
+        control: &zetesis_algebra::Cancellation,
         observations: &mut impl ExecutionSink,
     ) -> Result<Self, SolveError> {
         let source = resources.device_source(options).map_err(SolveError::Gpu)?;
@@ -591,7 +591,7 @@ impl MembershipExecution for Execution {
         &mut self,
         models: &mut StableModels,
         options: &SolveConfig,
-        cancellation: &zetesis_cpu::Cancellation,
+        cancellation: &zetesis_algebra::Cancellation,
         phases: &Recorder,
     ) -> Option<Result<Interpretation, Failure>> {
         match self {
@@ -683,7 +683,7 @@ fn propagate(
     theory: &zetesis_ferraris::Theory,
     candidates: &[Interpretation],
     options: &SolveConfig,
-    cancellation: &zetesis_cpu::Cancellation,
+    cancellation: &zetesis_algebra::Cancellation,
     phases: &Recorder,
 ) -> Result<crate::batch_executor::DeviceVerdicts, Failure> {
     let limits = slate_limits(options, candidates.len());
@@ -707,7 +707,7 @@ fn propagate_within(
     theory: &zetesis_ferraris::Theory,
     candidates: &[Interpretation],
     limits: zetesis_wgpu::FormulaLimits,
-    cancellation: &zetesis_cpu::Cancellation,
+    cancellation: &zetesis_algebra::Cancellation,
     phases: &Recorder,
 ) -> Result<crate::batch_executor::DeviceVerdicts, Failure> {
     // The device API returns one ordered verdict per candidate. Reserve its
@@ -985,7 +985,7 @@ impl<E: MembershipExecution + ?Sized> MembershipExecution for &mut E {
         &mut self,
         models: &mut StableModels,
         config: &SolveConfig,
-        cancellation: &zetesis_cpu::Cancellation,
+        cancellation: &zetesis_algebra::Cancellation,
         phases: &Recorder,
     ) -> Option<Result<Interpretation, Failure>> {
         (**self).next(models, config, cancellation, phases)
@@ -1020,7 +1020,7 @@ impl crate::formula_queue::device::SlateDevice for FormulaDevice<'_> {
         &'d mut self,
         slate: zetesis_ferraris::SlateRef<'_>,
         offset: usize,
-        cancellation: &zetesis_cpu::Cancellation,
+        cancellation: &zetesis_algebra::Cancellation,
     ) -> Result<Self::Prepared<'d>, Failure> {
         let limits = slate_limits(self.options, slate.candidates().len());
         self.oracle
@@ -1108,13 +1108,13 @@ impl crate::formula_queue::device::PreparedSubmission
         Self::count(self)
     }
 
-    fn check(self, cancellation: &zetesis_cpu::Cancellation) -> Self::Checked {
+    fn check(self, cancellation: &zetesis_algebra::Cancellation) -> Self::Checked {
         Self::check(self, cancellation)
     }
 
     fn check_overlapping<R>(
         self,
-        cancellation: &zetesis_cpu::Cancellation,
+        cancellation: &zetesis_algebra::Cancellation,
         during: impl FnOnce() -> R,
     ) -> (Self::Checked, Option<R>) {
         Self::check_overlapping(self, cancellation, during)

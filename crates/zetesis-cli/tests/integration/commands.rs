@@ -4,8 +4,8 @@ use std::process::{Command as ProcessCommand, Stdio};
 
 use crate::support::options::plain as options;
 use clap::Parser;
+use zetesis_algebra::Cancellation;
 use zetesis_cli::{Backend, Command, Completion, Options, Report, RunError, run_with_diagnostics};
-use zetesis_cpu::Cancellation;
 use zetesis_test_support::io::Closed;
 
 #[test]

@@ -323,10 +323,10 @@ fn check(
         Source::Clauses { first, count } => {
             let end = first
                 .checked_add(count)
-                .ok_or(BudgetError::Stopped(zetesis_cpu::Stop::InvalidProgram))?;
+                .ok_or(BudgetError::Stopped(zetesis_algebra::Stop::InvalidProgram))?;
             let roots = clauses
                 .get(first..end)
-                .ok_or(BudgetError::Stopped(zetesis_cpu::Stop::InvalidProgram))?;
+                .ok_or(BudgetError::Stopped(zetesis_algebra::Stop::InvalidProgram))?;
             source::check_clause_equation(
                 theory,
                 facts,

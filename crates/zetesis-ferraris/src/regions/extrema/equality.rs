@@ -14,7 +14,7 @@
 
 use std::ops::Range;
 
-use zetesis_cpu::Stop;
+use zetesis_algebra::Stop;
 
 use super::{Closure, Count, Narrower, Step, Work, bit, push, reserve};
 use crate::regions::{flag_words, witnesses};

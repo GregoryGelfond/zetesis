@@ -5,7 +5,7 @@ use crate::regions::{
     Subject, Width, Work, bit,
 };
 use crate::{AdmissionLimits, FormulaNodes, FormulaParts, Node, Region, Theory};
-use zetesis_cpu::{Cancellation, Stop};
+use zetesis_algebra::{Cancellation, Stop};
 
 use super::State;
 

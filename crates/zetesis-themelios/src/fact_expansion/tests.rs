@@ -3,8 +3,8 @@ use crate::{ExpansionLimits, ExpansionResource, StatementId};
 use themelios_program::program::{Arguments, Atom, Rule};
 use themelios_program::symbol::{Name, Sign, Symbol};
 use themelios_program::term::{EvalError, Term as SourceTerm, Variable};
+use zetesis_algebra::{Cancellation, Stop};
 use zetesis_core::{AtomPattern, Term, Value};
-use zetesis_cpu::{Cancellation, Stop};
 
 fn fact(lower: i32, upper: i32) -> WithProvenance<Statement> {
     WithProvenance::constructed(

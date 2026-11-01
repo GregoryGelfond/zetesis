@@ -7,7 +7,7 @@ use crate::failure::Progress;
 use crate::{Options, PublicationOutcome, RunError};
 use clap::Parser;
 use std::io::{self, Write};
-use zetesis_cpu::Cancellation;
+use zetesis_algebra::Cancellation;
 use zetesis_themelios::observation::ViewError;
 
 const PREFIX: &[u8] = b"{\"schema\":3,\"format\":\"zetesis\",\"models\":[";

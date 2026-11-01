@@ -49,7 +49,7 @@ pub fn term_with<E>(
 ///
 /// ```
 /// use zetesis_core::{Atom, Predicate, Sign, Value};
-/// use zetesis_cpu::Cancellation;
+/// use zetesis_algebra::Cancellation;
 /// use zetesis_themelios::{logical::Symbol, symbols};
 ///
 /// let atom = Atom::new(

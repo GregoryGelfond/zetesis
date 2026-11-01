@@ -106,7 +106,7 @@ impl Resident {
         observation: Observation,
         plan: &Plan,
         timeout: Duration,
-        cancellation: &zetesis_cpu::Cancellation,
+        cancellation: &zetesis_algebra::Cancellation,
     ) -> Result<Dispatched, GpuError> {
         let transport = self
             .transport

@@ -9,7 +9,7 @@ use themelios_solve::{
     contract::{Backend, Cancel, Capabilities, Fault, Presupposition, SolveRequest},
     outcome::{ShowRule, Solved},
 };
-use zetesis_cpu::{CancellationSlot, CancellationSlotError};
+use zetesis_algebra::{CancellationSlot, CancellationSlotError};
 use zetesis_solve::Session;
 use zetesis_themelios::validate_program_formula;
 

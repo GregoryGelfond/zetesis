@@ -3,8 +3,8 @@ use crate::support::objective_plans::exact as plan;
 use std::cmp::Ordering;
 use std::collections::BTreeSet;
 
+use zetesis_algebra::Cancellation;
 use zetesis_core::{Model, Term, Value};
-use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{Interpretation, models};
 use zetesis_objective::{ObjectiveProgram, ObjectiveTemplate, Score, WeightPolarity, evaluate};
 use zetesis_reference_support::{admit, formula, resource_limits};

@@ -1,6 +1,6 @@
 use std::fmt;
 
-use zetesis_cpu::Stop;
+use zetesis_algebra::Stop;
 
 /// Why no logical decision is available. Every variant leaves coverage open.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

@@ -5,11 +5,11 @@ use std::error::Error as _;
 use zetesis_reference_support::{BundleFixture, formula};
 
 use clap::Parser;
+use zetesis_algebra::Cancellation;
 use zetesis_cli::{
     Options, PublicationFailure, RunError, run_bundle_finalized_with_diagnostics,
     run_finalized_with_diagnostics,
 };
-use zetesis_cpu::Cancellation;
 use zetesis_themelios::base::source::{Source, SourceId};
 use zetesis_themelios::observation::{Error, ErrorKind, EvaluationError};
 

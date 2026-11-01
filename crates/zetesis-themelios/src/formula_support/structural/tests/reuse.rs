@@ -55,7 +55,7 @@ fn theory(source: &str, enabled: bool) -> (crate::formula::Compiled, usize) {
 
 #[test]
 fn prepared_arguments_preserve_formula_semantics() {
-    use zetesis_cpu::Cancellation;
+    use zetesis_algebra::Cancellation;
     use zetesis_ferraris::{Limits, models, models_reduct};
     let source = "{k(1);t(1);t(2);p(f(1));p(other(1));p(other(2))}.r:-k(X),t(Y),p(f(X)).";
     let (actual, hits) = theory(source, true);
@@ -541,7 +541,7 @@ fn retained_hit_refusal(refusal: Refusal) {
         scratch.clear();
         let restricted = match refusal {
             Refusal::Cancellation => {
-                let cancelled = zetesis_cpu::Cancellation::default();
+                let cancelled = zetesis_algebra::Cancellation::default();
                 cancelled.cancel();
                 counters.attach_test_control(&cancelled);
                 limits
@@ -560,7 +560,7 @@ fn retained_hit_refusal(refusal: Refusal) {
             Refusal::Cancellation => assert!(matches!(
                 result,
                 Err(FormulaFailure::Interrupted {
-                    reason: zetesis_cpu::Stop::Cancelled,
+                    reason: zetesis_algebra::Stop::Cancelled,
                     ..
                 })
             )),
@@ -627,7 +627,7 @@ fn query_attempt(
         ..FormulaLimits::default()
     };
     if cancelled {
-        let token = zetesis_cpu::Cancellation::default();
+        let token = zetesis_algebra::Cancellation::default();
         token.cancel();
         counters.attach_test_control(&token);
     }
@@ -689,7 +689,7 @@ fn prepared_queries_keep_exact_work_refusals() {
         assert!(matches!(
             query_attempt(program, support, computation, counters, None, None, true).0,
             Err(FormulaFailure::Interrupted {
-                reason: zetesis_cpu::Stop::Cancelled,
+                reason: zetesis_algebra::Stop::Cancelled,
                 ..
             })
         ));

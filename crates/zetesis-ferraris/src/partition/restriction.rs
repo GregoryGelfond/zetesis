@@ -6,7 +6,7 @@ use crate::{
     AdmissionLimits, AggregateComparison, AggregateElement, AggregateError, AggregateLimits,
     FormulaNodes, NodeView, Theory,
 };
-use zetesis_cpu::{Cancellation, ChargeError, Meter, Refusal, Stop};
+use zetesis_algebra::{Cancellation, ChargeError, Meter, Refusal, Stop};
 
 use super::Plan;
 

@@ -1,9 +1,9 @@
 //! Structural values cross closure/reduct, scoring, retention and output boundaries.
 use clap::Parser;
+use zetesis_algebra::Cancellation;
 use zetesis_cli::{
     Completion, Interruption, OptimizationStop, Options, RunError, run_with_diagnostics,
 };
-use zetesis_cpu::Cancellation;
 
 fn solve(source: &str, extra: &[&str]) -> (Result<zetesis_cli::Report, RunError>, String) {
     let options = Options::try_parse_from(

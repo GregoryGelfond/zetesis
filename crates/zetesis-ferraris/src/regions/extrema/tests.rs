@@ -7,7 +7,7 @@ use crate::{
     NarrowingScratch, Node, NodeView, OriginalSubject, Region, RegionLimits, Theory, models,
     models_reduct,
 };
-use zetesis_cpu::{Cancellation, Stop};
+use zetesis_algebra::{Cancellation, Stop};
 
 mod order;
 

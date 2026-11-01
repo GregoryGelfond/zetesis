@@ -6,7 +6,7 @@ use std::{
     io::{self, Write},
     num::NonZeroUsize,
 };
-use zetesis_cpu::Cancellation;
+use zetesis_algebra::Cancellation;
 use zetesis_test_support::io::BoundedWriter;
 
 fn options() -> crate::publication_fixture::FormulaCase {

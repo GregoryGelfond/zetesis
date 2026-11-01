@@ -5,7 +5,7 @@
 //! Typed value ordering and the preservation of guard comparisons are separate
 //! preparation obligations; this primitive does not compare source values.
 
-use zetesis_cpu::Stop;
+use zetesis_algebra::Stop;
 
 #[cfg(test)]
 mod tests;

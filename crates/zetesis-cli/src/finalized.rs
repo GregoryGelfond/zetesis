@@ -212,14 +212,14 @@ pub enum PublicationPhase {
 /// Cooperative publication stop, independently of semantic search coverage.
 #[derive(Clone, Debug)]
 pub struct PublicationStop {
-    reason: zetesis_cpu::Stop,
+    reason: zetesis_algebra::Stop,
     phase: PublicationPhase,
     observation: Option<Box<zetesis_themelios::observation::Error>>,
 }
 impl PublicationStop {
     /// Original control reason, without a new poll or inferred clock state.
     #[must_use]
-    pub const fn reason(&self) -> zetesis_cpu::Stop {
+    pub const fn reason(&self) -> zetesis_algebra::Stop {
         self.reason
     }
     /// Operation that observed the stop.
@@ -258,10 +258,10 @@ impl PublicationStop {
         }
     }
 }
-const fn cooperative(reason: zetesis_cpu::Stop) -> bool {
+const fn cooperative(reason: zetesis_algebra::Stop) -> bool {
     matches!(
         reason,
-        zetesis_cpu::Stop::Cancelled | zetesis_cpu::Stop::Deadline
+        zetesis_algebra::Stop::Cancelled | zetesis_algebra::Stop::Deadline
     )
 }
 

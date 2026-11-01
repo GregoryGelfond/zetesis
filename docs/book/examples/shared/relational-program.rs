@@ -2,7 +2,7 @@
 // ANCHOR: example
 use std::{collections::BTreeMap, sync::Arc};
 use zetesis::program::{AnswerSet, Program, Symbol};
-use zetesis_cpu::Cancellation;
+use zetesis_algebra::Cancellation;
 use zetesis_solve::{Backend, Completion, Session, SolveConfig, prepare_formula_execution};
 use zetesis_themelios::{
     FormulaPurpose, ProgramFormulaOptions, observation, prepare_program_formula_with, symbols,

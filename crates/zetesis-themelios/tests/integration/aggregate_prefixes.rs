@@ -2,7 +2,7 @@
 
 mod preservation;
 
-use zetesis_cpu::Cancellation;
+use zetesis_algebra::Cancellation;
 use zetesis_ferraris::{
     Narrower, Narrowing, NarrowingScratch, OriginalSubject, Region, RegionLimits,
 };

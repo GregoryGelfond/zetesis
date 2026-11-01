@@ -1,8 +1,8 @@
 //! Logical observation payload depends on term identity, not input allocation.
 
 use crate::support::observation_construction;
+use zetesis_algebra::Cancellation;
 use zetesis_core::{Atom, Model, Predicate, Sign, Value, ValueLimits, ValueNode};
-use zetesis_cpu::Cancellation;
 use zetesis_reference_support::formula;
 use zetesis_themelios::observation::{ErrorKind, Limits, Resource};
 

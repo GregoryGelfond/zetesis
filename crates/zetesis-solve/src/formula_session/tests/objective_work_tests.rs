@@ -9,7 +9,7 @@ use crate::{
     SolveConfig, SolveError,
 };
 use std::io;
-use zetesis_cpu::Cancellation;
+use zetesis_algebra::Cancellation;
 use zetesis_ferraris::Interpretation;
 use zetesis_reference_support::formula;
 use zetesis_themelios::AdmittedFormula;

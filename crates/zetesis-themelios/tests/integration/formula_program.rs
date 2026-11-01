@@ -2,8 +2,8 @@
 
 use std::{collections::BTreeSet, sync::Arc};
 
+use zetesis_algebra::{Cancellation, Stop};
 use zetesis_core::Model;
-use zetesis_cpu::{Cancellation, Stop};
 use zetesis_ferraris::{Interpretation, Limits, check};
 use zetesis_reference_support::{canonical, exhaustive, formula};
 use zetesis_test_support::records::Records;

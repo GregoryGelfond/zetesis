@@ -2,8 +2,8 @@
 
 use clap::Parser;
 use serde_json::Value;
+use zetesis_algebra::Cancellation;
 use zetesis_cli::{GroundingOutcome, GroundingPhase, Options, run_detailed_with_diagnostics};
-use zetesis_cpu::Cancellation;
 
 fn options(extra: &[&str]) -> Options {
     Options::try_parse_from(

@@ -7,8 +7,8 @@ use std::cmp::Ordering;
 use std::ops::ControlFlow;
 use std::sync::Arc;
 
+use zetesis_algebra::Cancellation;
 use zetesis_core::{Model, ModelOrder};
-use zetesis_cpu::Cancellation;
 use zetesis_objective::Score;
 use zetesis_stable::{LearnedStore, StableModels};
 

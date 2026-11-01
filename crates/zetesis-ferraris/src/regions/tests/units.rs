@@ -1,7 +1,7 @@
 //! Processed operands remove only redundant scans, not pending events.
 
 use crate::test_support::SinglePermits;
-use zetesis_cpu::{Cancellation, Stop};
+use zetesis_algebra::{Cancellation, Stop};
 
 use crate::{
     AdmissionLimits, EvaluationLimits, EvaluationWorkspace, FormulaParts, FrozenSubject,

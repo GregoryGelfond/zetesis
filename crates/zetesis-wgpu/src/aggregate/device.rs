@@ -10,7 +10,7 @@ use crate::{
     runtime::{DeviceProfile, ErrorScopes, Runtime},
 };
 use std::sync::Arc;
-use zetesis_cpu::Cancellation;
+use zetesis_algebra::Cancellation;
 use zetesis_ferraris::native_aggregate::Eligibility;
 
 /// Exact device reduction of already-acquired aggregate eligibility.

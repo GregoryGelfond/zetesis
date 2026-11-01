@@ -5,7 +5,7 @@ use std::collections::BTreeSet;
 use std::error::Error as _;
 use std::time::Instant;
 
-use zetesis_cpu::Stop;
+use zetesis_algebra::Stop;
 use zetesis_ferraris::{AdmissionLimits, Interpretation, Theory};
 use zetesis_stable::{Cancellation, Check, Incomplete, Limits, StableModels, check};
 

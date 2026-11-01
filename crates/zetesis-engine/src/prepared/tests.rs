@@ -4,7 +4,7 @@ use std::{convert::Infallible, num::NonZeroUsize, sync::Arc};
 
 use themelios_macros::program;
 use themelios_program::program::Program;
-use zetesis_cpu::Cancellation;
+use zetesis_algebra::Cancellation;
 use zetesis_solve::{ExecutionObservation, ExecutionObserver, PreparedProfile, Session};
 
 use super::Prepared;

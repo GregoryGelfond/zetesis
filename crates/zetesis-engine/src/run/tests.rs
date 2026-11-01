@@ -16,7 +16,7 @@ use themelios_solve::{
     contract::{Locus, Presupposition, Refused},
     outcome::{Conclusion, Determination, Run as _, ShowRule, Solved, Truncation},
 };
-use zetesis_cpu::{CancellationRun, CancellationSlot, Stop};
+use zetesis_algebra::{CancellationRun, CancellationSlot, Stop};
 use zetesis_solve::{
     Backend, ExecutionObservation, ExecutionObserver, Grounder, PreparedInput, Session,
     SolveConfig, SolveError, SolveFailure,
@@ -340,7 +340,7 @@ fn cancel_after_last_answer() {
     let prepared = crate::prepared::Prepared::new(
         Arc::new(original.clone()),
         &config,
-        &zetesis_cpu::Cancellation::default(),
+        &zetesis_algebra::Cancellation::default(),
     )
     .unwrap();
     let requested = config.session().grounder;

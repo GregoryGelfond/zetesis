@@ -5,7 +5,7 @@
 //! preparation exhaustion does not conceal cancellation or a refused global
 //! reservation. The existing narrowing meter retains and refunds spare permits.
 
-use zetesis_cpu::{Cancellation, Stop};
+use zetesis_algebra::{Cancellation, Stop};
 
 use crate::{AdmissionError, NodeView, Theory};
 

@@ -3,8 +3,8 @@
 use crate::test_support::prepared;
 use crate::{AdmissionOptions, ExpansionLimits, FormulaLimits, SourceAdmission, prepare_formula};
 use std::{collections::BTreeSet, sync::Arc};
+use zetesis_algebra::Cancellation;
 use zetesis_core::{Atom, ValueLimits};
-use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{Interpretation, Limits, check};
 
 fn admitted(source: &str) -> super::AcyclicSource {

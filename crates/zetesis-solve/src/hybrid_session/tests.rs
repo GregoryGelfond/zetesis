@@ -7,7 +7,7 @@ use crate::{
     AnswerSelection, Backend, Completion, ExecutionResources, Grounder, Interruption, SearchState,
     SolveConfig, SolveError,
 };
-use zetesis_cpu::{Cancellation, Stop, regions::Region};
+use zetesis_algebra::{Cancellation, Stop, region::Region};
 use zetesis_themelios::{ConstraintCheckCause, HybridFormula};
 
 struct Fixture {

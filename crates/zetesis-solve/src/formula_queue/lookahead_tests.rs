@@ -8,7 +8,7 @@ use std::time::Duration;
 
 use zetesis_backend::BatchComputeTime;
 
-use zetesis_cpu::Cancellation;
+use zetesis_algebra::Cancellation;
 use zetesis_ferraris::{Interpretation, SlateId, SlateRef, Theory};
 use zetesis_stable::{
     BatchLimits, BatchVerdict, CompletionExecutor, Incomplete, Limits, Lookahead, SearchLimits,

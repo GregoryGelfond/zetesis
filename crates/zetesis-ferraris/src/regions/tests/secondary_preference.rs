@@ -6,9 +6,9 @@ use crate::{
     AdmissionLimits, ChoiceHeads, FormulaParts, Knowledge, Narrower, Narrowing, NarrowingQuota,
     NarrowingScratch, Node, OriginalSubject, Region, RegionLimits, Theory,
 };
-use zetesis_cpu::{
+use zetesis_algebra::{
     Cancellation, Stop,
-    regions::{Counting, Traversal, Visit},
+    walk::{Counting, Visit, Walk},
 };
 
 #[derive(Default)]
@@ -269,7 +269,7 @@ fn secondary_preference_keeps_every_satisfying_assignment_once() {
         vec![4, 5],
     );
     let index = Narrower::new(&theory);
-    let mut walk = Traversal::with_state(Region::all_open(4), Counting::Never, index.knowledge());
+    let mut walk = Walk::with_state(Region::all_open(4), Counting::Never, index.knowledge());
     let mut actual = BTreeSet::new();
     let mut scratch = NarrowingScratch::default();
     while let Some(visit) = walk

@@ -136,7 +136,7 @@ small failure-accounting example easy to inspect.
 ```rust
 # extern crate zetesis_solve;
 # extern crate zetesis_core;
-# extern crate zetesis_cpu;
+# extern crate zetesis_algebra;
 # extern crate zetesis_themelios;
 {{#include ../examples/selection.rs:example}}
 ```
@@ -289,7 +289,7 @@ fields. It deliberately accepts typed records without producing text:
 
 ```rust
 # extern crate zetesis_cli;
-# extern crate zetesis_cpu;
+# extern crate zetesis_algebra;
 # extern crate zetesis_themelios;
 {{#include ../examples/answer-renderer.rs:example}}
 ```
@@ -341,7 +341,7 @@ to answer-set semantics.
 
 ### Cancellation and deadlines
 
-[`zetesis_cpu::Cancellation`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-cpu/src/cancellation.rs)
+[`zetesis_algebra::Cancellation`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-algebra/src/cancellation.rs)
 carries shared cancellation and an optional absolute deadline. `Session` owns
 solving; callers pass this value to the session and can cancel it through a clone.
 `Cancellation::default()` sets no deadline. `with_deadline(Instant)` can fail if
@@ -358,7 +358,7 @@ retains this view for its repeated polls.
 
 Metered operations charge work per formula node or edge against a local work
 limit and observe control at metered boundaries: before their first charged
-operation and at least once every `zetesis_cpu::POLL_INTERVAL` (256) charged
+operation and at least once every `zetesis_algebra::POLL_INTERVAL` (256) charged
 operations thereafter, so at most 255 further charged operations follow a
 requested stop. A refused work charge observes control first, and each operation
 settles its outcome at its exit: when it would report a resource refusal (work,
@@ -369,13 +369,13 @@ program's shape, identity or invariants are reported as found. These operations
 are original and frozen formula evaluation (with the exhaustive reference check
 and native aggregate eligibility), the tight, positive and stratified
 certificates, support construction, partition construction and restriction
-emission, and static closure checks. Each charges a `zetesis_cpu::Meter`, which
+emission, and static closure checks. Each charges a `zetesis_algebra::Meter`, which
 carries the cadence, and runs inside `Cancellation::metered`, the only source of
 a meter, which settles the outcome where the operation returns with its error
 type's `Refusal` classification; none of them can skip the precedence.
 
 Grounding's cumulative work account uses the same 256-unit cadence through
-`zetesis_cpu::poll_due(charged, amount)`. Its controlled scopes are charged
+`zetesis_algebra::poll_due(charged, amount)`. Its controlled scopes are charged
 formula preparation, source classification and exact evaluation, instantiation,
 terminal partition and admission, shared constraint-checker preparation, each
 model or region check, each consequence pass, and each answer reconstruction.

@@ -3,8 +3,8 @@ use crate::formula_ground::{Purpose, ground};
 use crate::formula_support::{testing, testing::Fixture};
 use crate::test_support::location;
 use crate::{ExpansionLimits, FormulaLimits};
+use zetesis_algebra::Cancellation;
 use zetesis_core::Value;
-use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{
     AggregateErrorKind, Interpretation, Limits, Narrower, Narrowing, NarrowingScratch, NodeView,
     OriginalSubject, Region, RegionLimits, models, models_reduct,

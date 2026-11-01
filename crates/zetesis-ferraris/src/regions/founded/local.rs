@@ -20,7 +20,7 @@ use super::{
     flag_words, reserve,
 };
 use std::mem::size_of;
-use zetesis_cpu::Stop;
+use zetesis_algebra::Stop;
 
 #[cfg(test)]
 mod tests;

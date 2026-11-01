@@ -33,7 +33,7 @@
 use std::num::NonZeroUsize;
 use std::ops::ControlFlow;
 
-use zetesis_cpu::Stop;
+use zetesis_algebra::Stop;
 
 use super::{Chain, Closure, Count, Narrower, Step, Work, bit, chain_position, flag_words};
 

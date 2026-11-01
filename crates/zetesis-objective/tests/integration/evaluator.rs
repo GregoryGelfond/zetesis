@@ -6,10 +6,10 @@ use std::time::{Duration, Instant};
 
 use crate::support::programs::program;
 use proptest::prelude::*;
+use zetesis_algebra::Cancellation;
 use zetesis_core::{
     AtomPattern, Filter, Model, TemplateTerm, Term, Value, ValueLimits, ValueNodeRef,
 };
-use zetesis_cpu::Cancellation;
 use zetesis_objective::{
     AdmissionError, AdmissionLimits, ErrorKind, Limits, ObjectiveProgram, ObjectiveTemplate, Stop,
     evaluate,

@@ -3,7 +3,7 @@
 use std::{error::Error as _, fmt, sync::Arc};
 use zetesis_reference_support::formula;
 
-use zetesis_cpu::Cancellation;
+use zetesis_algebra::Cancellation;
 use zetesis_solve::{
     Backend, ExecutionObservation, ExecutionObserver, PreparedInput, Session, SolveConfig,
     SolveError, SolveFailure, Subject,

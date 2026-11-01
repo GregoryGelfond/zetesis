@@ -2,7 +2,7 @@
 
 use std::io::Write;
 
-use zetesis_cpu::Cancellation;
+use zetesis_algebra::Cancellation;
 use zetesis_themelios::{OutputSelection, observation::ObservationProgram};
 
 use crate::SolvePhase;
@@ -240,7 +240,7 @@ fn acknowledge(
 /// Callers pass its typed stop, rather than polling after an unrelated failure;
 /// this preserves the operation's diagnostic and failure precedence.
 pub(crate) fn interrupted(
-    reason: zetesis_cpu::Stop,
+    reason: zetesis_algebra::Stop,
     renderer: &mut impl AnswerRenderer,
     diagnostics: &mut Diagnostics<impl Write>,
     phases: &Recorder,

@@ -3,7 +3,7 @@
 use super::{Budget, ExpansionFailure, ExpansionLimits, ExpansionResource};
 use crate::test_support::location;
 use crate::{ConstraintAllowance, ConstraintCheckLimits};
-use zetesis_cpu::{Cancellation, Stop};
+use zetesis_algebra::{Cancellation, Stop};
 
 fn budget(allowance: &ConstraintAllowance) -> Budget {
     Budget::new(

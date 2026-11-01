@@ -1,8 +1,8 @@
 //! Objective ranking is subordinate to complete stable-model verification.
 
 use clap::Parser;
+use zetesis_algebra::Cancellation;
 use zetesis_cli::{Completion, Options, Report, run_with_diagnostics};
-use zetesis_cpu::Cancellation;
 
 fn solve(source: &str, arguments: &[&str]) -> (Report, String) {
     let options =

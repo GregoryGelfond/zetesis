@@ -11,7 +11,7 @@ use themelios_solve::{
     contract::Fault,
     outcome::{Conclusion, Model, Run as SolveRun},
 };
-use zetesis_cpu::{Cancellation, CancellationRun};
+use zetesis_algebra::{Cancellation, CancellationRun};
 use zetesis_solve::Session;
 use zetesis_themelios::SourceMetadata;
 

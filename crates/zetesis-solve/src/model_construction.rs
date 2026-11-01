@@ -3,10 +3,10 @@
 
 use std::fmt;
 
+use zetesis_algebra::{Cancellation, Stop};
 use zetesis_core::{
     AtomCatalog, Model, ModelError, ModelFailure, ModelOrder, ModelPublicationFailure,
 };
-use zetesis_cpu::{Cancellation, Stop};
 
 use crate::{SolveConfig, SolveError};
 

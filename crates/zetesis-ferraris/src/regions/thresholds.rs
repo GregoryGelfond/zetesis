@@ -11,7 +11,7 @@
 use std::collections::HashMap;
 
 use crate::{NodeView, Theory, Threshold};
-use zetesis_cpu::Stop;
+use zetesis_algebra::Stop;
 
 use super::adjacency::Adjacency;
 
@@ -315,7 +315,7 @@ fn reserve<T>(length: usize) -> Result<Vec<T>, Stop> {
 mod tests {
     use crate::{AdmissionLimits, FormulaNodes, FormulaParts, Node, NodeView, Theory};
     use crate::{Narrower, Narrowing, NarrowingScratch, OriginalSubject, Region, RegionLimits};
-    use zetesis_cpu::Cancellation;
+    use zetesis_algebra::Cancellation;
 
     fn theory(conditions: &[usize], weights: &[u64], bounds: &[i128], negative: bool) -> Theory {
         let mut nodes =

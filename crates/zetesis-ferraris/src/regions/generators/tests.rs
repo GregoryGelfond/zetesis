@@ -2,7 +2,7 @@
 
 use super::{GeneratorOrder, GeneratorOrderError, GeneratorOrderLimits};
 use crate::{AdmissionLimits, FormulaParts, Node, OriginalSubject, Region, RegionLimits, Theory};
-use zetesis_cpu::{Cancellation, Stop};
+use zetesis_algebra::{Cancellation, Stop};
 
 fn theory(atoms: usize, nodes: Vec<Node>, roots: Vec<usize>) -> Theory {
     Theory::new(

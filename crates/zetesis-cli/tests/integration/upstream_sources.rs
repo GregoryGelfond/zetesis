@@ -2,8 +2,8 @@
 
 use clap::Parser;
 use serde_json::Value;
+use zetesis_algebra::Cancellation;
 use zetesis_cli::{Completion, Options, run_detailed_with_diagnostics};
-use zetesis_cpu::Cancellation;
 use zetesis_test_support::repository;
 use zetesis_validation::curated::{self, Limits};
 

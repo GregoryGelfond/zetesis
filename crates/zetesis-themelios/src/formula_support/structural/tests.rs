@@ -334,7 +334,7 @@ const OPTIONAL: &str = "{k(1);k(2);p(f(1));p(f(2));p(other(1))}.r(X):-k(X),p(f(X
 
 #[test]
 fn exact_probes_preserve_original_truth() {
-    use zetesis_cpu::Cancellation;
+    use zetesis_algebra::Cancellation;
     use zetesis_ferraris::{Limits, models};
     let (actual, reference) = equivalent_theories(OPTIONAL);
     for (left, right) in worlds(&actual.theory, &reference.theory) {
@@ -359,7 +359,7 @@ fn exact_probes_preserve_original_truth() {
 
 #[test]
 fn exact_probes_preserve_arbitrary_frozen_truth() {
-    use zetesis_cpu::Cancellation;
+    use zetesis_algebra::Cancellation;
     use zetesis_ferraris::{Limits, models_reduct};
     let (actual, reference) = equivalent_theories(OPTIONAL);
     let worlds = worlds(&actual.theory, &reference.theory);
@@ -509,7 +509,7 @@ fn query_envelope(
             ..limits
         };
         if cancelled {
-            let cancellation = zetesis_cpu::Cancellation::default();
+            let cancellation = zetesis_algebra::Cancellation::default();
             cancellation.cancel();
             counters.attach_test_control(&cancellation);
         }
@@ -566,7 +566,7 @@ fn cancelled_queries_cannot_publish_a_posting() {
     assert!(matches!(
         query_envelope(None, true).0,
         Err(FormulaFailure::Interrupted {
-            reason: zetesis_cpu::Stop::Cancelled,
+            reason: zetesis_algebra::Stop::Cancelled,
             ..
         })
     ));

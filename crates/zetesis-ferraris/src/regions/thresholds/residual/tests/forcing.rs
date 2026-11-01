@@ -234,7 +234,7 @@ fn choices_with_interval(atoms: usize, terms: &[(usize, u64)], target: i128) -> 
 fn inherited_enumeration_matches_independent_complete_families() {
     // The expected families use raw input occurrences, not grouped rows or
     // divisibility. Choice roots make every satisfying selection stable, checked
-    // by the exhaustive reduct oracle. Traversal inherits real knowledge at splits.
+    // by the exhaustive reduct oracle. Walk inherits real knowledge at splits.
     for terms in [
         vec![(0, 6), (1, 10), (2, 15)],
         vec![(0, 2), (0, 4), (1, 10), (2, 15)],

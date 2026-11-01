@@ -2,9 +2,9 @@
 //! supplied by the caller, never an execution path of the solver.
 use clap::Parser;
 use std::collections::BTreeSet;
+use zetesis_algebra::Cancellation;
 use zetesis_cli::{Completion, Options, run};
 use zetesis_clingo_support as oracle;
-use zetesis_cpu::Cancellation;
 
 fn canonical(line: &str) -> BTreeSet<String> {
     // This campaign uses only scalar atoms without strings containing spaces,

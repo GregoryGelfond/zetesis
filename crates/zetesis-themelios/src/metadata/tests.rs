@@ -126,7 +126,7 @@ fn common_collector_applies_constructed_policy_without_source_evidence() {
 #[test]
 fn observation_compilation_polls_preparation_control() {
     use themelios_program::program::{Program, Show};
-    use zetesis_cpu::{Cancellation, Stop};
+    use zetesis_algebra::{Cancellation, Stop};
 
     let program = Program::of([Show::Term(7.into())]);
     let cancellation = Cancellation::default();

@@ -16,8 +16,8 @@ use crate::formula_support::{
     Computation, Context, Counters, StorageLease, reserve_exact, supports_column_totality,
 };
 use crate::{FormulaFailure, FormulaLimits, ProgramSite};
+use zetesis_algebra::region::Region;
 use zetesis_core::catalog::PredicateRef;
-use zetesis_cpu::regions::Region;
 
 mod wakeups;
 use wakeups::Change;

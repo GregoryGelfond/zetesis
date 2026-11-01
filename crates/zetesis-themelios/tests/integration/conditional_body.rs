@@ -10,8 +10,8 @@ use crate::support::finite_bindings::{Models, exhaustive, native, values};
 use crate::support::formula_trees::{Formula, world};
 use serde_json::Value as Json;
 use themelios_base::source::SourceId;
+use zetesis_algebra::Cancellation;
 use zetesis_clingo_support as oracle;
-use zetesis_cpu::Cancellation;
 use zetesis_ferraris::NodeView as Node;
 use zetesis_themelios::{
     AdmissionFailure, AdmissionOptions, AdmittedFormula, BundleAdmissionOptions, ExpansionFailure,

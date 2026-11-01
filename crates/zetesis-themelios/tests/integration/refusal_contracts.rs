@@ -9,8 +9,8 @@ use std::path::{Path, PathBuf};
 use zetesis_test_support::programs::nullary;
 
 use themelios_base::source::{FromBytesRefusal, SourceId};
+use zetesis_algebra::Cancellation;
 use zetesis_core::{Atom, AtomPattern, ConstructionError, Model, Predicate, Value};
-use zetesis_cpu::Cancellation;
 use zetesis_reference_support::resource_limits;
 use zetesis_themelios::logical::term::{EvalError, Variable};
 use zetesis_themelios::{

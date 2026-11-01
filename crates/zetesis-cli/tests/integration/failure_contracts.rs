@@ -5,10 +5,10 @@ use std::io::{self, Write};
 use std::process::{Command, Stdio};
 
 use crate::support::options::serial as options;
+use zetesis_algebra::Cancellation;
 use zetesis_cli::{
     Completion, RunError, StatisticsView, run_finalized_with_diagnostics, run_with_diagnostics,
 };
-use zetesis_cpu::Cancellation;
 use zetesis_test_support::io::{BoundedWriter, FULL};
 
 fn bounded_human(

@@ -5,7 +5,7 @@ use crate::{
     FrozenSubject, Interpretation, Narrower, Narrowing, NarrowingScratch, Node, NodeView, Region,
     RegionLimits, Theory,
 };
-use zetesis_cpu::Cancellation;
+use zetesis_algebra::Cancellation;
 
 fn push(nodes: &mut FormulaNodes, view: NodeView<'_>) -> usize {
     let mut transaction = nodes.transaction();

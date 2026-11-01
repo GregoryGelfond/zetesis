@@ -1,9 +1,9 @@
 //! Actual mapped-copy interruption and subsequent same-context GPU work.
 
 use super::*;
+use zetesis_algebra::Stop;
 use zetesis_backend::GpuApi;
 use zetesis_core::{Atom, Predicate, Value, relation::Limits};
-use zetesis_cpu::Stop;
 
 mod compact;
 

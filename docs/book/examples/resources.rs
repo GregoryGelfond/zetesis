@@ -1,8 +1,8 @@
 //! Reuse one device across independent formula sessions.
 
 // ANCHOR: example
+use zetesis_algebra::Cancellation;
 use zetesis_core::{Atom, Model, Predicate};
-use zetesis_cpu::Cancellation;
 use zetesis_solve::{
     AnswerSelection, Backend, Completion, ExecutionResources, PreparedInput, Session, SolveConfig,
     Subject,

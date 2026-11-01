@@ -10,7 +10,7 @@
 
 use std::sync::Arc;
 
-use zetesis_cpu::Cancellation;
+use zetesis_algebra::Cancellation;
 use zetesis_ferraris::{Narrower, Theory};
 
 use super::regions::stopped;

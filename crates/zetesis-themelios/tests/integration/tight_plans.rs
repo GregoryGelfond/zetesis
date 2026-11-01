@@ -1,6 +1,6 @@
 //! Source-to-certificate boundaries; classification reads the completed DAG.
 
-use zetesis_cpu::Cancellation;
+use zetesis_algebra::Cancellation;
 use zetesis_ferraris::{
     Interpretation, TightCheckLimits, TightError, TightPlan, TightPlanLimits, TightVerdict,
 };

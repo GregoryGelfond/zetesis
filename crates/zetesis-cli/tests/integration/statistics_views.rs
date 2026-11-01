@@ -3,11 +3,11 @@
 use std::{io, num::NonZeroUsize};
 
 use clap::Parser;
+use zetesis_algebra::Cancellation;
 use zetesis_cli::{
     Backend, ColorMode, Options, PublicationOutcome, SemanticOutcome, SolveConfig,
     SolveMeasurements, run_finalized_with_diagnostics, statistics_view::Statistics,
 };
-use zetesis_cpu::Cancellation;
 use zetesis_presentation::Layout;
 
 use zetesis_test_support::io::BoundedWriter;
@@ -109,7 +109,7 @@ fn disabled_measurements_keep_mandatory_work_receipts() {
 #[test]
 fn recorded_zero_does_not_become_unavailable() {
     let semantic = SemanticOutcome::interrupted_before_start(
-        zetesis_cli::Interruption::Preparation(zetesis_cpu::Stop::Cancelled),
+        zetesis_cli::Interruption::Preparation(zetesis_algebra::Stop::Cancelled),
     );
     let text = render(&SolveConfig::default(), Some(&semantic));
     assert_eq!(

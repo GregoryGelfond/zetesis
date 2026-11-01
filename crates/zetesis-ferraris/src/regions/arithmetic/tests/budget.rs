@@ -2,7 +2,7 @@
 
 use std::collections::VecDeque;
 
-use zetesis_cpu::{Cancellation, Stop};
+use zetesis_algebra::{Cancellation, Stop};
 
 use crate::regions::{NarrowingQuota, Work};
 use crate::{

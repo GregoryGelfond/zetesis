@@ -1799,7 +1799,7 @@ mod tests {
                 &[],
                 &[],
                 crate::AggregateFamilyLimits::default(),
-                &zetesis_cpu::Cancellation::default(),
+                &zetesis_algebra::Cancellation::default(),
             )
             .unwrap();
         assert_eq!(transaction.validation_frontier(), 3);
@@ -1813,7 +1813,7 @@ mod tests {
                 &[],
                 &[],
                 crate::AggregateFamilyLimits::default(),
-                &zetesis_cpu::Cancellation::default(),
+                &zetesis_algebra::Cancellation::default(),
             )
             .unwrap_err();
         assert_eq!(
@@ -1898,7 +1898,7 @@ mod tests {
                 &[],
                 &[],
                 crate::AggregateFamilyLimits::default(),
-                &zetesis_cpu::Cancellation::default(),
+                &zetesis_algebra::Cancellation::default(),
             )
             .unwrap_err();
         assert_eq!(
@@ -1973,7 +1973,7 @@ mod tests {
                         bound: 1,
                     }],
                     limits,
-                    &zetesis_cpu::Cancellation::default(),
+                    &zetesis_algebra::Cancellation::default(),
                 )
                 .unwrap();
             if let Some(work) = allowance {

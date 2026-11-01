@@ -1921,10 +1921,17 @@ dependencies = [
  "themelios-query",
  "themelios-solve",
  "themelios-syntax",
- "zetesis-cpu",
+ "zetesis-algebra",
  "zetesis-engine",
  "zetesis-solve",
  "zetesis-themelios",
+]
+
+[[package]]
+name = "zetesis-algebra"
+version = "0.6.0"
+dependencies = [
+ "proptest",
 ]
 
 [[package]]
@@ -1958,11 +1965,11 @@ dependencies = [
  "serde",
  "serde_json",
  "tempfile",
+ "zetesis-algebra",
  "zetesis-backend",
  "zetesis-bench",
  "zetesis-clingo-support",
  "zetesis-core",
- "zetesis-cpu",
  "zetesis-ferraris",
  "zetesis-objective",
  "zetesis-presentation",
@@ -1991,15 +1998,9 @@ name = "zetesis-core"
 version = "0.6.0"
 dependencies = [
  "proptest",
- "zetesis-test-support",
-]
-
-[[package]]
-name = "zetesis-cpu"
-version = "0.6.0"
-dependencies = [
  "rayon",
- "zetesis-core",
+ "zetesis-algebra",
+ "zetesis-test-support",
 ]
 
 [[package]]
@@ -2021,8 +2022,8 @@ dependencies = [
  "themelios-query",
  "themelios-solve",
  "themelios-syntax",
+ "zetesis-algebra",
  "zetesis-core",
- "zetesis-cpu",
  "zetesis-ferraris",
  "zetesis-solve",
  "zetesis-stable",
@@ -2044,9 +2045,9 @@ dependencies = [
  "criterion",
  "proptest",
  "serde_json",
+ "zetesis-algebra",
  "zetesis-clingo-support",
  "zetesis-core",
- "zetesis-cpu",
  "zetesis-test-support",
  "zetesis-theory-support",
 ]
@@ -2073,8 +2074,8 @@ name = "zetesis-objective"
 version = "0.6.0"
 dependencies = [
  "proptest",
+ "zetesis-algebra",
  "zetesis-core",
- "zetesis-cpu",
  "zetesis-test-support",
 ]
 
@@ -2092,8 +2093,8 @@ version = "0.6.0"
 dependencies = [
  "serde_json",
  "tempfile",
+ "zetesis-algebra",
  "zetesis-core",
- "zetesis-cpu",
  "zetesis-ferraris",
  "zetesis-objective",
  "zetesis-test-support",
@@ -2105,10 +2106,10 @@ name = "zetesis-solve"
 version = "0.6.0"
 dependencies = [
  "rayon",
+ "zetesis-algebra",
  "zetesis-backend",
  "zetesis-clingo-support",
  "zetesis-core",
- "zetesis-cpu",
  "zetesis-ferraris",
  "zetesis-objective",
  "zetesis-reference-support",
@@ -2127,7 +2128,7 @@ dependencies = [
  "proptest",
  "rayon",
  "self_cell",
- "zetesis-cpu",
+ "zetesis-algebra",
  "zetesis-ferraris",
  "zetesis-objective",
  "zetesis-reference-support",
@@ -2160,9 +2161,9 @@ dependencies = [
  "themelios-base",
  "themelios-program",
  "themelios-syntax",
+ "zetesis-algebra",
  "zetesis-clingo-support",
  "zetesis-core",
- "zetesis-cpu",
  "zetesis-domain",
  "zetesis-ferraris",
  "zetesis-objective",
@@ -2176,8 +2177,8 @@ dependencies = [
 name = "zetesis-theory-support"
 version = "0.6.0"
 dependencies = [
+ "zetesis-algebra",
  "zetesis-core",
- "zetesis-cpu",
  "zetesis-ferraris",
 ]
 
@@ -2210,9 +2211,9 @@ dependencies = [
  "naga",
  "pollster",
  "wgpu",
+ "zetesis-algebra",
  "zetesis-backend",
  "zetesis-core",
- "zetesis-cpu",
  "zetesis-ferraris",
  "zetesis-test-support",
  "zetesis-theory-support",

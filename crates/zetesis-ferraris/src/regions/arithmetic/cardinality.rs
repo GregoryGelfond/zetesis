@@ -8,8 +8,8 @@ use std::cmp::Ordering;
 use std::mem::size_of;
 use std::ops::Range;
 
-use zetesis_core::packed;
-use zetesis_cpu::Stop;
+use zetesis_algebra::Stop;
+use zetesis_algebra::words;
 
 use crate::AdmissionError;
 
@@ -104,7 +104,7 @@ fn check_pair(
     else {
         return Ok(false);
     };
-    let cardinality = u64::try_from(packed::count(left, &mut |work| budget.charge(work))?)
+    let cardinality = u64::try_from(words::count(left, &mut |work| budget.charge(work))?)
         .map_err(|_| BudgetError::Stopped(Stop::WorkLimit))?;
     budget.charge(1)?;
     if lower_cardinality != cardinality {
@@ -114,8 +114,8 @@ fn check_pair(
     if upper_cardinality != cardinality {
         return Ok(false);
     }
-    packed::xor_assign(left, right, &mut || budget.charge(1))?;
-    let remaining = packed::first(left, &mut |work| budget.charge(work))?;
+    words::xor_assign(left, right, &mut || budget.charge(1))?;
+    let remaining = words::first(left, &mut |work| budget.charge(work))?;
     budget.charge(1)?;
     if remaining.is_some() {
         return Ok(false);
@@ -141,7 +141,7 @@ fn union_side(
         if bound.side != side {
             return Ok(None);
         }
-        packed::union_assign(union, &bound.support, &mut |work| budget.charge(work))?;
+        words::union_assign(union, &bound.support, &mut |work| budget.charge(work))?;
         budget.charge(2)?;
         let Some(next) = cardinality.checked_add(bound.cardinality) else {
             return Ok(None);
@@ -482,7 +482,7 @@ fn components(
         let encoded = row
             .checked_add(1)
             .ok_or(BudgetError::Stopped(Stop::Allocation))?;
-        packed::visit_set_bits(
+        words::visit_set_bits(
             &bound.support,
             budget,
             &mut |budget, work| budget.charge(work),
@@ -629,10 +629,10 @@ fn greedy(
     let first = selected.len();
     for &row in rows {
         let disjoint =
-            packed::disjoint(union, &bounds[row].support, &mut |work| budget.charge(work))?;
+            words::disjoint(union, &bounds[row].support, &mut |work| budget.charge(work))?;
         budget.charge(1)?;
         if disjoint {
-            packed::union_assign(union, &bounds[row].support, &mut |work| budget.charge(work))?;
+            words::union_assign(union, &bounds[row].support, &mut |work| budget.charge(work))?;
             storage.push(selected, row, 1, budget)?;
         }
     }

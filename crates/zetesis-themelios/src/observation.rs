@@ -24,8 +24,8 @@ pub use themelios_program::symbol::{Name, Sign as SymbolSign, Symbol};
 /// Checked arithmetic causes from the pinned shared value vocabulary.
 pub use themelios_program::term::EvalError as EvaluationError;
 use themelios_program::term::{BinaryOp, UnaryOp};
+use zetesis_algebra::{Cancellation, Stop};
 use zetesis_core::Model;
-use zetesis_cpu::{Cancellation, Stop};
 
 pub(crate) use compile::compile;
 

@@ -12,7 +12,7 @@ use super::{
     Narrower, NodeView, Producers, Scratch, State, Theory, Work, bit, chain_position, flag_words,
     reserve,
 };
-use zetesis_cpu::Stop;
+use zetesis_algebra::Stop;
 
 impl Scratch {
     pub(super) fn prepare_components(

@@ -8,8 +8,8 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write;
 
 use stable_models::stable;
+use zetesis_algebra::Cancellation;
 use zetesis_core::Value;
-use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{Interpretation, Limits, models, models_reduct};
 use zetesis_test_support::programs::atom;
 use zetesis_themelios::ProgramSite;

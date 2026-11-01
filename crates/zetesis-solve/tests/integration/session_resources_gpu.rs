@@ -2,11 +2,11 @@
 
 use std::{convert::Infallible, num::NonZeroUsize};
 
+use zetesis_algebra::Cancellation;
 use zetesis_core::{
     Atom, Model, Predicate, Sign, Value,
     relation::{Limits, Relation},
 };
-use zetesis_cpu::Cancellation;
 use zetesis_reference_support::{formula, prepared};
 use zetesis_solve::{
     AnswerSelection, AnswerSet, Backend, Completion, ExecutionObservation, ExecutionObserver,

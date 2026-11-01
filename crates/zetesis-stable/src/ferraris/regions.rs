@@ -23,8 +23,11 @@
 
 use std::sync::Arc;
 
-use zetesis_cpu::Stop;
-use zetesis_cpu::regions::{Counting, Narrowing, Region, Traversal, Visit};
+use zetesis_algebra::Stop;
+use zetesis_algebra::{
+    region::{Narrowing, Region},
+    walk::{Counting, Visit, Walk},
+};
 use zetesis_ferraris::{
     ChoiceHeads, FrozenSubject, GeneratorOrder, GeneratorOrderError, Interpretation, Knowledge,
     LearningLimits, LearningOwner, Narrower, NarrowingAttempt, NarrowingQuota, NarrowingScratch,
@@ -180,35 +183,8 @@ impl RegionCounts {
     }
 }
 
-/// Owned storage of queued, inactive candidate regions in the parallel
-/// producers' deques, at frontier mutations.
-///
-/// Bytes include the deque vector's and each deque's header, the deques'
-/// allocated entry capacity, used or not, and each queued region's and
-/// knowledge's owned vector capacities. They exclude the regions producers
-/// hold, temporary split copies, shared theory and indexes, candidate batches,
-/// measurement bookkeeping, thread stacks and allocator/driver storage. This
-/// observation is neither total search memory nor a byte admission limit. Each
-/// count changes under the lock of the deque whose change causes it, so its
-/// peak is the maximum of a linearization of the deques' changes; peaks need
-/// not occur at the same mutation, and an empty frontier can retain entry
-/// capacity.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub struct RegionFrontierStatistics {
-    /// Currently queued inactive regions.
-    pub regions: usize,
-    /// Current entry capacity of the deques: the regions their storage can
-    /// queue without growing, used or not.
-    pub capacity: usize,
-    /// Current logical retained bytes in the stated ownership scope.
-    pub retained_bytes: u128,
-    /// Maximum number of simultaneously queued regions.
-    pub peak_regions: usize,
-    /// Maximum allocated entry capacity.
-    pub peak_capacity: usize,
-    /// Maximum logical retained bytes at a frontier mutation.
-    pub peak_retained_bytes: u128,
-}
+// Keep the public solver receipt name while the generic frontier owns its fields.
+pub use zetesis_algebra::walk::frontier::Statistics as RegionFrontierStatistics;
 
 /// What the region proposer did, cumulatively: the counts of its walk over
 /// the candidate tree, and whether the theory lies in the producer
@@ -429,7 +405,7 @@ pub(crate) struct RegionSearch {
     /// Each region carries what is known about it under the theory and
     /// under each restriction, in order; a restriction added after a region
     /// was reached gets fresh knowledge when the region is next narrowed.
-    traversal: Traversal<CandidateKnowledge>,
+    traversal: Walk<CandidateKnowledge>,
     /// Each restriction with its own index.
     restrictions: Conditions<(Theory, Narrower)>,
     /// The worklists every narrowing of this walk reuses, with its tier of
@@ -758,7 +734,7 @@ impl RegionSearch {
         Ok(Self {
             statistics,
             parts,
-            traversal: Traversal::with_state(root, Counting::Never, CandidateKnowledge::default())
+            traversal: Walk::with_state(root, Counting::Never, CandidateKnowledge::default())
                 .with_held_first(),
             restrictions: Conditions::default(),
             scratch: NarrowingScratch::default(),
@@ -1376,7 +1352,7 @@ impl<'a> ReductQuery<'a> {
         for atom in (0..theory.atom_count()).filter(|&atom| !candidate.contains(atom)) {
             root.cut(atom);
         }
-        let mut traversal = Traversal::with_state(root, Counting::Never, narrower.knowledge());
+        let mut traversal = Walk::with_state(root, Counting::Never, narrower.knowledge());
         let mut offered = false;
         loop {
             let before = traversal.statistics();
@@ -1500,7 +1476,7 @@ pub(crate) trait Publication {
         &mut self,
         truth: &[bool],
         candidate: &Interpretation,
-        traversal: &mut Traversal<Knowledge>,
+        traversal: &mut Walk<Knowledge>,
     ) -> Option<Self::Receipt>;
 }
 
@@ -1518,7 +1494,7 @@ impl Publication for Inline {
         &mut self,
         _: &[bool],
         _: &Interpretation,
-        _: &mut Traversal<Knowledge>,
+        _: &mut Walk<Knowledge>,
     ) -> Option<Self::Receipt> {
         None
     }

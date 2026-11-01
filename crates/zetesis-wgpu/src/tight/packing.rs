@@ -9,7 +9,7 @@ use super::{
 use crate::formula_graph::dependency;
 use crate::runtime::Variant;
 use crate::{GpuError, GpuErrorKind};
-use zetesis_cpu::Cancellation;
+use zetesis_algebra::Cancellation;
 use zetesis_ferraris::{Interpretation, Theory, TightPlan, TightVerdict};
 
 pub(super) const PARAM_BYTES: u64 = 64;
@@ -720,7 +720,7 @@ impl Plan {
         candidates: &[Interpretation],
         staging: &mut crate::candidates::Staging,
         ceiling: u64,
-        cancellation: &zetesis_cpu::Cancellation,
+        cancellation: &zetesis_algebra::Cancellation,
     ) -> Result<u64, GpuError> {
         if candidates.len() != self.worlds as usize {
             staging.release();

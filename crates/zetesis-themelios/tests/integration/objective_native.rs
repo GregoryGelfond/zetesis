@@ -1,7 +1,7 @@
 //! Native eligibility rows retain complete-key scoring and candidate-only bounds.
 
+use zetesis_algebra::Cancellation;
 use zetesis_core::{AtomCatalog, AtomPattern, Term, Value};
-use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{AdmissionLimits, FormulaParts, Interpretation, Node, NodeView, Theory};
 use zetesis_objective::{ObjectiveProgram, ObjectiveTemplate, Score};
 use zetesis_reference_support::resource_limits;

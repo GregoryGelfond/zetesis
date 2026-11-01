@@ -8,7 +8,7 @@ use std::fmt::Debug;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 
-use zetesis_cpu::regions::Region;
+use zetesis_algebra::region::Region;
 use zetesis_ferraris::Theory;
 
 use crate::timing::{self, Phase};

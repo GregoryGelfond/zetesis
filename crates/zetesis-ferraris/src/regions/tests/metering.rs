@@ -2,7 +2,7 @@
 //! stops it at, records the same work, and returns every unspent permit; a
 //! fixed ceiling stops it at the same read.
 
-use zetesis_cpu::{Cancellation, Stop};
+use zetesis_algebra::{Cancellation, Stop};
 
 use crate::regions::{NARROWING_BATCH, Work};
 use crate::{Narrower, NarrowingQuota, Region, RegionLimits, Theory};

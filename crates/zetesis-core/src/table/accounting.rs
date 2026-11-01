@@ -2,9 +2,9 @@
 
 use std::{cmp::Ordering, mem::size_of};
 
-use zetesis_core::catalog::TermRef;
+use crate::catalog::TermRef;
 
-use crate::{Cancellation, Stop};
+use zetesis_algebra::{Cancellation, Stop};
 
 use super::{Cause, Failure, Limits, MeteredCause, MeteredFailure, Resource, Statistics};
 
@@ -213,7 +213,7 @@ fn ceiling(resource: Resource, observed: u128, limit: u128) -> Result<(), Cause>
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::Stop;
+    use zetesis_algebra::Stop;
 
     #[test]
     fn interrupted_charge_preserves_the_completed_prefix() {

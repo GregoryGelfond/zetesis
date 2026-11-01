@@ -3,7 +3,7 @@ use std::mem::size_of;
 use proptest::prelude::*;
 
 use super::Adjacency;
-use zetesis_cpu::Stop;
+use zetesis_algebra::Stop;
 
 #[test]
 fn rows_preserve_order_and_duplicate_occurrences() {

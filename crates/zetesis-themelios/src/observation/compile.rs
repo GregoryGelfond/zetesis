@@ -38,7 +38,7 @@ impl Generated {
 }
 
 struct Compiler<'a> {
-    cancellation: Option<zetesis_cpu::Cancellation>,
+    cancellation: Option<zetesis_algebra::Cancellation>,
     admission: &'a mut crate::metadata::Admission,
     limits: AdmissionLimits,
     constants: &'a BTreeMap<String, Symbol>,

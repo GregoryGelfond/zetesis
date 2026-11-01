@@ -6,8 +6,8 @@ use super::super::{
 };
 use crate::GpuErrorKind;
 use std::time::Duration;
+use zetesis_algebra::Cancellation;
 use zetesis_core::Value;
-use zetesis_cpu::Cancellation;
 use zetesis_ferraris::native_aggregate::{self as native, Function};
 use zetesis_theory_support::aggregate as reference;
 

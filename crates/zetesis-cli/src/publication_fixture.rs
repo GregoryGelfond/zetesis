@@ -2,7 +2,7 @@
 
 use std::io::{self, Write};
 
-use zetesis_cpu::Cancellation;
+use zetesis_algebra::Cancellation;
 
 use crate::{PublicationConfig, PublicationFailure, PublicationOutcome};
 

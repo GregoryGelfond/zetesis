@@ -234,7 +234,7 @@ fn original_validation_still_precedes_the_external_checker() {
                 panic!("the original validation must refuse first")
             }),
             Err(BatchError::Search(Incomplete::Verification(
-                zetesis_cpu::Stop::WorkLimit
+                zetesis_algebra::Stop::WorkLimit
             )))
         ));
         assert_eq!(stream.statistics().candidates, 0);

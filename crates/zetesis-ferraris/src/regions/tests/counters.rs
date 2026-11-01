@@ -7,7 +7,7 @@ use crate::{
     AdmissionLimits, EvaluationLimits, EvaluationWorkspace, Interpretation, Narrower, Node, Region,
     RegionLimits, Theory,
 };
-use zetesis_cpu::Cancellation;
+use zetesis_algebra::Cancellation;
 
 use super::super::Width;
 use super::super::counters::Count;

@@ -3,8 +3,8 @@
 use serde_json::Value as Json;
 use std::collections::BTreeSet;
 use std::time::Duration;
+use zetesis_algebra::Cancellation;
 use zetesis_clingo_support as oracle;
-use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{NodeView as Node, Theory};
 use zetesis_reference_support::canonical;
 use zetesis_themelios::AdmittedFormula;

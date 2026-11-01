@@ -1,7 +1,7 @@
 //! Implication dispatch preserves ordered consequences and charged visits.
 
 use crate::test_support::SinglePermits;
-use zetesis_cpu::Stop;
+use zetesis_algebra::Stop;
 
 use crate::{AdmissionLimits, FormulaParts, Knowledge, Narrower, Node, Theory};
 

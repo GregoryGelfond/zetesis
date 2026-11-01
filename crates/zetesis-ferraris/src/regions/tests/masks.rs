@@ -1,6 +1,6 @@
 //! Packed storage preserves the closure's logical tails and stopping boundary.
 
-use zetesis_cpu::{Cancellation, Stop};
+use zetesis_algebra::{Cancellation, Stop};
 
 use crate::{
     AdmissionLimits, FormulaParts, FrozenSubject, Narrower, NarrowingScratch, Node,

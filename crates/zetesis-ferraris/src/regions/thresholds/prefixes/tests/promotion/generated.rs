@@ -1,7 +1,7 @@
 //! Small generated prefix forests compare pending schedules with fresh closure.
 
 use proptest::prelude::*;
-use zetesis_cpu::Cancellation;
+use zetesis_algebra::Cancellation;
 
 use crate::{Interpretation, Limits, models};
 

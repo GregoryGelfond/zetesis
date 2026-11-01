@@ -3,7 +3,7 @@
 
 use std::cell::Cell;
 
-use zetesis_cpu::regions::Region;
+use zetesis_algebra::region::Region;
 use zetesis_ferraris::{NARROWING_BATCH, Narrower, Node, Theory};
 
 use super::super::{CandidateKnowledge, Conditions, RegionCounts, narrow};

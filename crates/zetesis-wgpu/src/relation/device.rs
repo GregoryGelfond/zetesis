@@ -3,8 +3,8 @@ use super::{
     RelationGpuMasks, RelationGpuStats, SHADER, capacity, packing, poll,
 };
 use crate::{GpuError, GpuErrorKind, GpuInfo, GpuOptions, GpuSelection, runtime};
+use zetesis_algebra::Cancellation;
 use zetesis_core::relation::{Failure, Query, Relation};
-use zetesis_cpu::Cancellation;
 
 // Poll before each additional 4 KiB of packed payload writes.
 const PACK_CONTROL_BYTES: usize = 4096;

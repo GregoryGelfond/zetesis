@@ -15,7 +15,7 @@ mod validation;
 use std::{fmt, mem::size_of};
 
 use crate::{Interpretation, Theory};
-use zetesis_cpu::{Cancellation, ChargeError, Meter, Refusal, Stop};
+use zetesis_algebra::{Cancellation, ChargeError, Meter, Refusal, Stop};
 
 /// Independent limits for complete-root classification and least closure.
 #[derive(Clone, Copy, Debug)]
@@ -174,7 +174,7 @@ pub struct PositivePlanStatistics {
 /// It does not establish source completeness or verify the Rust implementation.
 ///
 /// ```
-/// use zetesis_cpu::Cancellation;
+/// use zetesis_algebra::Cancellation;
 /// use zetesis_ferraris::{AdmissionLimits, Node, PositivePlan, PositivePlanLimits, Theory};
 ///
 /// // a. b :- a. a :- b. The positive cycle is seeded by the fact a.

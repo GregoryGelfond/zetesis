@@ -1,6 +1,6 @@
 //! Native groups are checked against Boolean semantics, not binary expansion.
 use super::{group_allowed, model, propagate_with, values};
-use zetesis_cpu::Cancellation;
+use zetesis_algebra::Cancellation;
 use zetesis_ferraris::{
     AdmissionLimits, FormulaParts, FrozenReduct, Interpretation, Limits, Node, OperandSpan, Theory,
     Verdict, check,

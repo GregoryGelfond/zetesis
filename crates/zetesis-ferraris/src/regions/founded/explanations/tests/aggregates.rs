@@ -6,12 +6,12 @@ use super::{Program, assert_sound, explain, limits, partial};
 use crate::regions::Work;
 use crate::test_support::{SinglePermits, constructed_theory, push};
 use crate::{ExtremumCut, ExtremumCutRule, ExtremumRow, FormulaTransaction, NodeView, Threshold};
-use zetesis_cpu::Stop;
+use zetesis_algebra::Stop;
 
 #[test]
 fn ordinary_closure_reuses_native_aggregate_explanations() {
     use crate::{Knowledge, Narrowing, NarrowingScratch, OriginalSubject, Region, RegionLimits};
-    use zetesis_cpu::Cancellation;
+    use zetesis_algebra::Cancellation;
 
     for maximum in [false, true] {
         let (program, _) = program(|nodes| {

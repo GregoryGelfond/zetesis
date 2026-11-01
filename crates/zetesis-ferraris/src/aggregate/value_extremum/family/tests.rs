@@ -249,7 +249,7 @@ fn cancelled_family_preserves_the_original_prefix() {
     let error = build(&mut nodes, AggregateFamilyLimits::default(), &cancellation).unwrap_err();
     assert_eq!(
         error.kind(),
-        AggregateErrorKind::Control(zetesis_cpu::Stop::Cancelled)
+        AggregateErrorKind::Control(zetesis_algebra::Stop::Cancelled)
     );
     assert_eq!(nodes.view().len(), 1);
 }

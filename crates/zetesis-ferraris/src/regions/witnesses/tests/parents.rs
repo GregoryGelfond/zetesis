@@ -127,7 +127,7 @@ fn every_refused_discovery_prefix_can_retry_without_stale_candidates() {
         let mut work = Work::new(limit);
         assert_eq!(
             scratch.parent_chains(&index, 0, &mut work, |chain| chain.disjunction),
-            Err(zetesis_cpu::Stop::WorkLimit),
+            Err(zetesis_algebra::Stop::WorkLimit),
         );
         assert_eq!(work.spent(), limit);
         scratch

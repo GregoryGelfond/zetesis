@@ -13,7 +13,7 @@ use std::mem::size_of;
 
 use super::{Tick, TightError, TightProducer, filled};
 use crate::{NodeView, Theory};
-use zetesis_cpu::{Meter, Stop};
+use zetesis_algebra::{Meter, Stop};
 
 /// What a reader is: the kind of the reading object.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

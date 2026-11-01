@@ -1,7 +1,7 @@
 //! Split ordering over already-maintained unknown-parent counts.
 
 use super::{ChoiceHeads, Knowledge, NarrowingQuota, PreferenceAttempt, Region, Width, Work};
-use zetesis_cpu::{Cancellation, Stop};
+use zetesis_algebra::{Cancellation, Stop};
 
 impl Knowledge {
     fn unknown_count(&self, atom: usize) -> usize {

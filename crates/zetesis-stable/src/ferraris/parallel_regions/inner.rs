@@ -52,7 +52,7 @@ use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard, OnceLock, PoisonError, TryLockError};
 use std::time::{Duration, Instant};
 
-use zetesis_cpu::regions::{Region, Traversal};
+use zetesis_algebra::{region::Region, walk::Walk};
 use zetesis_ferraris::{Interpretation, Knowledge};
 
 use super::{
@@ -235,7 +235,7 @@ impl InnerDeques {
         &self,
         index: usize,
         cell: &Arc<QueryCell>,
-        traversal: &mut Traversal<Knowledge>,
+        traversal: &mut Walk<Knowledge>,
         termination: &Termination,
         reserve: impl FnOnce(&mut VecDeque<InnerEntry>, usize) -> Result<(), Incomplete>,
     ) -> Result<(), Incomplete> {
@@ -382,7 +382,7 @@ impl Publication for WalkPublication<'_, '_> {
         &mut self,
         truth: &[bool],
         candidate: &Interpretation,
-        traversal: &mut Traversal<Knowledge>,
+        traversal: &mut Walk<Knowledge>,
     ) -> Option<()> {
         let pending = traversal.pending();
         // A cell counting no region would never be decided.

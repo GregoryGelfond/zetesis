@@ -1,6 +1,6 @@
 //! Owned native decisions bound to the candidate and theory actually checked.
 
-use zetesis_cpu::{Cancellation, Stop};
+use zetesis_algebra::{Cancellation, Stop};
 
 use crate::{Check, Interpretation, Limits, Statistics, Theory, Verdict};
 

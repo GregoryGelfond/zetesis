@@ -9,8 +9,8 @@ use themelios_base::{
     span::{ByteOffset, Span},
 };
 use themelios_program::program::{DefaultNegation, Relation};
+use zetesis_algebra::Cancellation;
 use zetesis_core::{Atom, AtomPattern, Predicate, Term, Value, ValueNodeRef};
-use zetesis_cpu::Cancellation;
 
 fn fixture() -> (CompletedCatalog, RuleIr) {
     let location = ProgramSite::source(themelios_base::span::Location {

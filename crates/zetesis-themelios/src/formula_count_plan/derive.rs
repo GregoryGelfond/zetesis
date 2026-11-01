@@ -220,7 +220,7 @@ fn append_consequences(
         work.payload(super::bytes::<Consequence>(1)?)?;
         consequences
             .try_reserve_exact(1)
-            .map_err(|_| Fault::Stopped(zetesis_cpu::Stop::Allocation))?;
+            .map_err(|_| Fault::Stopped(zetesis_algebra::Stop::Allocation))?;
         consequences.push(Consequence {
             location: global.location,
             body: global.body,

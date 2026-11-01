@@ -19,7 +19,7 @@
 //! Every new wave fixes an open condition; no numeric bound or reason is cached.
 
 use crate::regions::{Closure, Count, Narrower, Step, Work, bit};
-use zetesis_cpu::Stop;
+use zetesis_algebra::Stop;
 
 use super::State;
 

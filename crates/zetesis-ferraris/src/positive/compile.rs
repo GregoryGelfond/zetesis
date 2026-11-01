@@ -2,7 +2,7 @@
 
 use std::mem::size_of;
 
-use zetesis_cpu::Stop;
+use zetesis_algebra::Stop;
 
 pub(super) use super::activation::{Edge, State};
 use super::{Budget, PositiveError, PositivePlan, propagate, validation};

@@ -41,7 +41,7 @@ use super::{
     Narrower, NodeView, Producers, Scratch, Theory, Work, bit, chain_position, flag_words,
 };
 use std::mem::size_of;
-use zetesis_cpu::Stop;
+use zetesis_algebra::Stop;
 
 #[cfg(test)]
 mod tests;

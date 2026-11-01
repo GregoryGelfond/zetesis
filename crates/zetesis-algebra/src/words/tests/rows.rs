@@ -2,8 +2,8 @@ use std::collections::BTreeSet;
 
 use proptest::prelude::*;
 
-use crate::packed::{count, disjoint, first, union_assign, visit_set_bits};
-use crate::packed::{intersection_count, xor_assign};
+use crate::words::{count, disjoint, first, union_assign, visit_set_bits};
+use crate::words::{intersection_count, xor_assign};
 
 fn packed(positions: &BTreeSet<usize>, words: usize) -> Vec<u64> {
     let mut result = vec![0; words];

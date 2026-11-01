@@ -14,7 +14,7 @@
 //! Interrupted updates withdraw their owning evaluation before any later read.
 
 use crate::{ExtremaMeasure, ExtremumCut, NumericDomain, Theory, Threshold};
-use zetesis_cpu::Stop;
+use zetesis_algebra::Stop;
 
 /// Capacity survives passes; valid bits survive only into an update of the
 /// evaluation that published them, under the invariant the module states.

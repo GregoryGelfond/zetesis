@@ -3,7 +3,7 @@
 use crate::support::models::{CostFamily as Family, cost_family as family};
 use std::{collections::BTreeSet, convert::Infallible, num::NonZeroUsize};
 
-use zetesis_cpu::Cancellation;
+use zetesis_algebra::Cancellation;
 use zetesis_ferraris::{NodeView, PositiveError, PositiveResource, TightError, TightResource};
 use zetesis_reference_support::formula;
 use zetesis_solve::{

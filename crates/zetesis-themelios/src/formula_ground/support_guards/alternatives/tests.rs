@@ -8,7 +8,7 @@ use crate::grounding_observer::{GroundingOutcome, GroundingPhase, GroundingWork,
 use crate::{ExpansionLimits, FormulaLimits, FormulaResource, GroundingObserver};
 use themelios_base::source::SourceId;
 use themelios_base::span::{ByteOffset, Span};
-use zetesis_cpu::{Cancellation, Stop};
+use zetesis_algebra::{Cancellation, Stop};
 use zetesis_ferraris::{Region, Theory};
 
 mod boundaries;

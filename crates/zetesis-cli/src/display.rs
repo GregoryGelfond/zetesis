@@ -4,8 +4,8 @@ pub(crate) mod record;
 
 use std::ops::ControlFlow;
 
+use zetesis_algebra::Cancellation;
 use zetesis_core::Model;
-use zetesis_cpu::Cancellation;
 use zetesis_objective::Score;
 use zetesis_themelios::{
     OutputSelection, PreparedSelection,

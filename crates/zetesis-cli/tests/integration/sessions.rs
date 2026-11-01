@@ -11,11 +11,11 @@ use std::{
 };
 
 use clap::Parser;
+use zetesis_algebra::Cancellation;
 use zetesis_cli::{
     Completion, Grounder, Interruption, Options, Oracle, PreparedInput, RunError, Session,
     SessionModel, SolveConfig, Subject, run_finalized_with_diagnostics,
 };
-use zetesis_cpu::Cancellation;
 use zetesis_reference_support::formula;
 use zetesis_test_support::io::{CLOSED, Closed, FailAt};
 
@@ -334,7 +334,7 @@ fn cancelled_formula_does_not_enter_membership() {
     assert_eq!(outcome.completion(), Some(Completion::Interrupted));
     assert!(matches!(
         outcome.interruption(),
-        Some(Interruption::Preparation(zetesis_cpu::Stop::Cancelled))
+        Some(Interruption::Preparation(zetesis_algebra::Stop::Cancelled))
     ));
     assert_eq!(outcome.candidate_progress(), 0);
     assert!(outcome.countermodel_statistics().is_none());
@@ -503,7 +503,7 @@ fn stopped_prepared_inputs_skip_execution_setup() {
     let outcome = session.outcome().unwrap();
     assert_eq!(
         outcome.interruption(),
-        Some(Interruption::Preparation(zetesis_cpu::Stop::Cancelled))
+        Some(Interruption::Preparation(zetesis_algebra::Stop::Cancelled))
     );
     let Subject::Theory(theory) = outcome.subject().unwrap() else {
         panic!("original theory")

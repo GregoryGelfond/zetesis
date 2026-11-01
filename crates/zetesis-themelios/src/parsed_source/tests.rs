@@ -27,7 +27,7 @@ fn refusal_recovery_transfers_original_owners() {
 fn formula_control_retains_the_refused_source() {
     let source = ParsedSource::new("p(1..3).".into(), AdmissionOptions::default()).unwrap();
     let pointer = source.source().text().as_ptr();
-    let cancellation = zetesis_cpu::Cancellation::default();
+    let cancellation = zetesis_algebra::Cancellation::default();
     cancellation.cancel();
     let failure = source
         .prepare_formula_with_cancellation(
@@ -38,7 +38,7 @@ fn formula_control_retains_the_refused_source() {
         .unwrap_err();
     assert_eq!(
         failure.error().interruption(),
-        Some(zetesis_cpu::Stop::Cancelled)
+        Some(zetesis_algebra::Stop::Cancelled)
     );
     assert_eq!(failure.source().source().text().as_ptr(), pointer);
 }
@@ -46,7 +46,7 @@ fn formula_control_retains_the_refused_source() {
 #[test]
 fn formula_preparation_observes_its_supplied_control() {
     let source = ParsedSource::new("a | b.".into(), AdmissionOptions::default()).unwrap();
-    let cancellation = zetesis_cpu::Cancellation::default();
+    let cancellation = zetesis_algebra::Cancellation::default();
     cancellation.cancel();
     let failure = source
         .prepare_formula_with_cancellation(
@@ -57,14 +57,14 @@ fn formula_preparation_observes_its_supplied_control() {
         .unwrap_err();
     assert_eq!(
         failure.error().interruption(),
-        Some(zetesis_cpu::Stop::Cancelled)
+        Some(zetesis_algebra::Stop::Cancelled)
     );
 }
 
 #[test]
 fn formula_materialization_retains_preparation_control() {
     let source = ParsedSource::new("a | b.".into(), AdmissionOptions::default()).unwrap();
-    let cancellation = zetesis_cpu::Cancellation::default();
+    let cancellation = zetesis_algebra::Cancellation::default();
     let prepared = source
         .prepare_formula_with_cancellation(
             ExpansionLimits::default(),
@@ -74,7 +74,10 @@ fn formula_materialization_retains_preparation_control() {
         .unwrap();
     cancellation.cancel();
     let failure = prepared.ground().unwrap_err();
-    assert_eq!(failure.interruption(), Some(zetesis_cpu::Stop::Cancelled));
+    assert_eq!(
+        failure.interruption(),
+        Some(zetesis_algebra::Stop::Cancelled)
+    );
 }
 
 #[test]
@@ -84,7 +87,7 @@ fn bundle_formula_preparation_observes_control() {
     let path = directory.path().join("entry.lp");
     std::fs::write(&path, "p(1..3).").unwrap();
     let bundle = crate::SourceBundle::load(&path, crate::BundleLimits::default()).unwrap();
-    let cancellation = zetesis_cpu::Cancellation::default();
+    let cancellation = zetesis_algebra::Cancellation::default();
     cancellation.cancel();
     let failure = crate::prepare_bundle_formula_with_cancellation(
         bundle,
@@ -96,7 +99,7 @@ fn bundle_formula_preparation_observes_control() {
     .unwrap_err();
     assert_eq!(
         failure.error().interruption(),
-        Some(zetesis_cpu::Stop::Cancelled)
+        Some(zetesis_algebra::Stop::Cancelled)
     );
     assert_eq!(failure.bundle().sources().len(), 1);
 }
@@ -108,7 +111,7 @@ fn bundle_formula_materialization_retains_preparation_control() {
     let path = directory.path().join("entry.lp");
     std::fs::write(&path, "a | b.").unwrap();
     let bundle = crate::SourceBundle::load(&path, crate::BundleLimits::default()).unwrap();
-    let cancellation = zetesis_cpu::Cancellation::default();
+    let cancellation = zetesis_algebra::Cancellation::default();
     let prepared = crate::prepare_bundle_formula_with_cancellation(
         bundle,
         crate::BundleAdmissionOptions::default(),
@@ -121,7 +124,7 @@ fn bundle_formula_materialization_retains_preparation_control() {
     let failure = prepared.ground().unwrap_err();
     assert_eq!(
         failure.error().interruption(),
-        Some(zetesis_cpu::Stop::Cancelled)
+        Some(zetesis_algebra::Stop::Cancelled)
     );
 }
 

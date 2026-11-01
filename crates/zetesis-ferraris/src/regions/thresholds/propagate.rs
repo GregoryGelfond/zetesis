@@ -4,7 +4,7 @@
 
 use crate::Theory;
 use crate::regions::{Closure, Count, Narrower, Step, Work, bit};
-use zetesis_cpu::Stop;
+use zetesis_algebra::Stop;
 
 impl<C: Count> Closure<'_, C> {
     pub(in crate::regions) fn seed_thresholds(

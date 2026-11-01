@@ -14,7 +14,7 @@ use themelios_solve::{
     contract::Fault,
     outcome::{Conclusion, Model},
 };
-use zetesis_cpu::{Cancellation, Stop};
+use zetesis_algebra::{Cancellation, Stop};
 use zetesis_themelios::{SourceMetadata, observation, symbols};
 
 use crate::faults;

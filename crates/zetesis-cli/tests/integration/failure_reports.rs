@@ -4,11 +4,11 @@ use std::error::Error;
 use std::io;
 
 use clap::Parser;
+use zetesis_algebra::Cancellation;
 use zetesis_cli::{
     Completion, GroundingPhase, Interruption, Options, RunError, SolvePhase, StatisticsView,
     run_detailed, run_detailed_with_diagnostics, run_with_diagnostics,
 };
-use zetesis_cpu::Cancellation;
 use zetesis_test_support::io::{BoundedWriter, FAILED, FailAt};
 
 fn options(oracle: &str) -> Options {
@@ -344,7 +344,7 @@ fn a_cancelled_request_keeps_its_interruption_when_its_summary_sink_fails() {
     assert_eq!(partial.completion, Some(Completion::Interrupted));
     assert_eq!(
         partial.interruption,
-        Some(Interruption::Preparation(zetesis_cpu::Stop::Cancelled))
+        Some(Interruption::Preparation(zetesis_algebra::Stop::Cancelled))
     );
     assert_eq!(
         (

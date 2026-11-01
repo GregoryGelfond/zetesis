@@ -4,12 +4,12 @@ use std::collections::BTreeSet;
 
 use crate::support::options::serial_config as config;
 use clap::Parser;
+use zetesis_algebra::Cancellation;
 use zetesis_cli::{
     Completion, Interruption, Options, PreparedInput, PreparedProfile, Session, SolveConfig,
     SolvePhase, Subject, run_finalized,
 };
 use zetesis_core::Model;
-use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{PositiveError, PositiveResource};
 use zetesis_reference_support::{BundleFixture, formula};
 use zetesis_themelios::{

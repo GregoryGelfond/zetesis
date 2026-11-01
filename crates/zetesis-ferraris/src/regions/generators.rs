@@ -23,7 +23,7 @@
 
 use std::{fmt, mem::size_of};
 
-use zetesis_cpu::{Cancellation, Stop};
+use zetesis_algebra::{Cancellation, Stop};
 
 use super::{
     NarrowingQuota, NodeView, OriginalSubject, PreferenceAttempt, Producers, Region, Theory, Work,

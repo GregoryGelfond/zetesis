@@ -79,7 +79,7 @@ use std::sync::{Arc, Mutex, PoisonError, RwLock};
 use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
 
-use zetesis_cpu::regions::{Narrowing, Region};
+use zetesis_algebra::region::{Narrowing, Region};
 use zetesis_ferraris::{
     Interpretation, Narrower, NarrowingScratch, SupportExplanationStatistics, Theory,
 };
@@ -661,7 +661,7 @@ impl ParallelRegions {
         } = opened;
         let root = root.ok_or(Incomplete::InvalidWitness)?;
         let (sender, receiver) = sync_channel(workers.get() * CHANNEL_SLACK);
-        let root = (root, CandidateKnowledge::default());
+        let root = Entry(root, CandidateKnowledge::default());
         let frontier = RegionFrontier::new(workers.get(), root)?;
         let inner = InnerDeques::new(workers.get())?;
         Ok(Self {
@@ -1849,7 +1849,7 @@ impl Workspaces<'_> {
 fn step<'a>(
     shared: &'a Shared,
     original: &IndexedTheory,
-    ((mut region, mut knowledge), index): (Entry, usize),
+    (Entry(mut region, mut knowledge), index): (Entry, usize),
     workspaces: &mut Workspaces<'a>,
     budget: &mut Budget<'a, WorkLease<'a>>,
     report: &mut WorkerReport,
@@ -1937,8 +1937,8 @@ fn step<'a>(
     // Each child carries its own copy of the knowledge, linear in the theory:
     // what the parent learned holds in both.
     let (cut, held) = region.split(atom);
-    let cut = (cut, workspaces.copy_knowledge(&knowledge));
-    shared.publish_split(index, cut, (held, knowledge), reserve_regions)?;
+    let cut = Entry(cut, workspaces.copy_knowledge(&knowledge));
+    shared.publish_split(index, cut, Entry(held, knowledge), reserve_regions)?;
     Ok(Stepped::Split)
 }
 

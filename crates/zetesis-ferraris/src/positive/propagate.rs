@@ -6,7 +6,7 @@ use super::{
     compile::Graph,
 };
 use crate::{NodeView, Theory};
-use zetesis_cpu::Stop;
+use zetesis_algebra::Stop;
 
 pub(super) fn complete(
     theory: &Theory,

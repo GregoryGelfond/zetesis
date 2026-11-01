@@ -3,7 +3,7 @@
 use std::mem::{size_of, size_of_val};
 use std::num::NonZeroUsize;
 
-use zetesis_cpu::Cancellation;
+use zetesis_algebra::Cancellation;
 
 use crate::{
     AdmissionLimits, EvaluationLimits, EvaluationWorkspace, Interpretation, Narrower, Node,

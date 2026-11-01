@@ -1,6 +1,6 @@
 use std::{collections::BTreeSet, time::Instant};
 
-use zetesis_core::{Atom, Predicate, Sign, relation::Limits as RelationLimits};
+use crate::{Atom, Predicate, Sign, relation::Limits as RelationLimits};
 
 use super::*;
 
@@ -177,10 +177,10 @@ fn typed_domains_do_not_conflate_equal_spellings() {
         Value::Supremum,
         Value::from_nodes(
             vec![
-                zetesis_core::ValueNode::Tuple { arity: 1 },
-                zetesis_core::ValueNode::Number(1),
+                crate::ValueNode::Tuple { arity: 1 },
+                crate::ValueNode::Number(1),
             ],
-            zetesis_core::ValueLimits::default(),
+            crate::ValueLimits::default(),
         )
         .unwrap(),
     ];
@@ -192,7 +192,7 @@ fn typed_domains_do_not_conflate_equal_spellings() {
             .map(|value| vec![value])
             .collect::<Vec<_>>(),
     );
-    let catalog = zetesis_core::AtomCatalog::new(source).unwrap();
+    let catalog = crate::AtomCatalog::new(source).unwrap();
     let relation = Relation::from_refs(
         (&predicate).into(),
         catalog.atoms(),
@@ -226,12 +226,12 @@ fn typed_domains_do_not_conflate_equal_spellings() {
         let borrowed = projection.domain(0).unwrap().next().unwrap();
         let original = relation.row(index).unwrap().value(0).unwrap();
         assert_eq!(borrowed, original);
-        if let zetesis_core::ValueNodeRef::String(text) | zetesis_core::ValueNodeRef::Symbol(text) =
+        if let crate::ValueNodeRef::String(text) | crate::ValueNodeRef::Symbol(text) =
             borrowed.descriptor()
         {
             let same = original.descriptor();
             assert!(
-                matches!(same, zetesis_core::ValueNodeRef::String(value) | zetesis_core::ValueNodeRef::Symbol(value) if std::ptr::eq(text, value))
+                matches!(same, crate::ValueNodeRef::String(value) | crate::ValueNodeRef::Symbol(value) if std::ptr::eq(text, value))
             );
         }
     }

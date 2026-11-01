@@ -10,7 +10,7 @@ use crate::{
     NarrowingScratch, NarrowingStatistics, Node, OriginalSubject, Producers, Region, RegionLimits,
     Theory,
 };
-use zetesis_cpu::{Cancellation, Stop};
+use zetesis_algebra::{Cancellation, Stop};
 
 mod carrier;
 mod consolidation;

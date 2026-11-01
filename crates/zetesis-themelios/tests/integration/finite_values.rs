@@ -520,7 +520,7 @@ fn constructed_keys_retain_objective_contributions() {
             admitted.objectives(),
             &model,
             zetesis_objective::Limits::default(),
-            &zetesis_cpu::Cancellation::default(),
+            &zetesis_algebra::Cancellation::default(),
         )
         .unwrap();
         costs.push(score.score().costs().to_vec());

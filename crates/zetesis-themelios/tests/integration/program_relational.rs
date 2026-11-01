@@ -4,8 +4,8 @@ use crate::support::unevaluable_directives::{objective, projection};
 use std::{collections::BTreeSet, sync::Arc, time::Instant};
 use zetesis_reference_support::{exhaustive_models, resource_limits};
 
+use zetesis_algebra::{Cancellation, Stop};
 use zetesis_core::Model;
-use zetesis_cpu::{Cancellation, Stop};
 use zetesis_themelios::logical::{
     Name, Symbol, Term,
     program::{

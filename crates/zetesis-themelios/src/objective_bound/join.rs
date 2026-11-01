@@ -1,9 +1,9 @@
 use std::cmp::Ordering;
 use std::collections::BTreeMap;
 
+use zetesis_algebra::Cancellation;
 use zetesis_core::catalog::{AtomRef, Atoms, TermRef};
 use zetesis_core::{AtomIndex, AtomIndexError, AtomRows, PatternRef, TemplateTerm, ValueNodeRef};
-use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{AggregateElement, FormulaNodes, NodeView, Theory};
 use zetesis_objective::{Condition, ConditionNode, ObjectiveProgram, ObjectiveTemplateRef};
 

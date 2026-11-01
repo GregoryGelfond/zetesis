@@ -2,7 +2,7 @@
 //! falls after an atom's recheck has it rechecked again.
 
 use crate::test_support::theory;
-use zetesis_cpu::{Cancellation, Stop};
+use zetesis_algebra::{Cancellation, Stop};
 
 use super::super::{Closure, Step, Work, support::Progress};
 

@@ -5,7 +5,7 @@
 
 use super::{Builder, SupportError, SupportLimits};
 use crate::{AdmissionError, AdmissionLimits, FormulaNodes, NodeView};
-use zetesis_cpu::{Cancellation, Refusal, Stop};
+use zetesis_algebra::{Cancellation, Refusal, Stop};
 
 /// Run `test` on a builder whose meter has admitted seven operations, which is
 /// not a metered boundary; with `stop`, a stop is requested once it has. The

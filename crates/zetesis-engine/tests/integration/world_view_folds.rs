@@ -10,8 +10,8 @@ use themelios_solve::{
     agent::Agent,
     contract::{Fault, Presupposition, Refused},
 };
+use zetesis_algebra::Cancellation;
 use zetesis_core::{Atom, Model, Predicate, Sign};
-use zetesis_cpu::Cancellation;
 use zetesis_engine::Solver;
 use zetesis_solve::{
     Backend, PreparedInput, QueryAnswer, Session, SessionBuilder, SolveConfig, WorldViewVerdict,

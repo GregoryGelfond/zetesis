@@ -3,8 +3,8 @@
 //! The evaluator establishes membership before ordinary bounded model
 //! construction. No candidate theory is substituted for the original source.
 
+use zetesis_algebra::Cancellation;
 use zetesis_core::Model;
-use zetesis_cpu::Cancellation;
 use zetesis_objective::Score;
 use zetesis_themelios::AcyclicSource;
 

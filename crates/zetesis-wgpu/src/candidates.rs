@@ -1,7 +1,7 @@
 //! Owner-checked word export into already admitted candidate transport storage.
 
 use crate::{GpuError, GpuErrorKind};
-use zetesis_cpu::Cancellation;
+use zetesis_algebra::Cancellation;
 use zetesis_ferraris::{Interpretation, Theory};
 
 /// Whether one dispatch checks the complete supplied slice or its largest

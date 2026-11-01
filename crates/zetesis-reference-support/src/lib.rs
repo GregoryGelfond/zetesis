@@ -23,8 +23,8 @@
 //! the tests that need these references compile it. It is not published or
 //! installed.
 
+use zetesis_algebra::Cancellation;
 use zetesis_core::{Model, Sign};
-use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{Interpretation, Limits, check};
 use zetesis_test_support::records::Records;
 use zetesis_themelios::{

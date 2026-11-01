@@ -5,7 +5,7 @@ use crate::formula_ground::{Builder, Purpose, ground};
 use crate::formula_support::testing;
 use crate::test_support::compiled_atoms;
 use crate::{ExpansionLimits, FormulaFailure, FormulaLimits, FormulaResource};
-use zetesis_cpu::Cancellation;
+use zetesis_algebra::Cancellation;
 use zetesis_ferraris::{Interpretation, Limits, models, models_reduct};
 
 thread_local! {

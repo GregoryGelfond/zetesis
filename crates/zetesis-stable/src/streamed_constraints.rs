@@ -18,7 +18,7 @@
 
 use std::sync::{Mutex, PoisonError};
 
-use zetesis_cpu::{Cancellation, regions::Region};
+use zetesis_algebra::{Cancellation, region::Region};
 use zetesis_ferraris::Theory;
 use zetesis_themelios::{
     ConstraintAllowance, ConstraintCheckFailure, ConstraintChecker, ConstraintConsequence,

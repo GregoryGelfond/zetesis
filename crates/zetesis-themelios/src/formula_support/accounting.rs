@@ -1,7 +1,7 @@
 //! Transferable source-check history, independent of transient observation.
 
 use std::mem;
-use zetesis_cpu::{Cancellation, Stop};
+use zetesis_algebra::{Cancellation, Stop};
 
 mod precedence;
 pub(crate) use precedence::StopPrecedence;
@@ -248,7 +248,7 @@ impl AccountControl {
         if amount != 0 && (self.every_charge || EVERY_CHARGE.get()) {
             return self.observe();
         }
-        if zetesis_cpu::poll_due(charged, amount) {
+        if zetesis_algebra::poll_due(charged, amount) {
             self.observe()
         } else {
             Ok(())

@@ -6,7 +6,7 @@
 //! partition both together so mutable counters precede relaxed seed roles.
 
 use super::{Narrower, NodeView, State, Theory, Work, bit, chain_position};
-use zetesis_cpu::Stop;
+use zetesis_algebra::Stop;
 
 #[derive(Clone, Copy, Debug)]
 pub(super) enum Initial {

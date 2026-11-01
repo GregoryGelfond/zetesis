@@ -136,7 +136,7 @@ pub enum ExpansionFailure {
     /// Shared cancellation or deadline observed before the next expansion step.
     Interrupted {
         /// The control signal; separate from configured resource ceilings.
-        reason: zetesis_cpu::Stop,
+        reason: zetesis_algebra::Stop,
         /// Original statement or whole-program site at the stopped boundary.
         location: ProgramSite,
     },
@@ -297,7 +297,7 @@ pub(crate) struct Budget {
     scalar_bytes: u128,
     origins: u128,
     allowance: Option<crate::constraint_allowance::Pending>,
-    cancellation: Option<zetesis_cpu::Cancellation>,
+    cancellation: Option<zetesis_algebra::Cancellation>,
 }
 
 impl Clone for Budget {
@@ -328,17 +328,17 @@ impl Budget {
 
     pub(crate) fn with_cancellation(
         mut self,
-        cancellation: Option<zetesis_cpu::Cancellation>,
+        cancellation: Option<zetesis_algebra::Cancellation>,
     ) -> Self {
         self.set_cancellation(cancellation);
         self
     }
 
-    pub(crate) fn set_cancellation(&mut self, cancellation: Option<zetesis_cpu::Cancellation>) {
+    pub(crate) fn set_cancellation(&mut self, cancellation: Option<zetesis_algebra::Cancellation>) {
         self.cancellation = cancellation;
     }
 
-    pub(crate) fn cancellation(&self) -> Option<&zetesis_cpu::Cancellation> {
+    pub(crate) fn cancellation(&self) -> Option<&zetesis_algebra::Cancellation> {
         self.cancellation.as_ref()
     }
 

@@ -15,7 +15,7 @@
 //! Preparation sorts occurrences and guards in O(E log E + G log G). It has no
 //! independent cancellation contract, like the enclosing narrower constructor.
 
-use zetesis_cpu::Stop;
+use zetesis_algebra::Stop;
 
 use crate::{ExtremumCutRule, NodeView, Theory};
 

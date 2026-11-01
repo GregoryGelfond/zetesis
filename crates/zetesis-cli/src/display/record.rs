@@ -14,9 +14,9 @@ use std::{
     io::{self, Write},
 };
 
+use zetesis_algebra::{Cancellation, Stop};
 use zetesis_core::ValueWriteError;
 use zetesis_core::catalog::{AtomRef, TermRef};
-use zetesis_cpu::{Cancellation, Stop};
 use zetesis_objective::Score;
 use zetesis_themelios::observation::ModelView;
 

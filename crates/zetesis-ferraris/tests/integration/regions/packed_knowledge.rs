@@ -1,6 +1,6 @@
 //! Carried knowledge and fresh closure agree across atom and node mask words.
 
-use zetesis_cpu::{Cancellation, Stop};
+use zetesis_algebra::{Cancellation, Stop};
 use zetesis_ferraris::{
     EvaluationLimits, EvaluationWorkspace, Interpretation, Knowledge, Narrower, Narrowing,
     NarrowingStatistics, Node, Region, RegionLimits, Theory,

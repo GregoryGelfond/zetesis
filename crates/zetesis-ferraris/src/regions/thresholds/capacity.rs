@@ -23,7 +23,7 @@
 
 use crate::regions::{Chain, Closure, Count, Narrower, Step, Work, bit};
 use crate::{NodeView, Theory};
-use zetesis_cpu::Stop;
+use zetesis_algebra::Stop;
 
 use super::{Adjacency, Row, reserve};
 

@@ -9,7 +9,7 @@ use crate::{
     SolveConfig,
 };
 use std::convert::Infallible;
-use zetesis_cpu::Cancellation;
+use zetesis_algebra::Cancellation;
 use zetesis_ferraris::Interpretation;
 use zetesis_stable::{Incomplete, StableModels};
 use zetesis_themelios::{ConstraintCheckLimits, ConstraintVerdict};

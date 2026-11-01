@@ -7,11 +7,11 @@ use std::io;
 
 use clap::Parser;
 use serde_json::Value as Json;
+use zetesis_algebra::Cancellation;
 use zetesis_cli::{
     Completion, Grounder, Options, PublicationOutcome, RunError, SolveConfig, StatisticsView,
     run_bundle_finalized_with_diagnostics, run_finalized_with_diagnostics,
 };
-use zetesis_cpu::Cancellation;
 use zetesis_themelios::{FormulaFailure, HybridFeature};
 use zetesis_validation::answers::native_json;
 

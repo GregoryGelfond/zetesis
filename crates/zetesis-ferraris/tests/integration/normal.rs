@@ -2,7 +2,7 @@
 //! reduct, and general subset-minimality agree after lowering.
 
 use proptest::prelude::*;
-use zetesis_cpu::Cancellation;
+use zetesis_algebra::Cancellation;
 use zetesis_ferraris::{Interpretation, Node, Theory};
 
 const ATOMS: [&str; 3] = ["a", "b", "c"];

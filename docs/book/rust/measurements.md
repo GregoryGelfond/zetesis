@@ -59,7 +59,7 @@ Its assertions concern presence and semantic completion, not a timing threshold.
 
 ```rust
 # extern crate zetesis_solve;
-# extern crate zetesis_cpu;
+# extern crate zetesis_algebra;
 # extern crate zetesis_themelios;
 {{#include ../examples/measurements.rs:example}}
 ```

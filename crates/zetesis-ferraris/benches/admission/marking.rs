@@ -10,7 +10,7 @@
 use std::hint::black_box;
 
 use criterion::{BatchSize, Criterion, Throughput};
-use zetesis_cpu::Cancellation;
+use zetesis_algebra::Cancellation;
 use zetesis_ferraris::{
     AdmissionLimits, FormulaNodes, FormulaParts, Narrower, Narrowing, NarrowingScratch, Node,
     NodeView, OriginalSubject, Region, RegionLimits, Theory,

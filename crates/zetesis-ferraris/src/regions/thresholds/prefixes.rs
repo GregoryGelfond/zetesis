@@ -15,7 +15,7 @@
 //! row length K and E grouped terms, and leaves the existing logical index
 //! receipt unchanged. It creates neither guard pairs nor new formula nodes.
 
-use zetesis_cpu::Stop;
+use zetesis_algebra::Stop;
 
 use crate::regions::{Closure, Count, Narrower, Step, Work};
 

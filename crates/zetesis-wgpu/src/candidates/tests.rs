@@ -1,5 +1,5 @@
 use super::*;
-use zetesis_cpu::Stop;
+use zetesis_algebra::Stop;
 use zetesis_ferraris::AdmissionLimits;
 
 fn theory(atoms: usize) -> Theory {

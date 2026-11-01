@@ -4,7 +4,7 @@ use super::*;
 use crate::regions::Width;
 use crate::test_support::{SinglePermits, close, constructed_theory, push, world};
 use crate::{Limits, Narrowing, NarrowingScratch, NodeView, Region, models};
-use zetesis_cpu::Cancellation;
+use zetesis_algebra::Cancellation;
 
 fn interval(atoms: usize, terms: &[(usize, u64)], bounds: [i128; 2]) -> crate::Theory {
     constructed_theory(atoms, |nodes| {

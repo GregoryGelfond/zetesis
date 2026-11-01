@@ -2,9 +2,9 @@
 
 use std::cmp::Ordering;
 
+use zetesis_algebra::Cancellation;
 use zetesis_core::catalog::TermRef;
 use zetesis_core::{Value as Term, ValueNodeRef};
-use zetesis_cpu::Cancellation;
 
 use super::{Bound, Error, ErrorKind, Function, Group, GroupRef, Phase, Statistics, Work, add};
 use crate::{AggregateComparison, AggregateExtremum};

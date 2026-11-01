@@ -1,9 +1,9 @@
 //! Typed view consumers need no CLI, solver, output writer or ASP-text parser.
 
 use serde_json::{Value as Json, json};
+use zetesis_algebra::Cancellation;
 use zetesis_core::catalog::AtomCatalog;
 use zetesis_core::{Atom, Model, Predicate, Sign, Value, ValueLimits, ValueNode};
-use zetesis_cpu::Cancellation;
 use zetesis_reference_support::formula;
 use zetesis_test_support::programs::atom;
 use zetesis_themelios::OutputSelection;
@@ -582,7 +582,7 @@ fn cancelled_encoding_refuses() {
     let mut table = AtomTable::new(usize::MAX);
     assert_eq!(
         view.record(&mut table, ViewLimits::default(), &fixture.cancellation),
-        Err(ViewError::Stopped(zetesis_cpu::Stop::Cancelled))
+        Err(ViewError::Stopped(zetesis_algebra::Stop::Cancelled))
     );
 }
 
@@ -693,7 +693,7 @@ fn cancelled_encoding_has_zero_accounting() {
         .unwrap_err();
     assert_eq!(
         failure.cause(),
-        json::Error::Stopped(zetesis_cpu::Stop::Cancelled)
+        json::Error::Stopped(zetesis_algebra::Stop::Cancelled)
     );
     assert_eq!(failure.statistics(), json::Statistics::default());
 }

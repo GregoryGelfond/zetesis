@@ -1,7 +1,7 @@
 //! A walker's scratch carries nothing from one narrowing into the next,
 //! however the earlier narrowing ended, and keeps its capacity for them.
 
-use zetesis_cpu::{Cancellation, Stop};
+use zetesis_algebra::{Cancellation, Stop};
 
 use crate::{
     Narrower, Narrowing, NarrowingQuota, NarrowingScratch, NarrowingStatistics, Region,

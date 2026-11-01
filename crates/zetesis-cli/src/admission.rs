@@ -3,7 +3,7 @@
 use crate::presentation::{Diagnostics, Label};
 use std::io::Write;
 
-use zetesis_cpu::Cancellation;
+use zetesis_algebra::Cancellation;
 use zetesis_themelios::{
     BundleAdmissionOptions, ExpansionLimits, ParsedSource, SourceBundle, SourceFailure,
 };

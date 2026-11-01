@@ -335,7 +335,7 @@ mod tests {
             let result = find(&index, &nodes, requested, location(), || {
                 if charged == cutoff {
                     return Err(FormulaFailure::Interrupted {
-                        reason: zetesis_cpu::Stop::Cancelled,
+                        reason: zetesis_algebra::Stop::Cancelled,
                         location: location(),
                     });
                 }
@@ -345,7 +345,7 @@ mod tests {
             assert!(matches!(
                 result,
                 Err(FormulaFailure::Interrupted {
-                    reason: zetesis_cpu::Stop::Cancelled,
+                    reason: zetesis_algebra::Stop::Cancelled,
                     ..
                 })
             ));

@@ -1,8 +1,8 @@
 //! The update route against the scalar plan: per-slot routes, receipts and
 //! verdicts across controlled candidate changes, and the route's availability.
 
+use zetesis_algebra::Cancellation;
 use zetesis_backend::GpuApi;
-use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{
     AdmissionLimits, EvaluationLimits, EvaluationWorkspace, FormulaNodes, FormulaParts,
     FormulaTransaction, Interpretation, Node, NodeView, SlateId, SlateRef, Theory, Threshold,

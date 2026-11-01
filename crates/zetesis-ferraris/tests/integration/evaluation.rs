@@ -2,7 +2,7 @@
 
 use std::time::Instant;
 
-use zetesis_cpu::{Cancellation, Stop};
+use zetesis_algebra::{Cancellation, Stop};
 use zetesis_ferraris::{
     AdmissionLimits, EvaluationError, EvaluationLimits, EvaluationWorkspace, Interpretation, Node,
     Theory,

@@ -14,8 +14,8 @@ use crate::{
     CheckedSlate, GpuDeviceSource, GpuError, GpuErrorKind, GpuInfo, GpuOptions, GpuSelection,
 };
 use std::time::{Duration, Instant};
+use zetesis_algebra::Cancellation;
 use zetesis_backend::{BatchComputeTime, ComputeTimingStatus};
-use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{Interpretation, SlateId, SlateRef, Theory, TightPlan};
 
 /// Real-device original satisfaction and ranked producer support checking.
@@ -1063,7 +1063,7 @@ impl GpuTightOracle {
 /// ```compile_fail,E0499
 /// # use zetesis_wgpu::{GpuTightOracle, TightGpuLimits};
 /// # fn second(oracle: &mut GpuTightOracle, plan: &zetesis_ferraris::TightPlan,
-/// #     slate: zetesis_ferraris::SlateRef<'_>, control: &zetesis_cpu::Cancellation) {
+/// #     slate: zetesis_ferraris::SlateRef<'_>, control: &zetesis_algebra::Cancellation) {
 /// let first = oracle.prepare(plan, slate, 0, TightGpuLimits::default(), control);
 /// let second = oracle.prepare(plan, slate, 0, TightGpuLimits::default(), control);
 /// drop((first, second));
@@ -1076,7 +1076,7 @@ impl GpuTightOracle {
 /// ```compile_fail,E0499
 /// # use zetesis_wgpu::{GpuTightOracle, TightGpuLimits};
 /// # fn between(oracle: &mut GpuTightOracle, plan: &zetesis_ferraris::TightPlan,
-/// #     slate: zetesis_ferraris::SlateRef<'_>, control: &zetesis_cpu::Cancellation) {
+/// #     slate: zetesis_ferraris::SlateRef<'_>, control: &zetesis_algebra::Cancellation) {
 /// let prepared = oracle.prepare(plan, slate, 0, TightGpuLimits::default(), control).unwrap();
 /// oracle.clear_residency();
 /// let _ = prepared.check(control);
@@ -1091,7 +1091,7 @@ impl GpuTightOracle {
 /// # use zetesis_wgpu::{GpuTightOracle, TightGpuLimits};
 /// # fn elsewhere(one: &mut GpuTightOracle, other: &mut GpuTightOracle,
 /// #     plan: &zetesis_ferraris::TightPlan, slate: zetesis_ferraris::SlateRef<'_>,
-/// #     control: &zetesis_cpu::Cancellation) {
+/// #     control: &zetesis_algebra::Cancellation) {
 /// let prepared = one.prepare(plan, slate, 0, TightGpuLimits::default(), control).unwrap();
 /// let _ = other.check(prepared, control);
 /// # }
@@ -1102,7 +1102,7 @@ impl GpuTightOracle {
 /// ```no_run
 /// # use zetesis_wgpu::{GpuTightOracle, TightGpuLimits};
 /// # fn in_order(oracle: &mut GpuTightOracle, plan: &zetesis_ferraris::TightPlan,
-/// #     slate: zetesis_ferraris::SlateRef<'_>, control: &zetesis_cpu::Cancellation) {
+/// #     slate: zetesis_ferraris::SlateRef<'_>, control: &zetesis_algebra::Cancellation) {
 /// let prepared = oracle.prepare(plan, slate, 0, TightGpuLimits::default(), control).unwrap();
 /// let _ = prepared.check(control);
 /// oracle.clear_residency();

@@ -19,7 +19,7 @@ use std::mem::size_of;
 use crate::{
     EvaluationError, EvaluationLimits, FormulaEvaluation, Interpretation, NodeView, Theory,
 };
-use zetesis_cpu::{Cancellation, Meter, Stop};
+use zetesis_algebra::{Cancellation, Meter, Stop};
 
 #[cfg(test)]
 mod tests;
@@ -551,7 +551,7 @@ fn storage(required: u128, limit: usize) -> Result<(), EvaluationError> {
 
 fn tick(meter: &mut Meter<'_>) -> Result<(), EvaluationError> {
     meter.charge().map_err(|error| match error {
-        zetesis_cpu::ChargeError::Stopped(stop) => EvaluationError::Stopped(stop),
-        zetesis_cpu::ChargeError::WorkLimit => EvaluationError::Stopped(Stop::WorkLimit),
+        zetesis_algebra::ChargeError::Stopped(stop) => EvaluationError::Stopped(stop),
+        zetesis_algebra::ChargeError::WorkLimit => EvaluationError::Stopped(Stop::WorkLimit),
     })
 }

@@ -6,8 +6,8 @@ mod updates;
 
 use crate::support::physical;
 
+use zetesis_algebra::{Cancellation, Stop};
 use zetesis_backend::GpuApi;
-use zetesis_cpu::{Cancellation, Stop};
 use zetesis_ferraris::{
     AdmissionLimits, Interpretation, Limits, Node, Theory, TightCheckLimits, TightPlan,
     TightPlanLimits, TightVerdict, Verdict, check,

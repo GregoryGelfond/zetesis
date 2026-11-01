@@ -16,8 +16,8 @@ pub use score::{ObjectiveScore, ObjectiveScoreError, ObjectiveScoreErrorKind};
 use std::collections::BTreeMap;
 use std::fmt;
 
+use zetesis_algebra::{Cancellation, Stop};
 use zetesis_core::catalog::Atoms;
-use zetesis_cpu::{Cancellation, Stop};
 use zetesis_ferraris::{
     AggregateElement, AggregateError, AggregateLimits, FormulaNodes, FormulaParts, NodeView, Theory,
 };

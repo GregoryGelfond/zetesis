@@ -1,7 +1,7 @@
 //! Injected quotas admit each original or frozen read and retain failed prefixes,
 //! with the quota's typed refusal kept beside it.
 
-use zetesis_cpu::{Cancellation, Stop};
+use zetesis_algebra::{Cancellation, Stop};
 use zetesis_ferraris::{
     AdmissionLimits, EvaluationLimits, EvaluationWorkspace, Interpretation, Narrower,
     NarrowingAttempt, NarrowingQuota, Node, Region, RegionLimits, Theory, producers,

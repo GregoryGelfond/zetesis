@@ -1,7 +1,7 @@
 //! Finite conditional-premise laws and bounded candidate-only composition.
 
 use proptest::prelude::*;
-use zetesis_cpu::Stop;
+use zetesis_algebra::Stop;
 use zetesis_ferraris::{Interpretation, models};
 use zetesis_stable::{
     Cancellation,

@@ -8,7 +8,7 @@ use clap::Parser;
 use crate::{
     Completion, Options, PublicationFailure, Report, RunError, run_finalized_with_diagnostics,
 };
-use zetesis_cpu::Cancellation;
+use zetesis_algebra::Cancellation;
 use zetesis_test_support::io::{BoundedWriter, FULL, FailAt};
 
 fn options(arguments: &[&str]) -> Options {

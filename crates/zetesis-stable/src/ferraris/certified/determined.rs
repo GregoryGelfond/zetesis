@@ -39,7 +39,7 @@ pub(super) fn check(
     *search = budget.statistics;
     let result = match result {
         Err(Incomplete::WorkLimit) if limits.max_verification_work < remaining => {
-            Err(Incomplete::Verification(zetesis_cpu::Stop::WorkLimit))
+            Err(Incomplete::Verification(zetesis_algebra::Stop::WorkLimit))
         }
         other => other,
     };
@@ -92,7 +92,9 @@ fn validate(
         // The certificate excludes other original models. In the stratified
         // case the determined interpretation need not itself be their subset.
         Ok(_) => Ok(Verdict::NonMinimal),
-        Err(EvaluationError::Stopped(zetesis_cpu::Stop::WorkLimit)) => Err(Incomplete::WorkLimit),
+        Err(EvaluationError::Stopped(zetesis_algebra::Stop::WorkLimit)) => {
+            Err(Incomplete::WorkLimit)
+        }
         Err(EvaluationError::Stopped(stop)) => Err(stop.into()),
         Err(error @ EvaluationError::Storage { .. }) => {
             Err(Incomplete::Certificate(CertificateError::Evaluation(error)))

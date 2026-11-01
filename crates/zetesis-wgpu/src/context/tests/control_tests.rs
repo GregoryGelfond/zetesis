@@ -4,8 +4,8 @@ use crate::{
     FormulaLimits, FormulaVerdict, GpuContext, GpuErrorKind, GpuFormulaOracle, GpuOptions,
     GpuSelection,
 };
+use zetesis_algebra::Cancellation;
 use zetesis_backend::GpuApi;
-use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{Interpretation, Node, Theory};
 
 fn cancelled() -> Cancellation {
@@ -83,7 +83,10 @@ fn settled_stops(context: &GpuContext, formula: &mut GpuFormulaOracle) {
     )
     .unwrap();
     let candidates = [Interpretation::new(&theory, []).unwrap()];
-    for stop in [zetesis_cpu::Stop::Cancelled, zetesis_cpu::Stop::Deadline] {
+    for stop in [
+        zetesis_algebra::Stop::Cancelled,
+        zetesis_algebra::Stop::Deadline,
+    ] {
         for after_decode in [false, true] {
             settled_read(formula.runtime(), stop, after_decode);
             context.check_health().unwrap();
@@ -97,7 +100,11 @@ fn settled_stops(context: &GpuContext, formula: &mut GpuFormulaOracle) {
     }
 }
 
-fn settled_read(runtime: &crate::runtime::Runtime, stop: zetesis_cpu::Stop, after_decode: bool) {
+fn settled_read(
+    runtime: &crate::runtime::Runtime,
+    stop: zetesis_algebra::Stop,
+    after_decode: bool,
+) {
     // A real submission/map is settled before deterministic control injection.
     // Inject either at decoder entry or after decoding. A poll can legitimately
     // require multiple quanta, so counting control calls cannot locate settlement.

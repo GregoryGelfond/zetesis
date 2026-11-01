@@ -278,7 +278,7 @@ fn interruption_after_either_reservation_publishes_no_graph() {
             });
         assert_eq!(
             result.err().unwrap().interruption(),
-            Some(zetesis_cpu::Stop::Cancelled)
+            Some(zetesis_algebra::Stop::Cancelled)
         );
         assert_eq!(calls, stop_at + 1);
     }

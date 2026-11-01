@@ -16,7 +16,7 @@
 use super::packing::{Graph, Packed};
 use super::{TightSupport, poll};
 use crate::{GpuError, GpuErrorKind};
-use zetesis_cpu::Cancellation;
+use zetesis_algebra::Cancellation;
 use zetesis_ferraris::{NodeView, TightPlan};
 
 /// Result-record routes, shared with `check.wgsl`: the complete route, dense

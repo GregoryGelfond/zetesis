@@ -3,7 +3,7 @@
 use super::super::{Scratch, Work, chain_position, expands};
 use super::*;
 use crate::test_support::Allowance;
-use zetesis_cpu::Stop;
+use zetesis_algebra::Stop;
 
 fn dag(disjunction: bool, depth: usize) -> (Theory, Vec<usize>) {
     let mut nodes =

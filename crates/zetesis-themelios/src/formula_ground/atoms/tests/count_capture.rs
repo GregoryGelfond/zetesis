@@ -6,8 +6,8 @@ use crate::ProgramSite;
 use themelios_base::source::{Source, SourceId};
 use themelios_base::span::{ByteOffset, Span};
 use themelios_program::program::DefaultNegation;
+use zetesis_algebra::Cancellation;
 use zetesis_core::{Atom, AtomPattern, Predicate, Sign};
-use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{
     AdmissionLimits, AggregateComparison, AggregateElement, AggregateLimits, FormulaNodes,
     FormulaParts, Interpretation, Limits, NodeView as Node, Theory, append_aggregate, models,

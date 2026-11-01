@@ -140,6 +140,12 @@ seeds.
 
 ## Where the machine enters
 
+`zetesis-algebra` is the dependency-free execution foundation: `region::Region`
+represents candidate regions, `walk::Walk` covers them, and `words` supplies the
+shared packed operations. The generic frontier lives under `walk::frontier`;
+semantic source tables live with their relations in `zetesis_core::table`.
+These primitives do not decide answer-set membership.
+
 CPU and GPU execution share the admitted formula representation. Independent
 candidate checks may run concurrently; each retains its own interpretation and
 frozen reduct. Hybrid execution additionally checks retained source constraints

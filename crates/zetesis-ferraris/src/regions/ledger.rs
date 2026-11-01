@@ -18,7 +18,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 
 use super::founded::explanations::{self, Explanation, Input, Limits};
 use crate::regions::{SupportExplanationStatistics, Theory, Work};
-use zetesis_cpu::Stop;
+use zetesis_algebra::Stop;
 
 mod row;
 

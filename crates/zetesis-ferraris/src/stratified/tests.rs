@@ -613,7 +613,7 @@ fn a_ceiling_refusal_settles_to_a_requested_stop() {
 
 #[test]
 fn plan_errors_classify_resource_refusals() {
-    use zetesis_cpu::Refusal;
+    use zetesis_algebra::Refusal;
     for refusal in [
         StratifiedError::Limit {
             resource: StratifiedResource::Bytes,

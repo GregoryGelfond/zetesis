@@ -3,7 +3,7 @@
 //! own refusals are, becomes a requested stop.
 
 use super::{Tick, TightError, TightResource, bytes};
-use zetesis_cpu::{Cancellation, Refusal, Stop};
+use zetesis_algebra::{Cancellation, Refusal, Stop};
 
 #[test]
 fn a_requested_stop_precedes_the_work_limit_between_boundaries() {

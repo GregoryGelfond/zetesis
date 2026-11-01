@@ -2,8 +2,8 @@
 
 use std::fmt;
 
+use zetesis_algebra::Cancellation;
 use zetesis_core::retention::{ModelRetention, RetentionError};
-use zetesis_cpu::Cancellation;
 
 use crate::execution_observation::ExecutionSink;
 use crate::{

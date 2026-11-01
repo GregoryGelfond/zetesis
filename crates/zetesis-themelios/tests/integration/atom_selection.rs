@@ -1,8 +1,8 @@
 //! Atom-channel membership is shared by charged and uncharged consumers.
 
+use zetesis_algebra::{Cancellation, Stop};
 use zetesis_core::catalog::AtomCatalog;
 use zetesis_core::{Atom, Predicate, Sign, Value};
-use zetesis_cpu::{Cancellation, Stop};
 use zetesis_reference_support::resource_limits;
 use zetesis_themelios::{AtomSelection, AtomSelectionLimits, PreparedSelection, observation};
 

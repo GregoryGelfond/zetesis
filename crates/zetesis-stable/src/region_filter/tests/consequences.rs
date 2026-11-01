@@ -9,7 +9,7 @@ use crate::{
     BatchError, Cancellation, Incomplete, Limits, RegionConsequence, RegionFeasibility,
     RegionFilter, RegionFilterWorker, RegionPass, SearchLimits, StableModels,
 };
-use zetesis_cpu::regions::Region;
+use zetesis_algebra::region::Region;
 use zetesis_ferraris::{Node, Theory};
 use zetesis_theory_support::theories::theory;
 

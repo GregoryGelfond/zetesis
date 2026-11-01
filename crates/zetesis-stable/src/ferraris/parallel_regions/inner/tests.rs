@@ -275,7 +275,7 @@ fn a_validation_its_ceiling_stops_never_yields_stable() {
     assert!(models.is_empty(), "an undecided candidate was delivered");
     assert!(matches!(
         search.shared.stopped(),
-        Some(Incomplete::Verification(zetesis_cpu::Stop::WorkLimit))
+        Some(Incomplete::Verification(zetesis_algebra::Stop::WorkLimit))
     ));
     // The undecided leaf stays outstanding: the walk can claim nothing.
     assert_eq!(search.shared.frontier.termination.unresolved(), 1);
@@ -471,7 +471,7 @@ fn a_declined_publication_leaves_the_query_to_decide_inline() {
             &mut self,
             _: &[bool],
             _: &Interpretation,
-            traversal: &mut Traversal<Knowledge>,
+            traversal: &mut Walk<Knowledge>,
         ) -> Option<()> {
             self.offered += 1;
             assert!(traversal.pending() >= 1);

@@ -11,8 +11,8 @@
 //! instance coverage and completed admission remain separate prerequisites.
 
 use std::sync::Arc;
+use zetesis_algebra::Cancellation;
 use zetesis_core::Model;
-use zetesis_cpu::Cancellation;
 use zetesis_objective::Score;
 use zetesis_themelios::{ConstraintAllowance, ConstraintChecker, ConstraintVerdict, StreamedCore};
 

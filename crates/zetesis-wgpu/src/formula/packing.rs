@@ -62,7 +62,7 @@ impl Shape {
             theory,
             device,
             u64::MAX,
-            &zetesis_cpu::Cancellation::default(),
+            &zetesis_algebra::Cancellation::default(),
         )
     }
 
@@ -70,7 +70,7 @@ impl Shape {
         theory: &Theory,
         device: &wgpu::Limits,
         max_staging_bytes: u64,
-        cancellation: &zetesis_cpu::Cancellation,
+        cancellation: &zetesis_algebra::Cancellation,
     ) -> Result<Self, GpuError> {
         let atoms = address(theory.atom_count())?;
         let roots = address(theory.roots().len())?;
@@ -356,7 +356,7 @@ impl Plan {
         candidates: &[Interpretation],
         staging: &mut crate::candidates::Staging,
         ceiling: u64,
-        cancellation: &zetesis_cpu::Cancellation,
+        cancellation: &zetesis_algebra::Cancellation,
     ) -> Result<u64, GpuError> {
         if candidates.len() != self.worlds as usize {
             staging.release();

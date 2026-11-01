@@ -3,7 +3,7 @@
 //! Reuses the evaluator benchmark's transcription of the former shared Boolean DP.
 
 use super::{Row, boolean_family};
-use zetesis_cpu::Cancellation;
+use zetesis_algebra::Cancellation;
 use zetesis_ferraris::{
     AdmissionLimits, AggregateComparison, AggregateElement, AggregateFamilyLimits, AggregateGuard,
     FormulaNodes, FormulaParts, Interpretation, Limits, Narrower, Narrowing, NarrowingScratch,

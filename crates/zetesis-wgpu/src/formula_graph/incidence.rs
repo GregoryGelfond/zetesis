@@ -8,7 +8,7 @@
 
 use super::capacity;
 use crate::GpuError;
-use zetesis_cpu::Cancellation;
+use zetesis_algebra::Cancellation;
 
 /// Appended CSR offsets and gate IDs, followed nowhere by candidate state.
 /// `offset` is nonzero, leaving zero available for the dense execution route.

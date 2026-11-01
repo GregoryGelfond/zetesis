@@ -8,8 +8,8 @@ use crate::runtime::{ErrorScopes, Observation, Scopes};
 use crate::timing::{BatchTiming, ComputeTimer};
 use crate::{CheckedSlate, GpuError, GpuErrorKind, GpuInfo, GpuOptions, GpuSelection};
 use std::time::{Duration, Instant};
+use zetesis_algebra::Cancellation;
 use zetesis_backend::{BatchComputeTime, ComputeTimingStatus};
-use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{Interpretation, SlateId, SlateRef, Theory};
 
 /// GPU original-truth evaluation and sound frozen-query propagation.
@@ -797,7 +797,7 @@ impl GpuFormulaOracle {
 /// ```compile_fail,E0499
 /// # use zetesis_wgpu::{FormulaLimits, GpuFormulaOracle};
 /// # fn second(oracle: &mut GpuFormulaOracle, slate: zetesis_ferraris::SlateRef<'_>,
-/// #     control: &zetesis_cpu::Cancellation) {
+/// #     control: &zetesis_algebra::Cancellation) {
 /// let first = oracle.prepare(slate, 0, FormulaLimits::default(), control);
 /// let second = oracle.prepare(slate, 0, FormulaLimits::default(), control);
 /// drop((first, second));
@@ -810,7 +810,7 @@ impl GpuFormulaOracle {
 /// ```compile_fail,E0499
 /// # use zetesis_wgpu::{FormulaLimits, GpuFormulaOracle};
 /// # fn between(oracle: &mut GpuFormulaOracle, slate: zetesis_ferraris::SlateRef<'_>,
-/// #     control: &zetesis_cpu::Cancellation) {
+/// #     control: &zetesis_algebra::Cancellation) {
 /// let prepared = oracle.prepare(slate, 0, FormulaLimits::default(), control).unwrap();
 /// oracle.clear_residency();
 /// let _ = prepared.check(control);
@@ -824,7 +824,7 @@ impl GpuFormulaOracle {
 /// ```compile_fail,E0624
 /// # use zetesis_wgpu::{FormulaLimits, GpuFormulaOracle};
 /// # fn elsewhere(one: &mut GpuFormulaOracle, other: &mut GpuFormulaOracle,
-/// #     slate: zetesis_ferraris::SlateRef<'_>, control: &zetesis_cpu::Cancellation) {
+/// #     slate: zetesis_ferraris::SlateRef<'_>, control: &zetesis_algebra::Cancellation) {
 /// let prepared = one.prepare(slate, 0, FormulaLimits::default(), control).unwrap();
 /// let _ = other.propagate(prepared, control);
 /// # }
@@ -835,7 +835,7 @@ impl GpuFormulaOracle {
 /// ```no_run
 /// # use zetesis_wgpu::{FormulaLimits, GpuFormulaOracle};
 /// # fn in_order(oracle: &mut GpuFormulaOracle, slate: zetesis_ferraris::SlateRef<'_>,
-/// #     control: &zetesis_cpu::Cancellation) {
+/// #     control: &zetesis_algebra::Cancellation) {
 /// let first = oracle.prepare(slate, 0, FormulaLimits::default(), control).unwrap();
 /// let _ = first.check(control);
 /// let second = oracle.prepare(slate, 0, FormulaLimits::default(), control).unwrap();

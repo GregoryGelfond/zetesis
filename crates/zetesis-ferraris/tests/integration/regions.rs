@@ -5,7 +5,7 @@
 
 use std::collections::BTreeSet;
 
-use zetesis_cpu::{Cancellation, Stop};
+use zetesis_algebra::{Cancellation, Stop};
 use zetesis_ferraris::{
     Interpretation, Limits, Narrower, Narrowing, NarrowingStatistics, Node, Producers, Region,
     RegionLimits, Theory, check, producers,

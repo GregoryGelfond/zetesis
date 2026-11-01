@@ -1,7 +1,7 @@
 //! Prefix discovery, original bound transport and isolation from frozen closure.
 
 use crate::test_support::{Allowance, close};
-use zetesis_cpu::{Cancellation, Stop};
+use zetesis_algebra::{Cancellation, Stop};
 
 use crate::regions::{Known, NarrowingStatistics, Width};
 use crate::{

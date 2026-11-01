@@ -4,7 +4,7 @@ use zetesis_ferraris::{AdmissionLimits, Node};
 
 fn prepared(theory: &Theory, device: &wgpu::Limits) -> Result<PreparedGraph, GpuError> {
     Preparation::new(theory, 2, FormulaLimits::default(), device, 7)?
-        .finish(device, &zetesis_cpu::Cancellation::default())
+        .finish(device, &zetesis_algebra::Cancellation::default())
         .map(|(prepared, _)| prepared)
 }
 fn graph(theory: &Theory, device: &wgpu::Limits) -> Result<Graph, GpuError> {
@@ -42,7 +42,7 @@ fn candidate_words(
     plan: &Plan,
     graph: &Graph,
     candidates: &[Interpretation],
-    cancellation: &zetesis_cpu::Cancellation,
+    cancellation: &zetesis_algebra::Cancellation,
 ) -> Result<Vec<u32>, GpuError> {
     let mut staging = crate::candidates::Staging::default();
     plan.pack(graph, candidates, &mut staging, u64::MAX, cancellation)?;
@@ -105,7 +105,7 @@ fn packed_nodes_preserve_topology_shared_atom_ids_and_original_operators() {
             &plan,
             &graph,
             &[a, b],
-            &zetesis_cpu::Cancellation::default()
+            &zetesis_algebra::Cancellation::default()
         )
         .unwrap(),
         vec![1, 2]
@@ -116,7 +116,7 @@ fn packed_nodes_preserve_topology_shared_atom_ids_and_original_operators() {
             &plan,
             &graph,
             &[foreign.clone(), foreign],
-            &zetesis_cpu::Cancellation::default()
+            &zetesis_algebra::Cancellation::default()
         )
         .unwrap_err()
         .kind(),
@@ -213,7 +213,7 @@ fn device_limits_zero_atoms_and_word_boundaries_have_explicit_layouts() {
             &plan,
             &graph,
             &[candidate],
-            &zetesis_cpu::Cancellation::default(),
+            &zetesis_algebra::Cancellation::default(),
         )
         .unwrap();
         assert_eq!(packed.len(), count.div_ceil(32).max(1));
@@ -443,7 +443,7 @@ fn prefix_admission_selects_the_complete_layout_boundary() {
             let selected = crate::candidates::BatchSize::Prefix(9)
                 .select(
                     limits.max_candidates,
-                    &zetesis_cpu::Cancellation::default(),
+                    &zetesis_algebra::Cancellation::default(),
                     |count| layout(count, limits),
                 )
                 .unwrap();
@@ -454,13 +454,17 @@ fn prefix_admission_selects_the_complete_layout_boundary() {
         let bytes = layout(1, FormulaLimits::default()).unwrap().accounted;
         assert!(
             crate::candidates::BatchSize::Prefix(9)
-                .select(9, &zetesis_cpu::Cancellation::default(), |count| layout(
-                    count,
-                    FormulaLimits {
-                        max_batch_bytes: bytes - 1,
-                        ..Default::default()
-                    }
-                ))
+                .select(
+                    9,
+                    &zetesis_algebra::Cancellation::default(),
+                    |count| layout(
+                        count,
+                        FormulaLimits {
+                            max_batch_bytes: bytes - 1,
+                            ..Default::default()
+                        }
+                    )
+                )
                 .is_err()
         );
     }
@@ -474,7 +478,7 @@ fn prefix_admission_includes_the_timestamp_readback_tail() {
     device.max_storage_buffer_binding_size = 144;
     for (timed, expected) in [(false, 6), (true, 5)] {
         let selected = crate::candidates::BatchSize::Prefix(20)
-            .select(20, &zetesis_cpu::Cancellation::default(), |count| {
+            .select(20, &zetesis_algebra::Cancellation::default(), |count| {
                 let plan = Plan::new(&graph, count, FormulaLimits::default(), &device, false, 1)?;
                 crate::timing::readback_size(plan.results, timed, device.max_buffer_size)?;
                 Ok(plan)

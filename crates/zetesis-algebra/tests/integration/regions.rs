@@ -7,11 +7,14 @@
 
 use std::mem::size_of;
 
-use zetesis_cpu::Stop;
-use zetesis_cpu::regions::{Counting, Narrowing, Region, Traversal, Visit};
+use zetesis_algebra::Stop;
+use zetesis_algebra::{
+    region::{Narrowing, Region},
+    walk::{Counting, Visit, Walk},
+};
 
 /// Every visit of a traversal, with a narrowing that never decides anything.
-fn visits(mut traversal: Traversal) -> Vec<Visit> {
+fn visits(mut traversal: Walk) -> Vec<Visit> {
     let mut visits = Vec::new();
     while let Some(visit) = traversal
         .next(|_, ()| Ok::<_, Stop>(Narrowing::Fixed { changed: false }))
@@ -374,7 +377,7 @@ fn a_split_decides_the_atom_both_ways_and_drops_the_preference() {
 
 #[test]
 fn never_counting_visits_every_leaf_in_counter_order() {
-    let traversal = Traversal::new(Region::all_open(2), Counting::Never);
+    let traversal = Walk::new(Region::all_open(2), Counting::Never);
     let leaves: Vec<Vec<usize>> = visits(traversal)
         .iter()
         .map(|visit| match visit {
@@ -388,7 +391,7 @@ fn never_counting_visits_every_leaf_in_counter_order() {
 
 #[test]
 fn the_root_is_split_even_when_its_narrowing_changes_nothing() {
-    let traversal = Traversal::new(Region::all_open(2), Counting::Unchanged);
+    let traversal = Walk::new(Region::all_open(2), Counting::Unchanged);
     let visits = visits(traversal);
     // The root splits on atom 1; each child, unchanged by narrowing, is counted.
     assert_eq!(visits.len(), 2);
@@ -400,7 +403,7 @@ fn the_root_is_split_even_when_its_narrowing_changes_nothing() {
 fn a_narrowing_that_decides_an_atom_keeps_splitting_below_it() {
     // Narrowing cuts atom 0 whenever atom 2 is held: the held branch then
     // has one open atom left and is split, not counted.
-    let mut traversal = Traversal::new(Region::all_open(3), Counting::Unchanged);
+    let mut traversal = Walk::new(Region::all_open(3), Counting::Unchanged);
     let mut seen = Vec::new();
     while let Some(visit) = traversal
         .next(|region, ()| {
@@ -423,7 +426,7 @@ fn a_narrowing_that_decides_an_atom_keeps_splitting_below_it() {
 
 #[test]
 fn a_refuted_region_is_skipped_with_its_whole_subtree() {
-    let mut traversal = Traversal::new(Region::all_open(3), Counting::Never);
+    let mut traversal = Walk::new(Region::all_open(3), Counting::Never);
     let mut leaves = Vec::new();
     while let Some(visit) = traversal
         .next(|region, ()| {
@@ -452,14 +455,14 @@ fn a_refuted_region_is_skipped_with_its_whole_subtree() {
 fn a_decided_root_is_one_leaf() {
     let mut root = Region::all_open(2);
     assert!(root.hold(0) && root.cut(1));
-    let visits = visits(Traversal::new(root, Counting::Unchanged));
+    let visits = visits(Walk::new(root, Counting::Unchanged));
     assert_eq!(visits.len(), 1);
     assert!(matches!(&visits[0], Visit::Leaf(region, ()) if held(region) == vec![0]));
 }
 
 #[test]
 fn a_stopped_narrowing_stops_the_traversal_and_keeps_the_region() {
-    let mut traversal = Traversal::new(Region::all_open(2), Counting::Never);
+    let mut traversal = Walk::new(Region::all_open(2), Counting::Never);
     assert_eq!(
         traversal.next(|_, ()| Err(Stop::WorkLimit)).unwrap_err(),
         Stop::WorkLimit
@@ -473,7 +476,7 @@ fn a_stopped_narrowing_stops_the_traversal_and_keeps_the_region() {
 fn a_narrowing_may_choose_the_split_atom() {
     // Preferring atom 0 at every region visits the leaves with atom 0 as
     // the high bit of the order: empty, {1}, {0}, {0,1}.
-    let mut traversal = Traversal::new(Region::all_open(2), Counting::Never);
+    let mut traversal = Walk::new(Region::all_open(2), Counting::Never);
     let mut leaves = Vec::new();
     while let Some(visit) = traversal
         .next(|region, ()| {
@@ -499,7 +502,7 @@ fn each_leaf_carries_the_state_of_its_own_lineage() {
     // regions on its own lineage: each narrowing adds one, so a leaf at
     // depth two has seen three regions, and siblings do not see each
     // other's count.
-    let mut traversal = Traversal::with_state(Region::all_open(2), Counting::Never, 0usize);
+    let mut traversal = Walk::with_state(Region::all_open(2), Counting::Never, 0usize);
     let mut depths = Vec::new();
     while let Some(visit) = traversal
         .next(|_, seen: &mut usize| {
@@ -520,7 +523,7 @@ fn a_traversal_from_a_narrowed_root_does_not_narrow_it_again() {
     // The caller narrowed the root before the traversal began: the root is
     // split without a narrowing, and every region below it is narrowed
     // once, the counting never counting the root as a flat interval.
-    let mut traversal = Traversal::with_narrowed_root(Region::all_open(2), Counting::Unchanged, ());
+    let mut traversal = Walk::with_narrowed_root(Region::all_open(2), Counting::Unchanged, ());
     let mut narrowed = Vec::new();
     while let Some(visit) = traversal
         .next(|region, ()| {
@@ -539,15 +542,15 @@ fn a_traversal_from_a_narrowed_root_does_not_narrow_it_again() {
 
 #[test]
 fn held_first_reverses_an_unrestricted_traversal() {
-    let cut = visits(Traversal::new(Region::all_open(4), Counting::Never));
-    let held = visits(Traversal::new(Region::all_open(4), Counting::Never).with_held_first());
+    let cut = visits(Walk::new(Region::all_open(4), Counting::Never));
+    let held = visits(Walk::new(Region::all_open(4), Counting::Never).with_held_first());
     assert_eq!(held, cut.into_iter().rev().collect::<Vec<_>>());
 }
 
 #[test]
 fn held_first_preserves_refuted_coverage_and_lineage() {
-    fn family(held_first: bool) -> (Vec<Vec<usize>>, zetesis_cpu::regions::RegionStatistics) {
-        let mut walk = Traversal::with_state(Region::all_open(4), Counting::Never, 0_usize);
+    fn family(held_first: bool) -> (Vec<Vec<usize>>, zetesis_algebra::walk::RegionStatistics) {
+        let mut walk = Walk::with_state(Region::all_open(4), Counting::Never, 0_usize);
         if held_first {
             walk = walk.with_held_first();
         }
@@ -581,20 +584,20 @@ fn held_first_preserves_refuted_coverage_and_lineage() {
 
 #[test]
 fn held_first_keeps_a_refused_region_pending() {
-    let mut walk = Traversal::new(Region::all_open(3), Counting::Never).with_held_first();
+    let mut walk = Walk::new(Region::all_open(3), Counting::Never).with_held_first();
     assert_eq!(
         walk.next(|_, ()| Err(Stop::WorkLimit)),
         Err(Stop::WorkLimit)
     );
     let after_refusal = visits(walk);
-    let complete = visits(Traversal::new(Region::all_open(3), Counting::Never).with_held_first());
+    let complete = visits(Walk::new(Region::all_open(3), Counting::Never).with_held_first());
     assert_eq!(after_refusal, complete);
     assert_eq!(after_refusal.len(), 8);
 }
 
 #[test]
 fn surrendered_regions_list_the_next_visit_last() {
-    let mut traversal = Traversal::new(Region::all_open(2), Counting::Never);
+    let mut traversal = Walk::new(Region::all_open(2), Counting::Never);
     let first = traversal
         .next(|_, ()| Ok::<_, Stop>(Narrowing::Fixed { changed: false }))
         .unwrap();
@@ -614,7 +617,7 @@ fn surrendered_regions_list_the_next_visit_last() {
 
 #[test]
 fn a_surrendering_traversal_ends_with_its_statistics() {
-    let mut traversal = Traversal::new(Region::all_open(2), Counting::Never);
+    let mut traversal = Walk::new(Region::all_open(2), Counting::Never);
     traversal
         .next(|_, ()| Ok::<_, Stop>(Narrowing::Fixed { changed: false }))
         .unwrap();
@@ -632,7 +635,7 @@ fn a_surrendering_traversal_ends_with_its_statistics() {
 fn surrendered_regions_cover_the_leaves_not_yet_visited() {
     // Visit two leaves, then walk each surrendered region as its own root:
     // together the leaves are the root's, each once.
-    let mut traversal = Traversal::new(Region::all_open(4), Counting::Never);
+    let mut traversal = Walk::new(Region::all_open(4), Counting::Never);
     let mut leaves = Vec::new();
     for _ in 0..2 {
         let Some(Visit::Leaf(region, ())) = traversal
@@ -644,7 +647,7 @@ fn surrendered_regions_cover_the_leaves_not_yet_visited() {
         leaves.push(held(&region));
     }
     for (region, ()) in traversal.surrender() {
-        for visit in visits(Traversal::new(region, Counting::Never)) {
+        for visit in visits(Walk::new(region, Counting::Never)) {
             let Visit::Leaf(region, ()) = visit else {
                 panic!("never counted")
             };
@@ -661,7 +664,7 @@ fn surrendered_regions_cover_the_leaves_not_yet_visited() {
 
 #[test]
 fn a_stopped_narrowing_surrenders_its_region() {
-    let mut traversal = Traversal::new(Region::all_open(2), Counting::Never);
+    let mut traversal = Walk::new(Region::all_open(2), Counting::Never);
     assert_eq!(
         traversal.next(|_, ()| Err::<Narrowing, _>(Stop::WorkLimit)),
         Err(Stop::WorkLimit)

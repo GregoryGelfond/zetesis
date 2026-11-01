@@ -20,7 +20,7 @@ use super::{
     Adjacency, Initial, Narrower, NodeView, Producers, Scratch, State, Theory, Work, bit,
     initialization,
 };
-use zetesis_cpu::Stop;
+use zetesis_algebra::Stop;
 
 #[derive(Debug)]
 pub(super) struct Projection {

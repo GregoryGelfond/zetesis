@@ -6,7 +6,7 @@
 
 use std::mem::size_of;
 
-use zetesis_cpu::Stop;
+use zetesis_algebra::Stop;
 
 use super::budget::{Budget, BudgetError};
 

@@ -5,7 +5,7 @@
 //! ordinary production route rather than inheriting a parent's test control.
 
 use std::cell::RefCell;
-use zetesis_cpu::Cancellation;
+use zetesis_algebra::Cancellation;
 
 #[derive(Clone, Copy, Default, Debug, PartialEq, Eq)]
 pub(crate) struct Counts {

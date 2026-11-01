@@ -1,14 +1,13 @@
 //! The shared frontier protocols and the exact receipts of a measured frontier.
 
-use std::mem::size_of;
-use std::sync::mpsc;
-use std::time::Instant;
+use std::mem::{align_of, size_of};
+use std::sync::Mutex;
+
+use super::super::regions::RegionFrontierStatistics;
 
 use zetesis_ferraris::{AdmissionLimits, Narrower, Node, Theory};
 
 use super::*;
-
-const WAIT: Duration = Duration::from_secs(2);
 
 fn index() -> Narrower {
     let theory = Theory::new(
@@ -25,12 +24,12 @@ fn index() -> Narrower {
 fn entry() -> Entry {
     let mut knowledge = CandidateKnowledge::default();
     knowledge.permanent(0, &index()).unwrap();
-    (Region::all_open(2), knowledge)
+    Entry(Region::all_open(2), knowledge)
 }
 
 /// An entry's header and owned payload, computed from its parts rather than
-/// from `entry_payload`.
-fn entry_bytes((region, knowledge): &Entry) -> u128 {
+/// from the generic payload method.
+fn entry_bytes(Entry(region, knowledge): &Entry) -> u128 {
     region.retained_bytes() + size_of::<CandidateKnowledge>() as u128 + knowledge.allocated_bytes()
 }
 
@@ -42,74 +41,6 @@ fn headers(workers: usize) -> u128 {
 
 fn receipts(frontier: &RegionFrontier) -> RegionFrontierStatistics {
     frontier.statistics().unwrap()
-}
-
-#[test]
-fn a_single_child_publication_grows_the_count_by_one_and_pushes_one_entry() {
-    let frontier = RegionFrontier::new(2, entry()).unwrap();
-    let _held = frontier.take_local(0).unwrap();
-    frontier
-        .publish_split(0, [entry()], reserve_regions)
-        .unwrap();
-    assert_eq!(frontier.termination.unresolved(), 2);
-    assert_eq!(frontier.queue(0).len(), 1);
-}
-
-#[test]
-fn a_resumed_walk_starts_open_at_its_carried_count() {
-    let termination = Termination::resuming(5);
-    assert_eq!(termination.unresolved(), 5);
-    assert!(!termination.has_ended());
-}
-
-#[test]
-fn a_resolution_to_zero_wakes_the_idle_and_leaves_the_walk_open() {
-    let frontier = RegionFrontier::new(2, entry()).unwrap();
-    let _hand = frontier.take_local(0).unwrap();
-    let (done, result) = mpsc::sync_channel(1);
-    std::thread::scope(|scope| {
-        scope.spawn(|| {
-            let _ = done.send(frontier.wait_for_work(Duration::from_mins(1), |_| None::<Entry>));
-        });
-        // The waiter registers under the gate and releases it only by waiting,
-        // so the resolution's wake, which takes the gate, reaches it.
-        while frontier.termination.idle_waiters.load(Ordering::Relaxed) == 0 {
-            std::hint::spin_loop();
-        }
-        frontier.termination.resolve();
-        assert!(
-            result.recv_timeout(WAIT).unwrap().is_none(),
-            "the waiter was not woken"
-        );
-    });
-    assert!(frontier.termination.is_resolved());
-    assert!(!frontier.termination.is_closed());
-}
-
-#[test]
-fn a_gate_attempt_never_waits_for_a_busy_deque() {
-    let frontier = RegionFrontier::new(1, entry()).unwrap();
-    let busy = frontier.queue(0);
-    let started = Instant::now();
-    assert_eq!(frontier.try_take_local(0).err(), Some(Busy));
-    assert!(started.elapsed() < WAIT);
-    drop(busy);
-    assert!(matches!(frontier.try_take_local(0), Ok(Some(_))));
-}
-
-#[test]
-fn a_gate_attempt_tells_a_busy_deque_from_an_empty_one() {
-    let frontier = RegionFrontier::new(1, entry()).unwrap();
-    let _hand = frontier.take_local(0).unwrap();
-    let busy = frontier.queue(0);
-    assert_eq!(frontier.try_take_local(0).err(), Some(Busy));
-    drop(busy);
-    assert!(matches!(frontier.try_take_local(0), Ok(None)));
-}
-
-#[test]
-fn an_unmeasured_frontier_keeps_no_receipts() {
-    assert_eq!(RegionFrontier::new(1, entry()).unwrap().statistics(), None);
 }
 
 #[test]
@@ -209,4 +140,21 @@ fn the_peak_is_the_maximum_of_the_counter_history() {
     let observed = receipts(&frontier);
     assert_eq!(observed.regions, *history.last().unwrap());
     assert_eq!(observed.peak_regions, *history.iter().max().unwrap());
+}
+
+#[test]
+fn the_candidate_entry_preserves_tuple_layout_and_payload() {
+    assert_eq!(
+        size_of::<Entry>(),
+        size_of::<(Region, CandidateKnowledge)>()
+    );
+    assert_eq!(
+        align_of::<Entry>(),
+        align_of::<(Region, CandidateKnowledge)>()
+    );
+    let entry = entry();
+    assert_eq!(
+        entry.allocated_bytes(),
+        entry_bytes(&entry) - size_of::<Entry>() as u128
+    );
 }

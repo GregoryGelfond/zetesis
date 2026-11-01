@@ -8,7 +8,7 @@ use super::{
     order::Schedule,
 };
 use crate::{EvaluationError, EvaluationWorkspace, Interpretation, NodeView, Theory};
-use zetesis_cpu::Stop;
+use zetesis_algebra::Stop;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(super) enum State {

@@ -4,7 +4,7 @@ use super::{
     ObjectiveBoundError, ObjectiveBoundStatistics, ObjectivePlan, ObjectivePlanLimits, Work,
 };
 use std::fmt;
-use zetesis_cpu::{Cancellation, Stop};
+use zetesis_algebra::{Cancellation, Stop};
 use zetesis_ferraris::{Interpretation, NodeView};
 use zetesis_objective::{Limits, Score};
 

@@ -7,7 +7,7 @@ use crate::{
     ExtremumRow, FormulaNodes, FormulaParts, FrozenReduct, Limits, Node, NodeView, Theory,
     Threshold, TightCheckLimits, TightPlan, TightPlanLimits, TightVerdict, TightWorkspace,
 };
-use zetesis_cpu::{Cancellation, Stop};
+use zetesis_algebra::{Cancellation, Stop};
 
 fn weighted(bounds: &[i128], checked: bool) -> Theory {
     let mut nodes = FormulaNodes::default();

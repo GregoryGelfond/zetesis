@@ -28,8 +28,8 @@ mod residual_sums;
 use std::{hint::black_box, time::Duration};
 
 use criterion::{BenchmarkId, Criterion, Throughput};
+use zetesis_algebra::Cancellation;
 use zetesis_core::Value as Term;
-use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{
     AdmissionLimits, AggregateComparison as Comparison, AggregateElement, AggregateExtremum,
     AggregateLimits, Interpretation, Theory, ValueExtremumElement, append_aggregate,

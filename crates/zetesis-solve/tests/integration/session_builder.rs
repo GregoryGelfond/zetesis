@@ -4,7 +4,7 @@ use std::{collections::BTreeSet, io};
 use zetesis_reference_support::formula;
 
 use crate::support::sessions::config;
-use zetesis_cpu::Cancellation;
+use zetesis_algebra::Cancellation;
 use zetesis_solve::{
     AnswerSelection, Backend, Completion, ExecutionObservation, ExecutionObserver,
     ExecutionResources, GpuApi, Grounder, PreparedInput, Session, SolveConfig, SolveError, Subject,

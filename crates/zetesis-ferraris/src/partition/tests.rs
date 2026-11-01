@@ -3,7 +3,7 @@
 //! construction's own refusals are, it becomes the stop.
 
 use super::{Budget, ErrorKind, Group, Limits, Resource, Statistics, dimensions};
-use zetesis_cpu::{Cancellation, Meter, Refusal, Stop};
+use zetesis_algebra::{Cancellation, Meter, Refusal, Stop};
 
 /// Run `test` on a construction budget whose meter has admitted `charged`
 /// operations; with `stop`, a stop is requested once it has. The metered exit

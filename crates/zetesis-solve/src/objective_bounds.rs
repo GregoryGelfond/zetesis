@@ -4,7 +4,7 @@ use crate::ExecutionObservation as Event;
 use crate::countermodel::Input;
 use crate::execution_observation::ExecutionSink;
 use crate::{SolveConfig, SolveError};
-use zetesis_cpu::Cancellation;
+use zetesis_algebra::Cancellation;
 use zetesis_objective::Score;
 use zetesis_stable::StableModels;
 use zetesis_themelios::objective_bound::{

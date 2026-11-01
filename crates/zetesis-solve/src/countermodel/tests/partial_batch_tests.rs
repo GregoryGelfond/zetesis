@@ -4,7 +4,7 @@
 use std::io;
 use std::num::NonZeroUsize;
 
-use zetesis_cpu::Cancellation;
+use zetesis_algebra::Cancellation;
 use zetesis_ferraris::Interpretation;
 use zetesis_stable::{BatchVerdict, StableModels};
 

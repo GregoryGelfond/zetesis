@@ -3,8 +3,8 @@
 use std::{collections::BTreeSet, convert::Infallible, num::NonZeroUsize};
 use zetesis_reference_support::{formula, prepared, resource_limits};
 
+use zetesis_algebra::{Cancellation, Stop};
 use zetesis_core::{Atom, Model, Predicate, Sign, Value, ValueLimits, ValueNode};
-use zetesis_cpu::{Cancellation, Stop};
 use zetesis_solve::{
     Backend, Completion, ExecutionObservation, ExecutionObserver, Grounder, GroundingMode,
     Interruption, Oracle, PreparedInput, PreparedProfile, Session, SolveConfig, SolveError,

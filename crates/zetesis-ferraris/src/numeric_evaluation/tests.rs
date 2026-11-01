@@ -7,8 +7,8 @@ use crate::{
     TightCheckLimits, TightPlan, TightPlanLimits, TightVerdict, TightWorkspace, check,
     models_reduct, native_aggregate as native,
 };
+use zetesis_algebra::{Cancellation, Stop};
 use zetesis_core::Value;
-use zetesis_cpu::{Cancellation, Stop};
 
 fn family(roots: Vec<usize>, reverse: bool) -> Theory {
     let mut nodes = FormulaNodes::default();

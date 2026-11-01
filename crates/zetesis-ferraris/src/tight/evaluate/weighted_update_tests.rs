@@ -6,7 +6,7 @@ use crate::{
     AdmissionLimits, FormulaParts, Node, NumericDomain, NumericRow, Theory, ThresholdDescriptor,
     TightCheckLimits, TightError, TightPlan, TightPlanLimits, TightResource,
 };
-use zetesis_cpu::Cancellation;
+use zetesis_algebra::Cancellation;
 
 fn prepare(theory: &Theory) -> TightPlan {
     let cancellation = Cancellation::default();

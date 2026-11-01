@@ -68,7 +68,7 @@ fn decoded_reasons_survive_exact_completion_refusal() {
         AdmissionLimits::default(),
     )
     .unwrap();
-    let cancellation = zetesis_cpu::Cancellation::default();
+    let cancellation = zetesis_algebra::Cancellation::default();
     let mut models = zetesis_stable::StableModels::new(
         &theory,
         zetesis_stable::Limits::default(),

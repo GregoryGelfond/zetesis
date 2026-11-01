@@ -1,8 +1,8 @@
 //! Ordinary formula invocations select the hybrid before answer-set publication.
 
 use crate::support::options::enumerating;
+use zetesis_algebra::Cancellation;
 use zetesis_cli::{Completion, RunError, run_with_diagnostics};
-use zetesis_cpu::Cancellation;
 
 mod formula_records;
 

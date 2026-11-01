@@ -1,11 +1,11 @@
 //! Host-produced failures retain their typed identity across the CLI adapter.
 
 use std::{error::Error, fmt, io, num::NonZeroUsize, sync::Arc};
+use zetesis_algebra::Cancellation;
 use zetesis_cli::{
     Backend, ExecutionObservation, ExecutionObserver, Grounder, Oracle, PreparedInput,
     PreparedProfile, PublicationFailure, RunError, Session, SolveConfig, Subject,
 };
-use zetesis_cpu::Cancellation;
 use zetesis_reference_support::formula;
 
 fn config() -> SolveConfig {

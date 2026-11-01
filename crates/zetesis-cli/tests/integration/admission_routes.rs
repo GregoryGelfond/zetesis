@@ -1,10 +1,10 @@
 //! Automatic source admission retains anonymous projection semantics.
 
 use clap::Parser;
+use zetesis_algebra::Cancellation;
 use zetesis_cli::{
     Completion, Options, RunError, run_bundle_with_diagnostics, run_with_diagnostics,
 };
-use zetesis_cpu::Cancellation;
 use zetesis_reference_support::BundleFixture;
 use zetesis_validation::answers::native_json;
 

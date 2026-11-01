@@ -20,7 +20,7 @@
 
 use super::{Deduction, Literals, capture_read};
 use crate::regions::{Work, bit};
-use zetesis_cpu::Stop;
+use zetesis_algebra::Stop;
 
 mod merge;
 

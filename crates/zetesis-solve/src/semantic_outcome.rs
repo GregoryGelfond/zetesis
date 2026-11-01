@@ -274,7 +274,7 @@ mod count_tests {
     #[test]
     fn complete_count_needs_exhaustion_and_a_selected_family() {
         let mut outcome = SemanticOutcome::interrupted_before_start(Interruption::Preparation(
-            zetesis_cpu::Stop::Cancelled,
+            zetesis_algebra::Stop::Cancelled,
         ));
         outcome.verified = 7;
         outcome.selection = Some(AnswerSelection::All);
@@ -290,7 +290,7 @@ mod count_tests {
     #[test]
     fn an_absent_incumbent_only_counts_as_zero_for_empty_complete_search() {
         let mut outcome = SemanticOutcome::interrupted_before_start(Interruption::Preparation(
-            zetesis_cpu::Stop::Cancelled,
+            zetesis_algebra::Stop::Cancelled,
         ));
         outcome.selection = Some(AnswerSelection::Optimal);
         outcome.search_state = Some(SearchState::Exhausted);

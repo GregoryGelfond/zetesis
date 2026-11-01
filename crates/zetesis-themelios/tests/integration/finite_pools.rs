@@ -595,7 +595,7 @@ fn pooled_scalar_equality_preserves_explicit_facts() {
 
 #[test]
 fn hidden_optimum_ties_and_cancellation_keep_complete_model_identity() {
-    use zetesis_cpu::Cancellation;
+    use zetesis_algebra::Cancellation;
     let p = formula("1{p(1;2)}1.#minimize{1@1:p(1);1@1:p(2)}.#show.");
     let cancellation = Cancellation::default();
     let mut search = zetesis_stable::StableModels::new(

@@ -1,7 +1,7 @@
 //! Numeric threshold reduction over already-computed predecessor truth.
 
 use crate::Threshold;
-use zetesis_cpu::Stop;
+use zetesis_algebra::Stop;
 
 #[cfg(test)]
 mod tests;

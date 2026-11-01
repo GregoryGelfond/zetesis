@@ -176,7 +176,7 @@ fn failed_reduct_narrowing_keeps_its_query_count_on(engagement: Engagement) {
     // The original index was charged when the candidate walk started and is
     // shared.
     // Every unit of reduct-region work therefore comes from frozen narrowing.
-    // Traversal counts completed regions, so a failed first narrowing need
+    // Walk counts completed regions, so a failed first narrowing need
     // not increment that count.
     assert!(
         statistics.reduct.regions.work > 0,

@@ -328,7 +328,7 @@ propagation; allocation failure and global work, cancellation or deadline stops
 remain errors. Used words are reinitialized for every attempt, and retained
 capacity is accounted as worker scratch. Grounding's complete assignment sums
 and this CPU check share one packed shift-and-union kernel. The propagation
-operation `zetesis_core::packed::union_shifted_until_hit` checks translated bits
+operation `zetesis_algebra::words::union_shifted_until_hit` checks translated bits
 while inserting them, avoiding a separate interval scan. Earlier iterations
 found no witness, so only the new translated bits can supply one. A hit may
 leave a partial union, which the caller discards; absence requires completing
@@ -464,13 +464,13 @@ order changes the regions visited, never the answers. The packed region masks en
 open atoms in ascending order, excluding decided atoms and unused final bits;
 each inspected parent count spends one work permit. The primary count is read
 once per eligible atom; secondary counts are read only to resolve primary ties.
-The traversal itself is one operation in `zetesis-cpu`, shared by both
-routes when one worker walks; with several workers the formula route walks
-the same tree in `zetesis-stable`'s parallel regions: the walk begins on the
-calling thread, and the workers it then starts each own a deque of regions,
-from which idle workers steal. The closure
-route narrows by its two closures, the formula route by
-the readings.
+The scalar `zetesis_algebra::walk::Walk` covers candidate and proper-subset
+regions with the caller's narrowing. With several workers, `zetesis-stable`'s
+parallel regions walk the same tree: the walk begins on the calling thread,
+and the workers it then starts each own a deque of regions, from which idle
+workers steal. That schedule and the GPU candidate producers share the queue
+and termination protocol in `zetesis_algebra::walk::frontier::Frontier`.
+Their original-theory and frozen-reduct narrowing remain distinct.
 
 Before a CPU region query searches subsets, an optional checked fragment can
 decide membership by least consequences of the frozen reduct. Candidate-false

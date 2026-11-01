@@ -1,6 +1,6 @@
 mod refusals;
 
-use zetesis_cpu::Cancellation;
+use zetesis_algebra::Cancellation;
 
 use crate::{
     AdmissionError, Limits, NodeView, Theory,

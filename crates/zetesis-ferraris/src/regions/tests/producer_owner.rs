@@ -1,7 +1,7 @@
 //! A producer inventory authenticates its complete extraction's admission,
 //! not the dimensions or structural equality of an independently admitted theory.
 
-use zetesis_cpu::{Cancellation, Stop};
+use zetesis_algebra::{Cancellation, Stop};
 
 use crate::{Node, Producers, RegionLimits, Theory, test_support::theory};
 

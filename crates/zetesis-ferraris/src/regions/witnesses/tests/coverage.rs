@@ -3,7 +3,7 @@
 use super::super::{Scratch, Work, chain_position, expands};
 use super::*;
 use crate::test_support::Allowance;
-use zetesis_cpu::Stop;
+use zetesis_algebra::Stop;
 
 fn connective(nodes: &mut FormulaNodes, disjunction: bool, children: &[usize]) -> usize {
     push(

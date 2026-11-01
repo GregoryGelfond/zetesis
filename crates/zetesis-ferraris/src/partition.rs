@@ -9,7 +9,7 @@
 
 use std::fmt;
 
-use zetesis_cpu::{Cancellation, ChargeError, Meter, Refusal, Stop};
+use zetesis_algebra::{Cancellation, ChargeError, Meter, Refusal, Stop};
 
 mod restriction;
 #[cfg(test)]

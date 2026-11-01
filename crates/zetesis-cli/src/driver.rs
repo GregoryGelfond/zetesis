@@ -4,7 +4,7 @@ use crate::presentation::Diagnostics;
 use crate::{Backend, Completion, Grounder, Interruption, Options, RunFailure};
 use std::fmt;
 use std::io::{self, Write};
-use zetesis_cpu::{Cancellation, Stop};
+use zetesis_algebra::{Cancellation, Stop};
 use zetesis_themelios::{AdmissionFailure, BundleError, ExpansionFailure, SourceBundle};
 
 #[cfg(test)]

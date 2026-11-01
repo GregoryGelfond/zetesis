@@ -6,8 +6,8 @@
 
 use std::mem::size_of;
 
-use zetesis_core::packed;
-use zetesis_cpu::Stop;
+use zetesis_algebra::Stop;
+use zetesis_algebra::words;
 
 use crate::{AdmissionError, Producers, Theory};
 
@@ -229,7 +229,7 @@ fn completion_table<'a>(
         body_table[..word_count].fill(valid);
         intersect_literals(&mut body_table[..word_count], positive, true, budget)?;
         intersect_literals(&mut body_table[..word_count], negative, false, budget)?;
-        packed::union_assign(
+        words::union_assign(
             &mut output.forbidden[..word_count],
             &body_table[..word_count],
             &mut |work| budget.charge(work),
@@ -242,7 +242,7 @@ fn completion_table<'a>(
         budget.charge(1)?;
         *value = head & valid;
     }
-    packed::xor_assign(
+    words::xor_assign(
         &mut output.forbidden[..word_count],
         &body_table[..word_count],
         &mut || budget.charge(1),
@@ -259,7 +259,7 @@ fn intersect_literals(
     positive: bool,
     budget: &mut Budget<'_, '_>,
 ) -> Result<(), BudgetError> {
-    packed::visit_set_bits(
+    words::visit_set_bits(
         std::slice::from_ref(&selected),
         budget,
         &mut |meter, work| meter.charge(work),

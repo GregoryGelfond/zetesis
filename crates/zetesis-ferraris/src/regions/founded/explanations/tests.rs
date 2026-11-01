@@ -6,7 +6,7 @@ use crate::regions::founded::Scratch;
 use crate::regions::{Work, flag_words};
 use crate::test_support::{SinglePermits, theory, world};
 use crate::{Narrower, Node, NodeView, Producers, RegionLimits, Theory};
-use zetesis_cpu::{Cancellation, Stop};
+use zetesis_algebra::{Cancellation, Stop};
 
 mod aggregates;
 

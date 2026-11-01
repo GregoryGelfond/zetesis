@@ -57,7 +57,7 @@ independently of displayed projections.
 ## Execution and cancellation
 
 `SolveConfig` selects CPU or device execution and named resource limits.
-`zetesis_cpu::Cancellation` supplies cooperative cancellation and deadlines. GPU
+`zetesis_algebra::Cancellation` supplies cooperative cancellation and deadlines. GPU
 support is enabled by default; use `default-features = false` for a CPU-only
 consumer. Cargo feature unification can enable it through another dependency.
 Compiling GPU support does not select a device.

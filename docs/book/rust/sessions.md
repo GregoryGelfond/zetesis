@@ -1,7 +1,7 @@
 # Embedding an ordinary solve
 
 A `Session` owns solving state and borrows a coherent admitted input.
-`SolveConfig` selects execution policy and limits; `zetesis_cpu::Cancellation`
+`SolveConfig` selects execution policy and limits; `zetesis_algebra::Cancellation`
 carries shared cancellation and an optional deadline. The session accepts these
 values without argument parsing, standard streams or answer rendering. This
 example enumerates the guided tour's complete family:
@@ -9,7 +9,7 @@ example enumerates the guided tour's complete family:
 ```rust
 # extern crate zetesis_solve;
 # extern crate zetesis_core;
-# extern crate zetesis_cpu;
+# extern crate zetesis_algebra;
 # extern crate zetesis_ferraris;
 # extern crate zetesis_stable;
 # extern crate zetesis_themelios;
@@ -332,7 +332,7 @@ source checking. Each returned answer chooses a q-prefix followed by a p-suffix:
 ```rust
 # extern crate zetesis_solve;
 # extern crate zetesis_core;
-# extern crate zetesis_cpu;
+# extern crate zetesis_algebra;
 # extern crate zetesis_themelios;
 {{#include ../examples/hybrid.rs:example}}
 ```
@@ -505,7 +505,7 @@ that the Rust accumulators compute them is checked by tests, not by the proofs.
 ```rust
 # extern crate zetesis_solve;
 # extern crate zetesis_core;
-# extern crate zetesis_cpu;
+# extern crate zetesis_algebra;
 # extern crate zetesis_themelios;
 {{#include ../examples/world-view-questions.rs:example}}
 ```
@@ -572,7 +572,7 @@ not erase the full interpretations or merge their projection keys.
 
 ```rust
 # extern crate zetesis_solve;
-# extern crate zetesis_cpu;
+# extern crate zetesis_algebra;
 # extern crate zetesis_themelios;
 {{#include ../examples/projected-answers.rs:example}}
 ```
@@ -674,7 +674,7 @@ mode:
 ```rust
 # extern crate zetesis_solve;
 # extern crate zetesis_core;
-# extern crate zetesis_cpu;
+# extern crate zetesis_algebra;
 # extern crate zetesis_themelios;
 {{#include ../examples/observations.rs:example}}
 ```
@@ -714,7 +714,7 @@ its compilation without attempting device discovery.
 ```rust,no_run
 # extern crate zetesis_solve;
 # extern crate zetesis_core;
-# extern crate zetesis_cpu;
+# extern crate zetesis_algebra;
 # extern crate zetesis_themelios;
 # extern crate zetesis_wgpu;
 {{#include ../examples/resources.rs:example}}
@@ -766,7 +766,7 @@ and their scores. It requires an accessible physical GPU.
 
 ```rust,no_run
 # extern crate zetesis_solve;
-# extern crate zetesis_cpu;
+# extern crate zetesis_algebra;
 # extern crate zetesis_themelios;
 # extern crate zetesis_wgpu;
 {{#include ../examples/profiles.rs:example}}

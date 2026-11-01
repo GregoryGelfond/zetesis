@@ -206,7 +206,7 @@ fn cancelled_leaf_dispatch_cannot_return_a_value() {
                 location(),
             );
             let expressions = leaves();
-            let cancellation = zetesis_cpu::Cancellation::default();
+            let cancellation = zetesis_algebra::Cancellation::default();
             cancellation.cancel();
             counters.attach_test_control(&cancellation);
             assert!(matches!(
@@ -218,7 +218,7 @@ fn cancelled_leaf_dispatch_cannot_return_a_value() {
                     Context::new(computation, &FormulaLimits::default(), counters, location())
                 ),
                 Err(FormulaFailure::Interrupted {
-                    reason: zetesis_cpu::Stop::Cancelled,
+                    reason: zetesis_algebra::Stop::Cancelled,
                     ..
                 })
             ));

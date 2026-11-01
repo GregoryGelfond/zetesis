@@ -54,7 +54,7 @@ retain the contracts documented in the themelios manual.
 | Look up complete typed atoms | `Model::lookup`, `AtomIndex`, `CatalogIndex`, `AtomLookup`, `AtomPattern::key`, `BindingView` | [Checked lookup example](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-core/examples/README.md#checked-atom-lookup-probe) |
 | Build an append-only atom catalog | `atom_interner::{AtomInterner, CommittedAtoms, AtomAppender}` | [Catalog construction](models.md#building-a-catalog-during-grounding) |
 | Select equality matches in one relation | `zetesis_core::relation::{Relation, Query, Selection, Mask}` | [Core relation API](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-core/src/relation.rs) |
-| Restrict rows and project finite domains | `zetesis_cpu::table::{Table, Domain, Selection}` | [Finite tables](finite-tables.md) |
+| Restrict rows and project finite domains | `zetesis_core::table::{Table, Domain, Selection}` | [Finite tables](finite-tables.md) |
 | Inspect source domains and keyed relations | `zetesis_domain` | [Source preparation](source.md) |
 
 Atoms retain signed predicates, argument order and typed values. Dense positions,
@@ -65,12 +65,19 @@ row does not establish answer-set membership. See
 
 ## Membership and execution
 
+`zetesis-algebra` is the bottom execution layer and depends on no workspace
+crate. It owns cancellation, regions, word operations, the scalar walk and the
+generic frontier. Source tables belong to `zetesis-core` alongside their typed
+relations; the semantic solver libraries retain theory and answer-set meaning.
+
 | Task | Public library entry points | Guide |
 | --- | --- | --- |
 | Build finite formulas and check membership | `zetesis_ferraris::{Theory, FormulaParts, NodeView, Interpretation, check}` | [Finite reducts](reducts.md) |
 | Reuse original truth or a frozen reduct | `EvaluationWorkspace`, `FormulaEvaluation`, `FrozenReduct` | [Finite reducts](reducts.md) |
 | Use checked formula specializations | `zetesis_ferraris::{PositivePlan, StratifiedPlan, TightPlan, TightWorkspace}` | [Formula plans](sessions.md#formula-membership-plans) |
-| Cover and narrow candidate regions | `zetesis_cpu::regions::{Region, Traversal}`, `zetesis_ferraris::{Narrower, producers}` | [Exact execution](../architecture/execution.md) |
+| Cover and narrow candidate regions | `zetesis_algebra::{region::Region, walk::Walk}`, `zetesis_ferraris::{Narrower, producers}` | [Exact execution](../architecture/execution.md) |
+| Share packed word operations | `zetesis_algebra::words` | [Exact execution](../architecture/execution.md) |
+| Share parallel frontier protocols | `zetesis_algebra::walk::frontier::Frontier` | [Parallel walks](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-stable/README.md#walking-the-tree-with-several-workers) |
 | Enumerate formula answers and complete reduct queries | `zetesis_stable::{StableModels, check, CompletionExecutor}` | [Sessions](sessions.md) |
 | Check an admitted program's streamed constraints over candidate regions | `zetesis_stable::StreamedConstraints`, `StableModels::set_streamed_constraints` | [Hybrid formula sessions](sessions.md#hybrid-formula-sessions) |
 | Produce parallel candidate batches | `StableModels::with_region_producers`, `next_batch_with_completion` | [Formula plans](sessions.md#formula-membership-plans) |
@@ -110,6 +117,26 @@ different scopes; none alone certifies the complete Rust/WGSL implementation.
 See [validation](../reference/validation.md) and
 [proof correspondence](../lean/correspondence.md) before extending those claims.
 
+## Shared primitive ownership
+
+Direct callers of the former `zetesis-cpu` package use `zetesis-algebra`.
+The move preserves primitive behavior, typed failures and receipts; it does not
+replace the reduct check or change the available execution backends.
+
+| Former owner | Current owner |
+| --- | --- |
+| `zetesis_cpu::{Cancellation, Stop, Meter, Metered, poll_due}` | Same names in `zetesis_algebra` |
+| `zetesis_cpu::regions::{Region, Narrowing}` | `zetesis_algebra::region::{Region, Narrowing}` |
+| `zetesis_cpu::regions::{Traversal, Counting, Visit, RegionStatistics}` | `zetesis_algebra::walk::{Walk, Counting, Visit, RegionStatistics}` |
+| `zetesis_core::packed` | `zetesis_algebra::words` |
+| `zetesis_cpu::table` | `zetesis_core::table` |
+
+The scalar walk's type is `Walk`; there is no old-package forwarding crate.
+`zetesis_stable::RegionFrontierStatistics` keeps its public fields and now
+re-exports the shared frontier's statistics. The unified schedules and the
+separate Reduction/Verdict interface are subsequent changes, not effects of
+moving these owners.
+
 ## Migrating from 0.5.0
 
 The changes below affect direct library callers. Source syntax is unchanged;
@@ -145,13 +172,14 @@ For `GpuFormulaOracle::new_metal_with_projection`, use
 `new_selected_with_projection` with the same selection and projection.
 `zetesis_core::catalog::CatalogRead::constructor_of_predicate` is removed.
 
-The following helpers were public in 0.5.0 and are now crate-private:
+The former `zetesis-cpu` closure helpers `CONSTRAINT_HEAD` and `InstanceAtomIter`
+were removed with that route. The following helpers were public in 0.5.0 and
+are now crate-private:
 
 | Crate | Helpers |
 | --- | --- |
 | `zetesis-cli` | `RunFailure::into_cause` |
 | `zetesis-core` | `AtomKey::compare_ref`, `AtomRef::compare_key_with`, `Model::selection_payload_bytes`, `Predicate::shares_name` |
-| `zetesis-cpu` | `CONSTRAINT_HEAD`, `InstanceAtomIter` |
 | `zetesis-engine` | `OutputLimits::for_resources` |
 | `zetesis-maintenance` | `is_record` |
 | zetesis-sat (now `zetesis-stable`) | `CompletionExecutor::DEFAULT_SCRATCH_BYTES`, `ReductPreparationLimits::DEFAULT_BYTES` |

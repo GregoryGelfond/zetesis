@@ -10,7 +10,7 @@ publish = false
 [dependencies]
 rayon.workspace = true
 self_cell.workspace = true
-zetesis-cpu.workspace = true
+zetesis-algebra.workspace = true
 zetesis-ferraris.workspace = true
 zetesis-objective.workspace = true
 zetesis-themelios.workspace = true

@@ -7,8 +7,8 @@
 use std::convert::Infallible;
 use std::mem::size_of;
 
-use zetesis_core::packed;
-use zetesis_cpu::Stop;
+use zetesis_algebra::Stop;
+use zetesis_algebra::words;
 
 use super::{
     budget::{Budget, BudgetError},
@@ -142,7 +142,7 @@ pub(super) fn prepare(
     };
     for target in 0..rows.len() {
         loop {
-            let Some(atom) = packed::first(&rows[target].words, &mut |work| budget.charge(work))?
+            let Some(atom) = words::first(&rows[target].words, &mut |work| budget.charge(work))?
             else {
                 let refuted = budget.bounded(3, || {
                     if rows[target].constant {
@@ -209,7 +209,7 @@ fn add(
     let target = &mut remaining[0];
     let width = u64::try_from(target.words.len()).expect("a row length fits a work word");
     budget.charge(width + 2)?;
-    packed::xor_assign(&mut target.words, &source.words, &mut || {
+    words::xor_assign(&mut target.words, &source.words, &mut || {
         Ok::<_, Infallible>(())
     })
     .unwrap_or_else(|never| match never {});
@@ -227,10 +227,10 @@ fn collect_units(
     for row in &prepared.basis {
         budget.charge(1)?;
         let row = &rows[*row];
-        let count = packed::count(&row.words, &mut |work| budget.charge(work))?;
+        let count = words::count(&row.words, &mut |work| budget.charge(work))?;
         budget.charge(1)?;
         if count == 1 {
-            let atom = packed::first(&row.words, &mut |work| budget.charge(work))?
+            let atom = words::first(&row.words, &mut |work| budget.charge(work))?
                 .expect("the unchanged row has one atom");
             storage.push(
                 &mut prepared.units,
@@ -284,7 +284,7 @@ pub(super) fn build_index<'a>(
         budget.charge(3)?;
         let word = row / 64;
         let bit = 1 << (row % 64);
-        packed::visit_set_bits(
+        words::visit_set_bits(
             support,
             budget,
             &mut |budget, work| budget.charge(work),

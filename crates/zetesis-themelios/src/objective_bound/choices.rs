@@ -16,7 +16,7 @@ mod tests;
 
 use std::borrow::Cow;
 
-use zetesis_cpu::Cancellation;
+use zetesis_algebra::Cancellation;
 use zetesis_ferraris::{AggregateElement, FormulaNodes, FormulaParts, NodeView, Theory};
 use zetesis_objective::Score;
 

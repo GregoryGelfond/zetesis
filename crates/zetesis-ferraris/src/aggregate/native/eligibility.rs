@@ -1,6 +1,6 @@
 //! Actual occurrence masks acquired with the existing topological formula evaluator.
 
-use zetesis_cpu::{Cancellation, Meter, Stop};
+use zetesis_algebra::{Cancellation, Meter, Stop};
 
 use super::{
     Error, ErrorKind, Group, GroupRef, Reduction, ReductionLimits, Resource, Statistics, add, bytes,

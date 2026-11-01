@@ -4,7 +4,7 @@
 use crate::regions::{ChainOperands, Closure, Known, Narrower, NarrowingScratch, Step, Work, bit};
 use crate::test_support::SinglePermits;
 use crate::{ExtremumCutRule, Theory};
-use zetesis_cpu::Stop;
+use zetesis_algebra::Stop;
 
 fn family(count: usize, lengths: &[usize], suffix: bool) -> (Theory, Vec<usize>) {
     let mut owner = super::owner(count);

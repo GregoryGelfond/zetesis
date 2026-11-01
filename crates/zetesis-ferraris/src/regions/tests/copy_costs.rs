@@ -1,4 +1,4 @@
-//! Payload receipts for the Knowledge clones an actual Traversal requests.
+//! Payload receipts for the Knowledge clones an actual Walk requests.
 //!
 //! A receipt counts initialized array representation bytes and the returned
 //! clone's nonempty backing allocations. It does not intercept an allocator or
@@ -7,9 +7,9 @@
 
 use std::{cell::RefCell, collections::BTreeSet, mem::size_of, rc::Rc};
 
-use zetesis_cpu::{
+use zetesis_algebra::{
     Cancellation,
-    regions::{Counting, RegionStatistics, Traversal, Visit},
+    walk::{Counting, RegionStatistics, Visit, Walk},
 };
 
 use crate::{AdmissionLimits, Narrower, Node, Region, RegionLimits, Theory};
@@ -119,7 +119,7 @@ fn traverse(
         knowledge,
         receipt: Rc::clone(&receipt),
     };
-    let mut traversal = Traversal::with_state(
+    let mut traversal = Walk::with_state(
         Region::all_open(theory.atom_count()),
         Counting::Never,
         measured,
@@ -175,7 +175,7 @@ fn traversal_copies_only_live_knowledge_arrays() {
         let theory = theory(atoms);
         let narrower = Narrower::new(&theory);
         let selected = narrower.knowledge();
-        // Fixture setup is outside the measured Traversal clone calls.
+        // Fixture setup is outside the measured Walk clone calls.
         let native = native(&selected);
         let (selected_stats, selected, selected_leaves) = traverse(&theory, &narrower, selected);
         let (native_stats, native, native_leaves) = traverse(&theory, &narrower, native);

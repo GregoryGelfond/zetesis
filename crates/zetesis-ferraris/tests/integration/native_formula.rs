@@ -1,6 +1,6 @@
 //! Native groups retain one graph across original, frozen and specialized reads.
 
-use zetesis_cpu::{Cancellation, Stop};
+use zetesis_algebra::{Cancellation, Stop};
 use zetesis_ferraris::{
     AdmissionLimits, EvaluationError, EvaluationLimits, EvaluationWorkspace, FormulaParts,
     FrozenReduct, Interpretation, Limits, Node, OperandSpan, PositivePlan, PositivePlanLimits,

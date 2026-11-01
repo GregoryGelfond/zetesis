@@ -3,7 +3,7 @@
 use std::collections::VecDeque;
 use std::num::NonZeroUsize;
 
-use zetesis_cpu::Cancellation;
+use zetesis_algebra::Cancellation;
 use zetesis_ferraris::Interpretation;
 use zetesis_stable::{BatchError, BatchLimits, CompletionExecutor, StableModels};
 
@@ -595,7 +595,7 @@ mod tests {
         use zetesis_stable::{BatchVerdict, Incomplete, Limits, StableModels};
 
         let admitted = zetesis_reference_support::formula("{a;b;c}.");
-        let cancellation = zetesis_cpu::Cancellation::default();
+        let cancellation = zetesis_algebra::Cancellation::default();
         let mut models = StableModels::new(
             admitted.theory(),
             Limits {

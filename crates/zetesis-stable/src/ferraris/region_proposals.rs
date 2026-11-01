@@ -100,7 +100,7 @@ use std::sync::{Mutex, MutexGuard, PoisonError};
 use std::time::Duration;
 
 use rayon::prelude::*;
-use zetesis_cpu::regions::{Narrowing, Region};
+use zetesis_algebra::region::{Narrowing, Region};
 use zetesis_ferraris::{Interpretation, Narrower, NarrowingScratch, Theory};
 
 use super::conditions::{Bound, CandidateKnowledge, Conditions};
@@ -199,7 +199,7 @@ impl RegionProposals {
             .build()
             .map_err(|_| Incomplete::Allocation)?;
         let frontier =
-            RegionFrontier::measured(workers.get(), (root, CandidateKnowledge::default()))?;
+            RegionFrontier::measured(workers.get(), Entry(root, CandidateKnowledge::default()))?;
         Ok(Self {
             parts,
             restrictions: Conditions::default(),
@@ -893,7 +893,7 @@ impl<'filter> SlateFill<'_, 'filter> {
 
     fn step<'a>(
         &'a self,
-        (region, knowledge): &mut Entry,
+        Entry(region, knowledge): &mut Entry,
         workspace: &mut Workspace<'filter>,
         budget: &mut Budget<'a, WorkLease<'a>>,
         counts: &mut RegionCounts,
@@ -925,8 +925,8 @@ impl<'filter> SlateFill<'_, 'filter> {
             // Take the region out to split it by value; the emptied placeholder
             // (no atoms, no allocation) is discarded with this entry.
             let (cut, held) = std::mem::replace(region, Region::all_open(0)).split(atom);
-            let cut = (cut, knowledge.clone());
-            let held = (held, std::mem::take(knowledge));
+            let cut = Entry(cut, knowledge.clone());
+            let held = Entry(held, std::mem::take(knowledge));
             return Ok(Step::Split(cut, held));
         }
         if self.remaining == 0 {

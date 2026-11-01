@@ -9,7 +9,7 @@ publish = false
 
 [dependencies]
 zetesis-core.workspace = true
-zetesis-cpu.workspace = true
+zetesis-algebra.workspace = true
 
 [dev-dependencies]
 proptest.workspace = true

@@ -4,8 +4,8 @@ use std::{fmt, mem::size_of};
 
 mod index;
 
+use zetesis_algebra::{Cancellation, Stop};
 use zetesis_core::Model;
-use zetesis_cpu::{Cancellation, Stop};
 use zetesis_themelios::PreparedProjection;
 
 /// Independent ceilings for distinct projected answer identities.

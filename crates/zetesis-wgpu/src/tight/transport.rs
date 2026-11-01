@@ -6,7 +6,7 @@ use super::{TightGpuActivity, poll};
 use crate::runtime::{self, Dispatch, Observation, Variant, buffer, entry, initialized};
 use crate::{GpuError, GpuErrorKind};
 use std::time::Duration;
-use zetesis_cpu::Cancellation;
+use zetesis_algebra::Cancellation;
 
 pub(super) struct Resident {
     pub(super) graph: Graph,

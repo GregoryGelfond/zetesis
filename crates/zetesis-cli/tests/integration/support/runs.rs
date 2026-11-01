@@ -2,8 +2,8 @@
 //! diagnostics as text.
 
 use clap::Parser;
+use zetesis_algebra::Cancellation;
 use zetesis_cli::{Options, Report, RunError, run_detailed_with_diagnostics, run_with_diagnostics};
-use zetesis_cpu::Cancellation;
 
 /// The detailed run of `source` under `options`, which must succeed, with its
 /// output and diagnostics.

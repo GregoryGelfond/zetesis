@@ -10,8 +10,8 @@
 
 use std::time::Duration;
 
+use zetesis_algebra::Cancellation;
 use zetesis_backend::BatchComputeTime;
-use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{SlateId, SlateRef, Theory};
 use zetesis_stable::BatchVerdict;
 

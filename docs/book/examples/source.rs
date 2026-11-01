@@ -1,7 +1,7 @@
 //! Prepare zetesis input, inspect its analysis contract and collect its answers.
 
 // ANCHOR: example
-use zetesis_cpu::Cancellation;
+use zetesis_algebra::Cancellation;
 use zetesis_solve::{Backend, PreparedInput, SolveConfig, WorldView, WorldViewLimits};
 use zetesis_themelios::{
     AdmissionOptions, AnalysisBasis, ExpansionLimits, FormulaFailure, FormulaLimits,

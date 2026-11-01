@@ -1,7 +1,7 @@
 //! Canonical terms preserve table denotation and interruption boundaries.
 
 use super::*;
-use zetesis_core::{AtomCatalog, ValueLimits, ValueNode, ValueNodeRef};
+use crate::{AtomCatalog, ValueLimits, ValueNode, ValueNodeRef};
 
 #[test]
 fn foreign_finite_domains_preserve_source_occurrences() {

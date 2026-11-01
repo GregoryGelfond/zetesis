@@ -9,8 +9,8 @@
 use crate::ExecutionObserver;
 use crate::execution_observation::{ExecutionSink, Ignore, Observer};
 
+use zetesis_algebra::Cancellation;
 use zetesis_core::Model;
-use zetesis_cpu::Cancellation;
 use zetesis_ferraris::Theory;
 use zetesis_objective::Score;
 use zetesis_themelios::{AdmittedFormula, AdmittedFormulaBundle, SourceMetadata};
@@ -558,7 +558,7 @@ impl<'a> SessionBuilder<'a> {
 ///
 /// ```
 /// use zetesis_solve::{Backend, PreparedInput, Session, SolveConfig};
-/// use zetesis_cpu::Cancellation;
+/// use zetesis_algebra::Cancellation;
 /// use zetesis_themelios::{
 ///     AdmissionOptions, ExpansionLimits, FormulaLimits, admit_formula,
 /// };

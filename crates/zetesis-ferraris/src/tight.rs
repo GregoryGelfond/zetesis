@@ -12,7 +12,7 @@ pub use evaluate::TightWorkspace;
 use std::fmt;
 
 use crate::Theory;
-use zetesis_cpu::{Cancellation, ChargeError, Meter, Refusal, Stop};
+use zetesis_algebra::{Cancellation, ChargeError, Meter, Refusal, Stop};
 
 /// Admission bounds for the optional class certificate. Logical bytes cover the
 /// plan and all construction vectors, excluding the borrowed theory, allocator

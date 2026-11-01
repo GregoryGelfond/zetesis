@@ -5,7 +5,7 @@ use std::collections::BTreeSet;
 use std::convert::Infallible;
 
 use crate::support::batching::batch;
-use zetesis_cpu::Stop;
+use zetesis_algebra::Stop;
 use zetesis_ferraris::{Interpretation, Theory};
 use zetesis_stable::{
     BatchError, BatchVerdict, Cancellation, Incomplete, Limits, SearchLimits, StableModels,

@@ -7,7 +7,7 @@ use crate::{
     FrozenSubject, Interpretation, Limits, Narrower, Narrowing, NarrowingScratch, Node, NodeView,
     OriginalSubject, Region, RegionLimits, Theory, models,
 };
-use zetesis_cpu::{Cancellation, Stop};
+use zetesis_algebra::{Cancellation, Stop};
 
 use super::{gcd, misses};
 

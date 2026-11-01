@@ -7,7 +7,7 @@ use std::num::NonZeroUsize;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
-use zetesis_cpu::regions::Region;
+use zetesis_algebra::region::Region;
 use zetesis_ferraris::{Interpretation, Node, Theory};
 use zetesis_theory_support::theories::theory;
 

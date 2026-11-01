@@ -102,7 +102,7 @@ as ASP:
 
 ```rust
 # extern crate zetesis;
-# extern crate zetesis_cpu;
+# extern crate zetesis_algebra;
 # extern crate zetesis_solve;
 # extern crate zetesis_themelios;
 {{#include ../examples/formula-program-macro.rs:example}}
@@ -115,7 +115,7 @@ The constructors expose the choice elements and bounds for composition in Rust:
 
 ```rust
 # extern crate zetesis;
-# extern crate zetesis_cpu;
+# extern crate zetesis_algebra;
 # extern crate zetesis_solve;
 # extern crate zetesis_themelios;
 {{#include ../examples/formula-program.rs:example}}
@@ -131,7 +131,7 @@ are the full answer sets.
 
 ```rust
 # extern crate zetesis;
-# extern crate zetesis_cpu;
+# extern crate zetesis_algebra;
 # extern crate zetesis_solve;
 # extern crate zetesis_themelios;
 mod execution {
@@ -195,7 +195,7 @@ The macro writes the choice and `#show` directives directly:
 
 ```rust
 # extern crate zetesis;
-# extern crate zetesis_cpu;
+# extern crate zetesis_algebra;
 # extern crate zetesis_solve;
 # extern crate zetesis_themelios;
 {{#include ../examples/relational-program-macro.rs:example}}
@@ -208,7 +208,7 @@ The corresponding constructors keep each statement available for composition:
 
 ```rust
 # extern crate zetesis;
-# extern crate zetesis_cpu;
+# extern crate zetesis_algebra;
 # extern crate zetesis_solve;
 # extern crate zetesis_themelios;
 {{#include ../examples/relational-program.rs:example}}
@@ -225,7 +225,7 @@ the shown term `1`.
 
 ```rust
 # extern crate zetesis;
-# extern crate zetesis_cpu;
+# extern crate zetesis_algebra;
 # extern crate zetesis_solve;
 # extern crate zetesis_themelios;
 mod execution {
@@ -250,7 +250,7 @@ canonical answer sets, `{p}` and `{q}`. The macro keeps the rules in ASP form:
 
 ```rust
 # extern crate zetesis;
-# extern crate zetesis_cpu;
+# extern crate zetesis_algebra;
 # extern crate zetesis_solve;
 # extern crate zetesis_themelios;
 {{#include ../examples/program-macro.rs:example}}
@@ -263,7 +263,7 @@ The constructors compose the same rules from atoms and negated bodies:
 
 ```rust
 # extern crate zetesis;
-# extern crate zetesis_cpu;
+# extern crate zetesis_algebra;
 # extern crate zetesis_solve;
 # extern crate zetesis_themelios;
 {{#include ../examples/program.rs:example}}
@@ -280,7 +280,7 @@ exhausted search; an unfinished outcome is an error.
 
 ```rust
 # extern crate zetesis;
-# extern crate zetesis_cpu;
+# extern crate zetesis_algebra;
 # extern crate zetesis_solve;
 # extern crate zetesis_themelios;
 mod execution {
@@ -357,7 +357,7 @@ include precisely the receipts entailed by their chosen seeds.
 
 ```rust
 # extern crate zetesis_core;
-# extern crate zetesis_cpu;
+# extern crate zetesis_algebra;
 # extern crate zetesis_solve;
 # extern crate zetesis_themelios;
 {{#include ../examples/terminal.rs:example}}
@@ -934,7 +934,7 @@ empty family of an inconsistent program containing the constraint `:-.`.
 
 ```rust
 # extern crate zetesis_solve;
-# extern crate zetesis_cpu;
+# extern crate zetesis_algebra;
 # extern crate zetesis_themelios;
 {{#include ../examples/source.rs:example}}
 ```

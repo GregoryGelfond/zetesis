@@ -225,7 +225,7 @@ impl Packed {
             )?;
         }
         let old_words = (self.maximum + 1).div_ceil(WORD_BITS);
-        zetesis_core::packed::union_shifted(
+        zetesis_algebra::words::union_shifted(
             self.words.slice_mut(),
             old_words,
             weight,

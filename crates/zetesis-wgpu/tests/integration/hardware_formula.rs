@@ -6,8 +6,8 @@ mod native;
 
 use crate::support::physical;
 
+use zetesis_algebra::Cancellation;
 use zetesis_backend::GpuApi;
-use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{
     FrozenReduct, Interpretation, Limits, Node, NodeView, SlateId, SlateRef, Theory, Verdict, check,
 };

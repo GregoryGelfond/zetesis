@@ -6,7 +6,7 @@ use crate::{
     FrozenSubject, Interpretation, Limits, Narrowing, NarrowingAttempt, NarrowingQuota,
     NarrowingScratch, Node, OriginalSubject, Region, RegionLimits,
 };
-use zetesis_cpu::Cancellation;
+use zetesis_algebra::Cancellation;
 
 mod projected_heads;
 mod projected_parents;

@@ -2,7 +2,7 @@
 
 use super::{model_limits, write_model_record};
 use crate::RunError;
-use zetesis_cpu::{Cancellation, Stop};
+use zetesis_algebra::{Cancellation, Stop};
 use zetesis_themelios::{OutputSelection, observation};
 
 #[test]

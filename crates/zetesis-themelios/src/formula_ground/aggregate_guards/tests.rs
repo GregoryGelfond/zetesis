@@ -14,8 +14,8 @@ use themelios_program::{
     program::Relation,
     term::{BinaryOp, EvalError},
 };
+use zetesis_algebra::Cancellation;
 use zetesis_core::Value;
-use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{
     AggregateErrorKind, AggregateExtremum, Interpretation, Limits, models, models_reduct,
 };
@@ -684,9 +684,9 @@ fn guard_family_uses_preparation_control() {
             else {
                 panic!("the aggregate transaction observes the shared token");
             };
-            assert_eq!(error.interruption(), Some(zetesis_cpu::Stop::Cancelled));
+            assert_eq!(error.interruption(), Some(zetesis_algebra::Stop::Cancelled));
             assert!(matches!(error, FormulaFailure::Aggregate { error, .. }
-                if error.kind() == AggregateErrorKind::Control(zetesis_cpu::Stop::Cancelled)));
+                if error.kind() == AggregateErrorKind::Control(zetesis_algebra::Stop::Cancelled)));
             assert_eq!(snapshot(&builder.nodes), snapshot(&before));
         },
     );
@@ -716,7 +716,7 @@ fn signed_aggregate_uses_the_preparation_token() {
                 )
                 .unwrap_err();
             assert!(matches!(error, FormulaFailure::Aggregate { error, .. }
-                if error.kind() == AggregateErrorKind::Control(zetesis_cpu::Stop::Cancelled)));
+                if error.kind() == AggregateErrorKind::Control(zetesis_algebra::Stop::Cancelled)));
             assert_eq!(snapshot(&builder.nodes), snapshot(&before));
         },
     );
@@ -755,7 +755,7 @@ fn extrema_use_the_preparation_token() {
                     .unwrap_err();
                 // Native preparation may observe the same token before the
                 // aggregate publisher is entered. Preserve its typed cause.
-                assert_eq!(error.interruption(), Some(zetesis_cpu::Stop::Cancelled));
+                assert_eq!(error.interruption(), Some(zetesis_algebra::Stop::Cancelled));
                 assert_eq!(error.site(), Some(location()));
                 assert_eq!(snapshot(&builder.nodes), snapshot(&before));
             }

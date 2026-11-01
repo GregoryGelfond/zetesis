@@ -3,7 +3,7 @@
 use super::packing::{Graph, PARAM_BYTES, Packed, Packing, Plan};
 use super::{TightGpuBatchStats, TightGpuLimits, poll};
 use crate::{GpuError, GpuErrorKind};
-use zetesis_cpu::Cancellation;
+use zetesis_algebra::Cancellation;
 use zetesis_ferraris::{Interpretation, TightPlan};
 
 pub(super) struct Admission {

@@ -1,6 +1,6 @@
 use super::*;
 use crate::formula_count_plan::{CountPlanLimits, CountPlanResource, CountPlanStatistics};
-use zetesis_cpu::Cancellation;
+use zetesis_algebra::Cancellation;
 use zetesis_ferraris::AdmissionLimits;
 
 fn work() -> Work {

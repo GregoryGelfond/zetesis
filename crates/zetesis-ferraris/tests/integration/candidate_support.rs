@@ -1,6 +1,6 @@
 //! Candidate support restrictions retain the full reduct answer-set family.
 
-use zetesis_cpu::{Cancellation, Stop};
+use zetesis_algebra::{Cancellation, Stop};
 use zetesis_ferraris::{
     AdmissionLimits, Interpretation, Limits, Node, SupportError, SupportLimits, Theory, check,
     models, support_restriction,

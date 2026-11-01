@@ -1,6 +1,6 @@
 //! Regions of candidates over a formula theory, narrowed by its readings.
 //!
-//! A region (`zetesis_cpu::regions::Region`) holds some atoms in, cuts some
+//! A region (`zetesis_algebra::region::Region`) holds some atoms in, cuts some
 //! out and leaves the rest open; here it decides over the theory's atoms. A
 //! formula has two readings under a region: it is *sure* when every seed of
 //! the region satisfies it and *never* when no seed does, with a held atom
@@ -47,8 +47,8 @@ use std::mem::size_of;
 use std::num::NonZeroUsize;
 use std::sync::OnceLock;
 
-use zetesis_cpu::regions::{Narrowing, Region};
-use zetesis_cpu::{Cancellation, Stop};
+use zetesis_algebra::region::{Narrowing, Region};
+use zetesis_algebra::{Cancellation, Stop};
 
 use crate::{FormulaView, NodeView, Theory};
 
@@ -577,8 +577,8 @@ pub trait NarrowingQuota {
 
 /// The most charged reads a narrowing asks its [`NarrowingQuota`] for at once,
 /// and so the most reads between two consultations of it: the shared metered
-/// polling interval, [`zetesis_cpu::POLL_INTERVAL`].
-pub const NARROWING_BATCH: u64 = zetesis_cpu::POLL_INTERVAL;
+/// polling interval, [`zetesis_algebra::POLL_INTERVAL`].
+pub const NARROWING_BATCH: u64 = zetesis_algebra::POLL_INTERVAL;
 
 /// The narrowing's charged reads: a fixed ceiling, or permits granted by a
 /// quota in batches and spent locally. The reads admitted and not yet spent

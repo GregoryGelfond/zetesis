@@ -1,6 +1,6 @@
 //! Canonical observation execution across independently admitted input owners.
+use zetesis_algebra::Cancellation;
 use zetesis_core::{Atom, Model, Predicate, Value};
-use zetesis_cpu::Cancellation;
 use zetesis_reference_support::formula;
 use zetesis_themelios::observation::{ErrorKind, Limits, Resource};
 

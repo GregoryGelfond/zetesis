@@ -21,7 +21,7 @@
 //! failures. No condition-dependent result or proof is retained between calls.
 
 use crate::regions::{Closure, Count, Narrower, Step, Work, bit};
-use zetesis_cpu::Stop;
+use zetesis_algebra::Stop;
 
 use super::{Row, State};
 
@@ -156,7 +156,7 @@ fn attempt(
         // Only this translated copy can supply the first witness. It merely
         // declines optional pruning, never proves a compatible model. A hit
         // may leave the shift incomplete; no later code consumes that scratch.
-        if zetesis_core::packed::union_shifted_until_hit(
+        if zetesis_algebra::words::union_shifted_until_hit(
             words,
             source_words,
             weight,

@@ -5,7 +5,7 @@ use std::{fmt, mem::size_of_val};
 use crate::numeric_evaluation::NumericRowScratch;
 use crate::oracle::{Work, evaluate, failed_root};
 use crate::{Interpretation, Limits, Theory};
-use zetesis_cpu::{Cancellation, Meter, Refusal, Stop};
+use zetesis_algebra::{Cancellation, Meter, Refusal, Stop};
 
 /// Per-evaluation bounds, including storage retained from earlier evaluations.
 #[derive(Clone, Copy, Debug)]
@@ -246,7 +246,7 @@ impl EvaluationWorkspace {
 ///
 /// ```compile_fail
 /// # use zetesis_ferraris::{EvaluationLimits, EvaluationWorkspace, Interpretation};
-/// # use zetesis_cpu::Cancellation;
+/// # use zetesis_algebra::Cancellation;
 /// # fn stale(candidate: &Interpretation) {
 /// let mut workspace = EvaluationWorkspace::default();
 /// let control = Cancellation::default();
@@ -364,7 +364,7 @@ impl std::error::Error for EvaluationError {}
 #[cfg(test)]
 mod tests {
     use super::EvaluationError;
-    use zetesis_cpu::{Refusal, Stop};
+    use zetesis_algebra::{Refusal, Stop};
 
     #[test]
     fn evaluation_errors_classify_resource_refusals() {

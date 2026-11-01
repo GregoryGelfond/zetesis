@@ -38,7 +38,7 @@ zetesis-core = { path = "crates/zetesis-core" }
 zetesis-domain = { path = "crates/zetesis-domain" }
 zetesis-backend = { path = "crates/zetesis-backend" }
 zetesis-themelios = { path = "crates/zetesis-themelios" }
-zetesis-cpu = { path = "crates/zetesis-cpu" }
+zetesis-algebra = { path = "crates/zetesis-algebra" }
 zetesis-wgpu = { path = "crates/zetesis-wgpu" }
 zetesis-ferraris = { path = "crates/zetesis-ferraris" }
 zetesis-stable = { path = "crates/zetesis-stable" }

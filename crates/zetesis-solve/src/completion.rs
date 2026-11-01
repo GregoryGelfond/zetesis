@@ -1,7 +1,7 @@
 //! Search completion and logical interruption.
 
 use std::fmt;
-use zetesis_cpu::Stop;
+use zetesis_algebra::Stop;
 
 /// Why a successful driver invocation stopped.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -137,7 +137,7 @@ impl std::error::Error for Interruption {
 mod tests {
     use super::{Completion, Interruption, SearchState};
     use std::error::Error;
-    use zetesis_cpu::Stop;
+    use zetesis_algebra::Stop;
 
     #[test]
     fn interruption_retains_its_public_type_when_boxed() {

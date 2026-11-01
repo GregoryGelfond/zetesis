@@ -8,7 +8,7 @@ use crate::formula_execution::{
 };
 use crate::phase_timing::{Recorder, SolvePhase};
 use crate::{ExecutionObservation, SolveConfig, SolveError};
-use zetesis_cpu::Cancellation;
+use zetesis_algebra::Cancellation;
 use zetesis_ferraris::{Interpretation, TightPlan, TightVerdict};
 use zetesis_stable::{BatchVerdict, Incomplete};
 use zetesis_wgpu::{GpuDeviceSource, GpuTightOracle, TightGpuError, TightGpuLimits};

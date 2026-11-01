@@ -45,7 +45,7 @@
 use std::cmp::Ordering;
 use std::num::NonZeroUsize;
 
-use zetesis_cpu::Stop;
+use zetesis_algebra::Stop;
 
 use crate::regions::{Chain, Closure, Count, Narrower, Step, Work, bit, chain_position};
 

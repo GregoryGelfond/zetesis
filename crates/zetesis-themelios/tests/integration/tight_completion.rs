@@ -6,8 +6,8 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::num::NonZeroUsize;
 use zetesis_reference_support::formula;
 
+use zetesis_algebra::{Cancellation, Stop};
 use zetesis_core::{AtomCatalog, Model};
-use zetesis_cpu::{Cancellation, Stop};
 use zetesis_ferraris::{
     Theory, TightCheckLimits, TightError, TightPlan, TightPlanLimits, TightVerdict,
 };

@@ -136,8 +136,8 @@ fn a_split_preserves_both_children_and_counts_the_net_gain() {
     // the pushes so no peer can observe a transient zero.
     assert_eq!(outstanding(&search.shared), 2);
     // Held is pushed last (on top of the LIFO deque), cut beneath it.
-    let (mut held, mut held_knowledge) = search.shared.frontier.take_local(0).unwrap();
-    let (mut cut, mut cut_knowledge) = search.shared.frontier.take_local(0).unwrap();
+    let Entry(mut held, mut held_knowledge) = search.shared.frontier.take_local(0).unwrap();
+    let Entry(mut cut, mut cut_knowledge) = search.shared.frontier.take_local(0).unwrap();
     assert!(cut.is_cut(0) && held.is_held(0));
     let conditions = search.shared.restrictions.read().unwrap();
     // Narrowing the cut child learns that atom 0 is false. Its sibling must
@@ -446,14 +446,14 @@ fn an_owner_and_thief_acquire_distinct_split_children() {
 fn a_refused_split_leaves_the_frontier_unpublished() {
     let (search, original) = search_atoms(2, 2);
     split_next(&search.shared, &original, 0);
-    let (parent, knowledge) = search.shared.frontier.take_local(0).unwrap();
+    let Entry(parent, knowledge) = search.shared.frontier.take_local(0).unwrap();
     let prior = search.shared.frontier.queue(0).front().unwrap().0.clone();
     let atom = parent.split_atom().unwrap();
     let (cut, held) = parent.split(atom);
     let result = search.shared.publish_split(
         0,
-        (held, knowledge.clone()),
-        (cut, knowledge),
+        Entry(held, knowledge.clone()),
+        Entry(cut, knowledge),
         |queue, additional| {
             assert_eq!(additional, 2);
             // Exercise the actual reservation and error conversion, using
@@ -471,7 +471,7 @@ fn a_refused_split_leaves_the_frontier_unpublished() {
 #[test]
 fn children_become_stealable_after_the_split_commit() {
     let (search, _) = search(2);
-    let (parent, knowledge) = search.shared.frontier.take_local(0).unwrap();
+    let Entry(parent, knowledge) = search.shared.frontier.take_local(0).unwrap();
     let (cut, held) = parent.split(0);
     let (prepared, preparation) = mpsc::sync_channel(1);
     let (release, resume) = mpsc::sync_channel(1);
@@ -480,8 +480,8 @@ fn children_become_stealable_after_the_split_commit() {
         let publisher = scope.spawn(move || {
             shared.publish_split(
                 0,
-                (held, knowledge.clone()),
-                (cut, knowledge),
+                Entry(held, knowledge.clone()),
+                Entry(cut, knowledge),
                 |queue, additional| {
                     reserve_regions(queue, additional)?;
                     prepared.send(()).unwrap();
@@ -904,8 +904,8 @@ fn a_worker_splits_the_root_on_the_original_choice_head() {
     .unwrap();
     assert!(matches!(stepped, Stepped::Split));
     // The children differ only in the split atom: held on top, cut beneath.
-    let (held, _) = search.shared.frontier.take_local(0).unwrap();
-    let (cut, _) = search.shared.frontier.take_local(0).unwrap();
+    let Entry(held, _) = search.shared.frontier.take_local(0).unwrap();
+    let Entry(cut, _) = search.shared.frontier.take_local(0).unwrap();
     let split: Vec<_> = (0..theory.atom_count())
         .filter(|&atom| cut.is_cut(atom) && held.is_held(atom))
         .collect();

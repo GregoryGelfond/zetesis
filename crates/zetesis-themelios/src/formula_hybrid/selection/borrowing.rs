@@ -3,7 +3,7 @@
 //! The region search's routes, which prepare checkers on their own threads, are
 //! tested with the streamed constraints in zetesis-stable.
 
-use zetesis_cpu::{Cancellation, regions::Region};
+use zetesis_algebra::{Cancellation, region::Region};
 
 use crate::{ConstraintCheckLimits, ConstraintChecker, HybridFormula};
 

@@ -4,7 +4,7 @@ use std::mem::size_of;
 
 use super::{Chain, Connectives, Row, Work, anchor_keys};
 use crate::Threshold;
-use zetesis_cpu::Stop;
+use zetesis_algebra::Stop;
 
 fn row(conditions: &[usize], weights: &[u64]) -> Row {
     Row::new(Threshold {

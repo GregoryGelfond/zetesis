@@ -1,7 +1,7 @@
 //! Optional proof refusal leaves no descriptor or numeric scratch behind.
 
 use super::*;
-use zetesis_cpu::{Cancellation, Stop};
+use zetesis_algebra::{Cancellation, Stop};
 
 fn attempt(
     run: impl for<'a, 'source> FnOnce(

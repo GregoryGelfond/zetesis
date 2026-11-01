@@ -2,7 +2,7 @@
 
 use crate::evaluate::{Work, final_cost};
 use crate::{Error, Limits, ObjectiveProgram, Score, Statistics, Stop};
-use zetesis_cpu::Cancellation;
+use zetesis_algebra::Cancellation;
 
 /// A complete numeric score and its actual reduction work. No contribution
 /// tuples are retained, and this value establishes no model membership.

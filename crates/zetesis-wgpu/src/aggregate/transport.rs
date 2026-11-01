@@ -11,7 +11,7 @@ use crate::{
     runtime::{self, Runtime},
 };
 use std::{sync::Arc, time::Duration};
-use zetesis_cpu::Cancellation;
+use zetesis_algebra::Cancellation;
 
 pub(super) struct Resident {
     pub(super) numeric: Arc<Numeric>,

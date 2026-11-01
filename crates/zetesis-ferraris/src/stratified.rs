@@ -14,7 +14,7 @@ mod tests;
 use std::{fmt, mem::size_of};
 
 use crate::{Interpretation, Theory};
-use zetesis_cpu::{Cancellation, ChargeError, Meter, Refusal, Stop};
+use zetesis_algebra::{Cancellation, ChargeError, Meter, Refusal, Stop};
 
 /// Bounds for checked classification, stratification and direct evaluation.
 #[derive(Clone, Copy, Debug)]

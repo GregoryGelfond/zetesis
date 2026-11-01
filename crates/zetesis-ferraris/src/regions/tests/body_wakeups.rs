@@ -1,7 +1,7 @@
 //! Failed bodies wake support from their node events, before support quiescence.
 
 use crate::test_support::theory;
-use zetesis_cpu::{Cancellation, Stop};
+use zetesis_algebra::{Cancellation, Stop};
 
 use crate::{
     EvaluationLimits, EvaluationWorkspace, FrozenSubject, Interpretation, Knowledge, Narrower,

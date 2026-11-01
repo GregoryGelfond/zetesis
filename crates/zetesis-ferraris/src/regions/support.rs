@@ -30,7 +30,7 @@
 //! caller still abandons interrupted closure knowledge and pending work.
 
 use super::{Producers, Work, bit, counters::Count};
-use zetesis_cpu::Stop;
+use zetesis_algebra::Stop;
 
 #[cfg(test)]
 mod tests;

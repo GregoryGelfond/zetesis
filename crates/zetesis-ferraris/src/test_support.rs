@@ -1,6 +1,6 @@
 //! Helpers the crate's unit tests share.
 
-use zetesis_cpu::{Cancellation, Stop};
+use zetesis_algebra::{Cancellation, Stop};
 
 use crate::{
     AdmissionLimits, FormulaNodes, FormulaParts, FormulaTransaction, Interpretation, Knowledge,

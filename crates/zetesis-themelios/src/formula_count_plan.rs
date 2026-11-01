@@ -7,7 +7,7 @@
 use std::fmt;
 
 use crate::ProgramSite;
-use zetesis_cpu::{Cancellation, Stop};
+use zetesis_algebra::{Cancellation, Stop};
 use zetesis_ferraris::{AggregateLimits, Theory, partition};
 
 mod capture;

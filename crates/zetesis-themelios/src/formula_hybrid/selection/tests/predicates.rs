@@ -307,7 +307,7 @@ fn prepared_consequences_preserve_every_small_cube() {
             .consequence_region(
                 owner.core_theory(),
                 &cube,
-                &zetesis_cpu::Cancellation::default(),
+                &zetesis_algebra::Cancellation::default(),
                 ConstraintRegionPass::First,
             )
             .unwrap();

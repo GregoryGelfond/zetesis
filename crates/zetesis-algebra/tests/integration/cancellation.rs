@@ -2,7 +2,7 @@
 
 use std::time::{Duration, Instant};
 
-use zetesis_cpu::{Cancellation, CancellationSlot, Stop};
+use zetesis_algebra::{Cancellation, CancellationSlot, Stop};
 
 #[test]
 fn an_expired_deadline_stops_the_first_poll() {

@@ -1,7 +1,7 @@
 //! Cold potential measures classify guards without rescanning shared rows.
 
 use crate::GpuError;
-use zetesis_cpu::Cancellation;
+use zetesis_algebra::Cancellation;
 use zetesis_ferraris::{ExtremumCutRule, NodeView};
 
 pub(super) enum Summary {

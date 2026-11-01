@@ -2,8 +2,8 @@
 
 use crate::support::admission;
 use crate::support::metadata_resources;
+use zetesis_algebra::Cancellation;
 use zetesis_core::{Atom, Model, Predicate, Sign, Value};
-use zetesis_cpu::Cancellation;
 use zetesis_reference_support::resource_limits;
 use zetesis_themelios::base::source::{Source, SourceId};
 use zetesis_themelios::base::span::{ByteOffset, Location, Span};

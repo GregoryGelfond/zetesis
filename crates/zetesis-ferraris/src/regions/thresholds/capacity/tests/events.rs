@@ -7,7 +7,7 @@ use crate::{
     AdmissionLimits, FormulaNodes, FormulaParts, Narrower, Narrowing, NarrowingScratch, Node,
     NodeView, Region, Theory,
 };
-use zetesis_cpu::Stop;
+use zetesis_algebra::Stop;
 
 use super::push;
 

@@ -2,8 +2,8 @@
 
 use crate::support::models::ScoredFamily as Family;
 use std::{convert::Infallible, num::NonZeroUsize};
+use zetesis_algebra::Cancellation;
 use zetesis_core::Model;
-use zetesis_cpu::Cancellation;
 use zetesis_reference_support::{hybrid, prepared};
 use zetesis_solve::{
     AnswerSelection, Backend, Completion, ExecutionObservation, ExecutionObserver,

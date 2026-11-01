@@ -585,7 +585,7 @@ fn empty_first_mask_still_refuses_later_union_capacity() {
 
 #[test]
 fn empty_first_mask_preserves_late_typed_comparisons() {
-    use zetesis_core::{AtomCatalog, ValueLimits, ValueNode};
+    use crate::{AtomCatalog, ValueLimits, ValueNode};
 
     let predicate = Predicate::new("table", 2).unwrap();
     let value = Value::from_nodes(

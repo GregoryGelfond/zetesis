@@ -3,7 +3,7 @@
 use crate::support::admission;
 use std::time::Instant;
 use themelios_base::source::SourceId;
-use zetesis_cpu::{Cancellation, Stop};
+use zetesis_algebra::{Cancellation, Stop};
 use zetesis_reference_support::resource_limits;
 use zetesis_themelios::logical::term::{EvalError, Variable};
 use zetesis_themelios::{

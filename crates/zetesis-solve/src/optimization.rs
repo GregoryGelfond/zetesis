@@ -3,9 +3,9 @@
 use std::cmp::Ordering;
 use std::fmt;
 
+use zetesis_algebra::Cancellation;
 use zetesis_core::Model;
 use zetesis_core::retention::{ModelRetention, RetentionError};
-use zetesis_cpu::Cancellation;
 use zetesis_ferraris::Interpretation;
 use zetesis_objective::{ObjectiveProgram, Score};
 use zetesis_themelios::objective_bound::ObjectivePlan;

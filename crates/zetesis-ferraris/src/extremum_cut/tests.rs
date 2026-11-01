@@ -1,5 +1,5 @@
 use super::{ExtremaMeasure, ExtremumCutRule, ExtremumRow};
-use zetesis_cpu::{Cancellation, Stop};
+use zetesis_algebra::{Cancellation, Stop};
 
 #[test]
 fn every_mask_matches_selected_rank_extrema() {

@@ -1,7 +1,7 @@
 //! Refutation needs only the prefix that establishes a contradiction.
 
 use crate::test_support::SinglePermits;
-use zetesis_cpu::{Cancellation, Stop};
+use zetesis_algebra::{Cancellation, Stop};
 
 use crate::{
     AdmissionLimits, FormulaParts, Narrower, Node, OperandSpan, OriginalSubject, Region,

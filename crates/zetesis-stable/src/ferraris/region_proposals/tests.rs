@@ -220,7 +220,7 @@ fn step(slate: &SlateFill<'_, '_>, entry: &mut Entry) -> Step {
 }
 
 fn open(atoms: usize) -> Entry {
-    (Region::all_open(atoms), CandidateKnowledge::default())
+    Entry(Region::all_open(atoms), CandidateKnowledge::default())
 }
 
 fn slots(slate: &SlateFill<'_, '_>) -> usize {
@@ -1000,7 +1000,7 @@ fn proposals_split_on_the_original_choice_head_first() {
     assert_eq!(output.len(), 1);
     let pending = proposals.frontier.queue(0);
     assert!(!pending.is_empty());
-    assert!(pending.iter().all(|(region, _)| !region.is_open(0)));
+    assert!(pending.iter().all(|Entry(region, _)| !region.is_open(0)));
 }
 
 /// `a0 <- a1`, `a1 <- a0` beside two atomic choices: the root's pass

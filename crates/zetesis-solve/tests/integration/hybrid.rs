@@ -3,8 +3,8 @@
 use std::num::NonZeroUsize;
 
 use crate::support::models::Family;
+use zetesis_algebra::Cancellation;
 use zetesis_core::{Model, Sign};
-use zetesis_cpu::Cancellation;
 use zetesis_solve::{
     Backend, Completion, Grounder, Interruption, Oracle, PreparedInput, SemanticOutcome, Session,
     SolveConfig, SolveError, Subject,

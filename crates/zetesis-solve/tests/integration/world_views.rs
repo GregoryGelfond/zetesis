@@ -3,7 +3,7 @@
 use std::{collections::BTreeSet, convert::Infallible, io, num::NonZeroUsize};
 
 use crate::support::sessions::formula;
-use zetesis_cpu::Cancellation;
+use zetesis_algebra::Cancellation;
 use zetesis_solve::{
     AnswerSelection, AnswerSet, Backend, Completion, ExecutionObservation, ExecutionObserver,
     ExecutionResources, Grounder, Interruption, Oracle, PreparedInput, Session, SolveConfig,

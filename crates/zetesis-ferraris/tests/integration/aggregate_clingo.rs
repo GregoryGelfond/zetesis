@@ -3,7 +3,7 @@
 use crate::support::aggregate_theories::push;
 use crate::support::aggregate_theories::raw;
 use crate::support::clingo_models::{Models, clingo};
-use zetesis_cpu::Cancellation;
+use zetesis_algebra::Cancellation;
 use zetesis_ferraris::{
     AdmissionLimits, AggregateComparison as Comparison, AggregateElement as Element,
     AggregateLimits, Interpretation, Limits, Node, Theory, append_aggregate, check,

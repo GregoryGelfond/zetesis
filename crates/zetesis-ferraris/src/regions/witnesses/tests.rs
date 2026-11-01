@@ -13,8 +13,8 @@ use crate::{
     ValueExtremumElement, ValueExtremumGuard, append_value_extremum_family_refs,
     append_value_extremum_refs, models,
 };
+use zetesis_algebra::Cancellation;
 use zetesis_core::{Value, catalog::TermRef};
-use zetesis_cpu::Cancellation;
 
 #[derive(Clone, Copy, Debug)]
 enum Preparation {
@@ -350,7 +350,7 @@ fn associative_scratch_recovers_after_refusal_and_generation_wrap() {
     let mut scratch = Scratch::default();
     assert_eq!(
         scratch.read(&narrower, chain, None, &mut Work::new(0)),
-        Err(zetesis_cpu::Stop::WorkLimit)
+        Err(zetesis_algebra::Stop::WorkLimit)
     );
     assert_eq!(
         scratch
@@ -374,7 +374,7 @@ fn associative_scratch_recovers_after_refusal_and_generation_wrap() {
     assert!(scratch.pending.iter().all(|&word| word == 0));
     assert_eq!(
         Scratch::default().prepare_dirty(usize::MAX),
-        Err(zetesis_cpu::Stop::Allocation)
+        Err(zetesis_algebra::Stop::Allocation)
     );
 }
 

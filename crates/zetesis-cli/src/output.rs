@@ -60,7 +60,7 @@ pub(crate) fn write_model_record(
     view: &zetesis_themelios::observation::ModelView<'_>,
     atoms: &mut zetesis_themelios::observation::json::AtomTable,
     max_record_bytes: usize,
-    cancellation: &zetesis_cpu::Cancellation,
+    cancellation: &zetesis_algebra::Cancellation,
 ) -> Result<(), RunError> {
     let prefix = format!(
         "{}{{\"number\":{number},\"model\":",
@@ -424,8 +424,8 @@ fn objective_code(error: zetesis_objective::Error) -> &'static str {
     }
 }
 
-fn stop_code(reason: zetesis_cpu::Stop) -> &'static str {
-    use zetesis_cpu::Stop;
+fn stop_code(reason: zetesis_algebra::Stop) -> &'static str {
+    use zetesis_algebra::Stop;
     match reason {
         Stop::Cancelled => "cancelled",
         Stop::Deadline => "deadline",

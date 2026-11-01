@@ -7,7 +7,7 @@ use crate::{
     StratifiedPlanLimits, SupportLimits, Theory, TightCheckLimits, TightPlan, TightPlanLimits,
     TightVerdict, models, models_reduct, support_restriction,
 };
-use zetesis_cpu::{Cancellation, Stop};
+use zetesis_algebra::{Cancellation, Stop};
 
 // Independent witness expansion, used only as the small semantic test oracle.
 // The native branch must retain its ordinal row rather than calling this branch.

@@ -3,11 +3,11 @@
 use std::{io, num::NonZeroUsize};
 
 use clap::Parser;
+use zetesis_algebra::Cancellation;
 use zetesis_cli::{
     Completion, CountRenderer, Invocation, Options, PreparedInput, PublicationConfig,
     PublicationMode, PublicationOutcome, RunError, publish_prepared,
 };
-use zetesis_cpu::Cancellation;
 use zetesis_reference_support::formula;
 
 fn config() -> PublicationConfig {

@@ -8,7 +8,7 @@ use super::{
 };
 use crate::numeric_evaluation::NumericRowScratch;
 use crate::{Interpretation, NodeView, Theory};
-use zetesis_cpu::{Cancellation, Meter, Stop};
+use zetesis_algebra::{Cancellation, Meter, Stop};
 
 #[cfg(test)]
 mod incremental_tests;

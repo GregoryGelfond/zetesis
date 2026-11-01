@@ -274,7 +274,10 @@ fn legacy_cancellation_keeps_precedence_over_work() {
         .err()
         .unwrap();
     for failure in [failed_prepare, failed_select] {
-        assert_eq!(failure.cause, Cause::Interrupted(crate::Stop::Cancelled));
+        assert_eq!(
+            failure.cause,
+            Cause::Interrupted(zetesis_algebra::Stop::Cancelled)
+        );
         assert_eq!(failure.work, 0);
         assert_eq!(failure.peak_bytes, 0);
     }

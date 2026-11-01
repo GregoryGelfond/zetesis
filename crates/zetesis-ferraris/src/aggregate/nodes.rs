@@ -1,5 +1,5 @@
+use zetesis_algebra::Cancellation;
 use zetesis_core::{Value, catalog::TermRef};
-use zetesis_cpu::Cancellation;
 
 use super::lower::Destination;
 use super::{

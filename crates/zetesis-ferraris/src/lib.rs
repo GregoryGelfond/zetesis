@@ -69,7 +69,7 @@ pub use theory::{
     NodeView, NumericDomain, NumericRow, OperandSpan, Theory, TheoryAdmission, Threshold,
     ThresholdDescriptor,
 };
-pub use zetesis_cpu::regions::{Narrowing, Region};
+pub use zetesis_algebra::region::{Narrowing, Region};
 
 pub use tight::{
     TightAttempt, TightCheck, TightCheckLimits, TightError, TightPlan, TightPlanLimits,

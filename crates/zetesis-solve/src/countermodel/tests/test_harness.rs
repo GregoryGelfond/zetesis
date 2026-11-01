@@ -1,7 +1,7 @@
 //! Native formula session capture for the membership routes' tests.
 
+use zetesis_algebra::Cancellation;
 use zetesis_core::Model;
-use zetesis_cpu::Cancellation;
 use zetesis_objective::Score;
 pub(super) use zetesis_reference_support::formula as admitted;
 use zetesis_themelios::AdmittedFormula;

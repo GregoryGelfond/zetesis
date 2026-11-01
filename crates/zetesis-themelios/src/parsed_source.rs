@@ -125,7 +125,7 @@ impl ParsedSource {
         self,
         expansion: ExpansionLimits,
         limits: FormulaLimits,
-        cancellation: &zetesis_cpu::Cancellation,
+        cancellation: &zetesis_algebra::Cancellation,
     ) -> Result<PreparedFormula, SourceFailure<FormulaFailure>> {
         formula::prepare_parsed(self, expansion, &limits, Some(cancellation.clone()))
     }

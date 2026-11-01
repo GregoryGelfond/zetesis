@@ -152,7 +152,7 @@ fn optional_refusal_keeps_accepted_work_charged() {
 
 #[test]
 fn cancellation_is_a_typed_refusal() {
-    let cancellation = zetesis_cpu::Cancellation::default();
+    let cancellation = zetesis_algebra::Cancellation::default();
     let mut budget = Budget::new(ExpansionLimits::default(), 100_000)
         .with_cancellation(Some(cancellation.clone()));
     let (program, owners) = owned(&program(SOURCE), &mut budget);

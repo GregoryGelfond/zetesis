@@ -4,8 +4,8 @@
 //! admitted terminal-definition correspondence permits precisely one extension,
 //! and publication follows only after that extension completes.
 
+use zetesis_algebra::Cancellation;
 use zetesis_core::Model;
-use zetesis_cpu::Cancellation;
 use zetesis_objective::Score;
 use zetesis_themelios::{ReconstructionStatistics, TerminalFormula, TerminalReconstruction};
 

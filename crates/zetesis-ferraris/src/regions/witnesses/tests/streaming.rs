@@ -5,7 +5,7 @@ use std::ops::ControlFlow;
 use super::super::{Scratch, Work, chain_position, expands};
 use super::*;
 use crate::{EvaluationLimits, EvaluationWorkspace};
-use zetesis_cpu::Stop;
+use zetesis_algebra::Stop;
 
 fn early_witnesses(disjunction: bool, length: usize) -> (Theory, [usize; 3]) {
     let mut nodes = FormulaNodes::new(
