@@ -1294,6 +1294,30 @@ impl<'a> ReductQuery<'a> {
         }
     }
 
+    /// Search just the supplied region, with fresh knowledge of this candidate's
+    /// frozen reduct. A witness is validated independently. An exhausted region
+    /// establishes absence only inside its own bounds.
+    pub(super) fn check_region<Q: Quota>(
+        self,
+        evaluated: &zetesis_ferraris::FormulaEvaluation<'_>,
+        root: Region,
+        limits: crate::Limits,
+        budget: &mut Budget<'_, Q>,
+        workspace: (&mut crate::Statistics, &mut NarrowingScratch),
+    ) -> Result<Option<Interpretation>, Incomplete> {
+        match self.walk_from(
+            evaluated,
+            limits,
+            budget,
+            workspace,
+            &mut Inline,
+            Some(root),
+        )? {
+            Queried::Decided(witness) => Ok(witness),
+            Queried::Published(never) => match never {},
+        }
+    }
+
     /// [`Self::check`], asking `publication` before each narrowing whether to
     /// publish the query's pending regions for other workers to serve. A
     /// publication takes every pending region, the one about to be narrowed
@@ -1310,16 +1334,45 @@ impl<'a> ReductQuery<'a> {
         (statistics, scratch): (&mut crate::Statistics, &mut NarrowingScratch),
         publication: &mut P,
     ) -> Result<Queried<P::Receipt>, Incomplete> {
+        Ok(
+            match self.walk_from(
+                evaluated,
+                limits,
+                budget,
+                (statistics, scratch),
+                publication,
+                None,
+            )? {
+                Queried::Decided(witness) => {
+                    Queried::Decided(witness.map_or(crate::Check::Stable, crate::Check::NonMinimal))
+                }
+                Queried::Published(receipt) => Queried::Published(receipt),
+            },
+        )
+    }
+
+    fn walk_from<Q: Quota, P: Publication>(
+        self,
+        evaluated: &zetesis_ferraris::FormulaEvaluation<'_>,
+        limits: crate::Limits,
+        budget: &mut Budget<'_, Q>,
+        (statistics, scratch): (&mut crate::Statistics, &mut NarrowingScratch),
+        publication: &mut P,
+        root: Option<Region>,
+    ) -> Result<Queried<P::Receipt, Option<Interpretation>>, Incomplete> {
         let (theory, narrower) = self.index.subject(evaluated.theory())?;
         let candidate = evaluated.interpretation();
         let truth = evaluated.truth();
         if !theory.same_instance(candidate.theory()) {
             return Err(Incomplete::WrongTheory);
         }
-        let mut root = Region::all_open(theory.atom_count());
-        for atom in (0..theory.atom_count()).filter(|&atom| !candidate.contains(atom)) {
-            root.cut(atom);
-        }
+        let root = root.unwrap_or_else(|| {
+            let mut full = Region::all_open(theory.atom_count());
+            for atom in (0..theory.atom_count()).filter(|&atom| !candidate.contains(atom)) {
+                full.cut(atom);
+            }
+            full
+        });
         let mut traversal = Walk::with_state(root, Counting::Never, narrower.frozen_knowledge());
         let mut offered = false;
         loop {
@@ -1356,7 +1409,7 @@ impl<'a> ReductQuery<'a> {
                     }
                 }
                 Ok(None | Some(Visit::Counted(..))) => {
-                    return Ok(Queried::Decided(crate::Check::Stable));
+                    return Ok(Queried::Decided(None));
                 }
                 Ok(Some(Visit::Leaf(region, _))) => {
                     // The candidate models its own reduct and is no
@@ -1365,10 +1418,10 @@ impl<'a> ReductQuery<'a> {
                         continue;
                     }
                     let subset = leaf_interpretation(theory, &region)?;
-                    return crate::ferraris::checked_countermodel(
+                    return crate::ferraris::validated_countermodel(
                         theory, candidate, subset, limits, budget, statistics,
                     )
-                    .map(Queried::Decided);
+                    .map(|witness| Queried::Decided(Some(witness)));
                 }
             }
         }
@@ -1472,9 +1525,9 @@ impl Publication for Inline {
 }
 
 /// What a membership check whose query may be published ends in.
-pub(crate) enum Queried<R> {
-    /// The check decided the candidate.
-    Decided(crate::Check),
+pub(crate) enum Queried<R, D = crate::Check> {
+    /// The query reached its conclusion over the region it searched.
+    Decided(D),
     /// The query's pending regions were published, and other workers decide it.
     Published(R),
 }

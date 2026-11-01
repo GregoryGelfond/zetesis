@@ -28,9 +28,17 @@ fn preparation(theory: &Theory, limits: FormulaLimits) -> Result<Preparation, Gp
     Preparation::new(theory, 2, limits, &wgpu::Limits::default(), 1)
 }
 
+// The original setup receipt plus one classification per semantic atom and
+// one output word per polarity for each 32 atoms. The fixtures supply their
+// own atom counts, independently of the plan's computed receipt.
+const fn setup_with_projection(original: u32, atoms: u32) -> u32 {
+    original + atoms + 2 * atoms.div_ceil(32)
+}
+
 #[test]
 fn incidence_keeps_aliases_outputs_and_exact_receipts() {
-    let (prepared, plan) = preparation(&fixture(), FormulaLimits::default())
+    let theory = fixture();
+    let (prepared, plan) = preparation(&theory, FormulaLimits::default())
         .unwrap()
         .with_propagation(crate::GpuPropagation::ChangedDependencies)
         .finish(&wgpu::Limits::default(), &Cancellation::default())
@@ -43,25 +51,45 @@ fn incidence_keeps_aliases_outputs_and_exact_receipts() {
             0, 3, 5, 7, 9, 10, 11, 12, 1, 1, 7, 3, 7, 1, 3, 3, 5, 5, 5, 7,
         ]
     );
-    assert_eq!((plan.setup, plan.sweep), (34, 268));
+    assert_eq!(
+        (plan.setup, plan.sweep),
+        (setup_with_projection(34, 2), 268)
+    );
     assert_eq!(plan.domains, 2 * 9 * 4);
     assert_eq!(plan.params(&prepared.graph)[5], 15);
+    let candidates =
+        [0, 1].map(|atom| zetesis_ferraris::Interpretation::new(&theory, [atom]).unwrap());
+    let control = Cancellation::default();
+    let mut seeds = crate::candidates::Staging::default();
+    plan.pack(
+        &prepared.graph,
+        &candidates,
+        &mut seeds,
+        plan.max_batch_bytes,
+        &control,
+    )
+    .unwrap();
+    assert_eq!(seeds.words(), [0b01, 0b10]);
     let row = [
         plan.epoch,
         0,
         2,
         1,
-        plan.setup + plan.sweep,
+        // Both terminal mask words are written, but the two semantic atom
+        // domains were not scanned after the one completed sweep.
+        plan.setup + plan.sweep - 2,
         super::super::packing::MAGIC,
+        0, // Terminal rows carry neither a held nor a cut mask.
+        0,
     ];
     let mut words = row.to_vec();
     let mut second = row;
     second[1] = 1;
     words.extend(second);
-    assert!(super::super::packing::decode(&words, &plan).is_ok());
+    assert!(super::super::packing::decode(&words, &plan, seeds.words(), &control).is_ok());
     words[4] -= 1;
     assert_eq!(
-        super::super::packing::decode(&words, &plan)
+        super::super::packing::decode(&words, &plan, seeds.words(), &control)
             .unwrap_err()
             .kind(),
         GpuErrorKind::Readback
@@ -143,7 +171,8 @@ fn shared_interleaved_nodes_have_literal_stable_levels() {
     );
     let outputs: Vec<_> = prepared.nodes.chunks_exact(4).map(|node| node[3]).collect();
     assert_eq!(outputs, [0, 2, 1, 3, 4, 5, 0, 6]);
-    assert_eq!(plan.setup, 32); // 2*8 nodes + 8 edges + 2 atoms + 2 roots + 4 levels.
+    // Original: 2*8 nodes + 8 edges + 2 atoms + 2 roots + 4 levels.
+    assert_eq!(plan.setup, setup_with_projection(32, 2));
     assert_eq!(plan.sweep, 159); // 9*8 + 2*8 edges + 2 + 64 + 1 + 4 levels.
 }
 
@@ -164,7 +193,7 @@ fn pure_chains_keep_serial_truth() {
         .unwrap();
     assert_eq!(prepared.graph.schedule.levels, 0);
     assert_eq!(prepared.roots, [127]);
-    assert_eq!(plan.setup, 512);
+    assert_eq!(plan.setup, setup_with_projection(512, 1));
 }
 
 #[test]
@@ -207,14 +236,25 @@ fn zero_roots_still_cover_every_duplicate_leaf() {
 #[test]
 fn retained_upload_capacities_are_admitted_in_the_cold_peak() {
     for below in [0, 1] {
-        // Fixed graph: node128 + roots60; two-world transport288. Staging uses
-        // real u32 vectors with deliberate slack, observed before admission.
+        // Node and root buffers total 188 bytes. Both two-world output buffers
+        // add a held/cut u32 pair per world to the previous 288-byte transport.
+        // Host staging below has deliberate, independently observed vector slack.
         let nodes = vector::<u32>(32 + 17).unwrap();
         let roots = vector::<u32>(15 + 19).unwrap();
         let pointers = (nodes.as_ptr(), roots.as_ptr());
         let staging = retained_bytes(&nodes).unwrap() + retained_bytes(&roots).unwrap();
-        let exact =
-            188 + 288 + 64 + 8 + 2 * size_of::<super::super::FormulaCheck>() as u64 + staging;
+        let transport = 288 + 2 * 2 * 8;
+        // Two possible residual roots each own two u64 mask words. Only one
+        // root and temporary word-vector header coexist during materialization.
+        let root_storage =
+            2 * 16 + (size_of::<zetesis_algebra::region::Region>() + size_of::<Vec<u64>>()) as u64;
+        let exact = 188
+            + transport
+            + 64
+            + 8
+            + 2 * size_of::<super::super::FormulaCheck>() as u64
+            + root_storage
+            + staging;
         let mut allocations = [nodes, roots].into_iter();
         let result = preparation(
             &fixture(),
@@ -310,8 +350,10 @@ fn checked_schedule_offsets_refuse_overflow_and_underflow() {
 
 #[test]
 fn level_setup_is_admitted_after_the_minimum_serial_envelope() {
-    // Minimum setup28 succeeds; the actual four-level setup requires32.
-    for (work, accepted) in [(31, false), (32, true)] {
+    // The minimum serial setup is 28 and the four-level schedule adds 4,
+    // before the common two-atom projection.
+    let full = setup_with_projection(32, 2);
+    for (work, accepted) in [(full - 1, false), (full, true)] {
         let result = preparation(
             &fixture(),
             FormulaLimits {
@@ -378,8 +420,9 @@ fn native_depth_visits_every_operand_and_keeps_one_header() {
     assert_eq!(packed.graph.schedule.levels, 4);
     assert_eq!(&packed.nodes[16..], &[5, 0, 3, 4, 0, 1, 3]);
     assert_eq!(packed.roots, [4, 0, 2, 3, 4, 5, 0, 1, 2, 3, 4]);
-    assert_eq!((plan.setup, plan.sweep), (24, 130));
-    for (ceiling, accepted) in [(23, false), (24, true)] {
+    let required = setup_with_projection(24, 2);
+    assert_eq!((plan.setup, plan.sweep), (required, 130));
+    for (ceiling, accepted) in [(required - 1, false), (required, true)] {
         let result = Preparation::new(
             &theory,
             1,
@@ -537,8 +580,14 @@ fn threshold_outputs_wake_the_shared_owner() {
         .with_propagation(crate::GpuPropagation::ChangedDependencies)
         .finish(&device, &Cancellation::default())
         .unwrap();
-    assert_eq!((dense.setup, dense.sweep), (490, 772));
-    assert_eq!((dirty.setup, dirty.sweep), (492, 938));
+    assert_eq!(
+        (dense.setup, dense.sweep),
+        (setup_with_projection(490, 3), 772)
+    );
+    assert_eq!(
+        (dirty.setup, dirty.sweep),
+        (setup_with_projection(492, 3), 938)
+    );
     let incidence = prepared.graph.schedule.incidence.as_ref().unwrap();
     let offset = incidence.offset as usize;
     let slot = prepared.nodes[guards[1] * 4 + 3] as usize;
@@ -609,7 +658,10 @@ fn group_state_preserves_occurrences_and_exact_layout() {
     let end = prepared.roots[offset + 1] as usize;
     assert_eq!(&prepared.roots[order + begin..order + end], &[3, 3, 4, 4]);
     assert_eq!(plan.params(&prepared.graph)[12], 30);
-    assert_eq!((plan.setup, plan.sweep, plan.domains), (102, 434, 88));
+    assert_eq!(
+        (plan.setup, plan.sweep, plan.domains),
+        (setup_with_projection(102, 2), 434, 88)
+    );
 }
 
 #[test]

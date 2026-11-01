@@ -155,6 +155,7 @@ impl SlateDevice for Double {
         &'d mut self,
         slate: SlateRef<'_>,
         offset: usize,
+        _max_bytes: u64,
         cancellation: &Cancellation,
     ) -> Result<Prepared<'d>, Failure> {
         cancellation
@@ -190,6 +191,7 @@ impl SlateDevice for Double {
         slate: SlateId,
         offset: usize,
         offered: usize,
+        rows: &mut super::device::CheckedRows,
     ) -> Result<Decoded, Failure> {
         let receipt = checked?;
         // As a device receipt does, refuse another slate's or another offset's.
@@ -207,8 +209,10 @@ impl SlateDevice for Double {
             .index
             .checked_sub(1)
             .and_then(|previous| self.intervals.get(previous).copied().flatten());
+        for verdict in receipt.verdicts {
+            rows.classified(verdict)?;
+        }
         Ok(Decoded {
-            verdicts: receipt.verdicts,
             compute,
             finish_wait: receipt.finish_wait,
         })

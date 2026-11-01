@@ -750,6 +750,7 @@ fn explanation_overflow_leaves_all_counts_unchanged() {
     }
 }
 
+mod residual_root;
 mod source_preflight;
 
 mod arithmetic_membership;

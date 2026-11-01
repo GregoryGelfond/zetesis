@@ -8,7 +8,7 @@ use crate::{Cancellation, Incomplete, SearchLimits, SearchStatistics};
 mod batch;
 pub use batch::{
     BatchError, BatchLimits, BatchStatistics, BatchVerdict, Lookahead, LookaheadDeclined,
-    SlateProposal, SlateTicket,
+    RegionalOutcome, RegionalPass, SlateProposal, SlateTicket,
 };
 
 mod completion;

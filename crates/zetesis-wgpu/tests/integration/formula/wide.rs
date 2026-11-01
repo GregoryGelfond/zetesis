@@ -97,7 +97,10 @@ fn native_groups_preserve_arbitrary_frozen_truth_and_completions() {
                             || inner & !candidate != 0
                             || !model(&theory, inner, Some(&frozen))));
                     }
-                    FormulaVerdict::Residual(_) => assert!(model(&theory, candidate, None)),
+                    FormulaVerdict::Residual(_, root) => {
+                        assert!(model(&theory, candidate, None));
+                        super::check_residual_witnesses(&theory, candidate, &root);
+                    }
                 }
             }
         }

@@ -142,12 +142,14 @@ choose the earliest live owner, cover each live guard exactly once, preserve
 repeated contributions, and retain one dependency level for the whole family.
 The general kernel's two linear scans use conservative lower/upper sums; repeated physical slots and
 concurrent shrinking domains can weaken deductions. An original-false node stays
-false without constraining its children. A residual returns no narrowed atom
-region, so exact CPU completion retains the original proper-subset query. These
-are implementation contracts, not a new Lean refinement claim: packing, limb
-operations, atomic observations and the conclusive refutation still need their
-executable correspondence. Physical comparisons independently check original
-truth and retain every explicit proper-subset witness as a residual.
+false without constraining its children. A residual projects the remaining domains onto a region of semantic atoms.
+The host searches that region under the same frozen candidate and independently
+validates each witness. Completeness requires every proper-subset reduct
+model to survive the completed device sweeps and their projection. The region
+coverage laws then apply to the host walk. The connection to actual shader
+execution still depends on faithful packing, limb arithmetic, atomic
+observations and readback. The physical differential checks coverage on its
+finite fixtures.
 
 [`ThresholdResidues`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/ThresholdResidues.lean)
 separates a compatible sum into known and undecided contributions. A common

@@ -26,9 +26,8 @@ impl<'a> CandidateBatch<'a> {
         Self { theory, candidates }
     }
 
-    /// Exact original input of every candidate, which the GPU routes and the
-    /// queue's native test route load.
-    #[cfg(any(test, feature = "gpu"))]
+    /// Exact original input used by the queue's native checker fixtures.
+    #[cfg(test)]
     pub(crate) const fn theory(&self) -> &'a Theory {
         self.theory
     }

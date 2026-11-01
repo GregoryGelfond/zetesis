@@ -194,12 +194,21 @@ model while ensuring changed domains cannot lose their dependent transfers.
 Tests exercise that boundary; existing Lean laws do not establish this shader
 scheduler's correspondence. Exact host completion of residuals remains required.
 
-`FormulaVerdict::Residual` requires the exact host completion path. Candidate
-ordering, original theory identity and the frozen candidate are preserved across
-that boundary. No narrowed atom region is returned: exact completion keeps the
-full proper-subset query. Native numeric projection may leave more residuals
-than the previous Boolean expansion. Device results cannot silently change the
-subject being checked.
+A residual carries its reason and an owned region over the semantic atoms of
+one candidate. The device writes two mask words for each group of 32 atoms.
+One mask identifies atoms forced true and the other identifies atoms forced
+false. The readback binds both to the submitted candidate and checks their
+shape, polarity and padding. A dispatch reserves one classification per atom
+and two stores per word for this projection. Terminal results skip the
+classification and write zero masks.
+
+The host starts the same candidate's frozen-reduct query in that region, with
+fresh knowledge and an ordinary first narrowing. This also applies when a
+round or work limit stops the device before a fixed point. A proper-subset
+witness refutes the candidate after validation. If the regional search
+exhausts, the checked device coverage justifies using its result for the
+whole candidate. A caller supplying its own region learns only whether that
+region contains a witness.
 
 The static operation receives a complete ground program; `check_batch` performs
 no lazy tuple discovery. Lazy execution instead admits bounded source instances

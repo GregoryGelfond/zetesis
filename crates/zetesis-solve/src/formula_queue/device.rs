@@ -10,15 +10,25 @@
 
 use std::time::Duration;
 
+pub(crate) use super::regional::CheckedRows;
 use zetesis_algebra::Cancellation;
 use zetesis_backend::BatchComputeTime;
 use zetesis_ferraris::{SlateId, SlateRef, Theory};
-use zetesis_stable::BatchVerdict;
 
 use crate::formula_execution::Failure;
 
 /// A device route that checks the candidates of a stream's slates.
 pub(crate) trait SlateDevice {
+    /// Only the general formula primitive returns narrowed residual roots.
+    const REGIONAL: bool = false;
+
+    /// Record the accounted envelope of a regional submission or joined completion.
+    fn record_slate_bytes(&mut self, _total: u64) {}
+
+    fn retained_batch_bytes(&self) -> Result<u64, Failure> {
+        Ok(0)
+    }
+
     /// A submission admitted and planned, holding the device until it is checked.
     type Prepared<'d>: PreparedSubmission<Checked = Self::Checked>
     where
@@ -35,6 +45,7 @@ pub(crate) trait SlateDevice {
         &'d mut self,
         slate: SlateRef<'_>,
         offset: usize,
+        max_bytes: u64,
         cancellation: &Cancellation,
     ) -> Result<Self::Prepared<'d>, Failure>;
 
@@ -52,6 +63,7 @@ pub(crate) trait SlateDevice {
         slate: SlateId,
         offset: usize,
         offered: usize,
+        rows: &mut CheckedRows,
     ) -> Result<Decoded, Failure>;
 }
 
@@ -62,6 +74,11 @@ pub(crate) trait PreparedSubmission {
 
     /// The candidates this submission admitted.
     fn count(&self) -> usize;
+
+    /// Accounted by this plan, including the worst case of new decoded roots.
+    fn accounted_bytes(&self) -> u64 {
+        0
+    }
 
     /// Submit and finish the submission with nothing run beside it.
     fn check(self, cancellation: &Cancellation) -> Self::Checked;
@@ -77,12 +94,12 @@ pub(crate) trait PreparedSubmission {
     ) -> (Self::Checked, Option<R>);
 }
 
-/// A decoded submission: its verdicts; the compute interval the device
+/// An authenticated submission's checks are appended in order. These timing
+/// observations retain the compute interval the device
 /// reported with it, which belongs to the submission before it; and, for a
 /// submission checked beside the host's production, the finish's wait from
 /// the end of that production to the submission's observed completion.
 pub(crate) struct Decoded {
-    pub(crate) verdicts: Vec<BatchVerdict>,
     pub(crate) compute: Option<BatchComputeTime>,
     pub(crate) finish_wait: Option<Duration>,
 }

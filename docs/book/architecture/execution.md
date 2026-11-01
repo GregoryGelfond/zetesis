@@ -1175,8 +1175,11 @@ Auxiliary formula nodes never participate in this subset test. An original-false
 subformula remains disabled by the frozen mask throughout propagation. Native
 numeric projections make at most two linear scans per guard. Their conservative
 bounds preserve completions but may infer less than expanded Boolean formulas.
-A residual reports no narrowed atom region; exact host completion retains the
-original proper-subset query.
+A residual returns the held and cut masks for the semantic atoms of one
+candidate. The CPU starts from that region with fresh frozen-reduct knowledge.
+It performs the first narrowing even if the masks leave only one possible
+interpretation. The GPU reserves one classification per atom and two stores
+per 32-atom word. Terminal records write only the two zero words per group.
 
 Mandatory device setup charges `2*nodes+edges+atoms+roots+levels`; pure chains
 and empty graphs use zero levels. Each complete sweep reserves

@@ -94,6 +94,10 @@ impl Staging {
         self.words.capacity()
     }
 
+    pub(crate) fn retained_bytes(&self) -> Result<u64, GpuError> {
+        capacity_charge(0, self.words.capacity())
+    }
+
     /// Replace the plan's requested host seed bytes with actual capacity. The
     /// device seed allocation remains the requested size. An optional oversized
     /// buffer is dropped before a smaller replacement, never retained alongside it.

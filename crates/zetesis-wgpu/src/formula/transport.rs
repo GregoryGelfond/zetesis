@@ -39,6 +39,13 @@ impl Resident {
             transport: None,
         }
     }
+    pub(super) fn retained_bytes(&self) -> Result<u64, GpuError> {
+        self.graph
+            .schedule
+            .bytes
+            .checked_add(self.transport.as_ref().map_or(0, |t| t.bytes))
+            .ok_or_else(|| packing::capacity("retained formula buffers exceed u64"))
+    }
     pub(super) fn matches(&self, plan: &Plan) -> bool {
         self.matches_count(plan.worlds as usize)
     }
@@ -103,8 +110,8 @@ impl Resident {
         &self,
         runtime: &runtime::Runtime,
         submitted: Submitted,
+        readback: packing::Readback<'_>,
         observation: Observation,
-        plan: &Plan,
         timeout: Duration,
         cancellation: &zetesis_algebra::Cancellation,
     ) -> Result<Dispatched, GpuError> {
@@ -122,7 +129,7 @@ impl Resident {
             || cancellation.poll().map_err(GpuError::interrupted),
             |words| {
                 let (words, tail) = crate::timing::split_readback(words, transport.timed)?;
-                let checks = packing::decode(words, plan)?;
+                let checks = readback.decode(words, cancellation)?;
                 timing.tail = tail;
                 Ok(checks)
             },
@@ -141,6 +148,7 @@ pub(super) struct Submitted {
     pub(super) candidates: usize,
 }
 pub(super) struct Transport {
+    bytes: u64,
     worlds: u32,
     params: wgpu::Buffer,
     seeds: wgpu::Buffer,
@@ -210,6 +218,10 @@ impl Transport {
             ],
         });
         Ok(Self {
+            bytes: plan
+                .transport
+                .checked_add(readback_bytes - plan.results)
+                .ok_or_else(|| packing::capacity("formula transport size exceeds u64"))?,
             worlds: plan.worlds,
             params,
             seeds,

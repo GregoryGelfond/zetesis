@@ -4,6 +4,7 @@ use std::num::NonZeroUsize;
 use std::time::{Duration, Instant};
 
 use rayon::prelude::*;
+use zetesis_algebra::region::Region;
 use zetesis_ferraris::Interpretation;
 
 use super::{BatchVerdict, Limits, Statistics};
@@ -161,6 +162,19 @@ impl CompletionExecutor {
         statistics: &mut Statistics,
         accepted: &mut Vec<bool>,
     ) -> Result<(), Incomplete> {
+        self.execute(input, None, budget, statistics, accepted)
+    }
+
+    /// A regional result bit records absence in its supplied domain. Only
+    /// the later regional pass can consume that result for publication.
+    pub(super) fn execute(
+        &mut self,
+        input: Input<'_>,
+        roots: Option<Vec<(usize, Region)>>,
+        budget: &mut Budget<'_>,
+        statistics: &mut Statistics,
+        accepted: &mut Vec<bool>,
+    ) -> Result<(), Incomplete> {
         self.last = None;
         let timed = statistics.phase_timings.is_some();
         let mut progress = CompletionStatistics {
@@ -171,13 +185,17 @@ impl CompletionExecutor {
         };
         let started = timed.then(Instant::now);
         let result = (|| {
-            let result_bytes = scratch::results(input.candidates.len())?;
+            let mut result_bytes = scratch::results(input.candidates.len())?;
             scratch::admit(result_bytes, 0, self.max_scratch_bytes)?;
             let residuals = input
                 .verdicts
                 .iter()
                 .filter(|v| **v == BatchVerdict::Residual)
                 .count();
+            let regional_join = roots.is_some() && self.pool.is_some() && residuals != 0;
+            if regional_join {
+                result_bytes = scratch::regional_results(input.candidates.len())?;
+            }
             let admitted = scratch::admit(
                 result_bytes,
                 self.workers().min(residuals),
@@ -208,18 +226,37 @@ impl CompletionExecutor {
             if let Some(pool) = &self.pool
                 && !workspaces.is_empty()
             {
-                parallel(
+                let mut join = Join {
                     pool,
                     input,
                     budget,
                     statistics,
                     accepted,
-                    &mut progress,
-                    &mut workspaces,
-                )
+                    progress: &mut progress,
+                    workspaces: &mut workspaces,
+                };
+                if let Some(roots) = roots {
+                    let mut slots = storage(input.candidates.len())?;
+                    let extra = (slots.capacity() - input.candidates.len()) as u128
+                        * size_of::<RegionalJob>() as u128;
+                    record_peak(join.progress, peak + extra)?;
+                    if peak + extra > u128::from(self.max_scratch_bytes) {
+                        return Err(Incomplete::CompletionScratch);
+                    }
+                    slots.resize_with(input.candidates.len(), || RegionalJob::waiting(None));
+                    for (index, root) in roots {
+                        slots[index] = RegionalJob::waiting(Some(root));
+                    }
+                    join.execute(slots)
+                } else {
+                    let mut slots = storage(input.candidates.len())?;
+                    slots.resize_with(input.candidates.len(), || None);
+                    join.execute(slots)
+                }
             } else {
                 scalar(
                     input,
+                    roots,
                     budget,
                     statistics,
                     accepted,
@@ -262,6 +299,7 @@ fn classify(
     input: Input<'_>,
     candidate: &Interpretation,
     verdict: BatchVerdict,
+    root: QueryRoot,
     budget: &mut Budget<'_, impl Quota>,
     statistics: &mut Statistics,
     workspace: &mut ReductWorkspace,
@@ -286,13 +324,27 @@ fn classify(
                         }
                         let started = timing::start(statistics.phase_timings.as_ref());
                         increment(&mut statistics.countermodel_queries)?;
-                        let result = query.check(
-                            &evaluated.truth,
-                            input.limits,
-                            budget,
-                            statistics,
-                            evaluated.narrowing,
-                        );
+                        let result = match root {
+                            QueryRoot::Supplied(root) => query
+                                .check_region(
+                                    &evaluated.truth,
+                                    root,
+                                    input.limits,
+                                    budget,
+                                    (statistics, evaluated.narrowing),
+                                )
+                                .map(Checked::Regional),
+                            QueryRoot::Unneeded => return Err(Incomplete::InvalidWitness),
+                            QueryRoot::Full => query
+                                .check(
+                                    &evaluated.truth,
+                                    input.limits,
+                                    budget,
+                                    statistics,
+                                    evaluated.narrowing,
+                                )
+                                .map(Checked::Whole),
+                        };
                         timing::finish(&mut statistics.phase_timings, Phase::Reduct, started);
                         result
                     })();
@@ -300,17 +352,34 @@ fn classify(
                 }
                 None => return Err(Incomplete::InvalidWitness),
             };
-            match Decision::from(verdict) {
-                Decision::Stable => Ok(true),
-                Decision::Refuted => Ok(false),
-                Decision::Invalid => Err(Incomplete::InvalidWitness),
+            match verdict {
+                Checked::Regional(witness) => Ok(witness.is_none()),
+                Checked::Whole(check) => match Decision::from(check) {
+                    Decision::Stable => Ok(true),
+                    Decision::Refuted => Ok(false),
+                    Decision::Invalid => Err(Incomplete::InvalidWitness),
+                },
             }
         }
     }
 }
 
+// A regional terminal carries no query. If it ever reaches a residual
+// classifier, refuse the inconsistent job without substituting a full walk.
+enum QueryRoot {
+    Full,
+    Supplied(Region),
+    Unneeded,
+}
+
+enum Checked {
+    Whole(crate::Check),
+    Regional(Option<Interpretation>),
+}
+
 fn scalar(
     input: Input<'_>,
+    roots: Option<Vec<(usize, Region)>>,
     budget: &mut Budget<'_>,
     statistics: &mut Statistics,
     accepted: &mut Vec<bool>,
@@ -327,10 +396,26 @@ fn scalar(
     };
     let mut unused = ReductWorkspace::default();
     let workspace = workspaces.first_mut().unwrap_or(&mut unused);
+    let mut roots = roots.map(Vec::into_iter);
     let result = (|| {
-        for (candidate, &verdict) in input.candidates.iter().zip(input.verdicts) {
+        for (index, (candidate, &verdict)) in
+            input.candidates.iter().zip(input.verdicts).enumerate()
+        {
+            let root = match (&mut roots, verdict) {
+                (None, _) => QueryRoot::Full,
+                (Some(rows), BatchVerdict::Residual) => {
+                    let (slot, root) = rows.next().ok_or(Incomplete::InvalidWitness)?;
+                    if slot != index {
+                        return Err(Incomplete::InvalidWitness);
+                    }
+                    QueryRoot::Supplied(root)
+                }
+                (Some(_), _) => QueryRoot::Unneeded,
+            };
             // Retain the existing scalar counters, work order and failure boundary.
-            let result = classify(input, candidate, verdict, &mut local, statistics, workspace);
+            let result = classify(
+                input, candidate, verdict, root, &mut local, statistics, workspace,
+            );
             entered(progress, verdict, &result);
             accepted.push(result?);
         }
@@ -340,63 +425,137 @@ fn scalar(
     result
 }
 
-fn parallel(
-    pool: &rayon::ThreadPool,
-    input: Input<'_>,
-    budget: &mut Budget<'_>,
-    statistics: &mut Statistics,
-    accepted: &mut Vec<bool>,
-    progress: &mut CompletionStatistics,
-    workspaces: &mut [ReductWorkspace],
-) -> Result<(), Incomplete> {
-    let mut outcomes = storage(input.candidates.len())?;
-    outcomes.resize_with(input.candidates.len(), || None);
-    let shared = SharedBudget::new(budget.limits, budget.statistics);
-    let cancellation = budget.cancellation;
-    let timed = statistics.phase_timings.is_some();
-    let chunk_size = outcomes.len().div_ceil(progress.effective_workers.max(1));
-    pool.install(|| {
-        outcomes
-            .par_chunks_mut(chunk_size)
-            .zip(workspaces.par_iter_mut())
-            .enumerate()
-            .for_each(|(chunk, (slots, workspace))| {
-                for (offset, slot) in slots.iter_mut().enumerate() {
-                    *slot = Some(run(
-                        input,
-                        chunk * chunk_size + offset,
-                        &shared,
-                        cancellation,
-                        timed,
-                        workspace,
-                    ));
-                }
-            });
-    });
-    // Work is reserved before the operation. Read after join, including every
-    // failed job, before choosing an error in original candidate order.
-    shared.record(&mut budget.statistics);
-    let mut failure = None;
-    for (outcome, &verdict) in outcomes.into_iter().zip(input.verdicts) {
-        let outcome = outcome.expect("joined indexed execution fills every owned slot");
-        entered(progress, verdict, &outcome.result);
-        let merged = merge(statistics, &outcome.statistics);
-        merge_timing(progress, outcome.statistics.phase_timings);
-        if failure.is_none() {
-            failure = merged
-                .err()
-                .or_else(|| outcome.result.as_ref().err().copied());
-        }
-        if let Ok(value) = outcome.result {
-            accepted.push(value);
+/// The legacy job buffer keeps its exact existing representation. A regional
+/// slot uses the same allocation for its incoming root and joined receipt.
+trait Job: Send {
+    fn execute(&mut self, run: impl FnOnce(QueryRoot) -> Outcome);
+    fn into_outcome(self) -> Outcome;
+}
+
+impl Job for Option<Outcome> {
+    fn execute(&mut self, run: impl FnOnce(QueryRoot) -> Outcome) {
+        *self = Some(run(QueryRoot::Full));
+    }
+
+    fn into_outcome(self) -> Outcome {
+        self.expect("joined indexed execution fills every owned slot")
+    }
+}
+
+// Only the small job state changes variant. The one statistics header is
+// retained by its ordered slot and initialized when the worker finishes.
+struct RegionalJob {
+    stage: RegionalStage,
+    statistics: Option<Statistics>,
+}
+
+enum RegionalStage {
+    Pending(Option<Region>),
+    Finished(Result<bool, Incomplete>),
+}
+
+impl RegionalJob {
+    fn waiting(root: Option<Region>) -> Self {
+        Self {
+            stage: RegionalStage::Pending(root),
+            statistics: None,
         }
     }
-    failure.map_or(Ok(()), Err)
+}
+
+impl Job for RegionalJob {
+    fn execute(&mut self, run: impl FnOnce(QueryRoot) -> Outcome) {
+        let RegionalStage::Pending(root) = &mut self.stage else {
+            unreachable!("joined slot was served twice")
+        };
+        let outcome = run(root.take().map_or(QueryRoot::Unneeded, QueryRoot::Supplied));
+        self.statistics = Some(outcome.statistics);
+        self.stage = RegionalStage::Finished(outcome.result);
+    }
+
+    fn into_outcome(self) -> Outcome {
+        let RegionalStage::Finished(result) = self.stage else {
+            unreachable!("joined region was not served")
+        };
+        Outcome {
+            result,
+            statistics: self
+                .statistics
+                .expect("joined regional job recorded its statistics"),
+        }
+    }
+}
+
+struct Join<'a, 'b, 'c> {
+    pool: &'a rayon::ThreadPool,
+    input: Input<'b>,
+    budget: &'a mut Budget<'c>,
+    statistics: &'a mut Statistics,
+    accepted: &'a mut Vec<bool>,
+    progress: &'a mut CompletionStatistics,
+    workspaces: &'a mut [ReductWorkspace],
+}
+
+impl Join<'_, '_, '_> {
+    fn execute<J: Job>(&mut self, mut outcomes: Vec<J>) -> Result<(), Incomplete> {
+        let input = self.input;
+        let budget = &mut *self.budget;
+        let statistics = &mut *self.statistics;
+        let progress = &mut *self.progress;
+        let workspaces = &mut *self.workspaces;
+        let accepted = &mut *self.accepted;
+        let pool = self.pool;
+        let shared = SharedBudget::new(budget.limits, budget.statistics);
+        let cancellation = budget.cancellation;
+        let timed = statistics.phase_timings.is_some();
+        let chunk_size = outcomes.len().div_ceil(progress.effective_workers.max(1));
+        pool.install(|| {
+            outcomes
+                .par_chunks_mut(chunk_size)
+                .zip(workspaces.par_iter_mut())
+                .enumerate()
+                .for_each(|(chunk, (slots, workspace))| {
+                    for (offset, slot) in slots.iter_mut().enumerate() {
+                        slot.execute(|root| {
+                            run(
+                                input,
+                                chunk * chunk_size + offset,
+                                root,
+                                &shared,
+                                cancellation,
+                                timed,
+                                workspace,
+                            )
+                        });
+                    }
+                });
+        });
+        // Work is reserved before the operation. Read after join, including every
+        // failed job, before choosing an error in original candidate order.
+        shared.record(&mut budget.statistics);
+        let mut failure = None;
+        for (outcome, &verdict) in outcomes.into_iter().zip(input.verdicts) {
+            let outcome = outcome.into_outcome();
+            entered(progress, verdict, &outcome.result);
+            let merged = merge(statistics, &outcome.statistics);
+            merge_timing(progress, outcome.statistics.phase_timings);
+            if failure.is_none() {
+                failure = merged
+                    .err()
+                    .or_else(|| outcome.result.as_ref().err().copied());
+            }
+            if let Ok(value) = outcome.result {
+                accepted.push(value);
+            }
+        }
+        failure.map_or(Ok(()), Err)
+    }
 }
 
 fn run(
     input: Input<'_>,
     index: usize,
+    root: QueryRoot,
     shared: &SharedBudget,
     cancellation: &Cancellation,
     timed: bool,
@@ -416,6 +575,7 @@ fn run(
         input,
         &input.candidates[index],
         input.verdicts[index],
+        root,
         &mut budget,
         &mut statistics,
         workspace,

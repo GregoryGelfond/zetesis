@@ -63,7 +63,7 @@ fn busy_preserves_state(backend: GpuApi) {
         .unwrap();
     assert_eq!(
         checks[0].verdict(),
-        super::super::FormulaVerdict::NoProperSubset
+        &super::super::FormulaVerdict::NoProperSubset
     );
     assert_eq!(oracle.epoch, epoch + 1);
     let stats = oracle.last_batch_stats().unwrap();
@@ -94,8 +94,8 @@ fn staging_reuse(oracle: &mut GpuFormulaOracle, theory: &Theory, original: &[Int
             .collect();
         assert_eq!(
             checks
-                .iter()
-                .map(super::super::FormulaCheck::verdict)
+                .into_iter()
+                .map(super::super::FormulaCheck::into_verdict)
                 .collect::<Vec<_>>(),
             expected
         );
@@ -246,7 +246,7 @@ fn cancelled_shape_preserves_residency(
         .unwrap();
     assert_eq!(
         checks[0].verdict(),
-        super::super::FormulaVerdict::NoProperSubset
+        &super::super::FormulaVerdict::NoProperSubset
     );
     assert_eq!(oracle.epoch, epoch + 1);
     let stats = oracle.last_batch_stats().unwrap();
@@ -674,24 +674,35 @@ fn submission_receipt(backend: GpuApi) {
     ];
     let limits = FormulaLimits {
         max_rounds: 0,
-        max_work_per_candidate: 4,
+        // Four original setup units, one semantic atom, two mask words.
+        max_work_per_candidate: 7,
         ..Default::default()
     };
     let checks = oracle
         .propagate_batch(&theory, &candidates, limits)
         .unwrap();
     assert_eq!(oracle.last_submission_candidates(), Some(2));
-    assert_eq!(checks[0].verdict(), super::super::FormulaVerdict::NotModel);
+    assert_eq!(checks[0].verdict(), &super::super::FormulaVerdict::NotModel);
+    let super::super::FormulaVerdict::Residual(super::super::ResidualReason::RoundLimit, root) =
+        checks[1].verdict()
+    else {
+        panic!("the original model must reach the zero-round boundary");
+    };
+    // Setup already asserts the sole semantic atom used as the original root.
+    assert_eq!(root.len(), 1);
+    assert!(root.is_held(0));
+    let performed: Vec<_> = checks
+        .iter()
+        .map(super::super::FormulaCheck::statistics)
+        .collect();
+    // Both rows write the two masks. Only the unresolved row scans the atom.
     assert_eq!(
-        checks[1].verdict(),
-        super::super::FormulaVerdict::Residual(super::super::ResidualReason::RoundLimit)
+        performed,
+        [
+            super::super::FormulaStatistics { work: 6, rounds: 0 },
+            super::super::FormulaStatistics { work: 7, rounds: 0 },
+        ]
     );
-    for check in checks {
-        assert_eq!(
-            check.statistics(),
-            super::super::FormulaStatistics { work: 4, rounds: 0 }
-        );
-    }
     oracle.propagate_batch(&theory, &[], limits).unwrap();
     assert_eq!(oracle.last_submission_candidates(), None);
     let cancelled = Cancellation::default();
@@ -761,8 +772,12 @@ fn submitted_interruption(
         .finish(
             runtime,
             submitted,
+            packing::Readback {
+                plan: &plan,
+                seeds: oracle.candidates.words(),
+                output: packing::Output::reserve(&plan).unwrap(),
+            },
             crate::runtime::Observation::Polled,
-            &plan,
             limits.timeout,
             cancelled,
         )

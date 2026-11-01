@@ -132,8 +132,8 @@ pub(super) fn qualify(context: &zetesis_wgpu::GpuContext, projection: GateProjec
                 let verdicts: Vec<_> = oracle
                     .propagate_batch(&theory, &inputs, FormulaLimits::default())
                     .unwrap()
-                    .iter()
-                    .map(zetesis_wgpu::FormulaCheck::verdict)
+                    .into_iter()
+                    .map(zetesis_wgpu::FormulaCheck::into_verdict)
                     .collect();
                 let context = format!("{windows} windows, {options:?}");
                 let stats = oracle.last_batch_stats().unwrap();
@@ -155,7 +155,8 @@ pub(super) fn qualify(context: &zetesis_wgpu::GpuContext, projection: GateProjec
                     !verdicts.iter().any(|verdict| matches!(
                         verdict,
                         FormulaVerdict::Residual(
-                            ResidualReason::RoundLimit | ResidualReason::WorkLimit
+                            ResidualReason::RoundLimit | ResidualReason::WorkLimit,
+                            _
                         )
                     )),
                     "{context}: {verdicts:?}"
@@ -165,13 +166,21 @@ pub(super) fn qualify(context: &zetesis_wgpu::GpuContext, projection: GateProjec
                 } else {
                     // Every class occurs, so agreement covers refutation,
                     // quiescence and original truth alike.
-                    for class in [
-                        FormulaVerdict::NoProperSubset,
-                        FormulaVerdict::Residual(ResidualReason::FixedPoint),
-                        FormulaVerdict::NotModel,
-                    ] {
-                        assert!(verdicts.contains(&class), "{context}: {verdicts:?}");
-                    }
+                    assert!(
+                        verdicts.contains(&FormulaVerdict::NoProperSubset),
+                        "{context}: {verdicts:?}"
+                    );
+                    assert!(
+                        verdicts.iter().any(|verdict| matches!(
+                            verdict,
+                            FormulaVerdict::Residual(ResidualReason::FixedPoint, _)
+                        )),
+                        "{context}: {verdicts:?}"
+                    );
+                    assert!(
+                        verdicts.contains(&FormulaVerdict::NotModel),
+                        "{context}: {verdicts:?}"
+                    );
                     agreed = Some(verdicts);
                 }
             }

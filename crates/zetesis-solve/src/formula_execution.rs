@@ -617,29 +617,15 @@ impl MembershipExecution for Execution {
                 statistics,
                 ..
             } => {
-                if queue.enumerates() {
-                    let mut device = FormulaDevice {
-                        oracle,
-                        statistics,
-                        options,
-                    };
-                    return queue.next_device(models, options, cancellation, phases, &mut device);
+                if !queue.enumerates() {
+                    queue.decline_optimizing();
                 }
-                // An optimizing search keeps the serial schedule of the
-                // closure form, under which no slate is produced ahead.
-                queue.decline_optimizing();
-                queue.next(models, options, cancellation, |batch| {
-                    let verdicts = propagate(
-                        oracle,
-                        statistics,
-                        batch.theory(),
-                        batch.candidates(),
-                        options,
-                        cancellation,
-                        phases,
-                    )?;
-                    verdicts.finish(batch).map_err(Failure::from)
-                })
+                let mut device = FormulaDevice {
+                    oracle,
+                    statistics,
+                    options,
+                };
+                queue.next_device(models, options, cancellation, phases, &mut device)
             }
             #[cfg(feature = "gpu")]
             Self::Tight {
@@ -677,116 +663,29 @@ impl MembershipExecution for Execution {
 }
 
 #[cfg(feature = "gpu")]
-fn propagate(
-    oracle: &mut zetesis_wgpu::GpuFormulaOracle,
-    statistics: &mut FormulaExecutionStatistics,
-    theory: &zetesis_ferraris::Theory,
-    candidates: &[Interpretation],
-    options: &SolveConfig,
-    cancellation: &zetesis_algebra::Cancellation,
-    phases: &Recorder,
-) -> Result<crate::batch_executor::DeviceVerdicts, Failure> {
-    let limits = slate_limits(options, candidates.len());
-    propagate_within(
-        oracle,
-        statistics,
-        theory,
-        candidates,
-        limits,
-        cancellation,
-        phases,
-    )
-}
-
-/// Check one slate in as many submissions as `limits` and the device's
-/// admission require, in order.
-#[cfg(feature = "gpu")]
-fn propagate_within(
-    oracle: &mut zetesis_wgpu::GpuFormulaOracle,
-    statistics: &mut FormulaExecutionStatistics,
-    theory: &zetesis_ferraris::Theory,
-    candidates: &[Interpretation],
-    limits: zetesis_wgpu::FormulaLimits,
-    cancellation: &zetesis_algebra::Cancellation,
-    phases: &Recorder,
-) -> Result<crate::batch_executor::DeviceVerdicts, Failure> {
-    // The device API returns one ordered verdict per candidate. Reserve its
-    // host conversion before dispatch so allocation failure cannot hide a
-    // successfully decoded batch from the execution counters.
-    let mut verdicts =
-        crate::batch_executor::DeviceVerdicts::new(candidates.len()).map_err(Failure::Search)?;
-    while verdicts.values.len() < candidates.len() {
-        let pending = &candidates[verdicts.values.len()..];
-        let result = phases.measure(SolvePhase::GpuHostOracle, || {
-            oracle.propagate_prefix_with_cancellation(theory, pending, limits, cancellation)
-        });
-        // A failed call can still report the batch before it, as unavailable.
-        if let Some(report) = oracle.reported_compute_time() {
-            statistics.gpu_compute_timing.record(report);
-        }
-        // Submission is observable even when mapping or decoding fails. Preserve
-        // that operation's original error over a secondary accounting overflow.
-        let submitted = record_submission(statistics, oracle.last_submission_candidates());
-        let checks = result.map_err(|error| match error.interruption() {
-            Some(stop) => Failure::Search(stop.into()),
-            None => Failure::Run(SolveError::Gpu(error)),
-        })?;
-        submitted?;
-        let count = checks.checks().len();
-        if count == 0 || count > pending.len() {
-            return Err(Failure::Run(SolveError::FormulaBatchShape {
-                expected: pending.len(),
-                actual: count,
-            }));
-        }
-        verdicts.record_prefix(pending.len(), count);
-        let checks = checks
-            .into_checks(theory, &pending[..count])
-            .map_err(|error| Failure::Run(SolveError::Gpu(error)))?;
-        add(&mut statistics.gpu_batches, 1)?;
-        add(
-            &mut statistics.gpu_candidates,
-            u64::try_from(checks.len())
-                .map_err(|_| Failure::Search(Incomplete::CounterOverflow))?,
-        )?;
-        if let Some(batch) = oracle.last_batch_stats() {
-            statistics.peak_accounted_bytes =
-                statistics.peak_accounted_bytes.max(batch.accounted_bytes);
-            record_workgroup_size(statistics, batch.workgroup_size);
-        }
-        for check in checks {
-            add(&mut statistics.gpu_work, u64::from(check.statistics().work))?;
-            add(
-                &mut statistics.gpu_rounds,
-                u64::from(check.statistics().rounds),
-            )?;
-            verdicts.values.push(decoded_verdict(
-                statistics.gpu_residuals.get_or_insert_default(),
-                check.verdict(),
-            )?);
-        }
-    }
-    Ok(verdicts)
-}
-
-#[cfg(feature = "gpu")]
 fn decoded_verdict(
     residuals: &mut FormulaResidualStatistics,
     verdict: zetesis_wgpu::FormulaVerdict,
-) -> Result<zetesis_stable::BatchVerdict, Failure> {
+) -> Result<
+    (
+        zetesis_stable::BatchVerdict,
+        Option<zetesis_algebra::region::Region>,
+    ),
+    Failure,
+> {
     use zetesis_stable::BatchVerdict;
     use zetesis_wgpu::{FormulaVerdict, ResidualReason};
     Ok(match verdict {
-        FormulaVerdict::NotModel => BatchVerdict::NotModel,
-        FormulaVerdict::NoProperSubset => BatchVerdict::NoProperSubset,
-        FormulaVerdict::Residual(reason) => {
+        FormulaVerdict::NotModel => (BatchVerdict::NotModel, None),
+        FormulaVerdict::NoProperSubset => (BatchVerdict::NoProperSubset, None),
+        FormulaVerdict::Residual(reason, root) => {
             let count = match reason {
                 ResidualReason::FixedPoint => &mut residuals.fixed_point,
                 ResidualReason::RoundLimit => &mut residuals.round_limit,
                 ResidualReason::WorkLimit => &mut residuals.work_limit,
             };
             add(count, 1)?;
-            BatchVerdict::Residual
+            (BatchVerdict::Residual, Some(root))
         }
     })
 }
@@ -1009,6 +908,16 @@ pub(crate) struct FormulaDevice<'a> {
 
 #[cfg(feature = "gpu")]
 impl crate::formula_queue::device::SlateDevice for FormulaDevice<'_> {
+    const REGIONAL: bool = true;
+
+    fn record_slate_bytes(&mut self, total: u64) {
+        self.statistics.peak_accounted_bytes = self.statistics.peak_accounted_bytes.max(total);
+    }
+
+    fn retained_batch_bytes(&self) -> Result<u64, Failure> {
+        self.oracle.retained_batch_bytes().map_err(gpu_failure)
+    }
+
     type Prepared<'d>
         = zetesis_wgpu::PreparedFormulaSubmission<'d>
     where
@@ -1020,9 +929,11 @@ impl crate::formula_queue::device::SlateDevice for FormulaDevice<'_> {
         &'d mut self,
         slate: zetesis_ferraris::SlateRef<'_>,
         offset: usize,
+        max_bytes: u64,
         cancellation: &zetesis_algebra::Cancellation,
     ) -> Result<Self::Prepared<'d>, Failure> {
-        let limits = slate_limits(self.options, slate.candidates().len());
+        let mut limits = slate_limits(self.options, slate.candidates().len());
+        limits.max_batch_bytes = max_bytes;
         self.oracle
             .prepare(slate, offset, limits, cancellation)
             .map_err(gpu_failure)
@@ -1035,6 +946,7 @@ impl crate::formula_queue::device::SlateDevice for FormulaDevice<'_> {
         slate: zetesis_ferraris::SlateId,
         offset: usize,
         offered: usize,
+        rows: &mut crate::formula_queue::device::CheckedRows,
     ) -> Result<crate::formula_queue::device::Decoded, Failure> {
         // A failed call can still report the batch before it, as unavailable.
         let compute = self.oracle.reported_compute_time();
@@ -1071,10 +983,6 @@ impl crate::formula_queue::device::SlateDevice for FormulaDevice<'_> {
                 .max(batch.accounted_bytes);
             record_workgroup_size(self.statistics, batch.workgroup_size);
         }
-        let mut verdicts = Vec::new();
-        verdicts
-            .try_reserve_exact(checks.len())
-            .map_err(|_| Failure::Search(Incomplete::Allocation))?;
         for check in checks {
             add(
                 &mut self.statistics.gpu_work,
@@ -1084,13 +992,17 @@ impl crate::formula_queue::device::SlateDevice for FormulaDevice<'_> {
                 &mut self.statistics.gpu_rounds,
                 u64::from(check.statistics().rounds),
             )?;
-            verdicts.push(decoded_verdict(
+            let (verdict, root) = decoded_verdict(
                 self.statistics.gpu_residuals.get_or_insert_default(),
-                check.verdict(),
-            )?);
+                check.into_verdict(),
+            )?;
+            if let Some(root) = root {
+                rows.projected(root)?;
+            } else {
+                rows.classified(verdict)?;
+            }
         }
         Ok(crate::formula_queue::device::Decoded {
-            verdicts,
             compute,
             finish_wait,
         })
@@ -1103,6 +1015,10 @@ impl crate::formula_queue::device::PreparedSubmission
 {
     type Checked =
         Result<zetesis_wgpu::CheckedSlate<zetesis_wgpu::FormulaCheck>, zetesis_wgpu::GpuError>;
+
+    fn accounted_bytes(&self) -> u64 {
+        Self::accounted_bytes(self)
+    }
 
     fn count(&self) -> usize {
         Self::count(self)

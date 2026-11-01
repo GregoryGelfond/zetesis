@@ -60,6 +60,10 @@ pub struct FormulaLimits {
     /// occurrence counts and uniquely removed-bit notifications. It retains
     /// the scanned-group allowance; it does not report actual active work.
     /// If this optional envelope cannot fit, groups retain direct scans.
+    /// A single result projection reserves another `atoms + 2*ceil(atoms/32)`
+    /// setup units for one domain classification per atom and two mask stores per
+    /// word. Terminal statuses write zero masks, skip the atom scan, and report
+    /// only the word stores from this reservation.
     /// A budget below mandatory setup is refused before dispatch.
     pub max_work_per_candidate: u32,
     /// Maximum host wait for submitted work; not GPU preemption or a deadline
@@ -92,27 +96,27 @@ pub enum ResidualReason {
 }
 
 /// A partial decision about the original candidate and its frozen reduct.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum FormulaVerdict {
     /// The candidate violates an original asserted root.
     NotModel,
     /// Original roots hold, and sound propagation refutes every proper subset.
     NoProperSubset,
-    /// Original roots hold; exact residual search remains necessary.
-    Residual(ResidualReason),
+    /// Original roots hold. The returned region contains the remaining proper-subset queries.
+    Residual(ResidualReason, zetesis_algebra::region::Region),
 }
 
 /// Charged work and completed sweeps for one candidate.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct FormulaStatistics {
-    /// Mandatory setup plus reserved per-sweep work, as specified by the limits.
+    /// Performed setup and output projection plus the charge for completed sweeps.
     pub work: u32,
     /// Full cooperative propagation sweeps completed.
     pub rounds: u32,
 }
 
 /// Validated result for one candidate, preserving input order.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct FormulaCheck {
     verdict: FormulaVerdict,
     statistics: FormulaStatistics,
@@ -120,7 +124,12 @@ pub struct FormulaCheck {
 impl FormulaCheck {
     /// Logical or residual result. No fixed-point result implies stability.
     #[must_use]
-    pub const fn verdict(&self) -> FormulaVerdict {
+    pub const fn verdict(&self) -> &FormulaVerdict {
+        &self.verdict
+    }
+    /// Move the authenticated outcome and any residual root into host completion.
+    #[must_use]
+    pub fn into_verdict(self) -> FormulaVerdict {
         self.verdict
     }
     /// Per-candidate propagation accounting.

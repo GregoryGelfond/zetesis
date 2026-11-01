@@ -1,6 +1,6 @@
 //! Device ownership and health for the separate finite-formula profile.
 
-use super::packing::Plan;
+use super::packing::{self, Plan};
 use super::preparation::{Preparation, PreparedGraph};
 use super::transport::Resident;
 use super::{FormulaBatchStats, FormulaCheck, FormulaLimits, GateProjection, GpuFormulaProfile};
@@ -21,8 +21,7 @@ use zetesis_ferraris::{Interpretation, SlateId, SlateRef, Theory};
 /// which can leave more residual work than expanded Boolean formulas.
 ///
 /// This is a partial reduct primitive; exact residual search remains necessary.
-/// A residual reports no narrowed atom region: callers retain the full original
-/// proper-subset query. No source grounding, objective scoring, candidate
+/// A residual carries the semantic atom region retained by the completed device sweeps. No source grounding, objective scoring, candidate
 /// enumeration or CPU oracle fallback occurs here.
 pub struct GpuFormulaOracle {
     profile: GpuFormulaProfile,
@@ -42,6 +41,7 @@ struct PreparedCall {
     /// The batch's plan, which carries the epoch it commits when submitted.
     plan: Plan,
     stats: FormulaBatchStats,
+    output: packing::Output,
 }
 impl GpuFormulaOracle {
     /// The runtime this oracle submits through, for tests of settled reads.
@@ -199,6 +199,27 @@ impl GpuFormulaOracle {
     #[must_use]
     pub fn last_batch_stats(&self) -> Option<&FormulaBatchStats> {
         self.last.as_ref()
+    }
+    /// Resident formula buffers, actual host seed capacity and owned timer
+    /// storage after a submission. The returned checks own their own regions.
+    ///
+    /// # Errors
+    /// Returns a capacity error if the sum is outside the byte counter.
+    pub fn retained_batch_bytes(&self) -> Result<u64, GpuError> {
+        let device = self
+            .resident
+            .as_ref()
+            .map_or(Ok(0), Resident::retained_bytes)?;
+        let seeds = self.candidates.retained_bytes()?;
+        let timer = if self.timer.is_some() {
+            crate::timing::OVERHEAD_BYTES - crate::timing::READBACK_BYTES
+        } else {
+            0
+        };
+        device
+            .checked_add(seeds)
+            .and_then(|bytes| bytes.checked_add(timer))
+            .ok_or_else(|| packing::capacity("retained formula batch exceeds u64"))
     }
     /// Candidate count from this oracle's most recent call, if it reached queue
     /// submission, even if the result was interrupted or could not decode.
@@ -511,7 +532,12 @@ impl GpuFormulaOracle {
         cancellation: &Cancellation,
         during: Option<&mut dyn FnMut()>,
     ) -> Result<(Vec<FormulaCheck>, Option<Duration>), GpuError> {
-        let PreparedCall { fresh, plan, stats } = call;
+        let PreparedCall {
+            fresh,
+            plan,
+            stats,
+            output,
+        } = call;
         // The dispatched size's pipeline is compiled at first need, before this
         // call's scopes and before the fresh graph becomes resident. Only a
         // freshly prepared graph can need a size first, and its preparation has
@@ -573,8 +599,12 @@ impl GpuFormulaOracle {
                         resident.finish(
                             runtime,
                             submitted,
+                            packing::Readback {
+                                plan: &plan,
+                                seeds: self.candidates.words(),
+                                output,
+                            },
                             observation,
-                            &plan,
                             timeout,
                             cancellation,
                         )
@@ -686,7 +716,7 @@ impl GpuFormulaOracle {
     fn stage_candidates(
         &mut self,
         fresh: Option<PreparedGraph>,
-        plan: Plan,
+        mut plan: Plan,
         candidates: &[Interpretation],
         limits: FormulaLimits,
         timing_bytes: u64,
@@ -727,14 +757,21 @@ impl GpuFormulaOracle {
             .map(|prepared| &prepared.graph)
             .or_else(|| self.resident.as_ref().map(|resident| &resident.graph))
             .ok_or_else(|| GpuError::new(GpuErrorKind::Device, "missing formula packing graph"))?;
-        stats.accounted_bytes = plan.pack(
+        plan.accounted = plan.pack(
             graph,
             &candidates[..plan.worlds as usize],
             &mut self.candidates,
             limits.max_batch_bytes,
             cancellation,
-        )? + timing_bytes;
-        Ok(PreparedCall { fresh, plan, stats })
+        )?;
+        let output = packing::Output::reserve(&plan)?;
+        stats.accounted_bytes = output.accounted + timing_bytes;
+        Ok(PreparedCall {
+            fresh,
+            plan,
+            stats,
+            output,
+        })
     }
 
     // Optional indexing must not turn a smaller caller allowance into a new
@@ -855,6 +892,13 @@ pub struct PreparedFormulaSubmission<'o> {
 }
 
 impl PreparedFormulaSubmission<'_> {
+    /// Peak bytes admitted for this prepared dispatch, including output
+    /// capacity and timing storage. Use this while admitting overlapping work.
+    #[must_use]
+    pub const fn accounted_bytes(&self) -> u64 {
+        self.call.stats.accounted_bytes
+    }
+
     /// The identity of the slate this submission belongs to.
     #[must_use]
     pub const fn slate(&self) -> SlateId {

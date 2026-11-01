@@ -147,6 +147,7 @@ impl crate::formula_queue::device::SlateDevice for TightDevice<'_> {
         &'d mut self,
         slate: zetesis_ferraris::SlateRef<'_>,
         offset: usize,
+        _max_bytes: u64,
         cancellation: &Cancellation,
     ) -> Result<Self::Prepared<'d>, Failure> {
         let limits = limits(self.options, slate.candidates().len());
@@ -162,6 +163,7 @@ impl crate::formula_queue::device::SlateDevice for TightDevice<'_> {
         slate: zetesis_ferraris::SlateId,
         offset: usize,
         offered: usize,
+        rows: &mut crate::formula_queue::device::CheckedRows,
     ) -> Result<crate::formula_queue::device::Decoded, Failure> {
         // A failed call can still report the batch before it, as unavailable.
         let compute = self.oracle.reported_compute_time();
@@ -221,8 +223,10 @@ impl crate::formula_queue::device::SlateDevice for TightDevice<'_> {
             .try_reserve_exact(checks.len())
             .map_err(|_| Failure::Search(Incomplete::Allocation))?;
         verdicts.extend(checks.into_iter().map(|check| verdict(check.verdict())));
+        for verdict in verdicts {
+            rows.classified(verdict)?;
+        }
         Ok(crate::formula_queue::device::Decoded {
-            verdicts,
             compute,
             finish_wait,
         })

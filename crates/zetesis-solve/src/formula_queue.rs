@@ -15,6 +15,8 @@ use crate::{SolveConfig, SolveError};
 mod batching;
 #[cfg(feature = "gpu")]
 pub(crate) mod device;
+#[cfg(feature = "gpu")]
+mod regional;
 #[cfg(all(test, feature = "gpu"))]
 mod lookahead_tests;
 
@@ -250,24 +252,31 @@ impl BatchQueue {
         }
     }
 
-    /// Check and commit one slate; `true` when the stream is exhausted.
+    /// Issue the oldest joint ticket and reserve exactly the output owners for
+    /// its admitted kind. A pre-existing GPU cache is live during proposal.
     #[cfg(feature = "gpu")]
-    fn check_slate<D: device::SlateDevice>(
+    fn begin_device_slate<D: device::SlateDevice>(
         &mut self,
         models: &mut StableModels,
         options: &SolveConfig,
-        cancellation: &Cancellation,
-        phases: &crate::phase_timing::Recorder,
-        device: &mut D,
-    ) -> Result<bool, Failure> {
-        use crate::phase_timing::SolvePhase;
-        use device::PreparedSubmission;
+        device: &D,
+    ) -> Result<Option<(zetesis_stable::SlateTicket, regional::CheckedRows, u128)>, Failure> {
         use zetesis_stable::SlateProposal;
-
-        let selected = self.batching.select(models, options);
+        let ceiling = options.max_batch_bytes;
+        let resident_before = device.retained_batch_bytes()?;
+        let pending_ceiling = if D::REGIONAL {
+            ceiling
+                .checked_sub(resident_before)
+                .ok_or(Failure::Search(zetesis_stable::Incomplete::PendingBytes))?
+        } else {
+            ceiling
+        };
+        let selected = self
+            .batching
+            .select_within(models, options, pending_ceiling);
         let limits = BatchLimits {
             max_candidates: selected,
-            max_pending_bytes: options.max_batch_bytes,
+            max_pending_bytes: pending_ceiling,
         };
         let ticket = match models.propose_slate(limits).map_err(Failure::from)? {
             SlateProposal::New(ticket) => {
@@ -284,32 +293,83 @@ impl BatchQueue {
                 ticket
             }
             SlateProposal::Retry(ticket) => ticket,
-            SlateProposal::Exhausted => return Ok(true),
+            SlateProposal::Exhausted => return Ok(None),
             _ => return Err(Failure::from(crate::ExecutorError::ForeignBatch)),
         };
-        let slate = ticket.slate();
-        let (theory, count) = {
-            let view = models.slate(&ticket).map_err(Failure::from)?;
-            (view.theory().clone(), view.candidates().len())
+        let count = models
+            .slate(&ticket)
+            .map_err(Failure::from)?
+            .candidates()
+            .len();
+        let pending = if D::REGIONAL {
+            models.pending_batch_bytes().map_err(Failure::Search)?
+        } else {
+            0
         };
-        let mut verdicts = Vec::new();
-        verdicts
-            .try_reserve_exact(count)
-            .map_err(|_| Failure::Search(zetesis_stable::Incomplete::Allocation))?;
+        let rows = regional::CheckedRows::new(
+            count,
+            if D::REGIONAL {
+                Some((ceiling, pending, resident_before))
+            } else {
+                None
+            },
+        )?;
+        Ok(Some((ticket, rows, pending)))
+    }
+
+    /// Check and commit one slate; `true` when the stream is exhausted.
+    #[cfg(feature = "gpu")]
+    fn check_slate<D: device::SlateDevice>(
+        &mut self,
+        models: &mut StableModels,
+        options: &SolveConfig,
+        cancellation: &Cancellation,
+        phases: &crate::phase_timing::Recorder,
+        device: &mut D,
+    ) -> Result<bool, Failure> {
+        use crate::phase_timing::SolvePhase;
+        use device::PreparedSubmission;
+
+        let Some((ticket, mut rows, pending)) = self.begin_device_slate(models, options, device)?
+        else {
+            return Ok(true);
+        };
+        let ceiling = options.max_batch_bytes;
+        let slate = ticket.slate();
+        let view = models.slate(&ticket).map_err(Failure::from)?;
+        let count = view.candidates().len();
+        let theory = view.theory().clone();
+        // The optimizing route stays serial; only enumeration may propose ahead.
+        let enumeration = self.enumerates();
         let mut ahead = None;
-        while verdicts.len() < count {
-            let offset = verdicts.len();
+        while rows.verdicts.len() < count {
+            let offset = rows.verdicts.len();
+            let available = rows.remaining(ceiling, pending, 0)?;
             let view = models.slate(&ticket).map_err(Failure::from)?;
-            let prepared = phases.measure(SolvePhase::GpuHostOracle, || {
-                device.prepare(view, offset, cancellation)
-            })?;
+            // The synchronous route records its one inclusive host/oracle interval.
+            // The overlap-capable route retains its distinct preparation/check intervals.
+            let serial_window = (!enumeration).then(|| phases.start(SolvePhase::GpuHostOracle));
+            let prepared = if enumeration {
+                phases.measure(SolvePhase::GpuHostOracle, || {
+                    device.prepare(view, offset, available, cancellation)
+                })
+            } else {
+                device.prepare(view, offset, available, cancellation)
+            }?;
+            let device_bytes = prepared.accounted_bytes();
+            let available_for_pending = rows.remaining(ceiling, 0, device_bytes)?;
             let offered = count - offset;
-            self.batching.admitted(offered, prepared.count());
-            let overlapped = prepared.count() >= offered && self.engages(count);
+            let admitted = prepared.count();
+            self.batching.admitted(offered, admitted);
+            let overlapped = admitted >= offered && self.engages(count);
             let checked = if overlapped {
                 let lookahead_limits = BatchLimits {
-                    max_candidates: self.batching.select_lookahead(models, options),
-                    max_pending_bytes: options.max_batch_bytes,
+                    max_candidates: self.batching.select_lookahead(
+                        models,
+                        options,
+                        available_for_pending,
+                    ),
+                    max_pending_bytes: available_for_pending,
                 };
                 let submission = phases.start(SolvePhase::GpuHostOracle);
                 let mut finish = None;
@@ -323,39 +383,80 @@ impl BatchQueue {
                 drop(finish);
                 ahead = proposal.map(|proposal| (proposal, lookahead_limits.max_candidates));
                 checked
-            } else {
+            } else if enumeration {
                 phases.measure(SolvePhase::GpuHostOracle, || prepared.check(cancellation))
+            } else {
+                prepared.check(cancellation)
             };
-            let decoded = device.decode(checked, &theory, slate, offset, offered)?;
+            drop(serial_window);
+            // The plan and any new pending lookahead coexist with the older roots.
+            // Retain the device error first if its submission or decode failed.
+            let active_pending = if D::REGIONAL && overlapped {
+                models.pending_batch_bytes().map_err(Failure::Search)
+            } else {
+                Ok(pending)
+            };
+            let decoded = device.decode(checked, &theory, slate, offset, offered, &mut rows)?;
+            if D::REGIONAL {
+                let pending = active_pending?;
+                let spare = regional::after_pending(available_for_pending, pending)?;
+                device.record_slate_bytes(ceiling - spare);
+            }
+            if rows.verdicts.len() - offset != admitted {
+                return Err(Failure::Run(SolveError::FormulaBatchShape {
+                    expected: admitted,
+                    actual: rows.verdicts.len() - offset,
+                }));
+            }
             self.attribute(
                 decoded.compute,
                 overlapped.then_some(Overlapped {
                     wait: decoded.finish_wait,
                 }),
             );
-            verdicts.extend(decoded.verdicts);
         }
         // A stop observed now leaves the slate pending, its checks dropped:
         // the commit's completion and model construction poll the same control.
-        if let Err(error) = cancellation.poll() {
+        if enumeration && let Err(error) = cancellation.poll() {
             return Err(Failure::Search(error.into()));
         }
         if let Some((proposal, selected)) = ahead {
             self.proposed_ahead(models, proposal.map_err(Failure::from)?, selected, count);
         }
+        self.complete_device_slate(models, device, ticket, rows, ceiling)?;
+        Ok(false)
+    }
+
+    #[cfg(feature = "gpu")]
+    fn complete_device_slate<D: device::SlateDevice>(
+        &mut self,
+        models: &mut StableModels,
+        device: &mut D,
+        ticket: zetesis_stable::SlateTicket,
+        rows: regional::CheckedRows,
+        ceiling: u64,
+    ) -> Result<(), Failure> {
         let prior_completion = models.batch_statistics().completion_calls;
-        let result = models.commit_slate(ticket, verdicts, &mut self.completion);
+        if D::REGIONAL {
+            let spare = rows.remaining(
+                ceiling,
+                models.pending_batch_bytes().map_err(Failure::Search)?,
+                device.retained_batch_bytes()?,
+            )?;
+            device.record_slate_bytes(ceiling - spare);
+        }
+        let result = rows.finish(models, ticket, &mut self.completion);
         if models.batch_statistics().completion_calls != prior_completion
             && let Some(progress) = self.completion.last_statistics()
         {
             self.accounting.record(progress);
         }
-        let batch = result.map_err(Failure::from)?;
+        let batch = result?;
         // The bound generation is read after the commit and before any of the
         // slate's models is scored.
         self.batching.committed_in_flight(models.bound_generation());
         self.ready = batch.into();
-        Ok(false)
+        Ok(())
     }
 
     /// Record what the lookahead beside a slate of `count` candidates did.

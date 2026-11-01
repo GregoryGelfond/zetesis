@@ -68,7 +68,7 @@ fn controlled_calls(backend: GpuApi) {
             .iter()
             .map(crate::FormulaCheck::verdict)
             .collect::<Vec<_>>(),
-        [FormulaVerdict::NotModel, FormulaVerdict::NoProperSubset]
+        [&FormulaVerdict::NotModel, &FormulaVerdict::NoProperSubset]
     );
     settled_stops(&context, &mut formula);
     entry_precedence(&context, &mut formula, &theory);
@@ -95,7 +95,7 @@ fn settled_stops(context: &GpuContext, formula: &mut GpuFormulaOracle) {
                 .propagate_batch(&theory, &candidates, FormulaLimits::default())
                 .unwrap();
             assert_eq!(checks.len(), 1);
-            assert_eq!(checks[0].verdict(), FormulaVerdict::NoProperSubset);
+            assert_eq!(checks[0].verdict(), &FormulaVerdict::NoProperSubset);
         }
     }
 }

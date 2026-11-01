@@ -209,14 +209,39 @@ fn gate(base: u32, node: Node) {
     narrow(base + right, sy);
     narrow(base + node.output, sz);
 }
-fn finish(world: u32, status: u32, rounds: u32, work: u32) {
-    let base = world * 6u;
-    results[base] = params.epoch;
-    results[base + 1u] = world;
-    results[base + 2u] = status;
-    results[base + 3u] = rounds;
-    results[base + 4u] = work;
-    results[base + 5u] = 0x46525031u;
+// The complete workgroup reaches each terminal after the existing storage
+// barrier for its root initialization or completed sweep. One invocation writes
+// each pair of output words. No atomic merge or cleared result buffer is needed.
+fn finish(world: u32, lane: u32, base: u32, status: u32, rounds: u32, work: u32) {
+    let start = world * (6u + 2u * params.words);
+    if (lane == 0u) {
+        results[start] = params.epoch;
+        results[start + 1u] = world;
+        results[start + 2u] = status;
+        results[start + 3u] = rounds;
+        // The admitted word stores are performed on every path. A terminal
+        // verdict did not scan its atom domains. Release that reserved part.
+        results[start + 4u] = select(work, work - params.atoms, status < 3u);
+        results[start + 5u] = 0x46525031u;
+    }
+    for (var word = lane; word < params.words; word += WORKGROUP_SIZE) {
+        var held = 0u;
+        var cut = 0u;
+        if (status >= 3u) {
+            let first = word * 32u;
+            for (var bit = 0u; bit < min(32u, params.atoms - first); bit++) {
+                let mask = 1u << bit;
+                switch atomicLoad(&domains[base + first + bit]) {
+                    case 1u: { cut |= mask; }
+                    case 2u: { held |= mask; }
+                    case 3u: {}
+                    default: { held |= mask; cut |= mask; }
+                }
+            }
+        }
+        results[start + 6u + word] = held;
+        results[start + 6u + params.words + word] = cut;
+    }
 }
 fn propagate_node(base: u32, mask_base: u32, index: u32) {
     let node = node_at(index);
@@ -333,7 +358,7 @@ fn propagate(@builtin(workgroup_id) group: vec3<u32>,
     workgroupBarrier();
     if (lane == 0u) { stage = atomicLoad(&bad_root); }
     if (workgroupUniformLoad(&stage) != 0u) {
-        if (lane == 0u) { finish(world, 1u, 0u, params.setup_work); }
+        finish(world, lane, base, 1u, 0u, params.setup_work);
         return;
     }
     // No shrinking transfer may run until every group's initial permissions
@@ -348,11 +373,11 @@ fn propagate(@builtin(workgroup_id) group: vec3<u32>,
     var work = params.setup_work;
     loop {
         if (rounds == params.max_rounds) {
-            if (lane == 0u) { finish(world, 4u, rounds, work); }
+            finish(world, lane, base, 4u, rounds, work);
             return;
         }
         if (params.max_work - work < params.sweep_work) {
-            if (lane == 0u) { finish(world, 5u, rounds, work); }
+            finish(world, lane, base, 5u, rounds, work);
             return;
         }
         dirty_generation = rounds & 1u;
@@ -404,7 +429,7 @@ fn propagate(@builtin(workgroup_id) group: vec3<u32>,
         }
         let status = workgroupUniformLoad(&stage);
         if (status != 0u) {
-            if (lane == 0u) { finish(world, status, rounds, work); }
+            finish(world, lane, base, status, rounds, work);
             return;
         }
     }

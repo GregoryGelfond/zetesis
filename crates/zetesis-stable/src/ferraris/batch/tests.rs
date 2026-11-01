@@ -277,3 +277,5 @@ fn a_full_slate_beside_a_stop_commits_its_candidates_before_the_stop() {
     ));
     assert!(!search.exhausted());
 }
+
+mod regional;
