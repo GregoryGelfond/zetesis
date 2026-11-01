@@ -272,10 +272,10 @@ mod fixtures;
 ///
 /// The sealed executable must support the selected interface. Both interfaces
 /// request the same machine answers and statistics; all qualification, bounds
-/// and failure retention are shared with [`run`].
+/// and failure retention are shared with [`run()`].
 ///
 /// # Errors
-/// Returns the same pre-launch failures as [`run`].
+/// Returns the same pre-launch failures as [`run()`].
 pub fn run_with_invocation(
     request: &Request<'_>,
     invocation: NativeInvocation,
