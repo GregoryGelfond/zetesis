@@ -67,6 +67,29 @@ pub(crate) trait SlateDevice {
     ) -> Result<Decoded, Failure>;
 }
 
+/// Take a nonempty checked prefix only at this theory, slate and offset.
+/// Shape refusal precedes receipt authentication, as on both device routes.
+pub(crate) fn take_slate_prefix<T>(
+    receipt: zetesis_wgpu::CheckedSlate<T>,
+    theory: &Theory,
+    slate: SlateId,
+    offset: usize,
+    offered: usize,
+) -> Result<(Vec<T>, Option<Duration>), Failure> {
+    let count = receipt.count();
+    if count == 0 || count > offered {
+        return Err(Failure::Run(crate::SolveError::FormulaBatchShape {
+            expected: offered,
+            actual: count,
+        }));
+    }
+    let finish_wait = receipt.finish_wait();
+    let checks = receipt
+        .into_checks(theory, slate, offset)
+        .map_err(|error| Failure::Run(crate::SolveError::Gpu(error)))?;
+    Ok((checks, finish_wait))
+}
+
 /// One prepared submission's checks.
 pub(crate) trait PreparedSubmission {
     /// The device's receipt for the checked submission, or its failure.

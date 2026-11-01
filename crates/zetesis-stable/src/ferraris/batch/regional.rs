@@ -6,8 +6,8 @@ use zetesis_algebra::region::Region;
 use zetesis_ferraris::Interpretation;
 
 use super::{
-    BatchError, BatchVerdict, CompletionExecutor, Incomplete, OriginalCheck, SlateTicket,
-    StableModels, completion_error,
+    BatchError, BatchVerdict, CompletionExecutor, OriginalCheck, SlateTicket, StableModels,
+    completion_error,
 };
 
 /// The result of an exact search restricted to one supplied region.
@@ -32,18 +32,6 @@ pub struct RegionalPass<'s> {
 }
 
 impl StableModels {
-    /// Retained pending-row and validation envelope, including reserved
-    /// capacity for a slate proposed ahead. The query changes no ownership.
-    ///
-    /// # Errors
-    /// Returns counter overflow if the byte total cannot be represented.
-    pub fn pending_batch_bytes(&self) -> Result<u128, Incomplete> {
-        self.pending_row_bytes()
-            .checked_mul(self.held_rows() as u128)
-            .and_then(|rows| rows.checked_add(self.batch.validation.retained_bytes()))
-            .ok_or(Incomplete::CounterOverflow)
-    }
-
     /// Check the oldest joint slate's residuals inside supplied regions.
     /// The checker supplies a root for each provisional Residual in ascending
     /// slot order. Original truth and terminal assertions carry the same trust

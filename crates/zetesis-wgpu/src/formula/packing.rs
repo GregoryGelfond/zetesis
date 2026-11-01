@@ -2,11 +2,20 @@
 
 use super::{FormulaCheck, FormulaLimits, FormulaStatistics, FormulaVerdict, ResidualReason};
 use crate::{GpuError, GpuErrorKind};
+use zetesis_algebra::region::Region;
 use zetesis_ferraris::{Interpretation, Theory};
 
 pub(super) const PARAM_BYTES: u64 = 64;
 pub(super) const HEADER_WORDS: usize = 6;
 pub(super) const MAGIC: u32 = 0x4652_5031;
+
+// Decode constructs one Region at a time. Its mask payload stays with the
+// output row, while the same allowance for construction headers serves every row.
+const ROOT_STAGING_BYTES: u64 = (size_of::<Region>() + size_of::<Vec<u64>>()) as u64;
+
+fn root_mask_bytes(atoms: u32) -> u64 {
+    u64::from(atoms.div_ceil(u64::BITS)) * size_of::<[u64; 2]>() as u64
+}
 
 pub(super) fn capacity(detail: &str) -> GpuError {
     GpuError::new(GpuErrorKind::Capacity, detail)
@@ -286,13 +295,8 @@ impl Plan {
         let host_results = mul(u64::from(count), std::mem::size_of::<FormulaCheck>() as u64)?;
         // All worlds may return a residual simultaneously. The output Vec
         // carries each Region header; each such Region owns two boxed u64 masks.
-        let root_bytes = mul(16, u64::from(shape.atoms.div_ceil(64)))?;
-        let root_payload = mul(u64::from(count), root_bytes)?;
-        let root_staging = if count == 0 {
-            0
-        } else {
-            (size_of::<zetesis_algebra::region::Region>() + size_of::<Vec<u64>>()) as u64
-        };
+        let root_payload = mul(u64::from(count), root_mask_bytes(shape.atoms))?;
+        let root_staging = if count == 0 { 0 } else { ROOT_STAGING_BYTES };
         let accounted = sum(&[
             schedule.bytes,
             transport,
@@ -537,9 +541,7 @@ impl Readback<'_> {
     }
 }
 
-/// Construct the original candidate's subset subregion. Neither an outside
-/// open atom nor an outside held atom belongs to that universe.
-/// Lookahead may own every byte above the already announced dispatch peak.
+/// Keep root construction inside the announced peak. Lookahead may own the rest.
 fn admit_decode_storage(
     other: u64,
     requested: u128,
@@ -552,6 +554,8 @@ fn admit_decode_storage(
         .map_err(|_| zetesis_algebra::Stop::StorageLimit)
 }
 
+/// Materialize decisions for a subset of the submitted candidate. Every atom
+/// outside the candidate must be cut.
 fn decode_root(
     plan: &Plan,
     actual: u64,
@@ -559,8 +563,8 @@ fn decode_root(
     held: &[u32],
     cut: &[u32],
     cancellation: &zetesis_algebra::Cancellation,
-) -> Result<zetesis_algebra::region::Region, GpuError> {
-    use zetesis_algebra::{Stop, region::Region};
+) -> Result<Region, GpuError> {
+    use zetesis_algebra::Stop;
     let atoms = plan.atoms as usize;
     for (word, ((&present, &yes), &no)) in candidate.iter().zip(held).zip(cut).enumerate() {
         cancellation.poll().map_err(GpuError::interrupted)?;
@@ -574,9 +578,9 @@ fn decode_root(
             return Err(invalid());
         }
     }
-    let payload = 16 * u64::from(plan.atoms.div_ceil(64));
-    let staging = (size_of::<Region>() + size_of::<Vec<u64>>()) as u64;
-    let other = actual.checked_sub(payload + staging).ok_or_else(invalid)?;
+    let other = actual
+        .checked_sub(root_mask_bytes(plan.atoms) + ROOT_STAGING_BYTES)
+        .ok_or_else(invalid)?;
     let mut region = Region::try_all_open_with(
         atoms,
         &mut (),
@@ -612,7 +616,7 @@ fn decode_root(
 // Verify operation polarity and the 32-bit wire → 64-bit host representation
 // independently of the decision publication loop.
 fn verify_materialized(
-    region: &zetesis_algebra::region::Region,
+    region: &Region,
     held: &[u32],
     cut: &[u32],
     cancellation: &zetesis_algebra::Cancellation,

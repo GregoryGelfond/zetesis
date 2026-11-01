@@ -1178,10 +1178,11 @@ bounds preserve completions but may infer less than expanded Boolean formulas.
 A residual returns the held and cut masks for the semantic atoms of one
 candidate. The CPU starts from that region with fresh frozen-reduct knowledge.
 It performs the first narrowing even if the masks leave only one possible
-interpretation. The GPU reserves one classification per atom and two stores
-per 32-atom word. Terminal records write only the two zero words per group.
+interpretation. A residual classifies every atom and writes two mask words per
+group of 32 atoms. A terminal result only writes the zero masks.
 
-Mandatory device setup charges `2*nodes+edges+atoms+roots+levels`; pure chains
+Mandatory device setup reserves `2*nodes + edges + atoms + roots + levels`
+for the formula and `atoms + 2*ceil(atoms/32)` for its result. Pure chains
 and empty graphs use zero levels. Each complete sweep reserves
 `9*nodes+2*edges+atoms+65+levels`, covering binary relation rows, both possible native
 operand scans, the dependency-level walk and the strict-subset reduction. Setup and each sweep also reserve

@@ -155,19 +155,9 @@ impl CompletionExecutor {
         self.last
     }
 
-    pub(super) fn complete(
-        &mut self,
-        input: Input<'_>,
-        budget: &mut Budget<'_>,
-        statistics: &mut Statistics,
-        accepted: &mut Vec<bool>,
-    ) -> Result<(), Incomplete> {
-        self.execute(input, None, budget, statistics, accepted)
-    }
-
     /// A regional result bit records absence in its supplied domain. Only
     /// the later regional pass can consume that result for publication.
-    pub(super) fn execute(
+    pub(super) fn complete(
         &mut self,
         input: Input<'_>,
         roots: Option<Vec<(usize, Region)>>,
@@ -226,7 +216,7 @@ impl CompletionExecutor {
             if let Some(pool) = &self.pool
                 && !workspaces.is_empty()
             {
-                let mut join = Join {
+                let join = Join {
                     pool,
                     input,
                     budget,
@@ -497,14 +487,16 @@ struct Join<'a, 'b, 'c> {
 }
 
 impl Join<'_, '_, '_> {
-    fn execute<J: Job>(&mut self, mut outcomes: Vec<J>) -> Result<(), Incomplete> {
-        let input = self.input;
-        let budget = &mut *self.budget;
-        let statistics = &mut *self.statistics;
-        let progress = &mut *self.progress;
-        let workspaces = &mut *self.workspaces;
-        let accepted = &mut *self.accepted;
-        let pool = self.pool;
+    fn execute<J: Job>(self, mut outcomes: Vec<J>) -> Result<(), Incomplete> {
+        let Self {
+            pool,
+            input,
+            budget,
+            statistics,
+            accepted,
+            progress,
+            workspaces,
+        } = self;
         let shared = SharedBudget::new(budget.limits, budget.statistics);
         let cancellation = budget.cancellation;
         let timed = statistics.phase_timings.is_some();

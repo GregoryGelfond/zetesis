@@ -13,8 +13,8 @@
 //! anchor of that cone, so a chain whose cone holds none returns at once,
 //! without reading its cone or postings.
 //!
-//! A shared associative DAG can hide an intermediate cut such as [C,b,d]
-//! inside ((C or b) or d). Opaque and fully unfolded minima do not identify
+//! A shared associative DAG can hide an intermediate cut such as `[C,b,d]`
+//! inside `((C or b) or d)`. Opaque and fully unfolded minima do not identify
 //! every such cut. For a nested Boolean event, walk its same-kind cone and
 //! filter its distinct node IDs against the existing row anchors. For a native
 //! event, follow the anchor's existing immediate parent edges through same-kind

@@ -419,6 +419,18 @@ impl StableModels {
         usize::try_from(count).unwrap_or(usize::MAX)
     }
 
+    /// Retained pending-row and validation envelope, including reserved
+    /// capacity for a slate proposed ahead. The query changes no ownership.
+    ///
+    /// # Errors
+    /// Returns counter overflow if the byte total cannot be represented.
+    pub fn pending_batch_bytes(&self) -> Result<u128, Incomplete> {
+        self.pending_row_bytes()
+            .checked_mul(self.held_rows() as u128)
+            .and_then(|rows| rows.checked_add(self.batch.validation.retained_bytes()))
+            .ok_or(Incomplete::CounterOverflow)
+    }
+
     /// Candidate capacity for a slate proposed ahead
     /// ([`Self::propose_lookahead`]): the rows that fit the pending-memory
     /// envelope beside the oldest pending slate's retained rows and the actual
@@ -431,17 +443,15 @@ impl StableModels {
         if self.batch.pending.is_empty() || self.batch.ahead.is_some() {
             return 0;
         }
-        let row = self.pending_row_bytes();
-        let Some(available) = u128::from(max_pending_bytes)
-            .checked_sub(self.batch.validation.retained_bytes())
-            .and_then(|available| {
-                available.checked_sub(row * self.batch.pending.capacity() as u128)
-            })
+        let Some(available) = self
+            .pending_batch_bytes()
+            .ok()
+            .and_then(|retained| u128::from(max_pending_bytes).checked_sub(retained))
         else {
             return 0;
         };
-        let count =
-            (available / row).min((isize::MAX as usize / size_of::<Interpretation>()) as u128);
+        let count = (available / self.pending_row_bytes())
+            .min((isize::MAX as usize / size_of::<Interpretation>()) as u128);
         usize::try_from(count).unwrap_or(usize::MAX)
     }
 
@@ -1242,17 +1252,13 @@ impl StableModels {
             // completion borrows it and never builds one.
             query: self.index.get().map(|index| super::ReductQuery::new(index)),
         };
-        let result = if let Some(roots) = roots {
-            completion.execute(
-                input,
-                Some(roots),
-                &mut budget,
-                &mut self.statistics,
-                &mut accepted,
-            )
-        } else {
-            completion.complete(input, &mut budget, &mut self.statistics, &mut accepted)
-        };
+        let result = completion.complete(
+            input,
+            roots,
+            &mut budget,
+            &mut self.statistics,
+            &mut accepted,
+        );
         self.statistics.search = budget.statistics;
         result.map(|()| accepted)
     }

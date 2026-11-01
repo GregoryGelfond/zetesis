@@ -2,6 +2,8 @@
 
 use crate::ExecutionObservation as Event;
 use crate::execution_observation::ExecutionSink;
+#[cfg(feature = "gpu")]
+use crate::formula_queue::device::take_slate_prefix;
 
 use std::sync::Arc;
 use zetesis_ferraris::Interpretation;
@@ -959,17 +961,7 @@ impl crate::formula_queue::device::SlateDevice for FormulaDevice<'_> {
             record_submission(self.statistics, self.oracle.last_submission_candidates());
         let checks = checked.map_err(gpu_failure)?;
         submitted?;
-        let count = checks.count();
-        if count == 0 || count > offered {
-            return Err(Failure::Run(SolveError::FormulaBatchShape {
-                expected: offered,
-                actual: count,
-            }));
-        }
-        let finish_wait = checks.finish_wait();
-        let checks = checks
-            .into_checks(theory, slate, offset)
-            .map_err(|error| Failure::Run(SolveError::Gpu(error)))?;
+        let (checks, finish_wait) = take_slate_prefix(checks, theory, slate, offset, offered)?;
         add(&mut self.statistics.gpu_batches, 1)?;
         add(
             &mut self.statistics.gpu_candidates,

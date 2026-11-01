@@ -6,6 +6,7 @@ use crate::execution_observation::ExecutionSink;
 use crate::formula_execution::{
     Execution, Failure, FormulaExecutionStatistics, add, record_submission,
 };
+use crate::formula_queue::device::take_slate_prefix;
 use crate::phase_timing::{Recorder, SolvePhase};
 use crate::{ExecutionObservation, SolveConfig, SolveError};
 use zetesis_algebra::Cancellation;
@@ -196,17 +197,7 @@ impl crate::formula_queue::device::SlateDevice for TightDevice<'_> {
         let checks = checked.map_err(tight_failure)?;
         submission?;
         scheduled?;
-        let count = checks.count();
-        if count == 0 || count > offered {
-            return Err(Failure::Run(SolveError::FormulaBatchShape {
-                expected: offered,
-                actual: count,
-            }));
-        }
-        let finish_wait = checks.finish_wait();
-        let checks = checks
-            .into_checks(theory, slate, offset)
-            .map_err(|error| Failure::Run(SolveError::Gpu(error)))?;
+        let (checks, finish_wait) = take_slate_prefix(checks, theory, slate, offset, offered)?;
         if let Some(batch) = self.oracle.last_batch_stats() {
             add(&mut self.statistics.gpu_batches, batch.dispatches)?;
             add(&mut self.statistics.gpu_candidates, batch.candidates)?;

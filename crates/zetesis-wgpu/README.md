@@ -86,10 +86,11 @@ operands, then alternates with forward visits to carry deductions back toward
 roots. Both directions use the same frozen gates and atomic domain intersections.
 Pure chains retain serial evaluation because they
 contain no independent node work. Other narrow levels may still pay more in
-synchronization than they gain in parallel work. Setup charges
-`2*nodes+edges+atoms+roots+levels` policy units, with zero level units on the serial
-path. Both setup and sweeps add conservative numeric-row allowances, documented
-by `FormulaLimits`; these include portable limb arithmetic.
+synchronization than they gain in parallel work. Setup reserves
+`2*nodes + edges + atoms + roots + levels` for the formula and
+`atoms + 2*ceil(atoms/32)` for the result masks. A terminal result uses only
+the mask stores from the second allowance. The serial path uses zero level
+units. Both setup and sweeps add the numeric-row allowances in `FormulaLimits`.
 
 Preparation uses O(nodes + source_edges + roots + levels + g log g) host work. Source edges
 include numeric occurrences examined before constant folding; g counts variable

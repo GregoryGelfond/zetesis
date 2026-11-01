@@ -27,16 +27,21 @@ pub struct FormulaLimits {
     /// released afterward. The directory is charged by capacity and released once
     /// node packing finishes. Candidate upload scratch is retained only for an
     /// unchanged subject and batch shape, and charged by actual element capacity.
-    /// Result host allowances remain requested sizes.
+    /// Before submission, the host admits the decoded result vector's actual
+    /// capacity, mask storage for every candidate and space to construct one
+    /// region at a time.
     /// Caller-owned inputs, allocator overhead and driver-private allocations
     /// or deferred retirement are excluded; this is not an RSS bound.
     pub max_batch_bytes: u64,
-    /// Maximum complete propagation sweeps per candidate. Zero still checks
-    /// original truth, then returns an explicit round-limit residual.
+    /// Maximum complete propagation sweeps per candidate. At zero, a candidate
+    /// that satisfies the original theory returns a round-limit residual.
     pub max_rounds: u32,
-    /// Maximum charged device work per candidate. Setup costs
+    /// Maximum charged device work per candidate. Formula setup reserves
     /// `2*nodes+edges+atoms+roots+levels` for two node walks, all child occurrences, semantic-atom
     /// initialization, root visits and dependency-level synchronization.
+    /// Result projection reserves another `atoms + 2*ceil(atoms/32)` units for
+    /// one classification per atom and two mask stores per word. A terminal
+    /// result skips classification and reports only the stores from this allowance.
     /// Pure chains and empty graphs select serial truth and charge zero levels;
     /// other DAGs charge their number of occupied dependency levels.
     /// Leaf nodes are visited but need no separate domain initialization store.
@@ -60,10 +65,6 @@ pub struct FormulaLimits {
     /// occurrence counts and uniquely removed-bit notifications. It retains
     /// the scanned-group allowance; it does not report actual active work.
     /// If this optional envelope cannot fit, groups retain direct scans.
-    /// A single result projection reserves another `atoms + 2*ceil(atoms/32)`
-    /// setup units for one domain classification per atom and two mask stores per
-    /// word. Terminal statuses write zero masks, skip the atom scan, and report
-    /// only the word stores from this reservation.
     /// A budget below mandatory setup is refused before dispatch.
     pub max_work_per_candidate: u32,
     /// Maximum host wait for submitted work; not GPU preemption or a deadline
