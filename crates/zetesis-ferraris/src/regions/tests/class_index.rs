@@ -135,6 +135,109 @@ fn known_node_signs_hold_in_every_stable_completion() {
     assert_eq!(observed, [[true; 2]; 2]);
 }
 
+/// h follows from a threshold on the choice b, or from unsupported d.
+/// The classical interpretation {h} satisfies all roots. Only {b,h} is
+/// stable in the region holding h, so the threshold body is forced there.
+#[test]
+fn sole_numeric_body_is_known_only_for_stable_completions() {
+    let parts = crate::FormulaParts::from_numeric_raw(
+        vec![
+            Node::atom(0),
+            Node::atom(1),
+            Node::atom(2),
+            Node::falsum(),
+            Node::implies(1, 3),
+            Node::or_pair([1, 4]),
+            Node::threshold(0),
+            Node::implies(6, 0),
+            Node::implies(2, 0),
+            Node::implies(2, 2),
+        ],
+        vec![],
+        vec![1],
+        vec![1],
+        vec![crate::NumericRow {
+            start: 0,
+            length: 1,
+            domain: crate::NumericDomain::Weights,
+        }],
+        vec![crate::ThresholdDescriptor { row: 0, bound: 1 }],
+        vec![],
+    )
+    .unwrap();
+    let theory = crate::Theory::new(
+        3,
+        parts,
+        vec![5, 7, 8, 9],
+        crate::AdmissionLimits::default(),
+    )
+    .unwrap();
+    let cancel = Cancellation::default();
+    let h = crate::test_support::world(&theory, 1);
+    let mut oracle = crate::EvaluationWorkspace::default();
+    let reading = oracle
+        .evaluate(&h, crate::EvaluationLimits::default(), &cancel)
+        .result
+        .unwrap();
+    assert!(theory.roots().iter().all(|&root| reading.truth()[root]));
+    assert!(!reading.truth()[6]);
+    let stable = (0..8)
+        .filter(|&bits| {
+            let m = crate::test_support::world(&theory, bits);
+            crate::check(&theory, &m, crate::Limits::default(), &cancel)
+                .unwrap()
+                .accepted()
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(stable, [0, 3]);
+    let index = Narrower::new(&theory);
+    let mut region = Region::all_open(3);
+    assert!(region.hold(0));
+    let mut ordinary = index.knowledge();
+    let (ordinary_step, _) = crate::test_support::close(
+        &theory,
+        &index,
+        &mut region.clone(),
+        &mut ordinary,
+        &mut NarrowingScratch::default(),
+    );
+    assert_ne!(ordinary_step, zetesis_algebra::region::Narrowing::Refuted);
+    assert!(!super::super::bit(
+        super::compact(&ordinary).masks.slices()[0],
+        6
+    ));
+    let producers = crate::regions::producers(&theory, RegionLimits::default(), &cancel)
+        .unwrap()
+        .producers
+        .expect("complete ordinary and choice producers");
+    let mut known = index.knowledge();
+    let step = index
+        .narrow_known(
+            OriginalSubject::new(&theory, Some(&producers)),
+            &mut region,
+            &mut known,
+            &mut NarrowingScratch::default(),
+            RegionLimits::default(),
+            &cancel,
+        )
+        .result
+        .unwrap();
+    assert_ne!(step, zetesis_algebra::region::Narrowing::Refuted);
+    let masks = super::compact(&known).masks.slices();
+    assert!(
+        super::super::bit(masks[0], 6),
+        "the only possible producer's threshold must hold"
+    );
+    assert!(
+        super::super::bit(masks[1], 2),
+        "the unfounded alternative cannot support h"
+    );
+    assert_eq!(
+        region.decided().collect::<Vec<_>>(),
+        [(0, true), (1, true), (2, false)]
+    );
+}
+
 #[test]
 fn class_markers_do_not_enlarge_regional_knowledge() {
     assert_eq!(size_of::<Knowledge<AnswerSetsSought>>(), size_of::<Width>());

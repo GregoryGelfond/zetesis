@@ -5390,6 +5390,56 @@
     "line": 197
   },
   {
+    "name": "Zetesis.Refinement.MixedFormulaGraph.ordinary_fits",
+    "file": "Zetesis/MixedFormulaGraph.lean",
+    "line": 105
+  },
+  {
+    "name": "Zetesis.Refinement.MixedFormulaGraph.row_bits",
+    "file": "Zetesis/MixedFormulaGraph.lean",
+    "line": 115
+  },
+  {
+    "name": "Zetesis.Refinement.MixedFormulaGraph.layer_exact",
+    "file": "Zetesis/MixedFormulaGraph.lean",
+    "line": 132
+  },
+  {
+    "name": "Zetesis.Refinement.MixedFormulaGraph.evaluate_exact",
+    "file": "Zetesis/MixedFormulaGraph.lean",
+    "line": 193
+  },
+  {
+    "name": "Zetesis.Refinement.MixedFormulaGraph.root_column_exact",
+    "file": "Zetesis/MixedFormulaGraph.lean",
+    "line": 217
+  },
+  {
+    "name": "Zetesis.Refinement.MixedFormulaGraph.frozen_roots_exact",
+    "file": "Zetesis/MixedFormulaGraph.lean",
+    "line": 237
+  },
+  {
+    "name": "Zetesis.Refinement.MixedFormulaGraph.gather_bits_list",
+    "file": "Zetesis/MixedFormulaGraph.lean",
+    "line": 257
+  },
+  {
+    "name": "Zetesis.Refinement.MixedFormulaGraph.indexed_list",
+    "file": "Zetesis/MixedFormulaGraph.lean",
+    "line": 276
+  },
+  {
+    "name": "Zetesis.Refinement.MixedFormulaGraph.indexed_array",
+    "file": "Zetesis/MixedFormulaGraph.lean",
+    "line": 305
+  },
+  {
+    "name": "Zetesis.Refinement.MixedFormulaGraph.run_refines_evaluate",
+    "file": "Zetesis/MixedFormulaGraph.lean",
+    "line": 311
+  },
+  {
     "name": "Zetesis.ModelSelections.canonicalization_exact",
     "file": "Zetesis/ModelSelections.lean",
     "line": 34
@@ -8518,6 +8568,36 @@
     "name": "Zetesis.SourceSupport.completed_activity_covers",
     "file": "Zetesis/SourceSupport.lean",
     "line": 134
+  },
+  {
+    "name": "Zetesis.Refinement.StableProducerKnowledge.head_mem",
+    "file": "Zetesis/StableProducerKnowledge.lean",
+    "line": 65
+  },
+  {
+    "name": "Zetesis.Refinement.StableProducerKnowledge.supported_body",
+    "file": "Zetesis/StableProducerKnowledge.lean",
+    "line": 73
+  },
+  {
+    "name": "Zetesis.Refinement.StableProducerKnowledge.supported_possible",
+    "file": "Zetesis/StableProducerKnowledge.lean",
+    "line": 80
+  },
+  {
+    "name": "Zetesis.Refinement.StableProducerKnowledge.stable_support_survives",
+    "file": "Zetesis/StableProducerKnowledge.lean",
+    "line": 109
+  },
+  {
+    "name": "Zetesis.Refinement.StableProducerKnowledge.scan_signs",
+    "file": "Zetesis/StableProducerKnowledge.lean",
+    "line": 130
+  },
+  {
+    "name": "Zetesis.Refinement.StableProducerKnowledge.stable_signs_refute_region",
+    "file": "Zetesis/StableProducerKnowledge.lean",
+    "line": 157
   },
   {
     "name": "Zetesis.StorageOwners.sum_within_reservations",

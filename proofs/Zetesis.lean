@@ -162,6 +162,8 @@ import Zetesis.ReductRegions
 import Zetesis.CountermodelReuse
 import Zetesis.CountermodelReplay
 import Zetesis.NumericWitnessReplay
+import Zetesis.MixedFormulaGraph
+import Zetesis.StableProducerKnowledge
 import Zetesis.Frontier
 import Zetesis.AxisFolds
 import Zetesis.AlgebraicRows

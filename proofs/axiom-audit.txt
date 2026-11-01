@@ -1100,6 +1100,16 @@
 'Zetesis.LiftedBridge.completed_lazy_stage_exact' depends on axioms: [propext, Quot.sound]
 'Zetesis.LiftedBridge.completed_lazy_stage_accept_sound' depends on axioms: [propext, Quot.sound]
 'Zetesis.LiftedBridge.lazy_accept_sound' depends on axioms: [propext, Quot.sound]
+'Zetesis.Refinement.MixedFormulaGraph.ordinary_fits' depends on axioms: [propext, Quot.sound]
+'Zetesis.Refinement.MixedFormulaGraph.row_bits' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.Refinement.MixedFormulaGraph.layer_exact' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.Refinement.MixedFormulaGraph.evaluate_exact' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.Refinement.MixedFormulaGraph.root_column_exact' depends on axioms: [propext, Quot.sound]
+'Zetesis.Refinement.MixedFormulaGraph.frozen_roots_exact' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.Refinement.MixedFormulaGraph.gather_bits_list' depends on axioms: [propext, Quot.sound]
+'Zetesis.Refinement.MixedFormulaGraph.indexed_list' depends on axioms: [propext, Quot.sound]
+'Zetesis.Refinement.MixedFormulaGraph.indexed_array' depends on axioms: [propext, Quot.sound]
+'Zetesis.Refinement.MixedFormulaGraph.run_refines_evaluate' depends on axioms: [propext, Quot.sound]
 'Zetesis.ModelSelections.canonicalization_exact' depends on axioms: [propext, Quot.sound]
 'Zetesis.ModelSelections.unselected_entries_irrelevant' depends on axioms: [propext, Quot.sound]
 'Zetesis.ModelSelections.renumbering_preserves_interpretation' depends on axioms: [propext, Quot.sound]
@@ -1776,6 +1786,16 @@
 'Zetesis.SourceSupport.stages_inside_closed' does not depend on any axioms
 'Zetesis.SourceSupport.stable_inside_closed' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.SourceSupport.completed_activity_covers' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.Refinement.StableProducerKnowledge.head_mem' depends on axioms: [propext]
+'Zetesis.Refinement.StableProducerKnowledge.supported_body' depends on axioms: [propext, Quot.sound]
+'Zetesis.Refinement.StableProducerKnowledge.supported_possible' depends on axioms: [propext, Quot.sound]
+'Zetesis.Refinement.StableProducerKnowledge.stable_support_survives' depends on axioms: [propext,
+ Classical.choice,
+ Quot.sound]
+'Zetesis.Refinement.StableProducerKnowledge.scan_signs' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.Refinement.StableProducerKnowledge.stable_signs_refute_region' depends on axioms: [propext,
+ Classical.choice,
+ Quot.sound]
 'Zetesis.StorageOwners.sum_within_reservations' depends on axioms: [propext, Quot.sound]
 'Zetesis.StorageOwners.active_storage_within_limit' depends on axioms: [propext, Quot.sound]
 'Zetesis.StorageOwners.sum_within_component_bounds' depends on axioms: [propext, Quot.sound]

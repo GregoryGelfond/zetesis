@@ -3635,6 +3635,31 @@ region. `FormulaBounds.Known` suffices for that theorem. A deduction specific
 to stable completions needs its own preservation argument, as does reading the
 Rust node-knowledge mask. No learned fact enters a membership check.
 
+[`MixedFormulaGraph`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/MixedFormulaGraph.lean)
+composes the numeric row and finite operand laws across an immutable mixed graph.
+The checked reader resolves a descriptor on its own columns, verifies the row
+domain, and requires every operand occurrence to refer to an earlier node.
+An indexed original and frozen pass computes the two complete Ferraris truth
+columns from the empty prefix. The root theorem checks the original root IDs
+in order, including repetitions. The Rust correspondence starts at admitted
+`Theory::view` and numeric storage. Actual group views may borrow an inline
+pair or an arena slice. The proof uses their ordered contents, mathematical
+indices and exact arithmetic. Compiled extraction and refusal costs remain
+separate obligations.
+
+[`StableProducerKnowledge`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/StableProducerKnowledge.lean)
+follows the candidate support scan in `zetesis-ferraris/src/regions/support.rs`.
+An ordinary row is unavailable when its body is known false or a different
+head is held. Atomic choices use the body test alone. With complete producer
+coverage every stable completion containing the atom retains a supporter.
+An empty scan therefore excludes the atom; a held atom with one surviving
+source forces that source's body. Either sign can justify a later scan or
+a witness condition in the same region. The class here is the stable
+completions. The root and witness checks still use the original theory and
+its own frozen reduct. Authenticating a particular shared-node justification,
+inherited cursor skips, and the other sources of region knowledge remain
+separate from the full producer-filter law.
+
 [`AlgebraicRows`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/AlgebraicRows.lean)
 states algebraic consequences for any consequence class, as `RowOf` does. A term
 pairs an atom with a value, and a list of terms is measured in an interpretation
