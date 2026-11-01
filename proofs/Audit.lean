@@ -519,6 +519,13 @@ import Zetesis
 #print axioms Zetesis.CompactColumns.encoded_cell_exact
 #print axioms Zetesis.CompactColumns.accepts_exact
 #print axioms Zetesis.CompactColumns.selection_exact
+#print axioms Zetesis.ComponentClosure.lowerClosure_monotone
+#print axioms Zetesis.ComponentClosure.upperTransform_monotone
+#print axioms Zetesis.ComponentClosure.bekic
+#print axioms Zetesis.ComponentClosure.ordered_components
+#print axioms Zetesis.ComponentClosure.completed_ordered_rounds
+#print axioms Zetesis.ComponentClosure.settled_producer_covered
+#print axioms Zetesis.ComponentClosure.completed_producers_closed
 #print axioms Zetesis.ConditionalConsumers.original_body
 #print axioms Zetesis.ConditionalConsumers.frozen_body
 #print axioms Zetesis.ConditionalConsumers.empty_body_equivalent

@@ -4218,6 +4218,19 @@ traversals gives the inflationary step to which the scheduling law applies with
 `Q`. Neither the membership-pruned proposals nor their union with the carrier
 is asserted to satisfy `ReadsOnly`.
 
+[`ComponentClosure`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/ComponentClosure.lean)
+states Bekić's decomposition of two monotone least closures and its
+dependency-ordered case. `completed_producers_closed` connects the final
+carrier to each producer's last completed snapshot, assuming complete read
+registration, settled inputs and publication of the unpruned proposals. The
+component scheduler's `resolve` and `classify` must establish the dependency
+premise; `mark_ready` must establish that those inputs cannot change again.
+`take_ready` marks a producer before traversal, so only successful traversal
+and publication supply the completed-history premise. Monotonicity of rich
+source proposals, these imperative invariants and schedule termination remain
+executable obligations. The laws establish possible-head closure, not answer-set
+membership or equality of intermediate work receipts.
+
 Read-set completeness for `Q`, the pruning equality, complete bootstrap and
 old-head history, and append-only publication remain executable obligations.
 The registration's

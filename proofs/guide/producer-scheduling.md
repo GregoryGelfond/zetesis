@@ -62,14 +62,26 @@ selection.
 A rich producer whose reads all lie in dependency components before its heads'
 is instead scheduled by component: it waits, unselected though affected, until
 the components it reads reach their fixed point, and is then traversed once.
-The general laws claim closure only for the final round. There every
-component-scheduled producer was traversed after its reads' last change, so it
-is unaffected and its proposals over the old carrier were published:
-`empty_selection_closed` applies with its history premise. That the fixed-point
-test admits a producer only after its reads' last change, and that completion
-never ends with one untraversed, are Rust obligations stated in
-[the component schedule](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/formula_support/producers/registration/components.rs);
-no Lean law states them.
+[ComponentClosure](../Zetesis/ComponentClosure.lean) supplies the mathematical
+decomposition. Bekić's law expresses the least simultaneous closure of two
+monotone components through nested least closures. If the lower component does
+not read the upper one, `ordered_components` closes the lower component once,
+then closes the upper with those inputs fixed. `completed_ordered_rounds`
+connects this result to finite scans whose results are known to be closed; it
+does not claim that arbitrary fuel completes them.
+
+The actual schedule may begin upper work earlier. Its history obligation is
+separate: `completed_producers_closed` permits each producer its own last
+completed snapshot. Complete read registration, unchanged registered inputs
+since that snapshot, and successful publication of all its proposals establish
+closure of the final carrier. Leastness additionally requires sound construction.
+The fixed-point test must establish that the reads cannot change again, and
+successful completion must leave no producer untraversed. These remain Rust
+obligations in
+[the component schedule](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/formula_support/producers/registration/components.rs).
+In particular, its `Traversed` flag is set before traversal: the flag alone
+does not establish completed publication. Neither law identifies possible heads
+with an answer set or changes the final constraint and reduct checks.
 
 For the correspondence, let `Q(p, C)` be producer `p`'s possible heads over the
 fixed round snapshot `C`, before pruning heads already supported. The proposal

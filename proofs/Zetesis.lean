@@ -21,6 +21,7 @@ import Zetesis.StreamedConstraints
 import Zetesis.StreamedRegions
 import Zetesis.StreamedConsequences
 import Zetesis.ProducerScheduling
+import Zetesis.ComponentClosure
 import Zetesis.FerrarisGuards
 import Zetesis.FerrarisMask
 import Zetesis.Optimization
