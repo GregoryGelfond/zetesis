@@ -2595,6 +2595,41 @@
     "line": 151
   },
   {
+    "name": "Zetesis.ComponentClosure.lowerClosure_monotone",
+    "file": "Zetesis/ComponentClosure.lean",
+    "line": 63
+  },
+  {
+    "name": "Zetesis.ComponentClosure.upperTransform_monotone",
+    "file": "Zetesis/ComponentClosure.lean",
+    "line": 73
+  },
+  {
+    "name": "Zetesis.ComponentClosure.bekic",
+    "file": "Zetesis/ComponentClosure.lean",
+    "line": 93
+  },
+  {
+    "name": "Zetesis.ComponentClosure.ordered_components",
+    "file": "Zetesis/ComponentClosure.lean",
+    "line": 142
+  },
+  {
+    "name": "Zetesis.ComponentClosure.completed_ordered_rounds",
+    "file": "Zetesis/ComponentClosure.lean",
+    "line": 157
+  },
+  {
+    "name": "Zetesis.ComponentClosure.settled_producer_covered",
+    "file": "Zetesis/ComponentClosure.lean",
+    "line": 188
+  },
+  {
+    "name": "Zetesis.ComponentClosure.completed_producers_closed",
+    "file": "Zetesis/ComponentClosure.lean",
+    "line": 209
+  },
+  {
     "name": "Zetesis.ConditionalConsumers.original_body",
     "file": "Zetesis/ConditionalConsumers.lean",
     "line": 28
