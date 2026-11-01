@@ -215,22 +215,13 @@ impl CompletionExecutor {
                 .map_err(|_| Incomplete::Allocation)?;
             let (mut workspaces, peak) =
                 prepare_workspaces(budget.cancellation, &mut progress, self.max_scratch_bytes)?;
-            let rows = if let Some(receipt) = &mut self.regional {
-                if let Some(roots) = &roots {
-                    depths = receipt.workers(
-                        input.candidates.len(),
-                        chunk_size(input.candidates.len(), admitted),
-                        roots,
-                    );
-                }
-                receipt.slots.as_deref_mut()
-            } else {
-                None
-            };
-            let observation = Attempt {
-                rows,
-                depths: depths.as_deref_mut(),
-            };
+            let observation = Attempt::prepare(
+                self.regional.as_mut(),
+                roots.as_deref(),
+                input.candidates.len(),
+                admitted,
+                &mut depths,
+            );
             if let Some(pool) = &self.pool
                 && !workspaces.is_empty()
             {
@@ -334,6 +325,30 @@ struct Outcome {
 struct Attempt<'a> {
     rows: Option<&'a mut [Option<RegionalSlotObservation>]>,
     depths: Option<&'a mut [Option<DepthWorkspace>]>,
+}
+
+impl<'a> Attempt<'a> {
+    /// Prepare optional per-chunk storage after the mandatory workspaces fit.
+    /// The caller retains the depths for the width reduction after the join.
+    fn prepare(
+        receipt: Option<&'a mut RegionalObservations>,
+        roots: Option<&[(usize, Region)]>,
+        rows: usize,
+        workers: usize,
+        depths: &'a mut Option<Vec<Option<DepthWorkspace>>>,
+    ) -> Self {
+        let (Some(receipt), Some(roots)) = (receipt, roots) else {
+            return Self {
+                rows: None,
+                depths: None,
+            };
+        };
+        *depths = receipt.workers(rows, chunk_size(rows, workers), roots);
+        Self {
+            rows: receipt.slots.as_deref_mut(),
+            depths: depths.as_deref_mut(),
+        }
+    }
 }
 
 struct Serve<'a> {
