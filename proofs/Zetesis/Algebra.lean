@@ -865,6 +865,126 @@ def doubleCount {V : Type v} (o : AlgebraicRows.OrderedReduction V) (C : Class �
       exact AlgebraicRows.double_count_excludes_region o C r S first second firstCovers
         secondCovers lower upper exceeds z inside member)
 
+/-! ## Guarded counting bounds
+
+These are values of the existing counting reduction, not a second subject
+algebra. A signed guard activates a bound only when every literal is decided.
+The fallback is the held or possible measure of the same terms.
+-/
+
+section GuardedCounting
+
+open AlgebraicRows
+
+open Classical in
+/-- A guarded lower bound, strengthened by the atoms already held. -/
+noncomputable def guardedLower (r : Region α) (terms : List (Term α Nat))
+    (guard : List (Literal α)) (bound : Nat) : Nat :=
+  if ∀ l ∈ guard, Decides r l then
+    max bound (measure counting.toReduction r.lower terms)
+  else measure counting.toReduction r.lower terms
+
+open Classical in
+/-- A guarded upper bound, capped by the atoms still possible. -/
+noncomputable def guardedUpper (r : Region α) (terms : List (Term α Nat))
+    (guard : List (Literal α)) (bound : Nat) : Nat :=
+  if ∀ l ∈ guard, Decides r l then
+    min bound (measure counting.toReduction r.upper terms)
+  else measure counting.toReduction r.upper terms
+
+/-- The effective lower bound holds for every member of the class in the
+region, provided the original guarded bound holds for that class.
+
+Proof. Held atoms already give a lower bound. When the guard is decided,
+every contained interpretation satisfies it, so the original bound holds too;
+the maximum of these two lower bounds remains a lower bound. -/
+theorem guardedLower_sound (C : Class α) (r : Region α)
+    (terms : List (Term α Nat)) (guard : List (Literal α)) (bound : Nat)
+    (guarded : ∀ z, C z → (∀ l ∈ guard, Holds z l) →
+      bound ≤ measure counting.toReduction z terms) :
+    LowerIn counting C r terms (guardedLower r terms guard bound) := by
+  classical
+  intro z within member
+  change guardedLower r terms guard bound ≤ measure counting.toReduction z terms
+  have held : measure counting.toReduction r.lower terms ≤
+      measure counting.toReduction z terms :=
+    measure_mono counting within.1 terms (fun t _ => Nat.zero_le t.2)
+  by_cases active : ∀ l ∈ guard, Decides r l
+  · have released : bound ≤ measure counting.toReduction z terms :=
+      guarded z member (fun l listed => decides_holds within (active l listed))
+    simpa only [guardedLower, if_pos active] using (Nat.max_le.mpr ⟨released, held⟩)
+  · simpa only [guardedLower, if_neg active] using held
+
+/-- The effective upper bound holds for every member of the class in the
+region, provided the original guarded bound holds for that class.
+
+Proof. Possible atoms give an upper bound. A decided guard also releases the
+original upper bound; the minimum of the two is still an upper bound. -/
+theorem guardedUpper_sound (C : Class α) (r : Region α)
+    (terms : List (Term α Nat)) (guard : List (Literal α)) (bound : Nat)
+    (guarded : ∀ z, C z → (∀ l ∈ guard, Holds z l) →
+      measure counting.toReduction z terms ≤ bound) :
+    UpperIn counting C r terms (guardedUpper r terms guard bound) := by
+  classical
+  intro z within member
+  change measure counting.toReduction z terms ≤ guardedUpper r terms guard bound
+  have possible : measure counting.toReduction z terms ≤
+      measure counting.toReduction r.upper terms :=
+    measure_mono counting within.2 terms (fun t _ => Nat.zero_le t.2)
+  by_cases active : ∀ l ∈ guard, Decides r l
+  · have released : measure counting.toReduction z terms ≤ bound :=
+      guarded z member (fun l listed => decides_holds within (active l listed))
+    simpa only [guardedUpper, if_pos active] using (Nat.le_min.mpr ⟨released, possible⟩)
+  · simpa only [guardedUpper, if_neg active] using possible
+
+/-- Refining a region cannot lower an effective guarded lower bound.
+
+Proof. The held measure grows. An active guard remains active. A newly active
+guard can only replace the new held measure by a greater maximum. -/
+theorem guardedLower_mono {r r' : Region α} (inside : Inside r' r)
+    (terms : List (Term α Nat)) (guard : List (Literal α)) (bound : Nat) :
+    guardedLower r terms guard bound ≤ guardedLower r' terms guard bound := by
+  classical
+  have grows : measure counting.toReduction r.lower terms ≤
+      measure counting.toReduction r'.lower terms :=
+    measure_mono counting inside.1 terms (fun t _ => Nat.zero_le t.2)
+  by_cases active : ∀ l ∈ guard, Decides r l
+  · have persists : ∀ l ∈ guard, Decides r' l :=
+      fun l listed => decides_mono inside (active l listed)
+    simpa only [guardedLower, if_pos active, if_pos persists] using
+      (Nat.max_le.mpr ⟨Nat.le_max_left ..,
+        Nat.le_trans grows (Nat.le_max_right ..)⟩)
+  · by_cases later : ∀ l ∈ guard, Decides r' l
+    · simpa only [guardedLower, if_neg active, if_pos later] using
+        (Nat.le_trans grows (Nat.le_max_right bound
+          (measure counting.toReduction r'.lower terms)))
+    · simpa only [guardedLower, if_neg active, if_neg later] using grows
+
+/-- Refining a region cannot raise an effective guarded upper bound.
+
+Proof. The possible measure shrinks. An active guard remains active. A newly
+active guard can only replace the new possible measure by a smaller minimum. -/
+theorem guardedUpper_antitone {r r' : Region α} (inside : Inside r' r)
+    (terms : List (Term α Nat)) (guard : List (Literal α)) (bound : Nat) :
+    guardedUpper r' terms guard bound ≤ guardedUpper r terms guard bound := by
+  classical
+  have shrinks : measure counting.toReduction r'.upper terms ≤
+      measure counting.toReduction r.upper terms :=
+    measure_mono counting inside.2 terms (fun t _ => Nat.zero_le t.2)
+  by_cases active : ∀ l ∈ guard, Decides r l
+  · have persists : ∀ l ∈ guard, Decides r' l :=
+      fun l listed => decides_mono inside (active l listed)
+    simpa only [guardedUpper, if_pos active, if_pos persists] using
+      (Nat.le_min.mpr ⟨Nat.min_le_left ..,
+        Nat.le_trans (Nat.min_le_right ..) shrinks⟩)
+  · by_cases later : ∀ l ∈ guard, Decides r' l
+    · simpa only [guardedUpper, if_neg active, if_pos later] using
+        (Nat.le_trans (Nat.min_le_right bound
+          (measure counting.toReduction r'.upper terms)) shrinks)
+    · simpa only [guardedUpper, if_neg active, if_neg later] using shrinks
+
+end GuardedCounting
+
 /-! ## Folds over walks that may stop -/
 
 /-- **The verdict of a fold over a walk that may stop.** A walk's reduction decides

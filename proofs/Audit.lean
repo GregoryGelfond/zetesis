@@ -130,6 +130,10 @@ import Zetesis
 #print axioms Zetesis.Algebra.refines_wf
 #print axioms Zetesis.Algebra.fair_iteration_reaches_joint_of_atoms
 #print axioms Zetesis.Algebra.decides_mono
+#print axioms Zetesis.Algebra.guardedLower_sound
+#print axioms Zetesis.Algebra.guardedUpper_sound
+#print axioms Zetesis.Algebra.guardedLower_mono
+#print axioms Zetesis.Algebra.guardedUpper_antitone
 #print axioms Zetesis.Algebra.foldVerdict_absorbed
 #print axioms Zetesis.Algebra.foldVerdict_complete
 #print axioms Zetesis.Algebra.foldVerdict_empty
@@ -176,6 +180,7 @@ import Zetesis
 #print axioms Zetesis.AlgebraicRows.upper_in_of_class
 #print axioms Zetesis.AlgebraicRows.measure_rows
 #print axioms Zetesis.AlgebraicRows.double_count_excludes_region
+#print axioms Zetesis.AlgebraicRows.partial_double_count_excludes_region
 #print axioms Zetesis.AlgebraicRows.double_count_excludes
 #print axioms Zetesis.AlgebraicRows.cut_excludes_region
 #print axioms Zetesis.AlgebraicRows.conjunction_assoc_original
@@ -194,6 +199,7 @@ import Zetesis
 #print axioms Zetesis.AlgebraicRows.guard_releases
 #print axioms Zetesis.AlgebraicRows.parity_measure_odd
 #print axioms Zetesis.AlgebraicRows.parity_equation_of_xor
+#print axioms Zetesis.AlgebraicRows.counting_replace_occurrence
 #print axioms Zetesis.AlgebraicRows.counting_fold_one
 #print axioms Zetesis.AlgebraicRows.bounded_counting_fold
 #print axioms Zetesis.AlgebraicRows.bounded_counting_fold_one
@@ -2088,6 +2094,9 @@ import Zetesis
 #print axioms Zetesis.WorkPermits.consumed_within_limit
 #print axioms Zetesis.WorkPermits.settled_exhaustion
 #print axioms Zetesis.WorkPermits.unused_return_enables_work
+#print axioms Zetesis.WorkPermits.refund_then_settle
+#print axioms Zetesis.WorkPermits.settled_replacement
+#print axioms Zetesis.WorkPermits.unused_window_does_not_commit
 #print axioms Zetesis.WorldMasks.membership_exact
 #print axioms Zetesis.WorldMasks.membership_append
 #print axioms Zetesis.WorldMasks.empty_prefix_excludes_extension

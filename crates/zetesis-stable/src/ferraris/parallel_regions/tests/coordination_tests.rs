@@ -145,10 +145,11 @@ fn a_split_preserves_both_children_and_counts_the_net_gain() {
     for entry in [&mut cut, &mut held] {
         assert_ne!(
             super::super::super::regions::narrow(
-                (
-                    search.shared.parts.subject(original.theory()).unwrap(),
-                    original.narrower(),
-                ),
+                search
+                    .shared
+                    .parts
+                    .reading(original.theory(), original.narrower())
+                    .unwrap(),
                 &conditions,
                 entry,
                 &mut zetesis_ferraris::NarrowingScratch::default(),
@@ -456,7 +457,12 @@ fn a_refused_split_leaves_the_frontier_unpublished() {
     let interval = parent.region.clone();
     let preference = parent.split_atom();
     let knowledge_before = format!("{:?}", parent.state);
-    let cut_knowledge = parent.state.clone();
+    let copied = super::super::super::regions::copy_knowledge(
+        &parent.state,
+        None,
+        &mut budget(&search.shared),
+    );
+    let cut_knowledge = copied.result.unwrap();
     let mut pending = Some(parent);
     let error = search
         .shared
@@ -936,4 +942,164 @@ fn a_worker_splits_the_root_on_the_original_choice_head() {
         .filter(|&atom| cut.region.is_cut(atom) && held.region.is_held(atom))
         .collect();
     assert_eq!(split, [0]);
+}
+
+/// Isolate the worker allowance from preparation already completed by `search`.
+fn copy_search(max_work: u64) -> (ParallelRegions, Arc<IndexedTheory>) {
+    let (mut search, original) = search(2);
+    Arc::get_mut(&mut search.shared).unwrap().budget = SharedBudget::new(
+        crate::SearchLimits {
+            max_work,
+            ..Default::default()
+        },
+        SearchStatistics::default(),
+    );
+    (search, original)
+}
+
+/// Calibrate the actual subject and decision prefix separately from the copy;
+/// no assumed operation count is used to locate the new refusal boundary.
+fn split_copy_work() -> (SearchStatistics, RegionCounts, u64) {
+    let (search, original) = copy_search(u64::MAX);
+    let mut entry = search.shared.frontier.take_local(0).unwrap();
+    let mut workspaces = Workspaces::new();
+    let mut budget = budget(&search.shared);
+    let mut counts = RegionCounts::default();
+    search
+        .shared
+        .parts
+        .seed_tier(
+            &mut workspaces.tier,
+            &mut workspaces.scratch,
+            &mut budget,
+            &mut counts,
+        )
+        .unwrap();
+    let reading = search
+        .shared
+        .parts
+        .reading(original.theory(), original.narrower())
+        .unwrap();
+    assert!(
+        reading.arithmetic.is_some(),
+        "exercise the actual arithmetic subject slots"
+    );
+    let narrowing = super::super::super::regions::narrow(
+        reading,
+        &search.shared.restrictions.read().unwrap(),
+        &mut entry,
+        &mut workspaces.scratch,
+        &mut budget,
+        &mut counts,
+        None,
+    )
+    .unwrap();
+    search
+        .shared
+        .parts
+        .visited(
+            &mut workspaces.tier,
+            &mut workspaces.scratch,
+            &mut budget,
+            &mut counts,
+        )
+        .unwrap();
+    assert!(matches!(
+        walk::inspect(&entry, narrowing, Counting::Never, false),
+        walk::Step::Split(_)
+    ));
+    budget.decide().unwrap();
+    let prefix = budget.statistics;
+    let copied = super::super::super::regions::copy_knowledge(&entry.state, None, &mut budget);
+    assert!(copied.result.is_ok());
+    assert!(
+        copied.counts.work > 0,
+        "copy the initialized arithmetic slots under the meter"
+    );
+    assert_eq!(budget.statistics.work - prefix.work, copied.counts.work);
+    (prefix, counts, copied.counts.work)
+}
+
+#[test]
+fn a_copy_refusal_stops_before_publishing_children() {
+    let (prefix, before_copy, copy_work) = split_copy_work();
+    for allowed_copy_work in 0..copy_work {
+        let (search, original) = copy_search(prefix.work + allowed_copy_work);
+        let root = search.shared.frontier.take_local(0).unwrap();
+        let frontier = search.shared.frontier.statistics();
+        let mut budget = budget(&search.shared);
+        let mut report = report();
+        let result = step(
+            &search.shared,
+            &original,
+            (root, 0),
+            &mut Workspaces::new(),
+            &mut budget,
+            &mut report,
+            Timing::Inline,
+        );
+        assert!(matches!(result, Err(Incomplete::WorkLimit)));
+        assert_eq!(search.shared.stopped(), Some(Incomplete::WorkLimit));
+        assert_eq!(
+            budget.statistics.decisions, 1,
+            "decision debit still precedes copying"
+        );
+        assert!(budget.statistics.work >= prefix.work);
+        assert!(budget.statistics.work <= prefix.work + allowed_copy_work);
+        assert_eq!(
+            report.regions.work - before_copy.work,
+            budget.statistics.work - prefix.work
+        );
+        assert_eq!(
+            search.shared.live.work.load(Ordering::Relaxed),
+            report.regions.work
+        );
+        assert_eq!(search.shared.frontier.statistics(), frontier);
+        assert_eq!(outstanding(&search.shared), 1);
+        assert!(search.shared.frontier.queue(0).is_empty());
+        assert!(search.shared.frontier.termination.is_closed());
+        assert!(!search.shared.frontier.termination.is_resolved());
+        let performed = budget.statistics;
+        drop(budget);
+        let mut committed = SearchStatistics::default();
+        search.shared.budget.record(&mut committed);
+        assert_eq!(
+            committed, performed,
+            "copy permits settle once on every refusal prefix"
+        );
+    }
+}
+
+#[test]
+fn an_inclusive_copy_allowance_publishes_both_children() {
+    let (prefix, before_copy, copy_work) = split_copy_work();
+    let (search, original) = copy_search(prefix.work + copy_work);
+    let root = search.shared.frontier.take_local(0).unwrap();
+    let mut budget = budget(&search.shared);
+    let mut report = report();
+    assert!(matches!(
+        step(
+            &search.shared,
+            &original,
+            (root, 0),
+            &mut Workspaces::new(),
+            &mut budget,
+            &mut report,
+            Timing::Inline,
+        )
+        .unwrap(),
+        Stepped::Split
+    ));
+    assert_eq!(budget.statistics.work, prefix.work + copy_work);
+    assert_eq!(report.regions.work, before_copy.work + copy_work);
+    assert_eq!(
+        search.shared.live.work.load(Ordering::Relaxed),
+        report.regions.work
+    );
+    assert_eq!(budget.statistics.decisions, 1);
+    assert_eq!(outstanding(&search.shared), 2);
+    let held = search.shared.frontier.take_local(0).unwrap();
+    let cut = search.shared.frontier.take_local(0).unwrap();
+    assert!(held.region.is_held(0) && cut.region.is_cut(0));
+    assert_eq!(search.shared.stopped(), None);
 }

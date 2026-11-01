@@ -3,8 +3,8 @@
 //! the schedule's afterwards; restrictions narrow the remaining frontier,
 //! and the coordinator and workers share one ceiling.
 
-use crate::support::choice_theories;
 use crate::support::formula_theories as theories;
+use crate::support::{assert_region_work_accounted, choice_theories};
 
 use std::collections::BTreeSet;
 use std::time::Duration;
@@ -292,31 +292,49 @@ fn a_timed_parallel_walk_reports_its_index_build_as_candidate_generation() {
 }
 
 #[test]
-fn four_workers_report_the_scalar_walks_reading_work() {
-    // The workers walk the tree the scalar walk walks, so the regions and
-    // leaves they report are its, and so is the reading work, counted once:
-    // a worker's narrowing work goes to the live counters as it goes and
-    // is not added again when the workers are joined.
+fn four_workers_account_for_their_actual_reading_work() {
+    // Regions and leaves agree across schedules. Worker-local scratch and
+    // recycled child storage need not perform the same work: each route's
+    // budget must equal its actual owner receipts, with no second publication
+    // of candidate work when workers join.
     for theory in [mixed(), choices(6)] {
         let mut scalar =
             StableModels::new(&theory, Limits::default(), Cancellation::default()).unwrap();
-        let models = family(&mut scalar).len();
+        let expected = family(&mut scalar);
         let mut parallel = engaged(&theory, 4, Limits::default());
-        assert_eq!(family(&mut parallel).len(), models);
+        let found = family(&mut parallel);
+        assert_eq!(found.len(), expected.len());
+        assert_eq!(
+            found.iter().collect::<BTreeSet<_>>(),
+            expected.iter().collect::<BTreeSet<_>>()
+        );
+        assert_eq!(found.iter().collect::<BTreeSet<_>>().len(), found.len());
+        assert_eq!(
+            expected.iter().collect::<BTreeSet<_>>().len(),
+            expected.len()
+        );
+        assert!(scalar.exhausted() && parallel.exhausted());
         assert_route(&parallel, Engagement::Immediate, 4);
-        let one = scalar.statistics().regions.unwrap();
-        let four = parallel.statistics().regions.unwrap();
-        assert_eq!(four.counts.regions, one.counts.regions);
-        assert_eq!(four.counts.leaves, one.counts.leaves);
-        assert_eq!(four.counts.work, one.counts.work);
+        let one = scalar.statistics();
+        let four = parallel.statistics();
+        assert_eq!(
+            four.regions.unwrap().counts.regions,
+            one.regions.unwrap().counts.regions
+        );
+        assert_eq!(
+            four.regions.unwrap().counts.leaves,
+            one.regions.unwrap().counts.leaves
+        );
+        assert_region_work_accounted(&one);
+        assert_region_work_accounted(&four);
     }
 }
 
 #[test]
-fn an_unengaged_walk_reports_the_scalar_walks_receipts() {
-    // The walk that never engages steps the scalar walk's order on the
-    // calling thread with one retained workspace, so every receipt is the
-    // scalar walk's, checking work and peak check storage included.
+fn an_unengaged_walk_accounts_for_its_actual_work() {
+    // The coordinator preserves the scalar model order and semantic receipts.
+    // Its retired child storage can save real copy work. Exact conservation
+    // keeps that candidate-owner difference separate from membership work.
     for (theory, certified) in [(mixed(), false), (choices(6), false), (choices(5), true)] {
         let mut scalar =
             StableModels::new(&theory, Limits::default(), Cancellation::default()).unwrap();
@@ -364,11 +382,20 @@ fn an_unengaged_walk_reports_the_scalar_walks_receipts() {
         );
         assert_eq!(coordinator.certified, one.certified);
         assert_eq!(coordinator.reduct, one.reduct);
+        let coordinator_counts = coordinator.regions.unwrap().counts;
+        let mut expected_counts = one.regions.unwrap().counts;
+        // Work is checked independently below; every other existing and
+        // future receipt dimension still has to agree exactly.
+        expected_counts.work = coordinator_counts.work;
+        assert_eq!(coordinator_counts, expected_counts);
+        assert_eq!(coordinator.search.decisions, one.search.decisions);
+        assert_region_work_accounted(&one);
+        assert_region_work_accounted(&coordinator);
         assert_eq!(
-            coordinator.regions.unwrap().counts,
-            one.regions.unwrap().counts
+            i128::from(coordinator.search.work) - i128::from(one.search.work),
+            i128::from(coordinator_counts.work) - i128::from(one.regions.unwrap().counts.work),
+            "only the candidate owners account for the schedules' work difference"
         );
-        assert_eq!(coordinator.search, one.search);
     }
 }
 

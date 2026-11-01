@@ -333,3 +333,206 @@ fn bounded_topups_request_only_representable_grants_at_the_counter_limit() {
     assert_eq!(account.requests, [4]);
     assert!(account.refunds.is_empty());
 }
+
+/// Controlled replacements exercise the ownership view returned to Meter,
+/// independently of the particular shared-window implementation.
+#[derive(Clone, Copy)]
+enum Replacement {
+    BelowMinimum,
+    BeyondCapacity,
+    Refused(Error),
+}
+
+struct ReplacingAccount {
+    account: Account,
+    replacement: Replacement,
+    request: Option<(u64, u64, u64)>,
+}
+
+impl ReplacingAccount {
+    fn new(replacement: Replacement) -> Self {
+        Self {
+            account: Account::new([Ok(5)]),
+            replacement,
+            request: None,
+        }
+    }
+}
+
+impl Quota for ReplacingAccount {
+    type Error = Error;
+
+    fn reserve(&mut self, wanted: u64) -> Result<u64, Error> {
+        self.account.reserve(wanted)
+    }
+
+    fn refund(&mut self, unused: u64) {
+        self.account.refund(unused);
+    }
+
+    fn replenish(
+        &mut self,
+        unused: &mut u64,
+        minimum: u64,
+        capacity: u64,
+    ) -> Result<(), Failure<Error>> {
+        assert!(self.request.replace((*unused, minimum, capacity)).is_none());
+        match self.replacement {
+            Replacement::BelowMinimum => {
+                *unused = minimum.checked_sub(1).expect("a positive minimum");
+                Ok(())
+            }
+            Replacement::BeyondCapacity => {
+                *unused = capacity.checked_add(1).expect("a performed prefix");
+                Ok(())
+            }
+            Replacement::Refused(error) => {
+                self.refund(*unused);
+                *unused = 0;
+                Err(Failure::Refused(error))
+            }
+        }
+    }
+}
+
+fn three_reads(account: &mut ReplacingAccount) -> Meter<'_, ReplacingAccount> {
+    let mut meter = Meter::reserved(account);
+    for _ in 0..3 {
+        meter.tick().unwrap();
+    }
+    assert_eq!((meter.charged(), meter.remaining()), (3, 2));
+    meter
+}
+
+#[test]
+fn an_insufficient_replacement_cannot_execute_the_bounded_operation() {
+    let mut account = ReplacingAccount::new(Replacement::BelowMinimum);
+    let mut meter = three_reads(&mut account);
+    let mut executed = false;
+    assert_eq!(
+        meter.bounded(3, || {
+            executed = true;
+            ((), 3)
+        }),
+        Err(Failure::Stopped(Stop::InvalidProgram))
+    );
+    assert!(!executed);
+    assert_eq!((meter.charged(), meter.remaining()), (3, 2));
+    meter.refund();
+    assert_eq!((meter.charged(), meter.remaining()), (3, 0));
+    assert_eq!(account.request, Some((2, 3, u64::MAX - 3)));
+    assert_eq!(account.account.requests, [256]);
+    assert_eq!(account.account.refunds, [2]);
+}
+
+#[test]
+fn an_unrepresentable_replacement_is_returned_without_execution() {
+    let mut account = ReplacingAccount::new(Replacement::BeyondCapacity);
+    let mut meter = three_reads(&mut account);
+    let mut executed = false;
+    assert_eq!(
+        meter.bounded(3, || {
+            executed = true;
+            ((), 3)
+        }),
+        Err(Failure::Stopped(Stop::InvalidProgram))
+    );
+    assert!(!executed);
+    assert_eq!((meter.charged(), meter.remaining()), (3, 0));
+    meter.refund();
+    assert_eq!((meter.charged(), meter.remaining()), (3, 0));
+    assert_eq!(account.request, Some((2, 3, u64::MAX - 3)));
+    assert_eq!(account.account.requests, [256]);
+    assert_eq!(account.account.refunds, [u64::MAX - 2, 0]);
+}
+
+#[test]
+fn a_refused_replacement_publishes_its_released_borrow() {
+    for error in [
+        Error::Source(17),
+        Error::Storage {
+            required: 4097,
+            limit: 4096,
+        },
+        Error::Control(Stop::Cancelled),
+    ] {
+        let mut account = ReplacingAccount::new(Replacement::Refused(error));
+        let mut meter = three_reads(&mut account);
+        let mut executed = false;
+        assert_eq!(
+            meter.bounded(3, || {
+                executed = true;
+                ((), 3)
+            }),
+            Err(Failure::Refused(error))
+        );
+        assert!(!executed);
+        assert_eq!((meter.charged(), meter.remaining()), (3, 0));
+        meter.refund();
+        assert_eq!((meter.charged(), meter.remaining()), (3, 0));
+        assert_eq!(account.request, Some((2, 3, u64::MAX - 3)));
+        assert_eq!(account.account.requests, [256]);
+        assert_eq!(account.account.refunds, [2, 0]);
+    }
+}
+
+#[test]
+fn a_zero_bound_does_not_request_replacement() {
+    let mut account = ReplacingAccount::new(Replacement::Refused(Error::Source(8)));
+    let mut meter = Meter::reserved(&mut account);
+    let mut executions = 0;
+    assert_eq!(
+        meter.bounded(0, || {
+            executions += 1;
+            (23, 0)
+        }),
+        Ok(23)
+    );
+    assert_eq!(executions, 1);
+    assert_eq!((meter.charged(), meter.remaining()), (0, 0));
+    meter.refund();
+    assert!(account.request.is_none());
+    assert!(account.account.requests.is_empty());
+    assert_eq!(account.account.refunds, [0]);
+}
+
+#[test]
+fn a_sufficient_borrow_does_not_request_replacement() {
+    let mut account = ReplacingAccount::new(Replacement::Refused(Error::Source(8)));
+    let mut meter = three_reads(&mut account);
+    assert_eq!(meter.bounded(2, || (19, 1)), Ok(19));
+    assert_eq!((meter.charged(), meter.remaining()), (4, 1));
+    meter.refund();
+    assert!(account.request.is_none());
+    assert_eq!(account.account.requests, [256]);
+    assert_eq!(account.account.refunds, [1]);
+}
+
+#[test]
+fn bounded_operations_observe_control_only_when_they_need_permits() {
+    let cancellation = Cancellation::default();
+    let mut account = PollingAccount {
+        cancellation: &cancellation,
+        reservations: 0,
+        refunded: 0,
+    };
+    let mut meter = Meter::reserved(&mut account);
+    meter.tick().unwrap();
+    cancellation.cancel();
+    assert_eq!(meter.bounded(0, || (11, 0)), Ok(11));
+    assert_eq!(meter.bounded(255, || (13, 0)), Ok(13));
+    let mut executed = false;
+    assert_eq!(
+        meter.bounded(256, || {
+            executed = true;
+            ((), 256)
+        }),
+        Err(Failure::Refused(Stop::Cancelled))
+    );
+    assert!(!executed);
+    assert_eq!((meter.charged(), meter.remaining()), (1, 255));
+    meter.refund();
+    assert_eq!((meter.charged(), meter.remaining()), (1, 0));
+    assert_eq!(account.reservations, 2);
+    assert_eq!(account.refunded, 255);
+}

@@ -572,7 +572,8 @@ cut applied. Every proposed interpretation still needs membership checking
 against the original theory and its frozen reduct.
 
 `statistics.search.parity` and `statistics.search.cardinality` describe checked
-arithmetic preparation for that same original candidate owner. They record
+arithmetic preparation and candidate-region inspection for that same original
+owner. Their preparation fields record
 source rows, preparation status, root refutation and retained storage; parity
 also records rank, row additions and root units. Cardinality distinguishes
 candidate family attempts from checked families. An unprepared stage is distinct
@@ -586,8 +587,18 @@ of work already included in candidate reading work and search work. A declined
 or failed preparation retains its executed prefix; its published retained bytes
 are zero. `preparation_bytes` is the maximum shared named storage request through
 that stage, including a refused request, not process memory. Shared peaks are
-not additive. These records do not claim that per-region arithmetic subjects or
-device arithmetic preparation ran.
+not additive.
+
+Each object's `region_passes` counts completed runtime inspections, including
+unchanged and refuting inspections. Repeated inspections of one region count
+separately. `refuted` counts runtime semantic refutations, excluding preparation
+refutations and typed failures. Parity's `forced` counts fresh held or cut
+decisions applied by runtime inspections; preparation's root-unit count is
+reported separately. A failed inspection keeps
+its performed work and applied decisions, but adds no completed pass or
+refutation. Copying arithmetic knowledge contributes ordinary candidate work,
+not an inspection. These fields describe candidate-generation activity; they
+do not imply that arithmetic ran on the device or in frozen-reduct checking.
 
 `CompletionAccounting` reports requested workers and the greatest concurrency
 selected at preflight. This selection alone does not mean a candidate entered

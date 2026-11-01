@@ -150,3 +150,93 @@ fn saturated_limits_leave_nothing_to_a_later_pass() {
     };
     assert_eq!(limits.remaining_after(&spent).max_candidates, 0);
 }
+
+#[test]
+fn following_passes_preserve_each_runtime_arithmetic_receipt() {
+    use crate::{CardinalityStatistics, ParityStatistics, RegionSearchStatistics};
+
+    let earlier = RegionSearchStatistics {
+        counts: crate::RegionCounts {
+            arithmetic: crate::ferraris::regions::arithmetic_counts::ArithmeticCounts {
+                parity_passes: 2,
+                parity_forced: 3,
+                parity_refuted: 1,
+                cardinality_passes: 5,
+                cardinality_refuted: 2,
+            },
+            ..crate::RegionCounts::default()
+        },
+        parity: ParityStatistics {
+            region_passes: 2,
+            forced: 3,
+            refuted: 1,
+            ..ParityStatistics::default()
+        },
+        cardinality: CardinalityStatistics {
+            region_passes: 5,
+            refuted: 2,
+            ..CardinalityStatistics::default()
+        },
+        ..RegionSearchStatistics::default()
+    };
+    let later = RegionSearchStatistics {
+        counts: crate::RegionCounts {
+            arithmetic: crate::ferraris::regions::arithmetic_counts::ArithmeticCounts {
+                parity_passes: 7,
+                parity_forced: 11,
+                parity_refuted: 3,
+                cardinality_passes: 13,
+                cardinality_refuted: 5,
+            },
+            ..crate::RegionCounts::default()
+        },
+        parity: ParityStatistics {
+            region_passes: 7,
+            forced: 11,
+            refuted: 3,
+            ..ParityStatistics::default()
+        },
+        cardinality: CardinalityStatistics {
+            region_passes: 13,
+            refuted: 5,
+            ..CardinalityStatistics::default()
+        },
+        ..RegionSearchStatistics::default()
+    };
+    let both = super::regions(&earlier, later);
+    assert_eq!(both.parity.region_passes, 9);
+    assert_eq!(both.parity.forced, 14);
+    assert_eq!(both.parity.refuted, 4);
+    assert_eq!(both.cardinality.region_passes, 18);
+    assert_eq!(both.cardinality.refuted, 7);
+    assert_eq!(both.parity.preparation_work, 0);
+    assert_eq!(both.cardinality.preparation_work, 0);
+}
+
+#[test]
+fn multipass_projection_agrees_with_the_combined_private_receipt() {
+    use crate::ferraris::regions::arithmetic_counts::ArithmeticCounts;
+    let earlier = crate::RegionSearchStatistics {
+        counts: crate::RegionCounts {
+            arithmetic: ArithmeticCounts {
+                parity_passes: 2,
+                parity_forced: 3,
+                parity_refuted: 1,
+                cardinality_passes: 5,
+                cardinality_refuted: 2,
+            },
+            ..crate::RegionCounts::default()
+        },
+        ..crate::RegionSearchStatistics::default()
+    }
+    .with_runtime_arithmetic();
+    let both = super::regions(&earlier, earlier);
+    let projected = both.with_runtime_arithmetic();
+    assert_eq!(projected.parity, both.parity);
+    assert_eq!(projected.cardinality, both.cardinality);
+    assert_eq!(both.counts.arithmetic.parity_passes, 4);
+    assert_eq!(both.counts.arithmetic.parity_forced, 6);
+    assert_eq!(both.counts.arithmetic.parity_refuted, 2);
+    assert_eq!(both.counts.arithmetic.cardinality_passes, 10);
+    assert_eq!(both.counts.arithmetic.cardinality_refuted, 4);
+}

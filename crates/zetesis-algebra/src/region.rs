@@ -422,5 +422,32 @@ pub enum Narrowing {
     },
 }
 
+/// Progress from one application of a region subject, not joint agreement.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SubjectStep {
+    /// The applicable inspection completed without a new region decision.
+    Unchanged,
+    /// At least one sound decision was applied; further closure may be needed.
+    Changed,
+    /// The region contains no member of the subject's class.
+    Refuted,
+}
+
+impl SubjectStep {
+    /// Convert a subject whose complete local closure has been established.
+    ///
+    /// The caller must establish that closure separately: `Changed` alone is
+    /// not evidence of a fixed point. Partial late passes must not use this
+    /// conversion; their joint driver first re-establishes eager agreement.
+    #[must_use]
+    pub fn narrowing(self) -> Narrowing {
+        match self {
+            Self::Unchanged => Narrowing::Fixed { changed: false },
+            Self::Changed => Narrowing::Fixed { changed: true },
+            Self::Refuted => Narrowing::Refuted,
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests;

@@ -95,6 +95,7 @@
 
 use std::collections::VecDeque;
 use std::num::NonZeroUsize;
+use std::ops::ControlFlow;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Mutex, MutexGuard, PoisonError};
 use std::time::Duration;
@@ -309,6 +310,7 @@ impl RegionProposals {
             frontier_order: Some(self.order),
             ..self.statistics
         }
+        .with_runtime_arithmetic()
     }
 
     /// Every producer shares deque 0, the deque that holds the root: the order
@@ -703,19 +705,19 @@ impl<'filter> SlateFill<'_, 'filter> {
     }
 
     /// Publish the older child and retain the newer in the same hand. The
-    /// lineage copy precedes locking; the parent is consumed only after deque
-    /// storage is admitted. Success empties the occupied caller slot and
-    /// returns held; refusal restores the exact parent before returning its
-    /// original typed error.
+    /// metered lineage copy has completed before entry; the parent is consumed
+    /// only after deque storage is admitted. Success empties the occupied
+    /// caller slot and returns held; refusal restores the exact parent before
+    /// returning its original typed error.
     fn hand_over(
         &self,
         index: usize,
         pending: &mut Option<Entry>,
         atom: usize,
+        cut_knowledge: CandidateKnowledge,
         reserve: impl FnOnce(&mut VecDeque<Entry>, usize) -> Result<(), Incomplete>,
     ) -> Result<Entry, Incomplete> {
         let parent = pending.take().expect("publication has a pending parent");
-        let cut_knowledge = parent.state.clone();
         match self
             .frontier
             .publish_split_with(self.home(index), parent, reserve, |parent| {
@@ -728,6 +730,25 @@ impl<'filter> SlateFill<'_, 'filter> {
                 Err(error)
             }
         }
+    }
+
+    /// Account one child copy before publishing it. Both refusal boundaries
+    /// leave the parent in its caller-owned slot until the caller records stop.
+    fn split(
+        &self,
+        index: usize,
+        pending: &mut Option<Entry>,
+        atom: usize,
+        counts: &mut RegionCounts,
+        budget: &mut Budget<'_, WorkLease<'_>>,
+    ) -> Result<Entry, Incomplete> {
+        let copied = regions::copy_knowledge(
+            &pending.as_ref().expect("split has a pending parent").state,
+            None,
+            budget,
+        );
+        counts.add(copied.counts)?;
+        self.hand_over(index, pending, atom, copied.result?, reserve_regions)
     }
 
     /// Stop the slate on `error`, then return `entry`, a region producer
@@ -767,15 +788,15 @@ impl<'filter> SlateFill<'_, 'filter> {
     /// leaf could not be emitted; so a deferred leaf is not stepped again in
     /// this slate. Nor when control requests a stop, which is recorded. A
     /// refused region comes back for the producer to return to its deque.
-    fn ready(&self, entry: Entry) -> Result<Entry, Entry> {
+    fn ready(&self, entry: Entry) -> ControlFlow<Entry, Entry> {
         if self.frontier.termination.is_closed() || self.spoken_for() {
-            return Err(entry);
+            return ControlFlow::Break(entry);
         }
         if let Err(error) = self.cancellation.poll() {
             self.stop_unless_full(error.into());
-            return Err(entry);
+            return ControlFlow::Break(entry);
         }
-        Ok(entry)
+        ControlFlow::Continue(entry)
     }
 
     /// After a refutation or an emission the producer keeps its hand when it
@@ -844,8 +865,8 @@ impl<'filter> SlateFill<'_, 'filter> {
                 },
             };
             let mut entry = match self.ready(taken) {
-                Ok(entry) => entry,
-                Err(entry) => {
+                ControlFlow::Continue(entry) => entry,
+                ControlFlow::Break(entry) => {
                     hand = Some(entry);
                     break;
                 }
@@ -873,8 +894,28 @@ impl<'filter> SlateFill<'_, 'filter> {
                     hand = self.after_resolution(index, &lease);
                 }
                 Ok(Step::Split(atom)) => {
+                    // Continue the same lease after the step receipt, before
+                    // locking or consuming the unresolved parent.
                     let mut pending = Some(entry);
-                    match self.hand_over(index, &mut pending, atom, reserve_regions) {
+                    let published = {
+                        let mut budget = Budget {
+                            quota: lease,
+                            limits: self.limits,
+                            cancellation: self.cancellation,
+                            statistics: search,
+                        };
+                        let published = self.split(
+                            index,
+                            &mut pending,
+                            atom,
+                            &mut workspace.counts,
+                            &mut budget,
+                        );
+                        search = budget.statistics;
+                        lease = budget.quota;
+                        published
+                    };
+                    match published {
                         Ok(held) => hand = Some(held),
                         Err(error) => {
                             // The whole narrowed parent remains owned until
@@ -922,7 +963,7 @@ impl<'filter> SlateFill<'_, 'filter> {
             timings: &mut workspace.timings,
         });
         let narrowing = regions::narrow(
-            (self.parts.subject(self.theory)?, self.narrower),
+            self.parts.reading(self.theory, self.narrower)?,
             self.restrictions,
             entry,
             &mut workspace.scratch,

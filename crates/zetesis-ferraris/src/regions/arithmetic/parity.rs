@@ -4,6 +4,9 @@
 //! describe each row's initial check; trusted addition establishes subsequent
 //! consequences of those checked premises. No region or owner is changed.
 
+mod runtime;
+pub use runtime::ParityKnowledge;
+
 use zetesis_algebra::Quota;
 
 use std::convert::Infallible;

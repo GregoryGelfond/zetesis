@@ -68,12 +68,7 @@ impl<Q: Quota> Budget<'_, Q> {
     /// them one per read: control is polled once for the batch, and the
     /// granted permits count as spent until [`Self::refund`] returns the rest.
     pub(crate) fn reserve_up_to(&mut self, wanted: u64) -> Result<u64, Incomplete> {
-        self.cancellation.poll()?;
-        let granted =
-            self.quota
-                .reserve_up_to(self.statistics.work, self.limits.max_work, wanted)?;
-        self.statistics.work += granted;
-        Ok(granted)
+        zetesis_algebra::Quota::reserve(&mut self.incremental(), wanted)
     }
     /// Run a finite accounted kernel once under its full reservation, rather
     /// than treating one partial lease grant as the kernel's complete limit.
@@ -103,9 +98,27 @@ impl<Q: Quota> Budget<'_, Q> {
 
     /// Return permits granted by [`Self::reserve_up_to`] and not spent.
     pub(crate) fn refund(&mut self, unspent: u64) {
-        self.quota.refund(unspent);
-        self.statistics.work -= unspent;
+        zetesis_algebra::Quota::refund(&mut self.incremental(), unspent);
     }
+    /// Supply an atomic minimum through the quota's ownership-aware boundary.
+    pub(crate) fn replenish(
+        &mut self,
+        unused: &mut u64,
+        minimum: u64,
+        capacity: u64,
+    ) -> Result<(), Failure<Incomplete>> {
+        Q::replenish(self.incremental(), unused, minimum, capacity)
+    }
+
+    fn incremental(&mut self) -> quota::Incremental<'_, Q> {
+        quota::Incremental {
+            quota: &self.quota,
+            work: &mut self.statistics.work,
+            ceiling: self.limits.max_work,
+            cancellation: self.cancellation,
+        }
+    }
+
     /// The work left before the ceiling, for an operation that charges its
     /// own work and reports it afterwards through [`Self::charge`].
     pub(crate) fn remaining_work(&self) -> u64 {

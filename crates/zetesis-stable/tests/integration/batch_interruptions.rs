@@ -1,5 +1,6 @@
 //! Inclusive work and terminal contracts of the original-candidate batch API.
 
+use crate::support::assert_region_work_accounted;
 use crate::support::choice_theories::three_choices_falsum_first;
 use std::collections::BTreeSet;
 use std::convert::Infallible;
@@ -197,6 +198,7 @@ fn every_first_proposal_work_cutoff_returns_only_proved_models_and_a_terminal_st
         assert_eq!(search.batch_statistics().pending, 0);
         closed(&mut search);
     }
+    let mut saw_unused_allowance = false;
     for allowance in walk..=proposed {
         let mut search = with_work(&theory, allowance);
         match search.next_batch(batch(1), certified) {
@@ -217,8 +219,24 @@ fn every_first_proposal_work_cutoff_returns_only_proved_models_and_a_terminal_st
             }
             other => panic!("unexpected work-cutoff result at {allowance}: {other:?}"),
         }
-        assert_eq!(search.statistics().search.work, allowance);
+        let statistics = search.statistics();
+        assert_region_work_accounted(&statistics);
+        assert_eq!(statistics.countermodel_queries, 0);
+        assert_eq!(
+            statistics.reduct,
+            zetesis_stable::ReductStatistics::default()
+        );
+        assert!(statistics.certified.is_none());
+        assert!(statistics.search.work <= allowance);
+        saw_unused_allowance |= statistics.search.work < allowance;
         assert_eq!(search.batch_statistics().pending, 0);
         closed(&mut search);
     }
+    // The separate Meter/lease regression observes the bounded closure not
+    // being called, exact performed work, and exact refund. Here the real
+    // proposal path must also reach at least one whole-charge refusal.
+    assert!(
+        saw_unused_allowance,
+        "the fixture reaches indivisible admission"
+    );
 }

@@ -19,8 +19,14 @@ mod source;
 mod storage;
 mod uniform;
 mod cardinality;
+mod cardinality_runtime;
 mod work;
+pub(super) mod runtime;
+mod snapshot;
 
+pub use cardinality_runtime::CardinalityKnowledge;
+pub use parity::ParityKnowledge;
+pub use runtime::ArithmeticAttempt;
 pub use work::PreparationWork;
 
 #[cfg(test)]
@@ -82,7 +88,7 @@ impl PreparationStatus {
     }
 }
 
-/// Preparation observations for affine consequences of the original answers.
+/// Preparation and runtime observations for affine consequences of original answers.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct ParityStatistics {
     /// Publication or refusal status.
@@ -121,9 +127,19 @@ pub struct ParityStatistics {
     pub root_refuted: bool,
     /// Echelon rows that force an original atom at the root.
     pub units: usize,
+    /// Completed runtime batches, including unchanged batches and absorbing
+    /// refutations. Repeated batches on one region count separately; failed
+    /// attempts contribute work and applied decisions but no completed batch.
+    pub region_passes: u64,
+    /// Fresh held or cut decisions applied by runtime parity, including a
+    /// prefix retained in the receipt of a failed attempt. Excludes root units.
+    pub forced: u64,
+    /// Runtime batches that returned a checked semantic refutation.
+    /// Excludes root refutation and every typed failure.
+    pub refuted: u64,
 }
 
-/// Preparation observations for independently checked count partitions.
+/// Preparation and runtime observations for independently checked count partitions.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct CardinalityStatistics {
     /// Publication or refusal status.
@@ -158,6 +174,13 @@ pub struct CardinalityStatistics {
     pub retained_bytes: u128,
     /// A checked lower count exceeded its matching upper count at the root.
     pub root_refuted: bool,
+    /// Completed runtime batches, including unchanged batches and absorbing
+    /// refutations. Repeated batches on one region count separately; failed
+    /// attempts contribute work but no completed batch.
+    pub region_passes: u64,
+    /// Runtime batches that returned a checked semantic refutation.
+    /// Excludes root refutation and every typed failure.
+    pub refuted: u64,
 }
 
 /// A mandatory failure: never an optional decline or a semantic refutation.
@@ -548,6 +571,9 @@ impl ParityStatistics {
                 + prepared.retained_bytes(),
             root_refuted: prepared.root_refuted,
             units: prepared.units.len(),
+            region_passes: 0,
+            forced: 0,
+            refuted: 0,
         }
     }
 }

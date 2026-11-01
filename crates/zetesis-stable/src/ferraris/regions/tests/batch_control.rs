@@ -6,7 +6,7 @@ use std::cell::Cell;
 use zetesis_algebra::region::Region;
 use zetesis_ferraris::{NARROWING_BATCH, Narrower, Node, Theory};
 
-use super::super::{CandidateKnowledge, Conditions, RegionCounts, narrow};
+use super::super::{CandidateKnowledge, CandidateReading, Conditions, RegionCounts, narrow};
 
 use crate::budget::{Budget, LocalQuota, Quota, SharedBudget};
 use crate::{Cancellation, Incomplete, SearchLimits, SearchStatistics};
@@ -95,10 +95,11 @@ fn cancelled_narrowing<Q: Quota>(quota: Q, cancellation: &Cancellation) -> (Inco
     };
     let mut counts = RegionCounts::default();
     let stop = narrow(
-        (
-            zetesis_ferraris::OriginalSubject::new(&theory, None),
-            &narrower,
-        ),
+        CandidateReading {
+            original: zetesis_ferraris::OriginalSubject::new(&theory, None),
+            narrower: &narrower,
+            arithmetic: None,
+        },
         &Conditions::<(Theory, Narrower)>::default(),
         &mut zetesis_algebra::region::Entry::new(
             Region::all_open(theory.atom_count()),

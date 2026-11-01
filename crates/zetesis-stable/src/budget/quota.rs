@@ -1,8 +1,8 @@
 //! Statically selected quota ownership for local and joined parallel queries.
 
 use super::shared_budget::{WorkLease, WorkReservation};
-use crate::Incomplete;
-use zetesis_algebra::{Meter, MeterWorkError};
+use crate::{Cancellation, Incomplete};
+use zetesis_algebra::{Failure, Meter, MeterWorkError};
 
 /// Reservations precede the operation's local counter increment. This policy
 /// changes quota ownership only; polling and charged operation order stay in Budget.
@@ -33,6 +33,44 @@ pub(crate) trait Quota {
     ) -> Result<Self::Reservation<'_>, Incomplete>;
     /// Take back permits granted by [`Self::reserve_up_to`] and not spent.
     fn refund(&self, unspent: u64);
+
+    /// Replenish a borrowed account without assuming that an atomic operation
+    /// has consumed all earlier grants. Local accounts use the common default;
+    /// shared accounts return unused permits before replacing their owner.
+    fn replenish(
+        mut account: Incremental<'_, Self>,
+        unused: &mut u64,
+        minimum: u64,
+        capacity: u64,
+    ) -> Result<(), Failure<Incomplete>> {
+        zetesis_algebra::Quota::replenish(&mut account, unused, minimum, capacity)
+    }
+}
+
+/// The budget's existing incremental admission and refund boundary, borrowed
+/// without another counter. Both ordinary grants and buffered replenishment
+/// use these same polling and publication operations.
+pub(crate) struct Incremental<'a, Q: Quota + ?Sized> {
+    pub(super) quota: &'a Q,
+    pub(super) work: &'a mut u64,
+    pub(super) ceiling: u64,
+    pub(super) cancellation: &'a Cancellation,
+}
+
+impl<Q: Quota + ?Sized> zetesis_algebra::Quota for Incremental<'_, Q> {
+    type Error = Incomplete;
+
+    fn reserve(&mut self, wanted: u64) -> Result<u64, Incomplete> {
+        self.cancellation.poll()?;
+        let granted = self.quota.reserve_up_to(*self.work, self.ceiling, wanted)?;
+        *self.work += granted;
+        Ok(granted)
+    }
+
+    fn refund(&mut self, unused: u64) {
+        self.quota.refund(unused);
+        *self.work -= unused;
+    }
 }
 
 /// Ordinary queries have no shared pointer or per-operation execution-mode test.
@@ -137,6 +175,21 @@ impl Quota for WorkLease<'_> {
 
     fn refund(&self, unspent: u64) {
         self.give_back(unspent);
+    }
+
+    fn replenish(
+        account: Incremental<'_, Self>,
+        unused: &mut u64,
+        minimum: u64,
+        capacity: u64,
+    ) -> Result<(), Failure<Incomplete>> {
+        account.quota.replenish(
+            account.work,
+            account.cancellation,
+            unused,
+            minimum,
+            capacity,
+        )
     }
 }
 

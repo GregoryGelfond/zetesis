@@ -12,10 +12,12 @@ use std::sync::{Condvar, Mutex, MutexGuard};
 use std::time::Duration;
 
 use crate::{Cancellation, Incomplete, SearchLimits, SearchStatistics};
-use zetesis_algebra::{Meter, PermitLease};
+use zetesis_algebra::{Failure, Meter, POLL_INTERVAL, PermitLease};
 
-/// A scheduling policy, not a measured crossover: an incremental grant holds
-/// at most this many permits. A region walker keeps its lease across its
+/// A scheduling policy, not a measured crossover: an ordinary incremental
+/// grant prefers this many permits. A larger atomic minimum can require a
+/// larger window; no window changes the performed-work charge. A region walker
+/// keeps its lease across its
 /// consecutive regions, which commonly use a few hundred permits each, so one
 /// grant serves many regions and the shared ledger lock is taken about twice
 /// per grant rather than twice per region. Accounted kernels reserve their
@@ -44,16 +46,24 @@ struct Work {
 impl Work {
     /// None means another lease can still return permits, not exhaustion.
     fn grant(&mut self) -> Result<Option<u64>, Incomplete> {
-        if self.available != 0 {
-            let grant = self.available.min(WORK_QUANTUM);
-            self.available -= grant;
-            self.outstanding += grant;
-            Ok(Some(grant))
-        } else if self.outstanding == 0 {
-            Err(Incomplete::WorkLimit)
-        } else {
-            Ok(None)
+        self.grant_at_least(1)
+    }
+
+    /// A buffered atomic operation needs its minimum before it can run. Peers
+    /// can satisfy a shortfall only while they retain outstanding grants. Keep
+    /// the usual preferred window, enlarging it only for a larger atomic bound.
+    fn grant_at_least(&mut self, minimum: u64) -> Result<Option<u64>, Incomplete> {
+        if self.available < minimum {
+            return if self.outstanding == 0 {
+                Err(Incomplete::WorkLimit)
+            } else {
+                Ok(None)
+            };
         }
+        let grant = self.available.min(WORK_QUANTUM.max(minimum));
+        self.available -= grant;
+        self.outstanding += grant;
+        Ok(Some(grant))
     }
 
     /// An accounted kernel needs its allowance before entering. Wait for
@@ -204,7 +214,54 @@ impl WorkLease<'_> {
         self.permits.give_back(unspent);
     }
 
+    /// Replenish a common meter's unused borrow. Transfers within the current
+    /// grant keep the existing poll cadence and avoid the shared lock. Before
+    /// renewal, every unused borrowed permit returns to its original grant.
+    pub(crate) fn replenish(
+        &self,
+        work: &mut u64,
+        cancellation: &Cancellation,
+        unused: &mut u64,
+        minimum: u64,
+        capacity: u64,
+    ) -> Result<(), Failure<Incomplete>> {
+        while *unused < minimum {
+            cancellation
+                .poll()
+                .map_err(Incomplete::from)
+                .map_err(Failure::Refused)?;
+            let wanted = POLL_INTERVAL.min(capacity - *unused);
+            let granted = if let Ok(granted) = self.permits.take_up_to(wanted, || Err(())) {
+                granted
+            } else {
+                self.give_back(*unused);
+                *work -= *unused;
+                *unused = 0;
+                self.settle();
+                self.refill_with(|ledger| ledger.grant_at_least(minimum))
+                    .map_err(Failure::Refused)?;
+                // Renewal installed a positive grant. Take its first
+                // prefix now, without another control observation.
+                self.permits
+                    .take_up_to(POLL_INTERVAL.min(capacity), || {
+                        Err(Incomplete::InvalidWitness)
+                    })
+                    .map_err(Failure::Refused)?
+            };
+            *work += granted;
+            *unused += granted;
+        }
+        Ok(())
+    }
+
     fn refill(&self) -> Result<(), Incomplete> {
+        self.refill_with(Work::grant)
+    }
+
+    fn refill_with(
+        &self,
+        grant: impl Fn(&mut Work) -> Result<Option<u64>, Incomplete>,
+    ) -> Result<(), Incomplete> {
         loop {
             if let Err(error) = self.cancellation.poll() {
                 // A refused renewal still commits the consumed grant before
@@ -218,7 +275,7 @@ impl WorkLease<'_> {
             let renewed = self.permits.renew(|prior| {
                 work.outstanding -= prior.granted();
                 work.spent += prior.used();
-                work.grant()
+                grant(&mut work)
             });
             match renewed {
                 Ok(true) => return Ok(()),

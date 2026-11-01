@@ -2145,6 +2145,24 @@ Whole-request admission retains refundable partial top-ups; incremental takes
 retain consumed prefixes when a later refill fails. Their zero-request and
 polling rules remain distinct and are checked at the concrete Rust boundaries.
 
+`Quota::replenish` makes a bounded operation's unused borrow explicit when it
+needs more permits. Its default preserves cumulative partial grants. A shared
+lease instead returns that borrow to its original window before settling and
+waiting for a replacement that covers the next atomic minimum. The meter writes
+back the returned ownership on success and refusal alike; its performed-work
+count does not change during replenishment. `WorkPermits.refund_then_settle`
+establishes conservation and the exact committed prefix under the owned-borrow
+premise. `settled_replacement` shows that a new grant adds no performed work;
+`unused_window_does_not_commit` covers a wholly unperformed borrow.
+
+The new grant is requested only after the old window is settled, so a waiting
+worker retains no unused permits needed by a peer. If the available allowance
+cannot cover the atomic minimum and no grants remain outstanding, the operation
+is refused without running. Some allowance can remain unused. These laws do not
+prove the minimum-aware admission, notification, polling or unwind behavior;
+the concrete adapter must preserve those contracts and report no completion for
+a refused operation.
+
 Whole-kernel attempts use `Meter::under_reservation` with an already admitted
 `Reservation`. The common operation validates that returned work does not exceed
 the grant before committing it. This supplies the consumed-within-grant premise
@@ -2161,9 +2179,10 @@ regions and settles it before stealing or waiting for another region and
 before sending a model; a reservation settles it first, and exit or unwinding
 drops it. The ledger is therefore locked about twice per grant rather than
 twice per region, while no unused permit is held where the worker could
-block. Holding a grant across regions shifts timing, not outcomes: exhaustion
-is still reported only when no permit is available or outstanding, so the
-total work bound is unchanged, but near a small allowance a peer can wait
+block. At the single-read boundary, exhaustion is reported only when no permit
+is available or outstanding. Atomic operations additionally need their complete
+minimum as described above. The total work bound is unchanged, but near a small
+allowance a peer can wait
 until a busy worker's local run ends before permits return, and mid-run
 statistics trail committed work by up to one grant per worker. Its shared
 allowance includes
@@ -2462,6 +2481,8 @@ exhaustion of optimal ties retain distinct contracts.
 | Rust declaration (kind) | Lean declaration (kind) | Relation and remaining obligations |
 | --- | --- | --- |
 | `zetesis_algebra::cancellation::Reservation` (trait) | `Zetesis.WorkPermits.Window` (structure) | An admitted reservation exposes a finite allowance and commits actual use; interpreting it as a valid grant window requires used no greater than granted and the concrete exactly-once settlement/refund ownership contract. |
+| `zetesis_algebra::cancellation::Quota::replenish` (method) | `Zetesis.WorkPermits.refund_then_settle` (theorem) | The shared lease returns an owned unused borrow before settling its grant; the default quota retains cumulative partial grants. The scalar law preserves allowance and the exact performed prefix under its ownership premises. Native widths, returned ownership on failure, polling and unwinding remain concrete obligations. |
+| `zetesis_algebra::cancellation::Quota::replenish` (method) | `Zetesis.WorkPermits.settled_replacement` (theorem) | Installing an admitted replacement adds no performed work. Atomic minimum admission, waiting and notification remain concrete obligations; the scalar law does not prove scheduler progress. |
 | `zetesis_algebra::cancellation::Meter::under_reservation` (method) | `Zetesis.WorkPermits.settlement_partitions_grant` (theorem) | A returned valid work receipt is checked against the admitted allowance before commit, including when the returned value carries an inner failure. Valid use partitions granted work into used and unused. An outer typed error, overrun refusal, drop/refund and panic behavior remain concrete owner obligations. |
 | `zetesis_algebra::cancellation::permits::PermitLease` (struct) | `Zetesis.WorkPermits.Window` (structure) | The lease stores a granted/remaining window whose used amount is their difference; native-width and callback invariants must realize the valid natural-number window without creating a second charge owner. |
 | `zetesis_algebra::cancellation::permits::PermitLease::take_up_to` (method) | `Zetesis.WorkPermits.Window.take` (def) | Within a valid installed grant, the operation consumes min(wanted, remaining). Refill preserves its native error boundary and occurs on an exhausted lease even for wanted = 0; the pure Window.take law specifies neither refill nor control observations. |
@@ -3648,11 +3669,69 @@ partition of the same atoms before comparing its lower and upper totals
 
 The original-candidate routes consume a checked root refutation or a root
 seeded by parity units; the frozen-reduct search receives neither these rows nor
-that root state. These Lean laws justify the semantic steps, not the Rust
-implementation. Source ownership, complete producer inventories, packing,
-elimination, family discovery and checking, publication, work and memory
-accounting, and cancellation still require implementation correspondence.
-Per-region arithmetic propagation and flow witnesses remain separate work.
+that root state. The region-inspection library extends these checked systems
+without recognizing new source rows during search.
+
+`zetesis_ferraris::ParitySystem::inspect_reserved` reads touched basis rows
+against one input region, records that input in `ParityKnowledge`, then applies
+collected consequences in basis order. The snapshot precedes application, so a
+new decision remains a trigger for the next inspection. `AlgebraicRows.parity_forces`,
+`equation_excludes_given` and `excludes_region` supply the value-level argument;
+`LearnedRegions.consequence_row_forces` carries a forced row into the region.
+The shared `zetesis_algebra::region::SubjectStep::Changed` denotes progress,
+not local or joint closure.
+
+`zetesis_ferraris::CardinalitySystem::inspect_reserved` retains a complete input
+snapshot and two sums per checked family pair in `CardinalityKnowledge`. It
+reconstructs each affected occurrence's old and current bounds, replacing its
+contribution before testing for exclusion. The general laws separate three
+obligations:
+
+| Lean laws | Mathematical premise and conclusion | Rust counterpart |
+| --- | --- | --- |
+| `Zetesis.Algebra.guardedLower_sound`, `guardedUpper_sound` | The original guarded bound holds for the class. A decided guard permits its bound to strengthen the held lower count or cap the possible upper count. | `arithmetic::cardinality_runtime::values::effective` |
+| `Zetesis.Algebra.guardedLower_mono`, `guardedUpper_antitone` | Under `Inside current prior`, the effective natural lower bound grows and the effective upper bound shrinks. | Reconstructing bounds from the retained and current region masks |
+| `Zetesis.AlgebraicRows.counting_replace_occurrence` | Subtracting the selected old summand and adding its replacement gives the exact natural fold; other occurrences remain unchanged. | `arithmetic::cardinality_runtime::values::replace` |
+| `Zetesis.AlgebraicRows.partial_double_count_excludes_region` | Both complete families cover the same terms, old bounds hold in an enclosing region and new bounds hold in the current region. Any mixture whose lower fold exceeds its upper fold excludes the current region. | The first contradictory pair during occurrence refresh |
+
+The partial-refresh exclusion law needs validity of both choices of bound,
+not numerical monotonicity. Its complete-family premise is not permission to
+omit unrefreshed summands. The runtime count uses finite machine values; the
+natural-number laws do not prove its subtraction, addition or refusal paths.
+
+Both kernels use the existing `Words`, `Meter` and `NarrowingScratch` primitives.
+Their `ArithmeticAttempt` retains performed work on success or failure. Knowledge
+reuse requires the same prepared system and an ancestor input; width and descent
+checks do not authenticate system identity. The `copy_reserved` operations
+preserve the source and make a failed destination unavailable. Ordinary `Clone`
+does not provide metered copying.
+
+These are candidate-only kernels. The general laws quantify over a consequence
+class, but that does not authorize applying original-answer-set rows to
+`Countermodels`. The scalar walk, native workers, coordinator and slate producers
+compose these inspections through the common Subject driver. Parity, cardinality
+and streamed constraints follow the eager subjects; a changed late subject
+restarts eager propagation. The source adapter retains its own first-call marker,
+so arithmetic progress cannot make the source's first call a continuation.
+
+`CandidateKnowledge` keeps the arithmetic snapshots separate from restriction
+and objective generations. The charged copy operation preserves parent state
+and makes a refused child unavailable. Each returned attempt publishes its work
+and applied decisions before its outcome is handled. Completed inspections and
+semantic refutations have separate activity fields; an interrupted attempt
+claims neither. These schedule adapters introduce no arithmetic subject or
+receipt into the frozen countermodel walk.
+
+The general laws do not establish the adapters' exact permit ownership, refund,
+publication or concurrent lifetime behavior. Those remain executable refinement
+and qualification obligations, including refusal during a bounded arithmetic
+operation and differences in scratch or child-storage reuse across schedules.
+
+Source ownership, complete producer inventories, packing and padded incidence
+strides, touched-row coverage, snapshot publication, sibling isolation, retained
+and transient storage, typed refusal and cancellation remain Rust refinement
+obligations. The laws prove neither that refinement nor host/device equivalence.
+Flow witnesses remain separate work.
 
 Retained rows use either the scalar witness lists or sparse word groups, chosen
 by actual buffer capacity including the common row header. A packed row keeps

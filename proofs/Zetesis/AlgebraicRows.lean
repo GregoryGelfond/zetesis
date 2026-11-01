@@ -546,6 +546,74 @@ theorem double_count_excludes_region (o : OrderedReduction V) (C : Atoms α → 
     exact fold_le_fold o second (fun row listed => upper row listed z inside member)
   exact exceeds (o.le_trans _ _ _ fromBelow fromAbove)
 
+open Classical in
+/-- **A double count with partially refreshed bounds.** Two finite families
+cover the same terms. Each old bound holds in an enclosing region and each new
+bound holds in the current region. Choose either bound at every occurrence.
+If those chosen lower bounds exceed the chosen upper bounds, the current
+region has no member of the class.
+
+Proof. Every member of the current region is also in the enclosing region,
+so both choices of bound hold. Attach the chosen bounds to their unchanged
+terms and apply `double_count_excludes_region`.
+
+The selectors describe occurrences, not necessarily distinct source rows.
+The two families retain their complete coverage even if only some bounds have
+been refreshed. No monotonic improvement of the numerical values is needed
+for this exclusion law; their stated validity is enough. -/
+theorem partial_double_count_excludes_region (o : OrderedReduction V)
+    (C : Atoms α → Prop) {prior current : Region α}
+    (inside : FormulaBounds.Inside current prior) {ι : Type w}
+    (terms : ι → List (Term α V)) (first second : List ι) (S : List (Term α V))
+    (oldLower newLower oldUpper newUpper : ι → V)
+    (lowerFresh upperFresh : ι → Prop)
+    (firstCovers : (first.map terms).flatten.Perm S)
+    (secondCovers : (second.map terms).flatten.Perm S)
+    (oldBelow : ∀ i ∈ first, LowerIn o C prior (terms i) (oldLower i))
+    (newBelow : ∀ i ∈ first, LowerIn o C current (terms i) (newLower i))
+    (oldAbove : ∀ i ∈ second, UpperIn o C prior (terms i) (oldUpper i))
+    (newAbove : ∀ i ∈ second, UpperIn o C current (terms i) (newUpper i))
+    (exceeds : ¬ o.le
+      (o.toReduction.fold (fun i => if lowerFresh i then newLower i else oldLower i) first)
+      (o.toReduction.fold (fun i => if upperFresh i then newUpper i else oldUpper i) second)) :
+    ∀ z, current.Contains z → ¬ C z := by
+  classical
+  let lowerRows : List (List (Term α V) × V) :=
+    first.map fun i => (terms i, if lowerFresh i then newLower i else oldLower i)
+  let upperRows : List (List (Term α V) × V) :=
+    second.map fun i => (terms i, if upperFresh i then newUpper i else oldUpper i)
+  have enclosing : ∀ {z : Atoms α}, current.Contains z → prior.Contains z := by
+    intro z within
+    exact ⟨fun a held => within.1 a (inside.1 a held),
+      fun a present => inside.2 a (within.2 a present)⟩
+  have lowerCovers : (lowerRows.map Prod.fst).flatten.Perm S := by
+    simpa only [lowerRows, List.map_map, Function.comp_def] using firstCovers
+  have upperCovers : (upperRows.map Prod.fst).flatten.Perm S := by
+    simpa only [upperRows, List.map_map, Function.comp_def] using secondCovers
+  have lower : ∀ row ∈ lowerRows, LowerIn o C current row.1 row.2 := by
+    intro row listed
+    obtain ⟨i, member, rfl⟩ := List.mem_map.mp listed
+    intro z within belongs
+    change o.le (if lowerFresh i then newLower i else oldLower i)
+      (measure o.toReduction z (terms i))
+    by_cases fresh : lowerFresh i
+    · simpa only [if_pos fresh] using newBelow i member z within belongs
+    · simpa only [if_neg fresh] using oldBelow i member z (enclosing within) belongs
+  have upper : ∀ row ∈ upperRows, UpperIn o C current row.1 row.2 := by
+    intro row listed
+    obtain ⟨i, member, rfl⟩ := List.mem_map.mp listed
+    intro z within belongs
+    change o.le (measure o.toReduction z (terms i))
+      (if upperFresh i then newUpper i else oldUpper i)
+    by_cases fresh : upperFresh i
+    · simpa only [if_pos fresh] using newAbove i member z within belongs
+    · simpa only [if_neg fresh] using oldAbove i member z (enclosing within) belongs
+  have incompatible : ¬ o.le (o.toReduction.fold Prod.snd lowerRows)
+      (o.toReduction.fold Prod.snd upperRows) := by
+    simpa only [lowerRows, upperRows, o.toReduction.fold_map] using exceeds
+  exact double_count_excludes_region o C current S lowerRows upperRows
+    lowerCovers upperCovers lower upper incompatible
+
 /-- **The double count.** Two families of rows each cover the same terms, the
 first with lower bounds and the second with upper bounds of the class. If the
 lower bounds' fold does not lie below the upper bounds', the class has no member:
@@ -950,6 +1018,33 @@ def counting : OrderedReduction Nat where
   le_refl := Nat.le_refl
   le_trans := fun _ _ _ => Nat.le_trans
   op_le_op := fun _ _ _ _ => Nat.add_le_add
+
+/-- **Replace one occurrence in a finite count.** The old value is a summand
+of the complete natural fold, so subtracting it does not truncate; adding the
+new value gives exactly the fold with that occurrence replaced. Equal-valued
+occurrences elsewhere in the list remain untouched.
+
+Proof. Split both folds into the prefix, selected occurrence and suffix.
+Natural addition gives the old summand's lower bound and cancels that summand
+in the replacement equation. These are exact natural values; finite-width
+representability and any refusal before a machine operation are separate
+premises of a concrete implementation. -/
+theorem counting_replace_occurrence (preceding suffix : List Nat) (old new : Nat) :
+    old ≤ counting.toReduction.fold id (preceding ++ old :: suffix) ∧
+      counting.toReduction.fold id (preceding ++ old :: suffix) - old + new =
+        counting.toReduction.fold id (preceding ++ new :: suffix) := by
+  have previous : counting.toReduction.fold id (preceding ++ old :: suffix) =
+      counting.toReduction.fold id preceding +
+        (old + counting.toReduction.fold id suffix) := by
+    rw [counting.toReduction.fold_append, counting.toReduction.fold_cons]
+    rfl
+  have replaced : counting.toReduction.fold id (preceding ++ new :: suffix) =
+      counting.toReduction.fold id preceding +
+        (new + counting.toReduction.fold id suffix) := by
+    rw [counting.toReduction.fold_append, counting.toReduction.fold_cons]
+    rfl
+  rw [previous, replaced]
+  constructor <;> omega
 
 /-- Folding one for each member with natural addition gives the list's length.
 This counts occurrences, including repetitions, and the empty list contributes

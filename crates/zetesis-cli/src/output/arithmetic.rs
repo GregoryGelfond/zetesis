@@ -1,4 +1,4 @@
-//! Arithmetic preparation records from the original candidate owner.
+//! Arithmetic preparation and runtime records from the original candidate owner.
 
 use super::{Buffer, RunError};
 use zetesis_stable::{CardinalityStatistics, ParityStatistics, PreparationWork};
@@ -30,6 +30,9 @@ pub(super) fn parity(out: &mut Buffer, stats: Option<&ParityStatistics>) -> Resu
     out.text(",\"root_refuted\":")?;
     out.text(if stats.root_refuted { "true" } else { "false" })?;
     out.number_field("units", stats.units)?;
+    out.number_field("region_passes", stats.region_passes)?;
+    out.number_field("forced", stats.forced)?;
+    out.number_field("refuted", stats.refuted)?;
     out.text("}")
 }
 
@@ -59,6 +62,8 @@ pub(super) fn cardinality(
     phases(out, stats.phases)?;
     out.text(",\"root_refuted\":")?;
     out.text(if stats.root_refuted { "true" } else { "false" })?;
+    out.number_field("region_passes", stats.region_passes)?;
+    out.number_field("refuted", stats.refuted)?;
     out.text("}")
 }
 

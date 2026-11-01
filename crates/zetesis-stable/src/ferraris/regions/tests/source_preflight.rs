@@ -141,7 +141,11 @@ fn run(theory: &Theory, reply: Reply, mut counts: RegionCounts) -> Attempt {
         timings: &mut timings,
     };
     let result = narrow(
-        (OriginalSubject::new(theory, None), &narrower),
+        CandidateReading {
+            original: OriginalSubject::new(theory, None),
+            narrower: &narrower,
+            arithmetic: None,
+        },
         &Conditions::<(Theory, Narrower)>::default(),
         &mut entry,
         &mut NarrowingScratch::default(),

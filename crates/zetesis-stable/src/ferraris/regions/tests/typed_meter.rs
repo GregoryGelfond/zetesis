@@ -1,5 +1,7 @@
 //! Original quota payloads survive actual narrowing and receipt publication.
 
+mod buffered;
+
 use std::cell::Cell;
 
 use super::*;
@@ -135,4 +137,98 @@ fn receipt_overflow_precedes_a_typed_narrowing_refusal() {
         Err(Incomplete::CounterOverflow)
     );
     assert_eq!(counts, before);
+}
+
+#[test]
+fn buffered_refusal_returns_unused_permits_after_a_lease_refill() {
+    // The common Meter can retain an unused prefix while a bounded chunk
+    // needs another grant. Neither a failed chunk nor its unused permits is
+    // performed work, including after the source tries to renew its grant.
+    for (ceiling, performed) in [(2, 0), (5, 3)] {
+        let cancellation = Cancellation::default();
+        let limits = SearchLimits {
+            max_work: ceiling,
+            ..SearchLimits::default()
+        };
+        let shared = crate::budget::SharedBudget::new(limits, SearchStatistics::default());
+        let mut budget = Budget {
+            quota: shared.lease(&cancellation),
+            limits,
+            cancellation: &cancellation,
+            statistics: SearchStatistics::default(),
+        };
+        let reached = Cell::new(false);
+        {
+            let mut quota = BudgetQuota {
+                budget: &mut budget,
+            };
+            let mut meter = Meter::reserved(&mut quota);
+            for _ in 0..performed {
+                meter.tick().unwrap();
+            }
+            assert_eq!(
+                meter.bounded(3, || {
+                    reached.set(true);
+                    ((), 3)
+                }),
+                Err(zetesis_algebra::Failure::Refused(Incomplete::WorkLimit))
+            );
+            assert!(!reached.get());
+            // Replacement returned the old unused borrow before its refusal.
+            assert_eq!((meter.charged(), meter.remaining()), (performed, 0));
+            meter.refund();
+            assert_eq!((meter.charged(), meter.remaining()), (performed, 0));
+        }
+        assert_eq!(budget.statistics.work, performed);
+        drop(budget);
+        let mut settled = SearchStatistics::default();
+        shared.record(&mut settled);
+        assert_eq!(settled.work, performed);
+        assert_eq!(settled.decisions, 0);
+    }
+}
+
+#[test]
+fn unused_chunk_grants_return_after_successful_refill() {
+    let cancellation = Cancellation::default();
+    let limits = SearchLimits {
+        max_work: u64::MAX,
+        ..SearchLimits::default()
+    };
+    let shared = crate::budget::SharedBudget::new(limits, SearchStatistics::default());
+    let mut budget = Budget {
+        quota: shared.lease(&cancellation),
+        limits,
+        cancellation: &cancellation,
+        statistics: SearchStatistics::default(),
+    };
+    // Observe the real lease size instead of copying its scheduling constant.
+    let grant = budget.reserve_up_to(u64::MAX).unwrap();
+    budget.refund(grant);
+    let performed = grant.checked_sub(2).expect("the lease covers this prefix");
+    {
+        let mut quota = BudgetQuota {
+            budget: &mut budget,
+        };
+        let mut meter = Meter::reserved(&mut quota);
+        for _ in 0..performed {
+            meter.tick().unwrap();
+        }
+        assert_eq!(meter.remaining(), 2);
+        // The complete chunk is admitted, but the operation can return an
+        // allocation refusal before any of its reserved work is performed.
+        assert_eq!(
+            meter.bounded(3, || (Err::<(), _>(Incomplete::Allocation), 0)),
+            Ok(Err(Incomplete::Allocation))
+        );
+        assert_eq!(meter.charged(), performed);
+        meter.refund();
+        assert_eq!((meter.charged(), meter.remaining()), (performed, 0));
+    }
+    assert_eq!(budget.statistics.work, performed);
+    drop(budget);
+    let mut settled = SearchStatistics::default();
+    shared.record(&mut settled);
+    assert_eq!(settled.work, performed);
+    assert_eq!(settled.decisions, 0);
 }

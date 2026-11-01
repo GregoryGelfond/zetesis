@@ -186,6 +186,48 @@ fn theory(nodes: Vec<Node>, roots: Vec<usize>) -> Theory {
     .unwrap()
 }
 
+/// Exact late work after the direct core has settled a complete region.
+fn unchanged_arithmetic_work(
+    prepared: &RootPreparation,
+    region: &mut Region,
+    scratch: &mut NarrowingScratch,
+    cancellation: &Cancellation,
+) -> u64 {
+    // Independently inspect the settled region through the two actual
+    // arithmetic owners, using the same scratch lifetime as the walk.
+    // Neither may change this complete candidate or trigger another pass.
+    let mut arithmetic = Meter::local(u64::MAX);
+    let parity = prepared.parity().inspect_reserved(
+        region,
+        &mut prepared.parity().knowledge(),
+        scratch,
+        cancellation,
+        &mut arithmetic,
+    );
+    assert_eq!(parity.result, Ok(SubjectStep::Unchanged));
+    assert_eq!((parity.statistics.held, parity.statistics.cut), (0, 0));
+    let system = prepared
+        .cardinality()
+        .expect("nonrefuting preparation retains its cardinality owner");
+    let cardinality = system.inspect_reserved(
+        region,
+        &mut system.knowledge(),
+        scratch,
+        cancellation,
+        &mut arithmetic,
+    );
+    assert_eq!(cardinality.result, Ok(SubjectStep::Unchanged));
+    assert_eq!(
+        (cardinality.statistics.held, cardinality.statistics.cut),
+        (0, 0)
+    );
+    assert_eq!(
+        arithmetic.charged(),
+        parity.statistics.work + cardinality.statistics.work
+    );
+    arithmetic.charged()
+}
+
 #[test]
 fn an_enumeration_builds_one_original_index() {
     // The candidate walk builds one original index. Possible-founded closure
@@ -198,6 +240,21 @@ fn an_enumeration_builds_one_original_index() {
             zetesis_ferraris::producers(&theory, RegionLimits::default(), &cancellation).unwrap();
         let narrower = Narrower::new(&theory);
         let mut region = Region::all_open(theory.atom_count());
+        let mut scratch = NarrowingScratch::default();
+        let prepared = RootPreparation::prepare_reserved(
+            &theory,
+            extraction.producers.as_ref(),
+            PreparationLimits {
+                work: PreparationLimits::DEFAULT_WORK,
+                bytes: usize::try_from(Limits::default().max_reduct_bytes).unwrap_or(usize::MAX),
+            },
+            &cancellation,
+            &mut Meter::local(u64::MAX),
+        )
+        .result
+        .unwrap()
+        .expect("the tiny original arithmetic is prepared");
+        assert!(!prepared.root_refuted());
         // The walk's subject carries its learned rows; so does this one.
         let learning = LearningOwner::theory(&theory, LearningLimits::default());
         let attempt = narrower.narrow_known(
@@ -205,7 +262,7 @@ fn an_enumeration_builds_one_original_index() {
                 .with_choices(&extraction.choice_heads),
             &mut region,
             &mut narrower.knowledge(),
-            &mut NarrowingScratch::default(),
+            &mut scratch,
             RegionLimits::default(),
             &cancellation,
         );
@@ -214,6 +271,8 @@ fn an_enumeration_builds_one_original_index() {
         assert!(matches!(closed, Narrowing::Fixed { .. }));
         assert_eq!(region.open().count(), 0);
         assert_eq!(region.held().count(), 0);
+        let arithmetic_work =
+            unchanged_arithmetic_work(&prepared, &mut region, &mut scratch, &cancellation);
         let mut search = enumeration(&theory, route, workers, producers, Limits::default());
         let setup = search.statistics();
         assert_eq!(setup.regions.unwrap().counts.regions, 0, "{route}");
@@ -222,9 +281,10 @@ fn an_enumeration_builds_one_original_index() {
             setup.search.work,
             "{route}"
         );
-        // Starting from the independently settled constructor receipt, one
-        // exact N+E index charge and the direct core narrowing are the walk.
-        let region_work = setup.search.work + indexing_work(&theory) + direct.work;
+        // The independent constructor receipt, exact N+E index charge,
+        // direct core narrowing and actual late arithmetic are the walk.
+        let region_work =
+            setup.search.work + indexing_work(&theory) + direct.work + arithmetic_work;
         assert_eq!(
             hooks::builds(&theory),
             0,
@@ -241,6 +301,15 @@ fn an_enumeration_builds_one_original_index() {
         assert_eq!(counts.regions, 1, "{route}");
         assert_eq!(counts.leaves, 1, "{route}");
         assert_eq!(counts.work, region_work, "{route}");
+        assert_eq!(
+            counts.arithmetic,
+            arithmetic_counts::ArithmeticCounts {
+                parity_passes: 1,
+                cardinality_passes: 1,
+                ..Default::default()
+            },
+            "{route}: each unchanged arithmetic owner is inspected once"
+        );
         assert_eq!(statistics.reduct.regions.work, 0, "{route}");
         assert_eq!(statistics.reduct.frozen_positive_attempts, 1, "{route}");
         assert_eq!(statistics.reduct.frozen_positive_completed, 1, "{route}");
@@ -682,3 +751,5 @@ fn explanation_overflow_leaves_all_counts_unchanged() {
 }
 
 mod source_preflight;
+
+mod arithmetic_membership;

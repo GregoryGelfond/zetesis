@@ -9,36 +9,21 @@ use zetesis_algebra::{
     Class,
     region::{Narrowing, Region},
 };
-use zetesis_ferraris::{NarrowingAttempt, NarrowingScratch};
+use zetesis_ferraris::{NarrowingAttempt, NarrowingScratch, NarrowingStatistics};
 
 use crate::budget::{Budget, Quota};
 use crate::{Incomplete, RegionCounts};
 
-/// Position in one regional closure's separately owned source allowance.
+/// First or continued application in a closure-local sequence.
+/// The driver tracks late progress; the streamed adapter separately tracks
+/// its first actual source invocation so arithmetic cannot start its allowance.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum Pass {
     First,
     Continue,
 }
 
-/// Local progress, distinct from agreement of the complete subject family.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum SubjectStep {
-    Unchanged,
-    Changed,
-    Refuted,
-}
-
-impl SubjectStep {
-    /// The outcome of a single subject that has completed its own closure.
-    pub(crate) fn narrowing(self) -> Narrowing {
-        match self {
-            Self::Unchanged => Narrowing::Fixed { changed: false },
-            Self::Changed => Narrowing::Fixed { changed: true },
-            Self::Refuted => Narrowing::Refuted,
-        }
-    }
-}
+pub(crate) use zetesis_algebra::region::SubjectStep;
 
 /// A per-application search receipt, including any prefix before a failure.
 /// Separately owned source work never enters these counts.
@@ -58,13 +43,22 @@ impl SubjectAttempt {
     /// Selection metadata remains with the concrete adapter. This conversion
     /// neither reruns the narrower nor adds a second account owner.
     pub(crate) fn from_narrowing(attempt: &NarrowingAttempt<Incomplete>) -> Self {
-        let charges = &attempt.statistics;
+        let result = attempt.result.map(|result| match result {
+            Narrowing::Refuted => SubjectStep::Refuted,
+            Narrowing::Fixed { changed: false } => SubjectStep::Unchanged,
+            Narrowing::Fixed { changed: true } => SubjectStep::Changed,
+        });
+        Self::from_statistics(result, &attempt.statistics)
+    }
+
+    /// Convert the one common narrowing receipt without another account owner.
+    /// Progress classification remains with its concrete operation.
+    pub(crate) fn from_statistics(
+        result: Result<SubjectStep, Incomplete>,
+        charges: &NarrowingStatistics,
+    ) -> Self {
         Self {
-            result: attempt.result.map(|result| match result {
-                Narrowing::Refuted => SubjectStep::Refuted,
-                Narrowing::Fixed { changed: false } => SubjectStep::Unchanged,
-                Narrowing::Fixed { changed: true } => SubjectStep::Changed,
-            }),
+            result,
             counts: RegionCounts {
                 propagations: charges.propagations,
                 held: charges.held,
@@ -113,9 +107,10 @@ pub(crate) trait Subject<C: Class> {
 /// continues the same source allowance. Each change decides a fresh atom;
 /// refusals abandon the partial closure rather than claiming agreement.
 /// The iterator factory borrows the existing owners and allocates no registry.
+/// Absent late slots are skipped; they create neither a subject nor knowledge.
 pub(crate) fn joint<C, S, Q, I>(
     mut eager: impl FnMut() -> I,
-    late: &mut [S],
+    late: &mut [Option<S>],
     region: &mut Region,
     knowledge: &mut S::Knowledge,
     scratch: &mut NarrowingScratch,
@@ -152,7 +147,7 @@ where
         if revisit {
             continue;
         }
-        for subject in &mut *late {
+        for subject in late.iter_mut().flatten() {
             let attempt = subject.narrow(
                 region,
                 knowledge,

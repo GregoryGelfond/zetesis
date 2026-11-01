@@ -67,7 +67,19 @@ struct Observation {
     search: SearchStatistics,
 }
 
-fn run(eager_actions: &[Action], late_actions: &[Action], mut counts: RegionCounts) -> Observation {
+fn run(eager_actions: &[Action], late_actions: &[Action], counts: RegionCounts) -> Observation {
+    run_optional(
+        eager_actions,
+        &late_actions.iter().copied().map(Some).collect::<Vec<_>>(),
+        counts,
+    )
+}
+
+fn run_optional(
+    eager_actions: &[Action],
+    late_actions: &[Option<Action>],
+    mut counts: RegionCounts,
+) -> Observation {
     let cancellation = Cancellation::default();
     let mut budget = Budget {
         quota: LocalQuota,
@@ -89,10 +101,12 @@ fn run(eager_actions: &[Action], late_actions: &[Action], mut counts: RegionCoun
     let mut late: Vec<_> = late_actions
         .iter()
         .enumerate()
-        .map(|(ordinal, &action)| Script {
-            ordinal: eager_actions.len() + ordinal,
-            action,
-            trace: &trace,
+        .map(|(ordinal, action)| {
+            action.map(|action| Script {
+                ordinal: eager_actions.len() + ordinal,
+                action,
+                trace: &trace,
+            })
         })
         .collect();
     let mut region = Region::all_open(3);
@@ -220,4 +234,18 @@ fn failed_attempt_receipts_precede_the_typed_error() {
         assert_eq!(observed.trace, [(0, Pass::First)]);
         assert_eq!(observed.region.open().collect::<Vec<_>>(), [0, 1, 2]);
     }
+}
+
+#[test]
+fn absent_late_slots_do_no_work() {
+    let observed = run_optional(
+        &[Action::Unchanged],
+        &[None, Some(Action::Unchanged), None],
+        RegionCounts::default(),
+    );
+    assert_eq!(observed.result, Ok(Narrowing::Fixed { changed: false }));
+    assert_eq!(observed.trace, [(0, Pass::First), (2, Pass::First)]);
+    assert_eq!(observed.counts.work, 2);
+    assert_eq!(observed.search.work, 2);
+    assert_eq!(observed.region.open().collect::<Vec<_>>(), [0, 1, 2]);
 }

@@ -3,6 +3,11 @@
 use super::*;
 use zetesis_algebra::region::Narrowing;
 
+/// Test-only observation of actual joined candidate workers.
+pub(super) fn record_candidate_worker(report: &WorkerReport) {
+    engagement_tests::record_candidate_worker(report);
+}
+
 /// The original index the enumeration would build and hand the workers.
 fn original(theory: &Theory) -> Arc<IndexedTheory> {
     let mut owner = super::super::OriginalIndex::new(theory, u64::MAX);
@@ -55,10 +60,11 @@ fn shared_narrowing_never_executes_an_unleased_read() {
     );
     let mut counts = RegionCounts::default();
     let result = super::super::regions::narrow(
-        (
-            zetesis_ferraris::OriginalSubject::new(&theory, None),
-            &narrower,
-        ),
+        super::super::regions::CandidateReading {
+            original: zetesis_ferraris::OriginalSubject::new(&theory, None),
+            narrower: &narrower,
+            arithmetic: None,
+        },
         &Conditions::<(Theory, Narrower)>::default(),
         &mut entry,
         &mut zetesis_ferraris::NarrowingScratch::default(),
@@ -322,3 +328,5 @@ fn unchanged_explanation_counts_preserve_absolute_peaks() {
     live.add_support_explanations(&retained, &larger);
     assert_eq!(live.support_explanations(&empty), larger);
 }
+
+mod arithmetic_receipts;

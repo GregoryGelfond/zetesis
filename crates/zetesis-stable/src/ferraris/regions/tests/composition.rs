@@ -1,6 +1,8 @@
 //! A closed subject needs revisiting only after a later subject changes its input.
 
-use super::super::{CandidateKnowledge, Conditions, Narrower, Region, RegionCounts, narrow};
+use super::super::{
+    CandidateKnowledge, CandidateReading, Conditions, Narrower, Region, RegionCounts, narrow,
+};
 use super::{NARROWING_ATTEMPTS, budget, enumeration, theory};
 use crate::ferraris::conditions::Bound;
 use crate::{Cancellation, Limits};
@@ -106,10 +108,11 @@ fn close(original: &Theory, conditions: &Conditions<(Theory, Narrower)>) -> (Reg
     let before = NARROWING_ATTEMPTS.get();
     assert_eq!(
         narrow(
-            (
-                zetesis_ferraris::OriginalSubject::new(original, None),
-                &narrower
-            ),
+            CandidateReading {
+                original: zetesis_ferraris::OriginalSubject::new(original, None),
+                narrower: &narrower,
+                arithmetic: None,
+            },
             conditions,
             &mut entry,
             &mut scratch,
@@ -128,10 +131,11 @@ fn close(original: &Theory, conditions: &Conditions<(Theory, Narrower)>) -> (Reg
     // knowledge and scratch so stale pending work cannot hide in a fresh state.
     assert_eq!(
         narrow(
-            (
-                zetesis_ferraris::OriginalSubject::new(original, None),
-                &narrower
-            ),
+            CandidateReading {
+                original: zetesis_ferraris::OriginalSubject::new(original, None),
+                narrower: &narrower,
+                arithmetic: None,
+            },
             conditions,
             &mut entry,
             &mut scratch,

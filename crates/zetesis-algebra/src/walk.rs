@@ -152,9 +152,9 @@ impl Walk {
     }
 }
 
-impl<S: Clone> Walk<S> {
+impl<S> Walk<S> {
     /// A traversal of every candidate of the root, carrying `state` with the
-    /// root and a clone of a region's state with each of its children.
+    /// root. The caller's copy operation supplies each later sibling's state.
     #[must_use]
     pub fn with_state(root: Region, counting: Counting, state: S) -> Self {
         Self::with_entry(Entry::new(root, state), counting)
@@ -235,12 +235,61 @@ impl<S: Clone> Walk<S> {
     pub fn next<E: From<Stop>>(
         &mut self,
         narrow: impl FnMut(&mut Entry<S>) -> Result<Narrowing, E>,
-    ) -> Result<Option<Visit<S>>, E> {
+    ) -> Result<Option<Visit<S>>, E>
+    where
+        S: Clone,
+    {
         self.next_with_reservation(narrow, |pending, additional| {
             pending
                 .try_reserve(additional)
                 .map_err(|_| E::from(Stop::Allocation))
         })
+    }
+
+    /// Traverse with a fallible independent copy of the inherited state.
+    ///
+    /// Narrowing and copying borrow one context in execution order. Copying
+    /// runs after queue reservation and before consuming or splitting the
+    /// parent. The successful copy belongs to the sibling visited second; the
+    /// first child retains the original state, for either branch preference.
+    /// The copy must preserve its source and return equivalent independent
+    /// lineage state. This method adds no polling or resource policy.
+    ///
+    /// # Errors
+    /// Narrowing, reservation and copy failures keep the unresolved parent on
+    /// the stack. A failed copy retains completed narrowing and the attempted
+    /// split receipt, like a failed reservation. The root and pre-narrowed
+    /// flags are restored, and no child is formed or published. Context-side
+    /// receipts from a refused copy are not rolled back. Retrying an ordinary
+    /// root repeats its narrowing; a pre-narrowed root remains pre-narrowed.
+    pub fn next_with_copy<C, E: From<Stop>>(
+        &mut self,
+        context: &mut C,
+        narrow: impl FnMut(&mut C, &mut Entry<S>) -> Result<Narrowing, E>,
+        mut copy: impl FnMut(&mut C, &S) -> Result<S, E>,
+    ) -> Result<Option<Visit<S>>, E> {
+        self.next_with_split(
+            context,
+            narrow,
+            |_, pending, additional| {
+                pending
+                    .try_reserve(additional)
+                    .map_err(|_| E::from(Stop::Allocation))
+            },
+            |context, entry, atom, held_first| {
+                let copied = match copy(context, &entry.state) {
+                    Ok(copied) => copied,
+                    Err(error) => return Err((error, entry)),
+                };
+                Ok(entry.split_with(atom, |state| {
+                    if held_first {
+                        (copied, state)
+                    } else {
+                        (state, copied)
+                    }
+                }))
+            },
+        )
     }
 
     // The schedule admits pending capacity before consuming a split's parent.
@@ -250,6 +299,42 @@ impl<S: Clone> Walk<S> {
         &mut self,
         mut narrow: impl FnMut(&mut Entry<S>) -> Result<Narrowing, E>,
         mut reserve: impl FnMut(&mut Vec<Entry<S>>, usize) -> Result<(), E>,
+    ) -> Result<Option<Visit<S>>, E>
+    where
+        S: Clone,
+    {
+        self.next_with_split(
+            &mut (),
+            |(), entry| narrow(entry),
+            |(), pending, additional| reserve(pending, additional),
+            |(), entry, atom, held_first| {
+                // Preserve the original order: Region::split allocates its
+                // masks before the caller's Clone implementation is invoked.
+                Ok(entry.split_with(atom, |state| {
+                    if held_first {
+                        (state.clone(), state)
+                    } else {
+                        let second = state.clone();
+                        (state, second)
+                    }
+                }))
+            },
+        )
+    }
+
+    // Both copy contracts share this traversal. The private adapter returns the
+    // exact unconsumed parent on refusal; only successful splits publish children.
+    fn next_with_split<C, E: From<Stop>>(
+        &mut self,
+        context: &mut C,
+        mut narrow: impl FnMut(&mut C, &mut Entry<S>) -> Result<Narrowing, E>,
+        mut reserve: impl FnMut(&mut C, &mut Vec<Entry<S>>, usize) -> Result<(), E>,
+        mut split: impl FnMut(
+            &mut C,
+            Entry<S>,
+            usize,
+            bool,
+        ) -> Result<(Entry<S>, Entry<S>), (E, Entry<S>)>,
     ) -> Result<Option<Visit<S>>, E> {
         loop {
             let Some(mut entry) = self.regions.pop() else {
@@ -259,7 +344,7 @@ impl<S: Clone> Walk<S> {
             let narrowing = if narrowed_root {
                 Narrowing::Fixed { changed: true }
             } else {
-                match narrow(&mut entry) {
+                match narrow(context, &mut entry) {
                     Ok(narrowing) => narrowing,
                     Err(stop) => {
                         self.regions.push(entry);
@@ -286,7 +371,7 @@ impl<S: Clone> Walk<S> {
                 }
                 Step::Split(atom) => atom,
             };
-            if let Err(stop) = reserve(&mut self.regions, 2) {
+            if let Err(stop) = reserve(context, &mut self.regions, 2) {
                 // pop vacated one slot, so restoring its parent cannot allocate,
                 // even when the reservation left the capacity unchanged.
                 self.regions.push(entry);
@@ -294,14 +379,15 @@ impl<S: Clone> Walk<S> {
                 self.narrowed_root = narrowed_root;
                 return Err(stop);
             }
-            let (cut, held) = entry.split_with(atom, |state| {
-                if self.held_first {
-                    (state.clone(), state)
-                } else {
-                    let second = state.clone();
-                    (state, second)
+            let (cut, held) = match split(context, entry, atom, self.held_first) {
+                Ok(children) => children,
+                Err((error, parent)) => {
+                    self.regions.push(parent);
+                    self.root = root;
+                    self.narrowed_root = narrowed_root;
+                    return Err(error);
                 }
-            });
+            };
             let (first, second) = if self.held_first {
                 (held, cut)
             } else {

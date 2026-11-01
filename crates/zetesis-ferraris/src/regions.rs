@@ -57,9 +57,11 @@ use crate::{FormulaView, NodeView, Theory};
 
 mod adjacency;
 mod arithmetic;
+pub use arithmetic::ParityKnowledge;
 pub use arithmetic::{
-    CardinalityStatistics, CardinalitySystem, ParityStatistics, ParitySystem, PreparationAttempt,
-    PreparationError, PreparationLimits, PreparationStatus, PreparationWork, RootPreparation,
+    ArithmeticAttempt, CardinalityKnowledge, CardinalityStatistics, CardinalitySystem,
+    ParityStatistics, ParitySystem, PreparationAttempt, PreparationError, PreparationLimits,
+    PreparationStatus, PreparationWork, RootPreparation,
 };
 mod context;
 use context::{Context, LearningAccess, ReadingClass};
@@ -1592,6 +1594,7 @@ pub struct LearningAttempt<E = Stop> {
 pub struct NarrowingScratch {
     common: CommonScratch,
     learning: LearningScratch,
+    arithmetic: arithmetic::runtime::ArithmeticScratch,
 }
 
 /// Worklists shared by original and frozen closure execution.
@@ -1662,6 +1665,7 @@ impl NarrowingScratch {
             + self.common.possible_sums.capacity() as u128 * size_of::<u64>() as u128
             + self.common.witnesses.retained_bytes()
             + self.common.founded.retained_bytes()
+            + self.arithmetic.allocated_bytes()
             + self.learning.explanations.retained_bytes()
             + (self.learning.decided.capacity() + self.learning.match_rows.capacity()) as u128
                 * size_of::<usize>() as u128

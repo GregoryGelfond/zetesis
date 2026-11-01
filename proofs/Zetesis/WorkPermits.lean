@@ -162,4 +162,63 @@ theorem unused_return_enables_work (amount used : Nat) (state : Ledger)
   simp only [settle]
   omega
 
+/-- Returning an owned unused borrow before settlement preserves the allowance
+and commits exactly the previously taken amount minus that unused borrow.
+
+First the refund law establishes a valid window and its exact used count.
+The settlement law then preserves the source ledger. The final equation makes
+explicit why settling first would charge operations that did not run. -/
+theorem refund_then_settle (limit unused : Nat) (window : Window) (state : Ledger)
+    (valid : window.Valid) (refundable : unused ≤ window.used)
+    (conserved : Conserves limit state) (owned : window.granted ≤ state.outstanding) :
+    Conserves limit (settle window.granted (window.refund unused).used state) ∧
+      (settle window.granted (window.refund unused).used state).spent =
+        state.spent + (window.used - unused) := by
+  have refunded : (window.refund unused).Valid ∧
+      (window.refund unused).used + unused = window.used :=
+    refund_preserves_window unused window valid refundable
+  have used_bounded : (window.refund unused).used ≤ window.granted := by
+    show window.granted - (window.remaining + unused) ≤ window.granted
+    exact Nat.sub_le _ _
+  have exact_used : (window.refund unused).used = window.used - unused := by
+    have partition : (window.refund unused).used + unused = window.used := refunded.2
+    omega
+  constructor
+  · exact settle_conserves limit window.granted (window.refund unused).used
+      state conserved owned used_bounded
+  · show state.spent + (window.refund unused).used =
+      state.spent + (window.used - unused)
+    rw [exact_used]
+
+/-- Replacing a settled grant with a new admitted grant preserves the allowance
+and adds no work beyond the old grant's performed receipt. If replacement is
+refused, the preceding settlement law already supplies the retained state. -/
+theorem settled_replacement (limit amount used next : Nat) (state : Ledger)
+    (conserved : Conserves limit state) (owned : amount ≤ state.outstanding)
+    (consumed : used ≤ amount)
+    (admitted : next ≤ (settle amount used state).available) :
+    Conserves limit (grant next (settle amount used state)) ∧
+      (grant next (settle amount used state)).spent = state.spent + used := by
+  have settled : Conserves limit (settle amount used state) :=
+    settle_conserves limit amount used state conserved owned consumed
+  constructor
+  · exact grant_conserves limit next (settle amount used state) settled admitted
+  · rfl
+
+/-- A completely unused borrowed window contributes no committed work when it
+is returned before settlement. This includes a refused atomic operation whose
+required work exceeds the available allowance. -/
+theorem unused_window_does_not_commit (limit : Nat) (window : Window) (state : Ledger)
+    (valid : window.Valid) (conserved : Conserves limit state)
+    (owned : window.granted ≤ state.outstanding) :
+    Conserves limit (settle window.granted (window.refund window.used).used state) ∧
+      (settle window.granted (window.refund window.used).used state).spent =
+        state.spent := by
+  have returned :
+      Conserves limit (settle window.granted (window.refund window.used).used state) ∧
+        (settle window.granted (window.refund window.used).used state).spent =
+          state.spent + (window.used - window.used) :=
+    refund_then_settle limit window.used window state valid
+      (Nat.le_refl window.used) conserved owned
+  simpa only [Nat.sub_self, Nat.add_zero] using returned
 end Zetesis.WorkPermits

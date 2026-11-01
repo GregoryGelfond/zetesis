@@ -90,6 +90,7 @@ use super::certified::{self, Certification};
 use super::conditions::{Bound, CandidateKnowledge, Conditions};
 use super::original_index::IndexedTheory;
 use super::region_frontier::{Entry, RegionFrontier, reserve_regions};
+use super::regions::arithmetic_counts::ArithmeticCounts;
 use super::regions::{
     Queried, QueryDivisionStatistics, RegionCounts, RegionSearchStatistics, RegionWalkEngagement,
     RegionWorkerStatistics,
@@ -248,6 +249,11 @@ struct Live {
     work: AtomicU64,
     support_work: AtomicU64,
     founded_work: AtomicU64,
+    parity_passes: AtomicU64,
+    parity_forced: AtomicU64,
+    parity_refuted: AtomicU64,
+    cardinality_passes: AtomicU64,
+    cardinality_refuted: AtomicU64,
     support_explanation_attempts: AtomicU64,
     support_explanation_certified: AtomicU64,
     support_explanation_matched: AtomicU64,
@@ -305,6 +311,59 @@ impl Live {
     }
     fn read(counter: &AtomicU64) -> u64 {
         counter.load(Ordering::Relaxed)
+    }
+
+    /// Publish only new arithmetic activity. Inactive readers/copies perform
+    /// no atomic increments; the existing worker receipt owns the prefix.
+    fn add_arithmetic(&self, before: ArithmeticCounts, after: ArithmeticCounts) {
+        if before == after {
+            return;
+        }
+        for (counter, before, after) in [
+            (
+                &self.parity_passes,
+                before.parity_passes,
+                after.parity_passes,
+            ),
+            (
+                &self.parity_forced,
+                before.parity_forced,
+                after.parity_forced,
+            ),
+            (
+                &self.parity_refuted,
+                before.parity_refuted,
+                after.parity_refuted,
+            ),
+            (
+                &self.cardinality_passes,
+                before.cardinality_passes,
+                after.cardinality_passes,
+            ),
+            (
+                &self.cardinality_refuted,
+                before.cardinality_refuted,
+                after.cardinality_refuted,
+            ),
+        ] {
+            let delta = after - before;
+            if delta != 0 {
+                Self::add(counter, delta);
+            }
+        }
+    }
+
+    /// Existing coordinator receipt plus independently readable worker totals.
+    /// As for the other live counters, concurrent snapshots are not an atomic
+    /// cross-field snapshot; after joining, all completed deltas are visible.
+    fn arithmetic(&self, coordinator: ArithmeticCounts) -> ArithmeticCounts {
+        coordinator.saturating_add(ArithmeticCounts {
+            parity_passes: Self::read(&self.parity_passes),
+            parity_forced: Self::read(&self.parity_forced),
+            parity_refuted: Self::read(&self.parity_refuted),
+            cardinality_passes: Self::read(&self.cardinality_passes),
+            cardinality_refuted: Self::read(&self.cardinality_refuted),
+        })
     }
 
     /// Publish each admitted explanation prefix before a worker returns its result.
@@ -868,6 +927,7 @@ impl ParallelRegions {
                     .saturating_add(Live::read(&live.founded_work)),
                 support_explanations: live
                     .support_explanations(&self.statistics.counts.support_explanations),
+                arithmetic: live.arithmetic(self.statistics.counts.arithmetic),
             },
             producers: self.statistics.producers,
             generator_order: self.statistics.generator_order,
@@ -882,6 +942,7 @@ impl ParallelRegions {
                 query_division: self.query_division(),
             }),
         }
+        .with_runtime_arithmetic()
     }
 
     /// The published queries and who served their regions, current while the
@@ -1355,7 +1416,11 @@ impl ParallelRegions {
         let mut failure = None;
         for handle in self.handles.drain(..) {
             let result = match handle.join() {
-                Ok(Some(report)) => merge_membership(&mut self.merged, &report.statistics),
+                Ok(Some(report)) => {
+                    #[cfg(test)]
+                    tests::record_candidate_worker(&report);
+                    merge_membership(&mut self.merged, &report.statistics)
+                }
                 Ok(None) => Ok(()),
                 Err(_) => Err(Incomplete::WorkerPanicked),
             };
@@ -1756,6 +1821,9 @@ fn deliver<Q: crate::budget::Quota>(
 /// Publish a walker's narrowing and learning counts since `before` to the
 /// live counters.
 fn publish_counts(shared: &Shared, before: &RegionCounts, after: &RegionCounts) {
+    shared
+        .live
+        .add_arithmetic(before.arithmetic, after.arithmetic);
     Live::add(
         &shared.live.propagations,
         after.propagations - before.propagations,
@@ -1847,16 +1915,20 @@ impl Workspaces<'_> {
         }
     }
 
-    /// Copy the current parent, reusing at most one retired allocation. No
-    /// logical state from its former region survives the complete overwrite.
-    fn copy_knowledge(&mut self, parent: &CandidateKnowledge) -> CandidateKnowledge {
-        match self.retired_knowledge.take() {
-            Some(mut retired) => {
-                retired.clone_from(parent);
-                retired
-            }
-            None => parent.clone(),
-        }
+    /// Reuse a retired child outside the deque lock and publish its actual
+    /// copy prefix before exposing success or failure to the split owner.
+    fn copy_for_split(
+        &mut self,
+        shared: &Shared,
+        parent: &CandidateKnowledge,
+        budget: &mut Budget<'_, WorkLease<'_>>,
+        counts: &mut RegionCounts,
+    ) -> Result<CandidateKnowledge, Incomplete> {
+        let copied = super::regions::copy_knowledge(parent, self.retired_knowledge.take(), budget);
+        let before = *counts;
+        let result = counts.add(copied.counts).and(copied.result);
+        publish_counts(shared, &before, counts);
+        result
     }
 }
 
@@ -1901,10 +1973,10 @@ fn step<'a>(
             budget,
             &mut report.regions,
         )
-        .and_then(|()| shared.parts.subject(original.theory()))
-        .and_then(|subject| {
+        .and_then(|()| shared.parts.reading(original.theory(), original.narrower()))
+        .and_then(|reading| {
             super::regions::narrow(
-                (subject, original.narrower()),
+                reading,
                 &restrictions,
                 &mut entry,
                 &mut workspaces.scratch,
@@ -1955,9 +2027,15 @@ fn step<'a>(
         walk::Step::Counted => unreachable!("Counting::Never cannot count a region"),
     };
     budget.decide()?;
-    // Each child carries its own copy of the knowledge, linear in the theory:
-    // what the parent learned holds in both.
-    let cut_knowledge = workspaces.copy_knowledge(&entry.state);
+    let cut_knowledge =
+        match workspaces.copy_for_split(shared, &entry.state, budget, &mut report.regions) {
+            Ok(knowledge) => knowledge,
+            Err(error) => {
+                shared.stop(error);
+                drop(entry);
+                return Err(error);
+            }
+        };
     let mut pending = Some(entry);
     if let Err(error) =
         shared.publish_split(index, &mut pending, atom, cut_knowledge, reserve_regions)

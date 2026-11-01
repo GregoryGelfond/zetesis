@@ -106,7 +106,7 @@ pub trait Refusal: Sized {
 }
 
 /// A caller-owned account granting permits to one metered operation.
-/// A refusal grants nothing. A successful grant is in `1..=wanted`; zero is
+/// A reserve refusal grants nothing. A successful reserve grants `1..=wanted`; zero is
 /// treated as a local work refusal. The cumulative grant retained by one meter
 /// must fit `u64`, including already performed work. The account retains its
 /// own typed errors.
@@ -122,6 +122,44 @@ pub trait Quota {
 
     /// Return granted permits whose operations did not execute.
     fn refund(&mut self, unspent: u64);
+
+    /// Supply a complete atomic minimum while retaining exact ownership of
+    /// unused permits. `unused` initially names this meter's outstanding borrow;
+    /// on every normal return it names exactly the borrow still held, including
+    /// on refusal. An account may return that borrow before replacing its grant.
+    /// The caller supplies `unused <= capacity` and `minimum <= capacity`.
+    /// A successful return establishes `minimum <= unused <= capacity`.
+    ///
+    /// The default retains the incremental reserve/refund sequence. An account
+    /// with grant-local refunds can override this operation to release unused
+    /// permits before settling a grant or waiting for its replacement. The
+    /// operation performs no metered work and creates no second work counter.
+    ///
+    /// # Errors
+    /// Returns the exact account refusal or the existing local work/invariant
+    /// refusal. Earlier partial grants remain represented in `unused` unless
+    /// explicitly returned to their owner. An unwinding call supplies no receipt;
+    /// the meter cannot be reused or refunded after catching such an unwind.
+    fn replenish(
+        &mut self,
+        unused: &mut u64,
+        minimum: u64,
+        capacity: u64,
+    ) -> Result<(), Failure<Self::Error>> {
+        while *unused < minimum {
+            let wanted = POLL_INTERVAL.min(capacity - *unused);
+            let granted = self.reserve(wanted).map_err(Failure::Refused)?;
+            if granted == 0 {
+                return Err(Stop::WorkLimit.into());
+            }
+            if granted > wanted {
+                self.refund(granted);
+                return Err(Stop::InvalidProgram.into());
+            }
+            *unused += granted;
+        }
+        Ok(())
+    }
 }
 
 /// An already-admitted whole-kernel allowance and its settlement authority.
@@ -599,7 +637,8 @@ impl<'a, Q: Quota + ?Sized> Meter<'a, Q> {
     ///
     /// # Errors
     /// A refused top-up or unrepresentable count runs no part of `operation`.
-    /// Earlier partial grants remain refundable.
+    /// Replenishment may already have returned earlier unused grants. A later
+    /// refund returns only the resulting still-owned unused balance.
     ///
     /// # Panics
     /// The caller must report `actual <= maximum`. Debug builds assert this
@@ -685,20 +724,28 @@ impl<'a, Q: Quota + ?Sized> Meter<'a, Q> {
             .value
             .checked_add(minimum)
             .ok_or(Stop::WorkLimit)?;
-        while self.remaining() < minimum {
-            let Some(quota) = &mut self.quota else {
-                return Err(Stop::WorkLimit.into());
-            };
-            let wanted = POLL_INTERVAL.min(u64::MAX - self.limit);
-            let granted = quota.reserve(wanted).map_err(Failure::Refused)?;
-            if granted == 0 {
-                return Err(Stop::WorkLimit.into());
-            }
-            if granted > wanted {
-                quota.refund(granted);
-                return Err(Stop::InvalidProgram.into());
-            }
-            self.limit += granted;
+        let mut unused = self.remaining();
+        if unused >= minimum {
+            return Ok(());
+        }
+        let Some(quota) = &mut self.quota else {
+            return Err(Stop::WorkLimit.into());
+        };
+        let capacity = u64::MAX - self.count.value;
+        let result = quota.replenish(&mut unused, minimum, capacity);
+        if unused > capacity {
+            // As with an oversized reserve result, the reported borrow still
+            // belongs to this account and must return before local refusal.
+            quota.refund(unused);
+            self.limit = self.count.value;
+            return Err(Stop::InvalidProgram.into());
+        }
+        // A refused replacement may have returned the old borrow. Publish its
+        // new ownership before transporting either outcome, so refund is exact.
+        self.limit = self.count.value + unused;
+        result?;
+        if unused < minimum {
+            return Err(Stop::InvalidProgram.into());
         }
         Ok(())
     }

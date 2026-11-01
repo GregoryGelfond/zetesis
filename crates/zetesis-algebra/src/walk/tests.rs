@@ -1,5 +1,6 @@
 //! A refused scalar split keeps its unresolved partition and lineage.
 
+mod copy;
 mod inspection;
 
 use std::cell::Cell;

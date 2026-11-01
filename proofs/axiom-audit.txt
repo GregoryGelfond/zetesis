@@ -128,6 +128,10 @@
 'Zetesis.Algebra.refines_wf' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.Algebra.fair_iteration_reaches_joint_of_atoms' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.Algebra.decides_mono' does not depend on any axioms
+'Zetesis.Algebra.guardedLower_sound' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.Algebra.guardedUpper_sound' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.Algebra.guardedLower_mono' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.Algebra.guardedUpper_antitone' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.Algebra.foldVerdict_absorbed' depends on axioms: [propext, Quot.sound]
 'Zetesis.Algebra.foldVerdict_complete' depends on axioms: [propext]
 'Zetesis.Algebra.foldVerdict_empty' depends on axioms: [propext]
@@ -174,6 +178,7 @@
 'Zetesis.AlgebraicRows.upper_in_of_class' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.AlgebraicRows.measure_rows' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.AlgebraicRows.double_count_excludes_region' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.AlgebraicRows.partial_double_count_excludes_region' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.AlgebraicRows.double_count_excludes' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.AlgebraicRows.cut_excludes_region' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.AlgebraicRows.conjunction_assoc_original' does not depend on any axioms
@@ -192,6 +197,7 @@
 'Zetesis.AlgebraicRows.guard_releases' does not depend on any axioms
 'Zetesis.AlgebraicRows.parity_measure_odd' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.AlgebraicRows.parity_equation_of_xor' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.AlgebraicRows.counting_replace_occurrence' depends on axioms: [propext, Quot.sound]
 'Zetesis.AlgebraicRows.counting_fold_one' depends on axioms: [propext]
 'Zetesis.AlgebraicRows.bounded_counting_fold' depends on axioms: [propext, Quot.sound]
 'Zetesis.AlgebraicRows.bounded_counting_fold_one' depends on axioms: [propext, Quot.sound]
@@ -2182,6 +2188,9 @@
 'Zetesis.WorkPermits.consumed_within_limit' depends on axioms: [propext, Quot.sound]
 'Zetesis.WorkPermits.settled_exhaustion' does not depend on any axioms
 'Zetesis.WorkPermits.unused_return_enables_work' depends on axioms: [propext, Quot.sound]
+'Zetesis.WorkPermits.refund_then_settle' depends on axioms: [propext, Quot.sound]
+'Zetesis.WorkPermits.settled_replacement' depends on axioms: [propext, Quot.sound]
+'Zetesis.WorkPermits.unused_window_does_not_commit' depends on axioms: [propext, Quot.sound]
 'Zetesis.WorldMasks.membership_exact' depends on axioms: [propext, Quot.sound]
 'Zetesis.WorldMasks.membership_append' depends on axioms: [propext, Quot.sound]
 'Zetesis.WorldMasks.empty_prefix_excludes_extension' depends on axioms: [propext, Quot.sound]

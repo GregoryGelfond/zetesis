@@ -43,11 +43,17 @@ use crate::budget::{Budget, Quota};
 use crate::subject::{Pass, Subject, SubjectAttempt, SubjectContext, SubjectStep, joint};
 use crate::{Cancellation, Incomplete};
 
+pub(crate) mod arithmetic_counts;
 mod subjects;
+pub(super) use subjects::copy_knowledge;
 use subjects::{CandidateSubject, Frozen};
 
 /// What a walk over a region tree counted, cumulatively: the candidate
 /// tree's walk, or the proper-subset queries' walks together.
+///
+/// Runtime arithmetic attribution is retained internally and projected into
+/// [`RegionSearchStatistics`]. It participates in equality, debug output and
+/// checked merging along with the public dimensions.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 #[non_exhaustive]
 pub struct RegionCounts {
@@ -90,6 +96,9 @@ pub struct RegionCounts {
     /// The byte peak is the largest single worker ledger/capture footprint, not
     /// the sum across workers or total process memory.
     pub support_explanations: SupportExplanationStatistics,
+    // Private attribution travels with the existing receipt. Public arithmetic
+    // observations are projected by the original-region statistics owner.
+    pub(crate) arithmetic: arithmetic_counts::ArithmeticCounts,
 }
 
 impl RegionCounts {
@@ -182,6 +191,7 @@ impl RegionCounts {
                     .peak_bytes
                     .max(other.support_explanations.peak_bytes),
             },
+            arithmetic: self.arithmetic.checked_add(other.arithmetic)?,
         };
         *self = sum;
         Ok(())
@@ -219,6 +229,20 @@ pub struct RegionSearchStatistics {
     /// fixed for the stream before its first proposal. Routes without
     /// producers report `None`.
     pub frontier_order: Option<FrontierOrder>,
+}
+
+impl RegionSearchStatistics {
+    /// Project this receipt once without mutating the preparation observations.
+    /// Repeated snapshots neither consume nor add their cumulative activity.
+    pub(super) fn with_runtime_arithmetic(mut self) -> Self {
+        let activity = self.counts.arithmetic;
+        self.parity.region_passes = activity.parity_passes;
+        self.parity.forced = activity.parity_forced;
+        self.parity.refuted = activity.parity_refuted;
+        self.cardinality.region_passes = activity.cardinality_passes;
+        self.cardinality.refuted = activity.cardinality_refuted;
+        self
+    }
 }
 
 /// The order in which the parallel candidate producers take regions.
@@ -437,6 +461,17 @@ pub(crate) struct OriginalParts {
     learned: Option<Arc<LearnedStore>>,
 }
 
+/// Borrow the original candidate reading and its immutable arithmetic systems.
+/// The original parts establish the theory association; the caller supplies
+/// that theory's existing narrower. Restrictions and frozen queries do not
+/// receive these systems.
+#[derive(Clone, Copy)]
+pub(super) struct CandidateReading<'a> {
+    pub(super) original: OriginalSubject<'a>,
+    pub(super) narrower: &'a Narrower,
+    pub(super) arithmetic: Option<&'a RootPreparation>,
+}
+
 /// Which way a walk boundary moves a tier's rows.
 #[derive(Clone, Copy)]
 enum Sharing {
@@ -462,6 +497,20 @@ impl OriginalParts {
                 .with_choices(&self.choice_heads)
                 .with_generator_order(self.generator_order.as_ref()),
         )
+    }
+
+    /// Borrow the original subjects after the existing ownership check.
+    /// The narrower is the one lent by the authenticated original index.
+    pub(super) fn reading<'a>(
+        &'a self,
+        theory: &Theory,
+        narrower: &'a Narrower,
+    ) -> Result<CandidateReading<'a>, Incomplete> {
+        Ok(CandidateReading {
+            original: self.subject(theory)?,
+            narrower,
+            arithmetic: self.arithmetic.as_ref(),
+        })
     }
 
     /// The stream's learned store, once installed.
@@ -796,6 +845,7 @@ impl RegionSearch {
             workers: None,
             frontier_order: None,
         }
+        .with_runtime_arithmetic()
     }
 
     /// Narrow the regions still to visit by a candidate-only restriction;
@@ -914,19 +964,28 @@ impl RegionSearch {
         parts.seed_tier(tier, scratch, budget, &mut statistics.counts)?;
         let before = traversal.statistics();
         let mut advance = |mut check: Option<crate::region_filter::Check<'_, '_>>| {
-            traversal.next(|entry| -> Result<Narrowing, Incomplete> {
-                let narrowing = narrow(
-                    (parts.subject(formulas)?, narrower),
-                    restrictions,
-                    entry,
-                    scratch,
-                    budget,
-                    &mut statistics.counts,
-                    check.as_mut(),
-                )?;
-                parts.visited(tier, scratch, budget, &mut statistics.counts)?;
-                Ok(narrowing)
-            })
+            let mut context = (&mut *budget, &mut statistics.counts);
+            traversal.next_with_copy(
+                &mut context,
+                |(budget, counts), entry| -> Result<Narrowing, Incomplete> {
+                    let narrowing = narrow(
+                        parts.reading(formulas, narrower)?,
+                        restrictions,
+                        entry,
+                        scratch,
+                        budget,
+                        counts,
+                        check.as_mut(),
+                    )?;
+                    parts.visited(tier, scratch, budget, counts)?;
+                    Ok(narrowing)
+                },
+                |(budget, counts), known| {
+                    let attempt = copy_knowledge(known, None, budget);
+                    counts.add(attempt.counts)?;
+                    attempt.result
+                },
+            )
         };
         let visit = if let Some(filter) = filter {
             filter.with_dependent_mut(|filter, worker| {
@@ -978,7 +1037,7 @@ impl Drop for RegionSearch {
 /// when a restriction is active and one otherwise. A failed attempt installs no
 /// partial preference.
 pub(super) fn narrow<Q: Quota, R: std::borrow::Borrow<(Theory, Narrower)>>(
-    (original, narrower): (OriginalSubject<'_>, &Narrower),
+    reading: CandidateReading<'_>,
     restrictions: &Conditions<R>,
     entry: &mut Entry<CandidateKnowledge>,
     scratch: &mut NarrowingScratch,
@@ -986,6 +1045,8 @@ pub(super) fn narrow<Q: Quota, R: std::borrow::Borrow<(Theory, Narrower)>>(
     counts: &mut RegionCounts,
     filter: Option<&mut crate::region_filter::Check<'_, '_>>,
 ) -> Result<Narrowing, Incomplete> {
+    let original = reading.original;
+    let narrower = reading.narrower;
     let (region, knowledge) = entry.parts_mut();
     let eager = || {
         std::iter::once(CandidateSubject::Original {
@@ -1008,19 +1069,8 @@ pub(super) fn narrow<Q: Quota, R: std::borrow::Borrow<(Theory, Narrower)>>(
         )
         .chain(restrictions.bound.iter().map(CandidateSubject::Bound))
     };
-    let mut late = filter.map(|check| CandidateSubject::Streamed {
-        theory: original.theory(),
-        check,
-    });
-    let result = joint(
-        eager,
-        late.as_mut_slice(),
-        region,
-        knowledge,
-        scratch,
-        budget,
-        counts,
-    )?;
+    let mut late = subjects::late(&reading, filter);
+    let result = joint(eager, &mut late, region, knowledge, scratch, budget, counts)?;
     if result == Narrowing::Refuted {
         return Ok(result);
     }
@@ -1165,6 +1215,15 @@ impl<Q: Quota> zetesis_algebra::Quota for BudgetQuota<'_, '_, Q> {
 
     fn refund(&mut self, unspent: u64) {
         self.budget.refund(unspent);
+    }
+
+    fn replenish(
+        &mut self,
+        unused: &mut u64,
+        minimum: u64,
+        capacity: u64,
+    ) -> Result<(), Failure<Incomplete>> {
+        self.budget.replenish(unused, minimum, capacity)
     }
 }
 

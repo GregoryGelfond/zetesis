@@ -12,9 +12,14 @@ use std::mem::size_of;
 use std::sync::Arc;
 
 use zetesis_algebra::AnswerSetsSought;
-use zetesis_ferraris::{Knowledge, Narrower, Theory};
+use zetesis_ferraris::{
+    CardinalityKnowledge, CardinalitySystem, Knowledge, Narrower, ParityKnowledge, ParitySystem,
+    Theory,
+};
 
 use crate::Incomplete;
+
+mod copy;
 
 #[derive(Clone, Debug)]
 pub(super) struct Bound {
@@ -109,6 +114,10 @@ pub(super) struct CandidateKnowledge {
     /// bound. Keeping one vector avoids another allocation on each region copy.
     entries: Vec<Knowledge<AnswerSetsSought>>,
     bound_generation: Option<u64>,
+    /// Original arithmetic only; neither restrictions nor objective generations
+    /// create or replace these system-specific descendant snapshots.
+    parity: Option<ParityKnowledge>,
+    cardinality: Option<CardinalityKnowledge>,
 }
 
 impl Clone for CandidateKnowledge {
@@ -116,14 +125,24 @@ impl Clone for CandidateKnowledge {
         Self {
             entries: self.entries.clone(),
             bound_generation: self.bound_generation,
+            parity: self.parity.clone(),
+            cardinality: self.cardinality.clone(),
         }
     }
 
     fn clone_from(&mut self, source: &Self) {
-        let Self {
-            entries,
-            bound_generation,
-        } = source;
+        self.clone_entries_from(source);
+        self.parity.clone_from(&source.parity);
+        self.cardinality.clone_from(&source.cardinality);
+    }
+}
+
+impl CandidateKnowledge {
+    /// Copy the preceding non-arithmetic state once, with its existing exact
+    /// outer-capacity policy. Charged arithmetic copying calls this operation
+    /// directly, so it never first clones the new snapshots for free.
+    fn clone_entries_from(&mut self, source: &Self) {
+        let entries = &source.entries;
         // Published children retain no more vector capacity than a fresh
         // clone. Compatible entries reuse their arrays, overwriting every
         // conclusion and counter from the current parent.
@@ -132,11 +151,20 @@ impl Clone for CandidateKnowledge {
         } else {
             self.entries = Vec::from(entries.as_slice());
         }
-        self.bound_generation = *bound_generation;
+        self.bound_generation = source.bound_generation;
     }
-}
 
-impl CandidateKnowledge {
+    /// First inspection creates only this system's empty inline state. The
+    /// runtime initializes its payload under the same search Meter.
+    pub(super) fn parity(&mut self, system: &ParitySystem) -> &mut ParityKnowledge {
+        self.parity.get_or_insert_with(|| system.knowledge())
+    }
+
+    /// Counting state has the same original-system lifetime as parity state.
+    pub(super) fn cardinality(&mut self, system: &CardinalitySystem) -> &mut CardinalityKnowledge {
+        self.cardinality.get_or_insert_with(|| system.knowledge())
+    }
+
     /// The knowledge under the `index`th permanent theory, the original
     /// theory being the zeroth, created from `narrower` when this region has
     /// none under it yet. The first slot is reserved exactly, so a root that
@@ -210,6 +238,12 @@ impl CandidateKnowledge {
                     known.retained_bytes() - size_of::<Knowledge<AnswerSetsSought>>() as u128
                 })
                 .sum::<u128>()
+            + self.parity.as_ref().map_or(0, |known| {
+                known.retained_bytes() - size_of::<ParityKnowledge>() as u128
+            })
+            + self.cardinality.as_ref().map_or(0, |known| {
+                known.retained_bytes() - size_of::<CardinalityKnowledge>() as u128
+            })
     }
 }
 

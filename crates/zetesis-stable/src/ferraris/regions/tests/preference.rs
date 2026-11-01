@@ -1,6 +1,8 @@
 //! Original degree breaks ties after joint propagation of candidate restrictions.
 
-use super::super::{CandidateKnowledge, Conditions, Narrower, Region, RegionCounts, narrow};
+use super::super::{
+    CandidateKnowledge, CandidateReading, Conditions, Narrower, Region, RegionCounts, narrow,
+};
 use super::{budget, theory};
 use crate::ferraris::conditions::Bound;
 use crate::{Cancellation, Incomplete};
@@ -98,10 +100,11 @@ fn closed_with(
     let mut counts = RegionCounts::default();
     let mut entry = Entry::new(Region::all_open(3), CandidateKnowledge::default());
     let result = narrow(
-        (
-            OriginalSubject::new(original, None).with_choices(choices),
-            &narrower,
-        ),
+        CandidateReading {
+            original: OriginalSubject::new(original, None).with_choices(choices),
+            narrower: &narrower,
+            arithmetic: None,
+        },
         conditions,
         &mut entry,
         &mut NarrowingScratch::default(),
@@ -378,7 +381,7 @@ fn active_restrictions_keep_primary_preference() {
         let mut entry = Entry::new(Region::all_open(3), CandidateKnowledge::default());
         let mut allowance = budget(&cancellation, u64::MAX);
         let result = narrow(
-            (opened.parts.subject(&original).unwrap(), &narrower),
+            opened.parts.reading(&original, &narrower).unwrap(),
             &conditions,
             &mut entry,
             &mut NarrowingScratch::default(),

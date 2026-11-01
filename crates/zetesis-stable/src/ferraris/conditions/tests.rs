@@ -43,10 +43,11 @@ fn a_new_generation_discards_old_dag_knowledge() {
     };
     let mut counts = super::super::regions::RegionCounts::default();
     super::super::regions::narrow(
-        (
-            zetesis_ferraris::OriginalSubject::new(&original, None),
-            &narrower,
-        ),
+        super::super::regions::CandidateReading {
+            original: zetesis_ferraris::OriginalSubject::new(&original, None),
+            narrower: &narrower,
+            arithmetic: None,
+        },
         &conditions,
         &mut entry,
         &mut zetesis_ferraris::NarrowingScratch::default(),
@@ -62,10 +63,11 @@ fn a_new_generation_discards_old_dag_knowledge() {
         Some(Bound::prepare(&guard(true), 2, u64::MAX, &crate::Cancellation::default()).unwrap());
     assert_ne!(
         super::super::regions::narrow(
-            (
-                zetesis_ferraris::OriginalSubject::new(&original, None),
-                &narrower
-            ),
+            super::super::regions::CandidateReading {
+                original: zetesis_ferraris::OriginalSubject::new(&original, None),
+                narrower: &narrower,
+                arithmetic: None,
+            },
             &conditions,
             &mut entry,
             &mut zetesis_ferraris::NarrowingScratch::default(),
@@ -256,10 +258,11 @@ fn a_late_permanent_condition_keeps_bound_knowledge_separate() {
     };
     let mut counts = super::super::regions::RegionCounts::default();
     super::super::regions::narrow(
-        (
-            zetesis_ferraris::OriginalSubject::new(&original, None),
-            &narrower,
-        ),
+        super::super::regions::CandidateReading {
+            original: zetesis_ferraris::OriginalSubject::new(&original, None),
+            narrower: &narrower,
+            arithmetic: None,
+        },
         &conditions,
         &mut entry,
         &mut zetesis_ferraris::NarrowingScratch::default(),
@@ -276,10 +279,11 @@ fn a_late_permanent_condition_keeps_bound_knowledge_separate() {
     let permanent_index = Narrower::new(&permanent);
     conditions.permanent.push((permanent, permanent_index));
     super::super::regions::narrow(
-        (
-            zetesis_ferraris::OriginalSubject::new(&original, None),
-            &narrower,
-        ),
+        super::super::regions::CandidateReading {
+            original: zetesis_ferraris::OriginalSubject::new(&original, None),
+            narrower: &narrower,
+            arithmetic: None,
+        },
         &conditions,
         &mut entry,
         &mut zetesis_ferraris::NarrowingScratch::default(),
@@ -433,3 +437,5 @@ fn candidate_capacity_and_entry_policy_are_counted_once() {
     assert_eq!(released.retained_bytes, headers);
     assert_eq!(released.peak_retained_bytes, moved.peak_retained_bytes);
 }
+
+mod arithmetic;
