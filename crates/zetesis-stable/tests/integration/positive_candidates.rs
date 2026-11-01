@@ -8,6 +8,7 @@ use zetesis_stable::{
 };
 use zetesis_theory_support::theories::theory;
 
+use crate::support::arithmetic::{assert_arithmetic_declined, assert_root_absorbed};
 use crate::support::routes::{ROUTES, Route, search};
 
 fn enable(stream: &mut StableModels) {
@@ -108,10 +109,12 @@ fn failed_constraint_skips_larger_classical_models() {
             &original,
             Limits {
                 max_candidates: 0,
+                max_reduct_bytes: 0,
                 ..Limits::default()
             },
             Cancellation::default(),
         );
+        assert_arithmetic_declined(&stream);
         enable(&mut stream);
         let before = stream.statistics().search;
         assert!(stream.next().is_none());
@@ -304,10 +307,24 @@ fn positive_pulls_use_one_inclusive_work_budget() {
 
 #[test]
 fn cancelled_positive_pulls_leave_coverage_open() {
-    for original in [cycle(true), failed_constraint(), theory(0, vec![], vec![])] {
+    for (index, original) in [cycle(true), failed_constraint(), theory(0, vec![], vec![])]
+        .into_iter()
+        .enumerate()
+    {
         for route in ROUTES {
             let control = Cancellation::default();
-            let mut stream = search(route, &original, Limits::default(), control.clone());
+            let limits = if index == 1 {
+                Limits {
+                    max_reduct_bytes: 0,
+                    ..Limits::default()
+                }
+            } else {
+                Limits::default()
+            };
+            let mut stream = search(route, &original, limits, control.clone());
+            if index == 1 {
+                assert_arithmetic_declined(&stream);
+            }
             enable(&mut stream);
             control.cancel();
             assert!(matches!(stream.next(), Some(Err(Incomplete::Cancelled))));
@@ -383,5 +400,39 @@ fn singleton_restriction_receipts_agree_across_region_modes() {
         } else {
             expected = Some(counts);
         }
+    }
+}
+
+#[test]
+fn unsupported_constraint_absorbs_before_class_preparation() {
+    let original = failed_constraint();
+    let classical = Interpretation::new(&original, [0]).unwrap();
+    assert!(
+        zetesis_ferraris::models(
+            &original,
+            &classical,
+            zetesis_ferraris::Limits::default(),
+            &Cancellation::default()
+        )
+        .unwrap()
+    );
+    for mask in 0..2 {
+        let candidate = Interpretation::new(&original, (0..1).filter(|_| mask == 1)).unwrap();
+        assert!(
+            !zetesis_ferraris::check(
+                &original,
+                &candidate,
+                zetesis_ferraris::Limits::default(),
+                &Cancellation::default()
+            )
+            .unwrap()
+            .accepted()
+        );
+    }
+    for order in [
+        CertificateOrder::TightFirst,
+        CertificateOrder::PositiveFirst,
+    ] {
+        assert_root_absorbed(&original, order);
     }
 }

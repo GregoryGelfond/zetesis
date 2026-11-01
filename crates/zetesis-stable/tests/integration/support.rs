@@ -1,5 +1,6 @@
 //! Helpers shared by the integration test modules.
 
+pub(crate) mod arithmetic;
 pub(crate) mod batching;
 pub(crate) mod bounds;
 pub(crate) mod choice_theories;
