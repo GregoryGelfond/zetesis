@@ -146,6 +146,7 @@
 'Zetesis.AlgebraicRows.measure_own' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.AlgebraicRows.AbelianGroup.solve' does not depend on any axioms
 'Zetesis.AlgebraicRows.measure_cancel' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.AlgebraicRows.equation_of_agreement' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.AlgebraicRows.equation_add' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.AlgebraicRows.equation_sum' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.AlgebraicRows.equation_of_narrower_class' depends on axioms: [propext, Classical.choice, Quot.sound]
@@ -169,17 +170,30 @@
 'Zetesis.AlgebraicRows.double_count_excludes_region' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.AlgebraicRows.double_count_excludes' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.AlgebraicRows.cut_excludes_region' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.AlgebraicRows.conjunction_assoc_original' does not depend on any axioms
+'Zetesis.AlgebraicRows.conjunction_chain_original' depends on axioms: [propext]
+'Zetesis.AlgebraicRows.conjunction_flatten_original' depends on axioms: [propext, Quot.sound]
+'Zetesis.AlgebraicRows.canonical_truth_original' does not depend on any axioms
+'Zetesis.AlgebraicRows.truth_implication_original' does not depend on any axioms
+'Zetesis.AlgebraicRows.double_negated_conjunction_original' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.AlgebraicRows.entailed_by_patterns' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.AlgebraicRows.equation_local' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.AlgebraicRows.entailed_by_part' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.AlgebraicRows.entailed_fact_step' depends on axioms: [propext]
+'Zetesis.AlgebraicRows.entailed_by_residual_patterns' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.AlgebraicRows.completion_fold_false_iff' depends on axioms: [propext, Quot.sound]
 'Zetesis.AlgebraicRows.entailed_by_completion' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.AlgebraicRows.guard_releases' does not depend on any axioms
+'Zetesis.AlgebraicRows.parity_measure_odd' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.AlgebraicRows.parity_equation_of_xor' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.AlgebraicRows.parity_forces' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.AlgebraicRows.xor_definition' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.AlgebraicRows.threshold_measure' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.AlgebraicRows.lower_of_threshold' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.AlgebraicRows.upper_of_negated_threshold' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.AlgebraicRows.bounds_of_asserted_conjunction' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.AlgebraicRows.count_measure' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.AlgebraicRows.lower_of_clause' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.AlgebraicRows.double_count_groups' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.ArithmeticFamilies.empty_admissible' depends on axioms: [propext]
 'Zetesis.ArithmeticFamilies.empty_unwarned' depends on axioms: [propext]
@@ -230,11 +244,14 @@
 'Zetesis.AxisFolds.all_idempotent' does not depend on any axioms
 'Zetesis.AxisFolds.any_absorbing' does not depend on any axioms
 'Zetesis.AxisFolds.any_idempotent' does not depend on any axioms
+'Zetesis.AxisFolds.all_fold_true_iff' depends on axioms: [propext, Quot.sound]
+'Zetesis.AxisFolds.any_fold_true_iff' depends on axioms: [propext, Quot.sound]
 'Zetesis.AxisFolds.inter_absorbing' depends on axioms: [propext, Quot.sound]
 'Zetesis.AxisFolds.inter_idempotent' depends on axioms: [propext, Quot.sound]
 'Zetesis.AxisFolds.union_absorbing' depends on axioms: [propext, Quot.sound]
 'Zetesis.AxisFolds.union_idempotent' depends on axioms: [propext, Quot.sound]
 'Zetesis.AxisFolds.pair_absorbing' does not depend on any axioms
+'Zetesis.AxisFolds.pair_foldFrom_left_absorbing' does not depend on any axioms
 'Zetesis.AxisFolds.pair_idempotent' does not depend on any axioms
 'Zetesis.AxisFolds.walk_exhausted_fold' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.AxisFolds.world_view_fold_complete' depends on axioms: [propext, Classical.choice, Quot.sound]

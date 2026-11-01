@@ -27,6 +27,9 @@ pub(crate) struct FormulaSession<'a, E> {
     selection: AnswerSelection,
     execution: Option<E>,
     models: Option<StableModels>,
+    /// The latest construction prefix until a complete stream owns it. On a
+    /// failed tie-pass construction this follows the retained earlier stream.
+    candidate_setup: Option<zetesis_stable::Statistics>,
     /// The learned rows this solve's streams share, unless sharing is off.
     learned: Option<Arc<LearnedStore>>,
     model_order: Option<ModelOrder<'a>>,
@@ -150,6 +153,7 @@ impl<'a, E: MembershipExecution> FormulaSession<'a, E> {
             },
             execution: None,
             models: None,
+            candidate_setup: None,
             learned: None,
             model_order: None,
             construction: None,
@@ -176,27 +180,27 @@ impl<'a, E: MembershipExecution> FormulaSession<'a, E> {
         limits: zetesis_stable::Limits,
         cancellation: &Cancellation,
         phases: &Recorder,
-    ) -> Result<StableModels, zetesis_stable::Incomplete> {
+    ) -> zetesis_stable::ConstructionAttempt {
         phases.measure(SolvePhase::CandidateSetup, || {
             // CPU workers decide their own leaves. Device producers return
             // unchecked leaves to the bounded batch protocol and join before
             // membership execution starts.
             if let Some(workers) = config.region_workers() {
-                StableModels::with_region_workers(
+                StableModels::prepare_with_region_workers(
                     self.input.theory,
                     workers,
                     limits,
                     cancellation.clone(),
                 )
             } else if config.workers.get() > 1 {
-                StableModels::with_region_producers(
+                StableModels::prepare_with_region_producers(
                     self.input.theory,
                     config.workers,
                     limits,
                     cancellation.clone(),
                 )
             } else {
-                StableModels::new(self.input.theory, limits, cancellation.clone())
+                StableModels::prepare(self.input.theory, limits, cancellation.clone())
             }
         })
     }
@@ -237,7 +241,8 @@ impl<'a, E: MembershipExecution> FormulaSession<'a, E> {
         }
         let limits = crate::countermodel::search_limits(config);
         let models = self.candidate_stream(config, limits, cancellation, phases);
-        let mut models = match models {
+        self.candidate_setup = Some(models.statistics);
+        let mut models = match models.result {
             Ok(models) => models,
             Err(error) => {
                 self.complete(
@@ -254,6 +259,7 @@ impl<'a, E: MembershipExecution> FormulaSession<'a, E> {
         // Ownership is established before any fallible certificate/diagnostic
         // operation, so its attempted work remains available on failure.
         self.models = Some(models);
+        self.candidate_setup = None;
         // One store for this solve call: every stream the session builds
         // shares it, and so does the membership execution.
         if config.share_learned_rows {
@@ -690,7 +696,9 @@ impl<'a, E: MembershipExecution> FormulaSession<'a, E> {
         // The run's cumulative limits cover both passes together.
         let limits =
             crate::countermodel::search_limits(config).remaining_after(&earlier.statistics());
-        let mut fresh = match self.candidate_stream(config, limits, cancellation, phases) {
+        let attempt = self.candidate_stream(config, limits, cancellation, phases);
+        self.candidate_setup = Some(attempt.statistics);
+        let mut fresh = match attempt.result {
             Ok(fresh) => fresh,
             Err(error) => return TiePass::Stopped(error),
         };
@@ -704,6 +712,7 @@ impl<'a, E: MembershipExecution> FormulaSession<'a, E> {
         // so it owns them before any fallible step, whose attempted work then
         // remains in the session's receipts.
         let fresh = self.models.insert(fresh);
+        self.candidate_setup = None;
         // The same certificate as the strict search's, already reported.
         match crate::countermodel::prepare_certificate(
             fresh,
@@ -815,7 +824,13 @@ impl<'a, E: MembershipExecution> FormulaSession<'a, E> {
     }
 
     fn snapshot(&self, phases: &Recorder) -> SemanticOutcome {
-        let statistics = self.models.as_ref().map(StableModels::statistics);
+        let statistics = match (
+            self.models.as_ref().map(StableModels::statistics),
+            self.candidate_setup,
+        ) {
+            (Some(earlier), Some(setup)) => Some(earlier.followed_by(&setup)),
+            (earlier, setup) => setup.or(earlier),
+        };
         self.import_timings(
             phases,
             statistics.and_then(|statistics| statistics.phase_timings),

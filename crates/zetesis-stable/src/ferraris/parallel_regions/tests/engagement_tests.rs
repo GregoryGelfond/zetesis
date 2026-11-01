@@ -135,7 +135,13 @@ fn walk_with(
         statistics: SearchStatistics::default(),
     };
     let search = ParallelRegions::new(
-        theory,
+        crate::ferraris::regions::open(
+            theory,
+            limits.max_reduct_bytes,
+            limits.learning,
+            &mut budget,
+        )
+        .unwrap(),
         NonZeroUsize::new(workers).unwrap(),
         engagement,
         limits,
@@ -1088,8 +1094,8 @@ fn frozen_positive_receipts_survive_every_worker_route() {
             crate::ferraris::Proposer::Parallel(search) => {
                 omit_producers_for_membership_test(search);
             }
-            crate::ferraris::Proposer::Proposals(_) => {
-                panic!("expected a scalar or parallel region proposer")
+            crate::ferraris::Proposer::Proposals(_) | crate::ferraris::Proposer::Refuted(_) => {
+                panic!("expected an active scalar or parallel region proposer")
             }
         }
         assert_eq!(models.next().unwrap().unwrap().atoms().count(), 0);

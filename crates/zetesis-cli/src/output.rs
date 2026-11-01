@@ -1,5 +1,7 @@
 //! Streaming JSON document adapter over typed model views and driver outcomes.
 
+mod arithmetic;
+
 use std::io::{self, Write};
 
 use zetesis_themelios::observation::ViewError;
@@ -369,6 +371,7 @@ fn reason_code(reason: Interruption) -> &'static str {
                 Incomplete::LateLearnedStore => "late_learned_store",
                 Incomplete::LearnedStoreAlreadySet => "learned_store_already_set",
                 Incomplete::Certificate(_) => "certificate",
+                Incomplete::ArithmeticSource(_) => "arithmetic_source",
                 Incomplete::Verification(_) => "verification",
                 Incomplete::InvalidWitness => "invalid_witness",
                 Incomplete::CounterOverflow => "counter_overflow",
@@ -839,6 +842,13 @@ fn search_statistics(
     out.number_field("countermodel_queries", stats.countermodel_queries)?;
     out.number_field("countermodels", stats.countermodels)?;
     out.number_field("stable_models", stats.stable_models)?;
+    out.text(",\"parity\":")?;
+    arithmetic::parity(out, stats.regions.as_ref().map(|regions| &regions.parity))?;
+    out.text(",\"cardinality\":")?;
+    arithmetic::cardinality(
+        out,
+        stats.regions.as_ref().map(|regions| &regions.cardinality),
+    )?;
     out.text(",\"candidate_regions\":")?;
     region_statistics(out, stats.regions.as_ref())?;
     out.text(",\"region_filter\":")?;

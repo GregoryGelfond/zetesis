@@ -179,6 +179,7 @@ fn sat_class(error: zetesis_stable::Incomplete) -> Class {
         E::Cancelled => Class::Control(Conclusion::Interrupted),
         E::Deadline => Class::Control(Conclusion::Budget),
         E::Verification(stop) => stop_class(stop),
+        E::ArithmeticSource(error) => theory_class(error),
         E::Certificate(error) => certificate_class(error),
         E::WorkLimit
         | E::DecisionLimit

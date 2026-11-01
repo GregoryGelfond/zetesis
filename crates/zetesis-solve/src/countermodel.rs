@@ -50,7 +50,7 @@ pub(crate) fn prepare_certificate(
     diagnostics: &mut impl ExecutionSink,
     phases: &Recorder,
 ) -> Result<Option<zetesis_stable::Incomplete>, SolveError> {
-    if options.oracle != crate::Oracle::Auto {
+    if options.oracle != crate::Oracle::Auto || models.root_refuted() {
         return Ok(None);
     }
     let limits = certificate_limits(options);

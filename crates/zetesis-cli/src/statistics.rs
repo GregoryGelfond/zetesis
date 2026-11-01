@@ -494,6 +494,29 @@ fn candidate_regions(
     if let Some(workers) = regions.workers {
         region_workers(sink, workers)?;
     }
+    let parity = regions.parity;
+    writeln!(
+        sink,
+        "  candidate parity: status={}; rows={}; rank={}; root refuted={}; units={}; preparation work={}; peak bytes={} (work included in reading work)",
+        parity.status.label(),
+        parity.rows,
+        parity.rank,
+        parity.root_refuted,
+        parity.units,
+        parity.preparation_work,
+        parity.preparation_bytes,
+    )?;
+    let cardinality = regions.cardinality;
+    writeln!(
+        sink,
+        "  candidate cardinality: status={}; rows={}; families={}; root refuted={}; preparation work={}; peak bytes={} (work included in reading work)",
+        cardinality.status.label(),
+        cardinality.rows,
+        cardinality.families,
+        cardinality.root_refuted,
+        cardinality.preparation_work,
+        cardinality.preparation_bytes,
+    )?;
     writeln!(
         sink,
         "  candidate support: producer work={}; possible-foundedness work={} (included in reading work)",

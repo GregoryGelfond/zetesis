@@ -2,6 +2,7 @@ import Zetesis.AxisFolds
 import Zetesis.LearnedRegions
 import Zetesis.ThresholdReduct
 import Zetesis.PartitionCapacities
+import Zetesis.FormulaChains
 
 /-!
 # Rows of a consequence class over an algebra
@@ -16,8 +17,11 @@ atoms hold. Two shapes of consequence share the measure.
   group of Booleans under exclusive-or (`parity`); counts modulo a number would
   be another group. Equations of a class add (`equation_sum`), so the
   combinations an elimination finds are equations of the same class, and an
-  atom's terms with inverse values cancel (`measure_cancel`). Given every other
-  atom of an equation, the equation isolates one atom's contribution
+  atom's terms with inverse values cancel (`measure_cancel`). Equal measures
+  transport equations (`equation_of_agreement`); in parity, retaining exactly
+  the odd-multiplicity atoms preserves the measure (`parity_measure_odd`), so a
+  pointwise XOR of finite masks adds their equations (`parity_equation_of_xor`).
+  Given every other atom of an equation, the equation isolates one atom's contribution
   (`equation_isolates`): it forces the atom (`equation_forces_true`,
   `equation_forces_false`) or excludes the conditions given
   (`equation_excludes`).
@@ -50,7 +54,8 @@ A row enters a class through its provenance, checked once against its source:
 - a threshold over atom conditions bounds its terms' count
   (`lower_of_threshold`, `upper_of_negated_threshold`, from
   `ThresholdReduct.original`), and a guard releases a guarded threshold where it
-  holds (`guard_releases`).
+  holds (`guard_releases`); a clause forbidding every listed atom from being
+  false gives a lower bound of one (`lower_of_clause`).
 
 Not proved here: which rows, groups, completions, thresholds and guards a
 recognizer accepts; elimination, flow, or any search that finds a combination
@@ -226,6 +231,16 @@ end Equation
 The class names what the equation is a consequence of. -/
 def EquationOf (r : Reduction V) (C : Atoms α → Prop) (e : Equation α V) : Prop :=
   ∀ M, C M → e.Holds r M
+
+/-- Replacing an equation's terms by terms with the same measure in every member
+of its class preserves the equation, provided the constant is unchanged. This
+transports a consequence between representations without rechecking its source. -/
+theorem equation_of_agreement (r : Reduction V) (C : Atoms α → Prop)
+    {e f : Equation α V} (of : EquationOf r C e)
+    (agree : ∀ M, C M → measure r M f.terms = measure r M e.terms)
+    (constant : f.constant = e.constant) : EquationOf r C f := by
+  intro M member
+  exact (agree M member).trans ((of M member).trans constant.symm)
 
 /-- The sum of two equations of a class is an equation of the class. -/
 theorem equation_add (r : Reduction V) (C : Atoms α → Prop) {e f : Equation α V}
@@ -596,6 +611,68 @@ theorem cut_excludes_region (o : OrderedReduction V) (C : Atoms α → Prop) (c 
 
 /-! ## Provenance -/
 
+/-- Reassociating a conjunction preserves satisfaction in the original
+interpretation. This is a reading of the source formula, not a source rewrite. -/
+theorem conjunction_assoc_original (M : Atoms α) (F G H : Formula α) :
+    Satisfies M (.conj (.conj F G) H) ↔ Satisfies M (.conj F (.conj G H)) :=
+  and_assoc
+
+/-- A nested conjunction holds exactly when every listed leaf holds. The
+existing `FormulaBounds.ConjChain` records each leaf occurrence, including
+repeated formulas, without restricting the formulas at those leaves.
+
+Proof. A leaf is its singleton list. A conjunction joins two leaf lists, and
+its satisfaction supplies both induction hypotheses. -/
+theorem conjunction_chain_original (M : Atoms α) {F : Formula α}
+    {leaves : List (Formula α)} (chain : FormulaBounds.ConjChain F leaves) :
+    Satisfies M F ↔ ∀ L ∈ leaves, Satisfies M L := by
+  induction chain with
+  | leaf F =>
+    constructor
+    · intro holds L member
+      have same : L = F := List.mem_singleton.mp member
+      rw [same]
+      exact holds
+    · intro each
+      exact each F (List.mem_singleton.mpr rfl)
+  | node left right ihLeft ihRight =>
+    constructor
+    · intro holds L member
+      rcases List.mem_append.mp member with inLeft | inRight
+      · exact ihLeft.mp holds.1 L inLeft
+      · exact ihRight.mp holds.2 L inRight
+    · intro each
+      exact ⟨ihLeft.mpr (fun L member => each L (List.mem_append_left _ member)),
+        ihRight.mpr (fun L member => each L (List.mem_append_right _ member))⟩
+
+/-- Reading a conjunction tree as its flat list of leaf occurrences preserves
+original satisfaction, by the chain law and `ChoiceIntervals.all_classical`.
+Neither this reading nor its list representation removes repeated leaves. -/
+theorem conjunction_flatten_original (M : Atoms α) {F : Formula α}
+    {leaves : List (Formula α)} (chain : FormulaBounds.ConjChain F leaves) :
+    Satisfies M F ↔ Satisfies M (ChoiceIntervals.all leaves) :=
+  (conjunction_chain_original M chain).trans (ChoiceIntervals.all_classical M leaves).symm
+
+/-- The exact canonical truth formula, falsum implying falsum, holds in every
+original interpretation. This statement does not recognize other tautologies. -/
+theorem canonical_truth_original (M : Atoms α) :
+    Satisfies M (.imp .bot .bot) :=
+  fun impossible => impossible
+
+/-- An implication with the exact canonical truth antecedent has its
+consequent's original truth. The original formula and its reduct stay intact. -/
+theorem truth_implication_original (M : Atoms α) (F : Formula α) :
+    Satisfies M (.imp (.imp .bot .bot) F) ↔ Satisfies M F :=
+  ⟨fun holds => holds (canonical_truth_original M), fun holds _ => holds⟩
+
+/-- An asserted double-negated conjunction gives the original truth of every
+leaf, by `Ferraris.double_neg_satisfies` and the chain law. This is only an
+original-world statement: it does not erase double negation in a frozen reduct. -/
+theorem double_negated_conjunction_original (M : Atoms α) {F : Formula α}
+    {leaves : List (Formula α)} (chain : FormulaBounds.ConjChain F leaves) :
+    Satisfies M (Ferraris.Neg (Ferraris.Neg F)) ↔ ∀ L ∈ leaves, Satisfies M L :=
+  (Ferraris.double_neg_satisfies M F).trans (conjunction_chain_original M chain)
+
 /-- **Provenance by patterns.** A property local to a set of atoms holds in every
 model of a group of formulas that mention only those atoms, provided every
 interpretation inside the set that violates the property violates some formula of
@@ -634,6 +711,80 @@ a property of the group's models holds in every answer set. -/
 theorem entailed_by_part (T G : Theory α) (included : ∀ F ∈ G, F ∈ T) (P : Atoms α → Prop)
     (entailed : ∀ M, Models M G → P M) : ∀ M, Stable M T → P M :=
   fun M answer => entailed M (fun F member => answer.1 F (included F member))
+
+/-- **One checked fact step.** A class which already entails the recorded
+positive facts also entails the next atom when it entails an atomic-head
+implication and the earlier facts suffice for that implication's body.
+
+Proof. The earlier facts hold in the selected class member, hence its body
+holds; the asserted implication gives its head. Earlier facts remain true.
+Applying this law in witness order justifies each prefix. A readiness claim
+about the final fact set instead would not establish its premise. No producer
+uniqueness, complete interpretation or least-fixed-point hypothesis is used. -/
+theorem entailed_fact_step (C : Atoms α → Prop) (known : List α)
+    (body : Formula α) (head : α)
+    (earlier : ∀ M, C M → ∀ a ∈ known, M a)
+    (source : ∀ M, C M → Satisfies M (.imp body (.atom head)))
+    (ready : ∀ M, (∀ a ∈ known, M a) → Satisfies M body) :
+    ∀ M, C M → ∀ a ∈ head :: known, M a := by
+  intro M member atom listed
+  have earlierHolds : ∀ a ∈ known, M a := earlier M member
+  have bodyHolds : Satisfies M body := ready M earlierHolds
+  have headHolds : M head := source M member bodyHolds
+  rcases List.mem_cons.mp listed with same | previous
+  · subst atom
+    exact headHolds
+  · exact earlierHolds atom previous
+
+/-- **Provenance by patterns under proved facts.** Every member of a consequence
+class models the original theory and contains the checked positive facts. Each
+residual clause follows, under those facts, from an original root. If the
+residual clauses mention only S and exclude every local pattern violating P,
+then every class member has P.
+
+Proof. The facts and original model give each residual clause by its declared
+correspondence. Apply `entailed_by_patterns` to this residual theory, which
+really mentions only S. The original roots may mention additional fact atoms;
+they are not falsely claimed to satisfy that locality premise. Neither the
+original theory nor its frozen reduct is rewritten by this law. -/
+theorem entailed_by_residual_patterns
+    (C : Atoms α → Prop) (T residual : Theory α) (known : List α)
+    (S : Atoms α) (P : Atoms α → Prop)
+    (facts : ∀ M, C M → ∀ a ∈ known, M a)
+    (originalModels : ∀ M, C M → Models M T)
+    (correspondence : ∀ R ∈ residual, ∃ F ∈ T,
+      ∀ M, (∀ a ∈ known, M a) → Satisfies M F → Satisfies M R)
+    (depends : ∀ M N, EqOn S M N → P M → P N)
+    (mentions : ∀ F ∈ residual, ∀ a, Mentions F a → S a)
+    (checked : ∀ N, (∀ a, N a → S a) → ¬ P N →
+      ∃ F ∈ residual, ¬ Satisfies N F) :
+    ∀ M, C M → P M := by
+  intro M member
+  have residualModels : Models M residual := by
+    intro clause listed
+    obtain ⟨original, asserted, preserves⟩ := correspondence clause listed
+    have sourceHolds : Satisfies M original := originalModels M member original asserted
+    exact preserves M (facts M member) sourceHolds
+  exact entailed_by_patterns S residual P depends mentions checked M residualModels
+
+/-- A pattern is not forbidden by completion exactly when the head agrees with
+some fully satisfied body. AND reduces each body's literal values, OR reduces
+all producers, and XOR records disagreement. This is a pointwise statement, so
+it applies separately to every column bit of a finite interpretation table. -/
+theorem completion_fold_false_iff (head : Bool) (value : α → Bool)
+    (bodies : List (List α)) :
+    (head ^^ any.fold (all.fold value) bodies) = false ↔
+      (head = true ↔ ∃ body ∈ bodies, ∀ literal ∈ body, value literal = true) := by
+  have bodyUnion : any.fold (all.fold value) bodies = true ↔
+      ∃ body ∈ bodies, ∀ literal ∈ body, value literal = true := by
+    rw [any_fold_true_iff]
+    constructor
+    · rintro ⟨body, listed, holds⟩
+      exact ⟨body, listed, (all_fold_true_iff value body).mp holds⟩
+    · rintro ⟨body, listed, each⟩
+      exact ⟨body, listed, (all_fold_true_iff value body).mpr each⟩
+  rw [← bodyUnion]
+  cases head <;> cases any.fold (all.fold value) bodies <;> decide
 
 open DisjunctiveSupport in
 /-- **Provenance by completion.** A property local to a set holding an atom and
@@ -689,6 +840,103 @@ def parity : AbelianGroup Bool where
   unit_op := fun a => by cases a <;> rfl
   neg := fun a => a
   op_neg := fun a => by cases a <;> rfl
+
+/-- **Odd multiplicity.** A list of unit parity terms has the same measure as
+any duplicate-free list containing exactly its atoms of odd multiplicity.
+
+Proof. Remove the first occurrence. If its atom is in the odd list, remove it
+there too and use permutation invariance. Otherwise insert it into the odd list
+for the induction hypothesis; the two copies then cancel. No ordering of atoms
+or packed representation is assumed. -/
+theorem parity_measure_odd [DecidableEq α] (M : Atoms α) (atoms mask : List α)
+    (distinct : mask.Nodup)
+    (odd : ∀ a, a ∈ mask ↔ atoms.count a % 2 = 1) :
+    measure parity.toReduction M (atoms.map fun a => (a, true)) =
+      measure parity.toReduction M (mask.map fun a => (a, true)) := by
+  induction atoms generalizing mask with
+  | nil =>
+    have empty : mask = [] := by
+      apply List.eq_nil_iff_forall_not_mem.mpr
+      intro a member
+      have impossible := (odd a).mp member
+      simp at impossible
+    rw [empty]
+  | cons a rest ih =>
+    by_cases present : a ∈ mask
+    · have restOdd : ∀ b, b ∈ mask.erase a ↔ rest.count b % 2 = 1 := by
+        intro b
+        rw [distinct.mem_erase_iff]
+        by_cases same : b = a
+        · subst b
+          have before : (rest.count a + 1) % 2 = 1 := by
+            simpa only [List.count_cons_self] using (odd a).mp present
+          simp only [ne_self_iff_false, false_and, false_iff]
+          omega
+        · simpa [same, Ne.symm same, List.count_cons] using odd b
+      have reduced := ih (mask.erase a) (distinct.erase a) restOdd
+      have reordered := measure_perm parity.toReduction M
+        ((List.perm_cons_erase present).map (fun b => (b, true)))
+      rw [reordered, List.map_cons, List.map_cons, measure_cons, measure_cons, reduced]
+    · have restOdd : ∀ b, b ∈ a :: mask ↔ rest.count b % 2 = 1 := by
+        intro b
+        by_cases same : b = a
+        · subst b
+          have before : ¬ (a :: rest).count a % 2 = 1 :=
+            fun value => present ((odd a).mpr value)
+          simp only [List.count_cons_self] at before
+          simp only [List.mem_cons, true_or, true_iff]
+          omega
+        · simpa [same, Ne.symm same, List.count_cons] using odd b
+      have reduced := ih (a :: mask) (List.nodup_cons.mpr ⟨present, distinct⟩) restOdd
+      rw [List.map_cons, measure_cons, reduced, List.map_cons, measure_cons]
+      show parity.op (contribution parity.toReduction M (a, true))
+        (parity.op (contribution parity.toReduction M (a, true))
+          (measure parity.toReduction M (mask.map fun b => (b, true)))) = _
+      rw [← parity.assoc]
+      have pair : parity.op (contribution parity.toReduction M (a, true))
+          (contribution parity.toReduction M (a, true)) = parity.unit := by
+        have cancelled : measure parity.toReduction M [(a, true), (a, true)] = parity.unit :=
+          measure_cancel parity M a true
+        rw [measure_cons, measure_cons] at cancelled
+        change parity.op (contribution parity.toReduction M (a, true))
+          (parity.op (contribution parity.toReduction M (a, true)) parity.unit) = parity.unit
+          at cancelled
+        rwa [parity.toReduction.op_unit] at cancelled
+      rw [pair, parity.unit_op]
+
+/-- **XOR of finite masks.** If duplicate-free atom lists represent two parity
+equations and a third list's membership bits are their pointwise exclusive-or,
+the third list with the exclusive-or constant is an equation of the same class.
+
+Proof. Add the original equations. The XOR mask lists exactly the odd-multiplicity
+atoms of the concatenation; `parity_measure_odd` and `equation_of_agreement`
+transport the sum to that mask. The premise is the representation obligation;
+this theorem does not verify machine-word XOR, coordinates or padding. -/
+theorem parity_equation_of_xor [DecidableEq α] (C : Atoms α → Prop)
+    (first second combined : List α) (firstConstant secondConstant : Bool)
+    (firstDistinct : first.Nodup) (secondDistinct : second.Nodup)
+    (combinedDistinct : combined.Nodup)
+    (bits : ∀ a, decide (a ∈ combined) = (decide (a ∈ first) ^^ decide (a ∈ second)))
+    (left : EquationOf parity.toReduction C
+      ⟨first.map (fun a => (a, true)), firstConstant⟩)
+    (right : EquationOf parity.toReduction C
+      ⟨second.map (fun a => (a, true)), secondConstant⟩) :
+    EquationOf parity.toReduction C
+      ⟨combined.map (fun a => (a, true)), firstConstant ^^ secondConstant⟩ := by
+  have odd : ∀ a, a ∈ combined ↔ (first ++ second).count a % 2 = 1 := by
+    intro a
+    have decoded : a ∈ combined ↔
+        (decide (a ∈ first) ^^ decide (a ∈ second)) = true := by
+      rw [← bits a]
+      simp
+    rw [List.count_append, firstDistinct.count, secondDistinct.count]
+    by_cases inFirst : a ∈ first <;> by_cases inSecond : a ∈ second <;>
+      simpa [inFirst, inSecond] using decoded
+  apply equation_of_agreement parity.toReduction C (equation_add parity.toReduction C left right)
+  · intro M _
+    simpa only [Equation.add, List.map_append] using
+      (parity_measure_odd M (first ++ second) combined combinedDistinct odd).symm
+  · rfl
 
 /-- **Counts**: the natural numbers under addition and their order. A term's
 measure is the weighted count of its atoms that hold. -/
@@ -791,6 +1039,35 @@ theorem upper_of_negated_threshold {β : Type w} (conditions : β → Formula α
   exact Nat.lt_of_not_le (fun reached =>
     holds ((ThresholdReduct.original M conditions inputs bound).mpr reached))
 
+/-- An asserted conjunction supplies both lower bounds from positive threshold
+leaves and strict upper bounds from negated threshold leaves. Other leaves may
+occur between them; each consequence requires its own leaf membership.
+
+Proof. The conjunction-chain law supplies each leaf's original satisfaction.
+`lower_of_threshold` and `upper_of_negated_threshold` then give the two kinds of
+bound. An optional outer double negation can supply the premise through
+`Ferraris.double_neg_satisfies`. In an answer set, an asserted original root's
+satisfaction comes from `Stable`'s original-model premise. No leaf is rewritten
+or discarded, and this does not establish a recognizer's complete traversal. -/
+theorem bounds_of_asserted_conjunction {β : Type w}
+    (conditions : β → Formula α) (atomOf : β → α)
+    (atoms : ∀ i, conditions i = .atom (atomOf i)) (M : Atoms α)
+    {F : Formula α} {leaves : List (Formula α)}
+    (chain : FormulaBounds.ConjChain F leaves) (asserted : Satisfies M F) :
+    (∀ inputs bound, ThresholdReduct.formula conditions inputs bound ∈ leaves →
+      bound ≤ measure counting.toReduction M
+        (inputs.map fun input => (atomOf input.2, input.1))) ∧
+    (∀ inputs bound, Ferraris.Neg (ThresholdReduct.formula conditions inputs bound) ∈ leaves →
+      measure counting.toReduction M
+        (inputs.map fun input => (atomOf input.2, input.1)) < bound) := by
+  have each : ∀ L ∈ leaves, Satisfies M L :=
+    (conjunction_chain_original M chain).mp asserted
+  constructor
+  · intro inputs bound member
+    exact lower_of_threshold conditions atomOf atoms inputs bound M (each _ member)
+  · intro inputs bound member
+    exact upper_of_negated_threshold conditions atomOf atoms inputs bound M (each _ member)
+
 /-- A count is a measure under `counting` with unit weights, bridging
 `ChoiceIntervals.count` and `PartitionCapacities` to this module. -/
 theorem count_measure (M : Atoms α) (atoms : List α) :
@@ -807,6 +1084,32 @@ theorem count_measure (M : Atoms α) (atoms : List α) :
     · rw [if_neg holds, contribution_of_fails counting.toReduction (t := (a, 1)) holds]
       show 0 + _ = 0 + _
       rfl
+
+/-- A satisfied clause forbidding all its atoms from being false bounds their
+unit-weight measure from below by one. Repeated atoms do not invalidate this
+lower bound; a recognizer may impose distinctness to represent a set of atoms.
+
+Proof. If no listed atom held, every negated atom in the clause's conjunction
+would hold, contradicting the clause. A held atom contributes to the count,
+which `count_measure` identifies with the measure. -/
+theorem lower_of_clause (M : Atoms α) (atoms : List α)
+    (holds : Satisfies M
+      (Ferraris.Neg (ChoiceIntervals.all (atoms.map fun a => Ferraris.Neg (.atom a))))) :
+    1 ≤ measure counting.toReduction M (atoms.map fun a => (a, 1)) := by
+  classical
+  have present : ∃ a ∈ atoms, M a := by
+    apply Classical.byContradiction
+    intro absent
+    apply holds
+    apply (ChoiceIntervals.all_classical M _).mpr
+    intro F listed
+    obtain ⟨a, member, rfl⟩ := List.mem_map.mp listed
+    exact fun satisfied => absent ⟨a, member, satisfied⟩
+  obtain ⟨a, member, satisfied⟩ := present
+  have counted : a ∈ atoms.filter (fun b => decide (M b)) :=
+    List.mem_filter.mpr ⟨member, decide_eq_true satisfied⟩
+  rw [← count_measure]
+  exact List.length_pos_of_mem counted
 
 /-- The double count in `PartitionCapacities`' terms, the instance C0 checks: two
 families of groups whose members are each a permutation of the same atoms, the

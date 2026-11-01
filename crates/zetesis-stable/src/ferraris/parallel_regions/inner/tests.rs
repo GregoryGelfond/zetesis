@@ -116,7 +116,13 @@ fn walk(
         statistics: SearchStatistics::default(),
     };
     let mut search = ParallelRegions::new(
-        theory,
+        crate::ferraris::regions::open(
+            theory,
+            limits.max_reduct_bytes,
+            limits.learning,
+            &mut budget,
+        )
+        .unwrap(),
         NonZeroUsize::new(2).unwrap(),
         Engagement::Immediate,
         limits,
@@ -514,7 +520,13 @@ fn a_coordinator_publishes_its_query_at_engagement() {
         statistics: SearchStatistics::default(),
     };
     let mut search = ParallelRegions::new(
-        &theory,
+        crate::ferraris::regions::open(
+            &theory,
+            limits.max_reduct_bytes,
+            limits.learning,
+            &mut budget,
+        )
+        .unwrap(),
         NonZeroUsize::new(2).unwrap(),
         Engagement::After(Duration::from_hours(1)),
         limits,

@@ -1,7 +1,9 @@
 //! Candidates proposed by regions: the coverage tree over the theory's
 //! atoms, narrowed by the theory's readings.
 //!
-//! The root region leaves every atom open. Each region is narrowed to the
+//! Checked original-answer arithmetic prepares the root before the walk. A
+//! refuted root starts no walk; otherwise its proved units seed the root and
+//! every remaining atom stays open. Each region is narrowed to the
 //! fixed point of `zetesis_ferraris::Narrower::narrow_known` over the
 //! original theory, from its parent's knowledge, with
 //! its producers for the support cut, and over every candidate-only
@@ -26,7 +28,8 @@ use zetesis_cpu::regions::{Counting, Narrowing, Region, Traversal, Visit};
 use zetesis_ferraris::{
     ChoiceHeads, FrozenSubject, GeneratorOrder, GeneratorOrderError, Interpretation, Knowledge,
     LearningLimits, LearningOwner, Narrower, NarrowingAttempt, NarrowingQuota, NarrowingScratch,
-    OriginalSubject, Producers, RegionLimits, SupportExplanationStatistics, Theory,
+    OriginalSubject, PreparationError, PreparationLimits, Producers, RegionLimits, RootPreparation,
+    SupportExplanationStatistics, Theory,
 };
 
 use super::conditions::{Bound, CandidateKnowledge, Conditions};
@@ -59,7 +62,7 @@ pub struct RegionCounts {
     /// Atoms the readings or original source consequences cut.
     pub cut: u64,
     /// Node reads, root tests and producer checks, and for the candidate
-    /// tree the producer extraction, optional generator-order preparation,
+    /// tree the producer extraction, optional arithmetic and generator-order preparation,
     /// the indexing of each restriction and,
     /// once a region walk first needs it, the indexing of the theory, one
     /// unit per node and operand occurrence (kept even if building the index
@@ -220,6 +223,10 @@ pub struct RegionSearchStatistics {
     pub producers: bool,
     /// Shared original generator-order preparation; included in `counts.work`.
     pub generator_order: GeneratorOrderStatistics,
+    /// Checked original-answer affine preparation, including declined prefixes.
+    pub parity: zetesis_ferraris::ParityStatistics,
+    /// Checked original-answer counting preparation, including declined prefixes.
+    pub cardinality: zetesis_ferraris::CardinalityStatistics,
     /// Frontier ownership measured by parallel candidate production. Other
     /// schedules do not currently measure it; absence does not mean zero bytes.
     pub frontier: Option<RegionFrontierStatistics>,
@@ -264,6 +271,10 @@ impl FrontierOrder {
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum GeneratorOrderStatus {
+    /// An earlier conclusive preparation made this optional order unnecessary.
+    NotPrepared,
+    /// Mandatory preparation stopped; its executed prefix remains recorded.
+    Incomplete,
     /// The complete producer fragment or a generating head is absent.
     #[default]
     NotApplicable,
@@ -278,6 +289,8 @@ impl GeneratorOrderStatus {
     #[must_use]
     pub const fn label(self) -> &'static str {
         match self {
+            Self::NotPrepared => "not_prepared",
+            Self::Incomplete => "incomplete",
             Self::NotApplicable => "not_applicable",
             Self::Prepared => "prepared",
             Self::StorageDeclined => "storage_declined",
@@ -438,6 +451,7 @@ pub(crate) struct OriginalParts {
     producers: Option<Producers>,
     choice_heads: ChoiceHeads,
     generator_order: Option<GeneratorOrder>,
+    arithmetic: Option<RootPreparation>,
     learning: LearningOwner,
     learned: Option<Arc<LearnedStore>>,
 }
@@ -454,7 +468,12 @@ impl OriginalParts {
     /// the carrier of the rows the walk learns. Restrictions, the bound and
     /// filters are read by other subjects, which never carry rows.
     pub(crate) fn subject(&self, theory: &Theory) -> Result<OriginalSubject<'_>, Incomplete> {
-        if !self.learning.owns(theory) {
+        if !self.learning.owns(theory)
+            || self
+                .arithmetic
+                .as_ref()
+                .is_some_and(|prepared| !prepared.belongs_to(theory))
+        {
             return Err(Incomplete::WrongTheory);
         }
         Ok(
@@ -569,75 +588,147 @@ impl OriginalParts {
 pub(crate) struct Opened {
     pub(crate) parts: OriginalParts,
     pub(crate) statistics: RegionSearchStatistics,
+    /// Absent only after an absorbing original-answer refutation.
+    pub(crate) root: Option<Region>,
 }
 
-/// Extract original producers, then prepare the optional shared generator
-/// order under the caller's independent preparation-byte allowance. Work uses
-/// the same streaming quota as narrowing, including every refused prefix.
+/// Opening result with every settled preparation prefix, even on failure.
+pub(crate) struct Opening {
+    pub(crate) result: Result<Opened, Incomplete>,
+    pub(crate) statistics: RegionSearchStatistics,
+}
+
+/// Extract original producers, checked arithmetic, and then generator order.
+/// Publish the settled receipt before inspecting success or failure. A proved
+/// arithmetic contradiction still absorbs before order or root allocation.
+pub(crate) fn open_attempt(
+    theory: &Theory,
+    order_byte_limit: u64,
+    learning: LearningLimits,
+    budget: &mut Budget<'_>,
+) -> Opening {
+    let before = budget.statistics.work;
+    let mut statistics = RegionSearchStatistics {
+        generator_order: GeneratorOrderStatistics {
+            status: GeneratorOrderStatus::NotPrepared,
+            ..Default::default()
+        },
+        ..Default::default()
+    };
+    let mut result = open_recording(theory, order_byte_limit, learning, budget, &mut statistics);
+    statistics.counts.work = budget.statistics.work - before;
+    if let Ok(opened) = result.as_mut() {
+        opened.statistics = statistics;
+    } else {
+        // These objects were dropped with the failed opening; their peak and
+        // work receipts remain, but no published capacity remains retained.
+        statistics.generator_order.retained_bytes = 0;
+        statistics.parity.retained_bytes = 0;
+        statistics.cardinality.retained_bytes = 0;
+    }
+    Opening { result, statistics }
+}
+
+#[cfg(test)]
 pub(crate) fn open(
     theory: &Theory,
     order_byte_limit: u64,
     learning: LearningLimits,
     budget: &mut Budget<'_>,
 ) -> Result<Opened, Incomplete> {
+    open_attempt(theory, order_byte_limit, learning, budget).result
+}
+
+fn open_recording(
+    theory: &Theory,
+    order_byte_limit: u64,
+    learning: LearningLimits,
+    budget: &mut Budget<'_>,
+    statistics: &mut RegionSearchStatistics,
+) -> Result<Opened, Incomplete> {
     let extraction = zetesis_ferraris::producers(theory, limits(budget), budget.cancellation)
         .map_err(stopped)?;
     budget.charge(extraction.work)?;
+    statistics.producers = extraction.producers.is_some();
     let cancellation = budget.cancellation;
     let mut quota = BudgetQuota {
         budget,
         failure: None,
     };
-    let attempt = GeneratorOrder::prepare_reserved(
-        OriginalSubject::new(theory, extraction.producers.as_ref()),
-        usize::try_from(order_byte_limit).unwrap_or(usize::MAX),
+    let arithmetic = RootPreparation::prepare_reserved(
+        theory,
+        extraction.producers.as_ref(),
+        PreparationLimits {
+            work: PreparationLimits::DEFAULT_WORK,
+            bytes: usize::try_from(order_byte_limit).unwrap_or(usize::MAX),
+        },
         cancellation,
         &mut quota,
     );
-    let (generator_order, status) = match attempt.result {
-        Ok(order) => {
-            let status = if order.is_some() {
-                GeneratorOrderStatus::Prepared
-            } else {
-                GeneratorOrderStatus::NotApplicable
-            };
-            (order, status)
-        }
-        Err(GeneratorOrderError::Storage { .. }) => (None, GeneratorOrderStatus::StorageDeclined),
-        Err(GeneratorOrderError::Stopped(stop)) => {
-            return Err(quota.failure.take().unwrap_or_else(|| stopped(stop)));
-        }
+    statistics.parity = arithmetic.parity;
+    statistics.cardinality = arithmetic.cardinality;
+    let mut arithmetic = arithmetic.result.map_err(|error| match error {
+        PreparationError::Stopped(stop) => quota.failure.take().unwrap_or_else(|| stopped(stop)),
+        PreparationError::Source(source) => Incomplete::ArithmeticSource(source),
+    })?;
+    let refuted = arithmetic
+        .as_ref()
+        .is_some_and(RootPreparation::root_refuted);
+    let generator_order = if refuted {
+        None
+    } else {
+        let attempt = GeneratorOrder::prepare_reserved(
+            OriginalSubject::new(theory, extraction.producers.as_ref()),
+            usize::try_from(order_byte_limit).unwrap_or(usize::MAX),
+            cancellation,
+            &mut quota,
+        );
+        // The attempt's prefix remains visible even when its result is a stop.
+        statistics.generator_order.work = attempt.work;
+        statistics.generator_order.peak_bytes = attempt.peak_bytes;
+        let (order, status) = match attempt.result {
+            Ok(order) => {
+                let status = if order.is_some() {
+                    GeneratorOrderStatus::Prepared
+                } else {
+                    GeneratorOrderStatus::NotApplicable
+                };
+                (order, status)
+            }
+            Err(GeneratorOrderError::Storage { .. }) => {
+                (None, GeneratorOrderStatus::StorageDeclined)
+            }
+            Err(GeneratorOrderError::Stopped(stop)) => {
+                statistics.generator_order.status = GeneratorOrderStatus::Incomplete;
+                return Err(quota.failure.take().unwrap_or_else(|| stopped(stop)));
+            }
+        };
+        statistics.generator_order.status = status;
+        statistics.generator_order.retained_bytes =
+            order.as_ref().map_or(0, GeneratorOrder::retained_bytes);
+        order
     };
-    let generator_statistics = GeneratorOrderStatistics {
-        status,
-        work: attempt.work,
-        peak_bytes: attempt.peak_bytes,
-        retained_bytes: generator_order
-            .as_ref()
-            .map_or(0, GeneratorOrder::retained_bytes),
+    let root = if refuted {
+        None
+    } else {
+        Some(
+            arithmetic
+                .as_mut()
+                .and_then(RootPreparation::take_seeded_root)
+                .unwrap_or_else(|| Region::all_open(theory.atom_count())),
+        )
     };
     Ok(Opened {
-        statistics: RegionSearchStatistics {
-            counts: RegionCounts {
-                work: extraction
-                    .work
-                    .checked_add(attempt.work)
-                    .ok_or(Incomplete::CounterOverflow)?,
-                ..Default::default()
-            },
-            producers: extraction.producers.is_some(),
-            generator_order: generator_statistics,
-            frontier: None,
-            workers: None,
-            frontier_order: None,
-        },
+        statistics: *statistics,
         parts: OriginalParts {
             producers: extraction.producers,
             choice_heads: extraction.choice_heads,
             generator_order,
+            arithmetic,
             learning: LearningOwner::theory(theory, learning),
             learned: None,
         },
+        root,
     })
 }
 
@@ -655,25 +746,20 @@ pub(crate) fn leaf_interpretation(
 }
 
 impl RegionSearch {
-    /// Extract the producers and queue the root region with no knowledge;
-    /// its first narrowing creates each knowledge slot.
-    pub(crate) fn new(
-        theory: &Theory,
-        native_byte_limit: u64,
-        order_byte_limit: u64,
-        learning: LearningLimits,
-        budget: &mut Budget<'_>,
-    ) -> Result<Self, Incomplete> {
-        let Opened { parts, statistics } = open(theory, order_byte_limit, learning, budget)?;
+    /// Queue the already prepared root; its first narrowing creates each
+    /// knowledge slot. Refuted roots are dispatched before this constructor.
+    pub(crate) fn new(opened: Opened, native_byte_limit: u64) -> Result<Self, Incomplete> {
+        let Opened {
+            parts,
+            statistics,
+            root,
+        } = opened;
+        let root = root.ok_or(Incomplete::InvalidWitness)?;
         Ok(Self {
             statistics,
             parts,
-            traversal: Traversal::with_state(
-                Region::all_open(theory.atom_count()),
-                Counting::Never,
-                CandidateKnowledge::default(),
-            )
-            .with_held_first(),
+            traversal: Traversal::with_state(root, Counting::Never, CandidateKnowledge::default())
+                .with_held_first(),
             restrictions: Conditions::default(),
             scratch: NarrowingScratch::default(),
             tier: Tier::default(),
@@ -729,6 +815,8 @@ impl RegionSearch {
             },
             producers: self.statistics.producers,
             generator_order: self.statistics.generator_order,
+            parity: self.statistics.parity,
+            cardinality: self.statistics.cardinality,
             frontier: None,
             workers: None,
             frontier_order: None,

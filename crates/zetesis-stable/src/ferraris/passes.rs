@@ -142,6 +142,25 @@ fn regions(
         .generator_order
         .peak_bytes
         .max(later.generator_order.peak_bytes);
+    later.parity.preparation_work = earlier
+        .parity
+        .preparation_work
+        .saturating_add(later.parity.preparation_work);
+    later.parity.preparation_bytes = earlier
+        .parity
+        .preparation_bytes
+        .max(later.parity.preparation_bytes);
+    later.parity.phases = preparation_work(earlier.parity.phases, later.parity.phases);
+    later.cardinality.preparation_work = earlier
+        .cardinality
+        .preparation_work
+        .saturating_add(later.cardinality.preparation_work);
+    later.cardinality.preparation_bytes = earlier
+        .cardinality
+        .preparation_bytes
+        .max(later.cardinality.preparation_bytes);
+    later.cardinality.phases =
+        preparation_work(earlier.cardinality.phases, later.cardinality.phases);
     if let (Some(earlier), Some(later)) = (earlier.frontier, later.frontier.as_mut()) {
         *later = RegionFrontierStatistics {
             peak_regions: earlier.peak_regions.max(later.peak_regions),
@@ -151,6 +170,23 @@ fn regions(
         };
     }
     later
+}
+
+fn preparation_work(
+    earlier: zetesis_ferraris::PreparationWork,
+    later: zetesis_ferraris::PreparationWork,
+) -> zetesis_ferraris::PreparationWork {
+    zetesis_ferraris::PreparationWork {
+        recognition: earlier.recognition.saturating_add(later.recognition),
+        provenance: earlier.provenance.saturating_add(later.provenance),
+        reduction: earlier.reduction.saturating_add(later.reduction),
+        discovery: earlier.discovery.saturating_add(later.discovery),
+        candidate_checks: earlier
+            .candidate_checks
+            .saturating_add(later.candidate_checks),
+        index: earlier.index.saturating_add(later.index),
+        root_seed: earlier.root_seed.saturating_add(later.root_seed),
+    }
 }
 
 fn counts(earlier: &RegionCounts, later: RegionCounts) -> RegionCounts {

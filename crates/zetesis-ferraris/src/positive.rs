@@ -5,6 +5,7 @@
 //! dependency projection as the original theory. Construction computes the least
 //! consequences once; no per-candidate propagation graph is retained.
 
+pub(crate) mod activation;
 mod compile;
 mod propagate;
 #[cfg(test)]

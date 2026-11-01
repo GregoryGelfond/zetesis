@@ -4,6 +4,228 @@ use std::ops::RangeInclusive;
 
 const WORD_BITS: usize = u64::BITS as usize;
 
+/// Union two word-aligned sets in ascending word order.
+///
+/// Charges one OR before each mutation, including its loads and store. There
+/// is no allocation. Refusal preserves the unvisited suffix. Padding is part
+/// of the set and must already be clear when it is outside the caller's domain.
+///
+/// # Errors
+/// Returns the first callback refusal, before that word is changed.
+///
+/// # Panics
+/// Panics before any callback if the lengths differ.
+pub fn union_assign<E>(
+    left: &mut [u64],
+    right: &[u64],
+    before: &mut impl FnMut(u64) -> Result<(), E>,
+) -> Result<(), E> {
+    assert_eq!(left.len(), right.len(), "packed rows have equal lengths");
+    for (left, right) in left.iter_mut().zip(right) {
+        before(1)?;
+        *left |= *right;
+    }
+    Ok(())
+}
+
+/// Decide disjointness, stopping at the first shared position.
+///
+/// Each visited word costs one AND and one zero test. An intersection is an
+/// absorbing witness: no later word or callback is visited. Empty sets are
+/// disjoint without reading a word. No allocation or mutation occurs.
+///
+/// # Errors
+/// Returns the first callback refusal; an unfinished scan proves no result.
+///
+/// # Panics
+/// Panics before any callback if the lengths differ.
+pub fn disjoint<E>(
+    left: &[u64],
+    right: &[u64],
+    before: &mut impl FnMut(u64) -> Result<(), E>,
+) -> Result<bool, E> {
+    assert_eq!(left.len(), right.len(), "packed rows have equal lengths");
+    for (left, right) in left.iter().zip(right) {
+        before(1)?;
+        let common = *left & *right;
+        before(1)?;
+        if common != 0 {
+            return Ok(false);
+        }
+    }
+    Ok(true)
+}
+
+/// Count all set positions with a popcount reduction.
+///
+/// Initialization costs one operation. Each word costs one popcount and one
+/// addition. All stored bits participate; the caller clears universe padding.
+/// Work is `1 + 2*words.len()` and auxiliary space is constant.
+///
+/// # Errors
+/// Returns the first callback refusal without a partial result.
+///
+/// # Panics
+/// Panics before any callback if the complete bit width exceeds `usize::MAX`.
+pub fn count<E>(words: &[u64], before: &mut impl FnMut(u64) -> Result<(), E>) -> Result<usize, E> {
+    assert!(
+        words.len() <= usize::MAX / WORD_BITS,
+        "packed bit width fits"
+    );
+    before(1)?;
+    let mut total = 0;
+    for word in words {
+        before(1)?;
+        let count = word.count_ones() as usize;
+        before(1)?;
+        total += count;
+    }
+    Ok(total)
+}
+
+/// Find the least set position without inspecting any later words.
+///
+/// Each visited word costs its zero test. A found bit adds trailing-zero count,
+/// position multiplication/addition and publication of the presence tag: four
+/// operations. Absence adds one final tag. Padding participates like any bit.
+/// No allocation or retained state occurs.
+///
+/// # Errors
+/// Returns the first callback refusal without a partial result.
+///
+/// # Panics
+/// Panics before any callback if the complete bit width exceeds `usize::MAX`.
+pub fn first<E>(
+    words: &[u64],
+    before: &mut impl FnMut(u64) -> Result<(), E>,
+) -> Result<Option<usize>, E> {
+    assert!(
+        words.len() <= usize::MAX / WORD_BITS,
+        "packed bit width fits"
+    );
+    for (index, word) in words.iter().enumerate() {
+        before(1)?;
+        if *word != 0 {
+            before(4)?;
+            return Ok(Some(index * WORD_BITS + word.trailing_zeros() as usize));
+        }
+    }
+    before(1)?;
+    Ok(None)
+}
+
+/// Visit every set position once, ascending, borrowing a caller-owned context.
+///
+/// Each word copy costs one operation. Each position costs trailing-zero count,
+/// position multiplication/addition, subtraction and clearing its bit: five.
+/// Visitor work is separate. Sharing a context lets both callbacks use one
+/// budget without interior mutability. Auxiliary space is constant.
+///
+/// # Errors
+/// Returns the first charging or visitor failure, with no subsequent visit.
+/// Already completed visitor effects form a prefix, never a complete result.
+///
+/// # Panics
+/// Panics before any callback if the complete bit width exceeds `usize::MAX`.
+pub fn visit_set_bits<C, E>(
+    words: &[u64],
+    context: &mut C,
+    before: &mut impl FnMut(&mut C, u64) -> Result<(), E>,
+    visit: &mut impl FnMut(&mut C, usize) -> Result<(), E>,
+) -> Result<(), E> {
+    assert!(
+        words.len() <= usize::MAX / WORD_BITS,
+        "packed bit width fits"
+    );
+    for (index, word) in words.iter().enumerate() {
+        before(context, 1)?;
+        let mut remaining = *word;
+        while remaining != 0 {
+            before(context, 5)?;
+            let position = index * WORD_BITS + remaining.trailing_zeros() as usize;
+            remaining &= remaining - 1;
+            visit(context, position)?;
+        }
+    }
+    Ok(())
+}
+
+/// Replace `left` by its symmetric difference with `right`.
+///
+/// Both slices represent the same word-aligned universe; every stored bit,
+/// including padding, participates. Words are visited in ascending order.
+/// `before` runs immediately before each word XOR, exactly once per word on
+/// success. Each XOR includes its operand loads and result store. Separate
+/// initialization belongs to the caller's ledger; loop control is not charged.
+///
+/// No allocation or retained state occurs. Work is linear in the slice length
+/// and auxiliary space is constant. After each completed word, that prefix is
+/// the symmetric difference and the remaining suffix is unchanged.
+///
+/// # Errors
+/// Returns the callback's first refusal without changing the refused word or
+/// visiting later words. The already-modified prefix is incomplete output.
+///
+/// # Panics
+/// Panics before any callback or mutation if the slice lengths differ.
+#[inline]
+pub fn xor_assign<E>(
+    left: &mut [u64],
+    right: &[u64],
+    before: &mut impl FnMut() -> Result<(), E>,
+) -> Result<(), E> {
+    assert_eq!(left.len(), right.len(), "packed rows have equal lengths");
+    for (left, right) in left.iter_mut().zip(right) {
+        before()?;
+        *left ^= *right;
+    }
+    Ok(())
+}
+
+/// Count the positions present in both word-aligned sets.
+///
+/// Every stored bit participates, so callers must clear any padding outside
+/// their logical universe. Words are visited in ascending order. For each word,
+/// `before` runs once immediately before the AND and again immediately before
+/// the popcount: exactly two primitive-operation charges per word on success.
+/// Each primitive includes its operand loads and result store. Initializing and
+/// adding to the accumulator belong to the caller's ledger; loop control is not
+/// charged.
+///
+/// No allocation or retained state occurs. Work is linear in the slice length
+/// and auxiliary space is constant. The accumulator counts the intersection
+/// of the completed prefix; the length bound ensures that every sum fits.
+///
+/// # Errors
+/// Returns the callback's first refusal before that primitive operation, with
+/// no later operations or callbacks. No partial count is returned. Both input
+/// slices remain unchanged, including when popcount is refused after an AND.
+///
+/// # Panics
+/// Panics before any callback if the slice lengths differ or their full bit
+/// width exceeds `usize::MAX`.
+#[inline]
+pub fn intersection_count<E>(
+    left: &[u64],
+    right: &[u64],
+    before: &mut impl FnMut() -> Result<(), E>,
+) -> Result<usize, E> {
+    assert_eq!(left.len(), right.len(), "packed rows have equal lengths");
+    assert!(
+        left.len() <= usize::MAX / WORD_BITS,
+        "packed bit width fits"
+    );
+    let mut total = 0;
+    for (left, right) in left.iter().zip(right) {
+        before()?;
+        let common = *left & *right;
+        before()?;
+        let count = common.count_ones();
+        total += usize::try_from(count).expect("one word's popcount fits usize");
+    }
+    Ok(total)
+}
+
 /// Add a translated copy of the initialized source prefix to `words`.
 ///
 /// A bit at `s` adds a bit at `s + shift`, when that position fits the output

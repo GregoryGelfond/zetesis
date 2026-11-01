@@ -670,3 +670,172 @@ fn a_stopped_narrowing_surrenders_its_region() {
     assert_eq!(pending.len(), 1);
     assert_eq!(pending[0].0, Region::all_open(2));
 }
+
+#[test]
+fn fallible_open_regions_match_the_default_constructor() {
+    for atoms in [0, 1, 63, 64, 65, 127, 128, 129] {
+        assert_eq!(
+            Region::try_all_open(atoms).unwrap(),
+            Region::all_open(atoms)
+        );
+    }
+}
+
+#[derive(Debug, PartialEq, Eq)]
+enum ConstructionFailure {
+    Stopped(Stop),
+    Work(usize),
+    Storage(usize),
+}
+
+impl From<Stop> for ConstructionFailure {
+    fn from(stop: Stop) -> Self {
+        Self::Stopped(stop)
+    }
+}
+
+#[derive(Default)]
+struct Construction {
+    work: u64,
+    work_calls: usize,
+    storage_calls: usize,
+    storage: Vec<u128>,
+}
+
+fn record_work(state: &mut Construction, work: u64) {
+    state.work += work;
+    state.work_calls += 1;
+}
+
+fn record_storage(state: &mut Construction, bytes: u128) {
+    state.storage.push(bytes);
+    state.storage_calls += 1;
+}
+
+#[test]
+fn metered_open_regions_charge_their_initialization() {
+    for atoms in [0_usize, 1, 63, 64, 65, 127, 128, 129] {
+        let mut state = Construction::default();
+        let region = Region::try_all_open_with(
+            atoms,
+            &mut state,
+            &mut |state, work| {
+                record_work(state, work);
+                Ok::<_, ConstructionFailure>(())
+            },
+            &mut |state, bytes| {
+                record_storage(state, bytes);
+                Ok::<_, ConstructionFailure>(())
+            },
+        )
+        .unwrap();
+        assert_eq!(region, Region::all_open(atoms));
+        assert_eq!(
+            state.work,
+            12 + 4 * u64::try_from(atoms.div_ceil(64)).unwrap()
+        );
+    }
+}
+
+#[test]
+fn mask_capacity_observations_include_the_live_header() {
+    let mut state = Construction::default();
+    let region = Region::try_all_open_with(
+        65,
+        &mut state,
+        &mut |state, work| {
+            record_work(state, work);
+            Ok::<_, ConstructionFailure>(())
+        },
+        &mut |state, bytes| {
+            record_storage(state, bytes);
+            Ok::<_, ConstructionFailure>(())
+        },
+    )
+    .unwrap();
+    let record = size_of::<Region>() as u128;
+    let vector = size_of::<Vec<u64>>() as u128;
+    let mask = 2 * size_of::<u64>() as u128;
+    assert_eq!(state.storage.len(), 5);
+    assert_eq!(state.storage[0], record + vector + mask);
+    assert!(state.storage[1] >= state.storage[0]);
+    assert_eq!(state.storage[2], record + vector + 2 * mask);
+    assert!(state.storage[3] >= state.storage[2]);
+    assert_eq!(state.storage[4], region.retained_bytes());
+}
+
+#[test]
+fn work_refusal_precedes_any_mask_initialization() {
+    let mut state = Construction::default();
+    let result = Region::try_all_open_with(
+        usize::MAX,
+        &mut state,
+        &mut |state, _| {
+            state.work_calls += 1;
+            Err(ConstructionFailure::Work(0))
+        },
+        &mut |state, bytes| {
+            record_storage(state, bytes);
+            Ok::<_, ConstructionFailure>(())
+        },
+    );
+    assert_eq!(result, Err(ConstructionFailure::Work(0)));
+    assert_eq!(state.work, 0);
+    assert_eq!(state.work_calls, 1);
+    assert_eq!(state.storage_calls, 1);
+}
+
+#[test]
+fn each_work_refusal_retains_only_completed_initialization() {
+    let chunks = [3, 2, 2, 2, 3, 2, 2, 2, 2];
+    for refused in 0..chunks.len() {
+        let mut state = Construction::default();
+        let result = Region::try_all_open_with(
+            65,
+            &mut state,
+            &mut |state, work| {
+                let call = state.work_calls;
+                state.work_calls += 1;
+                if call == refused {
+                    return Err(ConstructionFailure::Work(call));
+                }
+                state.work += work;
+                Ok(())
+            },
+            &mut |state, bytes| {
+                record_storage(state, bytes);
+                Ok::<_, ConstructionFailure>(())
+            },
+        );
+        assert_eq!(result, Err(ConstructionFailure::Work(refused)));
+        assert_eq!(state.work, chunks[..refused].iter().sum());
+        assert_eq!(state.work_calls, refused + 1);
+    }
+}
+
+#[test]
+fn storage_refusal_does_not_charge_the_next_initialization() {
+    for (refused, expected_work) in [0, 3, 9, 12, 18].into_iter().enumerate() {
+        let mut state = Construction::default();
+        let result = Region::try_all_open_with(
+            65,
+            &mut state,
+            &mut |state, work| {
+                record_work(state, work);
+                Ok::<_, ConstructionFailure>(())
+            },
+            &mut |state, _| {
+                let call = state.storage_calls;
+                state.storage_calls += 1;
+                if call == refused {
+                    Err(ConstructionFailure::Storage(call))
+                } else {
+                    Ok(())
+                }
+            },
+        );
+        assert_eq!(result, Err(ConstructionFailure::Storage(refused)));
+        assert_eq!(state.work, expected_work);
+        assert_eq!(state.storage_calls, refused + 1);
+    }
+}

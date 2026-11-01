@@ -1,5 +1,7 @@
 //! Whole-root grammar, linear incidence and exact reduct-family controls.
 
+mod activation_receipts;
+
 use super::*;
 use crate::test_support::theory;
 use crate::{Limits, Node};

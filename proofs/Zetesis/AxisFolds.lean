@@ -262,6 +262,61 @@ theorem any_absorbing : any.Absorbing true := fun a => by cases a <;> rfl
 
 theorem any_idempotent : any.Idempotent := fun a => by cases a <;> rfl
 
+/-- Conjunction reduction is true exactly when every listed value is true.
+The list retains repeated occurrences; no distinctness premise is needed. -/
+theorem all_fold_true_iff {α : Type w} (value : α → Bool) (members : List α) :
+    all.fold value members = true ↔ ∀ member ∈ members, value member = true := by
+  induction members with
+  | nil =>
+    simp [Reduction.fold, Reduction.foldFrom, all]
+  | cons first rest induction =>
+    have step : all.fold value (first :: rest) = true ↔
+        value first = true ∧ all.fold value rest = true := by
+      rw [Reduction.fold_cons]
+      change (value first && all.fold value rest) = true ↔ _
+      simp only [Bool.and_eq_true]
+    have sound : all.fold value (first :: rest) = true →
+        ∀ member ∈ first :: rest, value member = true := by
+      intro folded member listed
+      have parts := step.mp folded
+      rcases List.mem_cons.mp listed with same | later
+      · exact same.symm ▸ parts.1
+      · exact induction.mp parts.2 member later
+    have complete : (∀ member ∈ first :: rest, value member = true) →
+        all.fold value (first :: rest) = true := by
+      intro each
+      exact step.mpr ⟨each first List.mem_cons_self,
+        induction.mpr (fun member listed => each member (List.mem_cons_of_mem first listed))⟩
+    exact ⟨sound, complete⟩
+
+/-- Disjunction reduction is true exactly when a listed value is true.
+The empty list contributes false; repeated producers leave this law unchanged. -/
+theorem any_fold_true_iff {α : Type w} (value : α → Bool) (members : List α) :
+    any.fold value members = true ↔ ∃ member ∈ members, value member = true := by
+  induction members with
+  | nil =>
+    simp [Reduction.fold, Reduction.foldFrom, any]
+  | cons first rest induction =>
+    have step : any.fold value (first :: rest) = true ↔
+        value first = true ∨ any.fold value rest = true := by
+      rw [Reduction.fold_cons]
+      change (value first || any.fold value rest) = true ↔ _
+      simp only [Bool.or_eq_true]
+    have sound : any.fold value (first :: rest) = true →
+        ∃ member ∈ first :: rest, value member = true := by
+      intro folded
+      rcases step.mp folded with atFirst | later
+      · exact ⟨first, List.mem_cons_self, atFirst⟩
+      · obtain ⟨member, listed, present⟩ := induction.mp later
+        exact ⟨member, List.mem_cons_of_mem first listed, present⟩
+    have complete : (∃ member ∈ first :: rest, value member = true) →
+        any.fold value (first :: rest) = true := by
+      rintro ⟨member, listed, present⟩
+      rcases List.mem_cons.mp listed with same | later
+      · exact step.mpr (Or.inl (same ▸ present))
+      · exact step.mpr (Or.inr (induction.mpr ⟨member, later, present⟩))
+    exact ⟨sound, complete⟩
+
 /-- Intersection of sets of atoms, from the set of every atom. The empty set
 absorbs it; cautious consequences fold each answer set's atoms. -/
 def inter (α : Type w) : Reduction (Atoms α) where
@@ -326,6 +381,41 @@ theorem pair_absorbing {V : Type u} {W : Type v} (left : Reduction V) (right : R
     (pair left right).Absorbing (leftAbsorber, rightAbsorber) := fun a => by
   show (left.op a.1 leftAbsorber, right.op a.2 rightAbsorber) = (leftAbsorber, rightAbsorber)
   rw [leftAbsorbing, rightAbsorbing]
+
+/-- **One coordinate may stop while the other continues.** Once the left
+accumulator of a product reduction is absorbing, further members cannot change
+it. The right accumulator still folds every remaining member. In particular,
+absorption of one coordinate does not decide the whole product.
+
+Proof outline: the empty continuation leaves both accumulators unchanged. For
+one more member, absorption fixes the left coordinate; the induction hypothesis
+then describes the right coordinate's remaining fold. The absorber premise is
+mathematical: this law does not verify an implementation's test for absorption. -/
+theorem pair_foldFrom_left_absorbing {V : Type u} {W : Type v} {M : Type w}
+    (left : Reduction V) (right : Reduction W)
+    (leftValue : M → V) (rightValue : M → W)
+    {absorber : V} (absorbing : left.Absorbing absorber)
+    (start : W) (members : List M) :
+    (pair left right).foldFrom (fun member => (leftValue member, rightValue member))
+        (absorber, start) members =
+      (absorber, right.foldFrom rightValue start members) := by
+  induction members generalizing start with
+  | nil => rfl
+  | cons head rest ih =>
+    have leftStays : left.op absorber (leftValue head) = absorber := by
+      rw [left.comm]
+      exact absorbing (leftValue head)
+    have remaining :
+        (pair left right).foldFrom (fun member => (leftValue member, rightValue member))
+            (absorber, right.op start (rightValue head)) rest =
+          (absorber, right.foldFrom rightValue (right.op start (rightValue head)) rest) :=
+      ih (right.op start (rightValue head))
+    change
+      (pair left right).foldFrom (fun member => (leftValue member, rightValue member))
+          (left.op absorber (leftValue head), right.op start (rightValue head)) rest =
+        (absorber, right.foldFrom rightValue (right.op start (rightValue head)) rest)
+    rw [leftStays]
+    exact remaining
 
 /-- The product of idempotent reductions is idempotent. -/
 theorem pair_idempotent {V : Type u} {W : Type v} (left : Reduction V) (right : Reduction W)

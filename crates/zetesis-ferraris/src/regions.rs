@@ -53,6 +53,11 @@ use zetesis_cpu::{Cancellation, Stop};
 use crate::{FormulaView, NodeView, Theory};
 
 mod adjacency;
+mod arithmetic;
+pub use arithmetic::{
+    CardinalityStatistics, CardinalitySystem, ParityStatistics, ParitySystem, PreparationAttempt,
+    PreparationError, PreparationLimits, PreparationStatus, PreparationWork, RootPreparation,
+};
 mod counters;
 mod extrema;
 mod founded;
@@ -252,8 +257,12 @@ impl<'a> From<FrozenSubject<'a>> for Subject<'a> {
 }
 
 /// The producers of a theory in the support fragment, by head atom.
+/// Retains the exact admitted theory through one shared handle; cloning the
+/// inventory preserves that identity without copying the theory's storage.
 #[derive(Clone, Debug)]
 pub struct Producers {
+    /// Bound only after every root has been covered and the incidence maps built.
+    owner: Theory,
     rules: Vec<Producer>,
     by_head: Adjacency,
     /// The producers whose body is this node.
@@ -266,6 +275,13 @@ pub struct Producers {
     /// A once-completed cycle test over the same original positive incidences.
     /// Failed preparation leaves this unset; concurrent successful tests agree.
     founded_cycles: OnceLock<bool>,
+}
+
+impl Producers {
+    /// Whether this complete inventory was extracted from this exact admission.
+    fn belongs_to(&self, theory: &Theory) -> bool {
+        self.owner.same_instance(theory)
+    }
 }
 
 /// The atoms that head an atomic choice root of a theory, `a ∨ ¬a` standing
@@ -454,6 +470,7 @@ fn extract(theory: &Theory, work: &mut Work<'_>) -> Result<Option<Producers>, St
             .filter_map(|(index, producer)| producer.body.map(|body| (body, index))),
     )?;
     Ok(Some(Producers {
+        owner: theory.clone(),
         rules,
         by_head,
         by_body,
@@ -596,6 +613,46 @@ impl<'q> Work<'q> {
     #[inline]
     fn spent(&self) -> u64 {
         self.admitted - self.remaining
+    }
+    /// Admit a whole bounded operation before executing it, then charge only
+    /// its actual logical work. The private caller supplies a bound covering
+    /// every success and failure path of `operation`.
+    fn bounded<T>(
+        &mut self,
+        maximum: u64,
+        operation: impl FnOnce() -> (T, u64),
+    ) -> Result<T, Stop> {
+        self.top_up(maximum)?;
+        let (value, actual) = operation();
+        debug_assert!(
+            actual <= maximum,
+            "the operation exceeds its reserved bound"
+        );
+        self.remaining -= actual;
+        Ok(value)
+    }
+    /// Obtain enough unspent permits without changing the charged prefix.
+    /// Partial grants remain refundable if a later reservation refuses.
+    fn top_up(&mut self, minimum: u64) -> Result<(), Stop> {
+        self.spent().checked_add(minimum).ok_or(Stop::WorkLimit)?;
+        while self.remaining < minimum {
+            let Some(quota) = &mut self.quota else {
+                return Err(Stop::WorkLimit);
+            };
+            let wanted = NARROWING_BATCH.min(u64::MAX - self.admitted);
+            let granted = quota.reserve(wanted)?;
+            if granted == 0 {
+                return Err(Stop::WorkLimit);
+            }
+            if granted > wanted {
+                quota.refund(granted);
+                return Err(Stop::InvalidProgram);
+            }
+            // `wanted` fits the admitted counter; remaining never exceeds it.
+            self.admitted += granted;
+            self.remaining += granted;
+        }
+        Ok(())
     }
     /// Charge one read before it runs.
     #[inline]

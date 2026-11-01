@@ -50,6 +50,7 @@ impl DeterminedCandidates {
         }
         let candidate = plan.interpretation;
         let permitted = match source {
+            Proposer::Refuted(_) => Ok(false),
             Proposer::Regions(regions) => {
                 regions.permits_determined(candidate, budget, &mut statistics.phase_timings)
             }

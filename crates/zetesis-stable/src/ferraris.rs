@@ -162,6 +162,17 @@ pub struct Statistics {
     pub reduct: crate::ReductStatistics,
 }
 
+impl Statistics {
+    /// These completed-pass receipts followed by `later` on the same theory.
+    /// Work and counts add, peaks take the larger, and route state is later's.
+    /// This combines observations only: it neither transfers a budget nor
+    /// establishes coverage. Each prefix must be supplied exactly once.
+    #[must_use]
+    pub fn followed_by(&self, later: &Self) -> Self {
+        passes::statistics(self, later)
+    }
+}
+
 fn verification(limits: Limits) -> zetesis_ferraris::Limits {
     zetesis_ferraris::Limits {
         max_work: limits.max_verification_work,
@@ -342,6 +353,28 @@ pub struct StableModels {
     /// and shared by that walk and every membership query of its candidates.
     index: OriginalIndex,
 }
+/// Candidate construction and its charged prefix, on success and failure.
+/// No failed construction is an exhaustive stream. The original typed error
+/// is returned unchanged; the statistics are an observation, never a verdict.
+#[derive(Debug)]
+#[must_use]
+pub struct ConstructionAttempt {
+    /// Complete stream, or the exact mandatory construction failure.
+    pub result: Result<StableModels, Incomplete>,
+    /// Construction work and preparation receipts before any pull. Successful
+    /// streams own the same prefix; do not add this snapshot to their receipts.
+    pub statistics: Statistics,
+}
+
+enum Route {
+    Scalar,
+    Workers {
+        workers: std::num::NonZeroUsize,
+        engagement: Engagement,
+    },
+    Producers(std::num::NonZeroUsize),
+}
+
 impl StableModels {
     /// Enumerate by regions of the candidate space narrowed by the theory's
     /// readings, with no clause form built: the theory's producers are
@@ -352,6 +385,8 @@ impl StableModels {
     /// tree too, over the same index. Original-model and frozen-reduct checks
     /// always use the original theory.
     ///
+    /// Use [`Self::prepare`] to retain the construction receipt on failure.
+    ///
     /// # Errors
     /// Refuses admission, work limits, cancellation or allocation.
     pub fn new(
@@ -359,42 +394,7 @@ impl StableModels {
         limits: Limits,
         cancellation: Cancellation,
     ) -> Result<Self, Incomplete> {
-        let mut budget = Budget {
-            quota: crate::budget::LocalQuota,
-            limits: limits.search,
-            cancellation: &cancellation,
-            statistics: SearchStatistics::default(),
-        };
-        let proposer = Proposer::Regions(Box::new(RegionSearch::new(
-            theory,
-            limits.max_native_narrowing_bytes,
-            limits.max_reduct_bytes,
-            limits.learning,
-            &mut budget,
-        )?));
-        let statistics = Statistics {
-            search: budget.statistics,
-            ..Default::default()
-        };
-        Ok(Self {
-            theory: theory.clone(),
-            proposer,
-            limits,
-            cancellation,
-            statistics,
-            terminal: false,
-            exhausted: false,
-            pending_error: None,
-            batch: batch::State::default(),
-            certificate: None,
-            certificate_workspace: certified::Workspace::default(),
-            determined_candidates: None,
-            bound_generation: 0,
-            active_bound: None,
-            earlier: None,
-            reduct: crate::reduct::State::default(),
-            index: OriginalIndex::new(theory, limits.max_native_narrowing_bytes),
-        })
+        Self::prepare(theory, limits, cancellation).result
     }
 
     /// Enumerate by regions with up to `workers` walking the tree at once:
@@ -412,6 +412,8 @@ impl StableModels {
     /// result and differs between runs; the family is exact. One worker is
     /// the scalar regions method.
     ///
+    /// Use [`Self::prepare_with_region_workers`] to retain the construction receipt on failure.
+    ///
     /// # Errors
     /// Refuses admission, work limits, cancellation or allocation.
     pub fn with_region_workers(
@@ -420,13 +422,7 @@ impl StableModels {
         limits: Limits,
         cancellation: Cancellation,
     ) -> Result<Self, Incomplete> {
-        Self::with_region_workers_engaging(
-            theory,
-            workers,
-            Engagement::default(),
-            limits,
-            cancellation,
-        )
+        Self::prepare_with_region_workers(theory, workers, limits, cancellation).result
     }
 
     /// Enumerate by regions with up to `workers` walking the tree at once,
@@ -465,46 +461,16 @@ impl StableModels {
         limits: Limits,
         cancellation: Cancellation,
     ) -> Result<Self, Incomplete> {
-        if workers.get() == 1 {
-            return Self::new(theory, limits, cancellation);
-        }
-        let mut budget = Budget {
-            quota: crate::budget::LocalQuota,
-            limits: limits.search,
-            cancellation: &cancellation,
-            statistics: SearchStatistics::default(),
-        };
-        let parallel = ParallelRegions::new(
+        Self::prepare_route(
             theory,
-            workers,
-            engagement,
-            limits,
-            cancellation.clone(),
-            &mut budget,
-        )?;
-        let statistics = Statistics {
-            search: budget.statistics,
-            ..Default::default()
-        };
-        Ok(Self {
-            theory: theory.clone(),
-            proposer: Proposer::Parallel(Box::new(parallel)),
             limits,
             cancellation,
-            statistics,
-            terminal: false,
-            exhausted: false,
-            pending_error: None,
-            batch: batch::State::default(),
-            certificate: None,
-            certificate_workspace: certified::Workspace::default(),
-            determined_candidates: None,
-            bound_generation: 0,
-            active_bound: None,
-            earlier: None,
-            reduct: crate::reduct::State::default(),
-            index: OriginalIndex::new(theory, limits.max_native_narrowing_bytes),
-        })
+            Route::Workers {
+                workers,
+                engagement,
+            },
+        )
+        .result
     }
 
     /// Produce classical candidates in bounded Rayon runs, one for each slate
@@ -519,6 +485,8 @@ impl StableModels {
     /// stopped slate retains its completed proposals.
     /// One worker uses the ordinary scalar region traversal.
     ///
+    /// Use [`Self::prepare_with_region_producers`] to retain the construction receipt on failure.
+    ///
     /// # Errors
     /// Refuses admission, work limits, cancellation, allocation or pool creation.
     pub fn with_region_producers(
@@ -527,30 +495,121 @@ impl StableModels {
         limits: Limits,
         cancellation: Cancellation,
     ) -> Result<Self, Incomplete> {
-        if workers.get() == 1 {
-            return Self::new(theory, limits, cancellation);
-        }
+        Self::prepare_with_region_producers(theory, workers, limits, cancellation).result
+    }
+
+    /// Construct the scalar stream while retaining every preparation receipt.
+    /// The result has exactly [`Self::new`]'s semantics and failure identities.
+    pub fn prepare(
+        theory: &Theory,
+        limits: Limits,
+        cancellation: Cancellation,
+    ) -> ConstructionAttempt {
+        Self::prepare_route(theory, limits, cancellation, Route::Scalar)
+    }
+
+    /// Construct the ordinary worker route with its failure-prefix receipt.
+    /// Uses [`Self::with_region_workers`]'s engagement and one-worker behavior.
+    pub fn prepare_with_region_workers(
+        theory: &Theory,
+        workers: std::num::NonZeroUsize,
+        limits: Limits,
+        cancellation: Cancellation,
+    ) -> ConstructionAttempt {
+        Self::prepare_route(
+            theory,
+            limits,
+            cancellation,
+            Route::Workers {
+                workers,
+                engagement: Engagement::default(),
+            },
+        )
+    }
+
+    /// Construct bounded producers with their failure-prefix receipt.
+    /// Uses [`Self::with_region_producers`]'s scheduling and one-worker behavior.
+    pub fn prepare_with_region_producers(
+        theory: &Theory,
+        workers: std::num::NonZeroUsize,
+        limits: Limits,
+        cancellation: Cancellation,
+    ) -> ConstructionAttempt {
+        Self::prepare_route(theory, limits, cancellation, Route::Producers(workers))
+    }
+
+    fn prepare_route(
+        theory: &Theory,
+        limits: Limits,
+        cancellation: Cancellation,
+        route: Route,
+    ) -> ConstructionAttempt {
+        let route = match route {
+            Route::Workers { workers, .. } | Route::Producers(workers) if workers.get() == 1 => {
+                Route::Scalar
+            }
+            route => route,
+        };
         let mut budget = Budget {
             quota: crate::budget::LocalQuota,
             limits: limits.search,
             cancellation: &cancellation,
             statistics: SearchStatistics::default(),
         };
-        let proposals = RegionProposals::new(
+        // Allocate the terminal holder before a conclusive preparation. The
+        // completed proof must not be followed by a scheduler allocation.
+        let mut refuted = Box::new(RefutedRoot {
+            parts: None,
+            statistics: RegionSearchStatistics::default(),
+            filter: None,
+        });
+        let opening = regions::open_attempt(
             theory,
-            workers,
-            limits.max_native_narrowing_bytes,
             limits.max_reduct_bytes,
             limits.learning,
             &mut budget,
-        )?;
+        );
+        let mut regions = opening.statistics;
+        let proposer = opening.result.and_then(|opened| {
+            if opened.root.is_none() {
+                refuted.parts = Some(opened.parts);
+                refuted.statistics = opened.statistics;
+                return Ok(Proposer::Refuted(refuted));
+            }
+            match route {
+                Route::Scalar => RegionSearch::new(opened, limits.max_native_narrowing_bytes)
+                    .map(|search| Proposer::Regions(Box::new(search))),
+                Route::Workers {
+                    workers,
+                    engagement,
+                } => ParallelRegions::new(
+                    opened,
+                    workers,
+                    engagement,
+                    limits,
+                    cancellation.clone(),
+                    &mut budget,
+                )
+                .map(|search| Proposer::Parallel(Box::new(search))),
+                Route::Producers(workers) => {
+                    RegionProposals::new(opened, workers, limits.max_native_narrowing_bytes)
+                        .map(|search| Proposer::Proposals(Box::new(search)))
+                }
+            }
+        });
+        if proposer.is_err() {
+            regions.generator_order.retained_bytes = 0;
+            regions.parity.retained_bytes = 0;
+            regions.cardinality.retained_bytes = 0;
+        }
         let statistics = Statistics {
             search: budget.statistics,
+            regions: Some(regions),
             ..Default::default()
         };
-        Ok(Self {
+        let result = proposer.map(|proposer| Self {
             theory: theory.clone(),
-            proposer: Proposer::Proposals(Box::new(proposals)),
+            proposer,
             limits,
             cancellation,
             statistics,
@@ -566,7 +625,9 @@ impl StableModels {
             earlier: None,
             reduct: crate::reduct::State::default(),
             index: OriginalIndex::new(theory, limits.max_native_narrowing_bytes),
-        })
+        });
+        let statistics = result.as_ref().map_or(statistics, Self::statistics);
+        ConstructionAttempt { result, statistics }
     }
 
     /// Divide a parallel region walk's proper-subset queries among its workers
@@ -796,6 +857,7 @@ impl StableModels {
         }
         let filter = crate::region_filter::Filter::new(filter);
         match &mut self.proposer {
+            Proposer::Refuted(root) => root.filter = Some(filter),
             Proposer::Regions(regions) => regions.set_filter(filter),
             Proposer::Proposals(proposals) => proposals.set_filter(filter),
             Proposer::Parallel(parallel) => parallel.set_filter(filter)?,
@@ -842,6 +904,7 @@ impl StableModels {
             return Err(Incomplete::LearnedStoreAlreadySet);
         }
         match &mut self.proposer {
+            Proposer::Refuted(root) => root.set_learned_store(store),
             Proposer::Regions(regions) => regions.set_learned_store(store),
             Proposer::Proposals(proposals) => proposals.set_learned_store(store),
             Proposer::Parallel(parallel) => parallel.set_learned_store(store)?,
@@ -883,6 +946,14 @@ impl StableModels {
         self.exhausted
     }
 
+    /// Whether checked original-answer preparation proved the family empty
+    /// before traversal. No membership certificate or candidate is needed.
+    /// The stream still observes its normal iteration and closure protocol.
+    #[must_use]
+    pub const fn root_refuted(&self) -> bool {
+        self.proposer.root_refuted()
+    }
+
     /// Bounds installed so far by [`Self::improve_candidate_bound`]: zero
     /// before the first, one more after each successful installation. A
     /// refused or failed tightening, a permanent [`Self::restrict_candidates`]
@@ -908,6 +979,10 @@ impl StableModels {
     /// This stream's own receipts, which decide whether it has started.
     fn own_statistics(&self) -> Statistics {
         let mut statistics = match &self.proposer {
+            Proposer::Refuted(root) => Statistics {
+                regions: Some(root.statistics),
+                ..self.statistics
+            },
             Proposer::Regions(regions) => Statistics {
                 regions: Some(regions.statistics()),
                 ..self.statistics
@@ -1101,6 +1176,8 @@ struct Membership<'a> {
 /// the slate's output spoken for returns unresolved and is proposed later.
 #[derive(Debug)]
 enum Proposer {
+    /// An original-answer contradiction, with no walk or scheduler constructed.
+    Refuted(Box<RefutedRoot>),
     Regions(Box<RegionSearch>),
     /// The coordinator and, after engagement, workers walk the region tree
     /// and decide its leaves.
@@ -1124,9 +1201,33 @@ enum Proposal {
     Stable(Interpretation),
 }
 
+/// This holder is allocated before arithmetic preparation can establish a
+/// contradiction. Filling it afterwards transfers already-owned evidence and
+/// creates no traversal, index, channel, frontier or worker pool.
+#[derive(Debug)]
+struct RefutedRoot {
+    parts: Option<regions::OriginalParts>,
+    statistics: RegionSearchStatistics,
+    filter: Option<crate::region_filter::Filter>,
+}
+
+impl RefutedRoot {
+    fn set_learned_store(&mut self, store: std::sync::Arc<LearnedStore>) {
+        self.parts
+            .as_mut()
+            .expect("a published refutation retains its original parts")
+            .set_learned_store(store);
+    }
+}
+
 impl Proposer {
+    const fn root_refuted(&self) -> bool {
+        matches!(self, Self::Refuted(_))
+    }
+
     fn filter(&self) -> Option<&crate::region_filter::Filter> {
         match self {
+            Self::Refuted(root) => root.filter.as_ref(),
             Self::Regions(regions) => regions.filter(),
             Self::Proposals(proposals) => proposals.filter(),
             Self::Parallel(parallel) => parallel.filter(),
@@ -1135,6 +1236,10 @@ impl Proposer {
 
     fn learned_store(&self) -> Option<&std::sync::Arc<LearnedStore>> {
         match self {
+            Self::Refuted(root) => root
+                .parts
+                .as_ref()
+                .and_then(regions::OriginalParts::learned_store),
             Self::Regions(regions) => regions.learned_store(),
             Self::Proposals(proposals) => proposals.learned_store(),
             Self::Parallel(parallel) => parallel.learned_store(),
@@ -1145,9 +1250,9 @@ impl Proposer {
     /// borrowed scratch when the stream closes, preserving candidate receipts.
     fn finish_production(&mut self) -> Result<(), Incomplete> {
         match self {
+            Self::Refuted(_) | Self::Parallel(_) => Ok(()),
             Self::Regions(regions) => regions.finish(),
             Self::Proposals(proposals) => proposals.finish(),
-            Self::Parallel(_) => Ok(()),
         }
     }
 
@@ -1155,6 +1260,7 @@ impl Proposer {
     /// needed it, once in this proposer's region counts.
     fn record_index_work(&mut self, work: u64) -> Result<(), Incomplete> {
         let counts = match self {
+            Self::Refuted(root) => &mut root.statistics.counts,
             Self::Regions(regions) => regions.counts_mut(),
             Self::Parallel(parallel) => parallel.counts_mut(),
             Self::Proposals(proposals) => proposals.counts_mut(),
@@ -1189,6 +1295,7 @@ impl Proposer {
             Walk::Index(index) => index,
         };
         let proposal = match self {
+            Self::Refuted(_) => return Ok(None),
             Self::Regions(regions) => {
                 let proposal =
                     regions.propose(theory, index, budget, &mut statistics.phase_timings)?;
@@ -1239,6 +1346,7 @@ impl Proposer {
         budget: &mut Budget<'_>,
     ) -> Result<(), Incomplete> {
         match self {
+            Self::Refuted(_) => Ok(()),
             Self::Regions(regions) => regions.tighten(restriction, generation, budget),
             Self::Parallel(parallel) => parallel.tighten(restriction, generation, budget),
             Self::Proposals(proposals) => proposals.tighten(restriction, generation, budget),
@@ -1252,6 +1360,7 @@ impl Proposer {
         budget: &mut Budget<'_>,
     ) -> Result<(), Incomplete> {
         match self {
+            Self::Refuted(_) => Ok(()),
             Self::Regions(regions) => regions.restrict(restriction, budget),
             Self::Parallel(parallel) => parallel.restrict(restriction, budget),
             Self::Proposals(proposals) => proposals.restrict(restriction, budget),
@@ -1265,6 +1374,11 @@ fn advance(
     budget: &mut Budget<'_>,
     statistics: &mut Statistics,
 ) -> Result<Option<Interpretation>, Incomplete> {
+    // No index, certificate workspace or candidate storage is needed after an
+    // original-answer preparation has already established the empty family.
+    if proposer.root_refuted() {
+        return Ok(None);
+    }
     let Membership {
         theory,
         limits,

@@ -54,11 +54,13 @@ pub use frozen_positive::{FrozenPositiveAttempt, FrozenPositiveOutcome, FrozenPo
 pub use oracle::{Check, Limits, Statistics, Verdict, check, models, models_reduct};
 pub use reduct::FrozenReduct;
 pub use regions::{
-    ChoiceHeads, Extraction, FrozenSubject, GeneratorOrder, GeneratorOrderAttempt,
-    GeneratorOrderError, GeneratorOrderLimits, Knowledge, LearningAttempt, LearningLimits,
-    LearningOwner, LearningStore, NARROWING_BATCH, Narrower, NarrowingAttempt, NarrowingQuota,
-    NarrowingScratch, NarrowingStatistics, OriginalSubject, PreferenceAttempt, Producers,
-    RegionLimits, SupportExplanationStatistics, producers,
+    CardinalityStatistics, CardinalitySystem, ChoiceHeads, Extraction, FrozenSubject,
+    GeneratorOrder, GeneratorOrderAttempt, GeneratorOrderError, GeneratorOrderLimits, Knowledge,
+    LearningAttempt, LearningLimits, LearningOwner, LearningStore, NARROWING_BATCH, Narrower,
+    NarrowingAttempt, NarrowingQuota, NarrowingScratch, NarrowingStatistics, OriginalSubject,
+    ParityStatistics, ParitySystem, PreferenceAttempt, PreparationAttempt, PreparationError,
+    PreparationLimits, PreparationStatus, PreparationWork, Producers, RegionLimits,
+    RootPreparation, SupportExplanationStatistics, producers,
 };
 pub use slate::{SlateId, SlateRef};
 pub use theory::{

@@ -183,27 +183,23 @@ impl RegionProposals {
     /// Extract the producers and queue the root region with no knowledge;
     /// its first narrowing creates each knowledge slot.
     pub(crate) fn new(
-        theory: &Theory,
+        opened: regions::Opened,
         workers: NonZeroUsize,
         native_byte_limit: u64,
-        order_byte_limit: u64,
-        learning: zetesis_ferraris::LearningLimits,
-        budget: &mut Budget<'_>,
     ) -> Result<Self, Incomplete> {
-        let regions::Opened { parts, statistics } =
-            regions::open(theory, order_byte_limit, learning, budget)?;
+        let regions::Opened {
+            parts,
+            statistics,
+            root,
+        } = opened;
+        let root = root.ok_or(Incomplete::InvalidWitness)?;
         let pool = rayon::ThreadPoolBuilder::new()
             .num_threads(workers.get())
             .thread_name(|index| format!("zetesis-proposal-{index}"))
             .build()
             .map_err(|_| Incomplete::Allocation)?;
-        let frontier = RegionFrontier::measured(
-            workers.get(),
-            (
-                Region::all_open(theory.atom_count()),
-                CandidateKnowledge::default(),
-            ),
-        )?;
+        let frontier =
+            RegionFrontier::measured(workers.get(), (root, CandidateKnowledge::default()))?;
         Ok(Self {
             parts,
             restrictions: Conditions::default(),
