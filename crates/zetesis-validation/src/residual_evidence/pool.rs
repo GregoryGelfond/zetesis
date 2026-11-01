@@ -21,14 +21,15 @@ impl<T> Frame<T> {
     }
 
     fn join(&mut self, seen: Option<u64>, mut incoming: Vec<T>, target: usize) -> io::Result<()> {
-        let Some((left, right)) = self.seen.zip(seen) else {
+        let combined = self
+            .seen
+            .zip(seen)
+            .and_then(|(left, right)| left.checked_add(right).map(|total| (left, right, total)));
+        let Some((left, right, total)) = combined else {
             self.seen = None;
-            self.records.clear();
+            self.records = Vec::new();
             return Ok(());
         };
-        let total = left
-            .checked_add(right)
-            .ok_or_else(|| invalid("pooled population count overflow"))?;
         let mut k = total.min(target as u64);
         for (n, r) in [(left, self.records.len()), (right, incoming.len())] {
             if (r as u64) < n {

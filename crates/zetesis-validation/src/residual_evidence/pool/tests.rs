@@ -37,6 +37,20 @@ fn complete_small_fixtures_preserve_the_larger_safe_sample() {
 }
 
 #[test]
+fn overflow_loses_only_the_unrepresentable_population() {
+    let mut worlds = Frame::new(7, 1);
+    let mut batches = Frame::new(7, 2);
+    for (n, world, batch) in [(u64::MAX, 1, 9), (1, 2, 0), (5, 3, 1)] {
+        worlds.join(Some(n), vec![world], 10).unwrap();
+        batches.join(Some(1), vec![batch], 10).unwrap();
+    }
+    assert_eq!(worlds.seen, None);
+    assert!(worlds.records.is_empty());
+    assert_eq!(batches.seen, Some(3));
+    assert_eq!(batches.records, [9, 0, 1]);
+}
+
+#[test]
 fn merge_seed_replays_unequal_fixtures_on_independent_streams() {
     // Version-one replay vector. Fixture IDs deliberately identify the
     // retained inputs irrespective of the order chosen during the merge.
