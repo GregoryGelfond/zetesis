@@ -6636,6 +6636,11 @@
       "name": "Zetesis.Refinement.PackedInterpretations.export32_denotes"
     },
     {
+      "file": "Zetesis/PackedInterpretations.lean",
+      "line": 414,
+      "name": "Zetesis.Refinement.PackedInterpretations.candidate_word_read"
+    },
+    {
       "file": "Zetesis/PackedQueryLiterals.lean",
       "line": 30,
       "name": "Zetesis.PackedQueryLiterals.decode_encode"
@@ -10809,7 +10814,7 @@
     "Zetesis/WorldViews.lean"
   ],
   "source_sha256": {
-    "Audit.lean": "903a71f3ab2e8da9b7eba8b43e65a0978e64dec5172f79e6b78f5a6f6365029b",
+    "Audit.lean": "8061bd5bb5215fa370e5e64450d71b6ea21a6bea26d47f7b6dc9475829967785",
     "Zetesis.lean": "47966619f7bb01581457a3794db8c829fcb5eb81cc1a6cb4267b9ba386bf5db4",
     "Zetesis/AcyclicEvaluation.lean": "1a9c77283876cf1f61cb92031da04780aada5d0b256f79db5b64bfb6b129d0dc",
     "Zetesis/AdjacencyRows.lean": "38a19b1c74483a157636321a56e95fea660a2192a04c77930d609e411c8d30d4",
@@ -10940,7 +10945,7 @@
     "Zetesis/PackedAcceptance.lean": "487693301114d711bb2cf0e5898d6961e9375fe1f6e3212350f6e61adee949b3",
     "Zetesis/PackedClosure.lean": "facea36a28fffcb66a669a542a12f7b4d41a86bbf3e6a1a9ea5e226d68022495",
     "Zetesis/PackedCounterSearch.lean": "664b89dd50e5b8051ca306c6874b7db71107633e830ecd59f3ce3a27969362e4",
-    "Zetesis/PackedInterpretations.lean": "0643937f55daac92eb91959cea8b1c9e8fdb37f7da2424b05722f83f73296622",
+    "Zetesis/PackedInterpretations.lean": "0e6c95c0e1e94502455c0486e7123acdb7347f12b09a9ecf38e4cbf5dea66d6d",
     "Zetesis/PackedQueryLiterals.lean": "4700438efc4c0e35d1601acb2ada298d51b335287de0469cefca110600c3f853",
     "Zetesis/PackedSubsets.lean": "04220797148634ca2dc9bc01e7dce2a0d73d59024ff66597643e82b4a14a9a06",
     "Zetesis/PackedWordIterator.lean": "f2dde7b94603a056d90bd28a8a00423107d39567eaeb94aeb20d268d5829e0e9",

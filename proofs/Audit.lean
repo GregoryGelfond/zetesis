@@ -1327,6 +1327,7 @@ import Zetesis
 #print axioms Zetesis.Refinement.PackedInterpretations.export32_exact
 #print axioms Zetesis.Refinement.PackedInterpretations.pack_denotes
 #print axioms Zetesis.Refinement.PackedInterpretations.export32_denotes
+#print axioms Zetesis.Refinement.PackedInterpretations.candidate_word_read
 #print axioms Zetesis.PackedQueryLiterals.decode_encode
 #print axioms Zetesis.PackedQueryLiterals.encode_injective
 #print axioms Zetesis.PackedQueryLiterals.encode_lt

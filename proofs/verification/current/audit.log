@@ -1369,6 +1369,7 @@
 'Zetesis.Refinement.PackedInterpretations.export32_exact' depends on axioms: [propext, Quot.sound]
 'Zetesis.Refinement.PackedInterpretations.pack_denotes' depends on axioms: [propext, Quot.sound]
 'Zetesis.Refinement.PackedInterpretations.export32_denotes' depends on axioms: [propext, Quot.sound]
+'Zetesis.Refinement.PackedInterpretations.candidate_word_read' depends on axioms: [propext, Quot.sound]
 'Zetesis.PackedQueryLiterals.decode_encode' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.PackedQueryLiterals.encode_injective' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.PackedQueryLiterals.encode_lt' depends on axioms: [propext, Classical.choice, Quot.sound]

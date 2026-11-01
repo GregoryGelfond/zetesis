@@ -620,6 +620,16 @@ width. Predicate-set equalities connect these representations to the semantic
 library. The supplied in-range coordinates are a structural premise, not an
 assumption that membership is correct.
 
+The general formula and tight GPU checkers both call the WGSL function
+`candidate_contains` in `formula_graph/truth.wgsl`.
+`Zetesis.Refinement.PackedInterpretations.candidate_word_read` proves that
+in a batch of rows exported at a common width, loading word
+`world * stride + atom / 32` and testing bit `atom % 32` reads that world's
+membership for an in-range atom. Rows on either side may contain different
+candidates. Host tests check which buffers the assembled shaders read.
+Checked device address ranges, successful upload and physical execution remain
+separate obligations.
+
 The current `zetesis_algebra::words::Words` storage and borrowed views share the
 membership, ascending bit traversal and numeric-half operations used by
 `Interpretation`. The width-general `insert_bit_exact` and `clear_bit_exact`

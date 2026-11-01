@@ -6635,6 +6635,11 @@
     "line": 396
   },
   {
+    "name": "Zetesis.Refinement.PackedInterpretations.candidate_word_read",
+    "file": "Zetesis/PackedInterpretations.lean",
+    "line": 414
+  },
+  {
     "name": "Zetesis.PackedQueryLiterals.decode_encode",
     "file": "Zetesis/PackedQueryLiterals.lean",
     "line": 30

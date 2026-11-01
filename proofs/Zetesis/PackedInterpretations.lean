@@ -403,4 +403,37 @@ theorem export32_denotes (size : Nat) (words : List (BitVec 64))
   rw [membership atom.val]
   rfl
 
+/-- In a rectangular batch of exported candidates, the shader's read at
+`world * stride + atom / 32` tests exactly the selected world's semantic atom.
+The preceding worlds supply the offset. The in-range atom keeps the load in
+the selected row even when a following world has opposite bits.
+
+This is a mathematical address in admitted storage. Host buffer identity,
+checked device address arithmetic and actual shader execution are separate
+refinement obligations. -/
+theorem candidate_word_read (size : Nat) (before after : List (List (BitVec 64)))
+    (row : List (BitVec 64)) (stored : row.length = count64 size)
+    (padding : ZeroPadding size row) {atom : Nat} (inside : atom < size) :
+    let buffer := (before ++ row :: after).flatMap (export32 size)
+    let index := before.length * count32 size + atom / 32
+    (word buffer index &&& (1#32 <<< (atom % 32)) != 0#32) = contains size row atom := by
+  have prefixLength (rows : List (List (BitVec 64))) :
+      (rows.flatMap (export32 size)).length = rows.length * count32 size := by
+    induction rows with
+    | nil => simp
+    | cons row rows previous => simp [previous, export32, Nat.add_mul, Nat.add_comm]
+  dsimp only
+  have within : atom / 32 < (export32 size row).length := by
+    rw [(export32_exact size row stored padding).1]
+    unfold count32
+    omega
+  have sameWord : word ((before ++ row :: after).flatMap (export32 size))
+      (before.length * count32 size + atom / 32) = word (export32 size row) (atom / 32) := by
+    rw [← prefixLength before]
+    simp only [List.flatMap_append, List.flatMap_cons, word]
+    rw [List.getElem?_append_right (by omega)]
+    simp only [Nat.add_sub_cancel_left, List.getElem?_append_left within]
+  rw [sameWord, mask_bit _ _ (Nat.mod_lt atom (by decide))]
+  exact (export32_exact size row stored padding).2.1 atom
+
 end Zetesis.Refinement.PackedInterpretations
