@@ -47,6 +47,18 @@ pub struct FormulaResidualStatistics {
     pub work_limit: u64,
 }
 
+#[cfg(feature = "gpu")]
+impl FormulaResidualStatistics {
+    pub(crate) fn count_for(&mut self, reason: zetesis_wgpu::ResidualReason) -> &mut u64 {
+        use zetesis_wgpu::ResidualReason;
+        match reason {
+            ResidualReason::FixedPoint => &mut self.fixed_point,
+            ResidualReason::RoundLimit => &mut self.round_limit,
+            ResidualReason::WorkLimit => &mut self.work_limit,
+        }
+    }
+}
+
 /// Decoded tight-support device slots by the route that evaluated them, summed
 /// over the decoded batches.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -152,6 +164,8 @@ pub struct FormulaExecutionStatistics {
     /// Decoded residual reasons for the general GPU primitive. Absent for CPU
     /// and tight-support execution; distinct from committed `cpu_residuals`.
     pub gpu_residuals: Option<FormulaResidualStatistics>,
+    /// Exact handover attempt accounting on the general GPU route.
+    pub gpu_residual_handovers: Option<crate::ResidualHandoverStatistics>,
     /// Tight-support work ceiling per candidate. Present only for that device
     /// primitive; propagation sweep limits do not apply to a support scan.
     pub tight_work_per_candidate: Option<u64>,
@@ -481,6 +495,7 @@ impl Execution {
                 adapter,
                 gpu_limits: Some(options.into()),
                 gpu_residuals: Some(FormulaResidualStatistics::default()),
+                gpu_residual_handovers: Some(crate::ResidualHandoverStatistics::default()),
                 gpu_compute_timing,
                 ..Default::default()
             }),
@@ -626,6 +641,7 @@ impl MembershipExecution for Execution {
                     oracle,
                     statistics,
                     options,
+                    decoded: crate::residual_handovers::decoded::DecodeJournal::default(),
                 };
                 queue.next_device(models, options, cancellation, phases, &mut device)
             }
@@ -676,17 +692,12 @@ fn decoded_verdict(
     Failure,
 > {
     use zetesis_stable::BatchVerdict;
-    use zetesis_wgpu::{FormulaVerdict, ResidualReason};
+    use zetesis_wgpu::FormulaVerdict;
     Ok(match verdict {
         FormulaVerdict::NotModel => (BatchVerdict::NotModel, None),
         FormulaVerdict::NoProperSubset => (BatchVerdict::NoProperSubset, None),
         FormulaVerdict::Residual(reason, root) => {
-            let count = match reason {
-                ResidualReason::FixedPoint => &mut residuals.fixed_point,
-                ResidualReason::RoundLimit => &mut residuals.round_limit,
-                ResidualReason::WorkLimit => &mut residuals.work_limit,
-            };
-            add(count, 1)?;
+            add(residuals.count_for(reason), 1)?;
             (BatchVerdict::Residual, Some(root))
         }
     })
@@ -906,11 +917,20 @@ pub(crate) struct FormulaDevice<'a> {
     oracle: &'a mut zetesis_wgpu::GpuFormulaOracle,
     statistics: &'a mut FormulaExecutionStatistics,
     options: &'a SolveConfig,
+    decoded: crate::residual_handovers::decoded::DecodeJournal,
 }
 
 #[cfg(feature = "gpu")]
 impl crate::formula_queue::device::SlateDevice for FormulaDevice<'_> {
     const REGIONAL: bool = true;
+
+    fn handovers(&mut self) -> Option<&mut crate::ResidualHandoverStatistics> {
+        self.statistics.gpu_residual_handovers.as_mut()
+    }
+
+    fn take_decode_journal(&mut self) -> crate::residual_handovers::decoded::DecodeJournal {
+        std::mem::take(&mut self.decoded)
+    }
 
     fn record_slate_bytes(&mut self, total: u64) {
         self.statistics.peak_accounted_bytes = self.statistics.peak_accounted_bytes.max(total);
@@ -975,7 +995,7 @@ impl crate::formula_queue::device::SlateDevice for FormulaDevice<'_> {
                 .max(batch.accounted_bytes);
             record_workgroup_size(self.statistics, batch.workgroup_size);
         }
-        for check in checks {
+        for (relative, check) in checks.into_iter().enumerate() {
             add(
                 &mut self.statistics.gpu_work,
                 u64::from(check.statistics().work),
@@ -984,6 +1004,23 @@ impl crate::formula_queue::device::SlateDevice for FormulaDevice<'_> {
                 &mut self.statistics.gpu_rounds,
                 u64::from(check.statistics().rounds),
             )?;
+            if let zetesis_wgpu::FormulaVerdict::Residual(reason, root) = check.verdict()
+                && let Some(history) = &mut self.statistics.gpu_residual_handovers
+            {
+                let open = crate::residual_handovers::open_atoms(root);
+                history.decoded(*reason, open);
+                self.decoded.record(
+                    offset + relative,
+                    rows.count,
+                    *reason,
+                    open,
+                    self.options.max_completion_scratch_bytes,
+                );
+                if let Some(attempt) = &mut history.last_attempt {
+                    attempt.peak_observation_bytes =
+                        attempt.peak_observation_bytes.max(self.decoded.bytes());
+                }
+            }
             let (verdict, root) = decoded_verdict(
                 self.statistics.gpu_residuals.get_or_insert_default(),
                 check.into_verdict(),

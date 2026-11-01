@@ -982,6 +982,24 @@ no validated result supplies no decoded reason. Tight support and CPU execution
 leave this record absent. Aggregate sweep totals alone cannot identify the
 reason for each residual.
 
+The general GPU route also reports `gpu_residual_handovers`. Its latest attempt
+names the slate sequence and the attempt ordinal. On retry the slate keeps its
+sequence. A stop retains decoded residuals and work already performed. Only
+publication increments the committed-slate count. A slot settled by a CPU
+certificate contributes a residual but no regional search.
+
+When recording space permits, the coordinator joins the GPU reason and number
+of open atoms to the CPU receipt at the same original slot. It totals work and
+outcomes by reason. A slate's width is the maximum number of visited regions
+at a single depth, summed across its queries at that depth. Host time sums the
+individual query intervals, which may overlap. Unavailable measurements appear
+as null. The latest-attempt statistics do not estimate run-wide percentiles.
+
+The optional slot journal uses idle CPU completion scratch during decoding.
+Before the CPU starts, the coordinator retains the journal only when the
+remaining GPU batch allowance covers it beside the admitted owners. Otherwise
+it releases the journal. Exact search proceeds with its original scratch limit.
+
 With several requested workers, the region proposer produces a bounded batch
 in parallel and joins before its own slate's device check starts. On an
 enumeration, the next slate's production overlaps the current slate's last

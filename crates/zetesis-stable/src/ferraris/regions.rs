@@ -44,6 +44,7 @@ use crate::subject::{Pass, Subject, SubjectAttempt, SubjectContext, SubjectStep,
 use crate::{Cancellation, Incomplete};
 
 pub(crate) mod arithmetic_counts;
+pub(super) mod depth;
 mod subjects;
 pub(super) use subjects::copy_knowledge;
 use subjects::{CandidateSubject, Frozen};
@@ -1304,15 +1305,28 @@ impl<'a> ReductQuery<'a> {
         limits: crate::Limits,
         budget: &mut Budget<'_, Q>,
         workspace: (&mut crate::Statistics, &mut NarrowingScratch),
+        observation: Option<(&mut depth::QueryDepth, Option<&mut depth::DepthWorkspace>)>,
     ) -> Result<Option<Interpretation>, Incomplete> {
-        match self.walk_from(
-            evaluated,
-            limits,
-            budget,
-            workspace,
-            &mut Inline,
-            Some(root),
-        )? {
+        let result = if let Some((counts, levels)) = observation {
+            self.walk_from(
+                evaluated,
+                limits,
+                budget,
+                workspace,
+                (&mut Inline, depth::Recording::new(counts, levels)),
+                Some(root),
+            )
+        } else {
+            self.walk_from(
+                evaluated,
+                limits,
+                budget,
+                workspace,
+                (&mut Inline, ()),
+                Some(root),
+            )
+        };
+        match result? {
             Queried::Decided(witness) => Ok(witness),
             Queried::Published(never) => match never {},
         }
@@ -1340,7 +1354,7 @@ impl<'a> ReductQuery<'a> {
                 limits,
                 budget,
                 (statistics, scratch),
-                publication,
+                (publication, ()),
                 None,
             )? {
                 Queried::Decided(witness) => {
@@ -1351,13 +1365,13 @@ impl<'a> ReductQuery<'a> {
         )
     }
 
-    fn walk_from<Q: Quota, P: Publication>(
+    fn walk_from<Q: Quota, P: Publication, O: depth::Trace>(
         self,
         evaluated: &zetesis_ferraris::FormulaEvaluation<'_>,
         limits: crate::Limits,
         budget: &mut Budget<'_, Q>,
         (statistics, scratch): (&mut crate::Statistics, &mut NarrowingScratch),
-        publication: &mut P,
+        (publication, mut observation): (&mut P, O),
         root: Option<Region>,
     ) -> Result<Queried<P::Receipt, Option<Interpretation>>, Incomplete> {
         let (theory, narrower) = self.index.subject(evaluated.theory())?;
@@ -1382,7 +1396,8 @@ impl<'a> ReductQuery<'a> {
                     // Before the narrowing: the region stays pending.
                     return Err(Interrupt::Publish);
                 }
-                narrow_frozen(
+                observation.enter();
+                let result = narrow_frozen(
                     narrower,
                     FrozenSubject::new(theory, truth),
                     entry,
@@ -1390,9 +1405,12 @@ impl<'a> ReductQuery<'a> {
                     budget,
                     &mut statistics.reduct.regions,
                 )
-                .map_err(Interrupt::Stopped)
+                .map_err(Interrupt::Stopped)?;
+                observation.narrowed(result);
+                Ok(result)
             });
             let after = traversal.statistics();
+            observation.returned(after, visit.is_err());
             let counts = &mut statistics.reduct.regions;
             counts.regions += after.regions - before.regions;
             counts.refuted += after.refuted - before.refuted;

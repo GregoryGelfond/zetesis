@@ -86,6 +86,7 @@ pub use grounding::{
 mod optimization;
 mod objective_bounds;
 mod formula_execution;
+mod residual_handovers;
 #[cfg(feature = "gpu")]
 mod formula_tight;
 mod completion_accounting;
@@ -126,6 +127,10 @@ pub use optimization::{Optimization, OptimizationStop};
 pub use phase_timing::{PhaseTimings, SolvePhase};
 pub use policy::{GpuBatching, Grounder, OptimumSearch, Oracle};
 pub use projection::{ProjectionError, ProjectionLimits, ProjectionResource, ProjectionStatistics};
+pub use residual_handovers::{
+    ResidualHandoverAttempt, ResidualHandoverByReason, ResidualHandoverStatistics,
+    ResidualReasonSearch, ResidualSearchStatistics,
+};
 pub use semantic_outcome::{AnswerSelection, SemanticOutcome};
 pub use session::{
     AnswerSet, Original, PreparedInput, PreparedProfile, Session, SessionBuilder, SessionModel,

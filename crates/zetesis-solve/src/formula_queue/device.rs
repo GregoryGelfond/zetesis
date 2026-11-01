@@ -22,6 +22,16 @@ pub(crate) trait SlateDevice {
     /// Only the general formula primitive returns narrowed residual roots.
     const REGIONAL: bool = false;
 
+    /// Receipt owner of the general device path. Tight checks settle their own slots.
+    fn handovers(&mut self) -> Option<&mut crate::ResidualHandoverStatistics> {
+        None
+    }
+
+    /// Move the current attempt's optional decoded slots out of idle completion scratch.
+    fn take_decode_journal(&mut self) -> crate::residual_handovers::decoded::DecodeJournal {
+        crate::residual_handovers::decoded::DecodeJournal::default()
+    }
+
     /// Record the accounted envelope of a regional submission or joined completion.
     fn record_slate_bytes(&mut self, _total: u64) {}
 

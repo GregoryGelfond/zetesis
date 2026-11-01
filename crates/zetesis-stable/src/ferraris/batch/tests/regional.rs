@@ -15,15 +15,36 @@ fn slate_limit() -> BatchLimits {
 fn conditional_slate() -> (StableModels, SlateTicket, usize) {
     // Both interpretations satisfy x → x. Its only stable model is {}.
     let owner = theory(1, vec![Node::atom(0), Node::implies(0, 0)], vec![1]);
-    let mut search = StableModels::new(&owner, Limits::default(), Cancellation::default()).unwrap();
-    // Membership must remain correct for a nonminimal classical proposal even
-    // if today's outer candidate subjects can already prune it. Feed the
-    // genuine joined-producer admission boundary the two original models.
-    let available = search.prepare_pending(slate_limit()).unwrap();
+    paired_slate(&owner, &[0])
+}
+
+fn paired_slate(owner: &Theory, present: &[usize]) -> (StableModels, SlateTicket, usize) {
+    let search = StableModels::new(owner, Limits::default(), Cancellation::default()).unwrap();
+    let (search, ticket) = admitted_slate(
+        search,
+        vec![
+            Interpretation::new(owner, []).unwrap(),
+            Interpretation::new(owner, present.iter().copied()).unwrap(),
+        ],
+    );
+    (search, ticket, 1)
+}
+
+fn admitted_slate(
+    mut search: StableModels,
+    candidates: Vec<Interpretation>,
+) -> (StableModels, SlateTicket) {
+    // Exercise genuine joined-producer admission for original models which
+    // the active outer candidate subjects may otherwise prune.
+    let count = candidates.len();
+    let limit = BatchLimits {
+        max_candidates: NonZeroUsize::new(count).unwrap(),
+        ..slate_limit()
+    };
+    let available = search.prepare_pending(limit).unwrap();
     search.walk_index().unwrap();
     let mut rows = std::mem::take(&mut search.batch.pending);
-    rows.push(Interpretation::new(&owner, []).unwrap());
-    rows.push(Interpretation::new(&owner, [0]).unwrap());
+    rows.extend(candidates);
     let produced = Produced {
         exhausted: true,
         stopped: None,
@@ -35,11 +56,11 @@ fn conditional_slate() -> (StableModels, SlateTicket, usize) {
     assert!(admitted.exhausted);
     search.batch.pending = rows;
     search.batch.exhausted = admitted.exhausted;
-    let SlateProposal::Retry(ticket) = search.propose_slate(slate_limit()).unwrap() else {
+    let SlateProposal::Retry(ticket) = search.propose_slate(limit).unwrap() else {
         panic!("expected the already admitted pending rows");
     };
-    assert_eq!(search.slate(&ticket).unwrap().candidates().len(), 2);
-    (search, ticket, 1)
+    assert_eq!(search.slate(&ticket).unwrap().candidates().len(), count);
+    (search, ticket)
 }
 
 fn subset_roots(present: usize) -> Vec<(usize, Region)> {
@@ -321,3 +342,5 @@ fn complete_region_passes_preserve_the_full_family_and_reduct_work_of_legacy_com
 }
 
 mod refusals;
+
+mod observations;

@@ -49,11 +49,25 @@ impl StableModels {
         mut roots: Vec<(usize, Region)>,
         completion: &mut CompletionExecutor,
     ) -> Result<RegionalPass<'s>, BatchError<Infallible>> {
+        let requested = completion.take_observation_request();
+        let slate = ticket.slate();
         self.require_oldest(ticket)?;
         let result = (|| {
             self.check_tags(&provisional, OriginalCheck::Joint)?;
             validate_roots(&self.batch.pending, &provisional, &roots)?;
-            self.certify_tags(&mut provisional)?;
+            completion.begin_observations(
+                requested,
+                slate,
+                &provisional,
+                self.statistics.phase_timings.is_some(),
+            );
+            let certificates = self.certify_tags(&mut provisional);
+            let stopped = match &certificates {
+                Err(BatchError::Search(stop)) => Some(*stop),
+                _ => None,
+            };
+            completion.mark_certified(&provisional, stopped);
+            certificates?;
             roots.retain(|(slot, _)| provisional[*slot] == BatchVerdict::Residual);
             self.complete_pending(&provisional, Some(roots), completion)
                 .map_err(completion_error)

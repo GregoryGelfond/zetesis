@@ -102,7 +102,7 @@ pub enum Procedure {
 /// Decoded general-device outcomes requiring exact residual membership checks.
 /// These count device verdicts, separately from host completion attempts and
 /// commits. Historical observations can lack this receipt entirely.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, serde::Deserialize)]
 pub struct FormulaResidualStatistics {
     /// A complete no-change sweep left the proper-subset query unresolved.
     pub fixed_point: u64,
@@ -145,6 +145,9 @@ pub enum DeviceWork {
         /// absence remains unavailable rather than becoming zero.
         #[serde(skip_serializing_if = "Option::is_none")]
         gpu_residuals: Option<FormulaResidualStatistics>,
+        /// Decoded and completed handover activity when supplied by the general device.
+        #[serde(skip_serializing_if = "Option::is_none")]
+        gpu_residual_handovers: Option<Box<super::ResidualHandoverStatistics>>,
         /// Peak logical accounted GPU bytes.
         peak_accounted_bytes: u64,
     },
@@ -293,6 +296,16 @@ impl Observation {
         request: crate::selected::NativeExecution,
     ) -> Result<Self, String> {
         super::telemetry::observe(document, stderr, request)
+    }
+    /// Use the captured native JSON for exact wide handover integers when the
+    /// general-purpose Value parser could not retain their unsigned magnitude.
+    pub(crate) fn from_capture(
+        document: &serde_json::Value,
+        raw: &[u8],
+        stderr: &[u8],
+        request: crate::selected::NativeExecution,
+    ) -> Result<Self, String> {
+        super::telemetry::observe_with_source(document, stderr, request, Some(raw))
     }
 }
 /// A schedule position with its raw capture when launched.

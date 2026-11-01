@@ -57,6 +57,7 @@ impl MembershipExecution for Injected {
         Some(FormulaExecutionStatistics {
             gpu_limits: None,
             gpu_residuals: None,
+            gpu_residual_handovers: None,
             tight_work_per_candidate: None,
             gpu_scheduled_work: None,
             gpu_tight_routes: None,

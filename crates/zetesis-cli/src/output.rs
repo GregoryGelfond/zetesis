@@ -1,6 +1,7 @@
 //! Streaming JSON document adapter over typed model views and driver outcomes.
 
 mod arithmetic;
+mod handovers;
 
 use std::io::{self, Write};
 
@@ -1093,14 +1094,12 @@ fn execution_statistics(
     tight_routes(out, stats)?;
     out.text(",\"gpu_residuals\":")?;
     if let Some(residuals) = stats.gpu_residuals {
-        out.text("{\"fixed_point\":")?;
-        out.text(&residuals.fixed_point.to_string())?;
-        out.number_field("round_limit", residuals.round_limit)?;
-        out.number_field("work_limit", residuals.work_limit)?;
-        out.text("}")?;
+        handovers::reasons(out, &residuals)?;
     } else {
         out.text("null")?;
     }
+    out.text(",\"gpu_residual_handovers\":")?;
+    handovers::write(out, stats.gpu_residual_handovers.as_ref())?;
     out.number_field("gpu_submitted_batches", stats.gpu_submitted_batches)?;
     out.number_field("gpu_submitted_candidates", stats.gpu_submitted_candidates)?;
     out.number_field("gpu_batches", stats.gpu_batches)?;

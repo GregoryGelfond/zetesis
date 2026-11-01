@@ -244,7 +244,14 @@ impl BatchQueue {
                 self.released();
                 return Some(Ok(model));
             }
-            match self.check_slate(models, options, cancellation, phases, device) {
+            let prior = device.handovers().map(|stats| stats.attempts);
+            let result = self.check_slate(models, options, cancellation, phases, device);
+            if let Some(stats) = device.handovers()
+                && Some(stats.attempts) != prior
+            {
+                stats.finish(matches!(result, Ok(false)));
+            }
+            match result {
                 Ok(true) => return None,
                 Ok(false) => {}
                 Err(failure) => return Some(Err(failure)),
@@ -259,7 +266,7 @@ impl BatchQueue {
         &mut self,
         models: &mut StableModels,
         options: &SolveConfig,
-        device: &D,
+        device: &mut D,
     ) -> Result<Option<(zetesis_stable::SlateTicket, regional::CheckedRows, u128)>, Failure> {
         use zetesis_stable::SlateProposal;
         let ceiling = options.max_batch_bytes;
@@ -278,29 +285,29 @@ impl BatchQueue {
             max_candidates: selected,
             max_pending_bytes: pending_ceiling,
         };
-        let ticket = match models.propose_slate(limits).map_err(Failure::from)? {
-            SlateProposal::New(ticket) => {
-                let proposed = models
-                    .slate(&ticket)
-                    .map_err(Failure::from)?
-                    .candidates()
-                    .len();
-                self.batching.proposed(selected, proposed);
-                ticket
-            }
+        let proposal = models.propose_slate(limits).map_err(Failure::from)?;
+        let new = matches!(proposal, SlateProposal::New(_));
+        let retry = matches!(proposal, SlateProposal::Retry(_));
+        let ticket = match proposal {
+            SlateProposal::New(ticket) | SlateProposal::Retry(ticket) => ticket,
             SlateProposal::Ahead(ticket) => {
                 self.batching.promoted();
                 ticket
             }
-            SlateProposal::Retry(ticket) => ticket,
             SlateProposal::Exhausted => return Ok(None),
             _ => return Err(Failure::from(crate::ExecutorError::ForeignBatch)),
         };
+        if let Some(stats) = device.handovers() {
+            stats.begin(ticket.slate().sequence(), retry);
+        }
         let count = models
             .slate(&ticket)
             .map_err(Failure::from)?
             .candidates()
             .len();
+        if new {
+            self.batching.proposed(selected, count);
+        }
         let pending = if D::REGIONAL {
             models.pending_batch_bytes().map_err(Failure::Search)?
         } else {
@@ -415,6 +422,9 @@ impl BatchQueue {
                 }),
             );
         }
+        if let Some(attempt) = device.handovers().and_then(|s| s.last_attempt.as_mut()) {
+            attempt.decode_complete = true;
+        }
         // A stop observed now leaves the slate pending, its checks dropped:
         // the commit's completion and model construction poll the same control.
         if enumeration && let Err(error) = cancellation.poll() {
@@ -437,6 +447,9 @@ impl BatchQueue {
         ceiling: u64,
     ) -> Result<(), Failure> {
         let prior_completion = models.batch_statistics().completion_calls;
+        let slate = ticket.slate();
+        let mut observed = None;
+        let mut decoded = device.take_decode_journal();
         if D::REGIONAL {
             let spare = rows.remaining(
                 ceiling,
@@ -444,8 +457,40 @@ impl BatchQueue {
                 device.retained_batch_bytes()?,
             )?;
             device.record_slate_bytes(ceiling - spare);
+            if let Some(attempt) = device.handovers().and_then(|s| s.last_attempt.as_ref()) {
+                // The completion scratch that held the decode journal is about
+                // to be used by search. Keep the journal only if the idle
+                // dispatch envelope can take ownership without displacing it.
+                decoded.release_unless_fits(spare);
+                self.completion
+                    .observe_next_regional_pass(attempt.ordinal, spare - decoded.bytes());
+                observed = Some((attempt.ordinal, ceiling - spare));
+            }
         }
         let result = rows.finish(models, ticket, &mut self.completion);
+        if let Some((ordinal, mandatory_bytes)) = observed {
+            let may_have_queried = models.batch_statistics().completion_calls != prior_completion
+                && self
+                    .completion
+                    .last_statistics()
+                    .is_some_and(|s| s.residuals != 0);
+            let receipt = self
+                .completion
+                .take_regional_observations()
+                .filter(|r| r.slate() == slate && r.attempt() == ordinal);
+            let optional_bytes = decoded.bytes()
+                + receipt
+                    .as_ref()
+                    .map_or(0, zetesis_stable::RegionalObservations::peak_bytes);
+            device.record_slate_bytes(mandatory_bytes + optional_bytes);
+            if let Some(stats) = device.handovers() {
+                if let Some(attempt) = &mut stats.last_attempt {
+                    attempt.peak_observation_bytes =
+                        attempt.peak_observation_bytes.max(optional_bytes);
+                }
+                stats.join(receipt.as_ref(), &decoded, may_have_queried);
+            }
+        }
         if models.batch_statistics().completion_calls != prior_completion
             && let Some(progress) = self.completion.last_statistics()
         {

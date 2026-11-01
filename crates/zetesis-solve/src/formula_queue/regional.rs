@@ -23,7 +23,7 @@ struct RegionalSlate {
 pub(crate) struct CheckedRows {
     pub(super) verdicts: Vec<BatchVerdict>,
     regional: Option<RegionalSlate>,
-    count: usize,
+    pub(crate) count: usize,
 }
 
 fn space(ceiling: u64, terms: &[u128]) -> Result<u64, Failure> {

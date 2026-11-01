@@ -13,8 +13,14 @@ use crate::ferraris::Decision;
 use crate::reduct::ReductWorkspace;
 use crate::timing::{self, Phase};
 
+mod observations;
 mod scratch;
+
+use super::regions::depth::{DepthWorkspace, QueryDepth};
 use crate::{Cancellation, Incomplete, PhaseMeasurement, SearchPhaseTimings};
+pub use observations::{
+    RegionalObservations, RegionalQueryObservation, RegionalSlotObservation, RegionalSlotState,
+};
 
 /// Accounting for the last entered completion attempt, including failed jobs.
 /// Worker intervals may overlap; their sums are not coordinator wall time.
@@ -81,6 +87,8 @@ pub struct CompletionStatistics {
 pub struct CompletionExecutor {
     pool: Option<rayon::ThreadPool>,
     last: Option<CompletionStatistics>,
+    request: Option<(u64, u64)>,
+    regional: Option<RegionalObservations>,
     max_scratch_bytes: u64,
 }
 
@@ -89,6 +97,8 @@ impl Default for CompletionExecutor {
         Self {
             pool: None,
             last: None,
+            request: None,
+            regional: None,
             max_scratch_bytes: Self::DEFAULT_SCRATCH_BYTES,
         }
     }
@@ -133,6 +143,8 @@ impl CompletionExecutor {
                 )
             },
             last: None,
+            request: None,
+            regional: None,
             max_scratch_bytes,
         })
     }
@@ -166,6 +178,10 @@ impl CompletionExecutor {
         accepted: &mut Vec<bool>,
     ) -> Result<(), Incomplete> {
         self.last = None;
+        if roots.is_none() {
+            self.regional = None;
+        }
+        let mut depths = None;
         let timed = statistics.phase_timings.is_some();
         let mut progress = CompletionStatistics {
             workers: self.workers(),
@@ -197,22 +213,24 @@ impl CompletionExecutor {
             accepted
                 .try_reserve_exact(input.candidates.len())
                 .map_err(|_| Incomplete::Allocation)?;
-            let mut workspaces = storage(admitted)?;
-            let mut peak = u128::from(result_bytes)
-                + workspaces.capacity() as u128 * std::mem::size_of::<ReductWorkspace>() as u128;
-            record_peak(&mut progress, peak)?;
-            for _ in 0..admitted {
-                budget.cancellation.poll()?;
-                let workspace = ReductWorkspace::default();
-                // Every header was counted with the outer allocation; a fresh
-                // workspace holds its evaluation alone, which grows per query.
-                peak += workspace.retained_bytes() - std::mem::size_of::<ReductWorkspace>() as u128;
-                record_peak(&mut progress, peak)?;
-                if progress.peak_scratch_bytes > self.max_scratch_bytes {
-                    return Err(Incomplete::CompletionScratch);
+            let (mut workspaces, peak) =
+                prepare_workspaces(budget.cancellation, &mut progress, self.max_scratch_bytes)?;
+            let rows = if let Some(receipt) = &mut self.regional {
+                if let Some(roots) = &roots {
+                    depths = receipt.workers(
+                        input.candidates.len(),
+                        chunk_size(input.candidates.len(), admitted),
+                        roots,
+                    );
                 }
-                workspaces.push(workspace);
-            }
+                receipt.slots.as_deref_mut()
+            } else {
+                None
+            };
+            let observation = Attempt {
+                rows,
+                depths: depths.as_deref_mut(),
+            };
             if let Some(pool) = &self.pool
                 && !workspaces.is_empty()
             {
@@ -237,11 +255,11 @@ impl CompletionExecutor {
                     for (index, root) in roots {
                         slots[index] = RegionalJob::waiting(Some(root));
                     }
-                    join.execute(slots)
+                    join.execute(slots, observation)
                 } else {
                     let mut slots = storage(input.candidates.len())?;
                     slots.resize_with(input.candidates.len(), || None);
-                    join.execute(slots)
+                    join.execute(slots, observation)
                 }
             } else {
                 scalar(
@@ -251,14 +269,42 @@ impl CompletionExecutor {
                     statistics,
                     accepted,
                     &mut progress,
-                    &mut workspaces,
+                    (&mut workspaces, observation),
                 )
             }
         })();
+        if let Some(receipt) = &mut self.regional {
+            receipt.finish(depths.as_deref());
+        }
         progress.elapsed = started.map(|start| start.elapsed());
         self.last = Some(progress);
         result
     }
+}
+
+fn prepare_workspaces(
+    cancellation: &Cancellation,
+    progress: &mut CompletionStatistics,
+    max_scratch_bytes: u64,
+) -> Result<(Vec<ReductWorkspace>, u128), Incomplete> {
+    let admitted = progress.effective_workers;
+    let mut workspaces = storage(admitted)?;
+    let mut peak = u128::from(progress.requested_scratch_bytes)
+        + workspaces.capacity() as u128 * std::mem::size_of::<ReductWorkspace>() as u128;
+    record_peak(progress, peak)?;
+    for _ in 0..admitted {
+        cancellation.poll()?;
+        let workspace = ReductWorkspace::default();
+        // Every header was counted with the outer allocation; a fresh
+        // workspace holds its evaluation alone, which grows per query.
+        peak += workspace.retained_bytes() - std::mem::size_of::<ReductWorkspace>() as u128;
+        record_peak(progress, peak)?;
+        if progress.peak_scratch_bytes > max_scratch_bytes {
+            return Err(Incomplete::CompletionScratch);
+        }
+        workspaces.push(workspace);
+    }
+    Ok((workspaces, peak))
 }
 
 fn record_peak(progress: &mut CompletionStatistics, peak: u128) -> Result<(), Incomplete> {
@@ -285,6 +331,17 @@ struct Outcome {
     statistics: Statistics,
 }
 
+struct Attempt<'a> {
+    rows: Option<&'a mut [Option<RegionalSlotObservation>]>,
+    depths: Option<&'a mut [Option<DepthWorkspace>]>,
+}
+
+struct Serve<'a> {
+    workspace: &'a mut ReductWorkspace,
+    slot: Option<&'a mut RegionalSlotObservation>,
+    depth: Option<&'a mut DepthWorkspace>,
+}
+
 fn classify(
     input: Input<'_>,
     candidate: &Interpretation,
@@ -292,64 +349,116 @@ fn classify(
     root: QueryRoot,
     budget: &mut Budget<'_, impl Quota>,
     statistics: &mut Statistics,
-    workspace: &mut ReductWorkspace,
+    serve: Serve<'_>,
 ) -> Result<bool, Incomplete> {
-    budget.cancellation.poll()?;
-    match verdict {
-        BatchVerdict::NoProperSubset => Ok(true),
-        BatchVerdict::Refuted => Ok(false),
-        BatchVerdict::NotModel => Err(Incomplete::InvalidWitness),
-        BatchVerdict::Residual => {
-            let verdict = match input.query {
-                Some(query) => {
-                    let result = (|| {
-                        let evaluated = workspace.evaluate(
-                            candidate,
-                            input.limits,
-                            budget.cancellation,
-                            statistics,
-                        )?;
-                        if !evaluated.truth.is_model() {
-                            return Err(Incomplete::InvalidWitness);
-                        }
-                        let started = timing::start(statistics.phase_timings.as_ref());
-                        increment(&mut statistics.countermodel_queries)?;
-                        let result = match root {
-                            QueryRoot::Supplied(root) => query
-                                .check_region(
-                                    &evaluated.truth,
-                                    root,
-                                    input.limits,
-                                    budget,
-                                    (statistics, evaluated.narrowing),
-                                )
-                                .map(Checked::Regional),
-                            QueryRoot::Unneeded => return Err(Incomplete::InvalidWitness),
-                            QueryRoot::Full => query
-                                .check(
-                                    &evaluated.truth,
-                                    input.limits,
-                                    budget,
-                                    statistics,
-                                    evaluated.narrowing,
-                                )
-                                .map(Checked::Whole),
-                        };
-                        timing::finish(&mut statistics.phase_timings, Phase::Reduct, started);
-                        result
-                    })();
-                    workspace.finish_check(result, input.limits.max_reduct_bytes, statistics)?
-                }
-                None => return Err(Incomplete::InvalidWitness),
-            };
-            match verdict {
-                Checked::Regional(witness) => Ok(witness.is_none()),
-                Checked::Whole(check) => match Decision::from(check) {
-                    Decision::Stable => Ok(true),
-                    Decision::Refuted => Ok(false),
-                    Decision::Invalid => Err(Incomplete::InvalidWitness),
-                },
+    let mut serve = serve;
+    let result = budget
+        .cancellation
+        .poll()
+        .map_err(Incomplete::from)
+        .and_then(|()| match verdict {
+            BatchVerdict::NoProperSubset => Ok(true),
+            BatchVerdict::Refuted => Ok(false),
+            BatchVerdict::NotModel => Err(Incomplete::InvalidWitness),
+            BatchVerdict::Residual => serve.query(input, candidate, root, budget, statistics),
+        });
+    if let Some(slot) = serve.slot
+        && slot.state == RegionalSlotState::Unentered
+    {
+        slot.state = match result {
+            Ok(true) => RegionalSlotState::NoWitnessInSuppliedRegion,
+            Ok(false) => RegionalSlotState::ValidatedCountermodel,
+            Err(stop) => RegionalSlotState::Stopped(stop),
+        };
+    }
+    result
+}
+
+impl Serve<'_> {
+    fn query(
+        &mut self,
+        input: Input<'_>,
+        candidate: &Interpretation,
+        root: QueryRoot,
+        budget: &mut Budget<'_, impl Quota>,
+        statistics: &mut Statistics,
+    ) -> Result<bool, Incomplete> {
+        let query = input.query.ok_or(Incomplete::InvalidWitness)?;
+        let result = (|| {
+            let evaluated = self.workspace.evaluate(
+                candidate,
+                input.limits,
+                budget.cancellation,
+                statistics,
+            )?;
+            if !evaluated.truth.is_model() {
+                return Err(Incomplete::InvalidWitness);
             }
+            let started = timing::start(statistics.phase_timings.as_ref());
+            increment(&mut statistics.countermodel_queries)?;
+            let mut depth_counts = QueryDepth::default();
+            let before = self.slot.as_ref().map(|_| {
+                (
+                    statistics.reduct.regions.regions,
+                    budget.statistics.work,
+                    statistics.phase_timings.map(|t| t.reduct),
+                )
+            });
+            let result = match root {
+                QueryRoot::Supplied(root) => query
+                    .check_region(
+                        &evaluated.truth,
+                        root,
+                        input.limits,
+                        budget,
+                        (statistics, evaluated.narrowing),
+                        self.slot
+                            .as_ref()
+                            .map(|_| (&mut depth_counts, self.depth.as_deref_mut())),
+                    )
+                    .map(Checked::Regional),
+                QueryRoot::Unneeded => return Err(Incomplete::InvalidWitness),
+                QueryRoot::Full => query
+                    .check(
+                        &evaluated.truth,
+                        input.limits,
+                        budget,
+                        statistics,
+                        evaluated.narrowing,
+                    )
+                    .map(Checked::Whole),
+            };
+            timing::finish(&mut statistics.phase_timings, Phase::Reduct, started);
+            if let (Some(slot), Some((visits, work, old_timing))) = (&mut self.slot, before) {
+                let host_time = old_timing
+                    .zip(statistics.phase_timings)
+                    .and_then(|(old, new)| {
+                        (!old.overflowed && !new.reduct.overflowed)
+                            .then(|| new.reduct.elapsed.checked_sub(old.elapsed))
+                            .flatten()
+                    });
+                slot.query = Some(RegionalQueryObservation {
+                    visited: statistics.reduct.regions.regions - visits,
+                    attempted_splits: depth_counts.attempted_splits,
+                    published_splits: depth_counts.published_splits,
+                    deepest: depth_counts.deepest,
+                    work: budget.statistics.work - work,
+                    host_time,
+                });
+            }
+            result
+        })();
+
+        let verdict =
+            self.workspace
+                .finish_check(result, input.limits.max_reduct_bytes, statistics)?;
+        match verdict {
+            Checked::Regional(witness) => Ok(witness.is_none()),
+            Checked::Whole(check) => match Decision::from(check) {
+                Decision::Stable => Ok(true),
+                Decision::Refuted => Ok(false),
+                Decision::Invalid => Err(Incomplete::InvalidWitness),
+            },
         }
     }
 }
@@ -374,8 +483,9 @@ fn scalar(
     statistics: &mut Statistics,
     accepted: &mut Vec<bool>,
     progress: &mut CompletionStatistics,
-    workspaces: &mut [ReductWorkspace],
+    state: (&mut [ReductWorkspace], Attempt<'_>),
 ) -> Result<(), Incomplete> {
+    let (workspaces, mut observation) = state;
     progress.worker_original_validation = None;
     progress.worker_reduct = None;
     let mut local = Budget {
@@ -404,7 +514,23 @@ fn scalar(
             };
             // Retain the existing scalar counters, work order and failure boundary.
             let result = classify(
-                input, candidate, verdict, root, &mut local, statistics, workspace,
+                input,
+                candidate,
+                verdict,
+                root,
+                &mut local,
+                statistics,
+                Serve {
+                    workspace,
+                    slot: observation
+                        .rows
+                        .as_deref_mut()
+                        .and_then(|rows| rows.get_mut(index)?.as_mut()),
+                    depth: observation
+                        .depths
+                        .as_deref_mut()
+                        .and_then(|w| w.first_mut()?.as_mut()),
+                },
             );
             entered(progress, verdict, &result);
             accepted.push(result?);
@@ -486,8 +612,17 @@ struct Join<'a, 'b, 'c> {
     workspaces: &'a mut [ReductWorkspace],
 }
 
+// Logical slot chunks are identical for scheduling and optional observations.
+fn chunk_size(rows: usize, workers: usize) -> usize {
+    rows.div_ceil(workers.max(1)).max(1)
+}
+
 impl Join<'_, '_, '_> {
-    fn execute<J: Job>(self, mut outcomes: Vec<J>) -> Result<(), Incomplete> {
+    fn execute<J: Job>(
+        self,
+        mut outcomes: Vec<J>,
+        observation: Attempt<'_>,
+    ) -> Result<(), Incomplete> {
         let Self {
             pool,
             input,
@@ -500,27 +635,51 @@ impl Join<'_, '_, '_> {
         let shared = SharedBudget::new(budget.limits, budget.statistics);
         let cancellation = budget.cancellation;
         let timed = statistics.phase_timings.is_some();
-        let chunk_size = outcomes.len().div_ceil(progress.effective_workers.max(1));
+        let chunk_size = chunk_size(outcomes.len(), progress.effective_workers);
+        let serve_chunk = |chunk: usize,
+                           slots: &mut [J],
+                           workspace: &mut ReductWorkspace,
+                           mut rows: Option<&mut [Option<RegionalSlotObservation>]>,
+                           mut depth: Option<&mut DepthWorkspace>| {
+            for (offset, slot) in slots.iter_mut().enumerate() {
+                slot.execute(|root| {
+                    run(
+                        input,
+                        chunk * chunk_size + offset,
+                        root,
+                        &shared,
+                        cancellation,
+                        timed,
+                        Serve {
+                            workspace,
+                            slot: rows.as_deref_mut().and_then(|rows| rows[offset].as_mut()),
+                            depth: depth.as_deref_mut(),
+                        },
+                    )
+                });
+            }
+        };
         pool.install(|| {
-            outcomes
+            let jobs = outcomes
                 .par_chunks_mut(chunk_size)
                 .zip(workspaces.par_iter_mut())
-                .enumerate()
-                .for_each(|(chunk, (slots, workspace))| {
-                    for (offset, slot) in slots.iter_mut().enumerate() {
-                        slot.execute(|root| {
-                            run(
-                                input,
-                                chunk * chunk_size + offset,
-                                root,
-                                &shared,
-                                cancellation,
-                                timed,
-                                workspace,
-                            )
-                        });
-                    }
-                });
+                .enumerate();
+            if let Some(rows) = observation.rows {
+                let observed = jobs.zip(rows.par_chunks_mut(chunk_size));
+                if let Some(depths) = observation.depths {
+                    observed.zip(depths.par_iter_mut()).for_each(
+                        |(((i, (slots, w)), rows), depth)| {
+                            serve_chunk(i, slots, w, Some(rows), depth.as_mut());
+                        },
+                    );
+                } else {
+                    observed.for_each(|((i, (slots, w)), rows)| {
+                        serve_chunk(i, slots, w, Some(rows), None);
+                    });
+                }
+            } else {
+                jobs.for_each(|(i, (slots, w))| serve_chunk(i, slots, w, None, None));
+            }
         });
         // Work is reserved before the operation. Read after join, including every
         // failed job, before choosing an error in original candidate order.
@@ -551,7 +710,7 @@ fn run(
     shared: &SharedBudget,
     cancellation: &Cancellation,
     timed: bool,
-    workspace: &mut ReductWorkspace,
+    serve: Serve<'_>,
 ) -> Outcome {
     let mut budget = Budget {
         quota: shared.lease(cancellation),
@@ -570,7 +729,7 @@ fn run(
         root,
         &mut budget,
         &mut statistics,
-        workspace,
+        serve,
     );
     statistics.search = budget.statistics;
     Outcome { result, statistics }

@@ -13,6 +13,21 @@ pub(super) fn observe(
     stderr: &[u8],
     request: NativeExecution,
 ) -> Result<Observation, String> {
+    observe_with_source(document, stderr, request, None)
+}
+
+pub(super) fn observe_with_source(
+    document: &Value,
+    stderr: &[u8],
+    request: NativeExecution,
+    source: Option<&[u8]>,
+) -> Result<Observation, String> {
+    let mut observation = route(document, stderr, request)?;
+    super::handovers::attach(&mut observation.execution.device, document, source)?;
+    Ok(observation)
+}
+
+fn route(document: &Value, stderr: &[u8], request: NativeExecution) -> Result<Observation, String> {
     let timing = super::super::timing::parse_any(stderr)?;
     let statistics = &document["statistics"];
     measured_statistics(statistics, &timing)?;
@@ -312,6 +327,7 @@ fn formula(value: &Value, api: GpuApi, adapter: Option<&str>) -> Result<DeviceWo
         work: activity.work,
         cpu_residuals: activity.residuals,
         gpu_residuals: residual_reasons(value, activity.residuals)?,
+        gpu_residual_handovers: None,
         peak_accounted_bytes: activity.peak_bytes,
     })
 }

@@ -21,6 +21,11 @@
 //! reserve the root `child-rss.json` artifact path, checked on the copied filesystem.
 
 mod config;
+mod handovers;
+pub use handovers::{
+    ResidualHandoverAttempt, ResidualHandoverByReason, ResidualHandoverStatistics,
+    ResidualReasonSearch, ResidualSearchStatistics,
+};
 mod invocation;
 mod native_family;
 mod outcome;

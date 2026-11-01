@@ -528,3 +528,70 @@ fn compute_timing_json_reports_unresolved_batches_and_flushes() {
     assert_eq!(measured["flush_submissions"], 1);
     assert_eq!(measured["complete"], false);
 }
+
+#[test]
+fn handover_json_distinguishes_absence_zero_and_a_failed_search_prefix() {
+    use zetesis_solve::{
+        ResidualHandoverAttempt, ResidualHandoverStatistics, ResidualSearchStatistics,
+    };
+    #[derive(serde::Deserialize)]
+    struct Output {
+        gpu_residual_handovers: zetesis_validation::performance::matrix::ResidualHandoverStatistics,
+    }
+    let mut statistics = crate::FormulaExecutionStatistics::default();
+    let encode = |stats: &crate::FormulaExecutionStatistics| {
+        let mut out = Buffer::new(8192);
+        super::execution_statistics(&mut out, Some(stats)).unwrap();
+        out.bytes
+    };
+    let absent: serde_json::Value = serde_json::from_slice(&encode(&statistics)).unwrap();
+    assert!(absent["gpu_residual_handovers"].is_null());
+    let mut receipt = ResidualHandoverStatistics::default();
+    statistics.gpu_residual_handovers = Some(receipt.clone());
+    let zero: serde_json::Value = serde_json::from_slice(&encode(&statistics)).unwrap();
+    assert_eq!(zero["gpu_residual_handovers"]["attempts"], 0);
+    assert!(zero["gpu_residual_handovers"]["last_attempt"].is_null());
+    let large = u128::from(u64::MAX) + 1;
+    let mut search = ResidualSearchStatistics::default();
+    search.totals.stopped = 1;
+    search.totals.visited = 1;
+    search.deepest = Some(0);
+    search.width = Some(1);
+    search.totals.work = large;
+    let mut attempt = ResidualHandoverAttempt::default();
+    attempt.ordinal = 1;
+    attempt.slate_sequence = 7;
+    attempt.decode_complete = true;
+    attempt.residuals.round_limit = 1;
+    attempt.open_atoms = 1;
+    attempt.peak_observation_bytes = 256;
+    let mut reasons = zetesis_solve::ResidualHandoverByReason::default();
+    search.totals.open_atoms = 1;
+    reasons.round_limit = search.totals.clone();
+    attempt.by_reason = Some(reasons);
+    attempt.search = Some(search);
+    receipt.attempts = 1;
+    receipt.incomplete_attempts = 1;
+    receipt.query_work = large;
+    receipt.last_attempt = Some(attempt);
+    statistics.gpu_residual_handovers = Some(receipt);
+    let decoded: Output = serde_json::from_slice(&encode(&statistics)).unwrap();
+    let retained = decoded.gpu_residual_handovers;
+    assert_eq!(retained.query_work, large);
+    assert_eq!(retained.incomplete_attempts, 1);
+    let last = retained.last_attempt.unwrap();
+    assert_eq!(last.slate_sequence, 7);
+    assert!(!last.committed);
+    assert_eq!(last.peak_observation_bytes, 256);
+    let joined = last.by_reason.unwrap();
+    assert_eq!(joined.round_limit.work, large);
+    assert_eq!(joined.round_limit.open_atoms, 1);
+    assert_eq!(joined.fixed_point.work, 0);
+    let query = last.search.unwrap();
+    assert_eq!(query.work, large);
+    assert_eq!(query.stopped, 1);
+    assert_eq!(
+        (query.deepest, query.width, query.host_time_ns),
+        (Some(0), Some(1), None)
+    );
+}

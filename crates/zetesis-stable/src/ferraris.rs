@@ -12,7 +12,10 @@ pub use batch::{
 };
 
 mod completion;
-pub use completion::{CompletionExecutor, CompletionStatistics};
+pub use completion::{
+    CompletionExecutor, CompletionStatistics, RegionalObservations, RegionalQueryObservation,
+    RegionalSlotObservation, RegionalSlotState,
+};
 
 mod certified;
 mod conditions;

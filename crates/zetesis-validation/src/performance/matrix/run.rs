@@ -778,8 +778,9 @@ fn qualify(
                 .reported_displays(request.max_spelling_bytes)
                 .map_err(|error| invalid(&error))?;
             sample.observation = Some(
-                super::Observation::from_statistics(
+                super::Observation::from_capture(
                     &document,
+                    capture.stdout(),
                     capture.stderr(),
                     request.plan.profiles[profile],
                 )

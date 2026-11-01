@@ -261,6 +261,30 @@ read the enumeration's one original index. Returned countermodels still undergo
 independent frozen-reduct validation. Candidate restrictions do not replace the
 original theory.
 
+A checker can supply a subregion of the frozen query through
+`StableModels::begin_regional_pass`. A validated proper countermodel refutes
+the candidate. When the supplied region contains no witness, the caller must
+also establish that the region covered every possible proper witness before
+publishing a whole-candidate decision through `RegionalPass::finish`.
+
+To measure this work, call `CompletionExecutor::observe_next_regional_pass`
+with an attempt identifier and optional storage allowance before beginning the
+pass. Use `take_regional_observations` after it returns, including on a typed
+stop. The receipt identifies the slate and attempt. Its original slot order
+distinguishes CPU-certified, unentered, stopped and completed residuals.
+Each entered query reports charged work (including witness validation),
+visited regions and attempted and published splits. A stopped query retains
+the prefix it performed. A retry receives its own attempt identifier.
+
+The slate's width is its largest level after summing visits at each depth
+across workers. The host duration sums the measured query intervals, which
+can overlap. A pass with no queries has zero visits and zero width when its
+slot records are available. An entirely terminal slate requires no
+observation allocation. Insufficient optional storage can leave slot records
+or depth measurements unavailable while the same queries continue under
+their original limits. Disabled timing yields no host duration. Taking and
+dropping the receipt releases its retained slot storage.
+
 A formula session shares the rows its candidate walks learn through one
 `zetesis_stable::LearnedStore`, created for each solve call and handed to the
 session's candidate stream and membership execution. The rows only prune

@@ -74,6 +74,7 @@ fn decided(
 /// decides them, admits at most `prefix` candidates per submission, and
 /// records what the queue asked of it.
 struct Double {
+    handovers: Option<crate::ResidualHandoverStatistics>,
     prefix: usize,
     decides: Decides,
     stop: Stop,
@@ -97,6 +98,7 @@ struct Double {
 impl Double {
     fn new(prefix: usize, control: &Cancellation) -> Self {
         Self {
+            handovers: None,
             prefix,
             decides: Decides::Wholly,
             stop: Stop::Never,
@@ -148,6 +150,10 @@ impl Prepared<'_> {
 }
 
 impl SlateDevice for Double {
+    fn handovers(&mut self) -> Option<&mut crate::ResidualHandoverStatistics> {
+        self.handovers.as_mut()
+    }
+
     type Prepared<'d> = Prepared<'d>;
     type Checked = Result<Receipt, Failure>;
 
@@ -455,6 +461,44 @@ fn a_stop_during_the_lookahead_leaves_the_slate_pending_and_the_device_reusable(
     assert!(!models.exhausted());
     assert!(double.reusable);
     assert_eq!(double.in_flight, 0);
+}
+
+#[test]
+fn the_queue_records_an_incomplete_handover_when_the_device_does_not_return_a_prefix() {
+    let cancellation = Cancellation::default();
+    let (_admitted, mut models) = stream(CHOICES, &cancellation);
+    let options = options(4);
+    let mut queue = BatchQueue::for_joint_oracle(&options).unwrap();
+    queue.set_demand(UNBOUNDED);
+    let mut double = Double::new(usize::MAX, &cancellation);
+    double.handovers = Some(crate::ResidualHandoverStatistics::default());
+    double.stop = Stop::DuringFinish;
+    let result = queue.next_device(
+        &mut models,
+        &options,
+        &cancellation,
+        &Recorder::new(false),
+        &mut double,
+    );
+    assert!(matches!(result, Some(Err(Failure::Search(_)))));
+    let stats = double.handovers.unwrap();
+    let attempt = stats.last_attempt.unwrap();
+    assert_eq!(
+        (
+            stats.attempts,
+            stats.incomplete_attempts,
+            stats.committed_slates
+        ),
+        (1, 1, 0)
+    );
+    assert!(!attempt.committed && !attempt.decode_complete);
+    assert_eq!(
+        attempt.residuals,
+        crate::FormulaResidualStatistics::default()
+    );
+    assert!(attempt.search.is_none());
+    assert_eq!(stats.query_work, 0);
+    assert!(stats.complete_work);
 }
 
 #[test]

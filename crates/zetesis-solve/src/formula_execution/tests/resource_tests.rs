@@ -118,6 +118,7 @@ fn supplied_profile(backend: Backend, expected_api: &str) {
     for projection in GateProjection::ALL {
         let profile =
             GpuFormulaProfile::from_context_with_projection(&context, projection).unwrap();
+        super::residual_tests::compare_physical_roots(&profile);
         let resources = ExecutionResources::with_formula_profile(&profile);
         assert!(resources.formula_profile().unwrap().same_instance(&profile));
         assert!(resources.gpu_context().unwrap().same_instance(&context));
@@ -163,6 +164,7 @@ fn supplied_profile(backend: Backend, expected_api: &str) {
                         oracle,
                         statistics,
                         options: &options,
+                        decoded: crate::residual_handovers::decoded::DecodeJournal::default(),
                     },
                 )
                 .expect("the fact has one model")
@@ -270,6 +272,7 @@ fn qualify_prefix_orchestration(
             oracle: &mut oracle,
             statistics: &mut statistics,
             options: &logical,
+            decoded: crate::residual_handovers::decoded::DecodeJournal::default(),
         },
         slates: Vec::new(),
     };

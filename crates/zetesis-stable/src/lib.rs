@@ -44,8 +44,9 @@ pub use ferraris::{
     CompletionStatistics, ConstructionAttempt, Engagement, FrontierOrder, GeneratorOrderStatistics,
     GeneratorOrderStatus, LearnedStore, Limits, Lookahead, LookaheadDeclined, QueryDivision,
     QueryDivisionStatistics, RegionCounts, RegionFrontierStatistics, RegionSearchStatistics,
-    RegionWalkEngagement, RegionWorkerStatistics, RegionalOutcome, RegionalPass, SlateProposal,
-    SlateTicket, StableModels, Statistics, check,
+    RegionWalkEngagement, RegionWorkerStatistics, RegionalObservations, RegionalOutcome,
+    RegionalPass, RegionalQueryObservation, RegionalSlotObservation, RegionalSlotState,
+    SlateProposal, SlateTicket, StableModels, Statistics, check,
 };
 pub use zetesis_algebra::Cancellation;
 pub use zetesis_ferraris::{
