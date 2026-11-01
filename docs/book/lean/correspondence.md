@@ -1142,13 +1142,13 @@ does not implement the pure fixed-value `Reduction` contract.
 
 `AxisFolds.SetStreams.selected_inter`, `append_union` and
 `ordered_union_value` relate decoded finite occurrences to the existing set
-operations; `ordered_union_equal_left` preserves the exact left representative.
-Membership reads must be faithful, and comparison equality must imply equal
-decoded values. Strictly ordered unique inputs and a lawful pure order justify
-the executable canonical merge; the membership theorem alone does not establish
-sortedness. Rust's iterator and order traits do not enforce these premises.
-Cursor read order, unread suffixes after failure and successful Model
-materialization remain concrete correspondence obligations. No set law commutes
+operations. `ordered_union_equal_left` preserves the exact left representative
+on a tie. `ordered_union_sorted_unique` proves that the decoded output is
+strictly ordered and contains each atom at most once when both inputs are
+strictly ordered and the comparator follows the same transitive, irreflexive
+order on decoded atoms. Rust must supply faithful membership reads, comparison
+results and iterator advances. Cursor read order, unread suffixes after failure
+and successful Model materialization remain concrete correspondence obligations. No set law commutes
 allocation or failure effects. First-answer seeding, cautious empty absorption
 and brave exhaustion retain their existing coverage and verdict contracts.
 
@@ -2470,7 +2470,7 @@ to these pointwise applications remain implementation obligations.
 | `zetesis_algebra::reduction::Verdict` (enum) | `Zetesis.Algebra.FoldVerdict` (inductive) | Empty, Complete, Absorbed and Undecided classify authenticated accepted-member coverage. Compact Rust witnesses must relate to the Lean emitted history, and typed stops remain concrete payloads; the carrier itself proves neither membership, exhaustion nor minimum optimality. |
 | `zetesis_algebra::reduction::sets::intersection` (function) | `Zetesis.AxisFolds.SetStreams.selected_inter` (theorem) | Filtering a finite occurrence stream denotes intersection only when decoded occurrences faithfully cover the left set and each membership flag faithfully states membership in the right set. Cursor/materialization failures and Model allocation remain outside the pure set-value law. |
 | `zetesis_algebra::reduction::sets::union` (function) | `Zetesis.AxisFolds.SetStreams.append_union` (theorem) | Chaining the two finite occurrence streams denotes union after decoding; duplicates are allowed in the stream, while Model retains canonicalization, allocation and failure order. Iterator exhaustion and finite denotation are required. |
-| `zetesis_algebra::reduction::sets::ordered_union` (function) | `Zetesis.AxisFolds.SetStreams.ordered_union_value` (theorem) | The merge advances one head or both on equality, retaining the left representative. Decoded union requires comparator equality to imply decoded equality and faithful finite streams. The Rust cursor additionally requires strictly increasing unique inputs; allocation and publication order are separate obligations. |
+| `zetesis_algebra::reduction::sets::ordered_union` (function) | `Zetesis.AxisFolds.SetStreams.ordered_union_value` (theorem) | The merge retains the left representative on equality. For strictly ordered decoded inputs and a comparator faithful to their strict order, `ordered_union_sorted_unique` proves order and absence of duplicates in the merged stream. The Rust cursor must implement the specified advances, allocation and publication. |
 
 Tuple products are the `zetesis_algebra::reduction::Reduction` implementation
 for `(L, R)`; there is no separate Rust `Product` owner. Both coordinates are

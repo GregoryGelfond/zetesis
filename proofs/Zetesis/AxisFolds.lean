@@ -882,6 +882,73 @@ theorem ordered_union_equal_left (compare : ρ → ρ → Ordering)
       first :: orderedUnion compare leftRest rightRest := by
   simp only [orderedUnion, equal]
 
+/-- The ordered merge returns a strictly increasing list of decoded atoms, each
+occurring once. The inputs must already be strictly ordered. A comparison of
+representatives must report the order of their decoded atoms; different
+representatives of one atom may compare equal.
+
+Proof. Each step consumes the smaller head, or both equal heads. The emitted
+head precedes every remaining input atom, hence every atom of the remaining
+merge by `ordered_union_mem`. Irreflexivity excludes duplicate occurrences. -/
+theorem ordered_union_sorted_unique (decode : ρ → α) (compare : ρ → ρ → Ordering)
+    (lt : α → α → Prop) (transitive : ∀ a b c, lt a b → lt b c → lt a c)
+    (irreflexive : ∀ a, ¬ lt a a)
+    (faithful : ∀ first second, match compare first second with
+      | .lt => lt (decode first) (decode second)
+      | .eq => decode first = decode second
+      | .gt => lt (decode second) (decode first))
+    (left right : List ρ) (leftOrdered : (left.map decode).Pairwise lt)
+    (rightOrdered : (right.map decode).Pairwise lt) :
+    let merged := (orderedUnion compare left right).map decode
+    merged.Pairwise lt ∧ merged.Nodup := by
+  have equal (a b : ρ) (order : compare a b = .eq) : decode a = decode b := by
+    simpa only [order] using faithful a b
+  have beforeStream (a b : α) (tail : List α) (before : lt a b)
+      (ordered : (b :: tail).Pairwise lt) : ∀ x ∈ b :: tail, lt a x := by
+    intro x member
+    rcases List.mem_cons.mp member with rfl | later
+    · exact before
+    · exact transitive a b x before (List.rel_of_pairwise_cons ordered later)
+  have beforeMerge (a : α) (xs ys : List ρ)
+      (beforeLeft : ∀ x ∈ xs.map decode, lt a x)
+      (beforeRight : ∀ y ∈ ys.map decode, lt a y) :
+      ∀ z ∈ (orderedUnion compare xs ys).map decode, lt a z := by
+    intro z member
+    exact ((ordered_union_mem decode compare equal xs ys z).mp member).elim
+      (beforeLeft z) (beforeRight z)
+  have ordered : ((orderedUnion compare left right).map decode).Pairwise lt := by
+    induction left, right using orderedUnion.induct compare with
+    | case1 right => simpa only [orderedUnion] using rightOrdered
+    | case2 left nonempty =>
+      cases left with
+      | nil => exact (nonempty rfl).elim
+      | cons first rest => simpa only [orderedUnion] using leftOrdered
+    | case3 first xs second ys order continued =>
+      have leftParts := List.pairwise_cons.mp leftOrdered
+      have heads : lt (decode first) (decode second) := by
+        simpa only [order] using faithful first second
+      rw [orderedUnion, order, List.map_cons, List.pairwise_cons]
+      exact ⟨beforeMerge _ xs (second :: ys) leftParts.1
+        (beforeStream _ _ _ heads rightOrdered), continued leftParts.2 rightOrdered⟩
+    | case4 first xs second ys order continued =>
+      have leftParts := List.pairwise_cons.mp leftOrdered
+      have rightParts := List.pairwise_cons.mp rightOrdered
+      have beforeRight : ∀ y ∈ ys.map decode, lt (decode first) y := by
+        rw [equal first second order]
+        exact rightParts.1
+      rw [orderedUnion, order, List.map_cons, List.pairwise_cons]
+      exact ⟨beforeMerge _ xs ys leftParts.1 beforeRight, continued leftParts.2 rightParts.2⟩
+    | case5 first xs second ys order continued =>
+      have rightParts := List.pairwise_cons.mp rightOrdered
+      have heads : lt (decode second) (decode first) := by
+        simpa only [order] using faithful first second
+      rw [orderedUnion, order, List.map_cons, List.pairwise_cons]
+      exact ⟨beforeMerge _ (first :: xs) ys
+        (beforeStream _ _ _ heads leftOrdered) rightParts.1, continued leftOrdered rightParts.2⟩
+  refine ⟨ordered, ordered.imp ?_⟩
+  intro a b before same
+  exact irreflexive a (same ▸ before)
+
 end SetStreams
 
 

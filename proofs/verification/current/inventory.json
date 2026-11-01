@@ -1537,17 +1537,22 @@
     },
     {
       "file": "Zetesis/AxisFolds.lean",
-      "line": 894,
+      "line": 893,
+      "name": "Zetesis.AxisFolds.SetStreams.ordered_union_sorted_unique"
+    },
+    {
+      "file": "Zetesis/AxisFolds.lean",
+      "line": 961,
       "name": "Zetesis.AxisFolds.walk_exhausted_fold"
     },
     {
       "file": "Zetesis/AxisFolds.lean",
-      "line": 904,
+      "line": 971,
       "name": "Zetesis.AxisFolds.world_view_fold_complete"
     },
     {
       "file": "Zetesis/AxisFolds.lean",
-      "line": 921,
+      "line": 988,
       "name": "Zetesis.AxisFolds.world_view_fold_decided"
     },
     {
@@ -10804,7 +10809,7 @@
     "Zetesis/WorldViews.lean"
   ],
   "source_sha256": {
-    "Audit.lean": "e6a7113fc01fa7638f7aa17524313e79ca275bf82132c7170ef41da36068d6d7",
+    "Audit.lean": "903a71f3ab2e8da9b7eba8b43e65a0978e64dec5172f79e6b78f5a6f6365029b",
     "Zetesis.lean": "47966619f7bb01581457a3794db8c829fcb5eb81cc1a6cb4267b9ba386bf5db4",
     "Zetesis/AcyclicEvaluation.lean": "1a9c77283876cf1f61cb92031da04780aada5d0b256f79db5b64bfb6b129d0dc",
     "Zetesis/AdjacencyRows.lean": "38a19b1c74483a157636321a56e95fea660a2192a04c77930d609e411c8d30d4",
@@ -10823,7 +10828,7 @@
     "Zetesis/AtomCatalogs.lean": "2a90dd7c129290ffc3f9609f51378e6e45014a55f31b74cca9e7284a4e320eec",
     "Zetesis/AtomKeys.lean": "0188ea220bf8484db130ea674d01bad0db3db80f62678cbb0fcd930403cf1ae0",
     "Zetesis/AtomicWork.lean": "ebe299cace9d668c97193e4718016f2e18741754d0e44574da4094c42155b2e7",
-    "Zetesis/AxisFolds.lean": "e771cc398d9bc5aa255523cec1439270e84eb562e3014c8ca7f70f68c7619571",
+    "Zetesis/AxisFolds.lean": "c8f421ca98f929a9b802a99fc0cc53f337bb0674099886e43939a1342de46e3a",
     "Zetesis/BatchAccounting.lean": "c6ff03ea70ee1eb9afbbba472bfe10c0bd77e231b8623c4157da91fbb5a5c615",
     "Zetesis/BinaryWatch.lean": "c6391510df44d983c95f3c084aaba1336fdf88c47eded51b16e193ccd88110b4",
     "Zetesis/BindingScopes.lean": "1ccfde0f879702572dbc25ed20531f2b85e04eeedb59fd7eeea45ad7972486a7",

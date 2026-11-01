@@ -307,6 +307,7 @@ import Zetesis
 #print axioms Zetesis.AxisFolds.SetStreams.ordered_union_mem
 #print axioms Zetesis.AxisFolds.SetStreams.ordered_union_value
 #print axioms Zetesis.AxisFolds.SetStreams.ordered_union_equal_left
+#print axioms Zetesis.AxisFolds.SetStreams.ordered_union_sorted_unique
 #print axioms Zetesis.AxisFolds.walk_exhausted_fold
 #print axioms Zetesis.AxisFolds.world_view_fold_complete
 #print axioms Zetesis.AxisFolds.world_view_fold_decided

@@ -1535,19 +1535,24 @@
     "line": 878
   },
   {
+    "name": "Zetesis.AxisFolds.SetStreams.ordered_union_sorted_unique",
+    "file": "Zetesis/AxisFolds.lean",
+    "line": 893
+  },
+  {
     "name": "Zetesis.AxisFolds.walk_exhausted_fold",
     "file": "Zetesis/AxisFolds.lean",
-    "line": 894
+    "line": 961
   },
   {
     "name": "Zetesis.AxisFolds.world_view_fold_complete",
     "file": "Zetesis/AxisFolds.lean",
-    "line": 904
+    "line": 971
   },
   {
     "name": "Zetesis.AxisFolds.world_view_fold_decided",
     "file": "Zetesis/AxisFolds.lean",
-    "line": 921
+    "line": 988
   },
   {
     "name": "Zetesis.BatchAccounting.initial_covers",
