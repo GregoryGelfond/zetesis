@@ -3660,6 +3660,29 @@ its own frozen reduct. Authenticating a particular shared-node justification,
 inherited cursor skips, and the other sources of region knowledge remain
 separate from the full producer-filter law.
 
+[`SignedOriginal`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/SignedOriginal.lean)
+relates each signed node ID to its position on the same decoded mixed graph.
+A numeric guard's false original mask already fixes its frozen value. When
+that guard is true, agreement on its referenced condition IDs transfers the
+guard between candidates.
+
+[`CheckedSignedReplay`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/CheckedSignedReplay.lean)
+checks a proposed witness row. It confirms the old frozen roots and each
+submitted original sign, then restores the positive signs of asserted roots.
+At the fixed witness, it propagates definite bits through the mixed graph.
+A decisive operand suffices for an ordinary conjunction or disjunction.
+A false original numeric mask settles the node; a true guard can be computed
+when its child occurrences are known. The checker requires every asserted
+root to be definitely true. Unknown bits and absent IDs cannot supply evidence.
+The theorem `checked_row_excludes` proves the old proper countermodel and
+excludes a stable completion of a region holding the witness and an additional
+atom, provided the nonroot facts hold of stable completions in that region.
+It does not assume the selector covered enough nodes; the executable check
+establishes sufficiency. Rust would still need to authenticate the witness,
+root and sign owners at row creation and use, connect actual region knowledge
+to those signed facts, and enforce the row and work allowances. This check
+is a reference over the graph. The solver does not install or prune with it.
+
 [`AlgebraicRows`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/AlgebraicRows.lean)
 states algebraic consequences for any consequence class, as `RowOf` does. A term
 pairs an atom with a value, and a list of terms is measured in an interpretation

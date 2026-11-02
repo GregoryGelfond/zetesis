@@ -2166,6 +2166,66 @@
       "name": "Zetesis.ChargeCadence.observes_next_multiple"
     },
     {
+      "file": "Zetesis/CheckedSignedReplay.lean",
+      "line": 30,
+      "name": "Zetesis.Refinement.CheckedSignedReplay.or_sound"
+    },
+    {
+      "file": "Zetesis/CheckedSignedReplay.lean",
+      "line": 41,
+      "name": "Zetesis.Refinement.CheckedSignedReplay.neg_sound"
+    },
+    {
+      "file": "Zetesis/CheckedSignedReplay.lean",
+      "line": 45,
+      "name": "Zetesis.Refinement.CheckedSignedReplay.and_sound"
+    },
+    {
+      "file": "Zetesis/CheckedSignedReplay.lean",
+      "line": 57,
+      "name": "Zetesis.Refinement.CheckedSignedReplay.group_sound"
+    },
+    {
+      "file": "Zetesis/CheckedSignedReplay.lean",
+      "line": 92,
+      "name": "Zetesis.Refinement.CheckedSignedReplay.check_layer_sound"
+    },
+    {
+      "file": "Zetesis/CheckedSignedReplay.lean",
+      "line": 173,
+      "name": "Zetesis.Refinement.CheckedSignedReplay.extend_column"
+    },
+    {
+      "file": "Zetesis/CheckedSignedReplay.lean",
+      "line": 192,
+      "name": "Zetesis.Refinement.CheckedSignedReplay.verify_sound"
+    },
+    {
+      "file": "Zetesis/CheckedSignedReplay.lean",
+      "line": 228,
+      "name": "Zetesis.Refinement.CheckedSignedReplay.gather_forall"
+    },
+    {
+      "file": "Zetesis/CheckedSignedReplay.lean",
+      "line": 248,
+      "name": "Zetesis.Refinement.CheckedSignedReplay.confirmed_roots_model"
+    },
+    {
+      "file": "Zetesis/CheckedSignedReplay.lean",
+      "line": 276,
+      "name": "Zetesis.Refinement.CheckedSignedReplay.inserted_source"
+    },
+    {
+      "file": "Zetesis/CheckedSignedReplay.lean",
+      "line": 313,
+      "name": "Zetesis.Refinement.CheckedSignedReplay.root_member"
+    },
+    {
+      "file": "Zetesis/CheckedSignedReplay.lean",
+      "line": 335,
+      "name": "Zetesis.Refinement.CheckedSignedReplay.checked_row_excludes"
+    },
+    {
       "file": "Zetesis/ChoiceConsumers.lean",
       "line": 32,
       "name": "Zetesis.ChoiceConsumers.original_bounds"
@@ -8391,6 +8451,41 @@
       "name": "Zetesis.SignedObjectiveBounds.coalescing_order_example"
     },
     {
+      "file": "Zetesis/SignedOriginal.lean",
+      "line": 25,
+      "name": "Zetesis.Refinement.SignedOriginal.run_columns"
+    },
+    {
+      "file": "Zetesis/SignedOriginal.lean",
+      "line": 37,
+      "name": "Zetesis.Refinement.SignedOriginal.signed_id_exact"
+    },
+    {
+      "file": "Zetesis/SignedOriginal.lean",
+      "line": 48,
+      "name": "Zetesis.Refinement.SignedOriginal.frozen_id"
+    },
+    {
+      "file": "Zetesis/SignedOriginal.lean",
+      "line": 59,
+      "name": "Zetesis.Refinement.SignedOriginal.decode_append"
+    },
+    {
+      "file": "Zetesis/SignedOriginal.lean",
+      "line": 72,
+      "name": "Zetesis.Refinement.SignedOriginal.decode_extends"
+    },
+    {
+      "file": "Zetesis/SignedOriginal.lean",
+      "line": 90,
+      "name": "Zetesis.Refinement.SignedOriginal.at_ordinal"
+    },
+    {
+      "file": "Zetesis/SignedOriginal.lean",
+      "line": 117,
+      "name": "Zetesis.Refinement.SignedOriginal.numeric_id_replay"
+    },
+    {
       "file": "Zetesis/SingletonHeads.lean",
       "line": 28,
       "name": "Zetesis.SingletonHeads.singleton_head_truth"
@@ -10779,6 +10874,7 @@
     "Zetesis/CarrierCoordinates.lean",
     "Zetesis/CertifiedExecution.lean",
     "Zetesis/ChargeCadence.lean",
+    "Zetesis/CheckedSignedReplay.lean",
     "Zetesis/ChoiceConsumers.lean",
     "Zetesis/ChoiceIntervals.lean",
     "Zetesis/ClauseValidation.lean",
@@ -10911,6 +11007,7 @@
     "Zetesis/Semantics.lean",
     "Zetesis/SignedHeadElements.lean",
     "Zetesis/SignedObjectiveBounds.lean",
+    "Zetesis/SignedOriginal.lean",
     "Zetesis/SingletonHeads.lean",
     "Zetesis/SourceContributions.lean",
     "Zetesis/SourceMeasures.lean",
@@ -10954,8 +11051,8 @@
     "Zetesis/WorldViews.lean"
   ],
   "source_sha256": {
-    "Audit.lean": "d1fc9d2bea378f5a010792ea3015dc1b229f3ccb8b5d1888ddb245ea465efb32",
-    "Zetesis.lean": "7ed4334a68c1475d332640792957b56eddd68f54462e8d904748b163b1df60ac",
+    "Audit.lean": "6b2750ec7d34563aca662060037e6fc29081d53db3bd9ebc165298c61f3a6176",
+    "Zetesis.lean": "31bcdc9d881342a86c07adcc193089d1559a13f45f03821e19a723c7d9d706ca",
     "Zetesis/AcyclicEvaluation.lean": "1a9c77283876cf1f61cb92031da04780aada5d0b256f79db5b64bfb6b129d0dc",
     "Zetesis/AdjacencyRows.lean": "38a19b1c74483a157636321a56e95fea660a2192a04c77930d609e411c8d30d4",
     "Zetesis/AggregateAssignment.lean": "def2eac0ae638f3801d35c11a3162afaa3e0b9e393601cf899952e449e309639",
@@ -10988,6 +11085,7 @@
     "Zetesis/CarrierCoordinates.lean": "f8084e6f7361cceed39895a8974cc2fc54bb13aa896b44dbee1eb4580ce8bced",
     "Zetesis/CertifiedExecution.lean": "693ec9dcd4542e70d21cd19b99dd13dc59ac375b9ac945c65ee1632ff7ccc3a0",
     "Zetesis/ChargeCadence.lean": "8713ecc3ad9db2b4fca581908895dde2c70f716c8b14490d8a900e736f7a7bbe",
+    "Zetesis/CheckedSignedReplay.lean": "e05a44134513dc245d1ccaee46af8243294aa242e6f280b352c94a574c383262",
     "Zetesis/ChoiceConsumers.lean": "2505ef92e4694faddfe66bebeb26155b6d820a5493f94fa3653bcfbefc633d5a",
     "Zetesis/ChoiceIntervals.lean": "4b3047699ef976a0e3c1632bcaccd9611c7d26647d08b5766596960e20901b0f",
     "Zetesis/ClauseValidation.lean": "399729eb4722afff90326418ac7b280ad8e5b87bc14fb6650e75c517957736c4",
@@ -11120,6 +11218,7 @@
     "Zetesis/Semantics.lean": "fe4d59f5da0332897efa90e7b6dd9e5d1b1a4003017f1630799e5e6029f35dc8",
     "Zetesis/SignedHeadElements.lean": "98653a0d01452caa8383ad0549be3e720c4ca027944326f3c566474abee26275",
     "Zetesis/SignedObjectiveBounds.lean": "9a196ef4647a4999a96373134d80c92ecd940d4c3ee7dc7c173545a2a4816045",
+    "Zetesis/SignedOriginal.lean": "f78c51fb8a6ca332ede4a1ea4243092011d948f9cf2d21e85f025141ab5aad64",
     "Zetesis/SingletonHeads.lean": "a07c6c50041c0771175b98fa6d9d2d56ecb4c9c29ad09205acf44f44fcabe147",
     "Zetesis/SourceContributions.lean": "be9baa860c0caafeaba1068e269b8cec5531cce91a5dd694232e98847ee394df",
     "Zetesis/SourceMeasures.lean": "4d0aae99ee6de34fdc5f0dc7531339eadc365deb756ac33f809e7278c3b2191f",

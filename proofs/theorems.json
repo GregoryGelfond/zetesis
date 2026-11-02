@@ -2165,6 +2165,66 @@
     "line": 108
   },
   {
+    "name": "Zetesis.Refinement.CheckedSignedReplay.or_sound",
+    "file": "Zetesis/CheckedSignedReplay.lean",
+    "line": 30
+  },
+  {
+    "name": "Zetesis.Refinement.CheckedSignedReplay.neg_sound",
+    "file": "Zetesis/CheckedSignedReplay.lean",
+    "line": 41
+  },
+  {
+    "name": "Zetesis.Refinement.CheckedSignedReplay.and_sound",
+    "file": "Zetesis/CheckedSignedReplay.lean",
+    "line": 45
+  },
+  {
+    "name": "Zetesis.Refinement.CheckedSignedReplay.group_sound",
+    "file": "Zetesis/CheckedSignedReplay.lean",
+    "line": 57
+  },
+  {
+    "name": "Zetesis.Refinement.CheckedSignedReplay.check_layer_sound",
+    "file": "Zetesis/CheckedSignedReplay.lean",
+    "line": 92
+  },
+  {
+    "name": "Zetesis.Refinement.CheckedSignedReplay.extend_column",
+    "file": "Zetesis/CheckedSignedReplay.lean",
+    "line": 173
+  },
+  {
+    "name": "Zetesis.Refinement.CheckedSignedReplay.verify_sound",
+    "file": "Zetesis/CheckedSignedReplay.lean",
+    "line": 192
+  },
+  {
+    "name": "Zetesis.Refinement.CheckedSignedReplay.gather_forall",
+    "file": "Zetesis/CheckedSignedReplay.lean",
+    "line": 228
+  },
+  {
+    "name": "Zetesis.Refinement.CheckedSignedReplay.confirmed_roots_model",
+    "file": "Zetesis/CheckedSignedReplay.lean",
+    "line": 248
+  },
+  {
+    "name": "Zetesis.Refinement.CheckedSignedReplay.inserted_source",
+    "file": "Zetesis/CheckedSignedReplay.lean",
+    "line": 276
+  },
+  {
+    "name": "Zetesis.Refinement.CheckedSignedReplay.root_member",
+    "file": "Zetesis/CheckedSignedReplay.lean",
+    "line": 313
+  },
+  {
+    "name": "Zetesis.Refinement.CheckedSignedReplay.checked_row_excludes",
+    "file": "Zetesis/CheckedSignedReplay.lean",
+    "line": 335
+  },
+  {
     "name": "Zetesis.ChoiceConsumers.original_bounds",
     "file": "Zetesis/ChoiceConsumers.lean",
     "line": 32
@@ -8388,6 +8448,41 @@
     "name": "Zetesis.SignedObjectiveBounds.coalescing_order_example",
     "file": "Zetesis/SignedObjectiveBounds.lean",
     "line": 217
+  },
+  {
+    "name": "Zetesis.Refinement.SignedOriginal.run_columns",
+    "file": "Zetesis/SignedOriginal.lean",
+    "line": 25
+  },
+  {
+    "name": "Zetesis.Refinement.SignedOriginal.signed_id_exact",
+    "file": "Zetesis/SignedOriginal.lean",
+    "line": 37
+  },
+  {
+    "name": "Zetesis.Refinement.SignedOriginal.frozen_id",
+    "file": "Zetesis/SignedOriginal.lean",
+    "line": 48
+  },
+  {
+    "name": "Zetesis.Refinement.SignedOriginal.decode_append",
+    "file": "Zetesis/SignedOriginal.lean",
+    "line": 59
+  },
+  {
+    "name": "Zetesis.Refinement.SignedOriginal.decode_extends",
+    "file": "Zetesis/SignedOriginal.lean",
+    "line": 72
+  },
+  {
+    "name": "Zetesis.Refinement.SignedOriginal.at_ordinal",
+    "file": "Zetesis/SignedOriginal.lean",
+    "line": 90
+  },
+  {
+    "name": "Zetesis.Refinement.SignedOriginal.numeric_id_replay",
+    "file": "Zetesis/SignedOriginal.lean",
+    "line": 117
   },
   {
     "name": "Zetesis.SingletonHeads.singleton_head_truth",
