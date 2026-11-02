@@ -80,6 +80,8 @@ pub enum Incomplete {
     LearnedStoreAlreadySet,
     /// Optional candidate certification stopped without establishing membership.
     Certificate(crate::CertificateError),
+    /// A mandatory arithmetic source read failed; the exact source fault is retained.
+    ArithmeticSource(zetesis_ferraris::AdmissionError),
     /// Independent formula evaluation stopped without validating a witness.
     Verification(Stop),
     /// An internal SAT witness failed independent semantic validation.
@@ -156,6 +158,7 @@ impl fmt::Display for Incomplete {
             }
             Self::LearnedStoreAlreadySet => f.write_str("a learned-row store is already installed"),
             Self::Certificate(error) => write!(f, "certified membership: {error}"),
+            Self::ArithmeticSource(error) => write!(f, "arithmetic source: {error}"),
             Self::Verification(error) => write!(f, "independent verification: {error}"),
             Self::InvalidWitness => f.write_str("SAT witness failed independent verification"),
             Self::WorkerPanicked => f.write_str("SAT worker panicked before completing its search"),
@@ -166,6 +169,7 @@ impl fmt::Display for Incomplete {
 impl std::error::Error for Incomplete {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
+            Self::ArithmeticSource(error) => Some(error),
             Self::Verification(error) => Some(error),
             Self::Certificate(error) => Some(error),
             _ => None,

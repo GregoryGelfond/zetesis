@@ -98,12 +98,6 @@ fn indexing_work(theory: &Theory) -> u64 {
     u64::try_from(theory.nodes().len() + theory.parts().occurrences()).unwrap()
 }
 
-fn extraction(theory: &Theory) -> u64 {
-    zetesis_ferraris::producers(theory, RegionLimits::default(), &Cancellation::default())
-        .unwrap()
-        .work
-}
-
 // These test-only methods keep membership and handoff regressions on the
 // classical-candidate route even when optional producer pruning can decide the
 // fixture earlier. The original theory, index identity and choice marks remain.
@@ -220,10 +214,17 @@ fn an_enumeration_builds_one_original_index() {
         assert!(matches!(closed, Narrowing::Fixed { .. }));
         assert_eq!(region.open().count(), 0);
         assert_eq!(region.held().count(), 0);
-        // The independent core narrowing receipt plus extraction and one N+E
-        // index charge is the exact integration receipt on every route.
-        let region_work = extraction.work + indexing_work(&theory) + direct.work;
         let mut search = enumeration(&theory, route, workers, producers, Limits::default());
+        let setup = search.statistics();
+        assert_eq!(setup.regions.unwrap().counts.regions, 0, "{route}");
+        assert_eq!(
+            setup.regions.unwrap().counts.work,
+            setup.search.work,
+            "{route}"
+        );
+        // Starting from the independently settled constructor receipt, one
+        // exact N+E index charge and the direct core narrowing are the walk.
+        let region_work = setup.search.work + indexing_work(&theory) + direct.work;
         assert_eq!(
             hooks::builds(&theory),
             0,
@@ -263,6 +264,7 @@ fn a_positive_certificate_route_builds_no_index() {
     for (route, workers, producers) in ROUTES {
         let theory = positive();
         let mut search = enumeration(&theory, route, workers, producers, Limits::default());
+        let setup = search.statistics().regions.unwrap().counts.work;
         assert!(
             search
                 .enable_class_checking(
@@ -277,8 +279,8 @@ fn a_positive_certificate_route_builds_no_index() {
         assert_eq!(hooks::builds(&theory), 0, "{route} with {workers} workers");
         assert_eq!(
             search.statistics().regions.unwrap().counts.work,
-            extraction(&theory),
-            "{route}: only the producer extraction"
+            setup,
+            "{route}: no region work after constructor preparation"
         );
     }
 }
@@ -288,6 +290,7 @@ fn a_batched_positive_certificate_route_builds_no_index() {
     for (route, workers, producers) in ROUTES {
         let theory = positive();
         let mut search = enumeration(&theory, route, workers, producers, Limits::default());
+        let setup = search.statistics().regions.unwrap().counts.work;
         assert!(
             search
                 .enable_class_checking(
@@ -309,7 +312,7 @@ fn a_batched_positive_certificate_route_builds_no_index() {
         assert_eq!(hooks::builds(&theory), 0, "{route} with {workers} workers");
         assert_eq!(
             search.statistics().regions.unwrap().counts.work,
-            extraction(&theory),
+            setup,
             "{route}"
         );
     }
@@ -319,8 +322,14 @@ fn a_batched_positive_certificate_route_builds_no_index() {
 fn a_refused_index_charge_builds_nothing_and_stops_incomplete() {
     for (route, workers, producers) in ROUTES {
         let theory = cycle();
-        let setup = extraction(&theory);
-        // Room for the extraction, one unit short of the index.
+        let prepared = StableModels::prepare(&theory, Limits::default(), Cancellation::default());
+        assert!(
+            prepared.result.is_ok(),
+            "the reference construction completes"
+        );
+        let setup = prepared.statistics.search.work;
+        // Room for all settled preparation, one unit short of the exact index
+        // charge. The reference construction never pulls or builds an index.
         let limits = Limits {
             search: SearchLimits {
                 max_work: setup + indexing_work(&theory) - 1,
@@ -329,6 +338,7 @@ fn a_refused_index_charge_builds_nothing_and_stops_incomplete() {
             ..Limits::default()
         };
         let mut search = enumeration(&theory, route, workers, producers, limits);
+        assert_eq!(search.statistics().search.work, setup, "{route}");
         assert!(matches!(search.next(), Some(Err(Incomplete::WorkLimit))));
         assert!(search.next().is_none());
         assert!(!search.exhausted(), "{route}");
@@ -350,13 +360,14 @@ fn a_build_failing_after_its_charge_keeps_the_charge_in_both_receipts() {
     for (route, workers, producers) in ROUTES {
         let theory = cycle();
         let mut search = enumeration(&theory, route, workers, producers, Limits::default());
+        let setup = search.statistics().search.work;
         hooks::fail_next_build();
         assert!(matches!(search.next(), Some(Err(Incomplete::Allocation))));
         assert!(!search.exhausted(), "{route}");
         assert!(search.index.get().is_none(), "{route}");
         assert_eq!(hooks::builds(&theory), 1, "{route} with {workers} workers");
         let statistics = search.statistics();
-        let charged = extraction(&theory) + indexing_work(&theory);
+        let charged = setup + indexing_work(&theory);
         assert_eq!(statistics.search.work, charged, "{route}");
         assert_eq!(statistics.regions.unwrap().counts.work, charged, "{route}");
     }
@@ -575,11 +586,9 @@ fn the_walk_subject_learns_rows_of_its_theory() {
     let cancellation = Cancellation::default();
     let mut budget = budget(&cancellation, u64::MAX);
     let mut search = RegionSearch::new(
-        &theory,
+        crate::ferraris::regions::open(&theory, u64::MAX, LearningLimits::DEFAULT, &mut budget)
+            .unwrap(),
         u64::MAX,
-        u64::MAX,
-        LearningLimits::DEFAULT,
-        &mut budget,
     )
     .unwrap();
     let index = built(&theory);

@@ -42,12 +42,15 @@ pub use error::Incomplete;
 pub use ferraris::{
     BatchError, BatchLimits, BatchStatistics, BatchVerdict, CertificateError, CertificateLimits,
     CertificateOrder, CertificatePlanStatistics, CertifiedStatistics, Check, CompletionExecutor,
-    CompletionStatistics, Engagement, FrontierOrder, GeneratorOrderStatistics,
+    CompletionStatistics, ConstructionAttempt, Engagement, FrontierOrder, GeneratorOrderStatistics,
     GeneratorOrderStatus, LearnedStore, Limits, Lookahead, LookaheadDeclined, QueryDivision,
     QueryDivisionStatistics, RegionCounts, RegionFrontierStatistics, RegionSearchStatistics,
     RegionWalkEngagement, RegionWorkerStatistics, SlateProposal, SlateTicket, StableModels,
     Statistics, check,
 };
 pub use zetesis_cpu::Cancellation;
+pub use zetesis_ferraris::{
+    CardinalityStatistics, ParityStatistics, PreparationStatus, PreparationWork,
+};
 
 pub use timing::{PhaseMeasurement, SearchPhaseTimings};

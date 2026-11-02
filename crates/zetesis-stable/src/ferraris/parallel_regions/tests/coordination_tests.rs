@@ -59,7 +59,13 @@ fn search_engaging(
         statistics: SearchStatistics::default(),
     };
     let search = ParallelRegions::new(
-        &theory,
+        crate::ferraris::regions::open(
+            &theory,
+            limits.max_reduct_bytes,
+            limits.learning,
+            &mut budget,
+        )
+        .unwrap(),
         NonZeroUsize::new(workers).unwrap(),
         engagement,
         limits,
@@ -860,7 +866,18 @@ fn a_worker_splits_the_root_on_the_original_choice_head() {
     let cancellation = Cancellation::with_deadline(Instant::now() + 3 * WAIT).unwrap();
     let limits = Limits::default();
     let search = ParallelRegions::new(
-        &theory,
+        crate::ferraris::regions::open(
+            &theory,
+            limits.max_reduct_bytes,
+            limits.learning,
+            &mut Budget {
+                quota: crate::budget::LocalQuota,
+                limits: limits.search,
+                cancellation: &cancellation,
+                statistics: SearchStatistics::default(),
+            },
+        )
+        .unwrap(),
         NonZeroUsize::new(1).unwrap(),
         Engagement::Immediate,
         limits,

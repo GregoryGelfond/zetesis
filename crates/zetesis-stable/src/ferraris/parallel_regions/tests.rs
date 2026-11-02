@@ -94,7 +94,13 @@ fn a_panicked_worker_keeps_coverage_incomplete() {
         statistics: SearchStatistics::default(),
     };
     let mut search = ParallelRegions::new(
-        &theory,
+        crate::ferraris::regions::open(
+            &theory,
+            limits.max_reduct_bytes,
+            limits.learning,
+            &mut budget,
+        )
+        .unwrap(),
         NonZeroUsize::new(2).unwrap(),
         Engagement::Immediate,
         limits,
@@ -102,6 +108,7 @@ fn a_panicked_worker_keeps_coverage_incomplete() {
         &mut budget,
     )
     .unwrap();
+    let setup = budget.statistics.work;
     // Another worker waits for stealable work that never comes (the root is
     // held here, outside the queues). The panic closes the run, and the
     // waiter exits rather than hanging.
@@ -128,7 +135,7 @@ fn a_panicked_worker_keeps_coverage_incomplete() {
         Err(Incomplete::WorkerPanicked),
     ));
     assert!(!search.exhausted);
-    assert_eq!(budget.statistics.work, 4);
+    assert_eq!(budget.statistics.work, setup + 4);
 }
 
 /// A walk that has engaged its workers, as the in-crate tests build one by
@@ -181,7 +188,13 @@ fn refused_certificate_refunds_its_reserved_work(engagement: Engagement) {
         statistics: SearchStatistics::default(),
     };
     let mut search = ParallelRegions::new(
-        &theory,
+        crate::ferraris::regions::open(
+            &theory,
+            limits.max_reduct_bytes,
+            limits.learning,
+            &mut budget,
+        )
+        .unwrap(),
         NonZeroUsize::new(2).unwrap(),
         engagement,
         limits,
@@ -215,8 +228,8 @@ fn refused_certificate_refunds_its_reserved_work(engagement: Engagement) {
 }
 
 mod cancellation_tests;
-mod engagement_tests;
 mod coordination_tests;
+mod engagement_tests;
 mod timing_tests;
 
 #[test]

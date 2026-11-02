@@ -61,12 +61,15 @@ fn proposals(theory: &Theory, producers: usize) -> RegionProposals {
         statistics: SearchStatistics::default(),
     };
     RegionProposals::new(
-        theory,
+        crate::ferraris::regions::open(
+            theory,
+            u64::MAX,
+            zetesis_ferraris::LearningLimits::DEFAULT,
+            &mut budget,
+        )
+        .unwrap(),
         nonzero(producers),
         u64::MAX,
-        u64::MAX,
-        zetesis_ferraris::LearningLimits::DEFAULT,
-        &mut budget,
     )
     .unwrap()
 }

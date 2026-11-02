@@ -149,6 +149,24 @@ fn invalid_native_witnesses_are_engine_faults() {
 }
 
 #[test]
+fn arithmetic_source_faults_preserve_their_resource_class() {
+    use zetesis_ferraris::AdmissionError;
+    for (source, locus) in [
+        (AdmissionError::Allocation, Locus::Resource),
+        (AdmissionError::Edge, Locus::Engine),
+    ] {
+        let native =
+            Interruption::Countermodel(zetesis_stable::Incomplete::ArithmeticSource(source));
+        let fault = interruption(native).expect_err("typed source refusal");
+        assert_eq!(fault.locus(), locus);
+        assert_eq!(
+            fault.source().unwrap().downcast_ref::<Interruption>(),
+            Some(&native)
+        );
+    }
+}
+
+#[test]
 fn absent_search_evidence_is_an_adapter_fault() {
     assert!(completed(None).expect_err("no coverage").is_backend_bug());
 }

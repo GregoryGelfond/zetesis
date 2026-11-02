@@ -773,6 +773,14 @@ impl StableModels {
         limits: BatchLimits,
         original: OriginalCheck,
     ) -> Result<HandOut, BatchError<E>> {
+        // A completed original-answer refutation precedes subsequent controls
+        // and needs neither a pending slate nor an original-theory index.
+        if self.proposer.root_refuted() {
+            self.batch.exhausted = true;
+            self.exhausted = true;
+            self.terminal = true;
+            return Ok(HandOut::Empty);
+        }
         self.cancellation
             .poll()
             .map_err(|e| BatchError::Search(e.into()))?;
@@ -926,6 +934,10 @@ impl StableModels {
 
     fn propose(&mut self, limits: BatchLimits, original: OriginalCheck) -> Result<(), Incomplete> {
         if self.batch.exhausted {
+            return Ok(());
+        }
+        if self.proposer.root_refuted() {
+            self.batch.exhausted = true;
             return Ok(());
         }
         let available = self.prepare_pending(limits)?;

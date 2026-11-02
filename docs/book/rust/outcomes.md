@@ -559,6 +559,24 @@ callers can set `SolveConfig::max_candidate_bytes` and `max_search_work` directl
 cut applied. Every proposed interpretation still needs membership checking
 against the original theory and its frozen reduct.
 
+`statistics.search.parity` and `statistics.search.cardinality` describe checked
+arithmetic preparation for that same original candidate owner. They record
+source rows, preparation status, root refutation and retained storage; parity
+also records rank, row additions and root units. Cardinality distinguishes
+candidate family attempts from checked families. An unprepared stage is distinct
+from one that ran and found no useful rows. A root refutation can report zero
+visited regions because it precedes traversal.
+
+Each object's `preparation_work` is partitioned by `phases`: source recognition,
+independent provenance checking, row reduction, family discovery, independent
+candidate checks, incidence indexing and root seeding. These are disjoint parts
+of work already included in candidate reading work and search work. A declined
+or failed preparation retains its executed prefix; its published retained bytes
+are zero. `preparation_bytes` is the maximum shared named storage request through
+that stage, including a refused request, not process memory. Shared peaks are
+not additive. These records do not claim that per-region arithmetic subjects or
+device arithmetic preparation ran.
+
 `CompletionAccounting` reports requested workers and the greatest concurrency
 selected at preflight. This selection alone does not mean a candidate entered
 execution. `requested_scratch_bytes` records the greatest minimum envelope;

@@ -3015,15 +3015,84 @@ the two-rule exclusive-or instance. `lower_of_threshold` and
 conditions are atoms, with the weights as the terms' values, and
 `guard_releases` applies a guarded constraint where its guard holds.
 
-No part of the solver uses these laws yet: it does not recognize parity or
-counting structure in a theory. A narrowing that does must establish in Rust
-that each recognized row passed its provenance check against its source
-constraints, completion or threshold, including that a threshold's conditions
-are atoms and its guard holds where the row is used; that the literals it
-conditions on give the other atoms their values; that families cover the same
-terms; and that a certificate's shared, missed and remaining terms split its
-rows as stated. Elimination, flow search, coordinate assignment, packing, work
-and memory accounting and cancellation remain outside the laws.
+The bounded source views use `conjunction_assoc_original`,
+`conjunction_chain_original` and `conjunction_flatten_original` to read nested
+conjunctions with their leaf occurrences intact. `canonical_truth_original`
+authenticates the meaning of the exact `False -> False` formula, and
+`truth_implication_original` gives `TRUE -> F` the original truth of `F`.
+`double_negated_conjunction_original` composes the existing
+`Ferraris.double_neg_satisfies` law with the conjunction reading; this is
+original satisfaction, not permission to erase double negation in a frozen
+reduct. `bounds_of_asserted_conjunction` composes the lower and upper threshold
+laws for a conjunction containing both positive and negated thresholds. The
+Rust recognizers and independent source checkers must authenticate these exact
+contexts against the original root, visit and charge every source occurrence,
+preserve the existing distinct-atom and guard requirements, and finish checking
+all eligible children before publishing their family. These source views leave
+the original theory and its reduct unchanged; traversal, complete provenance,
+atomic publication and resource accounting remain implementation obligations.
+
+The library also provides `entailed_fact_step` for an ordered sequence of proved
+positive facts and `entailed_by_residual_patterns` for recognizing a source
+under those facts. The latter explicitly requires correspondence to the original
+roots; removing fact atoms does not make the original formula mention fewer
+atoms. `arithmetic::root_facts` prepares ordered witnesses through the same
+activation kernel as positive evaluation, then independently replays each
+original rule against earlier checked facts. Only replay constructs the packed
+fact mask used by clause recognition and its provenance checker. Negative
+premises and non-atomic heads are not fact sources. Source A checks its raw
+eight-atom limit and distinctness before conditioning; a known positive leaf
+disappears from the residual condition, while a known atom's negative leaf makes
+that condition false. Source B and cardinality guards keep their existing rules.
+The laws do not verify the Rust occurrence transpose, queue schedule, witness
+order, owner checks or metering. The retained facts never enter frozen-reduct
+membership search.
+
+Original-candidate preparation in `zetesis-ferraris` now recognizes bounded
+parity and counting structure. `arithmetic::rows` checks local truth patterns
+against their original constraint roots (`entailed_by_patterns`,
+`entailed_by_part`); `arithmetic::completion` reads the complete normal,
+sole-head producer span (`entailed_by_completion`). Independent source rereads
+check each proposed equation before `arithmetic::parity` eliminates rows.
+`equation_of_agreement`, `parity_measure_odd` and `parity_equation_of_xor`
+connect the packed XOR representation to `equation_add`. Root units and
+contradictions use the consequences stated by `parity_forces`,
+`equation_excludes_given` and `excludes_region`.
+
+Completion tables compose packed intersections of signed atom columns, unions
+over all producers, and XOR with the head column. `AxisFolds.all_fold_true_iff`,
+`any_fold_true_iff` and `AlgebraicRows.completion_fold_false_iff` state the
+pointwise meaning of these reductions, including empty and repeated lists.
+The concrete periodic columns, padding and metering remain Rust obligations.
+Both occurrence traversals and every independent source check are retained;
+within each traversal, the walker may borrow its caller's already-read entry
+view from the same immutable owner.
+
+The local affine-hull reduction stops inserting differences once its span has
+full rank, but still counts all remaining allowed patterns to decide exactness.
+`AxisFolds.pair_foldFrom_left_absorbing` states this separation: an absorbing
+coordinate stays fixed while the other coordinate continues its reduction.
+The echelon invariant establishing that the machine rank test recognizes full
+span remains an implementation obligation. Full span alone does not establish
+that the allowed set equals its affine hull.
+
+`arithmetic::cardinality_source` checks threshold and clause provenance
+(`lower_of_threshold`, `upper_of_negated_threshold`, `lower_of_clause`), retaining
+each guard. Its uniform-weight normalization corresponds to
+`ThresholdDivision.rounded_bound_le_iff`; handling signed machine bounds and
+executing the division remain Rust obligations. `arithmetic::cardinality`
+proposes families and independently checks that each side is a disjoint
+partition of the same atoms before comparing its lower and upper totals
+(`double_count_excludes`). A guarded bound does not become unconditional:
+`guard_releases` requires its guard to hold.
+
+The original-candidate routes consume a checked root refutation or a root
+seeded by parity units; the frozen-reduct search receives neither these rows nor
+that root state. These Lean laws justify the semantic steps, not the Rust
+implementation. Source ownership, complete producer inventories, packing,
+elimination, family discovery and checking, publication, work and memory
+accounting, and cancellation still require implementation correspondence.
+Per-region arithmetic propagation and flow witnesses remain separate work.
 
 Retained rows use either the scalar witness lists or sparse word groups, chosen
 by actual buffer capacity including the common row header. A packed row keeps

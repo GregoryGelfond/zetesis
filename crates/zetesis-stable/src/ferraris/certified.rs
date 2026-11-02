@@ -209,6 +209,8 @@ impl StableModels {
     /// enumeration; repeated calls never replace the first configuration or
     /// replenish a budget. Candidate restrictions retain the selected owner.
     /// Injected GPU checkers should use an enumeration without this CPU policy.
+    /// If [`Self::root_refuted`] already holds, returns `false` without attempting
+    /// a certificate or recording a certificate refusal.
     ///
     /// # Errors
     /// Refuses late/closed configuration, shared control/allocation failures or
@@ -234,6 +236,9 @@ impl StableModels {
     ) -> Result<bool, Incomplete> {
         if self.terminal {
             return Err(Incomplete::ClosedEnumerator);
+        }
+        if self.proposer.root_refuted() {
+            return Ok(false);
         }
         if self.statistics.certified.is_some() {
             let started = self.own_statistics().candidates != 0;

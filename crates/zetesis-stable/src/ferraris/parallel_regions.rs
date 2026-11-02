@@ -646,7 +646,7 @@ impl ParallelRegions {
     /// certificates are configured and its original index is built; the
     /// workers start when it has run for its engagement delay.
     pub(crate) fn new(
-        theory: &Theory,
+        opened: super::regions::Opened,
         workers: NonZeroUsize,
         engagement: Engagement,
         limits: Limits,
@@ -654,13 +654,14 @@ impl ParallelRegions {
         budget: &mut Budget<'_>,
     ) -> Result<Self, Incomplete> {
         let delay = engagement.delay(workers.get());
-        let super::regions::Opened { parts, statistics } =
-            super::regions::open(theory, limits.max_reduct_bytes, limits.learning, budget)?;
+        let super::regions::Opened {
+            parts,
+            statistics,
+            root,
+        } = opened;
+        let root = root.ok_or(Incomplete::InvalidWitness)?;
         let (sender, receiver) = sync_channel(workers.get() * CHANNEL_SLACK);
-        let root = (
-            Region::all_open(theory.atom_count()),
-            CandidateKnowledge::default(),
-        );
+        let root = (root, CandidateKnowledge::default());
         let frontier = RegionFrontier::new(workers.get(), root)?;
         let inner = InnerDeques::new(workers.get())?;
         Ok(Self {
@@ -853,6 +854,8 @@ impl ParallelRegions {
             },
             producers: self.statistics.producers,
             generator_order: self.statistics.generator_order,
+            parity: self.statistics.parity,
+            cardinality: self.statistics.cardinality,
             frontier: None,
             frontier_order: None,
             workers: Some(RegionWorkerStatistics {

@@ -2,7 +2,8 @@
 
 use super::{
     Budget, PositiveError,
-    compile::{Graph, State},
+    activation::{self, Effects, Point},
+    compile::Graph,
 };
 use crate::{NodeView, Theory};
 use zetesis_cpu::Stop;
@@ -14,34 +15,51 @@ pub(super) fn complete(
     budget: &mut Budget<'_, '_>,
 ) -> Result<(), PositiveError> {
     seed(theory, graph, budget)?;
-    let mut next = 0;
-    while let Some(&vertex) = graph.queue.get(next) {
-        budget.tick()?;
-        next += 1;
-        if vertex < theory.atom_count() {
-            words[vertex / 64] |= 1 << (vertex % 64);
-        }
-        for edge in graph.offsets[vertex]..graph.offsets[vertex + 1] {
-            budget.tick()?;
-            budget.statistics.propagated_dependencies += 1;
-            let incidence = graph.edges[edge];
-            let target = incidence.target;
-            match graph.states[target] {
-                State::Awaiting(1) => activate(target, theory.atom_count(), graph, budget)?,
-                State::Awaiting(remaining) => graph.states[target] = State::Awaiting(remaining - 1),
-                State::Weighted(remaining) => {
-                    let weight = i128::from(incidence.weight);
-                    if weight >= remaining {
-                        activate(target, theory.atom_count(), graph, budget)?;
-                    } else {
-                        graph.states[target] = State::Weighted(remaining - weight);
-                    }
-                }
-                State::Inactive | State::True => {}
+    activation::drain(
+        theory.atom_count(),
+        &graph.offsets,
+        &graph.edges,
+        &mut graph.states,
+        &mut graph.queue,
+        words,
+        &mut Legacy {
+            atoms: theory.atom_count(),
+            budget,
+        },
+    )
+}
+
+/// Preserve the existing tick and statistics boundaries, including the edge
+/// count before a later activation refusal. Fine-grained operation hooks add no
+/// legacy debit or cancellation poll.
+struct Legacy<'a, 'b, 'c> {
+    atoms: usize,
+    budget: &'a mut Budget<'b, 'c>,
+}
+
+impl Effects for Legacy<'_, '_, '_> {
+    type Error = PositiveError;
+
+    fn before(&mut self, point: Point, _work: u64) -> Result<(), Self::Error> {
+        match point {
+            Point::Operation => Ok(()),
+            Point::Dequeue | Point::Activation => self.budget.tick(),
+            Point::Incidence => {
+                self.budget.tick()?;
+                self.budget.statistics.propagated_dependencies += 1;
+                Ok(())
             }
         }
     }
-    Ok(())
+
+    fn activated(&mut self, vertex: usize, _source: Option<usize>) -> Result<(), Self::Error> {
+        if vertex < self.atoms {
+            self.budget.statistics.derived_atoms += 1;
+        } else {
+            self.budget.statistics.activated_nodes += 1;
+        }
+        Ok(())
+    }
 }
 
 fn activate(
@@ -50,17 +68,13 @@ fn activate(
     graph: &mut Graph,
     budget: &mut Budget<'_, '_>,
 ) -> Result<(), PositiveError> {
-    if graph.states[vertex] != State::True {
-        budget.tick()?;
-        graph.states[vertex] = State::True;
-        graph.queue.push(vertex);
-        if vertex < atoms {
-            budget.statistics.derived_atoms += 1;
-        } else {
-            budget.statistics.activated_nodes += 1;
-        }
-    }
-    Ok(())
+    activation::activate(
+        vertex,
+        None,
+        &mut graph.states,
+        &mut graph.queue,
+        &mut Legacy { atoms, budget },
+    )
 }
 
 fn seed(

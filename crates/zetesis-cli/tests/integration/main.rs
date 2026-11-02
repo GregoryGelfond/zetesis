@@ -4,6 +4,7 @@ mod support;
 mod admission_limits;
 mod admission_routes;
 mod answer_renderers;
+mod arithmetic;
 mod authored_examples;
 mod bound_priority_sessions;
 mod bundles;

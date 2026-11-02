@@ -105,12 +105,93 @@ impl Region {
     /// The region in which every atom is open: every candidate lies in it.
     #[must_use]
     pub fn all_open(atoms: usize) -> Self {
-        Self {
-            held: vec![0; words(atoms)].into_boxed_slice(),
-            cut: vec![0; words(atoms)].into_boxed_slice(),
+        Self::with_masks(
+            atoms,
+            &mut (),
+            |(), length, _| Ok::<_, std::convert::Infallible>(vec![0; length].into_boxed_slice()),
+            |(), _| Ok(()),
+        )
+        .unwrap_or_else(|never| match never {})
+    }
+
+    /// The all-open region, with fallible reservation of its two masks.
+    /// No partially initialized region escapes an allocation refusal.
+    ///
+    /// # Errors
+    /// Returns [`Stop::Allocation`] if either mask cannot be reserved.
+    pub fn try_all_open(atoms: usize) -> Result<Self, Stop> {
+        Self::try_all_open_with(atoms, &mut (), &mut |(), _| Ok(()), &mut |(), _| Ok(()))
+    }
+
+    /// Construct an all-open region with fallible work and storage admission.
+    ///
+    /// `before` admits each logical word operation before it executes. Each
+    /// mask initializes a three-word vector header, two words per appended zero
+    /// (the value and length), and its two-word boxed-slice header. Final atom
+    /// and preference fields cost two. A complete construction therefore costs
+    /// `12 + 4 * atoms.div_ceil(64)`; a refusal retains only its executed prefix.
+    /// Allocator internals are outside this logical operation count.
+    ///
+    /// `admit` observes this constructor's total named storage, excluding any
+    /// caller baseline: the output record, completed mask payloads, and the
+    /// current vector header and requested or actual capacity. It runs before
+    /// each reservation, after actual capacity is known, and before publishing
+    /// the final region. No partial region escapes either callback's refusal.
+    ///
+    /// # Errors
+    /// Preserves either callback's error. Failed mask reservation returns
+    /// [`Stop::Allocation`] converted into `E`.
+    pub fn try_all_open_with<C, E: From<Stop>>(
+        atoms: usize,
+        context: &mut C,
+        before: &mut impl FnMut(&mut C, u64) -> Result<(), E>,
+        admit: &mut impl FnMut(&mut C, u128) -> Result<(), E>,
+    ) -> Result<Self, E> {
+        Self::with_masks(
+            atoms,
+            &mut (context, before, admit),
+            |(context, before, admit), length, held_bytes| {
+                let headers = size_of::<Self>() as u128 + size_of::<Vec<u64>>() as u128;
+                let requested = length as u128 * size_of::<u64>() as u128;
+                admit(context, headers + held_bytes + requested)?;
+                before(context, 3)?;
+                let mut mask = Vec::new();
+                mask.try_reserve_exact(length)
+                    .map_err(|_| E::from(Stop::Allocation))?;
+                let actual = mask.capacity() as u128 * size_of::<u64>() as u128;
+                admit(context, headers + held_bytes + actual)?;
+                for _ in 0..length {
+                    before(context, 2)?;
+                    mask.push(0);
+                }
+                before(context, 2)?;
+                Ok(mask.into_boxed_slice())
+            },
+            |(context, before, admit), retained| {
+                admit(context, retained)?;
+                before(context, 2)
+            },
+        )
+    }
+
+    fn with_masks<C, E>(
+        atoms: usize,
+        context: &mut C,
+        mut allocate: impl FnMut(&mut C, usize, u128) -> Result<Box<[u64]>, E>,
+        mut publish: impl FnMut(&mut C, u128) -> Result<(), E>,
+    ) -> Result<Self, E> {
+        let held = allocate(context, words(atoms), 0)?;
+        let held_bytes = held.len() as u128 * size_of::<u64>() as u128;
+        let cut = allocate(context, words(atoms), held_bytes)?;
+        let retained =
+            size_of::<Self>() as u128 + held_bytes + cut.len() as u128 * size_of::<u64>() as u128;
+        publish(context, retained)?;
+        Ok(Self {
+            held,
+            cut,
             atoms,
             preferred: None,
-        }
+        })
     }
     /// The number of atoms the region decides over.
     #[must_use]

@@ -278,7 +278,6 @@ fn scalar_records(owner: &zetesis_themelios::AdmittedFormula) -> Vec<Record> {
 fn producer_batches_preserve_complete_full_answers() {
     for source in [
         "",
-        ":-.",
         "a | b.",
         "{a;b;c}. p:-p.",
         "1 {a;b;c} 1. #show.",
@@ -298,6 +297,30 @@ fn producer_batches_preserve_complete_full_answers() {
             assert_eq!(batch.committed, search.candidates);
             assert_produced(&execution);
         }
+    }
+}
+
+#[test]
+fn root_refutation_absorbs_before_parallel_production() {
+    // A constant-true constraint is now authenticated during arithmetic
+    // preparation. It must settle without starting the producer frontier.
+    let owner = admitted(":-.");
+    let expected = scalar_records(&owner);
+    assert!(expected.is_empty());
+    for (_, config, mut execution) in harnesses(producing(config())) {
+        let actual = run(&owner, &config, &Cancellation::default(), &mut execution);
+        assert!(actual.error.is_none());
+        assert_eq!(actual.outcome.completion(), Some(Completion::Exhausted));
+        assert_eq!(actual.records(), expected);
+        let (batch, search, queued) = execution.snapshots.last().unwrap();
+        assert_eq!((batch.pending, batch.committed, *queued), (0, 0, 0));
+        assert_eq!(search.candidates, 0);
+        assert_eq!(search.countermodel_queries, 0);
+        let regions = search.regions.unwrap();
+        assert!(regions.parity.root_refuted);
+        assert_eq!(regions.counts.regions, 0);
+        assert!(regions.frontier.is_none());
+        assert!(execution.proposed.is_empty());
     }
 }
 

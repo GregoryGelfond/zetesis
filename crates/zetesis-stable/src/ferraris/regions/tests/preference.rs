@@ -299,11 +299,9 @@ fn the_region_search_settles_the_choice_before_the_loop() {
     let cancellation = Cancellation::default();
     let mut budget = budget(&cancellation, u64::MAX);
     let mut search = super::super::RegionSearch::new(
-        &theory,
+        crate::ferraris::regions::open(&theory, u64::MAX, LearningLimits::DEFAULT, &mut budget)
+            .unwrap(),
         u64::MAX,
-        u64::MAX,
-        LearningLimits::DEFAULT,
-        &mut budget,
     )
     .unwrap();
     let mut owner = crate::ferraris::original_index::OriginalIndex::new(&theory, u64::MAX);

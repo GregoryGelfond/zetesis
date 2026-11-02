@@ -390,12 +390,56 @@ fn the_regions_of_independent_pairs_are_the_answers() {
 }
 
 #[test]
-fn a_root_refuted_program_reports_one_refuted_region() {
-    // The root's narrowing refutes it: the walk visits one region, refutes
-    // it, and proposes no candidate.
+fn arithmetic_root_refutation_reports_no_visited_region() {
+    // Checked preparation absorbs before traversal or membership setup.
     let (report, _, text) = solve("{a}. p. :- p.", &options(&["--stats"]));
     assert_eq!(report.models, 0);
     assert_eq!(report.completion, Completion::Exhausted);
+    let statistics = report.countermodel_statistics.unwrap();
+    let regions = statistics.regions.unwrap();
+    assert_eq!(
+        regions.parity.status,
+        zetesis_ferraris::PreparationStatus::Prepared
+    );
+    assert!(regions.parity.root_refuted);
+    assert_eq!(regions.counts.regions, 0);
+    assert_eq!(regions.counts.refuted, 0);
+    assert_eq!(statistics.candidates, 0);
+    assert_eq!(statistics.countermodel_queries, 0);
+    assert_eq!(statistics.search.decisions, 0);
+    assert_eq!(
+        text.matches("candidate regions: visited=0; refuted=0; leaves=0;")
+            .count(),
+        1,
+        "{text}"
+    );
+    assert!(
+        text.contains("candidate parity: status=prepared;"),
+        "{text}"
+    );
+    assert!(text.contains("root refuted=true;"), "{text}");
+    assert!(text.contains(" 0 classical candidates,"), "{text}");
+}
+
+#[test]
+fn a_walk_root_refutation_reports_one_refuted_region() {
+    // Choices keep all nine atoms in the grounded positive constraint.
+    // Separate constraints force them true: arithmetic seeds those units, but
+    // the nine-atom constraint is refuted only by the first narrowing call.
+    let (report, _, text) = solve(
+        "{p(1..9)}. :- not p(X), X=1..9. :- p(1),p(2),p(3),p(4),p(5),p(6),p(7),p(8),p(9). {a}.",
+        &options(&["--stats"]),
+    );
+    assert_eq!(report.models, 0);
+    assert_eq!(report.completion, Completion::Exhausted);
+    let statistics = report.countermodel_statistics.unwrap();
+    let regions = statistics.regions.unwrap();
+    assert!(!regions.parity.root_refuted);
+    assert!(!regions.cardinality.root_refuted);
+    assert_eq!(regions.counts.regions, 1);
+    assert_eq!(regions.counts.refuted, 1);
+    assert_eq!(statistics.candidates, 0);
+    assert_eq!(statistics.countermodel_queries, 0);
     assert_eq!(
         text.matches("candidate regions: visited=1; refuted=1; leaves=0;")
             .count(),

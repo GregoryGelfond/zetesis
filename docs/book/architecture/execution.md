@@ -403,6 +403,53 @@ grounding may give eager and hybrid executions different dependency graphs, so
 coverage and complete answer families, rather than identical traversal order,
 are the preserved contract.
 
+Before preparing that order, the same original-candidate owner recognizes
+checked affine equations and cardinality bounds. Clause groups and complete
+normal definitions supply parity equations over the original atom coordinates.
+Uniform positive thresholds and eligible constraints supply guarded count
+bounds. Recognition proposes each row; a separate source read authenticates it
+against the exact theory and complete producer inventory.
+
+For a bounded definition, signed atom columns are intersected within each body
+and united across its producers. XOR with the head column gives its forbidden
+patterns. These packed reductions retain every source check. The affine-hull
+reduction stops adding differences at full rank, while counting the remaining
+patterns to establish exactness.
+
+Nested conjunctions retain every leaf occurrence. In the declared clause
+contexts, an implication with the exact canonical-true antecedent is read through
+to its signed atom. An asserted conjunction may supply both lower and upper
+threshold bounds, including under original-world double negation; every child
+must qualify before the family is retained. These are checked source views, not
+rewrites of the original formula or its reduct.
+
+Clause recognition also uses independently checked positive facts. Selected
+original rules with atomic heads and positive conjunctive bodies feed the
+shared positive activation kernel. Its proposed facts carry ordered original
+rule witnesses; a separate replay starts empty and checks every premise before
+accepting a fresh head. Unseeded cycles cannot justify themselves, and unknown
+atoms are not assumed false. Recognition first checks the original clause's
+distinct atoms and eight-atom limit, then removes known positive leaves or
+discards a body falsified by a known negative leaf. The equation checker rereads
+that original clause using the same checked fact owner. Complete definitions
+and guarded counts retain their own source conditions.
+
+Root parity elimination uses packed row XOR. The counting preparation checks
+that proposed lower and upper families are disjoint covers of the same atoms,
+then compares their totals. A guarded bound contributes its unconditional
+fallback while its guard remains open. A proved root contradiction starts no
+candidate walk; otherwise one-atom parity rows seed the root. The original
+theory and frozen-reduct membership checks are unchanged. These preparations
+run once for each original candidate owner, before serial, parallel or device
+candidate scheduling; they are host preparation, not device kernels.
+
+Both systems share an optional allowance of 100,000,000 logical word operations
+and the inherited preparation-byte allowance. Exhausting an optional allowance
+discards the whole preparation and keeps ordinary candidate generation.
+Cancellation, global work refusal, allocation and invalid source reads remain
+typed failures. No partially prepared rows or units escape. Per-region parity
+and counting subjects are not installed by this root preparation.
+
 With an active restriction or without a prepared generator order, the existing
 preference applies. Open atoms that head an atomic choice root of the
 original theory rank first, whether or not the theory lies in the producer
