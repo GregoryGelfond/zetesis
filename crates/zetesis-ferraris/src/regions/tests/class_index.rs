@@ -135,6 +135,65 @@ fn known_node_signs_hold_in_every_stable_completion() {
     assert_eq!(observed, [[true; 2]; 2]);
 }
 
+#[test]
+fn a_countermodel_operand_sign_is_local_to_its_branch() {
+    // b ∨ (b → z), b → a.  With a held and z cut, the original sign
+    // of b → z determines whether the empty witness still satisfies the reduct.
+    let theory = theory(
+        3,
+        vec![
+            Node::atom(0),
+            Node::atom(1),
+            Node::atom(2),
+            Node::implies(1, 2),
+            Node::or_pair([1, 3]),
+            Node::implies(1, 0),
+        ],
+        vec![4, 5],
+    );
+    let index = Narrower::new(&theory);
+    let mut region = Region::all_open(3);
+    assert!(region.hold(0));
+    assert!(region.cut(2));
+    let mut parent = index.knowledge();
+    let mut scratch = NarrowingScratch::default();
+    crate::test_support::close(&theory, &index, &mut region, &mut parent, &mut scratch);
+    let sign = |knowledge: &Knowledge| {
+        let masks = super::compact(knowledge).masks.slices();
+        (
+            super::super::bit(masks[0], 3),
+            super::super::bit(masks[1], 3),
+        )
+    };
+    assert_eq!(sign(&parent), (false, false));
+
+    let witness = crate::test_support::world(&theory, 0);
+    let limits = crate::Limits::default();
+    let cancel = Cancellation::default();
+    let (cut, held) = region.split(1);
+    let mut child = parent.clone();
+    for (mut branch, mask, implication_true) in [(cut, 1, true), (held, 3, false)] {
+        child.clone_from(&parent);
+        assert_eq!(sign(&child), (false, false));
+        let (step, _) =
+            crate::test_support::close(&theory, &index, &mut branch, &mut child, &mut scratch);
+        assert_ne!(step, zetesis_algebra::region::Narrowing::Refuted);
+        assert_eq!(sign(&child), (implication_true, !implication_true));
+        let candidate = crate::test_support::world(&theory, mask);
+        assert!(crate::models(&theory, &candidate, limits, &cancel).unwrap());
+        assert_eq!(
+            crate::models_reduct(&theory, &candidate, &witness, limits, &cancel).unwrap(),
+            implication_true
+        );
+        assert_eq!(
+            crate::check(&theory, &candidate, limits, &cancel)
+                .unwrap()
+                .accepted(),
+            !implication_true
+        );
+    }
+}
+
 /// h follows from a threshold on the choice b, or from unsupported d.
 /// The classical interpretation {h} satisfies all roots. Only {b,h} is
 /// stable in the region holding h, so the threshold body is forced there.

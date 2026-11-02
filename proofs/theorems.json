@@ -7845,6 +7845,76 @@
     "line": 139
   },
   {
+    "name": "Zetesis.Refinement.RegionalOriginal.selection_sublist",
+    "file": "Zetesis/RegionalOriginal.lean",
+    "line": 28
+  },
+  {
+    "name": "Zetesis.Refinement.RegionalOriginal.selection_bounds",
+    "file": "Zetesis/RegionalOriginal.lean",
+    "line": 47
+  },
+  {
+    "name": "Zetesis.Refinement.RegionalOriginal.guard_mono",
+    "file": "Zetesis/RegionalOriginal.lean",
+    "line": 63
+  },
+  {
+    "name": "Zetesis.Refinement.RegionalOriginal.numeric_sound",
+    "file": "Zetesis/RegionalOriginal.lean",
+    "line": 91
+  },
+  {
+    "name": "Zetesis.Refinement.RegionalOriginal.read_layer_sound",
+    "file": "Zetesis/RegionalOriginal.lean",
+    "line": 130
+  },
+  {
+    "name": "Zetesis.Refinement.RegionalOriginal.extend",
+    "file": "Zetesis/RegionalOriginal.lean",
+    "line": 183
+  },
+  {
+    "name": "Zetesis.Refinement.RegionalOriginal.atoms_sound",
+    "file": "Zetesis/RegionalOriginal.lean",
+    "line": 199
+  },
+  {
+    "name": "Zetesis.Refinement.RegionalOriginal.scan_sound",
+    "file": "Zetesis/RegionalOriginal.lean",
+    "line": 210
+  },
+  {
+    "name": "Zetesis.Refinement.RegionalOriginal.matched_signs",
+    "file": "Zetesis/RegionalOriginal.lean",
+    "line": 251
+  },
+  {
+    "name": "Zetesis.Refinement.RegionalOriginal.regional_row_excludes",
+    "file": "Zetesis/RegionalOriginal.lean",
+    "line": 275
+  },
+  {
+    "name": "Zetesis.Refinement.RegionalProducer.supporter_eligible",
+    "file": "Zetesis/RegionalProducer.lean",
+    "line": 58
+  },
+  {
+    "name": "Zetesis.Refinement.RegionalProducer.sole_body_sound",
+    "file": "Zetesis/RegionalProducer.lean",
+    "line": 88
+  },
+  {
+    "name": "Zetesis.Refinement.RegionalProducer.produced_sound",
+    "file": "Zetesis/RegionalProducer.lean",
+    "line": 130
+  },
+  {
+    "name": "Zetesis.Refinement.RegionalProducer.producer_row_excludes",
+    "file": "Zetesis/RegionalProducer.lean",
+    "line": 151
+  },
+  {
     "name": "Zetesis.RelationExtension.reconstruction_preserved",
     "file": "Zetesis/RelationExtension.lean",
     "line": 27

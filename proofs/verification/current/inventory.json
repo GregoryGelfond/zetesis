@@ -7846,6 +7846,76 @@
       "name": "Zetesis.RegionBounds.narrowing_exact"
     },
     {
+      "file": "Zetesis/RegionalOriginal.lean",
+      "line": 28,
+      "name": "Zetesis.Refinement.RegionalOriginal.selection_sublist"
+    },
+    {
+      "file": "Zetesis/RegionalOriginal.lean",
+      "line": 47,
+      "name": "Zetesis.Refinement.RegionalOriginal.selection_bounds"
+    },
+    {
+      "file": "Zetesis/RegionalOriginal.lean",
+      "line": 63,
+      "name": "Zetesis.Refinement.RegionalOriginal.guard_mono"
+    },
+    {
+      "file": "Zetesis/RegionalOriginal.lean",
+      "line": 91,
+      "name": "Zetesis.Refinement.RegionalOriginal.numeric_sound"
+    },
+    {
+      "file": "Zetesis/RegionalOriginal.lean",
+      "line": 130,
+      "name": "Zetesis.Refinement.RegionalOriginal.read_layer_sound"
+    },
+    {
+      "file": "Zetesis/RegionalOriginal.lean",
+      "line": 183,
+      "name": "Zetesis.Refinement.RegionalOriginal.extend"
+    },
+    {
+      "file": "Zetesis/RegionalOriginal.lean",
+      "line": 199,
+      "name": "Zetesis.Refinement.RegionalOriginal.atoms_sound"
+    },
+    {
+      "file": "Zetesis/RegionalOriginal.lean",
+      "line": 210,
+      "name": "Zetesis.Refinement.RegionalOriginal.scan_sound"
+    },
+    {
+      "file": "Zetesis/RegionalOriginal.lean",
+      "line": 251,
+      "name": "Zetesis.Refinement.RegionalOriginal.matched_signs"
+    },
+    {
+      "file": "Zetesis/RegionalOriginal.lean",
+      "line": 275,
+      "name": "Zetesis.Refinement.RegionalOriginal.regional_row_excludes"
+    },
+    {
+      "file": "Zetesis/RegionalProducer.lean",
+      "line": 58,
+      "name": "Zetesis.Refinement.RegionalProducer.supporter_eligible"
+    },
+    {
+      "file": "Zetesis/RegionalProducer.lean",
+      "line": 88,
+      "name": "Zetesis.Refinement.RegionalProducer.sole_body_sound"
+    },
+    {
+      "file": "Zetesis/RegionalProducer.lean",
+      "line": 130,
+      "name": "Zetesis.Refinement.RegionalProducer.produced_sound"
+    },
+    {
+      "file": "Zetesis/RegionalProducer.lean",
+      "line": 151,
+      "name": "Zetesis.Refinement.RegionalProducer.producer_row_excludes"
+    },
+    {
       "file": "Zetesis/RelationExtension.lean",
       "line": 27,
       "name": "Zetesis.RelationExtension.reconstruction_preserved"
@@ -10996,6 +11066,8 @@
     "Zetesis/ReductEvaluation.lean",
     "Zetesis/ReductRegions.lean",
     "Zetesis/RegionBounds.lean",
+    "Zetesis/RegionalOriginal.lean",
+    "Zetesis/RegionalProducer.lean",
     "Zetesis/RelationExtension.lean",
     "Zetesis/RemainderIntervals.lean",
     "Zetesis/RequiredChoiceCosts.lean",
@@ -11051,8 +11123,8 @@
     "Zetesis/WorldViews.lean"
   ],
   "source_sha256": {
-    "Audit.lean": "6b2750ec7d34563aca662060037e6fc29081d53db3bd9ebc165298c61f3a6176",
-    "Zetesis.lean": "31bcdc9d881342a86c07adcc193089d1559a13f45f03821e19a723c7d9d706ca",
+    "Audit.lean": "5444977c1a8e96daab904d3da7ebd4280b22f18ee801c2b555adc5d378926554",
+    "Zetesis.lean": "6f1386e57400fb71b084becdec62f5552855bc00f4d44de0edb939ae48f1ef9a",
     "Zetesis/AcyclicEvaluation.lean": "1a9c77283876cf1f61cb92031da04780aada5d0b256f79db5b64bfb6b129d0dc",
     "Zetesis/AdjacencyRows.lean": "38a19b1c74483a157636321a56e95fea660a2192a04c77930d609e411c8d30d4",
     "Zetesis/AggregateAssignment.lean": "def2eac0ae638f3801d35c11a3162afaa3e0b9e393601cf899952e449e309639",
@@ -11207,6 +11279,8 @@
     "Zetesis/ReductEvaluation.lean": "9ae04576414c51e54f1cc20ded02ac924b34c0e0f392503acda2b93455119836",
     "Zetesis/ReductRegions.lean": "cf458a8c58b16b69cfa735113a0887b32651874773380c28060497ce4fc484ff",
     "Zetesis/RegionBounds.lean": "dc0c7d2bcff2efc05048af046e3945cb3cbdb546f197f7e294a54c14c6bca559",
+    "Zetesis/RegionalOriginal.lean": "53b78c15df28c0d3e0bf14a17301698a63dd614c40ed46e34a1ee17127180d84",
+    "Zetesis/RegionalProducer.lean": "e15293fb6805201b3dfde714bbdc0cd7f3b113c7c8ddb08ac7fda451094b1415",
     "Zetesis/RelationExtension.lean": "b14a16ce85275538d71b742aa5889f2c4fd0fbf27710b3b4de4f1b6cb14be2f0",
     "Zetesis/RemainderIntervals.lean": "a053309beddf6c8e3e1ed0b837e4c06b2cdd78bb1ca6c515461e0bf04f060cda",
     "Zetesis/RequiredChoiceCosts.lean": "055070eb434c9df42c5110cbe89ef5d6b78ed335eb8d17b67c5db8b41036a323",

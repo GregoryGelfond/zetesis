@@ -3683,6 +3683,25 @@ root and sign owners at row creation and use, connect actual region knowledge
 to those signed facts, and enforce the row and work allowances. This check
 is a reference over the graph. The solver does not install or prune with it.
 
+[`RegionalOriginal`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/RegionalOriginal.lean)
+establishes the signed facts needed by the witness check. Starting with the
+atoms held or cut in a region, a forward scan reads the graph in node order.
+For a numeric guard it evaluates the least and greatest possible selections
+of its input occurrences. When both give the same result, every completion
+has that reading. An unknown input can therefore leave the guard decided.
+
+[`RegionalProducer`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/RegionalProducer.lean)
+adds one round of producer reasoning between two such scans. If a held atom
+has exactly one surviving producer, its body must hold in every stable
+completion. The proof requires a complete inventory for the original theory
+and a checked link from each recorded body ID to its formula. A descendant
+can use these signs when it still holds the witness and at least one more atom.
+A sibling must establish the signs in its own region. The Rust
+`a_countermodel_operand_sign_is_local_to_its_branch` test exercises this
+distinction on an implication whose sign changes between siblings.
+Correspondence for the production producer inventory and for storing and
+charging witness rows remains open.
+
 [`AlgebraicRows`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/AlgebraicRows.lean)
 states algebraic consequences for any consequence class, as `RowOf` does. A term
 pairs an atom with a value, and a list of terms is measured in an interpretation

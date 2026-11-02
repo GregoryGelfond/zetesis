@@ -166,6 +166,8 @@ import Zetesis.MixedFormulaGraph
 import Zetesis.StableProducerKnowledge
 import Zetesis.SignedOriginal
 import Zetesis.CheckedSignedReplay
+import Zetesis.RegionalOriginal
+import Zetesis.RegionalProducer
 import Zetesis.Frontier
 import Zetesis.AxisFolds
 import Zetesis.AlgebraicRows
