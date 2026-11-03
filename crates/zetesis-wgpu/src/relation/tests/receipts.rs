@@ -256,3 +256,60 @@ fn tile_receipts_follow_uniform_mask_completion() {
     let mask = conditionals.pop().unwrap();
     assert!(mask < barrier && barrier < receipt);
 }
+
+#[test]
+fn full_scan_work_refusal_preserves_its_diagnostic() {
+    let (predicate, atoms) = source(33);
+    let relation = Relation::from_atoms(&predicate, &atoms, relation::Limits::default()).unwrap();
+    let value = Value::Number(1);
+    let queries = [
+        relation.query(&[], relation::Limits::default()).unwrap(),
+        relation
+            .query(&[(0, (&value).into())], relation::Limits::default())
+            .unwrap(),
+    ];
+    let reference = plan(&relation, &queries);
+    let error = packing::Plan::new(
+        &relation,
+        &queries,
+        RelationGpuLimits {
+            max_work: reference.work - 1,
+            ..RelationGpuLimits::default()
+        },
+        &wgpu::Limits::default(),
+        1,
+    )
+    .err()
+    .unwrap();
+    assert_eq!(error.kind(), GpuErrorKind::Capacity);
+    assert_eq!(error.detail(), "relation full-scan work exceeds ceiling");
+    assert_eq!(error.interruption(), None);
+}
+
+#[test]
+fn byte_refusal_precedes_the_full_scan_work_ceiling() {
+    let (predicate, atoms) = source(33);
+    let relation = Relation::from_atoms(&predicate, &atoms, relation::Limits::default()).unwrap();
+    let queries = [relation.query(&[], relation::Limits::default()).unwrap()];
+    let reference = plan(&relation, &queries);
+    assert!(reference.work > 0);
+    let error = packing::Plan::new(
+        &relation,
+        &queries,
+        RelationGpuLimits {
+            max_bytes: reference.accounted_bytes - 1,
+            max_work: 0,
+            ..RelationGpuLimits::default()
+        },
+        &wgpu::Limits::default(),
+        1,
+    )
+    .err()
+    .unwrap();
+    assert_eq!(error.kind(), GpuErrorKind::Capacity);
+    assert_eq!(
+        error.detail(),
+        "relation invocation exceeds authored byte ceiling"
+    );
+    assert_eq!(error.interruption(), None);
+}

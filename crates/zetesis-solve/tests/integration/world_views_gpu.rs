@@ -2,12 +2,12 @@
 
 use std::{collections::BTreeSet, io, num::NonZeroUsize};
 
-use zetesis_cpu::Cancellation;
+use zetesis_algebra::Cancellation;
 use zetesis_reference_support::formula;
 use zetesis_solve::{
     AnswerSelection, AnswerSet, Backend, Completion, ExecutionObservation, ExecutionObserver,
-    ExecutionResources, GpuApi, Grounder, Oracle, PreparedInput, Session, SolveConfig, SolveError,
-    Subject, WorldViewError, WorldViewLimits,
+    ExecutionResources, GpuApi, Grounder, Oracle, Original, PreparedInput, Session, SolveConfig,
+    SolveError, WorldViewError, WorldViewLimits,
 };
 use zetesis_themelios::AdmittedFormula;
 use zetesis_wgpu::{AdapterBackend, GpuContext, GpuErrorKind, GpuOptions, GpuSelection};
@@ -191,8 +191,8 @@ fn collection_limit_retains_checked_accounting(device: Device) {
     assert!(expected.contains(&record(&failure.answer_sets()[0])));
     assert!(
         failure.answer_sets()[0]
-            .subject()
-            .same_instance(failure.subject())
+            .original()
+            .same_instance(failure.original())
     );
     let outcome = failure.outcome().unwrap();
     assert_eq!(outcome.selection(), Some(AnswerSelection::All));
@@ -252,8 +252,8 @@ fn collection_refuses_a_foreign_context(device: Device) {
     assert!(failure.outcome().is_none());
     assert!(
         failure
-            .subject()
-            .same_instance(&Subject::Theory(owner.theory().clone()))
+            .original()
+            .same_instance(&Original::Theory(owner.theory().clone()))
     );
 }
 

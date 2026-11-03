@@ -1,7 +1,7 @@
 # Embedding an ordinary solve
 
 A `Session` owns solving state and borrows a coherent admitted input.
-`SolveConfig` selects execution policy and limits; `zetesis_cpu::Cancellation`
+`SolveConfig` selects execution policy and limits; `zetesis_algebra::Cancellation`
 carries shared cancellation and an optional deadline. The session accepts these
 values without argument parsing, standard streams or answer rendering. This
 example enumerates the guided tour's complete family:
@@ -9,7 +9,7 @@ example enumerates the guided tour's complete family:
 ```rust
 # extern crate zetesis_solve;
 # extern crate zetesis_core;
-# extern crate zetesis_cpu;
+# extern crate zetesis_algebra;
 # extern crate zetesis_ferraris;
 # extern crate zetesis_stable;
 # extern crate zetesis_themelios;
@@ -31,7 +31,7 @@ The original `ground()` doors still construct theories for arbitrary formula
 and reduct queries.
 
 An `AcyclicSource` is evaluated once. Sessions reuse its checked interpretation
-and original subject, while applying their own cancellation and model-publication
+and original input, while applying their own cancellation and model-publication
 allowances. `SemanticOutcome::source_evaluation()` reports preparation work;
 it is not search work repeated by each session. Preparation time belongs to the
 grounding phase. A successfully published sole answer establishes exhaustion
@@ -82,7 +82,7 @@ checking available. Cancellation and allocation failures interrupt the run.
 ## Pulling and stopping
 
 `Session` is a fused iterator of `Result<AnswerSet, SolveFailure>`. Each
-privately constructed `AnswerSet` retains its original `Subject`, complete interpretation and optional
+privately constructed `AnswerSet` retains its `Original`, complete interpretation and optional
 fully evaluated score. Hidden atoms remain present even when `#show` would omit
 them from human output. `SessionModel` remains a compatibility alias. These are
 completed membership results under the selected implementation, not Lean proof
@@ -261,6 +261,30 @@ read the enumeration's one original index. Returned countermodels still undergo
 independent frozen-reduct validation. Candidate restrictions do not replace the
 original theory.
 
+A checker can supply a subregion of the frozen query through
+`StableModels::begin_regional_pass`. A validated proper countermodel refutes
+the candidate. When the supplied region contains no witness, the caller must
+also establish that the region covered every possible proper witness before
+publishing a whole-candidate decision through `RegionalPass::finish`.
+
+To measure this work, call `CompletionExecutor::observe_next_regional_pass`
+with an attempt identifier and optional storage allowance before beginning the
+pass. Use `take_regional_observations` after it returns, including on a typed
+stop. The receipt identifies the slate and attempt. Its original slot order
+distinguishes CPU-certified, unentered, stopped and completed residuals.
+Each entered query reports charged work (including witness validation),
+visited regions and attempted and published splits. A stopped query retains
+the prefix it performed. A retry receives its own attempt identifier.
+
+The slate's width is its largest level after summing visits at each depth
+across workers. The host duration sums the measured query intervals, which
+can overlap. A pass with no queries has zero visits and zero width when its
+slot records are available. An entirely terminal slate requires no
+observation allocation. Insufficient optional storage can leave slot records
+or depth measurements unavailable while the same queries continue under
+their original limits. Disabled timing yields no host duration. Taking and
+dropping the receipt releases its retained slot storage.
+
 A formula session shares the rows its candidate walks learn through one
 `zetesis_stable::LearnedStore`, created for each solve call and handed to the
 session's candidate stream and membership execution. The rows only prune
@@ -317,7 +341,7 @@ using one source allowance for the entire closure. It does not change proper-sub
 queries of the frozen reduct. The ordinary formula enumerator obtains surviving
 core answers, then
 checks the streamed constraints before returning an `AnswerSet` of the original
-`Subject::Hybrid`. A violation rejects that core answer. A completed check permits
+`Original::Hybrid`. A violation rejects that core answer. A completed check permits
 publication; an interrupted or failed check remains pending and establishes
 neither acceptance nor exhaustion. With `AnswerSelection::All`, a positive model
 limit counts accepted original-program answers. With `Optimal`, it caps retained
@@ -332,7 +356,7 @@ source checking. Each returned answer chooses a q-prefix followed by a p-suffix:
 ```rust
 # extern crate zetesis_solve;
 # extern crate zetesis_core;
-# extern crate zetesis_cpu;
+# extern crate zetesis_algebra;
 # extern crate zetesis_themelios;
 {{#include ../examples/hybrid.rs:example}}
 ```
@@ -402,7 +426,7 @@ session starts new search and check budgets.
 `WorldView::collect(input, config, limits, cancellation)` owns a fresh unrestricted
 session and returns its complete original answer-set family only after
 exhaustion. Use `models: 0`; a positive model limit is honored and can prevent
-completion. Every member retains its full interpretation and original subject.
+completion. Every member retains its full interpretation and original input.
 Objectives annotate the members with scores without removing nonoptimal answers.
 
 The [source preparation example](source.md) checks the distinct empty-program
@@ -428,12 +452,12 @@ retained space can still be exponential in program size.
 [Retained interpretations](models.md) explains catalog ownership, logical model
 identity and the distinction between shared payload and selected true atoms.
 
-`WorldViewFailure` preserves the checked prefix, original subject, typed cause
+`WorldViewFailure` preserves the checked prefix, original input, typed cause
 and available semantic outcome. Search interruption, scoring failure and
 collection limits cannot produce a complete value. A model whose score or
 storage admission failed can remain in verified accounting without appearing in
 the retained prefix. No partial result is treated as a smaller program.
-`into_parts()` transfers the original cause, subject, answers and outcome into
+`into_parts()` transfers the original cause, original input, answers and outcome into
 `WorldViewFailureParts` without cloning. `into_answer_sets()` remains the explicit
 choice to keep only the answers and discard the other failure evidence.
 
@@ -478,7 +502,7 @@ the verdict is `WorldViewVerdict::Complete`. An exhausted empty family is
 claim, for example, that every atom is cautious. A session that stops before
 absorption or exhaustion, by cancellation, a deadline or a search or objective
 limit, returns a `WorldViewDecisionFailure` whose cause is
-`WorldViewDecisionError::NotExhausted`, with the subject and the session's
+`WorldViewDecisionError::NotExhausted`, with the original input and the session's
 outcome. A partial fold establishes nothing. Setup and execution failures keep
 their typed `SolveFailure`.
 
@@ -505,7 +529,7 @@ that the Rust accumulators compute them is checked by tests, not by the proofs.
 ```rust
 # extern crate zetesis_solve;
 # extern crate zetesis_core;
-# extern crate zetesis_cpu;
+# extern crate zetesis_algebra;
 # extern crate zetesis_themelios;
 {{#include ../examples/world-view-questions.rs:example}}
 ```
@@ -572,7 +596,7 @@ not erase the full interpretations or merge their projection keys.
 
 ```rust
 # extern crate zetesis_solve;
-# extern crate zetesis_cpu;
+# extern crate zetesis_algebra;
 # extern crate zetesis_themelios;
 {{#include ../examples/projected-answers.rs:example}}
 ```
@@ -674,7 +698,7 @@ mode:
 ```rust
 # extern crate zetesis_solve;
 # extern crate zetesis_core;
-# extern crate zetesis_cpu;
+# extern crate zetesis_algebra;
 # extern crate zetesis_themelios;
 {{#include ../examples/observations.rs:example}}
 ```
@@ -695,7 +719,7 @@ An observer error stops the relevant operation and is retained separately from
 device errors. Some formula
 initialization failures are retained in a session and delivered by its first
 pull. After a failed pull, later pulls return `None`; the failure retains the
-original cause and any established semantic evidence. `SolveFailure::subject`
+original cause and any established semantic evidence. `SolveFailure::original`
 can identify a prepared input even when setup failed before a search outcome
 existed.
 
@@ -714,7 +738,7 @@ its compilation without attempting device discovery.
 ```rust,no_run
 # extern crate zetesis_solve;
 # extern crate zetesis_core;
-# extern crate zetesis_cpu;
+# extern crate zetesis_algebra;
 # extern crate zetesis_themelios;
 # extern crate zetesis_wgpu;
 {{#include ../examples/resources.rs:example}}
@@ -724,7 +748,7 @@ Resources retain device infrastructure, not programs, candidates, prepared
 formula graphs, worker pools or incumbents. Context-only resources create fresh
 primitive pipelines. `ExecutionResources::with_formula_profile(&profile)` also
 retains an exact `GpuFormulaProfile`; repeated general formula sessions share its
-shader and compiled pipelines while creating fresh subject preparation, residency
+shader and compiled pipelines while creating fresh input preparation, residency
 and epochs.
 When tight support is selected, its distinct kernel compiles on the profile's
 exact context; the general formula pipeline is not used for support checking.
@@ -766,20 +790,20 @@ and their scores. It requires an accessible physical GPU.
 
 ```rust,no_run
 # extern crate zetesis_solve;
-# extern crate zetesis_cpu;
+# extern crate zetesis_algebra;
 # extern crate zetesis_themelios;
 # extern crate zetesis_wgpu;
 {{#include ../examples/profiles.rs:example}}
 ```
 
-### Retain the original subject
+### Retain the original input
 
-`AnswerSet::subject()` retains the checked `Program`, `Theory`, original
+`AnswerSet::original()` retains the checked `Program`, `Theory`, original
 `HybridFormula` or `TerminalFormula`. Hybrid and terminal-definition answers
 retain their full source owners, not merely their core or base theories.
-`Subject::same_instance` distinguishes shared owners from independently admitted but
+`Original::same_instance` distinguishes shared owners from independently admitted but
 structurally equal inputs. `into_interpretation()` explicitly discards the
-subject association for raw-model interoperability; use it only when your own
+original association for raw-model interoperability; use it only when your own
 boundary can maintain the required context.
 
 The example uses a tiny family to show streaming and bounded complete collection.

@@ -1,8 +1,8 @@
 //! Retention failures and partial evaluation cannot forge an optimum or erase
 //! accounting for stable models already checked by the reduct oracle.
 
+use zetesis_algebra::Cancellation;
 use zetesis_cli::{Completion, Interruption, OptimizationStop, PublicationConfig, Report};
-use zetesis_cpu::Cancellation;
 
 /// One worker: the exact charges these tests compare are the scalar walk's,
 /// whose first leaf is the same on every run.

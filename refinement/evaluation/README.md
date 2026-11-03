@@ -47,6 +47,13 @@ its exact N+E charge is a property of that generation. `OperandArena` supplies
 the prefix reduction's truth and work-bound laws, but the changed Rust loop
 still requires refreshed extraction and correspondence.
 
+The execution primitives now belong to `zetesis-algebra`, including the
+cancellation implementation formerly owned by `zetesis-cpu`. The retained
+native extraction still names `zetesis_cpu::cancellation`. Its source inventory,
+replay command and generated namespace remain historical evidence; qualifying
+the new owner requires a real extraction and dependent-proof refresh. Neither
+this crate move nor a replacement expected hash supplies that qualification.
+
 ## Native operand-row getters
 
 [`NativeRows`](NativeRows.lean) proves the actual generated `read_span`,

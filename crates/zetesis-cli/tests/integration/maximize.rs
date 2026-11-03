@@ -4,9 +4,9 @@ use std::process::{Command, Output, Stdio};
 use std::time::{Duration, Instant};
 
 use clap::Parser;
+use zetesis_algebra::Cancellation;
 use zetesis_cli::{Completion, Options, Oracle, Report, RunError, run_with_diagnostics};
 use zetesis_clingo_support as oracle;
-use zetesis_cpu::Cancellation;
 use zetesis_themelios::{AdmissionFailure, ExpansionFailure, FormulaFailure, ProfileFeature};
 
 type Records = Vec<(Vec<String>, Option<Vec<i64>>)>;

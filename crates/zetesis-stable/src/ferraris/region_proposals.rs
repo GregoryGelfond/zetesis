@@ -95,12 +95,13 @@
 
 use std::collections::VecDeque;
 use std::num::NonZeroUsize;
+use std::ops::ControlFlow;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Mutex, MutexGuard, PoisonError};
 use std::time::Duration;
 
 use rayon::prelude::*;
-use zetesis_cpu::regions::{Narrowing, Region};
+use zetesis_algebra::walk::{self, Counting};
 use zetesis_ferraris::{Interpretation, Narrower, NarrowingScratch, Theory};
 
 use super::conditions::{Bound, CandidateKnowledge, Conditions};
@@ -198,8 +199,10 @@ impl RegionProposals {
             .thread_name(|index| format!("zetesis-proposal-{index}"))
             .build()
             .map_err(|_| Incomplete::Allocation)?;
-        let frontier =
-            RegionFrontier::measured(workers.get(), (root, CandidateKnowledge::default()))?;
+        let frontier = RegionFrontier::measured(
+            workers.get(),
+            Entry::new(root, CandidateKnowledge::default()),
+        )?;
         Ok(Self {
             parts,
             restrictions: Conditions::default(),
@@ -307,6 +310,7 @@ impl RegionProposals {
             frontier_order: Some(self.order),
             ..self.statistics
         }
+        .with_runtime_arithmetic()
     }
 
     /// Every producer shares deque 0, the deque that holds the root: the order
@@ -555,7 +559,7 @@ struct SlateFill<'a, 'filter> {
 
 enum Step {
     Refuted,
-    Split(Entry, Entry),
+    Split(usize),
     Candidate(Interpretation),
     /// A leaf that found the output spoken for: unresolved, its region waits
     /// for a later slate.
@@ -700,26 +704,51 @@ impl<'filter> SlateFill<'_, 'filter> {
         )
     }
 
-    /// Publish a split's older child and keep its newer one in the same hand.
-    /// A refused publication drops the older child
-    /// unpublished, leaving the count unchanged, and fails the newer child
-    /// (see [`Self::fail`]).
+    /// Publish the older child and retain the newer in the same hand. The
+    /// metered lineage copy has completed before entry; the parent is consumed
+    /// only after deque storage is admitted. Success empties the occupied
+    /// caller slot and returns held; refusal restores the exact parent before
+    /// returning its original typed error.
     fn hand_over(
         &self,
         index: usize,
-        (cut, held): (Entry, Entry),
+        pending: &mut Option<Entry>,
+        atom: usize,
+        cut_knowledge: CandidateKnowledge,
         reserve: impl FnOnce(&mut VecDeque<Entry>, usize) -> Result<(), Incomplete>,
-    ) -> Option<Entry> {
+    ) -> Result<Entry, Incomplete> {
+        let parent = pending.take().expect("publication has a pending parent");
         match self
             .frontier
-            .publish_split(self.home(index), [cut], reserve)
-        {
-            Ok(()) => Some(held),
-            Err(error) => {
-                self.fail(index, held, error);
-                None
+            .publish_split_with(self.home(index), parent, reserve, |parent| {
+                let (cut, held) = parent.split_with(atom, |knowledge| (cut_knowledge, knowledge));
+                ([cut], held)
+            }) {
+            Ok(held) => Ok(held),
+            Err((error, parent)) => {
+                *pending = Some(parent);
+                Err(error)
             }
         }
+    }
+
+    /// Account one child copy before publishing it. Both refusal boundaries
+    /// leave the parent in its caller-owned slot until the caller records stop.
+    fn split(
+        &self,
+        index: usize,
+        pending: &mut Option<Entry>,
+        atom: usize,
+        counts: &mut RegionCounts,
+        budget: &mut Budget<'_, WorkLease<'_>>,
+    ) -> Result<Entry, Incomplete> {
+        let copied = regions::copy_knowledge(
+            &pending.as_ref().expect("split has a pending parent").state,
+            None,
+            budget,
+        );
+        counts.add(copied.counts)?;
+        self.hand_over(index, pending, atom, copied.result?, reserve_regions)
     }
 
     /// Stop the slate on `error`, then return `entry`, a region producer
@@ -736,17 +765,19 @@ impl<'filter> SlateFill<'_, 'filter> {
     }
 
     /// Return `entry` to producer `index`'s home deque, reserving its entry
-    /// capacity through `reserve`. A refused return drops the region and
-    /// records the refusal as a stop, unless one is recorded, so no region is
-    /// lost while the run could still claim coverage.
+    /// capacity through `reserve`. A refused return keeps its owner until the
+    /// typed stop closes this non-resumable production; only then is the entry
+    /// deliberately abandoned, without resolving its outstanding region.
     fn give_back(
         &self,
         index: usize,
         entry: Entry,
         reserve: impl FnOnce(&mut VecDeque<Entry>, usize) -> Result<(), Incomplete>,
     ) {
-        if let Err(error) = self.frontier.requeue(self.home(index), entry, reserve) {
+        if let Err((error, entry)) = self.frontier.requeue(self.home(index), entry, reserve) {
             self.stop(error);
+            // Terminal abandonment, not a resolution or a failed restoration.
+            drop(entry);
         }
     }
 
@@ -757,15 +788,15 @@ impl<'filter> SlateFill<'_, 'filter> {
     /// leaf could not be emitted; so a deferred leaf is not stepped again in
     /// this slate. Nor when control requests a stop, which is recorded. A
     /// refused region comes back for the producer to return to its deque.
-    fn ready(&self, entry: Entry) -> Result<Entry, Entry> {
+    fn ready(&self, entry: Entry) -> ControlFlow<Entry, Entry> {
         if self.frontier.termination.is_closed() || self.spoken_for() {
-            return Err(entry);
+            return ControlFlow::Break(entry);
         }
         if let Err(error) = self.cancellation.poll() {
             self.stop_unless_full(error.into());
-            return Err(entry);
+            return ControlFlow::Break(entry);
         }
-        Ok(entry)
+        ControlFlow::Continue(entry)
     }
 
     /// After a refutation or an emission the producer keeps its hand when it
@@ -834,8 +865,8 @@ impl<'filter> SlateFill<'_, 'filter> {
                 },
             };
             let mut entry = match self.ready(taken) {
-                Ok(entry) => entry,
-                Err(entry) => {
+                ControlFlow::Continue(entry) => entry,
+                ControlFlow::Break(entry) => {
                     hand = Some(entry);
                     break;
                 }
@@ -862,10 +893,38 @@ impl<'filter> SlateFill<'_, 'filter> {
                     self.frontier.termination.resolve();
                     hand = self.after_resolution(index, &lease);
                 }
-                Ok(Step::Split(cut, held)) => {
-                    match self.hand_over(index, (cut, held), reserve_regions) {
-                        Some(held) => hand = Some(held),
-                        None => break,
+                Ok(Step::Split(atom)) => {
+                    // Continue the same lease after the step receipt, before
+                    // locking or consuming the unresolved parent.
+                    let mut pending = Some(entry);
+                    let published = {
+                        let mut budget = Budget {
+                            quota: lease,
+                            limits: self.limits,
+                            cancellation: self.cancellation,
+                            statistics: search,
+                        };
+                        let published = self.split(
+                            index,
+                            &mut pending,
+                            atom,
+                            &mut workspace.counts,
+                            &mut budget,
+                        );
+                        search = budget.statistics;
+                        lease = budget.quota;
+                        published
+                    };
+                    match published {
+                        Ok(held) => hand = Some(held),
+                        Err(error) => {
+                            // The whole narrowed parent remains owned until
+                            // production becomes terminal. No restoration
+                            // allocation or child publication follows refusal.
+                            self.stop(error);
+                            drop(pending);
+                            break;
+                        }
                     }
                 }
                 Ok(Step::Candidate(candidate)) => {
@@ -893,7 +952,7 @@ impl<'filter> SlateFill<'_, 'filter> {
 
     fn step<'a>(
         &'a self,
-        (region, knowledge): &mut Entry,
+        entry: &mut Entry,
         workspace: &mut Workspace<'filter>,
         budget: &mut Budget<'a, WorkLease<'a>>,
         counts: &mut RegionCounts,
@@ -904,9 +963,9 @@ impl<'filter> SlateFill<'_, 'filter> {
             timings: &mut workspace.timings,
         });
         let narrowing = regions::narrow(
-            (self.parts.subject(self.theory)?, self.narrower),
+            self.parts.reading(self.theory, self.narrower)?,
             self.restrictions,
-            (region, knowledge),
+            entry,
             &mut workspace.scratch,
             budget,
             counts,
@@ -916,18 +975,17 @@ impl<'filter> SlateFill<'_, 'filter> {
         // trigger.
         self.parts
             .visited(&mut workspace.tier, &mut workspace.scratch, budget, counts)?;
-        if narrowing == Narrowing::Refuted {
-            counts.refuted = 1;
-            return Ok(Step::Refuted);
-        }
-        if let Some(atom) = region.split_atom() {
-            budget.decide()?;
-            // Take the region out to split it by value; the emptied placeholder
-            // (no atoms, no allocation) is discarded with this entry.
-            let (cut, held) = std::mem::replace(region, Region::all_open(0)).split(atom);
-            let cut = (cut, knowledge.clone());
-            let held = (held, std::mem::take(knowledge));
-            return Ok(Step::Split(cut, held));
+        match walk::inspect(entry, narrowing, Counting::Never, false) {
+            walk::Step::Refuted => {
+                counts.refuted = 1;
+                return Ok(Step::Refuted);
+            }
+            walk::Step::Split(atom) => {
+                budget.decide()?;
+                return Ok(Step::Split(atom));
+            }
+            walk::Step::Leaf => {}
+            walk::Step::Counted => unreachable!("Counting::Never cannot count a region"),
         }
         if self.remaining == 0 {
             return Err(Incomplete::CandidateLimit);
@@ -935,7 +993,7 @@ impl<'filter> SlateFill<'_, 'filter> {
         if !self.reserve_output_slot() {
             return Ok(Step::Deferred);
         }
-        let candidate = regions::leaf_interpretation(self.theory, region)?;
+        let candidate = regions::leaf_interpretation(self.theory, &entry.region)?;
         counts.leaves = 1;
         Ok(Step::Candidate(candidate))
     }

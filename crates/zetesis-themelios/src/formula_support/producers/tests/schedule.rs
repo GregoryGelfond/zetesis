@@ -435,11 +435,60 @@ fn empty_wake_sets_do_not_discharge_original_constraints() {
                     admitted.theory(),
                     &interpretation,
                     zetesis_ferraris::Limits::default(),
-                    &zetesis_cpu::Cancellation::default()
+                    &zetesis_algebra::Cancellation::default()
                 )
                 .unwrap(),
                 expected
             );
         }
+    }
+}
+
+#[test]
+fn affected_schedule_resumes_each_stopped_word_prefix() {
+    use crate::formula_support::producers::wake::Schedule;
+    use crate::test_support::given_site;
+    use zetesis_algebra::words::Words;
+
+    // Four lane reads and four selections. The empty third lane still costs
+    // its read; a refused selection must leave that same rule pending.
+    let words = [1_u64 << 63, 3, 0, 2];
+    for maximum in 0..=8 {
+        let mut schedule = Schedule::Affected {
+            words: Words::new(&words[..]),
+            next: 0,
+            remaining: Words::<u64>::bits(0),
+        };
+        let mut counters = Counters::default();
+        let limits = FormulaLimits {
+            max_work: maximum,
+            ..FormulaLimits::default()
+        };
+        let mut selected = Vec::new();
+        loop {
+            match schedule.next(&limits, &mut counters, given_site()) {
+                Ok(Some(rule)) => selected.push(rule),
+                Ok(None) => {
+                    assert_eq!(maximum, 8);
+                    break;
+                }
+                Err(error) => {
+                    assert!(maximum < 8);
+                    assert!(matches!(error, FormulaFailure::Limit {
+                        resource: FormulaResource::Work, observed, limit, ..
+                    } if limit == u128::from(maximum) && observed == limit + 1));
+                    break;
+                }
+            }
+        }
+        assert_eq!(counters.accounting.work, maximum);
+        while let Some(rule) = schedule
+            .next(&FormulaLimits::default(), &mut counters, given_site())
+            .unwrap()
+        {
+            selected.push(rule);
+        }
+        assert_eq!(selected, [63, 64, 65, 193]);
+        assert_eq!(counters.accounting.work, 8);
     }
 }

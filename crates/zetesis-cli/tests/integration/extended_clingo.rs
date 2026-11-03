@@ -6,9 +6,9 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write as FmtWrite;
 
 use clap::Parser;
+use zetesis_algebra::Cancellation;
 use zetesis_cli::{Completion, Options, run};
 use zetesis_clingo_support as oracle;
-use zetesis_cpu::Cancellation;
 use zetesis_themelios::{
     AdmissionFailure, ExpansionFailure, FormulaFailure, FormulaLimits, ProfileFeature,
 };

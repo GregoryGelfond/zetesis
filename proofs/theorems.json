@@ -442,242 +442,292 @@
   {
     "name": "Zetesis.Algebra.inside_refl",
     "file": "Zetesis/Algebra.lean",
-    "line": 109
+    "line": 103
   },
   {
     "name": "Zetesis.Algebra.inside_trans",
     "file": "Zetesis/Algebra.lean",
-    "line": 113
+    "line": 107
   },
   {
     "name": "Zetesis.Algebra.inside_antisymm",
     "file": "Zetesis/Algebra.lean",
-    "line": 120
+    "line": 114
   },
   {
     "name": "Zetesis.Algebra.narrow_to_inside",
     "file": "Zetesis/Algebra.lean",
-    "line": 131
+    "line": 125
   },
   {
     "name": "Zetesis.Algebra.Subject.sound_of_narrower",
     "file": "Zetesis/Algebra.lean",
-    "line": 192
+    "line": 186
   },
   {
     "name": "Zetesis.Algebra.Subject.apply_sound",
     "file": "Zetesis/Algebra.lean",
-    "line": 221
+    "line": 215
   },
   {
-    "name": "Zetesis.Algebra.joint_least",
+    "name": "Zetesis.Algebra.Subject.cohort_extensive",
     "file": "Zetesis/Algebra.lean",
-    "line": 247
+    "line": 233
   },
   {
-    "name": "Zetesis.Algebra.joint_most_precise_bound",
+    "name": "Zetesis.Algebra.Subject.cohort_monotone",
     "file": "Zetesis/Algebra.lean",
-    "line": 253
+    "line": 243
   },
   {
-    "name": "Zetesis.Algebra.joint_extensive",
+    "name": "Zetesis.Algebra.Subject.cohort_sound",
     "file": "Zetesis/Algebra.lean",
-    "line": 260
+    "line": 255
   },
   {
-    "name": "Zetesis.Algebra.joint_closed",
+    "name": "Zetesis.Algebra.Subject.cohort_members_iff",
     "file": "Zetesis/Algebra.lean",
-    "line": 274
+    "line": 267
   },
   {
-    "name": "Zetesis.Algebra.joint_monotone",
+    "name": "Zetesis.Algebra.Subject.cohort_refuted_iff",
     "file": "Zetesis/Algebra.lean",
-    "line": 286
+    "line": 289
   },
   {
-    "name": "Zetesis.Algebra.joint_of_closed",
-    "file": "Zetesis/Algebra.lean",
-    "line": 291
-  },
-  {
-    "name": "Zetesis.Algebra.joint_idempotent",
-    "file": "Zetesis/Algebra.lean",
-    "line": 299
-  },
-  {
-    "name": "Zetesis.Algebra.joint_more_subjects",
+    "name": "Zetesis.Algebra.Subject.cohort_empty",
     "file": "Zetesis/Algebra.lean",
     "line": 305
   },
   {
-    "name": "Zetesis.Algebra.ideal_contains",
+    "name": "Zetesis.Algebra.joint_least",
     "file": "Zetesis/Algebra.lean",
-    "line": 319
+    "line": 332
   },
   {
-    "name": "Zetesis.Algebra.ideal_inside",
+    "name": "Zetesis.Algebra.joint_most_precise_bound",
     "file": "Zetesis/Algebra.lean",
-    "line": 324
+    "line": 338
   },
   {
-    "name": "Zetesis.Algebra.Subject.narrow_ideal",
+    "name": "Zetesis.Algebra.joint_extensive",
     "file": "Zetesis/Algebra.lean",
-    "line": 329
+    "line": 345
   },
   {
-    "name": "Zetesis.Algebra.ideal_closed",
+    "name": "Zetesis.Algebra.joint_closed",
     "file": "Zetesis/Algebra.lean",
-    "line": 336
+    "line": 359
   },
   {
-    "name": "Zetesis.Algebra.joint_sound",
+    "name": "Zetesis.Algebra.joint_monotone",
     "file": "Zetesis/Algebra.lean",
-    "line": 349
+    "line": 371
   },
   {
-    "name": "Zetesis.Algebra.Reaches.inside",
+    "name": "Zetesis.Algebra.joint_of_closed",
     "file": "Zetesis/Algebra.lean",
-    "line": 368
+    "line": 376
   },
   {
-    "name": "Zetesis.Algebra.Reaches.sound",
+    "name": "Zetesis.Algebra.joint_idempotent",
     "file": "Zetesis/Algebra.lean",
-    "line": 375
+    "line": 384
   },
   {
-    "name": "Zetesis.Algebra.Reaches.snoc",
-    "file": "Zetesis/Algebra.lean",
-    "line": 382
-  },
-  {
-    "name": "Zetesis.Algebra.Reaches.below_closed",
+    "name": "Zetesis.Algebra.joint_more_subjects",
     "file": "Zetesis/Algebra.lean",
     "line": 390
   },
   {
-    "name": "Zetesis.Algebra.Reaches.eq_joint",
+    "name": "Zetesis.Algebra.ideal_contains",
+    "file": "Zetesis/Algebra.lean",
+    "line": 404
+  },
+  {
+    "name": "Zetesis.Algebra.ideal_inside",
     "file": "Zetesis/Algebra.lean",
     "line": 409
   },
   {
+    "name": "Zetesis.Algebra.Subject.narrow_ideal",
+    "file": "Zetesis/Algebra.lean",
+    "line": 414
+  },
+  {
+    "name": "Zetesis.Algebra.ideal_closed",
+    "file": "Zetesis/Algebra.lean",
+    "line": 421
+  },
+  {
+    "name": "Zetesis.Algebra.joint_sound",
+    "file": "Zetesis/Algebra.lean",
+    "line": 434
+  },
+  {
+    "name": "Zetesis.Algebra.Reaches.inside",
+    "file": "Zetesis/Algebra.lean",
+    "line": 453
+  },
+  {
+    "name": "Zetesis.Algebra.Reaches.sound",
+    "file": "Zetesis/Algebra.lean",
+    "line": 460
+  },
+  {
+    "name": "Zetesis.Algebra.Reaches.snoc",
+    "file": "Zetesis/Algebra.lean",
+    "line": 467
+  },
+  {
+    "name": "Zetesis.Algebra.Reaches.below_closed",
+    "file": "Zetesis/Algebra.lean",
+    "line": 475
+  },
+  {
+    "name": "Zetesis.Algebra.Reaches.eq_joint",
+    "file": "Zetesis/Algebra.lean",
+    "line": 494
+  },
+  {
     "name": "Zetesis.Algebra.Reaches.terminal_agreement",
     "file": "Zetesis/Algebra.lean",
-    "line": 417
+    "line": 502
   },
   {
     "name": "Zetesis.Algebra.iterate_reaches",
     "file": "Zetesis/Algebra.lean",
-    "line": 438
+    "line": 523
   },
   {
     "name": "Zetesis.Algebra.iterate_inside",
     "file": "Zetesis/Algebra.lean",
-    "line": 445
+    "line": 530
   },
   {
     "name": "Zetesis.Algebra.iterate_stabilizes",
     "file": "Zetesis/Algebra.lean",
-    "line": 457
+    "line": 542
   },
   {
     "name": "Zetesis.Algebra.fair_iteration_reaches_joint",
     "file": "Zetesis/Algebra.lean",
-    "line": 490
+    "line": 575
   },
   {
     "name": "Zetesis.Algebra.countP_lt",
     "file": "Zetesis/Algebra.lean",
-    "line": 512
+    "line": 597
   },
   {
     "name": "Zetesis.Algebra.unheld_le",
     "file": "Zetesis/Algebra.lean",
-    "line": 562
+    "line": 647
   },
   {
     "name": "Zetesis.Algebra.admitted_le",
     "file": "Zetesis/Algebra.lean",
-    "line": 570
+    "line": 655
   },
   {
     "name": "Zetesis.Algebra.openness_lt",
     "file": "Zetesis/Algebra.lean",
-    "line": 580
+    "line": 665
   },
   {
     "name": "Zetesis.Algebra.refines_wf",
     "file": "Zetesis/Algebra.lean",
-    "line": 617
+    "line": 702
   },
   {
     "name": "Zetesis.Algebra.fair_iteration_reaches_joint_of_atoms",
     "file": "Zetesis/Algebra.lean",
-    "line": 624
+    "line": 709
   },
   {
     "name": "Zetesis.Algebra.decides_mono",
     "file": "Zetesis/Algebra.lean",
-    "line": 686
+    "line": 771
   },
   {
-    "name": "Zetesis.Algebra.foldVerdict_absorbed",
+    "name": "Zetesis.Algebra.guardedLower_sound",
     "file": "Zetesis/Algebra.lean",
-    "line": 818
+    "line": 901
   },
   {
-    "name": "Zetesis.Algebra.foldVerdict_complete",
+    "name": "Zetesis.Algebra.guardedUpper_sound",
     "file": "Zetesis/Algebra.lean",
-    "line": 835
+    "line": 923
   },
   {
-    "name": "Zetesis.Algebra.foldVerdict_empty",
+    "name": "Zetesis.Algebra.guardedLower_mono",
     "file": "Zetesis/Algebra.lean",
-    "line": 851
+    "line": 944
   },
   {
-    "name": "Zetesis.Algebra.foldVerdict_undecided",
-    "file": "Zetesis/Algebra.lean",
-    "line": 866
-  },
-  {
-    "name": "Zetesis.Algebra.foldVerdict_without_absorber",
-    "file": "Zetesis/Algebra.lean",
-    "line": 881
-  },
-  {
-    "name": "Zetesis.Algebra.any_true_eq_false_iff",
-    "file": "Zetesis/Algebra.lean",
-    "line": 932
-  },
-  {
-    "name": "Zetesis.Algebra.inner_verdict",
-    "file": "Zetesis/Algebra.lean",
-    "line": 950
-  },
-  {
-    "name": "Zetesis.Algebra.countermodelVerdict_accepts",
+    "name": "Zetesis.Algebra.guardedUpper_antitone",
     "file": "Zetesis/Algebra.lean",
     "line": 967
   },
   {
+    "name": "Zetesis.Algebra.foldVerdict_absorbed",
+    "file": "Zetesis/Algebra.lean",
+    "line": 1023
+  },
+  {
+    "name": "Zetesis.Algebra.foldVerdict_complete",
+    "file": "Zetesis/Algebra.lean",
+    "line": 1040
+  },
+  {
+    "name": "Zetesis.Algebra.foldVerdict_empty",
+    "file": "Zetesis/Algebra.lean",
+    "line": 1056
+  },
+  {
+    "name": "Zetesis.Algebra.foldVerdict_undecided",
+    "file": "Zetesis/Algebra.lean",
+    "line": 1071
+  },
+  {
+    "name": "Zetesis.Algebra.foldVerdict_without_absorber",
+    "file": "Zetesis/Algebra.lean",
+    "line": 1086
+  },
+  {
+    "name": "Zetesis.Algebra.any_true_eq_false_iff",
+    "file": "Zetesis/Algebra.lean",
+    "line": 1137
+  },
+  {
+    "name": "Zetesis.Algebra.inner_verdict",
+    "file": "Zetesis/Algebra.lean",
+    "line": 1155
+  },
+  {
+    "name": "Zetesis.Algebra.countermodelVerdict_accepts",
+    "file": "Zetesis/Algebra.lean",
+    "line": 1172
+  },
+  {
     "name": "Zetesis.Algebra.answerSetVerdict_accepts",
     "file": "Zetesis/Algebra.lean",
-    "line": 996
+    "line": 1201
   },
   {
     "name": "Zetesis.Algebra.answer_sets_nested",
     "file": "Zetesis/Algebra.lean",
-    "line": 1010
+    "line": 1215
   },
   {
     "name": "Zetesis.Algebra.countermodel_outputs_empty_iff",
     "file": "Zetesis/Algebra.lean",
-    "line": 1017
+    "line": 1222
   },
   {
     "name": "Zetesis.Algebra.countermodel_verdict_independent",
     "file": "Zetesis/Algebra.lean",
-    "line": 1035
+    "line": 1240
   },
   {
     "name": "Zetesis.AlgebraicRows.contribution_of_holds",
@@ -850,139 +900,169 @@
     "line": 532
   },
   {
+    "name": "Zetesis.AlgebraicRows.partial_double_count_excludes_region",
+    "file": "Zetesis/AlgebraicRows.lean",
+    "line": 564
+  },
+  {
     "name": "Zetesis.AlgebraicRows.double_count_excludes",
     "file": "Zetesis/AlgebraicRows.lean",
-    "line": 553
+    "line": 621
   },
   {
     "name": "Zetesis.AlgebraicRows.cut_excludes_region",
     "file": "Zetesis/AlgebraicRows.lean",
-    "line": 582
+    "line": 650
   },
   {
     "name": "Zetesis.AlgebraicRows.conjunction_assoc_original",
     "file": "Zetesis/AlgebraicRows.lean",
-    "line": 616
+    "line": 684
   },
   {
     "name": "Zetesis.AlgebraicRows.conjunction_chain_original",
     "file": "Zetesis/AlgebraicRows.lean",
-    "line": 626
+    "line": 694
   },
   {
     "name": "Zetesis.AlgebraicRows.conjunction_flatten_original",
     "file": "Zetesis/AlgebraicRows.lean",
-    "line": 651
+    "line": 719
   },
   {
     "name": "Zetesis.AlgebraicRows.canonical_truth_original",
     "file": "Zetesis/AlgebraicRows.lean",
-    "line": 658
+    "line": 726
   },
   {
     "name": "Zetesis.AlgebraicRows.truth_implication_original",
     "file": "Zetesis/AlgebraicRows.lean",
-    "line": 664
+    "line": 732
   },
   {
     "name": "Zetesis.AlgebraicRows.double_negated_conjunction_original",
     "file": "Zetesis/AlgebraicRows.lean",
-    "line": 671
+    "line": 739
   },
   {
     "name": "Zetesis.AlgebraicRows.entailed_by_patterns",
     "file": "Zetesis/AlgebraicRows.lean",
-    "line": 685
+    "line": 753
   },
   {
     "name": "Zetesis.AlgebraicRows.equation_local",
     "file": "Zetesis/AlgebraicRows.lean",
-    "line": 701
+    "line": 769
   },
   {
     "name": "Zetesis.AlgebraicRows.entailed_by_part",
     "file": "Zetesis/AlgebraicRows.lean",
-    "line": 711
+    "line": 779
   },
   {
     "name": "Zetesis.AlgebraicRows.entailed_fact_step",
     "file": "Zetesis/AlgebraicRows.lean",
-    "line": 724
+    "line": 792
   },
   {
     "name": "Zetesis.AlgebraicRows.entailed_by_residual_patterns",
     "file": "Zetesis/AlgebraicRows.lean",
-    "line": 750
+    "line": 818
   },
   {
     "name": "Zetesis.AlgebraicRows.completion_fold_false_iff",
     "file": "Zetesis/AlgebraicRows.lean",
-    "line": 774
+    "line": 842
   },
   {
     "name": "Zetesis.AlgebraicRows.entailed_by_completion",
     "file": "Zetesis/AlgebraicRows.lean",
-    "line": 799
+    "line": 867
   },
   {
     "name": "Zetesis.AlgebraicRows.guard_releases",
     "file": "Zetesis/AlgebraicRows.lean",
-    "line": 826
+    "line": 894
   },
   {
     "name": "Zetesis.AlgebraicRows.parity_measure_odd",
     "file": "Zetesis/AlgebraicRows.lean",
-    "line": 851
+    "line": 919
   },
   {
     "name": "Zetesis.AlgebraicRows.parity_equation_of_xor",
     "file": "Zetesis/AlgebraicRows.lean",
-    "line": 915
+    "line": 983
+  },
+  {
+    "name": "Zetesis.AlgebraicRows.counting_replace_occurrence",
+    "file": "Zetesis/AlgebraicRows.lean",
+    "line": 1032
+  },
+  {
+    "name": "Zetesis.AlgebraicRows.counting_fold_one",
+    "file": "Zetesis/AlgebraicRows.lean",
+    "line": 1056
+  },
+  {
+    "name": "Zetesis.AlgebraicRows.bounded_counting_fold",
+    "file": "Zetesis/AlgebraicRows.lean",
+    "line": 1071
+  },
+  {
+    "name": "Zetesis.AlgebraicRows.bounded_counting_fold_one",
+    "file": "Zetesis/AlgebraicRows.lean",
+    "line": 1086
+  },
+  {
+    "name": "Zetesis.AlgebraicRows.bounded_counting_overflow_iff",
+    "file": "Zetesis/AlgebraicRows.lean",
+    "line": 1099
   },
   {
     "name": "Zetesis.AlgebraicRows.parity_forces",
     "file": "Zetesis/AlgebraicRows.lean",
-    "line": 957
+    "line": 1109
   },
   {
     "name": "Zetesis.AlgebraicRows.xor_definition",
     "file": "Zetesis/AlgebraicRows.lean",
-    "line": 972
+    "line": 1124
   },
   {
     "name": "Zetesis.AlgebraicRows.threshold_measure",
     "file": "Zetesis/AlgebraicRows.lean",
-    "line": 1001
+    "line": 1153
   },
   {
     "name": "Zetesis.AlgebraicRows.lower_of_threshold",
     "file": "Zetesis/AlgebraicRows.lean",
-    "line": 1026
+    "line": 1178
   },
   {
     "name": "Zetesis.AlgebraicRows.upper_of_negated_threshold",
     "file": "Zetesis/AlgebraicRows.lean",
-    "line": 1034
+    "line": 1186
   },
   {
     "name": "Zetesis.AlgebraicRows.bounds_of_asserted_conjunction",
     "file": "Zetesis/AlgebraicRows.lean",
-    "line": 1052
+    "line": 1204
   },
   {
     "name": "Zetesis.AlgebraicRows.count_measure",
     "file": "Zetesis/AlgebraicRows.lean",
-    "line": 1073
+    "line": 1225
   },
   {
     "name": "Zetesis.AlgebraicRows.lower_of_clause",
     "file": "Zetesis/AlgebraicRows.lean",
-    "line": 1095
+    "line": 1247
   },
   {
     "name": "Zetesis.AlgebraicRows.double_count_groups",
     "file": "Zetesis/AlgebraicRows.lean",
-    "line": 1123
+    "line": 1275
   },
   {
     "name": "Zetesis.ArithmeticFamilies.empty_admissible",
@@ -1135,6 +1215,61 @@
     "line": 81
   },
   {
+    "name": "Zetesis.AtomicWork.accepted_iff",
+    "file": "Zetesis/AtomicWork.lean",
+    "line": 40
+  },
+  {
+    "name": "Zetesis.AtomicWork.accepts_iff_fits",
+    "file": "Zetesis/AtomicWork.lean",
+    "line": 50
+  },
+  {
+    "name": "Zetesis.AtomicWork.refused_iff",
+    "file": "Zetesis/AtomicWork.lean",
+    "line": 63
+  },
+  {
+    "name": "Zetesis.AtomicWork.accepted_additive",
+    "file": "Zetesis/AtomicWork.lean",
+    "line": 73
+  },
+  {
+    "name": "Zetesis.AtomicWork.accepted_within_limit",
+    "file": "Zetesis/AtomicWork.lean",
+    "line": 80
+  },
+  {
+    "name": "Zetesis.AtomicWork.refused_preserves_prefix",
+    "file": "Zetesis/AtomicWork.lean",
+    "line": 89
+  },
+  {
+    "name": "Zetesis.AtomicWork.above_new_limit_refused",
+    "file": "Zetesis/AtomicWork.lean",
+    "line": 96
+  },
+  {
+    "name": "Zetesis.AtomicWork.charge_zero",
+    "file": "Zetesis/AtomicWork.lean",
+    "line": 104
+  },
+  {
+    "name": "Zetesis.AtomicWork.zero_accepted_iff",
+    "file": "Zetesis/AtomicWork.lean",
+    "line": 110
+  },
+  {
+    "name": "Zetesis.AtomicWork.zero_preserves_receipt",
+    "file": "Zetesis/AtomicWork.lean",
+    "line": 115
+  },
+  {
+    "name": "Zetesis.AtomicWork.accepted_composition",
+    "file": "Zetesis/AtomicWork.lean",
+    "line": 127
+  },
+  {
     "name": "Zetesis.AxisFolds.Reduction.op_unit",
     "file": "Zetesis/AxisFolds.lean",
     "line": 81
@@ -1265,19 +1400,159 @@
     "line": 421
   },
   {
+    "name": "Zetesis.AxisFolds.BoundedSum.encode_exact",
+    "file": "Zetesis/AxisFolds.lean",
+    "line": 448
+  },
+  {
+    "name": "Zetesis.AxisFolds.BoundedSum.encode_overflow_iff",
+    "file": "Zetesis/AxisFolds.lean",
+    "line": 454
+  },
+  {
+    "name": "Zetesis.AxisFolds.BoundedSum.none_op",
+    "file": "Zetesis/AxisFolds.lean",
+    "line": 463
+  },
+  {
+    "name": "Zetesis.AxisFolds.BoundedSum.op_none",
+    "file": "Zetesis/AxisFolds.lean",
+    "line": 467
+  },
+  {
+    "name": "Zetesis.AxisFolds.BoundedSum.op_encode",
+    "file": "Zetesis/AxisFolds.lean",
+    "line": 474
+  },
+  {
+    "name": "Zetesis.AxisFolds.BoundedSum.op_comm",
+    "file": "Zetesis/AxisFolds.lean",
+    "line": 486
+  },
+  {
+    "name": "Zetesis.AxisFolds.BoundedSum.op_assoc",
+    "file": "Zetesis/AxisFolds.lean",
+    "line": 493
+  },
+  {
+    "name": "Zetesis.AxisFolds.BoundedSum.zero_op",
+    "file": "Zetesis/AxisFolds.lean",
+    "line": 511
+  },
+  {
+    "name": "Zetesis.AxisFolds.BoundedSum.overflow_absorbs",
+    "file": "Zetesis/AxisFolds.lean",
+    "line": 533
+  },
+  {
+    "name": "Zetesis.AxisFolds.Minimum.choose_le_left",
+    "file": "Zetesis/AxisFolds.lean",
+    "line": 551
+  },
+  {
+    "name": "Zetesis.AxisFolds.Minimum.choose_le_right",
+    "file": "Zetesis/AxisFolds.lean",
+    "line": 561
+  },
+  {
+    "name": "Zetesis.AxisFolds.Minimum.le_choose_iff",
+    "file": "Zetesis/AxisFolds.lean",
+    "line": 571
+  },
+  {
+    "name": "Zetesis.AxisFolds.Minimum.choose_comm",
+    "file": "Zetesis/AxisFolds.lean",
+    "line": 587
+  },
+  {
+    "name": "Zetesis.AxisFolds.Minimum.choose_assoc",
+    "file": "Zetesis/AxisFolds.lean",
+    "line": 603
+  },
+  {
+    "name": "Zetesis.AxisFolds.Minimum.choose_idempotent",
+    "file": "Zetesis/AxisFolds.lean",
+    "line": 618
+  },
+  {
+    "name": "Zetesis.AxisFolds.Minimum.op_comm",
+    "file": "Zetesis/AxisFolds.lean",
+    "line": 630
+  },
+  {
+    "name": "Zetesis.AxisFolds.Minimum.op_assoc",
+    "file": "Zetesis/AxisFolds.lean",
+    "line": 637
+  },
+  {
+    "name": "Zetesis.AxisFolds.Minimum.reduction_idempotent",
+    "file": "Zetesis/AxisFolds.lean",
+    "line": 662
+  },
+  {
+    "name": "Zetesis.AxisFolds.Minimum.step_initial",
+    "file": "Zetesis/AxisFolds.lean",
+    "line": 681
+  },
+  {
+    "name": "Zetesis.AxisFolds.Minimum.step_equal_retains_current",
+    "file": "Zetesis/AxisFolds.lean",
+    "line": 686
+  },
+  {
+    "name": "Zetesis.AxisFolds.Minimum.step_value",
+    "file": "Zetesis/AxisFolds.lean",
+    "line": 694
+  },
+  {
+    "name": "Zetesis.AxisFolds.Minimum.step_value_map",
+    "file": "Zetesis/AxisFolds.lean",
+    "line": 714
+  },
+  {
+    "name": "Zetesis.AxisFolds.SetStreams.selected_inter",
+    "file": "Zetesis/AxisFolds.lean",
+    "line": 752
+  },
+  {
+    "name": "Zetesis.AxisFolds.SetStreams.append_union",
+    "file": "Zetesis/AxisFolds.lean",
+    "line": 788
+  },
+  {
+    "name": "Zetesis.AxisFolds.SetStreams.ordered_union_mem",
+    "file": "Zetesis/AxisFolds.lean",
+    "line": 823
+  },
+  {
+    "name": "Zetesis.AxisFolds.SetStreams.ordered_union_value",
+    "file": "Zetesis/AxisFolds.lean",
+    "line": 867
+  },
+  {
+    "name": "Zetesis.AxisFolds.SetStreams.ordered_union_equal_left",
+    "file": "Zetesis/AxisFolds.lean",
+    "line": 878
+  },
+  {
+    "name": "Zetesis.AxisFolds.SetStreams.ordered_union_sorted_unique",
+    "file": "Zetesis/AxisFolds.lean",
+    "line": 893
+  },
+  {
     "name": "Zetesis.AxisFolds.walk_exhausted_fold",
     "file": "Zetesis/AxisFolds.lean",
-    "line": 433
+    "line": 961
   },
   {
     "name": "Zetesis.AxisFolds.world_view_fold_complete",
     "file": "Zetesis/AxisFolds.lean",
-    "line": 443
+    "line": 971
   },
   {
     "name": "Zetesis.AxisFolds.world_view_fold_decided",
     "file": "Zetesis/AxisFolds.lean",
-    "line": 460
+    "line": 988
   },
   {
     "name": "Zetesis.BatchAccounting.initial_covers",
@@ -1625,6 +1900,41 @@
     "line": 232
   },
   {
+    "name": "Zetesis.BytePeak.accepted_iff",
+    "file": "Zetesis/BytePeak.lean",
+    "line": 41
+  },
+  {
+    "name": "Zetesis.BytePeak.refused_iff",
+    "file": "Zetesis/BytePeak.lean",
+    "line": 50
+  },
+  {
+    "name": "Zetesis.BytePeak.receipt_eq_max",
+    "file": "Zetesis/BytePeak.lean",
+    "line": 61
+  },
+  {
+    "name": "Zetesis.BytePeak.receipt_covers_inputs",
+    "file": "Zetesis/BytePeak.lean",
+    "line": 69
+  },
+  {
+    "name": "Zetesis.BytePeak.observe_zero",
+    "file": "Zetesis/BytePeak.lean",
+    "line": 80
+  },
+  {
+    "name": "Zetesis.BytePeak.acceptance_independent_of_previous",
+    "file": "Zetesis/BytePeak.lean",
+    "line": 87
+  },
+  {
+    "name": "Zetesis.BytePeak.successive_receipts",
+    "file": "Zetesis/BytePeak.lean",
+    "line": 110
+  },
+  {
     "name": "Zetesis.CandidateCursor.next_preserves",
     "file": "Zetesis/CandidateCursor.lean",
     "line": 71
@@ -1853,6 +2163,66 @@
     "name": "Zetesis.ChargeCadence.observes_next_multiple",
     "file": "Zetesis/ChargeCadence.lean",
     "line": 108
+  },
+  {
+    "name": "Zetesis.Refinement.CheckedSignedReplay.or_sound",
+    "file": "Zetesis/CheckedSignedReplay.lean",
+    "line": 30
+  },
+  {
+    "name": "Zetesis.Refinement.CheckedSignedReplay.neg_sound",
+    "file": "Zetesis/CheckedSignedReplay.lean",
+    "line": 41
+  },
+  {
+    "name": "Zetesis.Refinement.CheckedSignedReplay.and_sound",
+    "file": "Zetesis/CheckedSignedReplay.lean",
+    "line": 45
+  },
+  {
+    "name": "Zetesis.Refinement.CheckedSignedReplay.group_sound",
+    "file": "Zetesis/CheckedSignedReplay.lean",
+    "line": 57
+  },
+  {
+    "name": "Zetesis.Refinement.CheckedSignedReplay.check_layer_sound",
+    "file": "Zetesis/CheckedSignedReplay.lean",
+    "line": 92
+  },
+  {
+    "name": "Zetesis.Refinement.CheckedSignedReplay.extend_column",
+    "file": "Zetesis/CheckedSignedReplay.lean",
+    "line": 173
+  },
+  {
+    "name": "Zetesis.Refinement.CheckedSignedReplay.verify_sound",
+    "file": "Zetesis/CheckedSignedReplay.lean",
+    "line": 192
+  },
+  {
+    "name": "Zetesis.Refinement.CheckedSignedReplay.gather_forall",
+    "file": "Zetesis/CheckedSignedReplay.lean",
+    "line": 228
+  },
+  {
+    "name": "Zetesis.Refinement.CheckedSignedReplay.confirmed_roots_model",
+    "file": "Zetesis/CheckedSignedReplay.lean",
+    "line": 248
+  },
+  {
+    "name": "Zetesis.Refinement.CheckedSignedReplay.inserted_source",
+    "file": "Zetesis/CheckedSignedReplay.lean",
+    "line": 276
+  },
+  {
+    "name": "Zetesis.Refinement.CheckedSignedReplay.root_member",
+    "file": "Zetesis/CheckedSignedReplay.lean",
+    "line": 313
+  },
+  {
+    "name": "Zetesis.Refinement.CheckedSignedReplay.checked_row_excludes",
+    "file": "Zetesis/CheckedSignedReplay.lean",
+    "line": 335
   },
   {
     "name": "Zetesis.ChoiceConsumers.original_bounds",
@@ -2290,6 +2660,41 @@
     "line": 151
   },
   {
+    "name": "Zetesis.ComponentClosure.lowerClosure_monotone",
+    "file": "Zetesis/ComponentClosure.lean",
+    "line": 63
+  },
+  {
+    "name": "Zetesis.ComponentClosure.upperTransform_monotone",
+    "file": "Zetesis/ComponentClosure.lean",
+    "line": 73
+  },
+  {
+    "name": "Zetesis.ComponentClosure.bekic",
+    "file": "Zetesis/ComponentClosure.lean",
+    "line": 93
+  },
+  {
+    "name": "Zetesis.ComponentClosure.ordered_components",
+    "file": "Zetesis/ComponentClosure.lean",
+    "line": 142
+  },
+  {
+    "name": "Zetesis.ComponentClosure.completed_ordered_rounds",
+    "file": "Zetesis/ComponentClosure.lean",
+    "line": 157
+  },
+  {
+    "name": "Zetesis.ComponentClosure.settled_producer_covered",
+    "file": "Zetesis/ComponentClosure.lean",
+    "line": 188
+  },
+  {
+    "name": "Zetesis.ComponentClosure.completed_producers_closed",
+    "file": "Zetesis/ComponentClosure.lean",
+    "line": 209
+  },
+  {
     "name": "Zetesis.ConditionalConsumers.original_body",
     "file": "Zetesis/ConditionalConsumers.lean",
     "line": 28
@@ -2718,6 +3123,41 @@
     "name": "Zetesis.Refinement.CounterSearch.empty_candidate_skips_queries",
     "file": "Zetesis/CounterSearch.lean",
     "line": 247
+  },
+  {
+    "name": "Zetesis.LearnedRegions.alternative_nodes_agree",
+    "file": "Zetesis/CountermodelReplay.lean",
+    "line": 54
+  },
+  {
+    "name": "Zetesis.LearnedRegions.replay_nodes_agree",
+    "file": "Zetesis/CountermodelReplay.lean",
+    "line": 76
+  },
+  {
+    "name": "Zetesis.LearnedRegions.countermodel_row_refutes",
+    "file": "Zetesis/CountermodelReplay.lean",
+    "line": 117
+  },
+  {
+    "name": "Zetesis.LearnedRegions.antimonotone_superset_refutes",
+    "file": "Zetesis/CountermodelReuse.lean",
+    "line": 33
+  },
+  {
+    "name": "Zetesis.LearnedRegions.signed_body_reduct_antitone",
+    "file": "Zetesis/CountermodelReuse.lean",
+    "line": 53
+  },
+  {
+    "name": "Zetesis.LearnedRegions.witness_rules_persistent",
+    "file": "Zetesis/CountermodelReuse.lean",
+    "line": 76
+  },
+  {
+    "name": "Zetesis.LearnedRegions.falsum_free_countermodel_does_not_refute_superset",
+    "file": "Zetesis/CountermodelReuse.lean",
+    "line": 107
   },
   {
     "name": "Zetesis.DagSharing.getD_append_left",
@@ -4095,49 +4535,59 @@
     "line": 368
   },
   {
+    "name": "Zetesis.FormulaBounds.known_blocked_mono",
+    "file": "Zetesis/FormulaBounds.lean",
+    "line": 401
+  },
+  {
+    "name": "Zetesis.FormulaBounds.known_choice_blocked_mono",
+    "file": "Zetesis/FormulaBounds.lean",
+    "line": 415
+  },
+  {
     "name": "Zetesis.FormulaBounds.known_blocked_no_support",
     "file": "Zetesis/FormulaBounds.lean",
-    "line": 398
+    "line": 428
   },
   {
     "name": "Zetesis.FormulaBounds.known_choice_blocked_no_support",
     "file": "Zetesis/FormulaBounds.lean",
-    "line": 411
+    "line": 441
   },
   {
     "name": "Zetesis.FormulaBounds.unsupported_cut_with_choices",
     "file": "Zetesis/FormulaBounds.lean",
-    "line": 434
+    "line": 464
   },
   {
     "name": "Zetesis.FormulaBounds.sole_rule_forces_with_choices",
     "file": "Zetesis/FormulaBounds.lean",
-    "line": 453
+    "line": 483
   },
   {
     "name": "Zetesis.FormulaBounds.sole_choice_forces",
     "file": "Zetesis/FormulaBounds.lean",
-    "line": 474
+    "line": 504
   },
   {
     "name": "Zetesis.FormulaBounds.restriction_forces",
     "file": "Zetesis/FormulaBounds.lean",
-    "line": 499
+    "line": 529
   },
   {
     "name": "Zetesis.FormulaBounds.restriction_cuts",
     "file": "Zetesis/FormulaBounds.lean",
-    "line": 505
+    "line": 535
   },
   {
     "name": "Zetesis.FormulaBounds.restriction_contradiction_refutes",
     "file": "Zetesis/FormulaBounds.lean",
-    "line": 511
+    "line": 541
   },
   {
     "name": "Zetesis.FormulaBounds.restricted_stable_narrowing",
     "file": "Zetesis/FormulaBounds.lean",
-    "line": 524
+    "line": 554
   },
   {
     "name": "Zetesis.FormulaBounds.position_in_append",
@@ -5000,6 +5450,56 @@
     "line": 197
   },
   {
+    "name": "Zetesis.Refinement.MixedFormulaGraph.ordinary_fits",
+    "file": "Zetesis/MixedFormulaGraph.lean",
+    "line": 105
+  },
+  {
+    "name": "Zetesis.Refinement.MixedFormulaGraph.row_bits",
+    "file": "Zetesis/MixedFormulaGraph.lean",
+    "line": 115
+  },
+  {
+    "name": "Zetesis.Refinement.MixedFormulaGraph.layer_exact",
+    "file": "Zetesis/MixedFormulaGraph.lean",
+    "line": 132
+  },
+  {
+    "name": "Zetesis.Refinement.MixedFormulaGraph.evaluate_exact",
+    "file": "Zetesis/MixedFormulaGraph.lean",
+    "line": 193
+  },
+  {
+    "name": "Zetesis.Refinement.MixedFormulaGraph.root_column_exact",
+    "file": "Zetesis/MixedFormulaGraph.lean",
+    "line": 217
+  },
+  {
+    "name": "Zetesis.Refinement.MixedFormulaGraph.frozen_roots_exact",
+    "file": "Zetesis/MixedFormulaGraph.lean",
+    "line": 237
+  },
+  {
+    "name": "Zetesis.Refinement.MixedFormulaGraph.gather_bits_list",
+    "file": "Zetesis/MixedFormulaGraph.lean",
+    "line": 257
+  },
+  {
+    "name": "Zetesis.Refinement.MixedFormulaGraph.indexed_list",
+    "file": "Zetesis/MixedFormulaGraph.lean",
+    "line": 276
+  },
+  {
+    "name": "Zetesis.Refinement.MixedFormulaGraph.indexed_array",
+    "file": "Zetesis/MixedFormulaGraph.lean",
+    "line": 305
+  },
+  {
+    "name": "Zetesis.Refinement.MixedFormulaGraph.run_refines_evaluate",
+    "file": "Zetesis/MixedFormulaGraph.lean",
+    "line": 311
+  },
+  {
     "name": "Zetesis.ModelSelections.canonicalization_exact",
     "file": "Zetesis/ModelSelections.lean",
     "line": 34
@@ -5223,6 +5723,26 @@
     "name": "Zetesis.NormalSupport.answer_set_inside_closed",
     "file": "Zetesis/NormalSupport.lean",
     "line": 130
+  },
+  {
+    "name": "Zetesis.Refinement.NumericWitnessReplay.read_occurrence",
+    "file": "Zetesis/NumericWitnessReplay.lean",
+    "line": 41
+  },
+  {
+    "name": "Zetesis.Refinement.NumericWitnessReplay.frozen_read",
+    "file": "Zetesis/NumericWitnessReplay.lean",
+    "line": 73
+  },
+  {
+    "name": "Zetesis.Refinement.NumericWitnessReplay.selected_replay",
+    "file": "Zetesis/NumericWitnessReplay.lean",
+    "line": 84
+  },
+  {
+    "name": "Zetesis.LearnedRegions.known_countermodel_refutes_region",
+    "file": "Zetesis/NumericWitnessReplay.lean",
+    "line": 117
   },
   {
     "name": "Zetesis.ObjectiveBounds.mem_prune",
@@ -6227,42 +6747,62 @@
   {
     "name": "Zetesis.Refinement.PackedInterpretations.mask_bit",
     "file": "Zetesis/PackedInterpretations.lean",
-    "line": 68
+    "line": 84
+  },
+  {
+    "name": "Zetesis.Refinement.PackedInterpretations.insert_bit_exact",
+    "file": "Zetesis/PackedInterpretations.lean",
+    "line": 100
+  },
+  {
+    "name": "Zetesis.Refinement.PackedInterpretations.clear_bit_exact",
+    "file": "Zetesis/PackedInterpretations.lean",
+    "line": 134
+  },
+  {
+    "name": "Zetesis.Refinement.PackedInterpretations.combine_prefix_exact",
+    "file": "Zetesis/PackedInterpretations.lean",
+    "line": 183
   },
   {
     "name": "Zetesis.Refinement.PackedInterpretations.contains_eq_bit",
     "file": "Zetesis/PackedInterpretations.lean",
-    "line": 79
+    "line": 220
   },
   {
     "name": "Zetesis.Refinement.PackedInterpretations.insert_exact",
     "file": "Zetesis/PackedInterpretations.lean",
-    "line": 90
+    "line": 231
   },
   {
     "name": "Zetesis.Refinement.PackedInterpretations.insertAll_exact",
     "file": "Zetesis/PackedInterpretations.lean",
-    "line": 118
+    "line": 242
   },
   {
     "name": "Zetesis.Refinement.PackedInterpretations.pack_exact",
     "file": "Zetesis/PackedInterpretations.lean",
-    "line": 146
+    "line": 270
   },
   {
     "name": "Zetesis.Refinement.PackedInterpretations.export32_exact",
     "file": "Zetesis/PackedInterpretations.lean",
-    "line": 211
+    "line": 335
   },
   {
     "name": "Zetesis.Refinement.PackedInterpretations.pack_denotes",
     "file": "Zetesis/PackedInterpretations.lean",
-    "line": 261
+    "line": 385
   },
   {
     "name": "Zetesis.Refinement.PackedInterpretations.export32_denotes",
     "file": "Zetesis/PackedInterpretations.lean",
-    "line": 272
+    "line": 396
+  },
+  {
+    "name": "Zetesis.Refinement.PackedInterpretations.candidate_word_read",
+    "file": "Zetesis/PackedInterpretations.lean",
+    "line": 414
   },
   {
     "name": "Zetesis.PackedQueryLiterals.decode_encode",
@@ -6292,182 +6832,192 @@
   {
     "name": "Zetesis.Refinement.PackedSubsets.pack_represents",
     "file": "Zetesis/PackedSubsets.lean",
-    "line": 59
+    "line": 45
   },
   {
     "name": "Zetesis.Refinement.PackedSubsets.coordinate_stored",
     "file": "Zetesis/PackedSubsets.lean",
-    "line": 76
+    "line": 62
   },
   {
     "name": "Zetesis.Refinement.PackedSubsets.bit_member",
     "file": "Zetesis/PackedSubsets.lean",
-    "line": 85
+    "line": 71
   },
   {
     "name": "Zetesis.Refinement.PackedSubsets.insert_represents",
     "file": "Zetesis/PackedSubsets.lean",
-    "line": 99
+    "line": 85
   },
   {
     "name": "Zetesis.Refinement.PackedSubsets.clear_represents",
     "file": "Zetesis/PackedSubsets.lean",
-    "line": 111
+    "line": 97
   },
   {
     "name": "Zetesis.Refinement.PackedSubsets.represented_shape",
     "file": "Zetesis/PackedSubsets.lean",
-    "line": 129
+    "line": 115
   },
   {
     "name": "Zetesis.Refinement.PackedSubsets.absent_selected",
     "file": "Zetesis/PackedSubsets.lean",
-    "line": 162
+    "line": 148
   },
   {
     "name": "Zetesis.Refinement.PackedSubsets.carry_refines",
     "file": "Zetesis/PackedSubsets.lean",
-    "line": 177
+    "line": 163
   },
   {
     "name": "Zetesis.Refinement.PackedSubsets.carry_counted",
     "file": "Zetesis/PackedSubsets.lean",
-    "line": 224
+    "line": 210
   },
   {
     "name": "Zetesis.Refinement.PackedSubsets.walk_refines",
     "file": "Zetesis/PackedSubsets.lean",
-    "line": 261
+    "line": 247
   },
   {
     "name": "Zetesis.Refinement.PackedSubsets.selected_false",
     "file": "Zetesis/PackedSubsets.lean",
-    "line": 317
+    "line": 303
   },
   {
     "name": "Zetesis.Refinement.PackedSubsets.population_zero",
     "file": "Zetesis/PackedSubsets.lean",
-    "line": 324
+    "line": 310
   },
   {
     "name": "Zetesis.Refinement.PackedSubsets.empty_walk_refines",
     "file": "Zetesis/PackedSubsets.lean",
-    "line": 333
+    "line": 319
   },
   {
     "name": "Zetesis.Refinement.PackedSubsets.states_semantics",
     "file": "Zetesis/PackedSubsets.lean",
-    "line": 355
+    "line": 341
   },
   {
     "name": "Zetesis.Refinement.PackedSubsets.states_shape",
     "file": "Zetesis/PackedSubsets.lean",
-    "line": 366
+    "line": 352
   },
   {
     "name": "Zetesis.Refinement.PackedSubsets.proper_iff_visited",
     "file": "Zetesis/PackedSubsets.lean",
-    "line": 378
+    "line": 364
   },
   {
     "name": "Zetesis.Refinement.PackedSubsets.countermodel_search_iff",
     "file": "Zetesis/PackedSubsets.lean",
-    "line": 402
+    "line": 388
   },
   {
     "name": "Zetesis.Refinement.PackedSubsets.check_iff_answer_set",
     "file": "Zetesis/PackedSubsets.lean",
-    "line": 433
+    "line": 419
   },
   {
     "name": "Zetesis.Refinement.PackedSubsets.selected_atoms_nodup",
     "file": "Zetesis/PackedSubsets.lean",
-    "line": 454
+    "line": 440
   },
   {
     "name": "Zetesis.Refinement.PackedSubsets.selected_atoms_ordered",
     "file": "Zetesis/PackedSubsets.lean",
-    "line": 464
+    "line": 450
   },
   {
     "name": "Zetesis.Refinement.PackedSubsets.selected_atoms_truth",
     "file": "Zetesis/PackedSubsets.lean",
-    "line": 475
+    "line": 461
   },
   {
     "name": "Zetesis.Refinement.PackedSubsets.selected_atoms_representation",
     "file": "Zetesis/PackedSubsets.lean",
-    "line": 483
+    "line": 469
   },
   {
     "name": "Zetesis.Refinement.PackedSubsets.check_packed_iff_answer_set",
     "file": "Zetesis/PackedSubsets.lean",
-    "line": 501
+    "line": 487
   },
   {
     "name": "Zetesis.Refinement.PackedSubsets.carry_crosses_word_boundary",
     "file": "Zetesis/PackedSubsets.lean",
-    "line": 511
+    "line": 497
   },
   {
     "name": "Zetesis.Refinement.PackedWordIterator.start_invariant",
     "file": "Zetesis/PackedWordIterator.lean",
-    "line": 65
+    "line": 75
   },
   {
     "name": "Zetesis.Refinement.PackedWordIterator.exhausted_iff",
     "file": "Zetesis/PackedWordIterator.lean",
-    "line": 70
+    "line": 80
   },
   {
     "name": "Zetesis.Refinement.PackedWordIterator.step_active",
     "file": "Zetesis/PackedWordIterator.lean",
-    "line": 80
+    "line": 90
   },
   {
     "name": "Zetesis.Refinement.PackedWordIterator.advance_invariant",
     "file": "Zetesis/PackedWordIterator.lean",
-    "line": 97
+    "line": 107
   },
   {
     "name": "Zetesis.Refinement.PackedWordIterator.suffix_cons",
     "file": "Zetesis/PackedWordIterator.lean",
-    "line": 109
+    "line": 119
   },
   {
     "name": "Zetesis.Refinement.PackedWordIterator.step_refines",
     "file": "Zetesis/PackedWordIterator.lean",
-    "line": 122
+    "line": 132
   },
   {
     "name": "Zetesis.Refinement.PackedWordIterator.remaining_exact",
     "file": "Zetesis/PackedWordIterator.lean",
-    "line": 141
+    "line": 151
   },
   {
     "name": "Zetesis.Refinement.PackedWordIterator.run_prefix",
     "file": "Zetesis/PackedWordIterator.lean",
-    "line": 162
+    "line": 172
   },
   {
     "name": "Zetesis.Refinement.PackedWordIterator.run_complete",
     "file": "Zetesis/PackedWordIterator.lean",
-    "line": 188
+    "line": 198
   },
   {
     "name": "Zetesis.Refinement.PackedWordIterator.run_exhausted",
     "file": "Zetesis/PackedWordIterator.lean",
-    "line": 211
+    "line": 221
   },
   {
     "name": "Zetesis.Refinement.PackedWordIterator.initialized_exact",
     "file": "Zetesis/PackedWordIterator.lean",
-    "line": 222
+    "line": 232
   },
   {
     "name": "Zetesis.Refinement.PackedWordIterator.packed_exact",
     "file": "Zetesis/PackedWordIterator.lean",
-    "line": 242
+    "line": 252
+  },
+  {
+    "name": "Zetesis.Refinement.PackedWordIterator.SetBits.least_clear_suffix",
+    "file": "Zetesis/PackedWordIterator.lean",
+    "line": 279
+  },
+  {
+    "name": "Zetesis.Refinement.PackedWordIterator.SetBits.lowest_bit_arithmetic",
+    "file": "Zetesis/PackedWordIterator.lean",
+    "line": 320
   },
   {
     "name": "Zetesis.PairwiseExclusions.masked_unit_sum_two",
@@ -6735,9 +7285,14 @@
     "line": 302
   },
   {
+    "name": "Zetesis.PossibleFoundedness.body_upper_mono",
+    "file": "Zetesis/PossibleFoundedness.lean",
+    "line": 346
+  },
+  {
     "name": "Zetesis.PossibleFoundedness.body_upper_sound",
     "file": "Zetesis/PossibleFoundedness.lean",
-    "line": 337
+    "line": 381
   },
   {
     "name": "Zetesis.ProducerScheduling.stable_of_reads_only",
@@ -7255,14 +7810,19 @@
     "line": 174
   },
   {
+    "name": "Zetesis.ReductRegions.masked_known_mono",
+    "file": "Zetesis/ReductRegions.lean",
+    "line": 247
+  },
+  {
     "name": "Zetesis.ReductRegions.masked_known_sound",
     "file": "Zetesis/ReductRegions.lean",
-    "line": 244
+    "line": 284
   },
   {
     "name": "Zetesis.ReductRegions.masked_known_narrows",
     "file": "Zetesis/ReductRegions.lean",
-    "line": 281
+    "line": 321
   },
   {
     "name": "Zetesis.RegionBounds.lookup_selection_exact",
@@ -7283,6 +7843,76 @@
     "name": "Zetesis.RegionBounds.narrowing_exact",
     "file": "Zetesis/RegionBounds.lean",
     "line": 139
+  },
+  {
+    "name": "Zetesis.Refinement.RegionalOriginal.selection_sublist",
+    "file": "Zetesis/RegionalOriginal.lean",
+    "line": 28
+  },
+  {
+    "name": "Zetesis.Refinement.RegionalOriginal.selection_bounds",
+    "file": "Zetesis/RegionalOriginal.lean",
+    "line": 47
+  },
+  {
+    "name": "Zetesis.Refinement.RegionalOriginal.guard_mono",
+    "file": "Zetesis/RegionalOriginal.lean",
+    "line": 63
+  },
+  {
+    "name": "Zetesis.Refinement.RegionalOriginal.numeric_sound",
+    "file": "Zetesis/RegionalOriginal.lean",
+    "line": 91
+  },
+  {
+    "name": "Zetesis.Refinement.RegionalOriginal.read_layer_sound",
+    "file": "Zetesis/RegionalOriginal.lean",
+    "line": 130
+  },
+  {
+    "name": "Zetesis.Refinement.RegionalOriginal.extend",
+    "file": "Zetesis/RegionalOriginal.lean",
+    "line": 183
+  },
+  {
+    "name": "Zetesis.Refinement.RegionalOriginal.atoms_sound",
+    "file": "Zetesis/RegionalOriginal.lean",
+    "line": 199
+  },
+  {
+    "name": "Zetesis.Refinement.RegionalOriginal.scan_sound",
+    "file": "Zetesis/RegionalOriginal.lean",
+    "line": 210
+  },
+  {
+    "name": "Zetesis.Refinement.RegionalOriginal.matched_signs",
+    "file": "Zetesis/RegionalOriginal.lean",
+    "line": 251
+  },
+  {
+    "name": "Zetesis.Refinement.RegionalOriginal.regional_row_excludes",
+    "file": "Zetesis/RegionalOriginal.lean",
+    "line": 275
+  },
+  {
+    "name": "Zetesis.Refinement.RegionalProducer.supporter_eligible",
+    "file": "Zetesis/RegionalProducer.lean",
+    "line": 58
+  },
+  {
+    "name": "Zetesis.Refinement.RegionalProducer.sole_body_sound",
+    "file": "Zetesis/RegionalProducer.lean",
+    "line": 88
+  },
+  {
+    "name": "Zetesis.Refinement.RegionalProducer.produced_sound",
+    "file": "Zetesis/RegionalProducer.lean",
+    "line": 130
+  },
+  {
+    "name": "Zetesis.Refinement.RegionalProducer.producer_row_excludes",
+    "file": "Zetesis/RegionalProducer.lean",
+    "line": 151
   },
   {
     "name": "Zetesis.RelationExtension.reconstruction_preserved",
@@ -7545,47 +8175,47 @@
     "line": 138
   },
   {
-    "name": "Zetesis.Cube.contains_singleton",
+    "name": "Zetesis.Region.contains_singleton",
     "file": "Zetesis/Search.lean",
     "line": 40
   },
   {
-    "name": "Zetesis.Cube.contains_splitFalse",
+    "name": "Zetesis.Region.contains_splitFalse",
     "file": "Zetesis/Search.lean",
     "line": 49
   },
   {
-    "name": "Zetesis.Cube.contains_splitTrue",
+    "name": "Zetesis.Region.contains_splitTrue",
     "file": "Zetesis/Search.lean",
     "line": 63
   },
   {
-    "name": "Zetesis.Cube.split_partition",
+    "name": "Zetesis.Region.split_partition",
     "file": "Zetesis/Search.lean",
     "line": 77
   },
   {
-    "name": "Zetesis.Cube.split_disjoint",
+    "name": "Zetesis.Region.split_disjoint",
     "file": "Zetesis/Search.lean",
     "line": 92
   },
   {
-    "name": "Zetesis.Cube.fresh_branches",
+    "name": "Zetesis.Region.fresh_branches",
     "file": "Zetesis/Search.lean",
     "line": 98
   },
   {
-    "name": "Zetesis.Cube.contains_narrow",
+    "name": "Zetesis.Region.contains_narrow",
     "file": "Zetesis/Search.lean",
     "line": 109
   },
   {
-    "name": "Zetesis.Cube.narrow_preserves_valid",
+    "name": "Zetesis.Region.narrow_preserves_valid",
     "file": "Zetesis/Search.lean",
     "line": 125
   },
   {
-    "name": "Zetesis.Cube.consequence_narrow_preserves",
+    "name": "Zetesis.Region.consequence_narrow_preserves",
     "file": "Zetesis/Search.lean",
     "line": 138
   },
@@ -7890,6 +8520,41 @@
     "line": 217
   },
   {
+    "name": "Zetesis.Refinement.SignedOriginal.run_columns",
+    "file": "Zetesis/SignedOriginal.lean",
+    "line": 25
+  },
+  {
+    "name": "Zetesis.Refinement.SignedOriginal.signed_id_exact",
+    "file": "Zetesis/SignedOriginal.lean",
+    "line": 37
+  },
+  {
+    "name": "Zetesis.Refinement.SignedOriginal.frozen_id",
+    "file": "Zetesis/SignedOriginal.lean",
+    "line": 48
+  },
+  {
+    "name": "Zetesis.Refinement.SignedOriginal.decode_append",
+    "file": "Zetesis/SignedOriginal.lean",
+    "line": 59
+  },
+  {
+    "name": "Zetesis.Refinement.SignedOriginal.decode_extends",
+    "file": "Zetesis/SignedOriginal.lean",
+    "line": 72
+  },
+  {
+    "name": "Zetesis.Refinement.SignedOriginal.at_ordinal",
+    "file": "Zetesis/SignedOriginal.lean",
+    "line": 90
+  },
+  {
+    "name": "Zetesis.Refinement.SignedOriginal.numeric_id_replay",
+    "file": "Zetesis/SignedOriginal.lean",
+    "line": 117
+  },
+  {
     "name": "Zetesis.SingletonHeads.singleton_head_truth",
     "file": "Zetesis/SingletonHeads.lean",
     "line": 28
@@ -8068,6 +8733,36 @@
     "name": "Zetesis.SourceSupport.completed_activity_covers",
     "file": "Zetesis/SourceSupport.lean",
     "line": 134
+  },
+  {
+    "name": "Zetesis.Refinement.StableProducerKnowledge.head_mem",
+    "file": "Zetesis/StableProducerKnowledge.lean",
+    "line": 65
+  },
+  {
+    "name": "Zetesis.Refinement.StableProducerKnowledge.supported_body",
+    "file": "Zetesis/StableProducerKnowledge.lean",
+    "line": 73
+  },
+  {
+    "name": "Zetesis.Refinement.StableProducerKnowledge.supported_possible",
+    "file": "Zetesis/StableProducerKnowledge.lean",
+    "line": 80
+  },
+  {
+    "name": "Zetesis.Refinement.StableProducerKnowledge.stable_support_survives",
+    "file": "Zetesis/StableProducerKnowledge.lean",
+    "line": 109
+  },
+  {
+    "name": "Zetesis.Refinement.StableProducerKnowledge.scan_signs",
+    "file": "Zetesis/StableProducerKnowledge.lean",
+    "line": 130
+  },
+  {
+    "name": "Zetesis.Refinement.StableProducerKnowledge.stable_signs_refute_region",
+    "file": "Zetesis/StableProducerKnowledge.lean",
+    "line": 157
   },
   {
     "name": "Zetesis.StorageOwners.sum_within_reservations",
@@ -8438,6 +9133,96 @@
     "name": "Zetesis.StreamedRegions.pending_can_retain_answer",
     "file": "Zetesis/StreamedRegions.lean",
     "line": 148
+  },
+  {
+    "name": "Zetesis.StreamedSubjects.holds_truth_iff",
+    "file": "Zetesis/StreamedSubjects.lean",
+    "line": 40
+  },
+  {
+    "name": "Zetesis.StreamedSubjects.holds_opposite_iff",
+    "file": "Zetesis/StreamedSubjects.lean",
+    "line": 50
+  },
+  {
+    "name": "Zetesis.StreamedSubjects.decides_truth_iff",
+    "file": "Zetesis/StreamedSubjects.lean",
+    "line": 61
+  },
+  {
+    "name": "Zetesis.StreamedSubjects.decides_occurrences_iff",
+    "file": "Zetesis/StreamedSubjects.lean",
+    "line": 70
+  },
+  {
+    "name": "Zetesis.StreamedSubjects.occurrence_row",
+    "file": "Zetesis/StreamedSubjects.lean",
+    "line": 89
+  },
+  {
+    "name": "Zetesis.StreamedSubjects.body_excludes",
+    "file": "Zetesis/StreamedSubjects.lean",
+    "line": 118
+  },
+  {
+    "name": "Zetesis.StreamedSubjects.occurrence_narrow_eq_falsify",
+    "file": "Zetesis/StreamedSubjects.lean",
+    "line": 146
+  },
+  {
+    "name": "Zetesis.StreamedSubjects.fresh_step_reaches",
+    "file": "Zetesis/StreamedSubjects.lean",
+    "line": 191
+  },
+  {
+    "name": "Zetesis.StreamedSubjects.occurrence_conditions_persist",
+    "file": "Zetesis/StreamedSubjects.lean",
+    "line": 209
+  },
+  {
+    "name": "Zetesis.StreamedSubjects.completed_fixed_iff",
+    "file": "Zetesis/StreamedSubjects.lean",
+    "line": 228
+  },
+  {
+    "name": "Zetesis.StreamedSubjects.grouped_closed_iff",
+    "file": "Zetesis/StreamedSubjects.lean",
+    "line": 240
+  },
+  {
+    "name": "Zetesis.StreamedSubjects.grouped_joint_eq",
+    "file": "Zetesis/StreamedSubjects.lean",
+    "line": 261
+  },
+  {
+    "name": "Zetesis.StreamedSubjects.falsify_fixed_of_not_sure_not_fresh",
+    "file": "Zetesis/StreamedSubjects.lean",
+    "line": 281
+  },
+  {
+    "name": "Zetesis.StreamedSubjects.no_consequence_occurrence_fixed",
+    "file": "Zetesis/StreamedSubjects.lean",
+    "line": 331
+  },
+  {
+    "name": "Zetesis.StreamedSubjects.no_consequence_exclusion_fixed",
+    "file": "Zetesis/StreamedSubjects.lean",
+    "line": 368
+  },
+  {
+    "name": "Zetesis.StreamedSubjects.no_consequence_occurrences_closed",
+    "file": "Zetesis/StreamedSubjects.lean",
+    "line": 402
+  },
+  {
+    "name": "Zetesis.StreamedSubjects.no_consequence_constraint_closed",
+    "file": "Zetesis/StreamedSubjects.lean",
+    "line": 438
+  },
+  {
+    "name": "Zetesis.StreamedSubjects.complete_no_consequence_closed",
+    "file": "Zetesis/StreamedSubjects.lean",
+    "line": 485
   },
   {
     "name": "Zetesis.StrongNegation.satisfies_rename",
@@ -9985,29 +10770,64 @@
     "line": 70
   },
   {
+    "name": "Zetesis.WorkPermits.take_preserves_window",
+    "file": "Zetesis/WorkPermits.lean",
+    "line": 56
+  },
+  {
+    "name": "Zetesis.WorkPermits.take_partitions_remaining",
+    "file": "Zetesis/WorkPermits.lean",
+    "line": 64
+  },
+  {
+    "name": "Zetesis.WorkPermits.refund_preserves_window",
+    "file": "Zetesis/WorkPermits.lean",
+    "line": 78
+  },
+  {
+    "name": "Zetesis.WorkPermits.settlement_partitions_grant",
+    "file": "Zetesis/WorkPermits.lean",
+    "line": 95
+  },
+  {
     "name": "Zetesis.WorkPermits.grant_conserves",
     "file": "Zetesis/WorkPermits.lean",
-    "line": 43
+    "line": 127
   },
   {
     "name": "Zetesis.WorkPermits.settle_conserves",
     "file": "Zetesis/WorkPermits.lean",
-    "line": 52
+    "line": 136
   },
   {
     "name": "Zetesis.WorkPermits.consumed_within_limit",
     "file": "Zetesis/WorkPermits.lean",
-    "line": 61
+    "line": 145
   },
   {
     "name": "Zetesis.WorkPermits.settled_exhaustion",
     "file": "Zetesis/WorkPermits.lean",
-    "line": 69
+    "line": 153
   },
   {
     "name": "Zetesis.WorkPermits.unused_return_enables_work",
     "file": "Zetesis/WorkPermits.lean",
-    "line": 76
+    "line": 160
+  },
+  {
+    "name": "Zetesis.WorkPermits.refund_then_settle",
+    "file": "Zetesis/WorkPermits.lean",
+    "line": 171
+  },
+  {
+    "name": "Zetesis.WorkPermits.settled_replacement",
+    "file": "Zetesis/WorkPermits.lean",
+    "line": 196
+  },
+  {
+    "name": "Zetesis.WorkPermits.unused_window_does_not_commit",
+    "file": "Zetesis/WorkPermits.lean",
+    "line": 211
   },
   {
     "name": "Zetesis.WorldMasks.membership_exact",

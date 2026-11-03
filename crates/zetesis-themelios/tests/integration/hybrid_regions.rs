@@ -1,7 +1,7 @@
 //! Original-region refutation preserves all unrefuted candidate completions.
 
+use zetesis_algebra::{Cancellation, Stop, region::Region};
 use zetesis_core::Model;
-use zetesis_cpu::{Cancellation, Stop, regions::Region};
 use zetesis_reference_support::hybrid;
 use zetesis_themelios::{
     ConstraintAllowance, ConstraintCheckCause, ConstraintCheckLimits, ConstraintCheckStatistics,

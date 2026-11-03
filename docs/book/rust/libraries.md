@@ -54,7 +54,7 @@ retain the contracts documented in the themelios manual.
 | Look up complete typed atoms | `Model::lookup`, `AtomIndex`, `CatalogIndex`, `AtomLookup`, `AtomPattern::key`, `BindingView` | [Checked lookup example](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-core/examples/README.md#checked-atom-lookup-probe) |
 | Build an append-only atom catalog | `atom_interner::{AtomInterner, CommittedAtoms, AtomAppender}` | [Catalog construction](models.md#building-a-catalog-during-grounding) |
 | Select equality matches in one relation | `zetesis_core::relation::{Relation, Query, Selection, Mask}` | [Core relation API](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-core/src/relation.rs) |
-| Restrict rows and project finite domains | `zetesis_cpu::table::{Table, Domain, Selection}` | [Finite tables](finite-tables.md) |
+| Restrict rows and project finite domains | `zetesis_core::table::{Table, Domain, Selection}` | [Finite tables](finite-tables.md) |
 | Inspect source domains and keyed relations | `zetesis_domain` | [Source preparation](source.md) |
 
 Atoms retain signed predicates, argument order and typed values. Dense positions,
@@ -65,17 +65,31 @@ row does not establish answer-set membership. See
 
 ## Membership and execution
 
+`zetesis-algebra` is the bottom execution layer and depends on no workspace
+crate. It owns cancellation, regions, word operations, the scalar walk and the
+generic frontier. Source tables belong to `zetesis-core` alongside their typed
+relations; the semantic solver libraries retain theory and answer-set meaning.
+
 | Task | Public library entry points | Guide |
 | --- | --- | --- |
 | Build finite formulas and check membership | `zetesis_ferraris::{Theory, FormulaParts, NodeView, Interpretation, check}` | [Finite reducts](reducts.md) |
 | Reuse original truth or a frozen reduct | `EvaluationWorkspace`, `FormulaEvaluation`, `FrozenReduct` | [Finite reducts](reducts.md) |
 | Use checked formula specializations | `zetesis_ferraris::{PositivePlan, StratifiedPlan, TightPlan, TightWorkspace}` | [Formula plans](sessions.md#formula-membership-plans) |
-| Cover and narrow candidate regions | `zetesis_cpu::regions::{Region, Traversal}`, `zetesis_ferraris::{Narrower, producers}` | [Exact execution](../architecture/execution.md) |
+| Cover and narrow candidate regions | `zetesis_algebra::{region::Region, walk::Walk}`, `zetesis_ferraris::{Narrower, producers}` | [Exact execution](../architecture/execution.md) |
+| Share packed word operations | `zetesis_algebra::words` | [Exact execution](../architecture/execution.md) |
+| Share parallel frontier protocols | `zetesis_algebra::walk::frontier::Frontier` | [Parallel walks](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-stable/README.md#walking-the-tree-with-several-workers) |
 | Enumerate formula answers and complete reduct queries | `zetesis_stable::{StableModels, check, CompletionExecutor}` | [Sessions](sessions.md) |
 | Check an admitted program's streamed constraints over candidate regions | `zetesis_stable::StreamedConstraints`, `StableModels::set_streamed_constraints` | [Hybrid formula sessions](sessions.md#hybrid-formula-sessions) |
 | Produce parallel candidate batches | `StableModels::with_region_producers`, `next_batch_with_completion` | [Formula plans](sessions.md#formula-membership-plans) |
 | Share device resources | `zetesis_wgpu::GpuContext`, `GpuFormulaProfile`, `ExecutionResources` | [Device ownership](../architecture/ownership.md#device-resource-scope) |
 | Select relation masks on a device | `zetesis_wgpu::GpuRelationExecutor` | [Relation selection](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-wgpu/README.md#immutable-relation-selection) |
+
+`zetesis_algebra::words::Words` wraps existing packed storage or a borrowed slice
+without allocating, normalizing tails or acquiring semantic owner identity.
+Region and interpretation owners retain their logical extents; interpretations
+also retain the exact theory. The same primitive home supplies 64-bit membership
+and ascending bit traversal, numeric 32-bit halves, and 32-bit borrowed table
+intersection. Each caller retains its allocation and work-admission contract.
 
 `PreparedInput` borrows a coherent formula, hybrid, terminal-definition or
 certified source owner. Keep the theory, atom catalog, objectives and source
@@ -109,6 +123,96 @@ semantic solver libraries. Record checks, physical tests and Lean proofs have
 different scopes; none alone certifies the complete Rust/WGSL implementation.
 See [validation](../reference/validation.md) and
 [proof correspondence](../lean/correspondence.md) before extending those claims.
+
+## Shared primitive ownership
+
+Direct callers of the former `zetesis-cpu` package use `zetesis-algebra`.
+The move preserves primitive behavior, typed failures and receipts; it does not
+replace the reduct check or change the available execution backends.
+
+| Former owner | Current owner |
+| --- | --- |
+| `zetesis_cpu::{Cancellation, Stop, Meter, Metered, poll_due}` | Same names in `zetesis_algebra` |
+| `zetesis_cpu::regions::{Region, Narrowing}` | `zetesis_algebra::region::{Region, Narrowing}` |
+| `zetesis_cpu::regions::{Traversal, Counting, Visit, RegionStatistics}` | `zetesis_algebra::walk::{Walk, Counting, Visit, RegionStatistics}` |
+| `zetesis_core::packed` | `zetesis_algebra::words` |
+| `zetesis_cpu::table` | `zetesis_core::table` |
+| `zetesis_solve::Subject` (also re-exported by `zetesis_cli`) | `zetesis_solve::Original`, also re-exported as `zetesis_cli::Original` |
+| `zetesis_themelios::ProgramSubject` | `zetesis_themelios::ProgramOriginal` |
+| Original-input result fields and accessors named `subject` | `original` |
+
+`Original` retains the session's immutable source or theory identity.
+`ProgramOriginal` identifies the program, part or statement retained by an
+admission failure. Result owners and typed failure wrappers expose this
+evidence through `original`; `FormulaFailure::original_program()` still
+returns the whole retained program. These names do not change
+`OriginalSubject`, `FrozenSubject` or the class-indexed narrowing subjects.
+
+The scalar walk's type is `Walk`; there is no old-package forwarding crate.
+`zetesis_stable::RegionFrontierStatistics` keeps its public fields and now
+re-exports the shared frontier's statistics. The schedules use the shared
+`walk::inspect` classifier and retain their receipt and publication boundaries.
+These operations and the separate `Reduction`/`Verdict` interface are described
+below; moving their namespaces alone establishes none of their contracts.
+
+`zetesis_algebra::reduction::Reduction` combines pure values: `All` and `Any`
+combine Booleans, tuple products combine both coordinates, `CheckedSum` records
+exact nonnegative sums or overflow, and `Minimum` selects a value under its
+lawful-order contract. `Verdict` separately carries accepted absorption,
+completion, emptiness or a typed undecided result. The `reduction::sets` cursors
+refine intersection and union on finite occurrence streams; they introduce no
+set owner and leave canonical `Model` construction and its failures with the
+caller. None of these value operations proves membership, coverage or optimality.
+
+### Candidate and countermodel knowledge
+
+`Narrower::knowledge()` constructs `Knowledge<AnswerSetsSought>` for original
+formula narrowing, restrictions and objective bounds.
+`Narrower::frozen_knowledge()` constructs `Knowledge<Countermodels>` for a
+candidate's frozen reduct. The markers are sealed types from `zetesis_algebra`;
+the two knowledge types cannot be substituted for one another.
+
+Direct callers of frozen narrowing must use `frozen_knowledge()` and explicitly
+name `Knowledge<Countermodels>` wherever they store its result. The default
+`Knowledge` parameter remains `AnswerSetsSought`. Each value still belongs to
+the narrower that constructed it; the class marker does not authenticate that
+runtime owner. `NarrowingScratch` retains its worker-owned allocations, while
+frozen execution borrows only the common scratch and cannot read learned rows.
+
+### Region intervals and walk entries
+
+`Region` contains the atom universe and its held/cut masks. Equality compares
+that interval; selection policy is carried by `region::Entry<S>`, with the
+caller's lineage state. `Entry::prefer` records an open atom, `split_atom`
+rechecks it after narrowing, and `split_with` clears it in both children.
+
+`Walk::next` borrows the complete entry. `Walk::surrender` transfers pending
+entries, including preference and state; resume them through `with_entry`, or
+`with_narrowed_root` when their closure is already established. `Visit` hands
+terminal regions and state to its consumer, where split policy is no longer
+needed.
+
+`walk::inspect` is the shared allocation-free classification after narrowing:
+refuted, fully decided, counted, or split on an open atom. Scalar, parallel,
+slate and published countermodel paths use it. The schedules keep their own
+receipt publication and capacity admission; the classifier neither checks
+answer-set membership nor declares a counted region accepted.
+
+`Frontier::publish_split_with` reserves queue capacity while retaining the parent,
+then constructs the children only after admission. Failure returns the original
+typed error and that parent, with its preference and state intact. One queued
+child and one child kept in hand still increase unresolved work by one.
+`Frontier::requeue` likewise returns the entry on refusal. The scalar walk keeps
+its parent for retry or surrender. Concurrent schedules retain returned owners
+until they commit the terminal stop, then may deliberately abandon them; such
+cleanup is not resolution or exhaustion and does not promise failed-search resumption.
+
+Ferraris's fixed-ceiling and quota narrowing calls return one
+`NarrowingAttempt`: inspect `result`, account `statistics` even on failure, and
+install a completed `preferred` atom in the entry only after success. `None`
+leaves existing policy untouched; it accompanies propagation-only attempts,
+refutations and failures. A failed attempt's partially closed knowledge retains
+the abandonment contract documented on `Narrower`.
 
 ## Migrating from 0.5.0
 
@@ -145,13 +249,14 @@ For `GpuFormulaOracle::new_metal_with_projection`, use
 `new_selected_with_projection` with the same selection and projection.
 `zetesis_core::catalog::CatalogRead::constructor_of_predicate` is removed.
 
-The following helpers were public in 0.5.0 and are now crate-private:
+The former `zetesis-cpu` closure helpers `CONSTRAINT_HEAD` and `InstanceAtomIter`
+were removed with that route. The following helpers were public in 0.5.0 and
+are now crate-private:
 
 | Crate | Helpers |
 | --- | --- |
 | `zetesis-cli` | `RunFailure::into_cause` |
 | `zetesis-core` | `AtomKey::compare_ref`, `AtomRef::compare_key_with`, `Model::selection_payload_bytes`, `Predicate::shares_name` |
-| `zetesis-cpu` | `CONSTRAINT_HEAD`, `InstanceAtomIter` |
 | `zetesis-engine` | `OutputLimits::for_resources` |
 | `zetesis-maintenance` | `is_record` |
 | zetesis-sat (now `zetesis-stable`) | `CompletionExecutor::DEFAULT_SCRATCH_BYTES`, `ReductPreparationLimits::DEFAULT_BYTES` |
@@ -193,7 +298,7 @@ limits remain available for an explicitly bounded operation.
 | Aggregate append functions over a node vector | Use the paired `FormulaNodes` owner. Transactions commit, roll back or detach both suffixes together. `into_parts` discards topology evidence; `prepare_admission` consumes it for checked final admission. |
 | Complete literals of formula/aggregate or expansion limits | Include the new operand ceilings and `ExpansionLimits::max_family_bytes`. Exhaustive failures must cover operand-span/arity and materialized-family refusals. Node count alone no longer describes graph size. |
 | `TerminalFormula::base_theory() -> &Theory` | It returns `Option<&Theory>`. Match `base()` for eager versus streamed bases; a hybrid core's proposals must pass its constraints before reconstruction. Terminal observations add `base` and `streamed`, and grounding-mode matches include the hybrid terminal route. |
-| Narrowing with separate theory/producer/truth arguments and per-read callbacks | Pass `OriginalSubject` or `FrozenSubject` and reusable `NarrowingScratch`. Quota variants use `NarrowingQuota`; `narrow_known_metered` and `narrow_frozen_known_metered` are removed. |
+| Narrowing with separate theory/producer/truth arguments and per-read callbacks | Pass `OriginalSubject` or `FrozenSubject` and reusable `NarrowingScratch`. Reserved variants borrow `zetesis_algebra::Meter` over a typed `Quota`; `Failure` preserves caller refusals separately from local stops. `NarrowingQuota`, `narrow_known_metered` and `narrow_frozen_known_metered` are removed. |
 | `AtomTable::index` as an identity-recording operation | It performs structural lookup; the record encoder owns identity recording. `AtomIdentityMap::retain_held` releases unneeded owners. |
 | Native benchmark execution fields for workers, completion, batch and work caps | Use `NativeExecution::{threads, memory_bytes, time_limit_seconds}` with algorithm choices. New records identify the requested ordinary policy; historical report readers retain earlier fields. |
 

@@ -11,6 +11,7 @@ use std::{
     fs,
     path::{Path, PathBuf},
 };
+use zetesis_algebra::{Meter, MeterBytes};
 
 /// Inclusive input and retained-path limits; these are not allocator RSS limits.
 #[derive(Clone, Copy, Debug)]
@@ -102,12 +103,12 @@ impl Libraries {
 /// required crates and exceeded inclusive input/path limits. No files are written.
 pub fn select(messages: &[u8], required: &[&str], limits: Limits) -> Result<Libraries, Error> {
     require(!required.is_empty(), "book view needs required crate names")?;
-    if messages.len() > limits.message_bytes {
-        return Err(Error::Limit {
+    MeterBytes::check(messages.len() as u128, limits.message_bytes as u128).map_err(|_| {
+        Error::Limit {
             resource: "Cargo message bytes",
             limit: limits.message_bytes,
-        });
-    }
+        }
+    })?;
     let mut paths = BTreeSet::new();
     let mut crates = BTreeSet::new();
     let mut finished = false;
@@ -139,12 +140,12 @@ pub fn select(messages: &[u8], required: &[&str], limits: Limits) -> Result<Libr
                     {
                         require(path.is_absolute(), "Cargo artifact path must be absolute")?;
                         paths.insert(path.to_owned());
-                        if paths.len() > limits.artifacts {
-                            return Err(Error::Limit {
+                        Meter::check_count(paths.len(), 0, limits.artifacts).map_err(|_| {
+                            Error::Limit {
                                 resource: "book library paths",
                                 limit: limits.artifacts,
-                            });
-                        }
+                            }
+                        })?;
                         crates.insert(name.to_owned());
                     }
                 }

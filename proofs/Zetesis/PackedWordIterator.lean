@@ -1,7 +1,8 @@
 import Zetesis.PackedInterpretations
+import Init.Data.BitVec.Bitblast
 
 /-!
-# Checked iteration over numeric packed-word halves
+# Numeric half-word iteration and physical set-bit steps
 
 This authored cursor algorithm exports numeric low and high 32-bit halves of
 immutable 64-bit words. It refines `PackedInterpretations.export32`, deriving
@@ -15,6 +16,15 @@ representation refinement, not a Rust extraction: borrowing, exact theory
 ownership, byte conversion, allocation and machine-sized arithmetic remain
 implementation obligations for `InterpretationWords::next` in
 `zetesis-ferraris/src/theory.rs`.
+
+The final `SetBits` namespace gives a separate width-general one-step law:
+counting trailing zeroes selects the least present coordinate, and clearing its
+one-bit mask leaves precisely the strictly greater present coordinates. It
+reuses the library bit-vector facts rather than the numeric half-word cursor.
+The `lowest_bit_arithmetic` law identifies fixed-width decrement clearing and
+negation isolation with that same mask. Rust callback control, machine-index
+arithmetic, primitive correspondence and repeated cursor execution remain
+separate refinement obligations.
 -/
 
 namespace Zetesis.Refinement.PackedWordIterator
@@ -252,5 +262,113 @@ theorem packed_exact (size : Nat) (atoms : List Nat)
     intro atom
     rw [exported atom, membership atom]
   exact ⟨output, completed, length, exactSet⟩
+
+namespace SetBits
+
+/-- For a nonzero lane, counting trailing zeroes selects a stored true bit.
+    Clearing that coordinate with its complement mask leaves exactly the true
+    bits strictly above it. Thus a cursor that implements this step cannot
+    repeat a returned coordinate or discard a greater one; zero-lane exhaustion
+    is the existing `BitVec.zero_iff_eq_false` law.
+
+    The proof uses the library's selected-bit and lower-zero facts about `ctz`,
+    then the same complement-mask operation as `clear_bit_exact`. It states a
+    mathematical step. `lowest_bit_arithmetic` below connects fixed-width
+    decrement clearing to that mask; Rust correspondence and an effectful
+    visitor's success-before-advance boundary remain separate obligations. -/
+theorem least_clear_suffix {width : Nat} (value : BitVec width)
+    (nonempty : value ≠ 0#width) :
+    value.ctz.toNat < width ∧ value.getLsbD value.ctz.toNat = true ∧
+      ∀ index, (value &&& ~~~(1#width <<< value.ctz.toNat)).getLsbD index =
+        (value.getLsbD index && decide (value.ctz.toNat < index)) := by
+  have selected : value.getLsbD value.ctz.toNat = true :=
+    BitVec.getLsbD_true_ctz_of_ne_zero nonempty
+  have firstStored : value.ctz.toNat < width := BitVec.lt_of_getLsbD selected
+  have suffix : ∀ index,
+      (value &&& ~~~(1#width <<< value.ctz.toNat)).getLsbD index =
+        (value.getLsbD index && decide (value.ctz.toNat < index)) := by
+    intro index
+    by_cases stored : index < width
+    · have clearExact :
+          (value &&& ~~~(1#width <<< value.ctz.toNat)).getLsbD index =
+            (value.getLsbD index && decide (index ≠ value.ctz.toNat)) := by
+        rw [BitVec.getLsbD_and, BitVec.getLsbD_not, ← BitVec.twoPow_eq,
+          BitVec.getLsbD_twoPow]
+        simp [stored, firstStored, eq_comm]
+      rw [clearExact]
+      by_cases before : index < value.ctz.toNat
+      · have absent : value.getLsbD index = false := BitVec.getLsbD_false_of_lt_ctz before
+        simp [absent]
+      · have after : index ≠ value.ctz.toNat ↔ value.ctz.toNat < index := by omega
+        simp only [after]
+    · have outside : width ≤ index := by omega
+      rw [BitVec.getLsbD_of_ge _ _ outside, BitVec.getLsbD_of_ge _ _ outside]
+      rfl
+  exact ⟨firstStored, selected, suffix⟩
+
+/-- In a nonzero lane, AND with fixed-width negation isolates precisely the
+    least true bit; AND with the fixed-width decrement removes precisely that
+    same mask. These are the arithmetic identities used by low-bit isolation
+    and set-bit iteration, at any lane width.
+
+    The first part uses the library's negation law: at a bit above the first
+    true one, negation complements it; at that first bit, negation preserves it.
+    The second part uses `~(x - 1) = -x` and Boolean complement laws. No machine
+    overflow premise is needed because `BitVec` arithmetic is modular. This
+    proves the identities, not the correspondence of Rust intrinsics, callback
+    effects, borrowed storage or the full iterator loop. -/
+theorem lowest_bit_arithmetic {width : Nat} (value : BitVec width)
+    (nonempty : value ≠ 0#width) :
+    value &&& (-value) = (1#width <<< value.ctz.toNat) ∧
+      value &&& (value - 1#width) = value &&& ~~~(1#width <<< value.ctz.toNat) := by
+  have selected : value.getLsbD value.ctz.toNat = true :=
+    BitVec.getLsbD_true_ctz_of_ne_zero nonempty
+  have firstStored : value.ctz.toNat < width := BitVec.lt_of_getLsbD selected
+  have earlier : ∀ index,
+      (∃ before < index, value.getLsbD before = true) ↔ value.ctz.toNat < index := by
+    intro index
+    constructor
+    · rintro ⟨before, below, present⟩
+      have firstBefore : value.ctz.toNat ≤ before := by
+        by_cases ordered : value.ctz.toNat ≤ before
+        · exact ordered
+        · have absent : value.getLsbD before = false :=
+            BitVec.getLsbD_false_of_lt_ctz (by omega)
+          rw [absent] at present
+          cases present
+      omega
+    · intro before
+      exact ⟨value.ctz.toNat, before, selected⟩
+  have isolated : value &&& (-value) = (1#width <<< value.ctz.toNat) := by
+    apply BitVec.eq_of_getLsbD_eq_iff.mpr
+    intro index stored
+    rw [BitVec.getLsbD_and, BitVec.getLsbD_neg, ← BitVec.twoPow_eq,
+      BitVec.getLsbD_twoPow]
+    simp only [stored, firstStored, decide_true, Bool.true_and, earlier]
+    by_cases before : index < value.ctz.toNat
+    · have absent : value.getLsbD index = false := BitVec.getLsbD_false_of_lt_ctz before
+      have different : value.ctz.toNat ≠ index := by omega
+      simp [absent, different]
+    · by_cases same : index = value.ctz.toNat
+      · simp [same, selected]
+      · have after : value.ctz.toNat < index := by omega
+        have different : value.ctz.toNat ≠ index := Ne.symm same
+        cases value.getLsbD index <;> simp [after, different]
+  have decrement : value - 1#width = ~~~(-value) := by
+    have complement : ~~~(value - 1#width) = -value := by
+      rw [BitVec.not_sub_one_eq_not_add_one, BitVec.neg_eq_not_add]
+    calc
+      value - 1#width = ~~~(~~~(value - 1#width)) := BitVec.not_not.symm
+      _ = ~~~(-value) := congrArg (fun bits : BitVec width => ~~~bits) complement
+  have cleared : value &&& (value - 1#width) =
+      value &&& ~~~(1#width <<< value.ctz.toNat) := by
+    rw [decrement, ← isolated]
+    apply BitVec.eq_of_getLsbD_eq_iff.mpr
+    intro index stored
+    simp only [BitVec.getLsbD_and, BitVec.getLsbD_not, stored, decide_true, Bool.true_and]
+    cases value.getLsbD index <;> cases (-value).getLsbD index <;> rfl
+  exact ⟨isolated, cleared⟩
+
+end SetBits
 
 end Zetesis.Refinement.PackedWordIterator

@@ -1,6 +1,7 @@
 //! Streaming JSON document adapter over typed model views and driver outcomes.
 
 mod arithmetic;
+mod handovers;
 
 use std::io::{self, Write};
 
@@ -60,7 +61,7 @@ pub(crate) fn write_model_record(
     view: &zetesis_themelios::observation::ModelView<'_>,
     atoms: &mut zetesis_themelios::observation::json::AtomTable,
     max_record_bytes: usize,
-    cancellation: &zetesis_cpu::Cancellation,
+    cancellation: &zetesis_algebra::Cancellation,
 ) -> Result<(), RunError> {
     let prefix = format!(
         "{}{{\"number\":{number},\"model\":",
@@ -424,8 +425,8 @@ fn objective_code(error: zetesis_objective::Error) -> &'static str {
     }
 }
 
-fn stop_code(reason: zetesis_cpu::Stop) -> &'static str {
-    use zetesis_cpu::Stop;
+fn stop_code(reason: zetesis_algebra::Stop) -> &'static str {
+    use zetesis_algebra::Stop;
     match reason {
         Stop::Cancelled => "cancelled",
         Stop::Deadline => "deadline",
@@ -459,6 +460,9 @@ impl Buffer {
             .map_err(|error| self.error(error))
     }
     fn string(&mut self, value: &str) -> Result<(), RunError> {
+        self.json(value)
+    }
+    fn json<T: serde::Serialize + ?Sized>(&mut self, value: &T) -> Result<(), RunError> {
         serde_json::to_writer(&mut *self, value)
             .map_err(|error| self.error(io::Error::other(error)))
     }
@@ -1093,14 +1097,12 @@ fn execution_statistics(
     tight_routes(out, stats)?;
     out.text(",\"gpu_residuals\":")?;
     if let Some(residuals) = stats.gpu_residuals {
-        out.text("{\"fixed_point\":")?;
-        out.text(&residuals.fixed_point.to_string())?;
-        out.number_field("round_limit", residuals.round_limit)?;
-        out.number_field("work_limit", residuals.work_limit)?;
-        out.text("}")?;
+        handovers::reasons(out, &residuals)?;
     } else {
         out.text("null")?;
     }
+    out.text(",\"gpu_residual_handovers\":")?;
+    handovers::write(out, stats.gpu_residual_handovers.as_ref())?;
     out.number_field("gpu_submitted_batches", stats.gpu_submitted_batches)?;
     out.number_field("gpu_submitted_candidates", stats.gpu_submitted_candidates)?;
     out.number_field("gpu_batches", stats.gpu_batches)?;

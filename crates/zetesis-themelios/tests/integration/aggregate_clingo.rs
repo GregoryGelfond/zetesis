@@ -17,9 +17,9 @@ use zetesis_reference_support::{admit, formula, resource_limits};
 use std::collections::BTreeSet;
 
 use serde_json::Value as Json;
+use zetesis_algebra::Cancellation;
 use zetesis_clingo_support as oracle;
 use zetesis_core::{Atom, Model};
-use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{AggregateErrorKind, Interpretation, Limits, check};
 use zetesis_themelios::{
     AdmissionFailure, AdmittedFormula, ExpansionFailure, FormulaFailure, FormulaLimits,

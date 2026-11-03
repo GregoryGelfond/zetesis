@@ -690,7 +690,7 @@ fn cancellation_prevents_completed_results() {
         )
         .unwrap_err(),
     ] {
-        assert_eq!(error.interruption, Some(zetesis_cpu::Stop::Cancelled));
+        assert_eq!(error.interruption, Some(zetesis_algebra::Stop::Cancelled));
     }
 }
 
@@ -1243,6 +1243,43 @@ fn resident_schedule_can_use_serial_work_but_retains_its_real_bytes() {
 }
 
 #[test]
+fn optional_schedule_work_uses_authored_and_wire_ceilings() {
+    let mut graph = graph();
+    let device = wgpu::Limits::default();
+    // Synthetic work dimensions exercise the host gate without constructing
+    // huge source graphs or changing any transport dimension.
+    for (work, levels, ceiling, expected_levels, expected_work) in [
+        (0, 0, 0, 0, 0),
+        (0, 1, 0, 0, 0),
+        (7, 0, 7, 0, 7),
+        (7, 2, 9, 2, 9),
+        (7, 2, 8, 0, 7),
+        (u32::MAX - 1, 1, u64::from(u32::MAX), 1, u32::MAX),
+        (u32::MAX, 1, u64::MAX, 0, u32::MAX),
+    ] {
+        graph.work = work;
+        graph.levels = levels;
+        let selected = Plan::new(
+            &graph,
+            1,
+            TightGpuLimits {
+                max_work_per_candidate: ceiling,
+                ..TightGpuLimits::default()
+            },
+            &device,
+            false,
+            1,
+        )
+        .unwrap();
+        assert_eq!(selected.levels, expected_levels);
+        assert_eq!(selected.work, expected_work);
+        assert_eq!(selected.allowance, expected_work);
+        assert_eq!(selected.params(&graph)[6], expected_work);
+        assert_eq!(graph.levels, levels);
+    }
+}
+
+#[test]
 fn pure_chain_needs_no_level_storage() {
     let mut nodes = vec![Node::atom(0)];
     for index in 1..128 {
@@ -1299,7 +1336,7 @@ fn interrupted_schedule_preparation_retains_no_publishable_buffers() {
             .err()
             .unwrap()
             .interruption,
-        Some(zetesis_cpu::Stop::Cancelled)
+        Some(zetesis_algebra::Stop::Cancelled)
     );
     assert_eq!(graph.levels, 0);
 }
@@ -1372,4 +1409,96 @@ fn retained_truth_work_overflow_keeps_complete_scan() {
     selected.reuse_original_truth(&graph, u64::MAX);
     assert!(!selected.original_truth_reused);
     assert_eq!(selected.work, u32::MAX);
+}
+
+#[test]
+fn retained_truth_refusal_preserves_an_existing_reuse_plan() {
+    let graph = graph();
+    let mut selected = plan(&graph, 2, false);
+    selected.reuse_original_truth(&graph, u64::MAX);
+    assert!(selected.original_truth_reused);
+    let before = (
+        selected.work,
+        selected.allowance,
+        selected.accounted,
+        selected.transport,
+        selected.params(&graph),
+    );
+    selected.reuse_original_truth(&graph, 0);
+    assert!(selected.original_truth_reused);
+    assert_eq!(
+        (
+            selected.work,
+            selected.allowance,
+            selected.accounted,
+            selected.transport,
+            selected.params(&graph),
+        ),
+        before
+    );
+}
+
+#[test]
+fn retained_truth_work_accepts_the_wire_ceiling() {
+    let graph = graph();
+    // This fixture's retained-truth increment is 32, independently recorded in
+    // retained_truth_work_falls_back_without_new_storage above.
+    for (initial, ceiling, accepted) in [
+        (u32::MAX - 32, u64::from(u32::MAX), true),
+        (u32::MAX - 32, u64::from(u32::MAX) - 1, false),
+        (u32::MAX - 31, u64::MAX, false),
+    ] {
+        let mut selected = plan(&graph, 2, false);
+        let allowance = selected.allowance;
+        selected.work = initial;
+        selected.reuse_original_truth(&graph, ceiling);
+        assert_eq!(selected.original_truth_reused, accepted);
+        assert_eq!(selected.work, if accepted { u32::MAX } else { initial });
+        assert_eq!(
+            selected.allowance,
+            if accepted { u32::MAX } else { allowance }
+        );
+        assert_eq!(selected.params(&graph)[6], selected.work);
+    }
+}
+
+#[test]
+fn dispatch_call_keeps_its_original_borrowed_layout() {
+    use super::super::transport::Call;
+    use std::mem::{align_of, offset_of, size_of};
+    use zetesis_algebra::words::Words;
+
+    struct Original<'a> {
+        seeds: &'a [u32],
+        plan: &'a Plan,
+    }
+    assert_eq!(size_of::<Call<'_>>(), size_of::<Original<'_>>());
+    assert_eq!(align_of::<Call<'_>>(), align_of::<Original<'_>>());
+    assert_eq!(offset_of!(Call<'_>, seeds), offset_of!(Original<'_>, seeds));
+    assert_eq!(offset_of!(Call<'_>, plan), offset_of!(Original<'_>, plan));
+    let graph = graph();
+    let plan = plan(&graph, 2, true);
+    let candidates = [
+        Interpretation::new(&graph.theory, [0]).unwrap(),
+        Interpretation::new(&graph.theory, [1, 2]).unwrap(),
+    ];
+    let mut staging = crate::candidates::Staging::default();
+    plan.pack(
+        &graph,
+        &candidates,
+        &mut staging,
+        u64::MAX,
+        &Cancellation::default(),
+    )
+    .unwrap();
+    let call = Call {
+        seeds: Words::new(staging.words()),
+        plan: &plan,
+    };
+    assert_eq!(
+        (call.seeds.as_ptr(), call.seeds.len()),
+        (staging.words().as_ptr(), staging.words().len())
+    );
+    assert!(std::ptr::eq(call.plan, &raw const plan));
+    assert_eq!(&*call.seeds, &[1, 6]);
 }

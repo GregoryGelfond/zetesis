@@ -15,7 +15,7 @@ use zetesis_theory_support::theories::theory;
 fn joint_check(
     original: &Theory,
     candidates: &[zetesis_ferraris::Interpretation],
-) -> Result<Vec<BatchVerdict>, zetesis_cpu::Stop> {
+) -> Result<Vec<BatchVerdict>, zetesis_algebra::Stop> {
     candidates
         .iter()
         .map(|candidate| {

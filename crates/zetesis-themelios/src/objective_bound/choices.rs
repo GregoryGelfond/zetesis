@@ -16,7 +16,7 @@ mod tests;
 
 use std::borrow::Cow;
 
-use zetesis_cpu::Cancellation;
+use zetesis_algebra::Cancellation;
 use zetesis_ferraris::{AggregateElement, FormulaNodes, FormulaParts, NodeView, Theory};
 use zetesis_objective::Score;
 
@@ -56,12 +56,7 @@ pub(super) fn prepare(
     max_bytes: u128,
     cancellation: &Cancellation,
 ) -> Result<(Option<Costs>, ObjectiveBoundStatistics), ObjectiveBoundError> {
-    let mut work = Work {
-        limits,
-        cancellation,
-        template: None,
-        statistics: ObjectiveBoundStatistics::default(),
-    };
+    let mut work = Work::new(limits, cancellation);
     work.tick()?;
     if required.capture_failure().is_some() {
         return Err(work.error(Kind::ChoiceCapture));
@@ -89,7 +84,7 @@ pub(super) fn prepare(
         eligible_level |= nonnegative && positive;
     }
     if !required_member || !eligible_level {
-        return Ok((None, work.statistics));
+        return Ok((None, work.statistics()));
     }
     let mut memory = Storage::new(max_bytes, required, plan.choices.as_ref(), &work)?;
     let mut bridges = Bridges::new(plan, required, &mut memory, &mut work)?;
@@ -139,7 +134,7 @@ pub(super) fn prepare(
             &mut work,
         )?)
     };
-    Ok((costs, work.statistics))
+    Ok((costs, work.statistics()))
 }
 
 struct Level<'a> {
@@ -713,21 +708,10 @@ pub(super) fn strengthen(
     incumbent: &Score,
     comparison: super::bound::Comparison,
     limits: ObjectiveBoundLimits,
-    cancellation: &Cancellation,
+    work: &mut Work<'_>,
 ) -> ObjectiveBound {
     let Some(costs) = &plan.choices else {
         return exact;
-    };
-    let mut work = Work {
-        limits: ObjectivePlanLimits {
-            max_nodes: limits.aggregate.max_nodes,
-            max_operands: limits.aggregate.max_operands,
-            max_work: limits.max_work,
-            ..ObjectivePlanLimits::default()
-        },
-        cancellation,
-        template: None,
-        statistics: exact.statistics,
     };
     match combined(
         plan,
@@ -736,12 +720,12 @@ pub(super) fn strengthen(
         incumbent,
         comparison,
         limits,
-        &mut work,
+        work,
     ) {
         Ok(theory) => exact.theory = theory,
         Err(error) => exact.choice_failure = Some(error),
     }
-    exact.statistics = work.statistics;
+    exact.statistics = work.statistics();
     exact
 }
 

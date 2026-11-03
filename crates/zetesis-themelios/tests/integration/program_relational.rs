@@ -4,8 +4,8 @@ use crate::support::unevaluable_directives::{objective, projection};
 use std::{collections::BTreeSet, sync::Arc, time::Instant};
 use zetesis_reference_support::{exhaustive_models, resource_limits};
 
+use zetesis_algebra::{Cancellation, Stop};
 use zetesis_core::Model;
-use zetesis_cpu::{Cancellation, Stop};
 use zetesis_themelios::logical::{
     Name, Symbol, Term,
     program::{
@@ -16,7 +16,7 @@ use zetesis_themelios::logical::{
 };
 use zetesis_themelios::{
     AdmittedFormula, ExpansionFailure, ExpansionResource, FormulaFailure, FormulaLimits,
-    FormulaPurpose, ProgramFailureKind, ProgramFormulaOptions, ProgramResource, ProgramSubject,
+    FormulaPurpose, ProgramFailureKind, ProgramFormulaOptions, ProgramOriginal, ProgramResource,
     prepare_program_formula_with, symbols,
 };
 
@@ -153,10 +153,10 @@ fn ordinary_preparation_retains_directive_refusals() {
     for directive in [objective(), projection()] {
         let program = Arc::new(Program::of([directive.clone()]));
         let error = prepare(Arc::clone(&program), ProgramFormulaOptions::default()).unwrap_err();
-        let ProgramSubject::Statement(subject) = error.subject().unwrap() else {
+        let ProgramOriginal::Statement(retained_statement) = error.original().unwrap() else {
             panic!("the original unsupported directive is the failure subject");
         };
-        assert_eq!(subject.get(), &directive);
+        assert_eq!(retained_statement.get(), &directive);
         assert!(std::ptr::eq(
             error.original_program().unwrap(),
             program.as_ref()
@@ -226,10 +226,10 @@ fn show_failure_keeps_its_unfiltered_statement_identity() {
         if matches!(error.kind(), zetesis_themelios::observation::ErrorKind::Unsupported(
             zetesis_themelios::observation::Feature::UnsafeVariable)))
     );
-    let ProgramSubject::Statement(subject) = error.subject().unwrap() else {
+    let ProgramOriginal::Statement(retained_statement) = error.original().unwrap() else {
         panic!("the unbound show term retains its own original carrier");
     };
-    assert!(std::ptr::eq(subject, original));
+    assert!(std::ptr::eq(retained_statement, original));
     let site = error.site().unwrap();
     assert_eq!(site.statement_id().unwrap().index(), index);
     assert!(site.location().is_none());

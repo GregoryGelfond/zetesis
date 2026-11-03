@@ -1,17 +1,16 @@
+use zetesis_algebra::Meter;
+
 mod packed;
 mod views;
 
-use zetesis_cpu::{Cancellation, Stop};
+use zetesis_algebra::{Cancellation, Stop};
 
 use crate::{
     AdmissionError, EvaluationLimits, EvaluationWorkspace, Node, NodeView, Producers, RegionLimits,
     Theory,
-    regions::{
-        Work,
-        arithmetic::{
-            budget::{Budget, BudgetError},
-            completion::{Completion, completion},
-        },
+    regions::arithmetic::{
+        budget::{Budget, BudgetError},
+        completion::{Completion, completion},
     },
     test_support::{Allowance, constructed_theory, push, theory, world},
 };
@@ -23,8 +22,8 @@ fn inventory(owner: &Theory) -> Producers {
         .unwrap()
 }
 
-fn budget(cancellation: &Cancellation) -> Budget<'_, 'static> {
-    Budget::new(Work::new(u64::MAX), u64::MAX, usize::MAX, cancellation)
+fn budget<'a>(work: &'a mut Meter<'static>, cancellation: &'a Cancellation) -> Budget<'a, 'static> {
+    Budget::new(work, u64::MAX, usize::MAX, cancellation)
 }
 
 fn nested_xor() -> Theory {
@@ -85,9 +84,15 @@ fn nested_completion_matches_original_formula_truth() {
     let owner = nested_xor();
     let producers = inventory(&owner);
     let cancellation = Cancellation::default();
-    let record = completion(&owner, &producers, 4, 0, &mut budget(&cancellation))
-        .unwrap()
-        .unwrap();
+    let record = completion(
+        &owner,
+        &producers,
+        4,
+        0,
+        &mut budget(&mut Meter::local(u64::MAX), &cancellation),
+    )
+    .unwrap()
+    .unwrap();
     assert_eq!(record.support.len, 3);
     assert_eq!(record.support.atoms, [0, 1, 4, 0, 0, 0, 0, 0]);
     assert_matches_original_bodies(&owner, &producers, &record);
@@ -103,10 +108,16 @@ fn contradictory_literals_do_not_support_the_head() {
     });
     let producers = inventory(&owner);
     let cancellation = Cancellation::default();
-    let record = completion(&owner, &producers, 1, 0, &mut budget(&cancellation))
-        .unwrap()
-        .unwrap();
-    assert_eq!(record.forbidden, [0b1100, 0, 0, 0]);
+    let record = completion(
+        &owner,
+        &producers,
+        1,
+        0,
+        &mut budget(&mut Meter::local(u64::MAX), &cancellation),
+    )
+    .unwrap()
+    .unwrap();
+    assert_eq!(&*record.forbidden, [0b1100, 0, 0, 0]);
     assert_matches_original_bodies(&owner, &producers, &record);
 }
 
@@ -116,12 +127,18 @@ fn empty_and_fact_definitions_have_opposite_tables() {
     let producers = inventory(&owner);
     let cancellation = Cancellation::default();
     for (head, bits) in [(0, 0b10), (1, 0b01)] {
-        let record = completion(&owner, &producers, head, 0, &mut budget(&cancellation))
-            .unwrap()
-            .unwrap();
+        let record = completion(
+            &owner,
+            &producers,
+            head,
+            0,
+            &mut budget(&mut Meter::local(u64::MAX), &cancellation),
+        )
+        .unwrap()
+        .unwrap();
         assert_eq!(record.support.len, 1);
         assert_eq!(record.support.atoms[0], head);
-        assert_eq!(record.forbidden, [bits, 0, 0, 0]);
+        assert_eq!(&*record.forbidden, [bits, 0, 0, 0]);
         assert_matches_original_bodies(&owner, &producers, &record);
     }
 }
@@ -142,9 +159,15 @@ fn every_producer_must_be_normal_and_sole_headed() {
         let producers = inventory(&owner);
         let cancellation = Cancellation::default();
         assert!(
-            completion(&owner, &producers, 0, 0, &mut budget(&cancellation))
-                .unwrap()
-                .is_none()
+            completion(
+                &owner,
+                &producers,
+                0,
+                0,
+                &mut budget(&mut Meter::local(u64::MAX), &cancellation)
+            )
+            .unwrap()
+            .is_none()
         );
     }
 }
@@ -156,9 +179,15 @@ fn foreign_equal_inventory_does_not_authenticate() {
     let producers = inventory(&foreign);
     let cancellation = Cancellation::default();
     assert!(
-        completion(&owner, &producers, 4, 0, &mut budget(&cancellation))
-            .unwrap()
-            .is_none()
+        completion(
+            &owner,
+            &producers,
+            4,
+            0,
+            &mut budget(&mut Meter::local(u64::MAX), &cancellation)
+        )
+        .unwrap()
+        .is_none()
     );
     assert!(
         completion(
@@ -166,7 +195,7 @@ fn foreign_equal_inventory_does_not_authenticate() {
             &producers,
             4,
             0,
-            &mut budget(&cancellation)
+            &mut budget(&mut Meter::local(u64::MAX), &cancellation)
         )
         .unwrap()
         .is_some()
@@ -182,9 +211,15 @@ fn a_ninth_distinct_atom_declines_the_whole_definition() {
     let producers = inventory(&owner);
     let cancellation = Cancellation::default();
     assert!(
-        completion(&owner, &producers, 8, 0, &mut budget(&cancellation))
-            .unwrap()
-            .is_none()
+        completion(
+            &owner,
+            &producers,
+            8,
+            0,
+            &mut budget(&mut Meter::local(u64::MAX), &cancellation)
+        )
+        .unwrap()
+        .is_none()
     );
 }
 
@@ -198,9 +233,15 @@ fn unsupported_nested_bodies_publish_no_completion() {
     let producers = inventory(&owner);
     let cancellation = Cancellation::default();
     assert!(
-        completion(&owner, &producers, 2, 0, &mut budget(&cancellation))
-            .unwrap()
-            .is_none()
+        completion(
+            &owner,
+            &producers,
+            2,
+            0,
+            &mut budget(&mut Meter::local(u64::MAX), &cancellation)
+        )
+        .unwrap()
+        .is_none()
     );
 }
 
@@ -221,10 +262,16 @@ fn deep_bodies_use_borrowed_frames_without_recursion() {
     let owner = repeated_body(4096);
     let producers = inventory(&owner);
     let cancellation = Cancellation::default();
-    let record = completion(&owner, &producers, 1, 0, &mut budget(&cancellation))
-        .unwrap()
-        .unwrap();
-    assert_eq!(record.forbidden, [0b0110, 0, 0, 0]);
+    let record = completion(
+        &owner,
+        &producers,
+        1,
+        0,
+        &mut budget(&mut Meter::local(u64::MAX), &cancellation),
+    )
+    .unwrap()
+    .unwrap();
+    assert_eq!(&*record.forbidden, [0b0110, 0, 0, 0]);
     assert_matches_original_bodies(&owner, &producers, &record);
 }
 
@@ -235,11 +282,12 @@ fn repeated_occurrences_remain_in_the_work_receipt() {
     for depth in [1, 8, 32, 128] {
         let owner = repeated_body(depth);
         let producers = inventory(&owner);
-        let mut meter = budget(&cancellation);
+        let mut meter_work = Meter::local(u64::MAX);
+        let mut meter = budget(&mut meter_work, &cancellation);
         let record = completion(&owner, &producers, 1, 0, &mut meter)
             .unwrap()
             .unwrap();
-        assert_eq!(record.forbidden, [0b0110, 0, 0, 0]);
+        assert_eq!(&*record.forbidden, [0b0110, 0, 0, 0]);
         assert!(meter.work() > previous);
         previous = meter.work();
     }
@@ -259,11 +307,12 @@ fn repeated_literals_are_charged_on_both_traversals() {
         assert!(
             matches!(owner.view().node(body).unwrap(), NodeView::And(children) if children.len() == count)
         );
-        let mut meter = budget(&cancellation);
+        let mut meter_work = Meter::local(u64::MAX);
+        let mut meter = budget(&mut meter_work, &cancellation);
         let record = completion(&owner, &producers, 1, 0, &mut meter)
             .unwrap()
             .unwrap();
-        assert_eq!(record.forbidden, [0b0110, 0, 0, 0]);
+        assert_eq!(&*record.forbidden, [0b0110, 0, 0, 0]);
         receipts.push(meter.work());
     }
     // Every additional repeated atom costs 13 on support collection and 15 on
@@ -277,12 +326,14 @@ fn preparation_limits_expose_no_partial_table() {
     let owner = nested_xor();
     let producers = inventory(&owner);
     let cancellation = Cancellation::default();
-    let mut complete = budget(&cancellation);
+    let mut complete_work = Meter::local(u64::MAX);
+    let mut complete = budget(&mut complete_work, &cancellation);
     let expected = completion(&owner, &producers, 4, 17, &mut complete)
         .unwrap()
         .unwrap();
     for maximum in 0..complete.work() {
-        let mut limited = Budget::new(Work::new(u64::MAX), maximum, usize::MAX, &cancellation);
+        let mut limited_work = Meter::local(u64::MAX);
+        let mut limited = Budget::new(&mut limited_work, maximum, usize::MAX, &cancellation);
         assert_eq!(
             completion(&owner, &producers, 4, 17, &mut limited),
             Err(BudgetError::WorkDeclined)
@@ -290,14 +341,21 @@ fn preparation_limits_expose_no_partial_table() {
         assert!(limited.work() <= maximum);
     }
     for maximum in 0..usize::try_from(complete.peak_bytes()).unwrap() {
-        let mut limited = Budget::new(Work::new(u64::MAX), u64::MAX, maximum, &cancellation);
+        let mut limited_work = Meter::local(u64::MAX);
+        let mut limited = Budget::new(&mut limited_work, u64::MAX, maximum, &cancellation);
         assert!(
             matches!(completion(&owner, &producers, 4, 17, &mut limited),
             Err(BudgetError::StorageDeclined { required, limit }) if required > limit as u128)
         );
     }
     assert_eq!(
-        completion(&owner, &producers, 4, 17, &mut budget(&cancellation)),
+        completion(
+            &owner,
+            &producers,
+            4,
+            17,
+            &mut budget(&mut Meter::local(u64::MAX), &cancellation)
+        ),
         Ok(Some(expected))
     );
 }
@@ -307,22 +365,19 @@ fn global_refusals_preserve_their_typed_prefix() {
     let owner = nested_xor();
     let producers = inventory(&owner);
     let cancellation = Cancellation::default();
-    let mut complete = budget(&cancellation);
+    let mut complete_work = Meter::local(u64::MAX);
+    let mut complete = budget(&mut complete_work, &cancellation);
     completion(&owner, &producers, 4, 0, &mut complete)
         .unwrap()
         .unwrap();
     for failure in [Stop::Cancelled, Stop::WorkLimit, Stop::Allocation] {
         for remaining in 0..complete.work() {
             let mut allowance = Allowance { remaining, failure };
-            let mut limited = Budget::new(
-                Work::reserved(&mut allowance),
-                u64::MAX,
-                usize::MAX,
-                &cancellation,
-            );
+            let mut limited_work = Meter::reserved(&mut allowance);
+            let mut limited = Budget::new(&mut limited_work, u64::MAX, usize::MAX, &cancellation);
             assert_eq!(
                 completion(&owner, &producers, 4, 0, &mut limited),
-                Err(BudgetError::Stopped(failure))
+                Err(BudgetError::Refused(failure))
             );
             assert!(limited.work() <= remaining);
             limited.finish();
@@ -336,7 +391,8 @@ fn cancellation_precedes_source_and_storage_checks() {
     let producers = inventory(&owner);
     let cancellation = Cancellation::default();
     cancellation.cancel();
-    let mut meter = Budget::new(Work::new(0), 0, 0, &cancellation);
+    let mut meter_work = Meter::local(0);
+    let mut meter = Budget::new(&mut meter_work, 0, 0, &cancellation);
     assert_eq!(
         completion(&owner, &producers, usize::MAX, u128::MAX, &mut meter),
         Err(BudgetError::Stopped(Stop::Cancelled))
@@ -350,7 +406,13 @@ fn unrepresentable_storage_remains_an_allocation_stop() {
     let producers = inventory(&owner);
     let cancellation = Cancellation::default();
     assert_eq!(
-        completion(&owner, &producers, 4, u128::MAX, &mut budget(&cancellation)),
+        completion(
+            &owner,
+            &producers,
+            4,
+            u128::MAX,
+            &mut budget(&mut Meter::local(u64::MAX), &cancellation)
+        ),
         Err(BudgetError::Stopped(Stop::Allocation))
     );
 }
@@ -361,7 +423,13 @@ fn an_absent_head_is_a_typed_source_failure() {
     let producers = inventory(&owner);
     let cancellation = Cancellation::default();
     assert_eq!(
-        completion(&owner, &producers, 5, 0, &mut budget(&cancellation)),
+        completion(
+            &owner,
+            &producers,
+            5,
+            0,
+            &mut budget(&mut Meter::local(u64::MAX), &cancellation)
+        ),
         Err(BudgetError::Source(AdmissionError::Atom))
     );
 }

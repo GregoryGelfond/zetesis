@@ -244,14 +244,14 @@ fn run_input(
 fn process_cancellation(
     seconds: Option<u64>,
     start: Instant,
-) -> Result<zetesis_cpu::Cancellation, RunError> {
+) -> Result<zetesis_algebra::Cancellation, RunError> {
     let Some(seconds) = seconds else {
-        return Ok(zetesis_cpu::Cancellation::default());
+        return Ok(zetesis_algebra::Cancellation::default());
     };
     let deadline = start
         .checked_add(Duration::from_secs(seconds))
         .ok_or(RunError::TimeLimitRange { seconds })?;
-    zetesis_cpu::Cancellation::with_deadline(deadline).map_err(RunError::DeadlineTimer)
+    zetesis_algebra::Cancellation::with_deadline(deadline).map_err(RunError::DeadlineTimer)
 }
 
 enum Input {

@@ -13,6 +13,7 @@ serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true, features = ["raw_value"] }
 sha2.workspace = true
 tempfile.workspace = true
+zetesis-algebra.workspace = true
 zetesis-backend = { workspace = true, features = ["clap", "serde"] }
 zetesis-core.workspace = true
 themelios-program.workspace = true

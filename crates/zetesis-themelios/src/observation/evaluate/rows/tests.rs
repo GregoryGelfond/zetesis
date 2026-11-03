@@ -1,8 +1,8 @@
 use super::super::super::{ErrorKind, Resource};
 use super::ModelRows;
 use crate::observation::evaluate::test_support::work;
+use zetesis_algebra::{Cancellation, Stop};
 use zetesis_core::{AtomCatalog, Model, Sign, catalog::ReadError};
-use zetesis_cpu::{Cancellation, Stop};
 use zetesis_test_support::programs::signed_numbered as atom;
 
 #[test]

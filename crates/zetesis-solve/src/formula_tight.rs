@@ -6,9 +6,10 @@ use crate::execution_observation::ExecutionSink;
 use crate::formula_execution::{
     Execution, Failure, FormulaExecutionStatistics, add, record_submission,
 };
+use crate::formula_queue::device::take_slate_prefix;
 use crate::phase_timing::{Recorder, SolvePhase};
 use crate::{ExecutionObservation, SolveConfig, SolveError};
-use zetesis_cpu::Cancellation;
+use zetesis_algebra::Cancellation;
 use zetesis_ferraris::{Interpretation, TightPlan, TightVerdict};
 use zetesis_stable::{BatchVerdict, Incomplete};
 use zetesis_wgpu::{GpuDeviceSource, GpuTightOracle, TightGpuError, TightGpuLimits};
@@ -147,6 +148,7 @@ impl crate::formula_queue::device::SlateDevice for TightDevice<'_> {
         &'d mut self,
         slate: zetesis_ferraris::SlateRef<'_>,
         offset: usize,
+        _max_bytes: u64,
         cancellation: &Cancellation,
     ) -> Result<Self::Prepared<'d>, Failure> {
         let limits = limits(self.options, slate.candidates().len());
@@ -162,6 +164,7 @@ impl crate::formula_queue::device::SlateDevice for TightDevice<'_> {
         slate: zetesis_ferraris::SlateId,
         offset: usize,
         offered: usize,
+        rows: &mut crate::formula_queue::device::CheckedRows,
     ) -> Result<crate::formula_queue::device::Decoded, Failure> {
         // A failed call can still report the batch before it, as unavailable.
         let compute = self.oracle.reported_compute_time();
@@ -194,17 +197,7 @@ impl crate::formula_queue::device::SlateDevice for TightDevice<'_> {
         let checks = checked.map_err(tight_failure)?;
         submission?;
         scheduled?;
-        let count = checks.count();
-        if count == 0 || count > offered {
-            return Err(Failure::Run(SolveError::FormulaBatchShape {
-                expected: offered,
-                actual: count,
-            }));
-        }
-        let finish_wait = checks.finish_wait();
-        let checks = checks
-            .into_checks(theory, slate, offset)
-            .map_err(|error| Failure::Run(SolveError::Gpu(error)))?;
+        let (checks, finish_wait) = take_slate_prefix(checks, theory, slate, offset, offered)?;
         if let Some(batch) = self.oracle.last_batch_stats() {
             add(&mut self.statistics.gpu_batches, batch.dispatches)?;
             add(&mut self.statistics.gpu_candidates, batch.candidates)?;
@@ -221,8 +214,10 @@ impl crate::formula_queue::device::SlateDevice for TightDevice<'_> {
             .try_reserve_exact(checks.len())
             .map_err(|_| Failure::Search(Incomplete::Allocation))?;
         verdicts.extend(checks.into_iter().map(|check| verdict(check.verdict())));
+        for verdict in verdicts {
+            rows.classified(verdict)?;
+        }
         Ok(crate::formula_queue::device::Decoded {
-            verdicts,
             compute,
             finish_wait,
         })

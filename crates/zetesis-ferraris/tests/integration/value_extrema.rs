@@ -3,8 +3,8 @@ mod families;
 
 use crate::support::aggregate_theories::{COMPARISONS, EXTREMA, copy, prefix, push, snapshot};
 use crate::support::worlds::eval;
+use zetesis_algebra::Cancellation;
 use zetesis_core::{Sign, Value, ValueLimits, ValueNode};
-use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{
     AggregateComparison as Comparison, AggregateErrorKind as Error, AggregateExtremum as Extremum,
     AggregateLimits, Node, ValueExtremumElement as Element, append_value_extremum,

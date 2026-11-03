@@ -95,7 +95,7 @@ pub mod symbols;
 pub use parsed_source::{ParsedSource, SourceFailure};
 pub use program_admission::{
     CompilationFailure, ProgramAdmissionFailure, ProgramAdmissionOptions, ProgramFailureKind,
-    ProgramLimit, ProgramResource, ProgramSubject,
+    ProgramLimit, ProgramOriginal, ProgramResource,
 };
 /// Canonical shared frontend tiers, including all vocabulary exposed by this crate.
 pub use themelios_analysis as analysis;

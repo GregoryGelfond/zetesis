@@ -23,7 +23,7 @@ fn large() -> Ledger {
 fn candidates(ledger: &mut Ledger, decided: &[usize]) -> Vec<usize> {
     let mut rows = Vec::new();
     ledger
-        .candidates(decided, &mut rows, &mut Work::new(u64::MAX))
+        .candidates(decided, &mut rows, &mut Meter::local(u64::MAX))
         .unwrap();
     rows
 }
@@ -80,9 +80,11 @@ fn a_stopped_rebuild_is_never_read() {
     candidates(&mut ledger, &[]);
     let mut rows = Vec::new();
     let mut permits = SinglePermits::new(3, Stop::WorkLimit);
-    let mut work = Work::reserved(&mut permits);
+    let mut work = Meter::reserved(&mut permits);
     assert_eq!(
-        ledger.candidates(&[7], &mut rows, &mut work),
+        ledger
+            .candidates(&[7], &mut rows, &mut work)
+            .map_err(zetesis_algebra::Failure::into_stop),
         Err(Stop::WorkLimit)
     );
     assert_eq!(candidates(&mut ledger, &[7]), [7]);
@@ -122,9 +124,9 @@ fn padded(extra: usize) -> Program {
 /// with `padding`, a tautology for each extra atom.
 fn padded_tier(program: &Program, padding: bool) -> NarrowingScratch {
     let mut scratch = NarrowingScratch::default();
-    scratch.explanations.prepare(&program.owner);
-    scratch.explanations.remaining = u64::MAX;
-    let ledger = &mut scratch.explanations;
+    scratch.learning.explanations.prepare(&program.owner);
+    scratch.learning.explanations.remaining = u64::MAX;
+    let ledger = &mut scratch.learning.explanations;
     assert!(add(
         ledger,
         &[(2, false), (3, true)],
@@ -145,17 +147,15 @@ fn close_carrier(
     knowledge: &mut Knowledge,
     scratch: &mut NarrowingScratch,
 ) -> (Narrowing, NarrowingStatistics) {
-    program
-        .index
-        .narrow_known(
-            OriginalSubject::carrier(&program.owner, None),
-            region,
-            knowledge,
-            scratch,
-            RegionLimits::default(),
-            &Cancellation::default(),
-        )
-        .unwrap()
+    let attempt = program.index.narrow_known(
+        OriginalSubject::carrier(&program.owner, None),
+        region,
+        knowledge,
+        scratch,
+        RegionLimits::default(),
+        &Cancellation::default(),
+    );
+    (attempt.result.unwrap(), attempt.statistics)
 }
 
 fn region_of(program: &Program, decisions: &[(usize, bool)]) -> Region {
@@ -210,7 +210,7 @@ fn indexed_matching_agrees_with_scanning_in_every_partial_region() {
     };
     let mut scanned = padded_tier(&program, false);
     let mut indexed = padded_tier(&program, true);
-    assert!(indexed.explanations.records_decisions());
+    assert!(indexed.learning.explanations.records_decisions());
     for mut code in 0..243 {
         let mut initial = Region::all_open(program.theory.atom_count());
         for atom in 0..5 {
@@ -240,5 +240,5 @@ fn indexed_matching_agrees_with_scanning_in_every_partial_region() {
             (wanted.matched, wanted.forced, wanted.cut, wanted.refuted)
         );
     }
-    assert!(indexed.explanations.indexed_steps > 0);
+    assert!(indexed.learning.explanations.indexed_steps > 0);
 }

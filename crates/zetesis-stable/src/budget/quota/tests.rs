@@ -1,6 +1,8 @@
 //! Exact work, decision and reservation boundaries are independent of quota
 //! ownership.
 
+mod reservation;
+
 use crate::budget::{Budget, LocalQuota, Quota, SharedBudget};
 use crate::{Cancellation, Incomplete, SearchLimits, SearchStatistics};
 
@@ -248,4 +250,126 @@ fn local_batched_grants_stop_at_the_ceiling() {
     assert_eq!(quota.reserve_up_to(0, 10, 256), Ok(10));
     assert_eq!(quota.reserve_up_to(7, 10, 2), Ok(2));
     assert_eq!(quota.reserve_up_to(10, 10, 1), Err(Incomplete::WorkLimit));
+}
+
+#[test]
+fn local_bulk_charge_preserves_native_overflow_order() {
+    let cancellation = Cancellation::default();
+    for (spent, amount, ceiling, expected, recorded) in [
+        (
+            u64::MAX,
+            1,
+            u64::MAX,
+            Err(Incomplete::CounterOverflow),
+            u64::MAX,
+        ),
+        (
+            u64::MAX - 1,
+            2,
+            u64::MAX,
+            Err(Incomplete::CounterOverflow),
+            u64::MAX - 1,
+        ),
+        (
+            u64::MAX - 1,
+            2,
+            u64::MAX - 1,
+            Err(Incomplete::WorkLimit),
+            u64::MAX - 1,
+        ),
+        (u64::MAX, 0, u64::MAX, Ok(()), u64::MAX),
+        (5, 0, 4, Err(Incomplete::WorkLimit), 5),
+        (7, 1, 8, Ok(()), 8),
+    ] {
+        let mut budget = Budget {
+            quota: LocalQuota,
+            limits: SearchLimits {
+                max_work: ceiling,
+                max_decisions: 9,
+            },
+            cancellation: &cancellation,
+            statistics: SearchStatistics {
+                work: spent,
+                decisions: 3,
+            },
+        };
+        assert_eq!(budget.charge(amount), expected);
+        assert_eq!(budget.statistics.work, recorded);
+        assert_eq!(budget.statistics.decisions, 3);
+    }
+    // The quota admits this saturated demand; only Budget's receipt commit
+    // reports the carry. This also distinguishes the private protocol boundary.
+    assert_eq!(LocalQuota.charge(u64::MAX, u64::MAX, 1), Ok(()));
+}
+
+#[test]
+fn cancelled_bulk_charge_precedes_native_refusals() {
+    let cancellation = Cancellation::default();
+    cancellation.cancel();
+    for amount in [0, 1] {
+        let before = SearchStatistics {
+            work: u64::MAX,
+            decisions: 3,
+        };
+        let mut budget = Budget {
+            quota: LocalQuota,
+            limits: SearchLimits {
+                max_work: 0,
+                max_decisions: 0,
+            },
+            cancellation: &cancellation,
+            statistics: before,
+        };
+        assert_eq!(budget.charge(amount), Err(Incomplete::Cancelled));
+        assert_eq!(budget.statistics, before);
+    }
+}
+
+#[test]
+fn failed_shared_bulk_charge_keeps_its_consumed_prefix() {
+    let limits = SearchLimits {
+        max_work: 3,
+        max_decisions: 0,
+    };
+    let shared = SharedBudget::new(limits, SearchStatistics::default());
+    let cancellation = Cancellation::default();
+    let mut worker = Budget {
+        quota: shared.lease(&cancellation),
+        limits,
+        cancellation: &cancellation,
+        statistics: SearchStatistics::default(),
+    };
+    assert_eq!(worker.charge(4), Err(Incomplete::WorkLimit));
+    assert_eq!(worker.statistics, SearchStatistics::default());
+    drop(worker.quota);
+    let mut joined = SearchStatistics::default();
+    shared.record(&mut joined);
+    assert_eq!(joined.work, 3);
+    assert_eq!(joined.decisions, 0);
+}
+
+#[test]
+fn decision_admission_retains_the_last_representable_slot() {
+    let complete = compare(
+        &[Operation::Decide, Operation::Decide],
+        SearchLimits {
+            max_work: 2,
+            max_decisions: u64::MAX,
+        },
+        SearchStatistics {
+            work: 0,
+            decisions: u64::MAX - 1,
+        },
+    );
+    assert_eq!(
+        complete,
+        SearchStatistics {
+            work: 2,
+            decisions: u64::MAX
+        }
+    );
+    assert_eq!(
+        LocalQuota.decision(u64::MAX, u64::MAX),
+        Err(Incomplete::DecisionLimit)
+    );
 }

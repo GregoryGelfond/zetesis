@@ -403,7 +403,7 @@ fn failed_stratified_checks_keep_the_pending_answer() {
         assert!(matches!(
             stream.next_batch(batch(4), residual),
             Err(BatchError::Search(Incomplete::Verification(
-                zetesis_cpu::Stop::WorkLimit
+                zetesis_algebra::Stop::WorkLimit
             )))
         ));
         let stats = stream.statistics();

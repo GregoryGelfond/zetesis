@@ -3,7 +3,7 @@
 use crate::support::models::cost_family as family;
 use std::num::NonZeroUsize;
 
-use zetesis_cpu::Cancellation;
+use zetesis_algebra::Cancellation;
 use zetesis_reference_support::formula;
 use zetesis_solve::{
     Backend, Completion, Grounder, Oracle, PreparedInput, Session, SolveConfig, WorldView,

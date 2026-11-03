@@ -1,10 +1,10 @@
 //! Propagation can be composed without spending or replacing split preferences.
 
 use crate::{
-    AdmissionLimits, ChoiceHeads, FormulaParts, Knowledge, Narrower, Narrowing, NarrowingQuota,
-    NarrowingScratch, Node, OriginalSubject, Region, RegionLimits, Theory,
+    AdmissionLimits, ChoiceHeads, FormulaParts, Knowledge, Narrower, Narrowing, NarrowingScratch,
+    Node, OriginalSubject, Region, RegionLimits, Theory,
 };
-use zetesis_cpu::{Cancellation, Stop};
+use zetesis_algebra::{Cancellation, Stop, region::Entry};
 
 #[derive(Default)]
 struct Allowance {
@@ -22,7 +22,8 @@ impl Allowance {
     }
 }
 
-impl NarrowingQuota for Allowance {
+impl zetesis_algebra::Quota for Allowance {
+    type Error = Stop;
     fn reserve(&mut self, wanted: u64) -> Result<u64, Stop> {
         let grant = wanted.min(self.remaining);
         if grant == 0 {
@@ -74,6 +75,7 @@ fn closed(theory: &Theory) -> (Region, Knowledge) {
             RegionLimits::default(),
             &Cancellation::default(),
         )
+        .result
         .unwrap();
     (region, known)
 }
@@ -83,18 +85,19 @@ fn deferred_preference_preserves_existing_split_choice() {
     let theory = theory();
     let narrower = Narrower::new(&theory);
     let mut known = narrower.knowledge();
-    let mut region = Region::all_open(3);
-    region.prefer(2);
-    let attempt = narrower.propagate_known_reserved(
+    let mut entry = Entry::new(Region::all_open(3), ());
+    entry.prefer(2);
+    let attempt = crate::test_support::stop_narrowing(&narrower.propagate_known_reserved(
         OriginalSubject::new(&theory, None),
-        &mut region,
+        &mut entry.region,
         &mut known,
         &mut NarrowingScratch::default(),
         &Cancellation::default(),
-        &mut Allowance::new(1000),
-    );
+        &mut zetesis_algebra::Meter::reserved(&mut Allowance::new(1000)),
+    ));
     assert_eq!(attempt.result.unwrap(), Narrowing::Fixed { changed: false });
-    assert_eq!(region.split_atom(), Some(2));
+    assert_eq!(attempt.preferred, None);
+    assert_eq!(entry.split_atom(), Some(2));
 }
 
 #[test]
@@ -102,35 +105,35 @@ fn separate_preference_has_the_original_narrowing_receipt() {
     let theory = theory();
     let narrower = Narrower::new(&theory);
     let mut ordinary = Region::all_open(3);
-    let (_, expected) = narrower
-        .narrow_known(
-            OriginalSubject::new(&theory, None),
-            &mut ordinary,
-            &mut narrower.knowledge(),
-            &mut NarrowingScratch::default(),
-            RegionLimits::default(),
-            &Cancellation::default(),
-        )
-        .unwrap();
+    let attempt = narrower.narrow_known(
+        OriginalSubject::new(&theory, None),
+        &mut ordinary,
+        &mut narrower.knowledge(),
+        &mut NarrowingScratch::default(),
+        RegionLimits::default(),
+        &Cancellation::default(),
+    );
+    attempt.result.unwrap();
+    let expected = attempt.statistics;
     let mut region = Region::all_open(3);
     let mut known = narrower.knowledge();
     let mut allowance = Allowance::new(1000);
-    let propagated = narrower.propagate_known_reserved(
+    let propagated = crate::test_support::stop_narrowing(&narrower.propagate_known_reserved(
         OriginalSubject::new(&theory, None),
         &mut region,
         &mut known,
         &mut NarrowingScratch::default(),
         &Cancellation::default(),
-        &mut allowance,
-    );
+        &mut zetesis_algebra::Meter::reserved(&mut allowance),
+    ));
     propagated.result.unwrap();
-    let preference = known.preferred_atom_reserved(
+    let preference = crate::test_support::stop_preference(&known.preferred_atom_reserved(
         &region,
         &ChoiceHeads::default(),
         &Cancellation::default(),
-        &mut allowance,
-    );
-    region.prefer(preference.result.unwrap().unwrap());
+        &mut zetesis_algebra::Meter::reserved(&mut allowance),
+    ));
+    assert_eq!(preference.result.unwrap(), attempt.preferred);
     assert_eq!(region, ordinary);
     assert_eq!(preference.work, 3);
     assert_eq!(propagated.statistics.work + preference.work, expected.work);
@@ -143,12 +146,12 @@ fn preference_refusal_retains_exact_read_prefix() {
     let (region, known) = closed(&theory);
     for limit in 0..=3 {
         let mut allowance = Allowance::new(limit);
-        let selected = known.preferred_atom_reserved(
+        let selected = crate::test_support::stop_preference(&known.preferred_atom_reserved(
             &region,
             &ChoiceHeads::default(),
             &Cancellation::default(),
-            &mut allowance,
-        );
+            &mut zetesis_algebra::Meter::reserved(&mut allowance),
+        ));
         assert_eq!(selected.work, limit);
         assert_eq!(allowance.granted - allowance.refunded, limit);
         assert_eq!(
@@ -169,12 +172,12 @@ fn cancelled_preference_reads_nothing() {
     let cancellation = Cancellation::default();
     cancellation.cancel();
     let mut allowance = Allowance::new(1000);
-    let selected = known.preferred_atom_reserved(
+    let selected = crate::test_support::stop_preference(&known.preferred_atom_reserved(
         &region,
         &ChoiceHeads::default(),
         &cancellation,
-        &mut allowance,
-    );
+        &mut zetesis_algebra::Meter::reserved(&mut allowance),
+    ));
     assert_eq!(selected.result, Err(Stop::Cancelled));
     assert_eq!(selected.work, 0);
     assert_eq!(allowance.granted, 0);
@@ -195,12 +198,12 @@ fn zero_parent_counts_prefer_the_lowest_open_atom() {
             assert!(region.cut(atom));
         }
     }
-    let selected = known.preferred_atom_reserved(
+    let selected = crate::test_support::stop_preference(&known.preferred_atom_reserved(
         &region,
         &ChoiceHeads::default(),
         &Cancellation::default(),
-        &mut Allowance::new(1000),
-    );
+        &mut zetesis_algebra::Meter::reserved(&mut Allowance::new(1000)),
+    ));
     assert_eq!(selected.result, Ok(Some(64)));
     assert_eq!(selected.work, 2);
 }
@@ -276,24 +279,25 @@ fn choice_heads_rank_before_more_constrained_atoms() {
             RegionLimits::default(),
             &Cancellation::default(),
         )
+        .result
         .unwrap();
     assert_eq!(region.open().collect::<Vec<_>>(), [0, 1, 2, 3, 4]);
-    let ordinary = known.preferred_atom_reserved(
+    let ordinary = crate::test_support::stop_preference(&known.preferred_atom_reserved(
         &region,
         &ChoiceHeads::default(),
         &Cancellation::default(),
-        &mut Allowance::new(1000),
-    );
+        &mut zetesis_algebra::Meter::reserved(&mut Allowance::new(1000)),
+    ));
     let busiest = ordinary.result.unwrap().unwrap();
     // The premise: the ordinary ranking prefers an atom with more unknown
     // parents than the choice head.
     assert!(unknown(&known, busiest) > unknown(&known, 0));
-    let choice = known.preferred_atom_reserved(
+    let choice = crate::test_support::stop_preference(&known.preferred_atom_reserved(
         &region,
         &extraction.choice_heads,
         &Cancellation::default(),
-        &mut Allowance::new(1000),
-    );
+        &mut zetesis_algebra::Meter::reserved(&mut Allowance::new(1000)),
+    ));
     assert_eq!(choice.result, Ok(Some(0)));
     // Only the open choice can win; the four unmarked degrees are unread.
     assert_eq!(choice.work, 1);
@@ -320,18 +324,20 @@ fn a_subject_with_choices_splits_on_a_choice_head() {
         crate::producers(&theory, RegionLimits::default(), &Cancellation::default()).unwrap();
     let narrower = Narrower::new(&theory);
     let split = |subject: OriginalSubject<'_>| {
-        let mut region = Region::all_open(theory.atom_count());
-        narrower
-            .narrow_known(
-                subject,
-                &mut region,
-                &mut narrower.knowledge(),
-                &mut NarrowingScratch::default(),
-                RegionLimits::default(),
-                &Cancellation::default(),
-            )
-            .unwrap();
-        region.split_atom()
+        let mut entry = Entry::new(Region::all_open(theory.atom_count()), ());
+        let attempt = narrower.narrow_known(
+            subject,
+            &mut entry.region,
+            &mut narrower.knowledge(),
+            &mut NarrowingScratch::default(),
+            RegionLimits::default(),
+            &Cancellation::default(),
+        );
+        attempt.result.unwrap();
+        if let Some(atom) = attempt.preferred {
+            entry.prefer(atom);
+        }
+        entry.split_atom()
     };
     let producers = extraction.producers.as_ref();
     // The premise: without choices the subject splits on a busier atom.
@@ -356,25 +362,89 @@ fn closed_and_outside_choice_bits_do_not_hide_open_atoms() {
     assert!(region.cut(64));
     assert!(region.cut(129));
     let choices = ChoiceHeads {
-        words: vec![1, 1, !3, u64::MAX],
+        words: vec![1, 1, !3, u64::MAX].into(),
     };
-    let attempt = known.preferred_atom_reserved(
+    let attempt = crate::test_support::stop_preference(&known.preferred_atom_reserved(
         &region,
         &choices,
         &Cancellation::default(),
-        &mut Allowance::new(1000),
-    );
+        &mut zetesis_algebra::Meter::reserved(&mut Allowance::new(1000)),
+    ));
     assert_eq!(attempt.result, Ok(Some(1)));
     assert_eq!(attempt.work, 127);
     let choices = ChoiceHeads {
-        words: vec![1, 1 | (1 << 63), !1, u64::MAX],
+        words: vec![1, 1 | (1 << 63), !1, u64::MAX].into(),
     };
-    let attempt = known.preferred_atom_reserved(
+    let attempt = crate::test_support::stop_preference(&known.preferred_atom_reserved(
         &region,
         &choices,
         &Cancellation::default(),
-        &mut Allowance::new(1000),
-    );
+        &mut zetesis_algebra::Meter::reserved(&mut Allowance::new(1000)),
+    ));
     assert_eq!(attempt.result, Ok(Some(127)));
     assert_eq!(attempt.work, 1);
+}
+
+#[test]
+fn a_stopped_narrowing_publishes_no_partial_preference() {
+    let owner = theory();
+    let narrower = Narrower::new(&owner);
+    let run = |max_work| {
+        narrower.narrow_known(
+            OriginalSubject::new(&owner, None),
+            &mut Region::all_open(owner.atom_count()),
+            &mut narrower.knowledge(),
+            &mut NarrowingScratch::default(),
+            RegionLimits { max_work },
+            &Cancellation::default(),
+        )
+    };
+    let complete = run(u64::MAX);
+    assert_eq!(
+        complete.result.unwrap(),
+        Narrowing::Fixed { changed: false }
+    );
+    assert_eq!(complete.preferred, Some(1));
+    for limit in 0..complete.statistics.work {
+        let stopped = run(limit);
+        assert_eq!(stopped.result, Err(Stop::WorkLimit), "limit {limit}");
+        assert_eq!(stopped.preferred, None, "limit {limit}");
+        assert_eq!(stopped.statistics.work, limit, "limit {limit}");
+    }
+}
+
+#[test]
+fn a_refuted_narrowing_publishes_no_preference() {
+    let owner = crate::test_support::theory(3, vec![Node::falsum()], vec![0]);
+    let narrower = Narrower::new(&owner);
+    let attempt = narrower.narrow_known(
+        OriginalSubject::new(&owner, None),
+        &mut Region::all_open(owner.atom_count()),
+        &mut narrower.knowledge(),
+        &mut NarrowingScratch::default(),
+        RegionLimits::default(),
+        &Cancellation::default(),
+    );
+    assert_eq!(attempt.result.unwrap(), Narrowing::Refuted);
+    assert_eq!(attempt.preferred, None);
+}
+
+#[test]
+fn choice_storage_preserves_the_vector_layout() {
+    use std::mem::{align_of, size_of};
+    assert_eq!(size_of::<ChoiceHeads>(), size_of::<Vec<u64>>());
+    assert_eq!(align_of::<ChoiceHeads>(), align_of::<Vec<u64>>());
+    let words = vec![1_u64, 2, 0];
+    let pointer = words.as_ptr();
+    let capacity = words.capacity();
+    let choices = ChoiceHeads {
+        words: words.into(),
+    };
+    assert_eq!(choices.words.as_ptr(), pointer);
+    assert_eq!(choices.words.capacity(), capacity);
+    assert!(choices.contains(0));
+    assert!(choices.contains(65));
+    assert!(!choices.contains(64));
+    assert!(!choices.contains(192));
+    assert!(!choices.contains(usize::MAX));
 }

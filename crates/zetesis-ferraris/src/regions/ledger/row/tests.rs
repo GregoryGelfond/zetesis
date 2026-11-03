@@ -91,13 +91,15 @@ fn all_partial_readings_match_the_signed_condition_law() {
                 }
                 let wanted = expected(&source, &held, &cut);
                 assert_eq!(
-                    row.deduction(&held, &cut, &mut Work::new(u64::MAX))
+                    row.deduction(&held, &cut, &mut Meter::local(u64::MAX))
+                        .map_err(zetesis_algebra::Failure::into_stop)
                         .unwrap(),
                     wanted
                 );
                 assert_eq!(
                     scalar
-                        .deduction(&held, &cut, &mut Work::new(u64::MAX))
+                        .deduction(&held, &cut, &mut Meter::local(u64::MAX))
+                        .map_err(zetesis_algebra::Failure::into_stop)
                         .unwrap(),
                     wanted
                 );
@@ -148,7 +150,8 @@ fn signed_outputs_obey_the_signed_condition_law() {
             let wanted = expected(&source, &held, &cut);
             for row in &rows {
                 assert_eq!(
-                    row.deduction(&held, &cut, &mut Work::new(u64::MAX))
+                    row.deduction(&held, &cut, &mut Meter::local(u64::MAX))
+                        .map_err(zetesis_algebra::Failure::into_stop)
                         .unwrap(),
                     wanted
                 );
@@ -166,7 +169,8 @@ fn dense() -> Literals {
 
 fn prepared(source: Literals) -> Row {
     let mut allowance = u64::MAX;
-    Row::prepare(source, &mut allowance, &mut Work::new(u64::MAX), &mut 0)
+    Row::prepare(source, &mut allowance, &mut Meter::local(u64::MAX), &mut 0)
+        .map_err(zetesis_algebra::Failure::into_stop)
         .unwrap()
         .unwrap()
 }
@@ -204,9 +208,15 @@ fn peak_storage_includes_both_conversion_buffers() {
     let scalar = source.retained_bytes();
     let mut peak = 0;
     let mut allowance = u64::MAX;
-    let row = Row::prepare(source, &mut allowance, &mut Work::new(u64::MAX), &mut peak)
-        .unwrap()
-        .unwrap();
+    let row = Row::prepare(
+        source,
+        &mut allowance,
+        &mut Meter::local(u64::MAX),
+        &mut peak,
+    )
+    .map_err(zetesis_algebra::Failure::into_stop)
+    .unwrap()
+    .unwrap();
     assert!(matches!(row, Row::Packed { .. }));
     assert_eq!(
         peak,
@@ -220,7 +230,8 @@ fn equal_rows_and_distinct_signs_ignore_physical_form() {
     for row in [Row::Scalar(dense()), packed(&original)] {
         let mut allowance = u64::MAX;
         assert_eq!(
-            row.subsumes(&original, &mut allowance, &mut Work::new(u64::MAX))
+            row.subsumes(&original, &mut allowance, &mut Meter::local(u64::MAX))
+                .map_err(zetesis_algebra::Failure::into_stop)
                 .unwrap(),
             Some(true)
         );
@@ -228,7 +239,8 @@ fn equal_rows_and_distinct_signs_ignore_physical_form() {
         opposite.conditions[7].1 = !opposite.conditions[7].1;
         let mut allowance = u64::MAX;
         assert_eq!(
-            row.subsumes(&opposite, &mut allowance, &mut Work::new(u64::MAX))
+            row.subsumes(&opposite, &mut allowance, &mut Meter::local(u64::MAX))
+                .map_err(zetesis_algebra::Failure::into_stop)
                 .unwrap(),
             Some(false)
         );
@@ -236,7 +248,8 @@ fn equal_rows_and_distinct_signs_ignore_physical_form() {
         *different.outputs.last_mut().unwrap() = (80, false);
         let mut allowance = u64::MAX;
         assert_eq!(
-            row.subsumes(&different, &mut allowance, &mut Work::new(u64::MAX))
+            row.subsumes(&different, &mut allowance, &mut Meter::local(u64::MAX))
+                .map_err(zetesis_algebra::Failure::into_stop)
                 .unwrap(),
             Some(false)
         );
@@ -273,61 +286,71 @@ fn compact_matching_charges_word_reads_instead_of_atom_reads() {
         }
     }
     held[1] = 1 << 15;
-    let mut packed_work = Work::new(u64::MAX);
-    let mut scalar_work = Work::new(u64::MAX);
+    let mut packed_work = Meter::local(u64::MAX);
+    let mut scalar_work = Meter::local(u64::MAX);
     let wanted = Deduction::Require {
         atom: 0,
         value: false,
     };
     assert_eq!(
-        row.deduction(&held, &cut, &mut packed_work).unwrap(),
+        row.deduction(&held, &cut, &mut packed_work)
+            .map_err(zetesis_algebra::Failure::into_stop)
+            .unwrap(),
         wanted
     );
     assert_eq!(
-        scalar.deduction(&held, &cut, &mut scalar_work).unwrap(),
+        scalar
+            .deduction(&held, &cut, &mut scalar_work)
+            .map_err(zetesis_algebra::Failure::into_stop)
+            .unwrap(),
         wanted
     );
-    assert_eq!(packed_work.spent(), 4);
-    assert_eq!(scalar_work.spent(), 81);
+    assert_eq!(packed_work.charged(), 4);
+    assert_eq!(scalar_work.charged(), 81);
 }
 
 #[test]
 fn every_interrupted_conversion_prefix_returns_no_row() {
-    let mut complete = Work::new(u64::MAX);
+    let mut complete = Meter::local(u64::MAX);
     let mut allowance = u64::MAX;
     let row = Row::prepare(dense(), &mut allowance, &mut complete, &mut 0)
+        .map_err(zetesis_algebra::Failure::into_stop)
         .unwrap()
         .unwrap();
     assert!(matches!(row, Row::Packed { .. }));
     for failure in [Stop::WorkLimit, Stop::Cancelled, Stop::Deadline] {
-        for prefix in 0..complete.spent() {
+        for prefix in 0..complete.charged() {
             let mut permits = SinglePermits::new(prefix, failure);
-            let mut work = Work::reserved(&mut permits);
+            let mut work = Meter::reserved(&mut permits);
             let mut allowance = u64::MAX;
             assert_eq!(
-                Row::prepare(dense(), &mut allowance, &mut work, &mut 0),
+                Row::prepare(dense(), &mut allowance, &mut work, &mut 0)
+                    .map_err(zetesis_algebra::Failure::into_stop),
                 Err(failure)
             );
-            assert_eq!(work.spent(), prefix);
+            assert_eq!(work.charged(), prefix);
         }
     }
 }
 
 #[test]
 fn optional_conversion_exhaustion_returns_no_row() {
-    let mut complete = Work::new(u64::MAX);
+    let mut complete = Meter::local(u64::MAX);
     let mut allowance = u64::MAX;
     Row::prepare(dense(), &mut allowance, &mut complete, &mut 0)
+        .map_err(zetesis_algebra::Failure::into_stop)
         .unwrap()
         .unwrap();
-    for allowance in 0..complete.spent() {
+    for allowance in 0..complete.charged() {
         let mut remaining = allowance;
-        let mut work = Work::new(u64::MAX);
+        let mut work = Meter::local(u64::MAX);
         assert_eq!(
-            Row::prepare(dense(), &mut remaining, &mut work, &mut 0).unwrap(),
+            Row::prepare(dense(), &mut remaining, &mut work, &mut 0)
+                .map_err(zetesis_algebra::Failure::into_stop)
+                .unwrap(),
             None
         );
-        assert_eq!(work.spent(), allowance);
+        assert_eq!(work.charged(), allowance);
         assert_eq!(remaining, 0);
     }
 }
@@ -338,8 +361,11 @@ fn every_interrupted_word_match_preserves_its_stop() {
     let row = packed(&source);
     let held = [0, 0, 3];
     let cut = [0, 1, 0];
-    let mut measured = Work::new(u64::MAX);
-    let wanted = row.deduction(&held, &cut, &mut measured).unwrap();
+    let mut measured = Meter::local(u64::MAX);
+    let wanted = row
+        .deduction(&held, &cut, &mut measured)
+        .map_err(zetesis_algebra::Failure::into_stop)
+        .unwrap();
     assert_eq!(
         wanted,
         Deduction::Require {
@@ -347,15 +373,20 @@ fn every_interrupted_word_match_preserves_its_stop() {
             value: false
         }
     );
-    assert_eq!(measured.spent(), 7);
+    assert_eq!(measured.charged(), 7);
     for failure in [Stop::WorkLimit, Stop::Cancelled, Stop::Deadline] {
-        for prefix in 0..measured.spent() {
+        for prefix in 0..measured.charged() {
             let mut permits = SinglePermits::new(prefix, failure);
-            let mut work = Work::reserved(&mut permits);
-            assert_eq!(row.deduction(&held, &cut, &mut work), Err(failure));
-            assert_eq!(work.spent(), prefix);
+            let mut work = Meter::reserved(&mut permits);
             assert_eq!(
-                row.deduction(&held, &cut, &mut Work::new(u64::MAX))
+                row.deduction(&held, &cut, &mut work)
+                    .map_err(zetesis_algebra::Failure::into_stop),
+                Err(failure)
+            );
+            assert_eq!(work.charged(), prefix);
+            assert_eq!(
+                row.deduction(&held, &cut, &mut Meter::local(u64::MAX))
+                    .map_err(zetesis_algebra::Failure::into_stop)
                     .unwrap(),
                 wanted
             );
@@ -367,29 +398,32 @@ fn every_interrupted_word_match_preserves_its_stop() {
 fn a_subsumption_comparison_cannot_hide_a_stop() {
     let original = dense();
     let row = packed(&original);
-    let mut measured = Work::new(u64::MAX);
+    let mut measured = Meter::local(u64::MAX);
     let mut allowance = u64::MAX;
     assert_eq!(
         row.subsumes(&original, &mut allowance, &mut measured)
+            .map_err(zetesis_algebra::Failure::into_stop)
             .unwrap(),
         Some(true)
     );
     for failure in [Stop::WorkLimit, Stop::Cancelled, Stop::Deadline] {
-        for prefix in 0..measured.spent() {
+        for prefix in 0..measured.charged() {
             let mut permits = SinglePermits::new(prefix, failure);
-            let mut work = Work::reserved(&mut permits);
+            let mut work = Meter::reserved(&mut permits);
             let mut allowance = u64::MAX;
             assert_eq!(
-                row.subsumes(&original, &mut allowance, &mut work),
+                row.subsumes(&original, &mut allowance, &mut work)
+                    .map_err(zetesis_algebra::Failure::into_stop),
                 Err(failure)
             );
-            assert_eq!(work.spent(), prefix);
+            assert_eq!(work.charged(), prefix);
         }
     }
-    for prefix in 0..measured.spent() {
+    for prefix in 0..measured.charged() {
         let mut allowance = prefix;
         assert_eq!(
-            row.subsumes(&original, &mut allowance, &mut Work::new(u64::MAX))
+            row.subsumes(&original, &mut allowance, &mut Meter::local(u64::MAX))
+                .map_err(zetesis_algebra::Failure::into_stop)
                 .unwrap(),
             None
         );
@@ -398,3 +432,43 @@ fn a_subsumption_comparison_cannot_hide_a_stop() {
 
 mod publication;
 mod subsumption;
+
+#[test]
+fn sparse_lanes_keep_the_original_inline_layout() {
+    use std::mem::offset_of;
+
+    struct OriginalWord {
+        index: usize,
+        held: u64,
+        cut: u64,
+    }
+    struct OriginalCursor {
+        next: usize,
+        word: usize,
+        present: u64,
+        absent: u64,
+    }
+    assert_eq!(size_of::<Word>(), size_of::<OriginalWord>());
+    assert_eq!(align_of::<Word>(), align_of::<OriginalWord>());
+    assert_eq!(offset_of!(Word, index), offset_of!(OriginalWord, index));
+    assert_eq!(offset_of!(Word, held), offset_of!(OriginalWord, held));
+    assert_eq!(offset_of!(Word, cut), offset_of!(OriginalWord, cut));
+    assert_eq!(size_of::<OutputCursor>(), size_of::<OriginalCursor>());
+    assert_eq!(align_of::<OutputCursor>(), align_of::<OriginalCursor>());
+    assert_eq!(
+        offset_of!(OutputCursor, next),
+        offset_of!(OriginalCursor, next)
+    );
+    assert_eq!(
+        offset_of!(OutputCursor, word),
+        offset_of!(OriginalCursor, word)
+    );
+    assert_eq!(
+        offset_of!(OutputCursor, present),
+        offset_of!(OriginalCursor, present)
+    );
+    assert_eq!(
+        offset_of!(OutputCursor, absent),
+        offset_of!(OriginalCursor, absent)
+    );
+}

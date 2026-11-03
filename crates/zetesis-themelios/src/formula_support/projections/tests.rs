@@ -490,7 +490,7 @@ fn cancelled_hits_never_return_a_value() {
                 Context::new(computation, &limits, counters, location()),
             )
             .unwrap();
-            let cancellation = zetesis_cpu::Cancellation::default();
+            let cancellation = zetesis_algebra::Cancellation::default();
             cancellation.cancel();
             counters.attach_test_control(&cancellation);
             assert!(matches!(
@@ -502,7 +502,7 @@ fn cancelled_hits_never_return_a_value() {
                     Context::new(computation, &limits, counters, location())
                 ),
                 Err(FormulaFailure::Interrupted {
-                    reason: zetesis_cpu::Stop::Cancelled,
+                    reason: zetesis_algebra::Stop::Cancelled,
                     ..
                 })
             ));

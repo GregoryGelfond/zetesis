@@ -23,7 +23,7 @@ workspace = true
 [dev-dependencies]
 zetesis-solve.workspace = true
 zetesis-themelios.workspace = true
-zetesis-cpu.workspace = true
+zetesis-algebra.workspace = true
 
 [[example]]
 name = "book-agent"

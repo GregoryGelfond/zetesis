@@ -1,8 +1,8 @@
 //! Objective lookup preserves typed keys and checks only matching predicate rows.
 //! Work controls distinguish complete absence from a refused comparison prefix.
 
+use zetesis_algebra::Cancellation;
 use zetesis_core::{AtomPattern, Model, Predicate, Sign, Term, Value, ValueLimits, ValueNode};
-use zetesis_cpu::Cancellation;
 use zetesis_objective::{
     AdmissionLimits, Condition, ConditionNode, ErrorKind, Limits, ObjectiveProgram,
     ObjectiveTemplate, Stop, evaluate,

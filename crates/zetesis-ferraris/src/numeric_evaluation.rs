@@ -14,7 +14,7 @@
 //! Interrupted updates withdraw their owning evaluation before any later read.
 
 use crate::{ExtremaMeasure, ExtremumCut, NumericDomain, Theory, Threshold};
-use zetesis_cpu::Stop;
+use zetesis_algebra::{Stop, words::Words};
 
 /// Capacity survives passes; valid bits survive only into an update of the
 /// evaluation that published them, under the invariant the module states.
@@ -23,7 +23,7 @@ use zetesis_cpu::Stop;
 #[derive(Debug, Default)]
 pub(crate) struct NumericRowScratch {
     measures: Vec<Measure>,
-    valid: Vec<u64>,
+    valid: Words<u64>,
 }
 
 impl NumericRowScratch {
@@ -88,9 +88,11 @@ impl NumericRowScratch {
         let observed = observe(self.retained_bytes());
         reserved?;
         observed?;
+        let additional = rows.div_ceil(64).saturating_sub(self.valid.len());
         let reserved = self
             .valid
-            .try_reserve_exact(rows.div_ceil(64).saturating_sub(self.valid.len()))
+            .storage_mut()
+            .try_reserve_exact(additional)
             .map_err(|_| Stop::Allocation);
         let observed = observe(self.retained_bytes());
         reserved?;
@@ -109,13 +111,13 @@ impl NumericRowScratch {
     ) -> Result<(), E> {
         let rows = Self::rows(theory);
         let words = rows.div_ceil(64);
-        self.valid.clear();
+        self.valid.storage_mut().clear();
         if self.measures.capacity() < rows || self.valid.capacity() < words {
             return Err(Stop::InvalidProgram.into());
         }
         for _ in 0..words {
             tick()?;
-            self.valid.push(0);
+            self.valid.storage_mut().push(0);
         }
         while self.measures.len() < rows {
             tick()?;
@@ -205,7 +207,7 @@ impl NumericRowScratch {
             return Err(Stop::InvalidProgram);
         }
         let word = self.valid.get_mut(row / 64).ok_or(Stop::InvalidProgram)?;
-        let bit = 1_u64 << (row % 64);
+        let bit = Words::<u64>::locate(row).1;
         if *word & bit == 0 {
             return Ok(());
         }
@@ -249,7 +251,7 @@ impl NumericRowScratch {
         reduce: impl FnOnce() -> Result<Measure, E>,
     ) -> Result<Measure, E> {
         let word = self.valid.get_mut(row / 64).ok_or(Stop::InvalidProgram)?;
-        let bit = 1_u64 << (row % 64);
+        let bit = Words::<u64>::locate(row).1;
         let measure = self.measures.get_mut(row).ok_or(Stop::InvalidProgram)?;
         if *word & bit == 0 {
             let completed = reduce()?;

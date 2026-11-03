@@ -124,12 +124,7 @@ impl Budget {
     /// Reports the inclusive work ceiling.
     pub fn work(&self, amount: u64) -> Result<(), Stop> {
         let mut statistics = self.statistics.get();
-        crate::limits::check(
-            crate::Resource::Work,
-            u128::from(statistics.work) + u128::from(amount),
-            u128::from(self.limits.max_work),
-        )?;
-        statistics.work += amount;
+        crate::limits::charge_work(&mut statistics.work, amount, self.limits.max_work)?;
         self.statistics.set(statistics);
         Ok(())
     }
@@ -138,11 +133,13 @@ impl Budget {
     /// Reports the inclusive inspected-byte ceiling.
     pub fn bytes(&self, amount: u64) -> Result<(), Stop> {
         let mut statistics = self.statistics.get();
-        crate::limits::check(
-            crate::Resource::InspectedBytes,
-            u128::from(statistics.inspected_bytes) + u128::from(amount),
-            u128::from(self.limits.max_inspected_bytes),
-        )?;
+        let observed = u128::from(statistics.inspected_bytes) + u128::from(amount);
+        let limit = u128::from(self.limits.max_inspected_bytes);
+        zetesis_algebra::MeterBytes::check(observed, limit).map_err(|_| Stop {
+            resource: crate::Resource::InspectedBytes,
+            limit,
+            observed,
+        })?;
         statistics.inspected_bytes += amount;
         self.statistics.set(statistics);
         Ok(())

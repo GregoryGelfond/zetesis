@@ -4,7 +4,7 @@ use crate::presentation::Diagnostics;
 use crate::{Backend, Completion, Grounder, Interruption, Options, RunFailure};
 use std::fmt;
 use std::io::{self, Write};
-use zetesis_cpu::{Cancellation, Stop};
+use zetesis_algebra::{Cancellation, Stop};
 use zetesis_themelios::{AdmissionFailure, BundleError, ExpansionFailure, SourceBundle};
 
 #[cfg(test)]
@@ -755,7 +755,10 @@ pub fn publish_prepared(
     let mut result = crate::publication::solve(
         input,
         config,
-        &crate::ExecutionResources::default(),
+        crate::publication::RunResources {
+            execution: &crate::ExecutionResources::default(),
+            evidence_request: None,
+        },
         renderer,
         &mut diagnostics,
         cancellation,

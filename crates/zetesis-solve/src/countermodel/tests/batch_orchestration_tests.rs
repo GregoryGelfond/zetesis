@@ -3,8 +3,8 @@
 
 use std::num::NonZeroUsize;
 
+use zetesis_algebra::Cancellation;
 use zetesis_core::Model;
-use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{Interpretation, Theory};
 use zetesis_stable::{
     BatchStatistics, BatchVerdict, FrontierOrder, Incomplete, StableModels, Statistics,

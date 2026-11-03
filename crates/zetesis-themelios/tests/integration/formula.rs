@@ -6,8 +6,8 @@ use zetesis_reference_support::{BundleFixture, admit, formula, resource_limits};
 
 use std::collections::BTreeSet;
 
+use zetesis_algebra::Cancellation;
 use zetesis_clingo_support as oracle;
-use zetesis_cpu::Cancellation;
 use zetesis_ferraris::Theory;
 use zetesis_stable::{Limits, StableModels};
 use zetesis_themelios::{

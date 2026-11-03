@@ -6,9 +6,9 @@
 
 use themelios_program::{Program, program::Statement, provenance::WithProvenance};
 use themelios_solve::{contract::Fault, outcome::Conclusion};
-use zetesis_cpu::Stop;
+use zetesis_algebra::Stop;
 use zetesis_solve::{Interruption, SearchState, SemanticOutcome, SolveError, SolveFailure};
-use zetesis_themelios::{FormulaFailure, ProgramSite, ProgramSubject, observation};
+use zetesis_themelios::{FormulaFailure, ProgramOriginal, ProgramSite, observation};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Class {
@@ -47,17 +47,17 @@ fn stop_class(stop: Stop) -> Class {
 fn fault(
     class: Class,
     message: String,
-    subject: Option<ProgramSubject<'_>>,
+    original_evidence: Option<ProgramOriginal<'_>>,
 ) -> Result<Conclusion, Fault> {
     match class {
         Class::Control(conclusion) => Ok(conclusion),
         Class::Resource => Err(Fault::resource(message)),
         Class::Engine => Err(Fault::engine(message)),
         Class::Adapter => Err(Fault::adapter_bug(message)),
-        Class::Program => Err(match subject {
-            Some(ProgramSubject::Statement(statement)) => Fault::program(message, statement),
-            Some(ProgramSubject::Part(part)) => Fault::program_part(message, part),
-            Some(ProgramSubject::Program) | None => Fault::adapter_bug(format!(
+        Class::Program => Err(match original_evidence {
+            Some(ProgramOriginal::Statement(statement)) => Fault::program(message, statement),
+            Some(ProgramOriginal::Part(part)) => Fault::program_part(message, part),
+            Some(ProgramOriginal::Program) | None => Fault::adapter_bug(format!(
                 "native statement refusal omitted its original subject: {message}"
             )),
         }),
@@ -139,7 +139,7 @@ pub(crate) fn observation(
     fault(
         observation_class(error.kind()),
         error.to_string(),
-        statement(original, Some(error.site())).map(ProgramSubject::Statement),
+        statement(original, Some(error.site())).map(ProgramOriginal::Statement),
     )
     .map_err(|fault| fault.caused_by(error))
 }
@@ -300,7 +300,7 @@ fn observation_class(error: &observation::ErrorKind) -> Class {
 /// It has no cancellation or deadline effect; its classifier cannot return control.
 pub(crate) fn admission(error: zetesis_themelios::ProgramAdmissionFailure<'_>) -> Fault {
     let class = program_class(&error.kind);
-    fault(class, error.to_string(), Some(error.subject))
+    fault(class, error.to_string(), Some(error.original))
         .expect_err("structural admission has no runtime control")
         .caused_by(error.kind)
 }
@@ -310,13 +310,13 @@ pub(crate) fn formula(error: FormulaFailure, original: &Program) -> Result<Concl
 }
 
 fn formula_ref(error: &FormulaFailure, original: &Program) -> Result<Conclusion, Fault> {
-    let subject = error
-        .subject()
-        .or_else(|| statement(original, error.site()).map(ProgramSubject::Statement));
+    let original_evidence = error
+        .original()
+        .or_else(|| statement(original, error.site()).map(ProgramOriginal::Statement));
     // Whole-input validation limits are resource faults. A semantic refusal
     // must identify its actual statement or excluded program part; absent
     // evidence is an internal invariant failure, never a guessed subject.
-    fault(formula_class(error), error.to_string(), subject)
+    fault(formula_class(error), error.to_string(), original_evidence)
 }
 
 fn program_class(error: &zetesis_themelios::ProgramFailureKind) -> Class {
@@ -436,12 +436,12 @@ fn relation_class(error: &zetesis_core::relation::Failure) -> Class {
     }
 }
 
-fn table_class(error: &zetesis_cpu::table::Cause) -> Class {
+fn table_class(error: &zetesis_core::table::Cause) -> Class {
     match error {
-        zetesis_cpu::table::Cause::Interrupted(stop) => stop_class(*stop),
-        zetesis_cpu::table::Cause::Limit { .. }
-        | zetesis_cpu::table::Cause::Overflow
-        | zetesis_cpu::table::Cause::Allocation => Class::Resource,
+        zetesis_core::table::Cause::Interrupted(stop) => stop_class(*stop),
+        zetesis_core::table::Cause::Limit { .. }
+        | zetesis_core::table::Cause::Overflow
+        | zetesis_core::table::Cause::Allocation => Class::Resource,
         _ => Class::Engine,
     }
 }

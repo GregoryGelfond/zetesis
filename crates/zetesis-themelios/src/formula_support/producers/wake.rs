@@ -5,6 +5,7 @@ use std::ops::Range;
 
 use crate::ProgramSite;
 use themelios_program::symbol::Signature;
+use zetesis_algebra::words::{SetBits, Words};
 use zetesis_core::{
     catalog::{AtomRef, PredicateRef},
     relation::Failure,
@@ -27,7 +28,7 @@ struct PredicateInputs<'source> {
 pub(super) struct Wake<'source> {
     predicates: Vec<PredicateInputs<'source>>,
     postings: Vec<usize>,
-    active: Vec<u64>,
+    active: Words<u64>,
 }
 
 impl<'source> Wake<'source> {
@@ -83,7 +84,7 @@ impl<'source> Wake<'source> {
         let mut wake = Self {
             predicates,
             postings,
-            active: Vec::new(),
+            active: Words::new(Vec::new()),
         };
         wake.bootstrap(rules, memory, limits, counters, location)?;
         Ok(wake)
@@ -98,10 +99,10 @@ impl<'source> Wake<'source> {
         location: ProgramSite,
     ) -> Result<(), FormulaFailure> {
         let words = rules.len().div_ceil(u64::BITS as usize);
-        memory.reserve(&mut self.active, words)?;
+        memory.reserve(self.active.storage_mut(), words)?;
         for _ in 0..words {
             counters.work(limits, location)?;
-            self.active.push(0);
+            self.active.storage_mut().push(0);
         }
         for (rule, inputs) in rules.iter().enumerate() {
             counters.work(limits, location)?;
@@ -120,15 +121,15 @@ impl<'source> Wake<'source> {
         location: ProgramSite,
     ) -> Result<(), FormulaFailure> {
         counters.work(limits, location)?;
-        self.active[rule / u64::BITS as usize] |= 1 << (rule % u64::BITS as usize);
+        self.active.insert(rule);
         Ok(())
     }
 
     pub(super) fn schedule(&self) -> Schedule<'_> {
         Schedule::Affected {
-            words: &self.active,
+            words: Words::new(&self.active[..]),
             next: 0,
-            remaining: 0,
+            remaining: Words::<u64>::bits(0),
         }
     }
 
@@ -139,7 +140,7 @@ impl<'source> Wake<'source> {
         counters: &mut Counters,
         location: ProgramSite,
     ) -> Result<(), FormulaFailure> {
-        for word in &mut self.active {
+        for word in self.active.iter_mut() {
             counters.work(limits, location)?;
             *word = 0;
         }
@@ -212,9 +213,9 @@ pub(in crate::formula_support) enum Schedule<'a> {
         next: usize,
     },
     Affected {
-        words: &'a [u64],
+        words: Words<u64, &'a [u64]>,
         next: usize,
-        remaining: u64,
+        remaining: SetBits<u64>,
     },
 }
 
@@ -246,17 +247,14 @@ impl<'a> Schedule<'a> {
                 next,
                 remaining,
             } => loop {
-                if *remaining != 0 {
-                    counters.work(limits, location)?;
-                    let bit = remaining.trailing_zeros() as usize;
-                    *remaining &= *remaining - 1;
+                if let Some(bit) = remaining.next_with(|| counters.work(limits, location))? {
                     return Ok(Some((*next - 1) * u64::BITS as usize + bit));
                 }
                 let Some(&word) = words.get(*next) else {
                     return Ok(None);
                 };
                 counters.work(limits, location)?;
-                *remaining = word;
+                *remaining = Words::<u64>::bits(word);
                 *next += 1;
             },
         }

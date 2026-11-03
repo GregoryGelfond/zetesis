@@ -10,10 +10,10 @@ use std::{
 use zetesis_reference_support::formula;
 use zetesis_test_support::programs::atom;
 
+use zetesis_algebra::Cancellation;
 use zetesis_clingo_support as oracle;
 use zetesis_clingo_support::REPORT_BYTES;
 use zetesis_core::{Model, Value};
-use zetesis_cpu::Cancellation;
 use zetesis_solve::{
     AnswerSelection, AnswerSet, Backend, Completion, ExecutionObservation, ExecutionObserver,
     ExecutionResources, Grounder, OptimumSearch, Oracle, PreparedInput, Session, SolveConfig,

@@ -3,7 +3,7 @@
 use std::sync::Arc;
 
 use themelios_program::program::Program;
-use zetesis_cpu::Cancellation;
+use zetesis_algebra::Cancellation;
 use zetesis_solve::PreparedInput;
 use zetesis_themelios::{
     FormulaFailure, FormulaPurpose, ProgramFormulaOptions, SourceMetadata,

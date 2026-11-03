@@ -11,13 +11,13 @@ use std::collections::BTreeSet;
 use std::num::NonZeroUsize;
 
 use clap::Parser;
+use zetesis_algebra::Cancellation;
 use zetesis_cli::{
     Backend, Completion, Interruption, Options, Oracle, PreparedInput, Session, SolveConfig,
     run_with_diagnostics,
 };
 use zetesis_clingo_support as oracle;
 use zetesis_core::{Value, ValueLimits};
-use zetesis_cpu::Cancellation;
 use zetesis_reference_support::{admit, canonical, exhaustive, formula};
 use zetesis_stable::Incomplete;
 use zetesis_test_support::programs::atom;

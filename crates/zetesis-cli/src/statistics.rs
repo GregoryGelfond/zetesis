@@ -497,23 +497,28 @@ fn candidate_regions(
     let parity = regions.parity;
     writeln!(
         sink,
-        "  candidate parity: status={}; rows={}; rank={}; root refuted={}; units={}; preparation work={}; peak bytes={} (work included in reading work)",
+        "  candidate parity: status={}; rows={}; rank={}; root refuted={}; units={}; region passes={}; forced={}; refuted={}; preparation work={}; preparation peak bytes={} (work included in reading work)",
         parity.status.label(),
         parity.rows,
         parity.rank,
         parity.root_refuted,
         parity.units,
+        parity.region_passes,
+        parity.forced,
+        parity.refuted,
         parity.preparation_work,
         parity.preparation_bytes,
     )?;
     let cardinality = regions.cardinality;
     writeln!(
         sink,
-        "  candidate cardinality: status={}; rows={}; families={}; root refuted={}; preparation work={}; peak bytes={} (work included in reading work)",
+        "  candidate cardinality: status={}; rows={}; families={}; root refuted={}; region passes={}; refuted={}; preparation work={}; preparation peak bytes={} (work included in reading work)",
         cardinality.status.label(),
         cardinality.rows,
         cardinality.families,
         cardinality.root_refuted,
+        cardinality.region_passes,
+        cardinality.refuted,
         cardinality.preparation_work,
         cardinality.preparation_bytes,
     )?;

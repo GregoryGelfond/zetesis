@@ -9,7 +9,7 @@
 
 use std::fmt;
 
-use zetesis_cpu::{Cancellation, ChargeError, Meter, Refusal, Stop};
+use zetesis_algebra::{Cancellation, ChargeError, Meter, MeterBytes, Refusal, Stop};
 
 mod restriction;
 #[cfg(test)]
@@ -350,9 +350,11 @@ fn build(premises: Premises<'_>, budget: &mut Budget<'_, '_>) -> Result<Plan, Er
     budget.statistics.construction_bytes = resident
         .checked_add(bytes::<Coverage>(premises.atom_count)?)
         .ok_or(ErrorKind::Overflow)?;
-    if budget.statistics.construction_bytes > budget.limits.max_bytes {
-        return Err(ErrorKind::Limit(Resource::Bytes));
-    }
+    MeterBytes::check(
+        u128::from(budget.statistics.construction_bytes),
+        u128::from(budget.limits.max_bytes),
+    )
+    .map_err(|_| ErrorKind::Limit(Resource::Bytes))?;
     let mut coverage = budget.storage(premises.atom_count)?;
     for _ in 0..premises.atom_count {
         budget.tick()?;
@@ -446,11 +448,9 @@ fn assign(
 }
 
 fn limit(actual: usize, maximum: usize, resource: Resource) -> Result<(), ErrorKind> {
-    if actual > maximum {
-        Err(ErrorKind::Limit(resource))
-    } else {
-        Ok(())
-    }
+    Meter::check_count(actual, 0, maximum)
+        .map(|_| ())
+        .map_err(|_| ErrorKind::Limit(resource))
 }
 
 fn bytes<T>(count: usize) -> Result<u64, ErrorKind> {

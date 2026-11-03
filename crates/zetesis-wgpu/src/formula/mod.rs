@@ -27,16 +27,21 @@ pub struct FormulaLimits {
     /// released afterward. The directory is charged by capacity and released once
     /// node packing finishes. Candidate upload scratch is retained only for an
     /// unchanged subject and batch shape, and charged by actual element capacity.
-    /// Result host allowances remain requested sizes.
+    /// Before submission, the host admits the decoded result vector's actual
+    /// capacity, mask storage for every candidate and space to construct one
+    /// region at a time.
     /// Caller-owned inputs, allocator overhead and driver-private allocations
     /// or deferred retirement are excluded; this is not an RSS bound.
     pub max_batch_bytes: u64,
-    /// Maximum complete propagation sweeps per candidate. Zero still checks
-    /// original truth, then returns an explicit round-limit residual.
+    /// Maximum complete propagation sweeps per candidate. At zero, a candidate
+    /// that satisfies the original theory returns a round-limit residual.
     pub max_rounds: u32,
-    /// Maximum charged device work per candidate. Setup costs
+    /// Maximum charged device work per candidate. Formula setup reserves
     /// `2*nodes+edges+atoms+roots+levels` for two node walks, all child occurrences, semantic-atom
     /// initialization, root visits and dependency-level synchronization.
+    /// Result projection reserves another `atoms + 2*ceil(atoms/32)` units for
+    /// one classification per atom and two mask stores per word. A terminal
+    /// result skips classification and reports only the stores from this allowance.
     /// Pure chains and empty graphs select serial truth and charge zero levels;
     /// other DAGs charge their number of occupied dependency levels.
     /// Leaf nodes are visited but need no separate domain initialization store.
@@ -92,27 +97,27 @@ pub enum ResidualReason {
 }
 
 /// A partial decision about the original candidate and its frozen reduct.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum FormulaVerdict {
     /// The candidate violates an original asserted root.
     NotModel,
     /// Original roots hold, and sound propagation refutes every proper subset.
     NoProperSubset,
-    /// Original roots hold; exact residual search remains necessary.
-    Residual(ResidualReason),
+    /// Original roots hold. The returned region contains the remaining proper-subset queries.
+    Residual(ResidualReason, zetesis_algebra::region::Region),
 }
 
 /// Charged work and completed sweeps for one candidate.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct FormulaStatistics {
-    /// Mandatory setup plus reserved per-sweep work, as specified by the limits.
+    /// Performed setup and output projection plus the charge for completed sweeps.
     pub work: u32,
     /// Full cooperative propagation sweeps completed.
     pub rounds: u32,
 }
 
 /// Validated result for one candidate, preserving input order.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct FormulaCheck {
     verdict: FormulaVerdict,
     statistics: FormulaStatistics,
@@ -120,7 +125,12 @@ pub struct FormulaCheck {
 impl FormulaCheck {
     /// Logical or residual result. No fixed-point result implies stability.
     #[must_use]
-    pub const fn verdict(&self) -> FormulaVerdict {
+    pub const fn verdict(&self) -> &FormulaVerdict {
+        &self.verdict
+    }
+    /// Move the authenticated outcome and any residual root into host completion.
+    #[must_use]
+    pub fn into_verdict(self) -> FormulaVerdict {
         self.verdict
     }
     /// Per-candidate propagation accounting.

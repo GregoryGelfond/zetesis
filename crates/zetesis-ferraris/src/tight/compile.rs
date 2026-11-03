@@ -5,7 +5,7 @@ use super::{
     TightProducerKind, TightResource, bytes, filled, reserve,
 };
 use crate::{ExtremumCut, NodeView, Theory, Threshold};
-use zetesis_cpu::{Cancellation, Meter, Stop};
+use zetesis_algebra::{Cancellation, Meter, Stop};
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Body {
@@ -99,7 +99,7 @@ fn classify_step(
     classes: &mut Vec<Body>,
     meter: &mut Meter<'_>,
 ) -> Result<(), TightError> {
-    meter.tick()?;
+    Tick::tick(meter)?;
     let class = classify_node(theory, index, classes, meter)?;
     classes.push(class);
     Ok(())
@@ -121,7 +121,7 @@ fn classify_node(
         NodeView::Atom(_) => Ok(Body::Positive),
         NodeView::False => Ok(Body::Frozen),
         NodeView::Implies(_, consequent) => {
-            meter.tick()?;
+            Tick::tick(meter)?;
             let node = theory
                 .view()
                 .node(consequent)
@@ -150,7 +150,7 @@ fn classify_cut(
     }
     let mut class = Body::Frozen;
     for (&child, &rank) in cut.row.conditions.iter().zip(cut.row.ranks) {
-        meter.tick()?;
+        Tick::tick(meter)?;
         if cut.qualifies(rank) {
             class = match (class, classes[child]) {
                 (Body::Opaque, _) | (_, Body::Opaque) => Body::Opaque,
@@ -170,7 +170,7 @@ fn classify_threshold(
     let mut total = 0_i128;
     let mut class = Body::Frozen;
     for (&child, &weight) in threshold.conditions.iter().zip(threshold.weights) {
-        meter.tick()?;
+        Tick::tick(meter)?;
         total = total
             .checked_add(i128::from(weight))
             .ok_or(Stop::InvalidProgram)?;
@@ -196,7 +196,7 @@ fn classify_operands(
 ) -> Result<Body, TightError> {
     let mut class = Body::Frozen;
     for &child in operands {
-        meter.tick()?;
+        Tick::tick(meter)?;
         class = match (class, classes[child]) {
             (Body::Opaque, _) | (_, Body::Opaque) => Body::Opaque,
             (Body::Frozen, Body::Frozen) => Body::Frozen,
@@ -255,7 +255,7 @@ fn extract(
 ) -> Result<Vec<TightProducer>, TightError> {
     let mut count = 0usize;
     for &root in theory.roots() {
-        meter.tick()?;
+        Tick::tick(meter)?;
         if producer(theory, root, classes)?.is_some() {
             if count == limits.max_producers {
                 return Err(TightError::Limit(TightResource::Producers));
@@ -270,7 +270,7 @@ fn extract(
     )?;
     let mut producers = reserve(count)?;
     for &root in theory.roots() {
-        meter.tick()?;
+        Tick::tick(meter)?;
         if let Some(producer) = producer(theory, root, classes)? {
             producers.push(producer);
         }
@@ -287,7 +287,7 @@ fn each_dependency(
 ) -> Result<(), TightError> {
     let offset = theory.atom_count();
     for index in 0..theory.view().len() {
-        meter.tick()?;
+        Tick::tick(meter)?;
         match theory
             .view()
             .node(index)
@@ -300,7 +300,7 @@ fn each_dependency(
                 // Duplicate operands contribute duplicate edges and matching
                 // indegrees. Neither is silently deduplicated on its own.
                 for &child in operands {
-                    meter.tick()?;
+                    Tick::tick(meter)?;
                     if classes[child] == Body::Positive {
                         visit(offset + child, offset + index, false)?;
                     }
@@ -308,7 +308,7 @@ fn each_dependency(
             }
             NodeView::Threshold(threshold) if classes[index] == Body::Positive => {
                 for (&child, &weight) in threshold.conditions.iter().zip(threshold.weights) {
-                    meter.tick()?;
+                    Tick::tick(meter)?;
                     if weight != 0 && classes[child] == Body::Positive {
                         visit(offset + child, offset + index, false)?;
                     }
@@ -316,7 +316,7 @@ fn each_dependency(
             }
             NodeView::ExtremumCut(cut) if classes[index] == Body::Positive => {
                 for (&child, &rank) in cut.row.conditions.iter().zip(cut.row.ranks) {
-                    meter.tick()?;
+                    Tick::tick(meter)?;
                     if cut.qualifies(rank) && classes[child] == Body::Positive {
                         visit(offset + child, offset + index, false)?;
                     }
@@ -326,7 +326,7 @@ fn each_dependency(
         }
     }
     for producer in producers {
-        meter.tick()?;
+        Tick::tick(meter)?;
         if let Some(body) = producer.body
             && classes[body] == Body::Positive
         {
@@ -430,19 +430,19 @@ fn derive_ranks(
         },
     )?;
     for (index, &degree) in indegrees.iter().enumerate() {
-        meter.tick()?;
+        Tick::tick(meter)?;
         if degree == 0 {
             queue.push(index);
         }
     }
     let mut cursor = 0;
     while cursor < queue.len() {
-        meter.tick()?;
+        Tick::tick(meter)?;
         let source = queue[cursor];
         cursor += 1;
         let mut edge_index = links[source];
         while edge_index != END {
-            meter.tick()?;
+            Tick::tick(meter)?;
             let edge = edges[edge_index];
             rank[edge.target] = rank[edge.target].max(rank[source] + usize::from(edge.strict));
             indegrees[edge.target] -= 1;
@@ -454,14 +454,14 @@ fn derive_ranks(
     }
     if queue.len() != vertices {
         for (atom, degree) in indegrees[..theory.atom_count()].iter().enumerate() {
-            meter.tick()?;
+            Tick::tick(meter)?;
             if *degree != 0 {
                 return Err(TightError::PositiveCycle { atom });
             }
         }
         // Formula edges are topological, so a remaining cycle necessarily
         // passes through an atom. Keep a typed failure if that invariant fails.
-        return Err(zetesis_cpu::Stop::InvalidProgram.into());
+        return Err(zetesis_algebra::Stop::InvalidProgram.into());
     }
     let mut atoms = reserve(theory.atom_count())?;
     atoms.extend_from_slice(&rank[..theory.atom_count()]);
@@ -480,14 +480,14 @@ fn validate_ranks(
         return Err(TightError::RankShape);
     }
     for &rank in ranks {
-        meter.tick()?;
+        Tick::tick(meter)?;
         if rank >= ranks.len() {
             return Err(TightError::RankShape);
         }
     }
     let mut maximum = reserve::<usize>(theory.nodes().len())?;
     for (index, &class) in classes.iter().enumerate() {
-        meter.tick()?;
+        Tick::tick(meter)?;
         maximum.push(
             match theory
                 .view()
@@ -501,7 +501,7 @@ fn validate_ranks(
                 NodeView::Threshold(threshold) if class == Body::Positive => {
                     let mut value = 0;
                     for (&child, &weight) in threshold.conditions.iter().zip(threshold.weights) {
-                        meter.tick()?;
+                        Tick::tick(meter)?;
                         if weight != 0 && classes[child] == Body::Positive {
                             value = value.max(maximum[child]);
                         }
@@ -511,7 +511,7 @@ fn validate_ranks(
                 NodeView::ExtremumCut(cut) if class == Body::Positive => {
                     let mut value = 0;
                     for (&child, &rank) in cut.row.conditions.iter().zip(cut.row.ranks) {
-                        meter.tick()?;
+                        Tick::tick(meter)?;
                         if cut.qualifies(rank) && classes[child] == Body::Positive {
                             value = value.max(maximum[child]);
                         }
@@ -523,7 +523,7 @@ fn validate_ranks(
         );
     }
     for producer in producers {
-        meter.tick()?;
+        Tick::tick(meter)?;
         if let Some(body) = producer.body
             && classes[body] == Body::Positive
             && maximum[body] >= ranks[producer.head]
@@ -543,7 +543,7 @@ fn maximum_operand(
 ) -> Result<usize, TightError> {
     let mut value = 0;
     for &child in operands {
-        meter.tick()?;
+        Tick::tick(meter)?;
         value = value.max(maximum[child]);
     }
     Ok(value)

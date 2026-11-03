@@ -200,3 +200,29 @@ fn packed_support_does_not_retain_prior_body_truth() {
         assert_eq!(result.verdict, expected);
     }
 }
+
+#[test]
+fn first_set_stops_at_the_matching_word_or_refused_read() {
+    let cancellation = Cancellation::default();
+    for maximum in 0..=3 {
+        let attempt =
+            cancellation.metered(maximum, |meter| first_set(&[0, 0, 1 << 7, u64::MAX], meter));
+        assert_eq!(attempt.charged, maximum);
+        assert_eq!(
+            attempt.result,
+            if maximum == 3 {
+                Ok(135)
+            } else {
+                Err(TightError::Limit(crate::TightResource::Work))
+            },
+        );
+    }
+    for words in [&[][..], &[0, 0, 0][..]] {
+        let attempt = cancellation.metered(u64::MAX, |meter| first_set(words, meter));
+        assert_eq!(attempt.charged, u64::try_from(words.len()).unwrap());
+        assert_eq!(
+            attempt.result,
+            Err(TightError::Stopped(Stop::InvalidProgram))
+        );
+    }
+}

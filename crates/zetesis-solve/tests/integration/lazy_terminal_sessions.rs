@@ -2,8 +2,8 @@
 //! is checked against the streamed constraints, then extended, then published.
 
 use std::{collections::BTreeSet, num::NonZeroUsize};
+use zetesis_algebra::Cancellation;
 use zetesis_core::Model;
-use zetesis_cpu::Cancellation;
 use zetesis_reference_support::prepared;
 use zetesis_solve::{
     Backend, Completion, Grounder, Oracle, PreparedInput, Session, SolveConfig, SolveError,

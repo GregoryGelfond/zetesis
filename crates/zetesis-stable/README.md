@@ -126,8 +126,14 @@ check's preparations, passes, refutations and failures.
 
 ## Proposing candidates by regions
 
+The shared region and word primitives live in `zetesis-algebra`, which has no
+workspace dependencies. Parallel walkers and GPU candidate producers use
+`zetesis_algebra::walk::frontier::Frontier` for their queue and termination
+protocol. Their semantic knowledge and membership decisions remain here.
+
 No clause form of the theory is built. The candidate space is the coverage tree
-of `Search.lean` over the theory's atoms, walked by `zetesis_cpu::regions`: the
+of `Search.lean` over the theory's atoms, walked by
+`zetesis_algebra::walk::Walk`: the
 root leaves every atom open, each region is narrowed by
 `zetesis_ferraris::Narrower::narrow_known_reserved`, from its parent's
 knowledge, to the fixed point of the theory's readings, with the theory's

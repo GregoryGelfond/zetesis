@@ -2,12 +2,14 @@
 //! No adapter absence or residual query is replaced by a CPU GPU-result claim.
 
 mod agreement;
+mod handover;
 mod native;
 
 use crate::support::physical;
 
+use zetesis_algebra::Cancellation;
+use zetesis_algebra::region::Region;
 use zetesis_backend::GpuApi;
-use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{
     FrozenReduct, Interpretation, Limits, Node, NodeView, SlateId, SlateRef, Theory, Verdict, check,
 };
@@ -72,6 +74,35 @@ fn setup_work(theory: &Theory) -> u32 {
             + scheduled_levels(theory),
     )
     .unwrap()
+}
+
+// Every submitted world must fit the atom scan and both logical mask columns.
+// Empty-atom worlds have no column words.
+fn reserved_setup(theory: &Theory, setup: u32) -> u32 {
+    let atoms = u32::try_from(theory.atom_count()).unwrap();
+    setup + atoms + 2 * atoms.div_ceil(32)
+}
+
+// Both terminal verdicts write zeros in the mask columns. Only residuals read
+// every semantic atom domain to construct the returned geometry.
+fn returned_work(theory: &Theory, setup: u32, sweep: u32, result: &FormulaCheck) -> u32 {
+    let atoms = u32::try_from(theory.atom_count()).unwrap();
+    let read_domains = match result.verdict() {
+        FormulaVerdict::NotModel | FormulaVerdict::NoProperSubset => 0,
+        FormulaVerdict::Residual(_, _) => atoms,
+    };
+    setup + result.statistics().rounds * sweep + read_domains + 2 * atoms.div_ceil(32)
+}
+
+fn residual_root(result: &FormulaCheck, expected: ResidualReason) -> &Region {
+    let FormulaVerdict::Residual(actual, root) = result.verdict() else {
+        panic!(
+            "expected a residual with reason {expected:?}, got {:?}",
+            result.verdict()
+        );
+    };
+    assert_eq!(*actual, expected);
+    root
 }
 
 fn sweep_work(theory: &Theory) -> u32 {
@@ -168,7 +199,8 @@ fn compare(oracle: &mut GpuFormulaOracle, theory: &Theory) -> (usize, usize) {
                 assert!(cpu.accepted());
                 refutations += 1;
             }
-            FormulaVerdict::Residual(_) => {
+            FormulaVerdict::Residual(_, root) => {
+                handover::check_coverage(candidate, root, &inputs, cpu.accepted());
                 assert!(!matches!(cpu.verdict(), Verdict::NotModel { .. }));
                 residuals += 1;
             }
@@ -177,7 +209,7 @@ fn compare(oracle: &mut GpuFormulaOracle, theory: &Theory) -> (usize, usize) {
         let (setup, sweep) = propagation_work(theory, cold.propagation);
         assert_eq!(
             result.statistics().work,
-            setup + result.statistics().rounds * sweep
+            returned_work(theory, setup, sweep, result)
         );
     }
     let reversed: Vec<_> = inputs.into_iter().rev().collect();
@@ -398,6 +430,7 @@ fn qualify_frozen_queries(backend: GpuApi, projection: GateProjection) {
     println!("completed refutations={} residuals={}", totals.0, totals.1);
     qualify_root_propagation(&mut oracle);
     qualify_kernel_options(&mut oracle);
+    handover::check_subset_cut(&mut oracle);
 }
 
 fn qualify_kernel_options(oracle: &mut GpuFormulaOracle) {
@@ -538,8 +571,8 @@ fn qualify_size_boundaries(oracle: &mut GpuFormulaOracle, sizing: GpuWorkgroupSi
         let results = oracle
             .propagate_batch(&graph, &inputs, FormulaLimits::default())
             .unwrap();
-        assert_eq!(results[0].verdict(), FormulaVerdict::NotModel);
-        assert_eq!(results[1].verdict(), FormulaVerdict::NoProperSubset);
+        assert_eq!(results[0].verdict(), &FormulaVerdict::NotModel);
+        assert_eq!(results[1].verdict(), &FormulaVerdict::NoProperSubset);
         assert_eq!(dispatched(oracle), expected(64), "{atoms} atoms");
     }
 }
@@ -573,11 +606,8 @@ fn qualify_next_generation(oracle: &mut GpuFormulaOracle) {
     // generation must revisit the implication/or(b,b) and find the conflict.
     // N=5, E=6, A=2, R=2, L=3 gives dense setup23/sweep127.
     // W=1, V=5, I=9 adds setup2 and sweep(1+5+20+54)=80.
-    for (rounds, expected) in [
-        (1, FormulaVerdict::Residual(ResidualReason::RoundLimit)),
-        (2, FormulaVerdict::NoProperSubset),
-    ] {
-        let work = 25 + rounds * 207;
+    for rounds in [1, 2] {
+        let work = reserved_setup(&graph, 25) + rounds * 207;
         let checks = oracle
             .propagate_batch(
                 &graph,
@@ -593,9 +623,19 @@ fn qualify_next_generation(oracle: &mut GpuFormulaOracle) {
             oracle.last_batch_stats().unwrap().propagation,
             GpuPropagation::ChangedDependencies
         );
-        assert_eq!(checks[0].verdict(), expected);
+        if rounds == 1 {
+            let root = residual_root(&checks[0], ResidualReason::RoundLimit);
+            assert_eq!(root.len(), 2);
+            assert_eq!(root.decision(0), Some(true));
+            assert_eq!(root.decision(1), Some(false));
+        } else {
+            assert_eq!(checks[0].verdict(), &FormulaVerdict::NoProperSubset);
+        }
         assert_eq!(checks[0].statistics().rounds, rounds);
-        assert_eq!(checks[0].statistics().work, work);
+        assert_eq!(
+            checks[0].statistics().work,
+            returned_work(&graph, 25, 207, &checks[0])
+        );
     }
 }
 
@@ -632,7 +672,7 @@ fn qualify_active_frontier(oracle: &mut GpuFormulaOracle) {
                 &[candidate],
                 FormulaLimits {
                     max_rounds: rounds,
-                    max_work_per_candidate: setup + rounds * sweep,
+                    max_work_per_candidate: reserved_setup(&graph, setup) + rounds * sweep,
                     ..Default::default()
                 },
             )
@@ -641,11 +681,11 @@ fn qualify_active_frontier(oracle: &mut GpuFormulaOracle) {
             oracle.last_batch_stats().unwrap().propagation,
             GpuPropagation::ChangedDependencies
         );
-        assert_eq!(checks[0].verdict(), FormulaVerdict::NoProperSubset);
+        assert_eq!(checks[0].verdict(), &FormulaVerdict::NoProperSubset);
         assert!(checks[0].statistics().rounds <= rounds);
         assert_eq!(
             checks[0].statistics().work,
-            setup + checks[0].statistics().rounds * sweep
+            returned_work(&graph, setup, sweep, &checks[0])
         );
     }
 }
@@ -672,7 +712,7 @@ fn qualify_incidence_fallback(oracle: &mut GpuFormulaOracle) {
             &theory,
             &inputs,
             FormulaLimits {
-                max_work_per_candidate: setup_work(&theory),
+                max_work_per_candidate: reserved_setup(&theory, setup_work(&theory)),
                 ..Default::default()
             },
         )
@@ -682,12 +722,11 @@ fn qualify_incidence_fallback(oracle: &mut GpuFormulaOracle) {
         GpuPropagation::Dense
     );
     for result in &results[..3] {
-        assert_eq!(result.verdict(), FormulaVerdict::NotModel);
+        assert_eq!(result.verdict(), &FormulaVerdict::NotModel);
     }
-    assert_eq!(
-        results[3].verdict(),
-        FormulaVerdict::Residual(ResidualReason::WorkLimit)
-    );
+    let root = residual_root(&results[3], ResidualReason::WorkLimit);
+    assert_eq!(root.len(), 2);
+    assert!(root.is_open(0) && root.is_open(1));
     assert_eq!(
         oracle.compiled_profile().kernel_options().propagation,
         requested
@@ -707,7 +746,7 @@ fn qualify_group_fallback(oracle: &mut GpuFormulaOracle) {
             &theory,
             &candidates(&theory),
             FormulaLimits {
-                max_work_per_candidate: active_setup,
+                max_work_per_candidate: reserved_setup(&theory, active_setup),
                 ..Default::default()
             },
         )
@@ -716,14 +755,13 @@ fn qualify_group_fallback(oracle: &mut GpuFormulaOracle) {
         oracle.last_batch_stats().unwrap().propagation,
         GpuPropagation::ChangedDependencies
     );
-    assert!(
-        results
-            .iter()
-            .any(|result| result.verdict() == FormulaVerdict::Residual(ResidualReason::WorkLimit))
-    );
+    assert!(results.iter().any(|result| matches!(
+        result.verdict(),
+        FormulaVerdict::Residual(ResidualReason::WorkLimit, _)
+    )));
     assert!(results.iter().all(|result| matches!(
         result.verdict(),
-        FormulaVerdict::NotModel | FormulaVerdict::Residual(ResidualReason::WorkLimit)
+        FormulaVerdict::NotModel | FormulaVerdict::Residual(ResidualReason::WorkLimit, _)
     )));
     oracle.clear_residency();
     compare(oracle, &theory);
@@ -790,7 +828,9 @@ fn qualify_root_propagation(oracle: &mut GpuFormulaOracle) {
             .unwrap()
             .accepted()
         );
-        let work = setup_work(&graph) + sweep_work(&graph);
+        let setup = setup_work(&graph);
+        let sweep = sweep_work(&graph);
+        let work = reserved_setup(&graph, setup) + sweep;
         let results = oracle
             .propagate_batch(
                 &graph,
@@ -802,9 +842,12 @@ fn qualify_root_propagation(oracle: &mut GpuFormulaOracle) {
                 },
             )
             .unwrap();
-        assert_eq!(results[0].verdict(), FormulaVerdict::NoProperSubset);
+        assert_eq!(results[0].verdict(), &FormulaVerdict::NoProperSubset);
         assert_eq!(results[0].statistics().rounds, 1);
-        assert_eq!(results[0].statistics().work, work);
+        assert_eq!(
+            results[0].statistics().work,
+            returned_work(&graph, setup, sweep, &results[0])
+        );
     }
 }
 
@@ -835,20 +878,16 @@ fn qualify_bidirectional_propagation(oracle: &mut GpuFormulaOracle) {
     // requirement. Reverse-only sweeps would advance one chain link at a time.
     let propagation = oracle.compiled_profile().kernel_options().propagation;
     let (setup, sweep) = propagation_work(&graph, propagation);
-    for (rounds, work, expected, completed_rounds) in [
-        (
-            1,
-            setup + sweep,
-            FormulaVerdict::Residual(ResidualReason::RoundLimit),
-            1,
-        ),
+    let reserved = reserved_setup(&graph, setup);
+    for (rounds, work, residual, completed_rounds) in [
+        (1, reserved + sweep, Some(ResidualReason::RoundLimit), 1),
         (
             2,
-            setup + 2 * sweep - 1,
-            FormulaVerdict::Residual(ResidualReason::WorkLimit),
+            reserved + 2 * sweep - 1,
+            Some(ResidualReason::WorkLimit),
             1,
         ),
-        (2, setup + 2 * sweep, FormulaVerdict::NoProperSubset, 2),
+        (2, reserved + 2 * sweep, None, 2),
     ] {
         let checks = oracle
             .propagate_batch(
@@ -862,11 +901,18 @@ fn qualify_bidirectional_propagation(oracle: &mut GpuFormulaOracle) {
             )
             .unwrap();
         assert_eq!(oracle.last_batch_stats().unwrap().propagation, propagation);
-        assert_eq!(checks[0].verdict(), expected);
+        if let Some(reason) = residual {
+            let root = residual_root(&checks[0], reason);
+            assert_eq!(root.len(), 2);
+            assert_eq!(root.decision(0), Some(true));
+            assert_eq!(root.decision(1), Some(false));
+        } else {
+            assert_eq!(checks[0].verdict(), &FormulaVerdict::NoProperSubset);
+        }
         assert_eq!(checks[0].statistics().rounds, completed_rounds);
         assert_eq!(
             checks[0].statistics().work,
-            setup + completed_rounds * sweep
+            returned_work(&graph, setup, sweep, &checks[0])
         );
     }
 }
@@ -911,18 +957,15 @@ fn qualify_subset_strides(oracle: &mut GpuFormulaOracle) {
         // 65 of one strict-subset reduction, whatever the workgroup size.
         let setup = 529 - u32::try_from(available.len()).unwrap();
         let sweep = 1394;
-        let expected = match available.len() {
-            0 => FormulaVerdict::NoProperSubset,
-            1 => FormulaVerdict::Residual(ResidualReason::RoundLimit),
-            _ => FormulaVerdict::Residual(ResidualReason::FixedPoint),
+        let reserved = reserved_setup(&graph, setup);
+        let after_sweep = match available.len() {
+            0 => None,
+            1 => Some(ResidualReason::RoundLimit),
+            _ => Some(ResidualReason::FixedPoint),
         };
-        for (work, verdict, rounds) in [
-            (
-                setup + sweep - 1,
-                FormulaVerdict::Residual(ResidualReason::WorkLimit),
-                0,
-            ),
-            (setup + sweep, expected, 1),
+        for (work, residual, rounds) in [
+            (reserved + sweep - 1, Some(ResidualReason::WorkLimit), 0),
+            (reserved + sweep, after_sweep, 1),
         ] {
             let results = oracle
                 .propagate_batch(
@@ -935,9 +978,31 @@ fn qualify_subset_strides(oracle: &mut GpuFormulaOracle) {
                     },
                 )
                 .unwrap();
-            assert_eq!(results[0].verdict(), verdict, "available={available:?}");
+            if let Some(reason) = residual {
+                let root = residual_root(&results[0], reason);
+                assert_eq!(root.len(), 131);
+                for atom in 0..131 {
+                    let decision = if !available.contains(&atom) {
+                        Some(true)
+                    } else if rounds == 1 && available.len() == 1 {
+                        Some(false)
+                    } else {
+                        None
+                    };
+                    assert_eq!(
+                        root.decision(atom),
+                        decision,
+                        "atom={atom}, available={available:?}"
+                    );
+                }
+            } else {
+                assert_eq!(results[0].verdict(), &FormulaVerdict::NoProperSubset);
+            }
             assert_eq!(results[0].statistics().rounds, rounds);
-            assert_eq!(results[0].statistics().work, setup + rounds * sweep);
+            assert_eq!(
+                results[0].statistics().work,
+                returned_work(&graph, setup, sweep, &results[0])
+            );
         }
     }
     println!("strict-subset strides=3 final-stride=3 zero/unique/multiple=8 exact/below=16");
@@ -966,22 +1031,26 @@ fn qualify_resources(backend: GpuApi, projection: GateProjection) {
         ),
         (
             FormulaLimits {
-                max_work_per_candidate: 4,
+                max_work_per_candidate: reserved_setup(&graph, 4),
                 ..FormulaLimits::default()
             },
             ResidualReason::WorkLimit,
         ),
     ] {
         let results = oracle.propagate_batch(&graph, &inputs, limits).unwrap();
-        assert_eq!(results[0].verdict(), FormulaVerdict::NotModel);
-        assert_eq!(results[1].verdict(), FormulaVerdict::Residual(expected));
+        assert_eq!(results[0].verdict(), &FormulaVerdict::NotModel);
+        // The asserted root is a semantic atom and is held during setup.
+        let root = residual_root(&results[1], expected);
+        assert_eq!(root.len(), 1);
+        assert_eq!(root.decision(0), Some(true));
         assert_eq!(results[1].statistics().rounds, 0);
-        assert_eq!(results[1].statistics().work, 4);
+        assert_eq!(results[1].statistics().work, 7);
+        assert_eq!(results[0].statistics().work, 6);
     }
     let full = oracle
         .propagate_batch(&graph, &inputs, FormulaLimits::default())
         .unwrap();
-    assert_eq!(full[1].verdict(), FormulaVerdict::NoProperSubset);
+    assert_eq!(full[1].verdict(), &FormulaVerdict::NoProperSubset);
     let hot = *oracle.last_batch_stats().unwrap();
     assert_zero_wait_preserves_residency(&mut oracle, &graph, &inputs, &full);
     for (bytes, succeeds) in [
@@ -1030,7 +1099,7 @@ fn qualify_resources(backend: GpuApi, projection: GateProjection) {
         let result = oracle
             .propagate_batch(&graph, &[candidate], FormulaLimits::default())
             .unwrap();
-        assert_eq!(result[0].verdict(), FormulaVerdict::NoProperSubset);
+        assert_eq!(result[0].verdict(), &FormulaVerdict::NoProperSubset);
     }
     assert!(
         oracle

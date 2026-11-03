@@ -2,6 +2,8 @@
 
 use std::{fmt, mem::size_of};
 
+use zetesis_algebra::words::Words;
+
 use crate::catalog::TermRef;
 
 use super::{Failure, Limits, Relation, Row, Work, storage};
@@ -204,7 +206,7 @@ impl<'owner, 'source> Selection<'owner, 'source> {
 /// it does not establish full pattern matching or answer-set membership.
 pub struct Mask<'owner, 'source> {
     relation: &'owner Relation<'source>,
-    words: Vec<u32>,
+    words: Words<u32>,
     bytes: usize,
     work: u128,
 }
@@ -322,7 +324,7 @@ impl<'source> Relation<'source> {
         let result = self.resolve_query(equalities, &mut work, &mut before);
         QueryAttempt {
             result,
-            work: work.used,
+            work: work.charged(),
             peak_bytes: work.peak,
         }
     }
@@ -359,7 +361,7 @@ impl<'source> Relation<'source> {
         EqualityAttempt {
             relation: self,
             result,
-            work: work.used,
+            work: work.charged(),
             peak_bytes: work.peak,
         }
     }
@@ -384,7 +386,7 @@ impl<'source> Relation<'source> {
             equalities: resolved,
             possible,
             bytes: work.live - self.storage.retained_bytes,
-            work: work.used,
+            work: work.charged(),
         })
     }
 
@@ -395,17 +397,7 @@ impl<'source> Relation<'source> {
         work: &mut Work,
         before: &mut impl FnMut() -> Result<(), E>,
     ) -> Result<Option<Equality>, QueryFailure<E>> {
-        let mut tick = || -> Result<(), QueryFailure<E>> {
-            let next = work.used.checked_add(1).ok_or(Failure::Overflow)?;
-            super::ceiling(
-                super::Resource::Work,
-                next,
-                u128::from(work.limits.max_work),
-            )?;
-            before().map_err(QueryFailure::Stopped)?;
-            work.used = next;
-            Ok(())
-        };
+        let mut tick = || work.tick_with(1, &mut *before);
         tick()?;
         if column >= self.predicate.arity() {
             return Err(Failure::Column.into());
@@ -450,7 +442,7 @@ impl<'source> Relation<'source> {
             relation: self,
             positions: copied,
             bytes: work.live - self.storage.retained_bytes,
-            work: work.used,
+            work: work.charged(),
         })
     }
 
@@ -484,6 +476,7 @@ impl<'source> Relation<'source> {
             return Err(Failure::Mask);
         }
         let mask_bytes = std::mem::size_of_val(words);
+        let words = Words::<u32, _>::new(words);
         let extra = mask_bytes
             .checked_add(size_of::<Selection<'_, '_>>())
             .ok_or(Failure::Overflow)?;
@@ -496,24 +489,22 @@ impl<'source> Relation<'source> {
                 return Err(Failure::Mask);
             }
             count = count
-                .checked_add(word.count_ones() as usize)
+                .checked_add(Words::<u32>::popcount(word) as usize)
                 .ok_or(Failure::Overflow)?;
         }
         let mut positions = work.reserve(count)?;
         for (index, &word) in words.iter().enumerate() {
             work.tick(1)?;
-            let mut remaining = word;
-            while remaining != 0 {
-                work.tick(2)?;
-                positions.push(index * bits + remaining.trailing_zeros() as usize);
-                remaining &= remaining - 1;
+            let mut selected = Words::<u32>::bits(word);
+            while let Some(bit) = selected.next_with(|| work.tick(2))? {
+                positions.push(index * bits + bit);
             }
         }
         Ok(Selection {
             relation: self,
             positions,
             bytes: work.live - self.storage.retained_bytes - mask_bytes,
-            work: work.used,
+            work: work.charged(),
         })
     }
 
@@ -535,7 +526,7 @@ impl<'source> Relation<'source> {
             relation: self,
             positions,
             bytes: work.live - self.storage.retained_bytes,
-            work: work.used,
+            work: work.charged(),
         })
     }
 
@@ -573,7 +564,7 @@ impl<'source> Relation<'source> {
             relation: self,
             positions,
             bytes: work.live - self.storage.retained_bytes - inputs,
-            work: work.used,
+            work: work.charged(),
         })
     }
 
@@ -606,14 +597,15 @@ impl<'source> Relation<'source> {
         let mut words = work.reserve(count)?;
         work.tick(count as u128)?;
         words.resize(count, 0_u32);
+        let mut words = Words::<u32>::new(words);
         self.visit_matches(query, input, &mut work, |position| {
-            words[position / bits] |= 1 << (position % bits);
+            words.insert(position);
         })?;
         Ok(Mask {
             relation: self,
             words,
             bytes: work.live - self.storage.retained_bytes - inputs,
-            work: work.used,
+            work: work.charged(),
         })
     }
 

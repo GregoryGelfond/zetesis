@@ -1,11 +1,11 @@
 //! Differential closure and processed-event accounting for shared native rows.
 
 use crate::regions::{
-    Closure, Knowledge, Narrower, NarrowingScratch, NarrowingStatistics, RegionLimits, Step,
-    Subject, Width, Work, bit,
+    Closure, Context, Knowledge, Meter, Narrower, NarrowingScratch, NarrowingStatistics,
+    RegionLimits, Step, Width, bit,
 };
 use crate::{AdmissionLimits, FormulaNodes, FormulaParts, Node, Region, Theory};
-use zetesis_cpu::{Cancellation, Stop};
+use zetesis_algebra::{Cancellation, Stop};
 
 use super::State;
 
@@ -50,7 +50,10 @@ fn region(values: &[Option<bool>]) -> Region {
     region
 }
 
-fn readings(knowledge: &Knowledge, nodes: usize) -> Vec<Option<bool>> {
+fn readings<C: zetesis_algebra::Class>(
+    knowledge: &Knowledge<C>,
+    nodes: usize,
+) -> Vec<Option<bool>> {
     fn read<C>(known: &crate::regions::Known<C>, nodes: usize) -> Vec<Option<bool>> {
         let masks = known.masks.slices();
         (0..nodes)
@@ -72,7 +75,7 @@ fn readings(knowledge: &Knowledge, nodes: usize) -> Vec<Option<bool>> {
     }
 }
 
-fn states(knowledge: &Knowledge) -> &[State] {
+fn states<C: zetesis_algebra::Class>(knowledge: &Knowledge<C>) -> &[State] {
     match &knowledge.width {
         Width::Compact16(known) => &known.thresholds,
         Width::Compact32(known) => &known.thresholds,
@@ -179,46 +182,66 @@ fn incremental(
     guards: &[Option<bool>],
     frozen: Option<&[bool]>,
 ) -> Result<Vec<Option<bool>>, ()> {
+    match frozen {
+        Some(truth) => incremental_class(
+            Context::from(crate::FrozenSubject::new(theory, truth)),
+            index,
+            atoms,
+            guards,
+        ),
+        None => incremental_class(
+            Context::from(crate::OriginalSubject::new(theory, None)),
+            index,
+            atoms,
+            guards,
+        ),
+    }
+}
+
+fn incremental_class<C: crate::regions::ReadingClass>(
+    context: Context<'_, C>,
+    index: &Narrower,
+    atoms: &[Option<bool>],
+    guards: &[Option<bool>],
+) -> Result<Vec<Option<bool>>, ()> {
+    let theory = context.theory();
     let mut knowledge = index.root_known::<usize>();
     let mut scratch = NarrowingScratch::default();
-    scratch.prepare(theory.atom_count());
-    let mut closure = Closure {
-        known: knowledge.borrow(),
-        lists: &mut scratch,
-    };
-    for (guard, value) in guards.iter().enumerate() {
-        let node = atoms.len() + guard;
-        match value {
-            Some(true) => {
-                assert!(closure.sure(node) != Step::Contradiction);
+    scratch.common.prepare(theory.atom_count());
+    let result = {
+        let mut closure = Closure::<_, C> {
+            known: knowledge.borrow(),
+            lists: &mut scratch.common,
+            learning: C::borrow_learning(&mut scratch.learning),
+        };
+        for (guard, value) in guards.iter().enumerate() {
+            let node = atoms.len() + guard;
+            match value {
+                Some(true) => {
+                    assert!(closure.sure(node) != Step::Contradiction);
+                }
+                Some(false) => {
+                    assert!(closure.never(node) != Step::Contradiction);
+                }
+                None => {}
             }
-            Some(false) => {
-                assert!(closure.never(node) != Step::Contradiction);
-            }
-            None => {}
         }
-    }
-    let result = closure
-        .close(
-            Subject {
-                theory,
-                producers: None,
-                frozen,
-                choices: &crate::regions::NO_CHOICES,
-                generator_order: None,
-                learning: None,
-            },
-            index,
-            &region(atoms),
-            &mut Work::new(u64::MAX),
-            &mut NarrowingStatistics::default(),
-        )
-        .unwrap();
+        closure
+            .close(
+                context,
+                index,
+                &region(atoms),
+                &mut Meter::local(u64::MAX),
+                &mut NarrowingStatistics::default(),
+            )
+            .unwrap()
+    };
     if result == Step::Contradiction {
         return Err(());
     }
     Ok(readings(
-        &Knowledge {
+        &Knowledge::<C> {
+            class: std::marker::PhantomData,
             width: Width::Native(knowledge),
         },
         theory.nodes().len(),
@@ -266,14 +289,15 @@ fn close(
     scratch: &mut NarrowingScratch,
     limit: u64,
 ) -> Result<(crate::Narrowing, NarrowingStatistics), Stop> {
-    index.narrow_known(
+    let attempt = index.narrow_known(
         crate::OriginalSubject::new(theory, None),
         region,
         knowledge,
         scratch,
         RegionLimits { max_work: limit },
         &Cancellation::default(),
-    )
+    );
+    attempt.result.map(|outcome| (outcome, attempt.statistics))
 }
 
 #[test]
@@ -384,24 +408,17 @@ fn stopped_numeric_work_leaves_no_scratch_authority() {
     let mut scratch = NarrowingScratch::default();
     for ceiling in 0..receipt.1.work {
         let mut discarded_region = original.clone();
-        let stopped = index.narrow_with(
+        let stopped = crate::test_support::stop_narrowing(&index.narrow_with(
             (
-                Subject {
-                    theory: &theory,
-                    producers: None,
-                    frozen: None,
-                    choices: &crate::regions::NO_CHOICES,
-                    generator_order: None,
-                    learning: None,
-                },
+                Context::from(crate::OriginalSubject::new(&theory, None)),
                 crate::regions::SplitSelection::Choose,
             ),
             &mut discarded_region,
             &mut index.knowledge(),
             &mut scratch,
-            Work::new(ceiling),
+            &mut Meter::local(ceiling),
             &Cancellation::default(),
-        );
+        ));
         assert_eq!(stopped.result, Err(Stop::WorkLimit));
         assert_eq!(stopped.statistics.work, ceiling);
         let mut actual_region = original.clone();
@@ -489,21 +506,22 @@ fn copied_rows_preserve_arbitrary_frozen_children() {
             .map(|node| mask & (1 << node) != 0)
             .chain(bounds.iter().map(|&bound| sum >= bound))
             .collect();
-        let close =
-            |region: &mut Region, knowledge: &mut Knowledge, scratch: &mut NarrowingScratch| {
-                index
-                    .narrow_frozen_known(
-                        crate::FrozenSubject::new(&theory, &truth),
-                        region,
-                        knowledge,
-                        scratch,
-                        RegionLimits::default(),
-                        &Cancellation::default(),
-                    )
-                    .unwrap()
-                    .0
-            };
-        let mut parent = index.knowledge();
+        let close = |region: &mut Region,
+                     knowledge: &mut Knowledge<zetesis_algebra::Countermodels>,
+                     scratch: &mut NarrowingScratch| {
+            index
+                .narrow_frozen_known(
+                    crate::FrozenSubject::new(&theory, &truth),
+                    region,
+                    knowledge,
+                    scratch,
+                    RegionLimits::default(),
+                    &Cancellation::default(),
+                )
+                .result
+                .unwrap()
+        };
+        let mut parent = index.frozen_knowledge();
         let mut scratch = NarrowingScratch::default();
         close(&mut Region::all_open(3), &mut parent, &mut scratch);
         let before = states(&parent).to_vec();
@@ -512,7 +530,7 @@ fn copied_rows_preserve_arbitrary_frozen_children() {
             copied.clone_from(&parent);
             let mut child = region(&decisions(code, 3));
             let mut fresh_region = child.clone();
-            let mut fresh = index.knowledge();
+            let mut fresh = index.frozen_knowledge();
             assert_eq!(
                 close(&mut child, &mut copied, &mut scratch),
                 close(
@@ -620,7 +638,7 @@ fn frozen_false_guard_updates_its_parent_row() {
     // M={1}; J is arbitrary. The masked inner guard cannot become true even
     // when J holds atom 0, so the outer root must obtain its weight from atom 1.
     let truth = [false, true, false, true];
-    let mut knowledge = index.knowledge();
+    let mut knowledge = index.frozen_knowledge();
     let mut region = Region::all_open(2);
     index
         .narrow_frozen_known(
@@ -631,6 +649,7 @@ fn frozen_false_guard_updates_its_parent_row() {
             RegionLimits::default(),
             &Cancellation::default(),
         )
+        .result
         .unwrap();
     assert!(region.is_open(0));
     assert!(region.is_held(1));

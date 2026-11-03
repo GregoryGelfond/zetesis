@@ -8,10 +8,16 @@ license.workspace = true
 publish = false
 
 [dependencies]
+zetesis-algebra.workspace = true
 
 [dev-dependencies]
+rayon.workspace = true
 proptest.workspace = true
 zetesis-test-support.workspace = true
 
 [lints]
 workspace = true
+
+[[example]]
+name = "book-finite-tables"
+path = "../../docs/book/examples/finite-tables.rs"

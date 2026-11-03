@@ -50,14 +50,16 @@ fn merge(row: &Row, other: &mut Literals, maximum: usize) -> Option<bool> {
         other,
         maximum,
         &mut remaining,
-        &mut Work::new(u64::MAX),
+        &mut Meter::local(u64::MAX),
         &mut 0,
     )
+    .map_err(zetesis_algebra::Failure::into_stop)
     .unwrap()
 }
 
 fn deduction(row: &Row, held: &[u64], cut: &[u64]) -> Deduction {
-    row.deduction(held, cut, &mut Work::new(u64::MAX)).unwrap()
+    row.deduction(held, cut, &mut Meter::local(u64::MAX))
+        .unwrap()
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -266,25 +268,27 @@ fn interrupted_union_preserves_both_inputs() {
         let row = stored(&source, packed);
         let bytes = row.retained_bytes();
         let mut complete = copy(&proposed);
-        let mut measured = Work::new(u64::MAX);
+        let mut measured = Meter::local(u64::MAX);
         let mut peak = 0;
         let mut remaining = u64::MAX;
         assert_eq!(
-            row.union_outputs(&mut complete, 64, &mut remaining, &mut measured, &mut peak),
+            row.union_outputs(&mut complete, 64, &mut remaining, &mut measured, &mut peak)
+                .map_err(zetesis_algebra::Failure::into_stop),
             Ok(Some(true))
         );
         assert!(peak > proposed.retained_bytes());
         for failure in [Stop::WorkLimit, Stop::Cancelled, Stop::Deadline] {
-            for prefix in 0..measured.spent() {
+            for prefix in 0..measured.charged() {
                 let mut other = copy(&proposed);
                 let mut permits = SinglePermits::new(prefix, failure);
-                let mut work = Work::reserved(&mut permits);
+                let mut work = Meter::reserved(&mut permits);
                 let mut remaining = u64::MAX;
                 assert_eq!(
-                    row.union_outputs(&mut other, 64, &mut remaining, &mut work, &mut 0),
+                    row.union_outputs(&mut other, 64, &mut remaining, &mut work, &mut 0)
+                        .map_err(zetesis_algebra::Failure::into_stop),
                     Err(failure)
                 );
-                assert_eq!(work.spent(), prefix);
+                assert_eq!(work.charged(), prefix);
                 assert_eq!(other, proposed);
                 assert_eq!(row.retained_bytes(), bytes);
                 assert_eq!(row.outputs().collect::<Vec<_>>(), source.outputs);
@@ -292,15 +296,16 @@ fn interrupted_union_preserves_both_inputs() {
                 assert_eq!(other, complete);
             }
         }
-        for prefix in 0..measured.spent() {
+        for prefix in 0..measured.charged() {
             let mut other = copy(&proposed);
             let mut remaining = prefix;
-            let mut work = Work::new(u64::MAX);
+            let mut work = Meter::local(u64::MAX);
             assert_eq!(
-                row.union_outputs(&mut other, 64, &mut remaining, &mut work, &mut 0),
+                row.union_outputs(&mut other, 64, &mut remaining, &mut work, &mut 0)
+                    .map_err(zetesis_algebra::Failure::into_stop),
                 Ok(None)
             );
-            assert_eq!(work.spent(), prefix);
+            assert_eq!(work.charged(), prefix);
             assert_eq!(other, proposed);
             assert_eq!(row.retained_bytes(), bytes);
         }
@@ -320,9 +325,10 @@ fn union_peak_includes_old_and_replacement_outputs() {
             &mut other,
             64,
             &mut remaining,
-            &mut Work::new(u64::MAX),
+            &mut Meter::local(u64::MAX),
             &mut peak
-        ),
+        )
+        .map_err(zetesis_algebra::Failure::into_stop),
         Ok(Some(true))
     );
     assert_eq!(
@@ -342,7 +348,8 @@ fn reverse_subsumption_preserves_units_or_refutes_earlier() {
         let row = stored(&old, packed);
         let mut remaining = u64::MAX;
         assert_eq!(
-            row.subsumed_by(&stronger, &mut remaining, &mut Work::new(u64::MAX)),
+            row.subsumed_by(&stronger, &mut remaining, &mut Meter::local(u64::MAX))
+                .map_err(zetesis_algebra::Failure::into_stop),
             Ok(Some(true))
         );
         for new_packed in [false, true] {
@@ -380,7 +387,8 @@ fn reverse_subsumption_rejects_wrong_signs_or_missing_outputs() {
         ] {
             let mut remaining = u64::MAX;
             assert_eq!(
-                row.subsumed_by(&invalid, &mut remaining, &mut Work::new(u64::MAX)),
+                row.subsumed_by(&invalid, &mut remaining, &mut Meter::local(u64::MAX))
+                    .map_err(zetesis_algebra::Failure::into_stop),
                 Ok(Some(false))
             );
         }
@@ -394,35 +402,38 @@ fn interrupted_reverse_subsumption_retains_the_old_row() {
     for packed in [false, true] {
         let row = stored(&source, packed);
         let bytes = row.retained_bytes();
-        let mut measured = Work::new(u64::MAX);
+        let mut measured = Meter::local(u64::MAX);
         let mut remaining = u64::MAX;
         assert_eq!(
-            row.subsumed_by(&proposed, &mut remaining, &mut measured),
+            row.subsumed_by(&proposed, &mut remaining, &mut measured)
+                .map_err(zetesis_algebra::Failure::into_stop),
             Ok(Some(true))
         );
         for failure in [Stop::WorkLimit, Stop::Cancelled, Stop::Deadline] {
-            for prefix in 0..measured.spent() {
+            for prefix in 0..measured.charged() {
                 let mut permits = SinglePermits::new(prefix, failure);
-                let mut work = Work::reserved(&mut permits);
+                let mut work = Meter::reserved(&mut permits);
                 let mut remaining = u64::MAX;
                 assert_eq!(
-                    row.subsumed_by(&proposed, &mut remaining, &mut work),
+                    row.subsumed_by(&proposed, &mut remaining, &mut work)
+                        .map_err(zetesis_algebra::Failure::into_stop),
                     Err(failure)
                 );
-                assert_eq!(work.spent(), prefix);
+                assert_eq!(work.charged(), prefix);
                 assert_eq!(row.outputs().collect::<Vec<_>>(), source.outputs);
                 assert_eq!(row.conditions().collect::<Vec<_>>(), source.conditions);
                 assert_eq!(row.retained_bytes(), bytes);
             }
         }
-        for prefix in 0..measured.spent() {
+        for prefix in 0..measured.charged() {
             let mut remaining = prefix;
-            let mut work = Work::new(u64::MAX);
+            let mut work = Meter::local(u64::MAX);
             assert_eq!(
-                row.subsumed_by(&proposed, &mut remaining, &mut work),
+                row.subsumed_by(&proposed, &mut remaining, &mut work)
+                    .map_err(zetesis_algebra::Failure::into_stop),
                 Ok(None)
             );
-            assert_eq!(work.spent(), prefix);
+            assert_eq!(work.charged(), prefix);
             assert_eq!(row.retained_bytes(), bytes);
         }
     }

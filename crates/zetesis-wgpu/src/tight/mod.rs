@@ -9,11 +9,13 @@ mod update;
 use crate::GpuError;
 pub use device::{GpuTightOracle, PreparedTightSubmission};
 use std::{fmt, time::Duration};
-use zetesis_cpu::{Cancellation, Stop};
+use zetesis_algebra::{Cancellation, Stop};
 use zetesis_ferraris::TightVerdict;
 
 const SHADER: &str = concat!(
     include_str!("check.wgsl"),
+    include_str!("../words.wgsl"),
+    include_str!("../formula_graph/truth.wgsl"),
     include_str!("../formula_graph/numeric.wgsl")
 );
 

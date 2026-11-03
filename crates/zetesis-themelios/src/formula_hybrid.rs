@@ -16,8 +16,8 @@ use std::{
 };
 use themelios_base::source::Source;
 use themelios_program::program::{DefaultNegation, Program};
+use zetesis_algebra::{Cancellation, Stop, region::Region};
 use zetesis_core::{AtomCatalog, AtomIndexError, AtomLookup, CatalogIndex, Model};
-use zetesis_cpu::{Cancellation, Stop, regions::Region};
 use zetesis_ferraris::Theory;
 
 use crate::expansion::Budget;
@@ -1420,8 +1420,8 @@ mod tests {
             checker
                 .consequence_region(
                     owner.core_theory(),
-                    &zetesis_cpu::regions::Region::all_open(1),
-                    &zetesis_cpu::Cancellation::default(),
+                    &zetesis_algebra::region::Region::all_open(1),
+                    &zetesis_algebra::Cancellation::default(),
                     crate::ConstraintRegionPass::First,
                 )
                 .unwrap(),
@@ -1435,14 +1435,14 @@ mod tests {
         let mut checker = owner
             .checker(crate::ConstraintCheckLimits::default())
             .unwrap();
-        let region = zetesis_cpu::regions::Region::all_open(owner.atom_catalog().atoms().len());
+        let region = zetesis_algebra::region::Region::all_open(owner.atom_catalog().atoms().len());
         for _ in 0..2 {
             assert_eq!(
                 checker
                     .check_region(
                         owner.core_theory(),
                         &region,
-                        &zetesis_cpu::Cancellation::default()
+                        &zetesis_algebra::Cancellation::default()
                     )
                     .unwrap(),
                 crate::ConstraintRegionVerdict::NotRefuted

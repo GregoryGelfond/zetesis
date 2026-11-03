@@ -29,7 +29,7 @@ fn a_source_stop_retains_the_earlier_incumbent() {
     let mut session = HybridSession::new(
         super::super::HybridInput {
             core: owner.core(),
-            subject: crate::Subject::Hybrid(owner.clone()),
+            original: crate::Original::Hybrid(owner.clone()),
         },
         &config,
         &ExecutionResources::default(),
@@ -109,7 +109,7 @@ fn a_source_fault_does_not_publish_retained_answers() {
     let mut session = HybridSession::new(
         super::super::HybridInput {
             core: owner.core(),
-            subject: crate::Subject::Hybrid(owner.clone()),
+            original: crate::Original::Hybrid(owner.clone()),
         },
         &config,
         &ExecutionResources::default(),

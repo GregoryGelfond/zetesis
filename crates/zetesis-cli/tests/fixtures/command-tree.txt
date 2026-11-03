@@ -11,6 +11,10 @@ command zetesis | An answer-set solver
     long ""
   command solve | Find answer sets; use - explicitly for standard input
     settings=["disable_help_flag", "disable_help_subcommand", "propagate_version"] aliases=[]
+    arg residual_evidence_request long=Some("residual-evidence-request") short=None aliases=None values=[] defaults=[] hidden=false short_help_hidden=true heading=Some("Advanced controls")
+      index=None action=Set num_args=Some(1) value_names=Some(["FILE"]) delimiter=None terminator=None parser=PathBuf flags=[] conflicts=[]
+      help "Read an explicit versioned benchmark request for a bounded GPU residual sample artifact"
+      long ""
     arg backend long=Some("backend") short=None aliases=None values=["cpu", "gpu", "metal", "vulkan"] defaults=["cpu"] hidden=false short_help_hidden=false heading=Some("Execution")
       index=None action=Set num_args=Some(1) value_names=Some(["BACKEND"]) delimiter=None terminator=None parser=Backend flags=[] conflicts=[]
       help "Choose the execution backend: cpu (the default) or gpu"
@@ -328,6 +332,10 @@ command zetesis | An answer-set solver
     long ""
   command solve | Find answer sets; use - explicitly for standard input
     settings=["disable_help_flag", "disable_help_subcommand", "propagate_version"] aliases=[]
+    arg residual_evidence_request long=Some("residual-evidence-request") short=None aliases=None values=[] defaults=[] hidden=false short_help_hidden=true heading=Some("Advanced controls")
+      index=None action=Set num_args=Some(1) value_names=Some(["FILE"]) delimiter=None terminator=None parser=PathBuf flags=[] conflicts=[]
+      help "Read an explicit versioned benchmark request for a bounded GPU residual sample artifact"
+      long ""
     arg backend long=Some("backend") short=None aliases=None values=["cpu", "gpu", "metal", "vulkan"] defaults=["cpu"] hidden=false short_help_hidden=false heading=Some("Execution")
       index=None action=Set num_args=Some(1) value_names=Some(["BACKEND"]) delimiter=None terminator=None parser=Backend flags=[] conflicts=[]
       help "Choose the execution backend: cpu (the default) or gpu"

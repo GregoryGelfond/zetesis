@@ -10,7 +10,7 @@
 use std::num::NonZeroUsize;
 use std::sync::mpsc::sync_channel;
 
-use zetesis_ferraris::{AdmissionLimits, FormulaParts, Narrower, Node, Theory};
+use zetesis_ferraris::{AdmissionLimits, FormulaParts, Narrower, Node, Region, Theory};
 
 use super::super::{
     Engagement, ParallelRegions, Stepped, WalkRecord, WorkerReport, Workspaces, advance, worker,
@@ -275,7 +275,7 @@ fn a_validation_its_ceiling_stops_never_yields_stable() {
     assert!(models.is_empty(), "an undecided candidate was delivered");
     assert!(matches!(
         search.shared.stopped(),
-        Some(Incomplete::Verification(zetesis_cpu::Stop::WorkLimit))
+        Some(Incomplete::Verification(zetesis_algebra::Stop::WorkLimit))
     ));
     // The undecided leaf stays outstanding: the walk can claim nothing.
     assert_eq!(search.shared.frontier.termination.unresolved(), 1);
@@ -376,14 +376,19 @@ fn a_split_counts_its_gain_before_its_children_are_queued() {
     let candidate = Interpretation::new(&theory, 0..theory.atom_count()).unwrap();
     let truth = vec![true; theory.nodes().len()];
     let cell = Arc::new(QueryCell::new(&truth, &candidate, 1).unwrap());
-    let knowledge = Narrower::new(&theory).knowledge();
-    let (cut, held) = Region::all_open(theory.atom_count()).split(0);
+    let knowledge = Narrower::new(&theory).frozen_knowledge();
+    let cut_knowledge = knowledge.clone();
+    let mut pending = Some(InnerEntry::new(
+        Entry::new(Region::all_open(theory.atom_count()), knowledge),
+        &cell,
+    ));
     shared
         .inner
         .publish_split(
             1,
-            &cell,
-            ((cut, knowledge.clone()), (held, knowledge)),
+            &mut pending,
+            0,
+            cut_knowledge,
             &shared.frontier.termination,
             |queue, additional| {
                 // The parent, in hand, and the split's net gain: both counted
@@ -393,11 +398,15 @@ fn a_split_counts_its_gain_before_its_children_are_queued() {
                 reserve_entries(queue, additional)
             },
         )
-        .unwrap();
+        .unwrap_or_else(|error| panic!("split refused: {error:?}"));
+    assert!(pending.is_none(), "an admitted split consumes the parent");
     assert_eq!(cell.outstanding.load(Ordering::Acquire), 2);
     let newest = shared.inner.take_local(1).unwrap();
-    assert!(newest.region.is_cut(0), "the cut child is served first");
-    assert!(shared.inner.take_local(1).unwrap().region.is_held(0));
+    assert!(
+        newest.entry.region.is_cut(0),
+        "the cut child is served first"
+    );
+    assert!(shared.inner.take_local(1).unwrap().entry.region.is_held(0));
 }
 
 #[test]
@@ -408,18 +417,41 @@ fn a_refused_split_publishes_nothing_and_withdraws_its_gain() {
     let candidate = Interpretation::new(&theory, 0..theory.atom_count()).unwrap();
     let truth = vec![true; theory.nodes().len()];
     let cell = Arc::new(QueryCell::new(&truth, &candidate, 1).unwrap());
-    let knowledge = Narrower::new(&theory).knowledge();
-    let (cut, held) = Region::all_open(theory.atom_count()).split(0);
+    let knowledge = Narrower::new(&theory).frozen_knowledge();
+    let mut entry = Entry::new(Region::all_open(theory.atom_count()), knowledge);
+    entry.prefer(1);
+    let region = entry.region.clone();
+    let knowledge_before = format!("{:?}", entry.state);
+    let cut_knowledge = entry.state.clone();
+    let mut pending = Some(InnerEntry::new(entry, &cell));
     let result = shared.inner.publish_split(
         1,
-        &cell,
-        ((cut, knowledge.clone()), (held, knowledge)),
+        &mut pending,
+        1,
+        cut_knowledge,
         &shared.frontier.termination,
         |queue, _| reserve_entries(queue, usize::MAX),
     );
-    assert_eq!(result.err(), Some(Incomplete::Allocation));
+    let Err(error) = result else {
+        panic!("capacity overflow must refuse publication");
+    };
+    let parent = pending.take().expect("refusal retains the whole parent");
+    assert_eq!(error, Incomplete::Allocation);
+    assert_eq!(parent.entry.region, region);
+    assert_eq!(parent.entry.split_atom(), Some(1));
+    assert_eq!(format!("{:?}", parent.entry.state), knowledge_before);
+    assert!(Arc::ptr_eq(&parent.cell, &cell));
     assert_eq!(cell.outstanding.load(Ordering::Acquire), 1);
     assert!(shared.inner.take_local(1).is_none());
+    assert!(cell.stop.get().is_none());
+    assert_eq!(shared.stopped(), None);
+    // The whole parent is still pending. Teardown is a separate, typed stop.
+    abandon(shared, parent, error);
+    assert_eq!(cell.stop.get(), Some(&Incomplete::Allocation));
+    assert_eq!(shared.stopped(), Some(Incomplete::Allocation));
+    assert_eq!(cell.outstanding.load(Ordering::Acquire), 0);
+    assert!(!cell.is_resolved());
+    assert!(!shared.frontier.termination.is_resolved());
 }
 
 #[test]
@@ -432,9 +464,9 @@ fn a_decided_querys_queued_region_is_dropped_unnarrowed() {
     let cell = Arc::new(QueryCell::new(&truth, &candidate, 2).unwrap());
     assert!(cell.absorb(candidate.try_clone().unwrap()));
     let entry = InnerEntry::new(
-        (
+        Entry::new(
             Region::all_open(theory.atom_count()),
-            Narrower::new(&theory).knowledge(),
+            Narrower::new(&theory).frozen_knowledge(),
         ),
         &cell,
     );
@@ -471,7 +503,7 @@ fn a_declined_publication_leaves_the_query_to_decide_inline() {
             &mut self,
             _: &[bool],
             _: &Interpretation,
-            traversal: &mut Traversal<Knowledge>,
+            traversal: &mut Walk<Knowledge<Countermodels>>,
         ) -> Option<()> {
             self.offered += 1;
             assert!(traversal.pending() >= 1);
@@ -564,3 +596,5 @@ fn a_coordinator_publishes_its_query_at_engagement() {
         inline_regions(&theory).regions
     );
 }
+
+mod publication;

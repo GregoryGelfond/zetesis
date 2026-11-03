@@ -10,19 +10,19 @@ fn capture_from_pruning(program: &Program) -> NarrowingScratch {
         program.close(&mut original, &mut program.index.knowledge(), &mut scratch);
     assert!(matches!(result, Narrowing::Fixed { .. }));
     assert!(original.is_cut(0) && original.is_cut(1));
-    assert!(scratch.founded.passes > 0);
+    assert!(scratch.common.founded.passes > 0);
     assert_eq!(counts.support_explanations.attempts, 1);
     assert_eq!(counts.support_explanations.certified, 1);
     assert_eq!(counts.support_explanations.refuted, 0);
-    assert_eq!(scratch.explanations.len(), 1);
+    assert_eq!(scratch.learning.explanations.len(), 1);
     assert_eq!(
-        scratch.explanations.rows[0]
+        scratch.learning.explanations.rows[0]
             .row
             .conditions()
             .collect::<Vec<_>>(),
         [(2, false), (3, true)]
     );
-    assert_eq!(scratch.explanations.absent_outputs(0), [0, 1]);
+    assert_eq!(scratch.learning.explanations.absent_outputs(0), [0, 1]);
     scratch
 }
 
@@ -122,49 +122,48 @@ fn early_rows_are_suspended_without_original_producer_coverage() {
     let mut frozen = initial.clone();
     let mut reference = initial.clone();
     let subject = FrozenSubject::new(&program.theory, evaluated.truth());
-    let (expected, _) = program
+    let expected = program
         .index
         .narrow_frozen_known(
             subject,
             &mut reference,
-            &mut program.index.knowledge(),
+            &mut program.index.frozen_knowledge(),
             &mut NarrowingScratch::default(),
             RegionLimits::default(),
             &Cancellation::default(),
         )
+        .result
         .unwrap();
-    let (actual, counts) = program
-        .index
-        .narrow_frozen_known(
-            subject,
-            &mut frozen,
-            &mut program.index.knowledge(),
-            &mut scratch,
-            RegionLimits::default(),
-            &Cancellation::default(),
-        )
-        .unwrap();
+    let attempt = program.index.narrow_frozen_known(
+        subject,
+        &mut frozen,
+        &mut program.index.frozen_knowledge(),
+        &mut scratch,
+        RegionLimits::default(),
+        &Cancellation::default(),
+    );
+    let actual = attempt.result.unwrap();
+    let counts = attempt.statistics;
     assert_eq!(actual, expected);
     for atom in 0..5 {
         assert_eq!(frozen.decision(atom), reference.decision(atom));
     }
     assert_eq!(counts.support_explanations.work, 0);
-    assert_eq!(scratch.explanations.len(), 1);
+    assert_eq!(scratch.learning.explanations.len(), 1);
     let mut restriction = initial;
-    let (_, counts) = program
-        .index
-        .narrow_known(
-            OriginalSubject::new(&program.theory, None),
-            &mut restriction,
-            &mut program.index.knowledge(),
-            &mut scratch,
-            RegionLimits::default(),
-            &Cancellation::default(),
-        )
-        .unwrap();
+    let attempt = program.index.narrow_known(
+        OriginalSubject::new(&program.theory, None),
+        &mut restriction,
+        &mut program.index.knowledge(),
+        &mut scratch,
+        RegionLimits::default(),
+        &Cancellation::default(),
+    );
+    attempt.result.unwrap();
+    let counts = attempt.statistics;
     assert_eq!(restriction.decision(2), None);
     assert_eq!(counts.support_explanations.work, 0);
-    assert_eq!(scratch.explanations.len(), 1);
+    assert_eq!(scratch.learning.explanations.len(), 1);
 }
 
 #[test]
@@ -178,7 +177,7 @@ fn a_foreign_owner_discards_early_rows() {
     assert!(matches!(result, Narrowing::Fixed { .. }));
     assert_eq!(narrowed.decision(2), None);
     assert_eq!(counts.support_explanations.forced, 0);
-    assert_eq!(scratch.explanations.len(), 0);
+    assert_eq!(scratch.learning.explanations.len(), 0);
 }
 
 fn separate_cycles() -> Program {
@@ -204,8 +203,8 @@ fn a_later_held_head_has_capture_priority() {
     assert_eq!(result, Narrowing::Refuted);
     assert_eq!(counts.support_explanations.attempts, 1);
     assert_eq!(counts.support_explanations.certified, 1);
-    assert_eq!(scratch.explanations.len(), 1);
-    assert_eq!(scratch.explanations.absent_outputs(0), [64, 65]);
+    assert_eq!(scratch.learning.explanations.len(), 1);
+    assert_eq!(scratch.learning.explanations.absent_outputs(0), [64, 65]);
 }
 
 #[test]
@@ -220,8 +219,8 @@ fn one_completed_pass_captures_at_most_one_open_component() {
         assert!(original.is_cut(atom));
     }
     assert_eq!(counts.support_explanations.attempts, 1);
-    assert_eq!(scratch.explanations.len(), 1);
-    assert_eq!(scratch.explanations.absent_outputs(0), [0, 1]);
+    assert_eq!(scratch.learning.explanations.len(), 1);
+    assert_eq!(scratch.learning.explanations.absent_outputs(0), [0, 1]);
 }
 
 #[test]
@@ -229,15 +228,15 @@ fn unfinished_optional_discovery_keeps_the_original_cuts() {
     let program = separate_cycles();
     let mut original = Region::all_open(66);
     let mut scratch = NarrowingScratch::default();
-    scratch.explanations.prepare(&program.owner);
-    scratch.explanations.remaining = 1;
+    scratch.learning.explanations.prepare(&program.owner);
+    scratch.learning.explanations.remaining = 1;
     let (result, counts) =
         program.close(&mut original, &mut program.index.knowledge(), &mut scratch);
     assert!(matches!(result, Narrowing::Fixed { .. }));
     for atom in [0, 1, 64, 65] {
         assert!(original.is_cut(atom));
     }
-    assert!(scratch.founded.passes > 0);
+    assert!(scratch.common.founded.passes > 0);
     assert_eq!(counts.support_explanations.attempts, 0);
-    assert_eq!(scratch.explanations.len(), 0);
+    assert_eq!(scratch.learning.explanations.len(), 0);
 }

@@ -11,9 +11,15 @@ use std::borrow::Borrow;
 use std::mem::size_of;
 use std::sync::Arc;
 
-use zetesis_ferraris::{Knowledge, Narrower, Theory};
+use zetesis_algebra::AnswerSetsSought;
+use zetesis_ferraris::{
+    CardinalityKnowledge, CardinalitySystem, Knowledge, Narrower, ParityKnowledge, ParitySystem,
+    Theory,
+};
 
 use crate::Incomplete;
+
+mod copy;
 
 #[derive(Clone, Debug)]
 pub(super) struct Bound {
@@ -106,8 +112,12 @@ impl<R: Borrow<(Theory, Narrower)>> Conditions<R> {
 pub(super) struct CandidateKnowledge {
     /// Original theory first, then permanent restrictions, then the optional
     /// bound. Keeping one vector avoids another allocation on each region copy.
-    entries: Vec<Knowledge>,
+    entries: Vec<Knowledge<AnswerSetsSought>>,
     bound_generation: Option<u64>,
+    /// Original arithmetic only; neither restrictions nor objective generations
+    /// create or replace these system-specific descendant snapshots.
+    parity: Option<ParityKnowledge>,
+    cardinality: Option<CardinalityKnowledge>,
 }
 
 impl Clone for CandidateKnowledge {
@@ -115,14 +125,24 @@ impl Clone for CandidateKnowledge {
         Self {
             entries: self.entries.clone(),
             bound_generation: self.bound_generation,
+            parity: self.parity.clone(),
+            cardinality: self.cardinality.clone(),
         }
     }
 
     fn clone_from(&mut self, source: &Self) {
-        let Self {
-            entries,
-            bound_generation,
-        } = source;
+        self.clone_entries_from(source);
+        self.parity.clone_from(&source.parity);
+        self.cardinality.clone_from(&source.cardinality);
+    }
+}
+
+impl CandidateKnowledge {
+    /// Copy the preceding non-arithmetic state once, with its existing exact
+    /// outer-capacity policy. Charged arithmetic copying calls this operation
+    /// directly, so it never first clones the new snapshots for free.
+    fn clone_entries_from(&mut self, source: &Self) {
+        let entries = &source.entries;
         // Published children retain no more vector capacity than a fresh
         // clone. Compatible entries reuse their arrays, overwriting every
         // conclusion and counter from the current parent.
@@ -131,11 +151,20 @@ impl Clone for CandidateKnowledge {
         } else {
             self.entries = Vec::from(entries.as_slice());
         }
-        self.bound_generation = *bound_generation;
+        self.bound_generation = source.bound_generation;
     }
-}
 
-impl CandidateKnowledge {
+    /// First inspection creates only this system's empty inline state. The
+    /// runtime initializes its payload under the same search Meter.
+    pub(super) fn parity(&mut self, system: &ParitySystem) -> &mut ParityKnowledge {
+        self.parity.get_or_insert_with(|| system.knowledge())
+    }
+
+    /// Counting state has the same original-system lifetime as parity state.
+    pub(super) fn cardinality(&mut self, system: &CardinalitySystem) -> &mut CardinalityKnowledge {
+        self.cardinality.get_or_insert_with(|| system.knowledge())
+    }
+
     /// The knowledge under the `index`th permanent theory, the original
     /// theory being the zeroth, created from `narrower` when this region has
     /// none under it yet. The first slot is reserved exactly, so a root that
@@ -145,7 +174,7 @@ impl CandidateKnowledge {
         &mut self,
         index: usize,
         narrower: &Narrower,
-    ) -> Result<&mut Knowledge, Incomplete> {
+    ) -> Result<&mut Knowledge<AnswerSetsSought>, Incomplete> {
         let permanent = self.entries.len() - usize::from(self.bound_generation.is_some());
         if index == permanent {
             let reserved = if self.entries.is_empty() {
@@ -161,7 +190,10 @@ impl CandidateKnowledge {
         Ok(&mut self.entries[index])
     }
 
-    pub(super) fn bound(&mut self, bound: &Bound) -> Result<&mut Knowledge, Incomplete> {
+    pub(super) fn bound(
+        &mut self,
+        bound: &Bound,
+    ) -> Result<&mut Knowledge<AnswerSetsSought>, Incomplete> {
         match self.bound_generation {
             Some(generation) if generation == bound.generation => {}
             Some(_) => {
@@ -190,7 +222,7 @@ impl CandidateKnowledge {
     pub(super) fn preference_subjects<R>(
         &self,
         conditions: &Conditions<R>,
-    ) -> (&Knowledge, &Knowledge) {
+    ) -> (&Knowledge<AnswerSetsSought>, &Knowledge<AnswerSetsSought>) {
         let current = conditions.permanent.len() + usize::from(conditions.bound.is_some());
         (&self.entries[0], &self.entries[current])
     }
@@ -198,12 +230,20 @@ impl CandidateKnowledge {
     /// Owned allocations only; the enclosing frontier counts this value's
     /// inline vector and generation headers.
     pub(super) fn allocated_bytes(&self) -> u128 {
-        self.entries.capacity() as u128 * size_of::<Knowledge>() as u128
+        self.entries.capacity() as u128 * size_of::<Knowledge<AnswerSetsSought>>() as u128
             + self
                 .entries
                 .iter()
-                .map(|known| known.retained_bytes() - size_of::<Knowledge>() as u128)
+                .map(|known| {
+                    known.retained_bytes() - size_of::<Knowledge<AnswerSetsSought>>() as u128
+                })
                 .sum::<u128>()
+            + self.parity.as_ref().map_or(0, |known| {
+                known.retained_bytes() - size_of::<ParityKnowledge>() as u128
+            })
+            + self.cardinality.as_ref().map_or(0, |known| {
+                known.retained_bytes() - size_of::<CardinalityKnowledge>() as u128
+            })
     }
 }
 

@@ -7,8 +7,8 @@ use crate::{
     ConstraintCheckCause, ConstraintCheckFailure, ConstraintCheckStatistics, FormulaFailure,
     ProgramSite, ReconstructionError,
 };
+use zetesis_algebra::Stop;
 use zetesis_core::{AtomIndexError, ModelFailure};
-use zetesis_cpu::Stop;
 
 /// Unlike the CPU's unlocated Refusal, replacement can inspect the old error.
 pub(crate) trait StopPrecedence: Sized {

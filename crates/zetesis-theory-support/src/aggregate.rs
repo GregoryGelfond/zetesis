@@ -3,8 +3,8 @@
 //! the node prefix on which the Ferraris aggregate propositions build their
 //! theories.
 
+use zetesis_algebra::Cancellation;
 use zetesis_core::Value;
-use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{
     AdmissionLimits, AggregateComparison as Comparison, FormulaNodes, FormulaParts, Interpretation,
     Node, Theory,

@@ -136,24 +136,22 @@ fn a_split_preserves_both_children_and_counts_the_net_gain() {
     // the pushes so no peer can observe a transient zero.
     assert_eq!(outstanding(&search.shared), 2);
     // Held is pushed last (on top of the LIFO deque), cut beneath it.
-    let (mut held, mut held_knowledge) = search.shared.frontier.take_local(0).unwrap();
-    let (mut cut, mut cut_knowledge) = search.shared.frontier.take_local(0).unwrap();
-    assert!(cut.is_cut(0) && held.is_held(0));
+    let mut held = search.shared.frontier.take_local(0).unwrap();
+    let mut cut = search.shared.frontier.take_local(0).unwrap();
+    assert!(cut.region.is_cut(0) && held.region.is_held(0));
     let conditions = search.shared.restrictions.read().unwrap();
     // Narrowing the cut child learns that atom 0 is false. Its sibling must
     // retain independent knowledge and still admit the opposite decision.
-    for (region, knowledge) in [
-        (&mut cut, &mut cut_knowledge),
-        (&mut held, &mut held_knowledge),
-    ] {
+    for entry in [&mut cut, &mut held] {
         assert_ne!(
             super::super::super::regions::narrow(
-                (
-                    search.shared.parts.subject(original.theory()).unwrap(),
-                    original.narrower(),
-                ),
+                search
+                    .shared
+                    .parts
+                    .reading(original.theory(), original.narrower())
+                    .unwrap(),
                 &conditions,
-                (region, knowledge),
+                entry,
                 &mut zetesis_ferraris::NarrowingScratch::default(),
                 &mut budget,
                 &mut report.regions,
@@ -163,7 +161,7 @@ fn a_split_preserves_both_children_and_counts_the_net_gain() {
             Narrowing::Refuted,
         );
     }
-    assert!(cut.is_cut(0) && held.is_held(0));
+    assert!(cut.region.is_cut(0) && held.region.is_held(0));
     assert!(search.shared.frontier.take_local(0).is_none());
 }
 
@@ -213,18 +211,18 @@ fn a_split_overwrites_retired_knowledge() {
     let second = search.shared.frontier.take_local(0).unwrap();
     let split_atoms: Vec<_> = (0..2)
         .filter(|&atom| {
-            first.0.is_cut(atom) && second.0.is_held(atom)
-                || first.0.is_held(atom) && second.0.is_cut(atom)
+            first.region.is_cut(atom) && second.region.is_held(atom)
+                || first.region.is_held(atom) && second.region.is_cut(atom)
         })
         .collect();
     assert_eq!(split_atoms.len(), 1);
     let atom = split_atoms[0];
-    let (cut, held) = if first.0.is_cut(atom) {
+    let (cut, held) = if first.region.is_cut(atom) {
         (first, second)
     } else {
         (second, first)
     };
-    assert!(cut.0.is_cut(atom) && held.0.is_held(atom));
+    assert!(cut.region.is_cut(atom) && held.region.is_held(atom));
     // The cut child becomes contradictory after a new permanent restriction.
     let restriction = theory(2, vec![Node::atom(atom)], vec![0]);
     let narrower = Narrower::new(&restriction);
@@ -436,8 +434,8 @@ fn an_owner_and_thief_acquire_distinct_split_children() {
         let stolen = find_work(&search.shared, 1, IDLE_WAIT).map(region).unwrap();
         (local.join().unwrap(), stolen)
     });
-    assert!(local.0.is_held(0));
-    assert!(stolen.0.is_cut(0));
+    assert!(local.region.is_held(0));
+    assert!(stolen.region.is_cut(0));
     assert!(search.shared.frontier.take_local(0).is_none());
     assert_eq!(outstanding(&search.shared), 2);
 }
@@ -446,49 +444,66 @@ fn an_owner_and_thief_acquire_distinct_split_children() {
 fn a_refused_split_leaves_the_frontier_unpublished() {
     let (search, original) = search_atoms(2, 2);
     split_next(&search.shared, &original, 0);
-    let (parent, knowledge) = search.shared.frontier.take_local(0).unwrap();
-    let prior = search.shared.frontier.queue(0).front().unwrap().0.clone();
+    let parent = search.shared.frontier.take_local(0).unwrap();
+    let prior = search
+        .shared
+        .frontier
+        .queue(0)
+        .front()
+        .unwrap()
+        .region
+        .clone();
     let atom = parent.split_atom().unwrap();
-    let (cut, held) = parent.split(atom);
-    let result = search.shared.publish_split(
-        0,
-        (held, knowledge.clone()),
-        (cut, knowledge),
-        |queue, additional| {
+    let interval = parent.region.clone();
+    let preference = parent.split_atom();
+    let knowledge_before = format!("{:?}", parent.state);
+    let copied = super::super::super::regions::copy_knowledge(
+        &parent.state,
+        None,
+        &mut budget(&search.shared),
+    );
+    let cut_knowledge = copied.result.unwrap();
+    let mut pending = Some(parent);
+    let error = search
+        .shared
+        .publish_split(0, &mut pending, atom, cut_knowledge, |queue, additional| {
             assert_eq!(additional, 2);
             // Exercise the actual reservation and error conversion, using
             // guaranteed capacity overflow rather than attempting host OOM.
             reserve_regions(queue, usize::MAX)
-        },
-    );
-    assert_eq!(result, Err(Incomplete::Allocation));
+        })
+        .unwrap_err();
+    let parent = pending.take().expect("refusal retains the whole parent");
+    assert_eq!(error, Incomplete::Allocation);
+    assert_eq!(parent.region, interval);
+    assert_eq!(parent.split_atom(), preference);
+    assert_eq!(format!("{:?}", parent.state), knowledge_before);
     assert_eq!(outstanding(&search.shared), 2);
     assert_eq!(search.shared.frontier.queue(0).len(), 1);
-    assert_eq!(search.shared.frontier.take_local(0).unwrap().0, prior);
+    assert_eq!(search.shared.frontier.take_local(0).unwrap().region, prior);
     assert!(!search.exhausted);
 }
 
 #[test]
 fn children_become_stealable_after_the_split_commit() {
     let (search, _) = search(2);
-    let (parent, knowledge) = search.shared.frontier.take_local(0).unwrap();
-    let (cut, held) = parent.split(0);
+    let parent = search.shared.frontier.take_local(0).unwrap();
+    let cut_knowledge = parent.state.clone();
     let (prepared, preparation) = mpsc::sync_channel(1);
     let (release, resume) = mpsc::sync_channel(1);
     std::thread::scope(|scope| {
         let shared = &search.shared;
         let publisher = scope.spawn(move || {
-            shared.publish_split(
-                0,
-                (held, knowledge.clone()),
-                (cut, knowledge),
-                |queue, additional| {
+            let mut pending = Some(parent);
+            let outcome =
+                shared.publish_split(0, &mut pending, 0, cut_knowledge, |queue, additional| {
                     reserve_regions(queue, additional)?;
                     prepared.send(()).unwrap();
                     resume.recv_timeout(WAIT).unwrap();
                     Ok(())
-                },
-            )
+                });
+            assert!(pending.is_none(), "an admitted split consumes the parent");
+            outcome
         });
         preparation.recv_timeout(WAIT).unwrap();
         assert_eq!(outstanding(&search.shared), 1);
@@ -498,11 +513,19 @@ fn children_become_stealable_after_the_split_commit() {
         ));
         release.send(()).unwrap();
         let stolen = find_work(&search.shared, 1, IDLE_WAIT).map(region).unwrap();
-        assert!(stolen.0.is_held(0));
+        assert!(stolen.region.is_cut(0));
         assert_eq!(outstanding(&search.shared), 2);
         publisher.join().unwrap().unwrap();
     });
-    assert!(search.shared.frontier.take_local(0).unwrap().0.is_cut(0));
+    assert!(
+        search
+            .shared
+            .frontier
+            .take_local(0)
+            .unwrap()
+            .region
+            .is_held(0)
+    );
     assert!(search.shared.frontier.take_local(0).is_none());
 }
 
@@ -626,12 +649,12 @@ struct RefuseChildren(Theory);
 
 struct RefuseChildrenWorker<'a>(&'a Theory);
 
-impl crate::RegionFilter for RefuseChildren {
+impl crate::region_filter::tests::injection::Source for RefuseChildren {
     fn worker(
         &self,
         theory: &Theory,
         cancellation: &Cancellation,
-    ) -> Result<Box<dyn crate::RegionFilterWorker + '_>, Incomplete> {
+    ) -> Result<Box<dyn crate::region_filter::tests::injection::Worker + '_>, Incomplete> {
         cancellation.poll()?;
         if !theory.same_instance(&self.0) {
             return Err(Incomplete::WrongTheory);
@@ -640,7 +663,7 @@ impl crate::RegionFilter for RefuseChildren {
     }
 }
 
-impl crate::RegionFilterWorker for RefuseChildrenWorker<'_> {
+impl crate::region_filter::tests::injection::Worker for RefuseChildrenWorker<'_> {
     fn check(
         &mut self,
         theory: &Theory,
@@ -668,9 +691,11 @@ fn an_allocation_stop_closes_and_settles_the_frontier() {
 fn allocation_stop_closes_and_settles_the_frontier(engagement: Engagement) {
     let (mut search, original) = search_engaging(2, 1, engagement);
     search
-        .set_filter(crate::region_filter::Filter::new(Arc::new(RefuseChildren(
-            original.theory().clone(),
-        ))))
+        .set_filter(crate::region_filter::Filter::new(
+            crate::region_filter::Source::Fixture(Arc::new(RefuseChildren(
+                original.theory().clone(),
+            ))),
+        ))
         .unwrap();
     let cancellation = search.shared.cancellation.clone();
     let mut budget = Budget {
@@ -782,7 +807,13 @@ fn a_waiting_worker_never_misses_a_publication() {
             });
             spin(publisher_start);
             shared
-                .publish_split(0, root.clone(), root.clone(), reserve_regions)
+                .publish_split(
+                    0,
+                    &mut Some(root.clone()),
+                    0,
+                    root.state.clone(),
+                    reserve_regions,
+                )
                 .unwrap();
             if done.recv_timeout(WAIT).is_err() {
                 // End the walk so the stranded waiter returns at once.
@@ -811,8 +842,9 @@ fn a_waiter_finding_a_region_at_its_recheck_deregisters() {
     let (search, _) = search(2);
     let shared = &search.shared;
     let root = shared.frontier.take_local(0).unwrap();
+    let cut_knowledge = root.state.clone();
     shared
-        .publish_split(0, root.clone(), root, reserve_regions)
+        .publish_split(0, &mut Some(root), 0, cut_knowledge, reserve_regions)
         .unwrap();
     assert!(wait_for_work(shared, 1, WAIT).is_some());
     assert_eq!(waiting(&search), 0);
@@ -904,10 +936,170 @@ fn a_worker_splits_the_root_on_the_original_choice_head() {
     .unwrap();
     assert!(matches!(stepped, Stepped::Split));
     // The children differ only in the split atom: held on top, cut beneath.
-    let (held, _) = search.shared.frontier.take_local(0).unwrap();
-    let (cut, _) = search.shared.frontier.take_local(0).unwrap();
+    let held = search.shared.frontier.take_local(0).unwrap();
+    let cut = search.shared.frontier.take_local(0).unwrap();
     let split: Vec<_> = (0..theory.atom_count())
-        .filter(|&atom| cut.is_cut(atom) && held.is_held(atom))
+        .filter(|&atom| cut.region.is_cut(atom) && held.region.is_held(atom))
         .collect();
     assert_eq!(split, [0]);
+}
+
+/// Isolate the worker allowance from preparation already completed by `search`.
+fn copy_search(max_work: u64) -> (ParallelRegions, Arc<IndexedTheory>) {
+    let (mut search, original) = search(2);
+    Arc::get_mut(&mut search.shared).unwrap().budget = SharedBudget::new(
+        crate::SearchLimits {
+            max_work,
+            ..Default::default()
+        },
+        SearchStatistics::default(),
+    );
+    (search, original)
+}
+
+/// Calibrate the actual subject and decision prefix separately from the copy;
+/// no assumed operation count is used to locate the new refusal boundary.
+fn split_copy_work() -> (SearchStatistics, RegionCounts, u64) {
+    let (search, original) = copy_search(u64::MAX);
+    let mut entry = search.shared.frontier.take_local(0).unwrap();
+    let mut workspaces = Workspaces::new();
+    let mut budget = budget(&search.shared);
+    let mut counts = RegionCounts::default();
+    search
+        .shared
+        .parts
+        .seed_tier(
+            &mut workspaces.tier,
+            &mut workspaces.scratch,
+            &mut budget,
+            &mut counts,
+        )
+        .unwrap();
+    let reading = search
+        .shared
+        .parts
+        .reading(original.theory(), original.narrower())
+        .unwrap();
+    assert!(
+        reading.arithmetic.is_some(),
+        "exercise the actual arithmetic subject slots"
+    );
+    let narrowing = super::super::super::regions::narrow(
+        reading,
+        &search.shared.restrictions.read().unwrap(),
+        &mut entry,
+        &mut workspaces.scratch,
+        &mut budget,
+        &mut counts,
+        None,
+    )
+    .unwrap();
+    search
+        .shared
+        .parts
+        .visited(
+            &mut workspaces.tier,
+            &mut workspaces.scratch,
+            &mut budget,
+            &mut counts,
+        )
+        .unwrap();
+    assert!(matches!(
+        walk::inspect(&entry, narrowing, Counting::Never, false),
+        walk::Step::Split(_)
+    ));
+    budget.decide().unwrap();
+    let prefix = budget.statistics;
+    let copied = super::super::super::regions::copy_knowledge(&entry.state, None, &mut budget);
+    assert!(copied.result.is_ok());
+    assert!(
+        copied.counts.work > 0,
+        "copy the initialized arithmetic slots under the meter"
+    );
+    assert_eq!(budget.statistics.work - prefix.work, copied.counts.work);
+    (prefix, counts, copied.counts.work)
+}
+
+#[test]
+fn a_copy_refusal_stops_before_publishing_children() {
+    let (prefix, before_copy, copy_work) = split_copy_work();
+    for allowed_copy_work in 0..copy_work {
+        let (search, original) = copy_search(prefix.work + allowed_copy_work);
+        let root = search.shared.frontier.take_local(0).unwrap();
+        let frontier = search.shared.frontier.statistics();
+        let mut budget = budget(&search.shared);
+        let mut report = report();
+        let result = step(
+            &search.shared,
+            &original,
+            (root, 0),
+            &mut Workspaces::new(),
+            &mut budget,
+            &mut report,
+            Timing::Inline,
+        );
+        assert!(matches!(result, Err(Incomplete::WorkLimit)));
+        assert_eq!(search.shared.stopped(), Some(Incomplete::WorkLimit));
+        assert_eq!(
+            budget.statistics.decisions, 1,
+            "decision debit still precedes copying"
+        );
+        assert!(budget.statistics.work >= prefix.work);
+        assert!(budget.statistics.work <= prefix.work + allowed_copy_work);
+        assert_eq!(
+            report.regions.work - before_copy.work,
+            budget.statistics.work - prefix.work
+        );
+        assert_eq!(
+            search.shared.live.work.load(Ordering::Relaxed),
+            report.regions.work
+        );
+        assert_eq!(search.shared.frontier.statistics(), frontier);
+        assert_eq!(outstanding(&search.shared), 1);
+        assert!(search.shared.frontier.queue(0).is_empty());
+        assert!(search.shared.frontier.termination.is_closed());
+        assert!(!search.shared.frontier.termination.is_resolved());
+        let performed = budget.statistics;
+        drop(budget);
+        let mut committed = SearchStatistics::default();
+        search.shared.budget.record(&mut committed);
+        assert_eq!(
+            committed, performed,
+            "copy permits settle once on every refusal prefix"
+        );
+    }
+}
+
+#[test]
+fn an_inclusive_copy_allowance_publishes_both_children() {
+    let (prefix, before_copy, copy_work) = split_copy_work();
+    let (search, original) = copy_search(prefix.work + copy_work);
+    let root = search.shared.frontier.take_local(0).unwrap();
+    let mut budget = budget(&search.shared);
+    let mut report = report();
+    assert!(matches!(
+        step(
+            &search.shared,
+            &original,
+            (root, 0),
+            &mut Workspaces::new(),
+            &mut budget,
+            &mut report,
+            Timing::Inline,
+        )
+        .unwrap(),
+        Stepped::Split
+    ));
+    assert_eq!(budget.statistics.work, prefix.work + copy_work);
+    assert_eq!(report.regions.work, before_copy.work + copy_work);
+    assert_eq!(
+        search.shared.live.work.load(Ordering::Relaxed),
+        report.regions.work
+    );
+    assert_eq!(budget.statistics.decisions, 1);
+    assert_eq!(outstanding(&search.shared), 2);
+    let held = search.shared.frontier.take_local(0).unwrap();
+    let cut = search.shared.frontier.take_local(0).unwrap();
+    assert!(held.region.is_held(0) && cut.region.is_cut(0));
+    assert_eq!(search.shared.stopped(), None);
 }

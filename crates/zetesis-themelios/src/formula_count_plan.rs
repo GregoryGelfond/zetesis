@@ -7,12 +7,14 @@
 use std::fmt;
 
 use crate::ProgramSite;
-use zetesis_cpu::{Cancellation, Stop};
+use zetesis_algebra::{Cancellation, Meter, MeterBytes, Stop};
 use zetesis_ferraris::{AggregateLimits, Theory, partition};
 
 mod capture;
 mod derive;
 mod emit;
+#[cfg(test)]
+mod tests;
 pub(crate) use capture::{Bounds, Collector, Group as RequiredGroup, Input, Members};
 
 /// Complete source choice groups retained for optional objective bounds.
@@ -305,10 +307,43 @@ pub(crate) struct Request<'a> {
 struct Work {
     limits: CountPlanLimits,
     cancellation: Cancellation,
-    statistics: CountPlanStatistics,
+    meter: Meter<'static>,
+    groups: usize,
+    members: usize,
+    origins: usize,
+    attempts: usize,
+    consequences: usize,
+    storage_bytes: u64,
     location: ProgramSite,
 }
 impl Work {
+    fn new(limits: CountPlanLimits, cancellation: Cancellation, location: ProgramSite) -> Self {
+        Self {
+            limits,
+            cancellation,
+            meter: Meter::local(limits.max_work),
+            groups: 0,
+            members: 0,
+            origins: 0,
+            attempts: 0,
+            consequences: 0,
+            storage_bytes: 0,
+            location,
+        }
+    }
+
+    fn statistics(&self) -> CountPlanStatistics {
+        CountPlanStatistics {
+            work: self.meter.charged(),
+            groups: self.groups,
+            members: self.members,
+            origins: self.origins,
+            attempts: self.attempts,
+            consequences: self.consequences,
+            storage_bytes: self.storage_bytes,
+        }
+    }
+
     fn poll(&self) -> Result<(), CountPlanFailureKind> {
         self.cancellation
             .poll()
@@ -319,22 +354,22 @@ impl Work {
         self.record(count)
     }
     fn record(&mut self, count: u64) -> Result<(), CountPlanFailureKind> {
-        if count > self.limits.max_work - self.statistics.work {
-            return Err(CountPlanFailureKind::Limit(CountPlanResource::Work));
-        }
-        self.statistics.work += count;
-        Ok(())
+        // Imported native work retains its prefix without another control poll.
+        self.meter
+            .bounded(count, || ((), count))
+            .map_err(|failure| match failure.into_stop() {
+                Stop::WorkLimit => CountPlanFailureKind::Limit(CountPlanResource::Work),
+                other => CountPlanFailureKind::Stopped(other),
+            })
     }
     fn payload(&mut self, bytes: u64) -> Result<(), CountPlanFailureKind> {
         let total = self
-            .statistics
             .storage_bytes
             .checked_add(bytes)
             .ok_or(CountPlanFailureKind::Overflow)?;
-        if total > self.limits.max_bytes {
-            return Err(CountPlanFailureKind::Limit(CountPlanResource::Bytes));
-        }
-        self.statistics.storage_bytes = total;
+        MeterBytes::check(u128::from(total), u128::from(self.limits.max_bytes))
+            .map_err(|_| CountPlanFailureKind::Limit(CountPlanResource::Bytes))?;
+        self.storage_bytes = total;
         Ok(())
     }
     fn vector<T>(&mut self, count: usize) -> Result<Vec<T>, CountPlanFailureKind> {
@@ -350,7 +385,7 @@ impl Work {
         CountPlanFailure {
             kind,
             location: self.location,
-            statistics: self.statistics,
+            statistics: self.statistics(),
         }
     }
 }
@@ -365,9 +400,7 @@ fn ceiling(
     maximum: usize,
     resource: CountPlanResource,
 ) -> Result<(), CountPlanFailureKind> {
-    if actual > maximum {
-        Err(CountPlanFailureKind::Limit(resource))
-    } else {
-        Ok(())
-    }
+    Meter::check_count(actual, 0, maximum)
+        .map(|_| ())
+        .map_err(|_| CountPlanFailureKind::Limit(resource))
 }

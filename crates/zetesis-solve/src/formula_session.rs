@@ -7,8 +7,8 @@ use std::cmp::Ordering;
 use std::ops::ControlFlow;
 use std::sync::Arc;
 
+use zetesis_algebra::Cancellation;
 use zetesis_core::{Model, ModelOrder};
-use zetesis_cpu::Cancellation;
 use zetesis_objective::Score;
 use zetesis_stable::{LearnedStore, StableModels};
 
@@ -837,7 +837,7 @@ impl<'a, E: MembershipExecution> FormulaSession<'a, E> {
         );
         SemanticOutcome {
             projection: None,
-            subject: Some(crate::Subject::Theory(self.input.theory.clone())),
+            original: Some(crate::Original::Theory(self.input.theory.clone())),
             selection: Some(self.selection),
             verified: statistics.map_or(0, |s| s.stable_models),
             scored: self.incumbents.scored(),
@@ -886,6 +886,23 @@ impl<'a, E: MembershipExecution> FormulaSession<'a, E> {
 mod tests;
 
 impl<'a> FormulaSession<'a, crate::formula_execution::Execution> {
+    #[cfg(feature = "gpu")]
+    pub(crate) fn observe_samples(&self, stats: &mut crate::ResidualHandoverStatistics) {
+        if let Some(crate::formula_execution::Execution::Hybrid { queue, .. }) = &self.execution {
+            queue.observe_samples(stats);
+        }
+    }
+
+    #[cfg(feature = "gpu")]
+    pub(crate) fn run_samples_mut(
+        &mut self,
+    ) -> Option<&mut crate::residual_handovers::sampling::RunSamples> {
+        match self.execution.as_mut()? {
+            crate::formula_execution::Execution::Hybrid { queue, .. } => queue.run_samples_mut(),
+            _ => None,
+        }
+    }
+
     /// Own semantic preparation before choosing its execution route. A stopped
     /// preparation retains its receipts without constructing a device pipeline.
     /// Route construction keeps the ordinary session's fallible start door.

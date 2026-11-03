@@ -21,9 +21,11 @@
 //! is reached or exceeded. All runtime visits are charged and cancellable.
 //! Original-only row notifications are coalesced by the existing queue.
 
-use crate::regions::{Chain, Closure, Count, Narrower, Step, Work, bit};
+use zetesis_algebra::{Failure, Quota};
+
+use crate::regions::{Chain, Closure, Count, Meter, Narrower, Step};
 use crate::{NodeView, Theory};
-use zetesis_cpu::Stop;
+use zetesis_algebra::Stop;
 
 use super::{Adjacency, Row, reserve};
 
@@ -216,13 +218,13 @@ fn aliases(
     Ok(result)
 }
 
-impl<C: Count> Closure<'_, C> {
-    pub(in crate::regions) fn threshold_capacity(
+impl<W: Count, C: crate::regions::ReadingClass> Closure<'_, W, C> {
+    pub(in crate::regions) fn threshold_capacity<Q: Quota + ?Sized>(
         &mut self,
         index: &Narrower,
         row: usize,
-        work: &mut Work<'_>,
-    ) -> Result<Step, Stop> {
+        work: &mut Meter<'_, Q>,
+    ) -> Result<Step, Failure<Q::Error>> {
         let Some(capacity) = &index.thresholds.capacity else {
             return Ok(Step::Unchanged);
         };
@@ -234,7 +236,7 @@ impl<C: Count> Closure<'_, C> {
         for &entry in &capacity.by_row[row] {
             work.tick()?;
             let required = &capacity.requirements[entry];
-            if bit(self.known.never, required.root) {
+            if self.known.never.contains(required.root) {
                 continue;
             }
             let mut minimum = state.known;
@@ -243,7 +245,7 @@ impl<C: Count> Closure<'_, C> {
                 // known counts processed events. A pending true condition can
                 // make this an underestimate, never an overestimate. Its later
                 // processed event schedules this row again.
-                minimum += i128::from(!bit(self.known.sure, condition));
+                minimum += i128::from(!self.known.sure.contains(condition));
                 if minimum >= upper {
                     break;
                 }

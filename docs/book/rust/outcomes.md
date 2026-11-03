@@ -12,11 +12,11 @@ the [library reference](libraries.md#api-reference).
 
 | Evidence | What it establishes | What it does not establish |
 | --- | --- | --- |
-| Verified model | Completed membership for the original subject | Exhaustive enumeration or optimality |
+| Verified model | Completed membership for the original input | Exhaustive enumeration or optimality |
 | Evaluated score | Cost of that verified model | A globally best cost |
 | Exhausted search | Relevant candidate coverage completed | Successful external publication |
 | Proved optimum | Complete relevant search establishes the incumbent | Every optimal tie was delivered |
-| `WorldView` | All full answers of the original subject were captured after unrestricted exhaustion | Successful external publication |
+| `WorldView` | All full answers of the original input were captured after unrestricted exhaustion | Successful external publication |
 | Decided world-view question | A fold over checked answer sets reached its absorbing value, which holds over the whole world view | The world view itself, or completed search |
 | Published record | The sink accepted one whole record | Flush, durability or complete search |
 
@@ -136,7 +136,7 @@ small failure-accounting example easy to inspect.
 ```rust
 # extern crate zetesis_solve;
 # extern crate zetesis_core;
-# extern crate zetesis_cpu;
+# extern crate zetesis_algebra;
 # extern crate zetesis_themelios;
 {{#include ../examples/selection.rs:example}}
 ```
@@ -153,9 +153,9 @@ iterator has not completed the final exhaustion step. Thus the failure carries
 `verified_models() == 2` and `completion() == None`; its checked prefix cannot be
 relabelled a complete one-answer world view. Larger batches can also retain
 queued membership results in verification accounting before those answers are
-scored or yielded. The retained answer's subject remains the original owner.
+scored or yielded. The retained answer's original input retains its owner.
 The example uses `WorldViewFailure::into_parts()` to move that prefix and its
-typed cause, subject and outcome together. This transfers ownership without
+typed cause, original input and outcome together. This transfers ownership without
 cloning answers or strengthening the incomplete evidence. `into_answer_sets()`
 instead deliberately discards the cause and coverage context.
 
@@ -163,7 +163,7 @@ instead deliberately discards the cause and coverage context.
 retained incumbents. Streaming all answers can release each answer after use;
 complete collection retains the full family. With `K` answers and full payload
 sizes `s₁, …, sₖ`, collection requires space proportional to their sum in addition
-to the search engine and shared subject. `K` can be exponential in the atom
+to the search engine and shared original input. `K` can be exponential in the atom
 carrier. Objective selection retains incumbent ties under its separate limits;
 the one optimum in this fixture does not bound the number of ties in general.
 
@@ -289,7 +289,7 @@ fields. It deliberately accepts typed records without producing text:
 
 ```rust
 # extern crate zetesis_cli;
-# extern crate zetesis_cpu;
+# extern crate zetesis_algebra;
 # extern crate zetesis_themelios;
 {{#include ../examples/answer-renderer.rs:example}}
 ```
@@ -341,7 +341,7 @@ to answer-set semantics.
 
 ### Cancellation and deadlines
 
-[`zetesis_cpu::Cancellation`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-cpu/src/cancellation.rs)
+[`zetesis_algebra::Cancellation`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-algebra/src/cancellation.rs)
 carries shared cancellation and an optional absolute deadline. `Session` owns
 solving; callers pass this value to the session and can cancel it through a clone.
 `Cancellation::default()` sets no deadline. `with_deadline(Instant)` can fail if
@@ -353,12 +353,13 @@ Repeated polls can retain `Cancellation::polling()`'s borrowed
 `CancellationPoll` view. Preparing the view resolves the token's flag references
 and slot identity once, without allocation or reference-count updates. Each poll
 still reads the live flags in the same order. The view borrows the token; it
-neither owns a run guard nor extends a deadline. Every metered operation's meter
-retains this view for its repeated polls.
+neither owns a run guard nor extends a deadline. A locally polled meter
+retains this view for its repeated polls; a reserved meter delegates control
+observations to its caller-owned account.
 
 Metered operations charge work per formula node or edge against a local work
 limit and observe control at metered boundaries: before their first charged
-operation and at least once every `zetesis_cpu::POLL_INTERVAL` (256) charged
+operation and at least once every `zetesis_algebra::POLL_INTERVAL` (256) charged
 operations thereafter, so at most 255 further charged operations follow a
 requested stop. A refused work charge observes control first, and each operation
 settles its outcome at its exit: when it would report a resource refusal (work,
@@ -369,13 +370,13 @@ program's shape, identity or invariants are reported as found. These operations
 are original and frozen formula evaluation (with the exhaustive reference check
 and native aggregate eligibility), the tight, positive and stratified
 certificates, support construction, partition construction and restriction
-emission, and static closure checks. Each charges a `zetesis_cpu::Meter`, which
-carries the cadence, and runs inside `Cancellation::metered`, the only source of
-a meter, which settles the outcome where the operation returns with its error
-type's `Refusal` classification; none of them can skip the precedence.
+emission, and static closure checks. Each charges a `zetesis_algebra::Meter`, which
+carries the cadence, and runs inside `Cancellation::metered`. That scope settles
+the outcome where the operation returns with its error type's `Refusal`
+classification; none of those operations can skip the precedence.
 
 Grounding's cumulative work account uses the same 256-unit cadence through
-`zetesis_cpu::poll_due(charged, amount)`. Its controlled scopes are charged
+`zetesis_algebra::poll_due(charged, amount)`. Its controlled scopes are charged
 formula preparation, source classification and exact evaluation, instantiation,
 terminal partition and admission, shared constraint-checker preparation, each
 model or region check, each consequence pass, and each answer reconstruction.
@@ -412,14 +413,25 @@ allowance is counted up to the limit and refused as the emission's work limit.
 So a refusal of the meter's own limit, by a charge or by an overrunning
 lowering, leaves the count at the limit.
 
-Narrowing meters its reads through a second arrangement: permits from a
-`NarrowingQuota`, at most `NARROWING_BATCH` (`POLL_INTERVAL`) at a time. A quota
+Narrowing uses the same `Meter` with a borrowed `zetesis_algebra::Quota`: permits
+arrive at most `NARROWING_BATCH` (`POLL_INTERVAL`) at a time. A quota
 that polls control does so when it grants a batch; the solver's quota observes
 control before every grant, so a requested stop takes precedence over its
 exhausted allowance. The library's fixed-ceiling route (`Narrower::narrow_known`,
 `Narrower::narrow_frozen_known` and `producers`) has no quota: it observes
 control once, before its first read, and refuses its ceiling without observing
-control again. Coarser operations, such as objective reduction, search decisions
+control again. Its unpolled local meter keeps that boundary.
+
+Reserved operations return `Failure::Refused(error)` for the caller's original
+typed error and `Failure::Stopped(stop)` for a local stop. The solver returns
+caller errors unchanged, including storage sizes and limits. Every completed or
+failed attempt retains its performed prefix and refunds only known unused
+permits; publishing that receipt does not charge the account a second time.
+A bounded operation that panics has returned no actual-work receipt, so its
+outstanding reservation is conservatively consumed. Nested helpers share the
+meter; they do not add another refund or exit-settlement boundary.
+
+Coarser operations, such as objective reduction, search decisions
 and aggregate lowering, still poll before every charged step. A computation that
 completes between two boundaries may return its complete result before observing
 a stop requested since its last observation; static closure checks and partition
@@ -483,7 +495,7 @@ PublicationFailure>`. `PublicationOutcome::Completed` carries a
 it cannot retract that proof, and it cannot claim a partially written record as
 fully published. `PublicationFailure` preserves the original cause and available
 semantic, publication and timing evidence. The solver library's `SolveFailure`
-retains only execution cause, subject, semantics and timings. Its owned
+retains only execution cause, original input, semantics and timings. Its owned
 decomposition allows a consumer to preserve those values in its own failure
 representation without constructing new semantic evidence.
 
@@ -560,7 +572,8 @@ cut applied. Every proposed interpretation still needs membership checking
 against the original theory and its frozen reduct.
 
 `statistics.search.parity` and `statistics.search.cardinality` describe checked
-arithmetic preparation for that same original candidate owner. They record
+arithmetic preparation and candidate-region inspection for that same original
+owner. Their preparation fields record
 source rows, preparation status, root refutation and retained storage; parity
 also records rank, row additions and root units. Cardinality distinguishes
 candidate family attempts from checked families. An unprepared stage is distinct
@@ -574,8 +587,24 @@ of work already included in candidate reading work and search work. A declined
 or failed preparation retains its executed prefix; its published retained bytes
 are zero. `preparation_bytes` is the maximum shared named storage request through
 that stage, including a refused request, not process memory. Shared peaks are
-not additive. These records do not claim that per-region arithmetic subjects or
-device arithmetic preparation ran.
+not additive.
+
+A completed preparation with an empty echelon basis performs no regional parity
+inspections. Counting also skips regional inspections when preparation retained
+no checked family pair, even if it recognized individual bounds. A retained
+guarded pair participates because later decisions can activate its guards.
+Root units and root contradictions are decided during preparation.
+
+Each object's `region_passes` counts completed runtime inspections, including
+unchanged and refuting inspections. Repeated inspections of one region count
+separately. `refuted` counts runtime semantic refutations, excluding preparation
+refutations and typed failures. Parity's `forced` counts fresh held or cut
+decisions applied by runtime inspections; preparation's root-unit count is
+reported separately. A failed inspection keeps
+its performed work and applied decisions, but adds no completed pass or
+refutation. Copying arithmetic knowledge contributes ordinary candidate work,
+not an inspection. These fields describe candidate-generation activity; they
+do not imply that arithmetic ran on the device or in frozen-reduct checking.
 
 `CompletionAccounting` reports requested workers and the greatest concurrency
 selected at preflight. This selection alone does not mean a candidate entered

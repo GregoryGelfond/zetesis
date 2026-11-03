@@ -1,8 +1,8 @@
 //! Closed objective conditions read full models without supplying support.
 
 use crate::support::programs::program;
+use zetesis_algebra::Cancellation;
 use zetesis_core::{Atom, AtomPattern, Model, Predicate, Sign, Term, Value};
-use zetesis_cpu::Cancellation;
 use zetesis_objective::{
     AdmissionError, AdmissionLimits, AdmissionResource, Condition, ConditionNode as Node,
     ErrorKind, Limits, ObjectiveProgram, ObjectiveTemplate, Stop, evaluate,

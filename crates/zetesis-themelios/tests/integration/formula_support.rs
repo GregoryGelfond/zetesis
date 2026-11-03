@@ -4,7 +4,7 @@
 
 use crate::support::atom_models::{self, Models};
 use crate::support::objective_boundaries;
-use zetesis_cpu::Cancellation;
+use zetesis_algebra::Cancellation;
 use zetesis_ferraris::{Interpretation, Limits, check};
 use zetesis_reference_support::{admit, formula, resource_limits};
 use zetesis_themelios::{AdmittedFormula, FormulaFailure, FormulaResource};

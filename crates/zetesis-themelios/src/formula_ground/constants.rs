@@ -2,7 +2,7 @@
 
 use themelios_base::source::SourceId;
 use themelios_base::span::{ByteOffset, Span};
-use zetesis_cpu::Cancellation;
+use zetesis_algebra::Cancellation;
 use zetesis_ferraris::{Interpretation, Limits, models, models_reduct};
 
 use super::*;
@@ -676,7 +676,7 @@ fn final_admission_obeys_the_work_ceiling() {
 fn final_admission_keeps_cancellation_typed() {
     for retained in [false, true] {
         assert!(matches!(final_admission(retained, u64::MAX, true),
-            Err(FormulaFailure::Interrupted { reason: zetesis_cpu::Stop::Cancelled, location: origin })
+            Err(FormulaFailure::Interrupted { reason: zetesis_algebra::Stop::Cancelled, location: origin })
                 if origin == location()));
     }
 }

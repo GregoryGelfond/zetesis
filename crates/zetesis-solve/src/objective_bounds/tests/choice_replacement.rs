@@ -7,7 +7,7 @@ use std::collections::BTreeSet;
 use super::Bounds;
 use crate::execution_observation::Observer;
 use crate::{ExecutionObservation, ExecutionObserver, SolveConfig};
-use zetesis_cpu::Cancellation;
+use zetesis_algebra::Cancellation;
 use zetesis_ferraris::{Interpretation, Theory};
 use zetesis_objective::Score;
 use zetesis_reference_support::formula;

@@ -160,6 +160,39 @@ still apply. The effective values appear in `limits.answers` and
 `--native-report-bytes` separately for capture and native full-report decoding.
 A refusal retains the failed comparison; it does not establish an incomplete family as complete.
 
+### Pool GPU residual observations
+
+Use `--residual-evidence COHORT` to qualify an explicitly selected fixture
+family and pool measurements from the general GPU route. Give each family its
+own name and select its inputs with `--workloads` or `--case`. For example,
+from the repository root on a Metal host with clingo available:
+
+```sh
+zetesis-bench run --residual-evidence two-qbf \
+  --workloads examples/scalability/two-qbf/manifest.json \
+  --backend metal --grounder eager --oracle countermodel \
+  --report two-qbf-residuals.json
+```
+
+This is a separate qualification campaign. It checks the answers and requests
+an additional bounded artifact from each native child. It collects no timing
+or memory comparison rounds. Each profile gets its own pool. Every requested
+member must qualify and provide valid evidence for that pool to be published.
+A solver that lacks the artifact protocol can still return matching answers.
+Its evidence remains unavailable.
+
+The report records the relative path, exact byte length and SHA-256 of each
+retained artifact. Keep the adjacent evidence directory with the report. Each
+artifact contains the two retained populations and is at most 5,177,472 bytes.
+Ordinary stdout and stderr have first claim on the capture allowance. Missing,
+truncated or inconsistent observations cannot qualify the measurement.
+
+Pooling weights each run by its original population size. The batch count
+includes zero-residual commits. Query depth and work use eligible residual
+worlds. The reported coverage and retained counts tell you which ranks are
+exact, estimated or unavailable. Averaging individual run medians does not
+give the pooled median.
+
 ### Profiles
 
 A run measures one native profile, set by `--backend`, `--grounder` and

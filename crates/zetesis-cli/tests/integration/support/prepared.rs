@@ -2,11 +2,11 @@
 //! flag is parsed here; tests set the existing publication or renderer limits.
 
 use std::io::Write;
+use zetesis_algebra::Cancellation;
 use zetesis_cli::{
     AnswerRenderer, ColorMode, HumanRenderer, PublicationConfig, PublicationOutcome,
     PublicationReport, Report, RunFailure, publish_prepared,
 };
-use zetesis_cpu::Cancellation;
 use zetesis_themelios::{AdmissionOptions, ExpansionLimits, FormulaLimits, ParsedSource};
 
 pub(crate) fn config(arguments: &[&str]) -> PublicationConfig {

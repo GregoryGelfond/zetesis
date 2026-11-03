@@ -16,10 +16,18 @@ use crate::Incomplete;
 /// # Errors
 /// Refuses an unrepresentable byte count.
 pub(super) fn results(candidates: usize) -> Result<u64, Incomplete> {
+    slot_bytes::<Option<Outcome>>(candidates)
+}
+
+/// A pending Region moves into the same slot used for its joined result.
+pub(super) fn regional_results(candidates: usize) -> Result<u64, Incomplete> {
+    slot_bytes::<super::RegionalJob>(candidates)
+}
+
+fn slot_bytes<S>(candidates: usize) -> Result<u64, Incomplete> {
     u64::try_from(
         candidates as u128
-            * (size_of::<Option<Outcome>>() + size_of::<bool>() + size_of::<Interpretation>())
-                as u128,
+            * (size_of::<S>() + size_of::<bool>() + size_of::<Interpretation>()) as u128,
     )
     .map_err(|_| Incomplete::CounterOverflow)
 }

@@ -1,10 +1,11 @@
 //! Source reads reserve a bounded chunk but retain only its executed charge.
 
+use zetesis_algebra::Meter;
+
 use std::collections::VecDeque;
 
-use zetesis_cpu::{Cancellation, Stop};
+use zetesis_algebra::{Cancellation, Stop};
 
-use crate::regions::{NarrowingQuota, Work};
 use crate::{
     AdmissionError, AdmissionLimits, ExtremumCutDescriptor, ExtremumCutRule, FormulaParts, Node,
     NumericDomain, NumericRow, OperandSpan, Theory, ThresholdDescriptor,
@@ -61,7 +62,8 @@ fn owner() -> Theory {
 fn node_reads_charge_the_actual_canonical_path() {
     let theory = owner();
     let cancellation = Cancellation::default();
-    let mut budget = Budget::new(Work::new(1_000), 1_000, 0, &cancellation);
+    let mut budget_work = Meter::local(1_000);
+    let mut budget = Budget::new(&mut budget_work, 1_000, 0, &cancellation);
     for (id, expected) in [4, 4, 5, 5, 5, 5, 12, 12, 21, 24].into_iter().enumerate() {
         let before = budget.work();
         assert_eq!(
@@ -76,7 +78,8 @@ fn node_reads_charge_the_actual_canonical_path() {
 fn absent_node_retains_its_typed_failure_prefix() {
     let theory = owner();
     let cancellation = Cancellation::default();
-    let mut budget = Budget::new(Work::new(100), 100, 0, &cancellation);
+    let mut budget_work = Meter::local(100);
+    let mut budget = Budget::new(&mut budget_work, 100, 0, &cancellation);
     assert_eq!(
         budget.node(&theory, theory.nodes().len()),
         Err(BudgetError::Source(AdmissionError::Edge))
@@ -88,7 +91,8 @@ fn absent_node_retains_its_typed_failure_prefix() {
 fn optional_work_admits_the_whole_view_bound() {
     let theory = owner();
     let cancellation = Cancellation::default();
-    let mut budget = Budget::new(Work::new(100), 23, 0, &cancellation);
+    let mut budget_work = Meter::local(100);
+    let mut budget = Budget::new(&mut budget_work, 23, 0, &cancellation);
     // Even the four-operation atom read first needs its maximum chunk. An
     // absent ID must likewise remain unread when that chunk is not admitted.
     for id in [0, usize::MAX] {
@@ -101,7 +105,8 @@ fn optional_work_admits_the_whole_view_bound() {
 fn global_refusal_precedes_optional_decline() {
     let theory = owner();
     let cancellation = Cancellation::default();
-    let mut budget = Budget::new(Work::new(23), 0, 0, &cancellation);
+    let mut budget_work = Meter::local(23);
+    let mut budget = Budget::new(&mut budget_work, 0, 0, &cancellation);
     assert_eq!(
         budget.node(&theory, 0),
         Err(BudgetError::Stopped(Stop::WorkLimit))
@@ -114,7 +119,8 @@ fn cancellation_precedes_both_work_refusals() {
     let theory = owner();
     let cancellation = Cancellation::default();
     cancellation.cancel();
-    let mut budget = Budget::new(Work::new(0), 0, 0, &cancellation);
+    let mut budget_work = Meter::local(0);
+    let mut budget = Budget::new(&mut budget_work, 0, 0, &cancellation);
     assert_eq!(
         budget.node(&theory, 0),
         Err(BudgetError::Stopped(Stop::Cancelled))
@@ -141,7 +147,8 @@ impl Grants {
     }
 }
 
-impl NarrowingQuota for Grants {
+impl zetesis_algebra::Quota for Grants {
+    type Error = Stop;
     fn reserve(&mut self, wanted: u64) -> Result<u64, Stop> {
         self.calls += 1;
         let grant = self.steps.pop_front().unwrap_or(Err(Stop::WorkLimit))?;
@@ -161,13 +168,14 @@ fn partial_reservation_refunds_without_executing_the_read() {
     let cancellation = Cancellation::default();
     let mut quota = Grants::new([Ok(5), Ok(7), Err(Stop::Deadline)]);
     {
-        let mut budget = Budget::new(Work::reserved(&mut quota), 100, 0, &cancellation);
+        let mut budget_work = Meter::reserved(&mut quota);
+        let mut budget = Budget::new(&mut budget_work, 100, 0, &cancellation);
         budget.charge(2).unwrap();
         // Three existing spare permits and seven newly granted ones cannot
         // admit the next read. Its invalid ID must not replace the deadline.
         assert_eq!(
             budget.node(&theory, usize::MAX),
-            Err(BudgetError::Stopped(Stop::Deadline))
+            Err(BudgetError::Refused(Stop::Deadline))
         );
         assert_eq!(budget.work(), 2);
         budget.finish();
@@ -184,7 +192,8 @@ fn optional_decline_refunds_all_reserved_permits() {
     let cancellation = Cancellation::default();
     let mut quota = Grants::new([Ok(13), Ok(11)]);
     {
-        let mut budget = Budget::new(Work::reserved(&mut quota), 0, 0, &cancellation);
+        let mut budget_work = Meter::reserved(&mut quota);
+        let mut budget = Budget::new(&mut budget_work, 0, 0, &cancellation);
         assert_eq!(budget.node(&theory, 0), Err(BudgetError::WorkDeclined));
         assert_eq!(budget.work(), 0);
         budget.finish();
@@ -198,7 +207,8 @@ fn successful_read_refunds_only_its_unused_reservation() {
     let cancellation = Cancellation::default();
     let mut quota = Grants::new([Ok(24)]);
     {
-        let mut budget = Budget::new(Work::reserved(&mut quota), 24, 0, &cancellation);
+        let mut budget_work = Meter::reserved(&mut quota);
+        let mut budget = Budget::new(&mut budget_work, 24, 0, &cancellation);
         assert_eq!(budget.node(&theory, 0), Ok(crate::NodeView::Atom(0)));
         budget.finish();
         assert_eq!(budget.work(), 4);
@@ -209,7 +219,8 @@ fn successful_read_refunds_only_its_unused_reservation() {
 #[test]
 fn storage_decline_records_the_requested_peak() {
     let cancellation = Cancellation::default();
-    let mut budget = Budget::new(Work::new(0), 0, 12, &cancellation);
+    let mut budget_work = Meter::local(0);
+    let mut budget = Budget::new(&mut budget_work, 0, 12, &cancellation);
     budget.admit_bytes(8).unwrap();
     assert_eq!(budget.peak_bytes(), 8);
     assert_eq!(
@@ -228,10 +239,168 @@ fn storage_decline_records_the_requested_peak() {
 fn cancellation_precedes_storage_decline() {
     let cancellation = Cancellation::default();
     cancellation.cancel();
-    let mut budget = Budget::new(Work::new(0), 0, 0, &cancellation);
+    let mut budget_work = Meter::local(0);
+    let mut budget = Budget::new(&mut budget_work, 0, 0, &cancellation);
     assert_eq!(
         budget.admit_bytes(1),
         Err(BudgetError::Stopped(Stop::Cancelled))
     );
     assert_eq!(budget.peak_bytes(), 0);
+}
+
+#[test]
+fn exact_byte_admission_preserves_the_work_receipt() {
+    let cancellation = Cancellation::default();
+    let mut budget_work = Meter::local(0);
+    let mut budget = Budget::new(&mut budget_work, 0, 12, &cancellation);
+    assert_eq!(budget.admit_bytes(12), Ok(()));
+    assert_eq!(budget.peak_bytes(), 12);
+    assert_eq!(budget.admit_bytes(0), Ok(()));
+    assert_eq!(budget.peak_bytes(), 12);
+    assert_eq!(budget.work(), 0);
+}
+
+#[test]
+fn cancelled_zero_byte_admission_preserves_the_peak() {
+    let cancellation = Cancellation::default();
+    let mut budget_work = Meter::local(0);
+    let mut budget = Budget::new(&mut budget_work, 0, 12, &cancellation);
+    budget.admit_bytes(12).unwrap();
+    cancellation.cancel();
+    assert_eq!(
+        budget.admit_bytes(0),
+        Err(BudgetError::Stopped(Stop::Cancelled))
+    );
+    assert_eq!(budget.peak_bytes(), 12);
+    assert_eq!(budget.work(), 0);
+}
+
+// The owned payload intentionally implements neither Clone nor Copy. The
+// caller refusal must travel through the real meter without a saved-error slot.
+#[derive(Debug, PartialEq, Eq)]
+pub(super) enum TypedRefusal {
+    Storage {
+        owner: Box<str>,
+        required: u128,
+        limit: u128,
+    },
+    Control(Stop),
+}
+
+impl zetesis_algebra::Refusal for TypedRefusal {
+    fn is_resource_refusal(&self) -> bool {
+        match self {
+            Self::Storage { .. } => true,
+            Self::Control(stop) => zetesis_algebra::Refusal::is_resource_refusal(stop),
+        }
+    }
+
+    fn from_stop(stop: Stop) -> Self {
+        Self::Control(stop)
+    }
+}
+
+pub(super) struct TypedQuota {
+    steps: VecDeque<Result<u64, TypedRefusal>>,
+    pub(super) granted: u64,
+    pub(super) refunded: u64,
+}
+
+impl TypedQuota {
+    pub(super) fn new(steps: impl IntoIterator<Item = Result<u64, TypedRefusal>>) -> Self {
+        Self {
+            steps: steps.into_iter().collect(),
+            granted: 0,
+            refunded: 0,
+        }
+    }
+}
+
+impl zetesis_algebra::Quota for TypedQuota {
+    type Error = TypedRefusal;
+
+    fn reserve(&mut self, wanted: u64) -> Result<u64, Self::Error> {
+        let grant = self
+            .steps
+            .pop_front()
+            .expect("the bounded script covers each reservation")?;
+        assert!(grant <= wanted);
+        self.granted += grant;
+        Ok(grant)
+    }
+
+    fn refund(&mut self, unspent: u64) {
+        self.refunded += unspent;
+    }
+}
+
+#[test]
+fn typed_global_refusal_precedes_optional_and_source_failures() {
+    let owner_name = Box::<str>::from("arithmetic-original");
+    let identity = owner_name.as_ptr();
+    let mut quota = TypedQuota::new([
+        Ok(5),
+        Ok(7),
+        Err(TypedRefusal::Storage {
+            owner: owner_name,
+            required: u128::MAX,
+            limit: 31,
+        }),
+    ]);
+    let cancellation = Cancellation::default();
+    let theory = owner();
+    {
+        let mut work = Meter::reserved(&mut quota);
+        let mut budget = Budget::new(&mut work, 2, 0, &cancellation);
+        budget.charge(2).unwrap();
+        // Optional work is exhausted and the source ID is invalid. The old
+        // global-first reservation boundary must nevertheless return this
+        // exact caller error, without executing the node read.
+        let BudgetError::Refused(TypedRefusal::Storage {
+            owner,
+            required,
+            limit,
+        }) = budget.node(&theory, usize::MAX).unwrap_err()
+        else {
+            panic!("the typed reservation refusal must remain intact")
+        };
+        assert_eq!(owner.as_ptr(), identity);
+        assert_eq!(&*owner, "arithmetic-original");
+        assert_eq!((required, limit), (u128::MAX, 31));
+        assert_eq!(budget.work(), 2);
+        assert_eq!(budget.peak_bytes(), 0);
+        budget.finish();
+        assert_eq!(budget.work(), 2);
+    }
+    assert_eq!((quota.granted, quota.refunded), (12, 10));
+}
+
+#[test]
+fn a_borrowed_meter_gives_each_preparation_its_own_prefix() {
+    let theory = owner();
+    let cancellation = Cancellation::default();
+    let mut work = Meter::local(100);
+    work.bounded(7, || ((), 7)).unwrap();
+    {
+        let mut budget = Budget::new(&mut work, 24, 0, &cancellation);
+        assert_eq!(budget.work(), 0);
+        budget
+            .in_phase(super::super::work::Phase::Recognition, |budget| {
+                assert_eq!(budget.node(&theory, 0)?, crate::NodeView::Atom(0));
+                Ok(())
+            })
+            .unwrap();
+        assert_eq!(budget.work(), 4);
+        assert_eq!(budget.phases().total(), 4);
+        budget.finish();
+    }
+    assert_eq!(work.charged(), 11);
+    {
+        let mut budget = Budget::new(&mut work, 23, 0, &cancellation);
+        assert_eq!(budget.node(&theory, 0), Err(BudgetError::WorkDeclined));
+        assert_eq!(budget.work(), 0);
+        assert_eq!(budget.phases().total(), 0);
+        budget.finish();
+    }
+    assert_eq!(work.charged(), 11);
 }

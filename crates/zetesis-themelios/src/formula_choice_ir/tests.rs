@@ -74,7 +74,7 @@ fn model_count(source: &Program) -> usize {
     let mut search = zetesis_stable::StableModels::new(
         &compiled.theory,
         zetesis_stable::Limits::default(),
-        zetesis_cpu::Cancellation::default(),
+        zetesis_algebra::Cancellation::default(),
     )
     .unwrap();
     let count = search.by_ref().map(Result::unwrap).count();

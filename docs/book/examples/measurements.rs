@@ -1,7 +1,7 @@
 //! Share one optional host-measurement scope across admission and solving.
 
 // ANCHOR: example
-use zetesis_cpu::Cancellation;
+use zetesis_algebra::Cancellation;
 use zetesis_solve::{
     Backend, PreparedInput, Session, SolveConfig, SolveMeasurements, SolvePhase, WorldViewLimits,
 };

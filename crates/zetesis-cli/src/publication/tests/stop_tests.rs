@@ -9,7 +9,7 @@ use std::{
     io::{self, Write},
     ops::ControlFlow,
 };
-use zetesis_cpu::{Cancellation, Stop};
+use zetesis_algebra::{Cancellation, Stop};
 use zetesis_reference_support::formula;
 use zetesis_themelios::observation::{ErrorKind, ViewError};
 

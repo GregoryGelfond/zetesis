@@ -142,3 +142,48 @@ fn every_stopped_selection_can_retry_once() {
         assert_eq!(append.pending.len(), 1);
     }
 }
+
+#[test]
+fn support_selection_preserves_sparse_word_boundaries() {
+    use zetesis_test_support::programs::signed_numbered;
+
+    let limits = FormulaLimits::default();
+    let mut counters = Counters::default();
+    let mut catalog = SupportCatalog::default();
+    let (_, mut append) = catalog.split(&limits, &mut counters, location()).unwrap();
+    let mut discovered = Vec::new();
+    for value in 0..130 {
+        let ingress = signed_numbered("discovered", zetesis_core::Sign::Positive, &[value]);
+        discovered.push(
+            append
+                .discover_ref((&ingress).into(), 0, &limits, &mut counters, location())
+                .unwrap(),
+        );
+    }
+    for index in [0, 63, 64, 129] {
+        assert_eq!(discovered[index].position, index);
+        append
+            .retain(&discovered[index], 0, &limits, &mut counters, location())
+            .unwrap();
+    }
+    assert_eq!(&append.supported[..], &[1 | (1_u64 << 63), 1, 2]);
+    let storage = (append.supported.as_ptr(), append.supported.capacity());
+    for (index, atom) in discovered.iter().enumerate() {
+        assert_eq!(
+            append.is_supported(atom.position),
+            [0, 63, 64, 129].contains(&index)
+        );
+    }
+    assert!(!append.is_supported(130));
+    assert!(!append.is_supported(usize::MAX));
+    for index in [129, 64, 63, 0] {
+        append
+            .retain(&discovered[index], 0, &limits, &mut counters, location())
+            .unwrap();
+    }
+    assert_eq!(&append.pending[..], &[0, 63, 64, 129]);
+    assert_eq!(
+        (append.supported.as_ptr(), append.supported.capacity()),
+        storage
+    );
+}

@@ -115,7 +115,9 @@ fn original_evaluation_stop_never_enters_subset_search() {
     .unwrap();
     assert!(matches!(
         search.next(),
-        Some(Err(Incomplete::Verification(zetesis_cpu::Stop::WorkLimit)))
+        Some(Err(Incomplete::Verification(
+            zetesis_algebra::Stop::WorkLimit
+        )))
     ));
     assert_eq!(search.statistics().reduct.original_work, 1);
     assert_eq!(search.statistics().countermodel_queries, 0);

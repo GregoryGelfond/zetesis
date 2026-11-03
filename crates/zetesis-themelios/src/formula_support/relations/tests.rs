@@ -550,7 +550,7 @@ fn shared_probe_refusal_preserves_its_dictionary_prefix() {
     .unwrap();
     let allowance = crate::ConstraintAllowance::new(crate::ConstraintCheckLimits::default());
     let mut counters =
-        Counters::with_allowance(allowance.clone(), &zetesis_cpu::Cancellation::default());
+        Counters::with_allowance(allowance.clone(), &zetesis_algebra::Cancellation::default());
     let check = FormulaLimits {
         max_work: 2,
         ..limits
@@ -594,7 +594,7 @@ fn shared_probe_matches_local_execution() {
     assert_eq!(expected, Some([7].as_slice()));
     let allowance = crate::ConstraintAllowance::new(crate::ConstraintCheckLimits::default());
     let mut shared =
-        Counters::with_allowance(allowance.clone(), &zetesis_cpu::Cancellation::default());
+        Counters::with_allowance(allowance.clone(), &zetesis_algebra::Cancellation::default());
     let actual = support
         .probe(&pattern, &[], &limits, &mut shared, location())
         .unwrap();

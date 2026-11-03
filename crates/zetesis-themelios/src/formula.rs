@@ -343,7 +343,7 @@ pub enum FormulaFailure {
     /// A cancellable streamed-source operation stopped before completion.
     Interrupted {
         /// Cancellation or deadline observed at a charged work boundary.
-        reason: zetesis_cpu::Stop,
+        reason: zetesis_algebra::Stop,
         /// Original source occurrence whose operation stopped.
         location: ProgramSite,
     },
@@ -371,7 +371,7 @@ pub enum FormulaFailure {
     /// A finite-table index or row selection failed without publishing a result.
     SupportTable {
         /// Exact cause and completed operation receipts; never semantic UNSAT.
-        error: zetesis_cpu::table::Failure,
+        error: zetesis_core::table::Failure,
         /// Original positive source occurrence.
         location: ProgramSite,
     },
@@ -484,7 +484,7 @@ impl FormulaFailure {
     /// Shared cancellation or deadline that stopped this operation, when any.
     /// Resource ceilings and malformed input are never control conclusions.
     #[must_use]
-    pub fn interruption(&self) -> Option<zetesis_cpu::Stop> {
+    pub fn interruption(&self) -> Option<zetesis_algebra::Stop> {
         let reason = match self.cause() {
             Self::Interrupted { reason, .. }
             | Self::Expansion(ExpansionFailure::Interrupted { reason, .. }) => Some(*reason),
@@ -501,7 +501,7 @@ impl FormulaFailure {
         reason.filter(|reason| {
             matches!(
                 reason,
-                zetesis_cpu::Stop::Cancelled | zetesis_cpu::Stop::Deadline
+                zetesis_algebra::Stop::Cancelled | zetesis_algebra::Stop::Deadline
             )
         })
     }
@@ -549,7 +549,7 @@ impl FormulaFailure {
 
     /// Resolve a typed-input refusal to the caller's original logical object.
     #[must_use]
-    pub fn subject(&self) -> Option<crate::ProgramSubject<'_>> {
+    pub fn original(&self) -> Option<crate::ProgramOriginal<'_>> {
         let Self::Program { program, error } = self else {
             return None;
         };
@@ -557,7 +557,7 @@ impl FormulaFailure {
             return program
                 .statements()
                 .nth(statement.index())
-                .map(crate::ProgramSubject::Statement);
+                .map(crate::ProgramOriginal::Statement);
         }
         if let Self::Logical {
             part: Some(index), ..
@@ -566,9 +566,9 @@ impl FormulaFailure {
             return program
                 .parts()
                 .nth(*index)
-                .map(|part| crate::ProgramSubject::Part(part.key()));
+                .map(|part| crate::ProgramOriginal::Part(part.key()));
         }
-        Some(crate::ProgramSubject::Program)
+        Some(crate::ProgramOriginal::Program)
     }
 
     /// Located diagnostics; bundle identities resolve through its retained catalog.
@@ -1356,15 +1356,15 @@ pub(crate) fn logical_failure(
     program: &SourceProgram,
     error: crate::ProgramAdmissionFailure<'_>,
 ) -> FormulaFailure {
-    let (part, location) = match error.subject {
-        crate::ProgramSubject::Program => (None, ProgramSite::program()),
-        crate::ProgramSubject::Part(key) => (
+    let (part, location) = match error.original {
+        crate::ProgramOriginal::Program => (None, ProgramSite::program()),
+        crate::ProgramOriginal::Part(key) => (
             program
                 .parts()
                 .position(|part| std::ptr::eq(part.key(), key)),
             ProgramSite::program(),
         ),
-        crate::ProgramSubject::Statement(statement) => {
+        crate::ProgramOriginal::Statement(statement) => {
             let index = program
                 .statements()
                 .position(|carrier| std::ptr::eq(carrier, statement))
@@ -1389,7 +1389,7 @@ pub(crate) fn prepare_parsed(
     source: ParsedSource,
     expansion: ExpansionLimits,
     limits: &FormulaLimits,
-    cancellation: Option<zetesis_cpu::Cancellation>,
+    cancellation: Option<zetesis_algebra::Cancellation>,
 ) -> Result<PreparedFormula, SourceFailure<FormulaFailure>> {
     match prepare_source(&source, expansion, limits, cancellation) {
         Ok((preparation, metadata, program)) => Ok(PreparedFormula::new(
@@ -1405,7 +1405,7 @@ fn prepare_source(
     source: &ParsedSource,
     expansion: ExpansionLimits,
     limits: &FormulaLimits,
-    cancellation: Option<zetesis_cpu::Cancellation>,
+    cancellation: Option<zetesis_algebra::Cancellation>,
 ) -> Result<(Preparation, SourceMetadata, Arc<SourceProgram>), FormulaFailure> {
     let parsed = source.parsed();
     let options = source.options();
@@ -1487,7 +1487,7 @@ pub fn prepare_bundle_formula_with_cancellation(
     options: BundleAdmissionOptions,
     expansion: ExpansionLimits,
     limits: FormulaLimits,
-    cancellation: &zetesis_cpu::Cancellation,
+    cancellation: &zetesis_algebra::Cancellation,
 ) -> Result<PreparedFormulaBundle, FormulaBundleFailure> {
     prepare_bundle_with_control(
         bundle,
@@ -1503,7 +1503,7 @@ fn prepare_bundle_with_control(
     options: BundleAdmissionOptions,
     expansion: ExpansionLimits,
     limits: &FormulaLimits,
-    cancellation: Option<zetesis_cpu::Cancellation>,
+    cancellation: Option<zetesis_algebra::Cancellation>,
 ) -> Result<PreparedFormulaBundle, FormulaBundleFailure> {
     match prepare_bundle(&bundle, options, expansion, limits, cancellation) {
         Ok((preparation, metadata, program)) => Ok(PreparedFormulaBundle::new(
@@ -1523,7 +1523,7 @@ fn prepare_bundle(
     options: BundleAdmissionOptions,
     expansion: ExpansionLimits,
     limits: &FormulaLimits,
-    cancellation: Option<zetesis_cpu::Cancellation>,
+    cancellation: Option<zetesis_algebra::Cancellation>,
 ) -> Result<(Preparation, SourceMetadata, Arc<SourceProgram>), FormulaFailure> {
     let budget = crate::expansion::Budget::new(expansion, options.core_limits.max_templates)
         .with_cancellation(cancellation);
@@ -1626,7 +1626,7 @@ fn prepare(
 }
 
 pub(crate) fn poll_control(
-    cancellation: Option<&zetesis_cpu::Cancellation>,
+    cancellation: Option<&zetesis_algebra::Cancellation>,
     location: ProgramSite,
 ) -> Result<(), FormulaFailure> {
     if let Some(cancellation) = cancellation {

@@ -13,7 +13,7 @@ Here atom indices `0` and `1` denote `a` and `b`. The theory is `a | b.`.
 The candidate `{a,b}` satisfies the theory but has a proper-subset reduct model:
 
 ```rust
-# extern crate zetesis_cpu;
+# extern crate zetesis_algebra;
 # extern crate zetesis_ferraris;
 {{#include ../examples/reduct.rs:example}}
 ```
@@ -117,7 +117,7 @@ operation consumes a subset budget.
 
 `Limits::max_work` bounds charged operations; `max_subsets` bounds the reference
 membership check's proper-subset queries. Cancellation and deadlines use
-`zetesis_cpu::Cancellation`.
+`zetesis_algebra::Cancellation`.
 
 Every operation returns a typed stop on exceeded limits or invalid identity.
 The [local Rust API reference](../../doc/zetesis_ferraris/index.html), generated

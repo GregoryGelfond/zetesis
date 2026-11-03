@@ -1,9 +1,9 @@
 //! Cover authentication consumes only reached edges and keeps compound cuts.
 
-use super::super::{Scratch, Work, chain_position, expands};
+use super::super::{Meter, Scratch, chain_position, expands};
 use super::*;
 use crate::test_support::Allowance;
-use zetesis_cpu::Stop;
+use zetesis_algebra::Stop;
 
 fn connective(nodes: &mut FormulaNodes, disjunction: bool, children: &[usize]) -> usize {
     push(
@@ -49,20 +49,21 @@ fn early_uncovered_paths_do_not_prepare_siblings() {
             let chain = chain(&index, root);
             assert_eq!(index.chains[chain].leaves(&index.extrema).len(), width - 1);
             let mut scratch = warmed(&index);
-            let mut work = Work::new(u64::MAX);
+            let mut work = Meter::local(u64::MAX);
             let mut tested = Vec::new();
             let covered = scratch
                 .covered_by(&index, chain, &mut work, |node, work| {
-                    work.tick()?;
+                    work.tick().map_err(zetesis_algebra::Failure::into_stop)?;
                     tested.push(node);
                     Ok(false)
                 })
+                .map_err(zetesis_algebra::Failure::into_stop)
                 .unwrap();
             assert!(!covered);
             assert_eq!(tested, [root, first, 0]);
             // Three nodes, two reached edges, three coverage callback reads.
             // Eager sibling preparation instead consumes width+1 edges.
-            assert_eq!(work.spent(), 8, "width={width}");
+            assert_eq!(work.charged(), 8, "width={width}");
             assert!(!scratch.visited(1) && !scratch.visited(2));
             assert_eq!(scratch.frames.len(), 2);
             assert_eq!(scratch.stack.capacity(), 0);
@@ -78,20 +79,21 @@ fn a_late_uncovered_path_retains_full_visit_order() {
         let (theory, root, first) = wide(disjunction, width);
         let index = Narrower::new(&theory);
         let mut scratch = warmed(&index);
-        let mut work = Work::new(u64::MAX);
+        let mut work = Meter::local(u64::MAX);
         let mut tested = Vec::new();
         let covered = scratch
             .covered_by(&index, chain(&index, root), &mut work, |node, work| {
-                work.tick()?;
+                work.tick().map_err(zetesis_algebra::Failure::into_stop)?;
                 tested.push(node);
                 Ok(node < width - 1)
             })
+            .map_err(zetesis_algebra::Failure::into_stop)
             .unwrap();
         assert!(!covered);
         let expected: Vec<_> = [root, first].into_iter().chain(0..width).collect();
         assert_eq!(tested, expected);
         // width+2 nodes and callbacks, width+1 edges, exactly the old full walk.
-        assert_eq!(work.spent(), u64::try_from(3 * width + 5).unwrap());
+        assert_eq!(work.charged(), u64::try_from(3 * width + 5).unwrap());
     }
 }
 
@@ -102,21 +104,22 @@ fn covered_compounds_prune_only_their_descendants() {
         let (theory, root, first) = wide(disjunction, width);
         let index = Narrower::new(&theory);
         let mut scratch = warmed(&index);
-        let mut work = Work::new(u64::MAX);
+        let mut work = Meter::local(u64::MAX);
         let mut tested = Vec::new();
         assert!(
             scratch
                 .covered_by(&index, chain(&index, root), &mut work, |node, work| {
-                    work.tick()?;
+                    work.tick().map_err(zetesis_algebra::Failure::into_stop)?;
                     tested.push(node);
                     Ok(node == first || node < width)
                 })
+                .map_err(zetesis_algebra::Failure::into_stop)
                 .unwrap()
         );
         let expected: Vec<_> = [root, first].into_iter().chain(2..width).collect();
         assert_eq!(tested, expected);
         assert!(!scratch.visited(0) && !scratch.visited(1));
-        assert_eq!(work.spent(), u64::try_from(3 * width - 1).unwrap());
+        assert_eq!(work.charged(), u64::try_from(3 * width - 1).unwrap());
         assert!(scratch.frames.is_empty());
     }
 }
@@ -126,19 +129,20 @@ fn a_covered_root_reads_no_edges() {
     let (theory, root, first) = wide(true, 32);
     let index = Narrower::new(&theory);
     let mut scratch = warmed(&index);
-    let mut work = Work::new(u64::MAX);
+    let mut work = Meter::local(u64::MAX);
     let mut tested = Vec::new();
     assert!(
         scratch
             .covered_by(&index, chain(&index, root), &mut work, |node, work| {
-                work.tick()?;
+                work.tick().map_err(zetesis_algebra::Failure::into_stop)?;
                 tested.push(node);
                 Ok(node == root)
             })
+            .map_err(zetesis_algebra::Failure::into_stop)
             .unwrap()
     );
     assert_eq!(tested, [root]);
-    assert_eq!(work.spent(), 2);
+    assert_eq!(work.charged(), 2);
     assert!(!scratch.visited(first));
     assert_eq!(scratch.frames.capacity(), 0);
 }
@@ -174,7 +178,7 @@ fn complete_deep_covers_keep_distinct_callback_order() {
             assert_eq!(index.chains[chain].leaves(&index.extrema).len(), 2);
         }
         let mut scratch = warmed(&index);
-        let mut work = Work::new(u64::MAX);
+        let mut work = Meter::local(u64::MAX);
         let mut tested = Vec::new();
         assert!(
             scratch
@@ -183,18 +187,19 @@ fn complete_deep_covers_keep_distinct_callback_order() {
                     chain(&index, *roots.last().unwrap()),
                     &mut work,
                     |node, work| {
-                        work.tick()?;
+                        work.tick().map_err(zetesis_algebra::Failure::into_stop)?;
                         tested.push(node);
                         Ok(node < 2)
                     }
                 )
+                .map_err(zetesis_algebra::Failure::into_stop)
                 .unwrap()
         );
         let expected: Vec<_> = roots.iter().rev().copied().chain([0, 1]).collect();
         assert_eq!(tested, expected, "shared atom one is tested once");
         // depth chains plus depth+1 atom encounters, 2*depth edges and
         // depth+2 distinct coverage callbacks. Dedup does not erase edge work.
-        assert_eq!(work.spent(), u64::try_from(5 * depth + 3).unwrap());
+        assert_eq!(work.charged(), u64::try_from(5 * depth + 3).unwrap());
         assert!(scratch.frames.is_empty());
         assert!(scratch.frames.capacity() >= depth);
         assert_eq!(scratch.stack.capacity(), 0);
@@ -213,22 +218,28 @@ fn cone_collection_keeps_compounds_and_full_receipt() {
     let chain = chain(&index, *roots.last().unwrap());
     let expected: Vec<_> = roots.iter().rev().copied().chain([0, 1]).collect();
     let mut scratch = warmed(&index);
-    let mut work = Work::new(u64::MAX);
-    scratch.cone(&index, chain, &mut work).unwrap();
+    let mut work = Meter::local(u64::MAX);
+    scratch
+        .cone(&index, chain, &mut work)
+        .map_err(zetesis_algebra::Failure::into_stop)
+        .unwrap();
     assert_eq!(scratch.prepared(), expected);
-    assert_eq!(work.spent(), u64::try_from(4 * depth + 1).unwrap());
+    assert_eq!(work.charged(), u64::try_from(4 * depth + 1).unwrap());
     assert!(scratch.frames.is_empty());
     let capacity = scratch.leaves.capacity();
-    for limit in 0..work.spent() {
-        let mut limited = Work::new(limit);
+    for limit in 0..work.charged() {
+        let mut limited = Meter::local(limit);
         assert_eq!(
-            scratch.cone(&index, chain, &mut limited),
+            scratch
+                .cone(&index, chain, &mut limited)
+                .map_err(zetesis_algebra::Failure::into_stop),
             Err(Stop::WorkLimit)
         );
-        assert_eq!(limited.spent(), limit);
+        assert_eq!(limited.charged(), limit);
         assert_eq!(scratch.leaves.capacity(), capacity);
         scratch
-            .cone(&index, chain, &mut Work::new(u64::MAX))
+            .cone(&index, chain, &mut Meter::local(u64::MAX))
+            .map_err(zetesis_algebra::Failure::into_stop)
             .unwrap();
         assert_eq!(scratch.prepared(), expected);
         assert!(scratch.frames.is_empty());
@@ -251,24 +262,27 @@ fn every_cover_work_prefix_can_retry_with_another_cut() {
             } else {
                 warmed(&index)
             };
-            let mut work = Work::new(limit);
+            let mut work = Meter::local(limit);
             assert_eq!(
-                scratch.covered_by(&index, chain, &mut work, |node, work| {
-                    work.tick()?;
-                    Ok(node < width)
-                }),
+                scratch
+                    .covered_by(&index, chain, &mut work, |node, work| {
+                        work.tick().map_err(zetesis_algebra::Failure::into_stop)?;
+                        Ok(node < width)
+                    })
+                    .map_err(zetesis_algebra::Failure::into_stop),
                 Err(Stop::WorkLimit),
             );
-            assert_eq!(work.spent(), limit);
+            assert_eq!(work.charged(), limit);
             let mut tested = Vec::new();
-            let mut retry = Work::new(u64::MAX);
+            let mut retry = Meter::local(u64::MAX);
             assert!(
                 !scratch
                     .covered_by(&index, chain, &mut retry, |node, work| {
-                        work.tick()?;
+                        work.tick().map_err(zetesis_algebra::Failure::into_stop)?;
                         tested.push(node);
                         Ok(node < width - 1)
                     })
+                    .map_err(zetesis_algebra::Failure::into_stop)
                     .unwrap()
             );
             assert_eq!(tested, expected);
@@ -288,21 +302,24 @@ fn cancelled_cover_prefixes_do_not_establish_coverage() {
             remaining: allowed,
             failure: Stop::Cancelled,
         };
-        let mut work = Work::reserved(&mut quota);
-        let result = scratch.covered_by(&index, chain, &mut work, |node, work| {
-            work.tick()?;
-            Ok(node < width)
-        });
+        let mut work = Meter::reserved(&mut quota);
+        let result = scratch
+            .covered_by(&index, chain, &mut work, |node, work| {
+                work.tick().map_err(zetesis_algebra::Failure::into_stop)?;
+                Ok(node < width)
+            })
+            .map_err(zetesis_algebra::Failure::into_stop);
         assert_eq!(result, Err(Stop::Cancelled));
-        assert_eq!(work.spent(), allowed);
+        assert_eq!(work.charged(), allowed);
         work.refund();
         assert_eq!(quota.remaining, 0);
         assert!(
             scratch
-                .covered_by(&index, chain, &mut Work::new(u64::MAX), |node, work| {
-                    work.tick()?;
+                .covered_by(&index, chain, &mut Meter::local(u64::MAX), |node, work| {
+                    work.tick().map_err(zetesis_algebra::Failure::into_stop)?;
                     Ok(node < width)
                 })
+                .map_err(zetesis_algebra::Failure::into_stop)
                 .unwrap()
         );
         assert!(scratch.frames.is_empty());

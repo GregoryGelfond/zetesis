@@ -237,7 +237,7 @@ pub fn run(request: &Request<'_>) -> Result<Report, Error> {
 /// qualification, warmup, timed and diagnostic calls retain their direct path.
 ///
 /// # Errors
-/// Returns the setup/publication refusals of [`run`], including missing helper
+/// Returns the setup/publication refusals of [`run()`], including missing helper
 /// identity. Resource-record failures remain retained observation failures.
 pub fn run_with_runner(request: &Request<'_>, runner: &Path) -> Result<Report, Error> {
     run::campaign(request, Some(runner))

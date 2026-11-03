@@ -4,7 +4,7 @@
 use std::io;
 use std::num::NonZeroUsize;
 
-use zetesis_cpu::Cancellation;
+use zetesis_algebra::Cancellation;
 use zetesis_ferraris::Interpretation;
 use zetesis_stable::{BatchVerdict, StableModels};
 
@@ -57,6 +57,7 @@ impl MembershipExecution for Injected {
         Some(FormulaExecutionStatistics {
             gpu_limits: None,
             gpu_residuals: None,
+            gpu_residual_handovers: None,
             tight_work_per_candidate: None,
             gpu_scheduled_work: None,
             gpu_tight_routes: None,

@@ -3,6 +3,8 @@
 //! The proposer stores premises; the checker revisits their original source.
 //! Sharing this decoder does not let either consumer supply the other's truth.
 
+use zetesis_algebra::Quota;
+
 use crate::{AdmissionError, NodeView, Theory};
 
 use super::super::{
@@ -17,11 +19,11 @@ pub(super) struct Rule {
     pub body: Option<usize>,
 }
 
-pub(super) fn rule(
+pub(super) fn rule<Q: Quota + ?Sized>(
     theory: &Theory,
     ordinal: usize,
-    budget: &mut Budget<'_, '_>,
-) -> Result<Option<Rule>, BudgetError> {
+    budget: &mut Budget<'_, '_, Q>,
+) -> Result<Option<Rule>, BudgetError<Q::Error>> {
     budget.charge(2)?;
     let root = *theory
         .roots()
@@ -57,13 +59,17 @@ pub(super) fn rule(
 /// Visit every positive premise occurrence; exact TRUE contributes no atom.
 /// Unsupported leaves stop this source. A caller may also stop on a false
 /// premise during replay. The walker is released on every returned path.
-pub(super) fn premises(
+pub(super) fn premises<Q: Quota + ?Sized>(
     theory: &Theory,
     body: Option<usize>,
     storage: &mut Storage,
-    budget: &mut Budget<'_, '_>,
-    mut visit: impl FnMut(usize, &mut Storage, &mut Budget<'_, '_>) -> Result<bool, BudgetError>,
-) -> Result<bool, BudgetError> {
+    budget: &mut Budget<'_, '_, Q>,
+    mut visit: impl FnMut(
+        usize,
+        &mut Storage,
+        &mut Budget<'_, '_, Q>,
+    ) -> Result<bool, BudgetError<Q::Error>>,
+) -> Result<bool, BudgetError<Q::Error>> {
     budget.charge(1)?;
     let Some(body) = body else {
         budget.charge(1)?;
@@ -84,5 +90,5 @@ pub(super) fn premises(
         }
     });
     let released = conjunction.release(storage);
-    result.and_then(|value| released.map(|()| value))
+    result.and_then(|value| released.map(|()| value).map_err(BudgetError::Stopped))
 }

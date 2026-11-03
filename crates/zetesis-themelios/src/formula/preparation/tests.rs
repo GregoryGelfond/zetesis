@@ -251,7 +251,7 @@ fn exact_source_admission_keeps_accepted_work_and_cancellation() {
     } if observed == u128::from(accepted) + 1 && limit == u128::from(accepted)));
 
     let (mut prepared, _key) = prepared_with_identity();
-    let cancellation = zetesis_cpu::Cancellation::default();
+    let cancellation = zetesis_algebra::Cancellation::default();
     prepared
         .preparation
         .budget
@@ -259,7 +259,7 @@ fn exact_source_admission_keeps_accepted_work_and_cancellation() {
     cancellation.cancel();
     assert_eq!(
         prepared.try_source().unwrap_err().interruption(),
-        Some(zetesis_cpu::Stop::Cancelled)
+        Some(zetesis_algebra::Stop::Cancelled)
     );
 }
 

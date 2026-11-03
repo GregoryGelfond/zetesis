@@ -26,9 +26,8 @@ impl<'a> CandidateBatch<'a> {
         Self { theory, candidates }
     }
 
-    /// Exact original subject of every candidate, which the GPU routes and the
-    /// queue's native test route load.
-    #[cfg(any(test, feature = "gpu"))]
+    /// Exact original input used by the queue's native checker fixtures.
+    #[cfg(test)]
     pub(crate) const fn theory(&self) -> &'a Theory {
         self.theory
     }
@@ -136,7 +135,7 @@ impl DeviceVerdicts {
 /// route. Either is an internal invariant failure, never a membership verdict.
 #[derive(Debug)]
 pub enum ExecutorError {
-    /// A receipt belongs to a different exact subject or pending batch.
+    /// A receipt belongs to a different original input or pending batch.
     ForeignBatch,
     /// The route returned a different number of verdicts than candidates.
     Shape {

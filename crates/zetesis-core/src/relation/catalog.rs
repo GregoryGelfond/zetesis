@@ -159,13 +159,13 @@ impl Catalog {
                     peak_construction_bytes: work.peak,
                     referenced_encoding_bytes: 0,
                     borrowed_mapping_bytes: 0,
-                    construction_work: work.used,
+                    construction_work: work.charged(),
                 },
             })
         })();
         build.map_err(|error| CatalogFailure {
             error,
-            work: work.used,
+            work: work.charged(),
             retained_bytes: 0,
             peak_construction_bytes: work.peak,
         })
@@ -563,7 +563,7 @@ impl Catalog {
     fn failed(&self, error: Failure, work: &Work) -> CatalogFailure {
         CatalogFailure {
             error,
-            work: work.used,
+            work: work.charged(),
             retained_bytes: self.retained_bytes(),
             peak_construction_bytes: work.peak,
         }
@@ -599,7 +599,7 @@ impl Catalog {
             peak_construction_bytes: work.peak,
             referenced_encoding_bytes: self.encoding_bytes,
             borrowed_mapping_bytes: 0,
-            construction_work: work.used,
+            construction_work: work.charged(),
         }
     }
 }

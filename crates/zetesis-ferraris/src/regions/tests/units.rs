@@ -1,7 +1,7 @@
 //! Processed operands remove only redundant scans, not pending events.
 
 use crate::test_support::SinglePermits;
-use zetesis_cpu::{Cancellation, Stop};
+use zetesis_algebra::{Cancellation, Class, Countermodels, Stop};
 
 use crate::{
     AdmissionLimits, EvaluationLimits, EvaluationWorkspace, FormulaParts, FrozenSubject,
@@ -9,7 +9,7 @@ use crate::{
     Region, RegionLimits, Theory,
 };
 
-use super::super::{Closure, Step, Subject, Width, Work, bit, counters::Count};
+use super::super::{Closure, Context, Meter, Step, Width, bit, counters::Count};
 use super::{
     compact_mut,
     counters::{native, same_knowledge},
@@ -46,18 +46,18 @@ fn chain(disjunction: bool) -> Theory {
 }
 
 /// The previous unit loop, retained only at this small dispatch boundary.
-fn scan<C: Count>(
+fn scan<C: Count, Q: zetesis_algebra::Quota<Error = Stop> + ?Sized>(
     closure: &mut Closure<'_, C>,
     index: &Narrower,
-    work: &mut Work<'_>,
+    work: &mut Meter<'_, Q>,
 ) -> Result<Step, Stop> {
     let chain = &index.chains[0];
     for &operand in chain.ordinary_leaves() {
-        work.tick()?;
+        work.tick().map_err(zetesis_algebra::Failure::into_stop)?;
         let opposite: &[u64] = if chain.disjunction {
-            closure.known.never
+            &closure.known.never
         } else {
-            closure.known.sure
+            &closure.known.sure
         };
         if !bit(opposite, operand) {
             return Ok(if chain.disjunction {
@@ -71,15 +71,15 @@ fn scan<C: Count>(
 }
 
 /// The complete downward scan before processed totals omitted it.
-fn scan_operands<C: Count>(
+fn scan_operands<C: Count, Q: zetesis_algebra::Quota<Error = Stop> + ?Sized>(
     closure: &mut Closure<'_, C>,
     index: &Narrower,
-    work: &mut Work<'_>,
+    work: &mut Meter<'_, Q>,
 ) -> Result<Step, Stop> {
     let chain = &index.chains[0];
     let mut step = Step::Unchanged;
     for &operand in chain.ordinary_leaves() {
-        work.tick()?;
+        work.tick().map_err(zetesis_algebra::Failure::into_stop)?;
         step = step.join(if chain.disjunction {
             closure.never(operand)
         } else {
@@ -105,16 +105,19 @@ struct Attempt {
 /// 0 is open; 1/2 fail pending/counted; 3/4 hold pending/counted.
 fn state(index: &Narrower, values: [usize; 4]) -> (Knowledge, NarrowingScratch) {
     let mut knowledge = index.knowledge();
-    let known = compact_mut(&mut knowledge);
+    let mut known = compact_mut(&mut knowledge);
     let mut scratch = NarrowingScratch::default();
-    scratch.prepare(3);
+    scratch.common.prepare(3);
     let root = index.chains[0].root;
     if index.chains[0].disjunction {
         known.sure[0] |= 1 << root;
     } else {
         known.never[0] |= 1 << root;
     }
-    scratch.nodes.push((root, index.chains[0].disjunction));
+    scratch
+        .common
+        .nodes
+        .push((root, index.chains[0].disjunction));
     for (operand, value) in values.into_iter().enumerate() {
         match value {
             1 | 2 => known.never[0] |= 1 << operand,
@@ -122,7 +125,7 @@ fn state(index: &Narrower, values: [usize; 4]) -> (Knowledge, NarrowingScratch) 
             _ => {}
         }
         match value {
-            1 | 3 => scratch.nodes.push((operand, value == 3)),
+            1 | 3 => scratch.common.nodes.push((operand, value == 3)),
             2 | 4 if (value == 4) == index.chains[0].disjunction => {
                 known.witnessed[0] |= 1;
             }
@@ -141,37 +144,42 @@ fn attempt(
     limit: u64,
     teaching: Teaching,
 ) -> Attempt {
-    fn call<C: Count>(
+    fn call<C: Count, Q: zetesis_algebra::Quota<Error = Stop> + ?Sized>(
         closure: &mut Closure<'_, C>,
         index: &Narrower,
         scanning: bool,
-        work: &mut Work<'_>,
+        work: &mut Meter<'_, Q>,
         teaching: Teaching,
     ) -> Result<Step, Stop> {
         match (teaching, scanning) {
             (Teaching::Unit, true) => scan(closure, index, work),
-            (Teaching::Unit, false) => closure.unit(index, 0, work),
+            (Teaching::Unit, false) => closure
+                .unit(index, 0, work)
+                .map_err(zetesis_algebra::Failure::into_stop),
             (Teaching::Operands, true) => scan_operands(closure, index, work),
-            (Teaching::Operands, false) => closure.teach_chain(index, 0, work),
+            (Teaching::Operands, false) => closure
+                .teach_chain(index, 0, work)
+                .map_err(zetesis_algebra::Failure::into_stop),
         }
     }
     let (mut knowledge, mut scratch) = state(index, values);
     if matches!(teaching, Teaching::Operands) {
         let root = index.chains[0].root;
-        let known = compact_mut(&mut knowledge);
+        let mut known = compact_mut(&mut knowledge);
         known.sure[0] ^= 1 << root;
         known.never[0] ^= 1 << root;
-        scratch.nodes[0].1 = !index.chains[0].disjunction;
+        scratch.common.nodes[0].1 = !index.chains[0].disjunction;
     }
     if wide {
         knowledge = native(&knowledge);
     }
-    let mut work = Work::new(limit);
+    let mut work = Meter::local(limit);
     let result = match &mut knowledge.width {
         Width::Compact16(known) => call(
-            &mut Closure {
+            &mut Closure::<_, zetesis_algebra::AnswerSetsSought> {
                 known: known.borrow(),
-                lists: &mut scratch,
+                lists: &mut scratch.common,
+                learning: &mut scratch.learning,
             },
             index,
             scanning,
@@ -179,9 +187,10 @@ fn attempt(
             teaching,
         ),
         Width::Compact32(known) => call(
-            &mut Closure {
+            &mut Closure::<_, zetesis_algebra::AnswerSetsSought> {
                 known: known.borrow(),
-                lists: &mut scratch,
+                lists: &mut scratch.common,
+                learning: &mut scratch.learning,
             },
             index,
             scanning,
@@ -189,9 +198,10 @@ fn attempt(
             teaching,
         ),
         Width::Native(known) => call(
-            &mut Closure {
+            &mut Closure::<_, zetesis_algebra::AnswerSetsSought> {
                 known: known.borrow(),
-                lists: &mut scratch,
+                lists: &mut scratch.common,
+                learning: &mut scratch.learning,
             },
             index,
             scanning,
@@ -201,7 +211,7 @@ fn attempt(
     };
     Attempt {
         result,
-        work: work.spent(),
+        work: work.charged(),
         knowledge,
         scratch,
     }
@@ -214,10 +224,10 @@ fn unit(index: &Narrower, values: [usize; 4], wide: bool, scanning: bool, limit:
 fn same(left: &Attempt, right: &Attempt) {
     assert!(left.result == right.result);
     same_knowledge(&left.knowledge, &right.knowledge);
-    assert_eq!(left.scratch.nodes, right.scratch.nodes);
-    assert_eq!(left.scratch.learned, right.scratch.learned);
-    assert_eq!(left.scratch.heads, right.scratch.heads);
-    assert_eq!(left.scratch.pending, right.scratch.pending);
+    assert_eq!(left.scratch.common.nodes, right.scratch.common.nodes);
+    assert_eq!(left.scratch.common.learned, right.scratch.common.learned);
+    assert_eq!(left.scratch.common.heads, right.scratch.common.heads);
+    assert_eq!(left.scratch.common.pending, right.scratch.common.pending);
 }
 
 #[test]
@@ -358,35 +368,38 @@ fn the_last_opposite_event_still_refutes_the_chain() {
         let opposite = if disjunction { 2 } else { 4 };
         let (mut knowledge, mut scratch) =
             state(&index, [opposite, opposite, opposite, opposite - 1]);
-        let mut closure = Closure {
+        let mut closure = Closure::<_, zetesis_algebra::AnswerSetsSought> {
             known: compact_mut(&mut knowledge),
-            lists: &mut scratch,
+            lists: &mut scratch.common,
+            learning: &mut scratch.learning,
         };
-        let mut work = Work::new(4);
+        let mut work = Meter::local(4);
         // All bits are opposite, but the last event has not reached the chain.
         assert!(matches!(
             closure.unit(&index, 0, &mut work),
             Ok(Step::Unchanged)
         ));
-        assert_eq!(work.spent(), 4);
+        assert_eq!(work.charged(), 4);
         assert!(matches!(
-            closure.operand_changed(&index, 0, !disjunction, &mut work),
+            closure
+                .operand_changed(&index, 0, !disjunction, &mut work)
+                .map_err(zetesis_algebra::Failure::into_stop),
             Ok(Step::Contradiction)
         ));
-        assert_eq!(work.spent(), 4);
+        assert_eq!(work.charged(), 4);
         assert!(bit(
             if disjunction {
-                closure.known.sure
+                &closure.known.sure
             } else {
-                closure.known.never
+                &closure.known.never
             },
             7
         ));
         assert!(!bit(
             if disjunction {
-                closure.known.never
+                &closure.known.never
             } else {
-                closure.known.sure
+                &closure.known.sure
             },
             7
         ));
@@ -399,18 +412,20 @@ fn an_absorbing_operand_still_refutes_an_opposite_root() {
         let index = Narrower::new(&chain(disjunction));
         let value = if disjunction { 3 } else { 1 };
         let (mut knowledge, mut scratch) = state(&index, [0, 0, 0, value]);
-        let known = compact_mut(&mut knowledge);
+        let mut known = compact_mut(&mut knowledge);
         // A fresh witness's event contradicts the parent before any unit scan.
         known.sure[0] ^= 1 << 7;
         known.never[0] ^= 1 << 7;
-        let mut work = Work::new(0);
-        let result = Closure {
+        let mut work = Meter::local(0);
+        let result = Closure::<_, zetesis_algebra::AnswerSetsSought> {
             known,
-            lists: &mut scratch,
+            lists: &mut scratch.common,
+            learning: &mut scratch.learning,
         }
-        .operand_changed(&index, 0, disjunction, &mut work);
+        .operand_changed(&index, 0, disjunction, &mut work)
+        .map_err(zetesis_algebra::Failure::into_stop);
         assert!(matches!(result, Ok(Step::Contradiction)));
-        assert_eq!(work.spent(), 0);
+        assert_eq!(work.charged(), 0);
     }
 }
 /// h <- a and b, or h <- a or b; the body is a live chain with a parent.
@@ -442,11 +457,13 @@ fn chain_body(disjunction: bool) -> Theory {
 /// The asserted implication has run; both body leaves have been processed,
 /// learning the body whose event is about to run. No atom has been published
 /// to a region: these tests exercise the event before that boundary.
-fn processed_body(index: &Narrower) -> (Knowledge, NarrowingScratch) {
+fn processed_body<C: Class>(
+    index: &Narrower,
+    mut knowledge: Knowledge<C>,
+) -> (Knowledge<C>, NarrowingScratch) {
     assert_eq!(index.chains[0].root, 2);
     assert_eq!(index.chains[0].ordinary_leaves(), [0, 1]);
-    let mut knowledge = index.knowledge();
-    let known = compact_mut(&mut knowledge);
+    let mut known = compact_mut(&mut knowledge);
     if index.chains[0].disjunction {
         known.never[0] = 0b111;
         known.atom_never[0] = 0b11;
@@ -460,7 +477,7 @@ fn processed_body(index: &Narrower) -> (Knowledge, NarrowingScratch) {
     known.unknown.decrement(2);
     *known.seeded = true;
     let mut scratch = NarrowingScratch::default();
-    scratch.prepare(3);
+    scratch.common.prepare(3);
     (knowledge, scratch)
 }
 
@@ -474,21 +491,23 @@ fn processed_roots_keep_the_node_and_parent_permits() {
                 .unwrap()
                 .producers
                 .expect("the implication is a producer");
-        let subject = Subject::from(OriginalSubject::new(&theory, Some(&producers)));
+        let subject = Context::from(OriginalSubject::new(&theory, Some(&producers)));
         for stop in [Stop::WorkLimit, Stop::Cancelled, Stop::Deadline] {
             for limit in 0..=2 {
-                let (mut knowledge, mut scratch) = processed_body(&index);
+                let (mut knowledge, mut scratch) = processed_body(&index, index.knowledge());
                 let mut expected = knowledge.clone();
                 let mut quota = SinglePermits::new(limit, stop);
-                let mut work = Work::reserved(&mut quota);
-                let result = Closure {
+                let mut work = Meter::reserved(&mut quota);
+                let result = Closure::<_, zetesis_algebra::AnswerSetsSought> {
                     known: compact_mut(&mut knowledge),
-                    lists: &mut scratch,
+                    lists: &mut scratch.common,
+                    learning: &mut scratch.learning,
                 }
-                .revisit(subject, &index, 2, !disjunction, &mut work);
-                assert_eq!(work.spent(), limit);
+                .revisit(subject, &index, 2, !disjunction, &mut work)
+                .map_err(zetesis_algebra::Failure::into_stop);
+                assert_eq!(work.charged(), limit);
                 work.refund();
-                let known = compact_mut(&mut expected);
+                let mut known = compact_mut(&mut expected);
                 if limit > 0 {
                     known.unknown.decrement(0);
                     known.unknown.decrement(1);
@@ -506,13 +525,16 @@ fn processed_roots_keep_the_node_and_parent_permits() {
                 same_knowledge(&knowledge, &expected);
                 let taught_head = !disjunction && limit == 2;
                 assert_eq!(
-                    scratch.nodes,
+                    scratch.common.nodes,
                     if taught_head { vec![(3, true)] } else { vec![] }
                 );
-                assert!(scratch.learned.is_empty());
+                assert!(scratch.common.learned.is_empty());
                 let woke_head = disjunction && limit > 0;
-                assert_eq!(scratch.heads, if woke_head { vec![2] } else { vec![] });
-                assert_eq!(scratch.pending, if woke_head { vec![4] } else { vec![0] });
+                assert_eq!(
+                    scratch.common.heads,
+                    if woke_head { vec![2] } else { vec![] }
+                );
+                assert_eq!(&*scratch.common.pending, if woke_head { [4] } else { [0] });
                 assert_eq!(quota.calls, (limit + 1).min(2));
                 assert_eq!(quota.remaining, 0);
             }
@@ -529,25 +551,30 @@ fn a_processed_false_body_still_removes_support() {
             .unwrap()
             .producers
             .expect("the implication is a producer");
-    let subject = Subject::from(OriginalSubject::new(&theory, Some(&producers)));
-    let (mut knowledge, mut scratch) = processed_body(&index);
-    let mut closure = Closure {
+    let subject = Context::from(OriginalSubject::new(&theory, Some(&producers)));
+    let (mut knowledge, mut scratch) = processed_body(&index, index.knowledge());
+    let mut closure = Closure::<_, zetesis_algebra::AnswerSetsSought> {
         known: compact_mut(&mut knowledge),
-        lists: &mut scratch,
+        lists: &mut scratch.common,
+        learning: &mut scratch.learning,
     };
-    let mut work = Work::new(3);
+    let mut work = Meter::local(3);
     assert!(matches!(
-        closure.revisit(subject, &index, 2, false, &mut work),
+        closure
+            .revisit(subject, &index, 2, false, &mut work)
+            .map_err(zetesis_algebra::Failure::into_stop),
         Ok(Step::Unchanged)
     ));
-    assert_eq!(work.spent(), 2);
+    assert_eq!(work.charged(), 2);
     assert_eq!(closure.lists.next_recheck(), Some(2));
     assert!(matches!(
-        closure.recheck(&index, &producers, 2, &mut work),
+        closure
+            .recheck(&index, &producers, 2, &mut work)
+            .map_err(zetesis_algebra::Failure::into_stop),
         Ok(Step::Changed)
     ));
-    assert_eq!(work.spent(), 3);
-    assert!(bit(closure.known.atom_never, 2));
+    assert_eq!(work.charged(), 3);
+    assert!(closure.known.atom_never.contains(2));
     assert_eq!(closure.lists.nodes, [(3, false)]);
     assert_eq!(closure.lists.learned, [2]);
     assert!(closure.lists.heads.is_empty());
@@ -570,25 +597,31 @@ fn a_frozen_false_root_remains_a_constant() {
         .unwrap();
     assert!(!evaluation.truth()[2]);
     assert!(evaluation.truth()[4]);
-    let subject = Subject::from(FrozenSubject::new(&theory, evaluation.truth()));
-    let (mut knowledge, mut scratch) = processed_body(&index);
+    let subject = Context::from(FrozenSubject::new(&theory, evaluation.truth()));
+    let (mut knowledge, mut scratch) = processed_body(&index, index.frozen_knowledge());
     let mut expected = knowledge.clone();
     let known = compact_mut(&mut expected);
     known.unknown.decrement(0);
     known.unknown.decrement(1);
-    let mut work = Work::new(2);
-    let result = Closure {
+    let mut work = Meter::local(2);
+    let result = Closure::<_, Countermodels> {
         known: compact_mut(&mut knowledge),
-        lists: &mut scratch,
+        lists: &mut scratch.common,
+        learning: (),
     }
-    .revisit(subject, &index, 2, false, &mut work);
+    .revisit(subject, &index, 2, false, &mut work)
+    .map_err(zetesis_algebra::Failure::into_stop);
     assert!(matches!(result, Ok(Step::Unchanged)));
-    assert_eq!(work.spent(), 2);
+    assert_eq!(work.charged(), 2);
     same_knowledge(&knowledge, &expected);
     // The falsum event still updates ranking and its unmasked parent. It
     // neither teaches operands nor applies original-theory support pruning.
-    assert!(scratch.nodes.is_empty() && scratch.learned.is_empty() && scratch.heads.is_empty());
-    assert!(scratch.pending.iter().all(|word| *word == 0));
+    assert!(
+        scratch.common.nodes.is_empty()
+            && scratch.common.learned.is_empty()
+            && scratch.common.heads.is_empty()
+    );
+    assert!(scratch.common.pending.iter().all(|word| *word == 0));
 }
 
 #[test]
@@ -598,23 +631,25 @@ fn witnessed_units_keep_the_node_and_parent_permits() {
         let index = Narrower::new(&theory);
         let opposite = if disjunction { 2 } else { 4 };
         let witness = if disjunction { 4 } else { 2 };
-        let subject = Subject::from(OriginalSubject::new(&theory, None));
+        let subject = Context::from(OriginalSubject::new(&theory, None));
         for stop in [Stop::WorkLimit, Stop::Cancelled, Stop::Deadline] {
             for limit in 0..=2 {
                 let (mut knowledge, mut scratch) =
                     state(&index, [opposite, opposite, opposite - 1, witness]);
-                assert_eq!(scratch.nodes.pop(), Some((2, !disjunction)));
+                assert_eq!(scratch.common.nodes.pop(), Some((2, !disjunction)));
                 let mut expected = knowledge.clone();
                 let mut quota = SinglePermits::new(limit, stop);
-                let mut work = Work::reserved(&mut quota);
-                let result = Closure {
+                let mut work = Meter::reserved(&mut quota);
+                let result = Closure::<_, zetesis_algebra::AnswerSetsSought> {
                     known: compact_mut(&mut knowledge),
-                    lists: &mut scratch,
+                    lists: &mut scratch.common,
+                    learning: &mut scratch.learning,
                 }
-                .revisit(subject, &index, 2, !disjunction, &mut work);
-                assert_eq!(work.spent(), limit);
+                .revisit(subject, &index, 2, !disjunction, &mut work)
+                .map_err(zetesis_algebra::Failure::into_stop);
+                assert_eq!(work.charged(), limit);
                 work.refund();
-                let expected_known = compact_mut(&mut expected);
+                let mut expected_known = compact_mut(&mut expected);
                 if limit > 0 {
                     if disjunction {
                         expected_known.atom_never[0] |= 1 << 1;
@@ -630,9 +665,15 @@ fn witnessed_units_keep_the_node_and_parent_permits() {
                 } else {
                     assert!(result == Err(stop));
                 }
-                assert_eq!(scratch.nodes, [(7, disjunction)]);
-                assert_eq!(scratch.learned, if limit == 0 { vec![] } else { vec![1] });
-                assert!(scratch.heads.is_empty() && scratch.pending.iter().all(|word| *word == 0));
+                assert_eq!(scratch.common.nodes, [(7, disjunction)]);
+                assert_eq!(
+                    scratch.common.learned,
+                    if limit == 0 { vec![] } else { vec![1] }
+                );
+                assert!(
+                    scratch.common.heads.is_empty()
+                        && scratch.common.pending.iter().all(|word| *word == 0)
+                );
                 // All full-state fields are checked, including unchanged seen
                 // and unknown counts, without reusing stopped knowledge.
                 same_knowledge(&knowledge, &expected);
@@ -642,48 +683,45 @@ fn witnessed_units_keep_the_node_and_parent_permits() {
     }
 }
 
-fn narrow(
-    theory: &Theory,
+fn narrow<C: super::super::ReadingClass>(
     index: &Narrower,
-    frozen: Option<&[bool]>,
+    subject: Context<'_, C>,
     region: &mut Region,
-    knowledge: &mut Knowledge,
+    knowledge: &mut Knowledge<C>,
 ) {
     let mut scratch = NarrowingScratch::default();
-    let result = if let Some(truth) = frozen {
-        index.narrow_frozen_known(
-            FrozenSubject::new(theory, truth),
-            region,
-            knowledge,
-            &mut scratch,
-            RegionLimits::default(),
-            &Cancellation::default(),
-        )
-    } else {
-        index.narrow_known(
-            OriginalSubject::new(theory, None),
-            region,
-            knowledge,
-            &mut scratch,
-            RegionLimits::default(),
-            &Cancellation::default(),
-        )
-    }
-    .unwrap();
-    assert!(matches!(result.0, Narrowing::Fixed { .. }));
-    assert!(scratch.nodes.is_empty() && scratch.learned.is_empty() && scratch.heads.is_empty());
-    assert!(scratch.pending.iter().all(|word| *word == 0));
+    let result = super::narrow_context(
+        index,
+        subject,
+        region,
+        knowledge,
+        &mut scratch,
+        RegionLimits::default(),
+        &Cancellation::default(),
+    );
+    assert!(matches!(result.result.unwrap(), Narrowing::Fixed { .. }));
+    assert!(
+        scratch.common.nodes.is_empty()
+            && scratch.common.learned.is_empty()
+            && scratch.common.heads.is_empty()
+    );
+    assert!(scratch.common.pending.iter().all(|word| *word == 0));
 }
 
-fn inherited(theory: &Theory, index: &Narrower, frozen: Option<&[bool]>, first: bool) {
+fn inherited<C: super::super::ReadingClass>(
+    index: &Narrower,
+    subject: Context<'_, C>,
+    first: bool,
+    fresh: impl Fn() -> Knowledge<C>,
+) {
     for wide in [false, true] {
         let mut parent = Region::all_open(3);
         let disjunction = index.chains[0].disjunction;
         assert!(if first { parent.hold(2) } else { parent.cut(2) });
-        let fresh = index.knowledge();
+        let fresh = fresh();
         let fresh = if wide { native(&fresh) } else { fresh };
         let mut knowledge = fresh.clone();
-        narrow(theory, index, frozen, &mut parent, &mut knowledge);
+        narrow(index, subject, &mut parent, &mut knowledge);
         let saved = knowledge.clone();
         let mut child = parent.clone();
         for atom in 0..2 {
@@ -696,8 +734,8 @@ fn inherited(theory: &Theory, index: &Narrower, frozen: Option<&[bool]>, first: 
         let mut from_fresh = child.clone();
         let mut from_parent = knowledge.clone();
         let mut from_nothing = fresh;
-        narrow(theory, index, frozen, &mut child, &mut from_parent);
-        narrow(theory, index, frozen, &mut from_fresh, &mut from_nothing);
+        narrow(index, subject, &mut child, &mut from_parent);
+        narrow(index, subject, &mut from_fresh, &mut from_nothing);
         assert_eq!(child, from_fresh);
         same_knowledge(&from_parent, &from_nothing);
         same_knowledge(&knowledge, &saved);
@@ -712,7 +750,12 @@ fn inherited_chain_knowledge_agrees_with_fresh_closure() {
         // One first decision supplies an absorbing witness; its opposite
         // lets the child learn every operand at the same polarity.
         for first in [false, true] {
-            inherited(&theory, &index, None, first);
+            inherited(
+                &index,
+                Context::from(OriginalSubject::new(&theory, None)),
+                first,
+                || index.knowledge(),
+            );
             for atoms in [vec![0, 1, 2], vec![0, 1]] {
                 let candidate = Interpretation::new(&theory, atoms).unwrap();
                 let mut workspace = EvaluationWorkspace::default();
@@ -722,7 +765,12 @@ fn inherited_chain_knowledge_agrees_with_fresh_closure() {
                     &Cancellation::default(),
                 );
                 let evaluation = attempt.result.unwrap();
-                inherited(&theory, &index, Some(evaluation.truth()), first);
+                inherited(
+                    &index,
+                    Context::from(FrozenSubject::new(&theory, evaluation.truth())),
+                    first,
+                    || index.frozen_knowledge(),
+                );
             }
         }
     }

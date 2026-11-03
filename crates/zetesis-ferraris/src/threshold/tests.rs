@@ -7,7 +7,7 @@ use crate::{
     PositivePlan, PositivePlanLimits, StratifiedError, StratifiedPlan, StratifiedPlanLimits,
     Threshold, TightCheckLimits, TightError, TightPlan, TightPlanLimits, TightVerdict,
 };
-use zetesis_cpu::{Cancellation, Stop};
+use zetesis_algebra::{Cancellation, Stop};
 
 fn threshold(
     transaction: &mut FormulaTransaction<'_>,

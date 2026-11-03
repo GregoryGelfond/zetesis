@@ -131,7 +131,7 @@ fn query_capacity_refusal_never_becomes_no_rows() {
 #[test]
 fn cancelled_queries_publish_no_probe_and_retry() {
     at_probe(|join, computation, counters, location| {
-        let cancellation = zetesis_cpu::Cancellation::default();
+        let cancellation = zetesis_algebra::Cancellation::default();
         cancellation.cancel();
         counters.attach_test_control(&cancellation);
         let live = join.support.live_bytes();
@@ -141,7 +141,7 @@ fn cancelled_queries_publish_no_probe_and_retry() {
                 Context::new(computation, &FormulaLimits::default(), counters, location)
             ),
             Err(FormulaFailure::Interrupted {
-                reason: zetesis_cpu::Stop::Cancelled,
+                reason: zetesis_algebra::Stop::Cancelled,
                 ..
             })
         ));

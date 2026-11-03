@@ -473,3 +473,5 @@ pub(super) fn assert_work_stop<T, E>(result: &Result<T, Error<E>>, budget: &Budg
     ));
     assert_eq!(budget.statistics().work, budget.limits.max_work);
 }
+
+mod work;

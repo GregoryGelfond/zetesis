@@ -35,13 +35,9 @@ pub(super) fn plan(
             continue;
         }
         validate_source(global, theory, work)?;
-        let next = work
-            .statistics
-            .attempts
-            .checked_add(1)
-            .ok_or(Fault::Overflow)?;
+        let next = work.attempts.checked_add(1).ok_or(Fault::Overflow)?;
         ceiling(next, work.limits.max_attempts, Resource::Attempts)?;
-        work.statistics.attempts = next;
+        work.attempts = next;
         let Some(indices) = cover(global_index, groups, theory, work)? else {
             continue;
         };
@@ -58,13 +54,13 @@ pub(super) fn plan(
         return Ok(None);
     }
     let (restriction, origins) = super::emit::restriction(theory, &consequences, work)?;
-    work.statistics.consequences = consequences.len();
+    work.consequences = consequences.len();
     work.poll()?;
     Ok(Some(CountPlan {
         original: theory.clone(),
         restriction,
         origins,
-        statistics: work.statistics,
+        statistics: work.statistics(),
     }))
 }
 
@@ -146,12 +142,10 @@ fn partition(
         });
     }
     let mut limits = work.limits.partition;
-    limits.max_work = limits
-        .max_work
-        .min(work.limits.max_work - work.statistics.work);
+    limits.max_work = limits.max_work.min(work.meter.remaining());
     limits.max_bytes = limits
         .max_bytes
-        .min(work.limits.max_bytes - work.statistics.storage_bytes);
+        .min(work.limits.max_bytes - work.storage_bytes);
     let plan = partition::Plan::new(
         partition::Premises {
             atom_count: theory.atom_count(),
@@ -167,7 +161,7 @@ fn partition(
         Err(error) => error.statistics(),
     };
     work.record(statistics.work)?;
-    if statistics.construction_bytes <= work.limits.max_bytes - work.statistics.storage_bytes {
+    if statistics.construction_bytes <= work.limits.max_bytes - work.storage_bytes {
         work.payload(statistics.construction_bytes)?;
     }
     let plan = plan.map_err(Fault::Partition)?;
@@ -202,7 +196,6 @@ fn append_consequences(
             )
             .ok_or(Fault::Overflow)?;
         let total = work
-            .statistics
             .origins
             .checked_add(origin_count)
             .ok_or(Fault::Overflow)?;
@@ -216,11 +209,11 @@ fn append_consequences(
             work.charge(1)?;
             origins.push(origin);
         }
-        work.statistics.origins = total;
+        work.origins = total;
         work.payload(super::bytes::<Consequence>(1)?)?;
         consequences
             .try_reserve_exact(1)
-            .map_err(|_| Fault::Stopped(zetesis_cpu::Stop::Allocation))?;
+            .map_err(|_| Fault::Stopped(zetesis_algebra::Stop::Allocation))?;
         consequences.push(Consequence {
             location: global.location,
             body: global.body,

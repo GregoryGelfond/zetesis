@@ -4,7 +4,7 @@ use std::mem::size_of;
 
 use super::{Budget, PositiveError, PositivePlan, PositiveResource};
 use crate::{EvaluationError, EvaluationWorkspace, Interpretation, NodeView};
-use zetesis_cpu::Stop;
+use zetesis_algebra::Stop;
 
 pub(super) fn complete(
     least: &Interpretation,

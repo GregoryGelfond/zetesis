@@ -3,7 +3,7 @@
 //! construction's own refusals are, it becomes the stop.
 
 use super::{Budget, ErrorKind, Group, Limits, Resource, Statistics, dimensions};
-use zetesis_cpu::{Cancellation, Meter, Refusal, Stop};
+use zetesis_algebra::{Cancellation, Meter, Refusal, Stop};
 
 /// Run `test` on a construction budget whose meter has admitted `charged`
 /// operations; with `stop`, a stop is requested once it has. The metered exit
@@ -85,4 +85,45 @@ fn construction_errors_classify_resource_refusals() {
     ] {
         assert!(!shape.is_resource_refusal(), "{shape:?}");
     }
+}
+
+#[test]
+fn byte_refusal_retains_planned_dimensions_before_coverage_work() {
+    let groups = [Group {
+        members: &[0],
+        upper: 1,
+    }];
+    let premises = super::Premises {
+        atom_count: 1,
+        members: &[0],
+        lower: 1,
+        groups: &groups,
+    };
+    let cancellation = Cancellation::default();
+    let complete = super::Plan::new(premises, Limits::default(), &cancellation).unwrap();
+    let planned = complete.statistics();
+    assert!(planned.construction_bytes > planned.resident_bytes);
+    let refused = super::Plan::new(
+        premises,
+        Limits {
+            max_bytes: planned.construction_bytes - 1,
+            ..Limits::default()
+        },
+        &cancellation,
+    )
+    .unwrap_err();
+    assert_eq!(refused.kind(), ErrorKind::Limit(Resource::Bytes));
+    // Only the one group's dimensions have been visited. The coverage-cell
+    // initialization and declared/member traversals have not started.
+    assert_eq!(refused.statistics(), Statistics { work: 1, ..planned });
+    let exact = super::Plan::new(
+        premises,
+        Limits {
+            max_bytes: planned.construction_bytes,
+            ..Limits::default()
+        },
+        &cancellation,
+    )
+    .unwrap();
+    assert_eq!(exact.statistics(), planned);
 }

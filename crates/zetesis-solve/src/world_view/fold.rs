@@ -10,11 +10,12 @@
 
 use std::fmt;
 
+use zetesis_algebra::reduction::{All, Any, Reduction, Verdict, sets};
 use zetesis_core::{Atom, Model, ModelError, ValueLimits};
 
 use crate::execution_observation::Ignore;
 use crate::{
-    AnswerSelection, AnswerSet, Completion, SemanticOutcome, SessionBuilder, SolveFailure, Subject,
+    AnswerSelection, AnswerSet, Completion, Original, SemanticOutcome, SessionBuilder, SolveFailure,
 };
 
 /// The three-valued answer to a ground literal query over a program's world
@@ -66,23 +67,23 @@ impl<V> WorldViewVerdict<V> {
     }
 }
 
-/// A world-view question's verdict, with the subject and the session evidence
+/// A world-view question's verdict, with the original input and the session evidence
 /// it rests on. A decided verdict's session was stopped at the deciding answer
 /// set, so its outcome records a completion only if the search had already
 /// ended there; a complete or inconsistent verdict's records exhaustion of the
 /// unrestricted family.
 #[derive(Debug)]
 pub struct WorldViewDecision<V> {
-    subject: Subject,
+    original: Original,
     verdict: WorldViewVerdict<V>,
     outcome: SemanticOutcome,
 }
 
 impl<V> WorldViewDecision<V> {
-    /// Original immutable subject shared by every folded answer set.
+    /// Original immutable input shared by every folded answer set.
     #[must_use]
-    pub const fn subject(&self) -> &Subject {
-        &self.subject
+    pub const fn original(&self) -> &Original {
+        &self.original
     }
 
     /// What the fold established.
@@ -97,7 +98,7 @@ impl<V> WorldViewDecision<V> {
         &self.outcome
     }
 
-    /// Transfer the verdict, discarding the subject and session evidence.
+    /// Transfer the verdict, discarding the original input and session evidence.
     #[must_use]
     pub fn into_verdict(self) -> WorldViewVerdict<V> {
         self.verdict
@@ -144,12 +145,12 @@ impl std::error::Error for WorldViewDecisionError {
     }
 }
 
-/// A world-view question that was not decided, with the subject and the
+/// A world-view question that was not decided, with the original input and the
 /// session evidence available. No partial fold is retained.
 #[derive(Debug)]
 pub struct WorldViewDecisionFailure {
     cause: WorldViewDecisionError,
-    subject: Subject,
+    original: Original,
     outcome: Option<Box<SemanticOutcome>>,
 }
 
@@ -160,10 +161,10 @@ impl WorldViewDecisionFailure {
         &self.cause
     }
 
-    /// Exact original subject, including when setup failed before any answer.
+    /// Exact original input, including when setup failed before any answer.
     #[must_use]
-    pub const fn subject(&self) -> &Subject {
-        &self.subject
+    pub const fn original(&self) -> &Original {
+        &self.original
     }
 
     /// Available session evidence.
@@ -213,7 +214,7 @@ impl SessionBuilder<'_> {
         self,
         literal: &Atom,
     ) -> Result<WorldViewDecision<bool>, WorldViewDecisionFailure> {
-        decide(self, Membership::every(literal))
+        decide(self, Membership::new(literal, All))
     }
 
     /// Decide whether a literal holds in some answer set of the program: the
@@ -231,7 +232,7 @@ impl SessionBuilder<'_> {
         self,
         literal: &Atom,
     ) -> Result<WorldViewDecision<bool>, WorldViewDecisionFailure> {
-        decide(self, Membership::some(literal))
+        decide(self, Membership::new(literal, Any))
     }
 
     /// The program's cautious consequences: the atoms true in every answer
@@ -307,39 +308,34 @@ impl SessionBuilder<'_> {
     }
 }
 
-/// What folding one answer set did to the accumulator.
-enum Step {
-    /// The value is not yet decided.
-    Open,
-    /// The accumulator reached the absorbing value.
-    Absorbed,
-}
-
-/// One reduction folded over answer sets, with its absorbing test and its
-/// witnesses. Each implementation is one of `Zetesis.AxisFolds`'s reductions.
-trait Fold {
+/// Answer-specific value extraction and fallible witness/storage effects.
+///
+/// This adapter is not the pure value reduction. Its accepted absorption is
+/// reported only after every effect for that answer succeeds. Set storage
+/// retains its existing first-value representation and fallible operations.
+trait Accumulator {
     type Value;
 
-    /// Fold one checked answer set into the accumulator.
-    fn step(&mut self, answer: AnswerSet) -> Result<Step, WorldViewDecisionError>;
+    /// Consume one checked answer; return whether its accepted step absorbed.
+    fn step(&mut self, answer: AnswerSet) -> Result<bool, WorldViewDecisionError>;
 
-    /// The absorbed value and the answer sets that drove the fold to it.
-    fn decided(self) -> (Self::Value, Vec<AnswerSet>);
+    /// Transfer the absorbed value and its compact deciding witnesses.
+    fn absorbed(self) -> (Self::Value, Vec<AnswerSet>);
 
-    /// The value over every folded answer set; `None` when none was folded.
-    fn complete(self) -> Option<Self::Value>;
+    /// Transfer the value, distinguishing unseen input from the reduction unit.
+    fn value(self) -> Option<Self::Value>;
 }
 
 /// Run a fold over the unrestricted request's answer sets, stopping at
 /// absorption, and conclude only under `WorldView::collect`'s exhaustion
 /// predicate otherwise.
-fn decide<F: Fold>(
+fn decide<F: Accumulator>(
     request: SessionBuilder<'_>,
     mut fold: F,
 ) -> Result<WorldViewDecision<F::Value>, WorldViewDecisionFailure> {
     // Owning an unstarted request ensures that every answer set of the session
     // reaches the fold, as `WorldView::collect_request` requires of collection.
-    let subject = request.subject();
+    let original = request.original();
     let mut session = request
         .full_identity()
         .every_answer()
@@ -348,31 +344,25 @@ fn decide<F: Fold>(
         .map_err(|error| WorldViewDecisionFailure {
             outcome: error.semantic().cloned().map(Box::new),
             cause: WorldViewDecisionError::Solve(Box::new(error)),
-            subject: subject.clone(),
+            original: original.clone(),
         })?;
     while let Some(result) = session.pull(&mut Ignore) {
         let step = result
             .map_err(|error| WorldViewDecisionError::Solve(Box::new(error)))
             .and_then(|answer| fold.step(answer));
         match step {
-            Ok(Step::Open) => {}
-            Ok(Step::Absorbed) => {
+            Ok(false) => {}
+            Ok(true) => {
                 // Absorption decides the world view's value whatever answer
                 // sets remain (`AxisFolds.world_view_fold_decided`).
                 let outcome = session.stop();
-                let (value, witnesses) = fold.decided();
-                return Ok(WorldViewDecision {
-                    subject,
-                    verdict: WorldViewVerdict::Decided { value, witnesses },
-                    outcome,
-                });
+                let (value, witnesses) = fold.absorbed();
+                return publish(original, outcome, Verdict::Absorbed { value, witnesses });
             }
             Err(cause) => {
-                return Err(WorldViewDecisionFailure {
-                    cause,
-                    subject,
-                    outcome: Some(Box::new(session.stop())),
-                });
+                // Keep the accumulator alive until publication constructs the
+                // failure receipt, as at the original fallible-step boundary.
+                return publish(original, session.stop(), Verdict::Undecided(cause));
             }
         }
     }
@@ -380,17 +370,35 @@ fn decide<F: Fold>(
     if outcome.completion() != Some(Completion::Exhausted)
         || outcome.selection() != Some(AnswerSelection::All)
     {
-        return Err(WorldViewDecisionFailure {
-            cause: WorldViewDecisionError::NotExhausted,
-            subject,
-            outcome: Some(Box::new(outcome)),
-        });
+        return publish(
+            original,
+            outcome,
+            Verdict::Undecided(WorldViewDecisionError::NotExhausted),
+        );
     }
-    let verdict = fold
-        .complete()
-        .map_or(WorldViewVerdict::Inconsistent, WorldViewVerdict::Complete);
+    publish(original, outcome, Verdict::completed(fold.value()))
+}
+
+/// Project the common verdict without changing the semantic public API.
+fn publish<V>(
+    original: Original,
+    outcome: SemanticOutcome,
+    verdict: Verdict<V, Vec<AnswerSet>, WorldViewDecisionError>,
+) -> Result<WorldViewDecision<V>, WorldViewDecisionFailure> {
+    let verdict = match verdict {
+        Verdict::Absorbed { value, witnesses } => WorldViewVerdict::Decided { value, witnesses },
+        Verdict::Complete(value) => WorldViewVerdict::Complete(value),
+        Verdict::Empty => WorldViewVerdict::Inconsistent,
+        Verdict::Undecided(cause) => {
+            return Err(WorldViewDecisionFailure {
+                cause,
+                original,
+                outcome: Some(Box::new(outcome)),
+            });
+        }
+    };
     Ok(WorldViewDecision {
-        subject,
+        original,
         verdict,
         outcome,
     })
@@ -410,51 +418,46 @@ fn witness(
 
 /// Whether a literal is in every answer set (`all`, absorbed by `false`) or in
 /// some answer set (`any`, absorbed by `true`).
-struct Membership {
+struct Membership<R> {
     literal: Atom,
-    /// The membership that absorbs: `false` for every, `true` for some.
-    absorber: bool,
+    reduction: R,
+    value: bool,
     folded: bool,
     witnesses: Vec<AnswerSet>,
 }
 
-impl Membership {
-    fn every(literal: &Atom) -> Self {
+impl<R: Reduction<Value = bool>> Membership<R> {
+    fn new(literal: &Atom, reduction: R) -> Self {
         Self {
             literal: literal.clone(),
-            absorber: false,
+            value: reduction.unit(),
+            reduction,
             folded: false,
             witnesses: Vec::new(),
         }
     }
-
-    fn some(literal: &Atom) -> Self {
-        Self {
-            absorber: true,
-            ..Self::every(literal)
-        }
-    }
 }
 
-impl Fold for Membership {
+impl<R: Reduction<Value = bool>> Accumulator for Membership<R> {
     type Value = bool;
 
-    fn step(&mut self, answer: AnswerSet) -> Result<Step, WorldViewDecisionError> {
+    fn step(&mut self, answer: AnswerSet) -> Result<bool, WorldViewDecisionError> {
         self.folded = true;
-        if answer.interpretation().contains(&self.literal) != self.absorber {
-            return Ok(Step::Open);
+        let member = answer.interpretation().contains(&self.literal);
+        self.value = self.reduction.combine(self.value, member);
+        if !self.reduction.is_absorbing(&self.value) {
+            return Ok(false);
         }
         witness(&mut self.witnesses, answer)?;
-        Ok(Step::Absorbed)
+        Ok(true)
     }
 
-    fn decided(self) -> (bool, Vec<AnswerSet>) {
-        (self.absorber, self.witnesses)
+    fn absorbed(self) -> (bool, Vec<AnswerSet>) {
+        (self.value, self.witnesses)
     }
 
-    fn complete(self) -> Option<bool> {
-        // Without absorption every answer set held the other membership.
-        self.folded.then_some(!self.absorber)
+    fn value(self) -> Option<bool> {
+        self.folded.then_some(self.value)
     }
 }
 
@@ -481,10 +484,10 @@ impl Consequences {
     }
 }
 
-impl Fold for Consequences {
+impl Accumulator for Consequences {
     type Value = Model;
 
-    fn step(&mut self, answer: AnswerSet) -> Result<Step, WorldViewDecisionError> {
+    fn step(&mut self, answer: AnswerSet) -> Result<bool, WorldViewDecisionError> {
         let next = match self.atoms.take() {
             None => Ok(answer.into_interpretation()),
             Some(atoms) if self.cautious => intersection(&atoms, answer.interpretation()),
@@ -493,15 +496,15 @@ impl Fold for Consequences {
         .map_err(WorldViewDecisionError::Consequences)?;
         let absorbed = self.cautious && next.atoms().is_empty();
         self.atoms = Some(next);
-        Ok(if absorbed { Step::Absorbed } else { Step::Open })
+        Ok(absorbed)
     }
 
-    fn decided(self) -> (Model, Vec<AnswerSet>) {
+    fn absorbed(self) -> (Model, Vec<AnswerSet>) {
         // Only the empty intersection absorbs, and it names no witnesses.
         (self.atoms.unwrap_or_default(), Vec::new())
     }
 
-    fn complete(self) -> Option<Model> {
+    fn value(self) -> Option<Model> {
         self.atoms
     }
 }
@@ -509,12 +512,12 @@ impl Fold for Consequences {
 /// The atoms of `atoms` that `answer` also contains, as a selection of the
 /// accumulator's own catalog.
 fn intersection(atoms: &Model, answer: &Model) -> Result<Model, ModelError> {
-    let kept = atoms
+    let reads = atoms
         .positions()
         .iter()
         .zip(atoms.atoms().iter())
-        .filter(|&(_, atom)| answer.contains(atom))
-        .map(|(&position, _)| position);
+        .map(|(position, atom)| (position, answer.contains(atom)));
+    let kept = sets::intersection(reads).copied();
     Model::from_positions(atoms.catalog(), kept)
 }
 
@@ -523,7 +526,7 @@ fn intersection(atoms: &Model, answer: &Model) -> Result<Model, ModelError> {
 /// atoms, each copied once.
 fn union(atoms: &Model, answer: &Model) -> Result<Model, ModelError> {
     if atoms.catalog().same_owner(answer.catalog()) {
-        let positions = atoms.positions().iter().chain(answer.positions()).copied();
+        let positions = sets::union(atoms.positions().iter(), answer.positions().iter()).copied();
         return Model::from_positions(atoms.catalog(), positions);
     }
     let mut merged = Vec::new();
@@ -535,28 +538,11 @@ fn union(atoms: &Model, answer: &Model) -> Result<Model, ModelError> {
     merged
         .try_reserve_exact(capacity)
         .map_err(|_| ModelError::Allocation)?;
-    let mut left = atoms.atoms().iter().peekable();
-    let mut right = answer.atoms().iter().peekable();
-    loop {
-        let next = match (left.peek(), right.peek()) {
-            (None, None) => break,
-            (Some(_), None) => left.next(),
-            (None, Some(_)) => right.next(),
-            (Some(first), Some(second)) => match first.cmp(second) {
-                std::cmp::Ordering::Less => left.next(),
-                std::cmp::Ordering::Greater => right.next(),
-                std::cmp::Ordering::Equal => {
-                    right.next();
-                    left.next()
-                }
-            },
-        };
-        if let Some(atom) = next {
-            merged.push(
-                atom.to_atom(ValueLimits::default())
-                    .map_err(ModelError::Catalog)?,
-            );
-        }
+    for atom in sets::ordered_union(atoms.atoms().iter(), answer.atoms().iter()) {
+        merged.push(
+            atom.to_atom(ValueLimits::default())
+                .map_err(ModelError::Catalog)?,
+        );
     }
     Model::from_ordered(merged)
 }
@@ -575,21 +561,22 @@ struct Query {
 
 impl Query {
     fn new(literal: &Atom) -> Self {
+        let (not_true, not_false) = (Any, Any).unit();
         Self {
             literal: literal.clone(),
             contrary: literal.contrary(),
             folded: false,
-            not_true: false,
-            not_false: false,
+            not_true,
+            not_false,
             witnesses: Vec::new(),
         }
     }
 }
 
-impl Fold for Query {
+impl Accumulator for Query {
     type Value = QueryAnswer;
 
-    fn step(&mut self, answer: AnswerSet) -> Result<Step, WorldViewDecisionError> {
+    fn step(&mut self, answer: AnswerSet) -> Result<bool, WorldViewDecisionError> {
         self.folded = true;
         let model = answer.interpretation();
         let is_true = model.contains(&self.literal);
@@ -598,23 +585,19 @@ impl Fold for Query {
         // most two are retained, and one when the literal is unknown in it.
         let sets_not_true = !self.not_true && !is_true;
         let sets_not_false = !self.not_false && !is_false;
-        self.not_true |= !is_true;
-        self.not_false |= !is_false;
+        (self.not_true, self.not_false) =
+            (Any, Any).combine((self.not_true, self.not_false), (!is_true, !is_false));
         if sets_not_true || sets_not_false {
             witness(&mut self.witnesses, answer)?;
         }
-        Ok(if self.not_true && self.not_false {
-            Step::Absorbed
-        } else {
-            Step::Open
-        })
+        Ok((Any, Any).is_absorbing(&(self.not_true, self.not_false)))
     }
 
-    fn decided(self) -> (QueryAnswer, Vec<AnswerSet>) {
+    fn absorbed(self) -> (QueryAnswer, Vec<AnswerSet>) {
         (QueryAnswer::Unknown, self.witnesses)
     }
 
-    fn complete(self) -> Option<QueryAnswer> {
+    fn value(self) -> Option<QueryAnswer> {
         self.folded.then_some(if !self.not_true {
             QueryAnswer::Yes
         } else if !self.not_false {

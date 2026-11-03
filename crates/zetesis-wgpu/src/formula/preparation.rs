@@ -7,7 +7,7 @@ use crate::formula_graph::dependency;
 #[cfg(test)]
 use crate::formula_graph::dependency::insert_position;
 use crate::{GpuError, GpuErrorKind};
-use zetesis_cpu::Cancellation;
+use zetesis_algebra::Cancellation;
 use zetesis_ferraris::Theory;
 
 pub(super) struct Preparation {

@@ -328,7 +328,7 @@ propagation; allocation failure and global work, cancellation or deadline stops
 remain errors. Used words are reinitialized for every attempt, and retained
 capacity is accounted as worker scratch. Grounding's complete assignment sums
 and this CPU check share one packed shift-and-union kernel. The propagation
-operation `zetesis_core::packed::union_shifted_until_hit` checks translated bits
+operation `zetesis_algebra::words::union_shifted_until_hit` checks translated bits
 while inserting them, avoiding a separate interval scan. Earlier iterations
 found no witness, so only the new translated bits can supply one. A hit may
 leave a partial union, which the caller discards; absence requires completing
@@ -447,8 +447,11 @@ Both systems share an optional allowance of 100,000,000 logical word operations
 and the inherited preparation-byte allowance. Exhausting an optional allowance
 discards the whole preparation and keeps ordinary candidate generation.
 Cancellation, global work refusal, allocation and invalid source reads remain
-typed failures. No partially prepared rows or units escape. Per-region parity
-and counting subjects are not installed by this root preparation.
+typed failures. No partially prepared rows or units escape. If a candidate
+walk starts, it runs the parity check only when the prepared basis has a row,
+and the counting check only when preparation retained a checked pair of
+families. Empty systems consume no per-region arithmetic passes. Preparation
+work and candidate-state copies retain their own charges.
 
 With an active restriction or without a prepared generator order, the existing
 preference applies. Open atoms that head an atomic choice root of the
@@ -464,13 +467,13 @@ order changes the regions visited, never the answers. The packed region masks en
 open atoms in ascending order, excluding decided atoms and unused final bits;
 each inspected parent count spends one work permit. The primary count is read
 once per eligible atom; secondary counts are read only to resolve primary ties.
-The traversal itself is one operation in `zetesis-cpu`, shared by both
-routes when one worker walks; with several workers the formula route walks
-the same tree in `zetesis-stable`'s parallel regions: the walk begins on the
-calling thread, and the workers it then starts each own a deque of regions,
-from which idle workers steal. The closure
-route narrows by its two closures, the formula route by
-the readings.
+The scalar `zetesis_algebra::walk::Walk` covers candidate and proper-subset
+regions with the caller's narrowing. With several workers, `zetesis-stable`'s
+parallel regions walk the same tree: the walk begins on the calling thread,
+and the workers it then starts each own a deque of regions, from which idle
+workers steal. That schedule and the GPU candidate producers share the queue
+and termination protocol in `zetesis_algebra::walk::frontier::Frontier`.
+Their original-theory and frozen-reduct narrowing remain distinct.
 
 Before a CPU region query searches subsets, an optional checked fragment can
 decide membership by least consequences of the frozen reduct. Candidate-false
@@ -528,6 +531,18 @@ or a region whose check stopped never becomes a stable verdict
 (`InnerQuery.exhausted_walk_decides`). The coordinator publishes only once its
 engagement deadline has passed, and then engages the workers to serve the
 query. A refused allocation keeps the query inline.
+
+The allocation refusal that keeps a query inline belongs to the initial handoff:
+its pending entries have not yet been surrendered. A later served-query split
+retains its parent until child capacity is admitted. If that reservation fails,
+the server records the query stop and the outer typed stop before abandoning the
+returned owner. Retirement after that stop is cleanup, not evidence of a stable
+candidate. Candidate workers and slate producers follow the same owned failure
+boundary; queued and in-hand entries preserve the unresolved partition until
+terminal abandonment. A failed return to a deque also returns its entry to the
+caller, including when a thief's home has no capacity or a shared home has gained
+other work. These paths preserve the original allocation error and claim no
+exhaustive result.
 
 Answer sets are the same under every division. A query that ends stable narrows
 each region once, wherever it is divided; a refuted query, divided, may narrow
@@ -694,10 +709,10 @@ counted region and no more. The statistics report the regions visited,
 refuted, reached as leaves and counted, and the narrowing passes below the root. Each
 offered seed is still checked in full against the whole gate carrier. The
 laws are `Bounds.narrowed_contains_accepted`, the iterated narrowing of the
-open cube (`Bounds.undecided` in the Lean), `Bounds.lower_constraint_refutes` and
+open region (`Bounds.undecided` in the Lean), `Bounds.lower_constraint_refutes` and
 `Bounds.conflicting_atom_refutes` for the refutations, and the coverage
-tree of `Search.lean`, whose `split` node with `Cube.split_partition` and
-`Cube.split_disjoint` makes the regions a partition of their parent and
+tree of `Search.lean`, whose `split` node with `Region.split_partition` and
+`Region.split_disjoint` makes the regions a partition of their parent and
 whose `CoverageTree.mem_outputs_iff` makes the leaves exactly the accepted
 seeds of the root.
 The program is prepared once for the narrowing and charged as one
@@ -970,6 +985,58 @@ no validated result supplies no decoded reason. Tight support and CPU execution
 leave this record absent. Aggregate sweep totals alone cannot identify the
 reason for each residual.
 
+The general GPU route also reports `gpu_residual_handovers`. Its latest attempt
+names the slate sequence and the attempt ordinal. On retry the slate keeps its
+sequence. A stop retains decoded residuals and work already performed. Only
+publication increments the committed-slate count. A slot settled by a CPU
+certificate contributes a residual but no regional search.
+
+When recording space permits, the coordinator joins the GPU reason and number
+of open atoms to the CPU receipt at the same original slot. It totals work and
+outcomes by reason. A slate's width is the maximum number of visited regions
+at a single depth, summed across its queries at that depth. Host time sums the
+individual query intervals, which may overlap. Unavailable measurements appear
+as null.
+
+The optional `gpu_residual_handovers.samples` report describes two populations
+across the run. Use `worlds` to ask how difficult the residual queries were.
+Use `batches` to ask how much work was handed over at each dispatch. Every
+successful batch enters once, including one with zero residuals. A failed
+attempt contributes to the attempt's work receipt. Its retry enters the batch
+population upon successful commit.
+
+While the session is live, the report gives population sizes and storage use.
+At settlement, `groups` gives the combined view and a view for each device
+stopping reason when recording space permits. Each measurement shows how many
+members were eligible, measured and retained. Its median uses the integer
+midpoint for an even sample. Its 90th percentile uses nearest rank. Ranks
+are marked `exact`, `estimated` or `unavailable`. Disabled timing stays
+unavailable. A stopped run describes the committed prefix of that run.
+
+The collector aims for 65,536 worlds and 4,096 batches. Its separate byte
+allowance is one eighth of the general GPU batch allowance. Lowering memory
+can reduce either sample or omit the report. The arrays belong to the
+session. Reading a snapshot never advances the samples. The
+[benchmark evidence campaign](../reference/benchmarking.md#pool-gpu-residual-observations)
+can request the actual records at settlement and combine separately qualified
+instances at their original population weights.
+
+For a separately requested benchmark capture, a Rust caller can offer an
+empty, privately held file with `Session::request_residual_evidence` and
+retrieve its one-shot receipt with `Session::finish_residual_evidence` after
+settlement. The host streams the two retained populations before selecting
+terminal ranks or releasing their storage. Only a sealed artifact carries the
+slot identity, population sizes, seed and complete-family or prefix status.
+An unavailable collector, insufficient file allowance or failed write leaves
+the ordinary solver outcome available. The benchmark's child request uses a
+private directory, verifies the matching answer document, and keeps the raw
+records outside ordinary CLI output.
+
+The optional slot journal uses idle CPU completion scratch during decoding.
+Before the CPU starts, the coordinator retains the journal only when the
+remaining GPU batch allowance covers it beside the admitted owners. Otherwise
+it releases the journal. Exact search proceeds with its original scratch limit.
+
 With several requested workers, the region proposer produces a bounded batch
 in parallel and joins before its own slate's device check starts. On an
 enumeration, the next slate's production overlaps the current slate's last
@@ -1163,10 +1230,14 @@ Auxiliary formula nodes never participate in this subset test. An original-false
 subformula remains disabled by the frozen mask throughout propagation. Native
 numeric projections make at most two linear scans per guard. Their conservative
 bounds preserve completions but may infer less than expanded Boolean formulas.
-A residual reports no narrowed atom region; exact host completion retains the
-original proper-subset query.
+A residual returns the held and cut masks for the semantic atoms of one
+candidate. The CPU starts from that region with fresh frozen-reduct knowledge.
+It performs the first narrowing even if the masks leave only one possible
+interpretation. A residual classifies every atom and writes two mask words per
+group of 32 atoms. A terminal result only writes the zero masks.
 
-Mandatory device setup charges `2*nodes+edges+atoms+roots+levels`; pure chains
+Mandatory device setup reserves `2*nodes + edges + atoms + roots + levels`
+for the formula and `atoms + 2*ceil(atoms/32)` for its result. Pure chains
 and empty graphs use zero levels. Each complete sweep reserves
 `9*nodes+2*edges+atoms+65+levels`, covering binary relation rows, both possible native
 operand scans, the dependency-level walk and the strict-subset reduction. Setup and each sweep also reserve

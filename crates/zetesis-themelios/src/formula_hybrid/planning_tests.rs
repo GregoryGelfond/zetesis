@@ -3,7 +3,7 @@
 use super::{ConstraintCheckLimits, HybridFormula, check_budget};
 use crate::formula_support::{Counters, PreparedRule};
 use crate::{ExpansionFailure, ExpansionResource, FormulaFailure};
-use zetesis_cpu::{Cancellation, Stop};
+use zetesis_algebra::{Cancellation, Stop};
 
 fn owner() -> HybridFormula {
     crate::test_support::hybrid("p. q. :-p,q.")

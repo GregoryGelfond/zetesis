@@ -21,7 +21,7 @@
 //! does, by the class certificate when one applies and else by the
 //! proper-subset query as a region tree; a stable model is sent to the
 //! enumeration. The regions partition the candidate space exactly
-//! (`Cube.split_partition`, `Cube.split_disjoint` of `Search.lean`), so every
+//! (`Region.split_partition`, `Region.split_disjoint` of `Search.lean`), so every
 //! leaf is visited once, by the coordinator or a worker, whatever the
 //! interleaving. Before engagement models arrive in the scalar walk's order;
 //! afterwards their order is the schedule's and is not a property of the result.
@@ -79,7 +79,9 @@ use std::sync::{Arc, Mutex, PoisonError, RwLock};
 use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
 
-use zetesis_cpu::regions::{Narrowing, Region};
+use zetesis_algebra::Meter;
+use zetesis_algebra::region::Region;
+use zetesis_algebra::walk::{self, Counting};
 use zetesis_ferraris::{
     Interpretation, Narrower, NarrowingScratch, SupportExplanationStatistics, Theory,
 };
@@ -88,6 +90,7 @@ use super::certified::{self, Certification};
 use super::conditions::{Bound, CandidateKnowledge, Conditions};
 use super::original_index::IndexedTheory;
 use super::region_frontier::{Entry, RegionFrontier, reserve_regions};
+use super::regions::arithmetic_counts::ArithmeticCounts;
 use super::regions::{
     Queried, QueryDivisionStatistics, RegionCounts, RegionSearchStatistics, RegionWalkEngagement,
     RegionWorkerStatistics,
@@ -246,6 +249,11 @@ struct Live {
     work: AtomicU64,
     support_work: AtomicU64,
     founded_work: AtomicU64,
+    parity_passes: AtomicU64,
+    parity_forced: AtomicU64,
+    parity_refuted: AtomicU64,
+    cardinality_passes: AtomicU64,
+    cardinality_refuted: AtomicU64,
     support_explanation_attempts: AtomicU64,
     support_explanation_certified: AtomicU64,
     support_explanation_matched: AtomicU64,
@@ -303,6 +311,59 @@ impl Live {
     }
     fn read(counter: &AtomicU64) -> u64 {
         counter.load(Ordering::Relaxed)
+    }
+
+    /// Publish only new arithmetic activity. Inactive readers/copies perform
+    /// no atomic increments; the existing worker receipt owns the prefix.
+    fn add_arithmetic(&self, before: ArithmeticCounts, after: ArithmeticCounts) {
+        if before == after {
+            return;
+        }
+        for (counter, before, after) in [
+            (
+                &self.parity_passes,
+                before.parity_passes,
+                after.parity_passes,
+            ),
+            (
+                &self.parity_forced,
+                before.parity_forced,
+                after.parity_forced,
+            ),
+            (
+                &self.parity_refuted,
+                before.parity_refuted,
+                after.parity_refuted,
+            ),
+            (
+                &self.cardinality_passes,
+                before.cardinality_passes,
+                after.cardinality_passes,
+            ),
+            (
+                &self.cardinality_refuted,
+                before.cardinality_refuted,
+                after.cardinality_refuted,
+            ),
+        ] {
+            let delta = after - before;
+            if delta != 0 {
+                Self::add(counter, delta);
+            }
+        }
+    }
+
+    /// Existing coordinator receipt plus independently readable worker totals.
+    /// As for the other live counters, concurrent snapshots are not an atomic
+    /// cross-field snapshot; after joining, all completed deltas are visible.
+    fn arithmetic(&self, coordinator: ArithmeticCounts) -> ArithmeticCounts {
+        coordinator.saturating_add(ArithmeticCounts {
+            parity_passes: Self::read(&self.parity_passes),
+            parity_forced: Self::read(&self.parity_forced),
+            parity_refuted: Self::read(&self.parity_refuted),
+            cardinality_passes: Self::read(&self.cardinality_passes),
+            cardinality_refuted: Self::read(&self.cardinality_refuted),
+        })
     }
 
     /// Publish each admitted explanation prefix before a worker returns its result.
@@ -435,16 +496,31 @@ fn phases(timings: &SearchPhaseTimings) -> impl Iterator<Item = &PhaseMeasuremen
 }
 
 impl Shared {
-    /// Publish a split's older and newer children on this worker's deque, the
-    /// newer on top, through the frontier's one publication protocol.
+    /// Reserve before consuming the narrowed parent. The cut lineage was
+    /// copied outside the deque lock; only the interval split occurs inside.
+    /// Success empties the occupied caller slot; refusal restores its exact
+    /// parent before returning the original typed error.
     fn publish_split(
         &self,
         index: usize,
-        older: Entry,
-        next: Entry,
+        pending: &mut Option<Entry>,
+        atom: usize,
+        cut_knowledge: CandidateKnowledge,
         reserve: impl FnOnce(&mut std::collections::VecDeque<Entry>, usize) -> Result<(), Incomplete>,
     ) -> Result<(), Incomplete> {
-        self.frontier.publish_split(index, [older, next], reserve)
+        let parent = pending.take().expect("publication has a pending parent");
+        match self
+            .frontier
+            .publish_split_with(index, parent, reserve, |parent| {
+                let (cut, held) = parent.split_with(atom, |knowledge| (cut_knowledge, knowledge));
+                ([cut, held], ())
+            }) {
+            Ok(()) => Ok(()),
+            Err((error, parent)) => {
+                *pending = Some(parent);
+                Err(error)
+            }
+        }
     }
 
     /// Close for a normal end of work (no error): workers exit when they next
@@ -661,7 +737,7 @@ impl ParallelRegions {
         } = opened;
         let root = root.ok_or(Incomplete::InvalidWitness)?;
         let (sender, receiver) = sync_channel(workers.get() * CHANNEL_SLACK);
-        let root = (root, CandidateKnowledge::default());
+        let root = Entry::new(root, CandidateKnowledge::default());
         let frontier = RegionFrontier::new(workers.get(), root)?;
         let inner = InnerDeques::new(workers.get())?;
         Ok(Self {
@@ -851,6 +927,7 @@ impl ParallelRegions {
                     .saturating_add(Live::read(&live.founded_work)),
                 support_explanations: live
                     .support_explanations(&self.statistics.counts.support_explanations),
+                arithmetic: live.arithmetic(self.statistics.counts.arithmetic),
             },
             producers: self.statistics.producers,
             generator_order: self.statistics.generator_order,
@@ -865,6 +942,7 @@ impl ParallelRegions {
                 query_division: self.query_division(),
             }),
         }
+        .with_runtime_arithmetic()
     }
 
     /// The published queries and who served their regions, current while the
@@ -1338,7 +1416,11 @@ impl ParallelRegions {
         let mut failure = None;
         for handle in self.handles.drain(..) {
             let result = match handle.join() {
-                Ok(Some(report)) => merge_membership(&mut self.merged, &report.statistics),
+                Ok(Some(report)) => {
+                    #[cfg(test)]
+                    tests::record_candidate_worker(&report);
+                    merge_membership(&mut self.merged, &report.statistics)
+                }
                 Ok(None) => Ok(()),
                 Err(_) => Err(Incomplete::WorkerPanicked),
             };
@@ -1739,6 +1821,9 @@ fn deliver<Q: crate::budget::Quota>(
 /// Publish a walker's narrowing and learning counts since `before` to the
 /// live counters.
 fn publish_counts(shared: &Shared, before: &RegionCounts, after: &RegionCounts) {
+    shared
+        .live
+        .add_arithmetic(before.arithmetic, after.arithmetic);
     Live::add(
         &shared.live.propagations,
         after.propagations - before.propagations,
@@ -1830,16 +1915,20 @@ impl Workspaces<'_> {
         }
     }
 
-    /// Copy the current parent, reusing at most one retired allocation. No
-    /// logical state from its former region survives the complete overwrite.
-    fn copy_knowledge(&mut self, parent: &CandidateKnowledge) -> CandidateKnowledge {
-        match self.retired_knowledge.take() {
-            Some(mut retired) => {
-                retired.clone_from(parent);
-                retired
-            }
-            None => parent.clone(),
-        }
+    /// Reuse a retired child outside the deque lock and publish its actual
+    /// copy prefix before exposing success or failure to the split owner.
+    fn copy_for_split(
+        &mut self,
+        shared: &Shared,
+        parent: &CandidateKnowledge,
+        budget: &mut Budget<'_, WorkLease<'_>>,
+        counts: &mut RegionCounts,
+    ) -> Result<CandidateKnowledge, Incomplete> {
+        let copied = super::regions::copy_knowledge(parent, self.retired_knowledge.take(), budget);
+        let before = *counts;
+        let result = counts.add(copied.counts).and(copied.result);
+        publish_counts(shared, &before, counts);
+        result
     }
 }
 
@@ -1849,7 +1938,7 @@ impl Workspaces<'_> {
 fn step<'a>(
     shared: &'a Shared,
     original: &IndexedTheory,
-    ((mut region, mut knowledge), index): (Entry, usize),
+    (mut entry, index): (Entry, usize),
     workspaces: &mut Workspaces<'a>,
     budget: &mut Budget<'a, WorkLease<'a>>,
     report: &mut WorkerReport,
@@ -1884,12 +1973,12 @@ fn step<'a>(
             budget,
             &mut report.regions,
         )
-        .and_then(|()| shared.parts.subject(original.theory()))
-        .and_then(|subject| {
+        .and_then(|()| shared.parts.reading(original.theory(), original.narrower()))
+        .and_then(|reading| {
             super::regions::narrow(
-                (subject, original.narrower()),
+                reading,
                 &restrictions,
-                (&mut region, &mut knowledge),
+                &mut entry,
                 &mut workspaces.scratch,
                 budget,
                 &mut report.regions,
@@ -1914,31 +2003,49 @@ fn step<'a>(
     );
     publish_counts(shared, &before, &report.regions);
     let narrowing = narrowing?;
-    if narrowing == Narrowing::Refuted {
-        report.regions.refuted += 1;
-        Live::add(&shared.live.refuted, 1);
-        workspaces.retired_knowledge = Some(knowledge);
-        return Ok(Stepped::Resolved(None));
-    }
-    let Some(atom) = region.split_atom() else {
-        report.regions.leaves += 1;
-        Live::add(&shared.live.leaves, 1);
-        return leaf(
-            shared,
-            original,
-            &region,
-            budget,
-            (&mut workspaces.membership, &mut workspaces.certificate),
-            report,
-            WalkPublication::new(shared, index, timing),
-        );
+    let atom = match walk::inspect(&entry, narrowing, Counting::Never, false) {
+        walk::Step::Refuted => {
+            report.regions.refuted += 1;
+            Live::add(&shared.live.refuted, 1);
+            workspaces.retired_knowledge = Some(entry.state);
+            return Ok(Stepped::Resolved(None));
+        }
+        walk::Step::Leaf => {
+            report.regions.leaves += 1;
+            Live::add(&shared.live.leaves, 1);
+            return leaf(
+                shared,
+                original,
+                &entry.region,
+                budget,
+                (&mut workspaces.membership, &mut workspaces.certificate),
+                report,
+                WalkPublication::new(shared, index, timing),
+            );
+        }
+        walk::Step::Split(atom) => atom,
+        walk::Step::Counted => unreachable!("Counting::Never cannot count a region"),
     };
     budget.decide()?;
-    // Each child carries its own copy of the knowledge, linear in the theory:
-    // what the parent learned holds in both.
-    let (cut, held) = region.split(atom);
-    let cut = (cut, workspaces.copy_knowledge(&knowledge));
-    shared.publish_split(index, cut, (held, knowledge), reserve_regions)?;
+    let cut_knowledge =
+        match workspaces.copy_for_split(shared, &entry.state, budget, &mut report.regions) {
+            Ok(knowledge) => knowledge,
+            Err(error) => {
+                shared.stop(error);
+                drop(entry);
+                return Err(error);
+            }
+        };
+    let mut pending = Some(entry);
+    if let Err(error) =
+        shared.publish_split(index, &mut pending, atom, cut_knowledge, reserve_regions)
+    {
+        // Keep the unresolved parent until the typed stop is committed. This
+        // non-resumable walk then abandons it; it was never resolved or split.
+        shared.stop(error);
+        drop(pending);
+        return Err(error);
+    }
     Ok(Stepped::Split)
 }
 
@@ -1971,28 +2078,31 @@ fn leaf<'a>(
                 .checking_work_bound()?
                 .min(shared.limits.max_verification_work);
             let reservation = budget.quota.reserve(wanted)?;
-            let allowance = reservation.allowance();
-            let mut limits = shared.limits;
-            limits.max_verification_work = allowance;
-            if allowance < wanted {
-                // Only a shortage of global work lowers the search ceiling.
-                // A complete reservation preserves a stricter verification
-                // ceiling's own error attribution.
-                limits.search.max_work = search
-                    .work
-                    .checked_add(allowance)
-                    .ok_or(Incomplete::CounterOverflow)?;
-            }
-            let verdict = certified::classify(
-                certificate,
-                workspace,
-                &candidate,
-                limits,
-                budget.cancellation,
-                &mut report.statistics,
-                &mut search,
-            );
-            reservation.finish(search.work - budget.statistics.work)?;
+            let (verdict, _used) = Meter::under_reservation(reservation, |allowance| {
+                let mut limits = shared.limits;
+                limits.max_verification_work = allowance;
+                if allowance < wanted {
+                    // Only a shortage of global work lowers the search ceiling.
+                    // A complete reservation preserves a stricter verification
+                    // ceiling's own error attribution.
+                    limits.search.max_work = search
+                        .work
+                        .checked_add(allowance)
+                        .ok_or(Incomplete::CounterOverflow)?;
+                }
+                let verdict = certified::classify(
+                    certificate,
+                    workspace,
+                    &candidate,
+                    limits,
+                    budget.cancellation,
+                    &mut report.statistics,
+                    &mut search,
+                );
+                let used = search.work - budget.statistics.work;
+                Ok::<_, Incomplete>((verdict, used))
+            })
+            .map_err(crate::budget::reservation_failure)?;
             budget.statistics = search;
             verdict.map(|verdict| Some(Decision::from(verdict)))
         } else {

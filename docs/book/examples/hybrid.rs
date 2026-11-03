@@ -2,8 +2,8 @@
 
 // ANCHOR: example
 use std::{collections::BTreeSet, num::NonZeroUsize};
+use zetesis_algebra::Cancellation;
 use zetesis_core::{Atom, Model, Predicate, Value};
-use zetesis_cpu::Cancellation;
 use zetesis_solve::{Backend, Completion, Grounder, Oracle, PreparedInput, Session, SolveConfig};
 use zetesis_themelios::{AdmissionOptions, ExpansionLimits, FormulaLimits, prepare_formula};
 

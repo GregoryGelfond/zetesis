@@ -5,19 +5,21 @@
 //! success replaces the temporary row's outputs; the retained row never
 //! changes. Every comparison and union step shares the capture allowance.
 
-use super::{Literals, Row, Stop, Work, capture_read};
+use zetesis_algebra::{Failure, Quota};
+
+use super::{Literals, Meter, Row, Stop, capture_read};
 
 #[cfg(test)]
 mod tests;
 
-pub(super) fn union_outputs(
+pub(super) fn union_outputs<Q: Quota + ?Sized>(
     row: &Row,
     other: &mut Literals,
     maximum: usize,
     remaining: &mut u64,
-    work: &mut Work<'_>,
+    work: &mut Meter<'_, Q>,
     peak: &mut u128,
-) -> Result<Option<bool>, Stop> {
+) -> Result<Option<bool>, Failure<Q::Error>> {
     let (conditions, outputs) = row.lengths();
     if conditions != other.conditions.len() || outputs > maximum || other.outputs.len() > maximum {
         return Ok(Some(false));

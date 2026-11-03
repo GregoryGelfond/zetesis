@@ -1,16 +1,17 @@
 //! Original candidate consequences, independent of the frozen-reduct traversal.
 //!
-//! The seam is the crate's own: the hybrid route's [`crate::StreamedConstraints`]
-//! implements it, and so do the crate's tests. No caller can implement it, so no
-//! caller code can refute regions or decide atoms during a search.
+//! The source owner is concrete: the admitted hybrid program supplies the
+//! checker, and the candidate Subject applies its validated consequence.
+//! No caller code can refute regions or decide atoms during a search.
 
-use std::fmt::Debug;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 
-use zetesis_cpu::regions::Region;
+use zetesis_algebra::region::Region;
 use zetesis_ferraris::Theory;
 
+use crate::streamed_constraints::{self, ConstraintConsequence, StreamedConstraints};
+use crate::subject::Pass;
 use crate::timing::{self, Phase};
 use crate::{Cancellation, Incomplete, SearchPhaseTimings};
 
@@ -24,101 +25,63 @@ pub(crate) enum RegionFeasibility {
     Refuted,
 }
 
-/// Position of a source check within one candidate closure.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum RegionPass {
-    /// Begin this region's allowance, including any deferred preparation.
-    First,
-    /// Continue the same allowance after a fresh consequence and propagation.
-    Continue,
+/// The original source retained by a candidate stream. Production has only
+/// the admitted hybrid source; test injections are absent from supported builds.
+#[derive(Debug)]
+pub(crate) enum Source {
+    Streamed(Arc<StreamedConstraints>),
+    #[cfg(test)]
+    Fixture(Arc<dyn tests::injection::Source>),
 }
 
-/// A consequence of the original program for every interpretation in a region.
-///
-/// Decisions use the authenticated theory's atom coordinates. They must concern
-/// an open atom; the traversal rejects stale or out-of-range decisions.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum RegionConsequence {
-    /// No further consequence was established; this is not satisfaction.
-    Unchanged,
-    /// No sought answer belongs to this region.
-    Refuted,
-    /// Every sought answer in the region contains this atom.
-    Hold(usize),
-    /// No sought answer in the region contains this atom.
-    Cut(usize),
-}
-
-/// An original-program condition used only on candidate regions.
-///
-/// The factory authenticates the exact theory and atom coordinate meanings.
-/// A refutation must exclude every sought answer in the region. The callback
-/// never runs on a proper-subset query of a frozen reduct, and cannot replace
-/// its membership decision. An implementation retains source-specific failure
-/// evidence and returns [`Incomplete::RegionFilter`] to identify it.
-///
-/// A checker is prepared on the first region not refuted by original narrowing.
-/// Serial traversal, a parallel walk's coordinator until its workers start,
-/// each persistent native worker and each joined producer retain their
-/// checker, borrowing this factory across answer pulls.
-/// Joined producers' workspaces can move between executor threads. Separate determined-candidate
-/// checks prepare per operation. Preparation is not assumed free.
-/// The factory owns all external resource limits: shared allowances must be
-/// charged before work across every worker, including failed preparation and
-/// checks. The search's work counters exclude this separately accounted work.
-pub(crate) trait RegionFilter: Debug + Send + Sync {
-    /// Prepare independent mutable scratch for this traversal worker or check.
-    ///
-    /// # Errors
-    /// Preserve authentication, cancellation and resource failures as incomplete
-    /// outcomes. Returning an error never establishes candidate coverage.
+impl Source {
     fn worker(
         &self,
         theory: &Theory,
         cancellation: &Cancellation,
-    ) -> Result<Box<dyn RegionFilterWorker + '_>, Incomplete>;
+    ) -> Result<Checker<'_>, Incomplete> {
+        match self {
+            Self::Streamed(source) => source.worker(theory, cancellation).map(Checker::Streamed),
+            #[cfg(test)]
+            Self::Fixture(source) => source.worker(theory, cancellation).map(Checker::Fixture),
+        }
+    }
 }
 
-/// Mutable scratch borrowed from one original-program filter factory.
-///
-/// A checker belongs to one enumeration and is never used concurrently. It must
-/// be transferable between threads: joined candidate production retains its
-/// task-local scratch between slates without fixing a task to an OS thread.
-pub(crate) trait RegionFilterWorker: Send {
-    /// Read a region after original-theory and candidate-restriction narrowing.
-    /// The theory and region are immutable; no learned restriction enters the
-    /// reduct. Poll cancellation during bounded work and before a verdict.
-    ///
-    /// # Errors
-    /// Any failure leaves this region unresolved and enumeration incomplete.
+/// One boxed source checker, borrowing its exact source owner. It remains
+/// transferable between executor threads, never concurrently shared.
+enum Checker<'a> {
+    Streamed(Box<streamed_constraints::Worker<'a>>),
+    #[cfg(test)]
+    Fixture(Box<dyn tests::injection::Worker + 'a>),
+}
+
+impl Checker<'_> {
     fn check(
         &mut self,
         theory: &Theory,
         region: &Region,
         cancellation: &Cancellation,
-    ) -> Result<RegionFeasibility, Incomplete>;
+    ) -> Result<RegionFeasibility, Incomplete> {
+        match self {
+            Self::Streamed(worker) => worker.check(theory, region, cancellation),
+            #[cfg(test)]
+            Self::Fixture(worker) => worker.check(theory, region, cancellation),
+        }
+    }
 
-    /// Read one consequence after original and candidate-restriction closure.
-    /// A fresh decision causes another propagation round before continuation.
-    /// All continuations share the first pass's allowance. No consequence is
-    /// installed as a supporting rule or used in a frozen-reduct query.
-    ///
-    /// The default retains the feasibility-only callback contract.
-    ///
-    /// # Errors
-    /// Any failure leaves candidate coverage incomplete.
     fn consequence(
         &mut self,
         theory: &Theory,
         region: &Region,
         cancellation: &Cancellation,
-        _pass: RegionPass,
-    ) -> Result<RegionConsequence, Incomplete> {
-        self.check(theory, region, cancellation)
-            .map(|verdict| match verdict {
-                RegionFeasibility::NotRefuted => RegionConsequence::Unchanged,
-                RegionFeasibility::Refuted => RegionConsequence::Refuted,
-            })
+        pass: Pass,
+    ) -> Result<ConstraintConsequence, Incomplete> {
+        match self {
+            Self::Streamed(worker) => worker.consequence(theory, region, cancellation, pass),
+            #[cfg(test)]
+            Self::Fixture(worker) => worker.consequence(theory, region, cancellation, pass),
+        }
     }
 }
 
@@ -143,7 +106,7 @@ pub struct RegionFilterStatistics {
 
 #[derive(Debug)]
 pub(crate) struct Filter {
-    factory: Arc<dyn RegionFilter>,
+    factory: Source,
     preparations: AtomicU64,
     checks: AtomicU64,
     refuted: AtomicU64,
@@ -152,7 +115,7 @@ pub(crate) struct Filter {
 }
 
 impl Filter {
-    pub(crate) fn new(factory: Arc<dyn RegionFilter>) -> Self {
+    pub(crate) fn new(factory: Source) -> Self {
         Self {
             factory,
             preparations: AtomicU64::new(0),
@@ -227,7 +190,7 @@ impl Filter {
 
 pub(crate) struct Worker<'a> {
     filter: &'a Filter,
-    checker: Box<dyn RegionFilterWorker + 'a>,
+    checker: Checker<'a>,
 }
 
 impl Worker<'_> {
@@ -252,8 +215,8 @@ impl Worker<'_> {
         theory: &Theory,
         region: &Region,
         cancellation: &Cancellation,
-        pass: RegionPass,
-    ) -> Result<RegionConsequence, Incomplete> {
+        pass: Pass,
+    ) -> Result<ConstraintConsequence, Incomplete> {
         self.filter.increment(&self.filter.checks);
         let result = self
             .checker
@@ -261,7 +224,8 @@ impl Worker<'_> {
             .and_then(|consequence| {
                 cancellation.poll()?;
                 match consequence {
-                    RegionConsequence::Hold(atom) | RegionConsequence::Cut(atom)
+                    ConstraintConsequence::Hold { atom, .. }
+                    | ConstraintConsequence::Cut { atom, .. }
                         if !region.is_open(atom) =>
                     {
                         Err(Incomplete::InvalidRegionConsequence)
@@ -270,7 +234,9 @@ impl Worker<'_> {
                 }
             });
         match result {
-            Ok(RegionConsequence::Refuted) => self.filter.increment(&self.filter.refuted),
+            Ok(ConstraintConsequence::Refuted { .. }) => {
+                self.filter.increment(&self.filter.refuted);
+            }
             Err(_) => self.filter.increment(&self.filter.failed),
             Ok(_) => {}
         }
@@ -292,8 +258,8 @@ impl Check<'_, '_> {
         theory: &Theory,
         region: &Region,
         cancellation: &Cancellation,
-        pass: RegionPass,
-    ) -> Result<RegionConsequence, Incomplete> {
+        pass: Pass,
+    ) -> Result<ConstraintConsequence, Incomplete> {
         let started = timing::start(self.timings.as_ref());
         let result = (|| {
             let worker = match self.worker {
@@ -310,4 +276,4 @@ impl Check<'_, '_> {
 }
 
 #[cfg(test)]
-mod tests;
+pub(crate) mod tests;

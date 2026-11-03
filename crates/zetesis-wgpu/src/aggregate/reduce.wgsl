@@ -77,9 +77,9 @@ fn reduce(@builtin(workgroup_id) group: vec3<u32>, @builtin(local_invocation_ind
     for (var tuple = lane; tuple < dimensions.tuples; tuple += 64u) {
         let value = bitcast<i32>(contributions[tuple * 2u]);
         let present = contributions[tuple * 2u + 1u];
-        let bit = 1u << (tuple % 32u);
-        let original = (masks[row + 1u + tuple / 32u] & bit) != 0u;
-        let frozen = (masks[row + 1u + mask_words + tuple / 32u] & bit) != 0u;
+        let bit = packed_bit(tuple);
+        let original = (masks[row + 1u + bit.word] & bit.mask) != 0u;
+        let frozen = (masks[row + 1u + mask_words + bit.word] & bit.mask) != 0u;
         if original && present != 0u { ov = combine(ov, value, op, present); op = 1u; }
         if frozen && present != 0u { fv = combine(fv, value, fp, present); fp = 1u; }
     }

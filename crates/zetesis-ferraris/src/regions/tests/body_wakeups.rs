@@ -1,15 +1,14 @@
 //! Failed bodies wake support from their node events, before support quiescence.
 
 use crate::test_support::theory;
-use zetesis_cpu::{Cancellation, Stop};
+use zetesis_algebra::{Cancellation, Stop};
 
 use crate::{
     EvaluationLimits, EvaluationWorkspace, FrozenSubject, Interpretation, Knowledge, Narrower,
-    Narrowing, NarrowingQuota, NarrowingScratch, Node, OriginalSubject, Producers, Region,
-    RegionLimits, Theory,
+    Narrowing, NarrowingScratch, Node, OriginalSubject, Producers, Region, RegionLimits, Theory,
 };
 
-use super::super::{Closure, Step, Subject, Work};
+use super::super::{Closure, Context, Meter, Step};
 
 fn prepare(theory: &Theory) -> (Narrower, Producers) {
     let producers =
@@ -63,20 +62,24 @@ fn close(
                 RegionLimits::default(),
                 &Cancellation::default(),
             )
-            .unwrap()
-            .0,
+            .result
+            .unwrap(),
         Narrowing::Fixed { .. }
     ));
-    assert!(scratch.nodes.is_empty());
-    assert!(scratch.heads.is_empty());
-    assert!(scratch.pending.iter().all(|word| *word == 0));
+    assert!(scratch.common.nodes.is_empty());
+    assert!(scratch.common.heads.is_empty());
+    assert!(scratch.common.pending.iter().all(|word| *word == 0));
 }
 
 /// Live counters and all truth/ranking state agree. Retired neutral counters
 /// may differ because inherited and fresh closures encounter a witness at
 /// different positions. Both must retain the same absorbing root and witness;
 /// neither retired prefix may claim that every operand was neutral.
-fn same_knowledge(index: &Narrower, left: &Knowledge, right: &Knowledge) {
+fn same_knowledge<C: zetesis_algebra::Class>(
+    index: &Narrower,
+    left: &Knowledge<C>,
+    right: &Knowledge<C>,
+) {
     let (left, right) = (super::compact(left), super::compact(right));
     assert_eq!(left.masks.slices(), right.masks.slices());
     assert_eq!(left.neutral_operands.len(), right.neutral_operands.len());
@@ -117,19 +120,21 @@ fn a_false_body_event_owns_its_support_wakeup() {
         vec![5, 6, 7],
     );
     let (index, producers) = prepare(&theory);
-    let subject = Subject::from(OriginalSubject::new(&theory, Some(&producers)));
+    let subject = Context::from(OriginalSubject::new(&theory, Some(&producers)));
     let mut knowledge = index.knowledge();
     let mut lists = NarrowingScratch::default();
-    lists.prepare(3);
-    let mut closure = Closure {
+    lists.common.prepare(3);
+    let mut closure = Closure::<_, zetesis_algebra::AnswerSetsSought> {
         known: super::compact_mut(&mut knowledge),
-        lists: &mut lists,
+        lists: &mut lists.common,
+        learning: &mut lists.learning,
     };
-    let mut work = Work::new(u64::MAX);
+    let mut work = Meter::local(u64::MAX);
     assert!(matches!(closure.never(3), Step::Changed));
     while let Some((node, value)) = closure.lists.nodes.pop() {
         closure
             .revisit(subject, &index, node, value, &mut work)
+            .map_err(zetesis_algebra::Failure::into_stop)
             .unwrap();
     }
     assert!(matches!(
@@ -139,6 +144,7 @@ fn a_false_body_event_owns_its_support_wakeup() {
     assert_eq!(closure.lists.nodes.pop(), Some((0, true)));
     closure
         .revisit(subject, &index, 0, true, &mut work)
+        .map_err(zetesis_algebra::Failure::into_stop)
         .unwrap();
     // Parent teaching has already learned the body's falsity, but neither
     // dependent head is scheduled until its queued false event runs.
@@ -148,6 +154,7 @@ fn a_false_body_event_owns_its_support_wakeup() {
     while let Some((node, value)) = closure.lists.nodes.pop() {
         closure
             .revisit(subject, &index, node, value, &mut work)
+            .map_err(zetesis_algebra::Failure::into_stop)
             .unwrap();
     }
     assert!(closure.lists.heads.contains(&1));
@@ -157,6 +164,7 @@ fn a_false_body_event_owns_its_support_wakeup() {
     for _ in 0..2 {
         closure
             .teach_operands(subject, &index, 4, &mut work)
+            .map_err(zetesis_algebra::Failure::into_stop)
             .unwrap();
         assert!(closure.lists.heads.is_empty());
     }
@@ -166,14 +174,14 @@ fn a_false_body_event_owns_its_support_wakeup() {
 
 /// A closed parent's private state and a fresh state must give the same
 /// complete region and knowledge for both children of the next split.
-fn compare_children(
+fn compare_children<C: zetesis_algebra::Class>(
     index: &Narrower,
     mut parent: Region,
     atom: usize,
-    mut finish: impl FnMut(&mut Region, &mut Knowledge),
+    mut finish: impl FnMut(&mut Region, &mut Knowledge<C>),
     check: impl Fn(&Region, bool),
 ) {
-    let mut inherited = index.knowledge();
+    let mut inherited = index.class_knowledge::<C>();
     finish(&mut parent, &mut inherited);
     assert!(parent.is_open(atom));
     for held in [false, true] {
@@ -185,7 +193,7 @@ fn compare_children(
         }
         let mut fresh = child.clone();
         let mut known = inherited.clone();
-        let mut fresh_known = index.knowledge();
+        let mut fresh_known = index.class_knowledge::<C>();
         finish(&mut child, &mut known);
         finish(&mut fresh, &mut fresh_known);
         check(&child, held);
@@ -291,12 +299,12 @@ fn frozen_failed_bodies_do_not_apply_original_support() {
                         RegionLimits::default(),
                         &cancellation,
                     )
-                    .unwrap()
-                    .0,
+                    .result
+                    .unwrap(),
                 Narrowing::Fixed { .. }
             ));
-            assert!(scratch.nodes.is_empty());
-            assert!(scratch.heads.is_empty());
+            assert!(scratch.common.nodes.is_empty());
+            assert!(scratch.common.heads.is_empty());
         },
         |region, _| assert!(region.is_open(2)),
     );
@@ -308,7 +316,8 @@ struct Quota {
     spent: u64,
 }
 
-impl NarrowingQuota for Quota {
+impl zetesis_algebra::Quota for Quota {
+    type Error = Stop;
     fn reserve(&mut self, _wanted: u64) -> Result<u64, Stop> {
         if self.remaining == 0 {
             return Err(self.failure);
@@ -335,16 +344,16 @@ fn refused_body_propagation_keeps_exact_work_receipts() {
     let mut expected = input.clone();
     let mut expected_known = index.knowledge();
     let mut scratch = NarrowingScratch::default();
-    let (_, statistics) = index
-        .narrow_known(
-            OriginalSubject::new(&theory, Some(&producers)),
-            &mut expected,
-            &mut expected_known,
-            &mut scratch,
-            RegionLimits::default(),
-            &Cancellation::default(),
-        )
-        .unwrap();
+    let attempt = index.narrow_known(
+        OriginalSubject::new(&theory, Some(&producers)),
+        &mut expected,
+        &mut expected_known,
+        &mut scratch,
+        RegionLimits::default(),
+        &Cancellation::default(),
+    );
+    attempt.result.unwrap();
+    let statistics = attempt.statistics;
     assert_eq!(expected.decision(1), Some(false));
     for failure in [Stop::WorkLimit, Stop::Cancelled, Stop::Deadline] {
         for limit in 0..statistics.work {
@@ -356,14 +365,14 @@ fn refused_body_propagation_keeps_exact_work_receipts() {
                 failure,
                 spent: 0,
             };
-            let attempt = index.narrow_known_reserved(
+            let attempt = crate::test_support::stop_narrowing(&index.narrow_known_reserved(
                 OriginalSubject::new(&theory, Some(&producers)),
                 &mut region,
                 &mut known,
                 &mut scratch,
                 &Cancellation::default(),
-                &mut quota,
-            );
+                &mut zetesis_algebra::Meter::reserved(&mut quota),
+            ));
             assert_eq!(attempt.result, Err(failure));
             assert_eq!(attempt.statistics.work, limit);
             assert_eq!(quota.spent, limit);

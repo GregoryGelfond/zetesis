@@ -545,7 +545,7 @@ fn a_retained_plan_observes_cancellation() {
                 )
                 .unwrap(),
         );
-        let cancellation = zetesis_cpu::Cancellation::default();
+        let cancellation = zetesis_algebra::Cancellation::default();
         cancellation.cancel();
         counters.attach_test_control(&cancellation);
         let failure = plans

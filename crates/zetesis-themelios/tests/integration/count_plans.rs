@@ -5,8 +5,8 @@ use crate::support::finite_bindings as reference;
 use zetesis_reference_support::{BundleFixture, canonical, prepared, resource_limits};
 
 use reference::{exhaustive, external, holds, native, values};
+use zetesis_algebra::Cancellation;
 use zetesis_clingo_support as oracle;
-use zetesis_cpu::Cancellation;
 use zetesis_themelios::{
     AdmissionOptions, AdmittedFormula, CountPlanLimits, CountPlanResource, CountPlanStatus,
     ExpansionLimits, FormulaLimits, FormulaResource, prepare_formula,
@@ -255,7 +255,7 @@ fn cancelled_planning_preserves_successful_admission() {
         };
         assert_eq!(
             error.kind(),
-            zetesis_themelios::CountPlanFailureKind::Stopped(zetesis_cpu::Stop::Cancelled)
+            zetesis_themelios::CountPlanFailureKind::Stopped(zetesis_algebra::Stop::Cancelled)
         );
         assert_eq!(native(&admitted), native(&self::admitted(source, false)));
     }

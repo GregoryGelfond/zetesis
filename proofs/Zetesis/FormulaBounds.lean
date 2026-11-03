@@ -5,7 +5,7 @@ import Zetesis.DisjunctiveSupport
 /-!
 # Regions narrowed by the readings of a formula theory
 
-A region of candidates over a formula theory is a cube: the atoms every
+A region of candidates over a formula theory is an interval: the atoms every
 seed holds and the atoms some seed may hold. A formula has two readings
 under a region, both decided by one pass over its structure: it is *sure*
 when every seed of the region satisfies it, and *never* when no seed
@@ -51,7 +51,7 @@ universe u
 variable {α : Type u}
 
 /-- The two readings of a formula under a region: sure, and never. -/
-def read (c : Cube α) : Formula α → Prop × Prop
+def read (c : Region α) : Formula α → Prop × Prop
   | .atom a => (c.lower a, ¬ c.upper a)
   | .bot => (False, True)
   | .conj F G => ((read c F).1 ∧ (read c G).1, (read c F).2 ∨ (read c G).2)
@@ -59,14 +59,14 @@ def read (c : Cube α) : Formula α → Prop × Prop
   | .imp F G => ((read c F).2 ∨ (read c G).1, (read c F).1 ∧ (read c G).2)
 
 /-- Every seed of the region satisfies the formula. -/
-abbrev Sure (c : Cube α) (F : Formula α) : Prop := (read c F).1
+abbrev Sure (c : Region α) (F : Formula α) : Prop := (read c F).1
 
 /-- No seed of the region satisfies the formula. -/
-abbrev Never (c : Cube α) (F : Formula α) : Prop := (read c F).2
+abbrev Never (c : Region α) (F : Formula α) : Prop := (read c F).2
 
 /-- The readings are sound: a sure formula holds in every seed of the
 region and an impossible one in none. Induction on the formula. -/
-theorem read_sound (c : Cube α) {z : Atoms α} (hz : c.Contains z) :
+theorem read_sound (c : Region α) {z : Atoms α} (hz : c.Contains z) :
     ∀ F : Formula α, (Sure c F → Satisfies z F) ∧ (Never c F → ¬ Satisfies z F) := by
   intro F
   induction F with
@@ -94,18 +94,18 @@ theorem read_sound (c : Cube α) {z : Atoms α} (hz : c.Contains z) :
       · exact hG.1 s
     · exact hG.2 h.2 (hs (hF.1 h.1))
 
-theorem sure_sound (c : Cube α) {z : Atoms α} (hz : c.Contains z) {F : Formula α}
+theorem sure_sound (c : Region α) {z : Atoms α} (hz : c.Contains z) {F : Formula α}
     (h : Sure c F) : Satisfies z F :=
   (read_sound (z := z) c hz F).1 h
 
-theorem never_sound (c : Cube α) {z : Atoms α} (hz : c.Contains z) {F : Formula α}
+theorem never_sound (c : Region α) {z : Atoms α} (hz : c.Contains z) {F : Formula α}
     (h : Never c F) : ¬ Satisfies z F :=
   (read_sound (z := z) c hz F).2 h
 
 /-- Under a decided region, one whose two bounds agree, every formula is
 sure or impossible: the readings are the truth of the formula in the
 region's one seed. Induction on the formula, classically at the atoms. -/
-theorem decided_reads (c : Cube α) (hc : ∀ a, c.lower a ↔ c.upper a) :
+theorem decided_reads (c : Region α) (hc : ∀ a, c.lower a ↔ c.upper a) :
     ∀ F : Formula α, Sure c F ∨ Never c F := by
   intro F
   induction F with
@@ -137,7 +137,7 @@ theorem decided_reads (c : Cube α) (hc : ∀ a, c.lower a ↔ c.upper a) :
 the theory: its one seed, the lower bound, satisfies every root. This is
 why a leaf of the region tree is proposed to the reduct without a classical
 check. -/
-theorem decided_leaf_models (T : Theory α) (c : Cube α)
+theorem decided_leaf_models (T : Theory α) (c : Region α)
     (hc : ∀ a, c.lower a ↔ c.upper a) (h : ∀ F ∈ T, ¬ Never c F) :
     Models c.lower T := by
   intro F hF
@@ -147,19 +147,19 @@ theorem decided_leaf_models (T : Theory α) (c : Cube α)
   · exact (h F hF n).elim
 
 /-- A root impossible under the region refutes it. -/
-theorem never_root_refutes (T : Theory α) (c : Cube α) {F : Formula α}
+theorem never_root_refutes (T : Theory α) (c : Region α) {F : Formula α}
     (hF : F ∈ T) (h : Never c F) : ∀ z, c.Contains z → ¬ Stable z T :=
   fun z hz hs => never_sound (z := z) c hz h (hs.1 F hF)
 
 /-- A rule whose body is sure forces its atomic head into every stable model
 of the region. -/
-theorem sure_body_forces (T : Theory α) (c : Cube α) {B : Formula α} {a : α}
+theorem sure_body_forces (T : Theory α) (c : Region α) {B : Formula α} {a : α}
     (hF : Formula.imp B (.atom a) ∈ T) (h : Sure c B) :
     ∀ z, c.Contains z → Stable z T → z a :=
   fun z hz hs => hs.1 _ hF (sure_sound (z := z) c hz h)
 
 /-- A constraint whose body is sure refutes the region. -/
-theorem sure_body_refutes (T : Theory α) (c : Cube α) {B : Formula α}
+theorem sure_body_refutes (T : Theory α) (c : Region α) {B : Formula α}
     (hF : Formula.imp B .bot ∈ T) (h : Sure c B) :
     ∀ z, c.Contains z → ¬ Stable z T :=
   never_root_refutes T c hF ⟨h, trivial⟩
@@ -170,7 +170,7 @@ every root; upward, a formula from its operands as the connective dictates;
 downward, an operand from a formula whose truth is known and the other
 operand, as unit propagation over a clause form of the theory would decide.
 The knowledge of a shared subformula serves every formula containing it. -/
-inductive Known (T : Theory α) (c : Cube α) : Formula α → Bool → Prop
+inductive Known (T : Theory α) (c : Region α) : Formula α → Bool → Prop
   | held {a} (h : c.lower a) : Known T c (.atom a) true
   | cut {a} (h : ¬ c.upper a) : Known T c (.atom a) false
   | bot : Known T c .bot false
@@ -210,7 +210,7 @@ inductive Known (T : Theory α) (c : Cube α) : Formula α → Bool → Prop
 region: what is known to hold does, and what is known to fail does not.
 Induction on the derivation; the antecedent of a failing implication needs
 the excluded middle. -/
-theorem known_sound (T : Theory α) (c : Cube α) {z : Atoms α} (hz : c.Contains z)
+theorem known_sound (T : Theory α) (c : Region α) {z : Atoms α} (hz : c.Contains z)
     (hm : Models z T) {F : Formula α} {b : Bool} (h : Known T c F b) :
     (b = true → Satisfies z F) ∧ (b = false → ¬ Satisfies z F) := by
   induction h with
@@ -260,13 +260,13 @@ theorem known_sound (T : Theory α) (c : Cube α) {z : Atoms α} (hz : c.Contain
 
 /-- A region inside another: it holds every atom the other holds and admits
 only atoms the other admits, so its seeds are among the other's. -/
-def Inside (c' c : Cube α) : Prop :=
+def Inside (c' c : Region α) : Prop :=
   (∀ a, c.lower a → c'.lower a) ∧ (∀ a, c'.upper a → c.upper a)
 
 /-- Knowledge of a region holds in every region inside it, so a child of a
 split may start from its parent's knowledge. Induction on the derivation:
 only the atom cases read the region. -/
-theorem known_mono (T : Theory α) {c c' : Cube α} (h : Inside c' c) {F : Formula α}
+theorem known_mono (T : Theory α) {c c' : Region α} (h : Inside c' c) {F : Formula α}
     {b : Bool} (k : Known T c F b) : Known T c' F b := by
   induction k with
   | held ha => exact .held (h.1 _ ha)
@@ -296,17 +296,17 @@ theorem known_mono (T : Theory α) {c c' : Cube α} (h : Inside c' c) {F : Formu
   | not_imp_consequent _ ih => exact .not_imp_consequent ih
 
 /-- An atom known to hold is in every stable model of the region. -/
-theorem known_forces (T : Theory α) (c : Cube α) {a : α}
+theorem known_forces (T : Theory α) (c : Region α) {a : α}
     (h : Known T c (.atom a) true) : ∀ z, c.Contains z → Stable z T → z a :=
   fun z hz hs => (known_sound (z := z) T c hz hs.1 h).1 rfl
 
 /-- An atom known to fail is in no stable model of the region. -/
-theorem known_cuts (T : Theory α) (c : Cube α) {a : α}
+theorem known_cuts (T : Theory α) (c : Region α) {a : α}
     (h : Known T c (.atom a) false) : ∀ z, c.Contains z → Stable z T → ¬ z a :=
   fun z hz hs => (known_sound (z := z) T c hz hs.1 h).2 rfl
 
 /-- A formula known both to hold and to fail refutes the region. -/
-theorem known_contradiction_refutes (T : Theory α) (c : Cube α) {F : Formula α}
+theorem known_contradiction_refutes (T : Theory α) (c : Region α) {F : Formula α}
     (ht : Known T c F true) (hf : Known T c F false) :
     ∀ z, c.Contains z → ¬ Stable z T :=
   fun z hz hs =>
@@ -314,13 +314,13 @@ theorem known_contradiction_refutes (T : Theory α) (c : Cube α) {F : Formula �
 
 /-- A producer cannot support `a` under the region: its body is impossible,
 or another of its heads is held. -/
-def Blocked (c : Cube α) (r : Producer α) (a : α) : Prop :=
+def Blocked (c : Region α) (r : Producer α) (a : α) : Prop :=
   (match r with
     | .fact _ => False
     | .rule B _ => Never c B) ∨
   ∃ b, r.head.Contains b ∧ c.lower b ∧ b ≠ a
 
-theorem blocked_no_support (c : Cube α) (r : Producer α) (a : α) (hb : Blocked c r a) :
+theorem blocked_no_support (c : Region α) (r : Producer α) (a : α) (hb : Blocked c r a) :
     ∀ z, c.Contains z → ¬ r.Supports z a := by
   intro z hz hs
   rcases hb with body | ⟨b, hb, held, ne⟩
@@ -333,7 +333,7 @@ theorem blocked_no_support (c : Cube α) (r : Producer α) (a : α) (hb : Blocke
 no stable model of the region. -/
 theorem unsupported_cut (T : Theory α) (rules : List (Producer α))
     (covered : Covered T rules) (original : ∀ r ∈ rules, r.formula ∈ T)
-    (c : Cube α) (a : α) (h : ∀ r ∈ rules, r.head.Contains a → Blocked c r a) :
+    (c : Region α) (a : α) (h : ∀ r ∈ rules, r.head.Contains a → Blocked c r a) :
     ∀ z, c.Contains z → Stable z T → ¬ z a := by
   intro z hz hs present
   obtain ⟨r, member, support⟩ :=
@@ -345,7 +345,7 @@ supported by that one in every stable model of the region, so that
 producer is enabled there: its body holds. -/
 theorem sole_support_forces (T : Theory α) (rules : List (Producer α))
     (covered : Covered T rules) (original : ∀ r ∈ rules, r.formula ∈ T)
-    (c : Cube α) (a : α) (r : Producer α)
+    (c : Region α) (a : α) (r : Producer α)
     (h : ∀ r' ∈ rules, r'.head.Contains a → r' ≠ r → Blocked c r' a) :
     ∀ z, c.Contains z → Stable z T → z a → r.Enabled z := by
   intro z hz hs present
@@ -359,13 +359,13 @@ theorem sole_support_forces (T : Theory α) (rules : List (Producer α))
 /-- An atomic choice cannot support its atom under the region: it has a body
 and that body is impossible there. A choice without a body is never blocked,
 and a choice of another atom supports nothing else whatever the region. -/
-def ChoiceBlocked (c : Cube α) : ChoiceProducer α → Prop
+def ChoiceBlocked (c : Region α) : ChoiceProducer α → Prop
   | .fact _ | .reversedFact _ => False
   | .rule B _ | .reversedRule B _ => Never c B
 
 /-- A blocked choice supports no atom in any seed of the region: support
 needs the choice enabled, and an impossible body holds in no seed. -/
-theorem choice_blocked_no_support (c : Cube α) (r : ChoiceProducer α) (a : α)
+theorem choice_blocked_no_support (c : Region α) (r : ChoiceProducer α) (a : α)
     (hb : ChoiceBlocked c r) : ∀ z, c.Contains z → ¬ r.Supports z a := by
   intro z hz hs
   have enabled : r.Enabled z := hs.1
@@ -379,7 +379,7 @@ theorem choice_blocked_no_support (c : Cube α) (r : ChoiceProducer α) (a : α)
 alone: its body is known to fail, or another of its heads is known to hold.
 This is the narrowing's own test, which consults what propagation has
 established and not only what the region decides directly. -/
-def KnownBlocked (T : Theory α) (c : Cube α) (r : Producer α) (a : α) : Prop :=
+def KnownBlocked (T : Theory α) (c : Region α) (r : Producer α) (a : α) : Prop :=
   (match r with
     | .fact _ => False
     | .rule B _ => Known T c B false) ∨
@@ -387,15 +387,45 @@ def KnownBlocked (T : Theory α) (c : Cube α) (r : Producer α) (a : α) : Prop
 
 /-- An atomic choice blocked by the theory's knowledge: its body is known to
 fail. -/
-def KnownChoiceBlocked (T : Theory α) (c : Cube α) : ChoiceProducer α → Prop
+def KnownChoiceBlocked (T : Theory α) (c : Region α) : ChoiceProducer α → Prop
   | .fact _ | .reversedFact _ => False
   | .rule B _ | .reversedRule B _ => Known T c B false
+
+/-- An ordinary producer blocked by knowledge stays blocked in every region
+inside the original region, for the same theory and head atom.
+
+A false body remains known false by `known_mono`. A competing head remains
+known true by the same law, while its occurrence and distinction from the
+supported atom are unchanged. This transfers blocking evidence; it does not
+claim that the number of remaining support witnesses stays the same. -/
+theorem known_blocked_mono (T : Theory α) {larger smaller : Region α}
+    (inside : Inside smaller larger) (r : Producer α) (a : α)
+    (blocked : KnownBlocked T larger r a) : KnownBlocked T smaller r a := by
+  rcases blocked with body | ⟨b, occurs, held, other⟩
+  · apply Or.inl
+    cases r with
+    | fact H => exact body
+    | rule B H => exact known_mono T inside body
+  · have stillHeld : Known T smaller (.atom b) true := known_mono T inside held
+    exact Or.inr ⟨b, occurs, stillHeld, other⟩
+
+/-- An atomic choice blocked by knowledge stays blocked in every region
+inside the original region. Choices with no body are never blocked; in either
+order of a choice with a body, `known_mono` preserves its known falsity. -/
+theorem known_choice_blocked_mono (T : Theory α) {larger smaller : Region α}
+    (inside : Inside smaller larger) (r : ChoiceProducer α)
+    (blocked : KnownChoiceBlocked T larger r) : KnownChoiceBlocked T smaller r := by
+  cases r with
+  | fact a => exact blocked
+  | reversedFact a => exact blocked
+  | rule B a => exact known_mono T inside blocked
+  | reversedRule B a => exact known_mono T inside blocked
 
 /-- A producer blocked by knowledge supports its atom in no classical model
 of the theory inside the region, by `known_sound`: a body known to fail does
 not hold there, and another head known to hold is held, against sole-head
 support. -/
-theorem known_blocked_no_support (T : Theory α) (c : Cube α) (r : Producer α) (a : α)
+theorem known_blocked_no_support (T : Theory α) (c : Region α) (r : Producer α) (a : α)
     (hb : KnownBlocked T c r a) :
     ∀ z, c.Contains z → Models z T → ¬ r.Supports z a := by
   intro z hz hm hs
@@ -408,7 +438,7 @@ theorem known_blocked_no_support (T : Theory α) (c : Cube α) (r : Producer α)
 
 /-- A choice blocked by knowledge supports no atom in any classical model of
 the theory inside the region. -/
-theorem known_choice_blocked_no_support (T : Theory α) (c : Cube α)
+theorem known_choice_blocked_no_support (T : Theory α) (c : Region α)
     (r : ChoiceProducer α) (a : α) (hb : KnownChoiceBlocked T c r) :
     ∀ z, c.Contains z → Models z T → ¬ r.Supports z a := by
   intro z hz hm hs
@@ -433,7 +463,7 @@ of a stable model an ordinary supporter or an enabled choice of that atom,
 and each is excluded by its premise. -/
 theorem unsupported_cut_with_choices (T : Theory α) (rules : List (Producer α))
     (choices : List (ChoiceProducer α)) (covered : CoveredWithChoices T rules choices)
-    (c : Cube α) (a : α)
+    (c : Region α) (a : α)
     (ordinary : ∀ r ∈ rules, r.head.Contains a →
       ∀ z, c.Contains z → Stable z T → ¬ r.Supports z a)
     (chosen : ∀ r ∈ choices, r.head = a →
@@ -452,7 +482,7 @@ that producer, so its body holds there. Atomic choices count among the
 producers: each choice of the atom must be excluded. -/
 theorem sole_rule_forces_with_choices (T : Theory α) (rules : List (Producer α))
     (choices : List (ChoiceProducer α)) (covered : CoveredWithChoices T rules choices)
-    (c : Cube α) (a : α) (r : Producer α)
+    (c : Region α) (a : α) (r : Producer α)
     (ordinary : ∀ r' ∈ rules, r'.head.Contains a → r' ≠ r →
       ∀ z, c.Contains z → Stable z T → ¬ r'.Supports z a)
     (chosen : ∀ r' ∈ choices, r'.head = a →
@@ -473,7 +503,7 @@ producer of the atom and every other choice of it is excluded, so the choice
 is enabled in every stable model of the region holding the atom. -/
 theorem sole_choice_forces (T : Theory α) (rules : List (Producer α))
     (choices : List (ChoiceProducer α)) (covered : CoveredWithChoices T rules choices)
-    (c : Cube α) (a : α) (r : ChoiceProducer α)
+    (c : Region α) (a : α) (r : ChoiceProducer α)
     (ordinary : ∀ r' ∈ rules, r'.head.Contains a →
       ∀ z, c.Contains z → Stable z T → ¬ r'.Supports z a)
     (chosen : ∀ r' ∈ choices, r'.head = a → r' ≠ r →
@@ -496,19 +526,19 @@ knowledge is closed without producers, by the readings alone, and the readings
 suffice: the knowledge of any theory is sound in its models. An atom the
 restriction knows to hold is in every model of the restriction inside the
 region. -/
-theorem restriction_forces (R : Theory α) (c : Cube α) {a : α}
+theorem restriction_forces (R : Theory α) (c : Region α) {a : α}
     (h : Known R c (.atom a) true) : ∀ z, c.Contains z → Models z R → z a :=
   fun z hz hm => (known_sound (z := z) R c hz hm h).1 rfl
 
 /-- An atom a restriction knows to fail is in no model of the restriction
 inside the region. -/
-theorem restriction_cuts (R : Theory α) (c : Cube α) {a : α}
+theorem restriction_cuts (R : Theory α) (c : Region α) {a : α}
     (h : Known R c (.atom a) false) : ∀ z, c.Contains z → Models z R → ¬ z a :=
   fun z hz hm => (known_sound (z := z) R c hz hm h).2 rfl
 
 /-- A formula a restriction knows both to hold and to fail leaves the region
 without a model of the restriction. -/
-theorem restriction_contradiction_refutes (R : Theory α) (c : Cube α) {F : Formula α}
+theorem restriction_contradiction_refutes (R : Theory α) (c : Region α) {F : Formula α}
     (ht : Known R c F true) (hf : Known R c F false) :
     ∀ z, c.Contains z → ¬ Models z R :=
   fun z hz hm =>
@@ -521,7 +551,7 @@ A stable model is a classical model of the theory, and one still sought is a
 model of the restriction, so each knowledge is sound for it by `known_sound`;
 each theory's knowledge is carried to the children on its own, by
 `known_mono`. -/
-theorem restricted_stable_narrowing (T R : Theory α) (c : Cube α) {a : α}
+theorem restricted_stable_narrowing (T R : Theory α) (c : Region α) {a : α}
     (z : Atoms α) (hz : c.Contains z) (hs : Stable z T) (hr : Models z R) :
     ((Known T c (.atom a) true ∨ Known R c (.atom a) true) → z a) ∧
       ((Known T c (.atom a) false ∨ Known R c (.atom a) false) → ¬ z a) := by

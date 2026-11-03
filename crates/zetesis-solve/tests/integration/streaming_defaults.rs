@@ -5,8 +5,8 @@ use std::num::NonZeroUsize;
 use zetesis_reference_support::formula;
 
 use crate::support::sessions::config;
+use zetesis_algebra::Cancellation;
 use zetesis_core::Predicate;
-use zetesis_cpu::Cancellation;
 use zetesis_solve::{
     AnswerSet, Completion, Interruption, Oracle, PreparedInput, SemanticOutcome, Session,
     SolveConfig,

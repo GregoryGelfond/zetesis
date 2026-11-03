@@ -509,7 +509,7 @@ fn a_positive_check_failure_keeps_the_pending_subject() {
         .unwrap_err();
     assert!(matches!(
         error,
-        BatchError::Search(Incomplete::Verification(zetesis_cpu::Stop::WorkLimit))
+        BatchError::Search(Incomplete::Verification(zetesis_algebra::Stop::WorkLimit))
     ));
     let stats = stream.statistics();
     assert_eq!(stats.stable_models, 0);

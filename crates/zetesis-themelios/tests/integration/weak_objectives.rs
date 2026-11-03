@@ -4,8 +4,8 @@ use std::collections::BTreeSet;
 
 use themelios_base::source::SourceId;
 use themelios_program::program::Statement;
+use zetesis_algebra::Cancellation;
 use zetesis_core::Model;
-use zetesis_cpu::Cancellation;
 use zetesis_themelios::{
     AdmissionFailure, BundleAdmissionOptions, ExpansionFailure, ExpansionLimits, FormulaFailure,
     FormulaLimits, FormulaResource, InputLimit, admit_bundle_formula, admit_formula,

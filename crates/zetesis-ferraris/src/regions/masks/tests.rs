@@ -20,7 +20,7 @@ fn mask_slices_partition_the_owned_words() {
             chains.div_ceil(64),
         ];
         assert!(masks.words.iter().all(|&word| word == 0));
-        for (index, mask) in masks.split().into_iter().enumerate() {
+        for (index, mut mask) in masks.split().into_iter().enumerate() {
             assert_eq!(mask.len(), lengths[index]);
             mask.fill(1 << index);
         }
@@ -49,7 +49,7 @@ fn equal_length_copy_replaces_the_boundaries() {
         ),
     ] {
         assert_eq!(destination.words.len(), source.words.len());
-        for (index, mask) in source.split().into_iter().enumerate() {
+        for (index, mut mask) in source.split().into_iter().enumerate() {
             mask.fill(1 << index);
         }
         let address = destination.words.as_ptr();
@@ -57,7 +57,7 @@ fn equal_length_copy_replaces_the_boundaries() {
         assert_eq!(destination.words.as_ptr(), address);
         assert_eq!(destination.slices().map(<[u64]>::len), lengths);
         assert_eq!(destination.slices(), source.slices());
-        for (index, mask) in destination.split().into_iter().enumerate() {
+        for (index, mut mask) in destination.split().into_iter().enumerate() {
             mask.fill(0);
             assert!(
                 source.slices()[index]
@@ -73,8 +73,49 @@ fn cloned_masks_own_independent_words() {
     let source = Masks::empty(65, 130, 65);
     let mut cloned = source.clone();
     assert_ne!(source.words.as_ptr(), cloned.words.as_ptr());
-    for mask in cloned.split() {
+    for mut mask in cloned.split() {
         mask.fill(u64::MAX);
     }
     assert!(source.words.iter().all(|&word| word == 0));
+}
+
+#[test]
+fn six_views_keep_the_single_box_allocation() {
+    let mut masks = Masks::empty(65, 130, 1);
+    let base = masks.words.as_ptr();
+    let mut offset = 0;
+    for view in masks.split() {
+        assert_eq!(view.as_ptr(), base.wrapping_add(offset));
+        offset += view.len();
+    }
+    assert_eq!(offset, masks.words.len());
+}
+
+#[test]
+fn mask_owner_keeps_its_original_record_layout() {
+    struct Original {
+        words: Box<[u64]>,
+        node_words: usize,
+        atom_words: usize,
+    }
+    assert_eq!(
+        std::mem::size_of::<Masks>(),
+        std::mem::size_of::<Original>()
+    );
+    assert_eq!(
+        std::mem::align_of::<Masks>(),
+        std::mem::align_of::<Original>()
+    );
+    assert_eq!(
+        std::mem::offset_of!(Masks, words),
+        std::mem::offset_of!(Original, words)
+    );
+    assert_eq!(
+        std::mem::offset_of!(Masks, node_words),
+        std::mem::offset_of!(Original, node_words)
+    );
+    assert_eq!(
+        std::mem::offset_of!(Masks, atom_words),
+        std::mem::offset_of!(Original, atom_words)
+    );
 }

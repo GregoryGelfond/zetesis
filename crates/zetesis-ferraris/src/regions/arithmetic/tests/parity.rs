@@ -1,8 +1,8 @@
+use zetesis_algebra::Meter;
+
 use std::mem::size_of;
 
-use zetesis_cpu::{Cancellation, Stop};
-
-use crate::regions::{NarrowingQuota, Work};
+use zetesis_algebra::{Cancellation, Stop};
 
 use super::super::{
     budget::{Budget, BudgetError},
@@ -20,7 +20,7 @@ fn equations(atom_count: usize, specifications: &[(usize, bool)]) -> Vec<Equatio
                 *first = u64::try_from(coefficients).unwrap();
             }
             Equation {
-                words,
+                words: words.into(),
                 constant,
                 source: Source::Clauses { first: 0, count: 0 },
             }
@@ -49,7 +49,8 @@ fn completed(
     specifications: &[(usize, bool)],
 ) -> (Vec<Equation>, Prepared, u64, u128) {
     let cancellation = Cancellation::default();
-    let mut budget = Budget::new(Work::new(1_000_000), 1_000_000, usize::MAX, &cancellation);
+    let mut budget_work = Meter::local(1_000_000);
+    let mut budget = Budget::new(&mut budget_work, 1_000_000, usize::MAX, &cancellation);
     let mut storage = Storage::default();
     let mut rows = equations(atom_count, specifications);
     let result = prepare(&mut rows, atom_count, &mut storage, &mut budget).unwrap();
@@ -109,7 +110,8 @@ fn a_derived_contradiction_absorbs_before_the_index() {
     assert!(full.root_refuted);
     assert_eq!(full.counts.additions, 1);
     let cancellation = Cancellation::default();
-    let mut budget = Budget::new(Work::new(needed), needed, usize::MAX, &cancellation);
+    let mut budget_work = Meter::local(needed);
+    let mut budget = Budget::new(&mut budget_work, needed, usize::MAX, &cancellation);
     let mut storage = Storage::default();
     let mut rows = equations(2, &specifications);
     let prepared = prepare(&mut rows, 2, &mut storage, &mut budget).unwrap();
@@ -134,7 +136,8 @@ fn index_bits_follow_original_atom_and_row_coordinates() {
     for row_count in [0, 1, 63, 64, 65, 127, 128, 129] {
         let supports: Vec<_> = (0..row_count).map(|row| vec![1 << (row % 3), 0]).collect();
         let cancellation = Cancellation::default();
-        let mut budget = Budget::new(Work::new(1_000_000), 1_000_000, usize::MAX, &cancellation);
+        let mut budget_work = Meter::local(1_000_000);
+        let mut budget = Budget::new(&mut budget_work, 1_000_000, usize::MAX, &cancellation);
         let mut storage = Storage::default();
         let index = build_index(
             3,
@@ -160,7 +163,8 @@ fn index_bits_follow_original_atom_and_row_coordinates() {
 fn guard_insertions_reuse_the_same_incidence_index() {
     let supports = [vec![0, 0]; 1];
     let cancellation = Cancellation::default();
-    let mut budget = Budget::new(Work::new(1_000), 1_000, usize::MAX, &cancellation);
+    let mut budget_work = Meter::local(1_000);
+    let mut budget = Budget::new(&mut budget_work, 1_000, usize::MAX, &cancellation);
     let mut storage = Storage::default();
     let mut index = build_index(
         65,
@@ -237,7 +241,8 @@ fn optional_refusals_leave_only_complete_row_additions() {
     let expected = models(2, &equations(2, &specifications), &[0, 1, 2]);
     for limit in 0..needed {
         let cancellation = Cancellation::default();
-        let mut budget = Budget::new(Work::new(1_000_000), limit, usize::MAX, &cancellation);
+        let mut budget_work = Meter::local(1_000_000);
+        let mut budget = Budget::new(&mut budget_work, limit, usize::MAX, &cancellation);
         let mut storage = Storage::default();
         let mut rows = equations(2, &specifications);
         let error = prepare(&mut rows, 2, &mut storage, &mut budget).unwrap_err();
@@ -254,7 +259,8 @@ fn global_work_refusals_keep_their_type_and_prefix() {
     let expected = models(2, &equations(2, &specifications), &[0, 1, 2]);
     for limit in 0..needed {
         let cancellation = Cancellation::default();
-        let mut budget = Budget::new(Work::new(limit), 1_000_000, usize::MAX, &cancellation);
+        let mut budget_work = Meter::local(limit);
+        let mut budget = Budget::new(&mut budget_work, 1_000_000, usize::MAX, &cancellation);
         let mut storage = Storage::default();
         let mut rows = equations(2, &specifications);
         assert_eq!(
@@ -273,7 +279,8 @@ struct Deadline {
     refunded: u64,
 }
 
-impl NarrowingQuota for Deadline {
+impl zetesis_algebra::Quota for Deadline {
+    type Error = Stop;
     fn reserve(&mut self, wanted: u64) -> Result<u64, Stop> {
         if self.remaining == 0 {
             return Err(Stop::Deadline);
@@ -299,12 +306,13 @@ fn a_deadline_keeps_its_consumed_prefix_receipt() {
     };
     let spent;
     {
-        let mut budget = Budget::new(Work::reserved(&mut quota), 1_000, usize::MAX, &cancellation);
+        let mut budget_work = Meter::reserved(&mut quota);
+        let mut budget = Budget::new(&mut budget_work, 1_000, usize::MAX, &cancellation);
         let mut storage = Storage::default();
         let mut rows = equations(2, &[(3, true), (1, true), (2, false)]);
         assert_eq!(
             prepare(&mut rows, 2, &mut storage, &mut budget).unwrap_err(),
-            BudgetError::Stopped(Stop::Deadline)
+            BudgetError::Refused(Stop::Deadline)
         );
         spent = budget.work();
         assert!(spent > 0 && spent <= 40);
@@ -317,7 +325,8 @@ fn a_deadline_keeps_its_consumed_prefix_receipt() {
 fn cancellation_precedes_optional_preparation_refusal() {
     let cancellation = Cancellation::default();
     cancellation.cancel();
-    let mut budget = Budget::new(Work::new(0), 0, 0, &cancellation);
+    let mut budget_work = Meter::local(0);
+    let mut budget = Budget::new(&mut budget_work, 0, 0, &cancellation);
     let mut storage = Storage::default();
     let mut rows = equations(0, &[(0, true)]);
     assert_eq!(
@@ -330,7 +339,8 @@ fn cancellation_precedes_optional_preparation_refusal() {
 #[test]
 fn byte_refusal_preserves_the_header_initialization() {
     let cancellation = Cancellation::default();
-    let mut budget = Budget::new(Work::new(1_000), 1_000, 0, &cancellation);
+    let mut budget_work = Meter::local(1_000);
+    let mut budget = Budget::new(&mut budget_work, 1_000, 0, &cancellation);
     let mut storage = Storage::default();
     let mut rows = equations(1, &[(1, true)]);
     assert!(matches!(
@@ -345,7 +355,8 @@ fn byte_refusal_preserves_the_header_initialization() {
 fn index_dimension_overflow_is_an_allocation_failure() {
     let supports = vec![Vec::new(); 129];
     let cancellation = Cancellation::default();
-    let mut budget = Budget::new(Work::new(0), 0, usize::MAX, &cancellation);
+    let mut budget_work = Meter::local(0);
+    let mut budget = Budget::new(&mut budget_work, 0, usize::MAX, &cancellation);
     let mut storage = Storage::default();
     assert_eq!(
         build_index(

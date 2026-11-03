@@ -35,6 +35,9 @@ pub struct Options {
     /// Legacy library/parser callers retain the line-oriented record view.
     #[arg(skip)]
     pub statistics_view: crate::StatisticsView,
+    /// Read an explicit versioned benchmark request for a bounded GPU residual sample artifact.
+    #[arg(long, value_name = "FILE", hide_short_help = true)]
+    pub residual_evidence_request: Option<PathBuf>,
     /// Optional device inventory command; no source input is read for it.
     #[command(subcommand)]
     pub command: Option<Command>,

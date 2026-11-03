@@ -120,7 +120,7 @@ pub enum GpuErrorKind {
 pub struct GpuError {
     kind: GpuErrorKind,
     detail: String,
-    interruption: Option<zetesis_cpu::Stop>,
+    interruption: Option<zetesis_algebra::Stop>,
 }
 
 impl GpuError {
@@ -132,7 +132,7 @@ impl GpuError {
         }
     }
 
-    fn interrupted(stop: zetesis_cpu::Stop) -> Self {
+    fn interrupted(stop: zetesis_algebra::Stop) -> Self {
         Self {
             kind: GpuErrorKind::Interrupted,
             detail: stop.to_string(),
@@ -155,7 +155,7 @@ impl GpuError {
     /// Exact control stop, when this error reports an interrupted operation.
     /// A preceding scope/device fault replaces the stop and returns `None`.
     #[must_use]
-    pub const fn interruption(&self) -> Option<zetesis_cpu::Stop> {
+    pub const fn interruption(&self) -> Option<zetesis_algebra::Stop> {
         self.interruption
     }
 }

@@ -147,7 +147,7 @@ fn failed_outer_and_original_attempts_are_recorded_without_false_completion() {
         let error = search.next().unwrap().unwrap_err();
         assert!(matches!(
             error,
-            Incomplete::DecisionLimit | Incomplete::Verification(zetesis_cpu::Stop::WorkLimit)
+            Incomplete::DecisionLimit | Incomplete::Verification(zetesis_algebra::Stop::WorkLimit)
         ));
         let timing = search.statistics().phase_timings.unwrap();
         // One call builds the original index when the walk starts; one is

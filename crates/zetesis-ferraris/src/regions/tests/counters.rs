@@ -7,7 +7,7 @@ use crate::{
     AdmissionLimits, EvaluationLimits, EvaluationWorkspace, Interpretation, Narrower, Node, Region,
     RegionLimits, Theory,
 };
-use zetesis_cpu::Cancellation;
+use zetesis_algebra::{Cancellation, Class};
 
 use super::super::Width;
 use super::super::counters::Count;
@@ -37,7 +37,7 @@ fn copied_known<A: Count, B: Count>(known: &Known<A>) -> Known<B> {
     }
 }
 
-fn copied_width<C: Count>(knowledge: &Knowledge) -> Known<C> {
+fn copied_width<C: Count, D: Class>(knowledge: &Knowledge<D>) -> Known<C> {
     match &knowledge.width {
         Width::Compact16(known) => copied_known(known),
         Width::Compact32(known) => copied_known(known),
@@ -46,21 +46,23 @@ fn copied_width<C: Count>(knowledge: &Knowledge) -> Known<C> {
 }
 
 /// The same closure state at the native width.
-pub(super) fn native(knowledge: &Knowledge) -> Knowledge {
+pub(super) fn native<C: Class>(knowledge: &Knowledge<C>) -> Knowledge<C> {
     Knowledge {
         width: Width::Native(copied_width(knowledge)),
+        class: std::marker::PhantomData,
     }
 }
 
 /// The same bounded test state at the intermediate width.
-pub(super) fn compact32(knowledge: &Knowledge) -> Knowledge {
+pub(super) fn compact32<C: Class>(knowledge: &Knowledge<C>) -> Knowledge<C> {
     Knowledge {
         width: Width::Compact32(copied_width(knowledge)),
+        class: std::marker::PhantomData,
     }
 }
 
 /// The two counter arrays of any width, as native values.
-fn counts(knowledge: &Knowledge) -> [Vec<usize>; 2] {
+fn counts<C: Class>(knowledge: &Knowledge<C>) -> [Vec<usize>; 2] {
     fn arrays<C: Count>(known: &Known<C>) -> [Vec<usize>; 2] {
         [values(&known.neutral_operands), values(&known.unknown)]
     }
@@ -84,8 +86,8 @@ fn same_known<A: Count, B: Count>(left: &Known<A>, right: &Known<B>) {
     assert_eq!(left.thresholds, right.thresholds);
 }
 
-pub(super) fn same_knowledge(left: &Knowledge, right: &Knowledge) {
-    fn compare<C: Count>(left: &Known<C>, right: &Knowledge) {
+pub(super) fn same_knowledge<C: Class>(left: &Knowledge<C>, right: &Knowledge<C>) {
+    fn compare<C: Count, D: Class>(left: &Known<C>, right: &Knowledge<D>) {
         match &right.width {
             Width::Compact16(r) => same_known(left, r),
             Width::Compact32(r) => same_known(left, r),
@@ -99,46 +101,24 @@ pub(super) fn same_knowledge(left: &Knowledge, right: &Knowledge) {
     }
 }
 
-fn compare_closures(theory: &Theory, frozen: Option<&[bool]>, max_work: u64) {
-    let narrower = Narrower::new(theory);
-    let fresh = narrower.knowledge();
+fn compare_widths<C: Class>(
+    fresh: &Knowledge<C>,
+    apply: impl Fn(&mut Region, &mut Knowledge<C>) -> crate::NarrowingAttempt,
+) {
     assert_eq!(
         matches!(fresh.width, Width::Compact16(_)),
         size_of::<u16>() < size_of::<usize>()
     );
-    let cancellation = Cancellation::default();
-    let extracted =
-        super::super::producers(theory, RegionLimits::default(), &cancellation).unwrap();
     for code in 0..3usize.pow(4) {
         let mut compact_region = partial_region(code);
         let mut native_region = compact_region.clone();
         let mut compact = fresh.clone();
-        let mut intermediate = compact32(&fresh);
+        let mut intermediate = compact32(fresh);
         let mut intermediate_region = compact_region.clone();
-        let mut native = native(&fresh);
-        let close = |region: &mut Region, knowledge: &mut Knowledge| {
-            if let Some(truth) = frozen {
-                narrower.narrow_frozen_known(
-                    crate::FrozenSubject::new(theory, truth),
-                    region,
-                    knowledge,
-                    &mut crate::NarrowingScratch::default(),
-                    RegionLimits { max_work },
-                    &cancellation,
-                )
-            } else {
-                // Counter widths must pay the same cold classification work;
-                // one width must not populate another width's cache.
-                let producers = extracted.producers.clone();
-                narrower.narrow_known(
-                    crate::OriginalSubject::new(theory, producers.as_ref()),
-                    region,
-                    knowledge,
-                    &mut crate::NarrowingScratch::default(),
-                    RegionLimits { max_work },
-                    &cancellation,
-                )
-            }
+        let mut native = native(fresh);
+        let close = |region: &mut Region, knowledge: &mut Knowledge<C>| {
+            let attempt = apply(region, knowledge);
+            (attempt.result, attempt.statistics, attempt.preferred)
         };
         let expected = close(&mut native_region, &mut native);
         assert_eq!(
@@ -155,6 +135,39 @@ fn compare_closures(theory: &Theory, frozen: Option<&[bool]>, max_work: u64) {
         assert_eq!(intermediate_region, native_region, "region {code}");
         same_knowledge(&compact, &native);
         same_knowledge(&intermediate, &native);
+    }
+}
+
+fn compare_closures(theory: &Theory, frozen: Option<&[bool]>, max_work: u64) {
+    let narrower = Narrower::new(theory);
+    let cancellation = Cancellation::default();
+    let extracted =
+        super::super::producers(theory, RegionLimits::default(), &cancellation).unwrap();
+    if let Some(truth) = frozen {
+        compare_widths(&narrower.frozen_knowledge(), |region, knowledge| {
+            narrower.narrow_frozen_known(
+                crate::FrozenSubject::new(theory, truth),
+                region,
+                knowledge,
+                &mut crate::NarrowingScratch::default(),
+                RegionLimits { max_work },
+                &cancellation,
+            )
+        });
+    } else {
+        compare_widths(&narrower.knowledge(), |region, knowledge| {
+            // Counter widths must pay the same cold classification work;
+            // one width must not populate another width's cache.
+            let producers = extracted.producers.clone();
+            narrower.narrow_known(
+                crate::OriginalSubject::new(theory, producers.as_ref()),
+                region,
+                knowledge,
+                &mut crate::NarrowingScratch::default(),
+                RegionLimits { max_work },
+                &cancellation,
+            )
+        });
     }
 }
 
@@ -188,19 +201,23 @@ fn child_propagation_keeps_parent_knowledge_unchanged() {
     let mut parent = narrower.knowledge();
     let mut parent_region = Region::all_open(4);
     let cancellation = Cancellation::default();
-    narrower
-        .narrow_known(
-            crate::OriginalSubject::new(&theory, None),
-            &mut parent_region,
-            &mut parent,
-            &mut crate::NarrowingScratch::default(),
-            RegionLimits::default(),
-            &cancellation,
-        )
-        .unwrap();
+    let attempt = narrower.narrow_known(
+        crate::OriginalSubject::new(&theory, None),
+        &mut parent_region,
+        &mut parent,
+        &mut crate::NarrowingScratch::default(),
+        RegionLimits::default(),
+        &cancellation,
+    );
+    attempt.result.unwrap();
     let before = native(&parent);
     let mut child = parent.clone();
-    let atom = parent_region.split_atom().unwrap();
+    let mut entry = zetesis_algebra::region::Entry::new(parent_region, ());
+    if let Some(atom) = attempt.preferred {
+        entry.prefer(atom);
+    }
+    let atom = entry.split_atom().unwrap();
+    let parent_region = entry.region;
     let (mut child_region, _) = parent_region.split(atom);
     narrower
         .narrow_known(
@@ -211,6 +228,7 @@ fn child_propagation_keeps_parent_knowledge_unchanged() {
             RegionLimits::default(),
             &cancellation,
         )
+        .result
         .unwrap();
     assert_ne!(counts(&child), counts(&before));
     same_knowledge(&parent, &before);
@@ -329,6 +347,7 @@ fn chain_counts_cross_the_smallest_width_without_truncation() {
                 RegionLimits::default(),
                 &Cancellation::default(),
             )
+            .result
             .unwrap();
         assert_eq!(counts(&knowledge)[0], [atoms]);
         assert!((0..atoms).all(|atom| region.is_held(atom)));
@@ -367,6 +386,7 @@ fn atom_counts_include_every_node_occurrence() {
                 RegionLimits::default(),
                 &Cancellation::default(),
             )
+            .result
             .unwrap();
         assert_eq!(counts(&knowledge)[1], [0]);
     }

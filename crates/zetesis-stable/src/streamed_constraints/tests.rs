@@ -2,20 +2,20 @@
 //! every route: each prepared checker serves its walk or producer, and checks
 //! run on the routes' own threads.
 
+use crate::region_filter::tests::injection::{Source as InjectedSource, Worker as InjectedWorker};
 use std::collections::BTreeSet;
 use std::num::NonZeroUsize;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
-use zetesis_cpu::regions::Region;
+use zetesis_algebra::region::Region;
 use zetesis_ferraris::Theory;
 use zetesis_themelios::{ConstraintAllowance, ConstraintCheckLimits, HybridFormula};
 
 use super::StreamedConstraints;
 use crate::{
     BatchLimits, BatchVerdict, Cancellation, CertificateLimits, CertificateOrder, Engagement,
-    Incomplete, Limits, RegionFeasibility, RegionFilter, RegionFilterWorker, RegionWalkEngagement,
-    StableModels,
+    Incomplete, Limits, RegionFeasibility, RegionWalkEngagement, StableModels,
 };
 
 // The repeated condition adds no restriction: p(X) already entails not not
@@ -46,12 +46,12 @@ impl Counting {
     }
 }
 
-impl RegionFilter for Counting {
+impl InjectedSource for Counting {
     fn worker(
         &self,
         theory: &Theory,
         cancellation: &Cancellation,
-    ) -> Result<Box<dyn RegionFilterWorker + '_>, Incomplete> {
+    ) -> Result<Box<dyn InjectedWorker + '_>, Incomplete> {
         Ok(Box::new(CountingWorker {
             counting: self,
             inner: self.constraints.worker(theory, cancellation)?,
@@ -61,10 +61,10 @@ impl RegionFilter for Counting {
 
 struct CountingWorker<'a> {
     counting: &'a Counting,
-    inner: Box<dyn RegionFilterWorker + 'a>,
+    inner: Box<super::Worker<'a>>,
 }
 
-impl RegionFilterWorker for CountingWorker<'_> {
+impl InjectedWorker for CountingWorker<'_> {
     fn check(
         &mut self,
         theory: &Theory,

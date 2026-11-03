@@ -193,7 +193,7 @@ fn native_models(input: &AdmittedFormula) -> Models {
     let mut search = zetesis_stable::StableModels::new(
         input.theory(),
         zetesis_stable::Limits::default(),
-        zetesis_cpu::Cancellation::default(),
+        zetesis_algebra::Cancellation::default(),
     )
     .unwrap();
     let mut models = Models::new();

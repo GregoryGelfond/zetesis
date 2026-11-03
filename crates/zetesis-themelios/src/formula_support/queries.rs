@@ -13,8 +13,8 @@ use std::ops::{Deref, Range};
 
 use crate::ProgramSite;
 use zetesis_core::catalog::TermRef;
+use zetesis_core::table::{self, Cause, Domain, Resource, Selection, Table};
 use zetesis_core::{AtomKey, BindingView, PatternRef, TemplateTerm};
-use zetesis_cpu::table::{self, Cause, Domain, Resource, Selection, Table};
 
 use super::relations::RelationRows;
 use super::{Counters, GroundingWork, PositivePattern, Relations};

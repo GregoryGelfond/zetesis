@@ -1,11 +1,11 @@
 //! Reuse one device across independent formula sessions.
 
 // ANCHOR: example
+use zetesis_algebra::Cancellation;
 use zetesis_core::{Atom, Model, Predicate};
-use zetesis_cpu::Cancellation;
 use zetesis_solve::{
-    AnswerSelection, Backend, Completion, ExecutionResources, PreparedInput, Session, SolveConfig,
-    Subject,
+    AnswerSelection, Backend, Completion, ExecutionResources, Original, PreparedInput, Session,
+    SolveConfig,
 };
 use zetesis_themelios::{AdmissionOptions, ExpansionLimits, FormulaLimits, admit_formula};
 use zetesis_wgpu::{GpuContext, GpuOptions, GpuSelection};
@@ -43,8 +43,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         );
         assert!(
             answer
-                .subject()
-                .same_instance(&Subject::Theory(program.theory().clone()))
+                .original()
+                .same_instance(&Original::Theory(program.theory().clone()))
         );
         assert!(session.next().is_none());
         assert_eq!(

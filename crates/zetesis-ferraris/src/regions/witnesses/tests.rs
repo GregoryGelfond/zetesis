@@ -13,8 +13,8 @@ use crate::{
     ValueExtremumElement, ValueExtremumGuard, append_value_extremum_family_refs,
     append_value_extremum_refs, models,
 };
+use zetesis_algebra::Cancellation;
 use zetesis_core::{Value, catalog::TermRef};
-use zetesis_cpu::Cancellation;
 
 #[derive(Clone, Copy, Debug)]
 enum Preparation {
@@ -123,7 +123,7 @@ fn theory(preparation: Preparation, repeated_condition: bool) -> Theory {
 fn close(theory: &Theory) -> (Narrowing, Region) {
     let narrower = Narrower::new(theory);
     let mut region = Region::all_open(4);
-    let (outcome, _) = narrower
+    let outcome = narrower
         .narrow_known(
             OriginalSubject::new(theory, None),
             &mut region,
@@ -132,6 +132,7 @@ fn close(theory: &Theory) -> (Narrowing, Region) {
             RegionLimits::default(),
             &Cancellation::default(),
         )
+        .result
         .unwrap();
     (outcome, region)
 }
@@ -223,8 +224,8 @@ fn an_undecided_shared_parent_forwards_a_child_wakeup() {
                     RegionLimits::default(),
                     &Cancellation::default(),
                 )
+                .result
                 .unwrap()
-                .0
         };
     assert_ne!(
         close(&mut region, &mut known, &mut scratch),
@@ -248,8 +249,15 @@ fn an_undecided_shared_parent_forwards_a_child_wakeup() {
     assert_eq!(region, fresh);
     assert_eq!(region.decision(0), Some(true));
     assert_eq!(region.decision(2), Some(true));
-    assert!(scratch.witnesses.dirty.is_empty());
-    assert!(scratch.witnesses.pending.iter().all(|&word| word == 0));
+    assert!(scratch.common.witnesses.dirty.is_empty());
+    assert!(
+        scratch
+            .common
+            .witnesses
+            .pending
+            .iter()
+            .all(|&word| word == 0)
+    );
 }
 
 #[test]
@@ -293,14 +301,14 @@ fn associative_units_preserve_every_original_and_frozen_model() {
                 narrower.narrow_frozen_known(
                     FrozenSubject::new(&theory, truth.truth()),
                     &mut after,
-                    &mut narrower.knowledge(),
+                    &mut narrower.frozen_knowledge(),
                     &mut scratch,
                     RegionLimits::default(),
                     &cancellation,
                 )
             }
-            .unwrap()
-            .0;
+            .result
+            .unwrap();
             for inner in 0..8 {
                 if (0..3).any(|atom| {
                     before
@@ -343,25 +351,29 @@ fn associative_units_preserve_every_original_and_frozen_model() {
 
 #[test]
 fn associative_scratch_recovers_after_refusal_and_generation_wrap() {
-    use super::{Scratch, Work};
+    use super::{Meter, Scratch};
     let theory = compound_witness();
     let narrower = Narrower::new(&theory);
     let chain = super::chain_position(narrower.chain_of[4].unwrap());
     let mut scratch = Scratch::default();
     assert_eq!(
-        scratch.read(&narrower, chain, None, &mut Work::new(0)),
-        Err(zetesis_cpu::Stop::WorkLimit)
+        scratch
+            .read(&narrower, chain, None, &mut Meter::local(0))
+            .map_err(zetesis_algebra::Failure::into_stop),
+        Err(zetesis_algebra::Stop::WorkLimit)
     );
     assert_eq!(
         scratch
-            .read(&narrower, chain, None, &mut Work::new(u64::MAX))
+            .read(&narrower, chain, None, &mut Meter::local(u64::MAX))
+            .map_err(zetesis_algebra::Failure::into_stop)
             .unwrap(),
         &[0, 1]
     );
     scratch.generation = u32::MAX;
     assert_eq!(
         scratch
-            .read(&narrower, chain, None, &mut Work::new(u64::MAX))
+            .read(&narrower, chain, None, &mut Meter::local(u64::MAX))
+            .map_err(zetesis_algebra::Failure::into_stop)
             .unwrap(),
         &[0, 1]
     );
@@ -374,7 +386,7 @@ fn associative_scratch_recovers_after_refusal_and_generation_wrap() {
     assert!(scratch.pending.iter().all(|&word| word == 0));
     assert_eq!(
         Scratch::default().prepare_dirty(usize::MAX),
-        Err(zetesis_cpu::Stop::Allocation)
+        Err(zetesis_algebra::Stop::Allocation)
     );
 }
 
@@ -398,7 +410,7 @@ fn shared_conjunctions_retain_the_dual_unit_consequence() {
     let index = Narrower::new(&theory);
     let mut region = Region::all_open(3);
     assert!(region.hold(1));
-    let (outcome, _) = index
+    let outcome = index
         .narrow_known(
             OriginalSubject::new(&theory, None),
             &mut region,
@@ -407,6 +419,7 @@ fn shared_conjunctions_retain_the_dual_unit_consequence() {
             RegionLimits::default(),
             &Cancellation::default(),
         )
+        .result
         .unwrap();
     assert_ne!(outcome, Narrowing::Refuted);
     assert_eq!(region.decision(0), Some(false));
@@ -436,7 +449,7 @@ fn opaque_and_expanded_native_bridges_both_survive() {
     .unwrap();
     let index = Narrower::new(&theory);
     let mut region = Region::all_open(5);
-    let (outcome, _) = index
+    let outcome = index
         .narrow_known(
             OriginalSubject::new(&theory, None),
             &mut region,
@@ -445,6 +458,7 @@ fn opaque_and_expanded_native_bridges_both_survive() {
             RegionLimits::default(),
             &Cancellation::default(),
         )
+        .result
         .unwrap();
     assert_ne!(outcome, Narrowing::Refuted);
     assert_eq!(region.decision(3), Some(true));
@@ -526,7 +540,7 @@ fn compound_cuts_transport_boolean_witnesses() {
             let theory = mixed_cut(disjunction, transfer);
             let index = Narrower::new(&theory);
             let mut region = Region::all_open(5);
-            let (outcome, _) = index
+            let outcome = index
                 .narrow_known(
                     OriginalSubject::new(&theory, None),
                     &mut region,
@@ -535,6 +549,7 @@ fn compound_cuts_transport_boolean_witnesses() {
                     RegionLimits::default(),
                     &Cancellation::default(),
                 )
+                .result
                 .unwrap();
             assert_ne!(outcome, Narrowing::Refuted);
             assert_eq!(region.decision(4), Some(true));
@@ -576,7 +591,7 @@ fn compound_cut_inference_preserves_original_models() {
                     choices /= 3;
                 }
                 let mut after = before.clone();
-                let (outcome, _) = index
+                let outcome = index
                     .narrow_known(
                         OriginalSubject::new(&theory, None),
                         &mut after,
@@ -585,6 +600,7 @@ fn compound_cut_inference_preserves_original_models() {
                         RegionLimits::default(),
                         &cancellation,
                     )
+                    .result
                     .unwrap();
                 for &(mask, satisfies) in &worlds {
                     if !satisfies
@@ -626,15 +642,16 @@ fn compound_cut_inference_leaves_arbitrary_frozen_worlds_sound() {
                     workspace.evaluate(&candidate, EvaluationLimits::default(), &cancellation);
                 let truth = evaluation.result.unwrap();
                 let mut after = Region::all_open(5);
-                let (outcome, _) = index
+                let outcome = index
                     .narrow_frozen_known(
                         FrozenSubject::new(&theory, truth.truth()),
                         &mut after,
-                        &mut index.knowledge(),
+                        &mut index.frozen_knowledge(),
                         &mut scratch,
                         RegionLimits::default(),
                         &cancellation,
                     )
+                    .result
                     .unwrap();
                 for inner in 0_u32..32 {
                     let world = Interpretation::new(
@@ -692,7 +709,7 @@ fn a_native_upper_bound_refutes_its_smaller_boolean_conjunction() {
     .unwrap();
     let index = Narrower::new(&theory);
     let mut region = Region::all_open(5);
-    let (outcome, _) = index
+    let outcome = index
         .narrow_known(
             OriginalSubject::new(&theory, None),
             &mut region,
@@ -701,6 +718,7 @@ fn a_native_upper_bound_refutes_its_smaller_boolean_conjunction() {
             RegionLimits::default(),
             &Cancellation::default(),
         )
+        .result
         .unwrap();
     assert_ne!(outcome, Narrowing::Refuted);
     assert_eq!(region.decision(4), Some(true));
@@ -711,7 +729,31 @@ fn a_native_upper_bound_refutes_its_smaller_boolean_conjunction() {
 fn warmed(index: &Narrower) -> super::Scratch {
     let mut scratch = super::Scratch::default();
     scratch
-        .begin(index.parents.len(), &mut super::Work::new(u64::MAX))
+        .begin(index.parents.len(), &mut super::Meter::local(u64::MAX))
+        .map_err(zetesis_algebra::Failure::into_stop)
         .unwrap();
     scratch
+}
+
+#[test]
+fn dirty_masks_keep_capacity_when_subjects_shrink() {
+    let mut scratch = super::Scratch::default();
+    scratch.prepare_dirty(130).unwrap();
+    let pointer = scratch.pending.as_ptr();
+    let bytes = scratch.retained_bytes();
+    for chain in [0, 63, 64, 129, 64] {
+        scratch.queue_dirty(chain);
+    }
+    assert_eq!(scratch.dirty, [0, 63, 64, 129]);
+    assert_eq!(scratch.next_dirty(), Some(129));
+    scratch.queue_dirty(129);
+    scratch.clear();
+    scratch.prepare_dirty(1).unwrap();
+    assert!(scratch.dirty.is_empty());
+    assert_eq!(&*scratch.pending, [0, 0, 0]);
+    assert_eq!(scratch.pending.as_ptr(), pointer);
+    assert_eq!(scratch.retained_bytes(), bytes);
+    scratch.queue_dirty(0);
+    assert_eq!(scratch.next_dirty(), Some(0));
+    assert_eq!(scratch.next_dirty(), None);
 }

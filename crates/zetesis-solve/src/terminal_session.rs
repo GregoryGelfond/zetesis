@@ -4,8 +4,9 @@
 //! admitted terminal-definition correspondence permits precisely one extension,
 //! and publication follows only after that extension completes.
 
+use zetesis_algebra::Cancellation;
+use zetesis_algebra::reduction::{CheckedSum, Reduction as _};
 use zetesis_core::Model;
-use zetesis_cpu::Cancellation;
 use zetesis_objective::Score;
 use zetesis_themelios::{ReconstructionStatistics, TerminalFormula, TerminalReconstruction};
 
@@ -56,6 +57,22 @@ pub(crate) struct TerminalSession<'a> {
 }
 
 impl<'a> TerminalSession<'a> {
+    #[cfg(feature = "gpu")]
+    pub(crate) fn formula_core(&self) -> &FormulaSession<'a, Execution> {
+        match &self.base {
+            BaseSession::Eager(core) => core,
+            BaseSession::Hybrid(hybrid) => hybrid.formula_core(),
+        }
+    }
+
+    #[cfg(feature = "gpu")]
+    pub(crate) fn formula_core_mut(&mut self) -> &mut FormulaSession<'a, Execution> {
+        match &mut self.base {
+            BaseSession::Eager(core) => core,
+            BaseSession::Hybrid(hybrid) => hybrid.formula_core_mut(),
+        }
+    }
+
     pub(crate) fn new(
         owner: &'a TerminalFormula,
         config: &SolveConfig,
@@ -122,7 +139,7 @@ impl<'a> TerminalSession<'a> {
                 let base = HybridSession::new(
                     HybridInput {
                         core,
-                        subject: crate::Subject::TerminalDefinitions(owner.clone()),
+                        original: crate::Original::TerminalDefinitions(owner.clone()),
                     },
                     &base_config,
                     resources,
@@ -159,7 +176,7 @@ impl<'a> TerminalSession<'a> {
         }
         // Admit the next counter before consuming a base answer. An overflow
         // cannot lose an answer between the consumed and pending receipts.
-        let Some(consumed) = self.statistics.base_answers.checked_add(1) else {
+        let Some(consumed) = CheckedSum.combine(Some(self.statistics.base_answers), Some(1)) else {
             return self.finish(None, Some(SolveError::TerminalStatisticsOverflow), phases);
         };
         let next = match &mut self.base {
@@ -216,7 +233,7 @@ impl<'a> TerminalSession<'a> {
 
     fn snapshot(&self, phases: &Recorder) -> SemanticOutcome {
         let mut outcome = self.base_outcome(phases);
-        outcome.subject = Some(crate::Subject::TerminalDefinitions(self.owner.clone()));
+        outcome.original = Some(crate::Original::TerminalDefinitions(self.owner.clone()));
         outcome.selection = Some(AnswerSelection::All);
         outcome.verified = self.statistics.reconstructed;
         outcome.scored = 0;

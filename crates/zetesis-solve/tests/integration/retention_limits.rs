@@ -3,8 +3,8 @@
 use std::{collections::BTreeSet, num::NonZeroUsize};
 use zetesis_reference_support::formula;
 
+use zetesis_algebra::Cancellation;
 use zetesis_core::{Atom, Model, Predicate};
-use zetesis_cpu::Cancellation;
 use zetesis_solve::{
     AnswerSet, Backend, Completion, Interruption, OptimizationStop, Oracle, PreparedInput, Session,
     SolveConfig, WorldView, WorldViewError, WorldViewLimits,
@@ -118,7 +118,7 @@ fn world_view_byte_refusal_preserves_the_checked_prefix() {
     assert_eq!(failure.outcome().unwrap().completion(), None);
     assert!(!failure.outcome().unwrap().unsatisfiable());
     for answer in failure.answer_sets() {
-        assert!(answer.subject().same_instance(failure.subject()));
+        assert!(answer.original().same_instance(failure.original()));
     }
 }
 

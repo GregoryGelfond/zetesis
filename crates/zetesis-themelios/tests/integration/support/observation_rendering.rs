@@ -1,8 +1,8 @@
 //! The observations a formula program shows, rendered over every one of its
 //! atoms.
 
+use zetesis_algebra::Cancellation;
 use zetesis_core::Model;
-use zetesis_cpu::Cancellation;
 use zetesis_reference_support::formula;
 use zetesis_themelios::observation::Limits;
 

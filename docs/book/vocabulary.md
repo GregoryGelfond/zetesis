@@ -6,18 +6,26 @@ representations. A representation name does not confer a semantic property.
 | Concept | Current Rust representation | Lean vocabulary |
 | --- | --- | --- |
 | Canonical logical program | `themelios_program::Program`, re-exported as `zetesis_themelios::logical::Program`; constructed directly or raised from source | Source-template and translation laws use explicit abstract premises |
+| Original semantic input | `zetesis_solve::Original`, also re-exported by `zetesis_cli`; checked results retain it through `original` fields or accessors | An input-identity owner, not a new Lean primitive or a membership proof |
+| Original admission evidence | `zetesis_themelios::ProgramOriginal`: whole-program, part or statement identity in typed admission failures | Source ownership and provenance remain concrete obligations |
 | Original statement evidence | `zetesis_themelios::ProgramSite` carries an owner-local `StatementId` when available and an optional real `Location` | Identity and provenance do not by themselves establish a translation law |
 | Finite propositional theory | `zetesis_ferraris::Theory` | `Ferraris.Theory` |
 | Interpretation | `zetesis_core::Interpretation` / `Model`; theory-bound `zetesis_ferraris::Interpretation` | `Atoms α` |
 | Checked answer set | Privately constructed `zetesis_solve::AnswerSet` (`SessionModel` compatibility alias), or a native `StableInterpretation` | `Semantics.Stable` / `Ferraris.Stable` |
 | Ground-symbol exchange set | `zetesis_themelios::logical::AnswerSet`, a plain `BTreeSet<Symbol>` used by explicit symbol export | A set representation with no checked membership claim |
-| Complete world view | `WorldView` retains the original subject and all full answers after unrestricted exhaustion | Membership, original-family coverage and complete-capture laws |
+| Complete world view | `WorldView` retains the original input and all full answers after unrestricted exhaustion | Membership, original-family coverage and complete-capture laws |
+| Value combination over accepted members | Sealed `zetesis_algebra::reduction::Reduction`; pure values are separate from witnesses, fallible effects and completion evidence | `Zetesis.AxisFolds.Reduction`, a commutative monoid under each instance's stated premises |
+| Boolean values and products | `zetesis_algebra::reduction::{All, Any}` combine by conjunction/disjunction; `(L, R)` combines both coordinates and absorbs only when both absorb | `Zetesis.AxisFolds.all`, `any` and `pair`; value laws do not commute effects |
+| Bounded nonnegative addition | `zetesis_algebra::reduction::CheckedSum`: `Some(u64)` is exact, `None` propagates overflow, and no value signals successful early absorption | `Zetesis.AxisFolds.BoundedSum.reduction` at `u64::MAX`; an exact answer count still requires complete distinct-member coverage |
+| Minimum value and incumbent selection | `zetesis_algebra::reduction::Minimum<V>` uses `None` as identity; `step` retains the incumbent on equality and returns its incoming comparison | `Zetesis.AxisFolds.Minimum.reduction` and `step_value_map`, under a pure lawful order consistent with denoted value equality; selection alone proves neither optimality nor complete enumeration of optimal ties |
+| Set values represented by finite occurrence streams | `zetesis_algebra::reduction::sets::{intersection, union, ordered_union}` select or merge occurrences; `Model` retains canonical storage and fallible materialization | `Zetesis.AxisFolds.SetStreams.selected_inter`, `append_union`, `ordered_union_value`; faithful finite reads and, for the ordered cursor, strictly ordered unique inputs remain concrete premises |
+| A reduction's result when enumeration may stop | `zetesis_algebra::reduction::Verdict`: `Absorbed`, `Complete`, `Empty` or `Undecided`, with caller-owned value, witness and typed stop payloads | `Algebra.FoldVerdict`; membership, accepted absorption and completed coverage are separate premises |
 | A world-view question folded over answer sets: decided at an absorbing value, complete after exhaustion, or inconsistent | `WorldViewDecision` and its `WorldViewVerdict`, from `SessionBuilder::{known, possible, cautious, brave, answer}` | `AxisFolds.Reduction`, `world_view_fold_decided`, `world_view_fold_complete` |
 | Positive consequence closure | Checked positive-formula specialization | `Semantics.Gamma`, `Zetesis.Least` |
 | Frozen reduct | `zetesis_ferraris::FrozenReduct` | `Ferraris.ReductTheory` / `Semantics.ReductModel` |
 | Display | Source observations selecting shown atoms and terms | Distinct from full interpretation |
 | Proved optimum | `SemanticOutcome::optimum_proved()` and retained objective evidence | Objective ordering and completed-search laws |
-| The sides of a region: held, cut, open | `Region::is_held`, `is_cut`, `is_open`; the carrier's `held_gate_atoms` and `cut_gate_atoms`; the cube's `must` is the held set and the complement of `may` the cut set | `Cube`, `Bounds.undecided` for the open cube |
+| The sides of a region: held, cut, open | `Region::is_held`, `is_cut`, `is_open`; the carrier's `held_gate_atoms` and `cut_gate_atoms`; the region's `must` is the held set and the complement of `may` the cut set | `Region`, `Bounds.undecided` for the open region |
 | The two readings of a formula under a region: sure, never | `Knowledge`, known to hold or known never | `FormulaBounds.Sure`, `FormulaBounds.Never` |
 | A region visited as a leaf | `RegionStatistics::leaves`, the carrier's `regions_leaves`, the proposers' `leaves` | `decided_leaf_models` |
 | The carrier's narrowing by its two closures | `NarrowingState`, `narrowing_passes`, `narrowing_stop`, `root_refuted`; the record key `carrier_narrowing` | `Bounds.lean` |
@@ -32,7 +40,7 @@ representations. A representation name does not confer a semantic property.
 | This solver's run and the reference solver | `native` and `reference` in the series view; clingo is the tool filling the reference's role | None |
 | A requested solver configuration | a validation `profile`, a request for a `SolveConfig` | None |
 | An ongoing solve | `zetesis_solve::Session` owns search and membership execution | Membership and coverage laws describe its semantic obligations |
-| Cooperative cancellation and a deadline | `zetesis_cpu::Cancellation` carries shared cancellation and an optional absolute deadline | Stopped coverage remains distinct from exhaustion |
+| Cooperative cancellation and a deadline | `zetesis_algebra::Cancellation` carries shared cancellation and an optional absolute deadline | Stopped coverage remains distinct from exhaustion |
 | A workgroup size: the invocations cooperating on one device candidate, also every candidate-local loop's stride; and the sizing that selects one size per retained graph from its level widths, each level's node count | `zetesis_wgpu::GpuWorkgroupSize` and `GpuWorkgroupSizing` (`Fitted` or `Fixed`) in `GpuKernelOptions::workgroup_sizing`; the batch statistics' `workgroup_size`; the solver's `gpu_workgroup_size` and its JSON key | None; a physical schedule that preserves original truth |
 | Device discovery: listing a requested API's adapters with their reported identities, creating no device; and a device source, where a GPU primitive obtains its device — its own adapter selection, the same selection over an adapter enumeration begun earlier, or an existing context. Adapter enumeration is distinct from answer-set enumeration | `zetesis_wgpu::discover_adapters`; `GpuDiscovery` (an adapter enumeration begun on a background thread); `GpuDeviceSource` (`Selected`, `Discovered`, `Context`) and the solve-path primitives' `from_source`; `ExecutionResources::discovering` | None; adapter selection is outside the semantic laws |
 
@@ -41,7 +49,7 @@ execution tuples sharing a bound prefix; it is a separate representation.
 
 An ordinary Rust `Model` or `logical::AnswerSet` is a collection, not by itself
 a sealed answer-set certificate. Likewise, a `Check` value describing a decision should
-not be attached to another subject; the checked-owner APIs preserve that
+not be attached to another original input; the checked-owner APIs preserve that
 association explicitly.
 
 **Grounding** supplies finite instances or a stream with the required coverage.

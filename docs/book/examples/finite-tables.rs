@@ -1,9 +1,10 @@
 //! Select complete typed rows, project their values and restore a wider domain.
 
 // ANCHOR: example
-use zetesis_core::{Atom, Predicate, Value, relation::Relation};
-use zetesis_cpu::{
-    Cancellation,
+use zetesis_algebra::Cancellation;
+use zetesis_core::{
+    Atom, Predicate, Value,
+    relation::Relation,
     table::{Domain, Limits, Table},
 };
 

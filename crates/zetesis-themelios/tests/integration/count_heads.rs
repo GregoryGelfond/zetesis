@@ -62,7 +62,7 @@ fn native_count_search_preserves_full_models() {
         let mut search = zetesis_stable::StableModels::new(
             admitted.theory(),
             zetesis_stable::Limits::default(),
-            zetesis_cpu::Cancellation::default(),
+            zetesis_algebra::Cancellation::default(),
         )
         .unwrap();
         let mut models = Models::new();

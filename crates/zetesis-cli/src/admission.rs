@@ -3,7 +3,7 @@
 use crate::presentation::{Diagnostics, Label};
 use std::io::Write;
 
-use zetesis_cpu::Cancellation;
+use zetesis_algebra::Cancellation;
 use zetesis_themelios::{
     BundleAdmissionOptions, ExpansionLimits, ParsedSource, SourceBundle, SourceFailure,
 };
@@ -130,7 +130,10 @@ impl FormulaInput {
         crate::publication::solve(
             self.prepared(),
             &crate::PublicationConfig::from(options),
-            resources,
+            crate::publication::RunResources {
+                execution: resources,
+                evidence_request: options.residual_evidence_request.as_deref(),
+            },
             renderer,
             diagnostics,
             cancellation,

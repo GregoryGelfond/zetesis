@@ -3,6 +3,33 @@ mod shared_rows;
 use super::*;
 use zetesis_ferraris::{AdmissionLimits, FormulaParts, Node, OperandSpan};
 
+/// The same packed reader must load the host's candidate buffer for each
+/// route. Both modules already contain other read-only u32 arrays.
+pub(crate) fn assert_candidate_word_binding(
+    module: &naga::Module,
+    info: &naga::valid::ModuleInfo,
+    candidate_binding: u32,
+) {
+    let (reader, _) = module
+        .functions
+        .iter()
+        .find(|(_, f)| f.name.as_deref() == Some("candidate_contains"))
+        .expect("shared candidate reader");
+    let mut reads = Vec::new();
+    for (handle, global) in module.global_variables.iter() {
+        let usage = info[reader][handle];
+        if !usage.is_empty() {
+            assert_eq!(usage, naga::valid::GlobalUse::READ);
+            let binding = global
+                .binding
+                .expect("candidate reader loads bound storage");
+            reads.push((binding.group, binding.binding));
+        }
+    }
+    reads.sort_unstable();
+    assert_eq!(reads, [(0, 0), (0, candidate_binding)]);
+}
+
 fn theory() -> Theory {
     Theory::new(
         2,
@@ -84,7 +111,7 @@ fn cancelled_operand_packing_returns_a_typed_interruption() {
         )
         .unwrap_err()
         .interruption(),
-        Some(zetesis_cpu::Stop::Cancelled)
+        Some(zetesis_algebra::Stop::Cancelled)
     );
 }
 
@@ -229,7 +256,7 @@ fn native_shape_scan_preserves_cancellation() {
         .err()
         .unwrap()
         .interruption(),
-        Some(zetesis_cpu::Stop::Cancelled)
+        Some(zetesis_algebra::Stop::Cancelled)
     );
 }
 
@@ -324,7 +351,7 @@ fn ordinal_transport_preserves_original_and_arbitrary_frozen_truth() {
                 if let NodeView::ExtremumCut(cut) = theory.view().node(index).unwrap() {
                     let measure = cut
                         .row
-                        .reduce(|child| Ok::<_, zetesis_cpu::Stop>(reduct[child]))
+                        .reduce(|child| Ok::<_, zetesis_algebra::Stop>(reduct[child]))
                         .unwrap();
                     assert_eq!(reduct[index], original[index] && cut.rule.holds(measure));
                 }
@@ -386,14 +413,14 @@ fn ordinal_shape_scan_and_packing_preserve_cancellation() {
             .err()
             .unwrap()
             .interruption(),
-        Some(zetesis_cpu::Stop::Cancelled)
+        Some(zetesis_algebra::Stop::Cancelled)
     );
     let mut words = Vec::with_capacity(usize::try_from(shape.bytes).unwrap() / 4);
     assert_eq!(
         pack(&theory, &shape.rows, &mut words, &cancellation)
             .unwrap_err()
             .interruption(),
-        Some(zetesis_cpu::Stop::Cancelled)
+        Some(zetesis_algebra::Stop::Cancelled)
     );
     assert!(words.is_empty());
 }

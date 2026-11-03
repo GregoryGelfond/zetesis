@@ -16,7 +16,7 @@ use themelios_solve::{
     contract::{Locus, Presupposition, Refused},
     outcome::{Conclusion, Determination, Run as _, ShowRule, Solved, Truncation},
 };
-use zetesis_cpu::{CancellationRun, CancellationSlot, Stop};
+use zetesis_algebra::{CancellationRun, CancellationSlot, Stop};
 use zetesis_solve::{
     Backend, ExecutionObservation, ExecutionObserver, Grounder, PreparedInput, Session,
     SolveConfig, SolveError, SolveFailure,
@@ -267,6 +267,56 @@ fn export_resource_fault_has_no_conclusion() {
 }
 
 #[test]
+fn exporter_reuse_keeps_attempted_work_across_refusal_and_control() {
+    let admitted = admit(Program::of([Rule::fact(atom(1, Sign::Positive))]));
+    let mut session = Session::enumerate(
+        PreparedInput::formula(&admitted),
+        SolveConfig {
+            backend: Backend::Cpu,
+            models: 0,
+            ..Default::default()
+        },
+        zetesis_algebra::Cancellation::default(),
+    )
+    .unwrap();
+    let answer = session.next().unwrap().unwrap();
+    assert!(session.next().is_none());
+    let mut exporter = model::Exporter::new(model::OutputLimits {
+        max_symbol_work: 0,
+        ..Default::default()
+    });
+    let active = zetesis_algebra::Cancellation::default();
+    for expected in [1, 2] {
+        let error = exporter
+            .convert(&answer, admitted.metadata(), &active)
+            .unwrap_err();
+        assert!(matches!(
+            error,
+            model::OutputError::Symbol(zetesis_themelios::symbols::Failure::Stopped(
+                model::SymbolStop::Work { observed, limit: 0 }
+            )) if observed == expected
+        ));
+    }
+    let cancelled = zetesis_algebra::Cancellation::default();
+    cancelled.cancel();
+    assert!(matches!(
+        exporter.convert(&answer, admitted.metadata(), &cancelled),
+        Err(model::OutputError::Control(Stop::Cancelled))
+    ));
+    // Refused callbacks remain attempted work, but the control refusal above
+    // occurs before symbol traversal and must not increment that history.
+    assert!(matches!(
+        exporter.convert(&answer, admitted.metadata(), &active),
+        Err(model::OutputError::Symbol(
+            zetesis_themelios::symbols::Failure::Stopped(model::SymbolStop::Work {
+                observed: 3,
+                limit: 0,
+            })
+        ))
+    ));
+}
+
+#[test]
 fn observation_fault_names_the_original_directive() {
     let admitted = admit(Program::of([
         Statement::from(Rule::fact(atom(1, Sign::Positive))),
@@ -340,7 +390,7 @@ fn cancel_after_last_answer() {
     let prepared = crate::prepared::Prepared::new(
         Arc::new(original.clone()),
         &config,
-        &zetesis_cpu::Cancellation::default(),
+        &zetesis_algebra::Cancellation::default(),
     )
     .unwrap();
     let requested = config.session().grounder;

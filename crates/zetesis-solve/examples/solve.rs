@@ -6,7 +6,7 @@ use std::{
     io::{self, Write},
     num::NonZeroUsize,
 };
-use zetesis_cpu::Cancellation;
+use zetesis_algebra::Cancellation;
 use zetesis_solve::{Backend, Completion, Grounder, PreparedInput, Session, SolveConfig};
 use zetesis_themelios::{
     AdmissionOptions, ExpansionLimits, FormulaLimits, OutputSelection, observation, prepare_formula,

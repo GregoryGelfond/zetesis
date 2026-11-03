@@ -48,12 +48,12 @@ fn opaque_seed() -> Theory {
 fn any_included_occurrence_invalidates_a_false_atom() {
     let program = Program::new(positive_alias());
     let (mut child, mut knowledge, mut scratch) = program.closed();
-    assert!(!scratch.founded.may_affect_body(2));
-    assert!(scratch.founded.may_affect_body(9));
-    let before = scratch.founded.passes;
+    assert!(!scratch.common.founded.may_affect_body(2));
+    assert!(scratch.common.founded.may_affect_body(9));
+    let before = scratch.common.founded.passes;
     child.cut(2);
     program.close(&mut child, &mut knowledge, &mut scratch);
-    assert_eq!(scratch.founded.passes, before + 1);
+    assert_eq!(scratch.common.founded.passes, before + 1);
     assert!(child.is_open(0) && child.is_open(1));
     assert!(completed(&knowledge));
 }
@@ -62,13 +62,13 @@ fn any_included_occurrence_invalidates_a_false_atom() {
 fn a_cut_output_can_invalidate_an_opaque_body() {
     let program = Program::new(opaque_seed());
     let (mut child, mut knowledge, mut scratch) = program.closed();
-    assert!(!scratch.founded.may_affect_body(2));
-    assert!(scratch.founded.may_affect_body(5));
-    let before = scratch.founded.passes;
+    assert!(!scratch.common.founded.may_affect_body(2));
+    assert!(scratch.common.founded.may_affect_body(5));
+    let before = scratch.common.founded.passes;
     child.cut(2);
     program.close(&mut child, &mut knowledge, &mut scratch);
     assert!(child.is_cut(0) && child.is_cut(1));
-    assert_eq!(scratch.founded.passes, before + 2);
+    assert_eq!(scratch.common.founded.passes, before + 2);
     assert!(completed(&knowledge));
 }
 
@@ -76,12 +76,12 @@ fn a_cut_output_can_invalidate_an_opaque_body() {
 fn a_new_true_negative_body_preserves_completion() {
     let program = Program::new(negative_seed());
     let (mut child, mut knowledge, mut scratch) = program.closed();
-    assert!(!scratch.founded.may_affect_body(2));
-    let before = scratch.founded.passes;
+    assert!(!scratch.common.founded.may_affect_body(2));
+    let before = scratch.common.founded.passes;
     child.cut(2);
     program.close(&mut child, &mut knowledge, &mut scratch);
     assert!(child.is_held(0) && child.is_held(1));
-    assert_eq!(scratch.founded.passes, before);
+    assert_eq!(scratch.common.founded.passes, before);
     assert!(completed(&knowledge));
 }
 
@@ -95,15 +95,16 @@ fn unknown_projection_invalidates_output_atoms() {
         } else {
             NarrowingScratch::default()
         };
-        let before = scratch.founded.passes;
+        let before = scratch.common.founded.passes;
         let mut child = parent.clone();
         let mut knowledge = inherited.clone();
         child.cut(2);
         program.close(&mut child, &mut knowledge, &mut scratch);
-        assert_eq!(scratch.founded.passes, before + 1);
+        assert_eq!(scratch.common.founded.passes, before + 1);
         assert!(completed(&knowledge));
         assert!(
             scratch
+                .common
                 .founded
                 .owner
                 .as_ref()
@@ -146,7 +147,7 @@ fn stopped_output_events_retry_from_the_parent() {
     let mut expected_known = inherited.clone();
     let (expected_result, statistics) =
         program.close(&mut expected, &mut expected_known, &mut scratch);
-    assert_eq!(scratch.founded.passes, 1);
+    assert_eq!(scratch.common.founded.passes, 1);
     assert!(statistics.work > 0);
     for failure in [Stop::WorkLimit, Stop::Cancelled, Stop::Deadline] {
         for ceiling in 0..statistics.work {
@@ -165,14 +166,14 @@ fn stopped_output_events_retry_from_the_parent() {
             );
             assert_eq!(attempt.result, Err(failure));
             assert_eq!(attempt.statistics.work, ceiling);
-            assert_eq!(scratch.founded.passes, 1);
+            assert_eq!(scratch.common.founded.passes, 1);
             let mut retry = parent.clone();
             retry.cut(2);
             partial.clone_from(&inherited);
             let (actual, _) = program.close(&mut retry, &mut partial, &mut scratch);
             assert_eq!(actual, expected_result);
             assert_eq!(retry, expected);
-            assert_eq!(scratch.founded.passes, 1);
+            assert_eq!(scratch.common.founded.passes, 1);
             assert!(completed(&partial));
         }
     }

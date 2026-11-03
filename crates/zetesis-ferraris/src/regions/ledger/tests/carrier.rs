@@ -8,17 +8,15 @@ fn plain(
     region: &mut Region,
     scratch: &mut NarrowingScratch,
 ) -> (Narrowing, NarrowingStatistics) {
-    program
-        .index
-        .narrow_known(
-            OriginalSubject::new(&program.theory, Some(&program.producers)),
-            region,
-            &mut program.index.knowledge(),
-            scratch,
-            RegionLimits::default(),
-            &Cancellation::default(),
-        )
-        .unwrap()
+    let attempt = program.index.narrow_known(
+        OriginalSubject::new(&program.theory, Some(&program.producers)),
+        region,
+        &mut program.index.knowledge(),
+        scratch,
+        RegionLimits::default(),
+        &Cancellation::default(),
+    );
+    (attempt.result.unwrap(), attempt.statistics)
 }
 
 #[test]
@@ -33,7 +31,7 @@ fn a_plain_original_subject_captures_no_row() {
     );
     assert_eq!(result, Narrowing::Refuted);
     assert_eq!(counts.support_explanations.attempts, 0);
-    assert_eq!(scratch.explanations.len(), 0);
+    assert_eq!(scratch.learning.explanations.len(), 0);
 }
 
 #[test]
@@ -49,7 +47,7 @@ fn a_plain_original_subject_matches_no_row() {
     );
     assert_eq!(counts.support_explanations.matched, 0);
     assert_eq!(counts.support_explanations.work, 0);
-    assert_eq!(scratch.explanations.len(), 1);
+    assert_eq!(scratch.learning.explanations.len(), 1);
 }
 
 #[test]
@@ -57,17 +55,16 @@ fn a_carrier_without_producers_still_matches() {
     let program = Program::new(false);
     let (_, mut scratch) = program.captured();
     let mut child = region(&[(2, false), (3, true)]);
-    let (result, counts) = program
-        .index
-        .narrow_known(
-            OriginalSubject::carrier(&program.owner, None),
-            &mut child,
-            &mut program.index.knowledge(),
-            &mut scratch,
-            RegionLimits::default(),
-            &Cancellation::default(),
-        )
-        .unwrap();
+    let attempt = program.index.narrow_known(
+        OriginalSubject::carrier(&program.owner, None),
+        &mut child,
+        &mut program.index.knowledge(),
+        &mut scratch,
+        RegionLimits::default(),
+        &Cancellation::default(),
+    );
+    let result = attempt.result.unwrap();
+    let counts = attempt.statistics;
     assert!(matches!(result, Narrowing::Fixed { .. }));
     assert!(child.is_cut(0) && child.is_cut(1));
     assert_eq!(counts.support_explanations.matched, 1);

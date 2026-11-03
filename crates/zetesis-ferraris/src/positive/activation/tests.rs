@@ -196,3 +196,46 @@ fn a_failed_observer_stops_before_the_new_atom_is_dequeued() {
     assert!(fixture.states[4] == State::Awaiting(1));
     assert_eq!(effects.activations, [(2, None), (0, Some(2)), (3, Some(0))]);
 }
+
+#[test]
+fn atom_publication_preserves_borrowed_word_boundaries() {
+    // Each queued atom costs six units through its word write, then two for
+    // the empty outgoing span. A refused write must leave its lane unchanged.
+    for maximum in [0, 2, 5, 6, 7, 8, 10, 13, 14, 16, 21, 22, 24] {
+        let mut backing = [17_u64, 0, 0, 0, 23];
+        let mut states = vec![State::True; 130];
+        let mut queue = vec![63, 64, 129];
+        let mut effects = Recording::new(maximum);
+        let result = drain(
+            130,
+            &[0; 131],
+            &[],
+            &mut states,
+            &mut queue,
+            &mut backing[1..4],
+            &mut effects,
+        );
+        assert_eq!(
+            result,
+            if maximum == 24 {
+                Ok(())
+            } else {
+                Err(Fault::Work)
+            }
+        );
+        assert_eq!(
+            backing,
+            [
+                17,
+                if maximum >= 6 { 1 << 63 } else { 0 },
+                u64::from(maximum >= 14),
+                if maximum >= 22 { 2 } else { 0 },
+                23,
+            ],
+        );
+        assert!(effects.spent <= maximum);
+        assert_eq!(queue, [63, 64, 129]);
+        assert!(states.iter().all(|state| *state == State::True));
+        assert!(effects.activations.is_empty());
+    }
+}

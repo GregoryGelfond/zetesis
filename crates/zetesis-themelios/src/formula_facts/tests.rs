@@ -12,8 +12,8 @@
 use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
 
+use zetesis_algebra::Cancellation;
 use zetesis_core::{Model, ValueLimits};
-use zetesis_cpu::Cancellation;
 
 use super::{FactBlock, Item};
 use crate::formula_ir::testing::with_facts_as_rules;

@@ -4,6 +4,8 @@ use std::convert::Infallible;
 use std::fmt;
 use std::sync::Arc;
 
+use zetesis_algebra::MeterBytes;
+
 use zetesis_core::catalog::{
     AssignmentError, AssignmentFailure, AssignmentSlice, CatalogRead, DeclaredConstructor,
     Error as StorageError, Limits, PredicateRef, TermKey, TermRef, Vocabulary, VocabularyBuilder,
@@ -176,8 +178,16 @@ impl Authority {
         self.builder.read()
     }
     pub(crate) fn observe(&mut self, external: u128) -> Result<(), MetadataStorageError> {
-        self.peak = self.peak.max(external + self.bytes());
-        check(self.limits, external + self.bytes())
+        let observed = external + self.bytes();
+        MeterBytes::observe_peak(observed, self.limits.max_bytes as u128, &mut self.peak).map_err(
+            |_| {
+                StorageError::Storage {
+                    required: observed,
+                    limit: self.limits.max_bytes,
+                }
+                .into()
+            },
+        )
     }
     fn writer(&mut self, external: u128) -> Result<u128, MetadataStorageError> {
         let outer = external + HEADER as u128 + self.components.storage_bytes();
@@ -211,9 +221,14 @@ impl Authority {
         let available = remaining(self.limits, outer)?;
         self.components.restart_storage_peak();
         let result = action(&mut self.components, self.builder.read(), available);
-        self.peak = self.peak.max(outer + self.components.storage_peak_bytes());
+        let observed = outer + self.components.storage_peak_bytes();
+        let observation =
+            MeterBytes::observe_peak(observed, self.limits.max_bytes as u128, &mut self.peak);
         let value = result.map_err(|error| component(error, outer, self.limits))?;
-        check(self.limits, outer + self.components.storage_peak_bytes())?;
+        observation.map_err(|_| StorageError::Storage {
+            required: observed,
+            limit: self.limits.max_bytes,
+        })?;
         Ok(value)
     }
     pub(crate) fn construct(
@@ -334,15 +349,13 @@ impl Authority {
 
 const READY: fn() -> Result<(), Infallible> = || Ok(());
 fn check(limits: MetadataStorageLimits, observed: u128) -> Result<(), MetadataStorageError> {
-    if observed > limits.max_bytes as u128 {
-        Err(StorageError::Storage {
+    MeterBytes::check(observed, limits.max_bytes as u128).map_err(|_| {
+        StorageError::Storage {
             required: observed,
             limit: limits.max_bytes,
         }
-        .into())
-    } else {
-        Ok(())
-    }
+        .into()
+    })
 }
 fn remaining(limits: MetadataStorageLimits, external: u128) -> Result<usize, MetadataStorageError> {
     check(limits, external)?;
@@ -373,3 +386,6 @@ fn component(
         error => error.into(),
     }
 }
+
+#[cfg(test)]
+mod tests;

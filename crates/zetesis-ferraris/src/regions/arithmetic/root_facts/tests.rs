@@ -1,10 +1,11 @@
+use zetesis_algebra::Meter;
+
 mod refusals;
 
-use zetesis_cpu::Cancellation;
+use zetesis_algebra::Cancellation;
 
 use crate::{
     AdmissionError, Limits, NodeView, Theory,
-    regions::Work,
     test_support::{constructed_theory, push, world},
 };
 
@@ -14,8 +15,8 @@ use super::super::{
 };
 use super::{CheckedRootFacts, Step, build, replay};
 
-fn budget(cancellation: &Cancellation) -> Budget<'_, 'static> {
-    Budget::new(Work::new(u64::MAX), u64::MAX, usize::MAX, cancellation)
+fn budget<'a>(work: &'a mut Meter<'static>, cancellation: &'a Cancellation) -> Budget<'a, 'static> {
+    Budget::new(work, u64::MAX, usize::MAX, cancellation)
 }
 
 fn chained() -> Theory {
@@ -37,7 +38,7 @@ fn checked(theory: &Theory) -> CheckedRootFacts {
     build(
         theory,
         &mut Storage::default(),
-        &mut budget(&Cancellation::default()),
+        &mut budget(&mut Meter::local(u64::MAX), &Cancellation::default()),
     )
     .unwrap()
 }
@@ -47,8 +48,9 @@ fn nested_repeated_premises_reach_ordered_original_witnesses() {
     let owner = chained();
     let facts = checked(&owner);
     let cancellation = Cancellation::default();
-    let mut meter = budget(&cancellation);
-    assert_eq!(facts.words, [15]);
+    let mut meter_work = Meter::local(u64::MAX);
+    let mut meter = budget(&mut meter_work, &cancellation);
+    assert_eq!(&*facts.words, [15]);
     assert_eq!(facts.steps.len(), 4);
     let mut prior = 0_u64;
     for step in &facts.steps {
@@ -101,7 +103,7 @@ fn cycles_and_unsupported_sources_do_not_supply_facts() {
     });
     let facts = checked(&owner);
     assert!(facts.steps.is_empty());
-    assert_eq!(facts.words, [0]);
+    assert_eq!(&*facts.words, [0]);
 }
 
 #[test]
@@ -113,7 +115,7 @@ fn two_producers_publish_one_witness_for_the_same_head() {
         vec![first, second, 0]
     });
     let facts = checked(&owner);
-    assert_eq!(facts.words, [3]);
+    assert_eq!(&*facts.words, [3]);
     assert_eq!(facts.steps.iter().filter(|step| step.atom == 1).count(), 1);
 }
 
@@ -133,7 +135,7 @@ fn checked_owner_accepts_clones_but_not_equal_foreign_theories() {
             &owner,
             &facts.steps,
             &mut Storage::default(),
-            &mut budget(&cancellation)
+            &mut budget(&mut Meter::local(u64::MAX), &cancellation)
         )
         .unwrap()
         .is_some()
@@ -144,7 +146,7 @@ fn checked_owner_accepts_clones_but_not_equal_foreign_theories() {
             &owner,
             &facts.steps,
             &mut Storage::default(),
-            &mut budget(&cancellation)
+            &mut budget(&mut Meter::local(u64::MAX), &cancellation)
         )
         .unwrap()
         .is_none()
@@ -167,10 +169,11 @@ fn independent_replay_rejects_wrong_repeated_and_reordered_witnesses() {
             &owner,
             &valid,
             &mut Storage::default(),
-            &mut budget(&cancellation)
+            &mut budget(&mut Meter::local(u64::MAX), &cancellation)
         )
         .unwrap()
-        .unwrap(),
+        .unwrap()
+        .into_storage(),
         [15]
     );
     let proposals = [
@@ -186,7 +189,7 @@ fn independent_replay_rejects_wrong_repeated_and_reordered_witnesses() {
                 &owner,
                 &proposal,
                 &mut Storage::default(),
-                &mut budget(&cancellation)
+                &mut budget(&mut Meter::local(u64::MAX), &cancellation)
             )
             .unwrap()
             .is_none(),
@@ -199,7 +202,7 @@ fn independent_replay_rejects_wrong_repeated_and_reordered_witnesses() {
             &owner,
             &[Step { root: 5, atom: 0 }],
             &mut Storage::default(),
-            &mut budget(&cancellation)
+            &mut budget(&mut Meter::local(u64::MAX), &cancellation)
         ),
         Err(BudgetError::Source(AdmissionError::Root))
     );
@@ -224,7 +227,7 @@ fn final_mask_cannot_justify_an_unseeded_cycle() {
                 &owner,
                 &proposal,
                 &mut Storage::default(),
-                &mut budget(&cancellation)
+                &mut budget(&mut Meter::local(u64::MAX), &cancellation)
             )
             .unwrap()
             .is_none()
@@ -236,7 +239,8 @@ fn final_mask_cannot_justify_an_unseeded_cycle() {
 fn successful_storage_contains_only_the_checked_owner() {
     let owner = chained();
     let cancellation = Cancellation::default();
-    let mut meter = budget(&cancellation);
+    let mut meter_work = Meter::local(u64::MAX);
+    let mut meter = budget(&mut meter_work, &cancellation);
     let mut storage = Storage::default();
     let facts = build(&owner, &mut storage, &mut meter).unwrap();
     assert_eq!(storage.bytes(), facts.retained_bytes());

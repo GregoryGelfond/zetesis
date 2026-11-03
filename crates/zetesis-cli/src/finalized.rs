@@ -66,7 +66,7 @@ pub struct PublicationFailure {
     pub phase_timings: Option<Box<PhaseTimings>>,
     /// Compatibility view of the latest secondary reporting error.
     pub secondary_output: Option<io::Error>,
-    pub(crate) subject: Option<crate::Subject>,
+    pub(crate) original: Option<crate::Original>,
     pub(crate) semantic: Option<Box<SemanticOutcome>>,
     pub(crate) publication: Option<Publication>,
     pub(crate) publication_stop: Option<Box<PublicationStop>>,
@@ -75,14 +75,14 @@ pub struct PublicationFailure {
 }
 impl PublicationFailure {
     /// Known original input, including a prepared session's setup failure.
-    /// A subject association does not establish that search started, membership
+    /// An association with the original input does not establish that search started, membership
     /// completed or any coverage was obtained. Failures before source admission
-    /// can have no subject.
+    /// can have no original input.
     #[must_use]
-    pub fn subject(&self) -> Option<&crate::Subject> {
+    pub fn original(&self) -> Option<&crate::Original> {
         self.semantic()
-            .and_then(SemanticOutcome::subject)
-            .or(self.subject.as_ref())
+            .and_then(SemanticOutcome::original)
+            .or(self.original.as_ref())
     }
     /// Finalized evidence from the entered session, even if publication failed.
     #[must_use]
@@ -152,7 +152,7 @@ impl From<RunFailure> for PublicationFailure {
             partial_report: failure.partial_report,
             phase_timings: failure.phase_timings,
             secondary_output: failure.secondary_output,
-            subject: None,
+            original: None,
             semantic: None,
             publication: None,
             publication_stop: None,
@@ -186,7 +186,7 @@ impl From<zetesis_solve::SolveFailure> for PublicationFailure {
     fn from(failure: zetesis_solve::SolveFailure) -> Self {
         let parts = failure.into_parts();
         let mut failure = Self::from(RunError::from(*parts.cause));
-        failure.subject = parts.subject;
+        failure.original = parts.original;
         failure.semantic = parts.semantic;
         failure.phase_timings = parts.phase_timings;
         failure
@@ -212,14 +212,14 @@ pub enum PublicationPhase {
 /// Cooperative publication stop, independently of semantic search coverage.
 #[derive(Clone, Debug)]
 pub struct PublicationStop {
-    reason: zetesis_cpu::Stop,
+    reason: zetesis_algebra::Stop,
     phase: PublicationPhase,
     observation: Option<Box<zetesis_themelios::observation::Error>>,
 }
 impl PublicationStop {
     /// Original control reason, without a new poll or inferred clock state.
     #[must_use]
-    pub const fn reason(&self) -> zetesis_cpu::Stop {
+    pub const fn reason(&self) -> zetesis_algebra::Stop {
         self.reason
     }
     /// Operation that observed the stop.
@@ -258,10 +258,10 @@ impl PublicationStop {
         }
     }
 }
-const fn cooperative(reason: zetesis_cpu::Stop) -> bool {
+const fn cooperative(reason: zetesis_algebra::Stop) -> bool {
     matches!(
         reason,
-        zetesis_cpu::Stop::Cancelled | zetesis_cpu::Stop::Deadline
+        zetesis_algebra::Stop::Cancelled | zetesis_algebra::Stop::Deadline
     )
 }
 

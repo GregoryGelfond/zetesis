@@ -1,3 +1,5 @@
+use zetesis_algebra::Meter;
+
 use super::*;
 
 fn canonical_fact() -> Theory {
@@ -19,13 +21,19 @@ fn canonical_true_and_bare_facts_have_identical_completion() {
         assert_eq!(producers.by_head[1].len(), 1);
         let producer = &producers.rules[producers.by_head[1][0]];
         assert_eq!(producer.body.is_some(), has_body);
-        let record = completion(owner, &producers, 1, 0, &mut budget(&cancellation))
-            .unwrap()
-            .unwrap();
+        let record = completion(
+            owner,
+            &producers,
+            1,
+            0,
+            &mut budget(&mut Meter::local(u64::MAX), &cancellation),
+        )
+        .unwrap()
+        .unwrap();
         // The fact body contributes no atom. Only its completion head remains.
         assert_eq!(record.support.len, 1);
         assert_eq!(record.support.atoms, [1, 0, 0, 0, 0, 0, 0, 0]);
-        assert_eq!(record.forbidden, [1, 0, 0, 0]);
+        assert_eq!(&*record.forbidden, [1, 0, 0, 0]);
         assert_matches_original_bodies(owner, &producers, &record);
         records.push(record);
     }
@@ -45,12 +53,18 @@ fn a_true_body_does_not_skip_later_normal_producers() {
     let producers = inventory(&owner);
     assert_eq!(producers.by_head[2].len(), 2);
     let cancellation = Cancellation::default();
-    let record = completion(&owner, &producers, 2, 0, &mut budget(&cancellation))
-        .unwrap()
-        .unwrap();
+    let record = completion(
+        &owner,
+        &producers,
+        2,
+        0,
+        &mut budget(&mut Meter::local(u64::MAX), &cancellation),
+    )
+    .unwrap()
+    .unwrap();
     assert_eq!(record.support.len, 3);
     assert_eq!(record.support.atoms, [0, 1, 2, 0, 0, 0, 0, 0]);
-    assert_eq!(record.forbidden, [0b1111, 0, 0, 0]);
+    assert_eq!(&*record.forbidden, [0b1111, 0, 0, 0]);
     assert_matches_original_bodies(&owner, &producers, &record);
 }
 
@@ -82,9 +96,15 @@ fn a_true_body_does_not_hide_ineligible_later_producers() {
         assert_eq!(producers.by_head[9].len(), 2, "kind {kind}");
         let cancellation = Cancellation::default();
         assert!(
-            completion(&owner, &producers, 9, 0, &mut budget(&cancellation))
-                .unwrap()
-                .is_none(),
+            completion(
+                &owner,
+                &producers,
+                9,
+                0,
+                &mut budget(&mut Meter::local(u64::MAX), &cancellation)
+            )
+            .unwrap()
+            .is_none(),
             "kind {kind}"
         );
     }
@@ -108,9 +128,15 @@ fn only_whole_body_canonical_truth_is_an_empty_conjunction() {
         assert_eq!(producers.by_head[1].len(), 1);
         let cancellation = Cancellation::default();
         assert!(
-            completion(&owner, &producers, 1, 0, &mut budget(&cancellation))
-                .unwrap()
-                .is_none(),
+            completion(
+                &owner,
+                &producers,
+                1,
+                0,
+                &mut budget(&mut Meter::local(u64::MAX), &cancellation)
+            )
+            .unwrap()
+            .is_none(),
             "kind {kind}"
         );
     }
@@ -123,13 +149,25 @@ fn canonical_fact_replay_requires_the_original_owner() {
     let producers = inventory(&owner);
     let cancellation = Cancellation::default();
     assert!(
-        completion(&equal_foreign, &producers, 1, 0, &mut budget(&cancellation))
-            .unwrap()
-            .is_none()
-    );
-    let record = completion(&owner.clone(), &producers, 1, 0, &mut budget(&cancellation))
+        completion(
+            &equal_foreign,
+            &producers,
+            1,
+            0,
+            &mut budget(&mut Meter::local(u64::MAX), &cancellation)
+        )
         .unwrap()
-        .unwrap();
+        .is_none()
+    );
+    let record = completion(
+        &owner.clone(),
+        &producers,
+        1,
+        0,
+        &mut budget(&mut Meter::local(u64::MAX), &cancellation),
+    )
+    .unwrap()
+    .unwrap();
     assert_matches_original_bodies(&owner, &producers, &record);
 }
 
@@ -138,12 +176,14 @@ fn canonical_fact_decoding_preserves_every_refusal_prefix() {
     let owner = canonical_fact();
     let producers = inventory(&owner);
     let cancellation = Cancellation::default();
-    let mut full = budget(&cancellation);
+    let mut full_work = Meter::local(u64::MAX);
+    let mut full = budget(&mut full_work, &cancellation);
     let expected = completion(&owner, &producers, 1, 23, &mut full)
         .unwrap()
         .unwrap();
     for maximum in 0..full.work() {
-        let mut limited = Budget::new(Work::new(u64::MAX), maximum, usize::MAX, &cancellation);
+        let mut limited_work = Meter::local(u64::MAX);
+        let mut limited = Budget::new(&mut limited_work, maximum, usize::MAX, &cancellation);
         assert_eq!(
             completion(&owner, &producers, 1, 23, &mut limited),
             Err(BudgetError::WorkDeclined)
@@ -151,7 +191,8 @@ fn canonical_fact_decoding_preserves_every_refusal_prefix() {
         assert!(limited.work() <= maximum);
     }
     for maximum in 0..usize::try_from(full.peak_bytes()).unwrap() {
-        let mut limited = Budget::new(Work::new(u64::MAX), u64::MAX, maximum, &cancellation);
+        let mut limited_work = Meter::local(u64::MAX);
+        let mut limited = Budget::new(&mut limited_work, u64::MAX, maximum, &cancellation);
         assert!(
             matches!(completion(&owner, &producers, 1, 23, &mut limited), Err(BudgetError::StorageDeclined {required,limit}) if limit == maximum && required > maximum as u128)
         );
@@ -159,22 +200,24 @@ fn canonical_fact_decoding_preserves_every_refusal_prefix() {
     for failure in [Stop::Cancelled, Stop::WorkLimit, Stop::Allocation] {
         for remaining in 0..full.work() {
             let mut allowance = Allowance { remaining, failure };
-            let mut limited = Budget::new(
-                Work::reserved(&mut allowance),
-                u64::MAX,
-                usize::MAX,
-                &cancellation,
-            );
+            let mut limited_work = Meter::reserved(&mut allowance);
+            let mut limited = Budget::new(&mut limited_work, u64::MAX, usize::MAX, &cancellation);
             assert_eq!(
                 completion(&owner, &producers, 1, 23, &mut limited),
-                Err(BudgetError::Stopped(failure))
+                Err(BudgetError::Refused(failure))
             );
             assert!(limited.work() <= remaining);
             limited.finish();
         }
     }
     assert_eq!(
-        completion(&owner, &producers, 1, 23, &mut budget(&cancellation)),
+        completion(
+            &owner,
+            &producers,
+            1,
+            23,
+            &mut budget(&mut Meter::local(u64::MAX), &cancellation)
+        ),
         Ok(Some(expected))
     );
 }

@@ -3,22 +3,22 @@
 version = 4
 
 [[package]]
-name = "zetesis-core"
+name = "zetesis-algebra"
 version = "0.6.0"
 
 [[package]]
-name = "zetesis-cpu"
+name = "zetesis-core"
 version = "0.6.0"
 dependencies = [
- "zetesis-core",
+ "zetesis-algebra",
 ]
 
 [[package]]
 name = "zetesis-ferraris"
 version = "0.6.0"
 dependencies = [
+ "zetesis-algebra",
  "zetesis-core",
- "zetesis-cpu",
 ]
 
 [[package]]

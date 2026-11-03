@@ -4,9 +4,11 @@
 //! buffers are live. A move reserves both buffers, charges the moved logical
 //! fields, and releases the old capacity. Allocator internals are excluded.
 
+use zetesis_algebra::Quota;
+
 use std::mem::size_of;
 
-use zetesis_cpu::Stop;
+use zetesis_algebra::Stop;
 
 use super::budget::{Budget, BudgetError};
 
@@ -29,11 +31,11 @@ impl Storage {
 
     /// Admit named non-buffer metadata or fixed scratch while it is live.
     /// Contained vector headers already tracked by `reserve` are excluded.
-    pub(super) fn admit_record(
+    pub(super) fn admit_record<Q: Quota + ?Sized>(
         &mut self,
         bytes: u128,
-        budget: &mut Budget<'_, '_>,
-    ) -> Result<(), BudgetError> {
+        budget: &mut Budget<'_, '_, Q>,
+    ) -> Result<(), BudgetError<Q::Error>> {
         let next = self
             .bytes
             .checked_add(bytes)
@@ -44,53 +46,50 @@ impl Storage {
     }
 
     /// End the lifetime of fixed scratch; it is absent from later peaks.
-    pub(super) fn release_record(&mut self, bytes: u128) -> Result<(), BudgetError> {
-        self.bytes = self
-            .bytes
-            .checked_sub(bytes)
-            .ok_or(BudgetError::Stopped(Stop::InvalidProgram))?;
+    pub(super) fn release_record(&mut self, bytes: u128) -> Result<(), Stop> {
+        self.bytes = self.bytes.checked_sub(bytes).ok_or(Stop::InvalidProgram)?;
         Ok(())
     }
 
     /// Borrow fixed workspace for one operation, including its failure prefix.
-    pub(super) fn with_record<T>(
+    pub(super) fn with_record<T, Q: Quota + ?Sized>(
         &mut self,
         bytes: u128,
-        budget: &mut Budget<'_, '_>,
-        operation: impl FnOnce(&mut Self, &mut Budget<'_, '_>) -> Result<T, BudgetError>,
-    ) -> Result<T, BudgetError> {
+        budget: &mut Budget<'_, '_, Q>,
+        operation: impl FnOnce(&mut Self, &mut Budget<'_, '_, Q>) -> Result<T, BudgetError<Q::Error>>,
+    ) -> Result<T, BudgetError<Q::Error>> {
         self.admit_record(bytes, budget)?;
         let result = operation(self, budget);
         let released = self.release_record(bytes);
-        result.and_then(|value| released.map(|()| value))
+        result.and_then(|value| released.map(|()| value).map_err(BudgetError::Stopped))
     }
 
     /// Transfer a vector header into an already-accounted outer allocation.
     /// Its payload stays live; the outer element already includes the header.
-    pub(super) fn embed<T>(&mut self) -> Result<(), BudgetError> {
+    pub(super) fn embed<T>(&mut self) -> Result<(), Stop> {
         self.bytes = self
             .bytes
             .checked_sub(size_of::<Vec<T>>() as u128)
-            .ok_or(BudgetError::Stopped(Stop::InvalidProgram))?;
+            .ok_or(Stop::InvalidProgram)?;
         Ok(())
     }
 
     /// Release a payload whose header belongs to its enclosing allocation.
     /// Moving that header through a call is ABI transport, not another owner.
-    pub(super) fn release_embedded<T>(&mut self, values: Vec<T>) -> Result<(), BudgetError> {
+    pub(super) fn release_embedded<T>(&mut self, values: Vec<T>) -> Result<(), Stop> {
         self.bytes = self
             .bytes
             .checked_sub(values.capacity() as u128 * size_of::<T>() as u128)
-            .ok_or(BudgetError::Stopped(Stop::InvalidProgram))?;
+            .ok_or(Stop::InvalidProgram)?;
         drop(values);
         Ok(())
     }
 
-    pub(super) fn reserve<T>(
+    pub(super) fn reserve<T, Q: Quota + ?Sized>(
         &mut self,
         count: usize,
-        budget: &mut Budget<'_, '_>,
-    ) -> Result<Vec<T>, BudgetError> {
+        budget: &mut Budget<'_, '_, Q>,
+    ) -> Result<Vec<T>, BudgetError<Q::Error>> {
         budget.charge(3)?; // initialize the vector's three-word header
         let mut values = Vec::new();
         let header = size_of::<Vec<T>>() as u128;
@@ -118,13 +117,13 @@ impl Storage {
     /// Actual capacities govern bytes; every moved logical field is charged.
     /// The finite geometric schedule moves fewer than twice the final capacity
     /// cells when the allocator returns the requested exact capacities.
-    pub(super) fn push<T>(
+    pub(super) fn push<T, Q: Quota + ?Sized>(
         &mut self,
         values: &mut Vec<T>,
         value: T,
         words: u64,
-        budget: &mut Budget<'_, '_>,
-    ) -> Result<(), BudgetError> {
+        budget: &mut Budget<'_, '_, Q>,
+    ) -> Result<(), BudgetError<Q::Error>> {
         budget.charge(1)?;
         if values.len() == values.capacity() {
             let capacity = values.capacity().saturating_mul(2).max(1);
@@ -155,13 +154,13 @@ impl Storage {
         Ok(())
     }
 
-    pub(super) fn filled<T: Copy>(
+    pub(super) fn filled<T: Copy, Q: Quota + ?Sized>(
         &mut self,
         count: usize,
         value: T,
         words: u64,
-        budget: &mut Budget<'_, '_>,
-    ) -> Result<Vec<T>, BudgetError> {
+        budget: &mut Budget<'_, '_, Q>,
+    ) -> Result<Vec<T>, BudgetError<Q::Error>> {
         let mut values = self.reserve(count, budget)?;
         for _ in 0..count {
             budget.charge(words + 1)?;
@@ -170,13 +169,13 @@ impl Storage {
         Ok(values)
     }
 
-    pub(super) fn release<T>(&mut self, values: Vec<T>) -> Result<(), BudgetError> {
+    pub(super) fn release<T>(&mut self, values: Vec<T>) -> Result<(), Stop> {
         let capacity =
             size_of::<Vec<T>>() as u128 + values.capacity() as u128 * size_of::<T>() as u128;
         self.bytes = self
             .bytes
             .checked_sub(capacity)
-            .ok_or(BudgetError::Stopped(Stop::InvalidProgram))?;
+            .ok_or(Stop::InvalidProgram)?;
         drop(values);
         Ok(())
     }

@@ -6,10 +6,10 @@ use zetesis_reference_support::resource_limits;
 use zetesis_test_support::thresholds::first_success;
 
 use clap::Parser;
+use zetesis_algebra::Cancellation;
 use zetesis_cli::{
     Completion, Interruption, Options, Oracle, Report, RunError, run_with_diagnostics,
 };
-use zetesis_cpu::Cancellation;
 use zetesis_themelios::{
     AdmissionFailure, ExpansionFailure, FormulaFailure, FormulaResource, InputLimit,
 };

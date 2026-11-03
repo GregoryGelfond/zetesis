@@ -5,13 +5,13 @@ use std::{
     io,
     time::{Duration, Instant},
 };
+use zetesis_algebra::Cancellation;
 use zetesis_cli::{
     AnswerRenderer, AnswerView, BackendView, ColorMode, Completion, ConfigurationView,
     GroundingDisplay, GroundingMode, JsonRenderer, Options, PreparedInput, PublicationConfig,
     PublicationView, Report, RunError, SolvePhase, SolveStage, StatisticsView, SummaryDelivery,
     publish_prepared, run_with_diagnostics, run_with_renderer,
 };
-use zetesis_cpu::Cancellation;
 use zetesis_reference_support::formula;
 use zetesis_themelios::GroundingPhase;
 

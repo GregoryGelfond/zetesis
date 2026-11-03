@@ -166,7 +166,7 @@ fn batch_rejects_foreign_source_identity() {
 #[test]
 fn cancelled_finish_does_not_publish_a_selection() {
     with_batch(|batch, _, computation, counters| {
-        let cancellation = zetesis_cpu::Cancellation::default();
+        let cancellation = zetesis_algebra::Cancellation::default();
         counters.attach_test_control(&cancellation);
         cancellation.cancel();
         let result = batch.finish(
@@ -180,7 +180,7 @@ fn cancelled_finish_does_not_publish_a_selection() {
         assert!(matches!(
             result,
             Err(FormulaFailure::Interrupted {
-                reason: zetesis_cpu::Stop::Cancelled,
+                reason: zetesis_algebra::Stop::Cancelled,
                 ..
             })
         ));

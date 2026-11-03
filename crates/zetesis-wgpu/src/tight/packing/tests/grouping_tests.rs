@@ -218,7 +218,7 @@ fn cancelled_group_packing_has_no_partial_output() {
             .err()
             .unwrap()
             .interruption,
-        Some(zetesis_cpu::Stop::Cancelled)
+        Some(zetesis_algebra::Stop::Cancelled)
     );
 }
 

@@ -23,12 +23,16 @@
 
 use std::sync::Arc;
 
-use zetesis_cpu::Stop;
-use zetesis_cpu::regions::{Counting, Narrowing, Region, Traversal, Visit};
+use zetesis_algebra::Countermodels;
+use zetesis_algebra::{Failure, Meter, Stop};
+use zetesis_algebra::{
+    region::{Entry, Narrowing, Region},
+    walk::{self, Counting, Visit, Walk},
+};
 use zetesis_ferraris::{
     ChoiceHeads, FrozenSubject, GeneratorOrder, GeneratorOrderError, Interpretation, Knowledge,
-    LearningLimits, LearningOwner, Narrower, NarrowingAttempt, NarrowingQuota, NarrowingScratch,
-    OriginalSubject, PreparationError, PreparationLimits, Producers, RegionLimits, RootPreparation,
+    LearningLimits, LearningOwner, Narrower, NarrowingAttempt, NarrowingScratch, OriginalSubject,
+    PreparationError, PreparationLimits, Producers, RegionLimits, RootPreparation,
     SupportExplanationStatistics, Theory,
 };
 
@@ -36,10 +40,21 @@ use super::conditions::{Bound, CandidateKnowledge, Conditions};
 use super::learned::{LearnedStore, Tier};
 use super::original_index::IndexedTheory;
 use crate::budget::{Budget, Quota};
+use crate::subject::{Pass, Subject, SubjectAttempt, SubjectContext, SubjectStep, joint};
 use crate::{Cancellation, Incomplete};
+
+pub(crate) mod arithmetic_counts;
+pub(super) mod depth;
+mod subjects;
+pub(super) use subjects::copy_knowledge;
+use subjects::{CandidateSubject, Frozen};
 
 /// What a walk over a region tree counted, cumulatively: the candidate
 /// tree's walk, or the proper-subset queries' walks together.
+///
+/// Runtime arithmetic attribution is retained internally and projected into
+/// [`RegionSearchStatistics`]. It participates in equality, debug output and
+/// checked merging along with the public dimensions.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 #[non_exhaustive]
 pub struct RegionCounts {
@@ -82,6 +97,9 @@ pub struct RegionCounts {
     /// The byte peak is the largest single worker ledger/capture footprint, not
     /// the sum across workers or total process memory.
     pub support_explanations: SupportExplanationStatistics,
+    // Private attribution travels with the existing receipt. Public arithmetic
+    // observations are projected by the original-region statistics owner.
+    pub(crate) arithmetic: arithmetic_counts::ArithmeticCounts,
 }
 
 impl RegionCounts {
@@ -174,41 +192,15 @@ impl RegionCounts {
                     .peak_bytes
                     .max(other.support_explanations.peak_bytes),
             },
+            arithmetic: self.arithmetic.checked_add(other.arithmetic)?,
         };
         *self = sum;
         Ok(())
     }
 }
 
-/// Owned storage of queued, inactive candidate regions in the parallel
-/// producers' deques, at frontier mutations.
-///
-/// Bytes include the deque vector's and each deque's header, the deques'
-/// allocated entry capacity, used or not, and each queued region's and
-/// knowledge's owned vector capacities. They exclude the regions producers
-/// hold, temporary split copies, shared theory and indexes, candidate batches,
-/// measurement bookkeeping, thread stacks and allocator/driver storage. This
-/// observation is neither total search memory nor a byte admission limit. Each
-/// count changes under the lock of the deque whose change causes it, so its
-/// peak is the maximum of a linearization of the deques' changes; peaks need
-/// not occur at the same mutation, and an empty frontier can retain entry
-/// capacity.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub struct RegionFrontierStatistics {
-    /// Currently queued inactive regions.
-    pub regions: usize,
-    /// Current entry capacity of the deques: the regions their storage can
-    /// queue without growing, used or not.
-    pub capacity: usize,
-    /// Current logical retained bytes in the stated ownership scope.
-    pub retained_bytes: u128,
-    /// Maximum number of simultaneously queued regions.
-    pub peak_regions: usize,
-    /// Maximum allocated entry capacity.
-    pub peak_capacity: usize,
-    /// Maximum logical retained bytes at a frontier mutation.
-    pub peak_retained_bytes: u128,
-}
+// Keep the public solver receipt name while the generic frontier owns its fields.
+pub use zetesis_algebra::walk::frontier::Statistics as RegionFrontierStatistics;
 
 /// What the region proposer did, cumulatively: the counts of its walk over
 /// the candidate tree, and whether the theory lies in the producer
@@ -238,6 +230,20 @@ pub struct RegionSearchStatistics {
     /// fixed for the stream before its first proposal. Routes without
     /// producers report `None`.
     pub frontier_order: Option<FrontierOrder>,
+}
+
+impl RegionSearchStatistics {
+    /// Project this receipt once without mutating the preparation observations.
+    /// Repeated snapshots neither consume nor add their cumulative activity.
+    pub(super) fn with_runtime_arithmetic(mut self) -> Self {
+        let activity = self.counts.arithmetic;
+        self.parity.region_passes = activity.parity_passes;
+        self.parity.forced = activity.parity_forced;
+        self.parity.refuted = activity.parity_refuted;
+        self.cardinality.region_passes = activity.cardinality_passes;
+        self.cardinality.refuted = activity.cardinality_refuted;
+        self
+    }
 }
 
 /// The order in which the parallel candidate producers take regions.
@@ -429,7 +435,7 @@ pub(crate) struct RegionSearch {
     /// Each region carries what is known about it under the theory and
     /// under each restriction, in order; a restriction added after a region
     /// was reached gets fresh knowledge when the region is next narrowed.
-    traversal: Traversal<CandidateKnowledge>,
+    traversal: Walk<CandidateKnowledge>,
     /// Each restriction with its own index.
     restrictions: Conditions<(Theory, Narrower)>,
     /// The worklists every narrowing of this walk reuses, with its tier of
@@ -451,9 +457,20 @@ pub(crate) struct OriginalParts {
     producers: Option<Producers>,
     choice_heads: ChoiceHeads,
     generator_order: Option<GeneratorOrder>,
-    arithmetic: Option<RootPreparation>,
+    arithmetic: Option<subjects::PreparedArithmetic>,
     learning: LearningOwner,
     learned: Option<Arc<LearnedStore>>,
+}
+
+/// Borrow the original candidate reading and its immutable arithmetic systems.
+/// The original parts establish the theory association; the caller supplies
+/// that theory's existing narrower. Restrictions and frozen queries do not
+/// receive these systems.
+#[derive(Clone, Copy)]
+pub(super) struct CandidateReading<'a> {
+    pub(super) original: OriginalSubject<'a>,
+    pub(super) narrower: &'a Narrower,
+    pub(super) arithmetic: Option<&'a subjects::PreparedArithmetic>,
 }
 
 /// Which way a walk boundary moves a tier's rows.
@@ -472,7 +489,7 @@ impl OriginalParts {
             || self
                 .arithmetic
                 .as_ref()
-                .is_some_and(|prepared| !prepared.belongs_to(theory))
+                .is_some_and(|prepared| !prepared.owner.belongs_to(theory))
         {
             return Err(Incomplete::WrongTheory);
         }
@@ -481,6 +498,20 @@ impl OriginalParts {
                 .with_choices(&self.choice_heads)
                 .with_generator_order(self.generator_order.as_ref()),
         )
+    }
+
+    /// Borrow the original subjects after the existing ownership check.
+    /// The narrower is the one lent by the authenticated original index.
+    pub(super) fn reading<'a>(
+        &'a self,
+        theory: &Theory,
+        narrower: &'a Narrower,
+    ) -> Result<CandidateReading<'a>, Incomplete> {
+        Ok(CandidateReading {
+            original: self.subject(theory)?,
+            narrower,
+            arithmetic: self.arithmetic.as_ref(),
+        })
     }
 
     /// The stream's learned store, once installed.
@@ -555,15 +586,13 @@ impl OriginalParts {
         let Some(store) = &self.learned else {
             return Ok(());
         };
-        let mut quota = BudgetQuota {
-            budget,
-            failure: None,
-        };
+        let mut quota = BudgetQuota { budget };
+        let mut meter = Meter::reserved(&mut quota);
         let attempt = {
             let mut rows = store.lock();
             match sharing {
-                Sharing::Seed => scratch.seed_learning(&self.learning, &mut rows, &mut quota),
-                Sharing::Deliver => scratch.deliver_learning(&self.learning, &mut rows, &mut quota),
+                Sharing::Seed => scratch.seed_learning(&self.learning, &mut rows, &mut meter),
+                Sharing::Deliver => scratch.deliver_learning(&self.learning, &mut rows, &mut meter),
             }
         };
         counts.add(RegionCounts {
@@ -574,9 +603,7 @@ impl OriginalParts {
             },
             ..RegionCounts::default()
         })?;
-        attempt
-            .result
-            .map_err(|stop| quota.failure.take().unwrap_or_else(|| stopped(stop)))
+        attempt.result.map_err(meter_failure)
     }
 }
 
@@ -651,10 +678,8 @@ fn open_recording(
     budget.charge(extraction.work)?;
     statistics.producers = extraction.producers.is_some();
     let cancellation = budget.cancellation;
-    let mut quota = BudgetQuota {
-        budget,
-        failure: None,
-    };
+    let mut quota = BudgetQuota { budget };
+    let mut meter = Meter::reserved(&mut quota);
     let arithmetic = RootPreparation::prepare_reserved(
         theory,
         extraction.producers.as_ref(),
@@ -663,17 +688,26 @@ fn open_recording(
             bytes: usize::try_from(order_byte_limit).unwrap_or(usize::MAX),
         },
         cancellation,
-        &mut quota,
+        &mut meter,
     );
+    let prepared = arithmetic.result.map(|published| {
+        published.map(|owner| {
+            subjects::PreparedArithmetic::new(
+                owner,
+                arithmetic.parity.rank,
+                arithmetic.cardinality.families,
+            )
+        })
+    });
     statistics.parity = arithmetic.parity;
     statistics.cardinality = arithmetic.cardinality;
-    let mut arithmetic = arithmetic.result.map_err(|error| match error {
-        PreparationError::Stopped(stop) => quota.failure.take().unwrap_or_else(|| stopped(stop)),
+    let mut arithmetic = prepared.map_err(|error| match error {
+        PreparationError::Stopped(error) => meter_failure(error),
         PreparationError::Source(source) => Incomplete::ArithmeticSource(source),
     })?;
     let refuted = arithmetic
         .as_ref()
-        .is_some_and(RootPreparation::root_refuted);
+        .is_some_and(|prepared| prepared.owner.root_refuted());
     let generator_order = if refuted {
         None
     } else {
@@ -681,7 +715,7 @@ fn open_recording(
             OriginalSubject::new(theory, extraction.producers.as_ref()),
             usize::try_from(order_byte_limit).unwrap_or(usize::MAX),
             cancellation,
-            &mut quota,
+            &mut meter,
         );
         // The attempt's prefix remains visible even when its result is a stop.
         statistics.generator_order.work = attempt.work;
@@ -700,7 +734,7 @@ fn open_recording(
             }
             Err(GeneratorOrderError::Stopped(stop)) => {
                 statistics.generator_order.status = GeneratorOrderStatus::Incomplete;
-                return Err(quota.failure.take().unwrap_or_else(|| stopped(stop)));
+                return Err(meter_failure(stop));
             }
         };
         statistics.generator_order.status = status;
@@ -714,7 +748,7 @@ fn open_recording(
         Some(
             arithmetic
                 .as_mut()
-                .and_then(RootPreparation::take_seeded_root)
+                .and_then(|prepared| prepared.owner.take_seeded_root())
                 .unwrap_or_else(|| Region::all_open(theory.atom_count())),
         )
     };
@@ -758,7 +792,7 @@ impl RegionSearch {
         Ok(Self {
             statistics,
             parts,
-            traversal: Traversal::with_state(root, Counting::Never, CandidateKnowledge::default())
+            traversal: Walk::with_state(root, Counting::Never, CandidateKnowledge::default())
                 .with_held_first(),
             restrictions: Conditions::default(),
             scratch: NarrowingScratch::default(),
@@ -821,6 +855,7 @@ impl RegionSearch {
             workers: None,
             frontier_order: None,
         }
+        .with_runtime_arithmetic()
     }
 
     /// Narrow the regions still to visit by a candidate-only restriction;
@@ -939,19 +974,28 @@ impl RegionSearch {
         parts.seed_tier(tier, scratch, budget, &mut statistics.counts)?;
         let before = traversal.statistics();
         let mut advance = |mut check: Option<crate::region_filter::Check<'_, '_>>| {
-            traversal.next(|region, knowledge| -> Result<Narrowing, Incomplete> {
-                let narrowing = narrow(
-                    (parts.subject(formulas)?, narrower),
-                    restrictions,
-                    (region, knowledge),
-                    scratch,
-                    budget,
-                    &mut statistics.counts,
-                    check.as_mut(),
-                )?;
-                parts.visited(tier, scratch, budget, &mut statistics.counts)?;
-                Ok(narrowing)
-            })
+            let mut context = (&mut *budget, &mut statistics.counts);
+            traversal.next_with_copy(
+                &mut context,
+                |(budget, counts), entry| -> Result<Narrowing, Incomplete> {
+                    let narrowing = narrow(
+                        parts.reading(formulas, narrower)?,
+                        restrictions,
+                        entry,
+                        scratch,
+                        budget,
+                        counts,
+                        check.as_mut(),
+                    )?;
+                    parts.visited(tier, scratch, budget, counts)?;
+                    Ok(narrowing)
+                },
+                |(budget, counts), known| {
+                    let attempt = copy_knowledge(known, None, budget);
+                    counts.add(attempt.counts)?;
+                    attempt.result
+                },
+            )
         };
         let visit = if let Some(filter) = filter {
             filter.with_dependent_mut(|filter, worker| {
@@ -1003,86 +1047,48 @@ impl Drop for RegionSearch {
 /// when a restriction is active and one otherwise. A failed attempt installs no
 /// partial preference.
 pub(super) fn narrow<Q: Quota, R: std::borrow::Borrow<(Theory, Narrower)>>(
-    (original, narrower): (OriginalSubject<'_>, &Narrower),
+    reading: CandidateReading<'_>,
     restrictions: &Conditions<R>,
-    (region, knowledge): (&mut Region, &mut CandidateKnowledge),
+    entry: &mut Entry<CandidateKnowledge>,
     scratch: &mut NarrowingScratch,
     budget: &mut Budget<'_, Q>,
     counts: &mut RegionCounts,
-    mut filter: Option<&mut crate::region_filter::Check<'_, '_>>,
+    filter: Option<&mut crate::region_filter::Check<'_, '_>>,
 ) -> Result<Narrowing, Incomplete> {
-    let mut changed = false;
-    let mut pass = crate::RegionPass::First;
-    loop {
-        let mut revisit = false;
-        // A restriction is not a rule of the original theory: it is read
-        // without producers, and only the original's choice heads rank splits.
-        for (index, (subject, narrower)) in std::iter::once((original, narrower))
-            .chain(restrictions.permanent.iter().map(|restriction| {
-                let (theory, narrower) = restriction.borrow();
-                (OriginalSubject::new(theory, None), narrower)
-            }))
-            .enumerate()
-        {
-            let known = knowledge.permanent(index, narrower)?;
-            let attempt = BudgetQuota::narrow(budget, |cancellation, quota| {
-                narrower.propagate_known_reserved(
-                    subject,
-                    region,
-                    known,
-                    scratch,
-                    cancellation,
-                    quota,
-                )
-            });
-            match account(&attempt, counts)? {
-                Narrowing::Refuted => return Ok(Narrowing::Refuted),
-                Narrowing::Fixed { changed: moved } => {
-                    changed |= moved;
-                    revisit |= index != 0 && moved;
-                }
-            }
-        }
-        if let Some(bound) = &restrictions.bound {
-            let (formulas, narrower) = bound.index.as_ref();
-            let known = knowledge.bound(bound)?;
-            let attempt = BudgetQuota::narrow(budget, |cancellation, quota| {
-                narrower.propagate_known_reserved(
-                    zetesis_ferraris::OriginalSubject::new(formulas, None),
-                    region,
-                    known,
-                    scratch,
-                    cancellation,
-                    quota,
-                )
-            });
-            match account(&attempt, counts)? {
-                Narrowing::Refuted => return Ok(Narrowing::Refuted),
-                Narrowing::Fixed { changed: moved } => {
-                    changed |= moved;
-                    revisit |= moved;
-                }
-            }
-        }
-        if !revisit {
-            if let Some(filter) = &mut filter {
-                let consequence =
-                    filter.consequence(original.theory(), region, budget.cancellation, pass)?;
-                match consequence {
-                    crate::RegionConsequence::Refuted => return Ok(Narrowing::Refuted),
-                    crate::RegionConsequence::Unchanged => {}
-                    crate::RegionConsequence::Hold(_) | crate::RegionConsequence::Cut(_) => {
-                        apply_consequence(consequence, region, budget, counts)?;
-                        changed = true;
-                        pass = crate::RegionPass::Continue;
-                        continue;
+    let original = reading.original;
+    let narrower = reading.narrower;
+    let (region, knowledge) = entry.parts_mut();
+    let eager = || {
+        std::iter::once(CandidateSubject::Original {
+            reading: original,
+            narrower,
+        })
+        .chain(
+            restrictions
+                .permanent
+                .iter()
+                .enumerate()
+                .map(|(index, owner)| {
+                    let (theory, narrower) = owner.borrow();
+                    CandidateSubject::Restriction {
+                        index: index + 1,
+                        theory,
+                        narrower,
                     }
-                }
-            }
-            prefer_split(original, restrictions, region, knowledge, budget, counts)?;
-            return Ok(Narrowing::Fixed { changed });
-        }
+                }),
+        )
+        .chain(restrictions.bound.iter().map(CandidateSubject::Bound))
+    };
+    let mut late = subjects::late(&reading, filter);
+    let result = joint(eager, &mut late, region, knowledge, scratch, budget, counts)?;
+    if result == Narrowing::Refuted {
+        return Ok(result);
     }
+    let preferred = prefer_split(original, restrictions, region, knowledge, budget, counts)?;
+    if let Some(atom) = preferred {
+        entry.prefer(atom);
+    }
+    Ok(result)
 }
 
 /// Rank open atoms only after all subjects agree on the current region. An
@@ -1091,27 +1097,25 @@ pub(super) fn narrow<Q: Quota, R: std::borrow::Borrow<(Theory, Narrower)>>(
 fn prefer_split<Q: Quota, R>(
     original: OriginalSubject<'_>,
     conditions: &Conditions<R>,
-    region: &mut Region,
+    region: &Region,
     knowledge: &CandidateKnowledge,
     budget: &mut Budget<'_, Q>,
     counts: &mut RegionCounts,
-) -> Result<(), Incomplete> {
+) -> Result<Option<usize>, Incomplete> {
     let (original_known, primary) = knowledge.preference_subjects(conditions);
     let cancellation = budget.cancellation;
-    let mut quota = BudgetQuota {
-        budget,
-        failure: None,
-    };
+    let mut quota = BudgetQuota { budget };
+    let mut meter = Meter::reserved(&mut quota);
     let attempt = if conditions.permanent.is_empty() && conditions.bound.is_none() {
         match original.generator_order() {
             Some(order) => {
-                order.preferred_atom_reserved(original.theory(), region, cancellation, &mut quota)
+                order.preferred_atom_reserved(original.theory(), region, cancellation, &mut meter)
             }
             None => primary.preferred_atom_reserved(
                 region,
                 original.choices(),
                 cancellation,
-                &mut quota,
+                &mut meter,
             ),
         }
     } else {
@@ -1120,52 +1124,12 @@ fn prefer_split<Q: Quota, R>(
             original.choices(),
             original_known,
             cancellation,
-            &mut quota,
+            &mut meter,
         )
     };
     counts.work += attempt.work;
-    let preferred = attempt
-        .result
-        .map_err(|stop| quota.failure.take().unwrap_or_else(|| stopped(stop)))?;
-    if let Some(atom) = preferred {
-        region.prefer(atom);
-    }
-    Ok(())
-}
-
-/// Charge one fresh mask update before publishing it. Its validity was checked
-/// against the immutable region by the callback boundary.
-fn apply_consequence<Q: Quota>(
-    consequence: crate::RegionConsequence,
-    region: &mut Region,
-    budget: &mut Budget<'_, Q>,
-    counts: &mut RegionCounts,
-) -> Result<(), Incomplete> {
-    let (atom, held) = match consequence {
-        crate::RegionConsequence::Hold(atom) => (atom, true),
-        crate::RegionConsequence::Cut(atom) => (atom, false),
-        _ => return Err(Incomplete::InvalidRegionConsequence),
-    };
-    let mut updated = *counts;
-    updated.add(RegionCounts {
-        held: u64::from(held),
-        cut: u64::from(!held),
-        work: 1,
-        propagations: 1,
-        ..RegionCounts::default()
-    })?;
-    budget.cancellation.poll()?;
-    budget.tick()?;
-    let applied = if held {
-        region.hold(atom)
-    } else {
-        region.cut(atom)
-    };
-    if !applied {
-        return Err(Incomplete::InvalidRegionConsequence);
-    }
-    *counts = updated;
-    Ok(())
+    let preferred = attempt.result.map_err(meter_failure)?;
+    Ok(preferred)
 }
 
 /// Check only accumulated candidate conditions on a certified singleton.
@@ -1195,17 +1159,17 @@ pub(super) fn permits<R: std::borrow::Borrow<(Theory, Narrower)>>(
     }
     for (theory, narrower) in restrictions.iter() {
         let mut knowledge = narrower.knowledge();
-        let attempt = BudgetQuota::narrow(budget, |cancellation, quota| {
+        let attempt = BudgetQuota::narrow(budget, |cancellation, meter| {
             narrower.narrow_known_reserved(
                 zetesis_ferraris::OriginalSubject::new(theory, None),
                 &mut region,
                 &mut knowledge,
                 scratch,
                 cancellation,
-                quota,
+                meter,
             )
         });
-        if account(&attempt, counts)? == Narrowing::Refuted {
+        if SubjectAttempt::from_narrowing(&attempt).account(counts)? == SubjectStep::Refuted {
             return Ok(false);
         }
     }
@@ -1226,70 +1190,60 @@ pub(super) fn permits<R: std::borrow::Borrow<(Theory, Narrower)>>(
     Ok(true)
 }
 
-/// The budget as a narrowing's quota: permits granted in batches through
-/// [`Budget::reserve_up_to`], control polled once per batch, and the
-/// budget's own refusal kept to be returned unchanged.
+/// The existing budget as the common meter's quota. Reservation polls control
+/// once per batch; a refusal travels with its original typed payload.
 struct BudgetQuota<'b, 'a, Q: Quota> {
     budget: &'b mut Budget<'a, Q>,
-    failure: Option<Incomplete>,
 }
 
 impl<'b, 'a, Q: Quota> BudgetQuota<'b, 'a, Q> {
-    /// Run one narrowing on the budget, returning its receipt with the
-    /// budget's refusal, or the narrowing's own stop, as the failure.
+    /// Run one narrowing, preserving its receipt and the origin of its failure.
     fn narrow(
         budget: &'b mut Budget<'a, Q>,
-        run: impl FnOnce(&Cancellation, &mut dyn NarrowingQuota) -> NarrowingAttempt,
+        run: impl FnOnce(&Cancellation, &mut Meter<'_, Self>) -> NarrowingAttempt<Failure<Incomplete>>,
     ) -> NarrowingAttempt<Incomplete> {
         #[cfg(test)]
         tests::record_narrowing();
         let cancellation = budget.cancellation;
-        let mut quota = Self {
-            budget,
-            failure: None,
-        };
-        let attempt = run(cancellation, &mut quota);
+        let mut quota = Self { budget };
+        let mut meter = Meter::reserved(&mut quota);
+        let attempt = run(cancellation, &mut meter);
         NarrowingAttempt {
-            result: attempt
-                .result
-                .map_err(|stop| quota.failure.take().unwrap_or_else(|| stopped(stop))),
+            result: attempt.result.map_err(meter_failure),
             statistics: attempt.statistics,
+            preferred: attempt.preferred,
         }
     }
 }
 
-impl<Q: Quota> NarrowingQuota for BudgetQuota<'_, '_, Q> {
-    fn reserve(&mut self, wanted: u64) -> Result<u64, Stop> {
-        self.budget.reserve_up_to(wanted).map_err(|failure| {
-            self.failure = Some(failure);
-            Stop::WorkLimit
-        })
+impl<Q: Quota> zetesis_algebra::Quota for BudgetQuota<'_, '_, Q> {
+    type Error = Incomplete;
+
+    fn reserve(&mut self, wanted: u64) -> Result<u64, Self::Error> {
+        self.budget.reserve_up_to(wanted)
     }
 
     fn refund(&mut self, unspent: u64) {
         self.budget.refund(unspent);
     }
+
+    fn replenish(
+        &mut self,
+        unused: &mut u64,
+        minimum: u64,
+        capacity: u64,
+    ) -> Result<(), Failure<Incomplete>> {
+        self.budget.replenish(unused, minimum, capacity)
+    }
 }
 
-/// Publish every admitted narrowing prefix before returning its result. Work
-/// has passed through the local or shared budget, batch by batch, before
-/// each read.
-fn account(
-    attempt: &NarrowingAttempt<Incomplete>,
-    counts: &mut RegionCounts,
-) -> Result<Narrowing, Incomplete> {
-    let charges = &attempt.statistics;
-    counts.add(RegionCounts {
-        propagations: charges.propagations,
-        held: charges.held,
-        cut: charges.cut,
-        work: charges.work,
-        support_work: charges.support_work,
-        founded_work: charges.founded_work,
-        support_explanations: charges.support_explanations,
-        ..RegionCounts::default()
-    })?;
-    attempt.result
+/// Preserve a caller's refusal; local narrowing stops retain their existing
+/// mapping. Independent verification uses its own `From<Stop>` boundary.
+fn meter_failure(error: Failure<Incomplete>) -> Incomplete {
+    match error {
+        Failure::Refused(error) => error,
+        Failure::Stopped(stop) => stopped(stop),
+    }
 }
 
 pub(crate) fn limits<Q: Quota>(budget: &Budget<'_, Q>) -> RegionLimits {
@@ -1324,28 +1278,65 @@ impl<'a> ReductQuery<'a> {
     }
 
     /// Search the proper subsets of the candidate, a classical model whose
-    /// node truth is `truth`, for a model of its frozen reduct.
+    /// node truth has already been evaluated, for a model of its frozen reduct.
+    /// The authenticated evaluation owns the exact (theory, interpretation)
+    /// relation; callers supply neither a reading nor root knowledge.
     ///
     /// # Errors
     /// Work, decision and control stops end the query without a verdict.
     pub(crate) fn check<Q: Quota>(
         self,
-        subject: FrozenSubject<'_>,
-        candidate: &Interpretation,
+        evaluated: &zetesis_ferraris::FormulaEvaluation<'_>,
         limits: crate::Limits,
         budget: &mut Budget<'_, Q>,
         statistics: &mut crate::Statistics,
         scratch: &mut NarrowingScratch,
     ) -> Result<crate::Check, Incomplete> {
         match self.check_publishing(
-            subject,
-            candidate,
+            evaluated,
             limits,
             budget,
             (statistics, scratch),
             &mut Inline,
         )? {
             Queried::Decided(check) => Ok(check),
+            Queried::Published(never) => match never {},
+        }
+    }
+
+    /// Search just the supplied region, with fresh knowledge of this candidate's
+    /// frozen reduct. A witness is validated independently. An exhausted region
+    /// establishes absence only inside its own bounds.
+    pub(super) fn check_region<Q: Quota>(
+        self,
+        evaluated: &zetesis_ferraris::FormulaEvaluation<'_>,
+        root: Region,
+        limits: crate::Limits,
+        budget: &mut Budget<'_, Q>,
+        workspace: (&mut crate::Statistics, &mut NarrowingScratch),
+        observation: Option<(&mut depth::QueryDepth, Option<&mut depth::DepthWorkspace>)>,
+    ) -> Result<Option<Interpretation>, Incomplete> {
+        let result = if let Some((counts, levels)) = observation {
+            self.walk_from(
+                evaluated,
+                limits,
+                budget,
+                workspace,
+                (&mut Inline, depth::Recording::new(counts, levels)),
+                Some(root),
+            )
+        } else {
+            self.walk_from(
+                evaluated,
+                limits,
+                budget,
+                workspace,
+                (&mut Inline, ()),
+                Some(root),
+            )
+        };
+        match result? {
+            Queried::Decided(witness) => Ok(witness),
             Queried::Published(never) => match never {},
         }
     }
@@ -1360,43 +1351,75 @@ impl<'a> ReductQuery<'a> {
     /// Work, decision and control stops end the query without a verdict.
     pub(crate) fn check_publishing<Q: Quota, P: Publication>(
         self,
-        subject: FrozenSubject<'_>,
-        candidate: &Interpretation,
+        evaluated: &zetesis_ferraris::FormulaEvaluation<'_>,
         limits: crate::Limits,
         budget: &mut Budget<'_, Q>,
         (statistics, scratch): (&mut crate::Statistics, &mut NarrowingScratch),
         publication: &mut P,
     ) -> Result<Queried<P::Receipt>, Incomplete> {
-        let truth = subject.truth();
-        let (theory, narrower) = self.index.subject(subject.theory())?;
+        Ok(
+            match self.walk_from(
+                evaluated,
+                limits,
+                budget,
+                (statistics, scratch),
+                (publication, ()),
+                None,
+            )? {
+                Queried::Decided(witness) => {
+                    Queried::Decided(witness.map_or(crate::Check::Stable, crate::Check::NonMinimal))
+                }
+                Queried::Published(receipt) => Queried::Published(receipt),
+            },
+        )
+    }
+
+    fn walk_from<Q: Quota, P: Publication, O: depth::Trace>(
+        self,
+        evaluated: &zetesis_ferraris::FormulaEvaluation<'_>,
+        limits: crate::Limits,
+        budget: &mut Budget<'_, Q>,
+        (statistics, scratch): (&mut crate::Statistics, &mut NarrowingScratch),
+        (publication, mut observation): (&mut P, O),
+        root: Option<Region>,
+    ) -> Result<Queried<P::Receipt, Option<Interpretation>>, Incomplete> {
+        let (theory, narrower) = self.index.subject(evaluated.theory())?;
+        let candidate = evaluated.interpretation();
+        let truth = evaluated.truth();
         if !theory.same_instance(candidate.theory()) {
             return Err(Incomplete::WrongTheory);
         }
-        let mut root = Region::all_open(theory.atom_count());
-        for atom in (0..theory.atom_count()).filter(|&atom| !candidate.contains(atom)) {
-            root.cut(atom);
-        }
-        let mut traversal = Traversal::with_state(root, Counting::Never, narrower.knowledge());
+        let root = root.unwrap_or_else(|| {
+            let mut full = Region::all_open(theory.atom_count());
+            for atom in (0..theory.atom_count()).filter(|&atom| !candidate.contains(atom)) {
+                full.cut(atom);
+            }
+            full
+        });
+        let mut traversal = Walk::with_state(root, Counting::Never, narrower.frozen_knowledge());
         let mut offered = false;
         loop {
             let before = traversal.statistics();
-            let visit = traversal.next(|region, knowledge| {
+            let visit = traversal.next(|entry| {
                 if !offered && publication.due() {
                     // Before the narrowing: the region stays pending.
                     return Err(Interrupt::Publish);
                 }
-                narrow_frozen(
+                observation.enter();
+                let result = narrow_frozen(
                     narrower,
                     FrozenSubject::new(theory, truth),
-                    region,
-                    knowledge,
+                    entry,
                     scratch,
                     budget,
                     &mut statistics.reduct.regions,
                 )
-                .map_err(Interrupt::Stopped)
+                .map_err(Interrupt::Stopped)?;
+                observation.narrowed(result);
+                Ok(result)
             });
             let after = traversal.statistics();
+            observation.returned(after, visit.is_err());
             let counts = &mut statistics.reduct.regions;
             counts.regions += after.regions - before.regions;
             counts.refuted += after.refuted - before.refuted;
@@ -1413,7 +1436,7 @@ impl<'a> ReductQuery<'a> {
                     }
                 }
                 Ok(None | Some(Visit::Counted(..))) => {
-                    return Ok(Queried::Decided(crate::Check::Stable));
+                    return Ok(Queried::Decided(None));
                 }
                 Ok(Some(Visit::Leaf(region, _))) => {
                     // The candidate models its own reduct and is no
@@ -1422,10 +1445,10 @@ impl<'a> ReductQuery<'a> {
                         continue;
                     }
                     let subset = leaf_interpretation(theory, &region)?;
-                    return crate::ferraris::checked_countermodel(
+                    return crate::ferraris::validated_countermodel(
                         theory, candidate, subset, limits, budget, statistics,
                     )
-                    .map(Queried::Decided);
+                    .map(|witness| Queried::Decided(Some(witness)));
                 }
             }
         }
@@ -1446,7 +1469,7 @@ impl<'a> ReductQuery<'a> {
         self,
         truth: &[bool],
         candidate: &Interpretation,
-        (region, knowledge): (&mut Region, &mut Knowledge),
+        entry: &mut Entry<Knowledge<Countermodels>>,
         limits: crate::Limits,
         budget: &mut Budget<'_, Q>,
         (statistics, scratch): (&mut crate::Statistics, &mut NarrowingScratch),
@@ -1455,28 +1478,32 @@ impl<'a> ReductQuery<'a> {
         let narrowing = narrow_frozen(
             narrower,
             FrozenSubject::new(theory, truth),
-            region,
-            knowledge,
+            entry,
             scratch,
             budget,
             &mut statistics.reduct.regions,
         )?;
         let counts = &mut statistics.reduct.regions;
         counts.regions += 1;
-        if narrowing == Narrowing::Refuted {
-            counts.refuted += 1;
-            return Ok(Served::Empty);
-        }
-        let Some(atom) = region.split_atom() else {
-            counts.leaves += 1;
-            if candidate.atoms().all(|atom| region.is_held(atom)) {
+        let atom = match walk::inspect(entry, narrowing, Counting::Never, false) {
+            walk::Step::Refuted => {
+                counts.refuted += 1;
                 return Ok(Served::Empty);
             }
-            let subset = leaf_interpretation(theory, region)?;
-            return crate::ferraris::validated_countermodel(
-                theory, candidate, subset, limits, budget, statistics,
-            )
-            .map(Served::Countermodel);
+            walk::Step::Leaf => {
+                let region = &entry.region;
+                counts.leaves += 1;
+                if candidate.atoms().all(|atom| region.is_held(atom)) {
+                    return Ok(Served::Empty);
+                }
+                let subset = leaf_interpretation(theory, region)?;
+                return crate::ferraris::validated_countermodel(
+                    theory, candidate, subset, limits, budget, statistics,
+                )
+                .map(Served::Countermodel);
+            }
+            walk::Step::Split(atom) => atom,
+            walk::Step::Counted => unreachable!("Counting::Never cannot count a region"),
         };
         budget.decide()?;
         Ok(Served::Split(atom))
@@ -1500,7 +1527,7 @@ pub(crate) trait Publication {
         &mut self,
         truth: &[bool],
         candidate: &Interpretation,
-        traversal: &mut Traversal<Knowledge>,
+        traversal: &mut Walk<Knowledge<Countermodels>>,
     ) -> Option<Self::Receipt>;
 }
 
@@ -1518,16 +1545,16 @@ impl Publication for Inline {
         &mut self,
         _: &[bool],
         _: &Interpretation,
-        _: &mut Traversal<Knowledge>,
+        _: &mut Walk<Knowledge<Countermodels>>,
     ) -> Option<Self::Receipt> {
         None
     }
 }
 
 /// What a membership check whose query may be published ends in.
-pub(crate) enum Queried<R> {
-    /// The check decided the candidate.
-    Decided(crate::Check),
+pub(crate) enum Queried<R, D = crate::Check> {
+    /// The query reached its conclusion over the region it searched.
+    Decided(D),
     /// The query's pending regions were published, and other workers decide it.
     Published(R),
 }
@@ -1558,23 +1585,25 @@ impl From<Stop> for Interrupt {
 fn narrow_frozen<Q: Quota>(
     narrower: &Narrower,
     subject: FrozenSubject<'_>,
-    region: &mut Region,
-    knowledge: &mut Knowledge,
+    entry: &mut Entry<Knowledge<Countermodels>>,
     scratch: &mut NarrowingScratch,
     budget: &mut Budget<'_, Q>,
     counts: &mut RegionCounts,
 ) -> Result<Narrowing, Incomplete> {
-    let attempt = BudgetQuota::narrow(budget, |cancellation, quota| {
-        narrower.narrow_frozen_known_reserved(
-            subject,
-            region,
-            knowledge,
-            scratch,
-            cancellation,
-            quota,
-        )
-    });
-    account(&attempt, counts)
+    let (region, knowledge) = entry.parts_mut();
+    let mut subject = Frozen::new(narrower, subject);
+    let attempt = subject.narrow(
+        region,
+        knowledge,
+        scratch,
+        Pass::First,
+        &mut SubjectContext { budget, counts },
+    );
+    let result = attempt.account(counts)?.narrowing();
+    if let Some(atom) = subject.preferred {
+        entry.prefer(atom);
+    }
+    Ok(result)
 }
 
 #[cfg(test)]

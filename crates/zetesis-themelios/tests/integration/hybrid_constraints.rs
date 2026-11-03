@@ -4,8 +4,8 @@ use std::cell::Cell;
 use std::fmt::Write;
 use zetesis_reference_support::{hybrid, prepare, prepared};
 
+use zetesis_algebra::{Cancellation, Stop};
 use zetesis_core::Model;
-use zetesis_cpu::{Cancellation, Stop};
 use zetesis_themelios::{
     ConstraintAllowance, ConstraintCheckCause, ConstraintCheckLimits, ConstraintCheckStatistics,
     ConstraintVerdict, ExpansionFailure, FormulaFailure, FormulaResource, GroundingObserver,

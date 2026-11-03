@@ -2,7 +2,7 @@
 
 use std::{collections::BTreeSet, num::NonZeroUsize};
 
-use zetesis_cpu::{Cancellation, Stop};
+use zetesis_algebra::{Cancellation, Stop};
 use zetesis_reference_support::formula;
 use zetesis_solve::{
     Backend, Completion, Grounder, Interruption, ModelConstructionStop, PreparedInput, Session,

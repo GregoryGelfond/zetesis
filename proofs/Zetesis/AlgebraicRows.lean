@@ -61,7 +61,7 @@ Not proved here: which rows, groups, completions, thresholds and guards a
 recognizer accepts; elimination, flow, or any search that finds a combination
 or a certificate; coordinate assignment, bit packing and word operations;
 resource accounting; and the narrower's use of a consequence. A probe of an atom
-is `Cube.split_partition` with its held half excluded.
+is `Region.split_partition` with its held half excluded.
 -/
 
 namespace Zetesis.AlgebraicRows
@@ -287,7 +287,7 @@ theorem holds_truth (M : Atoms α) (a : α) : Holds M (a, truth M a) := by
 
 /-- A region decides the literal giving an atom its held value when it holds or
 has cut the atom. -/
-theorem decides_truth (c : Cube α) (a : α) (decided : c.lower a ∨ ¬ c.upper a) :
+theorem decides_truth (c : Region α) (a : α) (decided : c.lower a ∨ ¬ c.upper a) :
     Decides c (a, truth c.lower a) := by
   by_cases held : c.lower a
   · have sign : truth c.lower a = true := by simp [truth, held]
@@ -410,7 +410,7 @@ theorem equation_excludes_given (r : Reduction V) (C : Atoms α → Prop) (e : E
 /-- Conditions that exclude a class exclude every member of it in a region that
 decides them. -/
 theorem excludes_region (C : Atoms α → Prop) (B : List (Literal α)) (excluded : Excludes C B)
-    (c : Cube α) (decided : ∀ l ∈ B, Decides c l) : ∀ z, c.Contains z → ¬ C z :=
+    (c : Region α) (decided : ∀ l ∈ B, Decides c l) : ∀ z, c.Contains z → ¬ C z :=
   fun z inside member => excluded z member (fun l listed => decides_holds inside (decided l listed))
 
 /-! ## Bounds in an ordered commutative monoid -/
@@ -440,12 +440,12 @@ def UpperOf (o : OrderedReduction V) (C : Atoms α → Prop) (terms : List (Term
   ∀ M, C M → o.le (measure o.toReduction M terms) bound
 
 /-- A lower bound of the class's members in a region. -/
-def LowerIn (o : OrderedReduction V) (C : Atoms α → Prop) (c : Cube α)
+def LowerIn (o : OrderedReduction V) (C : Atoms α → Prop) (c : Region α)
     (terms : List (Term α V)) (bound : V) : Prop :=
   ∀ z, c.Contains z → C z → o.le bound (measure o.toReduction z terms)
 
 /-- An upper bound of the class's members in a region. -/
-def UpperIn (o : OrderedReduction V) (C : Atoms α → Prop) (c : Cube α)
+def UpperIn (o : OrderedReduction V) (C : Atoms α → Prop) (c : Region α)
     (terms : List (Term α V)) (bound : V) : Prop :=
   ∀ z, c.Contains z → C z → o.le (measure o.toReduction z terms) bound
 
@@ -492,24 +492,24 @@ theorem measure_mono (o : OrderedReduction V) {M N : Atoms α} (included : Sub M
       exact o.le_refl o.unit
 
 /-- In a region, the held atoms' measure is a lower bound of every member. -/
-theorem lower_in_of_held (o : OrderedReduction V) (C : Atoms α → Prop) (c : Cube α)
+theorem lower_in_of_held (o : OrderedReduction V) (C : Atoms α → Prop) (c : Region α)
     (terms : List (Term α V)) (positive : Positive o terms) :
     LowerIn o C c terms (measure o.toReduction c.lower terms) :=
   fun _ inside _ => measure_mono o inside.1 terms positive
 
 /-- In a region, the measure of the atoms not cut is an upper bound of every
 member. -/
-theorem upper_in_of_possible (o : OrderedReduction V) (C : Atoms α → Prop) (c : Cube α)
+theorem upper_in_of_possible (o : OrderedReduction V) (C : Atoms α → Prop) (c : Region α)
     (terms : List (Term α V)) (positive : Positive o terms) :
     UpperIn o C c terms (measure o.toReduction c.upper terms) :=
   fun _ inside _ => measure_mono o inside.2 terms positive
 
-theorem lower_in_of_class (o : OrderedReduction V) (C : Atoms α → Prop) (c : Cube α)
+theorem lower_in_of_class (o : OrderedReduction V) (C : Atoms α → Prop) (c : Region α)
     {terms : List (Term α V)} {bound : V} (lower : LowerOf o C terms bound) :
     LowerIn o C c terms bound :=
   fun z _ member => lower z member
 
-theorem upper_in_of_class (o : OrderedReduction V) (C : Atoms α → Prop) (c : Cube α)
+theorem upper_in_of_class (o : OrderedReduction V) (C : Atoms α → Prop) (c : Region α)
     {terms : List (Term α V)} {bound : V} (upper : UpperOf o C terms bound) :
     UpperIn o C c terms bound :=
   fun z _ member => upper z member
@@ -530,7 +530,7 @@ Proof. Measure the covered terms twice. The first family's bounds lie below thei
 rows' measures, whose fold is the terms' measure (`measure_rows`, `measure_perm`);
 so does the second family's, whose bounds lie above. -/
 theorem double_count_excludes_region (o : OrderedReduction V) (C : Atoms α → Prop)
-    (c : Cube α) (S : List (Term α V)) (first second : List (List (Term α V) × V))
+    (c : Region α) (S : List (Term α V)) (first second : List (List (Term α V) × V))
     (firstCovers : (first.map Prod.fst).flatten.Perm S)
     (secondCovers : (second.map Prod.fst).flatten.Perm S)
     (lower : ∀ row ∈ first, LowerIn o C c row.1 row.2)
@@ -546,6 +546,74 @@ theorem double_count_excludes_region (o : OrderedReduction V) (C : Atoms α → 
     exact fold_le_fold o second (fun row listed => upper row listed z inside member)
   exact exceeds (o.le_trans _ _ _ fromBelow fromAbove)
 
+open Classical in
+/-- **A double count with partially refreshed bounds.** Two finite families
+cover the same terms. Each old bound holds in an enclosing region and each new
+bound holds in the current region. Choose either bound at every occurrence.
+If those chosen lower bounds exceed the chosen upper bounds, the current
+region has no member of the class.
+
+Proof. Every member of the current region is also in the enclosing region,
+so both choices of bound hold. Attach the chosen bounds to their unchanged
+terms and apply `double_count_excludes_region`.
+
+The selectors describe occurrences, not necessarily distinct source rows.
+The two families retain their complete coverage even if only some bounds have
+been refreshed. No monotonic improvement of the numerical values is needed
+for this exclusion law; their stated validity is enough. -/
+theorem partial_double_count_excludes_region (o : OrderedReduction V)
+    (C : Atoms α → Prop) {prior current : Region α}
+    (inside : FormulaBounds.Inside current prior) {ι : Type w}
+    (terms : ι → List (Term α V)) (first second : List ι) (S : List (Term α V))
+    (oldLower newLower oldUpper newUpper : ι → V)
+    (lowerFresh upperFresh : ι → Prop)
+    (firstCovers : (first.map terms).flatten.Perm S)
+    (secondCovers : (second.map terms).flatten.Perm S)
+    (oldBelow : ∀ i ∈ first, LowerIn o C prior (terms i) (oldLower i))
+    (newBelow : ∀ i ∈ first, LowerIn o C current (terms i) (newLower i))
+    (oldAbove : ∀ i ∈ second, UpperIn o C prior (terms i) (oldUpper i))
+    (newAbove : ∀ i ∈ second, UpperIn o C current (terms i) (newUpper i))
+    (exceeds : ¬ o.le
+      (o.toReduction.fold (fun i => if lowerFresh i then newLower i else oldLower i) first)
+      (o.toReduction.fold (fun i => if upperFresh i then newUpper i else oldUpper i) second)) :
+    ∀ z, current.Contains z → ¬ C z := by
+  classical
+  let lowerRows : List (List (Term α V) × V) :=
+    first.map fun i => (terms i, if lowerFresh i then newLower i else oldLower i)
+  let upperRows : List (List (Term α V) × V) :=
+    second.map fun i => (terms i, if upperFresh i then newUpper i else oldUpper i)
+  have enclosing : ∀ {z : Atoms α}, current.Contains z → prior.Contains z := by
+    intro z within
+    exact ⟨fun a held => within.1 a (inside.1 a held),
+      fun a present => inside.2 a (within.2 a present)⟩
+  have lowerCovers : (lowerRows.map Prod.fst).flatten.Perm S := by
+    simpa only [lowerRows, List.map_map, Function.comp_def] using firstCovers
+  have upperCovers : (upperRows.map Prod.fst).flatten.Perm S := by
+    simpa only [upperRows, List.map_map, Function.comp_def] using secondCovers
+  have lower : ∀ row ∈ lowerRows, LowerIn o C current row.1 row.2 := by
+    intro row listed
+    obtain ⟨i, member, rfl⟩ := List.mem_map.mp listed
+    intro z within belongs
+    change o.le (if lowerFresh i then newLower i else oldLower i)
+      (measure o.toReduction z (terms i))
+    by_cases fresh : lowerFresh i
+    · simpa only [if_pos fresh] using newBelow i member z within belongs
+    · simpa only [if_neg fresh] using oldBelow i member z (enclosing within) belongs
+  have upper : ∀ row ∈ upperRows, UpperIn o C current row.1 row.2 := by
+    intro row listed
+    obtain ⟨i, member, rfl⟩ := List.mem_map.mp listed
+    intro z within belongs
+    change o.le (measure o.toReduction z (terms i))
+      (if upperFresh i then newUpper i else oldUpper i)
+    by_cases fresh : upperFresh i
+    · simpa only [if_pos fresh] using newAbove i member z within belongs
+    · simpa only [if_neg fresh] using oldAbove i member z (enclosing within) belongs
+  have incompatible : ¬ o.le (o.toReduction.fold Prod.snd lowerRows)
+      (o.toReduction.fold Prod.snd upperRows) := by
+    simpa only [lowerRows, upperRows, o.toReduction.fold_map] using exceeds
+  exact double_count_excludes_region o C current S lowerRows upperRows
+    lowerCovers upperCovers lower upper incompatible
+
 /-- **The double count.** Two families of rows each cover the same terms, the
 first with lower bounds and the second with upper bounds of the class. If the
 lower bounds' fold does not lie below the upper bounds', the class has no member:
@@ -559,7 +627,7 @@ theorem double_count_excludes (o : OrderedReduction V) (C : Atoms α → Prop)
     (exceeds : ¬ o.le (o.toReduction.fold Prod.snd first) (o.toReduction.fold Prod.snd second)) :
     ∀ M, ¬ C M := by
   intro M member
-  let everything : Cube α := ⟨Empty, Full⟩
+  let everything : Region α := ⟨Empty, Full⟩
   have inside : everything.Contains M := ⟨fun _ absent => absent.elim, fun _ _ => trivial⟩
   exact double_count_excludes_region o C everything S first second firstCovers secondCovers
     (fun row listed => lower_in_of_class o C everything (lower row listed))
@@ -579,7 +647,7 @@ the measure of the shared terms combined with that of the missed ones. The share
 terms lie among the second rows' terms, whose measure the upper bounds cap, since
 the rest's measure is at least the identity; the missed terms measure at most as
 the atoms not cut do. -/
-theorem cut_excludes_region (o : OrderedReduction V) (C : Atoms α → Prop) (c : Cube α)
+theorem cut_excludes_region (o : OrderedReduction V) (C : Atoms α → Prop) (c : Region α)
     (first second : List (List (Term α V) × V)) (shared missed rest : List (Term α V))
     (firstSplit : (first.map Prod.fst).flatten.Perm (shared ++ missed))
     (secondSplit : (second.map Prod.fst).flatten.Perm (shared ++ rest))
@@ -950,6 +1018,90 @@ def counting : OrderedReduction Nat where
   le_refl := Nat.le_refl
   le_trans := fun _ _ _ => Nat.le_trans
   op_le_op := fun _ _ _ _ => Nat.add_le_add
+
+/-- **Replace one occurrence in a finite count.** The old value is a summand
+of the complete natural fold, so subtracting it does not truncate; adding the
+new value gives exactly the fold with that occurrence replaced. Equal-valued
+occurrences elsewhere in the list remain untouched.
+
+Proof. Split both folds into the prefix, selected occurrence and suffix.
+Natural addition gives the old summand's lower bound and cancels that summand
+in the replacement equation. These are exact natural values; finite-width
+representability and any refusal before a machine operation are separate
+premises of a concrete implementation. -/
+theorem counting_replace_occurrence (preceding suffix : List Nat) (old new : Nat) :
+    old ≤ counting.toReduction.fold id (preceding ++ old :: suffix) ∧
+      counting.toReduction.fold id (preceding ++ old :: suffix) - old + new =
+        counting.toReduction.fold id (preceding ++ new :: suffix) := by
+  have previous : counting.toReduction.fold id (preceding ++ old :: suffix) =
+      counting.toReduction.fold id preceding +
+        (old + counting.toReduction.fold id suffix) := by
+    rw [counting.toReduction.fold_append, counting.toReduction.fold_cons]
+    rfl
+  have replaced : counting.toReduction.fold id (preceding ++ new :: suffix) =
+      counting.toReduction.fold id preceding +
+        (new + counting.toReduction.fold id suffix) := by
+    rw [counting.toReduction.fold_append, counting.toReduction.fold_cons]
+    rfl
+  rw [previous, replaced]
+  constructor <;> omega
+
+/-- Folding one for each member with natural addition gives the list's length.
+This counts occurrences, including repetitions, and the empty list contributes
+zero. Reading the result as a family's cardinality additionally requires a
+complete list without duplicate members.
+
+Proof. The empty fold is zero. Adding a head contributes one to the tail's
+count, which the induction hypothesis identifies with its length. -/
+theorem counting_fold_one (members : List α) :
+    counting.toReduction.fold (fun _ => 1) members = members.length := by
+  induction members with
+  | nil => rfl
+  | cons head rest counted =>
+    rw [counting.toReduction.fold_cons, counted]
+    show 1 + rest.length = (head :: rest).length
+    simp only [List.length_cons, Nat.add_comm]
+
+/-- Encoding every nonnegative contribution before folding gives the encoding
+of the exact natural sum. Complete enumeration, membership and distinctness
+are separate premises whenever that sum is read as a family cardinality.
+
+Proof. Both empty folds encode zero. At a head, the induction hypothesis gives
+the encoded tail and bounded addition commutes with encoding the exact sum. -/
+theorem bounded_counting_fold (limit : Nat) (value : α → Nat) (members : List α) :
+    (AxisFolds.BoundedSum.reduction limit).fold
+        (fun member => AxisFolds.BoundedSum.encode limit (value member)) members =
+      AxisFolds.BoundedSum.encode limit (counting.toReduction.fold value members) := by
+  induction members with
+  | nil => rfl
+  | cons head rest counted =>
+    rw [(AxisFolds.BoundedSum.reduction limit).fold_cons,
+      counting.toReduction.fold_cons, counted]
+    exact AxisFolds.BoundedSum.op_encode limit (value head)
+      (counting.toReduction.fold value rest)
+
+/-- A bounded count is exact list length when representable and overflow
+otherwise. Repeated members still count repeatedly; no set-cardinality or
+coverage conclusion is inferred from this value law. -/
+theorem bounded_counting_fold_one (limit : Nat) (members : List α) :
+    (AxisFolds.BoundedSum.reduction limit).fold
+        (fun _ => AxisFolds.BoundedSum.encode limit 1) members =
+      AxisFolds.BoundedSum.encode limit members.length := by
+  calc
+    (AxisFolds.BoundedSum.reduction limit).fold
+        (fun _ => AxisFolds.BoundedSum.encode limit 1) members =
+        AxisFolds.BoundedSum.encode limit (counting.toReduction.fold (fun _ => 1) members) :=
+      bounded_counting_fold limit (fun _ => 1) members
+    _ = AxisFolds.BoundedSum.encode limit members.length :=
+      congrArg (AxisFolds.BoundedSum.encode limit) (counting_fold_one members)
+
+/-- Overflow of the complete occurrence count is exactly excess list length. -/
+theorem bounded_counting_overflow_iff (limit : Nat) (members : List α) :
+    (AxisFolds.BoundedSum.reduction limit).fold
+        (fun _ => AxisFolds.BoundedSum.encode limit 1) members = none ↔
+      limit < members.length := by
+  rw [bounded_counting_fold_one]
+  exact AxisFolds.BoundedSum.encode_overflow_iff limit members.length
 
 /-- In parity an atom of odd coefficient is forced, under literals giving every
 other atom of an equation its value in σ, to the constant plus the others'

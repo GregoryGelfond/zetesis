@@ -7,7 +7,7 @@ import Zetesis.FormulaBounds
 
 Membership of a classical model `M` of a theory is decided by its frozen
 reduct: `M` is stable exactly when no proper subset of `M` models the
-reduct (`Ferraris.Stable`). That query is a coverage tree over the cube
+reduct (`Ferraris.Stable`). That query is a coverage tree over the region
 whose lower bound is empty and whose upper bound is `M`, with the frozen
 reduct as the theory: a leaf other than `M` that models the reduct is a
 proper-subset model and refutes stability, and a tree with no such leaf
@@ -34,7 +34,7 @@ universe u
 variable {α : Type u}
 
 /-- The query's root: every atom of `M` open, every other atom cut. -/
-def query (M : Atoms α) : Cube α := ⟨fun _ => False, M⟩
+def query (M : Atoms α) : Region α := ⟨fun _ => False, M⟩
 
 theorem query_contains (M J : Atoms α) : (query M).Contains J ↔ Sub J M := by
   constructor
@@ -125,7 +125,7 @@ theorem reduct_atom (M : Atoms α) {a : α} (h : M a) : Reduct M (.atom a) = .at
 /-- The two readings of an original formula under the candidate's mask: a
 masked formula reads as falsum, never sure and always impossible, and an
 unmasked one combines the masked readings of its operands as `read` does. -/
-noncomputable def maskedRead (M : Atoms α) (c : Cube α) : Formula α → Prop × Prop
+noncomputable def maskedRead (M : Atoms α) (c : Region α) : Formula α → Prop × Prop
   | .atom a => open Classical in
       if M a then (c.lower a, ¬ c.upper a) else (False, True)
   | .bot => (False, True)
@@ -149,7 +149,7 @@ noncomputable def maskedRead (M : Atoms α) (c : Cube α) : Formula α → Prop 
 Induction on the formula: a masked formula and falsum both read as falsum,
 and an unmasked connective is the reduct's connective over the operands'
 reducts, whose readings agree by the induction hypotheses. -/
-theorem masked_read_eq_reduct (M : Atoms α) (c : Cube α) (F : Formula α) :
+theorem masked_read_eq_reduct (M : Atoms α) (c : Region α) (F : Formula α) :
     maskedRead M c F = read c (Reduct M F) := by
   classical
   induction F with
@@ -171,7 +171,7 @@ theorem masked_read_eq_reduct (M : Atoms α) (c : Cube α) (F : Formula α) :
 
 /-- A masked formula reads as falsum whatever its operands read: it has no
 rules of its own. -/
-theorem masked_reads_falsum (M : Atoms α) (c : Cube α) {F : Formula α}
+theorem masked_reads_falsum (M : Atoms α) (c : Region α) {F : Formula α}
     (masked : ¬ Satisfies M F) : maskedRead M c F = (False, True) := by
   rw [masked_read_eq_reduct, reduct_masked M masked]
   rfl
@@ -181,7 +181,7 @@ A masked formula is known to fail, and that is all that is known of it from
 itself: every rule that relates a connective to its operands, upward or
 downward, asks that the connective be unmasked. A root is unmasked, the
 candidate being a model, and is known to hold. -/
-inductive MaskedKnown (M : Atoms α) (T : Theory α) (c : Cube α) : Formula α → Bool → Prop
+inductive MaskedKnown (M : Atoms α) (T : Theory α) (c : Region α) : Formula α → Bool → Prop
   | masked {F} (h : ¬ Satisfies M F) : MaskedKnown M T c F false
   | held {a} (m : M a) (h : c.lower a) : MaskedKnown M T c (.atom a) true
   | cut {a} (h : ¬ c.upper a) : MaskedKnown M T c (.atom a) false
@@ -235,13 +235,53 @@ inductive MaskedKnown (M : Atoms α) (T : Theory α) (c : Cube α) : Formula α 
   | not_imp_consequent {F G} (m : Satisfies M (.imp F G))
       (h : MaskedKnown M T c (.imp F G) false) : MaskedKnown M T c G false
 
+/-- Propagation knowledge under one fixed candidate mask persists in every
+more precise region. The original theory and candidate are unchanged; no
+knowledge may be transferred to a different candidate by this law.
+
+Proof outline. Induct on the existing masked derivation. A held atom remains
+held and a cut atom remains cut by the two components of `Inside`. A masked
+formula and a theory root keep the same evidence. Every connective rule keeps
+its original own-node mask premise and uses the transferred operand knowledge.
+This is a law of the abstract judgment, not a refinement of a stored worklist. -/
+theorem masked_known_mono (M : Atoms α) (T : Theory α)
+    {larger smaller : Region α} (inside : Inside smaller larger)
+    {F : Formula α} {b : Bool} (known : MaskedKnown M T larger F b) :
+    MaskedKnown M T smaller F b := by
+  induction known with
+  | masked absent => exact .masked absent
+  | held mask held => exact .held mask (inside.1 _ held)
+  | cut excluded => exact .cut (fun possible => excluded (inside.2 _ possible))
+  | root member => exact .root member
+  | conj_up mask _ _ ihF ihG => exact .conj_up mask ihF ihG
+  | conj_up_left mask _ ihF => exact .conj_up_left mask ihF
+  | conj_up_right mask _ ihG => exact .conj_up_right mask ihG
+  | disj_up_left mask _ ihF => exact .disj_up_left mask ihF
+  | disj_up_right mask _ ihG => exact .disj_up_right mask ihG
+  | disj_up mask _ _ ihF ihG => exact .disj_up mask ihF ihG
+  | imp_up_left mask _ ihF => exact .imp_up_left mask ihF
+  | imp_up_right mask _ ihG => exact .imp_up_right mask ihG
+  | imp_up mask _ _ ihF ihG => exact .imp_up mask ihF ihG
+  | conj_left mask _ ih => exact .conj_left mask ih
+  | conj_right mask _ ih => exact .conj_right mask ih
+  | disj_left mask _ _ ih ihG => exact .disj_left mask ih ihG
+  | disj_right mask _ _ ih ihF => exact .disj_right mask ih ihF
+  | imp_consequent mask _ _ ih ihF => exact .imp_consequent mask ih ihF
+  | imp_antecedent mask _ _ ih ihG => exact .imp_antecedent mask ih ihG
+  | not_conj_left mask _ _ ih ihG => exact .not_conj_left mask ih ihG
+  | not_conj_right mask _ _ ih ihF => exact .not_conj_right mask ih ihF
+  | not_disj_left mask _ ih => exact .not_disj_left mask ih
+  | not_disj_right mask _ ih => exact .not_disj_right mask ih
+  | not_imp_antecedent mask _ ih => exact .not_imp_antecedent mask ih
+  | not_imp_consequent mask _ ih => exact .not_imp_consequent mask ih
+
 /-- Propagation under the mask establishes only what propagation over the
 reduct theory does: what is known of an original formula under the mask is
 known of its reduct. Induction on the derivation. A masked formula's reduct
 is falsum, known to fail; a root's reduct is a root of the reduct theory; and
 each rule at an unmasked connective is the same rule at the reduct's
 connective, which `reduct_conj`, `reduct_disj` and `reduct_imp` expose. -/
-theorem masked_known_sound (M : Atoms α) (T : Theory α) (c : Cube α)
+theorem masked_known_sound (M : Atoms α) (T : Theory α) (c : Region α)
     {F : Formula α} {b : Bool} (h : MaskedKnown M T c F b) :
     Known (ReductTheory M T) c (Reduct M F) b := by
   induction h with
@@ -278,7 +318,7 @@ theorem masked_known_sound (M : Atoms α) (T : Theory α) (c : Cube α)
 candidate that models the reduct inside the region: the query may narrow by
 it. Composition of `masked_known_sound` with `known_sound` over the reduct
 theory. -/
-theorem masked_known_narrows (M : Atoms α) (T : Theory α) (c : Cube α) {J : Atoms α}
+theorem masked_known_narrows (M : Atoms α) (T : Theory α) (c : Region α) {J : Atoms α}
     (hJ : c.Contains J) (models : Models J (ReductTheory M T))
     {F : Formula α} {b : Bool} (h : MaskedKnown M T c F b) :
     (b = true → Satisfies J (Reduct M F)) ∧ (b = false → ¬ Satisfies J (Reduct M F)) :=

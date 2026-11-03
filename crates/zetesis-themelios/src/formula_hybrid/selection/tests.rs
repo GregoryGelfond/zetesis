@@ -571,13 +571,13 @@ fn source_resolution_retains_refused_work_prefixes() {
         last
     );
     assert_eq!(counters.accounting.work, (last + 1) as u64);
-    let cancellation = zetesis_cpu::Cancellation::default();
+    let cancellation = zetesis_algebra::Cancellation::default();
     cancellation.cancel();
     let mut counters = Counters::default().with_cancellation(Some(&cancellation));
     assert!(matches!(
         selection.resolve(atoms, &limits, &mut counters, prepared.source.location),
         Err(FormulaFailure::Interrupted {
-            reason: zetesis_cpu::Stop::Cancelled,
+            reason: zetesis_algebra::Stop::Cancelled,
             ..
         })
     ));

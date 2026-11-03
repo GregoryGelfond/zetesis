@@ -1,6 +1,6 @@
 //! Ancestor discovery prunes only branches discharged by ordinary propagation.
 
-use super::super::{Scratch, Work, chain_position};
+use super::super::{Meter, Scratch, chain_position};
 use super::*;
 
 /// Both associative branches share atom zero. Each inner connective has a
@@ -45,14 +45,16 @@ fn irrelevant_polarity_skips_its_ancestors_and_keeps_candidate_order() {
     let (theory, roots) = branches();
     let index = Narrower::new(&theory);
     let mut full = Scratch::default();
-    full.parent_chains(&index, 0, &mut Work::new(u64::MAX), |_| true)
+    full.parent_chains(&index, 0, &mut Meter::local(u64::MAX), |_| true)
+        .map_err(zetesis_algebra::Failure::into_stop)
         .unwrap();
     for (kind, disjunction) in [false, true].into_iter().enumerate() {
         let mut selected = Scratch::default();
         selected
-            .parent_chains(&index, 0, &mut Work::new(u64::MAX), |chain| {
+            .parent_chains(&index, 0, &mut Meter::local(u64::MAX), |chain| {
                 chain.disjunction == disjunction
             })
+            .map_err(zetesis_algebra::Failure::into_stop)
             .unwrap();
         let expected: Vec<_> = full
             .candidates()
@@ -76,10 +78,11 @@ fn absorbing_truth_prunes_a_branch_but_opposite_truth_stays_actionable() {
         for value in [false, true] {
             let mut selected = Scratch::default();
             selected
-                .parent_chains(&index, 0, &mut Work::new(u64::MAX), |chain| {
+                .parent_chains(&index, 0, &mut Meter::local(u64::MAX), |chain| {
                     let known = (chain.root == roots[kind][0]).then_some(value);
                     chain.disjunction == disjunction && known != Some(chain.disjunction)
                 })
+                .map_err(zetesis_algebra::Failure::into_stop)
                 .unwrap();
             if value == disjunction {
                 assert!(selected.candidates().is_empty());
@@ -97,18 +100,20 @@ fn pruning_does_not_read_or_retain_the_discarded_ancestor_tail() {
     let (theory, roots) = branches();
     let index = Narrower::new(&theory);
     let mut full = Scratch::default();
-    let mut complete = Work::new(u64::MAX);
+    let mut complete = Meter::local(u64::MAX);
     full.parent_chains(&index, 0, &mut complete, |_| true)
+        .map_err(zetesis_algebra::Failure::into_stop)
         .unwrap();
     let mut selected = Scratch::default();
-    let mut filtered = Work::new(u64::MAX);
+    let mut filtered = Meter::local(u64::MAX);
     selected
         .parent_chains(&index, 0, &mut filtered, |chain| {
             chain.disjunction && chain.root != roots[1][0]
         })
+        .map_err(zetesis_algebra::Failure::into_stop)
         .unwrap();
     assert!(selected.candidates().is_empty());
-    assert!(filtered.spent() < complete.spent());
+    assert!(filtered.charged() < complete.charged());
     assert_eq!(selected.candidates.capacity(), 0);
     assert!(!selected.visited(roots[0][1]) && !selected.visited(roots[1][1]));
 }
@@ -118,22 +123,26 @@ fn every_refused_discovery_prefix_can_retry_without_stale_candidates() {
     let (theory, roots) = branches();
     let index = Narrower::new(&theory);
     let expected = chain_ids(&index, &roots[1]);
-    let mut complete = Work::new(u64::MAX);
+    let mut complete = Meter::local(u64::MAX);
     Scratch::default()
         .parent_chains(&index, 0, &mut complete, |chain| chain.disjunction)
+        .map_err(zetesis_algebra::Failure::into_stop)
         .unwrap();
-    for limit in 0..complete.spent() {
+    for limit in 0..complete.charged() {
         let mut scratch = Scratch::default();
-        let mut work = Work::new(limit);
+        let mut work = Meter::local(limit);
         assert_eq!(
-            scratch.parent_chains(&index, 0, &mut work, |chain| chain.disjunction),
-            Err(zetesis_cpu::Stop::WorkLimit),
+            scratch
+                .parent_chains(&index, 0, &mut work, |chain| chain.disjunction)
+                .map_err(zetesis_algebra::Failure::into_stop),
+            Err(zetesis_algebra::Stop::WorkLimit),
         );
-        assert_eq!(work.spent(), limit);
+        assert_eq!(work.charged(), limit);
         scratch
-            .parent_chains(&index, 0, &mut Work::new(u64::MAX), |chain| {
+            .parent_chains(&index, 0, &mut Meter::local(u64::MAX), |chain| {
                 chain.disjunction
             })
+            .map_err(zetesis_algebra::Failure::into_stop)
             .unwrap();
         assert_eq!(scratch.candidates(), expected);
     }

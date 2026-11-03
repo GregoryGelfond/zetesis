@@ -14,6 +14,96 @@ const LATE: Engagement = Engagement::After(Duration::from_hours(1));
 const NEVER: Engagement = Engagement::After(Duration::MAX);
 const WAIT: Duration = Duration::from_secs(2);
 
+thread_local! {
+    // Observed joined reports, never inferred from a work difference. The
+    // handoff fixtures have no candidate refutations, so every such worker
+    // reaches arithmetic and cannot reuse retired refutation knowledge.
+    static CANDIDATE_WORKERS: Cell<usize> = const { Cell::new(0) };
+    static ARITHMETIC_WORKERS: Cell<usize> = const { Cell::new(0) };
+}
+
+pub(super) fn record_candidate_worker(report: &WorkerReport) {
+    if report.regions.regions != 0 {
+        CANDIDATE_WORKERS.set(CANDIDATE_WORKERS.get() + 1);
+        if report.regions.arithmetic.parity_passes > 0
+            && report.regions.arithmetic.cardinality_passes == 0
+        {
+            ARITHMETIC_WORKERS.set(ARITHMETIC_WORKERS.get() + 1);
+        }
+    }
+}
+
+/// Compare identical arithmetic inputs/knowledge through their actual owners.
+/// Only scratch capacity differs; both preparations preserve the same region.
+/// The returned charge is one cold worker's extra work, not a fitted constant.
+fn cold_arithmetic_scratch_work(theory: &Theory) -> u64 {
+    assert!((1..=64).contains(&theory.atom_count()));
+    let (search, index) = walk(theory, NEVER);
+    let reading = search
+        .shared
+        .parts
+        .reading(index.theory(), index.narrower())
+        .unwrap();
+    let prepared = reading.arithmetic.expect("the fixture prepares arithmetic");
+    let parity_system = prepared
+        .parity()
+        .expect("the positive loops yield parity rows");
+    assert!(
+        prepared.cardinality().is_none(),
+        "these loops have no checked counting family"
+    );
+    let cancellation = Cancellation::default();
+    let inspect = |region: &mut Region,
+                   parity: &mut zetesis_ferraris::ParityKnowledge,
+                   scratch: &mut NarrowingScratch| {
+        let before = region.clone();
+        let mut meter = zetesis_algebra::Meter::local(u64::MAX);
+        let parity =
+            parity_system.inspect_reserved(region, parity, scratch, &cancellation, &mut meter);
+        assert_eq!(
+            parity.result,
+            Ok(zetesis_algebra::region::SubjectStep::Unchanged)
+        );
+        assert_eq!(*region, before);
+        assert_eq!(meter.charged(), parity.statistics.work);
+        meter.charged()
+    };
+    let mut region = Region::all_open(theory.atom_count());
+    let mut parity = parity_system.knowledge();
+    let mut retained = NarrowingScratch::default();
+    inspect(&mut region, &mut parity, &mut retained);
+    let warm = inspect(&mut region.clone(), &mut parity.clone(), &mut retained);
+    let cold = inspect(&mut region, &mut parity, &mut NarrowingScratch::default());
+    let difference = cold.checked_sub(warm).expect("cold scratch does not reuse");
+    assert!(
+        difference > 0,
+        "the fixture reaches allocated arithmetic scratch"
+    );
+    difference
+}
+
+fn retain_single_workspace_work(actual: &mut Outcome, expected: &Outcome, cold: u64) {
+    assert_eq!(
+        expected.refuted, 0,
+        "the reference cannot recycle refutations"
+    );
+    assert_eq!(actual.refuted, 0, "workers cannot recycle refutations");
+    let active = CANDIDATE_WORKERS.get();
+    assert!((1..=2).contains(&active), "actual active workers: {active}");
+    assert_eq!(
+        ARITHMETIC_WORKERS.get(),
+        active,
+        "every active worker inspected parity and omitted the empty counting family"
+    );
+    let extra = u64::try_from(active).unwrap().checked_mul(cold).unwrap();
+    assert_eq!(
+        actual.work,
+        expected.work.checked_add(extra).unwrap(),
+        "one independently calibrated scratch initialization per active worker"
+    );
+    actual.work = actual.work.checked_sub(extra).unwrap();
+}
+
 /// The positive loop `a0 <- a1. a1 <- a0.` beside `choices` atomic choices:
 /// with the loop true, every leaf is a classical model the reduct refutes,
 /// and the walk interleaves those leaves with the stable models.
@@ -273,12 +363,12 @@ struct Pass {
 
 struct PassWorker(Arc<AtomicUsize>);
 
-impl crate::RegionFilter for Pass {
+impl crate::region_filter::tests::injection::Source for Pass {
     fn worker(
         &self,
         theory: &Theory,
         cancellation: &Cancellation,
-    ) -> Result<Box<dyn crate::RegionFilterWorker + '_>, Incomplete> {
+    ) -> Result<Box<dyn crate::region_filter::tests::injection::Worker + '_>, Incomplete> {
         cancellation.poll()?;
         if !theory.same_instance(&self.theory) {
             return Err(Incomplete::WrongTheory);
@@ -288,7 +378,7 @@ impl crate::RegionFilter for Pass {
     }
 }
 
-impl crate::RegionFilterWorker for PassWorker {
+impl crate::region_filter::tests::injection::Worker for PassWorker {
     fn check(
         &mut self,
         _: &Theory,
@@ -321,12 +411,12 @@ struct FaultyWorker {
     checked: usize,
 }
 
-impl crate::RegionFilter for Faulty {
+impl crate::region_filter::tests::injection::Source for Faulty {
     fn worker(
         &self,
         theory: &Theory,
         cancellation: &Cancellation,
-    ) -> Result<Box<dyn crate::RegionFilterWorker + '_>, Incomplete> {
+    ) -> Result<Box<dyn crate::region_filter::tests::injection::Worker + '_>, Incomplete> {
         cancellation.poll()?;
         if !theory.same_instance(&self.theory) {
             return Err(Incomplete::WrongTheory);
@@ -339,7 +429,7 @@ impl crate::RegionFilter for Faulty {
     }
 }
 
-impl crate::RegionFilterWorker for FaultyWorker {
+impl crate::region_filter::tests::injection::Worker for FaultyWorker {
     fn check(
         &mut self,
         _: &Theory,
@@ -377,10 +467,12 @@ impl Drop for FaultyWorker {
 fn handoff(
     theory: &Theory,
     certificate: Option<&Arc<Certification>>,
-    filter: Option<&Arc<dyn crate::RegionFilter>>,
+    filter: Option<&Arc<dyn crate::region_filter::tests::injection::Source>>,
     refuted: bool,
     skip: usize,
 ) -> (ParallelRegions, Vec<Vec<usize>>) {
+    CANDIDATE_WORKERS.set(0);
+    ARITHMETIC_WORKERS.set(0);
     let (mut search, index) = walk(theory, LATE);
     if refuted {
         // These handoffs require a rejected membership leaf in the engaging
@@ -389,7 +481,9 @@ fn handoff(
     }
     if let Some(filter) = filter {
         search
-            .set_filter(crate::region_filter::Filter::new(Arc::clone(filter)))
+            .set_filter(crate::region_filter::Filter::new(
+                crate::region_filter::Source::Fixture(Arc::clone(filter)),
+            ))
             .unwrap();
     }
     let cancellation = search.shared.cancellation.clone();
@@ -464,6 +558,7 @@ fn the_deadline_can_pass_between_two_steps_of_a_pull() {
     // deadline passes, so it holds unmerged membership receipts and a live
     // lease when it engages.
     let theory = loop_beside_choices(3);
+    let scratch_initialization = cold_arithmetic_scratch_work(&theory);
     let expected = unengaged(&theory, None, true);
     assert!(expected.countermodels > 0, "the reduct refutes leaves");
     let cold = expected.reduct.frozen_positive_preparation_work;
@@ -488,6 +583,7 @@ fn the_deadline_can_pass_between_two_steps_of_a_pull() {
             .checked_sub(extra)
             .expect("cold preparation is included in frozen-positive work");
         actual.reduct.frozen_positive_preparation_work = cold;
+        retain_single_workspace_work(&mut actual, &expected, scratch_initialization);
         assert_eq!(actual, expected, "after {skip} models");
     }
 }
@@ -497,12 +593,15 @@ fn a_handoff_keeps_the_certificate_checks_of_the_engaging_pull() {
     // The same with a certificate deciding the leaves: the engaging pull
     // holds the unmerged checks of leaves the certificate refuted.
     let theory = positive_loops(3);
+    let scratch_initialization = cold_arithmetic_scratch_work(&theory);
     let certificate = positive(&theory);
     let expected = unengaged(&theory, Some(&certificate), true);
     assert_eq!(expected.certificate_checks, Some((8, 1, 7)));
     assert_eq!(expected.countermodel_queries, 0, "the certificate decides");
     let (search, models) = handoff(&theory, Some(&certificate), None, true, 0);
-    assert_eq!(outcome(&search, &models), expected);
+    let mut actual = outcome(&search, &models);
+    retain_single_workspace_work(&mut actual, &expected, scratch_initialization);
+    assert_eq!(actual, expected);
 }
 
 #[test]
@@ -525,7 +624,7 @@ fn a_handoff_counts_the_coordinators_tight_checks_once() {
 fn a_filtered_handoff_prepares_at_most_one_checker_more_than_its_workers() {
     let theory = loop_beside_choices(3);
     let live = Arc::new(AtomicUsize::new(0));
-    let filter: Arc<dyn crate::RegionFilter> = Arc::new(Pass {
+    let filter: Arc<dyn crate::region_filter::tests::injection::Source> = Arc::new(Pass {
         theory: theory.clone(),
         live: Arc::clone(&live),
     });
@@ -811,11 +910,13 @@ fn a_failed_release_at_engagement_starts_no_thread() {
     let theory = tautologies(3);
     let (mut search, index) = walk(&theory, LATE);
     search
-        .set_filter(crate::region_filter::Filter::new(Arc::new(Faulty {
-            theory: theory.clone(),
-            panic_on_drop: true,
-            panic_at: Arc::new(AtomicUsize::new(0)),
-        })))
+        .set_filter(crate::region_filter::Filter::new(
+            crate::region_filter::Source::Fixture(Arc::new(Faulty {
+                theory: theory.clone(),
+                panic_on_drop: true,
+                panic_at: Arc::new(AtomicUsize::new(0)),
+            })),
+        ))
         .unwrap();
     let cancellation = search.shared.cancellation.clone();
     let mut budget = caller(&search, &cancellation);
@@ -841,11 +942,13 @@ fn a_panic_in_a_coordinator_step_merges_nothing_of_its_pull() {
     omit_producers_for_membership_test(&mut search);
     let panic_at = Arc::new(AtomicUsize::new(0));
     search
-        .set_filter(crate::region_filter::Filter::new(Arc::new(Faulty {
-            theory: theory.clone(),
-            panic_on_drop: false,
-            panic_at: Arc::clone(&panic_at),
-        })))
+        .set_filter(crate::region_filter::Filter::new(
+            crate::region_filter::Source::Fixture(Arc::new(Faulty {
+                theory: theory.clone(),
+                panic_on_drop: false,
+                panic_at: Arc::clone(&panic_at),
+            })),
+        ))
         .unwrap();
     let cancellation = search.shared.cancellation.clone();
     let mut budget = caller(&search, &cancellation);
@@ -954,10 +1057,12 @@ fn configuration_is_refused_once_the_walk_has_begun() {
         .unwrap()
         .unwrap();
     assert_eq!(
-        search.set_filter(crate::region_filter::Filter::new(Arc::new(Pass {
-            theory: theory.clone(),
-            live: Arc::new(AtomicUsize::new(0)),
-        }))),
+        search.set_filter(crate::region_filter::Filter::new(
+            crate::region_filter::Source::Fixture(Arc::new(Pass {
+                theory: theory.clone(),
+                live: Arc::new(AtomicUsize::new(0)),
+            }))
+        )),
         Err(Incomplete::LateRegionFilter)
     );
     let candidate = Interpretation::new(&theory, []).unwrap();

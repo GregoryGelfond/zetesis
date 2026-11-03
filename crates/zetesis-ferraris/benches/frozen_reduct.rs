@@ -9,7 +9,7 @@
 use std::hint::black_box;
 
 use criterion::{BenchmarkId, Criterion, Throughput};
-use zetesis_cpu::Cancellation;
+use zetesis_algebra::Cancellation;
 use zetesis_ferraris::{
     AdmissionLimits, FrozenReduct, Interpretation, Limits, Node, Theory, models_reduct,
 };

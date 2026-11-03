@@ -1,0 +1,14 @@
+[package]
+name = "zetesis-algebra"
+version.workspace = true
+description = "Shared execution algebra: cancellation, regions, walks and word operations."
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+
+[dev-dependencies]
+proptest.workspace = true
+
+[lints]
+workspace = true

@@ -11,9 +11,9 @@ use count_objective_sources::{INCONSISTENT, SATISFIABLE};
 use std::collections::BTreeSet;
 use std::num::NonZeroUsize;
 
+use zetesis_algebra::Cancellation;
 use zetesis_cli::{Backend, Completion, Interruption, Oracle, PreparedInput, Session, SolveConfig};
 use zetesis_core::{Value, ValueLimits};
-use zetesis_cpu::Cancellation;
 use zetesis_stable::Incomplete;
 use zetesis_test_support::programs::atom;
 

@@ -13,7 +13,7 @@ use crate::support::objective_boundaries;
 use cases::CASES;
 use reference::{Models, holds, native, values};
 use themelios_base::source::SourceId;
-use zetesis_cpu::Cancellation;
+use zetesis_algebra::Cancellation;
 use zetesis_themelios::{
     AdmissionOptions, AdmittedFormula, CountPlanLimits, CountPlanStatus, ExpansionFailure,
     ExpansionLimits, ExpansionResource, FormulaFailure, FormulaLimits, FormulaResource,

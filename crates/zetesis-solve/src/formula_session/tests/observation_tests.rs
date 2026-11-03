@@ -5,7 +5,7 @@ use crate::execution_observation::ExecutionSink;
 use crate::formula_execution::Execution;
 use crate::phase_timing::Recorder;
 use crate::{AnswerSelection, Backend, ExecutionObservation, SolveConfig, SolveError};
-use zetesis_cpu::Cancellation;
+use zetesis_algebra::Cancellation;
 use zetesis_ferraris::{AdmissionLimits, FormulaParts, Node, OperandSpan, Theory};
 use zetesis_reference_support::formula;
 

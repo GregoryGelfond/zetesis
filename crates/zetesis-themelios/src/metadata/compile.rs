@@ -144,16 +144,14 @@ impl Preflight {
         observed: u128,
         limit: usize,
     ) -> Result<(), MetadataError> {
-        if observed > limit as u128 {
-            Err(MetadataError::Limit {
+        zetesis_algebra::Meter::check_wide_count(observed, 0, limit as u128)
+            .map(|_| ())
+            .map_err(|_| MetadataError::Limit {
                 resource,
                 observed,
                 limit,
                 location: self.location,
             })
-        } else {
-            Ok(())
-        }
     }
     fn unsupported(&self, feature: MetadataFeature) -> MetadataError {
         MetadataError::Unsupported {

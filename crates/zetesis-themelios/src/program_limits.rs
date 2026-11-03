@@ -5,6 +5,8 @@
 
 use std::fmt;
 
+use zetesis_algebra::{Meter, MeterCountError};
+
 use themelios_program::symbol::Symbol;
 use themelios_program::term::{Term, Variable};
 
@@ -190,24 +192,26 @@ enum Frame<'a> {
 }
 
 fn check(resource: Resource, limit: usize, observed: usize) -> Result<(), Limit> {
-    if observed > limit {
-        Err(Limit {
+    Meter::check_count(observed, 0, limit)
+        .map(|_| ())
+        .map_err(|_| Limit {
             resource,
             limit,
             observed,
         })
-    } else {
-        Ok(())
-    }
 }
 
 fn charge(used: &mut usize, amount: usize, resource: Resource, limit: usize) -> Result<(), Limit> {
-    let observed = used.checked_add(amount).ok_or(Limit {
+    *used = Meter::check_count(*used, amount, limit).map_err(|error| Limit {
         resource,
         limit,
-        observed: usize::MAX,
+        observed: match error {
+            MeterCountError::Limit { observed, .. } => observed,
+            MeterCountError::Overflow => usize::MAX,
+        },
     })?;
-    check(resource, limit, observed)?;
-    *used = observed;
     Ok(())
 }
+
+#[cfg(test)]
+mod tests;

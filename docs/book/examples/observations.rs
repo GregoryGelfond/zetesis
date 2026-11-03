@@ -2,8 +2,8 @@
 
 // ANCHOR: example
 use std::convert::Infallible;
+use zetesis_algebra::Cancellation;
 use zetesis_core::{Atom, Model, Predicate};
-use zetesis_cpu::Cancellation;
 use zetesis_solve::{
     Backend, Completion, ExecutionObservation, ExecutionObserver, Grounder, PreparedInput, Session,
     SolveConfig,

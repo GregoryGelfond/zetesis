@@ -15,7 +15,9 @@ mod validation;
 use std::{fmt, mem::size_of};
 
 use crate::{Interpretation, Theory};
-use zetesis_cpu::{Cancellation, ChargeError, Meter, Refusal, Stop};
+use zetesis_algebra::{
+    Cancellation, ChargeError, Meter, MeterBytes, MeterBytesError, MeterCountError, Refusal, Stop,
+};
 
 /// Independent limits for complete-root classification and least closure.
 #[derive(Clone, Copy, Debug)]
@@ -174,7 +176,7 @@ pub struct PositivePlanStatistics {
 /// It does not establish source completeness or verify the Rust implementation.
 ///
 /// ```
-/// use zetesis_cpu::Cancellation;
+/// use zetesis_algebra::Cancellation;
 /// use zetesis_ferraris::{AdmissionLimits, Node, PositivePlan, PositivePlanLimits, Theory};
 ///
 /// // a. b :- a. a :- b. The positive cycle is seeded by the fact a.
@@ -239,7 +241,7 @@ impl PositivePlan {
                     cancellation,
                     meter,
                     statistics: &mut statistics,
-                    current_bytes: 0,
+                    bytes: MeterBytes::new(),
                 },
             )
         });
@@ -299,7 +301,7 @@ struct Budget<'a, 'c> {
     cancellation: &'c Cancellation,
     meter: &'a mut Meter<'c>,
     statistics: &'a mut PositivePlanStatistics,
-    current_bytes: u128,
+    bytes: MeterBytes,
 }
 
 impl Budget<'_, '_> {
@@ -316,75 +318,56 @@ impl Budget<'_, '_> {
     }
 
     fn dependency(&mut self) -> Result<(), PositiveError> {
-        let next = self
-            .statistics
-            .dependencies
-            .checked_add(1)
-            .ok_or(PositiveError::Overflow)?;
-        Self::ceiling(
-            PositiveResource::Dependencies,
-            next as u128,
-            self.limits.max_dependencies as u128,
-        )?;
-        self.statistics.dependencies = next;
+        self.statistics.dependencies = Meter::check_count(
+            self.statistics.dependencies,
+            1,
+            self.limits.max_dependencies,
+        )
+        .map_err(|error| match error {
+            MeterCountError::Limit { observed, limit } => PositiveError::Limit {
+                resource: PositiveResource::Dependencies,
+                observed: observed as u128,
+                limit: limit as u128,
+            },
+            MeterCountError::Overflow => PositiveError::Overflow,
+        })?;
         Ok(())
     }
 
     fn observe_bytes(&mut self, bytes: u128) -> Result<(), PositiveError> {
-        self.current_bytes = bytes;
-        self.statistics.peak_bytes = self.statistics.peak_bytes.max(bytes);
-        self.check_bytes(bytes)
-    }
-
-    fn check_bytes(&self, bytes: u128) -> Result<(), PositiveError> {
-        Self::ceiling(
-            PositiveResource::Bytes,
-            bytes,
-            self.limits.max_bytes as u128,
-        )
+        self.bytes
+            .observe(
+                bytes,
+                self.limits.max_bytes as u128,
+                &mut self.statistics.peak_bytes,
+            )
+            .map_err(Self::byte_error)
     }
 
     fn reserve<T>(&mut self, count: usize) -> Result<Vec<T>, PositiveError> {
         self.meter.poll()?;
-        let requested = self
-            .current_bytes
-            .checked_add(count as u128 * size_of::<T>() as u128)
-            .ok_or(PositiveError::Overflow)?;
-        self.check_bytes(requested)?;
-        let mut result = Vec::new();
-        result
-            .try_reserve_exact(count)
-            .map_err(|_| Stop::Allocation)?;
-        let actual = self
-            .current_bytes
-            .checked_add(result.capacity() as u128 * size_of::<T>() as u128)
-            .ok_or(PositiveError::Overflow)?;
-        self.observe_bytes(actual)?;
-        Ok(result)
+        self.bytes
+            .reserve(
+                count,
+                self.limits.max_bytes as u128,
+                &mut self.statistics.peak_bytes,
+            )
+            .map_err(Self::byte_error)
     }
 
     fn release<T>(&mut self, vector: Vec<T>) -> Result<(), PositiveError> {
-        let bytes = vector.capacity() as u128 * size_of::<T>() as u128;
-        drop(vector);
-        self.current_bytes = self
-            .current_bytes
-            .checked_sub(bytes)
-            .ok_or(PositiveError::Overflow)?;
-        Ok(())
+        self.bytes.release(vector).map_err(Self::byte_error)
     }
 
-    fn ceiling(
-        resource: PositiveResource,
-        observed: u128,
-        limit: u128,
-    ) -> Result<(), PositiveError> {
-        if observed > limit {
-            return Err(PositiveError::Limit {
-                resource,
+    fn byte_error(error: MeterBytesError) -> PositiveError {
+        match error {
+            MeterBytesError::Limit { observed, limit } => PositiveError::Limit {
+                resource: PositiveResource::Bytes,
                 observed,
                 limit,
-            });
+            },
+            MeterBytesError::Overflow => PositiveError::Overflow,
+            MeterBytesError::Allocation => PositiveError::Stopped(Stop::Allocation),
         }
-        Ok(())
     }
 }

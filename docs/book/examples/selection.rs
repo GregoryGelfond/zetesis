@@ -3,8 +3,8 @@
 // ANCHOR: example
 use std::collections::BTreeSet;
 use std::num::NonZeroUsize;
+use zetesis_algebra::Cancellation;
 use zetesis_core::{Atom, Model, Predicate};
-use zetesis_cpu::Cancellation;
 use zetesis_solve::{
     AnswerSelection, Backend, Completion, PreparedInput, Session, SolveConfig, WorldView,
     WorldViewError, WorldViewFailureParts, WorldViewLimits,
@@ -110,7 +110,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     .expect_err("the original family has two answers");
     let WorldViewFailureParts {
         cause,
-        subject,
+        original,
         answer_sets,
         outcome,
     } = failure.into_parts();
@@ -121,7 +121,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         retained.interpretation().clone(),
         retained.score().expect("active objective").costs().to_vec(),
     )));
-    assert!(retained.subject().same_instance(&subject));
+    assert!(retained.original().same_instance(&original));
     let outcome = outcome.expect("search started before collection failed");
     assert_eq!(outcome.selection(), Some(AnswerSelection::All));
     assert_eq!(outcome.verified_models(), 2);

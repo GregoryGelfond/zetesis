@@ -113,7 +113,7 @@ fn qualify_carry_and_borrow_at(oracle: &mut GpuFormulaOracle, weight: u64) {
     let result = oracle
         .propagate_batch(&theory, &[both], FormulaLimits::default())
         .unwrap();
-    assert_eq!(result[0].verdict(), FormulaVerdict::NoProperSubset);
+    assert_eq!(result[0].verdict(), &FormulaVerdict::NoProperSubset);
 }
 
 // The same result must survive both entailed rows and rows still requiring a
@@ -215,8 +215,8 @@ fn compare_native(oracle: &mut GpuFormulaOracle, theory: &Theory) {
             if matches!(result.verdict(), FormulaVerdict::NoProperSubset) {
                 assert!(expected.accepted());
             }
-            // Device domains never cross this API. A surviving proper-subset
-            // reduct model must leave exact CPU completion as a residual query.
+            // Every independently checked proper-subset witness must remain
+            // represented in the device's semantic root.
             if !matches!(expected.verdict(), Verdict::NotModel { .. }) {
                 let frozen =
                     FrozenReduct::new(candidate, Limits::default(), &Cancellation::default())
@@ -228,7 +228,15 @@ fn compare_native(oracle: &mut GpuFormulaOracle, theory: &Theory) {
                             .is_satisfied_by(tested, Limits::default(), &Cancellation::default())
                             .unwrap()
                     {
-                        assert!(matches!(result.verdict(), FormulaVerdict::Residual(_)));
+                        let FormulaVerdict::Residual(_, root) = result.verdict() else {
+                            panic!("a proper frozen witness requires residual completion");
+                        };
+                        assert_eq!(root.len(), theory.atom_count());
+                        for atom in 0..root.len() {
+                            if let Some(value) = root.decision(atom) {
+                                assert_eq!(value, tested.contains(atom));
+                            }
+                        }
                     }
                 }
             }
@@ -445,7 +453,7 @@ fn qualify_threshold_guard_families(oracle: &mut GpuFormulaOracle) {
             let result = oracle
                 .propagate_batch(&theory, &[candidate], FormulaLimits::default())
                 .unwrap();
-            assert_eq!(result[0].verdict(), FormulaVerdict::NoProperSubset);
+            assert_eq!(result[0].verdict(), &FormulaVerdict::NoProperSubset);
             assert_eq!(
                 oracle.last_batch_stats().unwrap().propagation,
                 super::requested_groups(oracle, &theory)

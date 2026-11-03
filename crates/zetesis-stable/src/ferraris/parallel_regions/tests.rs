@@ -1,6 +1,12 @@
 //! Fault injection at the production worker accounting and failure boundaries.
 
 use super::*;
+use zetesis_algebra::region::Narrowing;
+
+/// Test-only observation of actual joined candidate workers.
+pub(super) fn record_candidate_worker(report: &WorkerReport) {
+    engagement_tests::record_candidate_worker(report);
+}
 
 /// The original index the enumeration would build and hand the workers.
 fn original(theory: &Theory) -> Arc<IndexedTheory> {
@@ -48,16 +54,19 @@ fn shared_narrowing_never_executes_an_unleased_read() {
         statistics: SearchStatistics::default(),
     };
     let narrower = Narrower::new(&theory);
-    let mut region = Region::all_open(theory.atom_count());
-    let mut knowledge = CandidateKnowledge::default();
+    let mut entry = Entry::new(
+        Region::all_open(theory.atom_count()),
+        CandidateKnowledge::default(),
+    );
     let mut counts = RegionCounts::default();
     let result = super::super::regions::narrow(
-        (
-            zetesis_ferraris::OriginalSubject::new(&theory, None),
-            &narrower,
-        ),
+        super::super::regions::CandidateReading {
+            original: zetesis_ferraris::OriginalSubject::new(&theory, None),
+            narrower: &narrower,
+            arithmetic: None,
+        },
         &Conditions::<(Theory, Narrower)>::default(),
-        (&mut region, &mut knowledge),
+        &mut entry,
         &mut zetesis_ferraris::NarrowingScratch::default(),
         &mut budget,
         &mut counts,
@@ -319,3 +328,5 @@ fn unchanged_explanation_counts_preserve_absolute_peaks() {
     live.add_support_explanations(&retained, &larger);
     assert_eq!(live.support_explanations(&empty), larger);
 }
+
+mod arithmetic_receipts;

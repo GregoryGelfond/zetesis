@@ -15,9 +15,10 @@ mod decode;
 mod spelling;
 mod values;
 
+use zetesis_algebra::{Meter, MeterCountError};
 use zetesis_core::{Atom, Value, ValueLimits};
 
-use super::{Error, Issue, Limits as AnswerLimits, Resource, check, invalid};
+use super::{Error, Issue, Limits as AnswerLimits, Resource, invalid};
 
 /// Inclusive native-report acceptance and per-value construction ceilings.
 /// Initial JSON and temporary decoded node/text allocations are bounded by report
@@ -186,10 +187,13 @@ impl NativeAnswers {
                 .map_err(|_| Error::Allocation)?;
             for atom in &record.atoms {
                 let size = spelling::atom_bytes(atom)?;
-                used = used.checked_add(size).ok_or_else(|| {
-                    invalid(Issue::CountOverflow, "full-model spelling byte count")
-                })?;
-                check(Resource::SpellingBytes, max_bytes, used)?;
+                record_attempt(
+                    &mut used,
+                    size,
+                    max_bytes,
+                    Resource::SpellingBytes,
+                    "full-model spelling byte count",
+                )?;
                 symbols.push(spelling::atom(atom, size)?);
             }
             symbols.sort_unstable();
@@ -222,10 +226,44 @@ pub fn parse(bytes: &[u8], limits: Limits) -> Result<NativeAnswers, Error> {
 }
 
 fn admit_spelling(used: &mut usize, bytes: usize, maximum: usize) -> Result<(), Error> {
-    let attempted = used
-        .checked_add(bytes)
-        .ok_or_else(|| invalid(Issue::CountOverflow, "display spelling bytes"))?;
-    check(Resource::SpellingBytes, maximum, attempted)?;
+    let attempted = Meter::check_count(*used, bytes, maximum).map_err(|error| match error {
+        MeterCountError::Overflow => invalid(Issue::CountOverflow, "display spelling bytes"),
+        MeterCountError::Limit { observed, limit } => Error::Limit {
+            resource: Resource::SpellingBytes,
+            limit,
+            attempted: observed,
+        },
+    })?;
     *used = attempted;
     Ok(())
 }
+
+/// Keep the native parser's representable attempted total even on a ceiling
+/// refusal. Arithmetic overflow leaves its original prefix unchanged. Admission
+/// stays before allocation, decoding or retained publication by the caller.
+fn record_attempt(
+    used: &mut usize,
+    amount: usize,
+    limit: usize,
+    resource: Resource,
+    detail: &'static str,
+) -> Result<(), Error> {
+    match Meter::check_count(*used, amount, limit) {
+        Ok(attempted) => {
+            *used = attempted;
+            Ok(())
+        }
+        Err(MeterCountError::Limit { observed, limit }) => {
+            *used = observed;
+            Err(Error::Limit {
+                resource,
+                limit,
+                attempted: observed,
+            })
+        }
+        Err(MeterCountError::Overflow) => Err(invalid(Issue::CountOverflow, detail)),
+    }
+}
+
+#[cfg(test)]
+mod tests;

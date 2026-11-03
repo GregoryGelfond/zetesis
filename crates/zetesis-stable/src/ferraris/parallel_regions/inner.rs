@@ -52,7 +52,8 @@ use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard, OnceLock, PoisonError, TryLockError};
 use std::time::{Duration, Instant};
 
-use zetesis_cpu::regions::{Region, Traversal};
+use zetesis_algebra::Countermodels;
+use zetesis_algebra::{region::Entry, walk::Walk};
 use zetesis_ferraris::{Interpretation, Knowledge};
 
 use super::{
@@ -161,16 +162,14 @@ impl QueryCell {
 
 /// A region of a published query, with its knowledge and the query's cell.
 pub(super) struct InnerEntry {
-    region: Region,
-    knowledge: Knowledge,
+    entry: Entry<Knowledge<Countermodels>>,
     cell: Arc<QueryCell>,
 }
 
 impl InnerEntry {
-    fn new((region, knowledge): (Region, Knowledge), cell: &Arc<QueryCell>) -> Self {
+    fn new(entry: Entry<Knowledge<Countermodels>>, cell: &Arc<QueryCell>) -> Self {
         Self {
-            region,
-            knowledge,
+            entry,
             cell: Arc::clone(cell),
         }
     }
@@ -235,7 +234,7 @@ impl InnerDeques {
         &self,
         index: usize,
         cell: &Arc<QueryCell>,
-        traversal: &mut Traversal<Knowledge>,
+        traversal: &mut Walk<Knowledge<Countermodels>>,
         termination: &Termination,
         reserve: impl FnOnce(&mut VecDeque<InnerEntry>, usize) -> Result<(), Incomplete>,
     ) -> Result<(), Incomplete> {
@@ -249,30 +248,35 @@ impl InnerDeques {
         Ok(())
     }
 
-    /// Publish a split's children on worker `index`'s deque, the cut child on
-    /// top since the inline query visits it first: count the split's net gain
-    /// of one in `cell` before either child can be visible, then reserve their
-    /// entry capacity, push them, release the deque and wake one idle worker.
-    /// The injected reservation is the sole fallible storage effect; a refusal
-    /// withdraws the gain and publishes nothing.
+    /// Admit both children while retaining the narrowed parent and its query.
+    /// The cut knowledge is copied before locking. The reversible count gain
+    /// precedes reservation; refusal withdraws it and leaves the exact parent
+    /// in the occupied caller slot. Success consumes that slot only after
+    /// admission. Errors remain the original typed refusal.
+    /// After admission, queue held then cut so the inline query's cut-first
+    /// order is unchanged, release the deque, and wake an idle worker.
     fn publish_split(
         &self,
         index: usize,
-        cell: &Arc<QueryCell>,
-        (cut, held): ((Region, Knowledge), (Region, Knowledge)),
+        pending: &mut Option<InnerEntry>,
+        atom: usize,
+        cut_knowledge: Knowledge<Countermodels>,
         termination: &Termination,
         reserve: impl FnOnce(&mut VecDeque<InnerEntry>, usize) -> Result<(), Incomplete>,
     ) -> Result<(), Incomplete> {
-        let atoms = cut.0.len();
+        let parent = pending.as_ref().expect("publication has a pending parent");
+        let atoms = parent.entry.region.len();
         let mut queue = self.queue(index);
         // The parent is in hand and still counted.
-        cell.grow();
+        parent.cell.grow();
         if let Err(error) = reserve(&mut queue, 2) {
-            cell.shrink();
+            parent.cell.shrink();
             return Err(error);
         }
-        queue.push_back(InnerEntry::new(held, cell));
-        queue.push_back(InnerEntry::new(cut, cell));
+        let InnerEntry { entry, cell } = pending.take().expect("admission retains its parent");
+        let (cut, held) = entry.split_with(atom, |knowledge| (cut_knowledge, knowledge));
+        queue.push_back(InnerEntry::new(held, &cell));
+        queue.push_back(InnerEntry::new(cut, &cell));
         debug_assert!(
             queue.len() <= atoms + 1,
             "an inner deque outgrew its depth-first bound"
@@ -382,7 +386,7 @@ impl Publication for WalkPublication<'_, '_> {
         &mut self,
         truth: &[bool],
         candidate: &Interpretation,
-        traversal: &mut Traversal<Knowledge>,
+        traversal: &mut Walk<Knowledge<Countermodels>>,
     ) -> Option<()> {
         let pending = traversal.pending();
         // A cell counting no region would never be decided.
@@ -426,14 +430,10 @@ pub(super) fn serve<'a>(
     budget: &mut Budget<'a, WorkLease<'a>>,
     (report, reported): (&mut WorkerReport, &mut SearchPhaseTimings),
 ) -> Result<Option<Interpretation>, Incomplete> {
-    let InnerEntry {
-        mut region,
-        mut knowledge,
-        cell,
-    } = entry;
+    let InnerEntry { mut entry, cell } = entry;
     if cell.is_resolved() {
         // A decided query's region carries no obligation.
-        drop((region, knowledge));
+        drop(entry);
         let decided = cell.retire();
         debug_assert!(!decided, "a decided query was decided again");
         return Ok(None);
@@ -451,7 +451,7 @@ pub(super) fn serve<'a>(
             ReductQuery::new(original).serve(
                 &cell.truth,
                 &cell.candidate,
-                (&mut region, &mut knowledge),
+                &mut entry,
                 shared.limits,
                 budget,
                 (statistics, scratch),
@@ -464,46 +464,53 @@ pub(super) fn serve<'a>(
         &shared.live.countermodels,
         report.statistics.countermodels - countermodels,
     );
-    let settled = match served {
-        Ok(Served::Empty) => Ok(true),
+    match served {
+        Ok(Served::Empty) => decide(shared, &cell),
         Ok(Served::Countermodel(witness)) => {
             // Absorption: the candidate is refuted and nothing is delivered.
             if cell.absorb(witness) {
                 shared.frontier.termination.resolve();
             }
-            Ok(true)
+            decide(shared, &cell)
         }
-        // The region lives on as its children, the cut child with a copy of
-        // the knowledge, as the inline traversal's children carry copies.
         Ok(Served::Split(atom)) => {
-            let (cut, held) = region.split(atom);
-            let cut = (cut, knowledge.clone());
-            shared
-                .inner
-                .publish_split(
-                    index,
-                    &cell,
-                    (cut, (held, knowledge)),
-                    &shared.frontier.termination,
-                    reserve_entries,
-                )
-                .map(|()| false)
+            let cut_knowledge = entry.state.clone();
+            let mut pending = Some(InnerEntry { entry, cell });
+            match shared.inner.publish_split(
+                index,
+                &mut pending,
+                atom,
+                cut_knowledge,
+                &shared.frontier.termination,
+                reserve_entries,
+            ) {
+                Ok(()) => Ok(None),
+                Err(error) => {
+                    abandon(
+                        shared,
+                        pending.take().expect("refusal retains its parent"),
+                        error,
+                    );
+                    Err(error)
+                }
+            }
         }
-        Err(error) => Err(error),
-    };
-    match settled {
-        Ok(false) => Ok(None),
-        Ok(true) => decide(shared, &cell),
         Err(error) => {
-            // As inline, the query's error stops the walk: the stop is set
-            // before the region is retired, so the cell is never decided stable.
-            cell.halt(error);
-            shared.stop(error);
-            let decided = cell.retire();
-            debug_assert!(!decided, "a stopped query was decided stable");
+            abandon(shared, InnerEntry { entry, cell }, error);
             Err(error)
         }
     }
+}
+
+/// Commit the query and walk stops while still owning the unresolved parent,
+/// then retire its count and release it as terminal abandonment. Retirement
+/// after halt cannot certify stability; this is not a resolved search region.
+fn abandon(shared: &Shared, parent: InnerEntry, error: Incomplete) {
+    parent.cell.halt(error);
+    shared.stop(error);
+    let decided = parent.cell.retire();
+    debug_assert!(!decided, "a stopped query was decided stable");
+    drop(parent);
 }
 
 /// Retire a resolved region of `cell`'s query. The last, with no witness and

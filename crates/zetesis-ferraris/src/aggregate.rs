@@ -159,7 +159,7 @@ impl AggregateBuild {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum AggregateErrorKind {
     /// Shared cancellation or deadline, preserved as supplied by the CPU control.
-    Control(zetesis_cpu::Stop),
+    Control(zetesis_algebra::Stop),
     /// Too many input elements.
     ElementLimit,
     /// Too many requested guards in one aggregate family.
@@ -196,7 +196,7 @@ impl AggregateErrorKind {
     #[must_use]
     pub fn is_resource_refusal(self) -> bool {
         match self {
-            Self::Control(stop) => zetesis_cpu::Refusal::is_resource_refusal(&stop),
+            Self::Control(stop) => zetesis_algebra::Refusal::is_resource_refusal(&stop),
             Self::ElementLimit
             | Self::GuardLimit
             | Self::NodeLimit

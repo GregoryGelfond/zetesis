@@ -14,6 +14,8 @@ use zetesis_ferraris::{EvaluationLimits, Interpretation, SlateId, SlateRef, Theo
 #[cfg(test)]
 mod tests;
 mod validation;
+mod regional;
+pub use regional::{RegionalOutcome, RegionalPass};
 
 /// Faults the unit tests inject where no fixture fails on demand, as
 /// `original_index`'s build hook does: an allocation the allocator would
@@ -120,11 +122,12 @@ pub enum BatchError<E> {
     /// Current-call limits cannot admit the retained batch. Its proposals remain
     /// owned and retryable under sufficient limits, without calling the checker.
     Limits(Incomplete),
-    /// The checker did not return exactly one ordered verdict per pending candidate.
+    /// The checker did not return the required ordered entries. For a regional
+    /// list of the correct length, the actual count is its valid ordered prefix.
     Shape {
-        /// Pending candidate count.
+        /// Required entry count.
         expected: usize,
-        /// Returned verdict count.
+        /// Returned entry count, or valid prefix for a malformed regional list.
         actual: usize,
     },
     /// A slate ticket did not name the stream's oldest pending slate: it named
@@ -416,6 +419,18 @@ impl StableModels {
         usize::try_from(count).unwrap_or(usize::MAX)
     }
 
+    /// Retained pending-row and validation envelope, including reserved
+    /// capacity for a slate proposed ahead. The query changes no ownership.
+    ///
+    /// # Errors
+    /// Returns counter overflow if the byte total cannot be represented.
+    pub fn pending_batch_bytes(&self) -> Result<u128, Incomplete> {
+        self.pending_row_bytes()
+            .checked_mul(self.held_rows() as u128)
+            .and_then(|rows| rows.checked_add(self.batch.validation.retained_bytes()))
+            .ok_or(Incomplete::CounterOverflow)
+    }
+
     /// Candidate capacity for a slate proposed ahead
     /// ([`Self::propose_lookahead`]): the rows that fit the pending-memory
     /// envelope beside the oldest pending slate's retained rows and the actual
@@ -428,17 +443,15 @@ impl StableModels {
         if self.batch.pending.is_empty() || self.batch.ahead.is_some() {
             return 0;
         }
-        let row = self.pending_row_bytes();
-        let Some(available) = u128::from(max_pending_bytes)
-            .checked_sub(self.batch.validation.retained_bytes())
-            .and_then(|available| {
-                available.checked_sub(row * self.batch.pending.capacity() as u128)
-            })
+        let Some(available) = self
+            .pending_batch_bytes()
+            .ok()
+            .and_then(|retained| u128::from(max_pending_bytes).checked_sub(retained))
         else {
             return 0;
         };
-        let count =
-            (available / row).min((isize::MAX as usize / size_of::<Interpretation>()) as u128);
+        let count = (available / self.pending_row_bytes())
+            .min((isize::MAX as usize / size_of::<Interpretation>()) as u128);
         usize::try_from(count).unwrap_or(usize::MAX)
     }
 
@@ -753,6 +766,13 @@ impl StableModels {
         verdicts: Vec<BatchVerdict>,
         completion: &mut CompletionExecutor,
     ) -> Result<Vec<Interpretation>, BatchError<Infallible>> {
+        self.require_oldest(ticket)?;
+        let result = self.commit_pending(verdicts, completion, OriginalCheck::Joint);
+        self.terminate_on_search(&result);
+        result
+    }
+
+    fn require_oldest(&self, ticket: SlateTicket) -> Result<(), BatchError<Infallible>> {
         if self.terminal {
             return Err(BatchError::Search(Incomplete::ClosedEnumerator));
         }
@@ -760,9 +780,7 @@ impl StableModels {
         if self.batch.id != Some(slate) || self.batch.pending.is_empty() {
             return Err(BatchError::SlateOrder);
         }
-        let result = self.commit_pending(verdicts, completion, OriginalCheck::Joint);
-        self.terminate_on_search(&result);
-        result
+        Ok(())
     }
 
     /// Hand out the oldest pending slate, proposing one first when none is
@@ -853,6 +871,20 @@ impl StableModels {
         completion: &mut CompletionExecutor,
         original: OriginalCheck,
     ) -> Result<Vec<Interpretation>, BatchError<E>> {
+        self.check_tags(&verdicts, original)?;
+        self.certify_tags(&mut verdicts)?;
+        let flags = self
+            .complete_pending(&verdicts, None, completion)
+            .map_err(completion_error)?;
+        self.publish_pending(&verdicts, flags)
+            .map_err(BatchError::Search)
+    }
+
+    fn check_tags<E>(
+        &self,
+        verdicts: &[BatchVerdict],
+        original: OriginalCheck,
+    ) -> Result<(), BatchError<E>> {
         if verdicts.len() != self.batch.pending.len() {
             return Err(BatchError::Shape {
                 expected: self.batch.pending.len(),
@@ -862,18 +894,12 @@ impl StableModels {
         if original == OriginalCheck::Joint && verdicts.contains(&BatchVerdict::NotModel) {
             return Err(BatchError::Search(Incomplete::InvalidWitness));
         }
+        Ok(())
+    }
+
+    fn certify_tags<E>(&mut self, verdicts: &mut [BatchVerdict]) -> Result<(), BatchError<E>> {
         self.batch.original_checked = true;
-        self.certify_pending(&mut verdicts)
-            .map_err(BatchError::Search)?;
-        let output = self.commit(&verdicts, completion).map_err(|error| {
-            if error == Incomplete::CompletionScratch {
-                BatchError::Limits(error)
-            } else {
-                BatchError::Search(error)
-            }
-        })?;
-        self.promote();
-        Ok(output)
+        self.certify_pending(verdicts).map_err(BatchError::Search)
     }
 
     /// After a commit, the slate proposed ahead becomes the oldest pending
@@ -1200,11 +1226,12 @@ impl StableModels {
         Ok(usize::try_from(available).unwrap_or(usize::MAX))
     }
 
-    fn commit(
+    fn complete_pending(
         &mut self,
         verdicts: &[BatchVerdict],
+        roots: Option<Vec<(usize, zetesis_algebra::region::Region)>>,
         completion: &mut CompletionExecutor,
-    ) -> Result<Vec<Interpretation>, Incomplete> {
+    ) -> Result<Vec<bool>, Incomplete> {
         // Completion owns every resident query workspace in this attempt.
         // Scalar scratch carries no semantic state and must not remain as an
         // additional unaccounted workspace when switching execution modes.
@@ -1217,22 +1244,30 @@ impl StableModels {
             statistics: self.statistics.search,
         };
         increment(&mut self.batch.statistics.completion_calls)?;
+        let input = super::completion::Input {
+            candidates: &self.batch.pending,
+            verdicts,
+            limits: self.limits,
+            // A residual exists only after a walk, which built the index;
+            // completion borrows it and never builds one.
+            query: self.index.get().map(|index| super::ReductQuery::new(index)),
+        };
         let result = completion.complete(
-            super::completion::Input {
-                theory: &self.theory,
-                candidates: &self.batch.pending,
-                verdicts,
-                limits: self.limits,
-                // A residual exists only after a walk, which built the index;
-                // completion borrows it and never builds one.
-                query: self.index.get().map(|index| super::ReductQuery::new(index)),
-            },
+            input,
+            roots,
             &mut budget,
             &mut self.statistics,
             &mut accepted,
         );
         self.statistics.search = budget.statistics;
-        result?;
+        result.map(|()| accepted)
+    }
+
+    fn publish_pending(
+        &mut self,
+        verdicts: &[BatchVerdict],
+        accepted: Vec<bool>,
+    ) -> Result<Vec<Interpretation>, Incomplete> {
         // The executor preflight included these output slots before any query.
         let mut output = crate::budget::storage(verdicts.len())?;
         let mut stats = self.batch.statistics;
@@ -1258,7 +1293,16 @@ impl StableModels {
         }
         self.batch.statistics = stats;
         self.statistics.stable_models = stable;
+        self.promote();
         Ok(output)
+    }
+}
+
+fn completion_error<E>(error: Incomplete) -> BatchError<E> {
+    if error == Incomplete::CompletionScratch {
+        BatchError::Limits(error)
+    } else {
+        BatchError::Search(error)
     }
 }
 

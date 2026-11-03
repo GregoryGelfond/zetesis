@@ -2,16 +2,16 @@
 
 use std::{convert::Infallible, num::NonZeroUsize};
 
+use zetesis_algebra::Cancellation;
 use zetesis_core::{
     Atom, Model, Predicate, Sign, Value,
     relation::{Limits, Relation},
 };
-use zetesis_cpu::Cancellation;
 use zetesis_reference_support::{formula, prepared};
 use zetesis_solve::{
     AnswerSelection, AnswerSet, Backend, Completion, ExecutionObservation, ExecutionObserver,
-    ExecutionResources, GpuApi, Grounder, Interruption, Oracle, PreparedInput, SemanticOutcome,
-    Session, SolveConfig, SolveError, Subject,
+    ExecutionResources, GpuApi, Grounder, Interruption, Oracle, Original, PreparedInput,
+    SemanticOutcome, Session, SolveConfig, SolveError,
 };
 use zetesis_test_support::programs::signed as atom;
 use zetesis_wgpu::{
@@ -176,7 +176,7 @@ struct Capture {
 
 fn solve(
     input: PreparedInput<'_>,
-    subject: &Subject,
+    original: &Original,
     config: SolveConfig,
     resources: &ExecutionResources,
     selection: AnswerSelection,
@@ -190,12 +190,12 @@ fn solve(
     let mut records = Vec::new();
     while let Some(answer) = session.next_observed(&mut routes) {
         let answer = answer.unwrap();
-        assert!(answer.subject().same_instance(subject));
+        assert!(answer.original().same_instance(original));
         records.push(Record::from_answer(&answer));
     }
     assert!(session.next_observed(&mut routes).is_none());
     let outcome = session.outcome().unwrap();
-    assert!(outcome.subject().unwrap().same_instance(subject));
+    assert!(outcome.original().unwrap().same_instance(original));
     records.sort();
     Capture {
         records,
@@ -234,12 +234,12 @@ fn independent_normal_sessions(resources: &ExecutionResources, device: GpuApi) {
     let first = formula(NORMAL_NUMBER);
     let second = formula(NORMAL_STRING);
     assert!(!first.theory().same_instance(second.theory()));
-    let subject = Subject::Theory(first.theory().clone());
+    let original = Original::Theory(first.theory().clone());
     let mut limited = config(device.backend());
     limited.max_candidates = 0;
     let stopped = solve(
         PreparedInput::formula(&first),
-        &subject,
+        &original,
         limited,
         resources,
         AnswerSelection::All,
@@ -257,10 +257,10 @@ fn independent_normal_sessions(resources: &ExecutionResources, device: GpuApi) {
         (&first, Value::Number(7)),
         (&second, Value::String("7".into())),
     ] {
-        let subject = Subject::Theory(owner.theory().clone());
+        let original = Original::Theory(owner.theory().clone());
         let captured = solve(
             PreparedInput::formula(owner),
-            &subject,
+            &original,
             config(device.backend()),
             resources,
             AnswerSelection::All,
@@ -283,17 +283,17 @@ fn independent_formulas(resources: &ExecutionResources, device: GpuApi) {
     let second = formula(FORMULA_SECOND);
     assert!(!first.theory().same_instance(second.theory()));
     for (owner, choice, cost) in [(&first, "a", 1), (&second, "b", 4), (&first, "a", 1)] {
-        let subject = Subject::Theory(owner.theory().clone());
+        let original = Original::Theory(owner.theory().clone());
         let captured = solve(
             PreparedInput::formula(owner),
-            &subject,
+            &original,
             config(device.backend()),
             resources,
             AnswerSelection::Optimal,
         );
         let reference = solve(
             PreparedInput::formula(owner),
-            &subject,
+            &original,
             config(Backend::Cpu),
             &ExecutionResources::default(),
             AnswerSelection::Optimal,
@@ -313,7 +313,7 @@ fn independent_formulas(resources: &ExecutionResources, device: GpuApi) {
     }
     let all = solve(
         PreparedInput::formula(&second),
-        &Subject::Theory(second.theory().clone()),
+        &Original::Theory(second.theory().clone()),
         config(device.backend()),
         resources,
         AnswerSelection::All,
@@ -413,10 +413,10 @@ fn stopped_timed_session(device: GpuApi) {
     let timing = stopped.formula_execution().unwrap().gpu_compute_timing;
     assert_eq!(timing.flush_submissions, 0);
     assert_eq!(timing.unresolved_batches, u64::from(enabled));
-    let subject = Subject::Theory(owner.theory().clone());
+    let original = Original::Theory(owner.theory().clone());
     let completed = solve(
         PreparedInput::formula(&owner),
-        &subject,
+        &original,
         config(device.backend()),
         &resources,
         AnswerSelection::All,
@@ -458,7 +458,7 @@ fn independent_profile_sessions(device: GpuApi) {
         limited.max_candidates = 0;
         let stopped = solve(
             PreparedInput::formula(&owner),
-            &Subject::Theory(owner.theory().clone()),
+            &Original::Theory(owner.theory().clone()),
             limited,
             &retained,
             AnswerSelection::Optimal,
@@ -492,16 +492,16 @@ fn policy_refusal(device: GpuApi) {
 fn policy_refusal_with(resources: &ExecutionResources, device: GpuApi) {
     let owner = formula(NORMAL_NUMBER);
     let formula = formula(FORMULA_FIRST);
-    for (profile, input, subject) in [
+    for (profile, input, original) in [
         (
             Profile::Normal,
             PreparedInput::formula(&owner),
-            Subject::Theory(owner.theory().clone()),
+            Original::Theory(owner.theory().clone()),
         ),
         (
             Profile::Optimization,
             PreparedInput::formula(&formula),
-            Subject::Theory(formula.theory().clone()),
+            Original::Theory(formula.theory().clone()),
         ),
     ] {
         let mut routes = Routes::default();
@@ -516,7 +516,7 @@ fn policy_refusal_with(resources: &ExecutionResources, device: GpuApi) {
         .expect("a supplied context cannot switch backend");
         assert!(matches!(failure.cause.as_ref(), SolveError::Gpu(error)
             if error.kind() == GpuErrorKind::AdapterRefused));
-        assert!(failure.subject().unwrap().same_instance(&subject));
+        assert!(failure.original().unwrap().same_instance(&original));
         assert!(failure.semantic().is_none());
         assert_eq!(
             routes.device_tight + routes.device_formula + routes.cpu_formula,
@@ -524,7 +524,7 @@ fn policy_refusal_with(resources: &ExecutionResources, device: GpuApi) {
         );
         let complete = solve(
             input,
-            &subject,
+            &original,
             config(device.backend()),
             resources,
             AnswerSelection::Optimal,
@@ -544,7 +544,7 @@ fn cpu_policies_with(resources: &ExecutionResources) {
     let owner = formula(NORMAL_NUMBER);
     let capture = solve(
         PreparedInput::formula(&owner),
-        &Subject::Theory(owner.theory().clone()),
+        &Original::Theory(owner.theory().clone()),
         config(Backend::Cpu),
         resources,
         AnswerSelection::All,
@@ -561,7 +561,7 @@ fn cpu_policies_with(resources: &ExecutionResources) {
     let formula = formula(FORMULA_FIRST);
     let capture = solve(
         PreparedInput::formula(&formula),
-        &Subject::Theory(formula.theory().clone()),
+        &Original::Theory(formula.theory().clone()),
         config(Backend::Cpu),
         resources,
         AnswerSelection::Optimal,
@@ -611,16 +611,16 @@ fn observer_failure_with(resources: &ExecutionResources, device: GpuApi) {
     let cause = context
         .check_selection(GpuOptions::default(), device.other().selection())
         .unwrap_err();
-    for (profile, input, subject) in [
+    for (profile, input, original) in [
         (
             Profile::Normal,
             PreparedInput::formula(&owner),
-            Subject::Theory(owner.theory().clone()),
+            Original::Theory(owner.theory().clone()),
         ),
         (
             Profile::Optimization,
             PreparedInput::formula(&formula),
-            Subject::Theory(formula.theory().clone()),
+            Original::Theory(formula.theory().clone()),
         ),
     ] {
         let mut observer = RejectDeviceObservation {
@@ -637,11 +637,11 @@ fn observer_failure_with(resources: &ExecutionResources, device: GpuApi) {
         };
         assert_eq!(error.downcast_ref::<GpuError>(), Some(&cause));
         assert_eq!(observer.calls, 1);
-        assert!(failure.subject().unwrap().same_instance(&subject));
+        assert!(failure.original().unwrap().same_instance(&original));
         assert!(failure.semantic().is_none());
         let complete = solve(
             input,
-            &subject,
+            &original,
             config(device.backend()),
             resources,
             AnswerSelection::Optimal,
@@ -671,7 +671,7 @@ fn session_resource_fixture_families_are_exact() {
         let owner = formula(source);
         let capture = solve(
             PreparedInput::formula(&owner),
-            &Subject::Theory(owner.theory().clone()),
+            &Original::Theory(owner.theory().clone()),
             config(Backend::Cpu),
             &resources,
             AnswerSelection::All,
@@ -688,7 +688,7 @@ fn session_resource_fixture_families_are_exact() {
         let owner = formula(source);
         let capture = solve(
             PreparedInput::formula(&owner),
-            &Subject::Theory(owner.theory().clone()),
+            &Original::Theory(owner.theory().clone()),
             config(Backend::Cpu),
             &resources,
             AnswerSelection::Optimal,
@@ -805,10 +805,10 @@ fn unseeded_cycle_has_one_empty_answer_set() {
         &Cancellation::default(),
     )
     .unwrap();
-    let subject = Subject::Theory(owner.theory().clone());
+    let original = Original::Theory(owner.theory().clone());
     let capture = solve(
         PreparedInput::formula(&owner),
-        &subject,
+        &original,
         config(Backend::Cpu),
         &ExecutionResources::default(),
         AnswerSelection::All,
@@ -847,10 +847,10 @@ fn tight_families(device: GpuApi) {
     let resources = ExecutionResources::with_gpu(&context);
     for source in TIGHT_FAMILIES {
         let owner = formula(source);
-        let subject = Subject::Theory(owner.theory().clone());
+        let original = Original::Theory(owner.theory().clone());
         let cpu = solve(
             PreparedInput::formula(&owner),
-            &subject,
+            &original,
             config(Backend::Cpu),
             &ExecutionResources::default(),
             AnswerSelection::Optimal,
@@ -865,7 +865,7 @@ fn tight_families(device: GpuApi) {
             options.batch_size = NonZeroUsize::new(2).unwrap();
             let gpu = solve(
                 PreparedInput::formula(&owner),
-                &subject,
+                &original,
                 options,
                 &resources,
                 AnswerSelection::Optimal,
@@ -940,10 +940,10 @@ fn enumeration_lookahead(device: GpuApi) {
     let resources = ExecutionResources::with_gpu(&device.context());
     // Thirty-two answers over slates of four and more.
     let owner = formula("{a;b;c;d;e}.");
-    let subject = Subject::Theory(owner.theory().clone());
+    let original = Original::Theory(owner.theory().clone());
     let cpu = solve(
         PreparedInput::formula(&owner),
-        &subject,
+        &original,
         config(Backend::Cpu),
         &ExecutionResources::default(),
         AnswerSelection::All,
@@ -953,7 +953,7 @@ fn enumeration_lookahead(device: GpuApi) {
         options.oracle = oracle;
         let gpu = solve(
             PreparedInput::formula(&owner),
-            &subject,
+            &original,
             options,
             &resources,
             AnswerSelection::All,
@@ -1009,10 +1009,10 @@ fn general_formula_selection(device: GpuApi) {
                 "general-device fixture must retain its non-tight theory: {source}"
             );
         }
-        let subject = Subject::Theory(owner.theory().clone());
+        let original = Original::Theory(owner.theory().clone());
         let cpu = solve(
             PreparedInput::formula(&owner),
-            &subject,
+            &original,
             config(Backend::Cpu),
             &ExecutionResources::default(),
             AnswerSelection::All,
@@ -1021,7 +1021,7 @@ fn general_formula_selection(device: GpuApi) {
         options.oracle = oracle;
         let gpu = solve(
             PreparedInput::formula(&owner),
-            &subject,
+            &original,
             options,
             &resources,
             AnswerSelection::All,
@@ -1100,7 +1100,7 @@ fn tight_refusal(device: GpuApi) {
     options.oracle = Oracle::Auto;
     let complete = solve(
         PreparedInput::formula(&owner),
-        &Subject::Theory(owner.theory().clone()),
+        &Original::Theory(owner.theory().clone()),
         options,
         &resources,
         AnswerSelection::All,
@@ -1127,7 +1127,7 @@ fn terminal_families(device: GpuApi) {
     let reference_owner = formula(SOURCE);
     let reference = solve(
         PreparedInput::formula(&reference_owner),
-        &Subject::Theory(reference_owner.theory().clone()),
+        &Original::Theory(reference_owner.theory().clone()),
         config(Backend::Cpu),
         &ExecutionResources::default(),
         AnswerSelection::All,
@@ -1140,12 +1140,12 @@ fn terminal_families(device: GpuApi) {
         panic!("fixture requires actual terminal source materialization");
     };
     assert_eq!(owner.deferred_templates(), 1);
-    let subject = Subject::TerminalDefinitions(owner.clone());
-    assert!(!subject.same_instance(&Subject::Theory(owner.base_theory().unwrap().clone())));
+    let original = Original::TerminalDefinitions(owner.clone());
+    assert!(!original.same_instance(&Original::Theory(owner.base_theory().unwrap().clone())));
     let resources = ExecutionResources::with_gpu(&device.context());
     let capture = solve(
         PreparedInput::terminal(&owner),
-        &subject,
+        &original,
         SolveConfig {
             grounder: Grounder::Auto,
             ..config(device.backend())
@@ -1154,7 +1154,7 @@ fn terminal_families(device: GpuApi) {
         AnswerSelection::All,
     );
     // The common helper checks every answer and final outcome against the
-    // original terminal subject; this additionally requires real device work.
+    // original terminal input; this additionally requires real device work.
     require_device(&capture, device);
     require_complete(&capture, &reference.records);
     let terminal = capture.outcome.terminal_execution().unwrap();
@@ -1198,7 +1198,7 @@ fn terminal_families(device: GpuApi) {
     let enabled = timed.compute_timing() == zetesis_backend::ComputeTimingStatus::Enabled;
     let limited = solve(
         PreparedInput::terminal(&owner),
-        &subject,
+        &original,
         SolveConfig {
             grounder: Grounder::Auto,
             models: 2,

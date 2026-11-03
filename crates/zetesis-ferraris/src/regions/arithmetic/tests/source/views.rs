@@ -1,3 +1,5 @@
+use zetesis_algebra::Meter;
+
 use super::*;
 use crate::{EvaluationLimits, EvaluationWorkspace, test_support::world};
 
@@ -36,9 +38,14 @@ fn nested_wrapped_clauses_preserve_every_interpretation() {
         let mut evaluator = EvaluationWorkspace::default();
         for ordinal in 0..8 {
             let mut storage = Storage::default();
-            let record = source::clause(&owner, ordinal, &mut storage, &mut budget(&cancellation))
-                .unwrap()
-                .unwrap();
+            let record = source::clause(
+                &owner,
+                ordinal,
+                &mut storage,
+                &mut budget(&mut Meter::local(u64::MAX), &cancellation),
+            )
+            .unwrap()
+            .unwrap();
             assert_eq!(record.root, ordinal);
             assert_eq!(record.support.len, 3);
             assert_eq!(record.support.atoms, [0, 1, 2, 0, 0, 0, 0, 0]);
@@ -70,7 +77,7 @@ fn nested_source_replay_authenticates_owner_and_equations() {
                 &owner,
                 ordinal,
                 &mut Storage::default(),
-                &mut budget(&cancellation),
+                &mut budget(&mut Meter::local(u64::MAX), &cancellation),
             )
             .unwrap()
             .unwrap()
@@ -101,7 +108,7 @@ fn nested_source_replay_authenticates_owner_and_equations() {
                 records[0].support,
                 (&[coefficients, 0], constant),
                 &mut Storage::default(),
-                &mut budget(&cancellation),
+                &mut budget(&mut Meter::local(u64::MAX), &cancellation),
             )
             .unwrap();
             assert_eq!(
@@ -118,7 +125,7 @@ fn nested_source_replay_authenticates_owner_and_equations() {
             records[0].support,
             (&[7, 0], false),
             &mut Storage::default(),
-            &mut budget(&cancellation),
+            &mut budget(&mut Meter::local(u64::MAX), &cancellation),
         )
         .unwrap()
     );
@@ -143,9 +150,14 @@ fn repeated_atoms_across_nested_wrappers_decline() {
         let cancellation = Cancellation::default();
         let mut storage = Storage::default();
         assert!(
-            source::clause(&owner, 0, &mut storage, &mut budget(&cancellation))
-                .unwrap()
-                .is_none()
+            source::clause(
+                &owner,
+                0,
+                &mut storage,
+                &mut budget(&mut Meter::local(u64::MAX), &cancellation)
+            )
+            .unwrap()
+            .is_none()
         );
         assert_eq!(storage.bytes(), 0);
     }
@@ -174,7 +186,7 @@ fn noncanonical_truth_and_hidden_conjunctions_decline() {
                 &owner,
                 ordinal,
                 &mut Storage::default(),
-                &mut budget(&cancellation)
+                &mut budget(&mut Meter::local(u64::MAX), &cancellation)
             )
             .unwrap()
             .is_none(),
@@ -195,7 +207,7 @@ fn canonical_true_constraint_forbids_the_empty_pattern() {
         &owner,
         0,
         &mut Storage::default(),
-        &mut budget(&cancellation),
+        &mut budget(&mut Meter::local(u64::MAX), &cancellation),
     )
     .unwrap()
     .unwrap();
@@ -223,7 +235,7 @@ fn canonical_true_constraint_forbids_the_empty_pattern() {
             record.support,
             (&[0, 0], true),
             &mut Storage::default(),
-            &mut budget(&cancellation)
+            &mut budget(&mut Meter::local(u64::MAX), &cancellation)
         )
         .unwrap()
     );
@@ -239,7 +251,7 @@ fn nested_clause_decoding_and_replay_refuse_every_incomplete_prefix() {
                 &owner,
                 ordinal,
                 &mut Storage::default(),
-                &mut budget(&cancellation),
+                &mut budget(&mut Meter::local(u64::MAX), &cancellation),
             )
             .unwrap()
             .unwrap()
@@ -262,10 +274,12 @@ fn nested_clause_decoding_and_replay_refuse_every_incomplete_prefix() {
                 source::clause(&owner, 0, &mut storage, meter).map(|record| record.is_some())
             }
         };
-        let mut full = budget(&cancellation);
+        let mut full_work = Meter::local(u64::MAX);
+        let mut full = budget(&mut full_work, &cancellation);
         assert_eq!(run(&mut full), Ok(true));
         for maximum in 0..full.work() {
-            let mut limited = Budget::new(Work::new(u64::MAX), maximum, usize::MAX, &cancellation);
+            let mut limited_work = Meter::local(u64::MAX);
+            let mut limited = Budget::new(&mut limited_work, maximum, usize::MAX, &cancellation);
             assert_eq!(
                 run(&mut limited),
                 Err(BudgetError::WorkDeclined),
@@ -274,7 +288,8 @@ fn nested_clause_decoding_and_replay_refuse_every_incomplete_prefix() {
             assert!(limited.work() <= maximum);
         }
         for maximum in 0..usize::try_from(full.peak_bytes()).unwrap() {
-            let mut limited = Budget::new(Work::new(u64::MAX), u64::MAX, maximum, &cancellation);
+            let mut limited_work = Meter::local(u64::MAX);
+            let mut limited = Budget::new(&mut limited_work, u64::MAX, maximum, &cancellation);
             assert!(
                 matches!(run(&mut limited), Err(BudgetError::StorageDeclined {required,limit}) if limit == maximum && required > maximum as u128),
                 "replay={replay}, bytes={maximum}"

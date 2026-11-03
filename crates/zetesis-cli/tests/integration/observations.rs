@@ -1,8 +1,8 @@
 //! Display-only queries preserve full enumeration and never emit partial answers.
 
 use clap::Parser;
+use zetesis_algebra::Cancellation;
 use zetesis_cli::{Completion, Options, Report, RunError, run_with_diagnostics};
-use zetesis_cpu::Cancellation;
 use zetesis_themelios::observation::{ErrorKind, Resource};
 
 fn solve(source: &str, arguments: &[&str]) -> (Result<Report, RunError>, String, String) {

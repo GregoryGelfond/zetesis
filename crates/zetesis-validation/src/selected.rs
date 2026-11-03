@@ -321,7 +321,7 @@ impl std::error::Error for Error {
     }
 }
 
-/// Complete retained campaign evidence. Only [`run`] constructs this owner.
+/// Complete retained campaign evidence. Only [`run()`] constructs this owner.
 #[derive(Debug, Serialize)]
 pub struct Report {
     schema: u32,

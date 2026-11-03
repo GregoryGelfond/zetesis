@@ -105,6 +105,15 @@ impl Batching {
     /// the device prefix but never below the batch size; a short slate keeps
     /// the target. The pending-memory capacity bounds the count selected.
     pub(super) fn select(&mut self, models: &StableModels, options: &SolveConfig) -> NonZeroUsize {
+        self.select_within(models, options, options.max_batch_bytes)
+    }
+
+    pub(super) fn select_within(
+        &mut self,
+        models: &StableModels,
+        options: &SolveConfig,
+        max_pending_bytes: u64,
+    ) -> NonZeroUsize {
         let Policy::Adaptive {
             target,
             prefix_limit,
@@ -135,7 +144,7 @@ impl Batching {
                 (*target).min(cap)
             };
         }
-        let memory = NonZeroUsize::new(models.joint_batch_capacity(options.max_batch_bytes))
+        let memory = NonZeroUsize::new(models.joint_batch_capacity(max_pending_bytes))
             .unwrap_or(NonZeroUsize::MIN);
         // If even one cannot fit, ordinary admission reports its typed
         // refusal; a sizing observation cannot claim exhaustion.
@@ -189,8 +198,9 @@ impl Batching {
         &mut self,
         models: &StableModels,
         options: &SolveConfig,
+        max_pending_bytes: u64,
     ) -> NonZeroUsize {
-        let memory = NonZeroUsize::new(models.lookahead_capacity(options.max_batch_bytes))
+        let memory = NonZeroUsize::new(models.lookahead_capacity(max_pending_bytes))
             .unwrap_or(NonZeroUsize::MIN);
         let Policy::Adaptive {
             target,

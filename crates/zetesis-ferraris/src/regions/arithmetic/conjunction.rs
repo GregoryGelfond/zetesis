@@ -4,6 +4,8 @@
 //! no seen-node set removes repetitions. The caller interprets each non-And
 //! leaf under its own source grammar, with the same storage and work authority.
 
+use zetesis_algebra::{Quota, Stop};
+
 use crate::{AdmissionError, NodeView, Theory};
 
 use super::{
@@ -22,32 +24,32 @@ pub(super) struct Conjunction<'a> {
 }
 
 impl<'a> Conjunction<'a> {
-    pub(super) fn new(
+    pub(super) fn new<Q: Quota + ?Sized>(
         storage: &mut Storage,
-        budget: &mut Budget<'_, '_>,
-    ) -> Result<Self, BudgetError> {
+        budget: &mut Budget<'_, '_, Q>,
+    ) -> Result<Self, BudgetError<Q::Error>> {
         Ok(Self {
             values: storage.reserve(0, budget)?,
         })
     }
 
-    pub(super) fn release(self, storage: &mut Storage) -> Result<(), BudgetError> {
+    pub(super) fn release(self, storage: &mut Storage) -> Result<(), Stop> {
         storage.release(self.values)
     }
 
-    pub(super) fn walk(
+    pub(super) fn walk<Q: Quota + ?Sized>(
         &mut self,
         theory: &'a Theory,
         body: usize,
         storage: &mut Storage,
-        budget: &mut Budget<'_, '_>,
+        budget: &mut Budget<'_, '_, Q>,
         visit: impl FnMut(
             usize,
             NodeView<'a>,
             &mut Storage,
-            &mut Budget<'_, '_>,
-        ) -> Result<bool, BudgetError>,
-    ) -> Result<bool, BudgetError> {
+            &mut Budget<'_, '_, Q>,
+        ) -> Result<bool, BudgetError<Q::Error>>,
+    ) -> Result<bool, BudgetError<Q::Error>> {
         budget.charge(1)?;
         let view = budget.node(theory, body)?;
         self.walk_entered(theory, (body, view), storage, budget, visit)
@@ -57,36 +59,36 @@ impl<'a> Conjunction<'a> {
     /// node. Borrowing the view removes only the repeated entry read; every
     /// child occurrence is still read, in order, through the same budget.
     /// The caller must obtain `view` from `budget.node(theory, body)`.
-    pub(super) fn walk_view(
+    pub(super) fn walk_view<Q: Quota + ?Sized>(
         &mut self,
         theory: &'a Theory,
         entry: (usize, NodeView<'a>),
         storage: &mut Storage,
-        budget: &mut Budget<'_, '_>,
+        budget: &mut Budget<'_, '_, Q>,
         visit: impl FnMut(
             usize,
             NodeView<'a>,
             &mut Storage,
-            &mut Budget<'_, '_>,
-        ) -> Result<bool, BudgetError>,
-    ) -> Result<bool, BudgetError> {
+            &mut Budget<'_, '_, Q>,
+        ) -> Result<bool, BudgetError<Q::Error>>,
+    ) -> Result<bool, BudgetError<Q::Error>> {
         budget.charge(1)?;
         self.walk_entered(theory, entry, storage, budget, visit)
     }
 
-    fn walk_entered(
+    fn walk_entered<Q: Quota + ?Sized>(
         &mut self,
         theory: &'a Theory,
         (mut current, mut view): (usize, NodeView<'a>),
         storage: &mut Storage,
-        budget: &mut Budget<'_, '_>,
+        budget: &mut Budget<'_, '_, Q>,
         mut visit: impl FnMut(
             usize,
             NodeView<'a>,
             &mut Storage,
-            &mut Budget<'_, '_>,
-        ) -> Result<bool, BudgetError>,
-    ) -> Result<bool, BudgetError> {
+            &mut Budget<'_, '_, Q>,
+        ) -> Result<bool, BudgetError<Q::Error>>,
+    ) -> Result<bool, BudgetError<Q::Error>> {
         loop {
             budget.charge(1)?;
             if let NodeView::And(children) = view {
@@ -117,7 +119,10 @@ impl<'a> Conjunction<'a> {
         }
     }
 
-    fn next(&mut self, budget: &mut Budget<'_, '_>) -> Result<Option<usize>, BudgetError> {
+    fn next<Q: Quota + ?Sized>(
+        &mut self,
+        budget: &mut Budget<'_, '_, Q>,
+    ) -> Result<Option<usize>, BudgetError<Q::Error>> {
         loop {
             budget.charge(1)?;
             let Some(frame) = self.values.last_mut() else {

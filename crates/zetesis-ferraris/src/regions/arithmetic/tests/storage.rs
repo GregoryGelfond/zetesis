@@ -1,19 +1,21 @@
+use zetesis_algebra::Meter;
+
 use std::mem::size_of;
 
-use zetesis_cpu::Cancellation;
+use zetesis_algebra::Cancellation;
 
 use super::super::{
     budget::{Budget, BudgetError},
     storage::Storage,
 };
-use crate::regions::Work;
 
 #[test]
 fn simultaneous_growth_keeps_both_actual_capacities() {
     let cancellation = Cancellation::default();
-    let mut budget = Budget::new(Work::new(u64::MAX), u64::MAX, usize::MAX, &cancellation);
+    let mut budget_work = Meter::local(u64::MAX);
+    let mut budget = Budget::new(&mut budget_work, u64::MAX, usize::MAX, &cancellation);
     let mut storage = Storage::default();
-    let mut values = storage.reserve::<u64>(1, &mut budget).unwrap();
+    let mut values = storage.reserve::<u64, _>(1, &mut budget).unwrap();
     storage.push(&mut values, 7, 1, &mut budget).unwrap();
     let old = size_of::<Vec<u64>>() + values.capacity() * size_of::<u64>();
     storage.push(&mut values, 11, 1, &mut budget).unwrap();
@@ -28,7 +30,8 @@ fn simultaneous_growth_keeps_both_actual_capacities() {
 #[test]
 fn embedded_payload_does_not_count_another_header() {
     let cancellation = Cancellation::default();
-    let mut budget = Budget::new(Work::new(u64::MAX), u64::MAX, usize::MAX, &cancellation);
+    let mut budget_work = Meter::local(u64::MAX);
+    let mut budget = Budget::new(&mut budget_work, u64::MAX, usize::MAX, &cancellation);
     let mut storage = Storage::default();
     let inner = storage.filled(3, 1_u64, 1, &mut budget).unwrap();
     let payload = inner.capacity() * size_of::<u64>();
@@ -47,9 +50,10 @@ fn embedded_payload_does_not_count_another_header() {
 #[test]
 fn refused_growth_does_not_drain_the_old_buffer() {
     let cancellation = Cancellation::default();
-    let mut budget = Budget::new(Work::new(u64::MAX), 8, usize::MAX, &cancellation);
+    let mut budget_work = Meter::local(u64::MAX);
+    let mut budget = Budget::new(&mut budget_work, 8, usize::MAX, &cancellation);
     let mut storage = Storage::default();
-    let mut values = storage.reserve::<u64>(1, &mut budget).unwrap();
+    let mut values = storage.reserve::<u64, _>(1, &mut budget).unwrap();
     storage.push(&mut values, 7, 1, &mut budget).unwrap();
     // Three setup operations and three for the first push are spent. The next
     // capacity check fits, but its new header cannot be initialized.
@@ -68,7 +72,8 @@ fn refused_growth_does_not_drain_the_old_buffer() {
 #[test]
 fn fixed_scratch_is_absent_from_later_storage_requirements() {
     let cancellation = Cancellation::default();
-    let mut budget = Budget::new(Work::new(u64::MAX), u64::MAX, 100, &cancellation);
+    let mut budget_work = Meter::local(u64::MAX);
+    let mut budget = Budget::new(&mut budget_work, u64::MAX, 100, &cancellation);
     let mut storage = Storage::with_live_bytes(12);
     storage.admit_record(80, &mut budget).unwrap();
     storage.release_record(80).unwrap();

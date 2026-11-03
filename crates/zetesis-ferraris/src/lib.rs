@@ -53,14 +53,15 @@ pub use evaluation::{
 pub use frozen_positive::{FrozenPositiveAttempt, FrozenPositiveOutcome, FrozenPositiveWorkspace};
 pub use oracle::{Check, Limits, Statistics, Verdict, check, models, models_reduct};
 pub use reduct::FrozenReduct;
+pub use regions::ParityKnowledge;
 pub use regions::{
-    CardinalityStatistics, CardinalitySystem, ChoiceHeads, Extraction, FrozenSubject,
-    GeneratorOrder, GeneratorOrderAttempt, GeneratorOrderError, GeneratorOrderLimits, Knowledge,
-    LearningAttempt, LearningLimits, LearningOwner, LearningStore, NARROWING_BATCH, Narrower,
-    NarrowingAttempt, NarrowingQuota, NarrowingScratch, NarrowingStatistics, OriginalSubject,
-    ParityStatistics, ParitySystem, PreferenceAttempt, PreparationAttempt, PreparationError,
-    PreparationLimits, PreparationStatus, PreparationWork, Producers, RegionLimits,
-    RootPreparation, SupportExplanationStatistics, producers,
+    ArithmeticAttempt, CardinalityKnowledge, CardinalityStatistics, CardinalitySystem, ChoiceHeads,
+    Extraction, FrozenSubject, GeneratorOrder, GeneratorOrderAttempt, GeneratorOrderError,
+    GeneratorOrderLimits, Knowledge, LearningAttempt, LearningLimits, LearningOwner, LearningStore,
+    NARROWING_BATCH, Narrower, NarrowingAttempt, NarrowingScratch, NarrowingStatistics,
+    OriginalSubject, ParityStatistics, ParitySystem, PreferenceAttempt, PreparationAttempt,
+    PreparationError, PreparationLimits, PreparationStatus, PreparationWork, Producers,
+    RegionLimits, RootPreparation, SupportExplanationStatistics, producers,
 };
 pub use slate::{SlateId, SlateRef};
 pub use theory::{
@@ -69,7 +70,7 @@ pub use theory::{
     NodeView, NumericDomain, NumericRow, OperandSpan, Theory, TheoryAdmission, Threshold,
     ThresholdDescriptor,
 };
-pub use zetesis_cpu::regions::{Narrowing, Region};
+pub use zetesis_algebra::region::{Narrowing, Region};
 
 pub use tight::{
     TightAttempt, TightCheck, TightCheckLimits, TightError, TightPlan, TightPlanLimits,

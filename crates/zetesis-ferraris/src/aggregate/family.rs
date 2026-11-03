@@ -1,4 +1,4 @@
-use zetesis_cpu::Cancellation;
+use zetesis_algebra::{Cancellation, Meter};
 
 use super::lower::{Builder, Destination, reserve, subsets, transaction_value, validate};
 use super::{
@@ -154,9 +154,7 @@ pub(super) fn compile(
     max_guards: usize,
 ) -> ResultKind<(Vec<usize>, AggregateProfile)> {
     let (nonnegative, total) = validate(builder, elements)?;
-    if guards.len() > max_guards {
-        return Err(AggregateErrorKind::GuardLimit);
-    }
+    Meter::check_count(guards.len(), 0, max_guards).map_err(|_| AggregateErrorKind::GuardLimit)?;
     let profile = if nonnegative {
         AggregateProfile::Threshold
     } else {

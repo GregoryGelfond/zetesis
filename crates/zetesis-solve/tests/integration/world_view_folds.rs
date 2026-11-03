@@ -3,8 +3,8 @@
 
 use std::{collections::BTreeSet, num::NonZeroUsize};
 
+use zetesis_algebra::Cancellation;
 use zetesis_core::{Atom, Model, Predicate, Sign};
-use zetesis_cpu::Cancellation;
 use zetesis_reference_support::{canonical, formula, prepared};
 use zetesis_solve::{
     AnswerSelection, Backend, Completion, Grounder, Oracle, PreparedInput, ProjectionLimits,
@@ -191,7 +191,7 @@ fn membership_witnesses_are_answer_sets_that_settle_the_literal() {
                         panic!("{source}: {name}: {witnesses:?}");
                     };
                     assert_eq!(witness.interpretation().contains(&atom), holds);
-                    assert!(witness.subject().same_instance(decision.subject()));
+                    assert!(witness.original().same_instance(decision.original()));
                     witnessed += 1;
                 }
             }

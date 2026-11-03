@@ -2,7 +2,7 @@
 
 use std::fmt;
 
-use crate::{Backend, Grounder, Oracle, PhaseTimings, PreparedProfile, SemanticOutcome, Subject};
+use crate::{Backend, Grounder, Oracle, Original, PhaseTimings, PreparedProfile, SemanticOutcome};
 
 /// An unsuccessful preparation or execution operation; never evidence of UNSAT.
 #[derive(Debug)]
@@ -148,17 +148,17 @@ pub struct SolveFailure {
     pub cause: Box<SolveError>,
     /// Attempted host timing, independently of semantic completion.
     pub phase_timings: Option<Box<PhaseTimings>>,
-    pub(crate) subject: Option<Subject>,
+    pub(crate) original: Option<Original>,
     pub(crate) semantic: Option<Box<SemanticOutcome>>,
 }
 
 impl SolveFailure {
     /// Known original input, including a prepared session's setup failure.
     #[must_use]
-    pub fn subject(&self) -> Option<&Subject> {
+    pub fn original(&self) -> Option<&Original> {
         self.semantic()
-            .and_then(SemanticOutcome::subject)
-            .or(self.subject.as_ref())
+            .and_then(SemanticOutcome::original)
+            .or(self.original.as_ref())
     }
 
     /// Evidence established before the failed operation stopped execution.
@@ -168,14 +168,14 @@ impl SolveFailure {
     }
 
     /// Move the cause and evidence into a consumer's error representation.
-    /// The subject matches [`Self::subject`], including identity retained in the
+    /// The original input matches [`Self::original`], including identity retained in the
     /// semantic outcome. Decomposition cannot strengthen semantic evidence.
     #[must_use]
     pub fn into_parts(self) -> FailureParts {
-        let subject = self.subject().cloned();
+        let original = self.original().cloned();
         FailureParts {
             cause: self.cause,
-            subject,
+            original,
             semantic: self.semantic,
             phase_timings: self.phase_timings,
         }
@@ -187,8 +187,8 @@ impl SolveFailure {
 pub struct FailureParts {
     /// Original execution cause.
     pub cause: Box<SolveError>,
-    /// Known original input, matching [`SolveFailure::subject`] before decomposition.
-    pub subject: Option<Subject>,
+    /// Known original input, matching [`SolveFailure::original`] before decomposition.
+    pub original: Option<Original>,
     /// Established evidence, absent when no semantic session began.
     pub semantic: Option<Box<SemanticOutcome>>,
     /// Optional attempted host timings.
@@ -199,7 +199,7 @@ impl From<SolveError> for SolveFailure {
     fn from(cause: SolveError) -> Self {
         Self {
             cause: Box::new(cause),
-            subject: None,
+            original: None,
             semantic: None,
             phase_timings: None,
         }

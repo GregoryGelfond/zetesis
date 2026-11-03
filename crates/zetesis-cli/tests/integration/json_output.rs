@@ -7,10 +7,10 @@ use std::process::Command;
 
 use clap::Parser;
 use serde_json::{Value as Json, json};
+use zetesis_algebra::Cancellation;
 use zetesis_cli::{
     Completion, Options, Report, RunError, RunFailure, run_detailed_with_diagnostics,
 };
-use zetesis_cpu::Cancellation;
 use zetesis_test_support::io::BoundedWriter;
 
 type LimitChange = fn(&mut zetesis_cli::SolveConfig);

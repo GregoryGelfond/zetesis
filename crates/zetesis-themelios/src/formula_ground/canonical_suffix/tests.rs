@@ -5,7 +5,7 @@ use crate::expansion::Budget;
 use crate::formula_ground::Purpose;
 use crate::formula_support::testing::Fixture;
 use crate::test_support::location;
-use zetesis_cpu::Cancellation;
+use zetesis_algebra::Cancellation;
 use zetesis_ferraris::{
     ContributionRow, FormulaParts, Interpretation, Limits, Node as Stored, Theory,
     ThresholdDescriptor, models, models_reduct,

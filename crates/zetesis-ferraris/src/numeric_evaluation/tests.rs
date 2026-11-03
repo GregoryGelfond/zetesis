@@ -7,8 +7,8 @@ use crate::{
     TightCheckLimits, TightPlan, TightPlanLimits, TightVerdict, TightWorkspace, check,
     models_reduct, native_aggregate as native,
 };
+use zetesis_algebra::{Cancellation, Stop};
 use zetesis_core::Value;
-use zetesis_cpu::{Cancellation, Stop};
 
 fn family(roots: Vec<usize>, reverse: bool) -> Theory {
     let mut nodes = FormulaNodes::default();
@@ -201,7 +201,7 @@ fn failed_reductions_publish_no_valid_bit() {
         }
     });
     assert_eq!(result, Err(Stop::Cancelled));
-    assert_eq!(scratch.valid, [0]);
+    assert_eq!(&scratch.valid[..], [0]);
     reads = 0;
     let measure = scratch
         .extremum(&owner, 2, view(&owner, 2), |_| {
@@ -217,7 +217,7 @@ fn failed_reductions_publish_no_valid_bit() {
             maximum: 0
         }
     );
-    assert_eq!(scratch.valid, [1]);
+    assert_eq!(&scratch.valid[..], [1]);
     let cached = scratch
         .extremum(&owner, 3, view(&owner, 3), |_| Err(Stop::Cancelled))
         .unwrap();
@@ -237,11 +237,13 @@ fn packed_resets_preserve_zero_tail_bits() {
         })
         .unwrap();
     assert_eq!(ticks, 133);
-    assert_eq!(scratch.valid, [0, 0, 0]);
+    assert_eq!(&scratch.valid[..], [0, 0, 0]);
     scratch
         .extremum(&owner, 1, view(&owner, 1), |_| Ok::<_, Stop>(true))
         .unwrap();
-    assert_eq!(scratch.valid, [0, 0, 2]);
+    assert_eq!(&scratch.valid[..], [0, 0, 2]);
+    let allocation = (scratch.valid.as_ptr(), scratch.valid.capacity());
+    let held = scratch.retained_bytes();
     ticks = 0;
     scratch
         .reset(&owner, || {
@@ -250,7 +252,12 @@ fn packed_resets_preserve_zero_tail_bits() {
         })
         .unwrap();
     assert_eq!(ticks, 3);
-    assert_eq!(scratch.valid, [0, 0, 0]);
+    assert_eq!(&scratch.valid[..], [0, 0, 0]);
+    assert_eq!(
+        (scratch.valid.as_ptr(), scratch.valid.capacity()),
+        allocation
+    );
+    assert_eq!(scratch.retained_bytes(), held);
     assert_eq!(scratch.measures.len(), 130);
     assert!(scratch.retained_bytes() >= 130 * 16 + 3 * 8);
 }
@@ -270,7 +277,7 @@ fn interrupted_growth_only_retains_safe_cells() {
     });
     assert_eq!(result, Err(Stop::WorkLimit));
     assert_eq!(scratch.measures.len(), 5);
-    assert_eq!(scratch.valid, [0, 0, 0]);
+    assert_eq!(&scratch.valid[..], [0, 0, 0]);
     ticks = 0;
     scratch
         .reset(&owner, || {

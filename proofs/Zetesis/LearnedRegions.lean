@@ -17,7 +17,7 @@ them to any region: a row whose conditions the region decides refutes the region
 when the region decides an output's negation, and otherwise narrows it to the
 outputs; a row with exactly one condition left undecided and an output's negation
 decided forces that condition to fail. Each conclusion holds for every member of
-C in the region, which is the premise `Cube.narrow_preserves_valid` and the
+C in the region, which is the premise `Region.narrow_preserves_valid` and the
 search's `narrowed` constructor require, with C as the valid predicate.
 
 These laws do not certify a concrete row encoding, signed-mask matching, an
@@ -43,10 +43,10 @@ def Holds (M : Atoms α) : Literal α → Prop
 def negate : Literal α → Literal α
   | (a, b) => (a, !b)
 
-/-- A cube decides a literal when every interpretation it contains satisfies the
+/-- A region decides a literal when every interpretation it contains satisfies the
 literal: a required presence lies in its lower bound, a required absence outside
 its upper bound. -/
-def Decides (c : Cube α) : Literal α → Prop
+def Decides (c : Region α) : Literal α → Prop
   | (a, true) => c.lower a
   | (a, false) => ¬ c.upper a
 
@@ -61,8 +61,8 @@ def required (O : List (Literal α)) : Atoms α := fun a => (a, true) ∈ O
 /-- The atoms the outputs leave possible: every atom not required absent. -/
 def permitted (O : List (Literal α)) : Atoms α := fun a => (a, false) ∉ O
 
-/-- A literal the cube decides holds in every interpretation it contains. -/
-theorem decides_holds {c : Cube α} {z : Atoms α} (inside : c.Contains z) :
+/-- A literal the region decides holds in every interpretation it contains. -/
+theorem decides_holds {c : Region α} {z : Atoms α} (inside : c.Contains z) :
     ∀ {l : Literal α}, Decides c l → Holds z l
   | (a, true), lower => inside.1 a lower
   | (a, false), outside => fun present => outside (inside.2 a present)
@@ -78,14 +78,14 @@ theorem holds_or_negate (M : Atoms α) : ∀ l : Literal α, Holds M l ∨ Holds
   | (a, true) => Classical.em (M a)
   | (a, false) => (Classical.em (M a)).symm
 
-/-- A row whose conditions the cube decides refutes the cube when the cube also
-decides an output's negation: the cube contains no member of the class.
+/-- A row whose conditions the region decides refutes the region when the region also
+decides an output's negation: the region contains no member of the class.
 
-Proof. A member of C in the cube satisfies every condition, since the cube decides
+Proof. A member of C in the region satisfies every condition, since the region decides
 each one, so the row gives it every output. It also satisfies the decided negation
 of one output, a contradiction. -/
 theorem consequence_row_refutes (C : Atoms α → Prop) (B O : List (Literal α))
-    (row : RowOf C B O) (c : Cube α)
+    (row : RowOf C B O) (c : Region α)
     (conditions : ∀ l ∈ B, Decides c l)
     (contradicted : ∃ o ∈ O, Decides c (negate o)) :
     ∀ z, c.Contains z → ¬ C z := by
@@ -98,10 +98,10 @@ theorem consequence_row_refutes (C : Atoms α → Prop) (B O : List (Literal α)
   have opposite : Holds z (negate o) := decides_holds inside negated
   exact holds_negate_excludes opposite holds
 
-/-- A row whose conditions the cube decides gives every member of the class in
-the cube every output. -/
+/-- A row whose conditions the region decides gives every member of the class in
+the region every output. -/
 theorem consequence_row_forces (C : Atoms α → Prop) (B O : List (Literal α))
-    (row : RowOf C B O) (c : Cube α)
+    (row : RowOf C B O) (c : Region α)
     (conditions : ∀ l ∈ B, Decides c l) :
     ∀ z, c.Contains z → C z → ∀ o ∈ O, Holds z o := by
   intro z inside member
@@ -110,16 +110,16 @@ theorem consequence_row_forces (C : Atoms α → Prop) (B O : List (Literal α))
     exact decides_holds inside (conditions l listed)
   exact row z member satisfied
 
-/-- The forced outputs as a narrowing: every member of the class in the cube lies
-in the cube narrowed to the outputs' required atoms below and their permitted
-atoms above. This is `Cube.narrow_preserves_valid`'s premise with the class as
+/-- The forced outputs as a narrowing: every member of the class in the region lies
+in the region narrowed to the outputs' required atoms below and their permitted
+atoms above. This is `Region.narrow_preserves_valid`'s premise with the class as
 the valid predicate.
 
 Proof. By `consequence_row_forces`, a member satisfies every output: each atom an
 output requires present is in it, and each atom an output requires absent is not,
 which places it inside both new bounds. -/
 theorem consequence_row_narrows (C : Atoms α → Prop) (B O : List (Literal α))
-    (row : RowOf C B O) (c : Cube α)
+    (row : RowOf C B O) (c : Region α)
     (conditions : ∀ l ∈ B, Decides c l) :
     ∀ z, c.Contains z → C z → (c.narrow (required O) (permitted O)).Contains z := by
   have forced := consequence_row_forces C B O row c conditions
@@ -130,18 +130,18 @@ theorem consequence_row_narrows (C : Atoms α → Prop) (B O : List (Literal α)
     intro z inside member a present requiredAbsent
     exact forced z inside member (a, false) requiredAbsent present
   intro z inside member
-  exact Cube.narrow_preserves_valid C c (required O) (permitted O)
+  exact Region.narrow_preserves_valid C c (required O) (permitted O)
     forcedLower forcedUpper inside member
 
 /-- With every condition but one decided and an output's negation decided, the
-remaining condition fails in every member of the class in the cube.
+remaining condition fails in every member of the class in the region.
 
 Proof. Suppose a member satisfied the remaining condition. It satisfies the others,
-which the cube decides, so it satisfies every condition and the row gives it every
+which the region decides, so it satisfies every condition and the row gives it every
 output, contradicting the output's decided negation. So it satisfies the remaining
 condition's negation. -/
 theorem consequence_row_forces_complement (C : Atoms α → Prop) (B O : List (Literal α))
-    (row : RowOf C B O) (c : Cube α) (remaining : Literal α)
+    (row : RowOf C B O) (c : Region α) (remaining : Literal α)
     (others : ∀ l ∈ B, l ≠ remaining → Decides c l)
     (contradicted : ∃ o ∈ O, Decides c (negate o)) :
     ∀ z, c.Contains z → C z → Holds z (negate remaining) := by

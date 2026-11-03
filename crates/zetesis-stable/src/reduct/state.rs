@@ -81,8 +81,7 @@ impl State {
                 match positive_closure(&mut evaluated, candidate, limits, budget, statistics) {
                     Ok(Some(verdict)) => Ok(Queried::Decided(verdict)),
                     Ok(None) => query.check_publishing(
-                        zetesis_ferraris::FrozenSubject::new(theory, evaluated.truth.truth()),
-                        candidate,
+                        &evaluated.truth,
                         limits,
                         budget,
                         (statistics, evaluated.narrowing),
@@ -149,7 +148,7 @@ fn positive_closure(
         .peak_workspace_bytes
         .max(evaluated.positive_other_bytes + attempt.retained_bytes);
     let outcome = attempt.result.map_err(|error| match error {
-        EvaluationError::Stopped(zetesis_cpu::Stop::WorkLimit) => Incomplete::WorkLimit,
+        EvaluationError::Stopped(zetesis_algebra::Stop::WorkLimit) => Incomplete::WorkLimit,
         EvaluationError::Stopped(stop) => Incomplete::from(stop),
         EvaluationError::Storage { required, .. } => Incomplete::ReductStorage {
             required: evaluated.positive_other_bytes + required,

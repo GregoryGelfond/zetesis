@@ -2,13 +2,13 @@
 
 use std::fmt;
 
+use zetesis_algebra::{Cancellation, Meter, MeterCountError};
 use zetesis_core::retention::{ModelRetention, RetentionError};
-use zetesis_cpu::Cancellation;
 
 use crate::execution_observation::ExecutionSink;
 use crate::{
-    AnswerSelection, AnswerSet, Completion, PreparedInput, SemanticOutcome, Session,
-    SessionBuilder, SolveConfig, SolveFailure, Subject,
+    AnswerSelection, AnswerSet, Completion, Original, PreparedInput, SemanticOutcome, Session,
+    SessionBuilder, SolveConfig, SolveFailure,
 };
 
 mod fold;
@@ -107,7 +107,7 @@ impl From<RetentionError> for WorldViewError {
 #[derive(Debug)]
 pub struct WorldViewFailure {
     cause: WorldViewError,
-    subject: Subject,
+    original: Original,
     answer_sets: Vec<AnswerSet>,
     outcome: Option<Box<SemanticOutcome>>,
 }
@@ -120,8 +120,8 @@ pub struct WorldViewFailure {
 pub struct WorldViewFailureParts {
     /// Original setup, execution, coverage or collection refusal.
     pub cause: WorldViewError,
-    /// Exact original subject, including when setup failed before any answer.
-    pub subject: Subject,
+    /// Exact original input, including when setup failed before any answer.
+    pub original: Original,
     /// Checked answers retained before failure; no completeness is implied.
     pub answer_sets: Vec<AnswerSet>,
     /// Available session evidence, independent of collection admission.
@@ -135,10 +135,10 @@ impl WorldViewFailure {
         &self.cause
     }
 
-    /// Exact original subject, including when setup failed before any answer.
+    /// Exact original input, including when setup failed before any answer.
     #[must_use]
-    pub const fn subject(&self) -> &Subject {
-        &self.subject
+    pub const fn original(&self) -> &Original {
+        &self.original
     }
 
     /// Checked answers retained before failure; no completeness is implied.
@@ -154,19 +154,19 @@ impl WorldViewFailure {
     }
 
     /// Transfer the retained checked prefix, explicitly discarding failure and
-    /// coverage context. Each answer retains its original subject association.
+    /// coverage context. Each answer retains its original input association.
     #[must_use]
     pub fn into_answer_sets(self) -> Vec<AnswerSet> {
         self.answer_sets
     }
 
-    /// Transfer the original cause, subject, checked prefix and outcome together.
+    /// Transfer the original cause, original input, checked prefix and outcome together.
     /// This preserves their owners without cloning or discarding evidence.
     #[must_use]
     pub fn into_parts(self) -> WorldViewFailureParts {
         WorldViewFailureParts {
             cause: self.cause,
-            subject: self.subject,
+            original: self.original,
             answer_sets: self.answer_sets,
             outcome: self.outcome,
         }
@@ -195,14 +195,14 @@ impl std::error::Error for WorldViewFailure {
 /// or detached completion report to this complete-family claim.
 ///
 /// ```compile_fail
-/// use zetesis_solve::{AnswerSet, SemanticOutcome, Subject, WorldView};
-/// fn attach(subject: Subject, answer_sets: Vec<AnswerSet>, outcome: SemanticOutcome) -> WorldView {
-///     WorldView { subject, answer_sets, outcome }
+/// use zetesis_solve::{AnswerSet, SemanticOutcome, Original, WorldView};
+/// fn attach(original: Original, answer_sets: Vec<AnswerSet>, outcome: SemanticOutcome) -> WorldView {
+///     WorldView { original, answer_sets, outcome }
 /// }
 /// ```
 #[derive(Debug)]
 pub struct WorldView {
-    subject: Subject,
+    original: Original,
     answer_sets: Vec<AnswerSet>,
     outcome: SemanticOutcome,
 }
@@ -250,7 +250,7 @@ impl WorldView {
         // Owning an unstarted request ensures that no answer can have escaped
         // retention before this loop begins. Exhaustion alone would not repair
         // the missing prefix of an already consumed session.
-        let subject = request.subject();
+        let original = request.original();
         let mut session = request
             .full_identity()
             .selection(AnswerSelection::All)
@@ -258,7 +258,7 @@ impl WorldView {
             .map_err(|error| WorldViewFailure {
                 outcome: error.semantic().cloned().map(Box::new),
                 cause: WorldViewError::Solve(Box::new(error)),
-                subject: subject.clone(),
+                original: original.clone(),
                 answer_sets: Vec::new(),
             })?;
         let mut collection = Collection::default();
@@ -269,7 +269,7 @@ impl WorldView {
             if let Err(cause) = admission {
                 return Err(WorldViewFailure {
                     cause,
-                    subject,
+                    original,
                     answer_sets: collection.answer_sets,
                     outcome: Some(Box::new(session.stop())),
                 });
@@ -281,22 +281,22 @@ impl WorldView {
         {
             return Err(WorldViewFailure {
                 cause: WorldViewError::NotExhausted,
-                subject,
+                original,
                 answer_sets: collection.answer_sets,
                 outcome: Some(Box::new(outcome)),
             });
         }
         Ok(Self {
-            subject,
+            original,
             answer_sets: collection.answer_sets,
             outcome,
         })
     }
 
-    /// Original immutable subject shared by every member and the coverage result.
+    /// Original immutable input shared by every member and the coverage result.
     #[must_use]
-    pub const fn subject(&self) -> &Subject {
-        &self.subject
+    pub const fn original(&self) -> &Original {
+        &self.original
     }
 
     /// Every full answer set, in enumeration order rather than display order.
@@ -327,7 +327,7 @@ impl WorldView {
     }
 
     /// Transfer the full checked family, discarding its enclosing coverage value.
-    /// Each member keeps its original subject, interpretation and optional score.
+    /// Each member keeps its original input, interpretation and optional score.
     #[must_use]
     pub fn into_answer_sets(self) -> Vec<AnswerSet> {
         self.answer_sets
@@ -343,16 +343,17 @@ struct Collection {
 
 impl Collection {
     fn retain(&mut self, answer: AnswerSet, limits: WorldViewLimits) -> Result<(), WorldViewError> {
-        if self.answer_sets.len() >= limits.max_answer_sets {
-            return Err(WorldViewError::AnswerSets);
-        }
-        let atoms = self
-            .atoms
-            .checked_add(answer.interpretation().atoms().len())
-            .ok_or(WorldViewError::Overflow)?;
-        if atoms > limits.max_atoms {
-            return Err(WorldViewError::Atoms);
-        }
+        Meter::check_count(self.answer_sets.len(), 1, limits.max_answer_sets)
+            .map_err(|_| WorldViewError::AnswerSets)?;
+        let atoms = Meter::check_count(
+            self.atoms,
+            answer.interpretation().atoms().len(),
+            limits.max_atoms,
+        )
+        .map_err(|error| match error {
+            MeterCountError::Overflow => WorldViewError::Overflow,
+            MeterCountError::Limit { .. } => WorldViewError::Atoms,
+        })?;
         let admission = self.retention.admit(
             answer.interpretation(),
             crate::optimization::score_payload_bytes(answer.score())?,

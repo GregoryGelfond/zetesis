@@ -5,11 +5,11 @@ use std::{
     io,
     process::{Command, Stdio},
 };
+use zetesis_algebra::Cancellation;
 use zetesis_cli::{
     ColorMode, Completion, Options, RunError, StatisticsView,
     run_bundle_finalized_with_diagnostics, run_finalized_with_diagnostics,
 };
-use zetesis_cpu::Cancellation;
 use zetesis_test_support::repository;
 use zetesis_themelios::{BundleLimits, SourceBundle};
 

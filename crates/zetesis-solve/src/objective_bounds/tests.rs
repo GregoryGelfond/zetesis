@@ -3,9 +3,9 @@ use super::*;
 mod observer_contract_tests;
 mod contract_tests;
 
-/// Independent choices whose objective bound indexes its 400 elements, more
-/// work than the rest of the exact search performs.
-const HEAVY_OBJECTIVE: &str = "{a;b}. #minimize{1,X:a,X=1..200; 1,X:b,X=1..200}.";
+/// Two independent choices generate 800 elements over 400 shared tuple keys.
+/// Indexing their cost guard exceeds the work left for exact enumeration.
+const HEAVY_OBJECTIVE: &str = "{a;b}. #minimize{1,X:a,X=1..400; 1,X:b,X=1..400}.";
 
 /// Limits whose work ceiling is exactly what an exact search of `theory`
 /// charges: that search finds every original model, and no bound's charge

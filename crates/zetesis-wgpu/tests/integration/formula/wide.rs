@@ -1,6 +1,6 @@
 //! Native groups are checked against Boolean semantics, not binary expansion.
 use super::{group_allowed, model, propagate_with, values};
-use zetesis_cpu::Cancellation;
+use zetesis_algebra::Cancellation;
 use zetesis_ferraris::{
     AdmissionLimits, FormulaParts, FrozenReduct, Interpretation, Limits, Node, OperandSpan, Theory,
     Verdict, check,
@@ -97,7 +97,10 @@ fn native_groups_preserve_arbitrary_frozen_truth_and_completions() {
                             || inner & !candidate != 0
                             || !model(&theory, inner, Some(&frozen))));
                     }
-                    FormulaVerdict::Residual(_) => assert!(model(&theory, candidate, None)),
+                    FormulaVerdict::Residual(_, root) => {
+                        assert!(model(&theory, candidate, None));
+                        super::check_residual_witnesses(&theory, candidate, &root);
+                    }
                 }
             }
         }

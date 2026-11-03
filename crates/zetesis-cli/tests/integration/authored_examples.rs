@@ -1,7 +1,7 @@
 //! Real authored defaults cross the CLI and complete-display contract boundary.
 use clap::Parser;
+use zetesis_algebra::Cancellation;
 use zetesis_cli::{Completion, Options, run_with_diagnostics};
-use zetesis_cpu::Cancellation;
 use zetesis_test_support::repository::examples as root;
 use zetesis_validation::{
     answers::native_json,

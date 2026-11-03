@@ -7,6 +7,7 @@ use std::{
     io::Read,
     path::{Path, PathBuf},
 };
+use zetesis_algebra::MeterBytes;
 
 /// Inclusive serialized-input and directory traversal ceilings.
 #[derive(Clone, Copy, Debug)]
@@ -83,18 +84,18 @@ impl Tree {
             .take(bound)
             .read_to_end(&mut bytes)
             .map_err(|error| io(&path, error))?;
-        if bytes.len() > self.limits.file_bytes {
-            return Err(Error::Limit {
+        MeterBytes::check(bytes.len() as u128, self.limits.file_bytes as u128).map_err(|_| {
+            Error::Limit {
                 resource: "file bytes",
                 limit: self.limits.file_bytes,
-            });
-        }
-        if bytes.len() > self.remaining {
-            return Err(Error::Limit {
+            }
+        })?;
+        MeterBytes::check(bytes.len() as u128, self.remaining as u128).map_err(|_| {
+            Error::Limit {
                 resource: "total read bytes",
                 limit: self.limits.total_bytes,
-            });
-        }
+            }
+        })?;
         self.remaining -= bytes.len();
         Ok(bytes)
     }
@@ -196,3 +197,6 @@ impl Tree {
         Ok(result)
     }
 }
+
+#[cfg(test)]
+mod tests;

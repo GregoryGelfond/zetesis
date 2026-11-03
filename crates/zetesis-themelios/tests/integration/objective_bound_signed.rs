@@ -4,8 +4,8 @@ use crate::support::objective_bound_resources;
 use std::cmp::Ordering;
 use std::collections::BTreeSet;
 
+use zetesis_algebra::Cancellation;
 use zetesis_core::{Atom, AtomPattern, Model, Predicate, Term, Value};
-use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{AggregateErrorKind, AggregateLimits, Interpretation, Node, Theory, models};
 use zetesis_objective::{ObjectiveProgram, ObjectiveTemplate, Score, evaluate};
 use zetesis_stable::StableModels;

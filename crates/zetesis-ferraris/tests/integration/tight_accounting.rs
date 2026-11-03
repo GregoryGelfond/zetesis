@@ -1,7 +1,7 @@
 //! Every stopped prefix retains charged work for cumulative caller budgets.
 use std::time::Instant;
 
-use zetesis_cpu::{Cancellation, CancellationSlot, Stop};
+use zetesis_algebra::{Cancellation, CancellationSlot, Stop};
 use zetesis_ferraris::{
     AdmissionLimits, FormulaParts, Interpretation, Node, OperandSpan, Theory, TightCheckLimits,
     TightError, TightPlan, TightPlanLimits, TightResource, TightVerdict, TightWorkspace,

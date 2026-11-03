@@ -380,7 +380,7 @@ impl Faults {
             && outcome.as_ref().is_err_and(|error| {
                 matches!(
                     error.interruption,
-                    Some(zetesis_cpu::Stop::Cancelled | zetesis_cpu::Stop::Deadline)
+                    Some(zetesis_algebra::Stop::Cancelled | zetesis_algebra::Stop::Deadline)
                 )
             });
         let result = validation.and(health).and(outcome);

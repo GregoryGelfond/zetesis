@@ -1,6 +1,6 @@
 //! Native groups retain one graph across original, frozen and specialized reads.
 
-use zetesis_cpu::{Cancellation, Stop};
+use zetesis_algebra::{Cancellation, Stop};
 use zetesis_ferraris::{
     AdmissionLimits, EvaluationError, EvaluationLimits, EvaluationWorkspace, FormulaParts,
     FrozenReduct, Interpretation, Limits, Node, OperandSpan, PositivePlan, PositivePlanLimits,
@@ -253,15 +253,16 @@ fn native_frozen_narrowing_keeps_every_reduct_model_in_each_region() {
                         digits /= 3;
                     }
                     let before = region.clone();
-                    let (result, _) = narrower
+                    let result = narrower
                         .narrow_frozen_known(
                             FrozenSubject::new(&theory, truth.truth()),
                             &mut region,
-                            &mut narrower.knowledge(),
+                            &mut narrower.frozen_knowledge(),
                             &mut NarrowingScratch::default(),
                             RegionLimits::default(),
                             &cancellation,
                         )
+                        .result
                         .unwrap();
                     for tested in 0..4 {
                         let inside = (0..2).all(|atom| {
@@ -327,15 +328,16 @@ fn frozen_negation_keeps_masked_atom_decisions_free() {
                 2 => assert!(region.cut(0)),
                 _ => {}
             }
-            let (result, _) = narrower
+            let result = narrower
                 .narrow_frozen_known(
                     FrozenSubject::new(&theory, truth.truth()),
                     &mut region,
-                    &mut narrower.knowledge(),
+                    &mut narrower.frozen_knowledge(),
                     &mut NarrowingScratch::default(),
                     RegionLimits::default(),
                     &cancellation,
                 )
+                .result
                 .unwrap();
             assert!(
                 matches!(result, Narrowing::Fixed { .. }),
@@ -369,15 +371,16 @@ fn frozen_atom_root_stays_false_when_its_atom_is_held() {
     let mut region = Region::all_open(1);
     assert!(region.hold(0));
     assert!(!eval(theory.view(), 1, 1, Some(0)));
-    let (result, _) = narrower
+    let result = narrower
         .narrow_frozen_known(
             FrozenSubject::new(&theory, truth.truth()),
             &mut region,
-            &mut narrower.knowledge(),
+            &mut narrower.frozen_knowledge(),
             &mut NarrowingScratch::default(),
             RegionLimits::default(),
             &cancellation,
         )
+        .result
         .unwrap();
     assert!(matches!(result, Narrowing::Refuted));
 }

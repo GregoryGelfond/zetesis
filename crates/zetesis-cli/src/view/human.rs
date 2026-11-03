@@ -2,7 +2,7 @@
 
 use std::io::Write;
 
-use zetesis_cpu::Cancellation;
+use zetesis_algebra::Cancellation;
 
 use crate::display::record::{Contents, Record};
 use crate::{

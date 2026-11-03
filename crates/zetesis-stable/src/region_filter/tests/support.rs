@@ -2,18 +2,19 @@
 //! check's composition tests. The filters implement the crate's own seam, which
 //! no caller can implement.
 
+use crate::region_filter::tests::injection::{Source as InjectedSource, Worker as InjectedWorker};
 use std::collections::BTreeSet;
 use std::num::NonZeroUsize;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
-use zetesis_cpu::regions::Region;
+use zetesis_algebra::region::Region;
 use zetesis_ferraris::{Interpretation, Node, Theory};
 use zetesis_theory_support::theories::theory;
 
 use crate::{
     BatchLimits, BatchVerdict, Cancellation, Engagement, Incomplete, Limits, RegionFeasibility,
-    RegionFilter, RegionFilterWorker, StableModels,
+    StableModels,
 };
 
 #[derive(Clone, Copy, Debug)]
@@ -145,12 +146,12 @@ impl Drop for Worker<'_> {
     }
 }
 
-impl RegionFilter for Filter {
+impl InjectedSource for Filter {
     fn worker(
         &self,
         theory: &Theory,
         cancellation: &Cancellation,
-    ) -> Result<Box<dyn RegionFilterWorker + '_>, Incomplete> {
+    ) -> Result<Box<dyn InjectedWorker + '_>, Incomplete> {
         cancellation.poll()?;
         if !theory.same_instance(&self.subject) {
             return Err(Incomplete::WrongTheory);
@@ -163,7 +164,7 @@ impl RegionFilter for Filter {
     }
 }
 
-impl RegionFilterWorker for Worker<'_> {
+impl InjectedWorker for Worker<'_> {
     fn check(
         &mut self,
         theory: &Theory,

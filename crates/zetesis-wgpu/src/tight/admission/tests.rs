@@ -168,6 +168,6 @@ fn cancelled_admission_never_creates_a_plan() {
         .err()
         .unwrap()
         .interruption,
-        Some(zetesis_cpu::Stop::Cancelled)
+        Some(zetesis_algebra::Stop::Cancelled)
     );
 }

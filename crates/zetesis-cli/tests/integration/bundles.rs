@@ -8,8 +8,8 @@ use zetesis_reference_support::{BundleFixture, resource_limits};
 
 use crate::support::human::before_timing;
 use crate::support::options::enumerating as options;
+use zetesis_algebra::Cancellation;
 use zetesis_cli::{Completion, RunError, run_bundle_with_diagnostics, run_with_diagnostics};
-use zetesis_cpu::Cancellation;
 use zetesis_themelios::{BundleResource, SourceBundle};
 
 const MALFORMED_CHOICE: &str = "{a,b :- q.\nq :- c.\n";

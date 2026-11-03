@@ -11,11 +11,11 @@ use std::{
 };
 
 use clap::Parser;
+use zetesis_algebra::Cancellation;
 use zetesis_cli::{
-    Completion, Grounder, Interruption, Options, Oracle, PreparedInput, RunError, Session,
-    SessionModel, SolveConfig, Subject, run_finalized_with_diagnostics,
+    Completion, Grounder, Interruption, Options, Oracle, Original, PreparedInput, RunError,
+    Session, SessionModel, SolveConfig, run_finalized_with_diagnostics,
 };
-use zetesis_cpu::Cancellation;
 use zetesis_reference_support::formula;
 use zetesis_test_support::io::{CLOSED, Closed, FailAt};
 
@@ -80,7 +80,7 @@ fn detached_model_retains_theory_identity() {
     .next()
     .unwrap()
     .unwrap();
-    let Subject::Theory(theory) = model.subject() else {
+    let Original::Theory(theory) = model.original() else {
         panic!("formula subject")
     };
     assert!(theory.same_instance(admitted.theory()));
@@ -334,7 +334,7 @@ fn cancelled_formula_does_not_enter_membership() {
     assert_eq!(outcome.completion(), Some(Completion::Interrupted));
     assert!(matches!(
         outcome.interruption(),
-        Some(Interruption::Preparation(zetesis_cpu::Stop::Cancelled))
+        Some(Interruption::Preparation(zetesis_algebra::Stop::Cancelled))
     ));
     assert_eq!(outcome.candidate_progress(), 0);
     assert!(outcome.countermodel_statistics().is_none());
@@ -456,7 +456,7 @@ fn detached_outcome_retains_original_subject() {
         assert_eq!(session.by_ref().map(Result::unwrap).count(), 2);
         session.outcome().unwrap()
     };
-    let Subject::Theory(theory) = outcome.subject().unwrap() else {
+    let Original::Theory(theory) = outcome.original().unwrap() else {
         panic!("original theory")
     };
     assert!(theory.same_instance(admitted.theory()));
@@ -503,9 +503,9 @@ fn stopped_prepared_inputs_skip_execution_setup() {
     let outcome = session.outcome().unwrap();
     assert_eq!(
         outcome.interruption(),
-        Some(Interruption::Preparation(zetesis_cpu::Stop::Cancelled))
+        Some(Interruption::Preparation(zetesis_algebra::Stop::Cancelled))
     );
-    let Subject::Theory(theory) = outcome.subject().unwrap() else {
+    let Original::Theory(theory) = outcome.original().unwrap() else {
         panic!("original theory")
     };
     assert!(theory.same_instance(admitted.theory()));
@@ -620,9 +620,9 @@ fn execution_refusal_retains_preparation_timing() {
     assert_eq!(observer.failures, 1);
     assert!(
         failure
-            .subject()
+            .original()
             .unwrap()
-            .same_instance(&Subject::Theory(admitted.theory().clone()))
+            .same_instance(&Original::Theory(admitted.theory().clone()))
     );
     assert!(failure.semantic().is_none());
     // Class planning precedes executor choice. The existing fallible start
@@ -680,9 +680,9 @@ fn formula_setup_observer_failure_is_retained_for_first_pull() {
     }
     assert!(
         failure
-            .subject()
+            .original()
             .unwrap()
-            .same_instance(&Subject::Theory(admitted.theory().clone()))
+            .same_instance(&Original::Theory(admitted.theory().clone()))
     );
     assert!(session.next_observed(&mut observer).is_none());
     assert!(session.next().is_none());
@@ -717,9 +717,9 @@ fn bound_observer_failure_retains_the_verified_incumbent() {
     );
     assert!(
         outcome
-            .subject()
+            .original()
             .unwrap()
-            .same_instance(&Subject::Theory(admitted.theory().clone()))
+            .same_instance(&Original::Theory(admitted.theory().clone()))
     );
     assert_eq!(outcome.completion(), None);
     assert!(!outcome.optimum_proved());

@@ -4,11 +4,16 @@
 //! describe each row's initial check; trusted addition establishes subsequent
 //! consequences of those checked premises. No region or owner is changed.
 
+mod runtime;
+pub use runtime::ParityKnowledge;
+
+use zetesis_algebra::Quota;
+
 use std::convert::Infallible;
 use std::mem::size_of;
 
-use zetesis_core::packed;
-use zetesis_cpu::Stop;
+use zetesis_algebra::words;
+use zetesis_algebra::{Stop, words::Words};
 
 use super::{
     budget::{Budget, BudgetError},
@@ -55,7 +60,7 @@ impl Prepared {
 /// Atom-major incidence bits; row identifiers are the input enumeration order.
 #[derive(Debug)]
 pub(super) struct Index {
-    pub words: Vec<u64>,
+    pub words: Words<u64>,
     pub row_words: usize,
     pub rows: usize,
     /// Executed insertions, including repeated insertion of the same bit.
@@ -65,26 +70,25 @@ pub(super) struct Index {
 impl Index {
     /// Insert an admitted atom/row incidence: locate costs three, OR and its
     /// observation counter cost two. Callers establish both coordinate bounds.
-    pub(super) fn insert(
+    pub(super) fn insert<Q: Quota + ?Sized>(
         &mut self,
         atom: usize,
         row: usize,
-        budget: &mut Budget<'_, '_>,
-    ) -> Result<(), BudgetError> {
+        budget: &mut Budget<'_, '_, Q>,
+    ) -> Result<(), BudgetError<Q::Error>> {
         assert!(row < self.rows, "index row is admitted");
         budget.charge(3)?;
-        let word = row / 64;
-        let bit = 1 << (row % 64);
+        let (word, bit) = Words::<u64>::locate(row);
         self.insert_bit(atom, word, bit, budget)
     }
 
-    fn insert_bit(
+    fn insert_bit<Q: Quota + ?Sized>(
         &mut self,
         atom: usize,
         word: usize,
         bit: u64,
-        budget: &mut Budget<'_, '_>,
-    ) -> Result<(), BudgetError> {
+        budget: &mut Budget<'_, '_, Q>,
+    ) -> Result<(), BudgetError<Q::Error>> {
         budget.charge(2)?;
         self.words[atom * self.row_words + word] |= bit;
         self.insertions += 1;
@@ -119,12 +123,12 @@ impl Index {
 /// A refuting path omits those suffix terms. The shared first-bit primitive's
 /// result tag, counter increments, vector lengths and headers explain the
 /// differences from the scalar reference coefficients.
-pub(super) fn prepare(
+pub(super) fn prepare<Q: Quota + ?Sized>(
     rows: &mut [Equation],
     atom_count: usize,
     storage: &mut Storage,
-    budget: &mut Budget<'_, '_>,
-) -> Result<Prepared, BudgetError> {
+    budget: &mut Budget<'_, '_, Q>,
+) -> Result<Prepared, BudgetError<Q::Error>> {
     let mut pivots = storage.filled(atom_count, 0usize, 1, budget)?;
     let basis = storage.reserve(rows.len().min(atom_count), budget)?;
     let units = storage.reserve(0, budget)?;
@@ -142,7 +146,7 @@ pub(super) fn prepare(
     };
     for target in 0..rows.len() {
         loop {
-            let Some(atom) = packed::first(&rows[target].words, &mut |work| budget.charge(work))?
+            let Some(atom) = words::first(&rows[target].words, &mut |work| budget.charge(work))?
             else {
                 let refuted = budget.bounded(3, || {
                     if rows[target].constant {
@@ -177,7 +181,7 @@ pub(super) fn prepare(
     let index = budget.in_phase(super::work::Phase::Index, |budget| {
         build_index(
             atom_count,
-            prepared.basis.iter().map(|&row| rows[row].words.as_slice()),
+            prepared.basis.iter().map(|&row| &rows[row].words[..]),
             storage,
             budget,
         )
@@ -196,20 +200,20 @@ pub(super) fn prepare(
 /// `W+2` chunk covers every XOR, the constant XOR and the observation counter.
 /// Equal padded lengths and an earlier source are established by preparation;
 /// the shared kernel's callbacks cannot refuse inside this admitted chunk.
-fn add(
+fn add<Q: Quota + ?Sized>(
     rows: &mut [Equation],
     target: usize,
     source: usize,
     counts: &mut Counts,
-    budget: &mut Budget<'_, '_>,
-) -> Result<(), BudgetError> {
+    budget: &mut Budget<'_, '_, Q>,
+) -> Result<(), BudgetError<Q::Error>> {
     assert!(source < target, "a pivot belongs to an earlier checked row");
     let (earlier, remaining) = rows.split_at_mut(target);
     let source = &earlier[source];
     let target = &mut remaining[0];
     let width = u64::try_from(target.words.len()).expect("a row length fits a work word");
     budget.charge(width + 2)?;
-    packed::xor_assign(&mut target.words, &source.words, &mut || {
+    words::xor_assign(&mut target.words, &source.words, &mut || {
         Ok::<_, Infallible>(())
     })
     .unwrap_or_else(|never| match never {});
@@ -218,19 +222,19 @@ fn add(
     Ok(())
 }
 
-fn collect_units(
+fn collect_units<Q: Quota + ?Sized>(
     rows: &[Equation],
     prepared: &mut Prepared,
     storage: &mut Storage,
-    budget: &mut Budget<'_, '_>,
-) -> Result<(), BudgetError> {
+    budget: &mut Budget<'_, '_, Q>,
+) -> Result<(), BudgetError<Q::Error>> {
     for row in &prepared.basis {
         budget.charge(1)?;
         let row = &rows[*row];
-        let count = packed::count(&row.words, &mut |work| budget.charge(work))?;
+        let count = words::count(&row.words, &mut |work| budget.charge(work))?;
         budget.charge(1)?;
         if count == 1 {
-            let atom = packed::first(&row.words, &mut |work| budget.charge(work))?
+            let atom = words::first(&row.words, &mut |work| budget.charge(work))?
                 .expect("the unchanged row has one atom");
             storage.push(
                 &mut prepared.units,
@@ -259,19 +263,19 @@ fn collect_units(
 /// an insertion counter per incidence. Guard insertions later cost five each.
 /// Matrix/byte dimension checks precede allocation; unrepresentable allocation
 /// dimensions remain an allocation failure, never a logical contradiction.
-pub(super) fn build_index<'a>(
+pub(super) fn build_index<'a, Q: Quota + ?Sized>(
     atom_count: usize,
     supports: impl ExactSizeIterator<Item = &'a [u64]>,
     storage: &mut Storage,
-    budget: &mut Budget<'_, '_>,
-) -> Result<Index, BudgetError> {
+    budget: &mut Budget<'_, '_, Q>,
+) -> Result<Index, BudgetError<Q::Error>> {
     budget.charge(0)?; // global control precedes allocation-dimension refusal
     let rows = supports.len();
     let row_words = rows.div_ceil(128) * 2;
     let length = atom_count
         .checked_mul(row_words)
         .ok_or(BudgetError::Stopped(Stop::Allocation))?;
-    let words = storage.filled(length, 0, 1, budget)?;
+    let words = Words::new(storage.filled(length, 0, 1, budget)?);
     storage.admit_record((size_of::<Index>() - size_of::<Vec<u64>>()) as u128, budget)?;
     budget.charge(3)?;
     let mut index = Index {
@@ -282,9 +286,8 @@ pub(super) fn build_index<'a>(
     };
     for (row, support) in supports.enumerate() {
         budget.charge(3)?;
-        let word = row / 64;
-        let bit = 1 << (row % 64);
-        packed::visit_set_bits(
+        let (word, bit) = Words::<u64>::locate(row);
+        words::visit_set_bits(
             support,
             budget,
             &mut |budget, work| budget.charge(work),

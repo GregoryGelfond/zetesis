@@ -52,12 +52,13 @@ fn prepared(example: &Example) -> Scratch {
                 &example.owner,
                 &example.index,
                 &example.producers,
-                &mut Work::new(u64::MAX),
+                &mut Meter::local(u64::MAX),
             )
+            .map_err(zetesis_algebra::Failure::into_stop)
             .unwrap();
     }
     example
-        .complete(&mut scratch, &[0], &[0], &mut Work::new(u64::MAX))
+        .complete(&mut scratch, &[0], &[0], &mut Meter::local(u64::MAX))
         .unwrap();
     assert_eq!(scratch.atoms[0], 15);
     scratch
@@ -67,12 +68,14 @@ fn selection(example: &Example, never: &[u64], cuts: &[u64]) -> Scratch {
     let mut scratch = prepared(example);
     example.start(&mut scratch, never);
     let heads = scratch
-        .local_forward(&example.index, (never, cuts), &mut Work::new(u64::MAX))
+        .local_forward(&example.index, (never, cuts), &mut Meter::local(u64::MAX))
+        .map_err(zetesis_algebra::Failure::into_stop)
         .unwrap();
     assert_eq!(heads, 2 - (cuts[0] & 3).count_ones() as usize);
     let end = scratch.queue.len();
     scratch
-        .partition_heads(heads, &mut Work::new(u64::MAX))
+        .partition_heads(heads, &mut Meter::local(u64::MAX))
+        .map_err(zetesis_algebra::Failure::into_stop)
         .unwrap();
     scratch
         .local_bodies(
@@ -81,8 +84,9 @@ fn selection(example: &Example, never: &[u64], cuts: &[u64]) -> Scratch {
             &example.producers,
             (heads, end),
             (never, cuts),
-            &mut Work::new(u64::MAX),
+            &mut Meter::local(u64::MAX),
         )
+        .map_err(zetesis_algebra::Failure::into_stop)
         .unwrap();
     scratch
 }
@@ -90,12 +94,12 @@ fn selection(example: &Example, never: &[u64], cuts: &[u64]) -> Scratch {
 fn assert_full_result(example: &Example, never: &[u64], cuts: &[u64], atoms: u64) {
     let mut expected = prepared(example);
     example
-        .complete(&mut expected, never, cuts, &mut Work::new(u64::MAX))
+        .complete(&mut expected, never, cuts, &mut Meter::local(u64::MAX))
         .unwrap();
     let mut actual = prepared(example);
     example.start(&mut actual, never);
     example
-        .complete(&mut actual, never, cuts, &mut Work::new(u64::MAX))
+        .complete(&mut actual, never, cuts, &mut Meter::local(u64::MAX))
         .unwrap();
     assert_eq!(actual.local.passes, 1);
     assert_eq!(actual.atoms, expected.atoms);

@@ -9,9 +9,9 @@ use crate::support::finite_bindings::values as truth;
 use crate::support::fixtures::OBJECTIVE_EXTREMA_REFUSALS as EXTREMA_REFUSALS;
 use oracle::records as clingo;
 use source_cases::cases;
+use zetesis_algebra::Cancellation;
 use zetesis_clingo_support as oracle;
 use zetesis_core::Model;
-use zetesis_cpu::Cancellation;
 use zetesis_test_support::records::Records;
 use zetesis_themelios::{FormulaFailure, FormulaLimits, FormulaResource};
 

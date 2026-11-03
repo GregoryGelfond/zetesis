@@ -3,11 +3,11 @@
 use std::{collections::BTreeSet, convert::Infallible, io, num::NonZeroUsize};
 
 use crate::support::sessions::formula;
-use zetesis_cpu::Cancellation;
+use zetesis_algebra::Cancellation;
 use zetesis_solve::{
     AnswerSelection, AnswerSet, Backend, Completion, ExecutionObservation, ExecutionObserver,
-    ExecutionResources, Grounder, Interruption, Oracle, PreparedInput, Session, SolveConfig,
-    SolveError, Subject, WorldView, WorldViewError, WorldViewFailure, WorldViewLimits,
+    ExecutionResources, Grounder, Interruption, Oracle, Original, PreparedInput, Session,
+    SolveConfig, SolveError, WorldView, WorldViewError, WorldViewFailure, WorldViewLimits,
 };
 
 fn config() -> SolveConfig {
@@ -283,13 +283,13 @@ fn detached_answer_retains_original_instance() {
         .unwrap();
     assert!(
         answer
-            .subject()
-            .same_instance(&Subject::Theory(owner.theory().clone()))
+            .original()
+            .same_instance(&Original::Theory(owner.theory().clone()))
     );
     assert!(
         !answer
-            .subject()
-            .same_instance(&Subject::Theory(other.theory().clone()))
+            .original()
+            .same_instance(&Original::Theory(other.theory().clone()))
     );
     assert_eq!(names(&answer), ["a"]);
 }
@@ -303,18 +303,18 @@ fn world_view_keeps_its_subject_after_owner_drop() {
     let other = formula("a | b.");
     assert!(
         !world_view
-            .subject()
-            .same_instance(&Subject::Theory(other.theory().clone()))
+            .original()
+            .same_instance(&Original::Theory(other.theory().clone()))
     );
     for answer in world_view.answer_sets() {
-        assert!(answer.subject().same_instance(world_view.subject()));
+        assert!(answer.original().same_instance(world_view.original()));
     }
     assert!(
         world_view
             .outcome()
-            .subject()
+            .original()
             .unwrap()
-            .same_instance(world_view.subject())
+            .same_instance(world_view.original())
     );
     assert_eq!(
         family(&world_view),
@@ -327,8 +327,8 @@ fn distinct_semantic_profiles_do_not_share_instance() {
     let relational = formula("a.");
     let formulas = formula("a.");
     assert!(
-        !Subject::Theory(relational.theory().clone())
-            .same_instance(&Subject::Theory(formulas.theory().clone()))
+        !Original::Theory(relational.theory().clone())
+            .same_instance(&Original::Theory(formulas.theory().clone()))
     );
 }
 
@@ -412,8 +412,8 @@ fn requested_model_limit_refuses_complete_collection() {
     );
     assert!(
         failure.answer_sets()[0]
-            .subject()
-            .same_instance(failure.subject())
+            .original()
+            .same_instance(failure.original())
     );
 }
 
@@ -430,7 +430,7 @@ fn consumer_stop_does_not_establish_coverage() {
     let outcome = session.stop();
     assert_eq!(outcome.completion(), None);
     assert_eq!(outcome.selection(), Some(AnswerSelection::All));
-    assert!(outcome.subject().unwrap().same_instance(answer.subject()));
+    assert!(outcome.original().unwrap().same_instance(answer.original()));
     assert!(!outcome.unsatisfiable());
 }
 
@@ -476,8 +476,8 @@ fn search_budget_retains_only_a_checked_prefix() {
     assert_eq!(failure.outcome().unwrap().verified_models(), 1);
     assert!(
         failure.answer_sets()[0]
-            .subject()
-            .same_instance(failure.subject())
+            .original()
+            .same_instance(failure.original())
     );
     assert_eq!(failure.into_answer_sets().len(), 1);
 }
@@ -629,8 +629,8 @@ fn collection_refusal_preserves_queued_cpu_membership() {
     );
     assert!(
         failure.answer_sets()[0]
-            .subject()
-            .same_instance(failure.subject())
+            .original()
+            .same_instance(failure.original())
     );
 }
 
@@ -720,8 +720,8 @@ fn setup_refusal_preserves_the_original_subject() {
     assert!(failure.outcome().is_none());
     assert!(
         failure
-            .subject()
-            .same_instance(&Subject::Theory(owner.theory().clone()))
+            .original()
+            .same_instance(&Original::Theory(owner.theory().clone()))
     );
 }
 
@@ -809,8 +809,8 @@ fn observer_failure(
     .unwrap_err();
     assert!(
         failure
-            .subject()
-            .same_instance(&Subject::Theory(owner.theory().clone()))
+            .original()
+            .same_instance(&Original::Theory(owner.theory().clone()))
     );
     assert!(failure.answer_sets().is_empty());
     let WorldViewError::Solve(solve) = failure.cause() else {
@@ -865,7 +865,12 @@ fn collection_preserves_deferred_formula_failure() {
     let (failure, events, timings) = observer_failure(Refusal::Formula);
     assert_eq!(events, [Observation::Formula]);
     let outcome = failure.outcome().unwrap();
-    assert!(outcome.subject().unwrap().same_instance(failure.subject()));
+    assert!(
+        outcome
+            .original()
+            .unwrap()
+            .same_instance(failure.original())
+    );
     assert_eq!(outcome.selection(), Some(AnswerSelection::All));
     assert_eq!(outcome.verified_models(), 0);
     assert_eq!(outcome.completion(), None);
@@ -883,3 +888,28 @@ fn collection_preserves_deferred_formula_failure() {
 }
 
 mod failure_contracts;
+
+#[test]
+fn exact_collection_counts_admit_the_complete_family() {
+    let owner = formula("a. {b}.");
+    let world_view = WorldView::collect(
+        PreparedInput::formula(&owner),
+        config(),
+        WorldViewLimits {
+            max_answer_sets: 2,
+            max_atoms: 3,
+            ..Default::default()
+        },
+        Cancellation::default(),
+    )
+    .unwrap();
+    assert_eq!(
+        family(&world_view),
+        BTreeSet::from([vec!["a".into()], vec!["a".into(), "b".into()]])
+    );
+    assert_eq!(world_view.answer_sets().len(), 2);
+    assert_eq!(
+        world_view.outcome().completion(),
+        Some(Completion::Exhausted)
+    );
+}

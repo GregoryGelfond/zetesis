@@ -1,11 +1,12 @@
 //! Inclusive work and terminal contracts of the original-candidate batch API.
 
-use crate::support::choice_theories::three_choices_falsum_first;
+use crate::support::assert_region_work_accounted;
+use crate::support::choice_theories::{exclusive_choices, three_choices_falsum_first};
 use std::collections::BTreeSet;
 use std::convert::Infallible;
 
 use crate::support::batching::batch;
-use zetesis_cpu::Stop;
+use zetesis_algebra::Stop;
 use zetesis_ferraris::{Interpretation, Theory};
 use zetesis_stable::{
     BatchError, BatchVerdict, Cancellation, Incomplete, Limits, SearchLimits, StableModels,
@@ -176,8 +177,18 @@ fn residual_work_exhaustion_cannot_commit_an_earlier_certified_prefix() {
 
 #[test]
 fn every_first_proposal_work_cutoff_returns_only_proved_models_and_a_terminal_stop() {
-    let theory = three_choices_falsum_first();
-    let (encoded, proposed) = proposal_work(&theory, 1);
+    assert!(
+        !has_unused_proposal_work(&three_choices_falsum_first()),
+        "empty arithmetic leaves only scalar post-index charges on this fixture"
+    );
+    assert!(
+        has_unused_proposal_work(&exclusive_choices()),
+        "a checked arithmetic batch reaches indivisible admission"
+    );
+}
+
+fn has_unused_proposal_work(theory: &Theory) -> bool {
+    let (encoded, proposed) = proposal_work(theory, 1);
     // The original index is charged whole when the walk starts: an
     // allowance short of it spends nothing and stops the batch.
     let walk =
@@ -188,7 +199,7 @@ fn every_first_proposal_work_cutoff_returns_only_proved_models_and_a_terminal_st
         "bounded tiny-fixture work interval"
     );
     for allowance in encoded..walk {
-        let mut search = with_work(&theory, allowance);
+        let mut search = with_work(theory, allowance);
         assert!(matches!(
             search.next_batch(batch(1), never_called),
             Err(BatchError::Search(Incomplete::WorkLimit))
@@ -197,8 +208,9 @@ fn every_first_proposal_work_cutoff_returns_only_proved_models_and_a_terminal_st
         assert_eq!(search.batch_statistics().pending, 0);
         closed(&mut search);
     }
+    let mut saw_unused_allowance = false;
     for allowance in walk..=proposed {
-        let mut search = with_work(&theory, allowance);
+        let mut search = with_work(theory, allowance);
         match search.next_batch(batch(1), certified) {
             Ok(models) => {
                 assert_eq!(models.len(), 1);
@@ -217,8 +229,21 @@ fn every_first_proposal_work_cutoff_returns_only_proved_models_and_a_terminal_st
             }
             other => panic!("unexpected work-cutoff result at {allowance}: {other:?}"),
         }
-        assert_eq!(search.statistics().search.work, allowance);
+        let statistics = search.statistics();
+        assert_region_work_accounted(&statistics);
+        assert_eq!(statistics.countermodel_queries, 0);
+        assert_eq!(
+            statistics.reduct,
+            zetesis_stable::ReductStatistics::default()
+        );
+        assert!(statistics.certified.is_none());
+        assert!(statistics.search.work <= allowance);
+        saw_unused_allowance |= statistics.search.work < allowance;
         assert_eq!(search.batch_statistics().pending, 0);
         closed(&mut search);
     }
+    // The separate Meter/lease regression observes the bounded closure not
+    // being called, exact performed work, and exact refund. Return whether
+    // this real theory's post-index path reached an indivisible refusal.
+    saw_unused_allowance
 }

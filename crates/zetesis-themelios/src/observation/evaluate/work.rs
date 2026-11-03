@@ -1,6 +1,8 @@
 //! One resource and cancellation account shared by evaluation and rendering.
 //! This account retains neither a query program nor a term authority.
 
+use zetesis_algebra::{Meter, MeterWorkError};
+
 use crate::ProgramSite;
 
 use super::{Cancellation, ConstructionLimits, Error, ErrorKind, Limits, Resource, Statistics};
@@ -25,24 +27,32 @@ impl Work<'_> {
         observed: u128,
         limit: u128,
     ) -> Result<(), Error> {
-        if observed > limit {
-            return Err(self.error(ErrorKind::Limit {
-                resource,
-                observed,
-                limit,
-            }));
-        }
-        Ok(())
+        Meter::check_wide_count(observed, 0, limit)
+            .map(|_| ())
+            .map_err(|_| {
+                self.error(ErrorKind::Limit {
+                    resource,
+                    observed,
+                    limit,
+                })
+            })
     }
 
     pub(in crate::observation) fn step(&mut self, count: u128) -> Result<(), Error> {
         self.cancellation
             .poll()
             .map_err(|stop| self.error(ErrorKind::Stopped(stop)))?;
-        let observed = u128::from(self.statistics.work) + count;
-        self.check(Resource::Work, observed, u128::from(self.limits.max_work))?;
-        self.statistics.work = u64::try_from(observed).expect("work checked against u64 ceiling");
-        Ok(())
+        match Meter::charge_receipt(&mut self.statistics.work, count, self.limits.max_work) {
+            Ok(()) => Ok(()),
+            Err(MeterWorkError::Limit { observed, limit }) => Err(self.error(ErrorKind::Limit {
+                resource: Resource::Work,
+                observed,
+                limit,
+            })),
+            Err(MeterWorkError::Overflow) => {
+                unreachable!("observation work producers fit u128 with the accepted prefix")
+            }
+        }
     }
 
     pub(in crate::observation) fn reserve<T>(&self, count: usize) -> Result<Vec<T>, Error> {
@@ -53,3 +63,6 @@ impl Work<'_> {
         Ok(values)
     }
 }
+
+#[cfg(test)]
+mod tests;

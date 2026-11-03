@@ -11,9 +11,9 @@ use std::collections::BTreeSet;
 
 use serde_json::Value as Json;
 use themelios_program::term::EvalError;
+use zetesis_algebra::Cancellation;
 use zetesis_clingo_support as oracle;
 use zetesis_core::Model;
-use zetesis_cpu::Cancellation;
 use zetesis_themelios::{
     AdmissionFailure, AdmissionOptions, AdmittedFormula, BundleAdmissionOptions, ExpansionFailure,
     ExpansionLimits, ExpansionResource, FormulaFailure, FormulaLimits, FormulaResource,

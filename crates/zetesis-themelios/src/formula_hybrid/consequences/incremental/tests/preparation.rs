@@ -216,7 +216,7 @@ fn cancelled_borrow_does_not_admit_shared_bytes() {
     let Err(error) = prepared.prepare_incremental_plan(&mut counters) else {
         panic!("cancelled borrowing must fail");
     };
-    assert_eq!(error.interruption(), Some(zetesis_cpu::Stop::Cancelled));
+    assert_eq!(error.interruption(), Some(zetesis_algebra::Stop::Cancelled));
     assert_eq!(counters.accounting.work, 0);
     assert!(prepared.incremental_plan.is_none());
     assert_eq!(retained_bytes(prepared), retained);

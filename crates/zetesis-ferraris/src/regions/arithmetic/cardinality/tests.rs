@@ -1,6 +1,6 @@
-use zetesis_cpu::{Cancellation, Stop};
+use zetesis_algebra::Meter;
 
-use crate::regions::Work;
+use zetesis_algebra::{Cancellation, Stop};
 
 use super::super::cardinality_source::Source;
 use super::*;
@@ -11,7 +11,7 @@ fn bound(atoms: usize, support: &[usize], side: BoundSide, value: u64) -> Bound 
         words[atom / 64] |= 1 << (atom % 64);
     }
     Bound {
-        support: words,
+        support: words.into(),
         guard: Vec::new(),
         side,
         value,
@@ -26,7 +26,8 @@ fn bound(atoms: usize, support: &[usize], side: BoundSide, value: u64) -> Bound 
 
 fn completed(atoms: usize, bounds: &[Bound]) -> (Prepared, u64, u128, u128) {
     let cancellation = Cancellation::default();
-    let mut budget = Budget::new(Work::new(1_000_000), 1_000_000, usize::MAX, &cancellation);
+    let mut budget_work = Meter::local(1_000_000);
+    let mut budget = Budget::new(&mut budget_work, 1_000_000, usize::MAX, &cancellation);
     let mut storage = Storage::default();
     let prepared = prepare(bounds, atoms, &mut storage, &mut budget).unwrap();
     assert_eq!(storage.bytes(), prepared.retained_bytes());
@@ -64,7 +65,8 @@ fn models(atoms: usize, bounds: &[Bound]) -> Vec<usize> {
 
 fn checked(bounds: &[Bound], lower: &[usize], upper: &[usize]) -> bool {
     let cancellation = Cancellation::default();
-    let mut budget = Budget::new(Work::new(1_000_000), 1_000_000, usize::MAX, &cancellation);
+    let mut budget_work = Meter::local(1_000_000);
+    let mut budget = Budget::new(&mut budget_work, 1_000_000, usize::MAX, &cancellation);
     let width = bounds.first().map_or(0, |bound| bound.support.len());
     check_pair(
         bounds,
@@ -103,7 +105,8 @@ fn supplied_refutes(bounds: &[Bound], lower: &[usize], upper: &[usize]) -> bool 
         counts: Counts::default(),
     };
     let cancellation = Cancellation::default();
-    let mut budget = Budget::new(Work::new(1_000_000), 1_000_000, usize::MAX, &cancellation);
+    let mut budget_work = Meter::local(1_000_000);
+    let mut budget = Budget::new(&mut budget_work, 1_000_000, usize::MAX, &cancellation);
     reduce_pair(&mut families, bounds, 0, &mut budget).unwrap()
 }
 
@@ -186,7 +189,8 @@ fn mixed_exact_one_partitions_refute_and_absorb_before_the_index() {
         assert_eq!(counts.accepted, 2);
         assert_eq!(counts.rejected, 0);
         let cancellation = Cancellation::default();
-        let mut budget = Budget::new(Work::new(work), work, usize::MAX, &cancellation);
+        let mut budget_work = Meter::local(work);
+        let mut budget = Budget::new(&mut budget_work, work, usize::MAX, &cancellation);
         let result = prepare(&bounds, atoms, &mut Storage::default(), &mut budget).unwrap();
         assert!(matches!(result, Prepared::RootRefuted { .. }));
         assert_eq!(budget.work(), work);
@@ -326,18 +330,21 @@ fn preparation_refusals_publish_no_partial_family() {
         bound(1, &[0], BoundSide::Upper, 1),
     ];
     let cancellation = Cancellation::default();
-    let mut budget = Budget::new(Work::new(1_000_000), 1, usize::MAX, &cancellation);
+    let mut budget_work = Meter::local(1_000_000);
+    let mut budget = Budget::new(&mut budget_work, 1, usize::MAX, &cancellation);
     assert!(matches!(
         prepare(&bounds, 1, &mut Storage::default(), &mut budget),
         Err(BudgetError::WorkDeclined)
     ));
-    let mut budget = Budget::new(Work::new(1_000_000), 1_000_000, 0, &cancellation);
+    let mut budget_work = Meter::local(1_000_000);
+    let mut budget = Budget::new(&mut budget_work, 1_000_000, 0, &cancellation);
     assert!(matches!(
         prepare(&bounds, 1, &mut Storage::default(), &mut budget),
         Err(BudgetError::StorageDeclined { .. })
     ));
     cancellation.cancel();
-    let mut budget = Budget::new(Work::new(0), 0, 0, &cancellation);
+    let mut budget_work = Meter::local(0);
+    let mut budget = Budget::new(&mut budget_work, 0, 0, &cancellation);
     assert!(matches!(
         prepare(&bounds, 1, &mut Storage::default(), &mut budget),
         Err(BudgetError::Stopped(Stop::Cancelled))

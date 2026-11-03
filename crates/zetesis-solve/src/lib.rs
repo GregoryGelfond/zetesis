@@ -9,11 +9,11 @@
 //! Use [`PreparedInput::formula`] for a source admitted as finite formulas, or
 //! the hybrid, terminal-definition and acyclic-source inputs its preparation
 //! selects. The input borrows one owner; atom indexes, objectives and the
-//! original subject cannot be mixed across unrelated admissions. Preparing this
+//! original input cannot be mixed across unrelated admissions. Preparing this
 //! borrow performs no execution.
 //!
 //! ```
-//! use zetesis_cpu::Cancellation;
+//! use zetesis_algebra::Cancellation;
 //! use zetesis_solve::{Backend, PreparedInput, Session, SolveConfig, WorldViewLimits};
 //! use zetesis_themelios::{AdmissionOptions, ExpansionLimits, FormulaLimits, admit_formula};
 //!
@@ -36,7 +36,7 @@
 //! [`Session::new`] selects objective incumbents when an objective exists.
 //! [`Session::enumerate`] streams all original answer sets with their scores.
 //! Both yield privately constructed [`AnswerSet`] values. Their full atoms and
-//! [`Subject`] identity are independent of a source's displayed projection.
+//! [`Original`] identity are independent of a source's displayed projection.
 //! [`Session::progress`] records current evidence; [`Session::outcome`] becomes
 //! available when search finishes, stops or fails. Completion can remain absent
 //! after failure. Neither successful iteration
@@ -86,6 +86,7 @@ pub use grounding::{
 mod optimization;
 mod objective_bounds;
 mod formula_execution;
+mod residual_handovers;
 #[cfg(feature = "gpu")]
 mod formula_tight;
 mod completion_accounting;
@@ -126,9 +127,17 @@ pub use optimization::{Optimization, OptimizationStop};
 pub use phase_timing::{PhaseTimings, SolvePhase};
 pub use policy::{GpuBatching, Grounder, OptimumSearch, Oracle};
 pub use projection::{ProjectionError, ProjectionLimits, ProjectionResource, ProjectionStatistics};
+pub use residual_handovers::sampling::{
+    ResidualQuantiles, ResidualRunSamples, ResidualSampleGroup, ResidualSampleMetric,
+    ResidualSamplePopulation,
+};
+pub use residual_handovers::{
+    ResidualHandoverAttempt, ResidualHandoverByReason, ResidualHandoverStatistics,
+    ResidualReasonSearch, ResidualSearchStatistics,
+};
 pub use semantic_outcome::{AnswerSelection, SemanticOutcome};
 pub use session::{
-    AnswerSet, PreparedInput, PreparedProfile, Session, SessionBuilder, SessionModel, Subject,
+    AnswerSet, Original, PreparedInput, PreparedProfile, Session, SessionBuilder, SessionModel,
 };
 pub use solve_config::SolveConfig;
 pub use terminal_session::TerminalExecutionStatistics;

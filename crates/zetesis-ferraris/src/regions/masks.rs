@@ -1,14 +1,16 @@
 //! One owned allocation for the six disjoint knowledge masks.
 //!
 //! The node pair precedes the atom pair, seen snapshot and chain witnesses. Borrowing splits
-//! the block once; narrowing then indexes plain slices, with no per-bit shape
-//! decoding. Allocation retains Knowledge's infallible construction boundary.
+//! the block once; narrowing retains six transparent Words views, with no
+//! per-bit shape decoding. Allocation retains Knowledge's infallible construction
+//! boundary.
 
 use super::flag_words;
+use zetesis_algebra::words::Words;
 
 #[derive(Debug)]
 pub(super) struct Masks {
-    pub(super) words: Box<[u64]>,
+    pub(super) words: Words<u64, Box<[u64]>>,
     node_words: usize,
     atom_words: usize,
 }
@@ -23,7 +25,7 @@ impl Masks {
             .and_then(|words| words.checked_add(flag_words(chains)))
             .expect("the six knowledge masks fit one word block");
         Self {
-            words: vec![0; words].into_boxed_slice(),
+            words: vec![0; words].into_boxed_slice().into(),
             node_words,
             atom_words,
         }
@@ -31,13 +33,13 @@ impl Masks {
 
     /// The six exact, nonoverlapping spans, including unused tail bits.
     /// Safe splits check every boundary before the closure can access them.
-    pub(super) fn split(&mut self) -> [&mut [u64]; 6] {
+    pub(super) fn split(&mut self) -> [Words<u64, &mut [u64]>; 6] {
         let (sure, rest) = self.words.split_at_mut(self.node_words);
         let (never, rest) = rest.split_at_mut(self.node_words);
         let (atom_sure, rest) = rest.split_at_mut(self.atom_words);
         let (atom_never, rest) = rest.split_at_mut(self.atom_words);
         let (seen, witnessed) = rest.split_at_mut(self.atom_words);
-        [sure, never, atom_sure, atom_never, seen, witnessed]
+        [sure, never, atom_sure, atom_never, seen, witnessed].map(Words::new)
     }
 
     #[cfg(test)]

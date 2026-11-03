@@ -3,7 +3,7 @@
 use std::{io, num::NonZeroUsize, time::Duration};
 
 use clap::Parser;
-use zetesis_cpu::Cancellation;
+use zetesis_algebra::Cancellation;
 use zetesis_themelios::{SourceAdmission, SourceEvaluationStatistics};
 
 use crate::failure::Progress;

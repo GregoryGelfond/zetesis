@@ -16,8 +16,8 @@ use crate::formula_support::{
     Computation, Context, Counters, StorageLease, reserve_exact, supports_column_totality,
 };
 use crate::{FormulaFailure, FormulaLimits, ProgramSite};
+use zetesis_algebra::{region::Region, words::Words};
 use zetesis_core::catalog::PredicateRef;
-use zetesis_cpu::regions::Region;
 
 mod wakeups;
 use wakeups::Change;
@@ -212,8 +212,8 @@ pub(in crate::formula_hybrid) struct Incremental<'source> {
     plan: &'source Plan,
     changed: Vec<Change>,
     scans: Vec<Scan>,
-    held: Vec<u64>,
-    cut: Vec<u64>,
+    held: Words<u64>,
+    cut: Words<u64>,
     queued: Vec<Option<bool>>,
     pending: Vec<Decision>,
     /// The current batch came from an exhausted rule scan, and every observed
@@ -228,11 +228,12 @@ pub(in crate::formula_hybrid) struct Incremental<'source> {
 // Every buffer belongs to one lease. The common reservation checks replacement
 // overlap, actual allocator capacity and accepted copy work before publication.
 macro_rules! reserve_field {
-    ($state:expr, $field:ident, $count:expr, $context:expr) => {{
+    ($state:expr, $field:ident $(.$storage:ident())?, $count:expr, $context:expr) => {{
         let other =
             $state.lease.bytes() - $state.$field.capacity() * size_of_val_type(&$state.$field);
+        let field = &mut $state.$field;
         reserve_exact(
-            &mut $state.$field,
+            field$(.$storage())?,
             $count,
             &mut $state.lease,
             other,
@@ -457,8 +458,8 @@ impl<'source> Incremental<'source> {
             plan,
             changed: Vec::new(),
             scans: Vec::new(),
-            held: Vec::new(),
-            cut: Vec::new(),
+            held: Words::new(Vec::new()),
+            cut: Words::new(Vec::new()),
             queued: Vec::new(),
             pending: Vec::new(),
             completed_batch: None,
@@ -517,20 +518,20 @@ impl<'source> Incremental<'source> {
         let (held, cut) = region.decision_words();
         reserve_field!(
             self,
-            held,
+            held.storage_mut(),
             held.len(),
             Context::new(computation, limits, counters, site)
         );
         reserve_field!(
             self,
-            cut,
+            cut.storage_mut(),
             cut.len(),
             Context::new(computation, limits, counters, site)
         );
         for _ in held {
             counters.work(limits, site)?;
-            self.held.push(0);
-            self.cut.push(0);
+            self.held.storage_mut().push(0);
+            self.cut.storage_mut().push(0);
         }
         Ok(())
     }
@@ -591,15 +592,14 @@ impl<'source> Incremental<'source> {
         }
         for (word, (&held, &cut)) in held.iter().zip(cut).enumerate() {
             counters.work(limits, site)?;
-            let mut changed = (held ^ self.held[word]) | (cut ^ self.cut[word]);
+            let changed = (held ^ self.held[word]) | (cut ^ self.cut[word]);
             if monotone {
-                while changed != 0 {
-                    counters.work(limits, site)?;
-                    let atom = word * u64::BITS as usize + changed.trailing_zeros() as usize;
+                let mut changed = Words::<u64>::bits(changed);
+                while let Some(bit) = changed.next_with(|| counters.work(limits, site))? {
+                    let atom = word * u64::BITS as usize + bit;
                     if let Some(group) = self.plan.atom_predicates[atom] {
                         self.changed[group].include(atom);
                     }
-                    changed &= changed - 1;
                 }
             }
             self.held[word] = held;

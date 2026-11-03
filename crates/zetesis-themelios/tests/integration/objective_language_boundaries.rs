@@ -54,7 +54,7 @@ fn missing_extremum_witnesses_have_no_answers() {
         let mut search = zetesis_stable::StableModels::new(
             input.theory(),
             zetesis_stable::Limits::default(),
-            zetesis_cpu::Cancellation::default(),
+            zetesis_algebra::Cancellation::default(),
         )
         .unwrap();
         assert!(search.next().is_none());

@@ -52,7 +52,7 @@ fn count_construction_avoids_subset_merge_work() {
 #[test]
 fn zero_value_limit_precedes_other_refusals() {
     Fixture::default().with(given_site(), |_, computation, counters| {
-        let cancellation = zetesis_cpu::Cancellation::default();
+        let cancellation = zetesis_algebra::Cancellation::default();
         cancellation.cancel();
         *counters = std::mem::take(counters).with_cancellation(Some(&cancellation));
         let before = (counters.accounting.work, counters.workspace_bytes());
@@ -179,7 +179,7 @@ fn storage_refusal_releases_the_count_header() {
 #[test]
 fn cancellation_between_contributions_releases_storage() {
     Fixture::default().with(given_site(), |_, computation, counters| {
-        let cancellation = zetesis_cpu::Cancellation::default();
+        let cancellation = zetesis_algebra::Cancellation::default();
         *counters = std::mem::take(counters).with_cancellation(Some(&cancellation));
         let before = counters.workspace_bytes();
         let mut offered = 0;
@@ -199,7 +199,7 @@ fn cancellation_between_contributions_releases_storage() {
                 given_site()
             ),
             Err(FormulaFailure::Interrupted {
-                reason: zetesis_cpu::Stop::Cancelled,
+                reason: zetesis_algebra::Stop::Cancelled,
                 ..
             })
         ));

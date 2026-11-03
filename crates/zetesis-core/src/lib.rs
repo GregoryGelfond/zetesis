@@ -28,7 +28,7 @@ mod admission;
 mod model;
 pub mod catalog;
 pub mod retention;
-pub mod packed;
+pub mod table;
 mod identity;
 mod ordered_index;
 mod atom_lookup;

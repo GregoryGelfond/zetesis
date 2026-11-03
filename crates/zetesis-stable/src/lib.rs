@@ -14,21 +14,20 @@
 //! ground, translate source aggregates, invoke an external solver, or claim a
 //! refinement proof for its Rust implementation.
 //!
-//! The dependency on zetesis-themelios is confined to the `streamed_constraints`
-//! module. Region search, narrowing and membership read only the Ferraris
-//! theory and this crate's own types, so they do not depend on the front end.
+//! The admitted source and its consequence representation enter through
+//! `streamed_constraints`. Candidate composition applies those consequences;
+//! frozen membership reads only the Ferraris theory and its own typed state.
 #![forbid(unsafe_code)]
 
 mod budget;
 mod error;
 mod ferraris;
 mod region_filter;
+mod subject;
 mod streamed_constraints;
 mod timing;
+pub(crate) use region_filter::RegionFeasibility;
 pub use region_filter::RegionFilterStatistics;
-pub(crate) use region_filter::{
-    RegionConsequence, RegionFeasibility, RegionFilter, RegionFilterWorker, RegionPass,
-};
 pub use streamed_constraints::StreamedConstraints;
 mod checked;
 mod reduct;
@@ -45,10 +44,11 @@ pub use ferraris::{
     CompletionStatistics, ConstructionAttempt, Engagement, FrontierOrder, GeneratorOrderStatistics,
     GeneratorOrderStatus, LearnedStore, Limits, Lookahead, LookaheadDeclined, QueryDivision,
     QueryDivisionStatistics, RegionCounts, RegionFrontierStatistics, RegionSearchStatistics,
-    RegionWalkEngagement, RegionWorkerStatistics, SlateProposal, SlateTicket, StableModels,
-    Statistics, check,
+    RegionWalkEngagement, RegionWorkerStatistics, RegionalObservations, RegionalOutcome,
+    RegionalPass, RegionalQueryObservation, RegionalSlotObservation, RegionalSlotState,
+    SlateProposal, SlateTicket, StableModels, Statistics, check,
 };
-pub use zetesis_cpu::Cancellation;
+pub use zetesis_algebra::Cancellation;
 pub use zetesis_ferraris::{
     CardinalityStatistics, ParityStatistics, PreparationStatus, PreparationWork,
 };

@@ -12,7 +12,7 @@ pub use count::CountRenderer;
 pub use human::HumanRenderer;
 pub use json::JsonRenderer;
 
-use zetesis_cpu::Cancellation;
+use zetesis_algebra::Cancellation;
 use zetesis_themelios::observation::{Limits, ModelView};
 
 use crate::{Publication, PublicationFailure, PublicationStop, RunError, SemanticOutcome};

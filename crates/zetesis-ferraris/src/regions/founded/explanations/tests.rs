@@ -3,10 +3,10 @@
 
 use super::{Explanation, Input, Limits, collect};
 use crate::regions::founded::Scratch;
-use crate::regions::{Work, flag_words};
+use crate::regions::{Meter, flag_words};
 use crate::test_support::{SinglePermits, theory, world};
 use crate::{Narrower, Node, NodeView, Producers, RegionLimits, Theory};
-use zetesis_cpu::{Cancellation, Stop};
+use zetesis_algebra::{Cancellation, Stop};
 
 mod aggregates;
 
@@ -82,7 +82,7 @@ impl Program {
                 &self.producers,
                 &node_never,
                 &never,
-                &mut Work::new(u64::MAX),
+                &mut Meter::local(u64::MAX),
             )
             .unwrap();
         Completed {
@@ -106,12 +106,12 @@ fn limits() -> Limits {
     }
 }
 
-fn explain(
+fn explain<Q: zetesis_algebra::Quota<Error = Stop> + ?Sized>(
     program: &Program,
     completed: &Completed,
     start: usize,
     limits: Limits,
-    work: &mut Work<'_>,
+    work: &mut Meter<'_, Q>,
 ) -> Result<Option<Explanation>, Stop> {
     collect(
         Input {
@@ -119,14 +119,15 @@ fn explain(
             index: &program.index,
             producers: &program.producers,
             completed: &completed.scratch,
-            atom_sure: &completed.sure,
-            atom_never: &completed.never,
+            atom_sure: completed.sure.as_slice().into(),
+            atom_never: completed.never.as_slice().into(),
         },
         start,
         limits,
         work,
         &mut 0,
     )
+    .map_err(zetesis_algebra::Failure::into_stop)
 }
 
 fn matches(conditions: &[(usize, bool)], mask: usize) -> bool {
@@ -228,7 +229,7 @@ fn every_tiny_explanation_excludes_all_matching_original_answers() {
                     &completed,
                     start,
                     limits(),
-                    &mut Work::new(u64::MAX),
+                    &mut Meter::local(u64::MAX),
                 )
                 .unwrap() else {
                     continue;
@@ -288,9 +289,15 @@ fn boundary_conditions_do_not_retain_unrelated_ancestor_decisions() {
     let answers = program.answers();
     for z in [false, true] {
         let completed = program.complete(&[(0, true), (2, false), (3, true), (4, z)], &[]);
-        let record = explain(&program, &completed, 0, limits(), &mut Work::new(u64::MAX))
-            .unwrap()
-            .unwrap();
+        let record = explain(
+            &program,
+            &completed,
+            0,
+            limits(),
+            &mut Meter::local(u64::MAX),
+        )
+        .unwrap()
+        .unwrap();
         assert_eq!(record.conditions, [(2, false), (3, true)]);
         assert_eq!(record.unsupported, [0, 1]);
         assert_sound(&program, &completed, &record, &answers);
@@ -324,9 +331,15 @@ fn an_enabled_disjunctive_head_is_not_blocked_by_its_held_cohead() {
     );
     let completed = program.complete(&[(0, true), (3, true)], &[]);
     assert!(
-        explain(&program, &completed, 0, limits(), &mut Work::new(u64::MAX))
-            .unwrap()
-            .is_none()
+        explain(
+            &program,
+            &completed,
+            0,
+            limits(),
+            &mut Meter::local(u64::MAX)
+        )
+        .unwrap()
+        .is_none()
     );
 }
 
@@ -356,9 +369,15 @@ fn opaque_false_nodes_do_not_become_unconditional_explanations() {
         0
     );
     assert!(
-        explain(&program, &completed, 0, limits(), &mut Work::new(u64::MAX))
-            .unwrap()
-            .is_none()
+        explain(
+            &program,
+            &completed,
+            0,
+            limits(),
+            &mut Meter::local(u64::MAX)
+        )
+        .unwrap()
+        .is_none()
     );
     assert!(
         program.answers().contains(&0b111),
@@ -373,14 +392,26 @@ fn foreign_completed_geometry_supplies_no_explanation() {
     let completed = original.complete(&[(2, false), (3, true)], &[]);
     assert!(!original.owner.same_instance(&foreign.owner));
     assert!(
-        explain(&foreign, &completed, 0, limits(), &mut Work::new(u64::MAX))
-            .unwrap()
-            .is_none()
+        explain(
+            &foreign,
+            &completed,
+            0,
+            limits(),
+            &mut Meter::local(u64::MAX)
+        )
+        .unwrap()
+        .is_none()
     );
     assert!(
-        explain(&original, &completed, 0, limits(), &mut Work::new(u64::MAX))
-            .unwrap()
-            .is_some()
+        explain(
+            &original,
+            &completed,
+            0,
+            limits(),
+            &mut Meter::local(u64::MAX)
+        )
+        .unwrap()
+        .is_some()
     );
 }
 
@@ -407,15 +438,27 @@ fn every_local_explanation_cap_declines_without_partial_evidence() {
         },
     ] {
         assert!(
-            explain(&program, &completed, 0, limited, &mut Work::new(u64::MAX))
-                .unwrap()
-                .is_none()
+            explain(
+                &program,
+                &completed,
+                0,
+                limited,
+                &mut Meter::local(u64::MAX)
+            )
+            .unwrap()
+            .is_none()
         );
     }
     assert!(
-        explain(&program, &completed, 0, limits(), &mut Work::new(u64::MAX))
-            .unwrap()
-            .is_some()
+        explain(
+            &program,
+            &completed,
+            0,
+            limits(),
+            &mut Meter::local(u64::MAX)
+        )
+        .unwrap()
+        .is_some()
     );
 }
 
@@ -423,23 +466,29 @@ fn every_local_explanation_cap_declines_without_partial_evidence() {
 fn every_interrupted_explanation_prefix_returns_no_certificate() {
     let program = boundary_program();
     let completed = program.complete(&[(2, false), (3, true)], &[]);
-    let mut measured = Work::new(u64::MAX);
+    let mut measured = Meter::local(u64::MAX);
     let expected = explain(&program, &completed, 0, limits(), &mut measured)
         .unwrap()
         .unwrap();
-    assert!(measured.spent() > 0);
+    assert!(measured.charged() > 0);
     for failure in [Stop::WorkLimit, Stop::Cancelled, Stop::Deadline] {
-        for prefix in 0..measured.spent() {
+        for prefix in 0..measured.charged() {
             let mut quota = SinglePermits::new(prefix, failure);
-            let mut work = Work::reserved(&mut quota);
+            let mut work = Meter::reserved(&mut quota);
             assert!(
                 matches!(explain(&program, &completed, 0, limits(), &mut work),
                 Err(actual) if actual == failure)
             );
-            assert_eq!(work.spent(), prefix);
-            let retry = explain(&program, &completed, 0, limits(), &mut Work::new(u64::MAX))
-                .unwrap()
-                .unwrap();
+            assert_eq!(work.charged(), prefix);
+            let retry = explain(
+                &program,
+                &completed,
+                0,
+                limits(),
+                &mut Meter::local(u64::MAX),
+            )
+            .unwrap()
+            .unwrap();
             assert_eq!(retry.conditions, expected.conditions);
             assert_eq!(retry.unsupported, expected.unsupported);
         }
@@ -485,9 +534,15 @@ fn failed_conjunct_witness_rolls_back_speculative_atoms() {
         [1, 6]
     );
     let completed = program.complete(&[(0, true), (2, false), (3, false)], &[6]);
-    let record = explain(&program, &completed, 0, limits(), &mut Work::new(u64::MAX))
-        .unwrap()
-        .unwrap();
+    let record = explain(
+        &program,
+        &completed,
+        0,
+        limits(),
+        &mut Meter::local(u64::MAX),
+    )
+    .unwrap()
+    .unwrap();
     assert_eq!(record.conditions, [(3, false)]);
     assert_eq!(record.unsupported, [0]);
     assert_sound(&program, &completed, &record, &program.answers());
@@ -517,9 +572,15 @@ fn disjunctive_bodies_require_every_false_operand() {
         vec![7, 8, 9, 10, 12],
     ));
     let completed = program.complete(&[(0, true), (2, false), (3, false)], &[]);
-    let record = explain(&program, &completed, 0, limits(), &mut Work::new(u64::MAX))
-        .unwrap()
-        .unwrap();
+    let record = explain(
+        &program,
+        &completed,
+        0,
+        limits(),
+        &mut Meter::local(u64::MAX),
+    )
+    .unwrap()
+    .unwrap();
     assert_eq!(record.conditions, [(2, false), (3, false)]);
     assert_eq!(record.unsupported, [0, 1]);
     let answers = program.answers();
@@ -559,10 +620,49 @@ fn duplicate_atom_occurrences_do_not_spend_literal_capacity_twice() {
         literals: 1,
         ..limits()
     };
-    let record = explain(&program, &completed, 0, exact, &mut Work::new(u64::MAX))
+    let record = explain(&program, &completed, 0, exact, &mut Meter::local(u64::MAX))
         .unwrap()
         .unwrap();
     assert_eq!(record.conditions, [(2, false)]);
     assert_eq!(record.unsupported, [0, 1]);
     assert_sound(&program, &completed, &record, &program.answers());
+}
+
+#[test]
+fn input_words_preserve_borrowed_record_layout() {
+    use std::mem::{align_of, offset_of, size_of};
+    struct RawInput<'a> {
+        theory: &'a Theory,
+        index: &'a Narrower,
+        producers: &'a Producers,
+        completed: &'a Scratch,
+        atom_sure: &'a [u64],
+        atom_never: &'a [u64],
+    }
+    assert_eq!(size_of::<Input<'_>>(), size_of::<RawInput<'_>>());
+    assert_eq!(align_of::<Input<'_>>(), align_of::<RawInput<'_>>());
+    assert_eq!(
+        offset_of!(Input<'_>, theory),
+        offset_of!(RawInput<'_>, theory)
+    );
+    assert_eq!(
+        offset_of!(Input<'_>, index),
+        offset_of!(RawInput<'_>, index)
+    );
+    assert_eq!(
+        offset_of!(Input<'_>, producers),
+        offset_of!(RawInput<'_>, producers)
+    );
+    assert_eq!(
+        offset_of!(Input<'_>, completed),
+        offset_of!(RawInput<'_>, completed)
+    );
+    assert_eq!(
+        offset_of!(Input<'_>, atom_sure),
+        offset_of!(RawInput<'_>, atom_sure)
+    );
+    assert_eq!(
+        offset_of!(Input<'_>, atom_never),
+        offset_of!(RawInput<'_>, atom_never)
+    );
 }

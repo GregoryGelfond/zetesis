@@ -151,6 +151,12 @@ fn regions(
         .preparation_bytes
         .max(later.parity.preparation_bytes);
     later.parity.phases = preparation_work(earlier.parity.phases, later.parity.phases);
+    later.parity.region_passes = earlier
+        .parity
+        .region_passes
+        .saturating_add(later.parity.region_passes);
+    later.parity.forced = earlier.parity.forced.saturating_add(later.parity.forced);
+    later.parity.refuted = earlier.parity.refuted.saturating_add(later.parity.refuted);
     later.cardinality.preparation_work = earlier
         .cardinality
         .preparation_work
@@ -161,6 +167,14 @@ fn regions(
         .max(later.cardinality.preparation_bytes);
     later.cardinality.phases =
         preparation_work(earlier.cardinality.phases, later.cardinality.phases);
+    later.cardinality.region_passes = earlier
+        .cardinality
+        .region_passes
+        .saturating_add(later.cardinality.region_passes);
+    later.cardinality.refuted = earlier
+        .cardinality
+        .refuted
+        .saturating_add(later.cardinality.refuted);
     if let (Some(earlier), Some(later)) = (earlier.frontier, later.frontier.as_mut()) {
         *later = RegionFrontierStatistics {
             peak_regions: earlier.peak_regions.max(later.peak_regions),
@@ -201,6 +215,7 @@ fn counts(earlier: &RegionCounts, later: RegionCounts) -> RegionCounts {
         work: earlier.work.saturating_add(later.work),
         support_work: earlier.support_work.saturating_add(later.support_work),
         founded_work: earlier.founded_work.saturating_add(later.founded_work),
+        arithmetic: earlier.arithmetic.saturating_add(later.arithmetic),
         support_explanations: SupportExplanationStatistics {
             attempts: e.attempts.saturating_add(l.attempts),
             certified: e.certified.saturating_add(l.certified),

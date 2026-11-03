@@ -4,7 +4,7 @@ use crate::formula_ground::ground;
 use crate::formula_support::testing;
 use crate::test_support::compiled_atoms;
 use crate::{ExpansionLimits, FormulaLimits};
-use zetesis_cpu::Cancellation;
+use zetesis_algebra::Cancellation;
 use zetesis_ferraris::{Interpretation, Limits, RegionLimits, models, models_reduct, producers};
 
 use crate::test_support::without_pair_exclusions as without;

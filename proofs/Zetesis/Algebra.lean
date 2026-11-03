@@ -85,8 +85,8 @@ split only if the Rust closure equals the inductive closure `FormulaBounds.Known
 The support cut, the streamed constraints and the objective bound are not yet
 instances.
 
-The library calls a region `Cube`. `Region` abbreviates it until the library's
-rename, which retires the abbreviation.
+The region type and its geometry are `Zetesis.Region`, defined in
+`Zetesis.Search`; this module uses that original owner directly.
 -/
 
 namespace Zetesis.Algebra
@@ -98,12 +98,6 @@ universe u v
 variable {α : Type u}
 
 /-! ## Regions and the precision order -/
-
-/-- A **region**: the atoms every member holds (`lower`) and the atoms a member may
-hold (`upper`). Its members are the interpretations between the two
-(`Cube.Contains`). The library calls it `Cube`; this abbreviation is the
-algebra's name until the library's rename. -/
-abbrev Region (α : Type u) := Cube α
 
 /-- Every region is inside itself. -/
 theorem inside_refl (r : Region α) : Inside r r :=
@@ -136,7 +130,7 @@ theorem narrow_to_inside {r r' : Region α} (inside : Inside r' r) :
       atoms_ext fun a => ⟨fun held => Or.elim held (inside.1 a) id, Or.inr⟩
     have sameUpper : Inter r.upper upper' = upper' :=
       atoms_ext fun a => ⟨And.right, fun possible => ⟨inside.2 a possible, possible⟩⟩
-    show Cube.mk (Union r.lower lower') (Inter r.upper upper') = Cube.mk lower' upper'
+    show Region.mk (Union r.lower lower') (Inter r.upper upper') = Region.mk lower' upper'
     rw [sameLower, sameUpper]
 
 /-! ## Classes -/
@@ -223,6 +217,97 @@ theorem apply_sound (schedule : List (Subject C)) {r : Region α} {z : Atoms α}
   induction schedule generalizing r with
   | nil => exact inside
   | cons s rest ih => exact ih (s.sound inside member)
+
+/-! ### Pointwise lifting to a finite cohort
+
+A cohort here is just a finite indexed family of existing regions. Each position
+keeps its own class and subject. Applying those subjects pointwise introduces no
+new region representation and no schedule, storage layout or leaf decision.
+The class may be the same at every position, or may differ, as for countermodel
+queries belonging to different candidates. No membership assumption passes from
+one position to another.
+-/
+
+/-- Pointwise application of subjects only adds decisions in each region.
+The finite product uses the componentwise precision order. -/
+theorem cohort_extensive {n : Nat} {classes : Fin n → Class α}
+    (subjects : (i : Fin n) → Subject (classes i))
+    (regions : Fin n → Region α) :
+    ∀ i, Inside ((subjects i).narrow (regions i)) (regions i) := by
+  intro i
+  exact (subjects i).extensive (regions i)
+
+/-- Pointwise application is monotone when each position uses the same subject
+on both families. This does not compare different learned rows, objective bounds
+or subject families. -/
+theorem cohort_monotone {n : Nat} {classes : Fin n → Class α}
+    (subjects : (i : Fin n) → Subject (classes i))
+    {regions smaller : Fin n → Region α}
+    (inside : ∀ i, Inside (smaller i) (regions i)) :
+    ∀ i, Inside ((subjects i).narrow (smaller i))
+      ((subjects i).narrow (regions i)) := by
+  intro i
+  exact (subjects i).monotone (inside i)
+
+/-- Pointwise application retains every supplied class member in its own
+region. Class membership is a premise; a cohort of candidate regions does not
+thereby become a cohort of accepted answer sets. -/
+theorem cohort_sound {n : Nat} {classes : Fin n → Class α}
+    (subjects : (i : Fin n) → Subject (classes i))
+    {regions : Fin n → Region α} {members : Fin n → Atoms α}
+    (inside : ∀ i, (regions i).Contains (members i))
+    (member : ∀ i, classes i (members i)) :
+    ∀ i, ((subjects i).narrow (regions i)).Contains (members i) := by
+  intro i
+  exact (subjects i).sound (inside i) (member i)
+
+/-- Each position keeps exactly its original class members. Extensivity gives
+containment back in the original region; soundness gives the reverse direction.
+The other positions need not have any members. -/
+theorem cohort_members_iff {n : Nat} {classes : Fin n → Class α}
+    (subjects : (i : Fin n) → Subject (classes i))
+    (regions : Fin n → Region α) (i : Fin n) (z : Atoms α) :
+    (((subjects i).narrow (regions i)).Contains z ∧ classes i z) ↔
+      ((regions i).Contains z ∧ classes i z) := by
+  constructor
+  · intro narrowed
+    have original : (regions i).Contains z :=
+      StreamedConsequences.contains_of_inside
+        ((subjects i).extensive (regions i)) narrowed.1
+    exact ⟨original, narrowed.2⟩
+  · intro original
+    have retained : ((subjects i).narrow (regions i)).Contains z :=
+      (subjects i).sound original.1 original.2
+    exact ⟨retained, original.2⟩
+
+/-- A position has no class member after pointwise narrowing exactly when it
+had none before. This is a local semantic refutation law, not an executable
+procedure for detecting emptiness and not a refutation of any other position.
+
+Proof outline. A witness on either side transfers by `cohort_members_iff`,
+contradicting the corresponding absence premise. -/
+theorem cohort_refuted_iff {n : Nat} {classes : Fin n → Class α}
+    (subjects : (i : Fin n) → Subject (classes i))
+    (regions : Fin n → Region α) (i : Fin n) :
+    (¬ ∃ z, ((subjects i).narrow (regions i)).Contains z ∧ classes i z) ↔
+      (¬ ∃ z, (regions i).Contains z ∧ classes i z) := by
+  constructor
+  · intro noNarrowed original
+    rcases original with ⟨z, witness⟩
+    exact noNarrowed ⟨z, (cohort_members_iff subjects regions i z).mpr witness⟩
+  · intro noOriginal narrowed
+    rcases narrowed with ⟨z, witness⟩
+    exact noOriginal ⟨z, (cohort_members_iff subjects regions i z).mp witness⟩
+
+/-- Applying subjects to an empty indexed family leaves that family unchanged.
+There is no position to visit. This creates neither an interpretation nor a
+claim that a search is complete. -/
+theorem cohort_empty (classes : Fin 0 → Class α)
+    (subjects : (i : Fin 0) → Subject (classes i))
+    (regions : Fin 0 → Region α) :
+    (fun i => (subjects i).narrow (regions i)) = regions := by
+  funext i
+  exact Fin.elim0 i
 
 end Subject
 
@@ -714,9 +799,9 @@ def row {C : Class α} (B O : List (Literal α)) (of : RowOf C B O) : Subject C 
     refine ⟨fun a held => ?_, fun a present => ⟨inside.2 a present, fun decided => ?_⟩⟩
     · rcases held with held | ⟨decided, req⟩
       · exact inside.1 a held
-      · exact (Cube.contains_narrow.mp
+      · exact (Region.contains_narrow.mp
           (consequence_row_narrows C B O of r decided z inside member)).2.1 a req
-    · exact (Cube.contains_narrow.mp
+    · exact (Region.contains_narrow.mp
         (consequence_row_narrows C B O of r decided z inside member)).2.2 a present
 
 /-- **A refuting subject**: it refutes every region a condition marks, narrowing it
@@ -779,6 +864,126 @@ def doubleCount {V : Type v} (o : AlgebraicRows.OrderedReduction V) (C : Class �
       intro r z ⟨S, first, second, firstCovers, secondCovers, lower, upper, exceeds⟩ inside member
       exact AlgebraicRows.double_count_excludes_region o C r S first second firstCovers
         secondCovers lower upper exceeds z inside member)
+
+/-! ## Guarded counting bounds
+
+These are values of the existing counting reduction, not a second subject
+algebra. A signed guard activates a bound only when every literal is decided.
+The fallback is the held or possible measure of the same terms.
+-/
+
+section GuardedCounting
+
+open AlgebraicRows
+
+open Classical in
+/-- A guarded lower bound, strengthened by the atoms already held. -/
+noncomputable def guardedLower (r : Region α) (terms : List (Term α Nat))
+    (guard : List (Literal α)) (bound : Nat) : Nat :=
+  if ∀ l ∈ guard, Decides r l then
+    max bound (measure counting.toReduction r.lower terms)
+  else measure counting.toReduction r.lower terms
+
+open Classical in
+/-- A guarded upper bound, capped by the atoms still possible. -/
+noncomputable def guardedUpper (r : Region α) (terms : List (Term α Nat))
+    (guard : List (Literal α)) (bound : Nat) : Nat :=
+  if ∀ l ∈ guard, Decides r l then
+    min bound (measure counting.toReduction r.upper terms)
+  else measure counting.toReduction r.upper terms
+
+/-- The effective lower bound holds for every member of the class in the
+region, provided the original guarded bound holds for that class.
+
+Proof. Held atoms already give a lower bound. When the guard is decided,
+every contained interpretation satisfies it, so the original bound holds too;
+the maximum of these two lower bounds remains a lower bound. -/
+theorem guardedLower_sound (C : Class α) (r : Region α)
+    (terms : List (Term α Nat)) (guard : List (Literal α)) (bound : Nat)
+    (guarded : ∀ z, C z → (∀ l ∈ guard, Holds z l) →
+      bound ≤ measure counting.toReduction z terms) :
+    LowerIn counting C r terms (guardedLower r terms guard bound) := by
+  classical
+  intro z within member
+  change guardedLower r terms guard bound ≤ measure counting.toReduction z terms
+  have held : measure counting.toReduction r.lower terms ≤
+      measure counting.toReduction z terms :=
+    measure_mono counting within.1 terms (fun t _ => Nat.zero_le t.2)
+  by_cases active : ∀ l ∈ guard, Decides r l
+  · have released : bound ≤ measure counting.toReduction z terms :=
+      guarded z member (fun l listed => decides_holds within (active l listed))
+    simpa only [guardedLower, if_pos active] using (Nat.max_le.mpr ⟨released, held⟩)
+  · simpa only [guardedLower, if_neg active] using held
+
+/-- The effective upper bound holds for every member of the class in the
+region, provided the original guarded bound holds for that class.
+
+Proof. Possible atoms give an upper bound. A decided guard also releases the
+original upper bound; the minimum of the two is still an upper bound. -/
+theorem guardedUpper_sound (C : Class α) (r : Region α)
+    (terms : List (Term α Nat)) (guard : List (Literal α)) (bound : Nat)
+    (guarded : ∀ z, C z → (∀ l ∈ guard, Holds z l) →
+      measure counting.toReduction z terms ≤ bound) :
+    UpperIn counting C r terms (guardedUpper r terms guard bound) := by
+  classical
+  intro z within member
+  change measure counting.toReduction z terms ≤ guardedUpper r terms guard bound
+  have possible : measure counting.toReduction z terms ≤
+      measure counting.toReduction r.upper terms :=
+    measure_mono counting within.2 terms (fun t _ => Nat.zero_le t.2)
+  by_cases active : ∀ l ∈ guard, Decides r l
+  · have released : measure counting.toReduction z terms ≤ bound :=
+      guarded z member (fun l listed => decides_holds within (active l listed))
+    simpa only [guardedUpper, if_pos active] using (Nat.le_min.mpr ⟨released, possible⟩)
+  · simpa only [guardedUpper, if_neg active] using possible
+
+/-- Refining a region cannot lower an effective guarded lower bound.
+
+Proof. The held measure grows. An active guard remains active. A newly active
+guard can only replace the new held measure by a greater maximum. -/
+theorem guardedLower_mono {r r' : Region α} (inside : Inside r' r)
+    (terms : List (Term α Nat)) (guard : List (Literal α)) (bound : Nat) :
+    guardedLower r terms guard bound ≤ guardedLower r' terms guard bound := by
+  classical
+  have grows : measure counting.toReduction r.lower terms ≤
+      measure counting.toReduction r'.lower terms :=
+    measure_mono counting inside.1 terms (fun t _ => Nat.zero_le t.2)
+  by_cases active : ∀ l ∈ guard, Decides r l
+  · have persists : ∀ l ∈ guard, Decides r' l :=
+      fun l listed => decides_mono inside (active l listed)
+    simpa only [guardedLower, if_pos active, if_pos persists] using
+      (Nat.max_le.mpr ⟨Nat.le_max_left ..,
+        Nat.le_trans grows (Nat.le_max_right ..)⟩)
+  · by_cases later : ∀ l ∈ guard, Decides r' l
+    · simpa only [guardedLower, if_neg active, if_pos later] using
+        (Nat.le_trans grows (Nat.le_max_right bound
+          (measure counting.toReduction r'.lower terms)))
+    · simpa only [guardedLower, if_neg active, if_neg later] using grows
+
+/-- Refining a region cannot raise an effective guarded upper bound.
+
+Proof. The possible measure shrinks. An active guard remains active. A newly
+active guard can only replace the new possible measure by a smaller minimum. -/
+theorem guardedUpper_antitone {r r' : Region α} (inside : Inside r' r)
+    (terms : List (Term α Nat)) (guard : List (Literal α)) (bound : Nat) :
+    guardedUpper r' terms guard bound ≤ guardedUpper r terms guard bound := by
+  classical
+  have shrinks : measure counting.toReduction r'.upper terms ≤
+      measure counting.toReduction r.upper terms :=
+    measure_mono counting inside.2 terms (fun t _ => Nat.zero_le t.2)
+  by_cases active : ∀ l ∈ guard, Decides r l
+  · have persists : ∀ l ∈ guard, Decides r' l :=
+      fun l listed => decides_mono inside (active l listed)
+    simpa only [guardedUpper, if_pos active, if_pos persists] using
+      (Nat.le_min.mpr ⟨Nat.min_le_left ..,
+        Nat.le_trans (Nat.min_le_right ..) shrinks⟩)
+  · by_cases later : ∀ l ∈ guard, Decides r' l
+    · simpa only [guardedUpper, if_neg active, if_pos later] using
+        (Nat.le_trans (Nat.min_le_right bound
+          (measure counting.toReduction r'.upper terms)) shrinks)
+    · simpa only [guardedUpper, if_neg active, if_neg later] using shrinks
+
+end GuardedCounting
 
 /-! ## Folds over walks that may stop -/
 
@@ -917,11 +1122,11 @@ singleton. An undecided verdict gives none, so a stopped leaf decision certifies
 neither acceptance nor exhaustion. With these leaves, `CoverageTree.mem_outputs_iff`
 (L2) says the completed walk's accepted leaves are exactly the members of `C` in
 its root: L2 is a statement about accepted leaves, not about candidates. -/
-def node : LeafVerdict C z → Option (CoverageTree C (Cube.singleton z))
+def node : LeafVerdict C z → Option (CoverageTree C (Region.singleton z))
   | .accepted member => some (.accepted z member)
   | .refuted excluded =>
-    some (.refuted (Cube.singleton z) fun _ inside member =>
-      excluded ((Cube.contains_singleton.mp inside) ▸ member))
+    some (.refuted (Region.singleton z) fun _ inside member =>
+      excluded ((Region.contains_singleton.mp inside) ▸ member))
   | .undecided => none
 
 end LeafVerdict

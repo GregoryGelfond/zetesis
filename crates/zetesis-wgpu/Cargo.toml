@@ -10,7 +10,7 @@ publish = false
 [dependencies]
 zetesis-backend.workspace = true
 zetesis-core.workspace = true
-zetesis-cpu.workspace = true
+zetesis-algebra.workspace = true
 zetesis-ferraris.workspace = true
 wgpu.workspace = true
 bytemuck.workspace = true

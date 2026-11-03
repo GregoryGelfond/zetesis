@@ -81,6 +81,9 @@ fn receipts(document: &Json, parity: ParityStatistics, cardinality: CardinalityS
     assert_eq!(published["source_roots"], parity.source_roots);
     assert_eq!(published["rank"], parity.rank);
     assert_eq!(published["units"], parity.units);
+    assert_eq!(published["region_passes"], parity.region_passes);
+    assert_eq!(published["forced"], parity.forced);
+    assert_eq!(published["refuted"], parity.refuted);
     assert_eq!(published["root_refuted"], parity.root_refuted);
     assert_eq!(published["provenance_rejected"], parity.provenance_rejected);
     phases(published, parity.phases, parity.preparation_work);
@@ -90,6 +93,8 @@ fn receipts(document: &Json, parity: ParityStatistics, cardinality: CardinalityS
     assert_eq!(published["lower"], cardinality.lower);
     assert_eq!(published["upper"], cardinality.upper);
     assert_eq!(published["guarded"], cardinality.guarded);
+    assert_eq!(published["region_passes"], cardinality.region_passes);
+    assert_eq!(published["refuted"], cardinality.refuted);
     assert_eq!(published["root_refuted"], cardinality.root_refuted);
     assert_eq!(
         published["provenance_rejected"],
@@ -139,6 +144,11 @@ fn odd_parity_refutes_before_candidate_enumeration() {
         assert!(regions.parity.phases.reduction > 0);
         assert_eq!(regions.cardinality.status, PreparationStatus::NotPrepared);
         assert_eq!(regions.counts.regions, 0);
+        assert_eq!(regions.parity.region_passes, 0);
+        assert_eq!(regions.parity.forced, 0);
+        assert_eq!(regions.parity.refuted, 0);
+        assert_eq!(regions.cardinality.region_passes, 0);
+        assert_eq!(regions.cardinality.refuted, 0);
         assert_eq!(statistics.candidates, 0);
         assert_eq!(statistics.countermodel_queries, 0);
         let search = &document["statistics"]["search"];
@@ -240,6 +250,11 @@ fn lowered_pigeonhole_sources_refute_before_search() {
             assert!(regions.cardinality.phases.provenance > 0);
             assert!(regions.cardinality.phases.candidate_checks > 0);
             assert_eq!(regions.counts.regions, 0);
+            assert_eq!(regions.parity.region_passes, 0);
+            assert_eq!(regions.parity.forced, 0);
+            assert_eq!(regions.parity.refuted, 0);
+            assert_eq!(regions.cardinality.region_passes, 0);
+            assert_eq!(regions.cardinality.refuted, 0);
             assert_eq!(statistics.candidates, 0);
             assert_eq!(statistics.countermodel_queries, 0);
             receipts(&document, regions.parity, regions.cardinality);

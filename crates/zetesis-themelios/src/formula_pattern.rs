@@ -635,7 +635,7 @@ mod tests {
             );
             assert!(!scratch.delta.is_empty());
             let bytes = scratch.lease.bytes();
-            let cancellation = zetesis_cpu::Cancellation::default();
+            let cancellation = zetesis_algebra::Cancellation::default();
             *counters = std::mem::take(counters).with_cancellation(Some(&cancellation));
             cancellation.cancel();
             let error = scratch
@@ -650,7 +650,7 @@ mod tests {
             assert!(matches!(
                 error,
                 FormulaFailure::Interrupted {
-                    reason: zetesis_cpu::Stop::Cancelled,
+                    reason: zetesis_algebra::Stop::Cancelled,
                     ..
                 }
             ));

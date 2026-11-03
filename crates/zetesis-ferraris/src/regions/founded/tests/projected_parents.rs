@@ -70,7 +70,7 @@ fn parent_projection_retains_ordered_alias_occurrences() {
     let mut scratch = Scratch::default();
     scratch.prepare_projected(&owner, &index, &producers);
     assert_rows(&scratch, &owner, &index);
-    assert_eq!(scratch.cyclic_atoms, [0b011]);
+    assert_eq!(&*scratch.cyclic_atoms, [0b011]);
     assert!(index.absorbed[6]);
     assert!(!scratch.body_nodes.contains(&6));
     let projected = &scratch.projected.as_ref().unwrap().parents;
@@ -101,12 +101,14 @@ fn every_small_mask_matches_original_parent_postings() {
                 &producers,
                 &never,
                 &[0],
-                &mut Work::new(u64::MAX),
+                &mut Meter::local(u64::MAX),
             )
+            .map_err(zetesis_algebra::Failure::into_stop)
             .unwrap();
         assert!(scratch.projected.is_none(), "first pass uses original rows");
         scratch
-            .prepare_bodies(&owner, &index, &producers, &mut Work::new(u64::MAX))
+            .prepare_bodies(&owner, &index, &producers, &mut Meter::local(u64::MAX))
+            .map_err(zetesis_algebra::Failure::into_stop)
             .unwrap();
         assert_rows(scratch, &owner, &index);
     }
@@ -143,8 +145,9 @@ fn every_small_mask_matches_original_parent_postings() {
                         &producers,
                         &never,
                         &[cut_atoms],
-                        &mut Work::new(u64::MAX),
+                        &mut Meter::local(u64::MAX),
                     )
+                    .map_err(zetesis_algebra::Failure::into_stop)
                     .unwrap();
             }
             assert!(projected.projected.is_some());
@@ -158,8 +161,8 @@ fn every_small_mask_matches_original_parent_postings() {
                 original.missing_in_word(0, cut_atoms)
             );
             if cut_atoms == 0 {
-                supports_cycle |= projected.atoms == [0b011];
-                excludes_cycle |= projected.atoms == [0];
+                supports_cycle |= *projected.atoms == [0b011];
+                excludes_cycle |= *projected.atoms == [0];
             }
         }
     }
@@ -180,7 +183,7 @@ fn warm(extra: usize, projected: bool) -> u64 {
         reference.parents = index.parents.clone();
         reference.seed_start = reference.initial.len();
     }
-    let mut work = Work::new(u64::MAX);
+    let mut work = Meter::local(u64::MAX);
     scratch
         .complete(
             &owner,
@@ -190,10 +193,15 @@ fn warm(extra: usize, projected: bool) -> u64 {
             &[0],
             &mut work,
         )
+        .map_err(zetesis_algebra::Failure::into_stop)
         .unwrap();
-    assert_eq!(scratch.atoms, [0b011], "fanout source a actually activates");
+    assert_eq!(
+        &*scratch.atoms,
+        [0b011],
+        "fanout source a actually activates"
+    );
     assert_eq!(scratch.body_nodes.len(), 7);
-    work.spent()
+    work.charged()
 }
 
 #[test]
@@ -210,9 +218,10 @@ fn public_scratch_bytes_include_projected_payload() {
     let owner = shared_bodies(2);
     let mut scratch = NarrowingScratch::default();
     scratch
+        .common
         .founded
         .prepare_projected(&owner, &Narrower::new(&owner), &producers(&owner));
-    let projected = scratch.founded.projected.as_ref().unwrap();
+    let projected = scratch.common.founded.projected.as_ref().unwrap();
     assert!(projected.parents.iter().any(|row| !row.is_empty()));
     assert!(projected.heads.iter().any(|row| !row.is_empty()));
     let payload = projected.payload_bytes();
@@ -229,25 +238,29 @@ fn public_scratch_bytes_include_projected_payload() {
             founded.fact_rows.capacity(),
         ]
     };
-    let retained = capacities(&scratch.founded);
+    let retained = capacities(&scratch.common.founded);
     let foreign = shared_bodies(2);
     assert!(!owner.same_instance(&foreign));
-    let mut none = Work::new(0);
+    let mut none = Meter::local(0);
     // A same-shape owner change clears the obsolete index before the first
     // charged read. Other scratch vectors keep their existing capacities.
     assert_eq!(
-        scratch.founded.prepare_bodies(
-            &foreign,
-            &Narrower::new(&foreign),
-            &producers(&foreign),
-            &mut none,
-        ),
+        scratch
+            .common
+            .founded
+            .prepare_bodies(
+                &foreign,
+                &Narrower::new(&foreign),
+                &producers(&foreign),
+                &mut none,
+            )
+            .map_err(zetesis_algebra::Failure::into_stop),
         Err(Stop::WorkLimit)
     );
-    assert_eq!(none.spent(), 0);
-    assert!(scratch.founded.owner.is_none());
-    assert!(scratch.founded.projected.is_none());
-    assert_eq!(capacities(&scratch.founded), retained);
+    assert_eq!(none.charged(), 0);
+    assert!(scratch.common.founded.owner.is_none());
+    assert!(scratch.common.founded.projected.is_none());
+    assert_eq!(capacities(&scratch.common.founded), retained);
     assert_eq!(before, scratch.retained_bytes() + payload);
 }
 
@@ -276,8 +289,9 @@ fn prepared_initialization_matches_fresh_region_masks() {
                         &producers,
                         &never,
                         &[cut_atoms],
-                        &mut Work::new(u64::MAX),
+                        &mut Meter::local(u64::MAX),
                     )
+                    .map_err(zetesis_algebra::Failure::into_stop)
                     .unwrap();
             }
             assert!(
@@ -323,7 +337,7 @@ fn boundary_roles_reapply_both_false_masks() {
     let producers = producers(&owner);
     let mut scratch = Scratch::default();
     scratch.prepare_projected(&owner, &index, &producers);
-    assert_eq!(scratch.cyclic_atoms, [0b011]);
+    assert_eq!(&*scratch.cyclic_atoms, [0b011]);
     let position = scratch
         .body_nodes
         .iter()
@@ -348,15 +362,16 @@ fn boundary_roles_reapply_both_false_masks() {
                 &producers,
                 &[node_never],
                 &[atom_never],
-                &mut Work::new(u64::MAX),
+                &mut Meter::local(u64::MAX),
             )
+            .map_err(zetesis_algebra::Failure::into_stop)
             .unwrap();
         if seeded {
             assert!(matches!(scratch.states[2], State::True));
-            assert_eq!(scratch.atoms, [0b011]);
+            assert_eq!(&*scratch.atoms, [0b011]);
         } else {
             assert!(matches!(scratch.states[2], State::Inactive));
-            assert_eq!(scratch.atoms, [0]);
+            assert_eq!(&*scratch.atoms, [0]);
         }
     }
 }

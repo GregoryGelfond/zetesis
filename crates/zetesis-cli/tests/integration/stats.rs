@@ -6,10 +6,10 @@ use std::path::PathBuf;
 use crate::support::human::before_timing;
 use crate::support::options::serial;
 use clap::Parser;
+use zetesis_algebra::Cancellation;
 use zetesis_cli::{
     Completion, Options, Report, RunError, run_bundle_with_diagnostics, run_with_diagnostics,
 };
-use zetesis_cpu::Cancellation;
 use zetesis_test_support::io::BoundedWriter;
 use zetesis_themelios::{BundleLimits, SourceBundle};
 

@@ -2,6 +2,8 @@
 
 use crate::ExecutionObservation as Event;
 use crate::execution_observation::ExecutionSink;
+#[cfg(feature = "gpu")]
+use crate::formula_queue::device::take_slate_prefix;
 
 use std::sync::Arc;
 use zetesis_ferraris::Interpretation;
@@ -43,6 +45,18 @@ pub struct FormulaResidualStatistics {
     pub round_limit: u64,
     /// The next full sweep could not fit its device work allowance.
     pub work_limit: u64,
+}
+
+#[cfg(feature = "gpu")]
+impl FormulaResidualStatistics {
+    pub(crate) fn count_for(&mut self, reason: zetesis_wgpu::ResidualReason) -> &mut u64 {
+        use zetesis_wgpu::ResidualReason;
+        match reason {
+            ResidualReason::FixedPoint => &mut self.fixed_point,
+            ResidualReason::RoundLimit => &mut self.round_limit,
+            ResidualReason::WorkLimit => &mut self.work_limit,
+        }
+    }
 }
 
 /// Decoded tight-support device slots by the route that evaluated them, summed
@@ -150,6 +164,8 @@ pub struct FormulaExecutionStatistics {
     /// Decoded residual reasons for the general GPU primitive. Absent for CPU
     /// and tight-support execution; distinct from committed `cpu_residuals`.
     pub gpu_residuals: Option<FormulaResidualStatistics>,
+    /// Exact handover attempt accounting on the general GPU route.
+    pub gpu_residual_handovers: Option<crate::ResidualHandoverStatistics>,
     /// Tight-support work ceiling per candidate. Present only for that device
     /// primitive; propagation sweep limits do not apply to a support scan.
     pub tight_work_per_candidate: Option<u64>,
@@ -326,7 +342,7 @@ pub(crate) trait MembershipExecution {
         &mut self,
         models: &mut StableModels,
         options: &SolveConfig,
-        cancellation: &zetesis_cpu::Cancellation,
+        cancellation: &zetesis_algebra::Cancellation,
         phases: &Recorder,
     ) -> Option<Result<Interpretation, Failure>>;
     fn statistics(&self, models: &StableModels) -> Option<FormulaExecutionStatistics>;
@@ -357,13 +373,13 @@ pub(crate) trait MembershipExecution {
 /// limits' default timeout.
 #[cfg(feature = "gpu")]
 pub(crate) struct Settlement {
-    control: zetesis_cpu::Cancellation,
+    control: zetesis_algebra::Cancellation,
     wait: std::time::Duration,
 }
 
 #[cfg(feature = "gpu")]
 impl Settlement {
-    pub(crate) fn new(control: &zetesis_cpu::Cancellation, wait: std::time::Duration) -> Self {
+    pub(crate) fn new(control: &zetesis_algebra::Cancellation, wait: std::time::Duration) -> Self {
         Self {
             control: control.clone(),
             wait,
@@ -400,7 +416,7 @@ impl Execution {
         options: &SolveConfig,
         resources: &ExecutionResources,
         tight_plan: Option<Arc<zetesis_ferraris::TightPlan>>,
-        control: &zetesis_cpu::Cancellation,
+        control: &zetesis_algebra::Cancellation,
         observations: &mut impl ExecutionSink,
     ) -> Result<Self, SolveError> {
         if options.backend == Backend::Cpu {
@@ -433,7 +449,7 @@ impl Execution {
         _: &SolveConfig,
         _: &ExecutionResources,
         _: Option<Arc<zetesis_ferraris::TightPlan>>,
-        _: &zetesis_cpu::Cancellation,
+        _: &zetesis_algebra::Cancellation,
         _: &mut impl ExecutionSink,
     ) -> Result<Self, SolveError> {
         Err(SolveError::BackendUnavailable)
@@ -444,7 +460,7 @@ impl Execution {
         options: &SolveConfig,
         resources: &ExecutionResources,
         tight_plan: Option<Arc<zetesis_ferraris::TightPlan>>,
-        control: &zetesis_cpu::Cancellation,
+        control: &zetesis_algebra::Cancellation,
         observations: &mut impl ExecutionSink,
     ) -> Result<Self, SolveError> {
         let source = resources.device_source(options).map_err(SolveError::Gpu)?;
@@ -479,6 +495,7 @@ impl Execution {
                 adapter,
                 gpu_limits: Some(options.into()),
                 gpu_residuals: Some(FormulaResidualStatistics::default()),
+                gpu_residual_handovers: Some(crate::ResidualHandoverStatistics::default()),
                 gpu_compute_timing,
                 ..Default::default()
             }),
@@ -561,6 +578,7 @@ impl MembershipExecution for Execution {
                 // The last submission's interval arrives only with the flush;
                 // without one, an overlapped last submission is unmeasured.
                 queue.flushed(flushed);
+                queue.settle_samples();
             }
             #[cfg(feature = "gpu")]
             Self::Tight {
@@ -591,7 +609,7 @@ impl MembershipExecution for Execution {
         &mut self,
         models: &mut StableModels,
         options: &SolveConfig,
-        cancellation: &zetesis_cpu::Cancellation,
+        cancellation: &zetesis_algebra::Cancellation,
         phases: &Recorder,
     ) -> Option<Result<Interpretation, Failure>> {
         match self {
@@ -617,29 +635,16 @@ impl MembershipExecution for Execution {
                 statistics,
                 ..
             } => {
-                if queue.enumerates() {
-                    let mut device = FormulaDevice {
-                        oracle,
-                        statistics,
-                        options,
-                    };
-                    return queue.next_device(models, options, cancellation, phases, &mut device);
+                if !queue.enumerates() {
+                    queue.decline_optimizing();
                 }
-                // An optimizing search keeps the serial schedule of the
-                // closure form, under which no slate is produced ahead.
-                queue.decline_optimizing();
-                queue.next(models, options, cancellation, |batch| {
-                    let verdicts = propagate(
-                        oracle,
-                        statistics,
-                        batch.theory(),
-                        batch.candidates(),
-                        options,
-                        cancellation,
-                        phases,
-                    )?;
-                    verdicts.finish(batch).map_err(Failure::from)
-                })
+                let mut device = FormulaDevice {
+                    oracle,
+                    statistics,
+                    options,
+                    decoded: crate::residual_handovers::decoded::DecodeJournal::default(),
+                };
+                queue.next_device(models, options, cancellation, phases, &mut device)
             }
             #[cfg(feature = "gpu")]
             Self::Tight {
@@ -677,116 +682,24 @@ impl MembershipExecution for Execution {
 }
 
 #[cfg(feature = "gpu")]
-fn propagate(
-    oracle: &mut zetesis_wgpu::GpuFormulaOracle,
-    statistics: &mut FormulaExecutionStatistics,
-    theory: &zetesis_ferraris::Theory,
-    candidates: &[Interpretation],
-    options: &SolveConfig,
-    cancellation: &zetesis_cpu::Cancellation,
-    phases: &Recorder,
-) -> Result<crate::batch_executor::DeviceVerdicts, Failure> {
-    let limits = slate_limits(options, candidates.len());
-    propagate_within(
-        oracle,
-        statistics,
-        theory,
-        candidates,
-        limits,
-        cancellation,
-        phases,
-    )
-}
-
-/// Check one slate in as many submissions as `limits` and the device's
-/// admission require, in order.
-#[cfg(feature = "gpu")]
-fn propagate_within(
-    oracle: &mut zetesis_wgpu::GpuFormulaOracle,
-    statistics: &mut FormulaExecutionStatistics,
-    theory: &zetesis_ferraris::Theory,
-    candidates: &[Interpretation],
-    limits: zetesis_wgpu::FormulaLimits,
-    cancellation: &zetesis_cpu::Cancellation,
-    phases: &Recorder,
-) -> Result<crate::batch_executor::DeviceVerdicts, Failure> {
-    // The device API returns one ordered verdict per candidate. Reserve its
-    // host conversion before dispatch so allocation failure cannot hide a
-    // successfully decoded batch from the execution counters.
-    let mut verdicts =
-        crate::batch_executor::DeviceVerdicts::new(candidates.len()).map_err(Failure::Search)?;
-    while verdicts.values.len() < candidates.len() {
-        let pending = &candidates[verdicts.values.len()..];
-        let result = phases.measure(SolvePhase::GpuHostOracle, || {
-            oracle.propagate_prefix_with_cancellation(theory, pending, limits, cancellation)
-        });
-        // A failed call can still report the batch before it, as unavailable.
-        if let Some(report) = oracle.reported_compute_time() {
-            statistics.gpu_compute_timing.record(report);
-        }
-        // Submission is observable even when mapping or decoding fails. Preserve
-        // that operation's original error over a secondary accounting overflow.
-        let submitted = record_submission(statistics, oracle.last_submission_candidates());
-        let checks = result.map_err(|error| match error.interruption() {
-            Some(stop) => Failure::Search(stop.into()),
-            None => Failure::Run(SolveError::Gpu(error)),
-        })?;
-        submitted?;
-        let count = checks.checks().len();
-        if count == 0 || count > pending.len() {
-            return Err(Failure::Run(SolveError::FormulaBatchShape {
-                expected: pending.len(),
-                actual: count,
-            }));
-        }
-        verdicts.record_prefix(pending.len(), count);
-        let checks = checks
-            .into_checks(theory, &pending[..count])
-            .map_err(|error| Failure::Run(SolveError::Gpu(error)))?;
-        add(&mut statistics.gpu_batches, 1)?;
-        add(
-            &mut statistics.gpu_candidates,
-            u64::try_from(checks.len())
-                .map_err(|_| Failure::Search(Incomplete::CounterOverflow))?,
-        )?;
-        if let Some(batch) = oracle.last_batch_stats() {
-            statistics.peak_accounted_bytes =
-                statistics.peak_accounted_bytes.max(batch.accounted_bytes);
-            record_workgroup_size(statistics, batch.workgroup_size);
-        }
-        for check in checks {
-            add(&mut statistics.gpu_work, u64::from(check.statistics().work))?;
-            add(
-                &mut statistics.gpu_rounds,
-                u64::from(check.statistics().rounds),
-            )?;
-            verdicts.values.push(decoded_verdict(
-                statistics.gpu_residuals.get_or_insert_default(),
-                check.verdict(),
-            )?);
-        }
-    }
-    Ok(verdicts)
-}
-
-#[cfg(feature = "gpu")]
 fn decoded_verdict(
     residuals: &mut FormulaResidualStatistics,
     verdict: zetesis_wgpu::FormulaVerdict,
-) -> Result<zetesis_stable::BatchVerdict, Failure> {
+) -> Result<
+    (
+        zetesis_stable::BatchVerdict,
+        Option<zetesis_algebra::region::Region>,
+    ),
+    Failure,
+> {
     use zetesis_stable::BatchVerdict;
-    use zetesis_wgpu::{FormulaVerdict, ResidualReason};
+    use zetesis_wgpu::FormulaVerdict;
     Ok(match verdict {
-        FormulaVerdict::NotModel => BatchVerdict::NotModel,
-        FormulaVerdict::NoProperSubset => BatchVerdict::NoProperSubset,
-        FormulaVerdict::Residual(reason) => {
-            let count = match reason {
-                ResidualReason::FixedPoint => &mut residuals.fixed_point,
-                ResidualReason::RoundLimit => &mut residuals.round_limit,
-                ResidualReason::WorkLimit => &mut residuals.work_limit,
-            };
-            add(count, 1)?;
-            BatchVerdict::Residual
+        FormulaVerdict::NotModel => (BatchVerdict::NotModel, None),
+        FormulaVerdict::NoProperSubset => (BatchVerdict::NoProperSubset, None),
+        FormulaVerdict::Residual(reason, root) => {
+            add(residuals.count_for(reason), 1)?;
+            (BatchVerdict::Residual, Some(root))
         }
     })
 }
@@ -985,7 +898,7 @@ impl<E: MembershipExecution + ?Sized> MembershipExecution for &mut E {
         &mut self,
         models: &mut StableModels,
         config: &SolveConfig,
-        cancellation: &zetesis_cpu::Cancellation,
+        cancellation: &zetesis_algebra::Cancellation,
         phases: &Recorder,
     ) -> Option<Result<Interpretation, Failure>> {
         (**self).next(models, config, cancellation, phases)
@@ -1005,10 +918,29 @@ pub(crate) struct FormulaDevice<'a> {
     oracle: &'a mut zetesis_wgpu::GpuFormulaOracle,
     statistics: &'a mut FormulaExecutionStatistics,
     options: &'a SolveConfig,
+    decoded: crate::residual_handovers::decoded::DecodeJournal,
 }
 
 #[cfg(feature = "gpu")]
 impl crate::formula_queue::device::SlateDevice for FormulaDevice<'_> {
+    const REGIONAL: bool = true;
+
+    fn handovers(&mut self) -> Option<&mut crate::ResidualHandoverStatistics> {
+        self.statistics.gpu_residual_handovers.as_mut()
+    }
+
+    fn take_decode_journal(&mut self) -> crate::residual_handovers::decoded::DecodeJournal {
+        std::mem::take(&mut self.decoded)
+    }
+
+    fn record_slate_bytes(&mut self, total: u64) {
+        self.statistics.peak_accounted_bytes = self.statistics.peak_accounted_bytes.max(total);
+    }
+
+    fn retained_batch_bytes(&self) -> Result<u64, Failure> {
+        self.oracle.retained_batch_bytes().map_err(gpu_failure)
+    }
+
     type Prepared<'d>
         = zetesis_wgpu::PreparedFormulaSubmission<'d>
     where
@@ -1020,9 +952,11 @@ impl crate::formula_queue::device::SlateDevice for FormulaDevice<'_> {
         &'d mut self,
         slate: zetesis_ferraris::SlateRef<'_>,
         offset: usize,
-        cancellation: &zetesis_cpu::Cancellation,
+        max_bytes: u64,
+        cancellation: &zetesis_algebra::Cancellation,
     ) -> Result<Self::Prepared<'d>, Failure> {
-        let limits = slate_limits(self.options, slate.candidates().len());
+        let mut limits = slate_limits(self.options, slate.candidates().len());
+        limits.max_batch_bytes = max_bytes;
         self.oracle
             .prepare(slate, offset, limits, cancellation)
             .map_err(gpu_failure)
@@ -1035,6 +969,7 @@ impl crate::formula_queue::device::SlateDevice for FormulaDevice<'_> {
         slate: zetesis_ferraris::SlateId,
         offset: usize,
         offered: usize,
+        rows: &mut crate::formula_queue::device::CheckedRows,
     ) -> Result<crate::formula_queue::device::Decoded, Failure> {
         // A failed call can still report the batch before it, as unavailable.
         let compute = self.oracle.reported_compute_time();
@@ -1047,17 +982,7 @@ impl crate::formula_queue::device::SlateDevice for FormulaDevice<'_> {
             record_submission(self.statistics, self.oracle.last_submission_candidates());
         let checks = checked.map_err(gpu_failure)?;
         submitted?;
-        let count = checks.count();
-        if count == 0 || count > offered {
-            return Err(Failure::Run(SolveError::FormulaBatchShape {
-                expected: offered,
-                actual: count,
-            }));
-        }
-        let finish_wait = checks.finish_wait();
-        let checks = checks
-            .into_checks(theory, slate, offset)
-            .map_err(|error| Failure::Run(SolveError::Gpu(error)))?;
+        let (checks, finish_wait) = take_slate_prefix(checks, theory, slate, offset, offered)?;
         add(&mut self.statistics.gpu_batches, 1)?;
         add(
             &mut self.statistics.gpu_candidates,
@@ -1071,11 +996,7 @@ impl crate::formula_queue::device::SlateDevice for FormulaDevice<'_> {
                 .max(batch.accounted_bytes);
             record_workgroup_size(self.statistics, batch.workgroup_size);
         }
-        let mut verdicts = Vec::new();
-        verdicts
-            .try_reserve_exact(checks.len())
-            .map_err(|_| Failure::Search(Incomplete::Allocation))?;
-        for check in checks {
+        for (relative, check) in checks.into_iter().enumerate() {
             add(
                 &mut self.statistics.gpu_work,
                 u64::from(check.statistics().work),
@@ -1084,13 +1005,34 @@ impl crate::formula_queue::device::SlateDevice for FormulaDevice<'_> {
                 &mut self.statistics.gpu_rounds,
                 u64::from(check.statistics().rounds),
             )?;
-            verdicts.push(decoded_verdict(
+            if let zetesis_wgpu::FormulaVerdict::Residual(reason, root) = check.verdict()
+                && let Some(history) = &mut self.statistics.gpu_residual_handovers
+            {
+                let open = crate::residual_handovers::open_atoms(root);
+                history.decoded(*reason, open);
+                self.decoded.record(
+                    offset + relative,
+                    rows.count,
+                    *reason,
+                    open,
+                    self.options.max_completion_scratch_bytes,
+                );
+                if let Some(attempt) = &mut history.last_attempt {
+                    attempt.peak_observation_bytes =
+                        attempt.peak_observation_bytes.max(self.decoded.bytes());
+                }
+            }
+            let (verdict, root) = decoded_verdict(
                 self.statistics.gpu_residuals.get_or_insert_default(),
-                check.verdict(),
-            )?);
+                check.into_verdict(),
+            )?;
+            if let Some(root) = root {
+                rows.projected(root)?;
+            } else {
+                rows.classified(verdict)?;
+            }
         }
         Ok(crate::formula_queue::device::Decoded {
-            verdicts,
             compute,
             finish_wait,
         })
@@ -1104,17 +1046,21 @@ impl crate::formula_queue::device::PreparedSubmission
     type Checked =
         Result<zetesis_wgpu::CheckedSlate<zetesis_wgpu::FormulaCheck>, zetesis_wgpu::GpuError>;
 
+    fn accounted_bytes(&self) -> u64 {
+        Self::accounted_bytes(self)
+    }
+
     fn count(&self) -> usize {
         Self::count(self)
     }
 
-    fn check(self, cancellation: &zetesis_cpu::Cancellation) -> Self::Checked {
+    fn check(self, cancellation: &zetesis_algebra::Cancellation) -> Self::Checked {
         Self::check(self, cancellation)
     }
 
     fn check_overlapping<R>(
         self,
-        cancellation: &zetesis_cpu::Cancellation,
+        cancellation: &zetesis_algebra::Cancellation,
         during: impl FnOnce() -> R,
     ) -> (Self::Checked, Option<R>) {
         Self::check_overlapping(self, cancellation, during)

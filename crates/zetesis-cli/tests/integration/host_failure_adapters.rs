@@ -1,11 +1,11 @@
 //! Host-produced failures retain their typed identity across the CLI adapter.
 
 use std::{error::Error, fmt, io, num::NonZeroUsize, sync::Arc};
+use zetesis_algebra::Cancellation;
 use zetesis_cli::{
-    Backend, ExecutionObservation, ExecutionObserver, Grounder, Oracle, PreparedInput,
-    PreparedProfile, PublicationFailure, RunError, Session, SolveConfig, Subject,
+    Backend, ExecutionObservation, ExecutionObserver, Grounder, Oracle, Original, PreparedInput,
+    PreparedProfile, PublicationFailure, RunError, Session, SolveConfig,
 };
-use zetesis_cpu::Cancellation;
 use zetesis_reference_support::formula;
 
 fn config() -> SolveConfig {
@@ -59,7 +59,7 @@ fn no_coverage(semantic: Option<&zetesis_cli::SemanticOutcome>) {
 #[test]
 fn typed_observer_failure_keeps_its_external_owner() {
     let owner = formula("a.");
-    let subject = Subject::Theory(owner.theory().clone());
+    let expected_original = Original::Theory(owner.theory().clone());
     let token = Arc::new(());
     // Formula initialization owns an observer failure at its setup and returns
     // it from the first pull, with the original cause.
@@ -76,7 +76,12 @@ fn typed_observer_failure_keeps_its_external_owner() {
     no_coverage(original.semantic());
     let failure = PublicationFailure::from(original);
     drop(owner);
-    assert!(failure.subject().unwrap().same_instance(&subject));
+    assert!(
+        failure
+            .original()
+            .unwrap()
+            .same_instance(&expected_original)
+    );
     no_coverage(failure.semantic());
     assert!(failure.publication().is_none());
     assert!(failure.phase_timings.is_some());
@@ -161,8 +166,8 @@ fn prepared_refusal_keeps_the_requested_policy() {
     assert!(failure.semantic().is_none());
     assert!(
         failure
-            .subject()
+            .original()
             .unwrap()
-            .same_instance(&Subject::Theory(owner.theory().clone()))
+            .same_instance(&Original::Theory(owner.theory().clone()))
     );
 }

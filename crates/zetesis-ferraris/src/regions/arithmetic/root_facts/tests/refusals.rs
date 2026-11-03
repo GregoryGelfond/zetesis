@@ -1,11 +1,10 @@
 //! A declined attempt never publishes a checked owner, even after useful work.
 
-use zetesis_cpu::{Cancellation, Stop};
+use zetesis_algebra::Meter;
 
-use crate::{
-    regions::Work,
-    test_support::{Allowance, constructed_theory},
-};
+use zetesis_algebra::{Cancellation, Stop};
+
+use crate::test_support::{Allowance, constructed_theory};
 
 use super::super::super::{
     budget::{Budget, BudgetError},
@@ -18,10 +17,12 @@ use super::{budget, chained};
 fn every_optional_work_prefix_returns_no_fact_owner() {
     let owner = chained();
     let cancellation = Cancellation::default();
-    let mut complete = budget(&cancellation);
+    let mut complete_work = Meter::local(u64::MAX);
+    let mut complete = budget(&mut complete_work, &cancellation);
     build(&owner, &mut Storage::default(), &mut complete).unwrap();
     for limit in 0..complete.work() {
-        let mut meter = Budget::new(Work::new(u64::MAX), limit, usize::MAX, &cancellation);
+        let mut meter_work = Meter::local(u64::MAX);
+        let mut meter = Budget::new(&mut meter_work, limit, usize::MAX, &cancellation);
         assert!(
             matches!(
                 build(&owner, &mut Storage::default(), &mut meter),
@@ -38,10 +39,12 @@ fn every_optional_work_prefix_returns_no_fact_owner() {
 fn every_global_work_prefix_retains_its_typed_stop() {
     let owner = chained();
     let cancellation = Cancellation::default();
-    let mut complete = budget(&cancellation);
+    let mut complete_work = Meter::local(u64::MAX);
+    let mut complete = budget(&mut complete_work, &cancellation);
     build(&owner, &mut Storage::default(), &mut complete).unwrap();
     for limit in 0..complete.work() {
-        let mut meter = Budget::new(Work::new(limit), u64::MAX, usize::MAX, &cancellation);
+        let mut meter_work = Meter::local(limit);
+        let mut meter = Budget::new(&mut meter_work, u64::MAX, usize::MAX, &cancellation);
         assert!(
             matches!(
                 build(&owner, &mut Storage::default(), &mut meter),
@@ -58,7 +61,8 @@ fn every_global_work_prefix_retains_its_typed_stop() {
 fn refused_storage_includes_the_unpublished_requirement() {
     let owner = chained();
     let cancellation = Cancellation::default();
-    let mut complete = budget(&cancellation);
+    let mut complete_work = Meter::local(u64::MAX);
+    let mut complete = budget(&mut complete_work, &cancellation);
     let facts = build(&owner, &mut Storage::default(), &mut complete).unwrap();
     let limits = [
         0,
@@ -66,7 +70,8 @@ fn refused_storage_includes_the_unpublished_requirement() {
         usize::try_from(complete.peak_bytes() - 1).unwrap(),
     ];
     for limit in limits {
-        let mut meter = Budget::new(Work::new(u64::MAX), u64::MAX, limit, &cancellation);
+        let mut meter_work = Meter::local(u64::MAX);
+        let mut meter = Budget::new(&mut meter_work, u64::MAX, limit, &cancellation);
         assert!(matches!(
             build(&owner, &mut Storage::default(), &mut meter),
             Err(BudgetError::StorageDeclined { .. })
@@ -81,7 +86,8 @@ fn cancellation_precedes_empty_work_and_storage_allowances() {
     let owner = constructed_theory(0, |_| vec![]);
     let cancellation = Cancellation::default();
     cancellation.cancel();
-    let mut meter = Budget::new(Work::new(0), 0, 0, &cancellation);
+    let mut meter_work = Meter::local(0);
+    let mut meter = Budget::new(&mut meter_work, 0, 0, &cancellation);
     assert!(matches!(
         build(&owner, &mut Storage::default(), &mut meter),
         Err(BudgetError::Stopped(Stop::Cancelled))
@@ -100,15 +106,11 @@ fn a_reserved_deadline_refunds_all_unspent_permits() {
     };
     let spent;
     {
-        let mut meter = Budget::new(
-            Work::reserved(&mut quota),
-            u64::MAX,
-            usize::MAX,
-            &cancellation,
-        );
+        let mut meter_work = Meter::reserved(&mut quota);
+        let mut meter = Budget::new(&mut meter_work, u64::MAX, usize::MAX, &cancellation);
         assert!(matches!(
             build(&owner, &mut Storage::default(), &mut meter),
-            Err(BudgetError::Stopped(Stop::Deadline))
+            Err(BudgetError::Refused(Stop::Deadline))
         ));
         spent = meter.work();
         meter.finish();

@@ -28,7 +28,7 @@ fn run(owner: &Theory, mut graph: Graph, maximum: u64) -> Snapshot {
                 cancellation: &cancellation,
                 meter,
                 statistics: &mut statistics,
-                current_bytes: 0,
+                bytes: MeterBytes::new(),
             },
         )
     });

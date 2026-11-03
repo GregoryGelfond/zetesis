@@ -8,7 +8,7 @@ use std::time::Duration;
 
 use zetesis_backend::BatchComputeTime;
 
-use zetesis_cpu::Cancellation;
+use zetesis_algebra::Cancellation;
 use zetesis_ferraris::{Interpretation, SlateId, SlateRef, Theory};
 use zetesis_stable::{
     BatchLimits, BatchVerdict, CompletionExecutor, Incomplete, Limits, Lookahead, SearchLimits,
@@ -21,6 +21,8 @@ use crate::batch_executor::DeviceVerdicts;
 use crate::formula_execution::Failure;
 use crate::phase_timing::Recorder;
 use crate::{GpuBatching, GpuLookahead, GpuLookaheadDeclined, SolveConfig, SolveError};
+
+mod sampling;
 
 /// When the double raises the control during a slate's last submission.
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -74,6 +76,7 @@ fn decided(
 /// decides them, admits at most `prefix` candidates per submission, and
 /// records what the queue asked of it.
 struct Double {
+    handovers: Option<crate::ResidualHandoverStatistics>,
     prefix: usize,
     decides: Decides,
     stop: Stop,
@@ -97,6 +100,7 @@ struct Double {
 impl Double {
     fn new(prefix: usize, control: &Cancellation) -> Self {
         Self {
+            handovers: None,
             prefix,
             decides: Decides::Wholly,
             stop: Stop::Never,
@@ -148,6 +152,10 @@ impl Prepared<'_> {
 }
 
 impl SlateDevice for Double {
+    fn handovers(&mut self) -> Option<&mut crate::ResidualHandoverStatistics> {
+        self.handovers.as_mut()
+    }
+
     type Prepared<'d> = Prepared<'d>;
     type Checked = Result<Receipt, Failure>;
 
@@ -155,6 +163,7 @@ impl SlateDevice for Double {
         &'d mut self,
         slate: SlateRef<'_>,
         offset: usize,
+        _max_bytes: u64,
         cancellation: &Cancellation,
     ) -> Result<Prepared<'d>, Failure> {
         cancellation
@@ -190,8 +199,24 @@ impl SlateDevice for Double {
         slate: SlateId,
         offset: usize,
         offered: usize,
+        rows: &mut super::device::CheckedRows,
     ) -> Result<Decoded, Failure> {
-        let receipt = checked?;
+        let (verdicts, timing) = self.unpack(checked?, slate, offset, offered)?;
+        for verdict in verdicts {
+            rows.classified(verdict)?;
+        }
+        Ok(timing)
+    }
+}
+
+impl Double {
+    fn unpack(
+        &self,
+        receipt: Receipt,
+        slate: SlateId,
+        offset: usize,
+        offered: usize,
+    ) -> Result<(Vec<BatchVerdict>, Decoded), Failure> {
         // As a device receipt does, refuse another slate's or another offset's.
         if receipt.slate != slate
             || receipt.offset != offset
@@ -207,11 +232,13 @@ impl SlateDevice for Double {
             .index
             .checked_sub(1)
             .and_then(|previous| self.intervals.get(previous).copied().flatten());
-        Ok(Decoded {
-            verdicts: receipt.verdicts,
-            compute,
-            finish_wait: receipt.finish_wait,
-        })
+        Ok((
+            receipt.verdicts,
+            Decoded {
+                compute,
+                finish_wait: receipt.finish_wait,
+            },
+        ))
     }
 }
 
@@ -451,6 +478,44 @@ fn a_stop_during_the_lookahead_leaves_the_slate_pending_and_the_device_reusable(
     assert!(!models.exhausted());
     assert!(double.reusable);
     assert_eq!(double.in_flight, 0);
+}
+
+#[test]
+fn the_queue_records_an_incomplete_handover_when_the_device_does_not_return_a_prefix() {
+    let cancellation = Cancellation::default();
+    let (_admitted, mut models) = stream(CHOICES, &cancellation);
+    let options = options(4);
+    let mut queue = BatchQueue::for_joint_oracle(&options).unwrap();
+    queue.set_demand(UNBOUNDED);
+    let mut double = Double::new(usize::MAX, &cancellation);
+    double.handovers = Some(crate::ResidualHandoverStatistics::default());
+    double.stop = Stop::DuringFinish;
+    let result = queue.next_device(
+        &mut models,
+        &options,
+        &cancellation,
+        &Recorder::new(false),
+        &mut double,
+    );
+    assert!(matches!(result, Some(Err(Failure::Search(_)))));
+    let stats = double.handovers.unwrap();
+    let attempt = stats.last_attempt.unwrap();
+    assert_eq!(
+        (
+            stats.attempts,
+            stats.incomplete_attempts,
+            stats.committed_slates
+        ),
+        (1, 1, 0)
+    );
+    assert!(!attempt.committed && !attempt.decode_complete);
+    assert_eq!(
+        attempt.residuals,
+        crate::FormulaResidualStatistics::default()
+    );
+    assert!(attempt.search.is_none());
+    assert_eq!(stats.query_work, 0);
+    assert!(stats.complete_work);
 }
 
 #[test]

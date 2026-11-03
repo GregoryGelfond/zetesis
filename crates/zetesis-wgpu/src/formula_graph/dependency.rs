@@ -7,7 +7,7 @@
 
 use super::{address, capacity};
 use crate::GpuError;
-use zetesis_cpu::Cancellation;
+use zetesis_algebra::Cancellation;
 use zetesis_ferraris::Theory;
 
 fn poll(cancellation: &Cancellation) -> Result<(), GpuError> {

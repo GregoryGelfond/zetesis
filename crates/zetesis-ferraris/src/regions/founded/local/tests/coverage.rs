@@ -59,13 +59,14 @@ fn prepared(example: &Example) -> Scratch {
                 &example.owner,
                 &example.index,
                 &example.producers,
-                &mut Work::new(u64::MAX),
+                &mut Meter::local(u64::MAX),
             )
+            .map_err(zetesis_algebra::Failure::into_stop)
             .unwrap();
     }
     let (never, cuts) = example.masks(0, 0);
     example
-        .complete(&mut scratch, &never, &cuts, &mut Work::new(u64::MAX))
+        .complete(&mut scratch, &never, &cuts, &mut Meter::local(u64::MAX))
         .unwrap();
     assert_eq!(scratch.atoms[0], 15);
     scratch
@@ -84,11 +85,11 @@ fn check_alternate(support: Support) {
         }
     }
     example
-        .complete(&mut expected, &never, &cuts, &mut Work::new(u64::MAX))
+        .complete(&mut expected, &never, &cuts, &mut Meter::local(u64::MAX))
         .unwrap();
     example.start(&mut actual, &never);
     example
-        .complete(&mut actual, &never, &cuts, &mut Work::new(u64::MAX))
+        .complete(&mut actual, &never, &cuts, &mut Meter::local(u64::MAX))
         .unwrap();
     assert_eq!(actual.local.passes, 1);
     assert_eq!(actual.atoms, expected.atoms);
@@ -117,38 +118,40 @@ fn other_subjects_end_pending_local_collection() {
     let (never, cuts) = example.masks(3, 0);
     for frozen in [false, true] {
         let mut scratch = NarrowingScratch {
-            founded: example.prepared(),
+            common: crate::regions::CommonScratch {
+                founded: example.prepared(),
+                ..crate::regions::CommonScratch::default()
+            },
             ..NarrowingScratch::default()
         };
-        example.start(&mut scratch.founded, &never);
-        let touched = scratch.founded.local.touched.len();
+        example.start(&mut scratch.common.founded, &never);
+        let touched = scratch.common.founded.local.touched.len();
         assert!(touched > 0);
         let foreign = theory(9, vec![Node::atom(0)], vec![]);
         let index = Narrower::new(&foreign);
         let mut region = Region::all_open(9);
-        let mut known = index.knowledge();
         let mut quota = Allowance {
             remaining: u64::MAX,
             failure: Stop::WorkLimit,
         };
         let attempt = if frozen {
-            index.narrow_frozen_known_reserved(
+            crate::test_support::stop_narrowing(&index.narrow_frozen_known_reserved(
                 FrozenSubject::new(&foreign, &[true]),
                 &mut region,
-                &mut known,
+                &mut index.frozen_knowledge(),
                 &mut scratch,
                 &Cancellation::default(),
-                &mut quota,
-            )
+                &mut zetesis_algebra::Meter::reserved(&mut quota),
+            ))
         } else {
-            index.propagate_known_reserved(
+            crate::test_support::stop_narrowing(&index.propagate_known_reserved(
                 OriginalSubject::new(&foreign, None),
                 &mut region,
-                &mut known,
+                &mut index.knowledge(),
                 &mut scratch,
                 &Cancellation::default(),
-                &mut quota,
-            )
+                &mut zetesis_algebra::Meter::reserved(&mut quota),
+            ))
         };
         assert!(matches!(
             attempt.result.unwrap(),
@@ -157,27 +160,28 @@ fn other_subjects_end_pending_local_collection() {
         assert_eq!(attempt.statistics.founded_work, 0);
         assert!(
             scratch
+                .common
                 .founded
                 .owner
                 .as_ref()
                 .is_some_and(|owner| owner.same_instance(&example.owner))
         );
-        assert!(scratch.founded.projected.is_some());
-        assert!(!scratch.founded.local.collecting);
-        assert_eq!(scratch.founded.local.touched.len(), touched);
-        scratch.founded.begin_local(&example.owner, true);
-        assert!(!scratch.founded.local.collecting);
+        assert!(scratch.common.founded.projected.is_some());
+        assert!(!scratch.common.founded.local.collecting);
+        assert_eq!(scratch.common.founded.local.touched.len(), touched);
+        scratch.common.founded.begin_local(&example.owner, true);
+        assert!(!scratch.common.founded.local.collecting);
         example
             .complete(
-                &mut scratch.founded,
+                &mut scratch.common.founded,
                 &never,
                 &cuts,
-                &mut Work::new(u64::MAX),
+                &mut Meter::local(u64::MAX),
             )
             .unwrap();
-        assert_eq!(scratch.founded.local.passes, 0);
-        assert_eq!(scratch.founded.atoms[0] & 63, 48);
-        assert!(scratch.founded.local.touched.is_empty());
+        assert_eq!(scratch.common.founded.local.passes, 0);
+        assert_eq!(scratch.common.founded.atoms[0] & 63, 48);
+        assert!(scratch.common.founded.local.touched.is_empty());
     }
 }
 
@@ -185,18 +189,20 @@ fn other_subjects_end_pending_local_collection() {
 fn refused_replacement_preserves_retained_membership() {
     let first = Example::new(false);
     let next = Example::new(true);
-    let prepare = |scratch: &mut Scratch, work: &mut Work<'_>| {
-        scratch.prepare_bodies(&next.owner, &next.index, &next.producers, work)
+    let prepare = |scratch: &mut Scratch, work: &mut Meter<'_>| {
+        scratch
+            .prepare_bodies(&next.owner, &next.index, &next.producers, work)
+            .map_err(zetesis_algebra::Failure::into_stop)
     };
     let mut probe = first.prepared();
-    prepare(&mut probe, &mut Work::new(u64::MAX)).unwrap();
-    let mut complete = Work::new(u64::MAX);
+    prepare(&mut probe, &mut Meter::local(u64::MAX)).unwrap();
+    let mut complete = Meter::local(u64::MAX);
     prepare(&mut probe, &mut complete).unwrap();
     let mut actual = first.prepared();
-    prepare(&mut actual, &mut Work::new(u64::MAX)).unwrap();
+    prepare(&mut actual, &mut Meter::local(u64::MAX)).unwrap();
     let retained = actual.retained_bytes();
     assert!(actual.local.retained_bytes() > 0);
-    let mut stopped = Work::new(complete.spent() - 1);
+    let mut stopped = Meter::local(complete.charged() - 1);
     assert_eq!(prepare(&mut actual, &mut stopped), Err(Stop::WorkLimit));
     assert!(actual.owner.is_none() && actual.projected.is_none());
     assert_eq!(actual.retained_bytes(), retained);

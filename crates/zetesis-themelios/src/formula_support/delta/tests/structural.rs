@@ -7,8 +7,8 @@ use crate::formula_support::{Context, Probe, testing};
 use crate::grounding_observer::{GroundingPhase, Profile};
 use crate::test_support::Observer;
 use crate::{FormulaFailure, FormulaResource, GroundingWork as Receipt};
+use zetesis_algebra::{Cancellation, Stop};
 use zetesis_core::{Sign, ValueNode, ValueNodeRef};
-use zetesis_cpu::{Cancellation, Stop};
 use zetesis_ferraris::{Interpretation, Limits, models, models_reduct};
 use zetesis_test_support::programs::{atom, function, numbered};
 

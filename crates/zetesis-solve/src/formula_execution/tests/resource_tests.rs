@@ -2,7 +2,7 @@
 
 use super::Execution;
 use crate::{Backend, ExecutionResources, GpuApi, SolveConfig};
-use zetesis_cpu::Cancellation;
+use zetesis_algebra::Cancellation;
 use zetesis_wgpu::{GpuContext, GpuOptions};
 
 fn supplied_context(backend: Backend, expected_api: &str) {
@@ -39,7 +39,7 @@ fn supplied_context(backend: Backend, expected_api: &str) {
         zetesis_ferraris::TightPlan::compile(
             &theory,
             zetesis_ferraris::TightPlanLimits::default(),
-            &zetesis_cpu::Cancellation::default(),
+            &zetesis_algebra::Cancellation::default(),
         )
         .unwrap(),
     );
@@ -72,8 +72,30 @@ fn vulkan_formula_retains_the_supplied_context() {
     supplied_context(Backend::Gpu(Some(GpuApi::Vulkan)), "Vulkan");
 }
 
+fn assert_fresh_profile_statistics(
+    statistics: &super::FormulaExecutionStatistics,
+    options: &SolveConfig,
+) {
+    assert_eq!(statistics.gpu_batches, 0);
+    assert_eq!(
+        statistics.gpu_limits,
+        Some(super::FormulaDeviceLimits::from(options))
+    );
+    assert_eq!(statistics.gpu_submitted_batches, 0);
+    assert_eq!(statistics.gpu_submitted_candidates, 0);
+    assert_eq!(statistics.gpu_candidates, 0);
+    assert_eq!(statistics.gpu_work, 0);
+    assert_eq!(statistics.gpu_rounds, 0);
+    assert_eq!(
+        statistics.gpu_residuals,
+        Some(super::FormulaResidualStatistics::default())
+    );
+    assert_eq!(statistics.cpu_residuals, 0);
+    assert_eq!(statistics.gpu_decided, 0);
+}
+
 fn supplied_profile(backend: Backend, expected_api: &str) {
-    use zetesis_ferraris::{AdmissionLimits, Interpretation, Node, Theory};
+    use zetesis_ferraris::{AdmissionLimits, Node, Theory};
     use zetesis_wgpu::{GateProjection, GpuFormulaProfile};
     let context = GpuContext::new_selected(
         GpuOptions::default(),
@@ -89,7 +111,6 @@ fn supplied_profile(backend: Backend, expected_api: &str) {
         AdmissionLimits::default(),
     )
     .unwrap();
-    let candidates = [Interpretation::new(&theory, [0]).unwrap()];
     let options = SolveConfig {
         backend,
         ..Default::default()
@@ -97,6 +118,7 @@ fn supplied_profile(backend: Backend, expected_api: &str) {
     for projection in GateProjection::ALL {
         let profile =
             GpuFormulaProfile::from_context_with_projection(&context, projection).unwrap();
+        super::residual_tests::compare_physical_roots(&profile);
         let resources = ExecutionResources::with_formula_profile(&profile);
         assert!(resources.formula_profile().unwrap().same_instance(&profile));
         assert!(resources.gpu_context().unwrap().same_instance(&context));
@@ -124,32 +146,30 @@ fn supplied_profile(backend: Backend, expected_api: &str) {
             assert_eq!(oracle.projection(), projection);
             assert!(oracle.last_batch_stats().is_none());
             assert_eq!(queue.len(), 0);
-            assert_eq!(statistics.gpu_batches, 0);
-            assert_eq!(
-                statistics.gpu_limits,
-                Some(super::FormulaDeviceLimits::from(&options))
-            );
-            assert_eq!(statistics.gpu_submitted_batches, 0);
-            assert_eq!(statistics.gpu_submitted_candidates, 0);
-            assert_eq!(statistics.gpu_candidates, 0);
-            assert_eq!(statistics.gpu_work, 0);
-            assert_eq!(statistics.gpu_rounds, 0);
-            assert_eq!(
-                statistics.gpu_residuals,
-                Some(super::FormulaResidualStatistics::default())
-            );
-            assert_eq!(statistics.cpu_residuals, 0);
-            assert_eq!(statistics.gpu_decided, 0);
-            let result = super::propagate(
-                oracle,
-                statistics,
+            assert_fresh_profile_statistics(statistics, &options);
+            let control = Cancellation::default();
+            let mut models = zetesis_stable::StableModels::new(
                 &theory,
-                &candidates,
-                &options,
-                &zetesis_cpu::Cancellation::default(),
-                &crate::phase_timing::Recorder::new(false),
-            );
-            assert!(result.is_ok());
+                zetesis_stable::Limits::default(),
+                control.clone(),
+            )
+            .unwrap();
+            let result = queue
+                .next_device(
+                    &mut models,
+                    &options,
+                    &control,
+                    &crate::phase_timing::Recorder::new(false),
+                    &mut super::FormulaDevice {
+                        oracle,
+                        statistics,
+                        options: &options,
+                        decoded: crate::residual_handovers::decoded::DecodeJournal::default(),
+                    },
+                )
+                .expect("the fact has one model")
+                .unwrap_or_else(|_| panic!("the joint formula check must complete"));
+            assert!(result.atoms().eq([0]));
             assert_eq!(statistics.gpu_batches, 1);
             assert_eq!(statistics.gpu_submitted_batches, 1);
             assert_eq!(statistics.gpu_submitted_candidates, 1);
@@ -162,6 +182,60 @@ fn supplied_profile(backend: Backend, expected_api: &str) {
         for policy in [crate::GpuBatching::Fixed, crate::GpuBatching::Adaptive] {
             qualify_prefix_orchestration(&profile, backend, policy);
         }
+    }
+}
+
+/// Exercise the production ticket, readback and finish with a fixed two-row
+/// dispatch cap so the logical slate necessarily spans multiple submissions.
+struct TwoPerSubmission<'a> {
+    device: super::FormulaDevice<'a>,
+    slates: Vec<usize>,
+}
+
+impl crate::formula_queue::device::SlateDevice for TwoPerSubmission<'_> {
+    const REGIONAL: bool = true;
+    type Prepared<'d>
+        = zetesis_wgpu::PreparedFormulaSubmission<'d>
+    where
+        Self: 'd;
+    type Checked =
+        Result<zetesis_wgpu::CheckedSlate<zetesis_wgpu::FormulaCheck>, zetesis_wgpu::GpuError>;
+
+    fn retained_batch_bytes(&self) -> Result<u64, super::Failure> {
+        self.device.retained_batch_bytes()
+    }
+    fn prepare<'d>(
+        &'d mut self,
+        slate: zetesis_ferraris::SlateRef<'_>,
+        offset: usize,
+        max_bytes: u64,
+        control: &Cancellation,
+    ) -> Result<Self::Prepared<'d>, super::Failure> {
+        let count = slate.candidates().len();
+        if offset == 0 {
+            self.slates.push(count);
+        }
+        let limits = zetesis_wgpu::FormulaLimits {
+            max_candidates: 2,
+            max_batch_bytes: max_bytes,
+            ..super::slate_limits(self.device.options, count)
+        };
+        self.device
+            .oracle
+            .prepare(slate, offset, limits, control)
+            .map_err(super::gpu_failure)
+    }
+    fn decode(
+        &mut self,
+        checked: Self::Checked,
+        theory: &zetesis_ferraris::Theory,
+        slate: zetesis_ferraris::SlateId,
+        offset: usize,
+        offered: usize,
+        rows: &mut crate::formula_queue::device::CheckedRows,
+    ) -> Result<crate::formula_queue::device::Decoded, super::Failure> {
+        self.device
+            .decode(checked, theory, slate, offset, offered, rows)
     }
 }
 
@@ -180,7 +254,7 @@ fn qualify_prefix_orchestration(
 
     let admitted = zetesis_reference_support::formula("{a;b;c}.");
     let theory = admitted.theory();
-    let cancellation = zetesis_cpu::Cancellation::default();
+    let cancellation = zetesis_algebra::Cancellation::default();
     let mut models = StableModels::new(theory, Limits::default(), cancellation.clone()).unwrap();
     let logical = SolveConfig {
         backend,
@@ -193,24 +267,18 @@ fn qualify_prefix_orchestration(
     let mut statistics = super::FormulaExecutionStatistics::default();
     let phases = crate::phase_timing::Recorder::new(false);
     let mut family = BTreeSet::new();
-    let mut counts = Vec::new();
-    while let Some(next) = queue.next(&mut models, &logical, &cancellation, |batch| {
-        counts.push(batch.candidates().len());
-        let ceiling = zetesis_wgpu::FormulaLimits {
-            max_candidates: 2,
-            ..super::slate_limits(&logical, batch.candidates().len())
-        };
-        let verdicts = super::propagate_within(
-            &mut oracle,
-            &mut statistics,
-            batch.theory(),
-            batch.candidates(),
-            ceiling,
-            &cancellation,
-            &phases,
-        )?;
-        verdicts.finish(batch).map_err(super::Failure::from)
-    }) {
+    let mut capped = TwoPerSubmission {
+        device: super::FormulaDevice {
+            oracle: &mut oracle,
+            statistics: &mut statistics,
+            options: &logical,
+            decoded: crate::residual_handovers::decoded::DecodeJournal::default(),
+        },
+        slates: Vec::new(),
+    };
+    while let Some(next) =
+        queue.next_device(&mut models, &logical, &cancellation, &phases, &mut capped)
+    {
         let model = next.unwrap_or_else(|_| panic!("joint prefix execution must complete"));
         assert!(family.insert(model.atoms().collect::<Vec<_>>()));
     }
@@ -220,7 +288,8 @@ fn qualify_prefix_orchestration(
     assert_eq!(family, expected);
     // Under either policy: a device prefix below the batch size splits a round
     // into submissions and never shrinks the round.
-    assert_eq!(counts, [5, 3]);
+    assert_eq!(capped.slates, [5, 3]);
+    drop(capped);
     assert_eq!(statistics.gpu_submitted_batches, 5);
     assert_eq!(statistics.gpu_batches, 5);
     assert_eq!(statistics.gpu_submitted_candidates, 8);
@@ -266,7 +335,7 @@ fn steady_enumeration(backend: Backend) {
         let mut session = crate::Session::new(
             crate::PreparedInput::formula(&owner),
             config,
-            zetesis_cpu::Cancellation::default(),
+            zetesis_algebra::Cancellation::default(),
         )
         .unwrap();
         let answers: BTreeSet<_> = session

@@ -79,7 +79,7 @@ cannot establish the theorem's exhaustive optimum conclusion.
 ## Refuting a region before it becomes a candidate
 
 [`StreamedRegions`](../Zetesis/StreamedRegions.lean) supplies a different,
-sufficient test over the existing `Cube` and `FormulaBounds.Sure` definitions.
+sufficient test over the existing `Region` and `FormulaBounds.Sure` definitions.
 For a region with bounds `L` and `U`, every interpretation `S` under consideration
 satisfies `L ⊆ S ⊆ U`. A normalized constraint body is sure when:
 

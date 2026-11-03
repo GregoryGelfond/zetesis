@@ -3,8 +3,8 @@
 use crate::support::observation_construction;
 use crate::support::observation_reference;
 use crate::support::observation_rendering::shown as terms;
+use zetesis_algebra::Cancellation;
 use zetesis_core::Model;
-use zetesis_cpu::Cancellation;
 use zetesis_reference_support::{admit, formula};
 use zetesis_themelios::FormulaLimits;
 use zetesis_themelios::observation::{ErrorKind, EvaluationError, Limits, Resource};

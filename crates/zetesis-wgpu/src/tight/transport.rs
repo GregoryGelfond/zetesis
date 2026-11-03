@@ -6,7 +6,7 @@ use super::{TightGpuActivity, poll};
 use crate::runtime::{self, Dispatch, Observation, Variant, buffer, entry, initialized};
 use crate::{GpuError, GpuErrorKind};
 use std::time::Duration;
-use zetesis_cpu::Cancellation;
+use zetesis_algebra::{Cancellation, words::Words};
 
 pub(super) struct Resident {
     pub(super) graph: Graph,
@@ -143,7 +143,7 @@ impl Resident {
             0,
             bytemuck::cast_slice(&plan.params(&self.graph)),
         );
-        queue.write_buffer(&transport.seeds, 0, bytemuck::cast_slice(seeds));
+        queue.write_buffer(&transport.seeds, 0, bytemuck::cast_slice(&seeds));
         activity.uploaded_bytes += PARAM_BYTES + plan.seeds;
         let submission = runtime::submit(
             device,
@@ -203,7 +203,7 @@ impl Resident {
             || poll(cancellation),
             |words| {
                 let (words, tail) = crate::timing::split_readback(words, transport.timed)?;
-                let decoded = packing::decode(words, &self.graph, plan, seeds, cancellation)?;
+                let decoded = packing::decode(words, &self.graph, plan, &seeds, cancellation)?;
                 performed = decoded.work;
                 timing.tail = tail;
                 Ok(decoded)
@@ -227,7 +227,7 @@ impl Resident {
 /// One batch's host side: the candidate seeds it uploads and its plan.
 #[derive(Clone, Copy)]
 pub(super) struct Call<'a> {
-    pub(super) seeds: &'a [u32],
+    pub(super) seeds: Words<u32, &'a [u32]>,
     pub(super) plan: &'a Plan,
 }
 

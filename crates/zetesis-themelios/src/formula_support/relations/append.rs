@@ -6,6 +6,7 @@ use super::{
     atom_interner, ceiling, failure, owner_limits, record_owner_peak, size_of,
 };
 use crate::formula_support::GroundingWork;
+use zetesis_algebra::words::Words;
 
 mod assigned;
 pub(crate) use assigned::{SourceAtom, SourceScope};
@@ -23,7 +24,7 @@ pub(super) struct Base {
 pub(crate) struct SupportAppend<'a> {
     owner: AtomAppender<'a>,
     pending: &'a mut Vec<usize>,
-    supported: &'a mut Vec<u64>,
+    supported: &'a mut Words<u64>,
     scope: &'a SourceScope,
     growth: &'a AtomicUsize,
     base: Base,
@@ -108,7 +109,7 @@ impl<'a> SupportAppend<'a> {
     pub(super) fn new(
         owner: AtomAppender<'a>,
         pending: &'a mut Vec<usize>,
-        supported: &'a mut Vec<u64>,
+        supported: &'a mut Words<u64>,
         scope: &'a SourceScope,
         growth: &'a AtomicUsize,
         base: Base,

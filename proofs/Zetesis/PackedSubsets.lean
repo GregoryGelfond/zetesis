@@ -33,22 +33,8 @@ theorem clear_exact (words : List (BitVec 64)) (atom : Nat)
     (clear words atom).length = words.length ∧
       ∀ tested, bit64 (clear words atom) tested =
         (bit64 words tested && decide (tested ≠ atom)) := by
-  have length : (clear words atom).length = words.length := by simp [clear]
-  have membership : ∀ tested, bit64 (clear words atom) tested =
-      (bit64 words tested && decide (tested ≠ atom)) := by
-    intro tested
-    by_cases sameWord : atom / 64 = tested / 64
-    · have sameAtom : tested % 64 = atom % 64 ↔ tested = atom := by omega
-      simp only [bit64, clear, word]
-      rw [← sameWord, List.getElem?_set_self stored]
-      simp only [Option.getD_some, BitVec.getLsbD_and, BitVec.getLsbD_not]
-      rw [← BitVec.twoPow_eq]
-      simp [Nat.mod_lt _ (by decide : 0 < 64), ← sameAtom, eq_comm]
-    · have distinct : tested ≠ atom := by
-        intro same
-        exact sameWord (congrArg (fun value => value / 64) same.symm)
-      simp [bit64, clear, word, List.getElem?_set_ne sameWord, distinct]
-  exact ⟨length, membership⟩
+  simpa only [clearBit, bit, clear, bit64] using
+    clear_bit_exact (by decide : 0 < 64) words atom stored
 
 /-- Exact raw-bit representation at every coordinate, including storage shape
     and zero padding. The selected list itself contains only bounded atoms. -/

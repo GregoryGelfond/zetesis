@@ -9,9 +9,9 @@ use std::time::Duration;
 
 use crate::support::finite_bindings::Models;
 use serde_json::Value as Json;
+use zetesis_algebra::Cancellation;
 use zetesis_clingo_support as oracle;
 use zetesis_core::Model;
-use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{Interpretation, Limits as OracleLimits, models, models_reduct};
 use zetesis_stable::{Limits, StableModels};
 use zetesis_themelios::{AdmittedFormula, FormulaFailure, FormulaLimits, FormulaResource};

@@ -3,14 +3,14 @@
 
 use super::{Deduction, LearningLimits, LearningOwner, Ledger, Literals};
 use crate::regions::founded::explanations::Input;
-use crate::regions::{SupportExplanationStatistics, Width, Work};
+use crate::regions::{Meter, SupportExplanationStatistics, Width};
 use crate::test_support::{SinglePermits, theory, world};
 use crate::{
     EvaluationLimits, EvaluationWorkspace, FrozenSubject, Knowledge, Narrower, Narrowing,
     NarrowingScratch, NarrowingStatistics, Node, OriginalSubject, Producers, Region, RegionLimits,
     Theory,
 };
-use zetesis_cpu::{Cancellation, Stop};
+use zetesis_algebra::{Cancellation, Stop};
 
 mod carrier;
 mod consolidation;
@@ -81,16 +81,15 @@ impl Program {
         known: &mut Knowledge,
         scratch: &mut NarrowingScratch,
     ) -> (Narrowing, NarrowingStatistics) {
-        self.index
-            .narrow_known(
-                OriginalSubject::carrier(&self.owner, Some(&self.producers)),
-                region,
-                known,
-                scratch,
-                RegionLimits::default(),
-                &Cancellation::default(),
-            )
-            .unwrap()
+        let attempt = self.index.narrow_known(
+            OriginalSubject::carrier(&self.owner, Some(&self.producers)),
+            region,
+            known,
+            scratch,
+            RegionLimits::default(),
+            &Cancellation::default(),
+        );
+        (attempt.result.unwrap(), attempt.statistics)
     }
 
     fn captured(&self) -> (Knowledge, NarrowingScratch) {
@@ -101,16 +100,16 @@ impl Program {
         assert_eq!(result, Narrowing::Refuted);
         assert_eq!(counts.support_explanations.certified, 1);
         assert_eq!(counts.support_explanations.refuted, 0);
-        assert!(scratch.founded.passes > 0);
-        assert_eq!(scratch.explanations.len(), 1);
+        assert!(scratch.common.founded.passes > 0);
+        assert_eq!(scratch.learning.explanations.len(), 1);
         assert_eq!(
-            scratch.explanations.rows[0]
+            scratch.learning.explanations.rows[0]
                 .row
                 .conditions()
                 .collect::<Vec<_>>(),
             [(2, false), (3, true)]
         );
-        assert_eq!(scratch.explanations.absent_outputs(0), [0, 1]);
+        assert_eq!(scratch.learning.explanations.absent_outputs(0), [0, 1]);
         (known, scratch)
     }
 }
@@ -137,9 +136,10 @@ fn add(ledger: &mut Ledger, conditions: &[(usize, bool)], outputs: &[(usize, boo
     ledger
         .retain_founded(
             literals(conditions, outputs),
-            &mut Work::new(u64::MAX),
+            &mut Meter::local(u64::MAX),
             &mut 0,
         )
+        .map_err(zetesis_algebra::Failure::into_stop)
         .unwrap()
 }
 
@@ -181,9 +181,9 @@ fn input<'a>(
         theory: &program.theory,
         index: &program.index,
         producers: &program.producers,
-        completed: &scratch.founded,
-        atom_sure,
-        atom_never,
+        completed: &scratch.common.founded,
+        atom_sure: atom_sure.into(),
+        atom_never: atom_never.into(),
     }
 }
 
@@ -222,14 +222,14 @@ fn the_founded_output_limit_declines_a_wider_row() {
     assert_eq!(result, Narrowing::Refuted);
     assert_eq!(counts.support_explanations.attempts, 1);
     assert_eq!(counts.support_explanations.declined, 1);
-    assert_eq!(scratch.explanations.len(), 0);
+    assert_eq!(scratch.learning.explanations.len(), 0);
 }
 
 #[test]
 fn fresh_sibling_knowledge_reuses_a_complete_explanation() {
     let program = Program::new(false);
     let (_, mut scratch) = program.captured();
-    let before = scratch.founded.passes;
+    let before = scratch.common.founded.passes;
     let mut sibling = region(&[(0, true), (2, false), (3, true), (4, true)]);
     let (result, counts) =
         program.close(&mut sibling, &mut program.index.knowledge(), &mut scratch);
@@ -237,7 +237,7 @@ fn fresh_sibling_knowledge_reuses_a_complete_explanation() {
     assert_eq!(counts.support_explanations.matched, 1);
     assert_eq!(counts.support_explanations.refuted, 1);
     assert_eq!(counts.support_explanations.attempts, 0);
-    assert_eq!(scratch.founded.passes, before);
+    assert_eq!(scratch.common.founded.passes, before);
 }
 
 #[test]
@@ -314,8 +314,10 @@ fn matching_requires_every_signed_condition() {
             let cut = [u64::from(x == 1) << 2 | u64::from(y == 1) << 3];
             assert_eq!(
                 scratch
+                    .learning
                     .explanations
-                    .deduction(0, &held, &cut, &mut Work::new(u64::MAX))
+                    .deduction(0, &held, &cut, &mut Meter::local(u64::MAX))
+                    .map_err(zetesis_algebra::Failure::into_stop)
                     .unwrap(),
                 if x == 1 && y == 2 {
                     Deduction::ForceOutputs
@@ -343,34 +345,32 @@ fn frozen_and_inventory_free_visits_suspend_original_explanations() {
         .unwrap();
     assert!(evaluated.is_model());
     let decisions = [(0, true), (2, false), (3, true), (4, false)];
-    let (frozen, frozen_counts) = program
-        .index
-        .narrow_frozen_known(
-            FrozenSubject::new(&program.theory, evaluated.truth()),
-            &mut region(&decisions),
-            &mut program.index.knowledge(),
-            &mut scratch,
-            RegionLimits::default(),
-            &Cancellation::default(),
-        )
-        .unwrap();
+    let attempt = program.index.narrow_frozen_known(
+        FrozenSubject::new(&program.theory, evaluated.truth()),
+        &mut region(&decisions),
+        &mut program.index.frozen_knowledge(),
+        &mut scratch,
+        RegionLimits::default(),
+        &Cancellation::default(),
+    );
+    let frozen = attempt.result.unwrap();
+    let frozen_counts = attempt.statistics;
     assert!(matches!(frozen, Narrowing::Fixed { .. }));
     assert_eq!(frozen_counts.support_explanations.work, 0);
-    assert_eq!(scratch.explanations.len(), 1);
-    let (without_inventory, inventory_counts) = program
-        .index
-        .narrow_known(
-            OriginalSubject::new(&program.theory, None),
-            &mut region(&decisions),
-            &mut program.index.knowledge(),
-            &mut scratch,
-            RegionLimits::default(),
-            &Cancellation::default(),
-        )
-        .unwrap();
+    assert_eq!(scratch.learning.explanations.len(), 1);
+    let attempt = program.index.narrow_known(
+        OriginalSubject::new(&program.theory, None),
+        &mut region(&decisions),
+        &mut program.index.knowledge(),
+        &mut scratch,
+        RegionLimits::default(),
+        &Cancellation::default(),
+    );
+    let without_inventory = attempt.result.unwrap();
+    let inventory_counts = attempt.statistics;
     assert!(matches!(without_inventory, Narrowing::Fixed { .. }));
     assert_eq!(inventory_counts.support_explanations.work, 0);
-    assert_eq!(scratch.explanations.len(), 1);
+    assert_eq!(scratch.learning.explanations.len(), 1);
     let (original, original_counts) = program.close(
         &mut region(&decisions),
         &mut program.index.knowledge(),
@@ -393,9 +393,10 @@ fn a_foreign_theory_discards_previous_explanations() {
     );
     assert!(matches!(result, Narrowing::Fixed { .. }));
     assert_eq!(counts.support_explanations.refuted, 0);
-    assert_eq!(scratch.explanations.len(), 0);
+    assert_eq!(scratch.learning.explanations.len(), 0);
     assert!(
         scratch
+            .learning
             .explanations
             .owner
             .as_ref()
@@ -412,7 +413,7 @@ fn interrupted_capture_never_publishes_partial_evidence() {
     let (known, scratch) = program.captured();
     let mut complete = Ledger::default();
     complete.prepare(&program.owner);
-    let mut measured = Work::new(u64::MAX);
+    let mut measured = Meter::local(u64::MAX);
     complete
         .capture(
             input(&program, &known, &scratch),
@@ -420,30 +421,34 @@ fn interrupted_capture_never_publishes_partial_evidence() {
             &mut measured,
             &mut SupportExplanationStatistics::default(),
         )
+        .map_err(zetesis_algebra::Failure::into_stop)
         .unwrap();
     assert_eq!(complete.len(), 1);
-    assert!(measured.spent() > 0);
+    assert!(measured.charged() > 0);
     for failure in [Stop::WorkLimit, Stop::Cancelled, Stop::Deadline] {
-        for prefix in 0..measured.spent() {
+        for prefix in 0..measured.charged() {
             let mut ledger = Ledger::default();
             ledger.prepare(&program.owner);
             let mut counts = SupportExplanationStatistics::default();
             let mut permits = SinglePermits::new(prefix, failure);
-            let mut work = Work::reserved(&mut permits);
+            let mut work = Meter::reserved(&mut permits);
             assert_eq!(
-                ledger.capture(input(&program, &known, &scratch), 0, &mut work, &mut counts),
+                ledger
+                    .capture(input(&program, &known, &scratch), 0, &mut work, &mut counts)
+                    .map_err(zetesis_algebra::Failure::into_stop),
                 Err(failure)
             );
-            assert_eq!(work.spent(), prefix);
+            assert_eq!(work.charged(), prefix);
             assert_eq!(ledger.len(), 0);
             assert_eq!(counts.certified, 0);
             ledger
                 .capture(
                     input(&program, &known, &scratch),
                     0,
-                    &mut Work::new(u64::MAX),
+                    &mut Meter::local(u64::MAX),
                     &mut counts,
                 )
+                .map_err(zetesis_algebra::Failure::into_stop)
                 .unwrap();
             assert_eq!(ledger.rows, complete.rows);
         }
@@ -456,24 +461,30 @@ fn interrupted_matching_preserves_the_typed_failure() {
     let (_, scratch) = program.captured();
     let held = [1 << 3];
     let cut = [1 << 2];
-    let mut measured = Work::new(u64::MAX);
+    let mut measured = Meter::local(u64::MAX);
     assert_eq!(
         scratch
+            .learning
             .explanations
             .deduction(0, &held, &cut, &mut measured)
+            .map_err(zetesis_algebra::Failure::into_stop)
             .unwrap(),
         Deduction::ForceOutputs
     );
     for failure in [Stop::WorkLimit, Stop::Cancelled, Stop::Deadline] {
-        for prefix in 0..measured.spent() {
+        for prefix in 0..measured.charged() {
             let mut permits = SinglePermits::new(prefix, failure);
-            let mut work = Work::reserved(&mut permits);
+            let mut work = Meter::reserved(&mut permits);
             assert_eq!(
-                scratch.explanations.deduction(0, &held, &cut, &mut work),
+                scratch
+                    .learning
+                    .explanations
+                    .deduction(0, &held, &cut, &mut work)
+                    .map_err(zetesis_algebra::Failure::into_stop),
                 Err(failure)
             );
-            assert_eq!(work.spent(), prefix);
-            assert_eq!(scratch.explanations.len(), 1);
+            assert_eq!(work.charged(), prefix);
+            assert_eq!(scratch.learning.explanations.len(), 1);
         }
     }
 }

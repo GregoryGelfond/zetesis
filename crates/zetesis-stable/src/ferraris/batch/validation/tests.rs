@@ -219,7 +219,7 @@ fn interrupted_validation_can_reuse_storage_without_a_receipt() {
             &Cancellation::default(),
             &mut timings
         ),
-        Err(Incomplete::Verification(zetesis_cpu::Stop::WorkLimit))
+        Err(Incomplete::Verification(zetesis_algebra::Stop::WorkLimit))
     );
     assert_eq!(validation.work(), 1);
     let bytes = validation.retained_bytes();

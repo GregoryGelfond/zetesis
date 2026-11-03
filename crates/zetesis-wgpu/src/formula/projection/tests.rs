@@ -9,7 +9,7 @@ use std::borrow::Cow;
 fn default_shader_remains_the_borrowed_baseline() {
     assert!(
         matches!(GateProjection::Enumerated.shader().unwrap(), Cow::Borrowed(source)
-        if source == concat!(include_str!("../../formula.wgsl"), include_str!("../../formula_graph/numeric.wgsl"), include_str!("../numeric.wgsl"), include_str!("../subset.wgsl")))
+        if source == concat!(include_str!("../../formula.wgsl"), include_str!("../../words.wgsl"), include_str!("../../formula_graph/truth.wgsl"), include_str!("../../formula_graph/numeric.wgsl"), include_str!("../numeric.wgsl"), include_str!("../subset.wgsl")))
     );
 }
 
@@ -17,6 +17,8 @@ fn default_shader_remains_the_borrowed_baseline() {
 fn bitwise_transfer_preserves_the_shader_scaffold() {
     let baseline = concat!(
         include_str!("../../formula.wgsl"),
+        include_str!("../../words.wgsl"),
+        include_str!("../../formula_graph/truth.wgsl"),
         include_str!("../../formula_graph/numeric.wgsl"),
         include_str!("../numeric.wgsl"),
         include_str!("../subset.wgsl")
@@ -44,6 +46,7 @@ fn projection_variants_preserve_the_device_interface() {
         )
         .validate(&module)
         .expect("portable shader validation");
+        crate::formula_graph::assert_candidate_word_binding(&module, &info, 3);
         let (module, _) = naga::back::pipeline_constants::process_overrides(
             &module,
             &info,

@@ -17,6 +17,7 @@ use std::{
     fs,
     path::{Path, PathBuf},
 };
+use zetesis_algebra::Meter;
 use zetesis_validation::process::Limits;
 
 mod retention;
@@ -62,7 +63,8 @@ fn copy_flat_with(source: &Path, destination: &Path, limits: proofs::Limits) -> 
     fs::create_dir(destination)?;
     let mut tree = crate::files::Tree::new(source, limits)?;
     for (index, entry) in fs::read_dir(source)?.enumerate() {
-        require(index < limits.entries, "retained-log entry limit exceeded")?;
+        Meter::check_count(index, 1, limits.entries)
+            .map_err(|_| Box::<dyn Error>::from("retained-log entry limit exceeded"))?;
         let entry = entry?;
         require(
             entry.file_type()?.is_file(),

@@ -4,7 +4,7 @@ use super::super::{certificate_limits, prepare_certificate, search_limits};
 use crate::SolveConfig;
 use crate::execution_observation::Ignore;
 use crate::phase_timing::Recorder;
-use zetesis_cpu::Cancellation;
+use zetesis_algebra::Cancellation;
 use zetesis_ferraris::{
     AdmissionLimits, FormulaParts, Node, PositiveError, PositiveResource, Theory, TightError,
     TightPlan, TightPlanLimits, TightResource,

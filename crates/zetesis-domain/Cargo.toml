@@ -9,6 +9,7 @@ publish = false
 
 [dependencies]
 themelios-program.workspace = true
+zetesis-algebra.workspace = true
 
 [dev-dependencies]
 themelios-base.workspace = true

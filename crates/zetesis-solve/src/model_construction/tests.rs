@@ -2,7 +2,7 @@
 
 use super::{Account, Failure};
 use crate::{ModelConstructionStop, SolveConfig, SolveError};
-use zetesis_cpu::{Cancellation, Stop};
+use zetesis_algebra::{Cancellation, Stop};
 use zetesis_test_support::programs::model;
 
 #[test]

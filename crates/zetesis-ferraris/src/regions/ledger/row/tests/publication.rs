@@ -23,10 +23,11 @@ fn expected_effects(source: &Literals, held: &[u64], cut: &[u64]) -> Vec<Effect>
 
 fn publish(row: &Row, held: &[u64], cut: &mut [u64]) -> Vec<Effect> {
     let mut cursor = OutputCursor::default();
-    let mut work = Work::new(u64::MAX);
+    let mut work = Meter::local(u64::MAX);
     let mut effects = Vec::new();
     while let Some((atom, present)) = row
         .next_publication_output(&mut cursor, held, cut, &mut work)
+        .map_err(zetesis_algebra::Failure::into_stop)
         .unwrap()
     {
         assert!(!present, "these fixtures learn absences only");
@@ -67,10 +68,11 @@ fn expected_signed_effects(source: &Literals, held: &[u64], cut: &[u64]) -> Vec<
 
 fn publish_signed(row: &Row, held: &mut [u64], cut: &mut [u64]) -> Vec<Effect> {
     let mut cursor = OutputCursor::default();
-    let mut work = Work::new(u64::MAX);
+    let mut work = Meter::local(u64::MAX);
     let mut effects = Vec::new();
     while let Some((atom, present)) = row
         .next_publication_output(&mut cursor, held, cut, &mut work)
+        .map_err(zetesis_algebra::Failure::into_stop)
         .unwrap()
     {
         if bit(if present { &*cut } else { &*held }, atom) {
@@ -196,22 +198,24 @@ fn settled_packed_outputs_charge_only_their_words() {
     let cut = [u64::MAX; 2];
     for (row, expected_visits, expected_reads) in [(&compact, 0, 2), (&scalar, 64, 64)] {
         let mut cursor = OutputCursor::default();
-        let mut work = Work::new(u64::MAX);
+        let mut work = Meter::local(u64::MAX);
         let mut visited = 0;
         while row
             .next_publication_output(&mut cursor, &held, &cut, &mut work)
+            .map_err(zetesis_algebra::Failure::into_stop)
             .unwrap()
             .is_some()
         {
             visited += 1;
         }
         assert_eq!(visited, expected_visits);
-        assert_eq!(work.spent(), expected_reads);
+        assert_eq!(work.charged(), expected_reads);
         assert_eq!(
-            row.next_publication_output(&mut cursor, &held, &cut, &mut work),
+            row.next_publication_output(&mut cursor, &held, &cut, &mut work)
+                .map_err(zetesis_algebra::Failure::into_stop),
             Ok(None)
         );
-        assert_eq!(work.spent(), expected_reads);
+        assert_eq!(work.charged(), expected_reads);
     }
 }
 
@@ -222,10 +226,11 @@ fn open_packed_outputs_charge_words_and_events() {
     let held = [0; 2];
     let cut = [0; 2];
     let mut cursor = OutputCursor::default();
-    let mut work = Work::new(u64::MAX);
+    let mut work = Meter::local(u64::MAX);
     let mut visited = Vec::new();
     while let Some(atom) = row
         .next_publication_output(&mut cursor, &held, &cut, &mut work)
+        .map_err(zetesis_algebra::Failure::into_stop)
         .unwrap()
     {
         visited.push(atom);
@@ -234,7 +239,7 @@ fn open_packed_outputs_charge_words_and_events() {
         visited,
         (16..80).map(|atom| (atom, false)).collect::<Vec<_>>()
     );
-    assert_eq!(work.spent(), 66);
+    assert_eq!(work.charged(), 66);
 }
 
 #[test]
@@ -249,39 +254,44 @@ fn publication_refusal_keeps_the_unread_output() {
         }),
         packed(&source),
     ] {
-        let mut complete = Work::new(u64::MAX);
+        let mut complete = Meter::local(u64::MAX);
         let mut cursor = OutputCursor::default();
         let mut wanted = Vec::new();
         while let Some(atom) = row
             .next_publication_output(&mut cursor, &held, &cut, &mut complete)
+            .map_err(zetesis_algebra::Failure::into_stop)
             .unwrap()
         {
             wanted.push(atom);
         }
         for failure in [Stop::WorkLimit, Stop::Cancelled, Stop::Deadline] {
-            for prefix in 0..complete.spent() {
+            for prefix in 0..complete.charged() {
                 let mut permits = SinglePermits::new(prefix, failure);
-                let mut work = Work::reserved(&mut permits);
+                let mut work = Meter::reserved(&mut permits);
                 let mut cursor = OutputCursor::default();
                 let mut visited = Vec::new();
                 let result = loop {
-                    match row.next_publication_output(&mut cursor, &held, &cut, &mut work) {
+                    match row
+                        .next_publication_output(&mut cursor, &held, &cut, &mut work)
+                        .map_err(zetesis_algebra::Failure::into_stop)
+                    {
                         Ok(Some(atom)) => visited.push(atom),
                         other => break other,
                     }
                 };
                 assert_eq!(result, Err(failure));
-                assert_eq!(work.spent(), prefix);
+                assert_eq!(work.charged(), prefix);
                 assert_eq!(visited, wanted[..visited.len()]);
-                let mut resumed = Work::new(u64::MAX);
+                let mut resumed = Meter::local(u64::MAX);
                 while let Some(atom) = row
                     .next_publication_output(&mut cursor, &held, &cut, &mut resumed)
+                    .map_err(zetesis_algebra::Failure::into_stop)
                     .unwrap()
                 {
                     visited.push(atom);
                 }
                 assert_eq!(visited, wanted);
-                assert_eq!(work.spent() + resumed.spent(), complete.spent());
+                assert_eq!(work.charged() + resumed.charged(), complete.charged());
             }
         }
     }

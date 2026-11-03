@@ -1,3 +1,5 @@
+use zetesis_algebra::Meter;
+
 use super::*;
 use crate::{EvaluationLimits, EvaluationWorkspace, test_support::world};
 
@@ -19,14 +21,26 @@ fn checked_positive_facts_leave_only_unknown_coordinates() {
     let owner = supported_constraint();
     let facts = checked_facts(&owner);
     let cancellation = Cancellation::default();
-    assert!(facts.contains(0, &mut budget(&cancellation)).unwrap());
-    assert!(facts.contains(1, &mut budget(&cancellation)).unwrap());
-    assert!(!facts.contains(2, &mut budget(&cancellation)).unwrap());
+    assert!(
+        facts
+            .contains(0, &mut budget(&mut Meter::local(u64::MAX), &cancellation))
+            .unwrap()
+    );
+    assert!(
+        facts
+            .contains(1, &mut budget(&mut Meter::local(u64::MAX), &cancellation))
+            .unwrap()
+    );
+    assert!(
+        !facts
+            .contains(2, &mut budget(&mut Meter::local(u64::MAX), &cancellation))
+            .unwrap()
+    );
     let raw = source::clause(
         &owner,
         2,
         &mut Storage::default(),
-        &mut budget(&cancellation),
+        &mut budget(&mut Meter::local(u64::MAX), &cancellation),
     )
     .unwrap()
     .unwrap();
@@ -36,7 +50,7 @@ fn checked_positive_facts_leave_only_unknown_coordinates() {
         &facts,
         2,
         &mut Storage::default(),
-        &mut budget(&cancellation),
+        &mut budget(&mut Meter::local(u64::MAX), &cancellation),
     )
     .unwrap()
     .unwrap();
@@ -68,7 +82,7 @@ fn checked_positive_facts_leave_only_unknown_coordinates() {
             conditioned.support,
             (&[4, 0], true),
             &mut Storage::default(),
-            &mut budget(&cancellation)
+            &mut budget(&mut Meter::local(u64::MAX), &cancellation)
         )
         .unwrap()
     );
@@ -80,7 +94,7 @@ fn checked_positive_facts_leave_only_unknown_coordinates() {
             conditioned.support,
             (&[4, 0], false),
             &mut Storage::default(),
-            &mut budget(&cancellation)
+            &mut budget(&mut Meter::local(u64::MAX), &cancellation)
         )
         .unwrap()
     );
@@ -101,7 +115,7 @@ fn a_negated_checked_fact_makes_the_clause_vacuous() {
             &owner,
             1,
             &mut Storage::default(),
-            &mut budget(&cancellation)
+            &mut budget(&mut Meter::local(u64::MAX), &cancellation)
         )
         .unwrap()
         .is_some()
@@ -112,7 +126,7 @@ fn a_negated_checked_fact_makes_the_clause_vacuous() {
             &facts,
             1,
             &mut Storage::default(),
-            &mut budget(&cancellation)
+            &mut budget(&mut Meter::local(u64::MAX), &cancellation)
         )
         .unwrap()
         .is_none()
@@ -150,7 +164,14 @@ fn conditioning_preserves_raw_duplicate_and_support_limits() {
         let facts = checked_facts(&owner);
         let cancellation = Cancellation::default();
         for atom in 0..atoms {
-            assert!(facts.contains(atom, &mut budget(&cancellation)).unwrap());
+            assert!(
+                facts
+                    .contains(
+                        atom,
+                        &mut budget(&mut Meter::local(u64::MAX), &cancellation)
+                    )
+                    .unwrap()
+            );
         }
         // Conditioning first would erase every literal and incorrectly admit
         // a source rejected by the unchanged raw grammar.
@@ -159,7 +180,7 @@ fn conditioning_preserves_raw_duplicate_and_support_limits() {
                 &owner,
                 atoms,
                 &mut Storage::default(),
-                &mut budget(&cancellation)
+                &mut budget(&mut Meter::local(u64::MAX), &cancellation)
             )
             .unwrap()
             .is_none()
@@ -170,7 +191,7 @@ fn conditioning_preserves_raw_duplicate_and_support_limits() {
                 &facts,
                 atoms,
                 &mut Storage::default(),
-                &mut budget(&cancellation)
+                &mut budget(&mut Meter::local(u64::MAX), &cancellation)
             )
             .unwrap()
             .is_none()
@@ -193,7 +214,7 @@ fn eight_known_atoms_retain_an_empty_refuting_clause() {
         &owner,
         8,
         &mut Storage::default(),
-        &mut budget(&cancellation),
+        &mut budget(&mut Meter::local(u64::MAX), &cancellation),
     )
     .unwrap()
     .unwrap();
@@ -203,7 +224,7 @@ fn eight_known_atoms_retain_an_empty_refuting_clause() {
         &facts,
         8,
         &mut Storage::default(),
-        &mut budget(&cancellation),
+        &mut budget(&mut Meter::local(u64::MAX), &cancellation),
     )
     .unwrap()
     .unwrap();
@@ -218,7 +239,7 @@ fn eight_known_atoms_retain_an_empty_refuting_clause() {
             conditioned.support,
             (&[0, 0], true),
             &mut Storage::default(),
-            &mut budget(&cancellation)
+            &mut budget(&mut Meter::local(u64::MAX), &cancellation)
         )
         .unwrap()
     );
@@ -236,7 +257,7 @@ fn conditioning_rejects_equal_foreign_fact_owners() {
         &facts,
         2,
         &mut Storage::default(),
-        &mut budget(&cancellation),
+        &mut budget(&mut Meter::local(u64::MAX), &cancellation),
     )
     .unwrap()
     .unwrap();
@@ -246,7 +267,7 @@ fn conditioning_rejects_equal_foreign_fact_owners() {
             &foreign_facts,
             2,
             &mut Storage::default(),
-            &mut budget(&cancellation)
+            &mut budget(&mut Meter::local(u64::MAX), &cancellation)
         )
         .unwrap()
         .is_none()
@@ -259,7 +280,7 @@ fn conditioning_rejects_equal_foreign_fact_owners() {
             record.support,
             (&[4, 0], true),
             &mut Storage::default(),
-            &mut budget(&cancellation)
+            &mut budget(&mut Meter::local(u64::MAX), &cancellation)
         )
         .unwrap()
     );
@@ -275,7 +296,7 @@ fn conditioned_source_and_replay_preserve_refusal_prefixes() {
         &facts,
         2,
         &mut Storage::default(),
-        &mut budget(&cancellation),
+        &mut budget(&mut Meter::local(u64::MAX), &cancellation),
     )
     .unwrap()
     .unwrap();
@@ -298,15 +319,18 @@ fn conditioned_source_and_replay_preserve_refusal_prefixes() {
                     .map(|value| value.is_some())
             }
         };
-        let mut full = budget(&cancellation);
+        let mut full_work = Meter::local(u64::MAX);
+        let mut full = budget(&mut full_work, &cancellation);
         assert_eq!(run(&mut full), Ok(true));
         for maximum in 0..full.work() {
-            let mut limited = Budget::new(Work::new(u64::MAX), maximum, usize::MAX, &cancellation);
+            let mut limited_work = Meter::local(u64::MAX);
+            let mut limited = Budget::new(&mut limited_work, maximum, usize::MAX, &cancellation);
             assert_eq!(run(&mut limited), Err(BudgetError::WorkDeclined));
             assert!(limited.work() <= maximum);
         }
         for maximum in 0..usize::try_from(full.peak_bytes()).unwrap() {
-            let mut limited = Budget::new(Work::new(u64::MAX), u64::MAX, maximum, &cancellation);
+            let mut limited_work = Meter::local(u64::MAX);
+            let mut limited = Budget::new(&mut limited_work, u64::MAX, maximum, &cancellation);
             assert!(
                 matches!(run(&mut limited),Err(BudgetError::StorageDeclined {required,limit}) if limit==maximum && required>maximum as u128)
             );

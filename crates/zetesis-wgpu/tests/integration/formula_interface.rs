@@ -6,6 +6,8 @@
 fn module() -> naga::Module {
     let module = naga::front::wgsl::parse_str(concat!(
         include_str!("../../src/formula.wgsl"),
+        include_str!("../../src/words.wgsl"),
+        include_str!("../../src/formula_graph/truth.wgsl"),
         include_str!("../../src/formula_graph/numeric.wgsl"),
         include_str!("../../src/formula/numeric.wgsl"),
         include_str!("../../src/formula/subset.wgsl")
@@ -58,7 +60,7 @@ fn formula_preserves_the_declared_bindings() {
             ("params", 0, 0, AddressSpace::Uniform),
             ("nodes", 0, 1, read),
             ("roots", 0, 2, read),
-            ("seeds", 0, 3, read),
+            ("candidates", 0, 3, read),
             ("frozen", 0, 4, write),
             ("domains", 0, 5, write),
             ("results", 0, 6, write),

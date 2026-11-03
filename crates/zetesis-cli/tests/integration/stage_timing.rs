@@ -1,9 +1,9 @@
 //! Actual routes expose exclusive typed stages without changing model output.
 use crate::support::options::serial_with_statistics as options;
+use zetesis_algebra::Cancellation;
 use zetesis_cli::{
     Completion, GroundingMode, PhaseTimings, SolvePhase, SolveStage, run_detailed_with_diagnostics,
 };
-use zetesis_cpu::Cancellation;
 
 fn partition(timings: &PhaseTimings) {
     let stages = timings.stages;

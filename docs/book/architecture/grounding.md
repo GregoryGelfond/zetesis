@@ -2046,222 +2046,22 @@ growth overlap, excluding opaque hash-control and allocator storage. It is not
 a process-memory bound. Snapshot construction visits predicates without
 revisiting their rows.
 
-Scalar reduct closure uses the same per-predicate catalog. Before each round it
-prepares a complete ordered ID view for each changed extent and reuses that view
-for the round's joins. The view is a stack of sorted runs of row
-IDs. The first preparation of a relation traverses its O(n) row IDs into one
-run. A later preparation promotes the previous run to a level, merges the top
-two levels while the newer is at least half the older, so the levels shrink
-geometrically and number O(log n), and sorts the `d` rows appended since into
-a new run. A merge of two runs costs their combined length in charged
-comparisons and copies, and each row is merged O(log n) times over a whole
-derivation, so the views cost O(n log n) charged work in all and no
-preparation copies the extent; a bound-prefix window is one binary search per
-run. The levels are the rows present before the last appending preparation and
-the run is what it added, both borrowable until the next one. Row access
-within a run is constant time and borrows the authoritative tuple. A duplicate
-or refused insertion preserves an existing prepared extent; a successful
-append invalidates it.
+These catalogs belong to possible-support construction. A completed support
+owner is published only after a complete round adds no new head. Formula
+emission and hybrid constraint checking borrow that support; its possible rows
+do not establish candidate truth or reduct membership. Prepared hybrid rules
+retain ordering, necessary pattern rows and successful totality evidence for
+one exact completed support owner, with no candidate truth or traversal cursor.
 
-A predicate whose every argument is bounded is held as a dense relation
-instead of a catalog. Preparation infers an upper bound on each argument's
-values over the admitted templates: a constant in a head contributes itself, a
-head variable ranges within the intersection of the bounds of the positive
-body positions binding it, gates and filters bind nothing, and the least
-fixed point is finite because every value is a constant of the program. An
-argument wider than the ceiling is unknown, and unknown absorbs. Where every
-argument of a predicate is bounded and the product of the widths fits
-`PreparationLimits::max_dense_atoms`, the relation is a bit array over the
-mixed-radix index of the arguments' ranks, the first argument most
-significant, each argument's values kept in canonical order so that position
-order is canonical atom order. Membership is a bit test, insertion a bit set,
-and the rows matching a bound prefix are one contiguous range of positions,
-so a window is a scan of that range's words rather than two binary searches;
-no atom is allocated or compared by value until the model is assembled, and
-the model is read off the bits in order without sorting. The New rows of a
-round are a second bit array cleared when the cutoff advances, over the words
-the round touched, so an unchanged relation costs a round one unit whatever
-its size; Old is present and not new. New-row scans intersect their prefix
-window with that touched-word range: outer words are known zero. Scalar and
-block scans retain the original tuple positions and body-to-head offsets;
-this adds no storage. A round records a derived head of a
-dense relation as a pending bit: the key is ranked once, the position is
-tested against the relation, and an absent position is marked in a row of
-words the closure workspace keeps for the layout, beside the catalogs the
-round's joins borrow. The marks are disjoint from the relation, so their
-number is the round's count of new dense atoms and the derived-atom limit is
-judged as each is marked. After the round the marked words are joined into
-the relation and into New, and cleared, so nothing of a round or a candidate
-remains in the pending marks; every dense relation is created when the closure
-starts, so that a round never changes the catalogs. `Statistics::dense_heads`
-counts the heads recorded this way. Where a rule's innermost occurrence is
-over a dense relation, its last argument is a variable that nothing else in
-the rule mentions but the head, as the head's own last argument, every other
-argument of the two patterns is a constant or bound by then, and the two
-relations list that argument's values alike, the join does not bind the
-occurrence's rows one by one: the rows matching the bound prefix are one
-block of the relation, their heads are one block of the head's relation,
-place for place, and the block of rows is joined into the head's pending marks
-a word at a time, leaving out the positions the head holds or the round has
-marked. No gate or filter reads the variable, so every guard was judged
-before the depth was reached, and each row of the block is one binding of
-the rule; the new marks are counted against the derived-atom limit. This is
-the row operation of a transitive closure over a boolean matrix. The plan is
-fixed at preparation for every occurrence, since the occurrence a round
-visits innermost depends on the one it pivots on; a rule that fails a clause
-keeps the binding of single rows, as does a join that follows membership.
-`Statistics::block_steps` counts the blocks joined, whose rows are counted as
-bindings and not as tuple probes. The bounds are an upper domain of every
-derivable head, so a head outside them is an admitted-program invariant
-violation, not a missed row, and the closure over dense relations holds
-exactly the atoms the closure over catalogs would, step for step; the family
-tests check this atom for atom with dense relations enabled and disabled.
-Whether a predicate is laid out depends on its bounds and the ceiling alone,
-never on how many tuples it holds: a relation sparse in a wide box is dense
-all the same, at the cost of its words, and the ceiling is the one control.
-It is `PreparationLimits::max_dense_atoms`, 16,777,216 positions by default,
-and a session takes that default: nothing outside the library sets it.
-Every other predicate keeps its catalog, and the preparation receipt reports
-how many predicates were laid out.
-
-Scalar closure first visits every template against empty derived truth, including
-facts, zero-positive rules and constraints under the frozen candidate. In each
-later round, a binding is visited at its first source occurrence containing a new
-row: earlier occurrences select Old rows, that occurrence selects New rows, and
-later occurrences select Current rows. These disjoint choices preserve repeated
-predicates and source occurrences. The new occurrence is joined first, so its
-few rows bind the variables and every other occurrence is entered through a
-bound-prefix window, and only templates whose body names a predicate with new
-rows are visited at all, from an index prepared once per program; a round
-therefore costs the new rows times their joins, never a scan of an unchanged
-relation or a visit to a rule that cannot bind. Newness uses stable per-predicate insertion
-IDs, never canonical ranks, which can move when a smaller tuple is appended.
-For mixed extents, the Old rows are the catalog's levels and the New rows its
-newest run, each run in canonical order and each sharing the sole tuple payload
-owner. The round cutoff advances after the round's joins and before its heads
-are appended, so the levels of the next preparation hold exactly the Old
-extent; the partition keeps only that cutoff and checks it against the runs.
-All-old and all-new extents reuse every run or none.
-
-A round completes every selected binding and constraint before advancing its
-frontier and publishing pending heads. Frozen gates and pure equality filters
-preserve the eligibility of old positive bindings. Their consequences are
-already present, and earlier constraint triggers remain latched. Together with
-bootstrap and completed earlier scans, the final no-change round establishes
-complete source coverage. The final gate-carrier comparison still checks both
-directions, even for a rejected candidate. Failure returns no partial closure
-and discards dirty workspace history. Public `source::scan` and shared-world
-source traversal retain their complete ordered scans; this scalar schedule does
-not change the answer-set definition or claim device delta execution.
-
-[`DeltaRounds`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/DeltaRounds.lean)
-separates three mathematical obligations: first-new partitions cover each new
-binding, old enabled heads are already in current truth, and the retained
-constraint latch equals the old family's triggers. The
-[reading guide](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/guide/delta-rounds.md)
-maps those premises to scalar catalog cutoffs, complete bootstrap and round
-publication. These laws preserve a consequence step and constraint verdict;
-they do not prove Rust row decoding, interruption handling, a termination bound
-or answer-set membership. Those require their own representation and completed
-execution arguments.
-
-Completed scalar `Statistics::tuple_probes` counts source rows offered to the
-whole-row matcher, including rejected rows. It excludes prefix-search comparisons
-and catalog membership operations. Each probe belongs to a charged join-loop
-step. `work` also includes canonical and delta-view preparation, initialization,
-ID reads and writes, pivot checks, pending publication and final completion.
-Fewer emitted bindings alone do not establish fewer probes or less total work;
-none of these counters establishes an elapsed-time gain.
-
-`zetesis_cpu::PreparedQueries` inspects one exact admitted `Program` once to
-bound the assignment, cursor and undo buffers used by its joins, to infer its
-argument bounds and to choose its dense layouts, which every candidate's
-closure shares and admits first. A ground head's complete ordered tuple has a
-fixed position in its dense layout. Preparation retains this position so later
-firings need not rank its arguments again. Each candidate still visits the
-source, checks its guards and marks its own consequences; variable and tree
-heads keep their existing operations. The optional coordinate per template
-adds linear storage, admitted as preparation bytes. Preparation work and bytes
-have independent finite limits and a separate receipt. A
-`ClosureWorkspace` retains one Program-scoped canonical tuple authority and
-reusable relation, cursor/undo and old/new ID metadata between candidates.
-Assignments borrow terms only within one immutable round. Per-predicate catalogs
-hold membership and equality/order metadata over that authority; dense relations
-hold coordinate bits over the same frozen Program vocabulary.
-
-Final assembly publishes the selected discovery positions in semantic order,
-then constructs the result `Model` without exporting owned atoms. The workspace
-retains discovered identities and capacity, while resetting relation membership,
-frontiers, dense truth and pending marks. No candidate truth survives completion.
-Previously returned models keep their immutable prefixes. Any failed check
-discards dirty workspace state before reuse. A different `PreparedQueries`
-owner retires the old workspace, even for the same Program: its inferred axes
-and block plans may differ. The shared immutable layout owner authenticates
-that boundary. Its separately allocated header is included in preparation bytes.
-
-The one-shot `check_view` uses the same evaluator and charges preparation plus
-candidate work to its existing cumulative work limit. Reused preparation has a
-separate work receipt, so exact resource cutoffs can differ while completed
-closures, constraints and seed checks agree. Retained capacities are admitted
-under each prepared call's current limits, including an empty program. The
-one-shot empty-program path constructs no preparation or workspace and retains
-its vacuous zero-round result. This removes repeated allocation and dimension
-inspection; it does not establish a timing gain. Both entry points use the
-same scalar delta schedule described above.
-
-`BatchOracle` retains that preparation and a bounded set of workspaces across
-independent batches. Its indexed borrowed seed producer is divided into at most
-one contiguous range per configured worker. Each range has one exclusive
-workspace and its candidates run sequentially; range tasks may be stolen by
-Rayon. Result order and candidate occurrences are preserved without materializing
-seed views. This schedule bounds owners directly, independently of worker thread
-identities. It can balance uneven candidate costs differently from per-candidate
-work stealing. Shared-round and static execution keep their separate algorithms
-and the same nonblocking batch admission slot.
-
-Batch preparation uses `PreparationLimits`; a preparation stop is distinct from
-an individual candidate stop. `query_statistics` reports completed preparation
-builds and adoptions, assigned slots retained from earlier submissions, actual
-cached capacity and the latest admitted collective envelope. The envelope counts
-the separately allocated preparation header once, all idle workspace capacity, and each assigned
-workspace's maximum of retained capacity and its remaining per-closure allowance.
-A workspace's per-closure allowance already counts the prepared queries' retained
-bytes, so those bytes are subtracted before combining owners. Actual unused workspace-vector
-capacity and conservative replacement overlap are included. Lowering a limit
-can refuse already-retained capacity; even an empty batch checks an existing
-cache, while an empty batch never creates preparation. Final result retention,
-source payload, allocator/tree overhead and worker stacks remain separate. These
-receipts describe bounded ownership and reuse, not timing or process RSS.
-
-In an independent lazy CPU session, optional candidate narrowing supplies its
-completed immutable `PreparedQueries` to the mandatory oracle. The oracle adopts
-that exact owner only when the dense-layout policy agrees, the recorded work fits
-its preparation limit, and construction completed under no wider byte allowance.
-Otherwise it prepares the program through its ordinary path. Narrowing and the
-oracle retain separate mutable workspaces; shared queries contain no candidate
-truth or membership verdict. An optional resource-limit refusal permits ordinary
-mandatory checking; cancellation and deadlines still stop the session. Empty
-batches adopt nothing. `preparation_adoptions` counts adoption events; reusing
-the currently retained owner adds none. `preparation_builds` counts construction
-by the oracle itself.
-The preparation receipt still reports the original construction work. This reuse
-does not change eager, shared-round or device execution.
-
-`zetesis_cpu::Limits::max_closure_bytes` bounds each scalar closure's canonical
-authority, relation indexes/columns and prepared-order runs, dense words, pending
-discovery IDs/marks, query assignment/cursor/undo capacities, and operation scratch
-with conservative growth overlap. The authority counts canonical payload once;
-final catalog and model-selection metadata are admitted while being assembled.
-Its default is 128 MiB; zero is a zero-byte allowance. `peak_closure_bytes` is the
-maximum observed named envelope of a completed check. Relation capacities are
-summed as each relation is created, grows or is cleared, so reading the envelope
-does not visit every relation; debug builds recompute the sum on each read.
-Earlier results retained by the caller, allocator bookkeeping and Arc counters
-remain outside this per-check ledger. A successful allocation can exceed its
-proposed reservation before the actual-capacity check refuses it. A stopped
-scalar check returns no partial `Check` or statistics. Collective worker
-admission and result retention have separate owners; this is not a total
-process-memory bound.
+Finite-table queries use
+[`zetesis_core::table::Table`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-core/src/table.rs).
+Preparation borrows an immutable typed relation and builds value-to-row bitsets.
+The formula query workspace prepares each table index on demand; ordinary table
+joins and necessary finite-domain selection use the same table and mask
+operations. Each selection owns its row mask, while value projections borrow the
+prepared table. Typed comparison, work admission and cancellation remain part
+of these operations. A refusal publishes no partial table or selection and
+preserves its completed work and capacity receipts.
 
 `FormulaLimits::max_support_bytes` bounds one evolving canonical support authority
 and its current prefix, relation/equality metadata, postings, borrowed snapshot
@@ -2296,9 +2096,10 @@ published row. Clearing a catalog retains its reusable capacity. There is no
 retained unpacked copy. Headers, indexes and allocator capacity still count, so
 narrower cells alone do not establish a smaller complete owner or faster query.
 
-The lazy source grounder retains its candidate-specific relation and world-mask
-contracts; this eager support representation does not make a possible atom true.
-Queries and selections borrow their exact relation owner. A selection validates
+Hybrid constraint checks map completed support rows to the formula's atom IDs
+and filter them by the current region's decisions. They retain no truth from an
+earlier region or model; the possible-support owner remains unchanged. Queries
+and selections borrow their exact relation owner. A selection validates
 ordered positions; it does not establish complete grounding or answer-set
 membership. Equality filtering is complete relative to its supplied input rows:
 

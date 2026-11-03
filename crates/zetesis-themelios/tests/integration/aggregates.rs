@@ -3,7 +3,7 @@
 use std::collections::BTreeSet;
 
 use crate::support::atom_models::Models;
-use zetesis_cpu::Cancellation;
+use zetesis_algebra::Cancellation;
 use zetesis_reference_support::{admit, formula, resource_limits};
 use zetesis_stable::{Limits, StableModels};
 use zetesis_test_support::repository;

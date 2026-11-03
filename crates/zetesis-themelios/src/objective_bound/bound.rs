@@ -1,7 +1,7 @@
 use std::borrow::Cow;
 use std::collections::BTreeMap;
 
-use zetesis_cpu::Cancellation;
+use zetesis_algebra::Cancellation;
 use zetesis_ferraris::{
     AdmissionLimits, AggregateComparison, AggregateElement, AggregateFamilyBuild,
     AggregateFamilyLimits, AggregateGuard, FormulaNodes, FormulaParts, NodeView,
@@ -11,7 +11,7 @@ use zetesis_objective::Score;
 
 use super::{
     ObjectiveBound, ObjectiveBoundError, ObjectiveBoundErrorKind as Kind, ObjectiveBoundLimits,
-    ObjectiveBoundResource, ObjectiveBoundStatistics, ObjectivePlan, ObjectivePlanLimits, Work,
+    ObjectiveBoundResource, ObjectivePlan, ObjectivePlanLimits, Work,
 };
 
 pub(super) mod normalize;
@@ -32,17 +32,15 @@ pub(super) fn compile(
     limits: ObjectiveBoundLimits,
     cancellation: &Cancellation,
 ) -> Result<ObjectiveBound, ObjectiveBoundError> {
-    let mut work = Work {
-        cancellation,
-        limits: ObjectivePlanLimits {
+    let mut work = Work::new(
+        ObjectivePlanLimits {
             max_nodes: limits.aggregate.max_nodes,
             max_operands: limits.aggregate.max_operands,
             max_work: limits.max_work,
             ..ObjectivePlanLimits::default()
         },
-        template: None,
-        statistics: ObjectiveBoundStatistics::default(),
-    };
+        cancellation,
+    );
     work.tick()?;
     let mut nodes = copy(&plan.nodes, &mut work)?;
     let root = lexicographic(
@@ -75,16 +73,11 @@ pub(super) fn compile(
     let exact = ObjectiveBound {
         original: plan.original.clone(),
         theory,
-        statistics: work.statistics,
+        statistics: work.statistics(),
         choice_failure: None,
     };
     Ok(super::choices::strengthen(
-        plan,
-        exact,
-        incumbent,
-        comparison,
-        limits,
-        cancellation,
+        plan, exact, incumbent, comparison, limits, &mut work,
     ))
 }
 
@@ -120,7 +113,7 @@ fn copy(parts: &FormulaParts, work: &mut Work<'_>) -> Result<FormulaNodes, Objec
             _ => Kind::Theory(error),
         })
     })?;
-    work.statistics.nodes = copied.nodes().len();
+    work.nodes = copied.nodes().len();
     Ok(FormulaNodes::new(copied))
 }
 
@@ -186,7 +179,7 @@ pub(super) fn family(
     let mut aggregate = limits.aggregate;
     aggregate.max_work = aggregate
         .max_work
-        .min(limits.max_work - work.statistics.work);
+        .min(limits.max_work - work.meter.charged());
     let result = append_aggregate_family(
         nodes,
         elements,
@@ -205,7 +198,7 @@ pub(super) fn family(
         }
     };
     work.account(build.statistics().work)?;
-    work.statistics.nodes = nodes.view().len();
+    work.nodes = nodes.view().len();
     Ok(build)
 }
 

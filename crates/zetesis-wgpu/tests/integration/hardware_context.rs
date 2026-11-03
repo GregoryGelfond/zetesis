@@ -3,12 +3,12 @@
 use crate::support::physical;
 
 use std::time::{Duration, Instant};
+use zetesis_algebra::{Cancellation, Stop};
 use zetesis_backend::{BatchComputeTime, ComputeTimingStatus, GpuApi};
 use zetesis_core::{
     Atom, Predicate, Value,
     relation::{Limits, Relation},
 };
-use zetesis_cpu::{Cancellation, Stop};
 use zetesis_ferraris::{
     AdmissionLimits, Interpretation, Node, SlateId, SlateRef, Theory, TightPlan, TightPlanLimits,
 };
@@ -98,8 +98,8 @@ fn compose(backend: GpuApi) {
         let checks = formula
             .propagate_batch(&theory, &candidates, FormulaLimits::default())
             .unwrap();
-        assert_eq!(checks[0].verdict(), FormulaVerdict::NotModel);
-        assert_eq!(checks[1].verdict(), FormulaVerdict::NoProperSubset);
+        assert_eq!(checks[0].verdict(), &FormulaVerdict::NotModel);
+        assert_eq!(checks[1].verdict(), &FormulaVerdict::NoProperSubset);
         check_timing_sample(timing_enabled, formula.reported_compute_time());
         let stats = formula.last_batch_stats().unwrap();
         assert_eq!(stats.theory_uploaded, repetition == 0);
@@ -127,7 +127,7 @@ fn compose(backend: GpuApi) {
     let checks = formula
         .propagate_batch(&theory, &candidates, FormulaLimits::default())
         .unwrap();
-    assert_eq!(checks[1].verdict(), FormulaVerdict::NoProperSubset);
+    assert_eq!(checks[1].verdict(), &FormulaVerdict::NoProperSubset);
     assert!(!formula.last_batch_stats().unwrap().theory_uploaded);
     check_timing_sample(timing_enabled, formula.reported_compute_time());
     assert!(

@@ -9,8 +9,8 @@ use crate::support::clingo_reports::{enumerated_or_refused_unsafe, expected};
 use crate::support::finite_bindings::{exhaustive, holds, native, remap, values};
 use serde_json::Value as Json;
 use themelios_base::source::SourceId;
+use zetesis_algebra::Cancellation;
 use zetesis_clingo_support as oracle;
-use zetesis_cpu::Cancellation;
 use zetesis_themelios::{
     AdmissionFailure, AdmissionOptions, AdmittedFormula, BundleAdmissionOptions, ExpansionFailure,
     ExpansionLimits, FormulaFailure, FormulaLimits, FormulaResource, ProfileFeature,

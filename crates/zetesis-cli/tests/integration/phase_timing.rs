@@ -1,11 +1,11 @@
 //! Actual solve outcomes remain unchanged by optional attempted host timing.
 
 use crate::support::options::serial_with_statistics;
+use zetesis_algebra::Cancellation;
 use zetesis_cli::{
     Completion, Options, PhaseTimings, Report, RunError, SolvePhase, StatisticsView,
     run_with_diagnostics,
 };
-use zetesis_cpu::Cancellation;
 
 fn options(arguments: &[&str], statistics: bool) -> Options {
     let mut options = serial_with_statistics(arguments, statistics);

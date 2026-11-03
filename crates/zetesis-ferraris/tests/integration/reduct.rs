@@ -2,7 +2,7 @@
 
 use crate::support::worlds::interpretation;
 use std::time::Instant;
-use zetesis_cpu::{Cancellation, Stop};
+use zetesis_algebra::{Cancellation, Stop};
 use zetesis_ferraris::{
     AdmissionError, AdmissionLimits, EvaluationLimits, EvaluationWorkspace, FrozenReduct,
     Interpretation, Limits, Node, Theory, Verdict, check, models, models_reduct,

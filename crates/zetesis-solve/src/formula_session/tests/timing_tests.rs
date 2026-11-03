@@ -7,7 +7,7 @@ use crate::{
     AnswerSelection, Backend, ExecutionResources, Oracle, SolveConfig, SolveMeasurements,
     SolvePhase,
 };
-use zetesis_cpu::Cancellation;
+use zetesis_algebra::Cancellation;
 use zetesis_reference_support::formula;
 use zetesis_stable::{PhaseMeasurement, SearchPhaseTimings};
 

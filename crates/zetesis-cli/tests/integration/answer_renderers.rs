@@ -3,13 +3,13 @@
 use std::{io, num::NonZeroUsize};
 use zetesis_reference_support::formula;
 
+use zetesis_algebra::{Cancellation, Stop};
 use zetesis_cli::{
     AnswerRenderer, AnswerView, Backend, ColorMode, Completion, HumanRenderer, JsonRenderer,
     PreparedInput, PublicationConfig, PublicationOutcome, PublicationView, RunError,
     SemanticOutcome, SummaryDelivery, publish_prepared,
 };
 use zetesis_core::{Atom, Model, ValueLimits};
-use zetesis_cpu::{Cancellation, Stop};
 use zetesis_themelios::observation::Symbol;
 
 fn config() -> PublicationConfig {

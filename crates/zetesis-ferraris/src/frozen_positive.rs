@@ -19,7 +19,7 @@ use std::mem::size_of;
 use crate::{
     EvaluationError, EvaluationLimits, FormulaEvaluation, Interpretation, NodeView, Theory,
 };
-use zetesis_cpu::{Cancellation, Meter, Stop};
+use zetesis_algebra::{Cancellation, Meter, MeterBytes, Stop, words::Words};
 
 #[cfg(test)]
 mod tests;
@@ -90,7 +90,7 @@ pub struct FrozenPositiveWorkspace {
     classes: Vec<Classification>,
     heads: Vec<Option<usize>>,
     queue: Vec<usize>,
-    words: Vec<u64>,
+    words: Words<u64>,
 }
 
 impl FrozenPositiveWorkspace {
@@ -220,7 +220,7 @@ impl FrozenPositiveWorkspace {
         reserve(&mut self.classes, theory.nodes().len())?;
         reserve(&mut self.heads, theory.roots().len())?;
         reserve(&mut self.queue, vertices)?;
-        reserve(&mut self.words, theory.atom_count().div_ceil(64))?;
+        reserve(self.words.storage_mut(), theory.atom_count().div_ceil(64))?;
         storage(self.retained_bytes(), max_bytes)
     }
 
@@ -270,7 +270,7 @@ impl FrozenPositiveWorkspace {
             tick(meter)?;
             next += 1;
             if vertex < atoms {
-                self.words[vertex / 64] |= 1 << (vertex % 64);
+                self.words.insert(vertex);
             } else if vertex >= rules
                 && let Some(head) = self.heads[vertex - rules]
             {
@@ -291,7 +291,7 @@ impl FrozenPositiveWorkspace {
         let mut proper = false;
         for atom in 0..atoms {
             tick(meter)?;
-            let derived = self.words[atom / 64] & (1 << (atom % 64)) != 0;
+            let derived = self.words.contains(atom);
             let candidate = evaluated.interpretation().contains(atom);
             if derived && !candidate {
                 return Err(Stop::InvalidProgram.into());
@@ -309,15 +309,19 @@ impl FrozenPositiveWorkspace {
         let mut words = Vec::new();
         reserve(&mut words, self.words.len())?;
         let simultaneous = base + words.capacity() as u128 * size_of::<u64>() as u128;
-        *peak_bytes = (*peak_bytes).max(simultaneous);
-        storage(simultaneous, max_bytes)?;
+        MeterBytes::observe_peak(simultaneous, max_bytes as u128, peak_bytes).map_err(|_| {
+            EvaluationError::Storage {
+                required: simultaneous,
+                limit: max_bytes,
+            }
+        })?;
         for &word in &self.words {
             tick(meter)?;
             words.push(word);
         }
         Ok(FrozenPositiveOutcome::NonMinimal(Interpretation {
             theory: theory.clone(),
-            words,
+            words: words.into(),
         }))
     }
 
@@ -334,10 +338,10 @@ impl FrozenPositiveWorkspace {
             tick(meter)?;
             self.states.push(State::Inactive);
         }
-        self.words.clear();
+        self.words.storage_mut().clear();
         for _ in 0..theory.atom_count().div_ceil(64) {
             tick(meter)?;
-            self.words.push(0);
+            self.words.storage_mut().push(0);
         }
         for atom in 0..atoms {
             tick(meter)?;
@@ -551,7 +555,7 @@ fn storage(required: u128, limit: usize) -> Result<(), EvaluationError> {
 
 fn tick(meter: &mut Meter<'_>) -> Result<(), EvaluationError> {
     meter.charge().map_err(|error| match error {
-        zetesis_cpu::ChargeError::Stopped(stop) => EvaluationError::Stopped(stop),
-        zetesis_cpu::ChargeError::WorkLimit => EvaluationError::Stopped(Stop::WorkLimit),
+        zetesis_algebra::ChargeError::Stopped(stop) => EvaluationError::Stopped(stop),
+        zetesis_algebra::ChargeError::WorkLimit => EvaluationError::Stopped(Stop::WorkLimit),
     })
 }

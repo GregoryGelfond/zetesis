@@ -3,7 +3,7 @@
 use std::collections::VecDeque;
 use std::num::NonZeroUsize;
 
-use zetesis_cpu::Cancellation;
+use zetesis_algebra::Cancellation;
 use zetesis_ferraris::Interpretation;
 use zetesis_stable::{BatchError, BatchLimits, CompletionExecutor, StableModels};
 
@@ -15,6 +15,8 @@ use crate::{SolveConfig, SolveError};
 mod batching;
 #[cfg(feature = "gpu")]
 pub(crate) mod device;
+#[cfg(feature = "gpu")]
+mod regional;
 #[cfg(all(test, feature = "gpu"))]
 mod lookahead_tests;
 
@@ -61,6 +63,10 @@ pub(crate) struct BatchQueue {
     batching: batching::Batching,
     #[cfg(feature = "gpu")]
     demand: Demand,
+    /// The general GPU route's private run owner. It spans candidate streams
+    /// and keeps raw samples out of cloneable solver statistics.
+    #[cfg(feature = "gpu")]
+    samples: Option<crate::residual_handovers::sampling::RunSamples>,
     #[cfg(feature = "gpu")]
     lookahead: LookaheadReceipts,
     /// The last decoded device submission, when it was checked while the
@@ -107,7 +113,34 @@ impl BatchQueue {
 
     #[cfg(feature = "gpu")]
     pub(crate) fn for_joint_oracle(options: &SolveConfig) -> Result<Self, SolveError> {
-        Self::joint(options, options.completion_workers)
+        let mut queue = Self::joint(options, options.completion_workers)?;
+        queue.samples =
+            crate::residual_handovers::sampling::RunSamples::new(options.max_batch_bytes);
+        Ok(queue)
+    }
+
+    /// Polling copies population counts and, after settlement, bounded cached
+    /// summaries. A snapshot never clones or rearranges a run's raw samples.
+    #[cfg(feature = "gpu")]
+    pub(crate) fn observe_samples(&self, stats: &mut crate::ResidualHandoverStatistics) {
+        if let Some(samples) = &self.samples {
+            stats.samples = Some(samples.snapshot());
+        }
+    }
+
+    #[cfg(feature = "gpu")]
+    pub(crate) fn run_samples_mut(
+        &mut self,
+    ) -> Option<&mut crate::residual_handovers::sampling::RunSamples> {
+        self.samples.as_mut()
+    }
+
+    /// Materialize quantiles at most once, then release both raw reservoirs.
+    #[cfg(feature = "gpu")]
+    pub(crate) fn settle_samples(&mut self) {
+        if let Some(samples) = &mut self.samples {
+            samples.settle();
+        }
     }
 
     #[cfg(feature = "gpu")]
@@ -242,12 +275,84 @@ impl BatchQueue {
                 self.released();
                 return Some(Ok(model));
             }
-            match self.check_slate(models, options, cancellation, phases, device) {
+            let prior = device.handovers().map(|stats| stats.attempts);
+            let result = self.check_slate(models, options, cancellation, phases, device);
+            if let Some(stats) = device.handovers()
+                && Some(stats.attempts) != prior
+            {
+                stats.finish(matches!(result, Ok(false)));
+            }
+            match result {
                 Ok(true) => return None,
                 Ok(false) => {}
                 Err(failure) => return Some(Err(failure)),
             }
         }
+    }
+
+    /// Issue the oldest joint ticket and reserve exactly the output owners for
+    /// its admitted kind. A pre-existing GPU cache is live during proposal.
+    #[cfg(feature = "gpu")]
+    fn begin_device_slate<D: device::SlateDevice>(
+        &mut self,
+        models: &mut StableModels,
+        options: &SolveConfig,
+        device: &mut D,
+    ) -> Result<Option<(zetesis_stable::SlateTicket, regional::CheckedRows, u128)>, Failure> {
+        use zetesis_stable::SlateProposal;
+        let ceiling = options.max_batch_bytes;
+        let resident_before = device.retained_batch_bytes()?;
+        let pending_ceiling = if D::REGIONAL {
+            ceiling
+                .checked_sub(resident_before)
+                .ok_or(Failure::Search(zetesis_stable::Incomplete::PendingBytes))?
+        } else {
+            ceiling
+        };
+        let selected = self
+            .batching
+            .select_within(models, options, pending_ceiling);
+        let limits = BatchLimits {
+            max_candidates: selected,
+            max_pending_bytes: pending_ceiling,
+        };
+        let proposal = models.propose_slate(limits).map_err(Failure::from)?;
+        let new = matches!(proposal, SlateProposal::New(_));
+        let retry = matches!(proposal, SlateProposal::Retry(_));
+        let ticket = match proposal {
+            SlateProposal::New(ticket) | SlateProposal::Retry(ticket) => ticket,
+            SlateProposal::Ahead(ticket) => {
+                self.batching.promoted();
+                ticket
+            }
+            SlateProposal::Exhausted => return Ok(None),
+            _ => return Err(Failure::from(crate::ExecutorError::ForeignBatch)),
+        };
+        if let Some(stats) = device.handovers() {
+            stats.begin(ticket.slate().sequence(), retry);
+        }
+        let count = models
+            .slate(&ticket)
+            .map_err(Failure::from)?
+            .candidates()
+            .len();
+        if new {
+            self.batching.proposed(selected, count);
+        }
+        let pending = if D::REGIONAL {
+            models.pending_batch_bytes().map_err(Failure::Search)?
+        } else {
+            0
+        };
+        let rows = regional::CheckedRows::new(
+            count,
+            if D::REGIONAL {
+                Some((ceiling, pending, resident_before))
+            } else {
+                None
+            },
+        )?;
+        Ok(Some((ticket, rows, pending)))
     }
 
     /// Check and commit one slate; `true` when the stream is exhausted.
@@ -262,54 +367,47 @@ impl BatchQueue {
     ) -> Result<bool, Failure> {
         use crate::phase_timing::SolvePhase;
         use device::PreparedSubmission;
-        use zetesis_stable::SlateProposal;
 
-        let selected = self.batching.select(models, options);
-        let limits = BatchLimits {
-            max_candidates: selected,
-            max_pending_bytes: options.max_batch_bytes,
+        let Some((ticket, mut rows, pending)) = self.begin_device_slate(models, options, device)?
+        else {
+            return Ok(true);
         };
-        let ticket = match models.propose_slate(limits).map_err(Failure::from)? {
-            SlateProposal::New(ticket) => {
-                let proposed = models
-                    .slate(&ticket)
-                    .map_err(Failure::from)?
-                    .candidates()
-                    .len();
-                self.batching.proposed(selected, proposed);
-                ticket
-            }
-            SlateProposal::Ahead(ticket) => {
-                self.batching.promoted();
-                ticket
-            }
-            SlateProposal::Retry(ticket) => ticket,
-            SlateProposal::Exhausted => return Ok(true),
-            _ => return Err(Failure::from(crate::ExecutorError::ForeignBatch)),
-        };
+        let ceiling = options.max_batch_bytes;
         let slate = ticket.slate();
-        let (theory, count) = {
-            let view = models.slate(&ticket).map_err(Failure::from)?;
-            (view.theory().clone(), view.candidates().len())
-        };
-        let mut verdicts = Vec::new();
-        verdicts
-            .try_reserve_exact(count)
-            .map_err(|_| Failure::Search(zetesis_stable::Incomplete::Allocation))?;
+        let view = models.slate(&ticket).map_err(Failure::from)?;
+        let count = view.candidates().len();
+        let theory = view.theory().clone();
+        // The optimizing route stays serial; only enumeration may propose ahead.
+        let enumeration = self.enumerates();
         let mut ahead = None;
-        while verdicts.len() < count {
-            let offset = verdicts.len();
+        while rows.verdicts.len() < count {
+            let offset = rows.verdicts.len();
+            let available = rows.remaining(ceiling, pending, 0)?;
             let view = models.slate(&ticket).map_err(Failure::from)?;
-            let prepared = phases.measure(SolvePhase::GpuHostOracle, || {
-                device.prepare(view, offset, cancellation)
-            })?;
+            // The synchronous route records its one inclusive host/oracle interval.
+            // The overlap-capable route retains its distinct preparation/check intervals.
+            let serial_window = (!enumeration).then(|| phases.start(SolvePhase::GpuHostOracle));
+            let prepared = if enumeration {
+                phases.measure(SolvePhase::GpuHostOracle, || {
+                    device.prepare(view, offset, available, cancellation)
+                })
+            } else {
+                device.prepare(view, offset, available, cancellation)
+            }?;
+            let device_bytes = prepared.accounted_bytes();
+            let available_for_pending = rows.remaining(ceiling, 0, device_bytes)?;
             let offered = count - offset;
-            self.batching.admitted(offered, prepared.count());
-            let overlapped = prepared.count() >= offered && self.engages(count);
+            let admitted = prepared.count();
+            self.batching.admitted(offered, admitted);
+            let overlapped = admitted >= offered && self.engages(count);
             let checked = if overlapped {
                 let lookahead_limits = BatchLimits {
-                    max_candidates: self.batching.select_lookahead(models, options),
-                    max_pending_bytes: options.max_batch_bytes,
+                    max_candidates: self.batching.select_lookahead(
+                        models,
+                        options,
+                        available_for_pending,
+                    ),
+                    max_pending_bytes: available_for_pending,
                 };
                 let submission = phases.start(SolvePhase::GpuHostOracle);
                 let mut finish = None;
@@ -323,39 +421,132 @@ impl BatchQueue {
                 drop(finish);
                 ahead = proposal.map(|proposal| (proposal, lookahead_limits.max_candidates));
                 checked
-            } else {
+            } else if enumeration {
                 phases.measure(SolvePhase::GpuHostOracle, || prepared.check(cancellation))
+            } else {
+                prepared.check(cancellation)
             };
-            let decoded = device.decode(checked, &theory, slate, offset, offered)?;
+            drop(serial_window);
+            // The plan and any new pending lookahead coexist with the older roots.
+            // Retain the device error first if its submission or decode failed.
+            let active_pending = if D::REGIONAL && overlapped {
+                models.pending_batch_bytes().map_err(Failure::Search)
+            } else {
+                Ok(pending)
+            };
+            let decoded = device.decode(checked, &theory, slate, offset, offered, &mut rows)?;
+            if D::REGIONAL {
+                let pending = active_pending?;
+                let spare = regional::after_pending(available_for_pending, pending)?;
+                device.record_slate_bytes(ceiling - spare);
+            }
+            if rows.verdicts.len() - offset != admitted {
+                return Err(Failure::Run(SolveError::FormulaBatchShape {
+                    expected: admitted,
+                    actual: rows.verdicts.len() - offset,
+                }));
+            }
             self.attribute(
                 decoded.compute,
                 overlapped.then_some(Overlapped {
                     wait: decoded.finish_wait,
                 }),
             );
-            verdicts.extend(decoded.verdicts);
+        }
+        if let Some(attempt) = device.handovers().and_then(|s| s.last_attempt.as_mut()) {
+            attempt.decode_complete = true;
         }
         // A stop observed now leaves the slate pending, its checks dropped:
         // the commit's completion and model construction poll the same control.
-        if let Err(error) = cancellation.poll() {
+        if enumeration && let Err(error) = cancellation.poll() {
             return Err(Failure::Search(error.into()));
         }
         if let Some((proposal, selected)) = ahead {
             self.proposed_ahead(models, proposal.map_err(Failure::from)?, selected, count);
         }
+        self.complete_device_slate(models, device, ticket, rows, options)?;
+        Ok(false)
+    }
+
+    #[cfg(feature = "gpu")]
+    fn complete_device_slate<D: device::SlateDevice>(
+        &mut self,
+        models: &mut StableModels,
+        device: &mut D,
+        ticket: zetesis_stable::SlateTicket,
+        rows: regional::CheckedRows,
+        options: &SolveConfig,
+    ) -> Result<(), Failure> {
+        let ceiling = options.max_batch_bytes;
         let prior_completion = models.batch_statistics().completion_calls;
-        let result = models.commit_slate(ticket, verdicts, &mut self.completion);
+        let slate = ticket.slate();
+        let mut observed = None;
+        let mut decoded = device.take_decode_journal();
+        if D::REGIONAL {
+            let spare = rows.remaining(
+                ceiling,
+                models.pending_batch_bytes().map_err(Failure::Search)?,
+                device.retained_batch_bytes()?,
+            )?;
+            device.record_slate_bytes(ceiling - spare);
+            if let Some(attempt) = device.handovers().and_then(|s| s.last_attempt.as_ref()) {
+                // The completion scratch that held the decode journal is about
+                // to be used by search. Keep the journal only if the idle
+                // dispatch envelope can take ownership without displacing it.
+                decoded.release_unless_fits(spare);
+                self.completion
+                    .observe_next_regional_pass(attempt.ordinal, spare - decoded.bytes());
+                observed = Some((attempt.ordinal, ceiling - spare));
+            }
+        }
+        let result = rows.finish(models, ticket, &mut self.completion);
+        let receipt = if let Some((ordinal, mandatory_bytes)) = observed {
+            let may_have_queried = models.batch_statistics().completion_calls != prior_completion
+                && self
+                    .completion
+                    .last_statistics()
+                    .is_some_and(|s| s.residuals != 0);
+            let receipt = self
+                .completion
+                .take_regional_observations()
+                .filter(|r| r.slate() == slate && r.attempt() == ordinal);
+            let optional_bytes = decoded.bytes()
+                + receipt
+                    .as_ref()
+                    .map_or(0, zetesis_stable::RegionalObservations::peak_bytes);
+            device.record_slate_bytes(mandatory_bytes + optional_bytes);
+            if let Some(stats) = device.handovers() {
+                if let Some(attempt) = &mut stats.last_attempt {
+                    attempt.peak_observation_bytes =
+                        attempt.peak_observation_bytes.max(optional_bytes);
+                }
+                stats.join(receipt.as_ref(), &decoded, may_have_queried);
+            }
+            receipt
+        } else {
+            None
+        };
         if models.batch_statistics().completion_calls != prior_completion
             && let Some(progress) = self.completion.last_statistics()
         {
             self.accounting.record(progress);
         }
-        let batch = result.map_err(Failure::from)?;
+        let batch = result?;
+        // Each successful commit enters the run exactly once, even when the
+        // optional slot receipt or its decode journal could not be retained.
+        if let Some(samples) = &mut self.samples {
+            let counts = device
+                .handovers()
+                .and_then(|stats| stats.last_attempt.as_ref())
+                .filter(|attempt| attempt.decode_complete)
+                .map(|attempt| attempt.residuals);
+            samples.commit(counts, &decoded, receipt.as_ref(), options.stats);
+        }
         // The bound generation is read after the commit and before any of the
         // slate's models is scored.
         self.batching.committed_in_flight(models.bound_generation());
         self.ready = batch.into();
-        Ok(false)
+        Ok(())
     }
 
     /// Record what the lookahead beside a slate of `count` candidates did.
@@ -595,7 +786,7 @@ mod tests {
         use zetesis_stable::{BatchVerdict, Incomplete, Limits, StableModels};
 
         let admitted = zetesis_reference_support::formula("{a;b;c}.");
-        let cancellation = zetesis_cpu::Cancellation::default();
+        let cancellation = zetesis_algebra::Cancellation::default();
         let mut models = StableModels::new(
             admitted.theory(),
             Limits {

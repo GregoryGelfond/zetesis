@@ -20,10 +20,10 @@ facts. `#show run/1` changes only the displayed channel, not those typed answers
 
 ## Set up a Rust application
 
-The packages are not published on crates.io. These examples require zetesis
-0.6.0. Use paths in a pinned local checkout of that version. From the directory
-containing your `zetesis` checkout, record its revision and create a sibling
-application:
+The packages are not published on crates.io. These examples use this checkout's
+library APIs, including the `zetesis-algebra` owner introduced after 0.6.0.
+Use paths in one pinned local checkout. From the directory containing your
+`zetesis` checkout, record its revision and create a sibling application:
 
 ```sh
 git -C zetesis rev-parse HEAD
@@ -45,7 +45,7 @@ Replace the application's empty `[dependencies]` section with:
 [dependencies]
 zetesis-solve = { path = "../zetesis/crates/zetesis-solve", default-features = false }
 zetesis-themelios = { path = "../zetesis/crates/zetesis-themelios" }
-zetesis-cpu = { path = "../zetesis/crates/zetesis-cpu" }
+zetesis-algebra = { path = "../zetesis/crates/zetesis-algebra" }
 ```
 
 This selects a CPU-only solver build. Without `default-features = false`, GPU
@@ -60,7 +60,7 @@ maintained example below; there is no separate abbreviated implementation.
 
 ```rust
 # extern crate zetesis_solve;
-# extern crate zetesis_cpu;
+# extern crate zetesis_algebra;
 # extern crate zetesis_themelios;
 {{#include ../../../crates/zetesis-solve/examples/solve.rs:example}}
 ```

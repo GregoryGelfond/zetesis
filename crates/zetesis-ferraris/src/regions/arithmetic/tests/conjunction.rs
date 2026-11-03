@@ -1,22 +1,21 @@
 //! A borrowed entry saves its read without dropping occurrence evidence.
 
-use zetesis_cpu::{Cancellation, Stop};
+use zetesis_algebra::Meter;
+
+use zetesis_algebra::{Cancellation, Stop};
 
 use crate::{
     AdmissionError, NodeView, Theory,
-    regions::{
-        Work,
-        arithmetic::{
-            budget::{Budget, BudgetError},
-            conjunction::Conjunction,
-            storage::Storage,
-        },
+    regions::arithmetic::{
+        budget::{Budget, BudgetError},
+        conjunction::Conjunction,
+        storage::Storage,
     },
     test_support::{constructed_theory, push},
 };
 
-fn budget(cancellation: &Cancellation) -> Budget<'_, 'static> {
-    Budget::new(Work::new(u64::MAX), u64::MAX, usize::MAX, cancellation)
+fn budget<'a>(work: &'a mut Meter<'static>, cancellation: &'a Cancellation) -> Budget<'a, 'static> {
+    Budget::new(work, u64::MAX, usize::MAX, cancellation)
 }
 
 fn repeated_body() -> Theory {
@@ -33,7 +32,8 @@ fn observe(
     reject: Option<usize>,
 ) -> (Result<bool, BudgetError>, Vec<usize>, u64) {
     let cancellation = Cancellation::default();
-    let mut meter = budget(&cancellation);
+    let mut meter_work = Meter::local(u64::MAX);
+    let mut meter = budget(&mut meter_work, &cancellation);
     let mut storage = Storage::default();
     let mut walk = Conjunction::new(&mut storage, &mut meter).unwrap();
     // Both callers have inspected their entry before deciding to traverse it.
@@ -91,7 +91,8 @@ fn a_rejected_occurrence_stops_both_entry_forms() {
 fn borrowing_an_entry_does_not_bypass_cancellation() {
     let owner = repeated_body();
     let cancellation = Cancellation::default();
-    let mut meter = budget(&cancellation);
+    let mut meter_work = Meter::local(u64::MAX);
+    let mut meter = budget(&mut meter_work, &cancellation);
     let mut storage = Storage::default();
     let mut walk = Conjunction::new(&mut storage, &mut meter).unwrap();
     let root = owner.roots()[0];
@@ -120,7 +121,8 @@ fn borrowing_an_entry_does_not_bypass_cancellation() {
 fn an_absent_entry_keeps_its_typed_read_failure() {
     let owner = repeated_body();
     let cancellation = Cancellation::default();
-    let mut meter = budget(&cancellation);
+    let mut meter_work = Meter::local(u64::MAX);
+    let mut meter = budget(&mut meter_work, &cancellation);
     let mut storage = Storage::default();
     let mut walk = Conjunction::new(&mut storage, &mut meter).unwrap();
     let work = meter.work();

@@ -21,7 +21,7 @@ fn support_decisions_agree_with_independent_reducts() {
             AdmissionLimits::default(),
         )
         .unwrap();
-        let cancellation = zetesis_cpu::Cancellation::default();
+        let cancellation = zetesis_algebra::Cancellation::default();
         let plan = TightPlan::compile(&theory, TightPlanLimits::default(), &cancellation).unwrap();
         for mask in 0..8 {
             let candidate =

@@ -186,6 +186,29 @@ fn theory(nodes: Vec<Node>, roots: Vec<usize>) -> Theory {
     .unwrap()
 }
 
+/// Exact late work after the direct core has settled a complete region.
+fn unchanged_arithmetic_work(
+    prepared: &RootPreparation,
+    region: &mut Region,
+    scratch: &mut NarrowingScratch,
+    cancellation: &Cancellation,
+) -> u64 {
+    // The fixture has a checked parity basis and no counting pair.
+    // Independently inspect its one active owner with the walk's scratch lifetime.
+    let mut arithmetic = Meter::local(u64::MAX);
+    let parity = prepared.parity().inspect_reserved(
+        region,
+        &mut prepared.parity().knowledge(),
+        scratch,
+        cancellation,
+        &mut arithmetic,
+    );
+    assert_eq!(parity.result, Ok(SubjectStep::Unchanged));
+    assert_eq!((parity.statistics.held, parity.statistics.cut), (0, 0));
+    assert_eq!(arithmetic.charged(), parity.statistics.work);
+    arithmetic.charged()
+}
+
 #[test]
 fn an_enumeration_builds_one_original_index() {
     // The candidate walk builds one original index. Possible-founded closure
@@ -198,22 +221,48 @@ fn an_enumeration_builds_one_original_index() {
             zetesis_ferraris::producers(&theory, RegionLimits::default(), &cancellation).unwrap();
         let narrower = Narrower::new(&theory);
         let mut region = Region::all_open(theory.atom_count());
+        let mut scratch = NarrowingScratch::default();
+        let prepared = RootPreparation::prepare_reserved(
+            &theory,
+            extraction.producers.as_ref(),
+            PreparationLimits {
+                work: PreparationLimits::DEFAULT_WORK,
+                bytes: usize::try_from(Limits::default().max_reduct_bytes).unwrap_or(usize::MAX),
+            },
+            &cancellation,
+            &mut Meter::local(u64::MAX),
+        );
+        assert!(
+            prepared.parity.rank > 0,
+            "cycle supplies a real parity basis"
+        );
+        assert_eq!(
+            prepared.cardinality.families, 0,
+            "cycle supplies no counting pair"
+        );
+        let prepared = prepared
+            .result
+            .unwrap()
+            .expect("the tiny original arithmetic is prepared");
+        assert!(!prepared.root_refuted());
         // The walk's subject carries its learned rows; so does this one.
         let learning = LearningOwner::theory(&theory, LearningLimits::default());
-        let (closed, direct) = narrower
-            .narrow_known(
-                OriginalSubject::carrier(&learning, extraction.producers.as_ref())
-                    .with_choices(&extraction.choice_heads),
-                &mut region,
-                &mut narrower.knowledge(),
-                &mut NarrowingScratch::default(),
-                RegionLimits::default(),
-                &cancellation,
-            )
-            .unwrap();
+        let attempt = narrower.narrow_known(
+            OriginalSubject::carrier(&learning, extraction.producers.as_ref())
+                .with_choices(&extraction.choice_heads),
+            &mut region,
+            &mut narrower.knowledge(),
+            &mut scratch,
+            RegionLimits::default(),
+            &cancellation,
+        );
+        let closed = attempt.result.unwrap();
+        let direct = attempt.statistics;
         assert!(matches!(closed, Narrowing::Fixed { .. }));
         assert_eq!(region.open().count(), 0);
         assert_eq!(region.held().count(), 0);
+        let arithmetic_work =
+            unchanged_arithmetic_work(&prepared, &mut region, &mut scratch, &cancellation);
         let mut search = enumeration(&theory, route, workers, producers, Limits::default());
         let setup = search.statistics();
         assert_eq!(setup.regions.unwrap().counts.regions, 0, "{route}");
@@ -222,9 +271,10 @@ fn an_enumeration_builds_one_original_index() {
             setup.search.work,
             "{route}"
         );
-        // Starting from the independently settled constructor receipt, one
-        // exact N+E index charge and the direct core narrowing are the walk.
-        let region_work = setup.search.work + indexing_work(&theory) + direct.work;
+        // The independent constructor receipt, exact N+E index charge,
+        // direct core narrowing and actual late arithmetic are the walk.
+        let region_work =
+            setup.search.work + indexing_work(&theory) + direct.work + arithmetic_work;
         assert_eq!(
             hooks::builds(&theory),
             0,
@@ -241,6 +291,14 @@ fn an_enumeration_builds_one_original_index() {
         assert_eq!(counts.regions, 1, "{route}");
         assert_eq!(counts.leaves, 1, "{route}");
         assert_eq!(counts.work, region_work, "{route}");
+        assert_eq!(
+            counts.arithmetic,
+            arithmetic_counts::ArithmeticCounts {
+                parity_passes: 1,
+                ..Default::default()
+            },
+            "{route}: only the nonempty basis is inspected"
+        );
         assert_eq!(statistics.reduct.regions.work, 0, "{route}");
         assert_eq!(statistics.reduct.frozen_positive_attempts, 1, "{route}");
         assert_eq!(statistics.reduct.frozen_positive_completed, 1, "{route}");
@@ -414,13 +472,24 @@ fn a_lent_index_rejects_an_independent_equal_theory() {
         ),
         Err(Incomplete::WrongTheory)
     ));
-    // An empty truth buffer would be invalid for either DAG. Identity refusal
-    // must precede every indexed access, independently of equal dimensions.
-    for subject in [&equal, &theory] {
+    // Only a genuine evaluation can enter the root-query constructor. Both
+    // classical models carry the independently equal, foreign theory; identity
+    // refusal precedes any indexed query work or fresh regional state.
+    for atoms in [vec![], vec![0, 1]] {
+        let candidate = Interpretation::new(&equal, atoms).unwrap();
+        let mut workspace = zetesis_ferraris::EvaluationWorkspace::default();
+        let evaluated = workspace
+            .evaluate(
+                &candidate,
+                zetesis_ferraris::EvaluationLimits::default(),
+                &cancellation,
+            )
+            .result
+            .unwrap();
+        assert!(evaluated.is_model());
         assert!(matches!(
             ReductQuery::new(&index).check(
-                zetesis_ferraris::FrozenSubject::new(subject, &[]),
-                &candidate,
+                &evaluated,
                 Limits::default(),
                 &mut budget,
                 &mut statistics,
@@ -544,8 +613,7 @@ fn a_failed_region_query_records_growth_without_replacing_its_error() {
     let result = (|| {
         let evaluated = workspace.evaluate(&candidate, limits, &cancellation, &mut statistics)?;
         ReductQuery::new(&index).check(
-            zetesis_ferraris::FrozenSubject::new(&theory, evaluated.truth.truth()),
-            &candidate,
+            &evaluated.truth,
             limits,
             &mut budget,
             &mut statistics,
@@ -566,6 +634,7 @@ mod composition;
 mod generator_order;
 mod ordering;
 mod preference;
+mod typed_meter;
 
 #[test]
 fn a_foreign_theory_has_no_walk_subject() {
@@ -619,11 +688,15 @@ fn failed_narrowing_keeps_support_explanation_receipts() {
     statistics.work = 31;
     statistics.support_explanations = explanations;
     let attempt = NarrowingAttempt {
+        preferred: None,
         result: Err(Incomplete::WorkLimit),
         statistics,
     };
     let mut counts = RegionCounts::default();
-    assert_eq!(account(&attempt, &mut counts), Err(Incomplete::WorkLimit));
+    assert_eq!(
+        SubjectAttempt::from_narrowing(&attempt).account(&mut counts),
+        Err(Incomplete::WorkLimit)
+    );
     assert_eq!(counts.support_explanations, explanations);
     assert_eq!(counts.work, 31, "explanation work is already included");
 }
@@ -665,3 +738,8 @@ fn explanation_overflow_leaves_all_counts_unchanged() {
         assert_eq!(counts, before);
     }
 }
+
+mod residual_root;
+mod source_preflight;
+
+mod arithmetic_membership;

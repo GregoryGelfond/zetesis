@@ -3,8 +3,8 @@
 
 use std::{convert::Infallible, num::NonZeroUsize};
 
+use zetesis_algebra::Cancellation;
 use zetesis_core::Model;
-use zetesis_cpu::Cancellation;
 use zetesis_reference_support::{formula, hybrid};
 use zetesis_solve::{
     Backend, Completion, ExecutionObservation, ExecutionObserver, Grounder, OptimumSearch,

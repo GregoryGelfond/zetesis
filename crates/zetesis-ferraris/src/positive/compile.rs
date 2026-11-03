@@ -2,7 +2,7 @@
 
 use std::mem::size_of;
 
-use zetesis_cpu::Stop;
+use zetesis_algebra::Stop;
 
 pub(super) use super::activation::{Edge, State};
 use super::{Budget, PositiveError, PositivePlan, propagate, validation};
@@ -114,7 +114,7 @@ pub(super) fn build(
     drop(graph);
     let least = Interpretation {
         theory: theory.clone(),
-        words,
+        words: words.into(),
     };
     let failed = validation::complete(&least, budget)?;
     Ok((least, failed))

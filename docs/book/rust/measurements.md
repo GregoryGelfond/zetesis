@@ -23,7 +23,7 @@ The observer's error must implement `Error + Send + Sync + 'static`.
 an observer failure cannot cause GPU fallback and a second observation attempt.
 Initialization may return a setup failure or retain it for the first pull, as
 documented on `Session::new_observed`. After a failed pull, subsequent pulls
-return `None`. The failure retains any established evidence and original subject.
+return `None`. The failure retains any established evidence and original input.
 
 ## Define a measurement scope
 
@@ -59,7 +59,7 @@ Its assertions concern presence and semantic completion, not a timing threshold.
 
 ```rust
 # extern crate zetesis_solve;
-# extern crate zetesis_cpu;
+# extern crate zetesis_algebra;
 # extern crate zetesis_themelios;
 {{#include ../examples/measurements.rs:example}}
 ```

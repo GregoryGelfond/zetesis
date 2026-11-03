@@ -4,12 +4,12 @@ use std::collections::BTreeSet;
 
 use crate::support::options::serial_config as config;
 use clap::Parser;
+use zetesis_algebra::Cancellation;
 use zetesis_cli::{
-    Completion, Interruption, Options, PreparedInput, PreparedProfile, Session, SolveConfig,
-    SolvePhase, Subject, run_finalized,
+    Completion, Interruption, Options, Original, PreparedInput, PreparedProfile, Session,
+    SolveConfig, SolvePhase, run_finalized,
 };
 use zetesis_core::Model;
-use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{PositiveError, PositiveResource};
 use zetesis_reference_support::{BundleFixture, formula};
 use zetesis_themelios::{
@@ -53,7 +53,7 @@ fn formula_bundles_outlive_their_source_files() {
     let mut models = BTreeSet::new();
     for result in session.by_ref() {
         let model = result.unwrap();
-        let Subject::Theory(theory) = model.subject() else {
+        let Original::Theory(theory) = model.original() else {
             panic!("formula subject")
         };
         assert!(theory.same_instance(owner.theory()));
@@ -151,7 +151,7 @@ fn consumer_stop_leaves_formula_coverage_unknown() {
     );
 
     let outcome = session.stop();
-    let Subject::Theory(theory) = outcome.subject().unwrap() else {
+    let Original::Theory(theory) = outcome.original().unwrap() else {
         panic!("formula subject")
     };
     assert!(theory.same_instance(owner.theory()));

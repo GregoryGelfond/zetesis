@@ -1,6 +1,6 @@
 //! Helpers the evaluation's unit tests share across its modules.
 
-use zetesis_cpu::Cancellation;
+use zetesis_algebra::Cancellation;
 
 use super::{ConstructionLimits, Limits, Statistics, Work};
 

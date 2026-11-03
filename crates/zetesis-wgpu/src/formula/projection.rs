@@ -43,6 +43,8 @@ impl GateProjection {
     pub(super) fn shader(self) -> Result<Cow<'static, str>, GpuError> {
         const BASELINE: &str = concat!(
             include_str!("../formula.wgsl"),
+            include_str!("../words.wgsl"),
+            include_str!("../formula_graph/truth.wgsl"),
             include_str!("../formula_graph/numeric.wgsl"),
             include_str!("numeric.wgsl"),
             include_str!("subset.wgsl")
@@ -62,23 +64,7 @@ impl GateProjection {
                     .split_once("fn finish(")
                     .ok_or_else(invalid)?;
                 let parts = [prefix, include_str!("bitwise.wgsl"), "fn finish(", suffix];
-                let capacity = parts
-                    .iter()
-                    .try_fold(0usize, |total, part| total.checked_add(part.len()))
-                    .ok_or_else(|| {
-                        GpuError::new(
-                            GpuErrorKind::Capacity,
-                            "formula shader source length overflow",
-                        )
-                    })?;
-                let mut source = String::new();
-                source
-                    .try_reserve_exact(capacity)
-                    .map_err(|error| GpuError::new(GpuErrorKind::Allocation, error.to_string()))?;
-                for part in parts {
-                    source.push_str(part);
-                }
-                Ok(Cow::Owned(source))
+                crate::kernel::assemble(&parts, "formula shader source length overflow")
             }
         }
     }

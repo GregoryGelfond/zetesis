@@ -140,6 +140,28 @@ Notable changes by release. Versions follow Semantic Versioning.
 
 ### Changed
 
+- The native session owner `zetesis_solve::Subject`, also re-exported by
+  `zetesis_cli`, is renamed to `Original`. Themelios
+  `ProgramSubject` becomes `ProgramOriginal`. Result fields and accessors
+  named `subject` become `original`, including solve, world-view, formula
+  admission and publication failures. Variants, owner identity, typed failures
+  and retained evidence are unchanged. Update imports, field patterns and
+  accessor calls; no aliases retain the old names. `OriginalSubject` and
+  `FrozenSubject` keep their distinct narrowing contracts.
+- **Breaking Rust API:** a split preference belongs to
+  `zetesis_algebra::region::Entry<S>`, alongside its `Region` and lineage state.
+  Region equality compares the atom universe and decisions only. `Walk` passes
+  entries to narrowing and surrenders entries intact; `with_entry` and
+  `with_narrowed_root` retain an existing entry's preference. Ferraris's
+  `narrow_known` and `narrow_frozen_known` now return `NarrowingAttempt`, like
+  their quota variants, with the result, work receipt and completed preference.
+  Propagation-only, refuted and stopped attempts return no new preference.
+- **Breaking Rust API:** `zetesis-cpu` is renamed `zetesis-algebra`, with no
+  compatibility alias. Its scalar region walk is now
+  `zetesis_algebra::walk::Walk` instead of `zetesis_cpu::regions::Traversal`;
+  `Region` and `Narrowing` live in `zetesis_algebra::region`. Finite tables move
+  from `zetesis_cpu::table` to `zetesis_core::table`, and packed-word operations
+  from `zetesis_core::packed` to `zetesis_algebra::words`.
 - `--grounder lazy` and the hybrid formula schedule stream an integrity constraint
   only when its instances do not fit in the formula. Once the producer core and its
   completion are built, each eligible template is grounded into the core, in
@@ -364,6 +386,17 @@ Notable changes by release. Versions follow Semantic Versioning.
 
 ### Compatibility
 
+- Formula narrowing distinguishes candidate knowledge from frozen-reduct
+  knowledge. `Narrower::knowledge()` returns `Knowledge<AnswerSetsSought>`;
+  frozen callers use `frozen_knowledge()` and `Knowledge<Countermodels>`.
+  Both sealed markers are exported by `zetesis-algebra`. Frozen execution
+  has no access to the candidate worker's learned rows.
+
+- In the Lean library, `Zetesis.Cube` and its geometry namespace become
+  `Zetesis.Region`; the temporary `Zetesis.Algebra.Region` abbreviation is
+  removed. `Pending.cube` becomes `Pending.region`, and `sampleCube` becomes
+  `sampleRegion`. The statements and proofs retain the same mathematical
+  meaning; callers must use the new names.
 - `ExecutionObservation::HybridGrounding` carries one `streamed:
   StreamedConstraints` in place of `streamed_templates` and `streamed_instances`.
   `StreamedConstraints` adds `retained_templates` and `retained_instances`,

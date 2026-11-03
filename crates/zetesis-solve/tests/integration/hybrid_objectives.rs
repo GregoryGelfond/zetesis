@@ -4,7 +4,7 @@ use crate::support::models::ScoredFamily as Family;
 use std::{convert::Infallible, num::NonZeroUsize};
 use zetesis_reference_support::{formula, hybrid};
 
-use zetesis_cpu::Cancellation;
+use zetesis_algebra::Cancellation;
 use zetesis_solve::{
     AnswerSelection, Backend, Completion, ExecutionObservation, ExecutionObserver, Grounder,
     Interruption, OptimizationStop, PreparedInput, SemanticOutcome, Session, SolveConfig,
