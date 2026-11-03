@@ -766,13 +766,19 @@ const UNSEEDED_CYCLE: &str = "a :- b. b :- a.";
 // facts therefore leaves the a/b dependency cycle intact for general checking.
 const SEEDED_CYCLE: &str = "seed. a :- seed. b :- a. a :- b.";
 
-const TIGHT_FAMILIES: [&str; 7] = [
+// Parity preparation refutes the first program before a membership certificate
+// is needed. The second still visits a candidate region on the tight route.
+const REFUTED_AT_SETUP: &str = "a. :- a.";
+const UNSAT_TIGHT: &str = "1 {a;b} 1. :- a. :- b.";
+
+const TIGHT_FAMILIES: [&str; 8] = [
     "",
     UNSEEDED_CYCLE,
     "{a;b}. :- a,b.",
     "a :- not b. b :- not a.",
     "a. b :- a. :- not b.",
-    "a. :- a.",
+    REFUTED_AT_SETUP,
+    UNSAT_TIGHT,
     "1 {a;b} 1. #minimize {1@2,a:a;1@2,b:b}.",
 ];
 
@@ -866,30 +872,47 @@ fn tight_families(device: GpuApi) {
             );
             assert_eq!(gpu.records, cpu.records, "{source}");
             assert_eq!(gpu.outcome.completion(), Some(Completion::Exhausted));
-            assert_eq!(gpu.routes.device_tight, 1, "{source}");
-            assert_eq!(gpu.routes.device_formula + gpu.routes.cpu_formula, 0);
+            let unsatisfiable = matches!(source, REFUTED_AT_SETUP | UNSAT_TIGHT);
+            assert_eq!(gpu.outcome.unsatisfiable(), unsatisfiable, "{source}");
+            assert_eq!(gpu.routes.cpu_formula, 0);
             assert_eq!(gpu.routes.observed_backend, Some(device.observed()));
             assert_eq!(
                 gpu.routes.proposal_workers,
                 (workers > 1).then(|| NonZeroUsize::new(workers).unwrap())
             );
             let stats = gpu.outcome.formula_execution().unwrap();
+            let search = gpu.outcome.countermodel_statistics().unwrap();
+            assert_eq!(search.countermodel_queries, 0);
+            assert_eq!(stats.cpu_residuals, 0);
+            assert_eq!(stats.gpu_rounds, 0);
+            if unsatisfiable {
+                let regions = search.regions.unwrap();
+                assert_eq!(regions.parity.root_refuted, source == REFUTED_AT_SETUP);
+                assert_eq!(regions.counts.regions > 0, source == UNSAT_TIGHT);
+                assert_eq!(search.candidates, 0);
+                assert_eq!(stats.gpu_submitted_batches, 0);
+                assert_eq!(stats.gpu_submitted_candidates, 0);
+                assert_eq!(stats.gpu_work, 0);
+            }
+            if source == REFUTED_AT_SETUP {
+                // Without a certificate, setup selects the general executor.
+                assert!(search.certified.is_none());
+                assert_eq!((gpu.routes.device_formula, gpu.routes.device_tight), (1, 0));
+                continue;
+            }
+            assert_eq!((gpu.routes.device_formula, gpu.routes.device_tight), (0, 1));
             assert_eq!(stats.gpu_limits, None);
             assert_eq!(stats.gpu_residuals, None);
             assert!(stats.tight_work_per_candidate.is_some());
-            assert_eq!(stats.cpu_residuals, 0);
             assert_eq!(stats.completion.requested_workers, 1);
             assert_eq!(stats.completion.effective_workers, 0);
             assert_eq!(stats.completion.residuals, 0);
-            assert_eq!(stats.gpu_rounds, 0);
             assert_eq!(stats.gpu_scheduled_work, Some(stats.gpu_work));
-            let search = gpu.outcome.countermodel_statistics().unwrap();
             assert_eq!(
                 search.certified.unwrap().checks,
                 0,
                 "device policy must not perform hidden CPU certificate checks"
             );
-            assert_eq!(search.countermodel_queries, 0);
             if !gpu.records.is_empty() {
                 assert!(stats.gpu_batches > 0);
                 assert!(stats.gpu_candidates > 0);
@@ -900,13 +923,13 @@ fn tight_families(device: GpuApi) {
 }
 
 #[test]
-#[ignore = "requires Metal: tight sessions preserve the complete CPU families on the device's tight route"]
+#[ignore = "requires Metal: tight theories preserve the complete CPU families on their expected device routes"]
 fn metal_tight_sessions_preserve_complete_families() {
     tight_families(GpuApi::Metal);
 }
 
 #[test]
-#[ignore = "requires Vulkan: tight sessions preserve the complete CPU families on the device's tight route"]
+#[ignore = "requires Vulkan: tight theories preserve the complete CPU families on their expected device routes"]
 fn vulkan_tight_sessions_preserve_complete_families() {
     tight_families(GpuApi::Vulkan);
 }
