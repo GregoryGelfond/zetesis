@@ -63,9 +63,9 @@ fn wake(index: u32, removed: u32) {
     for (var position = start; position < end; position++) {
         let gate = roots[order + position];
         if (params.group_map != 0u) { update_group(gate, slot, removed); }
-        let bit = 1u << (gate % 32u);
-        atomicOr(&domains[current + gate / 32u], bit);
-        atomicOr(&domains[next + gate / 32u], bit);
+        let bit = packed_bit(gate);
+        atomicOr(&domains[current + bit.word], bit.mask);
+        atomicOr(&domains[next + bit.word], bit.mask);
     }
 }
 // Formula truth is always fresh; the shared pass reserves reuse for tight checking.

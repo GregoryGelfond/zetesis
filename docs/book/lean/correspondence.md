@@ -626,7 +626,12 @@ The general formula and tight GPU checkers both call the WGSL function
 in a batch of rows exported at a common width, loading word
 `world * stride + atom / 32` and testing bit `atom % 32` reads that world's
 membership for an in-range atom. Rows on either side may contain different
-candidates. Host tests check which buffers the assembled shaders read.
+candidates. The shared `packed_bit` in `words.wgsl` supplies the word index
+and one-hot mask. Formula wakes, tight updates and support, and aggregate
+occurrence masks use the same coordinates with their own storage bases.
+`Zetesis.Refinement.PackedInterpretations.mask_bit` relates the in-word mask
+test to the selected bit. Host tests check which buffers the assembled
+shaders read.
 Checked device address ranges, successful upload and physical execution remain
 separate obligations.
 

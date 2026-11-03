@@ -9,7 +9,7 @@ use std::borrow::Cow;
 fn default_shader_remains_the_borrowed_baseline() {
     assert!(
         matches!(GateProjection::Enumerated.shader().unwrap(), Cow::Borrowed(source)
-        if source == concat!(include_str!("../../formula.wgsl"), include_str!("../../formula_graph/truth.wgsl"), include_str!("../../formula_graph/numeric.wgsl"), include_str!("../numeric.wgsl"), include_str!("../subset.wgsl")))
+        if source == concat!(include_str!("../../formula.wgsl"), include_str!("../../words.wgsl"), include_str!("../../formula_graph/truth.wgsl"), include_str!("../../formula_graph/numeric.wgsl"), include_str!("../numeric.wgsl"), include_str!("../subset.wgsl")))
     );
 }
 
@@ -17,6 +17,7 @@ fn default_shader_remains_the_borrowed_baseline() {
 fn bitwise_transfer_preserves_the_shader_scaffold() {
     let baseline = concat!(
         include_str!("../../formula.wgsl"),
+        include_str!("../../words.wgsl"),
         include_str!("../../formula_graph/truth.wgsl"),
         include_str!("../../formula_graph/numeric.wgsl"),
         include_str!("../numeric.wgsl"),

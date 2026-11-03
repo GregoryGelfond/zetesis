@@ -224,7 +224,8 @@ fn adjust_count(slot: Slot, head: u32, holds: bool) {
 }
 fn enqueue(slot: Slot, node: u32) {
     let position = nodes[node * 4u + 3u];
-    atomicOr(&state[slot.queued + position / 32u], 1u << (position % 32u));
+    let bit = packed_bit(position);
+    atomicOr(&state[slot.queued + bit.word], bit.mask);
 }
 
 // A node or guard changed truth: queue the connectives and row owners reading
@@ -243,9 +244,11 @@ fn visit_readers(slot: Slot, node: u32, holds: bool) -> u32 {
             enqueue(slot, subject);
         } else if (kind == READER_PRODUCER) {
             adjust_count(slot, subject, holds);
-            atomicOr(&state[slot.touched + subject / 32u], 1u << (subject % 32u));
+            let bit = packed_bit(subject);
+            atomicOr(&state[slot.touched + bit.word], bit.mask);
         } else {
-            atomicXor(&state[slot.false_roots + subject / 32u], 1u << (subject % 32u));
+            let bit = packed_bit(subject);
+            atomicXor(&state[slot.false_roots + bit.word], bit.mask);
             if (holds) {
                 atomicSub(&state[slot.false_count], 1u);
             } else {
@@ -381,7 +384,8 @@ fn summarize(lane: u32, values: u32, slot: Slot, pathed: bool,
     }
     for (var position = lane; position < params.roots; position += WORKGROUP_SIZE) {
         if ((frozen[values + roots[position]] & 1u) == 0u) {
-            atomicOr(&state[slot.false_roots + position / 32u], 1u << (position % 32u));
+            let bit = packed_bit(position);
+            atomicOr(&state[slot.false_roots + bit.word], bit.mask);
             atomicAdd(&state[slot.false_count], 1u);
         }
         tally += 1u;
@@ -546,7 +550,7 @@ fn evaluate_dense(world: u32, lane: u32, grouped: bool, values: u32, supported: 
             let end = producers[offsets + word + 1u];
             for (var index = producers[offsets + word]; index < end; index += 1u) {
                 let producer = producer_at(index);
-                if (enabled(producer, values)) { mask |= 1u << (producer.head % 32u); }
+                if (enabled(producer, values)) { mask |= packed_bit(producer.head).mask; }
             }
             // Exactly one invocation owns this word. Empty groups overwrite
             // earlier batches with zero; valid heads never set padding bits.
@@ -558,7 +562,8 @@ fn evaluate_dense(world: u32, lane: u32, grouped: bool, values: u32, supported: 
             // Distinct heads may share a word. Atomic OR preserves every enabled
             // producer's bit, including duplicate producers for the same head.
             if (enabled(producer, values)) {
-                atomicOr(&support[supported + producer.head / 32u], 1u << (producer.head % 32u));
+                let bit = packed_bit(producer.head);
+                atomicOr(&support[supported + bit.word], bit.mask);
             }
         }
     }

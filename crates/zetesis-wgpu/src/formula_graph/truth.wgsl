@@ -5,7 +5,8 @@
 // One admitted world occupies params.words consecutive u32 words. Callers
 // supply a semantic atom in that row; padding is outside this operation.
 fn candidate_contains(world: u32, atom: u32) -> bool {
-    return (candidates[world * params.words + atom / 32u] & (1u << (atom % 32u))) != 0u;
+    let bit = packed_bit(atom);
+    return (candidates[world * params.words + bit.word] & bit.mask) != 0u;
 }
 
 fn node_at(index: u32) -> Node {
