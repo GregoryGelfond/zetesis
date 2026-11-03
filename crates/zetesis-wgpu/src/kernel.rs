@@ -309,12 +309,13 @@ impl Kernel {
         if !options.optional_features {
             return Ok(source);
         }
+        let assemble_variant = |parts: &[&str]| assemble(parts, "kernel source length overflow");
         let mut source = source;
         if matches!(self, Self::Formula(_)) && features.contains(wgpu::Features::SUBGROUP) {
             let body = source
                 .strip_suffix(include_str!("formula/subset.wgsl"))
                 .ok_or_else(|| boundary("subset reduction"))?;
-            source = assemble(&[body, include_str!("formula/subset_subgroup.wgsl")])?;
+            source = assemble_variant(&[body, include_str!("formula/subset_subgroup.wgsl")])?;
         }
         if features.contains(wgpu::Features::SHADER_INT64) {
             let (prefix, arithmetic) = source
@@ -323,7 +324,7 @@ impl Kernel {
             let (_, suffix) = arithmetic
                 .split_once("fn numeric_row(")
                 .ok_or_else(|| boundary("numeric row"))?;
-            source = assemble(&[
+            source = assemble_variant(&[
                 prefix,
                 include_str!("formula_graph/wide64.wgsl"),
                 "fn numeric_row(",
@@ -342,12 +343,14 @@ fn boundary(name: &str) -> GpuError {
 }
 
 /// One checked reservation for fixed authored fragments; no input text is parsed.
-fn assemble(parts: &[&str]) -> Result<Cow<'static, str>, GpuError> {
-    let length = parts.iter().try_fold(0usize, |total, part| {
-        total
-            .checked_add(part.len())
-            .ok_or_else(|| GpuError::new(GpuErrorKind::Capacity, "kernel source length overflow"))
-    })?;
+pub(crate) fn assemble(
+    parts: &[&str],
+    overflow: &'static str,
+) -> Result<Cow<'static, str>, GpuError> {
+    let length = parts
+        .iter()
+        .try_fold(0usize, |total, part| total.checked_add(part.len()))
+        .ok_or_else(|| GpuError::new(GpuErrorKind::Capacity, overflow))?;
     let mut source = String::new();
     source
         .try_reserve_exact(length)
