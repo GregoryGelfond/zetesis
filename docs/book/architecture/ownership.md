@@ -261,9 +261,11 @@ answer-set claim or change the primitive's input subject.
 Advertised support and enabled use are distinct observations. `GpuInfo::features`
 reports the adapter's optional wgpu features; discovery creates no device.
 `GpuContext::features` reports the subset granted to the retained device, and
-`GpuContext::limits` exposes its granted limits. Current constructors request no
-optional features. These operations perform no submission and establish neither
-device health nor an optimized execution path. The device inventory reports
+`GpuContext::limits` exposes its granted limits. Current constructors request
+supported `SUBGROUP` and `SHADER_INT64` features; timestamp queries are requested
+only when timing is requested. Granted features permit a kernel specialization but
+do not establish that a particular primitive uses it. These observations perform
+no submission and establish neither device health nor an optimized execution path. The device inventory reports
 advertised features using wgpu's names; a later feature-specific kernel still
 needs explicit admission, an exact baseline and physical qualification.
 
@@ -327,7 +329,13 @@ candidate-local truth and outcomes. An owned Rayon pool can execute those checks
 concurrently and return them in input order. Repeated equal candidates are still
 separate submitted occurrences.
 
-Within lazy grounding, source work may be shared across worlds. One batch-owned
+The former relational closure route shared source work across worlds. Its
+ownership argument remains relevant to the retained round laws, but this route
+was removed in 0.7.0. Current hybrid execution materializes a producer theory
+and checks streamed constraints on the host. The
+[grounding comparison](grounding-comparison.md) distinguishes the schedules.
+
+In the relational ownership model, one batch-owned
 atom catalog retains each demanded identity. Its committed prefix is immutable
 during a source scan; callbacks append to a disjoint pending tail. Canonically
 ordered local IDs select source rows by borrowing that prefix, so the Union and

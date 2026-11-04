@@ -251,7 +251,7 @@ pub(crate) fn dispatch_size(
     fitted(widths, &candidates[..count])
 }
 
-/// Only formula kernels have tunable candidate-local traversal strides.
+/// Formula and tight kernels carry tunable workgroup policies.
 #[derive(Clone, Copy, Default)]
 pub(crate) enum Kernel {
     #[default]

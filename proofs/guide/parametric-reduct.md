@@ -1,8 +1,9 @@
 # One network for all frozen reducts
 
 The clause search that implemented this network, as `PreparedReduct`, has been
-removed; the region search walks the reduct's proper-subset query under the
-candidate's mask instead (`ReductRegions`). The law and this account remain.
+removed; proper-subset queries now live in `zetesis-stable`'s `reduct` module
+and run under the candidate's original truth. The law and this historical account
+remain.
 
 `Zetesis.ParametricReduct` describes a fixed connective network with two inputs:
 original truth in a candidate M, and atom membership in a prospective smaller
@@ -33,7 +34,11 @@ The third theorem, `countermodel_iff`, lifts that equality to all asserted roots
 and proper subsets. Original satisfaction of M remains a separate obligation
 before answer-set membership can follow from absence of a countermodel.
 
-The Rust correspondence is `PreparedReduct` in `zetesis-stable`. It retains one CNF
+## Historical Rust implementation
+
+The removed Rust implementation was `PreparedReduct` in `zetesis-stable`. The
+implementation and cost account below describe that retired route, not a current
+exported API. Its encoding retains one CNF
 and exact immutable theory owner. Original atom slots represent N; separate
 inputs represent M and original implication truth. It asserts N ⊆ M, at least
 one M atom absent from N, and every network root. A successful

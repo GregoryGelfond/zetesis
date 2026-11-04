@@ -12,7 +12,8 @@
 //! one; [`Walk::with_held_first`] reverses that preference. With the default
 //! branch order and no atom preference, leaves follow a binary counter over
 //! the atoms with atom zero as its low bit (`Region.split_partition` and
-//! `Region.split_disjoint` of `Search.lean`). The root is always split.
+//! `Region.split_disjoint` of `Search.lean`). The root is never counted;
+//! it splits only when narrowing leaves it open and unrefuted.
 //!
 //! The narrowing is the caller's: on the formula route it is the theory's
 //! readings. The traversal only requires that a narrowing never
@@ -136,7 +137,7 @@ pub struct Walk<S = ()> {
     counting: Counting,
     /// Visit the held child first at future splits; queued entries keep their order.
     held_first: bool,
-    /// The root has not been visited yet; it is split whatever its narrowing.
+    /// The root has not been visited yet; unchanged counting cannot apply to it.
     root: bool,
     /// The caller narrowed the root before the traversal began, so it is
     /// not narrowed again.
@@ -174,9 +175,9 @@ impl<S> Walk<S> {
     }
 
     /// A traversal of every candidate of a root the caller has narrowed
-    /// already: the root is visited without a narrowing and split whatever
-    /// that narrowing reported, and every region below it is narrowed by
-    /// the caller's narrowing.
+    /// already. The root is classified without another narrowing: it is a
+    /// leaf when fully decided and otherwise split. Every region below it
+    /// is narrowed by the caller's narrowing.
     #[must_use]
     pub fn with_narrowed_root(root: Entry<S>, counting: Counting) -> Self {
         Self {

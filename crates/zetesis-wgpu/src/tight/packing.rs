@@ -9,7 +9,8 @@ use super::{
 use crate::formula_graph::dependency;
 use crate::runtime::Variant;
 use crate::{GpuError, GpuErrorKind};
-use zetesis_algebra::{Cancellation, Meter, words::Words};
+use zetesis_algebra::reduction::{CheckedSum, Reduction};
+use zetesis_algebra::{Cancellation, Meter, MeterBytes, words::Words};
 use zetesis_ferraris::{Interpretation, Theory, TightPlan, TightVerdict};
 
 pub(super) const PARAM_BYTES: u64 = 64;
@@ -28,11 +29,12 @@ fn address(value: usize) -> Result<u32, GpuError> {
     u32::try_from(value).map_err(|_| capacity("tight dimension exceeds u32"))
 }
 fn sum(values: &[u64]) -> Result<u64, GpuError> {
-    values.iter().try_fold(0u64, |total, next| {
-        total
-            .checked_add(*next)
-            .ok_or_else(|| capacity("tight byte sum overflow"))
-    })
+    values
+        .iter()
+        .try_fold(0, |total, next| {
+            CheckedSum.combine(Some(total), Some(*next))
+        })
+        .ok_or_else(|| capacity("tight byte sum overflow"))
 }
 // This is a proposed device-work allowance, not a performed-work receipt.
 // Optional routes must fit both the authored ceiling and the unchanged wire word.
@@ -47,10 +49,11 @@ fn extend_work(recorded: u32, extra: u32, ceiling: u64) -> Option<u32> {
 }
 
 fn buffer(bytes: u64, device: &wgpu::Limits) -> Result<(), GpuError> {
-    if bytes > device.max_buffer_size || bytes > device.max_storage_buffer_binding_size {
-        return Err(capacity("tight storage exceeds granted device limits"));
-    }
-    Ok(())
+    let ceiling = device
+        .max_buffer_size
+        .min(device.max_storage_buffer_binding_size);
+    MeterBytes::check(u128::from(bytes), u128::from(ceiling))
+        .map_err(|_| capacity("tight storage exceeds granted device limits"))
 }
 fn vector<T>(length: usize) -> Result<Vec<T>, GpuError> {
     let mut output = Vec::new();

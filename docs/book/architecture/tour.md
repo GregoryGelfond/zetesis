@@ -129,9 +129,13 @@ these bounds establish neither a speedup nor a process-memory bound.
 
 This closure computation is the definition that zetesis's laws state for normal
 programs. Its executable form was the relational closure route, removed in 0.7.0.
-zetesis now checks every program through its Ferraris translation, and
+Ordinary formula membership uses the Ferraris translation, and
 `NormalFerraris.answer_set_iff` proves that the two definitions agree on normal
-programs. The [delta-round](../lean/theorems.md) and
+programs. A certified acyclic normal source can instead be evaluated in dependency
+order and published by an automatic CPU session through `PreparedInput::source`,
+without materializing formulas. That route checks every original constraint before
+publication; its source certificate does not make arbitrary candidates answer sets.
+The [delta-round](../lean/theorems.md) and
 [source-coverage laws](../lean/theorems.md) that stated the removed route's
 incremental schedule remain as statements. The
 [reachability example](grounding-comparison.md#follow-a-candidate-dependent-join)

@@ -10,7 +10,7 @@ use zetesis_algebra::{Quota, Stop};
 use super::{
     budget::{Budget, BudgetError},
     conjunction::Conjunction,
-    source::{Literal, clause_literal, literal},
+    source::{Literal, clause_literal, constraint_body, literal},
     storage::Storage,
     uniform::{BoundSide, UniformBound, uniform_bound},
 };
@@ -225,17 +225,9 @@ fn read_constraint<Q: Quota + ?Sized>(
     storage: &mut Storage,
     budget: &mut Budget<'_, '_, Q>,
 ) -> Result<Option<Bound>, BudgetError<Q::Error>> {
-    budget.charge(1)?;
-    let NodeView::Implies(body, consequent) = view else {
-        budget.charge(1)?;
+    let Some(body) = constraint_body(theory, view, budget)? else {
         return Ok(None);
     };
-    let consequent = budget.node(theory, consequent)?;
-    budget.charge(1)?;
-    if !matches!(consequent, NodeView::False) {
-        budget.charge(1)?;
-        return Ok(None);
-    }
     let mut guard = storage.reserve(0, budget)?;
     budget.charge(1)?;
     let mut selected = None;

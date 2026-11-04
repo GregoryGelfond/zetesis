@@ -147,6 +147,27 @@ pub(super) fn clause_literal<'a, Q: Quota + ?Sized>(
     literal(theory, view, budget)
 }
 
+/// Authenticate a constraint's False consequent from an already-charged view.
+/// The body remains unread; callers retain their root ordinal and source grammar.
+pub(super) fn constraint_body<Q: Quota + ?Sized>(
+    theory: &Theory,
+    view: NodeView<'_>,
+    budget: &mut Budget<'_, '_, Q>,
+) -> Result<Option<usize>, BudgetError<Q::Error>> {
+    budget.charge(1)?;
+    let NodeView::Implies(body, consequent) = view else {
+        budget.charge(1)?;
+        return Ok(None);
+    };
+    let consequent = budget.node(theory, consequent)?;
+    budget.charge(1)?;
+    if !matches!(consequent, NodeView::False) {
+        budget.charge(1)?;
+        return Ok(None);
+    }
+    Ok(Some(body))
+}
+
 /// Recognize a constraint through its nested conjunction occurrences and
 /// declared signed-clause views. Duplicate atoms still decline the source,
 /// including opposite polarities. The exact constant-true body has no atoms
@@ -163,17 +184,9 @@ pub(super) fn clause<Q: Quota + ?Sized>(
         .get(ordinal)
         .ok_or(BudgetError::Source(AdmissionError::Root))?;
     let root_view = budget.node(theory, root)?;
-    budget.charge(1)?;
-    let NodeView::Implies(body, consequent) = root_view else {
-        budget.charge(1)?;
+    let Some(body) = constraint_body(theory, root_view, budget)? else {
         return Ok(None);
     };
-    let consequent = budget.node(theory, consequent)?;
-    budget.charge(1)?;
-    if !matches!(consequent, NodeView::False) {
-        budget.charge(1)?;
-        return Ok(None);
-    }
     let body_view = budget.node(theory, body)?;
     budget.charge(17)?; // fixed literal scratch and its initialized length
     let mut literals = [Literal {

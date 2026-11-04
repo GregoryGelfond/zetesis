@@ -2,7 +2,8 @@
 
 use super::{FormulaCheck, FormulaLimits, FormulaStatistics, FormulaVerdict, ResidualReason};
 use crate::{GpuError, GpuErrorKind};
-use zetesis_algebra::region::Region;
+use zetesis_algebra::reduction::{CheckedSum, Reduction};
+use zetesis_algebra::{MeterBytes, region::Region};
 use zetesis_ferraris::{Interpretation, Theory};
 
 pub(super) const PARAM_BYTES: u64 = 64;
@@ -28,19 +29,19 @@ fn mul(a: u64, b: u64) -> Result<u64, GpuError> {
         .ok_or_else(|| capacity("formula byte product overflow"))
 }
 fn sum(values: &[u64]) -> Result<u64, GpuError> {
-    values.iter().try_fold(0u64, |total, next| {
-        total
-            .checked_add(*next)
-            .ok_or_else(|| capacity("formula byte sum overflow"))
-    })
+    values
+        .iter()
+        .try_fold(0, |total, next| {
+            CheckedSum.combine(Some(total), Some(*next))
+        })
+        .ok_or_else(|| capacity("formula byte sum overflow"))
 }
 fn buffer(bytes: u64, device: &wgpu::Limits) -> Result<(), GpuError> {
-    if bytes > device.max_buffer_size || bytes > device.max_storage_buffer_binding_size {
-        return Err(capacity(
-            "formula storage buffer exceeds granted device limits",
-        ));
-    }
-    Ok(())
+    let ceiling = device
+        .max_buffer_size
+        .min(device.max_storage_buffer_binding_size);
+    MeterBytes::check(u128::from(bytes), u128::from(ceiling))
+        .map_err(|_| capacity("formula storage buffer exceeds granted device limits"))
 }
 pub(super) fn vector<T>(length: usize) -> Result<Vec<T>, GpuError> {
     let mut out = Vec::new();

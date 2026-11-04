@@ -2553,6 +2553,12 @@ exhaustion of optimal ties retain distinct contracts.
 | `zetesis_algebra::cancellation::bytes::MeterBytes::observe_peak_usize` (method) | `Zetesis.BytePeak.observe` (def) | The borrowed usize peak becomes max(previous, total) before either ceiling result; only total is compared with the ceiling. The caller retains current-byte ownership and distinguishes requested envelopes from actual capacity. Width conversion, observation identity and refusal order remain concrete obligations. |
 | `zetesis_algebra::cancellation::bytes::MeterBytes::observe_peak_u64` (method) | `Zetesis.BytePeak.observe` (def) | The borrowed u64 peak becomes max(previous, total) before either ceiling result; only total is compared with the ceiling. The caller retains current-byte ownership and distinguishes requested envelopes from actual capacity. Width conversion, observation identity and refusal order remain concrete obligations. |
 
+The formula and tight GPU packing adapters use `CheckedSum` for byte totals
+and `MeterBytes::check` for the smaller of the granted buffer and binding
+ceilings. Their typed errors, allocation boundaries and requested-versus-actual
+storage accounting remain with the adapters. The value laws above cover the
+sum and ceiling decisions; they do not establish device layout or execution.
+
 ### From the object laws to an execution
 
 `Zetesis.Algebra.inside_refl`, `inside_trans` and `inside_antisymm` describe the

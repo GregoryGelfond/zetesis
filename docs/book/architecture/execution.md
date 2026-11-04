@@ -1264,8 +1264,8 @@ from device qualification and timing evidence.
 | Capability | Execution boundary |
 | --- | --- |
 | Source loading, parsing, admission and output | Host libraries |
-| Independent relational membership | Scalar CPU or owned Rayon pool |
-| Shared lazy relational rounds | Host source stream with CPU or GPU chunk evaluation |
+| Independent formula membership | Scalar CPU or owned completion workers |
+| Hybrid source constraints | Host checks before original-answer acceptance or scoring |
 | Ordinary GPU formula membership | Complete tight support when certified; otherwise device propagation plus exact native CPU completion of residuals |
 | Native aggregate reductions | Bounded reusable CPU/device primitive; availability alone does not imply use by every solve |
 
@@ -1274,11 +1274,9 @@ adapters. With default resources, device availability is discovered at runtime.
 A command-line GPU solve begins wgpu's adapter enumeration on a background
 thread once its configuration is validated and before it reads its sources, so
 the adapter enumeration overlaps reading and admission, and on the formula
-routes grounding as well. The relational routes construct their primitive
-before grounding: the lazy route grounds during its search, and the static
-route constructs its primitive before static materialization. The solve's GPU
-primitive then selects over those adapters with its own capability check, as
-over an enumeration of its own, and requests its own device. Adapter choice and
+routes grounding as well. The solve's GPU primitive then selects over those
+adapters with its own capability check, as over an enumeration of its own,
+and requests its own device. Adapter choice and
 errors are therefore those of selection at the moment the enumeration began,
 which precedes construction by the time to read and admit the program and, on
 the formula routes, to ground it, so the gap grows with the program; timestamp
@@ -1292,35 +1290,16 @@ not evidence that it ran; adapter identity, submitted work, completed work and
 residual work are separate observations. GPU support does not mean the complete
 solver is device-resident.
 
-The static reduct oracle reads one framed closure record per candidate. A checked
-nonzero epoch identifies the submission, an ordinal identifies the input seed,
-and a nonzero marker follows synchronized closure writes. The host validates
-these fields, the exact record population, verdict bits and unused closure bits.
-It also checks the gate-carrier projection against the original seed. A missing
-or inconsistent record fails the whole batch instead of becoming acceptance.
-The 32-byte parameter buffer and four-word per-record header count toward the
-ordinary authored payload ceiling. Empty batches validate context health and
-graph admission without consuming dispatch resources or an epoch. The epoch
-sequence survives residency clearing and refuses overflow.
-
-These checks establish transport identity and representation consistency, not
-an independent proof of every rule consequence or constraint verdict. Actual
-shader execution still relies on the device API contract and requires physical
-qualification for each claimed backend; an observed driver fault is not presumed.
-
-For admitted relational programs, automatic materialization selects lazy source
-grounding on both CPU and GPU. Hardware changes do not require a complete ground
-rule store. Explicit eager grounding retains its compiled graph. Automatic
-formula admission can defer eligible terminal positive definitions and reconstruct
-them after base membership; other formulas are materialized eagerly. Explicit lazy
-CPU execution can stream eligible constraints against answers of its retained
-producer core. Formula device membership consumes the materialized theory; terminal
-reconstruction runs on the host.
+Automatic and lazy formula materialization can defer eligible terminal positive definitions and
+reconstruct them after base membership; other formulas are materialized eagerly.
+Explicit lazy execution can stream eligible constraints against answers of its
+retained producer core, whose membership can use the selected CPU or GPU backend.
+Formula device membership consumes the materialized theory; streamed constraints
+and terminal reconstruction run on the host.
 
 CPU is the default backend throughout the solve. Existing measurements do not
 establish a device crossover for an automatic hardware policy; batch size alone
-is insufficient evidence. Explicit shared CPU source batching also
-remains a CPU policy. An explicit GPU backend prepares its executor during
+is insufficient evidence. An explicit GPU backend prepares its executor during
 session setup. Default resources discover a device at that boundary;
 caller-supplied [ExecutionResources](../rust/sessions.md#share-execution-resources)
 reuse their exact context after policy and capability checks, without discovering

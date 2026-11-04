@@ -361,8 +361,8 @@ mod campaigns {
             evidence["report"]["plan"]["profiles"][0]["memory_bytes"],
             384 * 1024
         );
-        // The maintained wide Mastermind case is colors=8. Other cases may
-        // complete within this allowance; their controlled reference is not an
+        // The authored scalability Mastermind case here is colors=8. Other cases
+        // may complete within this allowance; their controlled reference is not an
         // answer oracle. This proposition concerns a real, retained refusal.
         let workload = &evidence["report"]["workloads"][8];
         assert_eq!(workload["entry"], "scalability/mastermind.lp");
