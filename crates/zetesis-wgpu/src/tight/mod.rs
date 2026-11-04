@@ -16,7 +16,8 @@ const SHADER: &str = concat!(
     include_str!("check.wgsl"),
     include_str!("../words.wgsl"),
     include_str!("../formula_graph/truth.wgsl"),
-    include_str!("../formula_graph/numeric.wgsl")
+    include_str!("../formula_graph/numeric.wgsl"),
+    include_str!("../reduction.wgsl")
 );
 
 /// Physical construction of the same complete producer-support relation.

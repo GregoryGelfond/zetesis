@@ -18,7 +18,8 @@ fn cooperative_formula_shader_validates_without_optional_capabilities() {
         include_str!("../../src/formula_graph/truth.wgsl"),
         include_str!("../../src/formula_graph/numeric.wgsl"),
         include_str!("../../src/formula/numeric.wgsl"),
-        include_str!("../../src/formula/subset.wgsl")
+        include_str!("../../src/formula/subset.wgsl"),
+        include_str!("../../src/reduction.wgsl")
     ))
     .unwrap();
     let info = naga::valid::Validator::new(

@@ -10,7 +10,8 @@ fn module() -> naga::Module {
         include_str!("../../src/formula_graph/truth.wgsl"),
         include_str!("../../src/formula_graph/numeric.wgsl"),
         include_str!("../../src/formula/numeric.wgsl"),
-        include_str!("../../src/formula/subset.wgsl")
+        include_str!("../../src/formula/subset.wgsl"),
+        include_str!("../../src/reduction.wgsl")
     ))
     .expect("production WGSL parses");
     let info = naga::valid::Validator::new(

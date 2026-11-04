@@ -298,40 +298,45 @@ impl Kernel {
     /// Select a bounded source fragment using granted features. Subgroup
     /// operations are confined to a workgroup-uniform reduction; individual
     /// formula rows may have divergent owners and cannot use that collective.
+    /// Select all borrowed fragments before one checked setup allocation,
+    /// including when subgroup and wide arithmetic are both granted.
     pub(crate) fn source(
         self,
         source: Cow<'static, str>,
         features: wgpu::Features,
     ) -> Result<Cow<'static, str>, GpuError> {
-        let Some(options) = self.options() else {
+        if self
+            .options()
+            .is_none_or(|options| !options.optional_features)
+            || !features.intersects(wgpu::Features::SUBGROUP | wgpu::Features::SHADER_INT64)
+        {
             return Ok(source);
+        }
+        let body = source
+            .strip_suffix(include_str!("reduction.wgsl"))
+            .ok_or_else(|| boundary("collective reduction"))?;
+        let collective = if features.contains(wgpu::Features::SUBGROUP) {
+            include_str!("reduction_subgroup.wgsl")
+        } else {
+            include_str!("reduction.wgsl")
         };
-        if !options.optional_features {
-            return Ok(source);
-        }
-        let assemble_variant = |parts: &[&str]| assemble(parts, "kernel source length overflow");
-        let mut source = source;
-        if matches!(self, Self::Formula(_)) && features.contains(wgpu::Features::SUBGROUP) {
-            let body = source
-                .strip_suffix(include_str!("formula/subset.wgsl"))
-                .ok_or_else(|| boundary("subset reduction"))?;
-            source = assemble_variant(&[body, include_str!("formula/subset_subgroup.wgsl")])?;
-        }
+        let mut parts = [body, "", "", "", collective];
         if features.contains(wgpu::Features::SHADER_INT64) {
-            let (prefix, arithmetic) = source
+            let (prefix, arithmetic) = body
                 .split_once("fn wide_add(")
                 .ok_or_else(|| boundary("wide addition"))?;
             let (_, suffix) = arithmetic
                 .split_once("fn numeric_row(")
                 .ok_or_else(|| boundary("numeric row"))?;
-            source = assemble_variant(&[
+            parts = [
                 prefix,
                 include_str!("formula_graph/wide64.wgsl"),
                 "fn numeric_row(",
                 suffix,
-            ])?;
+                collective,
+            ];
         }
-        Ok(source)
+        assemble(&parts, "kernel source length overflow")
     }
 }
 

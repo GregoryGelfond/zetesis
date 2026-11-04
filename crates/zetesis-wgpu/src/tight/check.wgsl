@@ -110,8 +110,8 @@ var<workgroup> evaluated: atomic<u32>;
 // summary when the slot's previous dispatch took dense reuse beyond the
 // threshold, summed. Write: invocation 0 zeroes both with the counters above,
 // before storing entry_route, whose uniform load orders the zeroes before any
-// other invocation's atomicMax. Ordering: at a phase's end each invocation
-// with a nonzero tally takes the maximum into phase_path[p & 1] before the
+// other invocation's atomicMax. Ordering: at a phase's end each elected
+// publisher merges its nonzero partial maximum into phase_path[p & 1] before the
 // phase's barrier; after it invocation 0 reads that variable and zeroes it
 // again, and the next atomicMax into it follows a later barrier. Every phase
 // of an update ends this way, the summary's included. Index: p & 1, within
@@ -316,13 +316,16 @@ fn update_node(world: u32, values: u32, slot: Slot, index: u32) -> vec2<u32> {
     return vec2<u32>(1u + reads + visits, 1u + read + visits);
 }
 
-// End one phase of an update: offer this invocation's tally to the phase's
+// End one phase of an update: reduce every invocation's tally into the phase's
 // maximum before the phase's barrier; after it, invocation 0 adds the maximum
 // to its path and zeroes the variable for the phase after next. Called in
 // uniform control flow.
 fn end_phase(lane: u32, tally: u32, phase: ptr<function, u32>, path: ptr<function, u32>) {
     let index = *phase & 1u;
-    if (tally != 0u) { atomicMax(&phase_path[index], tally); }
+    let maximum = partial_maximum(lane, tally);
+    if (maximum.publish && maximum.value != 0u) {
+        atomicMax(&phase_path[index], maximum.value);
+    }
     storageBarrier();
     workgroupBarrier();
     if (lane == 0u) {
@@ -522,7 +525,10 @@ fn update_slot(world: u32, lane: u32, values: u32, current: u32, slot: Slot,
         }
     }
     // The record's barrier ends this phase; invocation 0 takes its maximum then.
-    if (tally != 0u) { atomicMax(&phase_path[*phase & 1u], tally); }
+    let maximum = partial_maximum(lane, tally);
+    if (maximum.publish && maximum.value != 0u) {
+        atomicMax(&phase_path[*phase & 1u], maximum.value);
+    }
     return operations + tally;
 }
 

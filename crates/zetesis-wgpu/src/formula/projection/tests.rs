@@ -9,7 +9,7 @@ use std::borrow::Cow;
 fn default_shader_remains_the_borrowed_baseline() {
     assert!(
         matches!(GateProjection::Enumerated.shader().unwrap(), Cow::Borrowed(source)
-        if source == concat!(include_str!("../../formula.wgsl"), include_str!("../../words.wgsl"), include_str!("../../formula_graph/truth.wgsl"), include_str!("../../formula_graph/numeric.wgsl"), include_str!("../numeric.wgsl"), include_str!("../subset.wgsl")))
+        if source == concat!(include_str!("../../formula.wgsl"), include_str!("../../words.wgsl"), include_str!("../../formula_graph/truth.wgsl"), include_str!("../../formula_graph/numeric.wgsl"), include_str!("../numeric.wgsl"), include_str!("../subset.wgsl"), include_str!("../../reduction.wgsl")))
     );
 }
 
@@ -21,7 +21,8 @@ fn bitwise_transfer_preserves_the_shader_scaffold() {
         include_str!("../../formula_graph/truth.wgsl"),
         include_str!("../../formula_graph/numeric.wgsl"),
         include_str!("../numeric.wgsl"),
-        include_str!("../subset.wgsl")
+        include_str!("../subset.wgsl"),
+        include_str!("../../reduction.wgsl")
     );
     let (prefix, transfer) = baseline.split_once("fn gate(").unwrap();
     let suffix = &transfer[transfer.find("fn finish(").unwrap()..];
@@ -149,4 +150,32 @@ fn portable_selection_ignores_optional_device_features() {
         )
         .unwrap();
     assert!(matches!(source, Cow::Borrowed(_)));
+}
+
+#[test]
+fn formula_source_owns_only_projection_or_feature_assembly() {
+    for projection in GateProjection::ALL {
+        for optional_features in [false, true] {
+            let kernel = Kernel::Formula(GpuKernelOptions {
+                optional_features,
+                ..Default::default()
+            });
+            for granted in [
+                wgpu::Features::empty(),
+                wgpu::Features::SUBGROUP,
+                wgpu::Features::SHADER_INT64,
+                wgpu::Features::SUBGROUP | wgpu::Features::SHADER_INT64,
+            ] {
+                let source = kernel
+                    .source(projection.shader().unwrap(), granted)
+                    .unwrap();
+                assert_eq!(
+                    matches!(source, Cow::Owned(_)),
+                    projection == GateProjection::Bitwise
+                        || (optional_features && !granted.is_empty()),
+                    "{projection:?}, {optional_features}, {granted:?}"
+                );
+            }
+        }
+    }
 }
