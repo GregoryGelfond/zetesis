@@ -142,28 +142,34 @@ fn cold_preparation_refusals(
     .unwrap();
     let inputs = [Interpretation::new(&next, [0]).unwrap()];
     let epoch = oracle.epoch;
-    let error = oracle
-        .propagate_batch(
-            &next,
-            &inputs,
-            FormulaLimits {
-                max_batch_bytes: 0,
-                ..Default::default()
-            },
-        )
-        .unwrap_err();
-    assert_eq!(error.kind(), GpuErrorKind::Capacity);
-    assert_eq!(oracle.candidates.capacity(), 0);
-    assert!(
-        oracle
-            .resident
-            .as_ref()
-            .unwrap()
-            .graph
-            .shape
-            .theory
-            .same_instance(old)
-    );
+    // Ten setup units plus the residual projection for one atom and two mask
+    // words precede eviction. Cold packing then discovers two dependency levels.
+    let minimum_work = 10 + 1 + 2;
+    let scheduled_work = minimum_work + 2;
+    for limits in [
+        FormulaLimits {
+            max_batch_bytes: 0,
+            ..Default::default()
+        },
+        FormulaLimits {
+            max_work_per_candidate: minimum_work - 1,
+            ..Default::default()
+        },
+    ] {
+        let error = oracle.propagate_batch(&next, &inputs, limits).unwrap_err();
+        assert_eq!(error.kind(), GpuErrorKind::Capacity);
+        assert_eq!(oracle.candidates.capacity(), 0);
+        assert!(
+            oracle
+                .resident
+                .as_ref()
+                .unwrap()
+                .graph
+                .shape
+                .theory
+                .same_instance(old)
+        );
+    }
     assert_eq!(
         oracle
             .propagate_batch(&next, candidates, FormulaLimits::default())
@@ -181,13 +187,13 @@ fn cold_preparation_refusals(
             .theory
             .same_instance(old)
     );
-    // Minimum setup10 passes; the two-level setup12 refuses after cold packing.
+    // The minimum fits, then the exact level schedule refuses after eviction.
     let error = oracle
         .propagate_batch(
             &next,
             &inputs,
             FormulaLimits {
-                max_work_per_candidate: 11,
+                max_work_per_candidate: scheduled_work - 1,
                 ..Default::default()
             },
         )
