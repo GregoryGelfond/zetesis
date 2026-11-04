@@ -26,6 +26,24 @@ fn missing_authored_fragment_is_a_typed_failure() {
 }
 
 #[test]
+fn wide_specialization_requires_both_arithmetic_boundaries() {
+    for source in [
+        include_str!("../reduction.wgsl"),
+        concat!("fn wide_add(", include_str!("../reduction.wgsl")),
+    ] {
+        for features in [
+            wgpu::Features::SHADER_INT64,
+            wgpu::Features::SHADER_INT64 | wgpu::Features::SUBGROUP,
+        ] {
+            let error = Kernel::Tight(GpuKernelOptions::default())
+                .source(Cow::Borrowed(source), features)
+                .unwrap_err();
+            assert_eq!(error.kind(), GpuErrorKind::Validation);
+        }
+    }
+}
+
+#[test]
 fn tight_kernel_refuses_a_general_propagation_request() {
     for propagation in [
         GpuPropagation::ChangedDependencies,

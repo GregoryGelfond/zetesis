@@ -1760,6 +1760,25 @@ workgroup barrier remains. Its strided coverage, bounded `u32`
 arithmetic, immutable scan inputs, atom correspondence and synchronization remain
 Rust/WGSL obligations. The laws justify domain narrowing, not answer-set acceptance.
 
+Formula and tight shaders share `partial_maximum` in `reduction.wgsl` and its
+granted-subgroup specialization in `reduction_subgroup.wgsl`. The portable
+version publishes each lane's value. The subgroup version takes each part's
+maximum and elects one publisher. The zero identity covers empty contributions.
+`PartitionedScan.maximum_append`, `maximum_permutation` and
+`partition_index_exact` justify merging these partial maxima under exact finite
+partition coverage. Formula also computes its bounded additive partial before
+branching on the shared election, preserving the count that distinguishes atom
+zero from absence. Tight applies the maximum law with eligibility always true
+to the lane tallies of each individual phase, then sums those phase maxima.
+Combining tallies across phases before maximizing would change that path cost.
+Its alternating slots, resets and publication barriers remain in the consumer,
+including the verdict scan's separate final barrier. False-root witnesses
+still precede unsupported-atom witnesses and use their existing minima.
+These laws establish the unsigned fold equations. Subgroup uniformity,
+election, finite machine bounds and the ordering of atomic publication and
+reads remain WGSL obligations. Source specialization selects all fragments
+before one checked setup allocation, including a subgroup-only tight source.
+
 [`DependencySchedule`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/DependencySchedule.lean)
 preserves initial agreement with a reference valuation by induction over ready
 assignments. The evaluator reads only declared dependencies; those dependencies already agree,

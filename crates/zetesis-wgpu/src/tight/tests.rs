@@ -217,3 +217,70 @@ fn backend_failures_retain_their_class() {
     assert_eq!(error.to_string(), gpu.to_string());
     assert_eq!(error.source().unwrap().to_string(), gpu.to_string());
 }
+
+#[test]
+fn tight_source_owns_only_a_granted_specialization() {
+    use std::borrow::Cow;
+    use wgpu::Features;
+
+    for optional_features in [false, true] {
+        let kernel = crate::kernel::Kernel::Tight(crate::GpuKernelOptions {
+            optional_features,
+            ..Default::default()
+        });
+        for granted in [
+            Features::empty(),
+            Features::SUBGROUP,
+            Features::SHADER_INT64,
+            Features::SUBGROUP | Features::SHADER_INT64,
+        ] {
+            let source = kernel.source(Cow::Borrowed(SHADER), granted).unwrap();
+            assert_eq!(
+                matches!(source, Cow::Owned(_)),
+                optional_features && !granted.is_empty(),
+                "{optional_features}, {granted:?}"
+            );
+        }
+    }
+}
+
+#[test]
+fn only_tight_update_entry_points_require_the_granted_subgroup() {
+    let source = crate::kernel::Kernel::Tight(crate::GpuKernelOptions::default())
+        .source(std::borrow::Cow::Borrowed(SHADER), wgpu::Features::SUBGROUP)
+        .unwrap();
+    let module = naga::front::wgsl::parse_str(&source).unwrap();
+    let validate = |module: &naga::Module, capabilities| {
+        naga::valid::Validator::new(naga::valid::ValidationFlags::all(), capabilities)
+            .validate(module)
+            .map_err(Box::new)
+    };
+    let subgroup = naga::valid::Capabilities::SUBGROUP;
+    let info = validate(&module, subgroup).unwrap();
+    let constants = naga::back::PipelineConstants::from([("WORKGROUP_SIZE".to_owned(), 64.0)]);
+    for (name, uses_update) in [
+        ("check", true),
+        ("check_grouped", true),
+        ("check_dense", false),
+        ("check_grouped_dense", false),
+    ] {
+        let (entry, _) = naga::back::pipeline_constants::process_overrides(
+            &module,
+            &info,
+            Some((naga::ShaderStage::Compute, name)),
+            &constants,
+        )
+        .unwrap();
+        validate(&entry, subgroup).unwrap();
+        assert_eq!(
+            global_names(&entry),
+            global_names(&reduced_to(name)),
+            "{name}"
+        );
+        assert_eq!(
+            validate(&entry, naga::valid::Capabilities::empty()).is_err(),
+            uses_update,
+            "{name}"
+        );
+    }
+}

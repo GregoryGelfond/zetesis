@@ -47,7 +47,8 @@ impl GateProjection {
             include_str!("../formula_graph/truth.wgsl"),
             include_str!("../formula_graph/numeric.wgsl"),
             include_str!("numeric.wgsl"),
-            include_str!("subset.wgsl")
+            include_str!("subset.wgsl"),
+            include_str!("../reduction.wgsl")
         );
         match self {
             Self::Enumerated => Ok(Cow::Borrowed(BASELINE)),
