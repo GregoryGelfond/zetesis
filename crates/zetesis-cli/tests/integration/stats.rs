@@ -295,6 +295,61 @@ fn automatic_execution_reports_cpu() {
 }
 
 #[test]
+fn source_json_is_accepted_by_canonical_telemetry() {
+    use zetesis_validation::{
+        performance::matrix::{DeviceWork, Observation, Procedure},
+        selected::{Grounder, NativeExecution},
+    };
+
+    let request = NativeExecution {
+        grounder: Grounder::Auto,
+        ..NativeExecution::default()
+    };
+    let configured = options(&["--json", "--stats", "--grounder", "auto"]);
+    for (source, models) in [
+        ("a. b :- a.", 1),
+        ("a. :- a.", 0),
+        (
+            include_str!("../../../../examples/scalability/prime-sieve.lp"),
+            1,
+        ),
+    ] {
+        let (report, output, diagnostics) = solve(source, &configured);
+        assert_eq!(report.completion, Completion::Exhausted);
+        assert_eq!(report.models, models);
+        let receipt = report.source_evaluation.unwrap();
+        let document: serde_json::Value = serde_json::from_slice(&output).unwrap();
+        let stats = &document["statistics"];
+        for field in [
+            "execution",
+            "hybrid_execution",
+            "terminal_execution",
+            "search",
+        ] {
+            assert_eq!(stats.get(field), Some(&serde_json::Value::Null), "{field}");
+        }
+        for field in [
+            "lazy_execution",
+            "shared_execution",
+            "closure_execution",
+            "query_execution",
+            "candidate_restrictions",
+        ] {
+            assert!(stats.get(field).is_none(), "{field}");
+        }
+        // Observe the actual bytes' parsed document and diagnostics without
+        // inserting fields or replacing the producer's measurements.
+        let observed =
+            Observation::from_statistics(&document, diagnostics.as_bytes(), request).unwrap();
+        assert_eq!(observed.execution.procedure, Procedure::AcyclicSource);
+        assert!(matches!(observed.execution.device, DeviceWork::Cpu));
+        let decoded = observed.source_evaluation.unwrap();
+        assert_eq!(decoded.work, receipt.work);
+        assert_eq!(decoded.substitutions, receipt.substitutions);
+    }
+}
+
+#[test]
 fn bundled_sources_use_the_same_statistics_boundary_without_rewriting_stdout() {
     let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("tests/fixtures/correctness/excerpts/shortest-path-reachable.lp");

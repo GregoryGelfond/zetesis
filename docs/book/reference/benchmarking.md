@@ -262,6 +262,15 @@ in `original_validation`. The initial grounding time alone therefore does not
 measure all source evaluation work. Compare complete solve time, storage and
 the separate constraint-work counters as well.
 
+For direct CPU source evaluation, telemetry requires the typed
+`source_evaluation` admission receipt, matching operation metadata and eager
+admission measurements. Current `execution`, `hybrid_execution`,
+`terminal_execution` and `search` fields must be explicitly null. Earlier
+optional top-level `lazy_execution`, `shared_execution`, `closure_execution`,
+`query_execution` and `candidate_restrictions` fields may be absent or null;
+a non-null receipt still conflicts with direct source evaluation. Absence does
+not create an execution or work measurement for any of those routes.
+
 ### clingo
 
 `--clingo PATH` names the clingo to compare with, and it must be a runnable
