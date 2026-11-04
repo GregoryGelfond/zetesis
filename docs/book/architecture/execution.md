@@ -46,50 +46,47 @@ the semantic laws from the remaining executable refinement obligations.
 
 ## Two exact membership paths
 
-For the normal profile, a seed fixes the reduct's gates. Positive inference
-starts empty, derives consequences, checks constraints, then compares the
-result's gate projection with the seed. The dense graph and source-driven
-oracles implement this same acceptance question.
+A certificate for the complete original theory can select a class-specific
+membership check. The CPU supports tight, positive and stratified plans.
+The GPU supports the tight plan. For normal rules,
+the answer-set condition is equality with the least consequences of the
+candidate's reduct together with satisfaction of its constraints.
 
-Ordinary sessions retain shared atom selections across each candidate batch.
-CPU and GPU checkers borrow their true atoms through `SeedView`; an owned `Seed`
-uses the same checking implementation. Eager device packing writes into the
-admitted batch buffer without constructing a temporary word vector for each
-seed. These ownership and transport choices do not change the frozen gates or
-the least-consequence check. Returned answer sets still own their interpretations.
+The general membership check rejects a proposed interpretation `M` that
+fails the original theory `T`. Candidate-only restrictions further select
+which models the session seeks. For each eligible `M`, the inner search
+asks whether a proper subset `J` of `M` satisfies the frozen reduct
+`T^M`. A subset can be a countermodel even
+when it fails a candidate-only restriction. A validated countermodel
+rejects `M`. Complete coverage without one establishes that `M` is an
+answer set of `T`. An interrupted search without a witness leaves the
+question open. Each candidate has its own frozen reduct. Packed atom
+positions form the third dimension inside each region of both searches.
+The exhaustive `zetesis-ferraris` checker provides a small-instance
+reference for the region search in `zetesis-stable`.
 
-For finite general formulas, the candidate must first satisfy the original
-theory. A frozen truth mask then permits repeated evaluations of its reduct
-without constructing a separate formula tree. Finding a proper-subset model
-rejects the candidate. Proving that none exists accepts it. The exhaustive
-`zetesis-ferraris` checker is an exact small-instance reference; ordinary
-formula search uses the native region search and countermodel machinery in
-`zetesis-stable`.
+Before the candidate walk starts, arithmetic preparation can refute its
+root or fix atoms through proved units. Other atoms start open. Inside a
+region, a sure reading guarantees that every interpretation in the region
+satisfies the node, and a never reading guarantees that none does. A held
+atom is sure and a cut atom is never. Narrowing requires each asserted root
+to hold and propagates knowledge between nodes and their operands. For
+example, a conjunction required to hold requires both operands. If a
+disjunction must hold and one operand fails, the other must hold. These
+steps repeat until the readings stop changing or a contradiction refutes
+the region.
 
-Candidates on the formula route are proposed by regions, the same coverage tree
-the closure route walks (`Search.lean`), over the theory's atoms. The root
-leaves every atom open. Under a region every node of the formula DAG
-has two readings, decided by one pass over the DAG: sure, when every
-candidate of the region satisfies it, and never, when no candidate does; a
-held atom is sure, a cut atom never, and the connectives combine the
-readings as the closure route's definite and possible gates combine a
-rule's. The narrowing closes what every candidate must make of each node
-in both directions: every root holds, a node learns from its operands, and
-a node teaches its operands what its knowledge leaves them, a conjunction
-that holds both operands, a disjunction that holds with one operand
-failing the other, and so on through the connectives, until nothing
-changes; an atom known is decided and a node known both ways refutes,
-which is what unit propagation over a clause form decides. An atom none
-of whose producers can support it, each having a failing body or another
-head held, is cut, a held one refuting the region, and an atom held with
-one producer left demands that producer's body. The `zetesis-ferraris` crate narrows a region by
-these rules to a fixed point over the theory's own DAG, without a clause
-form (`FormulaBounds.read_sound`, `never_root_refutes`, `known_sound`,
-`unsupported_cut`). A region no reading refutes is split
-on the open atom the split ranking below prefers, held branch first;
-a region with every atom decided is a leaf, and a leaf is a classical model, since at a full decision every
-root is sure or never (`FormulaBounds.decided_leaf_models`). The leaf
-is the candidate the reduct decides.
+If an atom has no possible producer, narrowing cuts it. If it is already
+held, the region is refuted. A held atom with one possible producer
+requires that producer's body to hold. The `zetesis-ferraris` crate
+applies these rules to a fixed point over the theory's DAG
+(`FormulaBounds.read_sound`, `never_root_refutes`, `known_sound`,
+`unsupported_cut`). A surviving region with open atoms splits on the atom
+preferred by the ranking below, held branch first. At a fully decided
+leaf, each asserted root is sure or never. A never root refutes the leaf,
+so this region walk proposes only classical models of the original theory
+that satisfy its active candidate restrictions
+(`FormulaBounds.decided_leaf_models`).
 
 Support rechecks carry two producer-row positions with the region's inherited
 knowledge. A failed body or competing held head stays unavailable in every
