@@ -1062,6 +1062,91 @@ theorem counting_fold_one (members : List α) :
     show 1 + rest.length = (head :: rest).length
     simp only [List.length_cons, Nat.add_comm]
 
+/-- A count over atoms none of which holds is zero. -/
+theorem count_of_none (M : Atoms α) (S : List α) (none : ∀ a ∈ S, ¬ M a) :
+    measure counting.toReduction M (S.map fun a => (a, 1)) = 0 := by
+  induction S with
+  | nil => rfl
+  | cons head rest counted =>
+    have absent : ¬ M head := none head (List.mem_cons_self ..)
+    rw [List.map_cons, measure_cons,
+      contribution_of_fails counting.toReduction (M := M) (t := (head, 1)) absent,
+      counted (fun a listed => none a (List.mem_cons_of_mem head listed))]
+    rfl
+
+/-- **A clique is an upper bound.** If no member of the class holds two distinct
+atoms of a duplicate-free list `S`, every member holds at most one of them: the
+count over `S` is at most one. Each pair's premise is a refuted two-atom pattern
+(`Algebra.entailed_by_refutations`). -/
+theorem upper_of_clique (C : Atoms α → Prop) (S : List α) (nodup : S.Nodup)
+    (excluded : ∀ a ∈ S, ∀ b ∈ S, a ≠ b → ∀ M, C M → ¬ (M a ∧ M b)) :
+    UpperOf counting C (S.map fun a => (a, 1)) 1 := by
+  classical
+  intro M member
+  induction S with
+  | nil => exact Nat.zero_le 1
+  | cons head rest counted =>
+    have headFresh : head ∉ rest := (List.nodup_cons.mp nodup).1
+    have restNodup : rest.Nodup := (List.nodup_cons.mp nodup).2
+    have restExcluded : ∀ a ∈ rest, ∀ b ∈ rest, a ≠ b → ∀ N, C N → ¬ (N a ∧ N b) :=
+      fun a inRest b inRest' distinct =>
+        excluded a (List.mem_cons_of_mem head inRest) b (List.mem_cons_of_mem head inRest') distinct
+    rw [List.map_cons, measure_cons]
+    by_cases held : M head
+    · have none : ∀ a ∈ rest, ¬ M a := by
+        intro a listed holds
+        have distinct : head ≠ a := by
+          intro same
+          rw [same] at headFresh
+          exact headFresh listed
+        exact excluded head (List.mem_cons_self ..) a (List.mem_cons_of_mem head listed) distinct
+          M member ⟨held, holds⟩
+      rw [contribution_of_holds counting.toReduction (M := M) (t := (head, 1)) held,
+        count_of_none M rest none]
+      exact Nat.le_refl 1
+    · rw [contribution_of_fails counting.toReduction (M := M) (t := (head, 1)) held]
+      have tail : measure counting.toReduction M (rest.map fun a => (a, 1)) ≤ 1 :=
+        counted restNodup restExcluded
+      show 0 + measure counting.toReduction M (rest.map fun a => (a, 1)) ≤ 1
+      rw [Nat.zero_add]
+      exact tail
+
+/-- **Bounds from allowed patterns.** If every member of the class is allowed, where
+being allowed depends on `S` alone, and every allowed interpretation supported on
+`S` counts between `low` and `high` over `S`, then those are a lower and an upper
+bound of the class.
+
+Proof. A member and its restriction to `S` agree on `S`, so they count alike
+(`measure_congr`); the restriction is allowed and supported on `S`. -/
+theorem bounds_of_allowed (C : Atoms α → Prop) (S : List α) (Allowed : Atoms α → Prop)
+    (depends : ∀ σ τ : Atoms α, (∀ a ∈ S, (σ a ↔ τ a)) → Allowed σ → Allowed τ)
+    (entailed : ∀ M, C M → Allowed M) (low high : Nat)
+    (bounded : ∀ σ : Atoms α, Allowed σ → (∀ a, σ a → a ∈ S) →
+      low ≤ measure counting.toReduction σ (S.map fun a => (a, 1)) ∧
+        measure counting.toReduction σ (S.map fun a => (a, 1)) ≤ high) :
+    LowerOf counting C (S.map fun a => (a, 1)) low ∧
+      UpperOf counting C (S.map fun a => (a, 1)) high := by
+  have restricted : ∀ M, C M →
+      low ≤ measure counting.toReduction M (S.map fun a => (a, 1)) ∧
+        measure counting.toReduction M (S.map fun a => (a, 1)) ≤ high := by
+    intro M member
+    have agree : ∀ a ∈ S, ((fun b => b ∈ S ∧ M b) a ↔ M a) :=
+      fun a listed => ⟨fun restricted => restricted.2, fun held => ⟨listed, held⟩⟩
+    have allowed : Allowed (fun b => b ∈ S ∧ M b) :=
+      depends M _ (fun a listed => (agree a listed).symm) (entailed M member)
+    have supported : ∀ a, (fun b => b ∈ S ∧ M b) a → a ∈ S := fun _ restricted => restricted.1
+    have same : measure counting.toReduction M (S.map fun a => (a, 1)) =
+        measure counting.toReduction (fun b => b ∈ S ∧ M b) (S.map fun a => (a, 1)) := by
+      apply measure_congr counting.toReduction (S := fun a => a ∈ S)
+      · intro a listed
+        exact (agree a listed).symm
+      · intro t listed
+        rcases List.mem_map.mp listed with ⟨a, inS, rfl⟩
+        exact inS
+    rw [same]
+    exact bounded _ allowed supported
+  exact ⟨fun M member => (restricted M member).1, fun M member => (restricted M member).2⟩
+
 /-- Encoding every nonnegative contribution before folding gives the encoding
 of the exact natural sum. Complete enumeration, membership and distinctness
 are separate premises whenever that sum is read as a family cardinality.

@@ -730,6 +730,21 @@
     "line": 1240
   },
   {
+    "name": "Zetesis.Algebra.contains_decideAll",
+    "file": "Zetesis/Algebra.lean",
+    "line": 1265
+  },
+  {
+    "name": "Zetesis.Algebra.entailed_by_refutations",
+    "file": "Zetesis/Algebra.lean",
+    "line": 1289
+  },
+  {
+    "name": "Zetesis.Algebra.saturation_unit",
+    "file": "Zetesis/Algebra.lean",
+    "line": 1313
+  },
+  {
     "name": "Zetesis.AlgebraicRows.contribution_of_holds",
     "file": "Zetesis/AlgebraicRows.lean",
     "line": 85
@@ -1005,64 +1020,79 @@
     "line": 1056
   },
   {
+    "name": "Zetesis.AlgebraicRows.count_of_none",
+    "file": "Zetesis/AlgebraicRows.lean",
+    "line": 1066
+  },
+  {
+    "name": "Zetesis.AlgebraicRows.upper_of_clique",
+    "file": "Zetesis/AlgebraicRows.lean",
+    "line": 1081
+  },
+  {
+    "name": "Zetesis.AlgebraicRows.bounds_of_allowed",
+    "file": "Zetesis/AlgebraicRows.lean",
+    "line": 1121
+  },
+  {
     "name": "Zetesis.AlgebraicRows.bounded_counting_fold",
     "file": "Zetesis/AlgebraicRows.lean",
-    "line": 1071
+    "line": 1156
   },
   {
     "name": "Zetesis.AlgebraicRows.bounded_counting_fold_one",
     "file": "Zetesis/AlgebraicRows.lean",
-    "line": 1086
+    "line": 1171
   },
   {
     "name": "Zetesis.AlgebraicRows.bounded_counting_overflow_iff",
     "file": "Zetesis/AlgebraicRows.lean",
-    "line": 1099
+    "line": 1184
   },
   {
     "name": "Zetesis.AlgebraicRows.parity_forces",
     "file": "Zetesis/AlgebraicRows.lean",
-    "line": 1109
+    "line": 1194
   },
   {
     "name": "Zetesis.AlgebraicRows.xor_definition",
     "file": "Zetesis/AlgebraicRows.lean",
-    "line": 1124
+    "line": 1209
   },
   {
     "name": "Zetesis.AlgebraicRows.threshold_measure",
     "file": "Zetesis/AlgebraicRows.lean",
-    "line": 1153
+    "line": 1238
   },
   {
     "name": "Zetesis.AlgebraicRows.lower_of_threshold",
     "file": "Zetesis/AlgebraicRows.lean",
-    "line": 1178
+    "line": 1263
   },
   {
     "name": "Zetesis.AlgebraicRows.upper_of_negated_threshold",
     "file": "Zetesis/AlgebraicRows.lean",
-    "line": 1186
+    "line": 1271
   },
   {
     "name": "Zetesis.AlgebraicRows.bounds_of_asserted_conjunction",
     "file": "Zetesis/AlgebraicRows.lean",
-    "line": 1204
+    "line": 1289
   },
   {
     "name": "Zetesis.AlgebraicRows.count_measure",
     "file": "Zetesis/AlgebraicRows.lean",
-    "line": 1225
+    "line": 1310
   },
   {
     "name": "Zetesis.AlgebraicRows.lower_of_clause",
     "file": "Zetesis/AlgebraicRows.lean",
-    "line": 1247
+    "line": 1332
   },
   {
     "name": "Zetesis.AlgebraicRows.double_count_groups",
     "file": "Zetesis/AlgebraicRows.lean",
-    "line": 1275
+    "line": 1360
   },
   {
     "name": "Zetesis.ArithmeticFamilies.empty_admissible",
@@ -5290,19 +5320,24 @@
     "line": 166
   },
   {
+    "name": "Zetesis.LearnedRegions.guarded_row",
+    "file": "Zetesis/LearnedRegions.lean",
+    "line": 175
+  },
+  {
     "name": "Zetesis.LearnedRegions.row_union",
     "file": "Zetesis/LearnedRegions.lean",
-    "line": 174
+    "line": 187
   },
   {
     "name": "Zetesis.LearnedRegions.row_dominance",
     "file": "Zetesis/LearnedRegions.lean",
-    "line": 185
+    "line": 198
   },
   {
     "name": "Zetesis.LearnedRegions.founded_row",
     "file": "Zetesis/LearnedRegions.lean",
-    "line": 204
+    "line": 217
   },
   {
     "name": "Zetesis.Lifted.composition_exact",

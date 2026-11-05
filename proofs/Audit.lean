@@ -146,6 +146,9 @@ import Zetesis
 #print axioms Zetesis.Algebra.answer_sets_nested
 #print axioms Zetesis.Algebra.countermodel_outputs_empty_iff
 #print axioms Zetesis.Algebra.countermodel_verdict_independent
+#print axioms Zetesis.Algebra.contains_decideAll
+#print axioms Zetesis.Algebra.entailed_by_refutations
+#print axioms Zetesis.Algebra.saturation_unit
 #print axioms Zetesis.AlgebraicRows.contribution_of_holds
 #print axioms Zetesis.AlgebraicRows.contribution_of_fails
 #print axioms Zetesis.AlgebraicRows.measure_cons
@@ -201,6 +204,9 @@ import Zetesis
 #print axioms Zetesis.AlgebraicRows.parity_equation_of_xor
 #print axioms Zetesis.AlgebraicRows.counting_replace_occurrence
 #print axioms Zetesis.AlgebraicRows.counting_fold_one
+#print axioms Zetesis.AlgebraicRows.count_of_none
+#print axioms Zetesis.AlgebraicRows.upper_of_clique
+#print axioms Zetesis.AlgebraicRows.bounds_of_allowed
 #print axioms Zetesis.AlgebraicRows.bounded_counting_fold
 #print axioms Zetesis.AlgebraicRows.bounded_counting_fold_one
 #print axioms Zetesis.AlgebraicRows.bounded_counting_overflow_iff
@@ -1058,6 +1064,7 @@ import Zetesis
 #print axioms Zetesis.LearnedRegions.consequence_row_narrows
 #print axioms Zetesis.LearnedRegions.consequence_row_forces_complement
 #print axioms Zetesis.LearnedRegions.row_of_narrower_class
+#print axioms Zetesis.LearnedRegions.guarded_row
 #print axioms Zetesis.LearnedRegions.row_union
 #print axioms Zetesis.LearnedRegions.row_dominance
 #print axioms Zetesis.LearnedRegions.founded_row

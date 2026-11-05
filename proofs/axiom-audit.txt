@@ -144,6 +144,9 @@
 'Zetesis.Algebra.answer_sets_nested' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.Algebra.countermodel_outputs_empty_iff' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.Algebra.countermodel_verdict_independent' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.Algebra.contains_decideAll' does not depend on any axioms
+'Zetesis.Algebra.entailed_by_refutations' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.Algebra.saturation_unit' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.AlgebraicRows.contribution_of_holds' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.AlgebraicRows.contribution_of_fails' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.AlgebraicRows.measure_cons' depends on axioms: [propext, Classical.choice, Quot.sound]
@@ -199,6 +202,9 @@
 'Zetesis.AlgebraicRows.parity_equation_of_xor' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.AlgebraicRows.counting_replace_occurrence' depends on axioms: [propext, Quot.sound]
 'Zetesis.AlgebraicRows.counting_fold_one' depends on axioms: [propext]
+'Zetesis.AlgebraicRows.count_of_none' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.AlgebraicRows.upper_of_clique' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.AlgebraicRows.bounds_of_allowed' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.AlgebraicRows.bounded_counting_fold' depends on axioms: [propext, Quot.sound]
 'Zetesis.AlgebraicRows.bounded_counting_fold_one' depends on axioms: [propext, Quot.sound]
 'Zetesis.AlgebraicRows.bounded_counting_overflow_iff' depends on axioms: [propext, Quot.sound]
@@ -1082,6 +1088,7 @@
 'Zetesis.LearnedRegions.consequence_row_narrows' does not depend on any axioms
 'Zetesis.LearnedRegions.consequence_row_forces_complement' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.LearnedRegions.row_of_narrower_class' does not depend on any axioms
+'Zetesis.LearnedRegions.guarded_row' does not depend on any axioms
 'Zetesis.LearnedRegions.row_union' depends on axioms: [propext]
 'Zetesis.LearnedRegions.row_dominance' does not depend on any axioms
 'Zetesis.LearnedRegions.founded_row' depends on axioms: [propext, Classical.choice, Quot.sound]

@@ -169,6 +169,19 @@ theorem row_of_narrower_class (C D : Atoms α → Prop)
   intro M member satisfied
   exact row M (inclusion M member) satisfied
 
+/-- A row of the class restricted by a guard `G` is a row of the class with the
+guard among its conditions: a consequence found under decided guard literals enters
+`consequence_row_forces` with the guard decided. -/
+theorem guarded_row (C : Atoms α → Prop) (G B O : List (Literal α))
+    (row : RowOf (fun J => C J ∧ ∀ l ∈ G, Holds J l) B O) :
+    RowOf C (G ++ B) O := by
+  intro M member satisfied
+  have guarded : ∀ l ∈ G, Holds M l :=
+    fun l listed => satisfied l (List.mem_append_left B listed)
+  have conditions : ∀ l ∈ B, Holds M l :=
+    fun l listed => satisfied l (List.mem_append_right G listed)
+  exact row M ⟨member, guarded⟩ conditions
+
 /-- Two rows of a class with the same conditions give a row with both rows'
 outputs. Retention may merge such rows. -/
 theorem row_union (C : Atoms α → Prop) (B O₁ O₂ : List (Literal α))
