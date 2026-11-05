@@ -30,14 +30,23 @@ struct Saturation {
 
 impl Saturation {
     fn build(n: usize, clauses: &[Vec<(usize, bool)>], masked: &[Vec<(usize, bool)>]) -> Self {
-        Self::build_with(n, clauses, masked, &[])
+        Self::build_with(n, clauses, masked, &[], false)
     }
 
+    /// With `facts`, the shape the grounder writes: a tautology, the fact
+    /// `universal(j)` simplified away, guards each disjunction
+    /// `y(j) ∨ ny(j) ← (⊥ → ⊥)`; the fact
+    /// `literal(c, k)` joins the body of `fl(c, k)`, which also keeps the
+    /// other polarity's rule, `fl(c, k) ← other ∧ falsifier'`, false in the
+    /// candidate; and `f(c)`'s body is the conditional literal's expansion,
+    /// `clause(c) ∧ ⋀ (literal(c, k) → fl(c, k))`, nested as left-recursive
+    /// pairs.
     fn build_with(
         n: usize,
         clauses: &[Vec<(usize, bool)>],
         masked: &[Vec<(usize, bool)>],
         loose_clauses: &[Vec<(usize, bool)>],
+        facts: bool,
     ) -> Self {
         let (valid, current, other, loose) = (2 * n, 2 * n + 1, 2 * n + 2, 2 * n + 3);
         let all: Vec<&Vec<(usize, bool)>> =
@@ -49,22 +58,64 @@ impl Saturation {
             fl_base.push(next);
             next += clause.len();
         }
-        let atoms = next;
+        // The fact atoms, when present: `universal(j)`, then one per
+        // literal, then one per clause.
+        let universal = |j: usize| next + j;
+        let literal_fact = |c: usize, k: usize| next + n + fl_base[c] - fl_base[0] + k;
+        let clause_fact = |c: usize| {
+            next + n + (fl_base[all.len() - 1] - fl_base[0]) + all[all.len() - 1].len() + c
+        };
+        let atoms = if facts {
+            clause_fact(all.len() - 1) + 1
+        } else {
+            next
+        };
         let theory = constructed_theory(atoms, |nodes| {
             let mut roots = Vec::new();
+            let falsum = push(nodes, NodeView::False);
+            let tautology = push(nodes, NodeView::Implies(falsum, falsum));
             for j in 0..n {
-                roots.push(push(nodes, NodeView::Or(&[j, n + j])));
+                let pair = push(nodes, NodeView::Or(&[j, n + j]));
+                if facts {
+                    roots.push(universal(j));
+                    roots.push(push(nodes, NodeView::Implies(tautology, pair)));
+                } else {
+                    roots.push(pair);
+                }
             }
             roots.push(current);
             for (c, clause) in all.iter().enumerate() {
                 let mut conjuncts = Vec::new();
+                if facts {
+                    roots.push(clause_fact(c));
+                    conjuncts.push(clause_fact(c));
+                }
                 for (k, &(j, held)) in clause.iter().enumerate() {
                     let falsifier = if held { j } else { n + j };
                     let literal = fl_base[c] + k;
-                    roots.push(push(nodes, NodeView::Implies(falsifier, literal)));
-                    conjuncts.push(literal);
+                    let body = if facts {
+                        roots.push(literal_fact(c, k));
+                        let masked = if held { n + j } else { j };
+                        let dead = push(nodes, NodeView::And(&[other, masked]));
+                        roots.push(push(nodes, NodeView::Implies(dead, literal)));
+                        push(nodes, NodeView::And(&[literal_fact(c, k), falsifier]))
+                    } else {
+                        falsifier
+                    };
+                    roots.push(push(nodes, NodeView::Implies(body, literal)));
+                    if facts {
+                        conjuncts.push(push(nodes, NodeView::Implies(literal_fact(c, k), literal)));
+                    } else {
+                        conjuncts.push(literal);
+                    }
                 }
-                let body = push(nodes, NodeView::And(&conjuncts));
+                let body = if facts {
+                    conjuncts[1..].iter().fold(conjuncts[0], |left, &right| {
+                        push(nodes, NodeView::And(&[left, right]))
+                    })
+                } else {
+                    push(nodes, NodeView::And(&conjuncts))
+                };
                 roots.push(push(nodes, NodeView::Implies(body, f(c))));
                 let (gate, head) = if c < clauses.len() {
                     (current, valid)
@@ -83,22 +134,7 @@ impl Saturation {
             roots
         });
         let unused = |atom: usize| atom == other || (atom == loose && loose_clauses.is_empty());
-        let candidate =
-            Interpretation::new(&theory, (0..atoms).filter(|&atom| !unused(atom))).unwrap();
-        let mut workspace = EvaluationWorkspace::default();
-        let evaluated = workspace
-            .evaluate(
-                &candidate,
-                EvaluationLimits::default(),
-                &Cancellation::default(),
-            )
-            .result
-            .unwrap();
-        assert!(
-            evaluated.is_model(),
-            "the saturated candidate models the fixture"
-        );
-        let truth = evaluated.truth().to_vec();
+        let (candidate, truth) = saturated(&theory, |atom| !unused(atom));
         Self {
             theory,
             candidate,
@@ -133,14 +169,6 @@ impl Saturation {
         root
     }
 
-    /// The query root closed by hand: the fact `current` held, as the first
-    /// frozen narrowing holds it.
-    fn closed_root(&self) -> Region {
-        let mut root = self.query_root();
-        root.hold(self.current);
-        root
-    }
-
     /// The query root closed by the frozen narrowing, with its knowledge.
     fn closed(&self) -> (Narrower, Region, Knowledge<Countermodels>) {
         let narrower = Narrower::new(&self.theory);
@@ -167,7 +195,7 @@ impl Saturation {
 
     fn propose(&self) -> Proposals {
         let producers = self.producers();
-        let root = self.closed_root();
+        let (_, root, _) = self.closed();
         let mut quota = Allowance {
             remaining: u64::MAX,
             failure: Stop::WorkLimit,
@@ -242,6 +270,31 @@ fn two_chains() -> Vec<Vec<(usize, bool)>> {
     clauses.push(vec![(4, false), (6, false)]);
     clauses.push(vec![(4, true), (6, true)]);
     clauses
+}
+
+/// The candidate holding every atom `included`, which models `theory`, and
+/// its node truth.
+fn saturated(theory: &Theory, included: impl Fn(usize) -> bool) -> (Interpretation, Vec<bool>) {
+    let candidate = Interpretation::new(
+        theory,
+        (0..theory.atom_count()).filter(|&atom| included(atom)),
+    )
+    .unwrap();
+    let mut workspace = EvaluationWorkspace::default();
+    let evaluated = workspace
+        .evaluate(
+            &candidate,
+            EvaluationLimits::default(),
+            &Cancellation::default(),
+        )
+        .result
+        .unwrap();
+    assert!(
+        evaluated.is_model(),
+        "the saturated candidate models the fixture"
+    );
+    let truth = evaluated.truth().to_vec();
+    (candidate, truth)
 }
 
 /// A gate's four clauses: the odd patterns over `(a, i, o)`, falsified when
@@ -386,7 +439,7 @@ fn two_chains_whose_results_must_differ_refute_the_root() {
 
 #[test]
 fn parity_groups_under_an_open_guard_are_dropped() {
-    let fixture = Saturation::build_with(3, &gate(0, 1, 2), &[], &gate(0, 1, 2));
+    let fixture = Saturation::build_with(3, &gate(0, 1, 2), &[], &gate(0, 1, 2), false);
     let attempt = fixture.prepared();
     let preparation = attempt.result.unwrap().unwrap();
     assert_eq!(attempt.statistics.guards, 2);
@@ -598,4 +651,46 @@ fn a_guard_cut_at_the_root_needs_no_probe() {
     assert_eq!(attempt.statistics.saturation_units, 0);
     assert!(preparation.units().is_empty());
     assert_eq!(attempt.statistics.parity.rows, 1);
+}
+
+#[test]
+fn fact_bodies_and_guarded_disjunctions_do_not_split_the_groups() {
+    // The grounder's shape: facts in the bodies, a fact guarding each
+    // disjunction, and a masked second definition of each literal atom. The
+    // facts, held at the closed root, contribute no base atom; the guarded
+    // disjunction still pairs `y(j)` with `ny(j)`; and the masked rule,
+    // absent from the reduct, leaves the literal atom one live definition.
+    let plain = Saturation::build(3, &gate(0, 1, 2), &[]);
+    let grounded = Saturation::build_with(3, &gate(0, 1, 2), &[], &[], true);
+    let expected: Vec<(Vec<usize>, Vec<bool>)> = plain
+        .propose()
+        .clauses
+        .iter()
+        .map(|clause| (clause.support.clone(), clause.held.clone()))
+        .collect();
+    let actual: Vec<(Vec<usize>, Vec<bool>)> = grounded
+        .propose()
+        .clauses
+        .iter()
+        .map(|clause| (clause.support.clone(), clause.held.clone()))
+        .collect();
+    assert_eq!(actual, expected);
+    assert_eq!(grounded.propose().parity.len(), 1);
+    let attempt = grounded.prepared();
+    assert_eq!(attempt.statistics.parity.rows, 1);
+    assert_eq!(attempt.statistics.refuted_patterns, 4);
+}
+
+#[test]
+fn a_deeply_nested_conjunction_is_read_through() {
+    // Nine literals nested as pairs, with the fact guard and the conditional
+    // literal's implications: a nesting past any producer-chain bound, which
+    // the reader follows to every base atom.
+    let wide: Vec<(usize, bool)> = (0..9).map(|j| (j, j % 2 == 0)).collect();
+    let fixture = Saturation::build_with(9, &[wide, vec![(0, true), (1, true)]], &[], &[], true);
+    let proposals = fixture.propose();
+    assert_eq!(proposals.clauses.len(), 2);
+    assert_eq!(proposals.clauses[0].support, (0..9).collect::<Vec<_>>());
+    assert_eq!(proposals.counts.unsupported_clauses, 1);
+    assert_eq!(proposals.parity.len(), 1);
 }

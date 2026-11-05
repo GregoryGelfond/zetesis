@@ -63,6 +63,10 @@ use crate::{Interpretation, NodeView, Producers, Region, Theory};
 /// producers; the quantified encodings need three.
 const MAX_CHAIN: usize = 8;
 
+/// A body is read through at most this many nested connectives; the DAG is
+/// finite and each node read is charged, so this bounds the recursion only.
+const MAX_NESTING: usize = 1024;
+
 /// One base atom reached by a chain, and whether it was reached through the
 /// other disjunct of its two-atom root, so that the clause is falsified when
 /// the base is cut rather than held.
@@ -93,11 +97,13 @@ struct Falsifier {
 /// Propose the guards of `candidate`'s frozen reduct and their clauses.
 ///
 /// A guard is an atom of the candidate not held in `root`, open or already
-/// cut there, heading at least two rules whose bodies, true in the candidate,
-/// are conjunctions over atoms with at least one conjunct the root does not
-/// hold. A conjunct the root cuts still carries its clause when a definition
-/// chain leads below it; a base atom the root cuts satisfies its clause,
-/// which then proposes nothing.
+/// cut there, heading at least two rules of its own (one head) whose bodies,
+/// true in the candidate, are conjunctions over atoms with at least one
+/// conjunct the root does not hold. A conjunct the root cuts still carries
+/// its clause when a definition chain leads below it. A base atom the root
+/// decides contributes nothing when its literal is already satisfied, and
+/// satisfies the whole clause, which then proposes nothing, when its literal
+/// is already false; so the facts the grounder keeps in bodies fall away.
 /// Each open conjunct is followed through single-producer bodies, a single
 /// atom or a conjunction of atoms, to base atoms, a base that is one disjunct
 /// of a two-atom disjunctive root being read as the lower disjunct, through
@@ -158,20 +164,21 @@ pub(super) fn propose<Q: Quota + ?Sized>(
     Ok(proposals)
 }
 
-/// The conjuncts of `rule`'s body the root does not hold, when the body is a
-/// conjunction over atoms true in the candidate; none when the rule is a
-/// choice, a fact, masked, or every conjunct is held.
+/// The conjuncts of `rule`'s body the root does not hold, when the rule has
+/// one head and its body is a conjunction over atoms true in the candidate;
+/// none when the rule is a choice, a disjunction, a fact, masked, or every
+/// conjunct is held.
 fn falsifier<Q: Quota + ?Sized>(
     masked: Masked<'_>,
     rule: usize,
     budget: &mut Budget<'_, '_, Q>,
 ) -> Result<Option<Falsifier>, BudgetError<Q::Error>> {
     let producer = &masked.producers.rules[rule];
-    budget.charge(2)?;
+    budget.charge(3)?;
     let Some(body) = producer.body else {
         return Ok(None);
     };
-    if producer.choice || !masked.truth[body] {
+    if producer.choice || producer.heads.len() != 1 || !masked.truth[body] {
         return Ok(None);
     }
     let mut conjuncts = Vec::new();
@@ -196,9 +203,10 @@ fn falsifier<Q: Quota + ?Sized>(
 }
 
 /// Collect the atoms of a conjunction, read through nested conjunction nodes
-/// as a builder without wide spans writes them; `false` when an operand is
-/// neither an atom nor a conjunction, or the nesting runs deeper than
-/// `MAX_CHAIN`.
+/// as a builder without wide spans writes them, and through implications
+/// whose antecedent the root holds, as the grounder expands a conditional
+/// literal; `false` when an operand is none of these, or the nesting runs
+/// deeper than `MAX_NESTING`.
 fn conjunction<Q: Quota + ?Sized>(
     masked: Masked<'_>,
     node: usize,
@@ -207,7 +215,7 @@ fn conjunction<Q: Quota + ?Sized>(
     budget: &mut Budget<'_, '_, Q>,
 ) -> Result<bool, BudgetError<Q::Error>> {
     budget.charge(1)?;
-    if depth > MAX_CHAIN {
+    if depth > MAX_NESTING {
         return Ok(false);
     }
     match budget.node(masked.theory, node)? {
@@ -217,6 +225,21 @@ fn conjunction<Q: Quota + ?Sized>(
                 if !conjunction(masked, child, depth + 1, atoms, budget)? {
                     return Ok(false);
                 }
+            }
+        }
+        NodeView::Implies(antecedent, consequent) => {
+            // The conditional literal's expansion: `fact → conjunct`. An
+            // antecedent the root knows true passes to the consequent, one
+            // known false makes the implication true, an open one is no
+            // conjunction.
+            match known(masked, antecedent, depth + 1, budget)? {
+                Some(true) => {
+                    if !conjunction(masked, consequent, depth + 1, atoms, budget)? {
+                        return Ok(false);
+                    }
+                }
+                Some(false) => {}
+                None => return Ok(false),
             }
         }
         _ => return Ok(false),
@@ -278,7 +301,10 @@ fn follow<Q: Quota + ?Sized>(
     for &rule in definitions {
         budget.charge(1)?;
         let producer = &masked.producers.rules[rule];
-        if producer.body.is_none() && !producer.choice && producer.heads.len() == 2 {
+        if !producer.choice
+            && producer.heads.len() == 2
+            && disjunction_active(masked, producer.body, budget)?
+        {
             let other = if producer.heads[0] == atom {
                 producer.heads[1]
             } else {
@@ -286,24 +312,27 @@ fn follow<Q: Quota + ?Sized>(
             };
             budget.charge(1)?;
             if masked.candidate.contains(other) {
-                let base = atom.min(other);
-                let complement = other < atom;
-                // The clause is falsified by the base held or cut; the root
-                // deciding it the other way satisfies the clause already.
-                if masked.root.decision(base) == Some(complement) {
-                    return Ok(false);
-                }
-                reached.push(Reached { base, complement });
-                return Ok(true);
+                return Ok(settle(masked, atom.min(other), other < atom, reached));
             }
         }
     }
+    // The definitions the reduct keeps: a masked rule, whose body is false
+    // in the candidate, defines nothing there.
+    let mut live = None;
+    let mut alive = 0;
+    for &rule in definitions {
+        budget.charge(1)?;
+        let producer = &masked.producers.rules[rule];
+        if producer.body.is_none_or(|body| masked.truth[body]) {
+            alive += 1;
+            live = Some(rule);
+        }
+    }
     budget.charge(1)?;
-    if let [rule] = definitions[..] {
+    if let (1, Some(rule)) = (alive, live) {
         let producer = &masked.producers.rules[rule];
         if let Some(body) = producer.body
             && !producer.choice
-            && masked.truth[body]
         {
             match budget.node(masked.theory, body)? {
                 NodeView::Atom(next) => {
@@ -330,14 +359,94 @@ fn follow<Q: Quota + ?Sized>(
         }
     }
     budget.charge(1)?;
-    if masked.root.is_cut(atom) {
+    Ok(settle(masked, atom, false, reached))
+}
+
+/// Whether a two-headed disjunctive root is in force at the closed root: a
+/// bare disjunction, or one whose body the root knows true, as the grounder
+/// guards `y(j) ∨ ny(j)` with the fact `universal(j)` or with the tautology
+/// that fact leaves behind.
+fn disjunction_active<Q: Quota + ?Sized>(
+    masked: Masked<'_>,
+    body: Option<usize>,
+    budget: &mut Budget<'_, '_, Q>,
+) -> Result<bool, BudgetError<Q::Error>> {
+    let Some(body) = body else {
+        return Ok(true);
+    };
+    budget.charge(1)?;
+    if !masked.truth[body] {
         return Ok(false);
     }
-    reached.push(Reached {
-        base: atom,
-        complement: false,
-    });
-    Ok(true)
+    Ok(known(masked, body, 0, budget)? == Some(true))
+}
+
+/// What the closed root knows of a node's truth, read structurally: an
+/// atom's decision, falsum, and the connectives over what their operands are
+/// known to be; `None` when open or read deeper than `MAX_NESTING`.
+fn known<Q: Quota + ?Sized>(
+    masked: Masked<'_>,
+    node: usize,
+    depth: usize,
+    budget: &mut Budget<'_, '_, Q>,
+) -> Result<Option<bool>, BudgetError<Q::Error>> {
+    budget.charge(1)?;
+    if depth > MAX_NESTING {
+        return Ok(None);
+    }
+    Ok(match budget.node(masked.theory, node)? {
+        NodeView::Atom(atom) => masked.root.decision(atom),
+        NodeView::False => Some(false),
+        NodeView::And(children) => {
+            let mut all = Some(true);
+            for &child in children {
+                match known(masked, child, depth + 1, budget)? {
+                    Some(true) => {}
+                    Some(false) => return Ok(Some(false)),
+                    None => all = None,
+                }
+            }
+            all
+        }
+        NodeView::Or(children) => {
+            let mut any = Some(false);
+            for &child in children {
+                match known(masked, child, depth + 1, budget)? {
+                    Some(true) => return Ok(Some(true)),
+                    Some(false) => {}
+                    None => any = None,
+                }
+            }
+            any
+        }
+        NodeView::Implies(antecedent, consequent) => {
+            match (
+                known(masked, antecedent, depth + 1, budget)?,
+                known(masked, consequent, depth + 1, budget)?,
+            ) {
+                (Some(false), _) | (_, Some(true)) => Some(true),
+                (Some(true), Some(false)) => Some(false),
+                _ => None,
+            }
+        }
+        NodeView::Threshold(_) | NodeView::ExtremumCut(_) => None,
+    })
+}
+
+/// Record a base the clause reads directly (`complement` false, falsified
+/// when held) or through its disjunctive partner (`complement` true,
+/// falsified when cut), unless the root has decided it: a literal already
+/// satisfied contributes nothing, and one already false satisfies the clause,
+/// which then proposes nothing.
+fn settle(masked: Masked<'_>, base: usize, complement: bool, reached: &mut Vec<Reached>) -> bool {
+    match masked.root.decision(base) {
+        Some(decided) if decided != complement => true,
+        Some(_) => false,
+        None => {
+            reached.push(Reached { base, complement });
+            true
+        }
+    }
 }
 
 /// Record a clause, and its parity group when its support fits the table.
