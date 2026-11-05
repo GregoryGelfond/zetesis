@@ -10,6 +10,7 @@ mod curated_corpus;
 mod example_corpus;
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 mod example_parity;
+mod inner_series;
 mod matrix_schedule;
 mod native_invocation;
 mod native_json_answers;
