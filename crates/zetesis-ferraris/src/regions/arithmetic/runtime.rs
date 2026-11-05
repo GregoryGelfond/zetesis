@@ -189,7 +189,9 @@ pub(super) fn copy_words<Q: Quota + ?Sized, S: AsRef<[u64]> + AsMut<[u64]>>(
             let count = u64::try_from(covered).expect("covered words fit the permit balance");
             charge(work, count)?;
             let end = copied + covered;
-            target[copied..end].copy_from_slice(&source[copied..end]);
+            for (target, source) in target[copied..end].iter_mut().zip(&source[copied..end]) {
+                *target = *source;
+            }
             copied = end;
         }
     }
