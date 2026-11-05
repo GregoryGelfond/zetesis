@@ -1,3 +1,5 @@
+mod copying;
+
 use std::mem::size_of;
 
 use zetesis_algebra::Refusal;

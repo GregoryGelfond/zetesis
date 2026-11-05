@@ -6,6 +6,7 @@ mod barriers;
 mod coverage;
 mod false_bodies;
 mod heads;
+mod publication;
 use crate::test_support::{Allowance, theory};
 use crate::{Node, RegionLimits};
 use zetesis_algebra::Cancellation;
@@ -213,7 +214,7 @@ fn exact_owner_is_checked_after_history_collection() {
 }
 
 #[test]
-fn only_inherited_first_pass_uses_local_replay() {
+fn bare_completion_does_not_rearm_local_replay() {
     let example = Example::new(false);
     let (never, cuts) = example.masks(3, 0);
     let mut actual = example.prepared();
@@ -376,7 +377,9 @@ fn original_false_events_collect_the_whole_interval() {
             close(&mut child, &mut inherited, &mut scratch),
             Narrowing::Fixed { .. }
         ));
-        assert_eq!(scratch.common.founded.local.passes, before + 1);
+        // One changed replay publishes the cuts, then one local confirmation
+        // consumes the complete publication baseline with no further false input.
+        assert_eq!(scratch.common.founded.local.passes, before + 2);
         assert!((0..4).all(|atom| child.is_cut(atom)));
         assert!(child.is_open(4) && child.is_open(5));
     }

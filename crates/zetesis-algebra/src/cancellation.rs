@@ -643,6 +643,7 @@ impl<'a, Q: Quota + ?Sized> Meter<'a, Q> {
     /// # Panics
     /// The caller must report `actual <= maximum`. Debug builds assert this
     /// precondition, as the original private reservation boundary did.
+    #[inline]
     pub fn bounded<T>(
         &mut self,
         maximum: u64,

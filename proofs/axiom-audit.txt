@@ -1407,6 +1407,10 @@
 'Zetesis.Refinement.PackedInterpretations.pack_denotes' depends on axioms: [propext, Quot.sound]
 'Zetesis.Refinement.PackedInterpretations.export32_denotes' depends on axioms: [propext, Quot.sound]
 'Zetesis.Refinement.PackedInterpretations.candidate_word_read' depends on axioms: [propext, Quot.sound]
+'Zetesis.Refinement.PackedInterpretations.and_not_zero_iff_bit_imp' depends on axioms: [propext,
+ Classical.choice,
+ Quot.sound]
+'Zetesis.Refinement.PackedInterpretations.subset_scan_exact' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.PackedQueryLiterals.decode_encode' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.PackedQueryLiterals.encode_injective' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.PackedQueryLiterals.encode_lt' depends on axioms: [propext, Classical.choice, Quot.sound]
@@ -1456,6 +1460,7 @@
 'Zetesis.Refinement.PackedWordIterator.SetBits.lowest_bit_arithmetic' depends on axioms: [propext,
  Classical.choice,
  Quot.sound]
+'Zetesis.Refinement.PackedWordIterator.first_set_none_iff' depends on axioms: [propext, Quot.sound]
 'Zetesis.PairwiseExclusions.masked_unit_sum_two' depends on axioms: [propext, Quot.sound]
 'Zetesis.PairwiseExclusions.original' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.PairwiseExclusions.constraint_frozen_iff' depends on axioms: [propext, Classical.choice, Quot.sound]
@@ -1515,6 +1520,20 @@
  Quot.sound]
 'Zetesis.PossibleFoundedness.body_upper_mono' does not depend on any axioms
 'Zetesis.PossibleFoundedness.body_upper_sound' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.PossibleFoundedness.PublicationErasure.erasure_preserves_least_closed' does not depend on any axioms
+'Zetesis.PossibleFoundedness.PublicationErasure.positive_monotone' does not depend on any axioms
+'Zetesis.PossibleFoundedness.PublicationErasure.positive_direct_erasure' depends on axioms: [propext]
+'Zetesis.PossibleFoundedness.PublicationErasure.producer_step_closed' does not depend on any axioms
+'Zetesis.PossibleFoundedness.PublicationErasure.positive_step_monotone' does not depend on any axioms
+'Zetesis.PossibleFoundedness.PublicationErasure.direct_step_erasure' depends on axioms: [propext, Quot.sound]
+'Zetesis.PossibleFoundedness.PublicationErasure.completed_publication_preserves_least' depends on axioms: [propext,
+ Quot.sound]
+'Zetesis.PossibleFoundedness.PublicationErasure.surviving_cyclic_heads_possible' depends on axioms: [propext,
+ Classical.choice,
+ Quot.sound]
+'Zetesis.PossibleFoundedness.PublicationErasure.whole_publication_baseline' depends on axioms: [propext,
+ Classical.choice,
+ Quot.sound]
 'Zetesis.ProducerScheduling.stable_of_reads_only' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.ProducerScheduling.selective_step_exact_of_stable' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.ProducerScheduling.empty_selection_closed_of_stable' depends on axioms: [propext, Classical.choice, Quot.sound]
@@ -2099,6 +2118,12 @@
 'Zetesis.ThresholdDivision.original' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.ThresholdDivision.frozen' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.ThresholdDivision.equivalent' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.ThresholdPropagation.assign_current' depends on axioms: [propext, Quot.sound]
+'Zetesis.ThresholdPropagation.occurrence_le_coefficient' depends on axioms: [propext, Quot.sound]
+'Zetesis.ThresholdPropagation.assigned_false_le_remove_occurrence' depends on axioms: [propext, Quot.sound]
+'Zetesis.ThresholdPropagation.add_occurrence_le_assigned_true' depends on axioms: [propext, Quot.sound]
+'Zetesis.ThresholdPropagation.condition_required_true_of_occurrence' depends on axioms: [propext, Quot.sound]
+'Zetesis.ThresholdPropagation.condition_required_false_of_occurrence' depends on axioms: [propext, Quot.sound]
 'Zetesis.ThresholdPrefixes.masked_sum_append' depends on axioms: [propext]
 'Zetesis.ThresholdPrefixes.masked_sum_prefix_le' depends on axioms: [propext, Quot.sound]
 'Zetesis.ThresholdPrefixes.masked_threshold_implies' depends on axioms: [propext, Quot.sound]

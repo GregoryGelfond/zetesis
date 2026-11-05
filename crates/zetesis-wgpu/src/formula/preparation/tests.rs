@@ -547,7 +547,7 @@ fn constant_graph_admission_is_monotone_in_batch_bytes() {
 }
 
 #[test]
-fn threshold_outputs_wake_the_shared_owner() {
+fn threshold_inputs_and_outputs_wake_shared_owner() {
     use zetesis_ferraris::{FormulaNodes, FormulaParts, NodeView};
     let mut nodes = FormulaNodes::new(
         FormulaParts::new(
@@ -603,6 +603,16 @@ fn threshold_outputs_wake_the_shared_owner() {
             u32::try_from(guards[1]).unwrap()
         ]
     );
+    // Every row condition already has an ordinary incidence to each guard,
+    // including the designated owner. This remains true for the false child;
+    // original truth does not remove a physical dependency from the index.
+    for condition in 0..4 {
+        let slot = prepared.nodes[condition * 4 + 3] as usize;
+        let start = prepared.roots[offset + slot] as usize;
+        let end = prepared.roots[offset + slot + 1] as usize;
+        let targets = &prepared.roots[order + start..order + end];
+        assert!(targets.contains(&u32::try_from(guards[0]).unwrap()));
+    }
 }
 
 fn grouped_fixture() -> Theory {

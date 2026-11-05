@@ -58,7 +58,7 @@ impl Snapshot {
         self.words.split_at(self.words.len() / 2)
     }
 
-    /// Check same polarity containment through existing counted Words kernels.
+    /// Check same-polarity containment through the shared Boolean Words scan.
     /// This does not authenticate the prepared system or map false to an error.
     pub(super) fn is_ancestor<Q: Quota + ?Sized>(
         &self,
@@ -75,11 +75,12 @@ impl Snapshot {
         if held.len() != current_held.len() {
             return Ok(false);
         }
+        // Retain the prior counted kernel's representable-width precondition.
+        assert!(held.len() <= usize::MAX / 64, "packed bit width fits");
         for (old, current) in [(held, current_held), (cut, current_cut)] {
-            let count = words::count(old, &mut |amount| runtime::charge(work, amount))?;
-            let retained = runtime::counted_intersection(old, current, work)?;
-            runtime::charge(work, 1)?;
-            if count != retained {
+            if !Words::<u64, _>::new(old)
+                .is_subset_of(Words::new(current), &mut || runtime::charge(work, 1))?
+            {
                 return Ok(false);
             }
         }

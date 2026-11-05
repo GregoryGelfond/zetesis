@@ -391,3 +391,79 @@ fn lane_population_counts_every_stored_bit() {
         assert_eq!(Words::<u32>::popcount(word), width);
     }
 }
+
+#[test]
+fn subset_refusal_preserves_the_deciding_prefix() {
+    macro_rules! check {
+        ($lane:ty) => {{
+            let left: [$lane; 3] = [1, 2, 4];
+            let right: [$lane; 3] = [1, 0, 4];
+            // The second pair is the first witness. Even a callback willing
+            // to continue must not be called for the third pair.
+            for admitted in 0..=6 {
+                let mut calls = 0;
+                let result = Words::<$lane, _>::new(&left[..]).is_subset_of(
+                    Words::new(&right[..]),
+                    &mut || {
+                        if calls == admitted {
+                            return Err(("primitive", calls));
+                        }
+                        calls += 1;
+                        Ok(())
+                    },
+                );
+                assert_eq!(
+                    result,
+                    if admitted == 6 {
+                        Ok(false)
+                    } else {
+                        Err(("primitive", admitted))
+                    }
+                );
+                assert_eq!(calls, admitted);
+                assert_eq!(left, [1, 2, 4]);
+                assert_eq!(right, [1, 0, 4]);
+            }
+        }};
+    }
+    check!(u32);
+    check!(u64);
+}
+
+#[test]
+fn subset_includes_the_final_physical_bit() {
+    macro_rules! check {
+        ($lane:ty) => {{
+            let left: [$lane; 3] = [0, 0, 1 << (<$lane>::BITS - 1)];
+            for (right, expected) in [([0; 3], false), (left, true)] {
+                let mut calls = 0;
+                assert_eq!(
+                    Words::<$lane, _>::new(&left[..]).is_subset_of(
+                        Words::new(&right[..]),
+                        &mut || {
+                            calls += 1;
+                            Ok::<_, ()>(())
+                        }
+                    ),
+                    Ok(expected)
+                );
+                assert_eq!(calls, 9);
+            }
+            assert_eq!(
+                Words::<$lane, _>::new([])
+                    .is_subset_of(Words::new(&[]), &mut || Err("empty storage must not poll")),
+                Ok(true)
+            );
+        }};
+    }
+    check!(u32);
+    check!(u64);
+}
+
+#[test]
+#[should_panic(expected = "packed subset shapes agree")]
+fn subset_shape_is_checked_before_callbacks() {
+    let _ = Words::<u64, _>::new([1]).is_subset_of(Words::new(&[]), &mut || -> Result<(), ()> {
+        panic!("callback preceded shape validation")
+    });
+}

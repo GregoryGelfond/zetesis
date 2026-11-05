@@ -2138,7 +2138,9 @@ impl<W: Count, C: ReadingClass> Closure<'_, W, C> {
             let step = if let Some((node, value)) = self.lists.nodes.pop() {
                 statistics.propagations += 1;
                 self.revisit(subject, index, node, value, work)?
-            } else if let Some(row) = self.lists.next_threshold() {
+            } else if frozen.is_none()
+                && let Some(row) = self.lists.next_threshold()
+            {
                 debug_assert!(
                     frozen.is_none(),
                     "only original rows transport requirements"
@@ -2156,7 +2158,9 @@ impl<W: Count, C: ReadingClass> Closure<'_, W, C> {
                 let result = self.recheck(index, producers, atom, work);
                 statistics.support_work += work.charged() - before;
                 result?
-            } else if let Some(row) = self.lists.next_residual() {
+            } else if frozen.is_none()
+                && let Some(row) = self.lists.next_residual()
+            {
                 debug_assert!(frozen.is_none(), "only original rows check residual sums");
                 statistics.propagations += 1;
                 let step = self.threshold_residual(index, row, work)?;
@@ -2254,9 +2258,16 @@ impl<W: Count, C: ReadingClass> Closure<'_, W, C> {
                 }
             }
         }
-        // A changed pass queued new false evidence; ordinary propagation must
-        // finish and a new pass must account for it before closure is inherited.
-        // Interrupted or contradictory prefixes never publish this authority.
+        if step == Step::Changed {
+            // Every remaining uncut cyclic head now belongs to the completed
+            // possible set. Direct publication erased only absent heads; it
+            // cannot change that least closure. Collect ordinary false events
+            // from this boundary, before the surrounding closure drains them.
+            self.lists.founded.begin_after_publication(theory);
+        }
+        // A changed pass still requires ordinary propagation and another
+        // founded check before completion can be inherited. Interrupted or
+        // contradictory publication never rearms local replay.
         *self.known.founded_closed = step == Step::Unchanged;
         Ok(step)
     }

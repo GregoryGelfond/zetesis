@@ -147,6 +147,13 @@ fn inspect<Q: Quota + ?Sized>(
         .as_ref()
         .expect("complete nonrefuting preparation has its index");
     snapshot.select(region, index, scratch, work)?;
+    if words::first(&scratch.touched, &mut |amount| charge(work, amount))?.is_none() {
+        // No row can read an open mask or collect a consequence. Retain this
+        // inspected input even when its new decisions touch no parity row.
+        snapshot.publish(region, work)?;
+        charge(work, 1)?; // the reached unchanged result
+        return Ok(SubjectStep::Unchanged);
+    }
     prepare_open(region, &mut scratch.open, work)?;
     let (held, _) = region.decision_words();
     let ArithmeticScratch {

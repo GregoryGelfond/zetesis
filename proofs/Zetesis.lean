@@ -135,6 +135,7 @@ import Zetesis.SourceSupport
 import Zetesis.BindingScopes
 import Zetesis.DisjunctiveSupport
 import Zetesis.PossibleFoundedness
+import Zetesis.PossibleFoundednessPublication
 import Zetesis.LearnedRegions
 import Zetesis.AggregateBodyWitnesses
 import Zetesis.GateRestrictions
@@ -206,6 +207,7 @@ import Zetesis.AcyclicEvaluation
 import Zetesis.RequiredChoiceCosts
 
 import Zetesis.ThresholdPropagation
+import Zetesis.ThresholdOccurrence
 import Zetesis.ThresholdResidues
 
 import Zetesis.ChargeCadence

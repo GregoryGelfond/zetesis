@@ -1,4 +1,4 @@
-//! First-pass replay below inherited completed founded knowledge.
+//! Replay below completed founded knowledge.
 //!
 //! Every old uncut cyclic atom belongs to the old least upper closure. Collect
 //! all newly false selected inputs, then close their forward dependency cone.
@@ -10,10 +10,13 @@
 //! heads under current masks. The final
 //! atom mask contains the unaffected seeds and the complete local result.
 //!
-//! Only the inherited knowledge supplies this premise. Owner-bound scratch stores
-//! disposable membership/worklists, never an ancestor's truth. A partial attempt
-//! consumes the premise and leaves marks that require a full retry. Publication
-//! and explanation capture retain their existing complete-result boundary.
+//! Inherited completion or a complete successful missing-head publication
+//! supplies this premise. The latter erases only heads absent from the completed
+//! least closure, before ordinary propagation changes other body masks.
+//! Owner-bound scratch stores disposable membership/worklists, never previous
+//! body truth. A partial attempt consumes the premise and leaves marks that
+//! require a full retry. Publication and explanation capture retain their
+//! existing complete-result boundary.
 
 use zetesis_algebra::{Failure, Quota};
 
@@ -44,6 +47,8 @@ pub(super) struct Replay {
     touched: Vec<usize>,
     #[cfg(test)]
     passes: usize,
+    #[cfg(test)]
+    force_full: bool,
 }
 
 impl Replay {
@@ -139,11 +144,29 @@ impl Scratch {
     /// or allocation. Dirty scratch from a stopped sibling declines this route.
     pub(in crate::regions) fn begin_local(&mut self, theory: &Theory, inherited: bool) {
         self.local.end();
-        if inherited
-            && self
-                .owner
-                .as_ref()
-                .is_some_and(|owner| owner.same_instance(theory))
+        if inherited {
+            self.begin_completed(theory);
+        }
+    }
+
+    /// Called only after explanation capture and the entire missing-head
+    /// publication succeeded. Every remaining uncut cyclic head is in the
+    /// completed result; dependent ordinary events have not yet been drained.
+    pub(in crate::regions) fn begin_after_publication(&mut self, theory: &Theory) {
+        self.local.end();
+        self.begin_completed(theory);
+    }
+
+    /// Both callers supply complete baseline knowledge, never a partial pass.
+    fn begin_completed(&mut self, theory: &Theory) {
+        #[cfg(test)]
+        if self.local.force_full {
+            return;
+        }
+        if self
+            .owner
+            .as_ref()
+            .is_some_and(|owner| owner.same_instance(theory))
             && self.projected.is_some()
             && self.local.touched.is_empty()
             && self.local.atoms == theory.atom_count()
@@ -169,7 +192,7 @@ impl Scratch {
         }
     }
 
-    /// Consume first-pass authority before any fallible work. A declined local
+    /// Consume completed-baseline authority before any fallible work. A declined local
     /// plan leaves only disposable marks; the caller must complete a full pass.
     pub(super) fn complete_local<Q: Quota + ?Sized>(
         &mut self,
@@ -180,8 +203,8 @@ impl Scratch {
         atom_never: &[u64],
         work: &mut Meter<'_, Q>,
     ) -> Result<bool, Failure<Q::Error>> {
-        let inherited = std::mem::take(&mut self.local.collecting);
-        if !inherited
+        let completed = std::mem::take(&mut self.local.collecting);
+        if !completed
             || !self
                 .owner
                 .as_ref()

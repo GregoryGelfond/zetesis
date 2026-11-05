@@ -253,3 +253,59 @@ fn refused_selection_preserves_knowledge_and_reusable_scratch() {
         assert_eq!(snapshot.old_masks(), parent.decision_words());
     }
 }
+
+#[test]
+fn ancestry_admits_exactly_the_performed_prefix() {
+    for atoms in [0_usize, 1, 65, 129] {
+        let region = Region::all_open(atoms);
+        let snapshot = saved(&region);
+        let needed = 4 + 6 * u64::try_from(atoms.div_ceil(64)).unwrap();
+        for limit in 0..=needed {
+            let mut work = Meter::local(limit);
+            assert_eq!(
+                snapshot.validate(&region, atoms, &mut work),
+                if limit == needed {
+                    Ok(())
+                } else {
+                    Err(Failure::Stopped(Stop::WorkLimit))
+                }
+            );
+            assert_eq!(work.charged(), limit);
+            assert!(snapshot.initialized());
+            assert!(snapshot.words.iter().all(|word| *word == 0));
+            assert_eq!(region.open().count(), atoms);
+        }
+    }
+}
+
+#[test]
+fn bad_lineage_stops_at_its_first_missing_word() {
+    for (held, atom, needed) in [
+        (true, 0, 7),
+        (true, 128, 13),
+        (false, 0, 16),
+        (false, 128, 22),
+    ] {
+        let mut prior = Region::all_open(129);
+        assert!(if held {
+            prior.hold(atom)
+        } else {
+            prior.cut(atom)
+        });
+        let snapshot = saved(&prior);
+        let current = Region::all_open(129);
+        for limit in 0..=needed {
+            let mut work = Meter::local(limit);
+            assert_eq!(
+                snapshot.validate(&current, 129, &mut work),
+                Err(Failure::Stopped(if limit == needed {
+                    Stop::InvalidProgram
+                } else {
+                    Stop::WorkLimit
+                }))
+            );
+            assert_eq!(work.charged(), limit);
+            assert_eq!(snapshot.old_masks(), prior.decision_words());
+        }
+    }
+}

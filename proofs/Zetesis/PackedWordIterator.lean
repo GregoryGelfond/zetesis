@@ -371,4 +371,46 @@ theorem lowest_bit_arithmetic {width : Nat} (value : BitVec width)
 
 end SetBits
 
+/-- The first physical set position, scanning lanes in order. A zero
+    head contributes its width to a later position; a nonzero head uses its
+    trailing-zero count and does not inspect the suffix. The absence law below
+    is independent of machine index arithmetic and callback effects. -/
+def firstSet {width : Nat} : List (BitVec width) → Option Nat
+  | [] => none
+  | value :: rest =>
+      if value = 0#width then (firstSet rest).map (fun index => width + index)
+      else some value.ctz.toNat
+
+/-- A completed first-set scan returns absence exactly when every stored lane
+    is zero. This does not infer absence from an interrupted prefix. It supplies
+    the empty-mask premise for omitting work whose only consumers are selected
+    bits; ownership, output publication and resource effects remain separate.
+
+    The zero-head case uses the tail's complete coverage. A nonzero head makes
+    both absence and the all-zero proposition impossible. -/
+theorem first_set_none_iff {width : Nat} (words : List (BitVec width)) :
+    firstSet words = none ↔ ∀ value ∈ words, value = 0#width := by
+  induction words with
+  | nil => simp [firstSet]
+  | cons value rest tailExact =>
+    change (if value = 0#width then (firstSet rest).map (fun index => width + index)
+      else some value.ctz.toNat) = none ↔
+        ∀ lane ∈ value :: rest, lane = 0#width
+    by_cases zero : value = 0#width
+    · rw [if_pos zero, Option.map_eq_none_iff]
+      constructor
+      · intro absent lane listed
+        rcases List.mem_cons.mp listed with same | later
+        · subst lane
+          exact zero
+        · exact tailExact.mp absent lane later
+      · intro each
+        exact tailExact.mpr (fun lane listed => each lane (List.mem_cons_of_mem value listed))
+    · rw [if_neg zero]
+      constructor
+      · intro impossible
+        cases impossible
+      · intro each
+        exact False.elim (zero (each value List.mem_cons_self))
+
 end Zetesis.Refinement.PackedWordIterator

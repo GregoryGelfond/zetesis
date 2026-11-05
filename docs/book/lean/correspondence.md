@@ -129,6 +129,20 @@ positions retain their contributions even when their conditions are equal.
 with repeated condition identities, and the corresponding formula consequences.
 These are general laws over complete rows and truth bounds.
 
+`ThresholdPropagation.condition_required_true_of_occurrence` and
+`condition_required_false_of_occurrence` allow a conservative deduction using
+one occurrence's weight. For concurrent reads, the index type denotes operand
+occurrences and actual truth is the physical interpretation lifted to those
+positions. Lower and upper observations may differ between positions that alias
+the same physical slot; no coherence between those observations is assumed.
+`occurrence_le_coefficient` supplies the selected contribution's weight bound.
+The forcing laws require compatibility at every position and inclusion or
+exclusion of the selected occurrence in the reading used to form the sum.
+A later atomic load does not by itself establish that earlier-read premise.
+Relating those observations under shrinking domains, preserving occurrence
+multiplicity, and realizing natural-number sums without limb overflow remain
+Rust/WGSL correspondence obligations.
+
 The ordinary GPU formula and tight checkers retain shared native threshold rows.
 Four little-endian `u32` wire limbs preserve admitted nonnegative sums and signed-bound
 constants. The complete nonnegative row total, or ordinal empty-minimum sentinel,
@@ -645,6 +659,21 @@ and unmatched suffix. Its operation parameter takes the existing bit-vector
 OR, AND or XOR operation; the corresponding `BitVec.getLsbD_*` laws give each
 lane's set interpretation. The successful-write count is not a work allowance
 or a claim about which callback was executed.
+
+`Words::is_subset_of` tests equal-length physical storage with an ascending
+NOT/AND/zero-test scan. `PackedInterpretations.and_not_zero_iff_bit_imp` relates
+one word's zero difference to bit inclusion; `subset_scan_exact` covers every
+paired lane on completion. All stored bits participate. A semantic inclusion
+equivalence additionally needs exact carrier coverage and zero padding, not
+merely equal physical lengths. The Rust callback refusal boundaries remain a
+separate obligation: each visited lane admits its three primitives separately,
+and a first missing bit stops before the suffix.
+
+The shared arithmetic `Snapshot::is_ancestor` applies this operation to prior
+held/current held, then prior cut/current cut. Under the owners' mask invariants,
+these inclusions express `FormulaBounds.Inside current prior`: the upper bound
+is the complement of cut. This checks descent, not prepared-system identity.
+Detected faults still become `InvalidProgram`, never semantic refutation.
 
 `Region` and the six-span knowledge masks retain their own extents and
 allocation boundaries. Wrapping storage does not establish padding, owner
@@ -2188,6 +2217,27 @@ receipt. The local lease clears its grant; the cumulative meter retains its
 charged history. These are different post-settlement states governed by the
 same used/unused partition, not interchangeable admission policies.
 
+For `runtime::copy_words`, let `c` be charged work, `L` the admitted cumulative
+limit, with `c <= L <= u64::MAX`, and `n` a nonempty copy run covered by
+`n <= L - c`. The covered-success case of
+`WorkCharge.repeated_eq_charge` identifies `n` unit charges with one charge of
+`n`, both ending at `c + n`. Instantiating the numeric `WorkPermits.Window` with
+`granted = L` and `remaining = L - c`, `take_partitions_remaining` and
+`take_preserves_window` give the same remainder and used count. This cumulative
+view is not the source account's outstanding grant; settlement uses that owner's
+actual window and `settlement_partitions_grant`. At an empty balance the copy
+retains the original one-word charge and write, so refill, polling, refund and
+refusal boundaries remain unchanged. No exhausted-batch law justifies charging
+across that boundary.
+
+The Rust argument additionally requires representable counts and slice bounds,
+one original mutable-backing acquisition, and an infallible `u64` copy with no
+allocation, user callback or intermediate control observation. These premises
+make the intermediate reordering unobservable at the existing operation
+boundaries; they do not justify batching fallible maps or larger atomic
+primitives. Exact quota and stopped-prefix tests are regression evidence, not a
+Lean proof of Rust's finite arithmetic, borrowing or callback behavior.
+
 Renewal remains inside the source's existing lock, with control observed before
 locking. Its callback must operate only on that source account, without
 re-entering the same lease, and successful refill leaves a positive unconsumed
@@ -3462,14 +3512,32 @@ upper relaxation then put every compatible answer set inside `P`. The selection
 may be arbitrary: this law establishes safe exclusion, not equality with a least
 closure, and does not assume or prove inherited completion.
 
+`PossibleFoundedness.PublicationErasure.erasure_preserves_least_closed`
+proves that erasing atoms outside a monotone operator's least closed set from
+both inputs and outputs preserves that least set. The positive formula
+relaxation instantiates this law through `completed_publication_preserves_least`.
+`whole_publication_baseline` also establishes that every surviving permitted
+cyclic head belongs to the completed closure after all missing cyclic heads
+have been published. Erasing a partial publication prefix still preserves the
+least set, but does not establish that all remaining cyclic heads belong to it.
+The boundary precedes dependent ordinary propagation; it does not freeze opaque
+body truth across that later work or establish answer-set membership.
+
 Rust's [selective replay](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-ferraris/src/regions/founded/local.rs)
-uses inherited completed knowledge only on the first invalidated original pass,
-with exact owner and projection authentication repeated immediately before use.
-Its forward cone must include every affected live cyclic head `H`, from all false
-inputs since entry, including opaque bodies and already-false occurrences of newly
-cut atoms. Forward traversal may stop at a currently false destination only
-because a newly false input retains its own notification and an older false
-input was inactive in the inherited completed closure. The head-prefix partition
+collects false events from an authenticated completed original baseline. That
+baseline may be inherited at entry or re-established after a completed founded
+pass publishes its whole missing-head set. Exact owner and projection
+authentication are repeated immediately before replay. A stopped publication
+prefix cannot rearm collection; a completed pass without new publication does
+not supply a new event boundary. Its forward cone must include every affected
+live cyclic head `H`, from all false inputs since that baseline, including opaque
+bodies and already-false occurrences of newly cut atoms. Rearming may clear the
+completed founded event history, but must retain pending ordinary events and
+collect subsequent atom cuts and ordinary false events. It does not mark
+ordinary closure or founded confirmation complete. Forward traversal may stop
+at a currently false destination only because a newly false input
+retains its own notification and an older false input was inactive at the
+completed baseline. The head-prefix partition
 must preserve every discovered vertex, head order and membership marks; it does
 not supply new closure authority. Reverse selection must cover every producer entering an uncut head in
 `H` and every relevant relaxed Boolean operand in `B(H)`. A current false body
@@ -3479,9 +3547,12 @@ activate and needs no incoming producer evaluation. Fresh initialization and fil
 must saturate that complete body selection while seeding unaffected uncut atoms.
 The result must include the boundary seeds as well as the local closure before
 publication or explanation capture. Proving that no newly invalidated unblocked
-dependency can change a boundary seed, and that inherited completion justifies
-those seeds in the current least closure of the full cyclic-head relaxation, remains an executable
-correspondence obligation. So do occurrence
+dependency can change a boundary seed, and that the selected completed baseline
+justifies those seeds in the current least closure of the full cyclic-head
+relaxation, remains an executable correspondence obligation. Complete producer
+coverage, n-ary Boolean projection and native opaque-body treatment must realize
+the formula-level law; it does not verify the indexed Rust DAG. Further
+correspondence obligations include occurrence
 multiplicity, sibling isolation, full fallback, typed interruption and actual
 storage accounting. Exhaustive cut comparisons and interrupted-prefix tests supply
 regression evidence for these obligations; the partition law does not discharge
@@ -3853,6 +3924,19 @@ new decision remains a trigger for the next inspection. `AlgebraicRows.parity_fo
 `LearnedRegions.consequence_row_forces` carries a forced row into the region.
 The shared `zetesis_algebra::region::SubjectStep::Changed` denotes progress,
 not local or joint closure.
+
+After exact touched-row selection, parity uses the existing metered
+`words::first` to detect an empty mask. `PackedWordIterator.first_set_none_iff`
+states that completed absence means every stored word is zero; interrupted
+scans establish no such result. With no selected bit, the old row loop has no
+row consumer and the already-cleared consequence vector stays empty. The
+runtime can omit rebuilding its open mask and the vacuous row/application
+work, while still publishing the inspected input before returning Unchanged.
+This is not a permanent absorption flag: unrelated decisions are published,
+and later incident decisions select rows normally. Validation, system identity
+preconditions and the completed incidence-selection correspondence remain
+necessary. Executing fewer operations changes bounded receipts and quota
+observations; the packed value law does not establish those effects.
 
 `zetesis_ferraris::CardinalitySystem::inspect_reserved` retains a complete input
 snapshot and two sums per checked family pair in `CardinalityKnowledge`. It

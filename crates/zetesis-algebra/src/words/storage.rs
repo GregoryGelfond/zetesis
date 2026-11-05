@@ -247,6 +247,45 @@ macro_rules! lane {
                 Ok(None)
             }
 
+            /// Whether every stored bit here also occurs in `other`.
+            ///
+            /// Equal-length lanes are visited in ascending order. Each visited
+            /// pair calls `before` separately before NOT, AND and the zero test.
+            /// A missing bit decides false immediately; later lanes and callbacks
+            /// are not visited. Empty storage decides true without a callback.
+            /// All stored bits participate, including caller-owned padding.
+            ///
+            /// No mutation, allocation or retained state occurs. Work is three
+            /// primitive operations per visited lane, with constant space.
+            /// The completed prefix has no bit absent from `other`; a nonzero
+            /// difference is the deciding witness. Each step shortens the suffix.
+            ///
+            /// # Errors
+            /// Returns the exact first callback refusal before its operation.
+            /// An unfinished scan proves neither containment nor its negation.
+            ///
+            /// # Panics
+            /// Panics before any callback if the storage lengths differ.
+            #[inline]
+            pub fn is_subset_of<E>(
+                &self,
+                other: Words<$lane, &[$lane]>,
+                before: &mut impl FnMut() -> Result<(), E>,
+            ) -> Result<bool, E> {
+                assert_eq!(self.len(), other.len(), "packed subset shapes agree");
+                for (left, right) in self.iter().zip(other.iter()) {
+                    before()?;
+                    let absent = !*right;
+                    before()?;
+                    let missing = *left & absent;
+                    before()?;
+                    if missing != 0 {
+                        return Ok(false);
+                    }
+                }
+                Ok(true)
+            }
+
             /// Whether the common lane prefix has any shared set bit.
             ///
             /// Calls `before` once before each pair's AND-and-test, in ascending

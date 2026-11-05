@@ -6805,6 +6805,16 @@
     "line": 414
   },
   {
+    "name": "Zetesis.Refinement.PackedInterpretations.and_not_zero_iff_bit_imp",
+    "file": "Zetesis/PackedInterpretations.lean",
+    "line": 442
+  },
+  {
+    "name": "Zetesis.Refinement.PackedInterpretations.subset_scan_exact",
+    "file": "Zetesis/PackedInterpretations.lean",
+    "line": 472
+  },
+  {
     "name": "Zetesis.PackedQueryLiterals.decode_encode",
     "file": "Zetesis/PackedQueryLiterals.lean",
     "line": 30
@@ -7018,6 +7028,11 @@
     "name": "Zetesis.Refinement.PackedWordIterator.SetBits.lowest_bit_arithmetic",
     "file": "Zetesis/PackedWordIterator.lean",
     "line": 320
+  },
+  {
+    "name": "Zetesis.Refinement.PackedWordIterator.first_set_none_iff",
+    "file": "Zetesis/PackedWordIterator.lean",
+    "line": 391
   },
   {
     "name": "Zetesis.PairwiseExclusions.masked_unit_sum_two",
@@ -7293,6 +7308,51 @@
     "name": "Zetesis.PossibleFoundedness.body_upper_sound",
     "file": "Zetesis/PossibleFoundedness.lean",
     "line": 381
+  },
+  {
+    "name": "Zetesis.PossibleFoundedness.PublicationErasure.erasure_preserves_least_closed",
+    "file": "Zetesis/PossibleFoundednessPublication.lean",
+    "line": 51
+  },
+  {
+    "name": "Zetesis.PossibleFoundedness.PublicationErasure.positive_monotone",
+    "file": "Zetesis/PossibleFoundednessPublication.lean",
+    "line": 88
+  },
+  {
+    "name": "Zetesis.PossibleFoundedness.PublicationErasure.positive_direct_erasure",
+    "file": "Zetesis/PossibleFoundednessPublication.lean",
+    "line": 111
+  },
+  {
+    "name": "Zetesis.PossibleFoundedness.PublicationErasure.producer_step_closed",
+    "file": "Zetesis/PossibleFoundednessPublication.lean",
+    "line": 146
+  },
+  {
+    "name": "Zetesis.PossibleFoundedness.PublicationErasure.positive_step_monotone",
+    "file": "Zetesis/PossibleFoundednessPublication.lean",
+    "line": 173
+  },
+  {
+    "name": "Zetesis.PossibleFoundedness.PublicationErasure.direct_step_erasure",
+    "file": "Zetesis/PossibleFoundednessPublication.lean",
+    "line": 199
+  },
+  {
+    "name": "Zetesis.PossibleFoundedness.PublicationErasure.completed_publication_preserves_least",
+    "file": "Zetesis/PossibleFoundednessPublication.lean",
+    "line": 225
+  },
+  {
+    "name": "Zetesis.PossibleFoundedness.PublicationErasure.surviving_cyclic_heads_possible",
+    "file": "Zetesis/PossibleFoundednessPublication.lean",
+    "line": 251
+  },
+  {
+    "name": "Zetesis.PossibleFoundedness.PublicationErasure.whole_publication_baseline",
+    "file": "Zetesis/PossibleFoundednessPublication.lean",
+    "line": 262
   },
   {
     "name": "Zetesis.ProducerScheduling.stable_of_reads_only",
@@ -10023,6 +10083,36 @@
     "name": "Zetesis.ThresholdDivision.equivalent",
     "file": "Zetesis/ThresholdDivision.lean",
     "line": 148
+  },
+  {
+    "name": "Zetesis.ThresholdPropagation.assign_current",
+    "file": "Zetesis/ThresholdOccurrence.lean",
+    "line": 27
+  },
+  {
+    "name": "Zetesis.ThresholdPropagation.occurrence_le_coefficient",
+    "file": "Zetesis/ThresholdOccurrence.lean",
+    "line": 37
+  },
+  {
+    "name": "Zetesis.ThresholdPropagation.assigned_false_le_remove_occurrence",
+    "file": "Zetesis/ThresholdOccurrence.lean",
+    "line": 54
+  },
+  {
+    "name": "Zetesis.ThresholdPropagation.add_occurrence_le_assigned_true",
+    "file": "Zetesis/ThresholdOccurrence.lean",
+    "line": 67
+  },
+  {
+    "name": "Zetesis.ThresholdPropagation.condition_required_true_of_occurrence",
+    "file": "Zetesis/ThresholdOccurrence.lean",
+    "line": 82
+  },
+  {
+    "name": "Zetesis.ThresholdPropagation.condition_required_false_of_occurrence",
+    "file": "Zetesis/ThresholdOccurrence.lean",
+    "line": 100
   },
   {
     "name": "Zetesis.ThresholdPrefixes.masked_sum_append",

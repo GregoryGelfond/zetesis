@@ -162,16 +162,36 @@ pub(super) fn prepare_words<Q: Quota + ?Sized>(
     overwrite(target.storage_mut(), length, 1, |_| 0, work)
 }
 
-/// Copy same-length initialized words, before each write, without allocation.
+/// Copy initialized words without allocation, preserving the next-word refusal.
+/// Bulk only an already-admitted run; its body has no callbacks or early exit.
 pub(super) fn copy_words<Q: Quota + ?Sized, S: AsRef<[u64]> + AsMut<[u64]>>(
     target: &mut Words<u64, S>,
     source: &[u64],
     work: &mut Meter<'_, Q>,
 ) -> Result<(), Failure<Q::Error>> {
     assert_eq!(target.len(), source.len(), "snapshot word shapes agree");
-    for (target, source) in target.iter_mut().zip(source) {
-        charge(work, 1)?;
-        *target = *source;
+    // Acquire the backing once, as the original mutable iterator did. A
+    // generic backing's AsMut need not be free of observable effects.
+    let target = &mut **target;
+    let length = target.len().min(source.len());
+    let mut copied = 0;
+    while copied < length {
+        let available = usize::try_from(work.remaining()).unwrap_or(usize::MAX);
+        let covered = available.min(length - copied);
+        if covered == 0 {
+            // Replenish only for the next original one-word primitive.
+            charge(work, 1)?;
+            target[copied] = source[copied];
+            copied += 1;
+        } else {
+            // This complete, infallible slice is already covered by the grant:
+            // no quota callback or poll can occur between its word copies.
+            let count = u64::try_from(covered).expect("covered words fit the permit balance");
+            charge(work, count)?;
+            let end = copied + covered;
+            target[copied..end].copy_from_slice(&source[copied..end]);
+            copied = end;
+        }
     }
     Ok(())
 }
