@@ -55,7 +55,9 @@ impl Saturation {
                 roots.push(nodes.len() - 1);
                 conjuncts.push(literal);
             }
-            let body = if let [left, right] = conjuncts[..] {
+            let body = if let [only] = conjuncts[..] {
+                only
+            } else if let [left, right] = conjuncts[..] {
                 nodes.push(Node::and_pair([left, right]));
                 nodes.len() - 1
             } else {
@@ -272,8 +274,12 @@ fn narrow(
     let mut budget = budget(&cancellation, u64::MAX);
     let mut counts = RegionCounts::default();
     let result = narrow_inner(
-        narrower,
-        fixture.subject(),
+        InnerReading {
+            narrower,
+            subject: fixture.subject(),
+            producers: None,
+            candidate: &fixture.candidate,
+        },
         preparation,
         &mut entry,
         &mut NarrowingScratch::default(),
@@ -381,7 +387,7 @@ fn a_dropped_clause_candidate_finds_its_countermodel_in_few_regions() {
 }
 
 #[test]
-fn two_candidates_of_one_theory_prepare_different_rows() {
+fn a_dropped_clause_changes_the_rows_loaded() {
     // The stable candidate loads a row per gate and nothing more, its root
     // refuted by them; the dropped-clause candidate's second round probes
     // the dropped gate to exactness, and the refutations along the way add
@@ -576,4 +582,121 @@ fn a_residual_query_prepares_from_its_own_root() {
     let preparation = statistics.reduct.inner_preparation;
     assert_eq!((preparation.attempts, preparation.prepared), (1, 1));
     assert_eq!(preparation.root_refuted, 1);
+}
+
+#[test]
+fn a_preparation_of_another_candidate_is_refused_by_identity() {
+    // A preparation serves its own candidate's query alone: offered to a
+    // region of another theory's candidate, the inner narrowing refuses it
+    // as the wrong theory before reading a row.
+    let fixture = Saturation::build(4, &shared_inputs());
+    let (narrower, root, knowledge) = fixture.closed();
+    let preparation = fixture.preparation(&narrower, &root, &knowledge);
+    let twin = Saturation::build(4, &shared_inputs());
+    let (twin_narrower, twin_root, _) = twin.closed();
+    let mut entry = Entry::new(twin_root, CountermodelKnowledge::fresh(&twin_narrower));
+    let cancellation = Cancellation::default();
+    let mut budget = budget(&cancellation, u64::MAX);
+    let result = narrow_inner(
+        InnerReading {
+            narrower: &twin_narrower,
+            subject: twin.subject(),
+            producers: None,
+            candidate: &twin.candidate,
+        },
+        Some(&preparation),
+        &mut entry,
+        &mut NarrowingScratch::default(),
+        &mut budget,
+        &mut RegionCounts::default(),
+    );
+    assert!(matches!(result, Err(Incomplete::WrongTheory)));
+}
+
+#[test]
+fn a_spent_preparation_is_neither_pending_nor_installed() {
+    // A preparation handed to a publication that could not return it is
+    // spent: the walk goes on without rows and never prepares below the
+    // root.
+    let spent = InnerPreparation::Spent;
+    assert!(!spent.is_pending());
+    assert!(spent.installed().is_none());
+}
+
+/// Every clause of `width` over `n` universals: each subset of that many
+/// atoms with each pattern of held atoms.
+fn clauses_of_width(n: usize, width: usize) -> Vec<Vec<(usize, bool)>> {
+    let mut clauses = Vec::new();
+    for subset in 0_usize..1 << n {
+        if subset.count_ones() as usize != width {
+            continue;
+        }
+        let atoms: Vec<usize> = (0..n).filter(|&j| subset & (1 << j) != 0).collect();
+        for pattern in 0_usize..1 << width {
+            clauses.push(
+                atoms
+                    .iter()
+                    .enumerate()
+                    .map(|(k, &j)| (j, pattern & (1 << k) != 0))
+                    .collect(),
+            );
+        }
+    }
+    clauses
+}
+
+/// Whether some assignment of the universals satisfies every clause: a
+/// clause is satisfied when some literal's atom is not as it lists.
+fn satisfiable(n: usize, clauses: &[Vec<(usize, bool)>]) -> bool {
+    (0_usize..1 << n).any(|assignment| {
+        clauses.iter().all(|clause| {
+            clause
+                .iter()
+                .any(|&(j, held)| (assignment & (1 << j) != 0) != held)
+        })
+    })
+}
+
+#[test]
+fn every_small_saturation_core_is_decided_as_by_enumeration() {
+    // Over two universals every set of the eight clauses of width one or
+    // two, over three every set of the eight clauses of width three and
+    // every thirteenth set of the twelve of width two: the candidate is
+    // stable exactly when no assignment satisfies the core, and a
+    // countermodel found leaves the guard out and falsifies no clause.
+    for (n, widths, stride) in [(2, &[1, 2][..], 1), (3, &[3][..], 1), (3, &[2][..], 13)] {
+        let clauses: Vec<Vec<(usize, bool)>> = widths
+            .iter()
+            .flat_map(|&width| clauses_of_width(n, width))
+            .collect();
+        for selection in (1_usize..1 << clauses.len()).step_by(stride) {
+            let core: Vec<Vec<(usize, bool)>> = clauses
+                .iter()
+                .enumerate()
+                .filter(|(index, _)| selection & (1 << index) != 0)
+                .map(|(_, clause)| clause.clone())
+                .collect();
+            let fixture = Saturation::build(n, &core);
+            match fixture.check().0 {
+                crate::Check::Stable => {
+                    assert!(!satisfiable(n, &core), "n={n} core {core:?}");
+                }
+                crate::Check::NonMinimal(witness) => {
+                    assert!(satisfiable(n, &core), "n={n} core {core:?}");
+                    assert!(!witness.contains(fixture.valid), "n={n} core {core:?}");
+                    for clause in &core {
+                        assert!(
+                            clause.iter().any(|&(j, held)| !witness.contains(if held {
+                                j
+                            } else {
+                                n + j
+                            })),
+                            "n={n} core {core:?}: {clause:?} falsified"
+                        );
+                    }
+                }
+                other => panic!("n={n} core {core:?}: {other:?}"),
+            }
+        }
+    }
 }

@@ -424,11 +424,16 @@ impl Publication for WalkPublication<'_, '_> {
             )
             .is_err()
         {
-            if let Ok(cell) = Arc::try_unwrap(cell)
-                && let Some(installed) = cell.preparation.into_inner()
-            {
-                *preparation = InnerPreparation::Prepared(installed);
-            }
+            // The cell is this walk's alone until a publication succeeds,
+            // so the preparation comes back; were it shared, the walk goes
+            // on without it rather than preparing below the root.
+            *preparation = match Arc::try_unwrap(cell) {
+                Ok(cell) => match cell.preparation.into_inner() {
+                    Some(installed) => InnerPreparation::Prepared(installed),
+                    None => InnerPreparation::Pending,
+                },
+                Err(_) => InnerPreparation::Spent,
+            };
             return None;
         }
         Live::add(&self.shared.live.published, 1);

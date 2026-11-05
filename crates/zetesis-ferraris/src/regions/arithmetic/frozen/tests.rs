@@ -28,6 +28,8 @@ struct Saturation {
     valid: usize,
     current: usize,
     loose: usize,
+    /// Per clause, in order, its literal atoms `fl(c, k)`.
+    literals: Vec<Vec<usize>>,
 }
 
 impl Saturation {
@@ -137,6 +139,11 @@ impl Saturation {
         });
         let unused = |atom: usize| atom == other || (atom == loose && loose_clauses.is_empty());
         let (candidate, truth) = saturated(&theory, |atom| !unused(atom));
+        let literals = all
+            .iter()
+            .enumerate()
+            .map(|(c, clause)| (0..clause.len()).map(|k| fl_base[c] + k).collect())
+            .collect();
         Self {
             theory,
             candidate,
@@ -144,6 +151,7 @@ impl Saturation {
             valid,
             current,
             loose,
+            literals,
         }
     }
 
@@ -274,6 +282,63 @@ impl Saturation {
     fn prepared(&self) -> FrozenPreparationAttempt<Failure<Stop>> {
         self.prepare(unbounded(), u64::MAX, &Cancellation::default())
             .0
+    }
+
+    /// Another candidate of the same theory, the atoms `included` admits
+    /// saturated, with its truth.
+    fn candidate(&self, included: impl Fn(usize) -> bool) -> (Interpretation, Vec<bool>) {
+        saturated(&self.theory, included)
+    }
+
+    /// Prepare `candidate` of this theory from its own closed query root.
+    fn prepared_for(
+        &self,
+        candidate: &Interpretation,
+        truth: &[bool],
+    ) -> FrozenPreparationAttempt<Failure<Stop>> {
+        let producers = self.producers();
+        let narrower = Narrower::new(&self.theory);
+        let mut root = Region::all_open(self.theory.atom_count());
+        for atom in (0..self.theory.atom_count()).filter(|&atom| !candidate.contains(atom)) {
+            root.cut(atom);
+        }
+        let mut knowledge = narrower.frozen_knowledge();
+        let mut scratch = NarrowingScratch::default();
+        let cancellation = Cancellation::default();
+        let mut quota = Allowance {
+            remaining: u64::MAX,
+            failure: Stop::WorkLimit,
+        };
+        let closure_work = {
+            let mut meter = Meter::reserved(&mut quota);
+            narrower
+                .narrow_frozen_known_reserved(
+                    FrozenSubject::new(&self.theory, truth),
+                    &mut root,
+                    &mut knowledge,
+                    &mut scratch,
+                    &cancellation,
+                    &mut meter,
+                )
+                .statistics
+                .work
+        };
+        let query = ClosedQuery {
+            narrower: &narrower,
+            producers: Some(&producers),
+            subject: FrozenSubject::new(&self.theory, truth),
+            candidate,
+            region: &root,
+            knowledge: &knowledge,
+            closure_work,
+        };
+        FrozenPreparation::prepare_reserved(
+            query,
+            &mut scratch,
+            unbounded(),
+            &cancellation,
+            &mut quota,
+        )
     }
 }
 
@@ -494,6 +559,40 @@ fn the_floor_covers_the_proposals_and_the_loading_and_the_probes_are_leased() {
     assert!(attempt.result.unwrap().is_some());
     assert_eq!(attempt.work, charged);
     assert!(attempt.work > floor.work);
+    // Every floor below the unleased share, at every interruption point of
+    // the proposal pass and the loading: either declined with nothing
+    // installed or prepared whole, never a part; the work settled as
+    // charged; and once a floor prepares, every larger floor does, since the
+    // probes' own lease covers at most their slack.
+    let unleased = usize::try_from(work - leased).unwrap();
+    let stride = (unleased / 256).max(1);
+    let mut prepared_once = false;
+    for floor in (0..unleased).step_by(stride) {
+        let limits = FrozenPreparationLimits {
+            work: u64::try_from(floor).unwrap(),
+            bytes: usize::MAX,
+        };
+        let (attempt, charged) = fixture.prepare(limits, u64::MAX, &Cancellation::default());
+        assert_eq!(attempt.work, charged, "floor {floor}");
+        if attempt.result.as_ref().unwrap().is_some() {
+            assert_eq!(
+                attempt.statistics.status,
+                super::super::PreparationStatus::Prepared,
+                "floor {floor}"
+            );
+            prepared_once = true;
+        } else {
+            assert!(
+                !prepared_once,
+                "floor {floor} declines after a smaller floor prepared"
+            );
+            assert_eq!(
+                attempt.statistics.status,
+                super::super::PreparationStatus::WorkDeclined,
+                "floor {floor}"
+            );
+        }
+    }
     let half = FrozenPreparationLimits {
         work: (work - leased) / 2,
         bytes: usize::MAX,
@@ -1182,4 +1281,38 @@ fn a_dropped_pigeons_atoms_complete_the_lower_side() {
     assert!(bounds.contains(&(BoundSide::Lower, vec![9, 10, 11], 0, 3)));
     assert!(!preparation.root_refuted());
     assert!(attempt.statistics.cardinality.families >= 1);
+}
+
+#[test]
+fn two_candidates_of_one_theory_prepare_differently() {
+    // One theory, two models with different masks on the gate's cone: the
+    // saturated candidate, whose guard the unit cuts, loads the gate's row;
+    // the model with every universal cut (`current`, the `ny(j)` and the
+    // literals they falsify) leaves `valid` out, so it proposes no guard and
+    // prepares nothing. Neither preparation belongs to the other candidate.
+    let clauses = gate(0, 1, 2);
+    let fixture = Saturation::build(3, &clauses, &[]);
+    let first = fixture.prepared();
+    assert_eq!(first.statistics.parity.rows, 1);
+    let falsified: Vec<usize> = clauses
+        .iter()
+        .enumerate()
+        .flat_map(|(c, clause)| {
+            clause
+                .iter()
+                .enumerate()
+                .filter(|(_, literal)| !literal.1)
+                .map(move |(k, _)| (c, k))
+        })
+        .map(|(c, k)| fixture.literals[c][k])
+        .collect();
+    let (candidate, truth) = fixture.candidate(|atom| {
+        atom == fixture.current || (3..6).contains(&atom) || falsified.contains(&atom)
+    });
+    let second = fixture.prepared_for(&candidate, &truth);
+    assert_eq!(second.statistics.guards, 0);
+    assert!(second.result.unwrap().is_none());
+    let preparation = first.result.unwrap().unwrap();
+    assert!(preparation.belongs_to(&fixture.theory, &fixture.candidate));
+    assert!(!preparation.belongs_to(&fixture.theory, &candidate));
 }

@@ -1423,8 +1423,7 @@ impl<'a> ReductQuery<'a> {
                 observation.enter();
                 let before = statistics.reduct.regions.work;
                 let mut result = narrow_inner(
-                    narrower,
-                    reading.subject,
+                    reading,
                     preparation.installed(),
                     entry,
                     scratch,
@@ -1520,8 +1519,7 @@ impl<'a> ReductQuery<'a> {
         };
         let before = statistics.reduct.regions.work;
         let mut narrowing = narrow_inner(
-            narrower,
-            reading.subject,
+            reading,
             query.preparation,
             entry,
             scratch,
@@ -1584,8 +1582,14 @@ pub(crate) struct PublishedQuery<'a> {
 /// A query's inner subjects along its inline walk: pending until the root's
 /// first closure, then prepared, whether or not anything was installed.
 pub(crate) enum InnerPreparation {
+    /// The query root has not closed under this walk: its first narrowed
+    /// region, the root, prepares.
     Pending,
+    /// Prepared at the root, or found to propose nothing.
     Prepared(Option<Box<FrozenPreparation>>),
+    /// Handed to a publication that could not return it: the walk goes on
+    /// without rows and never prepares at a region below the root.
+    Spent,
 }
 
 impl InnerPreparation {
@@ -1595,7 +1599,7 @@ impl InnerPreparation {
 
     pub(crate) fn installed(&self) -> Option<&FrozenPreparation> {
         match self {
-            Self::Pending | Self::Prepared(None) => None,
+            Self::Pending | Self::Prepared(None) | Self::Spent => None,
             Self::Prepared(Some(preparation)) => Some(preparation),
         }
     }
@@ -1724,8 +1728,7 @@ fn prepare_at_root<Q: Quota>(
         return Ok((Some(installed), Narrowing::Refuted));
     }
     let narrowed = narrow_inner(
-        reading.narrower,
-        reading.subject,
+        reading,
         Some(&installed),
         entry,
         scratch,
@@ -1773,14 +1776,24 @@ fn prepare_inner<Q: Quota>(
 /// fixed point. The frozen reading's split preference is installed in the
 /// entry once the closure is accounted.
 fn narrow_inner<Q: Quota>(
-    narrower: &Narrower,
-    subject: FrozenSubject<'_>,
+    reading: InnerReading<'_>,
     preparation: Option<&FrozenPreparation>,
     entry: &mut Entry<CountermodelKnowledge>,
     scratch: &mut NarrowingScratch,
     budget: &mut Budget<'_, Q>,
     counts: &mut RegionCounts,
 ) -> Result<Narrowing, Incomplete> {
+    // A preparation serves its own candidate's query alone, authenticated
+    // at every use by the theory's identity and the candidate's atoms.
+    let InnerReading {
+        narrower,
+        subject,
+        candidate,
+        ..
+    } = reading;
+    if preparation.is_some_and(|prepared| !prepared.belongs_to(candidate.theory(), candidate)) {
+        return Err(Incomplete::WrongTheory);
+    }
     let (region, knowledge) = entry.parts_mut();
     let preferred = Cell::new(None);
     let eager = || {
