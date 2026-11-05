@@ -11,7 +11,6 @@ mod budget;
 mod cardinality_source;
 mod completion;
 mod conjunction;
-#[cfg(test)]
 mod frozen;
 mod hull;
 mod parity;
@@ -24,6 +23,11 @@ mod cardinality;
 mod cardinality_runtime;
 mod work;
 pub(super) mod runtime;
+
+pub use frozen::{
+    ClosedQuery, FrozenPreparation, FrozenPreparationAttempt, FrozenPreparationLimits,
+    FrozenPreparationStatistics,
+};
 mod snapshot;
 
 pub use cardinality_runtime::CardinalityKnowledge;
@@ -220,6 +224,15 @@ pub struct ParitySystem {
 }
 
 impl ParitySystem {
+    /// A system from rows already recognized and eliminated; the frozen
+    /// preparation's rows enter here.
+    const fn from_rows(recognized: rows::Recognized, prepared: parity::Prepared) -> Self {
+        Self {
+            recognized,
+            prepared,
+        }
+    }
+
     /// Owned headers and actual vector capacities; shared theory data excluded.
     #[must_use]
     pub fn retained_bytes(&self) -> u128 {

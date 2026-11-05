@@ -1,11 +1,12 @@
-use zetesis_algebra::{Cancellation, Meter, Stop};
+use zetesis_algebra::{Cancellation, Countermodels, Failure, Meter, Stop};
 
 use super::super::budget::Budget;
 use super::proposals::{Proposals, propose};
+use super::{ClosedQuery, FrozenPreparation, FrozenPreparationAttempt, FrozenPreparationLimits};
 use crate::test_support::{Allowance, constructed_theory, push};
 use crate::{
-    EvaluationLimits, EvaluationWorkspace, Interpretation, NodeView, Producers, Region,
-    RegionLimits, Theory, producers,
+    EvaluationLimits, EvaluationWorkspace, FrozenSubject, Interpretation, Knowledge, Narrower,
+    Narrowing, NarrowingScratch, NodeView, Producers, Region, RegionLimits, Theory, producers,
 };
 
 /// The saturation shape of the quantified fixtures over `n` universal
@@ -15,21 +16,35 @@ use crate::{
 /// `(j, held)`: it is falsified when `y(j)` is held (`true`) or cut (`false`),
 /// the latter read through `ny(j)`. Masked clauses hang off `valid ← other ∧
 /// f(c)` with `other` outside the candidate, so their rule is false in it.
+/// Loose clauses hang off `loose ← current ∧ f(c)`, a guard nothing
+/// saturates from; without them `loose` has no rule and stays outside the
+/// candidate.
 struct Saturation {
     theory: Theory,
     candidate: Interpretation,
     truth: Vec<bool>,
     valid: usize,
     current: usize,
+    loose: usize,
 }
 
 impl Saturation {
     fn build(n: usize, clauses: &[Vec<(usize, bool)>], masked: &[Vec<(usize, bool)>]) -> Self {
-        let (valid, current, other) = (2 * n, 2 * n + 1, 2 * n + 2);
-        let all: Vec<&Vec<(usize, bool)>> = clauses.iter().chain(masked).collect();
-        let f = |c: usize| other + 1 + c;
+        Self::build_with(n, clauses, masked, &[])
+    }
+
+    fn build_with(
+        n: usize,
+        clauses: &[Vec<(usize, bool)>],
+        masked: &[Vec<(usize, bool)>],
+        loose_clauses: &[Vec<(usize, bool)>],
+    ) -> Self {
+        let (valid, current, other, loose) = (2 * n, 2 * n + 1, 2 * n + 2, 2 * n + 3);
+        let all: Vec<&Vec<(usize, bool)>> =
+            clauses.iter().chain(masked).chain(loose_clauses).collect();
+        let f = |c: usize| loose + 1 + c;
         let mut fl_base = Vec::new();
-        let mut next = other + 1 + all.len();
+        let mut next = loose + 1 + all.len();
         for clause in &all {
             fl_base.push(next);
             next += clause.len();
@@ -51,9 +66,15 @@ impl Saturation {
                 }
                 let body = push(nodes, NodeView::And(&conjuncts));
                 roots.push(push(nodes, NodeView::Implies(body, f(c))));
-                let gate = if c < clauses.len() { current } else { other };
+                let (gate, head) = if c < clauses.len() {
+                    (current, valid)
+                } else if c < clauses.len() + masked.len() {
+                    (other, valid)
+                } else {
+                    (current, loose)
+                };
                 let body = push(nodes, NodeView::And(&[gate, f(c)]));
-                roots.push(push(nodes, NodeView::Implies(body, valid)));
+                roots.push(push(nodes, NodeView::Implies(body, head)));
             }
             for j in 0..n {
                 roots.push(push(nodes, NodeView::Implies(valid, j)));
@@ -61,8 +82,9 @@ impl Saturation {
             }
             roots
         });
+        let unused = |atom: usize| atom == other || (atom == loose && loose_clauses.is_empty());
         let candidate =
-            Interpretation::new(&theory, (0..atoms).filter(|&atom| atom != other)).unwrap();
+            Interpretation::new(&theory, (0..atoms).filter(|&atom| !unused(atom))).unwrap();
         let mut workspace = EvaluationWorkspace::default();
         let evaluated = workspace
             .evaluate(
@@ -83,6 +105,7 @@ impl Saturation {
             truth,
             valid,
             current,
+            loose,
         }
     }
 
@@ -97,15 +120,49 @@ impl Saturation {
         .expect("every root of the fixture lies in the support fragment")
     }
 
-    /// The query root closed by hand: every atom of the candidate open except
-    /// the fact `current`, which the first frozen narrowing holds.
-    fn closed_root(&self) -> Region {
+    fn subject(&self) -> FrozenSubject<'_> {
+        FrozenSubject::new(&self.theory, &self.truth)
+    }
+
+    /// The query root: every atom of the candidate open, every other cut.
+    fn query_root(&self) -> Region {
         let mut root = Region::all_open(self.theory.atom_count());
         for atom in (0..self.theory.atom_count()).filter(|&atom| !self.candidate.contains(atom)) {
             root.cut(atom);
         }
+        root
+    }
+
+    /// The query root closed by hand: the fact `current` held, as the first
+    /// frozen narrowing holds it.
+    fn closed_root(&self) -> Region {
+        let mut root = self.query_root();
         root.hold(self.current);
         root
+    }
+
+    /// The query root closed by the frozen narrowing, with its knowledge.
+    fn closed(&self) -> (Narrower, Region, Knowledge<Countermodels>) {
+        let narrower = Narrower::new(&self.theory);
+        let mut root = self.query_root();
+        let mut knowledge = narrower.frozen_knowledge();
+        let mut scratch = NarrowingScratch::default();
+        let mut quota = Allowance {
+            remaining: u64::MAX,
+            failure: Stop::WorkLimit,
+        };
+        let mut meter = Meter::reserved(&mut quota);
+        let attempt = narrower.narrow_frozen_known_reserved(
+            self.subject(),
+            &mut root,
+            &mut knowledge,
+            &mut scratch,
+            &Cancellation::default(),
+            &mut meter,
+        );
+        assert_eq!(attempt.result.unwrap(), Narrowing::Fixed { changed: true });
+        assert!(root.is_held(self.current));
+        (narrower, root, knowledge)
     }
 
     fn propose(&self) -> Proposals {
@@ -128,6 +185,63 @@ impl Saturation {
         )
         .unwrap()
     }
+
+    /// Prepare under `limits` with `allowance` permits from the account; the
+    /// attempt and the permits the account granted and kept.
+    fn prepare(
+        &self,
+        limits: FrozenPreparationLimits,
+        allowance: u64,
+        cancellation: &Cancellation,
+    ) -> (FrozenPreparationAttempt<Failure<Stop>>, u64) {
+        let producers = self.producers();
+        let (narrower, root, knowledge) = self.closed();
+        let mut scratch = NarrowingScratch::default();
+        let mut quota = Allowance {
+            remaining: allowance,
+            failure: Stop::WorkLimit,
+        };
+        let query = ClosedQuery {
+            narrower: &narrower,
+            producers: Some(&producers),
+            subject: self.subject(),
+            candidate: &self.candidate,
+            region: &root,
+            knowledge: &knowledge,
+        };
+        let attempt = FrozenPreparation::prepare_reserved(
+            query,
+            &mut scratch,
+            limits,
+            cancellation,
+            &mut quota,
+        );
+        (attempt, allowance - quota.remaining)
+    }
+
+    fn prepared(&self) -> FrozenPreparationAttempt<Failure<Stop>> {
+        self.prepare(unbounded(), u64::MAX, &Cancellation::default())
+            .0
+    }
+}
+
+fn unbounded() -> FrozenPreparationLimits {
+    FrozenPreparationLimits {
+        work: u64::MAX,
+        bytes: usize::MAX,
+    }
+}
+
+/// The two chains of three inputs computing the same parity, whose results
+/// `y(4)` and `y(6)` must differ: a contradiction over seven universals.
+fn two_chains() -> Vec<Vec<(usize, bool)>> {
+    let mut clauses = gate(0, 1, 3);
+    clauses.extend(gate(3, 2, 4));
+    clauses.extend(gate(1, 2, 5));
+    clauses.extend(gate(5, 0, 6));
+    clauses.push(vec![(4, false), (6, false)]);
+    clauses.push(vec![(4, true), (6, true)]);
+    clauses
 }
 
 /// A gate's four clauses: the odd patterns over `(a, i, o)`, falsified when
@@ -221,4 +335,144 @@ fn proposals_read_only_nodes_true_in_the_candidate() {
             .iter()
             .all(|clause| clause.support == vec![0, 1, 2])
     );
+}
+
+#[test]
+fn holding_the_saturation_atom_reaches_the_candidate_so_it_is_a_unit() {
+    let fixture = Saturation::build(3, &gate(0, 1, 2), &[]);
+    let attempt = fixture.prepared();
+    let preparation = attempt.result.unwrap().unwrap();
+    assert_eq!(preparation.units(), &[fixture.valid]);
+    assert_eq!(attempt.statistics.saturation_units, 1);
+    assert_eq!(attempt.statistics.guards, 1);
+}
+
+#[test]
+fn the_odd_patterns_of_a_gate_are_refuted_and_the_hull_is_exact() {
+    let fixture = Saturation::build(3, &gate(0, 1, 2), &[]);
+    let attempt = fixture.prepared();
+    let preparation = attempt.result.unwrap().unwrap();
+    assert_eq!(attempt.statistics.probes, 9);
+    assert_eq!(attempt.statistics.refuted_patterns, 4);
+    assert_eq!(attempt.statistics.inexact_hulls, 0);
+    assert_eq!(attempt.statistics.parity.rows, 1);
+    assert_eq!(attempt.statistics.parity.wider, 1);
+    assert!(!preparation.root_refuted());
+    assert!(preparation.parity().is_some());
+}
+
+#[test]
+fn a_dropped_clause_leaves_an_inexact_hull_and_no_row() {
+    let mut clauses = gate(0, 1, 2);
+    clauses.pop();
+    let fixture = Saturation::build(3, &clauses, &[]);
+    let attempt = fixture.prepared();
+    let preparation = attempt.result.unwrap().unwrap();
+    assert_eq!(attempt.statistics.refuted_patterns, 3);
+    assert_eq!(attempt.statistics.inexact_hulls, 1);
+    assert_eq!(attempt.statistics.parity.rows, 0);
+    assert!(preparation.parity().is_none());
+}
+
+#[test]
+fn two_chains_whose_results_must_differ_refute_the_root() {
+    let fixture = Saturation::build(7, &two_chains(), &[]);
+    let attempt = fixture.prepared();
+    let preparation = attempt.result.unwrap().unwrap();
+    assert_eq!(attempt.statistics.parity.rows, 5);
+    assert!(preparation.root_refuted());
+    assert!(attempt.statistics.root_refuted);
+}
+
+#[test]
+fn parity_groups_under_an_open_guard_are_dropped() {
+    let fixture = Saturation::build_with(3, &gate(0, 1, 2), &[], &gate(0, 1, 2));
+    let attempt = fixture.prepared();
+    let preparation = attempt.result.unwrap().unwrap();
+    assert_eq!(attempt.statistics.guards, 2);
+    assert_eq!(attempt.statistics.saturation_units, 1);
+    assert_eq!(preparation.units(), &[fixture.valid]);
+    assert_eq!(attempt.statistics.groups, 2);
+    assert_eq!(attempt.statistics.probed_groups, 1);
+    assert_eq!(attempt.statistics.parity.rows, 1);
+    assert!(fixture.loose > fixture.valid);
+}
+
+#[test]
+fn a_lease_crossed_mid_probe_declines_the_preparation() {
+    let fixture = Saturation::build(3, &gate(0, 1, 2), &[]);
+    let complete = fixture.prepared();
+    let work = complete.work;
+    assert!(work > 0);
+    let stride = (work / 400).max(1);
+    for lease in (1..work).step_by(usize::try_from(stride).unwrap()) {
+        let limits = FrozenPreparationLimits {
+            work: lease,
+            bytes: usize::MAX,
+        };
+        let (attempt, charged) = fixture.prepare(limits, u64::MAX, &Cancellation::default());
+        assert!(attempt.result.as_ref().unwrap().is_none(), "lease {lease}");
+        assert_eq!(
+            attempt.statistics.status,
+            super::super::PreparationStatus::WorkDeclined
+        );
+        assert!(
+            attempt.work <= lease,
+            "lease {lease}: charged {}",
+            attempt.work
+        );
+        assert_eq!(attempt.work, charged);
+    }
+}
+
+#[test]
+fn a_stopped_probe_stops_the_preparation() {
+    let fixture = Saturation::build(3, &gate(0, 1, 2), &[]);
+    let work = fixture.prepared().work;
+    let (attempt, charged) = fixture.prepare(unbounded(), work / 2, &Cancellation::default());
+    assert_eq!(attempt.work, charged);
+    assert!(matches!(
+        attempt.result,
+        Err(super::super::PreparationError::Stopped(Failure::Refused(
+            Stop::WorkLimit
+        )))
+    ));
+    let cancellation = Cancellation::default();
+    cancellation.cancel();
+    let (attempt, _) = fixture.prepare(unbounded(), u64::MAX, &cancellation);
+    assert!(matches!(
+        attempt.result,
+        Err(super::super::PreparationError::Stopped(Failure::Stopped(
+            Stop::Cancelled
+        )))
+    ));
+}
+
+#[test]
+fn a_preparation_belongs_to_one_candidate() {
+    let fixture = Saturation::build(3, &gate(0, 1, 2), &[]);
+    let preparation = fixture.prepared().result.unwrap().unwrap();
+    assert!(preparation.belongs_to(&fixture.theory, &fixture.candidate));
+    let smaller = Interpretation::new(&fixture.theory, fixture.candidate.atoms().skip(1)).unwrap();
+    assert!(!preparation.belongs_to(&fixture.theory, &smaller));
+    let twin = Saturation::build(3, &gate(0, 1, 2), &[]);
+    assert!(!preparation.belongs_to(&twin.theory, &twin.candidate));
+}
+
+#[test]
+fn probing_charges_the_lease_and_leaves_the_root_untouched() {
+    let fixture = Saturation::build(3, &gate(0, 1, 2), &[]);
+    let (_, root, _) = fixture.closed();
+    let before: Vec<Option<bool>> = (0..fixture.theory.atom_count())
+        .map(|atom| root.decision(atom))
+        .collect();
+    let (attempt, charged) = fixture.prepare(unbounded(), u64::MAX, &Cancellation::default());
+    assert!(attempt.result.unwrap().is_some());
+    assert_eq!(attempt.work, charged);
+    assert!(attempt.work > 0);
+    let (_, root, _) = fixture.closed();
+    let after: Vec<Option<bool>> = (0..fixture.theory.atom_count())
+        .map(|atom| root.decision(atom))
+        .collect();
+    assert_eq!(before, after);
 }

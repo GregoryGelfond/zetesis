@@ -59,9 +59,10 @@ mod adjacency;
 mod arithmetic;
 pub use arithmetic::ParityKnowledge;
 pub use arithmetic::{
-    ArithmeticAttempt, CardinalityKnowledge, CardinalityStatistics, CardinalitySystem,
-    ParityStatistics, ParitySystem, PreparationAttempt, PreparationError, PreparationLimits,
-    PreparationStatus, PreparationWork, RootPreparation,
+    ArithmeticAttempt, CardinalityKnowledge, CardinalityStatistics, CardinalitySystem, ClosedQuery,
+    FrozenPreparation, FrozenPreparationAttempt, FrozenPreparationLimits,
+    FrozenPreparationStatistics, ParityStatistics, ParitySystem, PreparationAttempt,
+    PreparationError, PreparationLimits, PreparationStatus, PreparationWork, RootPreparation,
 };
 mod context;
 use context::{Context, LearningAccess, ReadingClass};

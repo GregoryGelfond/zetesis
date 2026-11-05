@@ -26,8 +26,18 @@ use super::{
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) enum Source {
-    Clauses { first: usize, count: usize },
-    Definition { head: usize },
+    Clauses {
+        first: usize,
+        count: usize,
+    },
+    Definition {
+        head: usize,
+    },
+    /// A group of a candidate's countermodel class, checked at its probe
+    /// table when proposed and never re-read from formulas.
+    Probed {
+        group: usize,
+    },
 }
 
 /// An independently checked consequence of the exact owner's answer sets.
@@ -272,7 +282,7 @@ fn from_definitions<Q: Quota + ?Sized>(
     Ok(())
 }
 
-fn propose<Q: Quota + ?Sized>(
+pub(super) fn propose<Q: Quota + ?Sized>(
     support: Support,
     forbidden: &[u64; 4],
     counts: &mut Counts,
@@ -293,7 +303,7 @@ fn propose<Q: Quota + ?Sized>(
     Ok(proposed)
 }
 
-fn materialize<Q: Quota + ?Sized>(
+pub(super) fn materialize<Q: Quota + ?Sized>(
     theory: &Theory,
     support: Support,
     local: LocalEquation,
@@ -341,6 +351,12 @@ fn check<Q: Quota + ?Sized>(
                 budget,
             )
         }
+        Source::Probed { .. } => {
+            // Probed rows rest on their refuted probes, not on a source
+            // reread; this checker cannot confirm one and rejects it.
+            budget.charge(1)?;
+            Ok(false)
+        }
         Source::Definition { head } => {
             let Some(producers) = producers else {
                 return Ok(false);
@@ -370,7 +386,7 @@ fn check<Q: Quota + ?Sized>(
     }
 }
 
-fn retain<Q: Quota + ?Sized>(
+pub(super) fn retain<Q: Quota + ?Sized>(
     valid: bool,
     candidate: Equation,
     coefficients: u8,

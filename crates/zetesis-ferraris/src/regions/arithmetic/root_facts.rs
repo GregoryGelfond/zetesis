@@ -37,6 +37,22 @@ pub(super) struct CheckedRootFacts {
 }
 
 impl CheckedRootFacts {
+    /// The record of a class to which no original root fact belongs: the
+    /// owner's identity alone. Admitted to `storage` before it is returned.
+    pub(super) fn none<Q: Quota + ?Sized>(
+        theory: &Theory,
+        storage: &mut Storage,
+        budget: &mut Budget<'_, '_, Q>,
+    ) -> Result<Self, BudgetError<Q::Error>> {
+        storage.admit_record(size_of::<Self>() as u128, budget)?;
+        budget.charge(1)?;
+        Ok(Self {
+            owner: theory.clone(),
+            steps: Vec::new(),
+            words: Words::new(Vec::new()),
+        })
+    }
+
     pub(super) fn owner(&self) -> &Theory {
         &self.owner
     }

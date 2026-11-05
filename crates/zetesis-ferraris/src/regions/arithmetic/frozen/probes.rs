@@ -1,0 +1,126 @@
+//! Probes: frozen narrowings from a copy of the closed query root with a
+//! guard and a pattern decided. A refuted probe is the premise of
+//! `Zetesis.Algebra.entailed_by_refutations`; any other outcome allows the
+//! pattern.
+
+use zetesis_algebra::words::Words;
+use zetesis_algebra::{Cancellation, Countermodels, Failure, Meter, Quota};
+
+use super::proposals::Group;
+use crate::{FrozenSubject, Knowledge, Narrower, Narrowing, NarrowingScratch, Region};
+
+/// The closed root, its knowledge, and one retired region and knowledge the
+/// probes reuse.
+pub(super) struct Probe<'a> {
+    narrower: &'a Narrower,
+    subject: FrozenSubject<'a>,
+    root: &'a Region,
+    knowledge: &'a Knowledge<Countermodels>,
+    region: Region,
+    retired: Knowledge<Countermodels>,
+}
+
+impl<'a> Probe<'a> {
+    pub(super) fn new(
+        narrower: &'a Narrower,
+        subject: FrozenSubject<'a>,
+        root: &'a Region,
+        knowledge: &'a Knowledge<Countermodels>,
+    ) -> Self {
+        Self {
+            narrower,
+            subject,
+            root,
+            knowledge,
+            region: root.clone(),
+            retired: knowledge.clone(),
+        }
+    }
+
+    /// The retired copies' bytes, held for the preparation's life.
+    pub(super) fn retained_bytes(&self) -> u128 {
+        self.region.retained_bytes() + self.retired.retained_bytes()
+    }
+
+    /// The region the last probe narrowed.
+    pub(super) const fn region(&self) -> &Region {
+        &self.region
+    }
+
+    /// Narrow a copy of the closed root with `decisions` applied; whether the
+    /// copy is refuted. A decision the root already contradicts refutes the
+    /// copy without narrowing. Copying charges one operation per retained
+    /// word and per decision.
+    ///
+    /// # Errors
+    /// The meter's refusal or a stop, with the narrowing's performed prefix
+    /// charged.
+    pub(super) fn run<Q: Quota + ?Sized>(
+        &mut self,
+        decisions: &[(usize, bool)],
+        scratch: &mut NarrowingScratch,
+        cancellation: &Cancellation,
+        meter: &mut Meter<'_, Q>,
+    ) -> Result<bool, Failure<Q::Error>> {
+        let words = u64::try_from(self.retained_bytes().div_ceil(8)).unwrap_or(u64::MAX);
+        let copying = words.saturating_add(decisions.len() as u64);
+        let consistent = meter.bounded(copying, || {
+            self.region.clone_from(self.root);
+            self.retired.clone_from(self.knowledge);
+            let consistent = decisions.iter().all(|&(atom, held)| {
+                if held {
+                    self.region.hold(atom)
+                } else {
+                    self.region.cut(atom)
+                }
+            });
+            (consistent, copying)
+        })?;
+        if !consistent {
+            return Ok(true);
+        }
+        let attempt = self.narrower.narrow_frozen_known_reserved(
+            self.subject,
+            &mut self.region,
+            &mut self.retired,
+            scratch,
+            cancellation,
+            meter,
+        );
+        Ok(attempt.result? == Narrowing::Refuted)
+    }
+
+    /// The forbidden table of `group` under its guard cut: every pattern over
+    /// the support whose probe is refuted. Counts the probes and refutations.
+    ///
+    /// # Errors
+    /// As [`Self::run`].
+    pub(super) fn table<Q: Quota + ?Sized>(
+        &mut self,
+        group: &Group,
+        counts: &mut (u64, u64),
+        scratch: &mut NarrowingScratch,
+        cancellation: &Cancellation,
+        meter: &mut Meter<'_, Q>,
+    ) -> Result<Words<u64, [u64; 4]>, Failure<Q::Error>> {
+        let mut forbidden = Words::<u64, _>::new([0; 4]);
+        let support = &group.support.atoms[..group.support.len];
+        let mut decisions = Vec::with_capacity(support.len() + 1);
+        for pattern in 0..(1_usize << support.len()) {
+            decisions.clear();
+            decisions.push((group.guard, false));
+            decisions.extend(
+                support
+                    .iter()
+                    .enumerate()
+                    .map(|(position, &atom)| (atom, pattern & (1 << position) != 0)),
+            );
+            counts.0 += 1;
+            if self.run(&decisions, scratch, cancellation, meter)? {
+                forbidden.insert(pattern);
+                counts.1 += 1;
+            }
+        }
+        Ok(forbidden)
+    }
+}
