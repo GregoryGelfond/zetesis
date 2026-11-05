@@ -270,6 +270,20 @@ pub struct CardinalitySystem {
 }
 
 impl CardinalitySystem {
+    /// A system from bounds already proposed and prepared; the frozen
+    /// preparation's bounds enter here.
+    const fn from_bounds(
+        owner: Theory,
+        bounds: Vec<cardinality_source::Bound>,
+        prepared: cardinality::Prepared,
+    ) -> Self {
+        Self {
+            owner,
+            bounds,
+            prepared,
+        }
+    }
+
     /// Owned headers and capacities; the original theory is shared, not copied.
     #[must_use]
     pub fn retained_bytes(&self) -> u128 {

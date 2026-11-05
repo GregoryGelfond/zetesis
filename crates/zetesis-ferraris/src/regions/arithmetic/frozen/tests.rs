@@ -1,6 +1,7 @@
 use zetesis_algebra::{Cancellation, Countermodels, Failure, Meter, Stop};
 
 use super::super::budget::Budget;
+use super::super::uniform::BoundSide;
 use super::proposals::{Proposals, propose};
 use super::{ClosedQuery, FrozenPreparation, FrozenPreparationAttempt, FrozenPreparationLimits};
 use crate::test_support::{Allowance, constructed_theory, push};
@@ -475,23 +476,35 @@ fn parity_groups_under_an_open_guard_are_dropped() {
 }
 
 #[test]
-fn the_lease_floor_covers_the_proposals_and_each_round_pays_for_its_probes() {
-    // The floor must cover the proposal pass and the rows' loading; each
-    // probing round leases its probes times the narrower's work on top, so a
-    // floor below the whole preparation's work still prepares, while a floor
-    // below the proposal pass declines it with nothing installed.
+fn the_floor_covers_the_proposals_and_the_loading_and_the_probes_are_leased() {
+    // The floor covers the proposal pass and the systems' loading; the
+    // probes are leased on top, each at the root closure's cost plus one
+    // index pass, which the receipt reports. A floor of exactly the unleased
+    // share prepares, half of it declines with nothing installed, and a tiny
+    // floor declines within itself.
     let fixture = Saturation::build(3, &gate(0, 1, 2), &[]);
     let complete = fixture.prepared();
-    let work = complete.work;
-    assert!(work > 0);
+    let (work, leased) = (complete.work, complete.statistics.leased);
+    assert!(leased > 0 && work > leased);
     let floor = FrozenPreparationLimits {
-        work: work / 2,
+        work: work - leased,
         bytes: usize::MAX,
     };
     let (attempt, charged) = fixture.prepare(floor, u64::MAX, &Cancellation::default());
     assert!(attempt.result.unwrap().is_some());
     assert_eq!(attempt.work, charged);
     assert!(attempt.work > floor.work);
+    let half = FrozenPreparationLimits {
+        work: (work - leased) / 2,
+        bytes: usize::MAX,
+    };
+    let (attempt, charged) = fixture.prepare(half, u64::MAX, &Cancellation::default());
+    assert!(attempt.result.as_ref().unwrap().is_none());
+    assert_eq!(
+        attempt.statistics.status,
+        super::super::PreparationStatus::WorkDeclined
+    );
+    assert_eq!(attempt.work, charged);
     let tiny = FrozenPreparationLimits {
         work: 10,
         bytes: usize::MAX,
@@ -941,4 +954,232 @@ fn the_second_round_pins_the_dropped_gate_at_every_width() {
             assert!(units.contains(&atom), "n={n}: units {units:?}");
         }
     }
+}
+
+/// The pigeonhole core over `holes` holes: pigeon `p` in hole `k` is the atom
+/// `p · holes + k`; each pigeon's clause forbids the pattern with none of its
+/// holes held, and each pair of pigeons in one hole forbids both held.
+fn pigeonhole(holes: usize) -> (usize, Vec<Vec<(usize, bool)>>) {
+    let atom = |pigeon: usize, hole: usize| pigeon * holes + hole;
+    let mut clauses: Vec<Vec<(usize, bool)>> = (0..=holes)
+        .map(|pigeon| (0..holes).map(|hole| (atom(pigeon, hole), false)).collect())
+        .collect();
+    for hole in 0..holes {
+        for first in 0..=holes {
+            for second in first + 1..=holes {
+                clauses.push(vec![(atom(first, hole), true), (atom(second, hole), true)]);
+            }
+        }
+    }
+    ((holes + 1) * holes, clauses)
+}
+
+/// A preparation's count bounds as `(side, support, value, cardinality)`, in
+/// the system's order.
+fn count_bounds(preparation: &FrozenPreparation) -> Vec<(BoundSide, Vec<usize>, u64, u64)> {
+    let system = preparation.cardinality().expect("count bounds");
+    let atoms = system.owner.atom_count();
+    system
+        .bounds
+        .iter()
+        .map(|bound| {
+            (
+                bound.side,
+                (0..atoms)
+                    .filter(|&atom| bound.support.contains(atom))
+                    .collect(),
+                bound.value,
+                bound.cardinality,
+            )
+        })
+        .collect()
+}
+
+#[test]
+fn the_pigeon_clauses_are_lower_bounds() {
+    // Four pigeons over three holes: each pigeon's clause, probed over its
+    // three hole atoms, allows no pattern with none held, so at least one.
+    let (n, clauses) = pigeonhole(3);
+    let fixture = Saturation::build(n, &clauses, &[]);
+    let attempt = fixture.prepared();
+    let preparation = attempt.result.unwrap().unwrap();
+    let lower: Vec<_> = count_bounds(&preparation)
+        .into_iter()
+        .filter(|bound| bound.0 == BoundSide::Lower)
+        .collect();
+    assert_eq!(
+        lower,
+        (0..4)
+            .map(|pigeon| (
+                BoundSide::Lower,
+                (0..3).map(|hole| pigeon * 3 + hole).collect(),
+                1,
+                3
+            ))
+            .collect::<Vec<_>>()
+    );
+    assert_eq!(attempt.statistics.cardinality.lower, 4);
+    // Each pigeon's table allows the three patterns with one hole held, an
+    // affine set less one point: its parity row, the pigeon's holes odd.
+    assert_eq!(attempt.statistics.parity.rows, 4);
+}
+
+#[test]
+fn a_hole_clique_is_an_upper_bound() {
+    // The pairs of one hole, each probed to exclude both held, grow into
+    // the hole's clique of four pigeons: at most one. A pigeon's own holes
+    // exclude one another in this class as well, since a pigeon in two
+    // leaves the other three pigeons one hole, and the frozen reading sees
+    // it: the four pigeon cliques are the other upper bounds.
+    let (n, clauses) = pigeonhole(3);
+    let fixture = Saturation::build(n, &clauses, &[]);
+    let attempt = fixture.prepared();
+    let preparation = attempt.result.unwrap().unwrap();
+    let upper: Vec<_> = count_bounds(&preparation)
+        .into_iter()
+        .filter(|bound| bound.0 == BoundSide::Upper)
+        .collect();
+    let holes: Vec<_> = upper.iter().filter(|bound| bound.3 == 4).cloned().collect();
+    assert_eq!(
+        holes,
+        (0..3)
+            .map(|hole| (
+                BoundSide::Upper,
+                (0..4).map(|pigeon| pigeon * 3 + hole).collect(),
+                1,
+                4
+            ))
+            .collect::<Vec<_>>()
+    );
+    let pigeons: Vec<_> = upper.iter().filter(|bound| bound.3 == 3).cloned().collect();
+    assert_eq!(
+        pigeons,
+        (0..4)
+            .map(|pigeon| (
+                BoundSide::Upper,
+                (0..3).map(|hole| pigeon * 3 + hole).collect(),
+                1,
+                3
+            ))
+            .collect::<Vec<_>>()
+    );
+    assert_eq!(upper.len(), 7);
+    assert_eq!(attempt.statistics.cardinality.upper, 7);
+}
+
+#[test]
+fn the_double_count_refutes_the_root_at_h_plus_one_pigeons() {
+    // The pigeons' lower bounds and the holes' upper bounds partition the
+    // same atoms: four at least against three at most refutes the root.
+    // Less one pigeon's clause, the counts agree and the root stands.
+    let (n, mut clauses) = pigeonhole(3);
+    let fixture = Saturation::build(n, &clauses, &[]);
+    let attempt = fixture.prepared();
+    let preparation = attempt.result.unwrap().unwrap();
+    assert!(preparation.cardinality().unwrap().root_refuted());
+    assert!(preparation.root_refuted());
+    assert!(attempt.statistics.root_refuted);
+    // The pigeons' cliques partition the atoms as their clauses do, a family
+    // whose counts agree; the holes' cliques are the family that refutes.
+    assert_eq!(attempt.statistics.cardinality.families, 2);
+    clauses.remove(3);
+    let fixture = Saturation::build(n, &clauses, &[]);
+    let attempt = fixture.prepared();
+    let preparation = attempt.result.unwrap().unwrap();
+    assert!(!preparation.root_refuted());
+    // Three pigeons' clauses, and the completing bound of nothing over the
+    // dropped pigeon's atoms.
+    assert_eq!(attempt.statistics.cardinality.lower, 4);
+}
+
+#[test]
+fn a_missing_pair_leaves_no_clique() {
+    // Without the pair of pigeons 0 and 1 in hole 0, no clique holds both
+    // their atoms there: the hole's pairs grow into two cliques of three,
+    // neither covering the hole, so no family partitions the atoms both
+    // ways and the root stands, as it should: those two pigeons may share.
+    let (n, mut clauses) = pigeonhole(3);
+    let position = clauses
+        .iter()
+        .position(|clause| clause == &vec![(0, true), (3, true)])
+        .unwrap();
+    clauses.remove(position);
+    let fixture = Saturation::build(n, &clauses, &[]);
+    let attempt = fixture.prepared();
+    let preparation = attempt.result.unwrap().unwrap();
+    let upper: Vec<_> = count_bounds(&preparation)
+        .into_iter()
+        .filter(|bound| bound.0 == BoundSide::Upper)
+        .collect();
+    assert!(
+        upper
+            .iter()
+            .all(|bound| !(bound.1.contains(&0) && bound.1.contains(&3)))
+    );
+    assert!(upper.contains(&(BoundSide::Upper, vec![0, 6, 9], 1, 3)));
+    assert!(upper.contains(&(BoundSide::Upper, vec![3, 6, 9], 1, 3)));
+    assert!(!preparation.cardinality().unwrap().root_refuted());
+    assert!(!preparation.root_refuted());
+}
+
+#[test]
+fn a_tables_greatest_allowed_count_is_an_upper_bound() {
+    // Over three atoms, the clauses forbidding all held and none held leave
+    // the counts one and two: a lower bound of one and an upper bound of two
+    // over the same support, and no clique.
+    let fixture = Saturation::build(
+        3,
+        &[
+            vec![(0, true), (1, true), (2, true)],
+            vec![(0, false), (1, false), (2, false)],
+        ],
+        &[],
+    );
+    let attempt = fixture.prepared();
+    let preparation = attempt.result.unwrap().unwrap();
+    assert_eq!(
+        count_bounds(&preparation),
+        vec![
+            (BoundSide::Lower, vec![0, 1, 2], 1, 3),
+            (BoundSide::Upper, vec![0, 1, 2], 2, 3),
+        ]
+    );
+    assert!(!preparation.root_refuted());
+}
+
+#[test]
+fn count_bounds_under_an_open_guard_are_dropped() {
+    // The pigeonhole clauses hang off a guard nothing saturates from: its
+    // groups are dropped before any probe, and the one bound is the gate's
+    // own, over its three atoms.
+    let (n, clauses) = pigeonhole(2);
+    let fixture = Saturation::build_with(n, &gate(0, 1, 2), &[], &clauses, false);
+    let attempt = fixture.prepared();
+    let preparation = attempt.result.unwrap().unwrap();
+    // The gate's table bounds its three atoms above, and the completing
+    // lower bound of nothing covers them below.
+    let bounds = count_bounds(&preparation);
+    assert_eq!(bounds.len(), 2);
+    assert!(bounds.iter().all(|bound| bound.1 == vec![0, 1, 2]));
+    assert_eq!(bounds[1], (BoundSide::Lower, vec![0, 1, 2], 0, 3));
+    assert_eq!(attempt.statistics.cardinality.rows, 2);
+    assert_eq!(attempt.statistics.parity.rows, 1);
+}
+
+#[test]
+fn a_dropped_pigeons_atoms_complete_the_lower_side() {
+    // Less pigeon 3's clause, the holes' cliques cover its atoms and the
+    // pigeons' lower bounds do not: a lower bound of nothing over those
+    // atoms completes the partition, so the family of the pigeons against
+    // the holes forms, its counts agreeing at the root, and a region holding
+    // pigeon 3 in any hole exceeds the holes' room for the other three.
+    let (n, mut clauses) = pigeonhole(3);
+    clauses.remove(3);
+    let fixture = Saturation::build(n, &clauses, &[]);
+    let attempt = fixture.prepared();
+    let preparation = attempt.result.unwrap().unwrap();
+    let bounds = count_bounds(&preparation);
+    assert!(bounds.contains(&(BoundSide::Lower, vec![9, 10, 11], 0, 3)));
+    assert!(!preparation.root_refuted());
+    assert!(attempt.statistics.cardinality.families >= 1);
 }

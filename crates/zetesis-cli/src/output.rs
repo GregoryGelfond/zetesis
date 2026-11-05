@@ -884,6 +884,8 @@ fn search_statistics(
     out.number_field("refuted_patterns", preparation.refuted_patterns)?;
     out.number_field("rows", preparation.rows)?;
     out.number_field("inexact_hulls", preparation.inexact_hulls)?;
+    out.number_field("bounds", preparation.bounds)?;
+    out.number_field("families", preparation.families)?;
     out.number_field("root_refuted", preparation.root_refuted)?;
     out.number_field("work", preparation.work)?;
     out.text("}}}")

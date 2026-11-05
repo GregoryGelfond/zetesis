@@ -68,6 +68,12 @@ pub struct InnerPreparationStatistics {
     pub rows: u64,
     /// Probed groups whose allowed patterns are not affine.
     pub inexact_hulls: u64,
+    /// Count bounds loaded: a table's least and greatest allowed counts, a
+    /// clause's lower bound among them, and the cliques' upper bounds.
+    pub bounds: u64,
+    /// Count families found: lower and upper bounds partitioning one atom
+    /// set, whose sums the root's double count compares.
+    pub families: u64,
     /// Preparations whose rows refuted the query root: candidates decided stable there.
     pub root_refuted: u64,
     /// Work charged to the search by the preparations.
@@ -100,6 +106,8 @@ impl InnerPreparationStatistics {
             refuted_patterns: attempt.refuted_patterns,
             rows: attempt.parity.rows,
             inexact_hulls: attempt.inexact_hulls,
+            bounds: attempt.cardinality.rows as u64,
+            families: attempt.cardinality.families,
             root_refuted: u64::from(attempt.root_refuted),
             work: attempt.preparation_work,
         })
@@ -121,6 +129,8 @@ impl InnerPreparationStatistics {
             (&mut self.refuted_patterns, other.refuted_patterns),
             (&mut self.rows, other.rows),
             (&mut self.inexact_hulls, other.inexact_hulls),
+            (&mut self.bounds, other.bounds),
+            (&mut self.families, other.families),
             (&mut self.root_refuted, other.root_refuted),
             (&mut self.work, other.work),
         ] {
@@ -145,6 +155,8 @@ impl InnerPreparationStatistics {
             refuted_patterns: self.refuted_patterns.saturating_add(other.refuted_patterns),
             rows: self.rows.saturating_add(other.rows),
             inexact_hulls: self.inexact_hulls.saturating_add(other.inexact_hulls),
+            bounds: self.bounds.saturating_add(other.bounds),
+            families: self.families.saturating_add(other.families),
             root_refuted: self.root_refuted.saturating_add(other.root_refuted),
             work: self.work.saturating_add(other.work),
         }

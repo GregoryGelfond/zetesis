@@ -62,6 +62,8 @@ fn inner_preparation_json_lists_every_receipt() {
     reduct.inner_preparation.refuted_patterns = 120;
     reduct.inner_preparation.rows = 29;
     reduct.inner_preparation.inexact_hulls = 2;
+    reduct.inner_preparation.bounds = 11;
+    reduct.inner_preparation.families = 1;
     reduct.inner_preparation.root_refuted = 1;
     reduct.inner_preparation.work = 5_000;
     let statistics = zetesis_stable::Statistics {
@@ -85,6 +87,8 @@ fn inner_preparation_json_lists_every_receipt() {
             "refuted_patterns": 120,
             "rows": 29,
             "inexact_hulls": 2,
+            "bounds": 11,
+            "families": 1,
             "root_refuted": 1,
             "work": 5000,
         })

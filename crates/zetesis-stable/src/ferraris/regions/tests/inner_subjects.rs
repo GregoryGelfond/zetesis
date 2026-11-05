@@ -395,6 +395,62 @@ fn two_candidates_of_one_theory_prepare_different_rows() {
     assert_eq!((stable.rows, dropped.rows), (5, 6));
 }
 
+/// The pigeonhole core over `holes` holes: pigeon `p` in hole `k` is the atom
+/// `p · holes + k`; each pigeon's clause forbids the pattern with none of its
+/// holes held, and each pair of pigeons in one hole forbids both held.
+fn pigeonhole(holes: usize) -> (usize, Vec<Vec<(usize, bool)>>) {
+    let atom = |pigeon: usize, hole: usize| pigeon * holes + hole;
+    let mut clauses: Vec<Vec<(usize, bool)>> = (0..=holes)
+        .map(|pigeon| (0..holes).map(|hole| (atom(pigeon, hole), false)).collect())
+        .collect();
+    for hole in 0..holes {
+        for first in 0..=holes {
+            for second in first + 1..=holes {
+                clauses.push(vec![(atom(first, hole), true), (atom(second, hole), true)]);
+            }
+        }
+    }
+    ((holes + 1) * holes, clauses)
+}
+
+#[test]
+fn a_pigeonhole_core_is_decided_at_the_root() {
+    // Five pigeons over four holes: the pigeons' lower bounds and the holes'
+    // cliques partition the same atoms, five at least against four at most,
+    // and the double count refutes the root before any region is walked.
+    let (n, clauses) = pigeonhole(4);
+    let fixture = Saturation::build(n, &clauses);
+    let (check, statistics) = fixture.check();
+    assert!(matches!(check, crate::Check::Stable));
+    let regions = statistics.reduct.regions;
+    assert_eq!(
+        (regions.regions, regions.refuted, regions.leaves),
+        (1, 1, 0)
+    );
+    let preparation = statistics.reduct.inner_preparation;
+    assert_eq!(preparation.root_refuted, 1);
+    assert_eq!(preparation.bounds, 3 * 4 + 2);
+}
+
+#[test]
+fn a_dropped_pigeon_candidate_finds_its_countermodel_in_few_regions() {
+    // Less one pigeon's clause the core is satisfiable: the counts agree,
+    // the root stands, and the walk finds a countermodel under the bounds.
+    let (n, mut clauses) = pigeonhole(4);
+    clauses.remove(4);
+    let fixture = Saturation::build(n, &clauses);
+    let (check, statistics) = fixture.check();
+    assert!(matches!(check, crate::Check::NonMinimal(_)));
+    let regions = statistics.reduct.regions;
+    assert_eq!(
+        (regions.regions, regions.refuted, regions.leaves),
+        (55, 0, 1)
+    );
+    // Four pigeons' clauses, four holes' cliques, four pigeons' own, and the
+    // bound of nothing completing the lower side over the dropped pigeon's.
+    assert_eq!(statistics.reduct.inner_preparation.bounds, 3 * 4 + 1);
+}
+
 #[test]
 fn the_parity_tier_refutes_a_region_that_contradicts_a_basis_row() {
     let fixture = Saturation::build(4, &shared_inputs());
@@ -433,9 +489,9 @@ fn inner_knowledge_clones_its_arithmetic_slots_with_the_frozen_state() {
     assert!(region.cut(fixture.valid) && region.hold(2));
     let (_, entry, _) = narrow(&fixture, &narrower, &region, Some(&preparation));
     assert!(entry.state.parity.is_some());
-    assert!(entry.state.cardinality.is_none());
+    assert!(entry.state.cardinality.is_some());
     let copy = entry.state.clone();
-    assert!(copy.parity.is_some());
+    assert!(copy.parity.is_some() && copy.cardinality.is_some());
     let mut recycled = CountermodelKnowledge::fresh(&narrower);
     recycled.clone_from(&entry.state);
     assert!(recycled.parity.is_some());

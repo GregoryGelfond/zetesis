@@ -17,7 +17,8 @@ use zetesis_validation::answers::{self, native_json};
 use zetesis_validation::process::{self, Invocation, Limits, Stop};
 
 use super::authored_examples::two_qbf_cores::{
-    Fixture, Instance, PARITY, PARITY_DEFAULT, TSEITIN, TSEITIN_DEFAULT, series,
+    Core, Fixture, Instance, PARITY, PARITY_DEFAULT, PIGEONHOLE, PIGEONHOLE_DEFAULT, TSEITIN,
+    TSEITIN_DEFAULT, series,
 };
 
 /// One size of one core: the fixture, its default and the instance.
@@ -29,15 +30,31 @@ struct Size {
 }
 
 impl Size {
-    /// The core's size: parity inputs or Tseitin vertices.
+    /// The core's size: parity inputs, Tseitin vertices or pigeonhole holes.
     fn value(self) -> u64 {
         u64::try_from(self.instance.size()).unwrap()
     }
+
+    /// The core's universal atoms: parity inputs and gate outputs, Tseitin
+    /// edges, pigeonhole places.
+    fn universals(self) -> u64 {
+        let value = self.value();
+        match self.instance.core {
+            Core::Parity { .. } => 3 * value - 2,
+            Core::Tseitin { .. } => 3 * value / 2,
+            Core::Pigeonhole { .. } => value * (value + 1),
+        }
+    }
 }
 
-/// The parity series, then the Tseitin series.
-fn sizes() -> [Vec<Size>; 2] {
-    [(&PARITY, PARITY_DEFAULT), (&TSEITIN, TSEITIN_DEFAULT)].map(|(fixture, default)| {
+/// The parity, Tseitin and pigeonhole series.
+fn sizes() -> [Vec<Size>; 3] {
+    [
+        (&PARITY, PARITY_DEFAULT),
+        (&TSEITIN, TSEITIN_DEFAULT),
+        (&PIGEONHOLE, PIGEONHOLE_DEFAULT),
+    ]
+    .map(|(fixture, default)| {
         series(default)
             .into_iter()
             .map(|instance| Size {
@@ -210,7 +227,7 @@ fn count(preparation: &Value, field: &str) -> u64 {
 #[test]
 #[ignore = "requires clingo and ZETESIS: the quantified series' families agree and the inner census holds"]
 fn g_census_inner_finds_the_cores_groups_and_rows() {
-    let [parity, tseitin] = sizes();
+    let [parity, tseitin, pigeonhole] = sizes();
     // Parity over n inputs: two chains of n - 1 gates, four clauses each, and
     // the pair of clauses that makes the results differ: 2(n - 1) + 1 groups
     // per candidate. The stable candidate's rows refute its root in the
@@ -280,6 +297,45 @@ fn g_census_inner_finds_the_cores_groups_and_rows() {
             receipt.refuted
         );
     }
+    // Pigeonhole with h holes: h + 1 pigeon clauses, each a group over its
+    // h holes, and h · (h + 1) · h / 2 exclusion pairs, each a group of two.
+    // Every table bounds its support: a pigeon's clause its lower bound of
+    // one, and the pairs grow into the holes' cliques and the pigeons' own,
+    // since a pigeon in two holes leaves the others too few. The stable
+    // candidate's root falls to the double count; a dropped-pigeon
+    // candidate's stands, with one clause and one clique the fewer and a
+    // bound of nothing over the dropped pigeon's places completing the
+    // lower side, which the walk's double count then has.
+    for size in pigeonhole {
+        let h = size.value();
+        let receipt = checked(size);
+        let p = &receipt.preparation;
+        let candidates = receipt.candidates;
+        assert_eq!((receipt.models, candidates), (1, 4), "holes={h}");
+        assert_eq!(count(p, "saturation_units"), candidates, "holes={h}");
+        assert_eq!(
+            count(p, "groups"),
+            candidates * (h + 1 + h * h * (h + 1) / 2) - 3,
+            "holes={h}"
+        );
+        assert_eq!(count(p, "bounds"), 12 * h + 5, "holes={h}");
+        assert!(
+            count(p, "families") >= candidates,
+            "holes={h}: families {}",
+            count(p, "families")
+        );
+        println!(
+            "pigeonhole holes={h}: probes={} rounds={} rows={} bounds={} families={} work={} regions={} refuted={}",
+            count(p, "probes"),
+            count(p, "rounds"),
+            count(p, "rows"),
+            count(p, "bounds"),
+            count(p, "families"),
+            count(p, "work"),
+            receipt.visited,
+            receipt.refuted
+        );
+    }
 }
 
 #[test]
@@ -298,11 +354,11 @@ fn g_door_inner_a_stable_candidates_are_root_refuted() {
 #[test]
 #[ignore = "requires clingo and ZETESIS: the inner regions per non-minimal candidate grow polynomially along the series"]
 fn g_door_inner_b_inner_regions_grow_polynomially() {
-    for (name, family) in ["parity", "tseitin"].into_iter().zip(sizes()) {
+    for (name, family) in ["parity", "tseitin", "pigeonhole"].into_iter().zip(sizes()) {
         // The smallest size fixes the constant: regions per non-minimal
-        // candidate there, over its size squared. Every larger size must stay
-        // within that constant times its own size squared, compared exactly
-        // by cross-multiplication.
+        // candidate there, over its universal atoms squared. Every larger
+        // size must stay within that constant times its own atoms squared,
+        // compared exactly by cross-multiplication.
         let mut smallest: Option<(u128, u128, u128)> = None;
         for size in family {
             let receipt = checked(size);
@@ -311,17 +367,17 @@ fn g_door_inner_b_inner_regions_grow_polynomially() {
             assert!(nonminimal > 0, "{size:?}");
             // Each root-refuted candidate's walk is its one region.
             let regions = u128::from(receipt.visited - root_refuted);
-            let value = u128::from(size.value());
+            let value = u128::from(size.universals());
             let (regions_0, nonminimal_0, value_0) =
                 *smallest.get_or_insert((regions, nonminimal, value));
             println!(
-                "{name} size={value}: regions per non-minimal candidate={}",
+                "{name} universals={value}: regions per non-minimal candidate={}",
                 regions / nonminimal
             );
             assert!(
                 regions * nonminimal_0 * value_0 * value_0
                     <= regions_0 * nonminimal * value * value,
-                "{size:?}: {regions} regions over {nonminimal} candidates exceed the quadratic bound set at size {value_0}"
+                "{size:?}: {regions} regions over {nonminimal} candidates exceed the quadratic bound set at {value_0} universals"
             );
         }
     }

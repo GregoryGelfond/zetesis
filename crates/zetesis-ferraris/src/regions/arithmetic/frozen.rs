@@ -10,6 +10,7 @@
 //! preparation is built from the theory and the candidate, under its own
 //! lease of the caller's account, and belongs to that candidate alone.
 
+mod counts;
 mod probes;
 mod proposals;
 
@@ -25,7 +26,7 @@ use super::{
     CardinalityStatistics, CardinalitySystem, ParityStatistics, ParitySystem, PreparationError,
     PreparationLimits, PreparationStatus,
     budget::{Budget, BudgetError},
-    hull, parity,
+    cardinality, hull, parity,
     root_facts::CheckedRootFacts,
     rows::{self, Source},
     source::{self, Support},
@@ -108,6 +109,9 @@ pub struct FrozenPreparationStatistics {
     pub root_refuted: bool,
     /// Work charged to the account, on every outcome.
     pub preparation_work: u64,
+    /// Work leased for the probes beyond the floor: each unit probe and
+    /// each pattern probe at the root closure's cost plus one index pass.
+    pub leased: u64,
     /// Peak named bytes observed, the probes' retired copies included.
     pub preparation_bytes: u128,
     /// The parity system's own observations.
@@ -158,6 +162,7 @@ impl FrozenPreparation {
             account: quota,
             remaining: limits.work,
             used: 0,
+            extended: 0,
         };
         let mut statistics = FrozenPreparationStatistics::default();
         let mut peak = 0_u128;
@@ -182,6 +187,7 @@ impl FrozenPreparation {
             Err(error) => settle(error, &mut statistics),
         };
         statistics.preparation_work = lease.used;
+        statistics.leased = lease.extended;
         statistics.preparation_bytes = peak;
         FrozenPreparationAttempt {
             result,
@@ -256,6 +262,7 @@ struct Leased<'a, Q: Quota + ?Sized> {
     account: &'a mut Q,
     remaining: u64,
     used: u64,
+    extended: u64,
 }
 
 impl<Q: Quota + ?Sized> Quota for Leased<'_, Q> {
@@ -290,6 +297,7 @@ impl<Q: Quota + ?Sized> Leased<'_, Q> {
     /// Lease `additional` operations more, as a probing round earns them.
     fn extend(&mut self, additional: u64) {
         self.remaining = self.remaining.saturating_add(additional);
+        self.extended = self.extended.saturating_add(additional);
     }
 }
 
@@ -400,7 +408,7 @@ fn build<Q: Quota + ?Sized>(
         meter.refund();
     }
     statistics.probed_groups = groups.len() as u64;
-    let parity = probe_rounds(
+    let (parity, cardinality) = probe_rounds(
         theory,
         &groups,
         &mut probe,
@@ -409,23 +417,31 @@ fn build<Q: Quota + ?Sized>(
         statistics,
         peak,
     )?;
-    statistics.root_refuted = parity.as_ref().is_some_and(ParitySystem::root_refuted);
+    statistics.root_refuted = parity.as_ref().is_some_and(ParitySystem::root_refuted)
+        || cardinality
+            .as_ref()
+            .is_some_and(CardinalitySystem::root_refuted);
     let candidate = query.candidate.try_clone().map_err(BudgetError::Source)?;
     Ok(Some(FrozenPreparation {
         owner: theory.clone(),
         candidate,
         units,
         parity,
-        cardinality: None,
+        cardinality,
     }))
 }
 
-/// Probe the groups in rounds and load their rows: round one by the frozen
-/// reading alone, each later round under the rows the round before
-/// established, sound for the class as their joint closure is, while a
-/// round refutes more patterns than the one before and some hull is still
-/// inexact; each round leases its probes at `allowance` each. The rows of
-/// the last round are the preparation's.
+/// The systems a preparation installs: the parity rows and the count
+/// bounds, each when any was found.
+type Systems = (Option<ParitySystem>, Option<CardinalitySystem>);
+
+/// Probe the groups in rounds and load their rows and bounds: round one by
+/// the frozen reading alone, each later round under the parity rows the
+/// round before established, sound for the class as their joint closure is,
+/// while a round refutes more patterns than the one before, some hull is
+/// still inexact and no system refutes the root; each round leases its
+/// probes at `allowance` each. The systems of the last round are the
+/// preparation's.
 fn probe_rounds<Q: Quota + ?Sized>(
     theory: &Theory,
     groups: &[&proposals::Group],
@@ -439,8 +455,9 @@ fn probe_rounds<Q: Quota + ?Sized>(
     ),
     statistics: &mut FrozenPreparationStatistics,
     peak: &mut u128,
-) -> Result<Option<ParitySystem>, BudgetError<LeaseRefusal<Q::Error>>> {
+) -> Result<Systems, BudgetError<LeaseRefusal<Q::Error>>> {
     let mut parity: Option<ParitySystem> = None;
+    let mut cardinality: Option<CardinalitySystem> = None;
     let mut tables: Vec<(Support, Words<u64, [u64; 4]>)> = Vec::new();
     let mut refuted: Vec<u64> = vec![0; groups.len()];
     // Round one probes every group; a later round only those whose hull was
@@ -479,7 +496,7 @@ fn probe_rounds<Q: Quota + ?Sized>(
             }
             meter.refund();
         }
-        let (loaded, inexact) = {
+        let loaded = {
             let mut meter = Meter::reserved(lease);
             let mut budget = Budget::new(&mut meter, limits.work, limits.bytes, cancellation);
             let loaded = load(theory, &tables, statistics, &mut budget);
@@ -487,22 +504,33 @@ fn probe_rounds<Q: Quota + ?Sized>(
             budget.finish();
             loaded?
         };
-        parity = loaded;
-        pending = inexact;
-        if !progressed || parity.as_ref().is_none_or(ParitySystem::root_refuted) {
+        parity = loaded.parity;
+        cardinality = loaded.cardinality;
+        pending = loaded.inexact;
+        if !progressed
+            || parity.as_ref().is_none_or(ParitySystem::root_refuted)
+            || cardinality
+                .as_ref()
+                .is_some_and(CardinalitySystem::root_refuted)
+        {
             break;
         }
     }
     statistics.refuted_patterns = refuted.iter().sum();
-    Ok(parity)
+    Ok((parity, cardinality))
 }
 
-/// What a round loaded: the parity system, if any row was found, and the
-/// indices of the tables whose hull is inexact.
-type Loaded = (Option<ParitySystem>, Vec<usize>);
+/// What a round loaded: the parity and counting systems, when any row or
+/// bound was found, and the indices of the tables whose hull is inexact.
+struct Loaded {
+    parity: Option<ParitySystem>,
+    cardinality: Option<CardinalitySystem>,
+    inexact: Vec<usize>,
+}
 
-/// The parity system of the probed groups: each table's affine hull, every
-/// equation checked against its table, eliminated to echelon form; with the
+/// The systems of the probed groups: the parity system of each table's
+/// affine hull, every equation checked against its table and eliminated to
+/// echelon form, and the counting system of the tables' bounds; with the
 /// indices of the tables whose hull is inexact.
 fn load<Q: Quota + ?Sized>(
     theory: &Theory,
@@ -511,7 +539,11 @@ fn load<Q: Quota + ?Sized>(
     budget: &mut Budget<'_, '_, Q>,
 ) -> Result<Loaded, BudgetError<Q::Error>> {
     if tables.is_empty() {
-        return Ok((None, Vec::new()));
+        return Ok(Loaded {
+            parity: None,
+            cardinality: None,
+            inexact: Vec::new(),
+        });
     }
     let mut storage = Storage::default();
     let mut inexact = Vec::new();
@@ -567,24 +599,75 @@ fn load<Q: Quota + ?Sized>(
         })?;
     statistics.inexact_hulls = counts.inexact_hulls;
     budget.charge(1)?;
-    if recognized_equations.is_empty() {
-        return Ok((None, inexact));
+    let parity = if recognized_equations.is_empty() {
+        None
+    } else {
+        let prepared = budget.in_phase(Phase::Reduction, |budget| {
+            parity::prepare(
+                &mut recognized_equations,
+                theory.atom_count(),
+                &mut storage,
+                budget,
+            )
+        })?;
+        counts.groups = tables.len() as u64;
+        let recognized = rows::Recognized {
+            facts,
+            clauses: Vec::new(),
+            equations: recognized_equations,
+            counts,
+        };
+        statistics.parity = ParityStatistics::from_preparation(&recognized, &prepared, budget);
+        Some(ParitySystem::from_rows(recognized, prepared))
+    };
+    let cardinality = load_counts(theory, tables, statistics, &mut storage, budget)?;
+    Ok(Loaded {
+        parity,
+        cardinality,
+        inexact,
+    })
+}
+
+/// The counting system of the tables' bounds, when any was found: the
+/// bounds proposed from the tables, their families prepared and the root's
+/// double count taken, as the outer preparation takes them.
+fn load_counts<Q: Quota + ?Sized>(
+    theory: &Theory,
+    tables: &[(Support, Words<u64, [u64; 4]>)],
+    statistics: &mut FrozenPreparationStatistics,
+    storage: &mut Storage,
+    budget: &mut Budget<'_, '_, Q>,
+) -> Result<Option<CardinalitySystem>, BudgetError<Q::Error>> {
+    let mut counted = CardinalityStatistics::default();
+    let start = budget.work();
+    let bounds = budget.in_phase(Phase::Recognition, |budget| {
+        counts::propose(theory, tables, &mut counted, storage, budget)
+    })?;
+    budget.charge(1)?;
+    if bounds.is_empty() {
+        storage.release(bounds)?;
+        statistics.cardinality = counted;
+        return Ok(None);
     }
     let prepared = budget.in_phase(Phase::Reduction, |budget| {
-        parity::prepare(
-            &mut recognized_equations,
-            theory.atom_count(),
-            &mut storage,
-            budget,
-        )
+        cardinality::prepare(&bounds, theory.atom_count(), storage, budget)
     })?;
-    counts.groups = tables.len() as u64;
-    let recognized = rows::Recognized {
-        facts,
-        clauses: Vec::new(),
-        equations: recognized_equations,
-        counts,
-    };
-    statistics.parity = ParityStatistics::from_preparation(&recognized, &prepared, budget);
-    Ok((Some(ParitySystem::from_rows(recognized, prepared)), inexact))
+    counted.status = PreparationStatus::Prepared;
+    counted.rows = bounds.len();
+    counted.carriers = prepared.counts().carriers;
+    counted.attempts = prepared.counts().attempts;
+    counted.families = prepared.counts().accepted;
+    counted.refused = prepared.counts().rejected;
+    match &prepared {
+        cardinality::Prepared::RootRefuted { .. } => counted.root_refuted = true,
+        cardinality::Prepared::Families(families) => {
+            counted.occurrences = families.occurrences.len();
+        }
+    }
+    counted.preparation_work = budget.work() - start;
+    counted.preparation_bytes = budget.peak_bytes();
+    let system = CardinalitySystem::from_bounds(theory.clone(), bounds, prepared);
+    counted.retained_bytes = system.retained_bytes();
+    statistics.cardinality = counted;
+    Ok(Some(system))
 }
