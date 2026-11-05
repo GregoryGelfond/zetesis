@@ -1,12 +1,14 @@
 //! Concrete readings of the existing candidate and frozen owners.
 
+use std::cell::Cell;
+
 use zetesis_algebra::{AnswerSetsSought, Countermodels, Failure, Meter};
 use zetesis_ferraris::{
-    ArithmeticAttempt, CardinalitySystem, Knowledge, Narrower, NarrowingScratch, OriginalSubject,
-    ParitySystem, RootPreparation, Theory,
+    ArithmeticAttempt, CardinalitySystem, FrozenPreparation, FrozenSubject, Narrower,
+    NarrowingScratch, OriginalSubject, ParitySystem, RootPreparation, Theory,
 };
 
-use super::super::conditions::{Bound, CandidateKnowledge};
+use super::super::conditions::{Bound, CandidateKnowledge, CountermodelKnowledge};
 use super::arithmetic_counts::ArithmeticKind;
 use super::{BudgetQuota, CandidateReading, meter_failure};
 use crate::budget::{Budget, Quota};
@@ -297,30 +299,23 @@ fn streamed<Q: Quota>(
     }
 }
 
-/// A trusted (theory, model-truth) reading, without candidate components.
-/// Its existing Choose call returns the preference alongside the local closure;
-/// the caller publishes that preference only after accounting the attempt.
-pub(super) struct Frozen<'a> {
-    narrower: &'a Narrower,
-    reading: zetesis_ferraris::FrozenSubject<'a>,
-    pub(super) preferred: Option<usize>,
-}
-
-impl<'a> Frozen<'a> {
-    pub(super) fn new(
+/// The countermodel walk's subjects: the trusted (theory, model-truth)
+/// reading, eager, and the candidate's prepared inner systems, late. The
+/// frozen reading's Choose call returns a split preference with the local
+/// closure; it is written to the cell and the caller installs it after
+/// accounting the attempt.
+pub(super) enum CountermodelSubject<'a> {
+    Frozen {
         narrower: &'a Narrower,
-        reading: zetesis_ferraris::FrozenSubject<'a>,
-    ) -> Self {
-        Self {
-            narrower,
-            reading,
-            preferred: None,
-        }
-    }
+        reading: FrozenSubject<'a>,
+        preferred: &'a Cell<Option<usize>>,
+    },
+    Parity(&'a ParitySystem),
+    Cardinality(&'a CardinalitySystem),
 }
 
-impl Subject<Countermodels> for Frozen<'_> {
-    type Knowledge = Knowledge<Countermodels>;
+impl Subject<Countermodels> for CountermodelSubject<'_> {
+    type Knowledge = CountermodelKnowledge;
 
     fn narrow<Q: Quota>(
         &mut self,
@@ -330,19 +325,71 @@ impl Subject<Countermodels> for Frozen<'_> {
         _pass: Pass,
         context: &mut SubjectContext<'_, '_, Q>,
     ) -> SubjectAttempt {
-        let attempt = BudgetQuota::narrow(context.budget, |cancellation, meter| {
-            self.narrower.narrow_frozen_known_reserved(
-                self.reading,
-                region,
-                knowledge,
-                scratch,
-                cancellation,
-                meter,
-            )
-        });
-        self.preferred = attempt.preferred;
-        SubjectAttempt::from_narrowing(&attempt)
+        match self {
+            Self::Frozen {
+                narrower,
+                reading,
+                preferred,
+            } => {
+                let attempt = BudgetQuota::narrow(context.budget, |cancellation, meter| {
+                    narrower.narrow_frozen_known_reserved(
+                        *reading,
+                        region,
+                        knowledge.frozen(),
+                        scratch,
+                        cancellation,
+                        meter,
+                    )
+                });
+                if attempt.preferred.is_some() {
+                    preferred.set(attempt.preferred);
+                }
+                SubjectAttempt::from_narrowing(&attempt)
+            }
+            Self::Parity(system) => arithmetic(
+                ArithmeticKind::Parity,
+                context.budget,
+                |cancellation, meter| {
+                    system.inspect_reserved(
+                        region,
+                        knowledge.parity(system),
+                        scratch,
+                        cancellation,
+                        meter,
+                    )
+                },
+            ),
+            Self::Cardinality(system) => arithmetic(
+                ArithmeticKind::Cardinality,
+                context.budget,
+                |cancellation, meter| {
+                    system.inspect_reserved(
+                        region,
+                        knowledge.cardinality(system),
+                        scratch,
+                        cancellation,
+                        meter,
+                    )
+                },
+            ),
+        }
     }
+}
+
+/// The declared late order of the countermodel walk: a preparation's parity
+/// and counting systems, each present when it found rows. Absence allocates
+/// nothing and the common driver skips it.
+pub(super) fn inner_late(
+    preparation: Option<&FrozenPreparation>,
+) -> [Option<CountermodelSubject<'_>>; 2] {
+    [
+        preparation
+            .and_then(FrozenPreparation::parity)
+            .map(CountermodelSubject::Parity),
+        preparation
+            .and_then(FrozenPreparation::cardinality)
+            .map(CountermodelSubject::Cardinality),
+    ]
 }
 
 #[cfg(test)]

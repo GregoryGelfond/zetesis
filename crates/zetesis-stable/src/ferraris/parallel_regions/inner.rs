@@ -52,9 +52,8 @@ use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard, OnceLock, PoisonError, TryLockError};
 use std::time::{Duration, Instant};
 
-use zetesis_algebra::Countermodels;
 use zetesis_algebra::{region::Entry, walk::Walk};
-use zetesis_ferraris::{Interpretation, Knowledge};
+use zetesis_ferraris::Interpretation;
 
 use super::{
     ENGAGEMENT_COST_PER_WORKER, Live, QueryDivision, Shared, Taken, WorkerReport, Workspaces,
@@ -62,6 +61,7 @@ use super::{
 };
 use crate::budget::{Budget, WorkLease};
 use crate::ferraris::IndexedTheory;
+use crate::ferraris::conditions::CountermodelKnowledge;
 use crate::ferraris::region_frontier::Termination;
 use crate::ferraris::regions::{Publication, ReductQuery, Served};
 use crate::timing::{self, Phase};
@@ -162,12 +162,12 @@ impl QueryCell {
 
 /// A region of a published query, with its knowledge and the query's cell.
 pub(super) struct InnerEntry {
-    entry: Entry<Knowledge<Countermodels>>,
+    entry: Entry<CountermodelKnowledge>,
     cell: Arc<QueryCell>,
 }
 
 impl InnerEntry {
-    fn new(entry: Entry<Knowledge<Countermodels>>, cell: &Arc<QueryCell>) -> Self {
+    fn new(entry: Entry<CountermodelKnowledge>, cell: &Arc<QueryCell>) -> Self {
         Self {
             entry,
             cell: Arc::clone(cell),
@@ -234,7 +234,7 @@ impl InnerDeques {
         &self,
         index: usize,
         cell: &Arc<QueryCell>,
-        traversal: &mut Walk<Knowledge<Countermodels>>,
+        traversal: &mut Walk<CountermodelKnowledge>,
         termination: &Termination,
         reserve: impl FnOnce(&mut VecDeque<InnerEntry>, usize) -> Result<(), Incomplete>,
     ) -> Result<(), Incomplete> {
@@ -260,7 +260,7 @@ impl InnerDeques {
         index: usize,
         pending: &mut Option<InnerEntry>,
         atom: usize,
-        cut_knowledge: Knowledge<Countermodels>,
+        cut_knowledge: CountermodelKnowledge,
         termination: &Termination,
         reserve: impl FnOnce(&mut VecDeque<InnerEntry>, usize) -> Result<(), Incomplete>,
     ) -> Result<(), Incomplete> {
@@ -386,7 +386,7 @@ impl Publication for WalkPublication<'_, '_> {
         &mut self,
         truth: &[bool],
         candidate: &Interpretation,
-        traversal: &mut Walk<Knowledge<Countermodels>>,
+        traversal: &mut Walk<CountermodelKnowledge>,
     ) -> Option<()> {
         let pending = traversal.pending();
         // A cell counting no region would never be decided.

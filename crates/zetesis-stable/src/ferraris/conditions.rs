@@ -11,7 +11,7 @@ use std::borrow::Borrow;
 use std::mem::size_of;
 use std::sync::Arc;
 
-use zetesis_algebra::AnswerSetsSought;
+use zetesis_algebra::{AnswerSetsSought, Countermodels};
 use zetesis_ferraris::{
     CardinalityKnowledge, CardinalitySystem, Knowledge, Narrower, ParityKnowledge, ParitySystem,
     Theory,
@@ -244,6 +244,57 @@ impl CandidateKnowledge {
             + self.cardinality.as_ref().map_or(0, |known| {
                 known.retained_bytes() - size_of::<CardinalityKnowledge>() as u128
             })
+    }
+}
+
+/// A region's knowledge in a countermodel walk: the frozen reduct's, carried
+/// from the root, and the candidate's inner systems' slots, created at first
+/// inspection as the candidate walk's are. A walk without a preparation never
+/// creates a slot and carries exactly the frozen knowledge.
+#[derive(Debug)]
+pub(crate) struct CountermodelKnowledge {
+    pub(crate) frozen: Knowledge<Countermodels>,
+    pub(crate) parity: Option<ParityKnowledge>,
+    pub(crate) cardinality: Option<CardinalityKnowledge>,
+}
+
+impl Clone for CountermodelKnowledge {
+    fn clone(&self) -> Self {
+        Self {
+            frozen: self.frozen.clone(),
+            parity: self.parity.clone(),
+            cardinality: self.cardinality.clone(),
+        }
+    }
+
+    fn clone_from(&mut self, source: &Self) {
+        self.frozen.clone_from(&source.frozen);
+        self.parity.clone_from(&source.parity);
+        self.cardinality.clone_from(&source.cardinality);
+    }
+}
+
+impl CountermodelKnowledge {
+    /// The root's knowledge: the frozen reduct's, with no inner slot yet.
+    pub(crate) fn fresh(narrower: &Narrower) -> Self {
+        Self {
+            frozen: narrower.frozen_knowledge(),
+            parity: None,
+            cardinality: None,
+        }
+    }
+
+    pub(crate) const fn frozen(&mut self) -> &mut Knowledge<Countermodels> {
+        &mut self.frozen
+    }
+
+    /// First inspection creates only this system's empty inline state.
+    pub(crate) fn parity(&mut self, system: &ParitySystem) -> &mut ParityKnowledge {
+        self.parity.get_or_insert_with(|| system.knowledge())
+    }
+
+    pub(crate) fn cardinality(&mut self, system: &CardinalitySystem) -> &mut CardinalityKnowledge {
+        self.cardinality.get_or_insert_with(|| system.knowledge())
     }
 }
 

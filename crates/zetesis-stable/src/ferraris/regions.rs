@@ -21,33 +21,33 @@
 //! removes candidates, so no restart and no exclusion index is needed
 //! (`Search.CoverageTree`, `FormulaBounds`).
 
+use std::cell::Cell;
 use std::sync::Arc;
 
-use zetesis_algebra::Countermodels;
 use zetesis_algebra::{Failure, Meter, Stop};
 use zetesis_algebra::{
     region::{Entry, Narrowing, Region},
     walk::{self, Counting, Visit, Walk},
 };
 use zetesis_ferraris::{
-    ChoiceHeads, FrozenSubject, GeneratorOrder, GeneratorOrderError, Interpretation, Knowledge,
-    LearningLimits, LearningOwner, Narrower, NarrowingAttempt, NarrowingScratch, OriginalSubject,
-    PreparationError, PreparationLimits, Producers, RegionLimits, RootPreparation,
+    ChoiceHeads, FrozenPreparation, FrozenSubject, GeneratorOrder, GeneratorOrderError,
+    Interpretation, LearningLimits, LearningOwner, Narrower, NarrowingAttempt, NarrowingScratch,
+    OriginalSubject, PreparationError, PreparationLimits, Producers, RegionLimits, RootPreparation,
     SupportExplanationStatistics, Theory,
 };
 
-use super::conditions::{Bound, CandidateKnowledge, Conditions};
+use super::conditions::{Bound, CandidateKnowledge, Conditions, CountermodelKnowledge};
 use super::learned::{LearnedStore, Tier};
 use super::original_index::IndexedTheory;
 use crate::budget::{Budget, Quota};
-use crate::subject::{Pass, Subject, SubjectAttempt, SubjectContext, SubjectStep, joint};
+use crate::subject::{SubjectAttempt, SubjectStep, joint};
 use crate::{Cancellation, Incomplete};
 
 pub(crate) mod arithmetic_counts;
 pub(super) mod depth;
 mod subjects;
 pub(super) use subjects::copy_knowledge;
-use subjects::{CandidateSubject, Frozen};
+use subjects::{CandidateSubject, CountermodelSubject};
 
 /// What a walk over a region tree counted, cumulatively: the candidate
 /// tree's walk, or the proper-subset queries' walks together.
@@ -1396,7 +1396,11 @@ impl<'a> ReductQuery<'a> {
             }
             full
         });
-        let mut traversal = Walk::with_state(root, Counting::Never, narrower.frozen_knowledge());
+        let mut traversal = Walk::with_state(
+            root,
+            Counting::Never,
+            CountermodelKnowledge::fresh(narrower),
+        );
         let mut offered = false;
         loop {
             let before = traversal.statistics();
@@ -1406,9 +1410,10 @@ impl<'a> ReductQuery<'a> {
                     return Err(Interrupt::Publish);
                 }
                 observation.enter();
-                let result = narrow_frozen(
+                let result = narrow_inner(
                     narrower,
                     FrozenSubject::new(theory, truth),
+                    None,
                     entry,
                     scratch,
                     budget,
@@ -1469,15 +1474,16 @@ impl<'a> ReductQuery<'a> {
         self,
         truth: &[bool],
         candidate: &Interpretation,
-        entry: &mut Entry<Knowledge<Countermodels>>,
+        entry: &mut Entry<CountermodelKnowledge>,
         limits: crate::Limits,
         budget: &mut Budget<'_, Q>,
         (statistics, scratch): (&mut crate::Statistics, &mut NarrowingScratch),
     ) -> Result<Served, Incomplete> {
         let (theory, narrower) = self.index.subject(candidate.theory())?;
-        let narrowing = narrow_frozen(
+        let narrowing = narrow_inner(
             narrower,
             FrozenSubject::new(theory, truth),
+            None,
             entry,
             scratch,
             budget,
@@ -1527,7 +1533,7 @@ pub(crate) trait Publication {
         &mut self,
         truth: &[bool],
         candidate: &Interpretation,
-        traversal: &mut Walk<Knowledge<Countermodels>>,
+        traversal: &mut Walk<CountermodelKnowledge>,
     ) -> Option<Self::Receipt>;
 }
 
@@ -1545,7 +1551,7 @@ impl Publication for Inline {
         &mut self,
         _: &[bool],
         _: &Interpretation,
-        _: &mut Walk<Knowledge<Countermodels>>,
+        _: &mut Walk<CountermodelKnowledge>,
     ) -> Option<Self::Receipt> {
         None
     }
@@ -1581,26 +1587,31 @@ impl From<Stop> for Interrupt {
     }
 }
 
-/// Narrow one region of a proper-subset query by the frozen reduct.
-fn narrow_frozen<Q: Quota>(
+/// Narrow one region of a proper-subset query: the frozen reduct's reading
+/// eager, and the candidate's prepared inner systems late, to their joint
+/// fixed point. The frozen reading's split preference is installed in the
+/// entry once the closure is accounted.
+fn narrow_inner<Q: Quota>(
     narrower: &Narrower,
     subject: FrozenSubject<'_>,
-    entry: &mut Entry<Knowledge<Countermodels>>,
+    preparation: Option<&FrozenPreparation>,
+    entry: &mut Entry<CountermodelKnowledge>,
     scratch: &mut NarrowingScratch,
     budget: &mut Budget<'_, Q>,
     counts: &mut RegionCounts,
 ) -> Result<Narrowing, Incomplete> {
     let (region, knowledge) = entry.parts_mut();
-    let mut subject = Frozen::new(narrower, subject);
-    let attempt = subject.narrow(
-        region,
-        knowledge,
-        scratch,
-        Pass::First,
-        &mut SubjectContext { budget, counts },
-    );
-    let result = attempt.account(counts)?.narrowing();
-    if let Some(atom) = subject.preferred {
+    let preferred = Cell::new(None);
+    let eager = || {
+        std::iter::once(CountermodelSubject::Frozen {
+            narrower,
+            reading: subject,
+            preferred: &preferred,
+        })
+    };
+    let mut late = subjects::inner_late(preparation);
+    let result = joint(eager, &mut late, region, knowledge, scratch, budget, counts)?;
+    if let Some(atom) = preferred.get() {
         entry.prefer(atom);
     }
     Ok(result)
