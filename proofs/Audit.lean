@@ -1065,6 +1065,7 @@ import Zetesis
 #print axioms Zetesis.LearnedRegions.consequence_row_forces_complement
 #print axioms Zetesis.LearnedRegions.row_of_narrower_class
 #print axioms Zetesis.LearnedRegions.guarded_row
+#print axioms Zetesis.LearnedRegions.row_under_unit
 #print axioms Zetesis.LearnedRegions.row_union
 #print axioms Zetesis.LearnedRegions.row_dominance
 #print axioms Zetesis.LearnedRegions.founded_row

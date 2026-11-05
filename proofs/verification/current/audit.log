@@ -1089,6 +1089,7 @@
 'Zetesis.LearnedRegions.consequence_row_forces_complement' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.LearnedRegions.row_of_narrower_class' does not depend on any axioms
 'Zetesis.LearnedRegions.guarded_row' does not depend on any axioms
+'Zetesis.LearnedRegions.row_under_unit' depends on axioms: [propext]
 'Zetesis.LearnedRegions.row_union' depends on axioms: [propext]
 'Zetesis.LearnedRegions.row_dominance' does not depend on any axioms
 'Zetesis.LearnedRegions.founded_row' depends on axioms: [propext, Classical.choice, Quot.sound]

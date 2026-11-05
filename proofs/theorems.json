@@ -5325,19 +5325,24 @@
     "line": 175
   },
   {
+    "name": "Zetesis.LearnedRegions.row_under_unit",
+    "file": "Zetesis/LearnedRegions.lean",
+    "line": 189
+  },
+  {
     "name": "Zetesis.LearnedRegions.row_union",
     "file": "Zetesis/LearnedRegions.lean",
-    "line": 187
+    "line": 202
   },
   {
     "name": "Zetesis.LearnedRegions.row_dominance",
     "file": "Zetesis/LearnedRegions.lean",
-    "line": 198
+    "line": 213
   },
   {
     "name": "Zetesis.LearnedRegions.founded_row",
     "file": "Zetesis/LearnedRegions.lean",
-    "line": 217
+    "line": 232
   },
   {
     "name": "Zetesis.Lifted.composition_exact",

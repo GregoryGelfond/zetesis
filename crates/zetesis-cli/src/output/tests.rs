@@ -61,8 +61,12 @@ fn inner_preparation_json_lists_every_receipt() {
     reduct.inner_preparation.rounds = 5;
     reduct.inner_preparation.refuted_patterns = 120;
     reduct.inner_preparation.rows = 29;
+    reduct.inner_preparation.rank = 27;
+    reduct.inner_preparation.units = 3;
     reduct.inner_preparation.inexact_hulls = 2;
     reduct.inner_preparation.bounds = 11;
+    reduct.inner_preparation.lower = 6;
+    reduct.inner_preparation.upper = 5;
     reduct.inner_preparation.families = 1;
     reduct.inner_preparation.root_refuted = 1;
     reduct.inner_preparation.work = 5_000;
@@ -86,8 +90,12 @@ fn inner_preparation_json_lists_every_receipt() {
             "rounds": 5,
             "refuted_patterns": 120,
             "rows": 29,
+            "rank": 27,
+            "units": 3,
             "inexact_hulls": 2,
             "bounds": 11,
+            "lower": 6,
+            "upper": 5,
             "families": 1,
             "root_refuted": 1,
             "work": 5000,

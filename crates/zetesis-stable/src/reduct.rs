@@ -66,11 +66,20 @@ pub struct InnerPreparationStatistics {
     pub refuted_patterns: u64,
     /// Parity rows loaded.
     pub rows: u64,
+    /// The parity rows' echelon bases.
+    pub rank: u64,
+    /// One-atom parity rows, seeding the query root.
+    pub units: u64,
     /// Probed groups whose allowed patterns are not affine.
     pub inexact_hulls: u64,
     /// Count bounds loaded: a table's least and greatest allowed counts, a
-    /// clause's lower bound among them, and the cliques' upper bounds.
+    /// clause's lower bound among them, the cliques' upper bounds, and the
+    /// trivial bounds completing a partition.
     pub bounds: u64,
+    /// Count bounds from below.
+    pub lower: u64,
+    /// Count bounds from above.
+    pub upper: u64,
     /// Count families found: lower and upper bounds partitioning one atom
     /// set, whose sums the root's double count compares.
     pub families: u64,
@@ -105,8 +114,12 @@ impl InnerPreparationStatistics {
             rounds: attempt.rounds,
             refuted_patterns: attempt.refuted_patterns,
             rows: attempt.parity.rows,
+            rank: attempt.parity.rank as u64,
+            units: attempt.parity.units as u64,
             inexact_hulls: attempt.inexact_hulls,
             bounds: attempt.cardinality.rows as u64,
+            lower: attempt.cardinality.lower as u64,
+            upper: attempt.cardinality.upper as u64,
             families: attempt.cardinality.families,
             root_refuted: u64::from(attempt.root_refuted),
             work: attempt.preparation_work,
@@ -128,8 +141,12 @@ impl InnerPreparationStatistics {
             (&mut self.rounds, other.rounds),
             (&mut self.refuted_patterns, other.refuted_patterns),
             (&mut self.rows, other.rows),
+            (&mut self.rank, other.rank),
+            (&mut self.units, other.units),
             (&mut self.inexact_hulls, other.inexact_hulls),
             (&mut self.bounds, other.bounds),
+            (&mut self.lower, other.lower),
+            (&mut self.upper, other.upper),
             (&mut self.families, other.families),
             (&mut self.root_refuted, other.root_refuted),
             (&mut self.work, other.work),
@@ -154,8 +171,12 @@ impl InnerPreparationStatistics {
             rounds: self.rounds.saturating_add(other.rounds),
             refuted_patterns: self.refuted_patterns.saturating_add(other.refuted_patterns),
             rows: self.rows.saturating_add(other.rows),
+            rank: self.rank.saturating_add(other.rank),
+            units: self.units.saturating_add(other.units),
             inexact_hulls: self.inexact_hulls.saturating_add(other.inexact_hulls),
             bounds: self.bounds.saturating_add(other.bounds),
+            lower: self.lower.saturating_add(other.lower),
+            upper: self.upper.saturating_add(other.upper),
             families: self.families.saturating_add(other.families),
             root_refuted: self.root_refuted.saturating_add(other.root_refuted),
             work: self.work.saturating_add(other.work),
