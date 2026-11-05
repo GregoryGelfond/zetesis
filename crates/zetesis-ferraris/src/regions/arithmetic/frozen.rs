@@ -435,6 +435,14 @@ fn build<Q: Quota + ?Sized>(
 /// bounds, each when any was found.
 type Systems = (Option<ParitySystem>, Option<CardinalitySystem>);
 
+/// The probing rounds a preparation may run: the first by the frozen reading
+/// alone, the second under the rows it established. A later round tightens
+/// a hull the round before left inexact, one probe per pattern of each such
+/// group at the lease allowance each, and the cap bounds a preparation's
+/// probing at two rounds' probes; what the rounds established is loaded,
+/// sound for the class as before, the remaining hulls inexact.
+const MAX_ROUNDS: u64 = 2;
+
 /// Probe the groups in rounds and load their rows and bounds: round one by
 /// the frozen reading alone, each later round under the parity rows the
 /// round before established, sound for the class as their joint closure is,
@@ -461,9 +469,9 @@ fn probe_rounds<Q: Quota + ?Sized>(
     let mut tables: Vec<(Support, Words<u64, [u64; 4]>)> = Vec::new();
     let mut refuted: Vec<u64> = vec![0; groups.len()];
     // Round one probes every group; a later round only those whose hull was
-    // inexact, keeping the others' tables.
+    // inexact, keeping the others' tables, up to `MAX_ROUNDS`.
     let mut pending: Vec<usize> = (0..groups.len()).collect();
-    while !pending.is_empty() {
+    while !pending.is_empty() && statistics.rounds < MAX_ROUNDS {
         statistics.rounds += 1;
         let probes: u64 = pending
             .iter()

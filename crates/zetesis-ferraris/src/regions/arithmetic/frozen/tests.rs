@@ -1316,3 +1316,33 @@ fn two_candidates_of_one_theory_prepare_differently() {
     assert!(preparation.belongs_to(&fixture.theory, &fixture.candidate));
     assert!(!preparation.belongs_to(&fixture.theory, &candidate));
 }
+
+#[test]
+fn probing_stops_after_the_second_round() {
+    // Two chains over four inputs less one clause of the first chain's last
+    // gate and one of the pair: left to itself the probing runs four rounds,
+    // each tightening a hull the round before left inexact, down to one;
+    // capped, it stops after the second, the first by the frozen reading
+    // alone and the second under its rows, with two hulls still inexact,
+    // and loads what the two rounds established.
+    let mut clauses = two_chains_of(4);
+    clauses.remove(24);
+    clauses.remove(8);
+    let fixture = Saturation::build(3 * 4 - 2, &clauses, &[]);
+    let attempt = fixture.prepared();
+    let statistics = attempt.statistics;
+    assert_eq!(
+        (
+            statistics.rounds,
+            statistics.inexact_hulls,
+            statistics.root_refuted
+        ),
+        (2, 2, false)
+    );
+    assert!(
+        statistics.probes < 85 && statistics.parity.rows < 7,
+        "{statistics:?}"
+    );
+    let prepared = attempt.result.unwrap().unwrap();
+    assert!(prepared.parity().is_some());
+}
