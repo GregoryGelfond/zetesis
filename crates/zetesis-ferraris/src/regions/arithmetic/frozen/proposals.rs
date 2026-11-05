@@ -80,6 +80,7 @@ struct Masked<'a> {
     producers: &'a Producers,
     candidate: &'a Interpretation,
     truth: &'a [bool],
+    root: &'a Region,
 }
 
 /// A rule of a guard whose body is a conjunction over atoms, after dropping
@@ -91,9 +92,12 @@ struct Falsifier {
 
 /// Propose the guards of `candidate`'s frozen reduct and their clauses.
 ///
-/// A guard is an open atom of the candidate heading at least two rules whose
-/// bodies, true in the candidate, are conjunctions over atoms with at least
-/// one conjunct open in `root`; a conjunct the root cuts disables its rule.
+/// A guard is an atom of the candidate not held in `root`, open or already
+/// cut there, heading at least two rules whose bodies, true in the candidate,
+/// are conjunctions over atoms with at least one conjunct the root does not
+/// hold. A conjunct the root cuts still carries its clause when a definition
+/// chain leads below it; a base atom the root cuts satisfies its clause,
+/// which then proposes nothing.
 /// Each open conjunct is followed through single-producer bodies, a single
 /// atom or a conjunction of atoms, to base atoms, a base that is one disjunct
 /// of a two-atom disjunctive root being read as the lower disjunct, through
@@ -122,18 +126,19 @@ pub(super) fn propose<Q: Quota + ?Sized>(
         producers,
         candidate,
         truth,
+        root,
     };
     let mut proposals = Proposals::default();
     let mut falsifiers = Vec::new();
     for guard in (0..theory.atom_count()).filter(|&atom| candidate.contains(atom)) {
         budget.charge(1)?;
-        if !root.is_open(guard) {
+        if root.is_held(guard) {
             continue;
         }
         falsifiers.clear();
         for &rule in &producers.by_head[guard] {
             budget.charge(1)?;
-            if let Some(falsifier) = falsifier(masked, rule, root, budget)? {
+            if let Some(falsifier) = falsifier(masked, rule, budget)? {
                 falsifiers.push(falsifier);
             }
         }
@@ -153,13 +158,12 @@ pub(super) fn propose<Q: Quota + ?Sized>(
     Ok(proposals)
 }
 
-/// The open conjuncts of `rule`'s body when it is a conjunction over atoms
-/// true in the candidate; none when the rule is a choice, a fact, masked, has
-/// a conjunct the root cuts, or has no open conjunct.
+/// The conjuncts of `rule`'s body the root does not hold, when the body is a
+/// conjunction over atoms true in the candidate; none when the rule is a
+/// choice, a fact, masked, or every conjunct is held.
 fn falsifier<Q: Quota + ?Sized>(
     masked: Masked<'_>,
     rule: usize,
-    root: &Region,
     budget: &mut Budget<'_, '_, Q>,
 ) -> Result<Option<Falsifier>, BudgetError<Q::Error>> {
     let producer = &masked.producers.rules[rule];
@@ -174,22 +178,20 @@ fn falsifier<Q: Quota + ?Sized>(
     if !conjunction(masked, body, 0, &mut conjuncts, budget)? {
         return Ok(None);
     }
-    let mut open = Vec::new();
+    let mut unheld = Vec::new();
     for atom in conjuncts {
         budget.charge(1)?;
-        match root.decision(atom) {
-            Some(true) => {}
-            Some(false) => return Ok(None),
-            None => open.push(atom),
+        if !masked.root.is_held(atom) {
+            unheld.push(atom);
         }
     }
     budget.charge(1)?;
-    if open.is_empty() {
+    if unheld.is_empty() {
         return Ok(None);
     }
     Ok(Some(Falsifier {
         rule,
-        conjuncts: open,
+        conjuncts: unheld,
     }))
 }
 
@@ -259,7 +261,8 @@ fn clause<Q: Quota + ?Sized>(
 }
 
 /// Follow `atom` to its base atoms, appending them to `reached`; `false` when
-/// the chain leaves the candidate or runs too deep.
+/// the chain leaves the candidate, runs too deep, or reaches a base the root
+/// already cuts, which satisfies the clause.
 fn follow<Q: Quota + ?Sized>(
     masked: Masked<'_>,
     atom: usize,
@@ -283,10 +286,14 @@ fn follow<Q: Quota + ?Sized>(
             };
             budget.charge(1)?;
             if masked.candidate.contains(other) {
-                reached.push(Reached {
-                    base: atom.min(other),
-                    complement: other < atom,
-                });
+                let base = atom.min(other);
+                let complement = other < atom;
+                // The clause is falsified by the base held or cut; the root
+                // deciding it the other way satisfies the clause already.
+                if masked.root.decision(base) == Some(complement) {
+                    return Ok(false);
+                }
+                reached.push(Reached { base, complement });
                 return Ok(true);
             }
         }
@@ -321,6 +328,10 @@ fn follow<Q: Quota + ?Sized>(
                 _ => {}
             }
         }
+    }
+    budget.charge(1)?;
+    if masked.root.is_cut(atom) {
+        return Ok(false);
     }
     reached.push(Reached {
         base: atom,

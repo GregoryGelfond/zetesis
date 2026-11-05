@@ -545,3 +545,57 @@ fn a_nested_conjunction_body_is_read_through() {
     );
     assert_eq!(proposals.parity.len(), 1);
 }
+
+/// Prepare from the closed root with `decide` applied and closed again: a
+/// residual root a walk or a device handed over.
+fn prepared_from(
+    fixture: &Saturation,
+    decide: impl FnOnce(&mut Region),
+) -> FrozenPreparationAttempt<Failure<Stop>> {
+    let producers = fixture.producers();
+    let (narrower, mut root, mut knowledge) = fixture.closed();
+    decide(&mut root);
+    let mut scratch = NarrowingScratch::default();
+    let cancellation = Cancellation::default();
+    let mut quota = Allowance {
+        remaining: u64::MAX,
+        failure: Stop::WorkLimit,
+    };
+    let closed = {
+        let mut meter = Meter::reserved(&mut quota);
+        narrower.narrow_frozen_known_reserved(
+            fixture.subject(),
+            &mut root,
+            &mut knowledge,
+            &mut scratch,
+            &cancellation,
+            &mut meter,
+        )
+    };
+    assert_ne!(closed.result.unwrap(), Narrowing::Refuted);
+    let query = ClosedQuery {
+        narrower: &narrower,
+        producers: Some(&producers),
+        subject: fixture.subject(),
+        candidate: &fixture.candidate,
+        region: &root,
+        knowledge: &knowledge,
+    };
+    FrozenPreparation::prepare_reserved(query, &mut scratch, unbounded(), &cancellation, &mut quota)
+}
+
+#[test]
+fn a_guard_cut_at_the_root_needs_no_probe() {
+    // A residual root where a split or a device already cut the guard: its
+    // clauses hold there unconditionally, so the groups are probed without a
+    // unit probe and nothing is cut again.
+    let fixture = Saturation::build(3, &gate(0, 1, 2), &[]);
+    let valid = fixture.valid;
+    let attempt = prepared_from(&fixture, |root| assert!(root.cut(valid)));
+    let preparation = attempt.result.unwrap().unwrap();
+    assert_eq!(attempt.statistics.guards, 1);
+    assert_eq!(attempt.statistics.probes, 8);
+    assert_eq!(attempt.statistics.saturation_units, 0);
+    assert!(preparation.units().is_empty());
+    assert_eq!(attempt.statistics.parity.rows, 1);
+}

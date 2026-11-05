@@ -356,20 +356,25 @@ fn build<Q: Quota + ?Sized>(
     {
         let mut meter = Meter::reserved(lease);
         for &guard in &proposals.guards {
-            statistics.probes += 1;
-            let refuted = probe
-                .run(&[(guard, true)], scratch, cancellation, &mut meter)
-                .map_err(from_meter)?;
-            let reaches = refuted
-                || query
-                    .candidate
-                    .atoms()
-                    .all(|atom| probe.region().is_held(atom));
-            if !reaches {
-                continue;
+            // A guard the root already cuts needs no probe: its clauses hold
+            // there unconditionally. An open guard is probed held; one whose
+            // narrowing reaches the candidate, or is refuted, is a unit.
+            if query.region.is_open(guard) {
+                statistics.probes += 1;
+                let refuted = probe
+                    .run(&[(guard, true)], scratch, cancellation, &mut meter)
+                    .map_err(from_meter)?;
+                let reaches = refuted
+                    || query
+                        .candidate
+                        .atoms()
+                        .all(|atom| probe.region().is_held(atom));
+                if !reaches {
+                    continue;
+                }
+                units.push(guard);
+                statistics.saturation_units += 1;
             }
-            units.push(guard);
-            statistics.saturation_units += 1;
             for group in proposals.parity.iter().filter(|group| group.guard == guard) {
                 statistics.probed_groups += 1;
                 let mut counts = (0, 0);
