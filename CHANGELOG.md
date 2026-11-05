@@ -14,7 +14,9 @@ Notable changes by release. Versions follow Semantic Versioning.
   partition. They load into the same parity and cardinality systems the
   candidate walk uses and apply through the walk's joint closure, so the
   quantified saturation cores (parity, Tseitin, pigeonhole) are decided at the
-  root for their stable candidates and walked polynomially for the others.
+  root for their stable candidates and walked polynomially for the others. The
+  probing runs at most two rounds, the second under the rows the first
+  established, and loads what they found with the remaining hulls inexact.
   zetesis-ferraris adds `FrozenPreparation`, `FrozenPreparationAttempt`,
   `FrozenPreparationLimits`, `FrozenPreparationStatistics`, `ClosedQuery` and
   `ParitySystem::consistent_in_reserved`; zetesis-stable adds
