@@ -11,6 +11,8 @@ mod budget;
 mod cardinality_source;
 mod completion;
 mod conjunction;
+#[cfg(test)]
+mod frozen;
 mod hull;
 mod parity;
 mod root_facts;
