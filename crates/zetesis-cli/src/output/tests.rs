@@ -49,6 +49,47 @@ fn frozen_positive_json_preserves_failed_attempt_work() {
 }
 
 #[test]
+fn inner_preparation_json_lists_every_receipt() {
+    let mut reduct = zetesis_stable::ReductStatistics::default();
+    reduct.regions.regions = 7;
+    reduct.inner_preparation.attempts = 4;
+    reduct.inner_preparation.prepared = 3;
+    reduct.inner_preparation.declined = 1;
+    reduct.inner_preparation.saturation_units = 3;
+    reduct.inner_preparation.groups = 30;
+    reduct.inner_preparation.probes = 243;
+    reduct.inner_preparation.refuted_patterns = 120;
+    reduct.inner_preparation.rows = 29;
+    reduct.inner_preparation.inexact_hulls = 2;
+    reduct.inner_preparation.root_refuted = 1;
+    reduct.inner_preparation.work = 5_000;
+    let statistics = zetesis_stable::Statistics {
+        reduct,
+        ..zetesis_stable::Statistics::default()
+    };
+    let mut output = Buffer::new(4096);
+    search_statistics(&mut output, Some(&statistics), "test").unwrap();
+    let value: serde_json::Value = serde_json::from_slice(&output.bytes).unwrap();
+    assert_eq!(value["reduct_query_regions"]["visited"], 7);
+    assert_eq!(
+        value["reduct_query_regions"]["preparation"],
+        serde_json::json!({
+            "attempts": 4,
+            "prepared": 3,
+            "declined": 1,
+            "saturation_units": 3,
+            "groups": 30,
+            "probes": 243,
+            "refuted_patterns": 120,
+            "rows": 29,
+            "inexact_hulls": 2,
+            "root_refuted": 1,
+            "work": 5000,
+        })
+    );
+}
+
+#[test]
 fn region_json_preserves_support_explanation_receipts() {
     let mut statistics = zetesis_stable::RegionSearchStatistics::default();
     statistics.counts.work = 31;

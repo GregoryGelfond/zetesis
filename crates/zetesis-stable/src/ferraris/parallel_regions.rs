@@ -1502,6 +1502,9 @@ fn merge_membership(into: &mut Statistics, from: &Statistics) -> Result<(), Inco
         .reduct
         .peak_workspace_bytes
         .max(from.reduct.peak_workspace_bytes);
+    into.reduct
+        .inner_preparation
+        .merge(&from.reduct.inner_preparation)?;
     if let Some(from) = from.certified.as_ref() {
         let into = into.certified.get_or_insert_default();
         add(&mut into.checks, from.checks)?;

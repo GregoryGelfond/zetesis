@@ -94,8 +94,15 @@ fn support_attribution_overflow_leaves_counts_unchanged() {
     }
 }
 
+/// The index's charge: the narrower's work and the producer extraction's.
 fn indexing_work(theory: &Theory) -> u64 {
-    u64::try_from(theory.nodes().len() + theory.parts().occurrences()).unwrap()
+    let extraction = zetesis_ferraris::producers(
+        theory,
+        zetesis_ferraris::RegionLimits::default(),
+        &Cancellation::default(),
+    )
+    .unwrap();
+    u64::try_from(theory.nodes().len() + theory.parts().occurrences()).unwrap() + extraction.work
 }
 
 // These test-only methods keep membership and handoff regressions on the

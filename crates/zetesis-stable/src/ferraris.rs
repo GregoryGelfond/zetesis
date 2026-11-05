@@ -1032,6 +1032,7 @@ impl StableModels {
                         frozen_positive_work: merged.reduct.frozen_positive_work,
                         peak_workspace_bytes: merged.reduct.peak_workspace_bytes,
                         regions: merged.reduct.regions,
+                        inner_preparation: merged.reduct.inner_preparation,
                         ..self.statistics.reduct
                     },
                     ..self.statistics

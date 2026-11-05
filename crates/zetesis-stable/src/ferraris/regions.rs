@@ -30,10 +30,10 @@ use zetesis_algebra::{
     walk::{self, Counting, Visit, Walk},
 };
 use zetesis_ferraris::{
-    ChoiceHeads, FrozenPreparation, FrozenSubject, GeneratorOrder, GeneratorOrderError,
-    Interpretation, LearningLimits, LearningOwner, Narrower, NarrowingAttempt, NarrowingScratch,
-    OriginalSubject, PreparationError, PreparationLimits, Producers, RegionLimits, RootPreparation,
-    SupportExplanationStatistics, Theory,
+    ChoiceHeads, ClosedQuery, FrozenPreparation, FrozenPreparationLimits, FrozenSubject,
+    GeneratorOrder, GeneratorOrderError, Interpretation, LearningLimits, LearningOwner, Narrower,
+    NarrowingAttempt, NarrowingScratch, OriginalSubject, PreparationError, PreparationLimits,
+    Producers, RegionLimits, RootPreparation, SupportExplanationStatistics, Theory,
 };
 
 use super::conditions::{Bound, CandidateKnowledge, Conditions, CountermodelKnowledge};
@@ -1386,6 +1386,12 @@ impl<'a> ReductQuery<'a> {
         let (theory, narrower) = self.index.subject(evaluated.theory())?;
         let candidate = evaluated.interpretation();
         let truth = evaluated.truth();
+        let reading = InnerReading {
+            narrower,
+            subject: FrozenSubject::new(theory, truth),
+            producers: self.index.producers(),
+            candidate,
+        };
         if !theory.same_instance(candidate.theory()) {
             return Err(Incomplete::WrongTheory);
         }
@@ -1402,6 +1408,10 @@ impl<'a> ReductQuery<'a> {
             CountermodelKnowledge::fresh(narrower),
         );
         let mut offered = false;
+        // The candidate's inner subjects, prepared once from its root after
+        // the root's first closure and read by every later narrowing.
+        let mut preparation: Option<FrozenPreparation> = None;
+        let mut prepared = false;
         loop {
             let before = traversal.statistics();
             let visit = traversal.next(|entry| {
@@ -1410,16 +1420,24 @@ impl<'a> ReductQuery<'a> {
                     return Err(Interrupt::Publish);
                 }
                 observation.enter();
-                let result = narrow_inner(
+                let mut result = narrow_inner(
                     narrower,
-                    FrozenSubject::new(theory, truth),
-                    None,
+                    reading.subject,
+                    preparation.as_ref(),
                     entry,
                     scratch,
                     budget,
                     &mut statistics.reduct.regions,
                 )
                 .map_err(Interrupt::Stopped)?;
+                if !prepared && result != Narrowing::Refuted {
+                    prepared = true;
+                    let (installed, after_units) =
+                        prepare_at_root(reading, entry, limits, budget, scratch, statistics)
+                            .map_err(Interrupt::Stopped)?;
+                    preparation = installed;
+                    result = after_units;
+                }
                 observation.narrowed(result);
                 Ok(result)
             });
@@ -1584,6 +1602,97 @@ enum Interrupt {
 impl From<Stop> for Interrupt {
     fn from(stop: Stop) -> Self {
         Self::Stopped(stop.into())
+    }
+}
+
+/// What a candidate's query reads: its theory's index and producers, its
+/// frozen reduct and the candidate itself.
+#[derive(Clone, Copy)]
+struct InnerReading<'a> {
+    narrower: &'a Narrower,
+    subject: FrozenSubject<'a>,
+    producers: Option<&'a Producers>,
+    candidate: &'a Interpretation,
+}
+
+/// On the root's first closure: prepare the candidate's inner subjects from
+/// the closed root, cut their units into it and narrow it again with them.
+/// A unit the closed root already holds leaves the class empty: refuted,
+/// through the walk as always. Returns the preparation to read from now on
+/// and the root's narrowing.
+///
+/// # Errors
+/// As [`prepare_inner`] and [`narrow_inner`].
+fn prepare_at_root<Q: Quota>(
+    reading: InnerReading<'_>,
+    entry: &mut Entry<CountermodelKnowledge>,
+    limits: crate::Limits,
+    budget: &mut Budget<'_, Q>,
+    scratch: &mut NarrowingScratch,
+    statistics: &mut crate::Statistics,
+) -> Result<(Option<FrozenPreparation>, Narrowing), Incomplete> {
+    let preparation = prepare_inner(
+        ClosedQuery {
+            narrower: reading.narrower,
+            producers: reading.producers,
+            subject: reading.subject,
+            candidate: reading.candidate,
+            region: &entry.region,
+            knowledge: &entry.state.frozen,
+        },
+        limits,
+        budget,
+        scratch,
+        &mut statistics.reduct,
+    )?;
+    let Some(installed) = preparation.as_ref() else {
+        return Ok((None, Narrowing::Fixed { changed: false }));
+    };
+    if !installed.units().iter().all(|&atom| entry.region.cut(atom)) {
+        return Ok((preparation, Narrowing::Refuted));
+    }
+    let narrowed = narrow_inner(
+        reading.narrower,
+        reading.subject,
+        Some(installed),
+        entry,
+        scratch,
+        budget,
+        &mut statistics.reduct.regions,
+    )?;
+    Ok((preparation, narrowed))
+}
+
+/// Prepare the candidate's inner subjects from its closed query root under
+/// the search budget; the attempt's receipt enters the reduct statistics on
+/// every outcome. `None` when nothing was proposed or the lease declined.
+///
+/// # Errors
+/// The budget's or cancellation's stop, or a source refusal, as the root
+/// preparation reports them.
+fn prepare_inner<Q: Quota>(
+    query: ClosedQuery<'_>,
+    limits: crate::Limits,
+    budget: &mut Budget<'_, Q>,
+    scratch: &mut NarrowingScratch,
+    statistics: &mut crate::ReductStatistics,
+) -> Result<Option<FrozenPreparation>, Incomplete> {
+    let cancellation = budget.cancellation;
+    let mut quota = BudgetQuota { budget };
+    let attempt = FrozenPreparation::prepare_reserved(
+        query,
+        scratch,
+        FrozenPreparationLimits::per_candidate(
+            usize::try_from(limits.max_reduct_bytes).unwrap_or(usize::MAX),
+        ),
+        cancellation,
+        &mut quota,
+    );
+    statistics.inner_preparation.record(&attempt.statistics)?;
+    match attempt.result {
+        Ok(prepared) => Ok(prepared),
+        Err(PreparationError::Stopped(error)) => Err(meter_failure(error)),
+        Err(PreparationError::Source(source)) => Err(Incomplete::ArithmeticSource(source)),
     }
 }
 

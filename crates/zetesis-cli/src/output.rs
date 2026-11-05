@@ -872,7 +872,20 @@ fn search_statistics(
     out.number_field("leaves", stats.reduct.regions.leaves)?;
     out.number_field("propagations", stats.reduct.regions.propagations)?;
     out.number_field("reading_work", stats.reduct.regions.work)?;
-    out.text("}}")
+    let preparation = stats.reduct.inner_preparation;
+    out.text(",\"preparation\":{\"attempts\":")?;
+    out.text(&preparation.attempts.to_string())?;
+    out.number_field("prepared", preparation.prepared)?;
+    out.number_field("declined", preparation.declined)?;
+    out.number_field("saturation_units", preparation.saturation_units)?;
+    out.number_field("groups", preparation.groups)?;
+    out.number_field("probes", preparation.probes)?;
+    out.number_field("refuted_patterns", preparation.refuted_patterns)?;
+    out.number_field("rows", preparation.rows)?;
+    out.number_field("inexact_hulls", preparation.inexact_hulls)?;
+    out.number_field("root_refuted", preparation.root_refuted)?;
+    out.number_field("work", preparation.work)?;
+    out.text("}}}")
 }
 
 fn region_filter_statistics(

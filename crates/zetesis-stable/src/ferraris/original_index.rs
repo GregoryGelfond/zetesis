@@ -11,7 +11,7 @@
 use std::sync::Arc;
 
 use zetesis_algebra::Cancellation;
-use zetesis_ferraris::{Narrower, Theory};
+use zetesis_ferraris::{Narrower, Producers, RegionLimits, Theory};
 
 use super::regions::stopped;
 use crate::Incomplete;
@@ -24,6 +24,9 @@ use crate::Incomplete;
 pub(crate) struct IndexedTheory {
     theory: Theory,
     narrower: Narrower,
+    /// The theory's producers when every root is a rule; what a candidate's
+    /// inner preparation reads.
+    producers: Option<Producers>,
 }
 
 impl IndexedTheory {
@@ -33,6 +36,10 @@ impl IndexedTheory {
 
     pub(crate) fn narrower(&self) -> &Narrower {
         &self.narrower
+    }
+
+    pub(crate) fn producers(&self) -> Option<&Producers> {
+        self.producers.as_ref()
     }
 
     /// Authenticate before borrowing the indexed subject for any traversal.
@@ -71,8 +78,9 @@ impl OriginalIndex {
     /// The index, built on the first call that finds none.
     ///
     /// Before building, `charge` receives the index's documented cost: one
-    /// work unit per node and operand occurrence of the theory, which equals the built narrower's
-    /// [`Narrower::work`] and is known before building. A refused charge
+    /// work unit per node and operand occurrence of the theory, which equals
+    /// the built narrower's [`Narrower::work`], plus the producer extraction's
+    /// visits, both known before the narrower is built. A refused charge
     /// builds nothing and leaves the owner unbuilt. An admitted charge stays
     /// admitted even if the build then fails, as a failed narrowing keeps
     /// its admitted prefix: `charge` is where the caller records it, in the
@@ -93,16 +101,26 @@ impl OriginalIndex {
         let index = if let Some(index) = self.index.take() {
             index
         } else {
+            let extraction =
+                zetesis_ferraris::producers(&self.theory, RegionLimits::default(), cancellation)
+                    .map_err(stopped)?;
             let work = u64::try_from(
                 self.theory.nodes().len() as u128 + self.theory.parts().occurrences() as u128,
             )
-            .map_err(|_| Incomplete::CounterOverflow)?;
+            .ok()
+            .and_then(|indexing| indexing.checked_add(extraction.work))
+            .ok_or(Incomplete::CounterOverflow)?;
             charge(work)?;
             let narrower = prepare(&self.theory, self.native_byte_limit, cancellation)?;
-            debug_assert_eq!(narrower.work(), work, "the charge is the index's work");
+            debug_assert_eq!(
+                narrower.work() + extraction.work,
+                work,
+                "the charge is the index's work"
+            );
             Arc::new(IndexedTheory {
                 theory: self.theory.clone(),
                 narrower,
+                producers: extraction.producers,
             })
         };
         Ok(self.index.insert(index))

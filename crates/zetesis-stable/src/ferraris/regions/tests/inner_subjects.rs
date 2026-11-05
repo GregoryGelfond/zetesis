@@ -262,36 +262,99 @@ fn narrow(
 }
 
 #[test]
-fn an_empty_late_tier_reproduces_the_frozen_walk() {
+fn a_theory_without_saturation_shape_walks_as_today() {
     // The counts the frozen walk alone produced on these fixtures before the
-    // joint closure took over the inner walk.
+    // inner preparation entered the walk: a preparation that proposes nothing
+    // changes neither the verdict nor a count.
+    for (theory, stable, counts) in [
+        (cycle(), false, (2, 0, 1, 4, 10)),
+        (positive(), true, (1, 0, 1, 3, 5)),
+    ] {
+        let index = built(&theory);
+        let cancellation = Cancellation::default();
+        let candidate = Interpretation::new(&theory, [0, 1]).unwrap();
+        let mut workspace = EvaluationWorkspace::default();
+        let evaluated = workspace
+            .evaluate(&candidate, EvaluationLimits::default(), &cancellation)
+            .result
+            .unwrap();
+        let mut query_budget = budget(&cancellation, u64::MAX);
+        let mut statistics = Statistics::default();
+        let check = ReductQuery::new(&index)
+            .check(
+                &evaluated,
+                Limits::default(),
+                &mut query_budget,
+                &mut statistics,
+                &mut NarrowingScratch::default(),
+            )
+            .unwrap();
+        assert_eq!(matches!(check, crate::Check::Stable), stable);
+        let regions = statistics.reduct.regions;
+        assert_eq!(
+            (
+                regions.regions,
+                regions.refuted,
+                regions.leaves,
+                regions.propagations,
+                regions.work
+            ),
+            counts
+        );
+        assert_eq!(regions.arithmetic, ArithmeticCounts::default());
+        let preparation = statistics.reduct.inner_preparation;
+        assert_eq!((preparation.attempts, preparation.prepared), (1, 0));
+    }
+}
+
+#[test]
+fn the_stable_candidate_of_a_parity_core_is_decided_at_the_root() {
+    // Before the preparation, the frozen walk alone visited 51 regions,
+    // refuting 25, to establish this candidate's stability.
     let fixture = Saturation::build(7, &two_chains());
     let (check, statistics) = fixture.check();
     assert!(matches!(check, crate::Check::Stable));
     let regions = statistics.reduct.regions;
     assert_eq!(
-        (
-            regions.regions,
-            regions.refuted,
-            regions.leaves,
-            regions.propagations
-        ),
-        (51, 25, 1, 1289)
+        (regions.regions, regions.refuted, regions.leaves),
+        (1, 1, 0)
     );
+    let preparation = statistics.reduct.inner_preparation;
+    assert_eq!((preparation.attempts, preparation.prepared), (1, 1));
+    assert_eq!(preparation.saturation_units, 1);
+    assert_eq!(preparation.root_refuted, 1);
+    assert_eq!(preparation.rows, 5);
+    assert!(preparation.work > 0);
+}
+
+#[test]
+fn a_dropped_clause_candidate_finds_its_countermodel_in_few_regions() {
+    // Dropping the last clause makes the core satisfiable: the candidate has
+    // a countermodel, and the rows of the remaining clauses guide the walk to
+    // it in fewer regions than the frozen subject alone needed for the
+    // unsatisfiable core (51).
+    let mut clauses = two_chains();
+    clauses.pop();
+    let fixture = Saturation::build(7, &clauses);
+    let (check, statistics) = fixture.check();
+    assert!(matches!(check, crate::Check::NonMinimal(_)));
+    let regions = statistics.reduct.regions;
+    assert_eq!(
+        (regions.regions, regions.refuted, regions.leaves),
+        (19, 1, 1)
+    );
+    let preparation = statistics.reduct.inner_preparation;
+    assert_eq!((preparation.attempts, preparation.prepared), (1, 1));
+    assert_eq!(preparation.root_refuted, 0);
+    // The shared-input pair: the frozen walk alone visited 17 regions.
     let fixture = Saturation::build(4, &shared_inputs());
     let (check, statistics) = fixture.check();
     assert!(matches!(check, crate::Check::NonMinimal(_)));
     let regions = statistics.reduct.regions;
     assert_eq!(
-        (
-            regions.regions,
-            regions.refuted,
-            regions.leaves,
-            regions.propagations
-        ),
-        (17, 0, 1, 110)
+        (regions.regions, regions.refuted, regions.leaves),
+        (9, 0, 1)
     );
-    assert_eq!(regions.arithmetic, ArithmeticCounts::default());
 }
 
 #[test]
