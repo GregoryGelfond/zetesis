@@ -402,3 +402,84 @@ fn inner_knowledge_clones_its_arithmetic_slots_with_the_frozen_state() {
     recycled.clone_from(&entry.state);
     assert!(recycled.parity.is_some());
 }
+
+#[test]
+fn a_served_region_narrows_with_the_queries_preparation() {
+    let fixture = Saturation::build(4, &shared_inputs());
+    let (narrower, root, knowledge) = fixture.closed();
+    let preparation = fixture.preparation(&narrower, &root, &knowledge);
+    let index = built(&fixture.theory);
+    let cancellation = Cancellation::default();
+    for (prepared, expected_refuted) in [(None, 0), (Some(&preparation), 1)] {
+        let mut region = root.clone();
+        assert!(region.cut(fixture.valid) && region.hold(2) && region.cut(3));
+        let mut entry = Entry::new(region, CountermodelKnowledge::fresh(&narrower));
+        let mut query_budget = budget(&cancellation, u64::MAX);
+        let mut statistics = Statistics::default();
+        let mut installed = InnerPreparation::Pending;
+        let served = ReductQuery::new(&index)
+            .serve(
+                PublishedQuery {
+                    truth: &fixture.truth,
+                    candidate: &fixture.candidate,
+                    preparation: prepared,
+                    prepare_root: false,
+                },
+                &mut entry,
+                Limits::default(),
+                &mut query_budget,
+                (&mut statistics, &mut NarrowingScratch::default()),
+                &mut installed,
+            )
+            .unwrap();
+        assert!(installed.is_pending());
+        assert_eq!(statistics.reduct.regions.refuted, expected_refuted);
+        match (prepared, served) {
+            (None, Served::Split(_)) | (Some(_), Served::Empty) => {}
+            (_, Served::Split(_)) => panic!("the rows refute the served region"),
+            (_, Served::Empty) => panic!("the frozen subject alone cannot refute it"),
+            (_, Served::Countermodel(_)) => panic!("the region has no leaf"),
+        }
+    }
+}
+
+#[test]
+fn a_residual_query_prepares_from_its_own_root() {
+    // A residual root deciding y(2) and y(3) against the rows the clauses
+    // imply: prepared from that root, the rows refute it at once.
+    let fixture = Saturation::build(4, &shared_inputs());
+    let index = built(&fixture.theory);
+    let cancellation = Cancellation::default();
+    let mut workspace = EvaluationWorkspace::default();
+    let evaluated = workspace
+        .evaluate(
+            &fixture.candidate,
+            EvaluationLimits::default(),
+            &cancellation,
+        )
+        .result
+        .unwrap();
+    let mut residual = Region::all_open(fixture.theory.atom_count());
+    assert!(residual.cut(fixture.valid) && residual.hold(2) && residual.cut(3));
+    let mut query_budget = budget(&cancellation, u64::MAX);
+    let mut statistics = Statistics::default();
+    let witness = ReductQuery::new(&index)
+        .check_region(
+            &evaluated,
+            residual,
+            Limits::default(),
+            &mut query_budget,
+            (&mut statistics, &mut NarrowingScratch::default()),
+            None,
+        )
+        .unwrap();
+    assert!(witness.is_none());
+    let regions = statistics.reduct.regions;
+    assert_eq!(
+        (regions.regions, regions.refuted, regions.leaves),
+        (1, 1, 0)
+    );
+    let preparation = statistics.reduct.inner_preparation;
+    assert_eq!((preparation.attempts, preparation.prepared), (1, 1));
+    assert_eq!(preparation.root_refuted, 1);
+}

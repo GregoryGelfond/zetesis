@@ -1408,10 +1408,11 @@ impl<'a> ReductQuery<'a> {
             CountermodelKnowledge::fresh(narrower),
         );
         let mut offered = false;
-        // The candidate's inner subjects, prepared once from its root after
-        // the root's first closure and read by every later narrowing.
-        let mut preparation: Option<FrozenPreparation> = None;
-        let mut prepared = false;
+        // The candidate's inner subjects: pending until the root's first
+        // closure, then prepared once and read by every later narrowing. A
+        // query published before that closure leaves them to the root's
+        // server.
+        let mut preparation = InnerPreparation::Pending;
         loop {
             let before = traversal.statistics();
             let visit = traversal.next(|entry| {
@@ -1423,19 +1424,18 @@ impl<'a> ReductQuery<'a> {
                 let mut result = narrow_inner(
                     narrower,
                     reading.subject,
-                    preparation.as_ref(),
+                    preparation.installed(),
                     entry,
                     scratch,
                     budget,
                     &mut statistics.reduct.regions,
                 )
                 .map_err(Interrupt::Stopped)?;
-                if !prepared && result != Narrowing::Refuted {
-                    prepared = true;
+                if preparation.is_pending() && result != Narrowing::Refuted {
                     let (installed, after_units) =
                         prepare_at_root(reading, entry, limits, budget, scratch, statistics)
                             .map_err(Interrupt::Stopped)?;
-                    preparation = installed;
+                    preparation = InnerPreparation::Prepared(installed);
                     result = after_units;
                 }
                 observation.narrowed(result);
@@ -1454,7 +1454,9 @@ impl<'a> ReductQuery<'a> {
                 Err(Interrupt::Stopped(error)) => return Err(error),
                 Err(Interrupt::Publish) => {
                     offered = true;
-                    if let Some(receipt) = publication.publish(truth, candidate, &mut traversal) {
+                    if let Some(receipt) =
+                        publication.publish(truth, candidate, &mut preparation, &mut traversal)
+                    {
                         return Ok(Queried::Published(receipt));
                     }
                 }
@@ -1477,10 +1479,13 @@ impl<'a> ReductQuery<'a> {
         }
     }
 
-    /// Narrow one region of a published query of `candidate`, a classical
-    /// model whose node truth is `truth`, in place, as the inline query
+    /// Narrow one region of a published query, in place, as the inline query
     /// narrows its regions: from the knowledge the region carries, its
-    /// parent's under the same narrower and frozen mask. The region is counted
+    /// parent's under the same narrower and frozen mask, with the query's
+    /// prepared inner subjects late. When the query asks its root's server
+    /// to prepare, the preparation is returned in `installed` for the
+    /// query's cell before the region's children are published. The region
+    /// is counted
     /// as the inline query counts it, a split charges one decision, and a leaf
     /// other than the candidate is validated before it is returned.
     ///
@@ -1490,23 +1495,38 @@ impl<'a> ReductQuery<'a> {
     /// hold a countermodel.
     pub(crate) fn serve<Q: Quota>(
         self,
-        truth: &[bool],
-        candidate: &Interpretation,
+        query: PublishedQuery<'_>,
         entry: &mut Entry<CountermodelKnowledge>,
         limits: crate::Limits,
         budget: &mut Budget<'_, Q>,
         (statistics, scratch): (&mut crate::Statistics, &mut NarrowingScratch),
+        installed: &mut InnerPreparation,
     ) -> Result<Served, Incomplete> {
+        let candidate = query.candidate;
         let (theory, narrower) = self.index.subject(candidate.theory())?;
-        let narrowing = narrow_inner(
+        let reading = InnerReading {
             narrower,
-            FrozenSubject::new(theory, truth),
-            None,
+            subject: FrozenSubject::new(theory, query.truth),
+            producers: self.index.producers(),
+            candidate,
+        };
+        let mut narrowing = narrow_inner(
+            narrower,
+            reading.subject,
+            query.preparation,
             entry,
             scratch,
             budget,
             &mut statistics.reduct.regions,
         )?;
+        if query.prepare_root && narrowing != Narrowing::Refuted {
+            // The query published before its root closed: this region is
+            // that root, and its server prepares what the publisher would.
+            let (prepared, after_units) =
+                prepare_at_root(reading, entry, limits, budget, scratch, statistics)?;
+            *installed = InnerPreparation::Prepared(prepared);
+            narrowing = after_units;
+        }
         let counts = &mut statistics.reduct.regions;
         counts.regions += 1;
         let atom = match walk::inspect(entry, narrowing, Counting::Never, false) {
@@ -1534,6 +1554,37 @@ impl<'a> ReductQuery<'a> {
     }
 }
 
+/// A published query as its servers read it: the candidate, its node truth,
+/// its prepared inner subjects, and whether the served region is the root
+/// its publisher never narrowed, whose server prepares them.
+#[derive(Clone, Copy)]
+pub(crate) struct PublishedQuery<'a> {
+    pub(crate) truth: &'a [bool],
+    pub(crate) candidate: &'a Interpretation,
+    pub(crate) preparation: Option<&'a FrozenPreparation>,
+    pub(crate) prepare_root: bool,
+}
+
+/// A query's inner subjects along its inline walk: pending until the root's
+/// first closure, then prepared, whether or not anything was installed.
+pub(crate) enum InnerPreparation {
+    Pending,
+    Prepared(Option<Box<FrozenPreparation>>),
+}
+
+impl InnerPreparation {
+    pub(crate) const fn is_pending(&self) -> bool {
+        matches!(self, Self::Pending)
+    }
+
+    pub(crate) fn installed(&self) -> Option<&FrozenPreparation> {
+        match self {
+            Self::Pending | Self::Prepared(None) => None,
+            Self::Prepared(Some(preparation)) => Some(preparation),
+        }
+    }
+}
+
 /// Where an inline proper-subset query may hand its pending regions to other
 /// workers: asked before each narrowing whether to publish, and then offered
 /// the traversal.
@@ -1545,12 +1596,15 @@ pub(crate) trait Publication {
     fn due(&mut self) -> bool;
 
     /// Take every pending region of `traversal`, the query of `candidate`
-    /// under node truth `truth`, and return the receipt; or decline, leaving
-    /// the traversal as it is.
+    /// under node truth `truth`, with the candidate's inner subjects as far
+    /// as the walk prepared them, for the servers of those regions; return
+    /// the receipt, or decline, leaving the traversal and the preparation as
+    /// they are.
     fn publish(
         &mut self,
         truth: &[bool],
         candidate: &Interpretation,
+        preparation: &mut InnerPreparation,
         traversal: &mut Walk<CountermodelKnowledge>,
     ) -> Option<Self::Receipt>;
 }
@@ -1569,6 +1623,7 @@ impl Publication for Inline {
         &mut self,
         _: &[bool],
         _: &Interpretation,
+        _: &mut InnerPreparation,
         _: &mut Walk<CountermodelKnowledge>,
     ) -> Option<Self::Receipt> {
         None
@@ -1630,7 +1685,7 @@ fn prepare_at_root<Q: Quota>(
     budget: &mut Budget<'_, Q>,
     scratch: &mut NarrowingScratch,
     statistics: &mut crate::Statistics,
-) -> Result<(Option<FrozenPreparation>, Narrowing), Incomplete> {
+) -> Result<(Option<Box<FrozenPreparation>>, Narrowing), Incomplete> {
     let preparation = prepare_inner(
         ClosedQuery {
             narrower: reading.narrower,
@@ -1645,22 +1700,22 @@ fn prepare_at_root<Q: Quota>(
         scratch,
         &mut statistics.reduct,
     )?;
-    let Some(installed) = preparation.as_ref() else {
+    let Some(installed) = preparation.map(Box::new) else {
         return Ok((None, Narrowing::Fixed { changed: false }));
     };
     if !installed.units().iter().all(|&atom| entry.region.cut(atom)) {
-        return Ok((preparation, Narrowing::Refuted));
+        return Ok((Some(installed), Narrowing::Refuted));
     }
     let narrowed = narrow_inner(
         reading.narrower,
         reading.subject,
-        Some(installed),
+        Some(&installed),
         entry,
         scratch,
         budget,
         &mut statistics.reduct.regions,
     )?;
-    Ok((preparation, narrowed))
+    Ok((Some(installed), narrowed))
 }
 
 /// Prepare the candidate's inner subjects from its closed query root under

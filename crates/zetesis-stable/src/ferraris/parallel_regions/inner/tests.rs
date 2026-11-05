@@ -13,6 +13,7 @@ use std::sync::mpsc::sync_channel;
 use zetesis_ferraris::{AdmissionLimits, FormulaParts, Narrower, Node, Region, Theory};
 
 use crate::ferraris::conditions::CountermodelKnowledge;
+use crate::ferraris::regions::InnerPreparation;
 
 use super::super::{
     Engagement, ParallelRegions, Stepped, WalkRecord, WorkerReport, Workspaces, advance, worker,
@@ -76,6 +77,30 @@ fn saturation(variables: usize, clauses: &[Vec<Literal>]) -> Theory {
         AdmissionLimits::default(),
     )
     .unwrap()
+}
+
+/// A gate's four clauses over `(a, i, o)`, forbidding the odd patterns, in
+/// this module's literal convention: a positive literal is falsified when
+/// its variable is cut.
+fn gate_clauses(a: usize, i: usize, o: usize) -> Vec<Vec<Literal>> {
+    [
+        (true, false, false),
+        (false, true, false),
+        (false, false, true),
+        (true, true, true),
+    ]
+    .into_iter()
+    .map(|(sa, si, so)| vec![(a, !sa), (i, !si), (o, !so)])
+    .collect()
+}
+
+/// Two gates over shared inputs, `y(2) = y(0) ⊕ y(1)` and `y(3) = y(0) ⊕
+/// y(1)`: a satisfiable core whose rows combine to `y(2) ⊕ y(3) = 0`, read
+/// only through the candidate's preparation.
+fn shared_input_gates() -> Vec<Vec<Literal>> {
+    let mut clauses = gate_clauses(0, 1, 2);
+    clauses.extend(gate_clauses(0, 1, 3));
+    clauses
 }
 
 /// Every clause over `variables`, each forbidding one assignment: no
@@ -203,7 +228,7 @@ fn inline_regions(theory: &Theory) -> RegionCounts {
 
 #[test]
 fn a_published_leaf_stays_outstanding_until_its_query_is_decided() {
-    let theory = saturation(6, &every_clause(6));
+    let theory = saturation(9, &every_clause(9));
     let (search, original) = walk(&theory, QueryDivision::Immediate, Limits::default());
     let (stepped, _) = step_worker_0(&search, &original);
     assert!(matches!(stepped, Stepped::Published));
@@ -215,7 +240,7 @@ fn a_published_leaf_stays_outstanding_until_its_query_is_decided() {
 
 #[test]
 fn stolen_regions_prove_an_unrefuted_candidate_stable() {
-    let theory = saturation(8, &every_clause(8));
+    let theory = saturation(9, &every_clause(9));
     let (search, original) = walk(&theory, QueryDivision::Immediate, Limits::default());
     let (stepped, publisher) = step_worker_0(&search, &original);
     assert!(matches!(stepped, Stepped::Published));
@@ -243,7 +268,7 @@ fn stolen_regions_prove_an_unrefuted_candidate_stable() {
 
 #[test]
 fn a_countermodel_in_a_stolen_region_refutes_its_candidate() {
-    let theory = saturation(8, &all_but_one_clause(8));
+    let theory = saturation(9, &all_but_one_clause(9));
     let (search, original) = walk(&theory, QueryDivision::Immediate, Limits::default());
     let (stepped, _) = step_worker_0(&search, &original);
     assert!(matches!(stepped, Stepped::Published));
@@ -262,7 +287,7 @@ fn a_validation_its_ceiling_stops_never_yields_stable() {
     // Measure the candidate's original evaluation, then allow exactly that
     // much verification work: the evaluation passes, and the validation of a
     // real countermodel, which freezes the reduct before testing it, stops.
-    let theory = saturation(6, &all_but_one_clause(6));
+    let theory = saturation(9, &all_but_one_clause(9));
     let (search, original) = walk(&theory, QueryDivision::Immediate, Limits::default());
     let (_, publisher) = step_worker_0(&search, &original);
     let evaluation = publisher.statistics.reduct.original_work;
@@ -287,7 +312,7 @@ fn a_validation_its_ceiling_stops_never_yields_stable() {
 
 #[test]
 fn a_server_stopped_by_the_decision_ceiling_never_yields_stable() {
-    let theory = saturation(8, &every_clause(8));
+    let theory = saturation(9, &every_clause(9));
     let limits = Limits {
         search: crate::SearchLimits {
             max_decisions: 4,
@@ -307,7 +332,7 @@ fn a_server_stopped_by_the_decision_ceiling_never_yields_stable() {
 
 #[test]
 fn a_cancelled_server_never_yields_stable() {
-    let theory = saturation(8, &every_clause(8));
+    let theory = saturation(9, &every_clause(9));
     let (search, original) = walk(&theory, QueryDivision::Immediate, Limits::default());
     let (stepped, _) = step_worker_0(&search, &original);
     assert!(matches!(stepped, Stepped::Published));
@@ -320,7 +345,7 @@ fn a_cancelled_server_never_yields_stable() {
 
 #[test]
 fn a_query_that_never_divides_is_decided_where_it_ran() {
-    let theory = saturation(6, &every_clause(6));
+    let theory = saturation(9, &every_clause(9));
     let (search, original) = walk(&theory, QueryDivision::Never, Limits::default());
     let (stepped, _) = step_worker_0(&search, &original);
     assert!(matches!(stepped, Stepped::Resolved(Some(_))));
@@ -332,7 +357,7 @@ fn a_query_that_never_divides_is_decided_where_it_ran() {
 fn a_query_waits_for_an_idle_worker_before_it_publishes() {
     // No worker is idle at the gate, so however long the query runs it is
     // decided inline.
-    let theory = saturation(8, &every_clause(8));
+    let theory = saturation(9, &every_clause(9));
     let (search, original) = walk(&theory, QueryDivision::WhenIdle, Limits::default());
     let (stepped, _) = step_worker_0(&search, &original);
     assert!(matches!(stepped, Stepped::Resolved(Some(_))));
@@ -341,7 +366,7 @@ fn a_query_waits_for_an_idle_worker_before_it_publishes() {
 
 #[test]
 fn a_query_publishes_to_a_worker_idle_at_the_gate_after_its_delay() {
-    let theory = saturation(8, &every_clause(8));
+    let theory = saturation(9, &every_clause(9));
     let (search, original) = walk(&theory, QueryDivision::WhenIdle, Limits::default());
     // Stand in for a worker waiting at the gate, as it registers there.
     search
@@ -505,6 +530,7 @@ fn a_declined_publication_leaves_the_query_to_decide_inline() {
             &mut self,
             _: &[bool],
             _: &Interpretation,
+            _: &mut InnerPreparation,
             traversal: &mut Walk<CountermodelKnowledge>,
         ) -> Option<()> {
             self.offered += 1;
@@ -512,8 +538,8 @@ fn a_declined_publication_leaves_the_query_to_decide_inline() {
             None
         }
     }
-    for (clauses, stable) in [(every_clause(6), true), (all_but_one_clause(6), false)] {
-        let theory = saturation(6, &clauses);
+    for (clauses, stable) in [(every_clause(9), true), (all_but_one_clause(9), false)] {
+        let theory = saturation(9, &clauses);
         let original = index(&theory);
         let candidate = Interpretation::new(&theory, 0..theory.atom_count()).unwrap();
         let cancellation = Cancellation::default();
@@ -544,7 +570,7 @@ fn a_declined_publication_leaves_the_query_to_decide_inline() {
 
 #[test]
 fn a_coordinator_publishes_its_query_at_engagement() {
-    let theory = saturation(8, &every_clause(8));
+    let theory = saturation(9, &every_clause(9));
     let cancellation = Cancellation::with_deadline(Instant::now() + 3 * WAIT).unwrap();
     let limits = Limits::default();
     let mut budget = Budget {
@@ -600,3 +626,44 @@ fn a_coordinator_publishes_its_query_at_engagement() {
 }
 
 mod publication;
+
+#[test]
+fn a_published_query_carries_its_preparation_to_its_servers() {
+    let theory = saturation(4, &shared_input_gates());
+    let (search, original) = walk(&theory, QueryDivision::Immediate, Limits::default());
+    let (stepped, publisher) = step_worker_0(&search, &original);
+    assert!(matches!(stepped, Stepped::Published));
+    // Published before its first narrowing: the publisher prepared nothing,
+    // and the root's server prepares for every later server.
+    assert_eq!(publisher.statistics.reduct.inner_preparation.attempts, 0);
+    let pending_region = search
+        .shared
+        .inner
+        .take_local(0)
+        .expect("the query published its pending regions");
+    let cell = Arc::clone(&pending_region.cell);
+    assert!(cell.preparation.get().is_none());
+    let mut workspaces = Workspaces::new();
+    let mut budget = lease(&search.shared);
+    let mut served_report = report();
+    serve(
+        &search.shared,
+        &original,
+        (pending_region, Taken::Own, 0),
+        &mut workspaces,
+        &mut budget,
+        (&mut served_report, &mut SearchPhaseTimings::default()),
+    )
+    .unwrap();
+    assert_eq!(served_report.statistics.reduct.regions.regions, 1);
+    let preparation = served_report.statistics.reduct.inner_preparation;
+    assert_eq!((preparation.attempts, preparation.prepared), (1, 1));
+    assert_eq!(preparation.rows, 2);
+    assert!(cell.preparation.get().is_some_and(Option::is_some));
+    assert_ne!(
+        served_report.statistics.reduct.regions.arithmetic,
+        crate::ferraris::regions::arithmetic_counts::ArithmeticCounts::default()
+    );
+    run_worker_1(&search, &original);
+    assert_eq!(search.shared.frontier.termination.unresolved(), 0);
+}
