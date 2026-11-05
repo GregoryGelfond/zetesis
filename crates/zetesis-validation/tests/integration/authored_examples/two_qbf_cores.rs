@@ -9,27 +9,26 @@ use zetesis_validation::performance::matrix::{AuthoredProgram, ConstantAmendment
 type Clause = Vec<(u32, bool)>;
 
 /// One workload's files and seals.
-#[derive(Debug)]
-pub(crate) struct Fixture {
-    pub(crate) directory: &'static str,
-    pub(crate) entry: &'static str,
+struct Fixture {
+    directory: &'static str,
+    entry: &'static str,
     source_sha256: &'static str,
     manifest_sha256: &'static str,
 }
 
-pub(crate) const PARITY: Fixture = Fixture {
+const PARITY: Fixture = Fixture {
     directory: "scalability/two-qbf-parity",
     entry: "two_qbf_parity.lp",
     source_sha256: "2c3a862dabf858f0f017083a3c6753cf97fb33a7d69092817a451b78f98ff3ea",
     manifest_sha256: "ff861bd1ecae264ea0fa0a47a7708f24a1fbab0903078301702b430d71b79412",
 };
-pub(crate) const TSEITIN: Fixture = Fixture {
+const TSEITIN: Fixture = Fixture {
     directory: "scalability/two-qbf-tseitin",
     entry: "two_qbf_tseitin.lp",
     source_sha256: "7c18fe0f648b6d74ba4979e691d5e73ecd2e4074365da199fdef0f8f0710ad5b",
     manifest_sha256: "bb956bc556cc4a3b9f41c22ac6fefcf81549a68e777cae45c560560ee7509595",
 };
-pub(crate) const PIGEONHOLE: Fixture = Fixture {
+const PIGEONHOLE: Fixture = Fixture {
     directory: "scalability/two-qbf-pigeonhole",
     entry: "two_qbf_pigeonhole.lp",
     source_sha256: "4de3da43035196cf7f37e5ba17222ceba22d019e223eb6e682c450a8dd6a0c7f",
@@ -38,7 +37,7 @@ pub(crate) const PIGEONHOLE: Fixture = Fixture {
 
 /// The core a workload builds, with its constants as the program names them.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum Core {
+enum Core {
     Parity { n: i64, seed: i64 },
     Tseitin { vertices: i64 },
     Pigeonhole { holes: i64 },
@@ -46,23 +45,23 @@ pub(crate) enum Core {
 
 /// One instance: the existential side and the core.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) struct Instance {
-    pub(crate) exists: i64,
-    pub(crate) stable: i64,
-    pub(crate) core: Core,
+struct Instance {
+    exists: i64,
+    stable: i64,
+    core: Core,
 }
 
-pub(crate) const PARITY_DEFAULT: Instance = Instance {
+const PARITY_DEFAULT: Instance = Instance {
     exists: 2,
     stable: 1,
     core: Core::Parity { n: 6, seed: 1 },
 };
-pub(crate) const TSEITIN_DEFAULT: Instance = Instance {
+const TSEITIN_DEFAULT: Instance = Instance {
     exists: 2,
     stable: 1,
     core: Core::Tseitin { vertices: 12 },
 };
-pub(crate) const PIGEONHOLE_DEFAULT: Instance = Instance {
+const PIGEONHOLE_DEFAULT: Instance = Instance {
     exists: 2,
     stable: 1,
     core: Core::Pigeonhole { holes: 4 },
@@ -97,27 +96,6 @@ fn cases(default: Instance) -> [Instance; 5] {
             ..default
         },
     ]
-}
-
-/// The quantified series the inner census and door checks run: the default's
-/// existential side over cores of growing size, parity inputs 16 to 28,
-/// Tseitin vertices 12 to 30, pigeonhole holes 5 to 8.
-pub(crate) fn series(default: Instance) -> Vec<Instance> {
-    let cores: Vec<Core> = match default.core {
-        Core::Parity { seed, .. } => [16, 20, 24, 28]
-            .into_iter()
-            .map(|n| Core::Parity { n, seed })
-            .collect(),
-        Core::Tseitin { .. } => [12, 18, 24, 30]
-            .into_iter()
-            .map(|vertices| Core::Tseitin { vertices })
-            .collect(),
-        Core::Pigeonhole { .. } => (5..=8).map(|holes| Core::Pigeonhole { holes }).collect(),
-    };
-    cores
-        .into_iter()
-        .map(|core| Instance { core, ..default })
-        .collect()
 }
 
 /// The program's hash of the seed and an input; every intermediate value stays
@@ -364,21 +342,8 @@ impl Instance {
         constants
     }
 
-    /// The core's size: parity inputs, Tseitin vertices or pigeonhole holes.
-    pub(crate) fn size(self) -> i64 {
-        match self.core {
-            Core::Parity { n, .. } => n,
-            Core::Tseitin { vertices } => vertices,
-            Core::Pigeonhole { holes } => holes,
-        }
-    }
-
     /// The `#const` edits that turn `default` into this instance.
-    pub(crate) fn edits(
-        self,
-        default: Self,
-        entry: &'static str,
-    ) -> Vec<ConstantAmendment<'static>> {
+    fn edits(self, default: Self, entry: &'static str) -> Vec<ConstantAmendment<'static>> {
         default
             .constants()
             .into_iter()
@@ -471,28 +436,6 @@ fn two_qbf_core_cases_include_true_and_false_formulas() {
         let counts = cases(default).map(|case| case.family().len());
         assert!(counts.contains(&0), "{counts:?}");
         assert!(counts.iter().any(|&count| count > 0), "{counts:?}");
-    }
-}
-
-#[test]
-fn two_qbf_core_series_grow_their_cores() {
-    // Four sizes per core on the default's existential side, growing from
-    // the default's size on.
-    for (_, default) in FIXTURES {
-        let sizes = series(default);
-        assert_eq!(sizes.len(), 4, "{default:?}");
-        for instance in &sizes {
-            assert_eq!(
-                (instance.exists, instance.stable),
-                (default.exists, default.stable),
-                "{instance:?}"
-            );
-        }
-        assert!(sizes[0].size() >= default.size(), "{sizes:?}");
-        assert!(
-            sizes.windows(2).all(|pair| pair[0].size() < pair[1].size()),
-            "{sizes:?}"
-        );
     }
 }
 

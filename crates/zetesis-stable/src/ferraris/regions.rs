@@ -1389,7 +1389,7 @@ impl<'a> ReductQuery<'a> {
         let reading = InnerReading {
             narrower,
             subject: FrozenSubject::new(theory, truth),
-            producers: self.index.producers(),
+            index: self.index,
             candidate,
         };
         if !theory.same_instance(candidate.theory()) {
@@ -1514,7 +1514,7 @@ impl<'a> ReductQuery<'a> {
         let reading = InnerReading {
             narrower,
             subject: FrozenSubject::new(theory, query.truth),
-            producers: self.index.producers(),
+            index: self.index,
             candidate,
         };
         let before = statistics.reduct.regions.work;
@@ -1686,7 +1686,9 @@ impl From<Stop> for Interrupt {
 struct InnerReading<'a> {
     narrower: &'a Narrower,
     subject: FrozenSubject<'a>,
-    producers: Option<&'a Producers>,
+    /// The index, for the producers a preparation reads, extracted and
+    /// charged when first prepared.
+    index: &'a IndexedTheory,
     candidate: &'a Interpretation,
 }
 
@@ -1709,7 +1711,9 @@ fn prepare_at_root<Q: Quota>(
     let preparation = prepare_inner(
         ClosedQuery {
             narrower: reading.narrower,
-            producers: reading.producers,
+            producers: reading
+                .index
+                .producers(budget.cancellation, |work| budget.charge(work))?,
             subject: reading.subject,
             candidate: reading.candidate,
             region: &entry.region,

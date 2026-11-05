@@ -8,7 +8,7 @@
 //! can construct an `IndexedTheory`. A run decided without a region walk, by a
 //! positive certificate, builds none.
 
-use std::sync::Arc;
+use std::sync::{Arc, Mutex, OnceLock, PoisonError};
 
 use zetesis_algebra::Cancellation;
 use zetesis_ferraris::{Narrower, Producers, RegionLimits, Theory};
@@ -24,9 +24,13 @@ use crate::Incomplete;
 pub(crate) struct IndexedTheory {
     theory: Theory,
     narrower: Narrower,
-    /// The theory's producers when every root is a rule; what a candidate's
-    /// inner preparation reads.
-    producers: Option<Producers>,
+    /// The theory's producers when every root is a rule, extracted once by
+    /// the first inner preparation that needs them and charged to it; what
+    /// every candidate's inner preparation reads.
+    producers: OnceLock<Option<Producers>>,
+    /// Serializes the one extraction, so that concurrent preparations
+    /// neither extract nor charge it twice.
+    extraction: Mutex<()>,
 }
 
 impl IndexedTheory {
@@ -38,8 +42,34 @@ impl IndexedTheory {
         &self.narrower
     }
 
-    pub(crate) fn producers(&self) -> Option<&Producers> {
-        self.producers.as_ref()
+    /// The theory's producers, extracted on the first call under `charge`
+    /// (the extraction's visits) and kept for every later one, which charges
+    /// nothing; one extraction at a time, so the charge is paid once however
+    /// many preparations ask together.
+    ///
+    /// # Errors
+    /// Cancellation, the extraction's stop or the charge's refusal, after
+    /// which the next call extracts again.
+    pub(crate) fn producers(
+        &self,
+        cancellation: &Cancellation,
+        charge: impl FnOnce(u64) -> Result<(), Incomplete>,
+    ) -> Result<Option<&Producers>, Incomplete> {
+        if let Some(producers) = self.producers.get() {
+            return Ok(producers.as_ref());
+        }
+        let _one_at_a_time = self
+            .extraction
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner);
+        if let Some(producers) = self.producers.get() {
+            return Ok(producers.as_ref());
+        }
+        let extraction =
+            zetesis_ferraris::producers(&self.theory, RegionLimits::default(), cancellation)
+                .map_err(stopped)?;
+        charge(extraction.work)?;
+        Ok(self.producers.get_or_init(|| extraction.producers).as_ref())
     }
 
     /// Authenticate before borrowing the indexed subject for any traversal.
@@ -79,8 +109,7 @@ impl OriginalIndex {
     ///
     /// Before building, `charge` receives the index's documented cost: one
     /// work unit per node and operand occurrence of the theory, which equals
-    /// the built narrower's [`Narrower::work`], plus the producer extraction's
-    /// visits, both known before the narrower is built. A refused charge
+    /// the built narrower's [`Narrower::work`], known before the narrower is built. A refused charge
     /// builds nothing and leaves the owner unbuilt. An admitted charge stays
     /// admitted even if the build then fails, as a failed narrowing keeps
     /// its admitted prefix: `charge` is where the caller records it, in the
@@ -101,26 +130,18 @@ impl OriginalIndex {
         let index = if let Some(index) = self.index.take() {
             index
         } else {
-            let extraction =
-                zetesis_ferraris::producers(&self.theory, RegionLimits::default(), cancellation)
-                    .map_err(stopped)?;
             let work = u64::try_from(
                 self.theory.nodes().len() as u128 + self.theory.parts().occurrences() as u128,
             )
-            .ok()
-            .and_then(|indexing| indexing.checked_add(extraction.work))
-            .ok_or(Incomplete::CounterOverflow)?;
+            .map_err(|_| Incomplete::CounterOverflow)?;
             charge(work)?;
             let narrower = prepare(&self.theory, self.native_byte_limit, cancellation)?;
-            debug_assert_eq!(
-                narrower.work() + extraction.work,
-                work,
-                "the charge is the index's work"
-            );
+            debug_assert_eq!(narrower.work(), work, "the charge is the index's work");
             Arc::new(IndexedTheory {
                 theory: self.theory.clone(),
                 narrower,
-                producers: extraction.producers,
+                producers: OnceLock::new(),
+                extraction: Mutex::new(()),
             })
         };
         Ok(self.index.insert(index))

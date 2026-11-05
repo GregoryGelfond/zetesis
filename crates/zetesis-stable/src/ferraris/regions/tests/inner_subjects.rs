@@ -273,11 +273,12 @@ fn narrow(
     let cancellation = Cancellation::default();
     let mut budget = budget(&cancellation, u64::MAX);
     let mut counts = RegionCounts::default();
+    let index = built(&fixture.theory);
     let result = narrow_inner(
         InnerReading {
             narrower,
             subject: fixture.subject(),
-            producers: None,
+            index: &index,
             candidate: &fixture.candidate,
         },
         preparation,
@@ -597,11 +598,12 @@ fn a_preparation_of_another_candidate_is_refused_by_identity() {
     let mut entry = Entry::new(twin_root, CountermodelKnowledge::fresh(&twin_narrower));
     let cancellation = Cancellation::default();
     let mut budget = budget(&cancellation, u64::MAX);
+    let index = built(&twin.theory);
     let result = narrow_inner(
         InnerReading {
             narrower: &twin_narrower,
             subject: twin.subject(),
-            producers: None,
+            index: &index,
             candidate: &twin.candidate,
         },
         Some(&preparation),
