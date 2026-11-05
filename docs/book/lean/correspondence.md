@@ -3534,8 +3534,11 @@ live cyclic head `H`, from all false inputs since that baseline, including opaqu
 bodies and already-false occurrences of newly cut atoms. Rearming may clear the
 completed founded event history, but must retain pending ordinary events and
 collect subsequent atom cuts and ordinary false events. It does not mark
-ordinary closure or founded confirmation complete. Forward traversal may stop
-at a currently false destination only because a newly false input
+ordinary closure or founded confirmation complete. Inputs a sibling recorded
+before it was refuted or stopped describe that sibling's region alone; the next
+inherited narrowing resets those marks, one charged operation per mark, before
+it collects, so they never enter its cone and grant no authority. Forward
+traversal may stop at a currently false destination only because a newly false input
 retains its own notification and an older false input was inactive at the
 completed baseline. The head-prefix partition
 must preserve every discovered vertex, head order and membership marks; it does

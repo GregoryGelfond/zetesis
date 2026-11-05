@@ -1442,7 +1442,7 @@ impl Narrower {
             scratch
                 .common
                 .founded
-                .begin_local(subject.theory(), known.founded_closed);
+                .begin_local(subject.theory(), known.founded_closed, work)?;
         }
         // Only the owner's carrier matches and captures rows. Restriction,
         // bound and frozen visits suspend the ledger without clearing it.
@@ -2263,7 +2263,7 @@ impl<W: Count, C: ReadingClass> Closure<'_, W, C> {
             // possible set. Direct publication erased only absent heads; it
             // cannot change that least closure. Collect ordinary false events
             // from this boundary, before the surrounding closure drains them.
-            self.lists.founded.begin_after_publication(theory);
+            self.lists.founded.begin_after_publication(theory, work)?;
         }
         // A changed pass still requires ordinary propagation and another
         // founded check before completion can be inherited. Interrupted or

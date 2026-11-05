@@ -15,7 +15,10 @@
 //! least closure, before ordinary propagation changes other body masks.
 //! Owner-bound scratch stores disposable membership/worklists, never previous
 //! body truth. A partial attempt consumes the premise and leaves marks that
-//! require a full retry. Publication and explanation capture retain their
+//! require a full retry of that region. Marks a sibling left when it was
+//! refuted or stopped before its pass describe that sibling's inputs only;
+//! the next inherited narrowing resets them, charged per mark, and then
+//! collects its own. Publication and explanation capture retain their
 //! existing complete-result boundary.
 
 use zetesis_algebra::{Failure, Quota};
@@ -140,41 +143,67 @@ impl Scratch {
         self.local.end();
     }
 
-    /// Called once before original events. Unchanged checks incur no traversal
-    /// or allocation. Dirty scratch from a stopped sibling declines this route.
-    pub(in crate::regions) fn begin_local(&mut self, theory: &Theory, inherited: bool) {
+    /// Called once before original events. A sibling refuted or stopped before
+    /// its founded pass leaves its recorded inputs here; they describe another
+    /// region and carry no authority, so they are reset, one charged operation
+    /// per mark, before this region collects. Clean scratch incurs no traversal
+    /// or allocation.
+    ///
+    /// # Errors
+    /// Returns the exact refusal of a reset. The marks not yet reset remain,
+    /// so a later reset continues from them, and no authority is granted.
+    pub(in crate::regions) fn begin_local<Q: Quota + ?Sized>(
+        &mut self,
+        theory: &Theory,
+        inherited: bool,
+        work: &mut Meter<'_, Q>,
+    ) -> Result<(), Failure<Q::Error>> {
         self.local.end();
         if inherited {
-            self.begin_completed(theory);
+            self.begin_completed(theory, work)?;
         }
+        Ok(())
     }
 
     /// Called only after explanation capture and the entire missing-head
     /// publication succeeded. Every remaining uncut cyclic head is in the
     /// completed result; dependent ordinary events have not yet been drained.
-    pub(in crate::regions) fn begin_after_publication(&mut self, theory: &Theory) {
+    ///
+    /// # Errors
+    /// As [`Self::begin_local`]; the completed pass left no mark to reset.
+    pub(in crate::regions) fn begin_after_publication<Q: Quota + ?Sized>(
+        &mut self,
+        theory: &Theory,
+        work: &mut Meter<'_, Q>,
+    ) -> Result<(), Failure<Q::Error>> {
         self.local.end();
-        self.begin_completed(theory);
+        self.begin_completed(theory, work)
     }
 
     /// Both callers supply complete baseline knowledge, never a partial pass.
-    fn begin_completed(&mut self, theory: &Theory) {
+    /// Authority is granted only once every stale mark has been reset.
+    fn begin_completed<Q: Quota + ?Sized>(
+        &mut self,
+        theory: &Theory,
+        work: &mut Meter<'_, Q>,
+    ) -> Result<(), Failure<Q::Error>> {
         #[cfg(test)]
         if self.local.force_full {
-            return;
+            return Ok(());
         }
         if self
             .owner
             .as_ref()
             .is_some_and(|owner| owner.same_instance(theory))
             && self.projected.is_some()
-            && self.local.touched.is_empty()
             && self.local.atoms == theory.atom_count()
             && self.local.marks.len() == theory.atom_count().saturating_add(theory.nodes().len())
         {
+            self.local.clear(work)?;
             self.queue.clear();
             self.local.collecting = true;
         }
+        Ok(())
     }
 
     /// Ordinary evidence only appends selected node IDs, once each. Storage was

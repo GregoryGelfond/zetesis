@@ -51,7 +51,9 @@ fn published_then_invalidated(example: &Example) -> (Scratch, Vec<u64>, Vec<u64>
         .unwrap();
     assert_eq!(scratch.atoms[0] & 63, 60);
     publish(example, &scratch, &mut never, &mut cuts);
-    scratch.begin_after_publication(&example.owner);
+    scratch
+        .begin_after_publication(&example.owner, &mut Meter::local(u64::MAX))
+        .unwrap();
     assert!(scratch.local.collecting);
     let seed = example.seeds[1];
     never[seed / 64] |= 1 << (seed % 64);

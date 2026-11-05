@@ -65,7 +65,9 @@ fn old_false_parents_are_not_rediscovered() {
     // The barrier already failed in the parent. Only its newly false operand
     // belongs to this interval; the alternative producer still supports 0/1.
     never[0] |= 1 << 10;
-    actual.begin_local(&example.owner, true);
+    actual
+        .begin_local(&example.owner, true, &mut Meter::local(u64::MAX))
+        .unwrap();
     actual.record_false(10);
     assert_eq!(
         actual
@@ -94,7 +96,9 @@ fn newly_false_parents_keep_their_input_events() {
     never[barrier / 64] |= 1 << (barrier % 64);
     for inputs in [[10, barrier], [barrier, 10]] {
         let mut actual = example.prepared();
-        actual.begin_local(&example.owner, true);
+        actual
+            .begin_local(&example.owner, true, &mut Meter::local(u64::MAX))
+            .unwrap();
         for node in inputs.into_iter().chain(inputs) {
             actual.record_false(node);
         }
@@ -173,7 +177,9 @@ fn stopped_filtered_replay_requires_a_complete_retry() {
             )
             .unwrap();
         assert_eq!(scratch.atoms[0], 63);
-        scratch.begin_local(&example.owner, true);
+        scratch
+            .begin_local(&example.owner, true, &mut Meter::local(u64::MAX))
+            .unwrap();
         scratch.record_false(12);
         scratch
     };
