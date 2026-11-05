@@ -39,6 +39,7 @@ mod host_failure_adapters;
 mod host_memory;
 mod human_output_limits;
 mod hybrid;
+mod inner_series;
 mod json_output;
 mod language_value_sessions;
 mod matrix_telemetry;
