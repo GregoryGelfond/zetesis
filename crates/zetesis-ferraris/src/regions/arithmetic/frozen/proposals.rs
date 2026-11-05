@@ -341,11 +341,10 @@ fn follow<Q: Quota + ?Sized>(
                 NodeView::And(_) => {
                     let mut conjuncts = Vec::new();
                     if !conjunction(masked, body, 0, &mut conjuncts, budget)? {
-                        reached.push(Reached {
-                            base: atom,
-                            complement: false,
-                        });
-                        return Ok(true);
+                        // A body the reader cannot read through, an
+                        // aggregate's among them, makes the atom a base of
+                        // the clause, ruled by the root as any base is.
+                        return Ok(settle(masked, atom, false, reached));
                     }
                     for next in conjuncts {
                         if !follow(masked, next, depth + 1, reached, budget)? {

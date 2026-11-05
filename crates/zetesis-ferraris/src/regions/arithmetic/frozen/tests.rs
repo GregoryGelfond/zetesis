@@ -6,7 +6,8 @@ use super::{ClosedQuery, FrozenPreparation, FrozenPreparationAttempt, FrozenPrep
 use crate::test_support::{Allowance, constructed_theory, push};
 use crate::{
     EvaluationLimits, EvaluationWorkspace, FrozenSubject, Interpretation, Knowledge, Narrower,
-    Narrowing, NarrowingScratch, NodeView, Producers, Region, RegionLimits, Theory, producers,
+    Narrowing, NarrowingScratch, NodeView, Producers, Region, RegionLimits, Theory, Threshold,
+    producers,
 };
 
 /// The saturation shape of the quantified fixtures over `n` universal
@@ -633,6 +634,104 @@ fn a_nested_conjunction_body_is_read_through() {
         supports,
         vec![
             (vec![0, 1, 2], vec![false, true, false]),
+            (vec![0, 1, 2], vec![true, true, true]),
+        ]
+    );
+    assert_eq!(proposals.parity.len(), 1);
+}
+
+/// A chain through an atom the reader cannot read through, as the grounder
+/// defines its `#count` facts: `index ← fact ∧ (1·fact ≥ 1)`, with both
+/// clauses of `valid` passing through `index`. The chain stops there as at a
+/// base, and the root's decision rules as for any base: decided true, it
+/// contributes nothing, and the clauses' support is the universal atoms alone.
+#[test]
+fn an_unreadable_definition_decided_at_the_root_contributes_nothing() {
+    let n = 3;
+    let (valid, current, fact, index, f_a, f_b) = (6, 7, 8, 9, 10, 11);
+    let theory = constructed_theory(12, |nodes| {
+        let mut roots = Vec::new();
+        for j in 0..n {
+            roots.push(push(nodes, NodeView::Or(&[j, n + j])));
+            roots.push(push(nodes, NodeView::Implies(valid, j)));
+            roots.push(push(nodes, NodeView::Implies(valid, n + j)));
+        }
+        roots.push(current);
+        roots.push(fact);
+        let threshold = push(
+            nodes,
+            NodeView::Threshold(Threshold {
+                conditions: &[fact],
+                weights: &[1],
+                bound: 1,
+            }),
+        );
+        let body = push(nodes, NodeView::And(&[fact, threshold]));
+        roots.push(push(nodes, NodeView::Implies(body, index)));
+        for (head, literals) in [(f_a, [0, 1, 2]), (f_b, [n, n + 1, 2])] {
+            let body = push(
+                nodes,
+                NodeView::And(&[index, literals[0], literals[1], literals[2]]),
+            );
+            roots.push(push(nodes, NodeView::Implies(body, head)));
+            let body = push(nodes, NodeView::And(&[current, head]));
+            roots.push(push(nodes, NodeView::Implies(body, valid)));
+        }
+        roots
+    });
+    let candidate = Interpretation::new(&theory, 0..theory.atom_count()).unwrap();
+    let mut workspace = EvaluationWorkspace::default();
+    let evaluated = workspace
+        .evaluate(
+            &candidate,
+            EvaluationLimits::default(),
+            &Cancellation::default(),
+        )
+        .result
+        .unwrap();
+    assert!(evaluated.is_model());
+    let truth = evaluated.truth().to_vec();
+    let producers = producers(&theory, RegionLimits::default(), &Cancellation::default())
+        .unwrap()
+        .producers
+        .unwrap();
+    // The query root closed by the frozen reading decides the fact-defined
+    // atoms and leaves the guard open.
+    let narrower = Narrower::new(&theory);
+    let mut root = Region::all_open(theory.atom_count());
+    let mut knowledge = narrower.frozen_knowledge();
+    let mut quota = Allowance {
+        remaining: u64::MAX,
+        failure: Stop::WorkLimit,
+    };
+    let mut meter = Meter::reserved(&mut quota);
+    let cancellation = Cancellation::default();
+    let attempt = narrower.narrow_frozen_known_reserved(
+        FrozenSubject::new(&theory, &truth),
+        &mut root,
+        &mut knowledge,
+        &mut NarrowingScratch::default(),
+        &cancellation,
+        &mut meter,
+    );
+    assert_eq!(attempt.result.unwrap(), Narrowing::Fixed { changed: true });
+    assert_eq!(
+        (root.decision(index), root.decision(valid)),
+        (Some(true), None)
+    );
+    let mut budget = Budget::new(&mut meter, u64::MAX, usize::MAX, &cancellation);
+    let proposals = propose(&theory, &producers, &candidate, &truth, &root, &mut budget).unwrap();
+    assert_eq!(proposals.guards, vec![valid]);
+    let mut supports: Vec<(Vec<usize>, Vec<bool>)> = proposals
+        .clauses
+        .iter()
+        .map(|clause| (clause.support.clone(), clause.held.clone()))
+        .collect();
+    supports.sort();
+    assert_eq!(
+        supports,
+        vec![
+            (vec![0, 1, 2], vec![false, false, true]),
             (vec![0, 1, 2], vec![true, true, true]),
         ]
     );
