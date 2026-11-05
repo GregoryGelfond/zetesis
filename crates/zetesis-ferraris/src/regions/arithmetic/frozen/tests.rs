@@ -476,3 +476,72 @@ fn probing_charges_the_lease_and_leaves_the_root_untouched() {
         .collect();
     assert_eq!(before, after);
 }
+
+/// A guard whose clause bodies are nested conjunction pairs, as a formula
+/// builder without wide spans writes them: `valid ← y(0) ∧ (y(1) ∧ y(2))`
+/// and `valid ← ny(0) ∧ (y(1) ∧ ny(2))`, under `y(j) ∨ ny(j)` roots and
+/// saturation from `valid`.
+fn nested_pairs() -> (Theory, Interpretation, Vec<bool>) {
+    let n = 3;
+    let valid = 2 * n;
+    let theory = constructed_theory(valid + 1, |nodes| {
+        let mut roots = Vec::new();
+        for j in 0..n {
+            roots.push(push(nodes, NodeView::Or(&[j, n + j])));
+            roots.push(push(nodes, NodeView::Implies(valid, j)));
+            roots.push(push(nodes, NodeView::Implies(valid, n + j)));
+        }
+        for literals in [[0, 1, 2], [n, 1, n + 2]] {
+            let inner = push(nodes, NodeView::And(&[literals[1], literals[2]]));
+            let body = push(nodes, NodeView::And(&[literals[0], inner]));
+            roots.push(push(nodes, NodeView::Implies(body, valid)));
+        }
+        roots
+    });
+    let candidate = Interpretation::new(&theory, 0..theory.atom_count()).unwrap();
+    let mut workspace = EvaluationWorkspace::default();
+    let evaluated = workspace
+        .evaluate(
+            &candidate,
+            EvaluationLimits::default(),
+            &Cancellation::default(),
+        )
+        .result
+        .unwrap();
+    assert!(evaluated.is_model());
+    let truth = evaluated.truth().to_vec();
+    (theory, candidate, truth)
+}
+
+#[test]
+fn a_nested_conjunction_body_is_read_through() {
+    let (theory, candidate, truth) = nested_pairs();
+    let producers = producers(&theory, RegionLimits::default(), &Cancellation::default())
+        .unwrap()
+        .producers
+        .unwrap();
+    let root = Region::all_open(theory.atom_count());
+    let mut quota = Allowance {
+        remaining: u64::MAX,
+        failure: Stop::WorkLimit,
+    };
+    let mut meter = Meter::reserved(&mut quota);
+    let cancellation = Cancellation::default();
+    let mut budget = Budget::new(&mut meter, u64::MAX, usize::MAX, &cancellation);
+    let proposals = propose(&theory, &producers, &candidate, &truth, &root, &mut budget).unwrap();
+    assert_eq!(proposals.guards, vec![6]);
+    let mut supports: Vec<(Vec<usize>, Vec<bool>)> = proposals
+        .clauses
+        .iter()
+        .map(|clause| (clause.support.clone(), clause.held.clone()))
+        .collect();
+    supports.sort();
+    assert_eq!(
+        supports,
+        vec![
+            (vec![0, 1, 2], vec![false, true, false]),
+            (vec![0, 1, 2], vec![true, true, true]),
+        ]
+    );
+    assert_eq!(proposals.parity.len(), 1);
+}

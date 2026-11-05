@@ -171,17 +171,8 @@ fn falsifier<Q: Quota + ?Sized>(
         return Ok(None);
     }
     let mut conjuncts = Vec::new();
-    match budget.node(masked.theory, body)? {
-        NodeView::Atom(atom) => conjuncts.push(atom),
-        NodeView::And(children) => {
-            for &child in children {
-                let NodeView::Atom(atom) = budget.node(masked.theory, child)? else {
-                    return Ok(None);
-                };
-                conjuncts.push(atom);
-            }
-        }
-        _ => return Ok(None),
+    if !conjunction(masked, body, 0, &mut conjuncts, budget)? {
+        return Ok(None);
     }
     let mut open = Vec::new();
     for atom in conjuncts {
@@ -200,6 +191,35 @@ fn falsifier<Q: Quota + ?Sized>(
         rule,
         conjuncts: open,
     }))
+}
+
+/// Collect the atoms of a conjunction, read through nested conjunction nodes
+/// as a builder without wide spans writes them; `false` when an operand is
+/// neither an atom nor a conjunction, or the nesting runs deeper than
+/// `MAX_CHAIN`.
+fn conjunction<Q: Quota + ?Sized>(
+    masked: Masked<'_>,
+    node: usize,
+    depth: usize,
+    atoms: &mut Vec<usize>,
+    budget: &mut Budget<'_, '_, Q>,
+) -> Result<bool, BudgetError<Q::Error>> {
+    budget.charge(1)?;
+    if depth > MAX_CHAIN {
+        return Ok(false);
+    }
+    match budget.node(masked.theory, node)? {
+        NodeView::Atom(atom) => atoms.push(atom),
+        NodeView::And(children) => {
+            for &child in children {
+                if !conjunction(masked, child, depth + 1, atoms, budget)? {
+                    return Ok(false);
+                }
+            }
+        }
+        _ => return Ok(false),
+    }
+    Ok(true)
 }
 
 /// The clause of a falsifier: its conjuncts' chains merged into one ascending
@@ -282,15 +302,16 @@ fn follow<Q: Quota + ?Sized>(
                 NodeView::Atom(next) => {
                     return follow(masked, next, depth + 1, reached, budget);
                 }
-                NodeView::And(children) => {
-                    for &child in children {
-                        let NodeView::Atom(next) = budget.node(masked.theory, child)? else {
-                            reached.push(Reached {
-                                base: atom,
-                                complement: false,
-                            });
-                            return Ok(true);
-                        };
+                NodeView::And(_) => {
+                    let mut conjuncts = Vec::new();
+                    if !conjunction(masked, body, 0, &mut conjuncts, budget)? {
+                        reached.push(Reached {
+                            base: atom,
+                            complement: false,
+                        });
+                        return Ok(true);
+                    }
+                    for next in conjuncts {
                         if !follow(masked, next, depth + 1, reached, budget)? {
                             return Ok(false);
                         }
