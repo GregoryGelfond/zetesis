@@ -58,6 +58,7 @@ fn inner_preparation_json_lists_every_receipt() {
     reduct.inner_preparation.saturation_units = 3;
     reduct.inner_preparation.groups = 30;
     reduct.inner_preparation.probes = 243;
+    reduct.inner_preparation.rounds = 5;
     reduct.inner_preparation.refuted_patterns = 120;
     reduct.inner_preparation.rows = 29;
     reduct.inner_preparation.inexact_hulls = 2;
@@ -80,6 +81,7 @@ fn inner_preparation_json_lists_every_receipt() {
             "saturation_units": 3,
             "groups": 30,
             "probes": 243,
+            "rounds": 5,
             "refuted_patterns": 120,
             "rows": 29,
             "inexact_hulls": 2,

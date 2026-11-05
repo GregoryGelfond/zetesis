@@ -3,11 +3,18 @@
 //! `Zetesis.Algebra.entailed_by_refutations`; any other outcome allows the
 //! pattern.
 
+use zetesis_algebra::region::SubjectStep;
 use zetesis_algebra::words::Words;
 use zetesis_algebra::{Cancellation, Countermodels, Failure, Meter, Quota};
 
+use super::super::ParitySystem;
 use super::proposals::Group;
 use crate::{FrozenSubject, Knowledge, Narrower, Narrowing, NarrowingScratch, Region};
+
+/// Rows already established, narrowing beside the frozen reading in a probe:
+/// sound for the class, as the frozen reading is, so their joint closure
+/// refutes what either alone cannot.
+pub(super) type Rows<'a> = Option<&'a ParitySystem>;
 
 /// The closed root, its knowledge, and one retired region and knowledge the
 /// probes reuse.
@@ -47,6 +54,12 @@ impl<'a> Probe<'a> {
         &self.region
     }
 
+    /// The narrower's work: one unit per node and operand occurrence, which
+    /// bounds one narrowing of the closed root and so one probe.
+    pub(super) fn narrower_work(&self) -> u64 {
+        self.narrower.work()
+    }
+
     /// Narrow a copy of the closed root with `decisions` applied; whether the
     /// copy is refuted. A decision the root already contradicts refutes the
     /// copy without narrowing. Copying charges one operation per retained
@@ -58,6 +71,7 @@ impl<'a> Probe<'a> {
     pub(super) fn run<Q: Quota + ?Sized>(
         &mut self,
         decisions: &[(usize, bool)],
+        rows: Rows<'_>,
         scratch: &mut NarrowingScratch,
         cancellation: &Cancellation,
         meter: &mut Meter<'_, Q>,
@@ -79,15 +93,34 @@ impl<'a> Probe<'a> {
         if !consistent {
             return Ok(true);
         }
-        let attempt = self.narrower.narrow_frozen_known_reserved(
-            self.subject,
-            &mut self.region,
-            &mut self.retired,
-            scratch,
-            cancellation,
-            meter,
-        );
-        Ok(attempt.result? == Narrowing::Refuted)
+        let mut known = rows.map(ParitySystem::knowledge);
+        loop {
+            let attempt = self.narrower.narrow_frozen_known_reserved(
+                self.subject,
+                &mut self.region,
+                &mut self.retired,
+                scratch,
+                cancellation,
+                meter,
+            );
+            if attempt.result? == Narrowing::Refuted {
+                return Ok(true);
+            }
+            let (Some(system), Some(known)) = (rows, known.as_mut()) else {
+                return Ok(false);
+            };
+            let inspected =
+                system.inspect_reserved(&mut self.region, known, scratch, cancellation, meter);
+            match inspected.result? {
+                SubjectStep::Refuted => return Ok(true),
+                SubjectStep::Changed => {}
+                // The rows one at a time are at their fixed point; as a
+                // linear system under the decisions they may still contradict.
+                SubjectStep::Unchanged => {
+                    return Ok(!system.consistent_in_reserved(&self.region, meter)?);
+                }
+            }
+        }
     }
 
     /// The forbidden table of `group` under its guard cut: every pattern over
@@ -98,6 +131,7 @@ impl<'a> Probe<'a> {
     pub(super) fn table<Q: Quota + ?Sized>(
         &mut self,
         group: &Group,
+        rows: Rows<'_>,
         counts: &mut (u64, u64),
         scratch: &mut NarrowingScratch,
         cancellation: &Cancellation,
@@ -116,7 +150,7 @@ impl<'a> Probe<'a> {
                     .map(|(position, &atom)| (atom, pattern & (1 << position) != 0)),
             );
             counts.0 += 1;
-            if self.run(&decisions, scratch, cancellation, meter)? {
+            if self.run(&decisions, rows, scratch, cancellation, meter)? {
                 forbidden.insert(pattern);
                 counts.1 += 1;
             }

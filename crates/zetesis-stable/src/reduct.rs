@@ -59,6 +59,9 @@ pub struct InnerPreparationStatistics {
     pub groups: u64,
     /// Probes run.
     pub probes: u64,
+    /// Probing rounds run: one by the frozen reading alone per preparation,
+    /// each further one under the rows the round before established.
+    pub rounds: u64,
     /// Patterns whose probe was refuted.
     pub refuted_patterns: u64,
     /// Parity rows loaded.
@@ -93,6 +96,7 @@ impl InnerPreparationStatistics {
             saturation_units: attempt.saturation_units,
             groups: attempt.groups,
             probes: attempt.probes,
+            rounds: attempt.rounds,
             refuted_patterns: attempt.refuted_patterns,
             rows: attempt.parity.rows,
             inexact_hulls: attempt.inexact_hulls,
@@ -113,6 +117,7 @@ impl InnerPreparationStatistics {
             (&mut self.saturation_units, other.saturation_units),
             (&mut self.groups, other.groups),
             (&mut self.probes, other.probes),
+            (&mut self.rounds, other.rounds),
             (&mut self.refuted_patterns, other.refuted_patterns),
             (&mut self.rows, other.rows),
             (&mut self.inexact_hulls, other.inexact_hulls),
@@ -136,6 +141,7 @@ impl InnerPreparationStatistics {
             saturation_units: self.saturation_units.saturating_add(other.saturation_units),
             groups: self.groups.saturating_add(other.groups),
             probes: self.probes.saturating_add(other.probes),
+            rounds: self.rounds.saturating_add(other.rounds),
             refuted_patterns: self.refuted_patterns.saturating_add(other.refuted_patterns),
             rows: self.rows.saturating_add(other.rows),
             inexact_hulls: self.inexact_hulls.saturating_add(other.inexact_hulls),

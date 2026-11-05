@@ -51,13 +51,21 @@ pub struct ClosedQuery<'a> {
     pub region: &'a Region,
     /// The closed root's knowledge.
     pub knowledge: &'a Knowledge<Countermodels>,
+    /// What the root's first closure charged: with one pass over the index,
+    /// what one probe is leased, since a probe narrows that closed root again
+    /// with a few more decisions.
+    pub closure_work: u64,
 }
 
 /// The lease of one candidate's preparation: crossing it declines the whole
 /// preparation and installs nothing.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct FrozenPreparationLimits {
-    /// Word operations, charged to the caller's account as performed.
+    /// Word operations, charged to the caller's account as performed: the
+    /// floor, which must cover the proposal pass and the rows' loading. The
+    /// probes are leased on top, each the root closure's own cost plus one
+    /// pass over the index (`ClosedQuery::closure_work`), as a probe narrows
+    /// that closed root again with a few more decisions.
     pub work: u64,
     /// Peak simultaneous named bytes.
     pub bytes: usize,
@@ -93,6 +101,9 @@ pub struct FrozenPreparationStatistics {
     pub refuted_patterns: u64,
     /// Probed groups whose allowed patterns are not themselves affine.
     pub inexact_hulls: u64,
+    /// Probing rounds run: the first by the frozen reading alone, each later
+    /// one under the rows the round before established.
+    pub rounds: u64,
     /// The rows refute the closed root under the units.
     pub root_refuted: bool,
     /// Work charged to the account, on every outcome.
@@ -275,6 +286,13 @@ impl<Q: Quota + ?Sized> Quota for Leased<'_, Q> {
     }
 }
 
+impl<Q: Quota + ?Sized> Leased<'_, Q> {
+    /// Lease `additional` operations more, as a probing round earns them.
+    fn extend(&mut self, additional: u64) {
+        self.remaining = self.remaining.saturating_add(additional);
+    }
+}
+
 /// A probe's meter failure as the budget reports it.
 fn from_meter<E>(failure: Failure<E>) -> BudgetError<E> {
     match failure {
@@ -352,7 +370,9 @@ fn build<Q: Quota + ?Sized>(
         probes::Probe::new(query.narrower, query.subject, query.region, query.knowledge);
     *peak = (*peak).max(probe.retained_bytes());
     let mut units = Vec::new();
-    let mut tables: Vec<(Support, Words<u64, [u64; 4]>)> = Vec::new();
+    let mut groups = Vec::new();
+    let allowance = query.closure_work.saturating_add(probe.narrower_work());
+    lease.extend((proposals.guards.len() as u64).saturating_mul(allowance));
     {
         let mut meter = Meter::reserved(lease);
         for &guard in &proposals.guards {
@@ -362,7 +382,7 @@ fn build<Q: Quota + ?Sized>(
             if query.region.is_open(guard) {
                 statistics.probes += 1;
                 let refuted = probe
-                    .run(&[(guard, true)], scratch, cancellation, &mut meter)
+                    .run(&[(guard, true)], None, scratch, cancellation, &mut meter)
                     .map_err(from_meter)?;
                 let reaches = refuted
                     || query
@@ -375,27 +395,20 @@ fn build<Q: Quota + ?Sized>(
                 units.push(guard);
                 statistics.saturation_units += 1;
             }
-            for group in proposals.parity.iter().filter(|group| group.guard == guard) {
-                statistics.probed_groups += 1;
-                let mut counts = (0, 0);
-                let forbidden = probe
-                    .table(group, &mut counts, scratch, cancellation, &mut meter)
-                    .map_err(from_meter)?;
-                statistics.probes += counts.0;
-                statistics.refuted_patterns += counts.1;
-                tables.push((group.support, forbidden));
-            }
+            groups.extend(proposals.parity.iter().filter(|group| group.guard == guard));
         }
         meter.refund();
     }
-    let parity = {
-        let mut meter = Meter::reserved(lease);
-        let mut budget = Budget::new(&mut meter, limits.work, limits.bytes, cancellation);
-        let parity = load(theory, &tables, statistics, &mut budget);
-        *peak = (*peak).max(budget.peak_bytes());
-        budget.finish();
-        parity?
-    };
+    statistics.probed_groups = groups.len() as u64;
+    let parity = probe_rounds(
+        theory,
+        &groups,
+        &mut probe,
+        scratch,
+        (limits, cancellation, lease, allowance),
+        statistics,
+        peak,
+    )?;
     statistics.root_refuted = parity.as_ref().is_some_and(ParitySystem::root_refuted);
     let candidate = query.candidate.try_clone().map_err(BudgetError::Source)?;
     Ok(Some(FrozenPreparation {
@@ -407,18 +420,101 @@ fn build<Q: Quota + ?Sized>(
     }))
 }
 
+/// Probe the groups in rounds and load their rows: round one by the frozen
+/// reading alone, each later round under the rows the round before
+/// established, sound for the class as their joint closure is, while a
+/// round refutes more patterns than the one before and some hull is still
+/// inexact; each round leases its probes at `allowance` each. The rows of
+/// the last round are the preparation's.
+fn probe_rounds<Q: Quota + ?Sized>(
+    theory: &Theory,
+    groups: &[&proposals::Group],
+    probe: &mut probes::Probe<'_>,
+    scratch: &mut NarrowingScratch,
+    (limits, cancellation, lease, allowance): (
+        FrozenPreparationLimits,
+        &Cancellation,
+        &mut Leased<'_, Q>,
+        u64,
+    ),
+    statistics: &mut FrozenPreparationStatistics,
+    peak: &mut u128,
+) -> Result<Option<ParitySystem>, BudgetError<LeaseRefusal<Q::Error>>> {
+    let mut parity: Option<ParitySystem> = None;
+    let mut tables: Vec<(Support, Words<u64, [u64; 4]>)> = Vec::new();
+    let mut refuted: Vec<u64> = vec![0; groups.len()];
+    // Round one probes every group; a later round only those whose hull was
+    // inexact, keeping the others' tables.
+    let mut pending: Vec<usize> = (0..groups.len()).collect();
+    while !pending.is_empty() {
+        statistics.rounds += 1;
+        let probes: u64 = pending
+            .iter()
+            .map(|&index| 1_u64 << groups[index].support.len)
+            .sum();
+        lease.extend(probes.saturating_mul(allowance));
+        let mut progressed = false;
+        {
+            let mut meter = Meter::reserved(lease);
+            for &index in &pending {
+                let mut counts = (0, 0);
+                let forbidden = probe
+                    .table(
+                        groups[index],
+                        parity.as_ref(),
+                        &mut counts,
+                        scratch,
+                        cancellation,
+                        &mut meter,
+                    )
+                    .map_err(from_meter)?;
+                statistics.probes += counts.0;
+                progressed |= counts.1 > refuted[index];
+                refuted[index] = counts.1;
+                if tables.len() == index {
+                    tables.push((groups[index].support, forbidden));
+                } else {
+                    tables[index].1 = forbidden;
+                }
+            }
+            meter.refund();
+        }
+        let (loaded, inexact) = {
+            let mut meter = Meter::reserved(lease);
+            let mut budget = Budget::new(&mut meter, limits.work, limits.bytes, cancellation);
+            let loaded = load(theory, &tables, statistics, &mut budget);
+            *peak = (*peak).max(budget.peak_bytes());
+            budget.finish();
+            loaded?
+        };
+        parity = loaded;
+        pending = inexact;
+        if !progressed || parity.as_ref().is_none_or(ParitySystem::root_refuted) {
+            break;
+        }
+    }
+    statistics.refuted_patterns = refuted.iter().sum();
+    Ok(parity)
+}
+
+/// What a round loaded: the parity system, if any row was found, and the
+/// indices of the tables whose hull is inexact.
+type Loaded = (Option<ParitySystem>, Vec<usize>);
+
 /// The parity system of the probed groups: each table's affine hull, every
-/// equation checked against its table, eliminated to echelon form.
+/// equation checked against its table, eliminated to echelon form; with the
+/// indices of the tables whose hull is inexact.
 fn load<Q: Quota + ?Sized>(
     theory: &Theory,
     tables: &[(Support, Words<u64, [u64; 4]>)],
     statistics: &mut FrozenPreparationStatistics,
     budget: &mut Budget<'_, '_, Q>,
-) -> Result<Option<ParitySystem>, BudgetError<Q::Error>> {
+) -> Result<Loaded, BudgetError<Q::Error>> {
     if tables.is_empty() {
-        return Ok(None);
+        return Ok((None, Vec::new()));
     }
     let mut storage = Storage::default();
+    let mut inexact = Vec::new();
     let (facts, mut recognized_equations, mut counts) =
         budget.in_phase(Phase::Recognition, |budget| {
             storage.admit_record(
@@ -437,6 +533,9 @@ fn load<Q: Quota + ?Sized>(
                     storage.with_record(hull::SCRATCH_BYTES as u128, budget, |_, budget| {
                         rows::propose(*support, forbidden.storage(), &mut counts, budget)
                     })?;
+                if !proposed.exact {
+                    inexact.push(group);
+                }
                 for &local in proposed.equations() {
                     let words = rows::materialize(theory, *support, local, &mut storage, budget)?;
                     budget.charge(3)?; // constant, probed-source tag and group
@@ -469,7 +568,7 @@ fn load<Q: Quota + ?Sized>(
     statistics.inexact_hulls = counts.inexact_hulls;
     budget.charge(1)?;
     if recognized_equations.is_empty() {
-        return Ok(None);
+        return Ok((None, inexact));
     }
     let prepared = budget.in_phase(Phase::Reduction, |budget| {
         parity::prepare(
@@ -487,5 +586,5 @@ fn load<Q: Quota + ?Sized>(
         counts,
     };
     statistics.parity = ParityStatistics::from_preparation(&recognized, &prepared, budget);
-    Ok(Some(ParitySystem::from_rows(recognized, prepared)))
+    Ok((Some(ParitySystem::from_rows(recognized, prepared)), inexact))
 }

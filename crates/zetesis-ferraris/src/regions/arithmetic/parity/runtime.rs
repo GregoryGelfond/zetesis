@@ -80,6 +80,59 @@ impl ParitySystem {
         ParityKnowledge::empty()
     }
 
+    /// Whether the rows are consistent under the region's decisions: the
+    /// decided atoms substituted, the rows over the open atoms eliminated
+    /// to echelon form, and no row left reading `0 = 1`. Complete for the
+    /// rows as a linear system, where [`Self::inspect_reserved`] applies one
+    /// row at a time. Charged per word read and combined; the elimination's
+    /// scratch is allocated for the call.
+    ///
+    /// # Errors
+    /// The meter's refusal or a stop.
+    pub fn consistent_in_reserved<Q: Quota + ?Sized>(
+        &self,
+        region: &Region,
+        work: &mut Meter<'_, Q>,
+    ) -> Result<bool, Failure<Q::Error>> {
+        let (held, cut) = region.decision_words();
+        let width = held.len();
+        let mut pivots: Vec<(Vec<u64>, bool)> = Vec::new();
+        for &source in &self.prepared.basis {
+            let row = &self.recognized.equations[source];
+            let coefficients = &row.words[..width];
+            charge(work, 2 * width as u64 + 1)?;
+            // Substitute the decided atoms: held ones flip the constant.
+            let mut constant = row.constant;
+            let mut reduced: Vec<u64> = Vec::with_capacity(width);
+            for ((&word, &held), &cut) in coefficients.iter().zip(held).zip(cut) {
+                constant ^= (word & held).count_ones() % 2 == 1;
+                reduced.push(word & !(held | cut));
+            }
+            // Eliminate against the pivots found so far.
+            for (pivot, pivot_constant) in &pivots {
+                charge(work, width as u64 + 1)?;
+                let Some(bit) = lowest_bit(pivot) else {
+                    continue;
+                };
+                if reduced[bit / 64] & (1 << (bit % 64)) != 0 {
+                    for (target, source) in reduced.iter_mut().zip(pivot) {
+                        *target ^= source;
+                    }
+                    constant ^= pivot_constant;
+                }
+            }
+            charge(work, width as u64 + 1)?;
+            if lowest_bit(&reduced).is_none() {
+                if constant {
+                    return Ok(false);
+                }
+                continue;
+            }
+            pivots.push((reduced, constant));
+        }
+        Ok(true)
+    }
+
     /// Inspect applicable rows once and apply their consequences in row order.
     ///
     /// The region uses this system's original atom coordinates. Initialized
@@ -120,6 +173,15 @@ impl ParitySystem {
         statistics.work = work.charged() - before;
         ArithmeticAttempt { result, statistics }
     }
+}
+
+/// The lowest set bit of a word vector, as an atom index.
+fn lowest_bit(words: &[u64]) -> Option<usize> {
+    words
+        .iter()
+        .enumerate()
+        .find(|(_, word)| **word != 0)
+        .map(|(index, word)| index * 64 + word.trailing_zeros() as usize)
 }
 
 fn inspect<Q: Quota + ?Sized>(

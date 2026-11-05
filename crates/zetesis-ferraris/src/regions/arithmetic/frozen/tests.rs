@@ -169,6 +169,27 @@ impl Saturation {
         root
     }
 
+    /// What the root's first closure charges.
+    fn closure_work(&self) -> u64 {
+        let narrower = Narrower::new(&self.theory);
+        let mut root = self.query_root();
+        let mut knowledge = narrower.frozen_knowledge();
+        let mut quota = Allowance {
+            remaining: u64::MAX,
+            failure: Stop::WorkLimit,
+        };
+        let mut meter = Meter::reserved(&mut quota);
+        let attempt = narrower.narrow_frozen_known_reserved(
+            self.subject(),
+            &mut root,
+            &mut knowledge,
+            &mut NarrowingScratch::default(),
+            &Cancellation::default(),
+            &mut meter,
+        );
+        attempt.statistics.work
+    }
+
     /// The query root closed by the frozen narrowing, with its knowledge.
     fn closed(&self) -> (Narrower, Region, Knowledge<Countermodels>) {
         let narrower = Narrower::new(&self.theory);
@@ -236,6 +257,7 @@ impl Saturation {
             candidate: &self.candidate,
             region: &root,
             knowledge: &knowledge,
+            closure_work: self.closure_work(),
         };
         let attempt = FrozenPreparation::prepare_reserved(
             query,
@@ -452,30 +474,48 @@ fn parity_groups_under_an_open_guard_are_dropped() {
 }
 
 #[test]
-fn a_lease_crossed_mid_probe_declines_the_preparation() {
+fn the_lease_floor_covers_the_proposals_and_each_round_pays_for_its_probes() {
+    // The floor must cover the proposal pass and the rows' loading; each
+    // probing round leases its probes times the narrower's work on top, so a
+    // floor below the whole preparation's work still prepares, while a floor
+    // below the proposal pass declines it with nothing installed.
     let fixture = Saturation::build(3, &gate(0, 1, 2), &[]);
     let complete = fixture.prepared();
     let work = complete.work;
     assert!(work > 0);
-    let stride = (work / 400).max(1);
-    for lease in (1..work).step_by(usize::try_from(stride).unwrap()) {
-        let limits = FrozenPreparationLimits {
-            work: lease,
-            bytes: usize::MAX,
-        };
-        let (attempt, charged) = fixture.prepare(limits, u64::MAX, &Cancellation::default());
-        assert!(attempt.result.as_ref().unwrap().is_none(), "lease {lease}");
-        assert_eq!(
-            attempt.statistics.status,
-            super::super::PreparationStatus::WorkDeclined
-        );
-        assert!(
-            attempt.work <= lease,
-            "lease {lease}: charged {}",
-            attempt.work
-        );
-        assert_eq!(attempt.work, charged);
-    }
+    let floor = FrozenPreparationLimits {
+        work: work / 2,
+        bytes: usize::MAX,
+    };
+    let (attempt, charged) = fixture.prepare(floor, u64::MAX, &Cancellation::default());
+    assert!(attempt.result.unwrap().is_some());
+    assert_eq!(attempt.work, charged);
+    assert!(attempt.work > floor.work);
+    let tiny = FrozenPreparationLimits {
+        work: 10,
+        bytes: usize::MAX,
+    };
+    let (attempt, charged) = fixture.prepare(tiny, u64::MAX, &Cancellation::default());
+    assert!(attempt.result.as_ref().unwrap().is_none());
+    assert_eq!(
+        attempt.statistics.status,
+        super::super::PreparationStatus::WorkDeclined
+    );
+    assert_eq!(attempt.work, charged);
+    assert!(attempt.work <= 10);
+}
+
+#[test]
+fn a_later_round_reprobes_only_the_inexact_groups() {
+    // Two chains less one clause: round one probes the unit and every group
+    // (four gates and the differing pair, 4 · 8 + 4 patterns); round two
+    // probes only the inexact gate's eight patterns.
+    let mut clauses = two_chains();
+    clauses.remove(0);
+    let fixture = Saturation::build(7, &clauses, &[]);
+    let attempt = fixture.prepared();
+    assert_eq!(attempt.statistics.rounds, 2);
+    assert_eq!(attempt.statistics.probes, 1 + 4 * 8 + 4 + 8);
 }
 
 #[test]
@@ -633,6 +673,7 @@ fn prepared_from(
         candidate: &fixture.candidate,
         region: &root,
         knowledge: &knowledge,
+        closure_work: fixture.closure_work(),
     };
     FrozenPreparation::prepare_reserved(query, &mut scratch, unbounded(), &cancellation, &mut quota)
 }
@@ -693,4 +734,112 @@ fn a_deeply_nested_conjunction_is_read_through() {
     assert_eq!(proposals.clauses[0].support, (0..9).collect::<Vec<_>>());
     assert_eq!(proposals.counts.unsupported_clauses, 1);
     assert_eq!(proposals.parity.len(), 1);
+}
+
+#[test]
+fn a_second_probing_round_under_the_rows_narrows_the_dropped_gate() {
+    // Two chains whose results must differ, less one clause of the first
+    // gate: the frozen subject alone allows five patterns at that gate, so
+    // its hull is inexact. Under the other gates' rows and the differing
+    // results, every even pattern at that gate is refuted, so the second
+    // round leaves exactly the dropped clause's pattern, three units.
+    let mut clauses = two_chains();
+    clauses.remove(0);
+    let fixture = Saturation::build(7, &clauses, &[]);
+    let attempt = fixture.prepared();
+    let preparation = attempt.result.unwrap().unwrap();
+    assert!(!preparation.root_refuted());
+    // The second round made every hull exact, so no third round ran.
+    assert_eq!(attempt.statistics.rounds, 2);
+    assert_eq!(attempt.statistics.inexact_hulls, 0);
+    let units: Vec<(usize, bool)> = preparation.parity().expect("rows").units().collect();
+    assert!(units.iter().any(|&(atom, _)| atom == 0), "{units:?}");
+    assert!(units.iter().any(|&(atom, _)| atom == 1), "{units:?}");
+    assert!(units.iter().any(|&(atom, _)| atom == 3), "{units:?}");
+}
+
+#[test]
+fn the_rows_decide_consistency_under_the_regions_decisions() {
+    // Rows y0 ⊕ y1 ⊕ y2 = 0 and y2 ⊕ y3 = 0 under the cut guard: deciding
+    // y0 held, y1 and y2 cut, y3 held contradicts the first row; y2 held
+    // with y3 cut contradicts the second; y0 held alone is consistent, and
+    // so is y0, y1 held with y2, y3 cut.
+    let mut clauses = gate(0, 1, 2);
+    clauses.extend(gate(0, 1, 3));
+    let fixture = Saturation::build(4, &clauses, &[]);
+    let valid = fixture.valid;
+    let attempt = prepared_from(&fixture, |root| assert!(root.cut(valid)));
+    let preparation = attempt.result.unwrap().unwrap();
+    let system = preparation.parity().expect("rows");
+    let (_, closed, _) = fixture.closed();
+    let mut quota = Allowance {
+        remaining: u64::MAX,
+        failure: Stop::WorkLimit,
+    };
+    let mut meter = Meter::reserved(&mut quota);
+    for (decisions, consistent) in [
+        (vec![(0, true), (1, false), (2, false), (3, true)], false),
+        (vec![(2, true), (3, false)], false),
+        (vec![(0, true)], true),
+        (vec![(0, true), (1, true), (2, false), (3, false)], true),
+    ] {
+        let mut region = closed.clone();
+        assert!(region.cut(valid));
+        for &(atom, held) in &decisions {
+            assert!(if held {
+                region.hold(atom)
+            } else {
+                region.cut(atom)
+            });
+        }
+        assert_eq!(
+            system.consistent_in_reserved(&region, &mut meter).unwrap(),
+            consistent,
+            "{decisions:?}"
+        );
+    }
+}
+
+/// Two chains over `n` inputs computing the same parity, the second over the
+/// inputs in reverse, whose results must differ: inputs `0..n`, the first
+/// chain's outputs `n..2n - 1`, the second's `2n - 1..3n - 2`.
+fn two_chains_of(n: usize) -> Vec<Vec<(usize, bool)>> {
+    let mut clauses = gate(0, 1, n);
+    for k in 2..n {
+        clauses.extend(gate(n + k - 2, k, n + k - 1));
+    }
+    clauses.extend(gate(n - 1, n - 2, 2 * n - 1));
+    for k in 2..n {
+        clauses.extend(gate(2 * n + k - 3, n - 1 - k, 2 * n + k - 2));
+    }
+    clauses.push(vec![(2 * n - 2, false), (3 * n - 3, false)]);
+    clauses.push(vec![(2 * n - 2, true), (3 * n - 3, true)]);
+    clauses
+}
+
+#[test]
+fn the_second_round_pins_the_dropped_gate_at_every_width() {
+    // The same linear argument at every size: the sum of the remaining gate
+    // rows and the differing results says the dropped gate is odd, so its
+    // even patterns are refuted under the rows and its hull becomes exact,
+    // across the word boundary of the atom masks included.
+    for n in [7, 12, 20, 21, 24] {
+        let mut clauses = two_chains_of(n);
+        clauses.remove(0);
+        let fixture = Saturation::build(3 * n - 2, &clauses, &[]);
+        let attempt = fixture.prepared();
+        let preparation = attempt.result.unwrap().unwrap();
+        assert!(!preparation.root_refuted(), "n={n}");
+        assert_eq!(attempt.statistics.rounds, 2, "n={n}");
+        assert_eq!(attempt.statistics.inexact_hulls, 0, "n={n}");
+        let units: Vec<usize> = preparation
+            .parity()
+            .expect("rows")
+            .units()
+            .map(|(atom, _)| atom)
+            .collect();
+        for atom in [0, 1, n] {
+            assert!(units.contains(&atom), "n={n}: units {units:?}");
+        }
+    }
 }

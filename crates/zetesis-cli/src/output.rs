@@ -880,6 +880,7 @@ fn search_statistics(
     out.number_field("saturation_units", preparation.saturation_units)?;
     out.number_field("groups", preparation.groups)?;
     out.number_field("probes", preparation.probes)?;
+    out.number_field("rounds", preparation.rounds)?;
     out.number_field("refuted_patterns", preparation.refuted_patterns)?;
     out.number_field("rows", preparation.rows)?;
     out.number_field("inexact_hulls", preparation.inexact_hulls)?;

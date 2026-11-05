@@ -112,6 +112,28 @@ impl Saturation {
         FrozenSubject::new(&self.theory, &self.truth)
     }
 
+    /// What the root's first closure charges.
+    fn closure_work(&self) -> u64 {
+        let narrower = Narrower::new(&self.theory);
+        let mut root = Region::all_open(self.theory.atom_count());
+        let mut knowledge = narrower.frozen_knowledge();
+        let cancellation = Cancellation::default();
+        let mut budget = budget(&cancellation, u64::MAX);
+        let mut quota = BudgetQuota {
+            budget: &mut budget,
+        };
+        let mut meter = Meter::reserved(&mut quota);
+        let attempt = narrower.narrow_frozen_known_reserved(
+            self.subject(),
+            &mut root,
+            &mut knowledge,
+            &mut NarrowingScratch::default(),
+            &cancellation,
+            &mut meter,
+        );
+        attempt.statistics.work
+    }
+
     /// The query root closed by the frozen narrowing, with its knowledge.
     fn closed(&self) -> (Narrower, Region, Knowledge<Countermodels>) {
         let narrower = Narrower::new(&self.theory);
@@ -165,6 +187,7 @@ impl Saturation {
                 candidate: &self.candidate,
                 region: root,
                 knowledge,
+                closure_work: self.closure_work(),
             },
             &mut NarrowingScratch::default(),
             FrozenPreparationLimits {
@@ -330,9 +353,9 @@ fn the_stable_candidate_of_a_parity_core_is_decided_at_the_root() {
 #[test]
 fn a_dropped_clause_candidate_finds_its_countermodel_in_few_regions() {
     // Dropping the last clause makes the core satisfiable: the candidate has
-    // a countermodel, and the rows of the remaining clauses guide the walk to
-    // it in fewer regions than the frozen subject alone needed for the
-    // unsatisfiable core (51).
+    // a countermodel, and the rows of the remaining clauses, probed to
+    // exactness in a second round, guide the walk to it in fewer regions
+    // than the frozen subject alone needed for the unsatisfiable core (51).
     let mut clauses = two_chains();
     clauses.pop();
     let fixture = Saturation::build(7, &clauses);
@@ -341,7 +364,7 @@ fn a_dropped_clause_candidate_finds_its_countermodel_in_few_regions() {
     let regions = statistics.reduct.regions;
     assert_eq!(
         (regions.regions, regions.refuted, regions.leaves),
-        (19, 1, 1)
+        (17, 0, 1)
     );
     let preparation = statistics.reduct.inner_preparation;
     assert_eq!((preparation.attempts, preparation.prepared), (1, 1));
@@ -355,6 +378,21 @@ fn a_dropped_clause_candidate_finds_its_countermodel_in_few_regions() {
         (regions.regions, regions.refuted, regions.leaves),
         (9, 0, 1)
     );
+}
+
+#[test]
+fn two_candidates_of_one_theory_prepare_different_rows() {
+    // The stable candidate loads a row per gate and nothing more, its root
+    // refuted by them; the dropped-clause candidate's second round probes
+    // the dropped gate to exactness, and the refutations along the way add
+    // their units: the two preparations' rows differ.
+    let stable = Saturation::build(7, &two_chains());
+    let stable = stable.check().1.reduct.inner_preparation;
+    let mut clauses = two_chains();
+    clauses.pop();
+    let dropped = Saturation::build(7, &clauses);
+    let dropped = dropped.check().1.reduct.inner_preparation;
+    assert_eq!((stable.rows, dropped.rows), (5, 6));
 }
 
 #[test]

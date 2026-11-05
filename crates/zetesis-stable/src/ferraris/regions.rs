@@ -1421,6 +1421,7 @@ impl<'a> ReductQuery<'a> {
                     return Err(Interrupt::Publish);
                 }
                 observation.enter();
+                let before = statistics.reduct.regions.work;
                 let mut result = narrow_inner(
                     narrower,
                     reading.subject,
@@ -1432,9 +1433,16 @@ impl<'a> ReductQuery<'a> {
                 )
                 .map_err(Interrupt::Stopped)?;
                 if preparation.is_pending() && result != Narrowing::Refuted {
-                    let (installed, after_units) =
-                        prepare_at_root(reading, entry, limits, budget, scratch, statistics)
-                            .map_err(Interrupt::Stopped)?;
+                    let closure_work = statistics.reduct.regions.work - before;
+                    let (installed, after_units) = prepare_at_root(
+                        (reading, closure_work),
+                        entry,
+                        limits,
+                        budget,
+                        scratch,
+                        statistics,
+                    )
+                    .map_err(Interrupt::Stopped)?;
                     preparation = InnerPreparation::Prepared(installed);
                     result = after_units;
                 }
@@ -1510,6 +1518,7 @@ impl<'a> ReductQuery<'a> {
             producers: self.index.producers(),
             candidate,
         };
+        let before = statistics.reduct.regions.work;
         let mut narrowing = narrow_inner(
             narrower,
             reading.subject,
@@ -1522,8 +1531,15 @@ impl<'a> ReductQuery<'a> {
         if query.prepare_root && narrowing != Narrowing::Refuted {
             // The query published before its root closed: this region is
             // that root, and its server prepares what the publisher would.
-            let (prepared, after_units) =
-                prepare_at_root(reading, entry, limits, budget, scratch, statistics)?;
+            let closure_work = statistics.reduct.regions.work - before;
+            let (prepared, after_units) = prepare_at_root(
+                (reading, closure_work),
+                entry,
+                limits,
+                budget,
+                scratch,
+                statistics,
+            )?;
             *installed = InnerPreparation::Prepared(prepared);
             narrowing = after_units;
         }
@@ -1679,7 +1695,7 @@ struct InnerReading<'a> {
 /// # Errors
 /// As [`prepare_inner`] and [`narrow_inner`].
 fn prepare_at_root<Q: Quota>(
-    reading: InnerReading<'_>,
+    (reading, closure_work): (InnerReading<'_>, u64),
     entry: &mut Entry<CountermodelKnowledge>,
     limits: crate::Limits,
     budget: &mut Budget<'_, Q>,
@@ -1694,6 +1710,7 @@ fn prepare_at_root<Q: Quota>(
             candidate: reading.candidate,
             region: &entry.region,
             knowledge: &entry.state.frozen,
+            closure_work,
         },
         limits,
         budget,
