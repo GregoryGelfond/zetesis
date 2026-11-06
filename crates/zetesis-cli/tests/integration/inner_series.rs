@@ -1,10 +1,10 @@
 //! The quantified series: the inner preparation's census and door checks on
 //! the saturation cores, each size's family checked against clingo. Each
 //! size is the committed program with its one size constant amended; the
-//! solver runs in-process on the countermodel oracle, one thread, the eager
-//! grounder, and reports its statistics in the JSON document. The census at
-//! each family's smallest size needs no reference solver and runs in the
-//! portable suite.
+//! solver runs in-process on the countermodel oracle, one thread or fourteen
+//! where the I1 servers are checked, the eager grounder, and reports its
+//! statistics in the JSON document. The census at each family's smallest
+//! size needs no reference solver and runs in the portable suite.
 use clap::Parser;
 use serde_json::Value;
 use std::collections::BTreeSet;
@@ -79,6 +79,8 @@ struct Receipt {
     visited: u64,
     refuted: u64,
     preparation: Value,
+    /// Regions of published queries served by other workers, none at one.
+    served: u64,
 }
 
 /// A term as clingo displays it: a number or a symbol.
@@ -119,6 +121,12 @@ fn shown(model: &Value) -> BTreeSet<String> {
 }
 
 fn solve(program: &str) -> Receipt {
+    solve_with(program, 1)
+}
+
+/// Solve at `workers` threads.
+fn solve_with(program: &str, workers: u64) -> Receipt {
+    let workers = workers.to_string();
     let options = Options::try_parse_from([
         "zetesis",
         "--backend",
@@ -128,7 +136,7 @@ fn solve(program: &str) -> Receipt {
         "--grounder",
         "eager",
         "--threads",
-        "1",
+        workers.as_str(),
         "--models",
         "0",
         "--color",
@@ -166,6 +174,9 @@ fn solve(program: &str) -> Receipt {
         visited: regions["visited"].as_u64().unwrap(),
         refuted: regions["refuted"].as_u64().unwrap(),
         preparation: regions["preparation"].clone(),
+        served: search["candidate_regions"]["workers"]["query_division"]["served"]
+            .as_u64()
+            .unwrap_or(0),
     }
 }
 
@@ -344,6 +355,27 @@ fn g_census_inner_finds_the_cores_groups_and_rows() {
     }
     for h in PIGEONHOLE.sizes {
         pigeonhole_census(h, &checked(PIGEONHOLE, h));
+    }
+}
+
+#[test]
+#[ignore = "requires clingo: the series' families agree at fourteen workers, through the I1 servers"]
+fn the_series_families_agree_at_fourteen_workers() {
+    // At fourteen workers a published query's regions are served by other
+    // workers with the query's preparation: each family's two smallest sizes
+    // give clingo's family, and some region is served.
+    for family in [PARITY, TSEITIN, PIGEONHOLE] {
+        for &size in &family.sizes[..2] {
+            let program = family.program(size);
+            let expected = external(&program);
+            let receipt = solve_with(&program, 14);
+            assert_eq!(receipt.family, expected, "{} {size}", family.name);
+            assert!(
+                receipt.served > 0,
+                "{} {size}: no region served",
+                family.name
+            );
+        }
     }
 }
 
