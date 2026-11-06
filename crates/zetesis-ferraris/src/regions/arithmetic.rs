@@ -23,12 +23,12 @@ mod cardinality;
 mod cardinality_runtime;
 mod work;
 pub(super) mod runtime;
+mod snapshot;
 
 pub use frozen::{
     ClosedQuery, FrozenPreparation, FrozenPreparationAttempt, FrozenPreparationLimits,
     FrozenPreparationStatistics,
 };
-mod snapshot;
 
 pub use cardinality_runtime::CardinalityKnowledge;
 pub use parity::ParityKnowledge;

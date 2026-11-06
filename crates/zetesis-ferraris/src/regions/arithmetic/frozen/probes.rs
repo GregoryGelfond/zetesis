@@ -27,6 +27,14 @@ pub(super) struct Target<'a> {
     pub known: &'a Table,
 }
 
+/// A group's probed table with what it cost and what it found: the probes
+/// run and the patterns refuted, the known ones included.
+pub(super) struct Probed {
+    pub table: Table,
+    pub run: u64,
+    pub refuted: u64,
+}
+
 /// The closed root, its knowledge, and one retired region and knowledge the
 /// probes reuse.
 pub(super) struct Probe<'a> {
@@ -136,7 +144,7 @@ impl<'a> Probe<'a> {
 
     /// The forbidden table of `group` under its guard cut: every pattern over
     /// the support whose probe is refuted, and every pattern `known` refuted
-    /// already, which runs no probe. Counts the probes and the refutations.
+    /// already, which runs no probe.
     ///
     /// # Errors
     /// As [`Self::run`].
@@ -144,19 +152,19 @@ impl<'a> Probe<'a> {
         &mut self,
         target: Target<'_>,
         rows: Rows<'_>,
-        counts: &mut (u64, u64),
         scratch: &mut NarrowingScratch,
         cancellation: &Cancellation,
         meter: &mut Meter<'_, Q>,
-    ) -> Result<Table, Failure<Q::Error>> {
+    ) -> Result<Probed, Failure<Q::Error>> {
         let Target { group, known } = target;
         let mut forbidden = Words::<u64, _>::new([0; 4]);
+        let (mut run, mut refuted) = (0, 0);
         let support = &group.support.atoms[..group.support.len];
         let mut decisions = Vec::with_capacity(support.len() + 1);
         for pattern in 0..(1_usize << support.len()) {
             if known.contains(pattern) {
                 forbidden.insert(pattern);
-                counts.1 += 1;
+                refuted += 1;
                 continue;
             }
             decisions.clear();
@@ -167,12 +175,16 @@ impl<'a> Probe<'a> {
                     .enumerate()
                     .map(|(position, &atom)| (atom, pattern & (1 << position) != 0)),
             );
-            counts.0 += 1;
+            run += 1;
             if self.run(&decisions, rows, scratch, cancellation, meter)? {
                 forbidden.insert(pattern);
-                counts.1 += 1;
+                refuted += 1;
             }
         }
-        Ok(forbidden)
+        Ok(Probed {
+            table: forbidden,
+            run,
+            refuted,
+        })
     }
 }

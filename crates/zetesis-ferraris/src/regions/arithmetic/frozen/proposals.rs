@@ -10,7 +10,6 @@ use super::super::source::Support;
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(super) struct Clause {
     pub guard: usize,
-    pub rule: usize,
     /// Base atoms in ascending order, without repetition.
     pub support: Vec<usize>,
     /// Per support position: the clause is falsified when the atom is held.
@@ -23,8 +22,8 @@ pub(super) struct Clause {
 pub(super) struct Group {
     pub guard: usize,
     pub support: Support,
-    /// Per clause: its rule and the forbidden pattern, bit `i` for `support.atoms[i]`.
-    pub clauses: Vec<(usize, u8)>,
+    /// Per clause, the pattern it forbids: bit `i` for `support.atoms[i]`.
+    pub patterns: Vec<u8>,
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -41,10 +40,9 @@ pub(super) struct Proposals {
     /// Candidate guards: open atoms of the candidate heading at least two
     /// clause-shaped rules.
     pub guards: Vec<usize>,
-    /// Every clause reached, whatever its support's size.
-    pub clauses: Vec<Clause>,
     /// Parity groups: the clauses of a guard sharing a base support of at most
-    /// `MAX_SUPPORT` atoms.
+    /// `MAX_SUPPORT` atoms. A clause whose support is wider is counted and
+    /// dropped.
     pub parity: Vec<Group>,
     pub counts: ProposalCounts,
 }
@@ -90,7 +88,6 @@ struct Masked<'a> {
 /// A rule of a guard whose body is a conjunction over atoms, after dropping
 /// the conjuncts the closed root holds: the open conjuncts, in body order.
 struct Falsifier {
-    rule: usize,
     conjuncts: Vec<usize>,
 }
 
@@ -156,7 +153,7 @@ pub(super) fn propose<Q: Quota + ?Sized>(
         proposals.counts.guards += 1;
         for falsifier in falsifiers.drain(..) {
             if let Some(clause) = clause(masked, guard, &falsifier, budget)? {
-                admit(&mut proposals, clause, budget)?;
+                admit(&mut proposals, &clause, budget)?;
             }
         }
     }
@@ -196,10 +193,7 @@ fn falsifier<Q: Quota + ?Sized>(
     if unheld.is_empty() {
         return Ok(None);
     }
-    Ok(Some(Falsifier {
-        rule,
-        conjuncts: unheld,
-    }))
+    Ok(Some(Falsifier { conjuncts: unheld }))
 }
 
 /// Collect the atoms of a conjunction, read through nested conjunction nodes
@@ -277,7 +271,6 @@ fn clause<Q: Quota + ?Sized>(
     }
     Ok(Some(Clause {
         guard,
-        rule: falsifier.rule,
         support,
         held,
     }))
@@ -451,7 +444,7 @@ fn settle(masked: Masked<'_>, base: usize, complement: bool, reached: &mut Vec<R
 /// Record a clause, and its parity group when its support fits the table.
 fn admit<Q: Quota + ?Sized>(
     proposals: &mut Proposals,
-    clause: Clause,
+    clause: &Clause,
     budget: &mut Budget<'_, '_, Q>,
 ) -> Result<(), BudgetError<Q::Error>> {
     budget.charge(1)?;
@@ -477,38 +470,28 @@ fn admit<Q: Quota + ?Sized>(
             .position(|group| group.guard == clause.guard && group.support == support);
         budget.charge(proposals.parity.len() as u64 + 1)?;
         if let Some(index) = position {
-            proposals.parity[index].clauses.push((clause.rule, pattern));
+            proposals.parity[index].patterns.push(pattern);
         } else {
             proposals.counts.groups += 1;
             proposals.parity.push(Group {
                 guard: clause.guard,
                 support,
-                clauses: vec![(clause.rule, pattern)],
+                patterns: vec![pattern],
             });
         }
     }
-    proposals.clauses.push(clause);
     Ok(())
 }
 
 /// The proposals' retained bytes: headers and actual capacities.
 fn retained(proposals: &Proposals) -> u128 {
-    let clauses: u128 = proposals
-        .clauses
-        .iter()
-        .map(|clause| {
-            (clause.support.capacity() * size_of::<usize>() + clause.held.capacity()) as u128
-        })
-        .sum();
-    let groups: u128 = proposals
+    let patterns: u128 = proposals
         .parity
         .iter()
-        .map(|group| (group.clauses.capacity() * size_of::<(usize, u8)>()) as u128)
+        .map(|group| group.patterns.capacity() as u128)
         .sum();
     size_of::<Proposals>() as u128
         + (proposals.guards.capacity() * size_of::<usize>()) as u128
-        + (proposals.clauses.capacity() * size_of::<Clause>()) as u128
-        + clauses
         + (proposals.parity.capacity() * size_of::<Group>()) as u128
-        + groups
+        + patterns
 }

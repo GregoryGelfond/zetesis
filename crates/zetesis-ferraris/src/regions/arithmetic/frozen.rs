@@ -91,11 +91,19 @@ pub struct FrozenPreparationStatistics {
     pub status: PreparationStatus,
     /// Candidate guards proposed.
     pub guards: u64,
-    /// Guards whose probe reached the candidate: atoms cut at the root.
+    /// Guards cut at the root by their probe, which reached the candidate or
+    /// was refuted.
     pub saturation_units: u64,
+    /// Clause-shaped rules the proposal pass read under the candidate's
+    /// guards, whatever their support's width.
+    pub clauses: u64,
+    /// Clauses whose support exceeds the width a group may have, counted and
+    /// dropped.
+    pub unsupported_clauses: u64,
     /// Parity groups proposed.
     pub groups: u64,
-    /// Parity groups probed, under a unit guard.
+    /// Parity groups probed, under a guard the root cuts: a unit's, or one
+    /// the root cut already.
     pub probed_groups: u64,
     /// Probes run, unit probes included.
     pub probes: u64,
@@ -372,6 +380,8 @@ fn build<Q: Quota + ?Sized>(
         proposals?
     };
     statistics.guards = proposals.counts.guards;
+    statistics.clauses = proposals.counts.clauses;
+    statistics.unsupported_clauses = proposals.counts.unsupported_clauses;
     statistics.groups = proposals.counts.groups;
     if proposals.guards.is_empty() {
         return Ok(None);
@@ -481,7 +491,7 @@ fn known_refutations<Q: Quota + ?Sized>(
     for group in groups {
         let support = &group.support.atoms[..group.support.len];
         let mut refuted = Words::<u64, _>::new([0; 4]);
-        for &(_, pattern) in &group.clauses {
+        for &pattern in &group.patterns {
             meter.tick().map_err(from_meter)?;
             refuted.insert(usize::from(pattern));
         }
@@ -506,7 +516,7 @@ fn known_refutations<Q: Quota + ?Sized>(
             let mask = positions[..other.support.len]
                 .iter()
                 .fold(0_usize, |mask, &here| mask | (1 << here));
-            for &(_, forbidden) in &other.clauses {
+            for &forbidden in &other.patterns {
                 let value = (0..other.support.len)
                     .filter(|&k| forbidden & (1 << k) != 0)
                     .fold(0_usize, |value, k| value | (1 << positions[k]));
@@ -578,27 +588,25 @@ fn probe_rounds<Q: Quota + ?Sized>(
         {
             let mut meter = Meter::reserved(probing.lease);
             for &index in &pending {
-                let mut counts = (0, 0);
-                let forbidden = probe
+                let found = probe
                     .table(
                         probes::Target {
                             group: groups[index],
                             known: &known[index],
                         },
                         parity.as_ref(),
-                        &mut counts,
                         scratch,
                         probing.cancellation,
                         &mut meter,
                     )
                     .map_err(from_meter)?;
-                statistics.probes += counts.0;
-                progressed |= counts.1 > refuted[index];
-                refuted[index] = counts.1;
+                statistics.probes += found.run;
+                progressed |= found.refuted > refuted[index];
+                refuted[index] = found.refuted;
                 if tables.len() == index {
-                    tables.push((groups[index].support, forbidden));
+                    tables.push((groups[index].support, found.table));
                 } else {
-                    tables[index].1 = forbidden;
+                    tables[index].1 = found.table;
                 }
             }
             meter.refund();

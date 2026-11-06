@@ -400,6 +400,43 @@ fn gate(a: usize, i: usize, o: usize) -> Vec<Vec<(usize, bool)>> {
     .collect()
 }
 
+/// Every clause the proposals group, as its support with the pattern it
+/// forbids, sorted.
+fn clause_patterns(proposals: &Proposals) -> Vec<(Vec<usize>, u8)> {
+    let mut all: Vec<(Vec<usize>, u8)> = proposals
+        .parity
+        .iter()
+        .flat_map(|group| {
+            let support = group.support.atoms[..group.support.len].to_vec();
+            group
+                .patterns
+                .iter()
+                .map(move |&pattern| (support.clone(), pattern))
+        })
+        .collect();
+    all.sort();
+    all
+}
+
+/// Clauses written as a support and, per position, whether the atom is held
+/// when the clause is falsified, as the patterns they forbid, sorted.
+fn patterns_of(clauses: &[(Vec<usize>, Vec<bool>)]) -> Vec<(Vec<usize>, u8)> {
+    let mut all: Vec<(Vec<usize>, u8)> = clauses
+        .iter()
+        .map(|(support, held)| {
+            let pattern = held
+                .iter()
+                .enumerate()
+                .fold(0_u8, |bits, (position, &held)| {
+                    bits | (u8::from(held) << position)
+                });
+            (support.clone(), pattern)
+        })
+        .collect();
+    all.sort();
+    all
+}
+
 #[test]
 fn the_saturation_atom_is_proposed_as_a_guard() {
     let fixture = Saturation::build(3, &gate(0, 1, 2), &[]);
@@ -416,7 +453,7 @@ fn a_gates_four_clauses_form_one_group_over_its_y_atoms() {
     let group = &proposals.parity[0];
     assert_eq!(group.guard, fixture.valid);
     assert_eq!(&group.support.atoms[..group.support.len], &[0, 1, 2]);
-    let mut patterns: Vec<u8> = group.clauses.iter().map(|&(_, pattern)| pattern).collect();
+    let mut patterns = group.patterns.clone();
     patterns.sort_unstable();
     assert_eq!(patterns, vec![0b001, 0b010, 0b100, 0b111]);
     assert_eq!(proposals.counts.groups, 1);
@@ -432,24 +469,15 @@ fn a_pairwise_exclusion_is_proposed_per_pair() {
     ];
     let fixture = Saturation::build(3, &pairs, &[]);
     let proposals = fixture.propose();
-    let exclusions: Vec<(Vec<usize>, Vec<bool>)> = proposals
-        .clauses
-        .iter()
-        .map(|clause| (clause.support.clone(), clause.held.clone()))
-        .collect();
     assert_eq!(
-        exclusions,
-        vec![
-            (vec![0, 1], vec![true, true]),
-            (vec![0, 2], vec![true, true]),
-            (vec![1, 2], vec![true, true]),
-        ]
+        clause_patterns(&proposals),
+        vec![(vec![0, 1], 0b11), (vec![0, 2], 0b11), (vec![1, 2], 0b11)]
     );
     assert!(
         proposals
-            .clauses
+            .parity
             .iter()
-            .all(|clause| clause.guard == fixture.valid)
+            .all(|group| group.guard == fixture.valid)
     );
 }
 
@@ -461,22 +489,27 @@ fn a_support_beyond_k_max_is_dropped_and_counted() {
     assert_eq!(proposals.parity.len(), 1);
     assert_eq!(&proposals.parity[0].support.atoms[..2], &[0, 1]);
     assert_eq!(proposals.counts.unsupported_clauses, 1);
-    assert_eq!(proposals.clauses.len(), 2);
-    assert_eq!(proposals.clauses[0].support.len(), 9);
-    assert!(proposals.clauses[0].held.iter().all(|&held| !held));
+    assert_eq!(proposals.counts.clauses, 2);
+    // The receipt carries both counts, so a census tells a theory whose
+    // clauses are all too wide from one with no saturation shape.
+    let attempt = fixture.prepared();
+    assert_eq!(
+        (
+            attempt.statistics.clauses,
+            attempt.statistics.unsupported_clauses
+        ),
+        (2, 1)
+    );
 }
 
 #[test]
 fn proposals_read_only_nodes_true_in_the_candidate() {
     let fixture = Saturation::build(3, &gate(0, 1, 2), &[vec![(0, true), (1, false)]]);
     let proposals = fixture.propose();
-    assert_eq!(proposals.clauses.len(), 4);
-    assert!(
-        proposals
-            .clauses
-            .iter()
-            .all(|clause| clause.support == vec![0, 1, 2])
-    );
+    assert_eq!(proposals.counts.clauses, 4);
+    assert_eq!(proposals.parity.len(), 1);
+    assert_eq!(&proposals.parity[0].support.atoms[..3], &[0, 1, 2]);
+    assert_eq!(proposals.parity[0].patterns.len(), 4);
 }
 
 #[test]
@@ -573,7 +606,7 @@ fn parity_groups_under_an_open_guard_are_dropped() {
 }
 
 #[test]
-fn the_floor_covers_the_proposals_and_the_loading_and_the_probes_are_leased() {
+fn the_floor_is_exactly_the_preparations_unleased_share() {
     // The floor covers the proposal pass and the systems' loading; the
     // probes are leased on top, each at the root closure's cost plus one
     // index pass, which the receipt reports. A floor of exactly the unleased
@@ -763,18 +796,12 @@ fn a_nested_conjunction_body_is_read_through() {
     let mut budget = Budget::new(&mut meter, u64::MAX, usize::MAX, &cancellation);
     let proposals = propose(&theory, &producers, &candidate, &truth, &root, &mut budget).unwrap();
     assert_eq!(proposals.guards, vec![6]);
-    let mut supports: Vec<(Vec<usize>, Vec<bool>)> = proposals
-        .clauses
-        .iter()
-        .map(|clause| (clause.support.clone(), clause.held.clone()))
-        .collect();
-    supports.sort();
     assert_eq!(
-        supports,
-        vec![
+        clause_patterns(&proposals),
+        patterns_of(&[
             (vec![0, 1, 2], vec![false, true, false]),
             (vec![0, 1, 2], vec![true, true, true]),
-        ]
+        ])
     );
     assert_eq!(proposals.parity.len(), 1);
 }
@@ -861,18 +888,12 @@ fn an_unreadable_definition_decided_at_the_root_contributes_nothing() {
     let mut budget = Budget::new(&mut meter, u64::MAX, usize::MAX, &cancellation);
     let proposals = propose(&theory, &producers, &candidate, &truth, &root, &mut budget).unwrap();
     assert_eq!(proposals.guards, vec![valid]);
-    let mut supports: Vec<(Vec<usize>, Vec<bool>)> = proposals
-        .clauses
-        .iter()
-        .map(|clause| (clause.support.clone(), clause.held.clone()))
-        .collect();
-    supports.sort();
     assert_eq!(
-        supports,
-        vec![
+        clause_patterns(&proposals),
+        patterns_of(&[
             (vec![0, 1, 2], vec![false, false, true]),
             (vec![0, 1, 2], vec![true, true, true]),
-        ]
+        ])
     );
     assert_eq!(proposals.parity.len(), 1);
 }
@@ -969,19 +990,10 @@ fn fact_bodies_and_guarded_disjunctions_do_not_split_the_groups() {
     // absent from the reduct, leaves the literal atom one live definition.
     let plain = Saturation::build(3, &gate(0, 1, 2), &[]);
     let grounded = Saturation::build_with(3, &gate(0, 1, 2), &[], &[], true);
-    let expected: Vec<(Vec<usize>, Vec<bool>)> = plain
-        .propose()
-        .clauses
-        .iter()
-        .map(|clause| (clause.support.clone(), clause.held.clone()))
-        .collect();
-    let actual: Vec<(Vec<usize>, Vec<bool>)> = grounded
-        .propose()
-        .clauses
-        .iter()
-        .map(|clause| (clause.support.clone(), clause.held.clone()))
-        .collect();
-    assert_eq!(actual, expected);
+    assert_eq!(
+        clause_patterns(&grounded.propose()),
+        clause_patterns(&plain.propose())
+    );
     assert_eq!(grounded.propose().parity.len(), 1);
     let attempt = grounded.prepared();
     assert_eq!(attempt.statistics.parity.rows, 1);
@@ -996,8 +1008,7 @@ fn a_deeply_nested_conjunction_is_read_through() {
     let wide: Vec<(usize, bool)> = (0..9).map(|j| (j, j % 2 == 0)).collect();
     let fixture = Saturation::build_with(9, &[wide, vec![(0, true), (1, true)]], &[], &[], true);
     let proposals = fixture.propose();
-    assert_eq!(proposals.clauses.len(), 2);
-    assert_eq!(proposals.clauses[0].support, (0..9).collect::<Vec<_>>());
+    assert_eq!(proposals.counts.clauses, 2);
     assert_eq!(proposals.counts.unsupported_clauses, 1);
     assert_eq!(proposals.parity.len(), 1);
 }

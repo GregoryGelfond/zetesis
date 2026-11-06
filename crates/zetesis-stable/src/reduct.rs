@@ -47,14 +47,20 @@ pub struct ReductStatistics {
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 #[non_exhaustive]
 pub struct InnerPreparationStatistics {
-    /// Candidates whose query root closed without refutation and were offered a preparation.
+    /// Query roots prepared — the inline root, a served root or a residual
+    /// root — after a closure that did not refute them.
     pub attempts: u64,
-    /// Preparations that installed units or rows.
+    /// Preparations that installed units, rows or bounds.
     pub prepared: u64,
     /// Preparations the lease declined; their walk proceeded without one.
     pub declined: u64,
-    /// Guards whose probe reached the candidate: atoms cut at the query root.
+    /// Guards cut at the query root by their probe, which reached the candidate
+    /// or was refuted.
     pub saturation_units: u64,
+    /// Clause-shaped rules the proposal pass read under the candidates' guards.
+    pub clauses: u64,
+    /// Clauses whose support exceeds the width a group may have, dropped.
+    pub unsupported_clauses: u64,
     /// Parity groups proposed.
     pub groups: u64,
     /// Probes run.
@@ -109,6 +115,8 @@ impl InnerPreparationStatistics {
             prepared,
             declined,
             saturation_units: attempt.saturation_units,
+            clauses: attempt.clauses,
+            unsupported_clauses: attempt.unsupported_clauses,
             groups: attempt.groups,
             probes: attempt.probes,
             rounds: attempt.rounds,
@@ -136,6 +144,8 @@ impl InnerPreparationStatistics {
             (&mut self.prepared, other.prepared),
             (&mut self.declined, other.declined),
             (&mut self.saturation_units, other.saturation_units),
+            (&mut self.clauses, other.clauses),
+            (&mut self.unsupported_clauses, other.unsupported_clauses),
             (&mut self.groups, other.groups),
             (&mut self.probes, other.probes),
             (&mut self.rounds, other.rounds),
@@ -166,6 +176,10 @@ impl InnerPreparationStatistics {
             prepared: self.prepared.saturating_add(other.prepared),
             declined: self.declined.saturating_add(other.declined),
             saturation_units: self.saturation_units.saturating_add(other.saturation_units),
+            clauses: self.clauses.saturating_add(other.clauses),
+            unsupported_clauses: self
+                .unsupported_clauses
+                .saturating_add(other.unsupported_clauses),
             groups: self.groups.saturating_add(other.groups),
             probes: self.probes.saturating_add(other.probes),
             rounds: self.rounds.saturating_add(other.rounds),

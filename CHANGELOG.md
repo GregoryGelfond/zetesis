@@ -22,8 +22,8 @@ Notable changes by release. Versions follow Semantic Versioning.
   `ParitySystem::consistent_in_reserved`; zetesis-stable adds
   `ReductStatistics::inner_preparation` (`InnerPreparationStatistics`),
   printed as the `preparation` object of `reduct_query_regions` in the JSON
-  statistics: attempts, prepared, declined, saturation units, groups, probes,
-  rounds, refuted patterns, rows, rank, units, inexact hulls, bounds, lower,
+  statistics: attempts, prepared, declined, saturation units, clauses read and
+  unsupported clauses, groups, probes, rounds, refuted patterns, rows, rank, units, inexact hulls, bounds, lower,
   upper, families, root refutations and work. The Lean library adds
   `Region.decideAll`, `contains_decideAll`, `entailed_by_refutations`,
   `saturation_unit`, `countermodelSubjects`, `count_of_none`,

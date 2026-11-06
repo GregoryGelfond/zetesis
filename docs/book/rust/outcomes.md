@@ -86,10 +86,14 @@ Its `preparation` object reports the candidates' inner preparations, summed
 over the solve. Before a candidate's countermodel walk, its closed query root
 is probed for rows of the countermodel class, consequences of the frozen reduct
 alone, which the walk then applies beside the frozen reading. The object counts
-the `attempts` (candidates whose query root closed and were offered a
-preparation), the `prepared` and the `declined` (the lease declined; the walk
-proceeded without one), the `saturation_units` (guards cut at the root because
-holding them reaches the candidate), the clause `groups` proposed, the `probes`
+the `attempts` (query roots prepared — the inline root, a served root or a
+residual root — after a closure that did not refute them), the `prepared`
+(preparations that installed units, rows or bounds) and the `declined` (the
+lease declined; the walk proceeded without one), the `saturation_units` (guards
+cut at the root by their probe, which reached the candidate or was refuted), the
+`clauses` the proposal pass read under the candidates' guards and the
+`unsupported_clauses` among them whose support is too wide for a group, the
+clause `groups` proposed, the `probes`
 run (narrowings of the closed root with a guard and a pattern decided, the
 units' included), the probing `rounds`, the `refuted_patterns`, the parity
 `rows` loaded with their echelon `rank` and the one-atom `units` seeding the

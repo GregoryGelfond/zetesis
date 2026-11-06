@@ -878,6 +878,8 @@ fn search_statistics(
     out.number_field("prepared", preparation.prepared)?;
     out.number_field("declined", preparation.declined)?;
     out.number_field("saturation_units", preparation.saturation_units)?;
+    out.number_field("clauses", preparation.clauses)?;
+    out.number_field("unsupported_clauses", preparation.unsupported_clauses)?;
     out.number_field("groups", preparation.groups)?;
     out.number_field("probes", preparation.probes)?;
     out.number_field("rounds", preparation.rounds)?;

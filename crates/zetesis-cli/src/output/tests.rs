@@ -56,6 +56,8 @@ fn inner_preparation_json_lists_every_receipt() {
     reduct.inner_preparation.prepared = 3;
     reduct.inner_preparation.declined = 1;
     reduct.inner_preparation.saturation_units = 3;
+    reduct.inner_preparation.clauses = 121;
+    reduct.inner_preparation.unsupported_clauses = 1;
     reduct.inner_preparation.groups = 30;
     reduct.inner_preparation.probes = 243;
     reduct.inner_preparation.rounds = 5;
@@ -85,6 +87,8 @@ fn inner_preparation_json_lists_every_receipt() {
             "prepared": 3,
             "declined": 1,
             "saturation_units": 3,
+            "clauses": 121,
+            "unsupported_clauses": 1,
             "groups": 30,
             "probes": 243,
             "rounds": 5,
