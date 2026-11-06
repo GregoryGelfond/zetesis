@@ -104,8 +104,8 @@ struct Falsifier {
 /// of a two-atom disjunctive root being read as the lower disjunct, through
 /// its complement when it is the higher. A clause whose chain leaves the
 /// candidate, reads the same base with both polarities, or runs deeper than
-/// `MAX_CHAIN` proposes nothing; a support wider than `MAX_SUPPORT` is kept as
-/// a clause and counted as unsupported for parity.
+/// `MAX_CHAIN` proposes nothing; a support wider than `MAX_SUPPORT` is counted
+/// as a clause and as unsupported, and proposes no group.
 ///
 /// # Errors
 /// The budget's refusals; a producer set of another theory stops as an
