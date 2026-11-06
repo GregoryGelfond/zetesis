@@ -124,11 +124,16 @@ fn solve(program: &str) -> Receipt {
 
 /// Solve at `workers` threads.
 fn solve_with(program: &str, workers: u64) -> Receipt {
+    solve_on(program, "cpu", workers)
+}
+
+/// Solve on `backend` at `workers` threads.
+fn solve_on(program: &str, backend: &str, workers: u64) -> Receipt {
     let workers = workers.to_string();
     let options = Options::try_parse_from([
         "zetesis",
         "--backend",
-        "cpu",
+        backend,
         "--oracle",
         "countermodel",
         "--grounder",
@@ -427,5 +432,30 @@ fn g_door_inner_b_inner_regions_grow_polynomially() {
                 family.name
             );
         }
+    }
+}
+
+/// Each family's smallest size through the batched completion on `backend`:
+/// the device proposes the candidates and the countermodel oracle checks
+/// them with exact CPU residuals, each residual query prepared from its own
+/// root. The family is the CPU walk's, and the residual roots prepare.
+/// The device checks in `formula_gpu` call it, so it is compiled with them.
+#[cfg(feature = "gpu")]
+pub(crate) fn qualify_batched_completion(backend: &str) {
+    for family in [PARITY, TSEITIN, PIGEONHOLE] {
+        let size = family.sizes[0];
+        let program = family.program(size);
+        let cpu = solve(&program);
+        let device = solve_on(&program, backend, 1);
+        assert_eq!(
+            device.family, cpu.family,
+            "{} {size} on {backend}",
+            family.name
+        );
+        assert!(
+            count(&device.preparation, "prepared") > 0,
+            "{} {size} on {backend}: no residual root prepared",
+            family.name
+        );
     }
 }
