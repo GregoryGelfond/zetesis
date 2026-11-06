@@ -380,6 +380,18 @@ fn the_series_families_agree_at_fourteen_workers() {
 }
 
 #[test]
+#[ignore = "requires clingo: a pigeonhole past the group width is decided at its stable candidate's root"]
+fn a_pigeonhole_past_the_group_width_is_decided_at_the_root() {
+    // Nine holes: each pigeon's clause is wider than a group may be, so its
+    // lower bound of one is read off the clause, and the double count
+    // refutes the stable candidate's root as it does for eight holes.
+    let receipt = checked(PIGEONHOLE, 9);
+    let p = &receipt.preparation;
+    assert!(count(p, "unsupported_clauses") > 0);
+    assert_eq!(count(p, "root_refuted"), receipt.models);
+}
+
+#[test]
 #[ignore = "requires clingo: every stable candidate of the series is refuted at its query root"]
 fn g_door_inner_a_stable_candidates_are_root_refuted() {
     for family in [PARITY, TSEITIN, PIGEONHOLE] {
