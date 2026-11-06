@@ -67,7 +67,8 @@ impl PreparationLimits {
 /// Whether a complete immutable preparation was published.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum PreparationStatus {
-    /// The stage has not run, including after an earlier absorbing refutation.
+    /// The stage has not run, or ran and found nothing to publish: an earlier
+    /// absorbing refutation, no proposal, or nothing to install.
     #[default]
     NotPrepared,
     /// Complete checked rows and their root result are available.

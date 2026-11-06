@@ -58,16 +58,20 @@ pub struct ClosedQuery<'a> {
     pub closure_work: u64,
 }
 
-/// The lease of one candidate's preparation: crossing it declines the whole
-/// preparation and installs nothing.
+/// The lease of one candidate's preparation: a floor, and one allowance per
+/// probe run; crossing the lease declines the whole preparation and installs
+/// nothing.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct FrozenPreparationLimits {
     /// Word operations, charged to the caller's account as performed: the
-    /// floor, which must cover the proposal pass, the refutations read off the
-    /// clauses before probing, and the rows' loading, the one ceiling on the
-    /// preparation's work, held by its lease across every phase. The probes are leased on top, each the root closure's own cost
-    /// plus one pass over the index (`ClosedQuery::closure_work`), as a probe
-    /// narrows that closed root again with a few more decisions.
+    /// floor of the lease, which must cover the proposal pass, the
+    /// refutations read off the clauses before probing, and the rows'
+    /// loading. Each probe run extends the lease by one allowance, the root
+    /// closure's own cost plus one pass over the index
+    /// (`ClosedQuery::closure_work`), as a probe narrows that closed root
+    /// again with a few more decisions. The lease, floor plus allowances, is
+    /// the one ceiling on the preparation's work, held across every phase;
+    /// the preparation's work exceeds the floor whenever a probe runs.
     pub work: u64,
     /// Peak simultaneous named bytes.
     pub bytes: usize,
@@ -107,7 +111,8 @@ pub struct FrozenPreparationStatistics {
     pub probed_groups: u64,
     /// Probes run, unit probes included.
     pub probes: u64,
-    /// Patterns whose probe was refuted.
+    /// Patterns forbidden: by a probe that was refuted, or read off the
+    /// group's clauses before probing, which runs none for them.
     pub refuted_patterns: u64,
     /// Probed groups whose allowed patterns are not themselves affine.
     pub inexact_hulls: u64,

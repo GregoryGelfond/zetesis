@@ -41,9 +41,9 @@ pub struct ReductStatistics {
     pub inner_preparation: InnerPreparationStatistics,
 }
 
-/// Cumulative receipts of the candidates' inner preparations: the parity rows
-/// and units of each candidate's countermodel class, probed from its closed
-/// query root before its walk.
+/// Cumulative receipts of the candidates' inner preparations: the saturation
+/// units, the parity rows and the count bounds of each candidate's
+/// countermodel class, probed from its closed query root before its walk.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 #[non_exhaustive]
 pub struct InnerPreparationStatistics {
@@ -68,7 +68,8 @@ pub struct InnerPreparationStatistics {
     /// Probing rounds run: one by the frozen reading alone per preparation,
     /// each further one under the rows the round before established.
     pub rounds: u64,
-    /// Patterns whose probe was refuted.
+    /// Patterns forbidden: by a probe that was refuted, or read off the
+    /// group's clauses before probing, which runs none for them.
     pub refuted_patterns: u64,
     /// Parity rows loaded.
     pub rows: u64,

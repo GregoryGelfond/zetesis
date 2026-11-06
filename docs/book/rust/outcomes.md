@@ -95,9 +95,10 @@ cut at the root by their probe, which reached the candidate or was refuted), the
 `unsupported_clauses` among them whose support is too wide for a group, the
 clause `groups` proposed, the `probes`
 run (narrowings of the closed root with a guard and a pattern decided, the
-units' included), the probing `rounds`, the `refuted_patterns`, the parity
-`rows` loaded with their echelon `rank` and the one-atom `units` seeding the
-root, the `inexact_hulls`, the count `bounds` loaded (a table's least and
+units' included), the probing `rounds`, the `refuted_patterns` (forbidden by a
+refuted probe, or read off the group's clauses before probing, which runs none
+for them), the parity `rows` loaded with their echelon `rank` and the one-atom
+`units` seeding the root, the `inexact_hulls`, the count `bounds` loaded (a table's least and
 greatest allowed counts, a clique's, and the trivial bounds completing a
 partition), by side as `lower` and `upper`, the `families` whose double count
 the walk compares, the preparations `root_refuted` (candidates decided stable
