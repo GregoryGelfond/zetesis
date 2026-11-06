@@ -439,7 +439,7 @@ fn build<Q: Quota + ?Sized>(
         &mut Probing {
             lease,
             allowance,
-            limits,
+            bytes: limits.bytes,
             cancellation,
         },
         statistics,
@@ -474,7 +474,7 @@ type Systems = (Option<ParitySystem>, Option<CardinalitySystem>);
 struct Probing<'l, 'q, Q: Quota + ?Sized> {
     lease: &'l mut Leased<'q, Q>,
     allowance: u64,
-    limits: FrozenPreparationLimits,
+    bytes: usize,
     cancellation: &'l Cancellation,
 }
 
@@ -627,12 +627,7 @@ fn probe_rounds<Q: Quota + ?Sized>(
         }
         let loaded = {
             let mut meter = Meter::reserved(probing.lease);
-            let mut budget = Budget::new(
-                &mut meter,
-                u64::MAX,
-                probing.limits.bytes,
-                probing.cancellation,
-            );
+            let mut budget = Budget::new(&mut meter, u64::MAX, probing.bytes, probing.cancellation);
             let loaded = load(theory, &tables, statistics, &mut budget);
             *peak = (*peak).max(budget.peak_bytes());
             budget.finish();
@@ -681,7 +676,7 @@ fn load<Q: Quota + ?Sized>(
     }
     let mut storage = Storage::default();
     let mut inexact = Vec::new();
-    let (facts, mut recognized_equations, mut counts) =
+    let (facts, mut recognized_equations, counts) =
         budget.in_phase(Phase::Recognition, |budget| {
             storage.admit_record(
                 (size_of::<rows::Recognized>()
@@ -743,7 +738,6 @@ fn load<Q: Quota + ?Sized>(
                 budget,
             )
         })?;
-        counts.groups = tables.len() as u64;
         let recognized = rows::Recognized {
             facts,
             clauses: Vec::new(),
