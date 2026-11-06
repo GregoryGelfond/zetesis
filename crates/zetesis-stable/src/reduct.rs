@@ -69,7 +69,8 @@ pub struct InnerPreparationStatistics {
     /// each further one under the rows the round before established.
     pub rounds: u64,
     /// Patterns forbidden: by a probe that was refuted, or read off the
-    /// group's clauses before probing, which runs none for them.
+    /// clauses of the group, or of a group whose support it contains, before
+    /// probing, which runs none for them.
     pub refuted_patterns: u64,
     /// Parity rows loaded.
     pub rows: u64,
