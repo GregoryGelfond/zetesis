@@ -2678,8 +2678,13 @@ and in a later round by the frozen subject composed with the row subjects of the
 and so their joint closure (`Algebra.joint_sound`), the complete consistency check of those rows entering as a refuting
 subject of the class (a `0 = 1` combination under the region's decisions is a sum of class equations,
 `AlgebraicRows.equation_sum`, every variable of which the region decides, `equation_excludes_given` and
-`excludes_region`); so a refuted probe is the premise of `entailed_by_refutations` with that round's subject as `s`. A
-unit's probe narrows the closed root, `s.narrow (query M)`, with the guard held, where `saturation_unit` quantifies over
+`excludes_region`); so a refuted probe is the premise of `entailed_by_refutations` with that round's subject as `s`. The
+patterns a clause of the group forbids, and those whose restriction to a group whose support this one contains is such
+a pattern, are marked refuted without a probe: the region deciding such a pattern lies in the closed root, so a member
+of the class in it satisfies the clause's body under the pattern (the clause's rule and the chains to its base standing
+in the reduct, their bodies true in the candidate, as the proposal pass reads them) and holds the clause's guard, which
+every member excludes since the root cuts it; the region holds no member, nor does its narrowing inside it, which is the
+same premise. A unit's probe narrows the closed root, `s.narrow (query M)`, with the guard held, where `saturation_unit` quantifies over
 the raw query root with the guard held: a countermodel in the law's region holds the guard and lies in `query M`, so by
 the frozen subject's soundness it lies in the closed root and, holding the guard, in the probed region, which is how a
 probe that reaches the candidate or is refuted discharges the law's premise. A parity row or a count bound is installed only

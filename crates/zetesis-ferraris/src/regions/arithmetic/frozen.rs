@@ -480,11 +480,17 @@ struct Probing<'l, 'q, Q: Quota + ?Sized> {
 
 /// The patterns of each group refuted before any probe runs: those a clause
 /// of the group forbids, and those whose restriction to a group whose
-/// support this one contains is a pattern that group's clauses forbid. A
-/// probe of such a pattern would find the clause's own refutation, since
-/// every admitted group's guard is cut at the root; the table records it
-/// without running the probe. One word operation is charged to the floor per
-/// clause read, per pair of groups compared and per pattern examined.
+/// support this one contains is a pattern that group's clauses forbid. The
+/// region deciding such a pattern holds no member of the class: a member in
+/// it lies in the closed root, so under the pattern it satisfies the clause's
+/// body (the clause's rule and the chains to its base standing in the reduct,
+/// their bodies true in the candidate, as the proposal pass reads them) and
+/// holds the clause's guard, which every member excludes, the root cutting
+/// it; the narrowing of that region, inside it, holds none either, which is
+/// the premise `entailed_by_refutations` asks of a refuted pattern. The table
+/// records it without running the probe. One word operation is charged to
+/// the floor per clause read, per pair of groups compared and per pattern
+/// examined.
 ///
 /// # Errors
 /// The lease's refusal.
