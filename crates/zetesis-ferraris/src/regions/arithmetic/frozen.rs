@@ -513,6 +513,15 @@ struct ProbedGroup {
     forbidden: probes::Table,
 }
 
+/// The patterns `table` forbids.
+fn count_forbidden(table: &probes::Table) -> u64 {
+    table
+        .storage()
+        .iter()
+        .map(|word| u64::from(word.count_ones()))
+        .sum()
+}
+
 /// The patterns of each group refuted before any probe runs: those a clause
 /// of the group forbids, and those whose restriction to a group whose
 /// support this one contains is a pattern that group's clauses forbid. The
@@ -637,15 +646,7 @@ fn probe_rounds<Q: Quota + ?Sized>(
         let probes: u64 = pending
             .iter()
             .filter(|&&index| !settled_by_clause(index))
-            .map(|&index| {
-                let patterns = 1_u64 << groups[index].support.len;
-                let settled: u64 = known[index]
-                    .storage()
-                    .iter()
-                    .map(|word| u64::from(word.count_ones()))
-                    .sum();
-                patterns - settled
-            })
+            .map(|&index| (1_u64 << groups[index].support.len) - count_forbidden(&known[index]))
             .sum();
         probing
             .lease
@@ -656,7 +657,7 @@ fn probe_rounds<Q: Quota + ?Sized>(
             for &index in &pending {
                 if settled_by_clause(index) {
                     tables[index].forbidden = Words::new(*known[index].storage());
-                    refuted[index] = 1;
+                    refuted[index] = count_forbidden(&known[index]);
                     progressed = true;
                     continue;
                 }

@@ -577,6 +577,26 @@ fn a_pattern_holding_an_excluded_pair_needs_no_probe() {
 }
 
 #[test]
+fn a_lone_clause_counts_every_pattern_its_group_is_known_to_forbid() {
+    // Each clause forbids the pattern with none of its atoms held and is
+    // alone in its group, so the first round leaves both to their clauses,
+    // and no later round runs without a parity row. The narrower clause's
+    // support lies inside the wider's: the wider group's table forbids its
+    // own clause's pattern and the narrower clause's two over its support,
+    // the third atom held or not, one of them the same, so two patterns; the
+    // narrower group's forbids one.
+    let clauses = vec![
+        vec![(0, false), (1, false), (2, false)],
+        vec![(0, false), (1, false)],
+    ];
+    let fixture = Saturation::build(3, &clauses, &[]);
+    let attempt = fixture.prepared();
+    assert!(attempt.result.unwrap().is_some());
+    assert_eq!(attempt.statistics.rounds, 1);
+    assert_eq!(attempt.statistics.refuted_patterns, 2 + 1);
+}
+
+#[test]
 fn a_dropped_clause_leaves_an_inexact_hull_and_no_row() {
     let mut clauses = gate(0, 1, 2);
     clauses.pop();
