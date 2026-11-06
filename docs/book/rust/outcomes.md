@@ -92,7 +92,8 @@ residual root — after a closure that did not refute them), the `prepared`
 lease declined; the walk proceeded without one), the `saturation_units` (guards
 cut at the root by their probe, which reached the candidate or was refuted), the
 `clauses` the proposal pass read under the candidates' guards and the
-`unsupported_clauses` among them whose support is too wide for a group, the
+`unsupported_clauses` among them whose support is too wide for a group, an
+all-cut one still bounding its support from below by one, the
 clause `groups` proposed, the `probes`
 run (narrowings of the closed root with a guard and a pattern decided, the
 units' included), the probing `rounds`, the `refuted_patterns` (forbidden by a

@@ -10,8 +10,8 @@ Notable changes by release. Versions follow Semantic Versioning.
   a candidate's countermodel walk, its closed query root is probed for rows of
   the countermodel class: the saturation units it cuts, the affine hulls and
   the least and greatest allowed counts of each clause group's probed patterns,
-  the cliques of pairwise exclusions, and the trivial bounds completing a
-  partition. They load into the same parity and cardinality systems the
+  the cliques of pairwise exclusions, a lower bound of one over a clause too
+  wide for a group, and the trivial bounds completing a partition. They load into the same parity and cardinality systems the
   candidate walk uses and apply through the walk's joint closure, so the
   quantified saturation cores (parity, Tseitin, pigeonhole) are decided at the
   root for their stable candidates and walked polynomially for the others. The

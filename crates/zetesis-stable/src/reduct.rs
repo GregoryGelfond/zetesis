@@ -59,7 +59,9 @@ pub struct InnerPreparationStatistics {
     pub saturation_units: u64,
     /// Clause-shaped rules the proposal pass read under the candidates' guards.
     pub clauses: u64,
-    /// Clauses whose support exceeds the width a group may have, dropped.
+    /// Clauses whose support exceeds the width a group may have: they propose
+    /// no group, and one whose pattern cuts its whole support bounds it from
+    /// below by one.
     pub unsupported_clauses: u64,
     /// Parity groups proposed.
     pub groups: u64,

@@ -8,10 +8,12 @@
 //! `Zetesis.Algebra.entailed_by_refutations`. A pattern a clause of its group
 //! forbids is refuted without a probe, on the proposal pass's reading of the
 //! clause, a trusted computation that discharges the same premise
-//! (`known_refutations`). A saturation guard whose probe reaches the
-//! candidate is a unit (`Zetesis.Algebra.saturation_unit`). The preparation is
-//! built from the theory and the candidate, under its own lease of the
-//! caller's account, and belongs to that candidate alone.
+//! (`known_refutations`). A clause too wide for a group whose pattern cuts its
+//! whole support bounds it from below by one on the same reading
+//! (`Zetesis.AlgebraicRows.lower_of_clause`). A saturation guard whose probe
+//! reaches the candidate is a unit (`Zetesis.Algebra.saturation_unit`). The
+//! preparation is built from the theory and the candidate, under its own
+//! lease of the caller's account, and belongs to that candidate alone.
 
 mod counts;
 mod probes;
@@ -104,8 +106,9 @@ pub struct FrozenPreparationStatistics {
     /// Clause-shaped rules the proposal pass read under the candidate's
     /// guards, whatever their support's width.
     pub clauses: u64,
-    /// Clauses whose support exceeds the width a group may have, counted and
-    /// dropped.
+    /// Clauses whose support exceeds the width a group may have: they propose
+    /// no group, and one whose pattern cuts its whole support bounds it from
+    /// below by one.
     pub unsupported_clauses: u64,
     /// Parity groups proposed.
     pub groups: u64,
@@ -400,7 +403,10 @@ fn build<Q: Quota + ?Sized>(
         probes::Probe::new(query.narrower, query.subject, query.region, query.knowledge);
     *peak = (*peak).max(probe.retained_bytes());
     let mut units = Vec::new();
-    let mut groups = Vec::new();
+    let mut admitted = Admitted {
+        groups: Vec::new(),
+        wide: Vec::new(),
+    };
     let allowance = query.closure_work.saturating_add(probe.narrower_work());
     let open_guards = proposals
         .guards
@@ -430,14 +436,14 @@ fn build<Q: Quota + ?Sized>(
                 units.push(guard);
                 statistics.saturation_units += 1;
             }
-            groups.extend(proposals.parity.iter().filter(|group| group.guard == guard));
+            admitted.admit_guard(&proposals, guard);
         }
         meter.refund();
     }
-    statistics.probed_groups = groups.len() as u64;
+    statistics.probed_groups = admitted.groups.len() as u64;
     let (parity, cardinality) = probe_rounds(
         theory,
-        &groups,
+        &admitted,
         &mut probe,
         scratch,
         &mut Probing {
@@ -480,6 +486,24 @@ struct Probing<'l, 'q, Q: Quota + ?Sized> {
     allowance: u64,
     bytes: usize,
     cancellation: &'l Cancellation,
+}
+
+/// What the root admits under the guards it cuts: the groups to probe, and
+/// the clauses too wide for a group whose pattern cuts their whole support,
+/// each a lower bound of one over it.
+struct Admitted<'p> {
+    groups: Vec<&'p proposals::Group>,
+    wide: Vec<&'p proposals::Wide>,
+}
+
+impl<'p> Admitted<'p> {
+    /// Admit the groups and wide clauses of a guard the root cuts.
+    fn admit_guard(&mut self, proposals: &'p proposals::Proposals, guard: usize) {
+        self.groups
+            .extend(proposals.parity.iter().filter(|group| group.guard == guard));
+        self.wide
+            .extend(proposals.wide.iter().filter(|clause| clause.guard == guard));
+    }
 }
 
 /// A probed group's table over its support: the patterns found forbidden,
@@ -578,13 +602,14 @@ const MAX_ROUNDS: u64 = 2;
 /// preparation's.
 fn probe_rounds<Q: Quota + ?Sized>(
     theory: &Theory,
-    groups: &[&proposals::Group],
+    admitted: &Admitted<'_>,
     probe: &mut probes::Probe<'_>,
     scratch: &mut NarrowingScratch,
     probing: &mut Probing<'_, '_, Q>,
     statistics: &mut FrozenPreparationStatistics,
     peak: &mut u128,
 ) -> Result<Systems, BudgetError<LeaseRefusal<Q::Error>>> {
+    let groups = &admitted.groups[..];
     let mut parity: Option<ParitySystem> = None;
     let mut cardinality: Option<CardinalitySystem> = None;
     let mut tables: Vec<ProbedGroup> = groups
@@ -640,14 +665,7 @@ fn probe_rounds<Q: Quota + ?Sized>(
             }
             meter.refund();
         }
-        let loaded = {
-            let mut meter = Meter::reserved(probing.lease);
-            let mut budget = Budget::new(&mut meter, u64::MAX, probing.bytes, probing.cancellation);
-            let loaded = load(theory, &tables, statistics, &mut budget);
-            *peak = (*peak).max(budget.peak_bytes());
-            budget.finish();
-            loaded?
-        };
+        let loaded = load_round(theory, &tables, &admitted.wide, probing, statistics, peak)?;
         parity = loaded.parity;
         cardinality = loaded.cardinality;
         pending = loaded.inexact;
@@ -660,8 +678,32 @@ fn probe_rounds<Q: Quota + ?Sized>(
             break;
         }
     }
+    if statistics.rounds == 0 && !admitted.wide.is_empty() {
+        // No group to probe: the wide clauses' bounds load alone.
+        let loaded = load_round(theory, &tables, &admitted.wide, probing, statistics, peak)?;
+        parity = loaded.parity;
+        cardinality = loaded.cardinality;
+    }
     statistics.refuted_patterns = refuted.iter().sum();
     Ok((parity, cardinality))
+}
+
+/// Load a round's systems from `tables` and the `wide` clauses' bounds, the
+/// lease bounding work and the budget bytes.
+fn load_round<Q: Quota + ?Sized>(
+    theory: &Theory,
+    tables: &[ProbedGroup],
+    wide: &[&proposals::Wide],
+    probing: &mut Probing<'_, '_, Q>,
+    statistics: &mut FrozenPreparationStatistics,
+    peak: &mut u128,
+) -> Result<Loaded, BudgetError<LeaseRefusal<Q::Error>>> {
+    let mut meter = Meter::reserved(probing.lease);
+    let mut budget = Budget::new(&mut meter, u64::MAX, probing.bytes, probing.cancellation);
+    let loaded = load(theory, tables, wide, statistics, &mut budget);
+    *peak = (*peak).max(budget.peak_bytes());
+    budget.finish();
+    loaded
 }
 
 /// What a round loaded: the parity and counting systems, when any row or
@@ -674,15 +716,16 @@ struct Loaded {
 
 /// The systems of the probed groups: the parity system of each table's
 /// affine hull, every equation checked against its table and eliminated to
-/// echelon form, and the counting system of the tables' bounds; with the
-/// indices of the tables whose hull is inexact.
+/// echelon form, and the counting system of the tables' bounds and the wide
+/// clauses'; with the indices of the tables whose hull is inexact.
 fn load<Q: Quota + ?Sized>(
     theory: &Theory,
     tables: &[ProbedGroup],
+    wide: &[&proposals::Wide],
     statistics: &mut FrozenPreparationStatistics,
     budget: &mut Budget<'_, '_, Q>,
 ) -> Result<Loaded, BudgetError<Q::Error>> {
-    if tables.is_empty() {
+    if tables.is_empty() && wide.is_empty() {
         return Ok(Loaded {
             parity: None,
             cardinality: None,
@@ -768,7 +811,7 @@ fn load<Q: Quota + ?Sized>(
         statistics.parity = ParityStatistics::from_preparation(&recognized, &prepared, budget);
         Some(ParitySystem::from_rows(recognized, prepared))
     };
-    let cardinality = load_counts(theory, tables, statistics, &mut storage, budget)?;
+    let cardinality = load_counts(theory, tables, wide, statistics, &mut storage, budget)?;
     Ok(Loaded {
         parity,
         cardinality,
@@ -776,12 +819,13 @@ fn load<Q: Quota + ?Sized>(
     })
 }
 
-/// The counting system of the tables' bounds, when any was found: the
-/// bounds proposed from the tables, their families prepared and the root's
-/// double count taken, as the outer preparation takes them.
+/// The counting system of the tables' bounds and the wide clauses', when
+/// any was found: the bounds proposed, their families prepared and the
+/// root's double count taken, as the outer preparation takes them.
 fn load_counts<Q: Quota + ?Sized>(
     theory: &Theory,
     tables: &[ProbedGroup],
+    wide: &[&proposals::Wide],
     statistics: &mut FrozenPreparationStatistics,
     storage: &mut Storage,
     budget: &mut Budget<'_, '_, Q>,
@@ -789,7 +833,7 @@ fn load_counts<Q: Quota + ?Sized>(
     let mut counted = CardinalityStatistics::default();
     let start = budget.work();
     let bounds = budget.in_phase(Phase::Recognition, |budget| {
-        counts::propose(theory, tables, &mut counted, storage, budget)
+        counts::propose(theory, tables, wide, &mut counted, storage, budget)
     })?;
     budget.charge(1)?;
     if bounds.is_empty() {

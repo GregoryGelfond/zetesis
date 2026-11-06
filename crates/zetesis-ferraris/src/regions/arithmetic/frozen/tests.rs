@@ -486,11 +486,14 @@ fn a_pairwise_exclusion_is_proposed_per_pair() {
 }
 
 #[test]
-fn a_support_beyond_k_max_is_dropped_and_counted() {
+fn a_support_beyond_k_max_proposes_no_group_and_is_counted() {
     let wide: Vec<(usize, bool)> = (0..9).map(|j| (j, false)).collect();
     let fixture = Saturation::build(9, &[wide, vec![(0, true), (1, true)]], &[]);
     let proposals = fixture.propose();
     assert_eq!(proposals.parity.len(), 1);
+    // All cut, the wide clause is kept to bound its support from below.
+    assert_eq!(proposals.wide.len(), 1);
+    assert_eq!(proposals.wide[0].support, (0..9).collect::<Vec<_>>());
     assert_eq!(&proposals.parity[0].support.atoms[..2], &[0, 1]);
     assert_eq!(proposals.counts.unsupported_clauses, 1);
     assert_eq!(proposals.counts.clauses, 2);
@@ -1486,4 +1489,37 @@ fn a_probe_the_account_interrupts_is_not_counted() {
             "allowance {allowance}: {statistics:?}"
         );
     }
+}
+
+#[test]
+fn a_pigeonhole_beyond_the_group_width_is_refuted_at_the_root() {
+    // Ten pigeons in nine holes: each pigeon's clause, over its nine holes,
+    // is wider than a group may be, and each pair of pigeons in one hole is
+    // a group of two. The pairs' cliques bound each hole by one; the
+    // pigeons' clauses, too wide to probe, still bound each pigeon's holes
+    // from below by one, since no countermodel cuts them all; the two
+    // families partition the same places, and ten pigeons exceed nine holes.
+    let (pigeons, holes) = (10, 9);
+    let place = |pigeon: usize, hole: usize| pigeon * holes + hole;
+    let mut clauses: Vec<Vec<(usize, bool)>> = (0..pigeons)
+        .map(|pigeon| {
+            (0..holes)
+                .map(|hole| (place(pigeon, hole), false))
+                .collect()
+        })
+        .collect();
+    for hole in 0..holes {
+        for first in 0..pigeons {
+            for second in first + 1..pigeons {
+                clauses.push(vec![
+                    (place(first, hole), true),
+                    (place(second, hole), true),
+                ]);
+            }
+        }
+    }
+    let fixture = Saturation::build(pigeons * holes, &clauses, &[]);
+    let statistics = fixture.prepared().statistics;
+    assert_eq!(statistics.unsupported_clauses, 10, "{statistics:?}");
+    assert!(statistics.root_refuted, "{statistics:?}");
 }

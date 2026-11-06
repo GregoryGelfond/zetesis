@@ -34,6 +34,16 @@ pub(super) struct Group {
     pub patterns: Vec<u8>,
 }
 
+/// A clause too wide for a group whose pattern cuts its whole support: no
+/// member of the class cuts every atom of it, a lower bound of one that needs
+/// no table.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(super) struct Wide {
+    pub guard: usize,
+    /// Base atoms in ascending order, without repetition.
+    pub support: Vec<usize>,
+}
+
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub(super) struct ProposalCounts {
     pub guards: u64,
@@ -50,8 +60,10 @@ pub(super) struct Proposals {
     pub guards: Vec<usize>,
     /// Parity groups: the clauses of a guard sharing a base support of at most
     /// `MAX_SUPPORT` atoms. A clause whose support is wider is counted and
-    /// dropped.
+    /// proposes no group.
     pub parity: Vec<Group>,
+    /// The wider clauses whose pattern cuts their whole support, each once.
+    pub wide: Vec<Wide>,
     pub counts: ProposalCounts,
 }
 
@@ -105,7 +117,8 @@ struct Falsifier {
 /// its complement when it is the higher. A clause whose chain leaves the
 /// candidate, reads the same base with both polarities, or runs deeper than
 /// `MAX_CHAIN` proposes nothing; a support wider than `MAX_SUPPORT` is counted
-/// as a clause and as unsupported, and proposes no group.
+/// as a clause and as unsupported, and proposes no group, an all-cut one being
+/// kept as a wide clause.
 ///
 /// # Errors
 /// The budget's refusals; a producer set of another theory stops as an
@@ -439,7 +452,8 @@ fn settle(masked: Masked<'_>, base: usize, complement: bool, reached: &mut Vec<R
     }
 }
 
-/// Record a clause, and its parity group when its support fits the table.
+/// Record a clause, and its parity group when its support fits the table, or
+/// its wide clause when it does not and its pattern cuts the whole support.
 fn admit<Q: Quota + ?Sized>(
     proposals: &mut Proposals,
     clause: &Clause,
@@ -449,6 +463,22 @@ fn admit<Q: Quota + ?Sized>(
     proposals.counts.clauses += 1;
     if clause.support.len() > MAX_SUPPORT {
         proposals.counts.unsupported_clauses += 1;
+        budget.charge(clause.held.len() as u64)?;
+        if clause.held.iter().all(|&held| !held) {
+            // One comparison per support atom of each wide clause already kept.
+            budget.charge((proposals.wide.len() as u64 + 1) * clause.support.len() as u64)?;
+            let known = proposals
+                .wide
+                .iter()
+                .any(|wide| wide.guard == clause.guard && wide.support == clause.support);
+            if !known {
+                budget.charge(clause.support.len() as u64)?;
+                proposals.wide.push(Wide {
+                    guard: clause.guard,
+                    support: clause.support.clone(),
+                });
+            }
+        }
     } else {
         let mut support = Support {
             atoms: [0; MAX_SUPPORT],
@@ -488,8 +518,15 @@ fn retained(proposals: &Proposals) -> u128 {
         .iter()
         .map(|group| group.patterns.capacity() as u128)
         .sum();
+    let wide: u128 = proposals
+        .wide
+        .iter()
+        .map(|clause| (clause.support.capacity() * size_of::<usize>()) as u128)
+        .sum();
     size_of::<Proposals>() as u128
         + (proposals.guards.capacity() * size_of::<usize>()) as u128
         + (proposals.parity.capacity() * size_of::<Group>()) as u128
         + patterns
+        + (proposals.wide.capacity() * size_of::<Wide>()) as u128
+        + wide
 }

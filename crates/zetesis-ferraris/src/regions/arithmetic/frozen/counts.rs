@@ -6,6 +6,10 @@
 //! and below the support's size; and the pairs no allowed pattern holds
 //! together, read from every table, grow into cliques, each an upper bound
 //! of one (`upper_of_clique`), which carry a greatest count of one, as the
+//! A clause too wide for a group whose pattern cuts its whole support
+//! bounds that support from below by one with no table (`lower_of_clause`):
+//! no countermodel in the root cuts it whole, by the static refutations'
+//! argument.
 //! hull's unit rows carry one of nothing. Atoms one side covers and the other does not
 //! get the other side's trivial bound, nothing at least or everything at
 //! most, so that the families partition one atom set both ways. The bounds
@@ -27,7 +31,7 @@ use super::super::{
     storage::Storage,
     uniform::BoundSide,
 };
-use super::{ProbedGroup, probes::Table};
+use super::{ProbedGroup, probes::Table, proposals::Wide};
 use crate::Theory;
 
 /// The bounds the tables establish, the tables' first, the cliques' after
@@ -36,6 +40,7 @@ use crate::Theory;
 pub(super) fn propose<Q: Quota + ?Sized>(
     theory: &Theory,
     tables: &[ProbedGroup],
+    wide: &[&Wide],
     statistics: &mut CardinalityStatistics,
     storage: &mut Storage,
     budget: &mut Budget<'_, '_, Q>,
@@ -92,6 +97,21 @@ pub(super) fn propose<Q: Quota + ?Sized>(
                 }
             }
         }
+    }
+    // A clause too wide for a group, its pattern cutting its whole support:
+    // no countermodel in the root cuts every atom of it (`lower_of_clause`).
+    for (index, clause) in wide.iter().enumerate() {
+        budget.charge(1)?;
+        let bound = bound(
+            (BoundSide::Lower, 1),
+            clause.support.iter().copied(),
+            (tables.len() + index, 2),
+            width,
+            storage,
+            budget,
+        )?;
+        push_bound(&mut bounds, bound, storage, budget)?;
+        statistics.lower += 1;
     }
     cliques(
         &mut exclusions,
