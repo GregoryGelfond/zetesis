@@ -2,7 +2,9 @@
 //! the saturation cores, each size's family checked against clingo. Each
 //! size is the committed program with its one size constant amended; the
 //! solver runs in-process on the countermodel oracle, one thread, the eager
-//! grounder, and reports its statistics in the JSON document.
+//! grounder, and reports its statistics in the JSON document. The census at
+//! each family's smallest size needs no reference solver and runs in the
+//! portable suite.
 use clap::Parser;
 use serde_json::Value;
 use std::collections::BTreeSet;
@@ -198,130 +200,150 @@ fn count(preparation: &Value, field: &str) -> u64 {
         .unwrap_or_else(|| panic!("{field} in {preparation}"))
 }
 
+/// Parity over n inputs: two chains of n - 1 gates, four clauses each, and
+/// the pair of clauses that makes the results differ: 2(n - 1) + 1 groups
+/// per candidate. The stable candidate's rows refute its root in the first
+/// round; each dropped-clause candidate's inexact gate is probed to exactness
+/// in a second round under the other rows, so every hull ends exact and the
+/// rows number at least the groups' less one per non-minimal candidate.
+fn parity_census(n: u64, receipt: &Receipt) {
+    let p = &receipt.preparation;
+    let candidates = receipt.candidates;
+    assert_eq!((receipt.models, candidates), (1, 4), "n={n}");
+    assert_eq!(count(p, "attempts"), candidates, "n={n}");
+    assert_eq!(count(p, "prepared"), candidates, "n={n}");
+    assert_eq!(count(p, "saturation_units"), candidates, "n={n}");
+    assert_eq!(count(p, "groups"), candidates * (2 * (n - 1) + 1), "n={n}");
+    assert_eq!(count(p, "inexact_hulls"), 0, "n={n}");
+    assert!(
+        count(p, "rows") >= count(p, "groups") - (candidates - receipt.models),
+        "n={n}: rows {}",
+        count(p, "rows")
+    );
+    // One round for the stable candidate, two for each other.
+    assert_eq!(
+        count(p, "rounds"),
+        receipt.models + 2 * (candidates - receipt.models),
+        "n={n}"
+    );
+    println!(
+        "parity n={n}: probes={} rounds={} rows={} work={} regions={} refuted={}",
+        count(p, "probes"),
+        count(p, "rounds"),
+        count(p, "rows"),
+        count(p, "work"),
+        receipt.visited,
+        receipt.refuted
+    );
+}
+
+/// Tseitin on a cubic graph: one group of four clauses per vertex; the
+/// stable candidate loads a row per vertex, and each dropped-clause
+/// candidate's inexact vertex is probed to exactness in a second round.
+fn tseitin_census(vertices: u64, receipt: &Receipt) {
+    let p = &receipt.preparation;
+    let candidates = receipt.candidates;
+    assert_eq!((receipt.models, candidates), (1, 4), "vertices={vertices}");
+    assert_eq!(
+        count(p, "saturation_units"),
+        candidates,
+        "vertices={vertices}"
+    );
+    assert_eq!(
+        count(p, "groups"),
+        candidates * vertices,
+        "vertices={vertices}"
+    );
+    assert_eq!(count(p, "inexact_hulls"), 0, "vertices={vertices}");
+    assert!(
+        count(p, "rows") >= count(p, "groups") - (candidates - receipt.models),
+        "vertices={vertices}: rows {}",
+        count(p, "rows")
+    );
+    println!(
+        "tseitin vertices={vertices}: probes={} rows={} work={} regions={} refuted={}",
+        count(p, "probes"),
+        count(p, "rows"),
+        count(p, "work"),
+        receipt.visited,
+        receipt.refuted
+    );
+}
+
+/// Pigeonhole with h holes: h + 1 pigeon clauses, each a group over its h
+/// holes, and h · (h + 1) · h / 2 exclusion pairs, each a group of two.
+/// Every table bounds its support: a pigeon's clause its lower bound of one,
+/// and the pairs grow into the holes' cliques and the pigeons' own, since a
+/// pigeon in two holes leaves the others too few. The stable candidate's
+/// root falls to the double count; a dropped-pigeon candidate's stands, with
+/// one clause and one clique the fewer and a bound of nothing over the
+/// dropped pigeon's places completing the lower side.
+fn pigeonhole_census(h: u64, receipt: &Receipt) {
+    let p = &receipt.preparation;
+    let candidates = receipt.candidates;
+    assert_eq!((receipt.models, candidates), (1, 4), "holes={h}");
+    assert_eq!(count(p, "saturation_units"), candidates, "holes={h}");
+    // Every candidate's pigeon clauses and hole pairs, less the one
+    // clause each non-minimal candidate drops.
+    assert_eq!(
+        count(p, "groups"),
+        candidates * (h + 1 + h * h * (h + 1) / 2) - (candidates - receipt.models),
+        "holes={h}"
+    );
+    // Per candidate a lower bound per pigeon clause, a clique per hole
+    // and a clique per pigeon; a dropped-pigeon candidate has one clause
+    // and one pigeon clique the fewer, and the completing bound of
+    // nothing over the dropped pigeon's places.
+    let pigeons = h + 1;
+    let stable = pigeons + h + pigeons;
+    let dropped = (pigeons - 1) + h + (pigeons - 1) + 1;
+    assert_eq!(
+        count(p, "bounds"),
+        receipt.models * stable + (candidates - receipt.models) * dropped,
+        "holes={h}"
+    );
+    assert!(
+        count(p, "families") >= candidates,
+        "holes={h}: families {}",
+        count(p, "families")
+    );
+    println!(
+        "pigeonhole holes={h}: probes={} rounds={} rows={} bounds={} families={} work={} regions={} refuted={}",
+        count(p, "probes"),
+        count(p, "rounds"),
+        count(p, "rows"),
+        count(p, "bounds"),
+        count(p, "families"),
+        count(p, "work"),
+        receipt.visited,
+        receipt.refuted
+    );
+}
+
+#[test]
+fn the_inner_census_holds_at_each_familys_smallest_size() {
+    // The census needs no reference solver: each family's smallest size,
+    // solved alone, carries the counts its structure fixes. The families and
+    // the larger sizes are checked against clingo in the oracle campaign.
+    let n = PARITY.sizes[0];
+    parity_census(n, &solve(&PARITY.program(n)));
+    let vertices = TSEITIN.sizes[0];
+    tseitin_census(vertices, &solve(&TSEITIN.program(vertices)));
+    let h = PIGEONHOLE.sizes[0];
+    pigeonhole_census(h, &solve(&PIGEONHOLE.program(h)));
+}
+
 #[test]
 #[ignore = "requires clingo: the quantified series' families agree and the inner census holds"]
 fn g_census_inner_finds_the_cores_groups_and_rows() {
-    // Parity over n inputs: two chains of n - 1 gates, four clauses each, and
-    // the pair of clauses that makes the results differ: 2(n - 1) + 1 groups
-    // per candidate. The stable candidate's rows refute its root in the
-    // first round; each dropped-clause candidate's inexact gate is probed to
-    // exactness in a second round under the other rows, so every hull ends
-    // exact and the rows number at least the groups' less one per
-    // non-minimal candidate.
     for n in PARITY.sizes {
-        let receipt = checked(PARITY, n);
-        let p = &receipt.preparation;
-        let candidates = receipt.candidates;
-        assert_eq!((receipt.models, candidates), (1, 4), "n={n}");
-        assert_eq!(count(p, "attempts"), candidates, "n={n}");
-        assert_eq!(count(p, "prepared"), candidates, "n={n}");
-        assert_eq!(count(p, "saturation_units"), candidates, "n={n}");
-        assert_eq!(count(p, "groups"), candidates * (2 * (n - 1) + 1), "n={n}");
-        assert_eq!(count(p, "inexact_hulls"), 0, "n={n}");
-        assert!(
-            count(p, "rows") >= count(p, "groups") - (candidates - receipt.models),
-            "n={n}: rows {}",
-            count(p, "rows")
-        );
-        // One round for the stable candidate, two for each other.
-        assert_eq!(
-            count(p, "rounds"),
-            receipt.models + 2 * (candidates - receipt.models),
-            "n={n}"
-        );
-        println!(
-            "parity n={n}: probes={} rounds={} rows={} work={} regions={} refuted={}",
-            count(p, "probes"),
-            count(p, "rounds"),
-            count(p, "rows"),
-            count(p, "work"),
-            receipt.visited,
-            receipt.refuted
-        );
+        parity_census(n, &checked(PARITY, n));
     }
-    // Tseitin on a cubic graph: one group of four clauses per vertex; the
-    // stable candidate loads a row per vertex, and each dropped-clause
-    // candidate's inexact vertex is probed to exactness in a second round.
     for vertices in TSEITIN.sizes {
-        let receipt = checked(TSEITIN, vertices);
-        let p = &receipt.preparation;
-        let candidates = receipt.candidates;
-        assert_eq!((receipt.models, candidates), (1, 4), "vertices={vertices}");
-        assert_eq!(
-            count(p, "saturation_units"),
-            candidates,
-            "vertices={vertices}"
-        );
-        assert_eq!(
-            count(p, "groups"),
-            candidates * vertices,
-            "vertices={vertices}"
-        );
-        assert_eq!(count(p, "inexact_hulls"), 0, "vertices={vertices}");
-        assert!(
-            count(p, "rows") >= count(p, "groups") - (candidates - receipt.models),
-            "vertices={vertices}: rows {}",
-            count(p, "rows")
-        );
-        println!(
-            "tseitin vertices={vertices}: probes={} rows={} work={} regions={} refuted={}",
-            count(p, "probes"),
-            count(p, "rows"),
-            count(p, "work"),
-            receipt.visited,
-            receipt.refuted
-        );
+        tseitin_census(vertices, &checked(TSEITIN, vertices));
     }
-    // Pigeonhole with h holes: h + 1 pigeon clauses, each a group over its
-    // h holes, and h · (h + 1) · h / 2 exclusion pairs, each a group of two.
-    // Every table bounds its support: a pigeon's clause its lower bound of
-    // one, and the pairs grow into the holes' cliques and the pigeons' own,
-    // since a pigeon in two holes leaves the others too few. The stable
-    // candidate's root falls to the double count; a dropped-pigeon
-    // candidate's stands, with one clause and one clique the fewer and a
-    // bound of nothing over the dropped pigeon's places completing the
-    // lower side.
     for h in PIGEONHOLE.sizes {
-        let receipt = checked(PIGEONHOLE, h);
-        let p = &receipt.preparation;
-        let candidates = receipt.candidates;
-        assert_eq!((receipt.models, candidates), (1, 4), "holes={h}");
-        assert_eq!(count(p, "saturation_units"), candidates, "holes={h}");
-        // Every candidate's pigeon clauses and hole pairs, less the one
-        // clause each non-minimal candidate drops.
-        assert_eq!(
-            count(p, "groups"),
-            candidates * (h + 1 + h * h * (h + 1) / 2) - (candidates - receipt.models),
-            "holes={h}"
-        );
-        // Per candidate a lower bound per pigeon clause, a clique per hole
-        // and a clique per pigeon; a dropped-pigeon candidate has one clause
-        // and one pigeon clique the fewer, and the completing bound of
-        // nothing over the dropped pigeon's places.
-        let pigeons = h + 1;
-        let stable = pigeons + h + pigeons;
-        let dropped = (pigeons - 1) + h + (pigeons - 1) + 1;
-        assert_eq!(
-            count(p, "bounds"),
-            receipt.models * stable + (candidates - receipt.models) * dropped,
-            "holes={h}"
-        );
-        assert!(
-            count(p, "families") >= candidates,
-            "holes={h}: families {}",
-            count(p, "families")
-        );
-        println!(
-            "pigeonhole holes={h}: probes={} rounds={} rows={} bounds={} families={} work={} regions={} refuted={}",
-            count(p, "probes"),
-            count(p, "rounds"),
-            count(p, "rows"),
-            count(p, "bounds"),
-            count(p, "families"),
-            count(p, "work"),
-            receipt.visited,
-            receipt.refuted
-        );
+        pigeonhole_census(h, &checked(PIGEONHOLE, h));
     }
 }
 
