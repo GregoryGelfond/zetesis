@@ -436,4 +436,78 @@ theorem candidate_word_read (size : Nat) (before after : List (List (BitVec 64))
   rw [sameWord, mask_bit _ _ (Nat.mod_lt atom (by decide))]
   exact (export32_exact size row stored padding).2.1 atom
 
+/-- A word has no left-only bit exactly when every left bit is present
+    on the right. This law includes physical padding; it has no logical carrier
+    or resource-accounting premise. -/
+theorem and_not_zero_iff_bit_imp {width : Nat} (left right : BitVec width) :
+    left &&& ~~~right = 0 ↔
+      ∀ offset, offset < width → left.getLsbD offset = true → right.getLsbD offset = true := by
+  rw [BitVec.eq_of_getLsbD_eq_iff]
+  constructor
+  · intro absent offset inside held
+    have zero := absent offset inside
+    simpa [inside, held] using zero
+  · intro contained offset inside
+    cases held : left.getLsbD offset with
+    | false => simp [held]
+    | true =>
+      have retained := contained offset inside held
+      simp [retained]
+
+/-- Ascending equal-shape containment, stopping at the first left-only word.
+    The mismatch cases only make this mathematical function total; Rust checks
+    equal storage lengths before its callbacks and never enters those cases. -/
+def subsetScan {width : Nat} : List (BitVec width) → List (BitVec width) → Bool
+  | [], [] => true
+  | left :: rest, right :: others =>
+      if left &&& ~~~right = 0 then subsetScan rest others else false
+  | _, _ => false
+
+/-- Under equal storage lengths, the completed scan is true exactly when each
+    paired lane preserves every left bit. A first failing pair decides false
+    without using the tail; if no pair fails, induction covers the whole list.
+    Converting physical coordinates to semantic membership additionally needs
+    the owner's carrier/shape/padding correspondence. Refused callbacks are not
+    modeled by this total completed-value law. -/
+theorem subset_scan_exact {width : Nat} (left right : List (BitVec width))
+    (shape : left.length = right.length) :
+    subsetScan left right = true ↔
+      ∀ pair ∈ left.zip right, ∀ offset, offset < width →
+        pair.1.getLsbD offset = true → pair.2.getLsbD offset = true := by
+  induction left generalizing right with
+  | nil =>
+    cases right with
+    | nil => simp [subsetScan]
+    | cons value rest => simp at shape
+  | cons value rest tailExact =>
+    cases right with
+    | nil => simp at shape
+    | cons other others =>
+      have restShape : rest.length = others.length := Nat.succ.inj shape
+      change (if value &&& ~~~other = 0#width then subsetScan rest others else false) = true ↔
+        ∀ pair ∈ (value, other) :: rest.zip others, ∀ offset, offset < width →
+          pair.1.getLsbD offset = true → pair.2.getLsbD offset = true
+      by_cases head : value &&& ~~~other = 0#width
+      · have preserved := (and_not_zero_iff_bit_imp value other).mp head
+        rw [if_pos head]
+        constructor
+        · intro completed pair listed offset inside present
+          rcases List.mem_cons.mp listed with same | later
+          · subst pair
+            exact preserved offset inside present
+          · exact (tailExact others restShape).mp completed pair later offset inside present
+        · intro each
+          apply (tailExact others restShape).mpr
+          intro pair listed offset inside present
+          exact each pair (List.mem_cons_of_mem (value, other) listed) offset inside present
+      · rw [if_neg head]
+        constructor
+        · intro impossible
+          cases impossible
+        · intro each
+          have preserved : ∀ offset, offset < width → value.getLsbD offset = true →
+              other.getLsbD offset = true :=
+            each (value, other) List.mem_cons_self
+          exact False.elim (head ((and_not_zero_iff_bit_imp value other).mpr preserved))
+
 end Zetesis.Refinement.PackedInterpretations

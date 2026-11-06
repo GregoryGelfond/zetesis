@@ -37,6 +37,169 @@ pub struct ReductStatistics {
     pub peak_workspace_bytes: u128,
     /// What the proper-subset queries walked as region trees.
     pub regions: crate::RegionCounts,
+    /// What the queries' inner preparations found and cost.
+    pub inner_preparation: InnerPreparationStatistics,
+}
+
+/// Cumulative receipts of the candidates' inner preparations: the saturation
+/// units, the parity rows and the count bounds of each candidate's
+/// countermodel class, probed from its closed query root before its walk.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct InnerPreparationStatistics {
+    /// Query roots prepared — the inline root, a served root or a residual
+    /// root — after a closure that did not refute them.
+    pub attempts: u64,
+    /// Preparations that installed units, rows or bounds.
+    pub prepared: u64,
+    /// Preparations the lease declined; their walk proceeded without one.
+    pub declined: u64,
+    /// Guards cut at the query root by their probe, which reached the candidate
+    /// or was refuted.
+    pub saturation_units: u64,
+    /// Clause-shaped rules the proposal pass read under the candidates' guards.
+    pub clauses: u64,
+    /// Clauses whose support exceeds the width a group may have: they propose
+    /// no group, and one whose pattern cuts its whole support bounds it from
+    /// below by one.
+    pub unsupported_clauses: u64,
+    /// Parity groups proposed.
+    pub groups: u64,
+    /// Probes run to their verdict.
+    pub probes: u64,
+    /// Probing rounds run: one by the frozen reading alone per preparation,
+    /// each further one under the rows the round before established.
+    pub rounds: u64,
+    /// Patterns forbidden: by a probe that was refuted, or read off the
+    /// clauses of the group, or of a group whose support it contains, before
+    /// probing, which runs none for them.
+    pub refuted_patterns: u64,
+    /// Parity rows loaded.
+    pub rows: u64,
+    /// The parity rows' echelon bases.
+    pub rank: u64,
+    /// One-atom parity rows, seeding the query root.
+    pub units: u64,
+    /// Probed groups whose allowed patterns are not affine.
+    pub inexact_hulls: u64,
+    /// Count bounds loaded: a table's least and greatest allowed counts, a
+    /// clause's lower bound among them, the cliques' upper bounds, and the
+    /// trivial bounds completing a partition.
+    pub bounds: u64,
+    /// Count bounds from below.
+    pub lower: u64,
+    /// Count bounds from above.
+    pub upper: u64,
+    /// Count families found: lower and upper bounds partitioning one atom
+    /// set, whose sums the root's double count compares.
+    pub families: u64,
+    /// Preparations whose rows refuted the query root: candidates decided stable there.
+    pub root_refuted: u64,
+    /// Work charged to the search by the preparations.
+    pub work: u64,
+}
+
+impl InnerPreparationStatistics {
+    /// Record one attempt's receipt.
+    ///
+    /// # Errors
+    /// A counter beyond its width.
+    pub(crate) fn record(
+        &mut self,
+        attempt: &zetesis_ferraris::FrozenPreparationStatistics,
+    ) -> Result<(), Incomplete> {
+        use zetesis_ferraris::PreparationStatus;
+        let (prepared, declined) = match attempt.status {
+            PreparationStatus::Prepared => (1, 0),
+            PreparationStatus::WorkDeclined | PreparationStatus::StorageDeclined => (0, 1),
+            PreparationStatus::NotPrepared | PreparationStatus::Incomplete => (0, 0),
+        };
+        self.merge(&Self {
+            attempts: 1,
+            prepared,
+            declined,
+            saturation_units: attempt.saturation_units,
+            clauses: attempt.clauses,
+            unsupported_clauses: attempt.unsupported_clauses,
+            groups: attempt.groups,
+            probes: attempt.probes,
+            rounds: attempt.rounds,
+            refuted_patterns: attempt.refuted_patterns,
+            rows: attempt.parity.rows,
+            rank: attempt.parity.rank as u64,
+            units: attempt.parity.units as u64,
+            inexact_hulls: attempt.inexact_hulls,
+            bounds: attempt.cardinality.rows as u64,
+            lower: attempt.cardinality.lower as u64,
+            upper: attempt.cardinality.upper as u64,
+            families: attempt.cardinality.families,
+            root_refuted: u64::from(attempt.root_refuted),
+            work: attempt.preparation_work,
+        })
+    }
+
+    /// Add another receipt's counts.
+    ///
+    /// # Errors
+    /// A counter beyond its width.
+    pub(crate) fn merge(&mut self, other: &Self) -> Result<(), Incomplete> {
+        for (counter, value) in [
+            (&mut self.attempts, other.attempts),
+            (&mut self.prepared, other.prepared),
+            (&mut self.declined, other.declined),
+            (&mut self.saturation_units, other.saturation_units),
+            (&mut self.clauses, other.clauses),
+            (&mut self.unsupported_clauses, other.unsupported_clauses),
+            (&mut self.groups, other.groups),
+            (&mut self.probes, other.probes),
+            (&mut self.rounds, other.rounds),
+            (&mut self.refuted_patterns, other.refuted_patterns),
+            (&mut self.rows, other.rows),
+            (&mut self.rank, other.rank),
+            (&mut self.units, other.units),
+            (&mut self.inexact_hulls, other.inexact_hulls),
+            (&mut self.bounds, other.bounds),
+            (&mut self.lower, other.lower),
+            (&mut self.upper, other.upper),
+            (&mut self.families, other.families),
+            (&mut self.root_refuted, other.root_refuted),
+            (&mut self.work, other.work),
+        ] {
+            *counter = counter
+                .checked_add(value)
+                .ok_or(Incomplete::CounterOverflow)?;
+        }
+        Ok(())
+    }
+
+    /// The sum of two receipts, saturating at the counters' width.
+    #[must_use]
+    pub(crate) const fn saturating_add(self, other: Self) -> Self {
+        Self {
+            attempts: self.attempts.saturating_add(other.attempts),
+            prepared: self.prepared.saturating_add(other.prepared),
+            declined: self.declined.saturating_add(other.declined),
+            saturation_units: self.saturation_units.saturating_add(other.saturation_units),
+            clauses: self.clauses.saturating_add(other.clauses),
+            unsupported_clauses: self
+                .unsupported_clauses
+                .saturating_add(other.unsupported_clauses),
+            groups: self.groups.saturating_add(other.groups),
+            probes: self.probes.saturating_add(other.probes),
+            rounds: self.rounds.saturating_add(other.rounds),
+            refuted_patterns: self.refuted_patterns.saturating_add(other.refuted_patterns),
+            rows: self.rows.saturating_add(other.rows),
+            rank: self.rank.saturating_add(other.rank),
+            units: self.units.saturating_add(other.units),
+            inexact_hulls: self.inexact_hulls.saturating_add(other.inexact_hulls),
+            bounds: self.bounds.saturating_add(other.bounds),
+            lower: self.lower.saturating_add(other.lower),
+            upper: self.upper.saturating_add(other.upper),
+            families: self.families.saturating_add(other.families),
+            root_refuted: self.root_refuted.saturating_add(other.root_refuted),
+            work: self.work.saturating_add(other.work),
+        }
+    }
 }
 
 /// Reusable worker allocations for proper-subset queries.

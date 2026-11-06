@@ -59,9 +59,10 @@ mod adjacency;
 mod arithmetic;
 pub use arithmetic::ParityKnowledge;
 pub use arithmetic::{
-    ArithmeticAttempt, CardinalityKnowledge, CardinalityStatistics, CardinalitySystem,
-    ParityStatistics, ParitySystem, PreparationAttempt, PreparationError, PreparationLimits,
-    PreparationStatus, PreparationWork, RootPreparation,
+    ArithmeticAttempt, CardinalityKnowledge, CardinalityStatistics, CardinalitySystem, ClosedQuery,
+    FrozenPreparation, FrozenPreparationAttempt, FrozenPreparationLimits,
+    FrozenPreparationStatistics, ParityStatistics, ParitySystem, PreparationAttempt,
+    PreparationError, PreparationLimits, PreparationStatus, PreparationWork, RootPreparation,
 };
 mod context;
 use context::{Context, LearningAccess, ReadingClass};
@@ -593,6 +594,8 @@ enum ChainOperands {
 }
 
 impl Chain {
+    // Hot in the narrowing's closure; the hint measured to pay.
+    #[inline]
     fn leaves<'a>(&'a self, extrema: &'a extrema::Extrema) -> &'a [usize] {
         match &self.operands {
             ChainOperands::Owned(values) => values,
@@ -920,12 +923,38 @@ impl<C: Count> Known<C> {
 #[cfg(test)]
 mod tests;
 
+/// What the index reads of a node: the atom it carries, or an implication's
+/// operands. The nodes are decoded once into these, so the adjacencies built
+/// from them read a slot on each of their passes instead of decoding again.
+#[derive(Clone, Copy)]
+enum NodeRead {
+    Atom(usize),
+    Implies(usize, usize),
+    Other,
+}
+
+/// Every node's read, in node order.
+fn node_reads(nodes: FormulaView<'_>) -> Result<Vec<NodeRead>, Stop> {
+    let mut reads = Vec::new();
+    reads
+        .try_reserve_exact(nodes.len())
+        .map_err(|_| Stop::Allocation)?;
+    for index in 0..nodes.len() {
+        reads.push(match nodes.node(index).map_err(|_| Stop::InvalidProgram)? {
+            NodeView::Atom(atom) => NodeRead::Atom(atom),
+            NodeView::Implies(a, b) => NodeRead::Implies(a, b),
+            _ => NodeRead::Other,
+        });
+    }
+    Ok(reads)
+}
+
 /// The ordered operand-to-parent incidences already chosen by chain formation.
 /// Chains precede implications as in the original index; a repeated implication
 /// operand is one incidence. Distinct atom nodes carrying the same atom remain
 /// distinct occurrences when this stream is projected to atom operands.
 fn dependencies<'a>(
-    nodes: FormulaView<'a>,
+    reads: &'a [NodeRead],
     chains: &'a [Chain],
 ) -> impl Iterator<Item = (usize, usize)> + Clone + 'a {
     chains
@@ -935,9 +964,9 @@ fn dependencies<'a>(
             ChainOperands::Ordinal { .. } => None,
         })
         .flat_map(|(chain, operands)| operands.iter().map(move |&operand| (operand, chain.root)))
-        .chain((0..nodes.len()).flat_map(move |index| {
-            let operands = match nodes.node(index).expect("admitted node") {
-                NodeView::Implies(a, b) => [Some(a), (b != a).then_some(b)],
+        .chain(reads.iter().enumerate().flat_map(|(index, read)| {
+            let operands = match *read {
+                NodeRead::Implies(a, b) => [Some(a), (b != a).then_some(b)],
                 _ => [None, None],
             };
             operands
@@ -1057,24 +1086,27 @@ impl Narrower {
             &extrema,
             !witness_chains.is_empty(),
         )?;
-        let parents = Adjacency::build(nodes.len(), dependencies(nodes, &chains))?;
+        let reads = node_reads(nodes)?;
+        let parents = Adjacency::build(nodes.len(), dependencies(&reads, &chains))?;
         let atom_operands = Adjacency::try_build(
             nodes.len(),
-            dependencies(nodes, &chains)
+            dependencies(&reads, &chains)
                 .chain(thresholds.dependencies())
-                .filter_map(|(operand, parent)| match nodes.node(operand) {
-                    Ok(NodeView::Atom(atom)) => Some(Ok((parent, atom))),
-                    Ok(_) => None,
-                    Err(_) => Some(Err(Stop::InvalidProgram)),
+                .filter_map(|(operand, parent)| match reads.get(operand) {
+                    Some(NodeRead::Atom(atom)) => Some(Ok((parent, *atom))),
+                    Some(_) => None,
+                    None => Some(Err(Stop::InvalidProgram)),
                 }),
         )?;
-        let atom_nodes = Adjacency::try_build(
+        let atom_nodes = Adjacency::build(
             theory.atom_count(),
-            (0..nodes.len()).filter_map(|index| match nodes.node(index) {
-                Ok(NodeView::Atom(atom)) => Some(Ok((atom, index))),
-                Ok(_) => None,
-                Err(_) => Some(Err(Stop::InvalidProgram)),
-            }),
+            reads
+                .iter()
+                .enumerate()
+                .filter_map(|(index, read)| match *read {
+                    NodeRead::Atom(atom) => Some((atom, index)),
+                    _ => None,
+                }),
         )?;
         let counter_bound = counter_bound(&chains, &parents, &atom_nodes, &thresholds, &extrema);
         let mut result = Self {
@@ -1134,6 +1166,8 @@ impl Narrower {
 
     /// Direct Boolean parents followed by ordinal-cut parents. The ordinal
     /// incidences are streamed from compact row postings, never materialized.
+    // Hot in the narrowing's closure; the hint measured to pay.
+    #[inline]
     fn logical_parents(&self, node: usize) -> impl DoubleEndedIterator<Item = usize> + Clone + '_ {
         self.parents[node]
             .iter()
@@ -1442,7 +1476,7 @@ impl Narrower {
             scratch
                 .common
                 .founded
-                .begin_local(subject.theory(), known.founded_closed);
+                .begin_local(subject.theory(), known.founded_closed, work)?;
         }
         // Only the owner's carrier matches and captures rows. Restriction,
         // bound and frozen visits suspend the ledger without clearing it.
@@ -1820,6 +1854,8 @@ impl CommonScratch {
     /// Queue the atom's support recheck unless one is already pending. Its
     /// supporters only fall as knowledge grows, so the pending recheck,
     /// made with the later knowledge, derives what this one would have.
+    // Hot in the narrowing's closure; the hint measured to pay.
+    #[inline]
     fn queue_recheck(&mut self, atom: usize) {
         if !self.pending.contains(atom) {
             self.pending.insert(atom);
@@ -1829,6 +1865,8 @@ impl CommonScratch {
 
     /// The next atom to recheck, no longer pending: a support change during
     /// or after its recheck queues it again.
+    // Hot in the narrowing's closure; the hint measured to pay.
+    #[inline]
     fn next_recheck(&mut self) -> Option<usize> {
         let atom = self.heads.pop()?;
         self.pending.remove(atom);
@@ -1948,8 +1986,13 @@ impl<C: Count> Known<C> {
     }
 }
 
+// The closure's small accessors carry inline hints: hot in the narrowing,
+// left out of line by the compiler, and measured to pay on the candidate
+// generation's retired instructions.
 impl<W: Count, C: ReadingClass> Closure<'_, W, C> {
     /// A node learns to hold; it is revisited if that is new.
+    // Hot in the narrowing's closure; the hint measured to pay.
+    #[inline]
     fn sure(&mut self, index: usize) -> Step {
         let step = learn(&mut self.known.sure, &self.known.never, index);
         if step == Step::Changed {
@@ -1959,6 +2002,8 @@ impl<W: Count, C: ReadingClass> Closure<'_, W, C> {
     }
 
     /// A node learns to fail; it is revisited if that is new.
+    // Hot in the narrowing's closure; the hint measured to pay.
+    #[inline]
     fn never(&mut self, index: usize) -> Step {
         let step = learn(&mut self.known.never, &self.known.sure, index);
         if step == Step::Changed {
@@ -2138,7 +2183,9 @@ impl<W: Count, C: ReadingClass> Closure<'_, W, C> {
             let step = if let Some((node, value)) = self.lists.nodes.pop() {
                 statistics.propagations += 1;
                 self.revisit(subject, index, node, value, work)?
-            } else if let Some(row) = self.lists.next_threshold() {
+            } else if frozen.is_none()
+                && let Some(row) = self.lists.next_threshold()
+            {
                 debug_assert!(
                     frozen.is_none(),
                     "only original rows transport requirements"
@@ -2156,7 +2203,9 @@ impl<W: Count, C: ReadingClass> Closure<'_, W, C> {
                 let result = self.recheck(index, producers, atom, work);
                 statistics.support_work += work.charged() - before;
                 result?
-            } else if let Some(row) = self.lists.next_residual() {
+            } else if frozen.is_none()
+                && let Some(row) = self.lists.next_residual()
+            {
                 debug_assert!(frozen.is_none(), "only original rows check residual sums");
                 statistics.propagations += 1;
                 let step = self.threshold_residual(index, row, work)?;
@@ -2254,9 +2303,16 @@ impl<W: Count, C: ReadingClass> Closure<'_, W, C> {
                 }
             }
         }
-        // A changed pass queued new false evidence; ordinary propagation must
-        // finish and a new pass must account for it before closure is inherited.
-        // Interrupted or contradictory prefixes never publish this authority.
+        if step == Step::Changed {
+            // Every remaining uncut cyclic head now belongs to the completed
+            // possible set. Direct publication erased only absent heads; it
+            // cannot change that least closure. Collect ordinary false events
+            // from this boundary, before the surrounding closure drains them.
+            self.lists.founded.begin_after_publication(theory, work)?;
+        }
+        // A changed pass still requires ordinary propagation and another
+        // founded check before completion can be inherited. Interrupted or
+        // contradictory publication never rearms local replay.
         *self.known.founded_closed = step == Step::Unchanged;
         Ok(step)
     }

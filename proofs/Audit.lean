@@ -146,6 +146,9 @@ import Zetesis
 #print axioms Zetesis.Algebra.answer_sets_nested
 #print axioms Zetesis.Algebra.countermodel_outputs_empty_iff
 #print axioms Zetesis.Algebra.countermodel_verdict_independent
+#print axioms Zetesis.Algebra.contains_decideAll
+#print axioms Zetesis.Algebra.entailed_by_refutations
+#print axioms Zetesis.Algebra.saturation_unit
 #print axioms Zetesis.AlgebraicRows.contribution_of_holds
 #print axioms Zetesis.AlgebraicRows.contribution_of_fails
 #print axioms Zetesis.AlgebraicRows.measure_cons
@@ -201,6 +204,9 @@ import Zetesis
 #print axioms Zetesis.AlgebraicRows.parity_equation_of_xor
 #print axioms Zetesis.AlgebraicRows.counting_replace_occurrence
 #print axioms Zetesis.AlgebraicRows.counting_fold_one
+#print axioms Zetesis.AlgebraicRows.count_of_none
+#print axioms Zetesis.AlgebraicRows.upper_of_clique
+#print axioms Zetesis.AlgebraicRows.bounds_of_allowed
 #print axioms Zetesis.AlgebraicRows.bounded_counting_fold
 #print axioms Zetesis.AlgebraicRows.bounded_counting_fold_one
 #print axioms Zetesis.AlgebraicRows.bounded_counting_overflow_iff
@@ -1058,6 +1064,8 @@ import Zetesis
 #print axioms Zetesis.LearnedRegions.consequence_row_narrows
 #print axioms Zetesis.LearnedRegions.consequence_row_forces_complement
 #print axioms Zetesis.LearnedRegions.row_of_narrower_class
+#print axioms Zetesis.LearnedRegions.guarded_row
+#print axioms Zetesis.LearnedRegions.row_under_unit
 #print axioms Zetesis.LearnedRegions.row_union
 #print axioms Zetesis.LearnedRegions.row_dominance
 #print axioms Zetesis.LearnedRegions.founded_row
@@ -1361,6 +1369,8 @@ import Zetesis
 #print axioms Zetesis.Refinement.PackedInterpretations.pack_denotes
 #print axioms Zetesis.Refinement.PackedInterpretations.export32_denotes
 #print axioms Zetesis.Refinement.PackedInterpretations.candidate_word_read
+#print axioms Zetesis.Refinement.PackedInterpretations.and_not_zero_iff_bit_imp
+#print axioms Zetesis.Refinement.PackedInterpretations.subset_scan_exact
 #print axioms Zetesis.PackedQueryLiterals.decode_encode
 #print axioms Zetesis.PackedQueryLiterals.encode_injective
 #print axioms Zetesis.PackedQueryLiterals.encode_lt
@@ -1404,6 +1414,7 @@ import Zetesis
 #print axioms Zetesis.Refinement.PackedWordIterator.packed_exact
 #print axioms Zetesis.Refinement.PackedWordIterator.SetBits.least_clear_suffix
 #print axioms Zetesis.Refinement.PackedWordIterator.SetBits.lowest_bit_arithmetic
+#print axioms Zetesis.Refinement.PackedWordIterator.first_set_none_iff
 #print axioms Zetesis.PairwiseExclusions.masked_unit_sum_two
 #print axioms Zetesis.PairwiseExclusions.original
 #print axioms Zetesis.PairwiseExclusions.constraint_frozen_iff
@@ -1459,6 +1470,15 @@ import Zetesis
 #print axioms Zetesis.PossibleFoundedness.conditional_unsupported_forces_complement
 #print axioms Zetesis.PossibleFoundedness.body_upper_mono
 #print axioms Zetesis.PossibleFoundedness.body_upper_sound
+#print axioms Zetesis.PossibleFoundedness.PublicationErasure.erasure_preserves_least_closed
+#print axioms Zetesis.PossibleFoundedness.PublicationErasure.positive_monotone
+#print axioms Zetesis.PossibleFoundedness.PublicationErasure.positive_direct_erasure
+#print axioms Zetesis.PossibleFoundedness.PublicationErasure.producer_step_closed
+#print axioms Zetesis.PossibleFoundedness.PublicationErasure.positive_step_monotone
+#print axioms Zetesis.PossibleFoundedness.PublicationErasure.direct_step_erasure
+#print axioms Zetesis.PossibleFoundedness.PublicationErasure.completed_publication_preserves_least
+#print axioms Zetesis.PossibleFoundedness.PublicationErasure.surviving_cyclic_heads_possible
+#print axioms Zetesis.PossibleFoundedness.PublicationErasure.whole_publication_baseline
 #print axioms Zetesis.ProducerScheduling.stable_of_reads_only
 #print axioms Zetesis.ProducerScheduling.selective_step_exact_of_stable
 #print axioms Zetesis.ProducerScheduling.empty_selection_closed_of_stable
@@ -2005,6 +2025,12 @@ import Zetesis
 #print axioms Zetesis.ThresholdDivision.original
 #print axioms Zetesis.ThresholdDivision.frozen
 #print axioms Zetesis.ThresholdDivision.equivalent
+#print axioms Zetesis.ThresholdPropagation.assign_current
+#print axioms Zetesis.ThresholdPropagation.occurrence_le_coefficient
+#print axioms Zetesis.ThresholdPropagation.assigned_false_le_remove_occurrence
+#print axioms Zetesis.ThresholdPropagation.add_occurrence_le_assigned_true
+#print axioms Zetesis.ThresholdPropagation.condition_required_true_of_occurrence
+#print axioms Zetesis.ThresholdPropagation.condition_required_false_of_occurrence
 #print axioms Zetesis.ThresholdPrefixes.masked_sum_append
 #print axioms Zetesis.ThresholdPrefixes.masked_sum_prefix_le
 #print axioms Zetesis.ThresholdPrefixes.masked_threshold_implies

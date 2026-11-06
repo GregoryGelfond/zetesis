@@ -113,11 +113,12 @@ fn overwrite<T: Copy, Q: Quota + ?Sized>(
     length: usize,
     fields: u64,
     mut value: impl FnMut(usize) -> T,
+    acquire: impl FnOnce(usize, &mut Meter<'_, Q>) -> Result<Vec<T>, Failure<Q::Error>>,
     work: &mut Meter<'_, Q>,
 ) -> Result<(), Failure<Q::Error>> {
     charge(work, 1)?;
     if target.capacity() < length {
-        let mut next = reserved(length, work)?;
+        let mut next = acquire(length, work)?;
         for index in 0..length {
             charge(
                 work,
@@ -159,19 +160,64 @@ pub(super) fn prepare_words<Q: Quota + ?Sized>(
     length: usize,
     work: &mut Meter<'_, Q>,
 ) -> Result<(), Failure<Q::Error>> {
-    overwrite(target.storage_mut(), length, 1, |_| 0, work)
+    overwrite(target.storage_mut(), length, 1, |_| 0, reserved, work)
 }
 
-/// Copy same-length initialized words, before each write, without allocation.
+/// Initialize the snapshot through the same metered replacement operation
+/// with storage already reserved by the caller. Moving the three-word header
+/// takes the place of building it in the ordinary reservation.
+pub(super) fn prepare_supplied_words<Q: Quota + ?Sized>(
+    target: &mut Words<u64>,
+    length: usize,
+    supplied: Vec<u64>,
+    work: &mut Meter<'_, Q>,
+) -> Result<(), Failure<Q::Error>> {
+    overwrite(
+        target.storage_mut(),
+        length,
+        1,
+        |_| 0,
+        |length, work| {
+            charge(work, 3)?;
+            debug_assert!(supplied.is_empty() && supplied.capacity() >= length);
+            Ok(supplied)
+        },
+        work,
+    )
+}
+
+/// Copy initialized words without allocation, preserving the next-word refusal.
+/// Bulk only an already-admitted run; its body has no callbacks or early exit.
 pub(super) fn copy_words<Q: Quota + ?Sized, S: AsRef<[u64]> + AsMut<[u64]>>(
     target: &mut Words<u64, S>,
     source: &[u64],
     work: &mut Meter<'_, Q>,
 ) -> Result<(), Failure<Q::Error>> {
     assert_eq!(target.len(), source.len(), "snapshot word shapes agree");
-    for (target, source) in target.iter_mut().zip(source) {
-        charge(work, 1)?;
-        *target = *source;
+    // Acquire the backing once, as the original mutable iterator did. A
+    // generic backing's AsMut need not be free of observable effects.
+    let target = &mut **target;
+    let length = target.len().min(source.len());
+    let mut copied = 0;
+    while copied < length {
+        let available = usize::try_from(work.remaining()).unwrap_or(usize::MAX);
+        let covered = available.min(length - copied);
+        if covered == 0 {
+            // Replenish only for the next original one-word primitive.
+            charge(work, 1)?;
+            target[copied] = source[copied];
+            copied += 1;
+        } else {
+            // This complete, infallible slice is already covered by the grant:
+            // no quota callback or poll can occur between its word copies.
+            let count = u64::try_from(covered).expect("covered words fit the permit balance");
+            charge(work, count)?;
+            let end = copied + covered;
+            for (target, source) in target[copied..end].iter_mut().zip(&source[copied..end]) {
+                *target = *source;
+            }
+            copied = end;
+        }
     }
     Ok(())
 }
@@ -183,7 +229,14 @@ pub(super) fn copy_values<T: Copy, Q: Quota + ?Sized>(
     fields: u64,
     work: &mut Meter<'_, Q>,
 ) -> Result<(), Failure<Q::Error>> {
-    overwrite(target, source.len(), fields, |index| source[index], work)
+    overwrite(
+        target,
+        source.len(),
+        fields,
+        |index| source[index],
+        reserved,
+        work,
+    )
 }
 
 /// Append a scalar record under the existing preparation-style doubling rule.

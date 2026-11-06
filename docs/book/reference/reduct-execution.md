@@ -4,7 +4,10 @@
 
 The prepared reduct measured here belonged to the clause search, which has since
 been removed; the region search queries the reduct without preparing an
-encoding.
+encoding. What it prepares instead is each candidate's inner subjects: the
+parity rows and count bounds of its countermodel class, probed from the closed
+query root and reported under `reduct_query_regions.preparation` in the
+[solve statistics](../rust/outcomes.md).
 
 Retaining a prepared reduct removes repeated construction, but does not guarantee
 faster membership checks. In this comparison, task allocation's Metal route uses

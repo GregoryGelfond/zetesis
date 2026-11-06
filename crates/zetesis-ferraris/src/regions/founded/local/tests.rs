@@ -6,6 +6,7 @@ mod barriers;
 mod coverage;
 mod false_bodies;
 mod heads;
+mod publication;
 use crate::test_support::{Allowance, theory};
 use crate::{Node, RegionLimits};
 use zetesis_algebra::Cancellation;
@@ -123,7 +124,9 @@ impl Example {
     }
 
     fn start(&self, scratch: &mut Scratch, never: &[u64]) {
-        scratch.begin_local(&self.owner, true);
+        scratch
+            .begin_local(&self.owner, true, &mut Meter::local(u64::MAX))
+            .unwrap();
         assert!(scratch.local.collecting);
         for node in 0..self.owner.nodes().len() {
             if bit(never, node) {
@@ -208,16 +211,20 @@ fn exact_owner_is_checked_after_history_collection() {
     assert_eq!(actual.local.passes, 0);
     assert_eq!(actual.atoms[0] & 63, 48);
     let foreign = Example::new(false);
-    actual.begin_local(&foreign.owner, true);
+    actual
+        .begin_local(&foreign.owner, true, &mut Meter::local(u64::MAX))
+        .unwrap();
     assert!(!actual.local.collecting);
 }
 
 #[test]
-fn only_inherited_first_pass_uses_local_replay() {
+fn bare_completion_does_not_rearm_local_replay() {
     let example = Example::new(false);
     let (never, cuts) = example.masks(3, 0);
     let mut actual = example.prepared();
-    actual.begin_local(&example.owner, false);
+    actual
+        .begin_local(&example.owner, false, &mut Meter::local(u64::MAX))
+        .unwrap();
     assert!(!actual.local.collecting);
     example.start(&mut actual, &never);
     example
@@ -376,8 +383,195 @@ fn original_false_events_collect_the_whole_interval() {
             close(&mut child, &mut inherited, &mut scratch),
             Narrowing::Fixed { .. }
         ));
-        assert_eq!(scratch.common.founded.local.passes, before + 1);
+        // One changed replay publishes the cuts, then one local confirmation
+        // consumes the complete publication baseline with no further false input.
+        assert_eq!(scratch.common.founded.local.passes, before + 2);
         assert!((0..4).all(|atom| child.is_cut(atom)));
         assert!(child.is_open(4) && child.is_open(5));
     }
+}
+
+#[test]
+fn a_refuted_siblings_marks_are_reset_before_inherited_collection() {
+    let example = Example::new(false);
+    let (never, cuts) = example.masks(3, 0);
+    let mut expected = example.prepared();
+    example
+        .complete(&mut expected, &never, &cuts, &mut Meter::local(u64::MAX))
+        .unwrap();
+    let mut actual = example.prepared();
+    // A sibling records its false inputs, then is refuted before its pass.
+    let (sibling, _) = example.masks(4, 0);
+    example.start(&mut actual, &sibling);
+    assert!(!actual.local.touched.is_empty());
+    actual
+        .begin_local(&example.owner, true, &mut Meter::local(u64::MAX))
+        .unwrap();
+    assert!(actual.local.collecting);
+    assert!(actual.local.touched.is_empty());
+    assert!(actual.local.marks.iter().all(|&mark| mark == 0));
+    for node in 0..example.owner.nodes().len() {
+        if bit(&never, node) {
+            actual.record_false(node);
+        }
+    }
+    example
+        .complete(&mut actual, &never, &cuts, &mut Meter::local(u64::MAX))
+        .unwrap();
+    assert_eq!(actual.local.passes, 1);
+    assert_eq!(actual.atoms, expected.atoms);
+    assert_eq!(actual.atoms[0] & 63, 48);
+}
+
+#[test]
+fn resetting_stale_marks_charges_one_operation_per_mark() {
+    let example = Example::new(false);
+    let mut actual = example.prepared();
+    let (sibling, _) = example.masks(7, 63);
+    example.start(&mut actual, &sibling);
+    let stale = actual.local.touched.len();
+    assert!(stale > 0);
+    let mut reset = Meter::local(u64::MAX);
+    actual
+        .begin_local(&example.owner, true, &mut reset)
+        .unwrap();
+    assert_eq!(reset.charged(), stale as u64);
+    let mut clean = Meter::local(u64::MAX);
+    actual
+        .begin_local(&example.owner, true, &mut clean)
+        .unwrap();
+    assert!(actual.local.collecting);
+    assert_eq!(clean.charged(), 0);
+}
+
+#[test]
+fn a_refused_reset_keeps_every_remaining_mark_and_grants_no_authority() {
+    let example = Example::new(false);
+    let (never, cuts) = example.masks(3, 0);
+    let mut expected = example.prepared();
+    example
+        .complete(&mut expected, &never, &cuts, &mut Meter::local(u64::MAX))
+        .unwrap();
+    let (sibling, _) = example.masks(7, 63);
+    for failure in [
+        Stop::WorkLimit,
+        Stop::Cancelled,
+        Stop::Deadline,
+        Stop::Allocation,
+    ] {
+        let mut stale = None;
+        for ceiling in 0.. {
+            let mut actual = example.prepared();
+            example.start(&mut actual, &sibling);
+            let recorded = actual.local.touched.len();
+            assert_eq!(*stale.get_or_insert(recorded), recorded);
+            if ceiling == recorded {
+                break;
+            }
+            let mut allowance = Allowance {
+                remaining: u64::try_from(ceiling).unwrap(),
+                failure,
+            };
+            let mut work = Meter::reserved(&mut allowance);
+            assert_eq!(
+                actual
+                    .begin_local(&example.owner, true, &mut work)
+                    .map_err(zetesis_algebra::Failure::into_stop),
+                Err(failure)
+            );
+            work.refund();
+            assert!(!actual.local.collecting);
+            assert_eq!(actual.local.touched.len(), recorded - ceiling);
+            assert!(
+                actual
+                    .local
+                    .touched
+                    .iter()
+                    .all(|&vertex| actual.local.marks[vertex] != 0)
+            );
+            assert_eq!(
+                actual.local.marks.iter().filter(|&&mark| mark != 0).count(),
+                actual.local.touched.len()
+            );
+            // A later reset continues from the remaining marks.
+            actual
+                .begin_local(&example.owner, true, &mut Meter::local(u64::MAX))
+                .unwrap();
+            assert!(actual.local.collecting && actual.local.touched.is_empty());
+            for node in 0..example.owner.nodes().len() {
+                if bit(&never, node) {
+                    actual.record_false(node);
+                }
+            }
+            example
+                .complete(&mut actual, &never, &cuts, &mut Meter::local(u64::MAX))
+                .unwrap();
+            assert_eq!(actual.local.passes, 1);
+            assert_eq!(actual.atoms, expected.atoms);
+        }
+    }
+}
+
+#[test]
+fn a_refuted_sibling_does_not_force_the_next_full_pass() {
+    use crate::{Narrowing, NarrowingScratch, OriginalSubject, Region};
+    let example = Example::new(false);
+    let learning = crate::test_support::learning(&example.owner);
+    let close =
+        |region: &mut Region, known: &mut crate::Knowledge, scratch: &mut NarrowingScratch| {
+            example
+                .index
+                .narrow_known(
+                    OriginalSubject::carrier(&learning, Some(&example.producers)),
+                    region,
+                    known,
+                    scratch,
+                    RegionLimits::default(),
+                    &Cancellation::default(),
+                )
+                .result
+                .unwrap()
+        };
+    let mut parent = Region::all_open(example.owner.atom_count());
+    let mut known = example.index.knowledge();
+    let mut scratch = NarrowingScratch::default();
+    assert!(matches!(
+        close(&mut parent, &mut known, &mut scratch),
+        Narrowing::Fixed { .. }
+    ));
+    scratch
+        .common
+        .founded
+        .prepare_bodies(
+            &example.owner,
+            &example.index,
+            &example.producers,
+            &mut Meter::local(u64::MAX),
+        )
+        .map_err(zetesis_algebra::Failure::into_stop)
+        .unwrap();
+    // Cutting atom 0 and holding atom 1 refutes the first child through the
+    // rule 1 -> 0 during ordinary propagation, after atom 0's false
+    // occurrences were recorded and before any founded pass consumed them.
+    let mut refuted = parent.clone();
+    assert!(refuted.cut(0) && refuted.hold(1));
+    assert!(matches!(
+        close(&mut refuted, &mut known.clone(), &mut scratch),
+        Narrowing::Refuted
+    ));
+    assert!(!scratch.common.founded.local.touched.is_empty());
+    // Its sibling inherits the same completed parent and replays locally: one
+    // changed replay publishes the cuts, then one local confirmation.
+    let mut sibling = parent.clone();
+    assert!(sibling.hold(6));
+    let local = scratch.common.founded.local.passes;
+    let passes = scratch.common.founded.passes;
+    assert!(matches!(
+        close(&mut sibling, &mut known.clone(), &mut scratch),
+        Narrowing::Fixed { .. }
+    ));
+    assert_eq!(scratch.common.founded.passes - passes, 2);
+    assert_eq!(scratch.common.founded.local.passes - local, 2);
+    assert!(sibling.is_cut(0) && sibling.is_cut(1));
+    assert!(sibling.is_open(4) && sibling.is_open(5));
 }

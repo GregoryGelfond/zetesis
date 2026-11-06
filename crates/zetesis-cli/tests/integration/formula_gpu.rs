@@ -337,6 +337,18 @@ mod physical {
     }
 
     #[test]
+    #[ignore = "requires Metal: the quantified series' families through the batched completion match the CPU's"]
+    fn ordinary_metal_series_families_match_cpu_through_the_batched_completion() {
+        crate::inner_series::qualify_batched_completion(GpuApi::Metal.argument());
+    }
+
+    #[test]
+    #[ignore = "requires Vulkan: the quantified series' families through the batched completion match the CPU's"]
+    fn ordinary_vulkan_series_families_match_cpu_through_the_batched_completion() {
+        crate::inner_series::qualify_batched_completion(GpuApi::Vulkan.argument());
+    }
+
+    #[test]
     #[ignore = "requires Metal: ordinary Metal table joins preserve complete answers"]
     fn ordinary_metal_table_joins_preserve_complete_answers() {
         qualify_table_joins(GpuApi::Metal);

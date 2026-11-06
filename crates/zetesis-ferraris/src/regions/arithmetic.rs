@@ -1,9 +1,13 @@
 //! Checked affine equations and count bounds for candidate preparation.
 //!
 //! Source recognition proposes rows; independent source reads establish their
-//! consequences for the original theory's answer sets. These rows never enter
-//! the frozen reduct's proper-subset search. Root preparation precedes region
-//! narrowing; the later region subjects will consume the same immutable rows.
+//! consequences for the original theory's answer sets, and those rows never
+//! enter the frozen reduct's proper-subset search. A candidate's inner
+//! preparation makes rows of its countermodel class by the same hull,
+//! materialization and retention, checked against their probe tables and
+//! never reread, and those rows narrow that search as its late tier. Root
+//! preparation precedes region narrowing; the later region subjects consume
+//! the same immutable rows.
 
 use zetesis_algebra::Quota;
 
@@ -11,6 +15,7 @@ mod budget;
 mod cardinality_source;
 mod completion;
 mod conjunction;
+mod frozen;
 mod hull;
 mod parity;
 mod root_facts;
@@ -23,6 +28,11 @@ mod cardinality_runtime;
 mod work;
 pub(super) mod runtime;
 mod snapshot;
+
+pub use frozen::{
+    ClosedQuery, FrozenPreparation, FrozenPreparationAttempt, FrozenPreparationLimits,
+    FrozenPreparationStatistics,
+};
 
 pub use cardinality_runtime::CardinalityKnowledge;
 pub use parity::ParityKnowledge;
@@ -61,7 +71,8 @@ impl PreparationLimits {
 /// Whether a complete immutable preparation was published.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum PreparationStatus {
-    /// The stage has not run, including after an earlier absorbing refutation.
+    /// The stage has not run, or ran and found nothing to publish: an earlier
+    /// absorbing refutation, no proposal, or nothing to install.
     #[default]
     NotPrepared,
     /// Complete checked rows and their root result are available.
@@ -218,6 +229,15 @@ pub struct ParitySystem {
 }
 
 impl ParitySystem {
+    /// A system from rows already recognized and eliminated; the frozen
+    /// preparation's rows enter here.
+    const fn from_rows(recognized: rows::Recognized, prepared: parity::Prepared) -> Self {
+        Self {
+            recognized,
+            prepared,
+        }
+    }
+
     /// Owned headers and actual vector capacities; shared theory data excluded.
     #[must_use]
     pub fn retained_bytes(&self) -> u128 {
@@ -255,6 +275,20 @@ pub struct CardinalitySystem {
 }
 
 impl CardinalitySystem {
+    /// A system from bounds already proposed and prepared; the frozen
+    /// preparation's bounds enter here.
+    const fn from_bounds(
+        owner: Theory,
+        bounds: Vec<cardinality_source::Bound>,
+        prepared: cardinality::Prepared,
+    ) -> Self {
+        Self {
+            owner,
+            bounds,
+            prepared,
+        }
+    }
+
     /// Owned headers and capacities; the original theory is shared, not copied.
     #[must_use]
     pub fn retained_bytes(&self) -> u128 {

@@ -232,12 +232,13 @@ macro_rules! lane {
                 from: usize,
                 mut before_word: impl FnMut() -> Result<(), E>,
             ) -> Result<Option<usize>, E> {
+                let lanes = self.storage.as_ref();
                 let width = <$lane>::BITS as usize;
                 let mut index = from / width;
                 let mut mask = <$lane>::MAX << (from % width);
-                while index < self.len() {
+                while index < lanes.len() {
                     before_word()?;
-                    let selected = self[index] & mask;
+                    let selected = lanes[index] & mask;
                     if selected != 0 {
                         return Ok(Some(index * width + Self::first_bit(selected)));
                     }
@@ -245,6 +246,46 @@ macro_rules! lane {
                     mask = <$lane>::MAX;
                 }
                 Ok(None)
+            }
+
+            /// Whether every stored bit here also occurs in `other`.
+            ///
+            /// Equal-length lanes are visited in ascending order. Each visited
+            /// pair calls `before` separately before NOT, AND and the zero test.
+            /// A missing bit decides false immediately; later lanes and callbacks
+            /// are not visited. Empty storage decides true without a callback.
+            /// All stored bits participate, including caller-owned padding.
+            ///
+            /// No mutation, allocation or retained state occurs. Work is three
+            /// primitive operations per visited lane, with constant space.
+            /// The completed prefix has no bit absent from `other`; a nonzero
+            /// difference is the deciding witness. Each step shortens the suffix.
+            ///
+            /// # Errors
+            /// Returns the exact first callback refusal before its operation.
+            /// An unfinished scan proves neither containment nor its negation.
+            ///
+            /// # Panics
+            /// Panics before any callback if the storage lengths differ.
+            #[inline]
+            pub fn is_subset_of<E>(
+                &self,
+                other: Words<$lane, &[$lane]>,
+                before: &mut impl FnMut() -> Result<(), E>,
+            ) -> Result<bool, E> {
+                let lanes = self.storage.as_ref();
+                assert_eq!(lanes.len(), other.len(), "packed subset shapes agree");
+                for (left, right) in lanes.iter().zip(other.iter()) {
+                    before()?;
+                    let absent = !*right;
+                    before()?;
+                    let missing = *left & absent;
+                    before()?;
+                    if missing != 0 {
+                        return Ok(false);
+                    }
+                }
+                Ok(true)
             }
 
             /// Whether the common lane prefix has any shared set bit.

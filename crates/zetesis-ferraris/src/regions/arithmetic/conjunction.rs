@@ -72,6 +72,8 @@ impl<'a> Conjunction<'a> {
             &mut Budget<'_, '_, Q>,
         ) -> Result<bool, BudgetError<Q::Error>>,
     ) -> Result<bool, BudgetError<Q::Error>> {
+        // A walk borrowed from an earlier read begins no work once stopped.
+        budget.poll()?;
         budget.charge(1)?;
         self.walk_entered(theory, entry, storage, budget, visit)
     }

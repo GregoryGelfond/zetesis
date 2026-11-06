@@ -1,4 +1,4 @@
-//! First-pass replay below inherited completed founded knowledge.
+//! Replay below completed founded knowledge.
 //!
 //! Every old uncut cyclic atom belongs to the old least upper closure. Collect
 //! all newly false selected inputs, then close their forward dependency cone.
@@ -10,10 +10,16 @@
 //! heads under current masks. The final
 //! atom mask contains the unaffected seeds and the complete local result.
 //!
-//! Only the inherited knowledge supplies this premise. Owner-bound scratch stores
-//! disposable membership/worklists, never an ancestor's truth. A partial attempt
-//! consumes the premise and leaves marks that require a full retry. Publication
-//! and explanation capture retain their existing complete-result boundary.
+//! Inherited completion or a complete successful missing-head publication
+//! supplies this premise. The latter erases only heads absent from the completed
+//! least closure, before ordinary propagation changes other body masks.
+//! Owner-bound scratch stores disposable membership/worklists, never previous
+//! body truth. A partial attempt consumes the premise and leaves marks that
+//! require a full retry of that region. Marks a sibling left when it was
+//! refuted or stopped before its pass describe that sibling's inputs only;
+//! the next inherited narrowing resets them, charged per mark, and then
+//! collects its own. Publication and explanation capture retain their
+//! existing complete-result boundary.
 
 use zetesis_algebra::{Failure, Quota};
 
@@ -44,6 +50,8 @@ pub(super) struct Replay {
     touched: Vec<usize>,
     #[cfg(test)]
     passes: usize,
+    #[cfg(test)]
+    force_full: bool,
 }
 
 impl Replay {
@@ -135,28 +143,74 @@ impl Scratch {
         self.local.end();
     }
 
-    /// Called once before original events. Unchanged checks incur no traversal
-    /// or allocation. Dirty scratch from a stopped sibling declines this route.
-    pub(in crate::regions) fn begin_local(&mut self, theory: &Theory, inherited: bool) {
+    /// Called once before original events. A sibling refuted or stopped before
+    /// its founded pass leaves its recorded inputs here; they describe another
+    /// region and carry no authority, so they are reset, one charged operation
+    /// per mark, before this region collects. Clean scratch incurs no traversal
+    /// or allocation.
+    ///
+    /// # Errors
+    /// Returns the exact refusal of a reset. The marks not yet reset remain,
+    /// so a later reset continues from them, and no authority is granted.
+    pub(in crate::regions) fn begin_local<Q: Quota + ?Sized>(
+        &mut self,
+        theory: &Theory,
+        inherited: bool,
+        work: &mut Meter<'_, Q>,
+    ) -> Result<(), Failure<Q::Error>> {
         self.local.end();
-        if inherited
-            && self
-                .owner
-                .as_ref()
-                .is_some_and(|owner| owner.same_instance(theory))
+        if inherited {
+            self.begin_completed(theory, work)?;
+        }
+        Ok(())
+    }
+
+    /// Called only after explanation capture and the entire missing-head
+    /// publication succeeded. Every remaining uncut cyclic head is in the
+    /// completed result; dependent ordinary events have not yet been drained.
+    ///
+    /// # Errors
+    /// As [`Self::begin_local`]; the completed pass left no mark to reset.
+    pub(in crate::regions) fn begin_after_publication<Q: Quota + ?Sized>(
+        &mut self,
+        theory: &Theory,
+        work: &mut Meter<'_, Q>,
+    ) -> Result<(), Failure<Q::Error>> {
+        self.local.end();
+        self.begin_completed(theory, work)
+    }
+
+    /// Both callers supply complete baseline knowledge, never a partial pass.
+    /// Authority is granted only once every stale mark has been reset.
+    fn begin_completed<Q: Quota + ?Sized>(
+        &mut self,
+        theory: &Theory,
+        work: &mut Meter<'_, Q>,
+    ) -> Result<(), Failure<Q::Error>> {
+        #[cfg(test)]
+        if self.local.force_full {
+            return Ok(());
+        }
+        if self
+            .owner
+            .as_ref()
+            .is_some_and(|owner| owner.same_instance(theory))
             && self.projected.is_some()
-            && self.local.touched.is_empty()
             && self.local.atoms == theory.atom_count()
             && self.local.marks.len() == theory.atom_count().saturating_add(theory.nodes().len())
         {
+            self.local.clear(work)?;
             self.queue.clear();
             self.local.collecting = true;
         }
+        Ok(())
     }
 
     /// Ordinary evidence only appends selected node IDs, once each. Storage was
     /// reserved with the immutable projection. Atom events also call this for
     /// already-false occurrences, preserving conservative invalidation coverage.
+    // Hot in the narrowing's closure; the hint measured to pay.
+    #[inline]
     pub(in crate::regions) fn record_false(&mut self, node: usize) {
         if !self.local.collecting || matches!(self.states[node], State::Outside) {
             return;
@@ -169,7 +223,7 @@ impl Scratch {
         }
     }
 
-    /// Consume first-pass authority before any fallible work. A declined local
+    /// Consume completed-baseline authority before any fallible work. A declined local
     /// plan leaves only disposable marks; the caller must complete a full pass.
     pub(super) fn complete_local<Q: Quota + ?Sized>(
         &mut self,
@@ -180,8 +234,8 @@ impl Scratch {
         atom_never: &[u64],
         work: &mut Meter<'_, Q>,
     ) -> Result<bool, Failure<Q::Error>> {
-        let inherited = std::mem::take(&mut self.local.collecting);
-        if !inherited
+        let completed = std::mem::take(&mut self.local.collecting);
+        if !completed
             || !self
                 .owner
                 .as_ref()

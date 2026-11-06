@@ -169,8 +169,23 @@ fn other_subjects_end_pending_local_collection() {
         assert!(scratch.common.founded.projected.is_some());
         assert!(!scratch.common.founded.local.collecting);
         assert_eq!(scratch.common.founded.local.touched.len(), touched);
-        scratch.common.founded.begin_local(&example.owner, true);
-        assert!(!scratch.common.founded.local.collecting);
+        // The ended collection belongs to an abandoned region. The next
+        // inherited narrowing resets its marks, charged per mark, then
+        // collects its own inputs and replays them locally.
+        let mut reset = Meter::local(u64::MAX);
+        scratch
+            .common
+            .founded
+            .begin_local(&example.owner, true, &mut reset)
+            .unwrap();
+        assert!(scratch.common.founded.local.collecting);
+        assert!(scratch.common.founded.local.touched.is_empty());
+        assert_eq!(reset.charged(), touched as u64);
+        for node in 0..example.owner.nodes().len() {
+            if bit(&never, node) {
+                scratch.common.founded.record_false(node);
+            }
+        }
         example
             .complete(
                 &mut scratch.common.founded,
@@ -179,7 +194,7 @@ fn other_subjects_end_pending_local_collection() {
                 &mut Meter::local(u64::MAX),
             )
             .unwrap();
-        assert_eq!(scratch.common.founded.local.passes, 0);
+        assert_eq!(scratch.common.founded.local.passes, 1);
         assert_eq!(scratch.common.founded.atoms[0] & 63, 48);
         assert!(scratch.common.founded.local.touched.is_empty());
     }

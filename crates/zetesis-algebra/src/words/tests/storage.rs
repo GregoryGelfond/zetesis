@@ -391,3 +391,145 @@ fn lane_population_counts_every_stored_bit() {
         assert_eq!(Words::<u32>::popcount(word), width);
     }
 }
+
+#[test]
+fn subset_checks_and_scans_one_backing_view() {
+    struct ChangingView(std::cell::Cell<bool>);
+
+    impl AsRef<[u64]> for ChangingView {
+        fn as_ref(&self) -> &[u64] {
+            if self.0.replace(true) { &[0, 1] } else { &[1] }
+        }
+    }
+
+    let left = Words::<u64, _>::new(ChangingView(std::cell::Cell::new(false)));
+    let mut calls = 0;
+    let result = left.is_subset_of(Words::new(&[0]), &mut || {
+        calls += 1;
+        Ok::<_, ()>(())
+    });
+    assert_eq!(result, Ok(false));
+    assert_eq!(calls, 3);
+}
+
+#[test]
+fn subset_refusal_preserves_the_deciding_prefix() {
+    macro_rules! check {
+        ($lane:ty) => {{
+            let left: [$lane; 3] = [1, 2, 4];
+            let right: [$lane; 3] = [1, 0, 4];
+            // The second pair is the first witness. Even a callback willing
+            // to continue must not be called for the third pair.
+            for admitted in 0..=6 {
+                let mut calls = 0;
+                let result = Words::<$lane, _>::new(&left[..]).is_subset_of(
+                    Words::new(&right[..]),
+                    &mut || {
+                        if calls == admitted {
+                            return Err(("primitive", calls));
+                        }
+                        calls += 1;
+                        Ok(())
+                    },
+                );
+                assert_eq!(
+                    result,
+                    if admitted == 6 {
+                        Ok(false)
+                    } else {
+                        Err(("primitive", admitted))
+                    }
+                );
+                assert_eq!(calls, admitted);
+                assert_eq!(left, [1, 2, 4]);
+                assert_eq!(right, [1, 0, 4]);
+            }
+        }};
+    }
+    check!(u32);
+    check!(u64);
+}
+
+#[test]
+fn subset_includes_the_final_physical_bit() {
+    macro_rules! check {
+        ($lane:ty) => {{
+            let left: [$lane; 3] = [0, 0, 1 << (<$lane>::BITS - 1)];
+            for (right, expected) in [([0; 3], false), (left, true)] {
+                let mut calls = 0;
+                assert_eq!(
+                    Words::<$lane, _>::new(&left[..]).is_subset_of(
+                        Words::new(&right[..]),
+                        &mut || {
+                            calls += 1;
+                            Ok::<_, ()>(())
+                        }
+                    ),
+                    Ok(expected)
+                );
+                assert_eq!(calls, 9);
+            }
+            assert_eq!(
+                Words::<$lane, _>::new([])
+                    .is_subset_of(Words::new(&[]), &mut || Err("empty storage must not poll")),
+                Ok(true)
+            );
+        }};
+    }
+    check!(u32);
+    check!(u64);
+}
+
+#[test]
+#[should_panic(expected = "packed subset shapes agree")]
+fn subset_shape_is_checked_before_callbacks() {
+    let _ = Words::<u64, _>::new([1]).is_subset_of(Words::new(&[]), &mut || -> Result<(), ()> {
+        panic!("callback preceded shape validation")
+    });
+}
+
+#[test]
+fn cursor_checks_and_scans_one_backing_view() {
+    struct ChangingView<'a> {
+        first: &'a [u64],
+        later: &'a [u64],
+        borrows: std::cell::Cell<usize>,
+    }
+
+    impl AsRef<[u64]> for ChangingView<'_> {
+        fn as_ref(&self) -> &[u64] {
+            let borrows = self.borrows.get();
+            self.borrows.set(borrows + 1);
+            if borrows == 0 { self.first } else { self.later }
+        }
+    }
+
+    let original: &[u64] = &[1, 2];
+    let longer: &[u64] = &[1, 2, 4];
+    for (first, later, from, allowance, expected, visits) in [
+        (original, &[][..], 1, 2, Ok(Some(65)), 2),
+        (original, longer, 66, 2, Ok(None), 1),
+        (original, longer, 128, 0, Ok(None), 0),
+        (&[][..], longer, 0, 0, Ok(None), 0),
+        (original, &[][..], 1, 1, Err(1), 2),
+    ] {
+        let view = Words::<u64, _>::new(ChangingView {
+            first,
+            later,
+            borrows: std::cell::Cell::new(0),
+        });
+        let mut calls = 0;
+        let result = view.next_from_with(from, || {
+            let previous = calls;
+            calls += 1;
+            if previous == allowance {
+                Err(previous)
+            } else {
+                Ok(())
+            }
+        });
+        assert_eq!(result, expected);
+        assert_eq!(calls, visits);
+        assert_eq!(view.storage().borrows.get(), 1);
+    }
+}

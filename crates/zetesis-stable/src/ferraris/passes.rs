@@ -81,6 +81,10 @@ pub(super) fn statistics(earlier: &Statistics, later: &Statistics) -> Statistics
                 .peak_workspace_bytes
                 .max(later.reduct.peak_workspace_bytes),
             regions: counts(&earlier.reduct.regions, later.reduct.regions),
+            inner_preparation: earlier
+                .reduct
+                .inner_preparation
+                .saturating_add(later.reduct.inner_preparation),
         },
     }
 }

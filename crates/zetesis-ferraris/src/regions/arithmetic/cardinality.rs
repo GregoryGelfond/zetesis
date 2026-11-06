@@ -281,7 +281,7 @@ struct PartitionProposals {
 
 /// Stable bottom-up merging, reusing one initialized caller-owned buffer.
 /// Each level moves each record once; an odd final level copies it back once.
-fn sort<'a, T: Copy, Q: Quota + ?Sized>(
+pub(super) fn sort<'a, T: Copy, Q: Quota + ?Sized>(
     values: &'a mut [T],
     scratch: &'a mut [T],
     words: u64,
@@ -547,6 +547,7 @@ fn kind(kind: Kind) -> u8 {
         Kind::LowerConstraint => 1,
         Kind::Asserted => 2,
         Kind::ClauseLower => 3,
+        Kind::Probed => 4,
     }
 }
 

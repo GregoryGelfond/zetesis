@@ -129,6 +129,20 @@ positions retain their contributions even when their conditions are equal.
 with repeated condition identities, and the corresponding formula consequences.
 These are general laws over complete rows and truth bounds.
 
+`ThresholdPropagation.condition_required_true_of_occurrence` and
+`condition_required_false_of_occurrence` allow a conservative deduction using
+one occurrence's weight. For concurrent reads, the index type denotes operand
+occurrences and actual truth is the physical interpretation lifted to those
+positions. Lower and upper observations may differ between positions that alias
+the same physical slot; no coherence between those observations is assumed.
+`occurrence_le_coefficient` supplies the selected contribution's weight bound.
+The forcing laws require compatibility at every position and inclusion or
+exclusion of the selected occurrence in the reading used to form the sum.
+A later atomic load does not by itself establish that earlier-read premise.
+Relating those observations under shrinking domains, preserving occurrence
+multiplicity, and realizing natural-number sums without limb overflow remain
+Rust/WGSL correspondence obligations.
+
 The ordinary GPU formula and tight checkers retain shared native threshold rows.
 Four little-endian `u32` wire limbs preserve admitted nonnegative sums and signed-bound
 constants. The complete nonnegative row total, or ordinal empty-minimum sentinel,
@@ -645,6 +659,21 @@ and unmatched suffix. Its operation parameter takes the existing bit-vector
 OR, AND or XOR operation; the corresponding `BitVec.getLsbD_*` laws give each
 lane's set interpretation. The successful-write count is not a work allowance
 or a claim about which callback was executed.
+
+`Words::is_subset_of` tests equal-length physical storage with an ascending
+NOT/AND/zero-test scan. `PackedInterpretations.and_not_zero_iff_bit_imp` relates
+one word's zero difference to bit inclusion; `subset_scan_exact` covers every
+paired lane on completion. All stored bits participate. A semantic inclusion
+equivalence additionally needs exact carrier coverage and zero padding, not
+merely equal physical lengths. The Rust callback refusal boundaries remain a
+separate obligation: each visited lane admits its three primitives separately,
+and a first missing bit stops before the suffix.
+
+The shared arithmetic `Snapshot::is_ancestor` applies this operation to prior
+held/current held, then prior cut/current cut. Under the owners' mask invariants,
+these inclusions express `FormulaBounds.Inside current prior`: the upper bound
+is the complement of cut. This checks descent, not prepared-system identity.
+Detected faults still become `InvalidProgram`, never semantic refutation.
 
 `Region` and the six-span knowledge masks retain their own extents and
 allocation boundaries. Wrapping storage does not establish padding, owner
@@ -2188,6 +2217,27 @@ receipt. The local lease clears its grant; the cumulative meter retains its
 charged history. These are different post-settlement states governed by the
 same used/unused partition, not interchangeable admission policies.
 
+For `runtime::copy_words`, let `c` be charged work, `L` the admitted cumulative
+limit, with `c <= L <= u64::MAX`, and `n` a nonempty copy run covered by
+`n <= L - c`. The covered-success case of
+`WorkCharge.repeated_eq_charge` identifies `n` unit charges with one charge of
+`n`, both ending at `c + n`. Instantiating the numeric `WorkPermits.Window` with
+`granted = L` and `remaining = L - c`, `take_partitions_remaining` and
+`take_preserves_window` give the same remainder and used count. This cumulative
+view is not the source account's outstanding grant; settlement uses that owner's
+actual window and `settlement_partitions_grant`. At an empty balance the copy
+retains the original one-word charge and write, so refill, polling, refund and
+refusal boundaries remain unchanged. No exhausted-batch law justifies charging
+across that boundary.
+
+The Rust argument additionally requires representable counts and slice bounds,
+one original mutable-backing acquisition, and an infallible `u64` copy with no
+allocation, user callback or intermediate control observation. These premises
+make the intermediate reordering unobservable at the existing operation
+boundaries; they do not justify batching fallible maps or larger atomic
+primitives. Exact quota and stopped-prefix tests are regression evidence, not a
+Lean proof of Rust's finite arithmetic, borrowing or callback behavior.
+
 Renewal remains inside the source's existing lock, with control observed before
 locking. Its callback must operate only on that source account, without
 re-entering the same lease, and successful refill leaves a positive unconsumed
@@ -2616,9 +2666,37 @@ The subjects built from the library's laws:
 | Instance | Law it rests on | Rust |
 | --- | --- | --- |
 | `readings`, and from it `original` and `restriction` | `FormulaBounds.known_sound`, `known_mono` | The original subject's readings and knowledge; a restriction, the objective bound among them, read without producers |
-| `frozen`, the whole of `countermodelSubjects` | `known_sound` over the frozen reduct, and `ReductRegions.masked_known_sound` for propagation under the candidate's mask | The private frozen adapter reads `zetesis_ferraris::FrozenSubject`. The reduct query takes the existing authenticated `FormulaEvaluation`, derives its theory, candidate and frozen truth, and constructs its adapter, subset region and fresh frozen knowledge internally. It accepts no supplied subject or root state. Published query continuations retain their own authenticated entries; they are not new root constructors. Ferraris now indexes its knowledge and private reading context by the sealed class markers. The frozen closure borrows only common worker scratch; its learning capability is unit. A candidate closure can borrow the worker-owned ledger, which is never copied into regional knowledge. The marker does not bind a particular theory, candidate or state; the existing runtime ownership checks remain necessary |
+| `frozen`, the head of `countermodelSubjects` | `known_sound` over the frozen reduct, and `ReductRegions.masked_known_sound` for propagation under the candidate's mask | The private frozen adapter reads `zetesis_ferraris::FrozenSubject`. The reduct query takes the existing authenticated `FormulaEvaluation`, derives its theory, candidate and frozen truth, and constructs its adapter, subset region and fresh frozen knowledge internally. It accepts no supplied subject or root state. Published query continuations retain their own authenticated entries; they are not new root constructors. Ferraris now indexes its knowledge and private reading context by the sealed class markers. The frozen closure borrows only common worker scratch; its learning capability is unit. A candidate closure can borrow the worker-owned ledger, which is never copied into regional knowledge. The marker does not bind a particular theory, candidate or state; the existing runtime ownership checks remain necessary |
 | `row` | `LearnedRegions.consequence_row_narrows` | The learned-row ledger's narrowing, and algebraic forcing rows (`AlgebraicRows.equation_forces_true`, `equation_forces_false`) |
 | `exclusion`, `doubleCount`, through `refuting` | `AlgebraicRows.excludes_region`, `double_count_excludes_region` | Algebraic refutations, a recognized parity row's exclusion and the double count |
+| the rows of `countermodelSubjects`: the parity rows and units through `row`, the count bounds through `doubleCount` and the guarded bounds | `Algebra.entailed_by_refutations` over `contains_decideAll` for a probed group's allowed patterns, `Algebra.saturation_unit` for a unit, `LearnedRegions.row_under_unit` for a row found under a guard the class cuts; `AlgebraicRows.upper_of_clique`, `bounds_of_allowed` and `lower_of_clause` giving the count bounds' `LowerOf` and `UpperOf` | A candidate's inner preparation: rows of the countermodel class recognized by probing the closed query root, loaded into the same parity and cardinality systems the candidate walk uses, applied by the countermodel walk's late tier. The preparation is built from the theory and the candidate alone and dropped with the query |
+
+What the Rust establishes for those rows, beyond the obligations the arithmetic subjects already carry for forced literals
+and threshold guards: recognition reads only the masked DAG and the closed root's knowledge; every probe narrows a copy of
+the closed query root with exactly the guard and the pattern decided, in the first probing round by the frozen subject
+and in a later round by the frozen subject composed with the row subjects of the round before, each sound for the class
+and so their joint closure (`Algebra.joint_sound`), the complete consistency check of those rows entering as a refuting
+subject of the class (a `0 = 1` combination under the region's decisions is a sum of class equations,
+`AlgebraicRows.equation_sum`, every variable of which the region decides, `equation_excludes_given` and
+`excludes_region`); so a refuted probe is the premise of `entailed_by_refutations` with that round's subject as `s`. The
+patterns a clause of the group forbids, and those whose restriction to a group whose support this one contains is such
+a pattern, are marked refuted without a probe: the region deciding such a pattern lies in the closed root, so a member
+of the class in it satisfies the clause's body under the pattern (the clause's rule and the chains to its base standing
+in the reduct, their bodies true in the candidate, as the proposal pass reads them) and holds the clause's guard, which no
+countermodel in the root holds, cut by the root or a unit by `saturation_unit`; the region holds no member, nor does its
+narrowing inside it, which is the same premise, discharged by the proposal pass's reading of the clause rather than by a
+probe. A clause too wide for a group whose pattern cuts its whole support is installed as a lower bound of one over that
+support (`AlgebraicRows.lower_of_clause`), its all-cut pattern excluded by the same argument. A unit's probe narrows the closed root, `s.narrow (query M)`, with the guard held, where `saturation_unit` quantifies over
+the raw query root with the guard held: a countermodel in the law's region holds the guard and lies in `query M`, so by
+the frozen subject's soundness it lies in the closed root and, holding the guard, in the probed region, which is how a
+probe that reaches the candidate or is refuted discharges the law's premise. A parity row or a count bound is installed only
+under a guard the closed root cuts, a saturation unit or a residual root's own decision, and enters without the guard,
+which the unit discharges (`row_under_unit`), every region the preparation serves descending from that root; the
+preparation is built from the theory and the candidate, authenticated at every use, and never
+consulted for another candidate; `add` is the only operation changing a parity row; and a stopped probe declines the
+whole preparation rather than marking a pattern. The affine hull of the allowed patterns and the clique search are
+trusted computations whose results are checked against the retained pattern tables, not re-read from formulas; the
+proposal pass's reading of a clause, where it forbids a pattern without a probe, is a trusted computation beside them.
 
 The support cut (`FormulaBounds.unsupported_cut_with_choices`) and the objective
 bound's own lower-bound reasoning
@@ -3462,14 +3540,35 @@ upper relaxation then put every compatible answer set inside `P`. The selection
 may be arbitrary: this law establishes safe exclusion, not equality with a least
 closure, and does not assume or prove inherited completion.
 
+`PossibleFoundedness.PublicationErasure.erasure_preserves_least_closed`
+proves that erasing atoms outside a monotone operator's least closed set from
+both inputs and outputs preserves that least set. The positive formula
+relaxation instantiates this law through `completed_publication_preserves_least`.
+`whole_publication_baseline` also establishes that every surviving permitted
+cyclic head belongs to the completed closure after all missing cyclic heads
+have been published. Erasing a partial publication prefix still preserves the
+least set, but does not establish that all remaining cyclic heads belong to it.
+The boundary precedes dependent ordinary propagation; it does not freeze opaque
+body truth across that later work or establish answer-set membership.
+
 Rust's [selective replay](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-ferraris/src/regions/founded/local.rs)
-uses inherited completed knowledge only on the first invalidated original pass,
-with exact owner and projection authentication repeated immediately before use.
-Its forward cone must include every affected live cyclic head `H`, from all false
-inputs since entry, including opaque bodies and already-false occurrences of newly
-cut atoms. Forward traversal may stop at a currently false destination only
-because a newly false input retains its own notification and an older false
-input was inactive in the inherited completed closure. The head-prefix partition
+collects false events from an authenticated completed original baseline. That
+baseline may be inherited at entry or re-established after a completed founded
+pass publishes its whole missing-head set. Exact owner and projection
+authentication are repeated immediately before replay. A stopped publication
+prefix cannot rearm collection; a completed pass without new publication does
+not supply a new event boundary. Its forward cone must include every affected
+live cyclic head `H`, from all false inputs since that baseline, including opaque
+bodies and already-false occurrences of newly cut atoms. Rearming may clear the
+completed founded event history, but must retain pending ordinary events and
+collect subsequent atom cuts and ordinary false events. It does not mark
+ordinary closure or founded confirmation complete. Inputs a sibling recorded
+before it was refuted or stopped describe that sibling's region alone; the next
+inherited narrowing resets those marks, one charged operation per mark, before
+it collects, so they never enter its cone and grant no authority. Forward
+traversal may stop at a currently false destination only because a newly false input
+retains its own notification and an older false input was inactive at the
+completed baseline. The head-prefix partition
 must preserve every discovered vertex, head order and membership marks; it does
 not supply new closure authority. Reverse selection must cover every producer entering an uncut head in
 `H` and every relevant relaxed Boolean operand in `B(H)`. A current false body
@@ -3479,9 +3578,12 @@ activate and needs no incoming producer evaluation. Fresh initialization and fil
 must saturate that complete body selection while seeding unaffected uncut atoms.
 The result must include the boundary seeds as well as the local closure before
 publication or explanation capture. Proving that no newly invalidated unblocked
-dependency can change a boundary seed, and that inherited completion justifies
-those seeds in the current least closure of the full cyclic-head relaxation, remains an executable
-correspondence obligation. So do occurrence
+dependency can change a boundary seed, and that the selected completed baseline
+justifies those seeds in the current least closure of the full cyclic-head
+relaxation, remains an executable correspondence obligation. Complete producer
+coverage, n-ary Boolean projection and native opaque-body treatment must realize
+the formula-level law; it does not verify the indexed Rust DAG. Further
+correspondence obligations include occurrence
 multiplicity, sibling isolation, full fallback, typed interruption and actual
 storage accounting. Exhaustive cut comparisons and interrupted-prefix tests supply
 regression evidence for these obligations; the partition law does not discharge
@@ -3853,6 +3955,19 @@ new decision remains a trigger for the next inspection. `AlgebraicRows.parity_fo
 `LearnedRegions.consequence_row_forces` carries a forced row into the region.
 The shared `zetesis_algebra::region::SubjectStep::Changed` denotes progress,
 not local or joint closure.
+
+After exact touched-row selection, parity uses the existing metered
+`words::first` to detect an empty mask. `PackedWordIterator.first_set_none_iff`
+states that completed absence means every stored word is zero; interrupted
+scans establish no such result. With no selected bit, the old row loop has no
+row consumer and the already-cleared consequence vector stays empty. The
+runtime can omit rebuilding its open mask and the vacuous row/application
+work, while still publishing the inspected input before returning Unchanged.
+This is not a permanent absorption flag: unrelated decisions are published,
+and later incident decisions select rows normally. Validation, system identity
+preconditions and the completed incidence-selection correspondence remain
+necessary. Executing fewer operations changes bounded receipts and quota
+observations; the packed value law does not establish those effects.
 
 `zetesis_ferraris::CardinalitySystem::inspect_reserved` retains a complete input
 snapshot and two sums per checked family pair in `CardinalityKnowledge`. It

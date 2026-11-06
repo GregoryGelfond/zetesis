@@ -23,7 +23,9 @@
 
 use std::{fmt, mem::size_of};
 
-use zetesis_algebra::{Cancellation, Failure, Meter, MeterBytes, Quota, Stop, words::Words};
+use zetesis_algebra::{
+    Cancellation, Failure, Meter, MeterBytes, POLL_INTERVAL, Quota, Stop, words::Words,
+};
 
 use super::{
     NodeView, OriginalSubject, PreferenceAttempt, Producers, Region, Theory,
@@ -109,6 +111,12 @@ impl GeneratorOrder {
     /// original narrowing. No source spelling, predicate class or argument
     /// value is read. A theory without choices or competing heads declines
     /// without graph allocation. Cancellation precedes that fast path.
+    ///
+    /// The meter here is local and has no quota to poll, so control is
+    /// observed at entry and again before a refused charge is reported, and
+    /// not between them: a stop requested meanwhile waits for the preparation
+    /// to finish or to reach `limits.max_work`. [`Self::prepare_reserved`],
+    /// under a quota that polls, observes it at every refill as well.
     #[must_use]
     pub fn prepare(
         original: OriginalSubject<'_>,
@@ -172,7 +180,12 @@ impl GeneratorOrder {
                 if !producers.has_competing_heads && !producers.has_choice_heads {
                     return Ok(None);
                 }
-                build(original.theory, producers, &mut budget)
+                build(
+                    original.theory,
+                    producers,
+                    edges(original.theory, producers),
+                    &mut budget,
+                )
             });
         budget.work.refund();
         GeneratorOrderAttempt {
@@ -263,6 +276,7 @@ struct Frame {
 fn build<Q: Quota + ?Sized>(
     theory: &Theory,
     producers: &Producers,
+    incidences: impl Iterator<Item = Option<(usize, usize)>> + Clone,
     budget: &mut Budget<'_, '_, Q>,
 ) -> Result<Option<GeneratorOrder>, GeneratorOrderError<Failure<Q::Error>>> {
     let headers = size_of::<GeneratorOrder>()
@@ -279,15 +293,8 @@ fn build<Q: Quota + ?Sized>(
         .atom_count()
         .checked_add(theory.nodes().len())
         .ok_or(Stop::Allocation)?;
-    let incidences = edges(theory, producers);
-    let graph = Graph {
-        outgoing: Adjacency::try_build_in(vertices, incidences.clone().map(Ok), budget)?,
-        incoming: Adjacency::try_build_in(
-            vertices,
-            incidences.map(|event| Ok(event.map(|(from, to)| (to, from)))),
-            budget,
-        )?,
-    };
+    let (outgoing, incoming) = Adjacency::try_build_pair_in(vertices, incidences.map(Ok), budget)?;
+    let graph = Graph { outgoing, incoming };
     let finished = finishing_order(&graph, vertices, budget)?;
     let components = components(&graph, &finished, vertices, budget)?;
     // The graph walk's coordinates are checked before any order is published.
@@ -471,9 +478,25 @@ struct Budget<'a, 'q, Q: Quota + ?Sized> {
 }
 
 impl<Q: Quota + ?Sized> Budget<'_, '_, Q> {
+    /// Charge one operation. Control is observed as a metered operation
+    /// observes it: the order's entry before the first charge, the reserved
+    /// meter's account at every refill of `POLL_INTERVAL` permits, and this
+    /// tick before a refused charge is reported.
     fn tick(&mut self) -> Result<(), GeneratorOrderError<Failure<Q::Error>>> {
+        if let Err(failure) = self.work.tick() {
+            self.poll()?;
+            return Err(GeneratorOrderError::from(failure));
+        }
+        Ok(())
+    }
+
+    /// Observe control, out of line so that the tick it guards stays small
+    /// enough to inline where it is hot.
+    #[cold]
+    #[inline(never)]
+    fn poll(&self) -> Result<(), GeneratorOrderError<Failure<Q::Error>>> {
         self.cancellation.poll()?;
-        self.work.tick().map_err(GeneratorOrderError::from)
+        Ok(())
     }
 
     fn observe(&mut self, bytes: u128) -> Result<(), GeneratorOrderError<Failure<Q::Error>>> {
@@ -502,15 +525,38 @@ impl<Q: Quota + ?Sized> Budget<'_, '_, Q> {
         Ok(values)
     }
 
+    /// `count` copies of `value`, one charged operation each. Between
+    /// observation boundaries the copies already admitted are charged as one
+    /// run; the boundary's own operation, and any that needs a refill, is a
+    /// tick. So the polls, refills and the refused operation fall where
+    /// `count` ticks would put them, and the receipt is the same.
     fn filled<T: Copy>(
         &mut self,
         count: usize,
         value: T,
     ) -> Result<Vec<T>, GeneratorOrderError<Failure<Q::Error>>> {
         let mut values = self.reserve(count)?;
-        for _ in 0..count {
-            self.tick()?;
-            values.push(value);
+        while values.len() < count {
+            let charged = self.work.charged();
+            let offset = charged % POLL_INTERVAL;
+            let run = if offset == 0 {
+                0
+            } else {
+                (POLL_INTERVAL - offset)
+                    .min(self.work.remaining())
+                    .min((count - values.len()) as u64)
+            };
+            if run == 0 {
+                self.tick()?;
+                values.push(value);
+                continue;
+            }
+            if let Err(failure) = self.work.bounded(run, || ((), run)) {
+                self.poll()?;
+                return Err(GeneratorOrderError::from(failure));
+            }
+            let run = usize::try_from(run).map_err(|_| Stop::Allocation)?;
+            values.resize(values.len() + run, value);
         }
         Ok(values)
     }

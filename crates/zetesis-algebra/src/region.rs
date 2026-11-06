@@ -13,7 +13,7 @@ use crate::{Stop, words::Words};
 /// atom bitmasks, one for held and one for cut; a narrowing that carries
 /// knowledge from the region's parent applies only the decisions the parent
 /// had not yet seen, by diffing this region's decided mask against a snapshot.
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub struct Region {
     /// Bit set iff the atom is held. Disjoint from `cut` word for word, and
     /// bits at `[atoms, 64*words)` are always zero and are not atoms.
@@ -22,6 +22,24 @@ pub struct Region {
     cut: Words<u64, Box<[u64]>>,
     /// The atom universe; each mask is `words(atoms)` words long.
     atoms: usize,
+}
+
+impl Clone for Region {
+    fn clone(&self) -> Self {
+        Self {
+            held: self.held.clone(),
+            cut: self.cut.clone(),
+            atoms: self.atoms,
+        }
+    }
+
+    /// Reset a region in its existing mask buffers when the word counts
+    /// match. Frozen probes reuse one such region for successive patterns.
+    fn clone_from(&mut self, source: &Self) {
+        self.held.clone_from(&source.held);
+        self.cut.clone_from(&source.cut);
+        self.atoms = source.atoms;
+    }
 }
 
 /// The number of 64-bit words a mask over `atoms` atoms needs.

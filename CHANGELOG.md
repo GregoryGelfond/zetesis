@@ -6,6 +6,30 @@ Notable changes by release. Versions follow Semantic Versioning.
 
 ### Added
 
+- The membership check's inner walk is narrowed by subjects of its own. Before
+  a candidate's countermodel walk, its closed query root is probed for rows of
+  the countermodel class: the saturation units it cuts, the affine hulls and
+  the least and greatest allowed counts of each clause group's probed patterns,
+  the cliques of pairwise exclusions, a lower bound of one over a clause too
+  wide for a group, and the trivial bounds completing a partition. They load into the same parity and cardinality systems the
+  candidate walk uses and apply through the walk's joint closure, so the
+  quantified saturation cores (parity, Tseitin, pigeonhole) are decided at the
+  root for their stable candidates and walked polynomially for the others. The
+  probing runs at most two rounds, the second under the rows the first
+  established, and loads what they found with the remaining hulls inexact; a
+  group of one clause cutting its whole support is left to that clause until
+  the second.
+  zetesis-ferraris adds `FrozenPreparation`, `FrozenPreparationAttempt`,
+  `FrozenPreparationLimits`, `FrozenPreparationStatistics`, `ClosedQuery` and
+  `ParitySystem::consistent_in_reserved`; zetesis-stable adds
+  `ReductStatistics::inner_preparation` (`InnerPreparationStatistics`),
+  printed as the `preparation` object of `reduct_query_regions` in the JSON
+  statistics: attempts, prepared, declined, saturation units, clauses read and
+  unsupported clauses, groups, probes, rounds, refuted patterns, rows, rank, units, inexact hulls, bounds, lower,
+  upper, families, root refutations and work. The Lean library adds
+  `Region.decideAll`, `contains_decideAll`, `entailed_by_refutations`,
+  `saturation_unit`, `countermodelSubjects`, `count_of_none`,
+  `upper_of_clique`, `bounds_of_allowed`, `guarded_row` and `row_under_unit`.
 - Hybrid statistics report how lazy grounding divided the eligible constraints:
   the streamed templates and instances and those grounded in the core, as
   `HybridExecutionStatistics::streamed` (a `StreamedConstraints`, which adds
@@ -140,6 +164,10 @@ Notable changes by release. Versions follow Semantic Versioning.
 
 ### Changed
 
+- The candidate setup's generator order builds both adjacencies of the
+  dependency graph, by source and by target, from two passes over the
+  incidences where it made four, so `generator_order.work` in the receipts
+  falls with the reads; the order found is unchanged.
 - The native session owner `zetesis_solve::Subject`, also re-exported by
   `zetesis_cli`, is renamed to `Original`. Themelios
   `ProgramSubject` becomes `ProgramOriginal`. Result fields and accessors

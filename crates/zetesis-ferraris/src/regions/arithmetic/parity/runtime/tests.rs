@@ -7,7 +7,7 @@ use super::super::super::{
     ParitySystem,
     budget::Budget,
     parity, root_facts,
-    rows::{Counts, Equation, Recognized, Source},
+    rows::{Counts, Equation, Recognized},
     storage::Storage,
 };
 use crate::{regions::NarrowingScratch, test_support::constructed_theory};
@@ -32,7 +32,6 @@ fn system(atoms: usize, specifications: &[(Vec<usize>, bool)]) -> ParitySystem {
             Equation {
                 words: words.into(),
                 constant: *constant,
-                source: Source::Clauses { first: 0, count: 0 },
             }
         })
         .collect();
@@ -624,5 +623,120 @@ fn refused_copies_never_publish_a_partial_destination() {
         let charged = work.charged();
         assert_eq!(charged, quota.reserved - quota.refunded, "limit {limit}");
         assert_eq!(source.snapshot.old_masks(), (&before.0[..], &before.1[..]));
+    }
+}
+
+fn inspected_open_65() -> (
+    ParitySystem,
+    Region,
+    super::ParityKnowledge,
+    NarrowingScratch,
+) {
+    let system = system(65, &[(vec![0, 1], false)]);
+    let mut region = Region::all_open(65);
+    let mut known = system.knowledge();
+    let mut scratch = NarrowingScratch::default();
+    let attempt = system.inspect_reserved(
+        &mut region,
+        &mut known,
+        &mut scratch,
+        &Cancellation::default(),
+        &mut Meter::local(u64::MAX),
+    );
+    assert_eq!(attempt.result, Ok(SubjectStep::Unchanged));
+    assert_eq!(system.prepared.basis.len(), 1);
+    (system, region, known, scratch)
+}
+
+#[test]
+fn empty_selection_keeps_fresh_decision_scratch() {
+    let (system, mut region, mut known, mut scratch) = inspected_open_65();
+    // The first inspection made no deductions but selected a real row and
+    // built its open mask. No deductions is not the skip criterion.
+    assert_eq!(&*scratch.arithmetic.touched, &[1]);
+    assert_eq!(&*scratch.arithmetic.open, &[u64::MAX, 1]);
+    let before_capacity = scratch.arithmetic.open.capacity();
+    let result = system.inspect_reserved(
+        &mut region,
+        &mut known,
+        &mut scratch,
+        &Cancellation::default(),
+        &mut Meter::local(u64::MAX),
+    );
+    assert_eq!(result.result, Ok(SubjectStep::Unchanged));
+    assert_eq!(result.statistics.propagations, 0);
+    assert_eq!(&*scratch.arithmetic.touched, &[0]);
+    assert_eq!(&*scratch.arithmetic.open, &[0, 0]);
+    assert_eq!(scratch.arithmetic.open.capacity(), before_capacity);
+    assert_eq!(known.snapshot.old_masks(), region.decision_words());
+    assert_eq!(region.open().count(), 65);
+}
+
+#[test]
+fn unrelated_decisions_are_published_before_later_row_triggers() {
+    let (system, mut region, mut known, mut scratch) = inspected_open_65();
+    let token = Cancellation::default();
+    assert!(region.hold(64)); // no coefficient in the prepared parity row
+    let result = system.inspect_reserved(
+        &mut region,
+        &mut known,
+        &mut scratch,
+        &token,
+        &mut Meter::local(u64::MAX),
+    );
+    assert_eq!(result.result, Ok(SubjectStep::Unchanged));
+    assert_eq!(&*scratch.arithmetic.touched, &[0]);
+    assert_eq!(&*scratch.arithmetic.open, &[0, 1]);
+    assert_eq!(known.snapshot.old_masks(), region.decision_words());
+
+    assert!(region.hold(0));
+    let result = system.inspect_reserved(
+        &mut region,
+        &mut known,
+        &mut scratch,
+        &token,
+        &mut Meter::local(u64::MAX),
+    );
+    assert_eq!(result.result, Ok(SubjectStep::Changed));
+    assert_eq!(result.statistics.held, 1);
+    assert!(region.is_held(1));
+    assert_eq!(known.snapshot.old_masks().0, &[1, 1]);
+}
+
+#[test]
+fn empty_selection_cutoffs_retain_the_exact_prefix() {
+    // Isolate the post-validation body so this receipt remains independent of
+    // the separate ancestry implementation. W=2, T=1: entry4 + selection21
+    // + empty detection2 + snapshot5 + final result1 = 33 units.
+    for limit in 0..=33 {
+        let (system, mut region, mut known, mut scratch) = inspected_open_65();
+        known
+            .snapshot
+            .validate(&region, 65, &mut Meter::local(u64::MAX))
+            .unwrap();
+        let mut work = Meter::local(limit);
+        let mut statistics = crate::regions::NarrowingStatistics::default();
+        let result = super::inspect(
+            &system,
+            &mut region,
+            &mut known.snapshot,
+            (&mut scratch.arithmetic, None),
+            &mut work,
+            &mut statistics,
+        );
+        assert_eq!(
+            result,
+            if limit == 33 {
+                Ok(SubjectStep::Unchanged)
+            } else {
+                Err(Failure::Stopped(Stop::WorkLimit))
+            },
+            "limit {limit}"
+        );
+        // Snapshot preparation's two-unit admission follows four entry units;
+        // all other operations on this established empty-selection route are one.
+        assert_eq!(work.charged(), if limit == 5 { 4 } else { limit });
+        assert_eq!(statistics.propagations, 0);
+        assert_eq!(region.open().count(), 65);
     }
 }

@@ -790,6 +790,10 @@ fn merge(statistics: &mut Statistics, worker: &Statistics) -> Result<(), Incompl
         worker.reduct.frozen_positive_work,
     )?;
     statistics.reduct.regions.add(worker.reduct.regions)?;
+    statistics
+        .reduct
+        .inner_preparation
+        .merge(&worker.reduct.inner_preparation)?;
     statistics.reduct.peak_workspace_bytes = statistics
         .reduct
         .peak_workspace_bytes

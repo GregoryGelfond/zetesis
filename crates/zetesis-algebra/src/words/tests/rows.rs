@@ -2,8 +2,8 @@ use std::collections::BTreeSet;
 
 use proptest::prelude::*;
 
+use crate::words::{Words, intersection_count, xor_assign};
 use crate::words::{count, disjoint, first, union_assign, visit_set_bits};
-use crate::words::{intersection_count, xor_assign};
 
 fn packed(positions: &BTreeSet<usize>, words: usize) -> Vec<u64> {
     let mut result = vec![0; words];
@@ -20,6 +20,17 @@ fn positions(words: &[u64]) -> BTreeSet<usize> {
 }
 
 proptest! {
+    #[test]
+    fn subset_scan_matches_independent_position_sets(
+        left in proptest::collection::btree_set(0usize..256, 0..=256),
+        right in proptest::collection::btree_set(0usize..256, 0..=256),
+    ) {
+        let actual = Words::<u64, _>::new(packed(&left, 4)).is_subset_of(
+            Words::new(&packed(&right, 4)[..]), &mut || Ok::<_, ()>(()),
+        ).unwrap();
+        prop_assert_eq!(actual, left.is_subset(&right));
+    }
+
     #[test]
     fn packed_selection_and_reductions_match_position_sets(
         left in proptest::collection::btree_set(0usize..256, 0..=256),

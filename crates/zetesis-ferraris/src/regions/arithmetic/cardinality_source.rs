@@ -23,6 +23,11 @@ pub(super) enum Kind {
     LowerConstraint,
     Asserted,
     ClauseLower,
+    /// A frozen preparation's probed table or clique; never source-checked.
+    /// Its `Source` carries no formula coordinates: `root` and `node` hold a
+    /// table's index and side, a completing bound's ordinal, or a clique's
+    /// two lowest atoms, read only as the comparator's final tiebreak.
+    Probed,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -614,7 +619,7 @@ pub(super) fn release(bound: Bound, storage: &mut Storage) -> Result<(), Stop> {
 }
 
 /// Payload headers are contained by the outer row allocation once published.
-fn push_bound<Q: Quota + ?Sized>(
+pub(super) fn push_bound<Q: Quota + ?Sized>(
     bounds: &mut Vec<Bound>,
     bound: Bound,
     storage: &mut Storage,

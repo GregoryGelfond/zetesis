@@ -364,6 +364,90 @@ fn every_preparation_prefix_has_exact_quota_work() {
     }
 }
 
+/// A chain of `n` choices, each guarded by the next: upstream's shape
+/// stretched, so the order's arrays run past several observation boundaries.
+fn chain(n: usize) -> Theory {
+    let falsum = n;
+    let mut nodes: Vec<Node> = (0..n).map(Node::atom).collect();
+    nodes.push(Node::falsum());
+    let mut choices = Vec::with_capacity(n);
+    for atom in 0..n {
+        let absent = nodes.len();
+        nodes.push(Node::implies(atom, falsum));
+        choices.push(nodes.len());
+        nodes.push(Node::or_pair([atom, absent]));
+    }
+    let mut roots = vec![choices[n - 1]];
+    for (atom, &choice) in choices.iter().enumerate().take(n - 1) {
+        roots.push(nodes.len());
+        nodes.push(Node::implies(atom + 1, choice));
+    }
+    theory(n, nodes, roots)
+}
+
+#[test]
+fn every_prefix_across_observation_boundaries_has_exact_quota_work() {
+    // The filled arrays here are longer than POLL_INTERVAL, so their charged
+    // runs end at observation boundaries and wherever the account refills.
+    // Each limit within two operations of a boundary or of a refill, against
+    // accounts that refill below, at and above the boundary, refuses at
+    // exactly its prefix, as a tick per copy would.
+    let theory = chain(150);
+    let extraction = extract(&theory);
+    let original = OriginalSubject::new(&theory, extraction.producers.as_ref());
+    let expected = prepare(&theory);
+    let needed = expected.work;
+    assert!(
+        needed > 4 * zetesis_algebra::POLL_INTERVAL,
+        "needed {needed}"
+    );
+    let expected = expected.result.unwrap().unwrap();
+    let interval = zetesis_algebra::POLL_INTERVAL;
+    for batch in [1, 7, interval - 1, interval, interval + 1, 16_384] {
+        let near = |limit: u64, step: u64| {
+            let offset = limit % step;
+            offset <= 2 || step - offset <= 2
+        };
+        let limits = (0..=needed + 1).filter(|&limit| {
+            limit + 2 >= needed
+                || near(limit, interval)
+                || (batch >= interval && near(limit, batch))
+        });
+        for limit in limits {
+            let mut quota = Allowance {
+                remaining: limit,
+                batch,
+                spent: 0,
+            };
+            let attempt = crate::test_support::stop_generator(GeneratorOrder::prepare_reserved(
+                original,
+                usize::MAX,
+                &Cancellation::default(),
+                &mut zetesis_algebra::Meter::reserved(&mut quota),
+            ));
+            assert_eq!(
+                attempt.work,
+                limit.min(needed),
+                "batch {batch} limit {limit}"
+            );
+            assert_eq!(quota.spent, attempt.work, "batch {batch} limit {limit}");
+            if limit < needed {
+                assert!(
+                    matches!(
+                        attempt.result,
+                        Err(GeneratorOrderError::Stopped(Stop::WorkLimit))
+                    ),
+                    "batch {batch} limit {limit}"
+                );
+            } else {
+                let order = attempt.result.unwrap().unwrap();
+                assert_eq!(order.heads, expected.heads);
+                assert_eq!(order.ranks, expected.ranks);
+            }
+        }
+    }
+}
+
 #[test]
 fn storage_refusal_keeps_its_spent_prefix() {
     let theory = upstream();
@@ -546,4 +630,53 @@ fn historical_peak_does_not_refuse_a_fitting_unpolled_observation() {
             (bytes, 20, 0)
         );
     }
+}
+
+/// An iterator that counts how many times its clones are started: the number
+/// of traversals a consumer makes of the incidence events.
+#[derive(Clone)]
+struct Counted<I> {
+    inner: I,
+    started: bool,
+    traversals: std::rc::Rc<std::cell::Cell<usize>>,
+}
+
+impl<I: Iterator> Iterator for Counted<I> {
+    type Item = I::Item;
+    fn next(&mut self) -> Option<Self::Item> {
+        if !self.started {
+            self.started = true;
+            self.traversals.set(self.traversals.get() + 1);
+        }
+        self.inner.next()
+    }
+}
+
+#[test]
+fn the_dependency_graph_reads_the_incidences_twice() {
+    // Both adjacencies, outgoing and incoming, are built from two readings
+    // of the incidence events, one counting and one placing, not from two
+    // per adjacency: the events come through a long chain of adaptors over
+    // the theory, and each reading is paid in full.
+    let theory = upstream();
+    let extraction = extract(&theory);
+    let producers = extraction.producers.as_ref().unwrap();
+    let traversals = std::rc::Rc::new(std::cell::Cell::new(0));
+    let incidences = Counted {
+        inner: super::edges(&theory, producers),
+        started: false,
+        traversals: std::rc::Rc::clone(&traversals),
+    };
+    let cancellation = Cancellation::default();
+    let mut meter = crate::regions::Meter::local(u64::MAX);
+    let mut budget = super::Budget {
+        max_bytes: usize::MAX,
+        cancellation: &cancellation,
+        work: &mut meter,
+        bytes: 0,
+        peak: 0,
+    };
+    let order = super::build(&theory, producers, incidences, &mut budget).unwrap();
+    assert!(order.is_some());
+    assert_eq!(traversals.get(), 2);
 }

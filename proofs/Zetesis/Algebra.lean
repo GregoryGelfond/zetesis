@@ -1253,14 +1253,105 @@ theorem countermodel_verdict_independent (T : Theory α) (M : Atoms α)
   · exact Bool.noConfusion (hf.symm.trans (sameVerdict.mpr hs))
   · rfl
 
+/-! ## Rows of the countermodels from refuted patterns -/
+
+/-- The region deciding every atom of `S` as `σ` does, inside `r`: an atom of `S`
+that `σ` holds joins the lower bound, one it rejects leaves the upper bound. -/
+def _root_.Zetesis.Region.decideAll (r : Region α) (S : List α) (σ : Atoms α) : Region α :=
+  ⟨fun a => r.lower a ∨ (a ∈ S ∧ σ a), fun a => r.upper a ∧ ¬ (a ∈ S ∧ ¬ σ a)⟩
+
+/-- A member of a region lies in the region deciding `S` as any pattern that agrees
+with it on `S`, in particular as its own restriction to `S`. -/
+theorem contains_decideAll {r : Region α} {S : List α} {z σ : Atoms α}
+    (inside : r.Contains z) (agree : ∀ a ∈ S, (σ a ↔ z a)) :
+    (r.decideAll S σ).Contains z := by
+  refine ⟨?_, ?_⟩
+  · intro a lower
+    cases lower with
+    | inl held => exact inside.1 a held
+    | inr decided => exact (agree a decided.1).mp decided.2
+  · intro a held
+    exact ⟨inside.2 a held, fun rejected => rejected.2 ((agree a rejected.1).mpr held)⟩
+
+/-- **Rows from refuted patterns.** For a subject `s` sound for `C` and a region
+`r`: if every pattern over the support `S` outside `Allowed`, taken as an
+interpretation supported on `S`, is refuted by narrowing the region that decides
+it, then every member of `C` in `r` is allowed. `Allowed` depends on `S` alone.
+
+Proof. A member lies in the region deciding its own restriction to `S`
+(`contains_decideAll`); soundness keeps it in the narrowing, so its restriction is
+not among the refuted patterns, and `Allowed` transfers to the member. The Rust
+discharges the premise by the refutations of each probe's narrowing: in the first
+probing round the frozen subject's, whose soundness is the walk's own obligation
+(`ReductRegions.masked_known_sound`), and in a later round the frozen subject's
+composed with the row subjects of the round before, sound for the class as their
+joint closure is (`joint_sound`); with
+`AlgebraicRows.measure_congr` an equation holding on every allowed pattern is an
+equation of the class in `r`, and `AlgebraicRows.bounds_of_allowed` gives its
+count bounds. -/
+theorem entailed_by_refutations (C : Class α) (s : Subject C) (r : Region α) (S : List α)
+    (Allowed : Atoms α → Prop)
+    (depends : ∀ σ τ : Atoms α, (∀ a ∈ S, (σ a ↔ τ a)) → Allowed σ → Allowed τ)
+    (refuted : ∀ σ : Atoms α, (∀ a, σ a → a ∈ S) → ¬ Allowed σ →
+      ∀ z, (s.narrow (r.decideAll S σ)).Contains z → ¬ C z) :
+    ∀ z, r.Contains z → C z → Allowed z := by
+  intro z inside member
+  refine Classical.byContradiction fun notAllowed => ?_
+  have agree : ∀ a ∈ S, ((fun b => b ∈ S ∧ z b) a ↔ z a) := by
+    intro a listed
+    exact ⟨fun restricted => restricted.2, fun held => ⟨listed, held⟩⟩
+  have supported : ∀ a, (fun b => b ∈ S ∧ z b) a → a ∈ S := fun _ restricted => restricted.1
+  have restrictionNotAllowed : ¬ Allowed (fun b => b ∈ S ∧ z b) := by
+    intro allowed
+    exact notAllowed (depends _ z agree allowed)
+  have narrowed : (s.narrow (r.decideAll S (fun b => b ∈ S ∧ z b))).Contains z :=
+    s.sound (contains_decideAll inside agree) member
+  exact refuted _ supported restrictionNotAllowed z narrowed member
+
+/-- **Saturation units.** For a candidate `M` and a subject `s` sound for its
+countermodels: if narrowing the query root with `a` held leaves only interpretations
+that contain `M` or are no countermodel, then `¬ a` is a row of the countermodels
+with no conditions. A countermodel holding `a` lies in that narrowing, so it would
+contain `M`, contradicting `ProperSub`, or it is no countermodel. The Rust probes
+from the closed root, `s.narrow (query M)`, with `a` held: a countermodel holding
+`a` lies in the query root and, by `s`'s soundness, in the closed root and in that
+probe's region, so a probe that reaches `M` or is refuted discharges the premise. -/
+theorem saturation_unit (T : Theory α) (M : Atoms α) (s : Subject (Countermodels T M)) (a : α)
+    (reaches : ∀ z,
+      (s.narrow ((ReductRegions.query M).decideAll [a] (fun _ => True))).Contains z →
+        Sub M z ∨ ¬ Countermodels T M z) :
+    RowOf (Countermodels T M) [] [(a, false)] := by
+  intro z member _ o output
+  rw [List.mem_singleton.mp output]
+  intro held
+  have inRoot : (ReductRegions.query M).Contains z :=
+    (ReductRegions.query_contains M z).mpr member.1.1
+  have agree : ∀ b ∈ [a], ((fun _ => True) b ↔ z b) := by
+    intro b listed
+    rw [List.mem_singleton.mp listed]
+    exact ⟨fun _ => held, fun _ => trivial⟩
+  have narrowed :
+      (s.narrow ((ReductRegions.query M).decideAll [a] (fun _ => True))).Contains z :=
+    s.sound (contains_decideAll inRoot agree) member
+  cases reaches z narrowed with
+  | inl contains => exact member.1.2 contains
+  | inr none => exact none member
+
 /-- **The membership check's construction.** The countermodel walk takes only the
 theory and the candidate: its root is `ReductRegions.query M` and its subjects are
-built from `T` and `M` alone, today the frozen subject. It takes no supplied subject
-and no supplied root knowledge. That the Rust reduct query keeps to this
-construction is an implementation obligation, a discipline made visible here, not a
-type fact. -/
-noncomputable def countermodelSubjects (T : Theory α) (M : Atoms α) :
-    List (Subject (Countermodels T M)) :=
-  [frozen T M]
+built from `T` and `M` alone: the frozen subject; the parity rows and units a
+preparation installs, each a subject of the class through `row` with a `RowOf`
+proof from `entailed_by_refutations` or `saturation_unit`, over the frozen subject
+in the first probing round and, in a later round, over the frozen subject composed
+with the rows of the round before (`joint_sound`); and its count bounds, subjects
+through `doubleCount` and the guarded bounds, with `LowerOf` and `UpperOf` from
+`AlgebraicRows.bounds_of_allowed`, `upper_of_clique` and `lower_of_clause`.
+It takes no supplied subject and no supplied root knowledge. That the Rust reduct
+query keeps to this construction, probing from the closed query root and never
+sharing a preparation across candidates, is an implementation obligation, a
+discipline made visible here, not a type fact. -/
+noncomputable def countermodelSubjects (T : Theory α) (M : Atoms α)
+    (rows : List (Subject (Countermodels T M))) : List (Subject (Countermodels T M)) :=
+  frozen T M :: rows
 
 end Zetesis.Algebra

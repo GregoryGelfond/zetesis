@@ -573,13 +573,16 @@ impl StableModels {
             &mut budget,
         );
         let mut regions = opening.statistics;
+        // The opening's producers seed the theory's index, so a candidate's
+        // inner preparation reads them without a second extraction.
         let proposer = opening.result.and_then(|opened| {
+            let producers = opened.parts.producers().cloned();
             if opened.root.is_none() {
                 refuted.parts = Some(opened.parts);
                 refuted.statistics = opened.statistics;
-                return Ok(Proposer::Refuted(refuted));
+                return Ok((Proposer::Refuted(refuted), producers));
             }
-            match route {
+            let proposer = match route {
                 Route::Scalar => RegionSearch::new(opened, limits.max_native_narrowing_bytes)
                     .map(|search| Proposer::Regions(Box::new(search))),
                 Route::Workers {
@@ -598,7 +601,8 @@ impl StableModels {
                     RegionProposals::new(opened, workers, limits.max_native_narrowing_bytes)
                         .map(|search| Proposer::Proposals(Box::new(search)))
                 }
-            }
+            }?;
+            Ok((proposer, producers))
         });
         if proposer.is_err() {
             regions.generator_order.retained_bytes = 0;
@@ -610,7 +614,7 @@ impl StableModels {
             regions: Some(regions),
             ..Default::default()
         };
-        let result = proposer.map(|proposer| Self {
+        let result = proposer.map(|(proposer, producers)| Self {
             theory: theory.clone(),
             proposer,
             limits,
@@ -627,7 +631,7 @@ impl StableModels {
             active_bound: None,
             earlier: None,
             reduct: crate::reduct::State::default(),
-            index: OriginalIndex::new(theory, limits.max_native_narrowing_bytes),
+            index: OriginalIndex::seeded(theory, limits.max_native_narrowing_bytes, producers),
         });
         let statistics = result.as_ref().map_or(statistics, Self::statistics);
         ConstructionAttempt { result, statistics }
@@ -1032,6 +1036,7 @@ impl StableModels {
                         frozen_positive_work: merged.reduct.frozen_positive_work,
                         peak_workspace_bytes: merged.reduct.peak_workspace_bytes,
                         regions: merged.reduct.regions,
+                        inner_preparation: merged.reduct.inner_preparation,
                         ..self.statistics.reduct
                     },
                     ..self.statistics

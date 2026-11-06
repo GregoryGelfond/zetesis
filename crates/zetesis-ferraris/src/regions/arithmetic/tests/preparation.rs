@@ -386,13 +386,12 @@ fn prepared_equations_keep_padded_owned_words() {
 
 #[test]
 fn equation_keeps_its_original_record_layout() {
-    use super::super::rows::{Equation, Source};
+    use super::super::rows::Equation;
     use std::mem::{align_of, offset_of, size_of};
 
     struct Original {
         words: Vec<u64>,
         constant: bool,
-        source: Source,
     }
     assert_eq!(size_of::<Equation>(), size_of::<Original>());
     assert_eq!(align_of::<Equation>(), align_of::<Original>());
@@ -401,7 +400,6 @@ fn equation_keeps_its_original_record_layout() {
         offset_of!(Equation, constant),
         offset_of!(Original, constant)
     );
-    assert_eq!(offset_of!(Equation, source), offset_of!(Original, source));
 }
 
 #[test]

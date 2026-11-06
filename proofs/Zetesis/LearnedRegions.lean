@@ -169,6 +169,34 @@ theorem row_of_narrower_class (C D : Atoms α → Prop)
   intro M member satisfied
   exact row M (inclusion M member) satisfied
 
+/-- A row of the class restricted by a guard `G` is a row of the class with the
+guard among its conditions: a consequence found under decided guard literals enters
+`consequence_row_forces` with the guard decided. -/
+theorem guarded_row (C : Atoms α → Prop) (G B O : List (Literal α))
+    (row : RowOf (fun J => C J ∧ ∀ l ∈ G, Holds J l) B O) :
+    RowOf C (G ++ B) O := by
+  intro M member satisfied
+  have guarded : ∀ l ∈ G, Holds M l :=
+    fun l listed => satisfied l (List.mem_append_left B listed)
+  have conditions : ∀ l ∈ B, Holds M l :=
+    fun l listed => satisfied l (List.mem_append_right G listed)
+  exact row M ⟨member, guarded⟩ conditions
+
+/-- A row found under a guard literal the class itself decides is a row of the
+class without that condition: the guard, a unit of the class, holds in every
+member. The membership check's count bounds enter this way, their guard cut at
+the closed query root by `Algebra.saturation_unit`. -/
+theorem row_under_unit (C : Atoms α → Prop) (g : Literal α) (B O : List (Literal α))
+    (unit : RowOf C [] [g]) (row : RowOf C (g :: B) O) : RowOf C B O := by
+  intro M member satisfied
+  apply row M member
+  intro l listed
+  cases List.mem_cons.mp listed with
+  | inl equal =>
+    subst equal
+    exact unit M member (fun _ absent => nomatch absent) l (by simp)
+  | inr rest => exact satisfied l rest
+
 /-- Two rows of a class with the same conditions give a row with both rows'
 outputs. Retention may merge such rows. -/
 theorem row_union (C : Atoms α → Prop) (B O₁ O₂ : List (Literal α))

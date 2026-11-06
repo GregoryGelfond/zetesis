@@ -52,9 +52,8 @@ use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard, OnceLock, PoisonError, TryLockError};
 use std::time::{Duration, Instant};
 
-use zetesis_algebra::Countermodels;
 use zetesis_algebra::{region::Entry, walk::Walk};
-use zetesis_ferraris::{Interpretation, Knowledge};
+use zetesis_ferraris::{FrozenPreparation, Interpretation};
 
 use super::{
     ENGAGEMENT_COST_PER_WORKER, Live, QueryDivision, Shared, Taken, WorkerReport, Workspaces,
@@ -62,8 +61,11 @@ use super::{
 };
 use crate::budget::{Budget, WorkLease};
 use crate::ferraris::IndexedTheory;
+use crate::ferraris::conditions::CountermodelKnowledge;
 use crate::ferraris::region_frontier::Termination;
-use crate::ferraris::regions::{Publication, ReductQuery, Served};
+use crate::ferraris::regions::{
+    InnerPreparation, Publication, PublishedQuery, ReductQuery, Served,
+};
 use crate::timing::{self, Phase};
 use crate::{Incomplete, SearchPhaseTimings};
 
@@ -85,6 +87,10 @@ pub(super) struct QueryCell {
     truth: Vec<bool>,
     /// The candidate the query decides.
     candidate: Interpretation,
+    /// The candidate's inner subjects, set once: by the publisher when its
+    /// root had closed before it published, else by the root's server; read
+    /// by every server of the query's regions.
+    preparation: OnceLock<Option<Box<FrozenPreparation>>>,
     /// The query's live regions, queued or in hand.
     outstanding: AtomicUsize,
     /// A validated countermodel, set once.
@@ -108,6 +114,7 @@ impl QueryCell {
         Ok(Self {
             truth: owned,
             candidate,
+            preparation: OnceLock::new(),
             outstanding: AtomicUsize::new(pending),
             witness: OnceLock::new(),
             stop: OnceLock::new(),
@@ -162,12 +169,12 @@ impl QueryCell {
 
 /// A region of a published query, with its knowledge and the query's cell.
 pub(super) struct InnerEntry {
-    entry: Entry<Knowledge<Countermodels>>,
+    entry: Entry<CountermodelKnowledge>,
     cell: Arc<QueryCell>,
 }
 
 impl InnerEntry {
-    fn new(entry: Entry<Knowledge<Countermodels>>, cell: &Arc<QueryCell>) -> Self {
+    fn new(entry: Entry<CountermodelKnowledge>, cell: &Arc<QueryCell>) -> Self {
         Self {
             entry,
             cell: Arc::clone(cell),
@@ -234,7 +241,7 @@ impl InnerDeques {
         &self,
         index: usize,
         cell: &Arc<QueryCell>,
-        traversal: &mut Walk<Knowledge<Countermodels>>,
+        traversal: &mut Walk<CountermodelKnowledge>,
         termination: &Termination,
         reserve: impl FnOnce(&mut VecDeque<InnerEntry>, usize) -> Result<(), Incomplete>,
     ) -> Result<(), Incomplete> {
@@ -260,7 +267,7 @@ impl InnerDeques {
         index: usize,
         pending: &mut Option<InnerEntry>,
         atom: usize,
-        cut_knowledge: Knowledge<Countermodels>,
+        cut_knowledge: CountermodelKnowledge,
         termination: &Termination,
         reserve: impl FnOnce(&mut VecDeque<InnerEntry>, usize) -> Result<(), Incomplete>,
     ) -> Result<(), Incomplete> {
@@ -386,15 +393,28 @@ impl Publication for WalkPublication<'_, '_> {
         &mut self,
         truth: &[bool],
         candidate: &Interpretation,
-        traversal: &mut Walk<Knowledge<Countermodels>>,
+        preparation: &mut InnerPreparation,
+        traversal: &mut Walk<CountermodelKnowledge>,
     ) -> Option<()> {
         let pending = traversal.pending();
         // A cell counting no region would never be decided.
         if pending == 0 {
             return None;
         }
-        let cell = Arc::new(QueryCell::new(truth, candidate, pending).ok()?);
-        self.shared
+        let cell = QueryCell::new(truth, candidate, pending).ok()?;
+        // A prepared root's subjects move into the cell before any server can
+        // see a region; a refused publication returns them to the inline
+        // walk. A pending preparation leaves the cell unset for the root's
+        // server.
+        if let InnerPreparation::Prepared(installed) =
+            std::mem::replace(preparation, InnerPreparation::Pending)
+        {
+            let fresh = cell.preparation.set(installed).is_ok();
+            debug_assert!(fresh, "a new cell takes the publisher's subjects once");
+        }
+        let cell = Arc::new(cell);
+        if self
+            .shared
             .inner
             .publish(
                 self.index,
@@ -403,7 +423,20 @@ impl Publication for WalkPublication<'_, '_> {
                 &self.shared.frontier.termination,
                 reserve_entries,
             )
-            .ok()?;
+            .is_err()
+        {
+            // The cell is this walk's alone until a publication succeeds,
+            // so the preparation comes back; were it shared, the walk goes
+            // on without it rather than preparing below the root.
+            *preparation = match Arc::try_unwrap(cell) {
+                Ok(cell) => match cell.preparation.into_inner() {
+                    Some(installed) => InnerPreparation::Prepared(installed),
+                    None => InnerPreparation::Pending,
+                },
+                Err(_) => InnerPreparation::Spent,
+            };
+            return None;
+        }
         Live::add(&self.shared.live.published, 1);
         Some(())
     }
@@ -444,20 +477,33 @@ pub(super) fn serve<'a>(
     }
     let countermodels = report.statistics.countermodels;
     let started = timing::start(report.statistics.phase_timings.as_ref());
+    let prepared = cell.preparation.get();
+    let mut installed = InnerPreparation::Pending;
     let served = workspaces.membership.workspace.lend_narrowing(
         shared.limits.max_reduct_bytes,
         &mut report.statistics,
         |scratch, statistics| {
             ReductQuery::new(original).serve(
-                &cell.truth,
-                &cell.candidate,
+                PublishedQuery {
+                    truth: &cell.truth,
+                    candidate: &cell.candidate,
+                    preparation: prepared.and_then(Option::as_deref),
+                    prepare_root: prepared.is_none(),
+                },
                 &mut entry,
                 shared.limits,
                 budget,
                 (statistics, scratch),
+                &mut installed,
             )
         },
     );
+    if let InnerPreparation::Prepared(installed) = installed {
+        // The root's server sets the query's subjects before its children
+        // are published below, so the cell is still unset.
+        let first = cell.preparation.set(installed).is_ok();
+        debug_assert!(first, "the root's server sets the query's subjects once");
+    }
     timing::finish(&mut report.statistics.phase_timings, Phase::Reduct, started);
     publish_timings(shared, (report, reported));
     Live::add(

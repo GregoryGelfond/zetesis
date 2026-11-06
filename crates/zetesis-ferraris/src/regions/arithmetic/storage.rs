@@ -91,6 +91,16 @@ impl Storage {
         budget: &mut Budget<'_, '_, Q>,
     ) -> Result<Vec<T>, BudgetError<Q::Error>> {
         budget.charge(3)?; // initialize the vector's three-word header
+        self.reserve_bytes(count, budget)
+    }
+
+    /// Reserve and account for a vector when its producer meters the logical
+    /// work itself. Both the request and the actual capacity must fit.
+    pub(super) fn reserve_bytes<T, Q: Quota + ?Sized>(
+        &mut self,
+        count: usize,
+        budget: &mut Budget<'_, '_, Q>,
+    ) -> Result<Vec<T>, BudgetError<Q::Error>> {
         let mut values = Vec::new();
         let header = size_of::<Vec<T>>() as u128;
         let requested = count as u128 * size_of::<T>() as u128;
@@ -111,6 +121,24 @@ impl Storage {
         budget.admit_bytes(next)?;
         self.bytes = next;
         Ok(values)
+    }
+
+    /// Append an already-metered value, admitting the simultaneous old and
+    /// new buffers before a move.
+    pub(super) fn push_bytes<T, Q: Quota + ?Sized>(
+        &mut self,
+        values: &mut Vec<T>,
+        value: T,
+        budget: &mut Budget<'_, '_, Q>,
+    ) -> Result<(), BudgetError<Q::Error>> {
+        if values.len() == values.capacity() {
+            let capacity = values.capacity().saturating_mul(2).max(1);
+            let mut next = self.reserve_bytes(capacity, budget)?;
+            next.append(values);
+            self.release(std::mem::replace(values, next))?;
+        }
+        values.push(value);
+        Ok(())
     }
 
     /// Grow by doubling the current capacity, with one cell as the first step.

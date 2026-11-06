@@ -209,10 +209,11 @@ impl Rows {
         Ok(())
     }
 
-    /// Conservative frozen-query work for the existing threshold guard family.
+    /// Conservative guard-family supplement to `numeric_work`.
     /// Every live guard checks ownership; a shared owner scans G bounds twice.
     /// The 64 units per guard cover four-limb comparisons, descriptor/mask
-    /// reads and one intersection. No row contribution or extra storage is read.
+    /// reads and one intersection. Condition visits and forcing arithmetic
+    /// remain covered by `numeric_work`; this supplement adds no storage.
     pub(super) fn threshold_guard_work(
         &self,
         cancellation: &Cancellation,

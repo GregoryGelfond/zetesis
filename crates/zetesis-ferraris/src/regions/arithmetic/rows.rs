@@ -24,10 +24,22 @@ use super::{
     work::Phase,
 };
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(super) enum Source {
+/// A source the checker rereads from the formulas: a clause range or a
+/// definition. A probed row's source is its refuted probes, checked by its
+/// preparation against the retained tables and never reread, so it has no
+/// reading here.
+#[derive(Clone, Copy)]
+enum Reread {
     Clauses { first: usize, count: usize },
     Definition { head: usize },
+}
+
+/// What the checker rereads: the checked root facts, the producers when the
+/// theory's roots are rules, and the clause records.
+struct Sources<'a> {
+    facts: &'a CheckedRootFacts,
+    producers: Option<&'a Producers>,
+    clauses: &'a [Clause],
 }
 
 /// An independently checked consequence of the exact owner's answer sets.
@@ -36,7 +48,6 @@ pub(super) enum Source {
 pub(super) struct Equation {
     pub words: Words<u64>,
     pub constant: bool,
-    pub source: Source,
 }
 
 #[derive(Default, Debug)]
@@ -169,14 +180,10 @@ fn from_clauses<Q: Quota + ?Sized>(
         })?;
         for &local in proposed.equations() {
             let words = materialize(theory, support, local, storage, budget)?;
-            budget.charge(5)?; // constant, source tag, range start, range length
-            let candidate = Equation {
-                words,
-                constant: local.constant,
-                source: Source::Clauses {
-                    first,
-                    count: end - first,
-                },
+            budget.charge(5)?; // the constant; the reread source's tag, range start and length
+            let reread = Reread::Clauses {
+                first,
+                count: end - first,
             };
             let valid = budget.in_phase(Phase::Provenance, |budget| {
                 storage.with_record(
@@ -184,10 +191,14 @@ fn from_clauses<Q: Quota + ?Sized>(
                     budget,
                     |storage, budget| {
                         check(
-                            facts,
-                            producers,
-                            clauses,
-                            &candidate,
+                            &Sources {
+                                facts,
+                                producers,
+                                clauses,
+                            },
+                            reread,
+                            &words,
+                            local.constant,
                             support,
                             storage.bytes(),
                             budget,
@@ -195,6 +206,10 @@ fn from_clauses<Q: Quota + ?Sized>(
                     },
                 )
             })?;
+            let candidate = Equation {
+                words,
+                constant: local.constant,
+            };
             retain(
                 valid,
                 candidate,
@@ -239,23 +254,27 @@ fn from_definitions<Q: Quota + ?Sized>(
                 })?;
             for &local in proposed.equations() {
                 let words = materialize(theory, group.support, local, storage, budget)?;
-                budget.charge(3)?; // constant, definition-source tag and head
-                let candidate = Equation {
-                    words,
-                    constant: local.constant,
-                    source: Source::Definition { head },
-                };
+                budget.charge(3)?; // the constant; the reread source's tag and head
+                let reread = Reread::Definition { head };
                 let valid = budget.in_phase(Phase::Provenance, |budget| {
                     check(
-                        facts,
-                        Some(producers),
-                        clauses,
-                        &candidate,
+                        &Sources {
+                            facts,
+                            producers: Some(producers),
+                            clauses,
+                        },
+                        reread,
+                        &words,
+                        local.constant,
                         group.support,
                         storage.bytes(),
                         budget,
                     )
                 })?;
+                let candidate = Equation {
+                    words,
+                    constant: local.constant,
+                };
                 retain(
                     valid,
                     candidate,
@@ -272,7 +291,7 @@ fn from_definitions<Q: Quota + ?Sized>(
     Ok(())
 }
 
-fn propose<Q: Quota + ?Sized>(
+pub(super) fn propose<Q: Quota + ?Sized>(
     support: Support,
     forbidden: &[u64; 4],
     counts: &mut Counts,
@@ -293,7 +312,7 @@ fn propose<Q: Quota + ?Sized>(
     Ok(proposed)
 }
 
-fn materialize<Q: Quota + ?Sized>(
+pub(super) fn materialize<Q: Quota + ?Sized>(
     theory: &Theory,
     support: Support,
     local: LocalEquation,
@@ -312,65 +331,69 @@ fn materialize<Q: Quota + ?Sized>(
     Ok(words)
 }
 
+/// Whether an equation over `support` with `words` and `constant` follows
+/// from `reread`, read again from the formulas: a clause range's table, or a
+/// definition's completion when the theory's roots are rules.
 fn check<Q: Quota + ?Sized>(
-    facts: &CheckedRootFacts,
-    producers: Option<&Producers>,
-    clauses: &[Clause],
-    candidate: &Equation,
+    sources: &Sources<'_>,
+    reread: Reread,
+    words: &Words<u64>,
+    constant: bool,
     support: Support,
     live_bytes: u128,
     budget: &mut Budget<'_, '_, Q>,
 ) -> Result<bool, BudgetError<Q::Error>> {
-    let theory = facts.owner();
+    let theory = sources.facts.owner();
     budget.charge(1)?;
-    match candidate.source {
-        Source::Clauses { first, count } => {
+    match reread {
+        Reread::Clauses { first, count } => {
             let end = first
                 .checked_add(count)
                 .ok_or(BudgetError::Stopped(zetesis_algebra::Stop::InvalidProgram))?;
-            let roots = clauses
+            let roots = sources
+                .clauses
                 .get(first..end)
                 .ok_or(BudgetError::Stopped(zetesis_algebra::Stop::InvalidProgram))?;
             source::check_clause_equation(
                 theory,
-                facts,
+                sources.facts,
                 roots,
                 support,
-                (&candidate.words, candidate.constant),
+                (words, constant),
                 &mut Storage::with_live_bytes(live_bytes),
                 budget,
             )
         }
-        Source::Definition { head } => {
-            let Some(producers) = producers else {
+        Reread::Definition { head } => {
+            let Some(producers) = sources.producers else {
                 return Ok(false);
             };
-            let Some(reread) = completion::completion(theory, producers, head, live_bytes, budget)?
+            let Some(definition) =
+                completion::completion(theory, producers, head, live_bytes, budget)?
             else {
                 return Ok(false);
             };
-            let order = compare_support(support, reread.support, budget)?;
+            let order = compare_support(support, definition.support, budget)?;
             budget.charge(1)?;
             if order != Ordering::Equal {
                 return Ok(false);
             }
-            let Some(coefficients) =
-                source::local_coefficients(theory, support, &candidate.words, budget)?
+            let Some(coefficients) = source::local_coefficients(theory, support, words, budget)?
             else {
                 return Ok(false);
             };
             source::implied_by_table(
-                reread.forbidden.storage(),
+                definition.forbidden.storage(),
                 support.len,
                 coefficients,
-                candidate.constant,
+                constant,
                 budget,
             )
         }
     }
 }
 
-fn retain<Q: Quota + ?Sized>(
+pub(super) fn retain<Q: Quota + ?Sized>(
     valid: bool,
     candidate: Equation,
     coefficients: u8,
