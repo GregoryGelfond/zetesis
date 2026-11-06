@@ -172,7 +172,12 @@ impl GeneratorOrder {
                 if !producers.has_competing_heads && !producers.has_choice_heads {
                     return Ok(None);
                 }
-                build(original.theory, producers, &mut budget)
+                build(
+                    original.theory,
+                    producers,
+                    edges(original.theory, producers),
+                    &mut budget,
+                )
             });
         budget.work.refund();
         GeneratorOrderAttempt {
@@ -263,6 +268,7 @@ struct Frame {
 fn build<Q: Quota + ?Sized>(
     theory: &Theory,
     producers: &Producers,
+    incidences: impl Iterator<Item = Option<(usize, usize)>> + Clone,
     budget: &mut Budget<'_, '_, Q>,
 ) -> Result<Option<GeneratorOrder>, GeneratorOrderError<Failure<Q::Error>>> {
     let headers = size_of::<GeneratorOrder>()
@@ -279,15 +285,8 @@ fn build<Q: Quota + ?Sized>(
         .atom_count()
         .checked_add(theory.nodes().len())
         .ok_or(Stop::Allocation)?;
-    let incidences = edges(theory, producers);
-    let graph = Graph {
-        outgoing: Adjacency::try_build_in(vertices, incidences.clone().map(Ok), budget)?,
-        incoming: Adjacency::try_build_in(
-            vertices,
-            incidences.map(|event| Ok(event.map(|(from, to)| (to, from)))),
-            budget,
-        )?,
-    };
+    let (outgoing, incoming) = Adjacency::try_build_pair_in(vertices, incidences.map(Ok), budget)?;
+    let graph = Graph { outgoing, incoming };
     let finished = finishing_order(&graph, vertices, budget)?;
     let components = components(&graph, &finished, vertices, budget)?;
     // The graph walk's coordinates are checked before any order is published.

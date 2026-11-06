@@ -38,6 +38,86 @@ impl Adjacency {
         Self::try_build_in(rows, edges.map(|edge| edge.map(Some)), &mut Unmetered)
     }
 
+    /// Both adjacencies of one edge relation, by source and by target, from
+    /// two passes over the edges: one counting each vertex's degree both
+    /// ways, one placing each edge both ways. Reading the edges once per
+    /// pass rather than once per pass of each adjacency halves what a long
+    /// chain of adaptors behind `edges` costs. Charges as [`Self::try_build_in`].
+    ///
+    /// # Errors
+    /// As [`Self::try_build_in`].
+    pub(super) fn try_build_pair_in<C: Construction>(
+        rows: usize,
+        edges: impl Iterator<Item = Result<Option<(usize, usize)>, Stop>> + Clone,
+        construction: &mut C,
+    ) -> Result<(Self, Self), C::Error> {
+        let length = rows.checked_add(1).ok_or(Stop::Allocation)?;
+        let mut outgoing = construction.zeros(length)?;
+        let mut incoming = construction.zeros(length)?;
+        for edge in edges.clone() {
+            construction.tick()?;
+            let Some((from, to)) = edge? else { continue };
+            for (offsets, row) in [(&mut outgoing, from), (&mut incoming, to)] {
+                let after = row.checked_add(1).ok_or(Stop::Allocation)?;
+                let count = offsets.get_mut(after).ok_or(Stop::Allocation)?;
+                *count = count.checked_add(1).ok_or(Stop::Allocation)?;
+            }
+        }
+        for offsets in [&mut outgoing, &mut incoming] {
+            for row in 0..rows {
+                construction.tick()?;
+                offsets[row + 1] = offsets[row + 1]
+                    .checked_add(offsets[row])
+                    .ok_or(Stop::Allocation)?;
+            }
+        }
+        let mut out_entries = construction.zeros(outgoing[rows])?;
+        let mut in_entries = construction.zeros(incoming[rows])?;
+        let mut out_cursors = construction.reserve(rows)?;
+        let mut in_cursors = construction.reserve(rows)?;
+        for (cursors, offsets) in [(&mut out_cursors, &outgoing), (&mut in_cursors, &incoming)] {
+            for &offset in &offsets[..rows] {
+                construction.tick()?;
+                cursors.push(offset);
+            }
+        }
+        for edge in edges {
+            construction.tick()?;
+            let Some((from, to)) = edge? else { continue };
+            for (cursors, offsets, entries, row, entry) in [
+                (&mut out_cursors, &outgoing, &mut out_entries, from, to),
+                (&mut in_cursors, &incoming, &mut in_entries, to, from),
+            ] {
+                let cursor = cursors.get_mut(row).ok_or(Stop::Allocation)?;
+                if *cursor >= offsets[row + 1] {
+                    return Err(Stop::Allocation.into());
+                }
+                entries[*cursor] = entry;
+                *cursor += 1;
+            }
+        }
+        for (cursors, offsets) in [(&out_cursors, &outgoing), (&in_cursors, &incoming)] {
+            for (cursor, end) in cursors.iter().zip(&offsets[1..]) {
+                construction.tick()?;
+                if cursor != end {
+                    return Err(Stop::Allocation.into());
+                }
+            }
+        }
+        construction.release(out_cursors)?;
+        construction.release(in_cursors)?;
+        Ok((
+            Self {
+                offsets: outgoing,
+                entries: out_entries,
+            },
+            Self {
+                offsets: incoming,
+                entries: in_entries,
+            },
+        ))
+    }
+
     /// The same construction under a caller's storage and work authority.
     /// Empty events charge inspection of an input with no incidence. Every
     /// event, initialized cell and cursor inspection has a bounded charge.

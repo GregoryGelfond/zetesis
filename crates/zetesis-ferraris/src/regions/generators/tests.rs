@@ -547,3 +547,52 @@ fn historical_peak_does_not_refuse_a_fitting_unpolled_observation() {
         );
     }
 }
+
+/// An iterator that counts how many times its clones are started: the number
+/// of traversals a consumer makes of the incidence events.
+#[derive(Clone)]
+struct Counted<I> {
+    inner: I,
+    started: bool,
+    traversals: std::rc::Rc<std::cell::Cell<usize>>,
+}
+
+impl<I: Iterator> Iterator for Counted<I> {
+    type Item = I::Item;
+    fn next(&mut self) -> Option<Self::Item> {
+        if !self.started {
+            self.started = true;
+            self.traversals.set(self.traversals.get() + 1);
+        }
+        self.inner.next()
+    }
+}
+
+#[test]
+fn the_dependency_graph_reads_the_incidences_twice() {
+    // Both adjacencies, outgoing and incoming, are built from two readings
+    // of the incidence events, one counting and one placing, not from two
+    // per adjacency: the events come through a long chain of adaptors over
+    // the theory, and each reading is paid in full.
+    let theory = upstream();
+    let extraction = extract(&theory);
+    let producers = extraction.producers.as_ref().unwrap();
+    let traversals = std::rc::Rc::new(std::cell::Cell::new(0));
+    let incidences = Counted {
+        inner: super::edges(&theory, producers),
+        started: false,
+        traversals: std::rc::Rc::clone(&traversals),
+    };
+    let cancellation = Cancellation::default();
+    let mut meter = crate::regions::Meter::local(u64::MAX);
+    let mut budget = super::Budget {
+        max_bytes: usize::MAX,
+        cancellation: &cancellation,
+        work: &mut meter,
+        bytes: 0,
+        peak: 0,
+    };
+    let order = super::build(&theory, producers, incidences, &mut budget).unwrap();
+    assert!(order.is_some());
+    assert_eq!(traversals.get(), 2);
+}
