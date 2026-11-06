@@ -23,7 +23,9 @@
 
 use std::{fmt, mem::size_of};
 
-use zetesis_algebra::{Cancellation, Failure, Meter, MeterBytes, Quota, Stop, words::Words};
+use zetesis_algebra::{
+    Cancellation, Failure, Meter, MeterBytes, POLL_INTERVAL, Quota, Stop, words::Words,
+};
 
 use super::{
     NodeView, OriginalSubject, PreferenceAttempt, Producers, Region, Theory,
@@ -523,15 +525,38 @@ impl<Q: Quota + ?Sized> Budget<'_, '_, Q> {
         Ok(values)
     }
 
+    /// `count` copies of `value`, one charged operation each. Between
+    /// observation boundaries the copies already admitted are charged as one
+    /// run; the boundary's own operation, and any that needs a refill, is a
+    /// tick. So the polls, refills and the refused operation fall where
+    /// `count` ticks would put them, and the receipt is the same.
     fn filled<T: Copy>(
         &mut self,
         count: usize,
         value: T,
     ) -> Result<Vec<T>, GeneratorOrderError<Failure<Q::Error>>> {
         let mut values = self.reserve(count)?;
-        for _ in 0..count {
-            self.tick()?;
-            values.push(value);
+        while values.len() < count {
+            let charged = self.work.charged();
+            let offset = charged % POLL_INTERVAL;
+            let run = if offset == 0 {
+                0
+            } else {
+                (POLL_INTERVAL - offset)
+                    .min(self.work.remaining())
+                    .min((count - values.len()) as u64)
+            };
+            if run == 0 {
+                self.tick()?;
+                values.push(value);
+                continue;
+            }
+            if let Err(failure) = self.work.bounded(run, || ((), run)) {
+                self.poll()?;
+                return Err(GeneratorOrderError::from(failure));
+            }
+            let run = usize::try_from(run).map_err(|_| Stop::Allocation)?;
+            values.resize(values.len() + run, value);
         }
         Ok(values)
     }
