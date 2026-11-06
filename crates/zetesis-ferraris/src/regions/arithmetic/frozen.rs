@@ -485,12 +485,14 @@ struct Probing<'l, 'q, Q: Quota + ?Sized> {
 /// it lies in the closed root, so under the pattern it satisfies the clause's
 /// body (the clause's rule and the chains to its base standing in the reduct,
 /// their bodies true in the candidate, as the proposal pass reads them) and
-/// holds the clause's guard, which every member excludes, the root cutting
-/// it; the narrowing of that region, inside it, holds none either, which is
-/// the premise `entailed_by_refutations` asks of a refuted pattern. The table
-/// records it without running the probe. One word operation is charged to
-/// the floor per clause read, per pair of groups compared and per pattern
-/// examined.
+/// holds the clause's guard, which no countermodel in the root holds, the
+/// root having cut it already or the guard being a unit
+/// (`saturation_unit`); the narrowing of that region, inside it, holds none
+/// either, which is the premise `entailed_by_refutations` asks of a refuted
+/// pattern, discharged here by the proposal pass's reading of the clause
+/// rather than by a probe. The table records it without running the probe.
+/// One word operation is charged to the floor per clause read, per pair of
+/// groups compared and per pattern examined.
 ///
 /// # Errors
 /// The lease's refusal.

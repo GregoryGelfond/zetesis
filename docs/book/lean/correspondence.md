@@ -2682,9 +2682,10 @@ subject of the class (a `0 = 1` combination under the region's decisions is a su
 patterns a clause of the group forbids, and those whose restriction to a group whose support this one contains is such
 a pattern, are marked refuted without a probe: the region deciding such a pattern lies in the closed root, so a member
 of the class in it satisfies the clause's body under the pattern (the clause's rule and the chains to its base standing
-in the reduct, their bodies true in the candidate, as the proposal pass reads them) and holds the clause's guard, which
-every member excludes since the root cuts it; the region holds no member, nor does its narrowing inside it, which is the
-same premise. A unit's probe narrows the closed root, `s.narrow (query M)`, with the guard held, where `saturation_unit` quantifies over
+in the reduct, their bodies true in the candidate, as the proposal pass reads them) and holds the clause's guard, which no
+countermodel in the root holds, cut by the root or a unit by `saturation_unit`; the region holds no member, nor does its
+narrowing inside it, which is the same premise, discharged by the proposal pass's reading of the clause rather than by a
+probe. A unit's probe narrows the closed root, `s.narrow (query M)`, with the guard held, where `saturation_unit` quantifies over
 the raw query root with the guard held: a countermodel in the law's region holds the guard and lies in `query M`, so by
 the frozen subject's soundness it lies in the closed root and, holding the guard, in the probed region, which is how a
 probe that reaches the candidate or is refuted discharges the law's premise. A parity row or a count bound is installed only
@@ -2693,7 +2694,8 @@ which the unit discharges (`row_under_unit`), every region the preparation serve
 preparation is built from the theory and the candidate, authenticated at every use, and never
 consulted for another candidate; `add` is the only operation changing a parity row; and a stopped probe declines the
 whole preparation rather than marking a pattern. The affine hull of the allowed patterns and the clique search are
-trusted computations whose results are checked against the retained pattern tables, not re-read from formulas.
+trusted computations whose results are checked against the retained pattern tables, not re-read from formulas; the
+proposal pass's reading of a clause, where it forbids a pattern without a probe, is a trusted computation beside them.
 
 The support cut (`FormulaBounds.unsupported_cut_with_choices`) and the objective
 bound's own lower-bound reasoning
