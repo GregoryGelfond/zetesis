@@ -2,7 +2,15 @@
 //! falsify it, and each clause's base support reached through single-producer
 //! chains and the two-atom disjunctive roots.
 
-use super::super::source::Support;
+use std::mem::size_of;
+
+use zetesis_algebra::{Quota, Stop};
+
+use super::super::{
+    budget::{Budget, BudgetError},
+    source::{MAX_SUPPORT, Support},
+};
+use crate::{Interpretation, NodeView, Producers, Region, Theory};
 
 /// A clause of a guard: the rule whose body, with the conjuncts the closed
 /// root holds dropped, is falsified by holding (`true`) or cutting (`false`)
@@ -46,16 +54,6 @@ pub(super) struct Proposals {
     pub parity: Vec<Group>,
     pub counts: ProposalCounts,
 }
-
-use std::mem::size_of;
-
-use zetesis_algebra::{Quota, Stop};
-
-use super::super::{
-    budget::{Budget, BudgetError},
-    source::MAX_SUPPORT,
-};
-use crate::{Interpretation, NodeView, Producers, Region, Theory};
 
 /// A chain from a guard's conjunct is followed through at most this many
 /// producers; the quantified encodings need three.
