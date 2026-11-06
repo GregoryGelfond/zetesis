@@ -170,6 +170,9 @@ compatibility changes below before upgrading.
 
 ### Changed
 
+- Release builds use fat link-time optimization and one codegen unit. The
+  [CPU build comparison](docs/book/reference/performance.md#cpu-release-build-profile)
+  records executable size, retired instructions and elapsed time on four inputs.
 - The candidate setup's generator order builds both adjacencies of the
   dependency graph, by source and by target, from two passes over the
   incidences where it made four, so `generator_order.work` in the receipts

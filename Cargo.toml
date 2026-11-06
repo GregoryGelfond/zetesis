@@ -8,6 +8,10 @@ rust-version = "1.97"
 license = "MIT"
 version = "0.7.0"
 
+[profile.release]
+lto = "fat"
+codegen-units = 1
+
 # The enforced Rust subset of the estate baseline. Exceptions are named and argued at
 # their point of use; a prototype narrows features, not these checks.
 [workspace.lints.rust]
