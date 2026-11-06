@@ -1,9 +1,13 @@
 //! Checked affine equations and count bounds for candidate preparation.
 //!
 //! Source recognition proposes rows; independent source reads establish their
-//! consequences for the original theory's answer sets. These rows never enter
-//! the frozen reduct's proper-subset search. Root preparation precedes region
-//! narrowing; the later region subjects will consume the same immutable rows.
+//! consequences for the original theory's answer sets, and those rows never
+//! enter the frozen reduct's proper-subset search. A candidate's inner
+//! preparation makes rows of its countermodel class by the same hull,
+//! materialization and retention, checked against their probe tables and
+//! never reread, and those rows narrow that search as its late tier. Root
+//! preparation precedes region narrowing; the later region subjects consume
+//! the same immutable rows.
 
 use zetesis_algebra::Quota;
 
