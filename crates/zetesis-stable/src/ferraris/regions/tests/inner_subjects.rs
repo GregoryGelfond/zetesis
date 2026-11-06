@@ -202,6 +202,28 @@ impl Saturation {
         attempt.result.unwrap().unwrap()
     }
 
+    /// The membership check under a search budget of `work`: its outcome,
+    /// what the walk observed, and the work it spent.
+    fn check_within(&self, work: u64) -> (Result<crate::Check, Incomplete>, Statistics, u64) {
+        let index = built(&self.theory);
+        let cancellation = Cancellation::default();
+        let mut workspace = EvaluationWorkspace::default();
+        let evaluated = workspace
+            .evaluate(&self.candidate, EvaluationLimits::default(), &cancellation)
+            .result
+            .unwrap();
+        let mut query_budget = budget(&cancellation, work);
+        let mut statistics = Statistics::default();
+        let check = ReductQuery::new(&index).check(
+            &evaluated,
+            Limits::default(),
+            &mut query_budget,
+            &mut statistics,
+            &mut NarrowingScratch::default(),
+        );
+        (check, statistics, query_budget.statistics.work)
+    }
+
     /// The whole membership check of the candidate through the reduct query.
     fn check(&self) -> (crate::Check, Statistics) {
         let index = built(&self.theory);
@@ -719,4 +741,36 @@ fn every_small_saturation_core_is_decided_as_by_enumeration() {
             }
         }
     }
+}
+
+#[test]
+fn a_stop_inside_the_late_tier_is_a_stopped_query() {
+    // A dropped-clause candidate's countermodel is found with the late tier's
+    // parity rows. Across work limits, every check either finds it or reports
+    // the stop: a stop inside the parity or counting subject is a stopped
+    // query, never a refuted region whose countermodel the walk then misses.
+    let mut clauses = two_chains();
+    clauses.pop();
+    let fixture = Saturation::build(7, &clauses);
+    let (check, statistics, total) = fixture.check_within(u64::MAX);
+    assert!(matches!(check, Ok(crate::Check::NonMinimal(_))));
+    assert!(statistics.reduct.regions.arithmetic.parity_passes > 0);
+    let stride = usize::try_from(total / 2048).unwrap().max(1);
+    let mut stopped_after_the_tier_ran = 0;
+    for work in (0..total).step_by(stride) {
+        let (check, statistics, _) = fixture.check_within(work);
+        match check {
+            Ok(crate::Check::NonMinimal(_)) => {}
+            Err(Incomplete::WorkLimit) => {
+                if statistics.reduct.regions.arithmetic.parity_passes > 0 {
+                    stopped_after_the_tier_ran += 1;
+                }
+            }
+            other => panic!("work {work} of {total}: {other:?}"),
+        }
+    }
+    assert!(
+        stopped_after_the_tier_ran > 0,
+        "of {total} at stride {stride}"
+    );
 }
