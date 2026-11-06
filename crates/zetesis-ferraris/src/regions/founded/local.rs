@@ -209,6 +209,7 @@ impl Scratch {
     /// Ordinary evidence only appends selected node IDs, once each. Storage was
     /// reserved with the immutable projection. Atom events also call this for
     /// already-false occurrences, preserving conservative invalidation coverage.
+    #[inline]
     pub(in crate::regions) fn record_false(&mut self, node: usize) {
         if !self.local.collecting || matches!(self.states[node], State::Outside) {
             return;

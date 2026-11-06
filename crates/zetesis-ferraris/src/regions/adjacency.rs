@@ -193,6 +193,7 @@ impl Adjacency {
 impl Index<usize> for Adjacency {
     type Output = [usize];
 
+    #[inline]
     fn index(&self, row: usize) -> &Self::Output {
         &self.entries[self.offsets[row]..self.offsets[row + 1]]
     }

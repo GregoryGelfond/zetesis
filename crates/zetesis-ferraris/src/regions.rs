@@ -593,6 +593,7 @@ enum ChainOperands {
 }
 
 impl Chain {
+    #[inline]
     fn leaves<'a>(&'a self, extrema: &'a extrema::Extrema) -> &'a [usize] {
         match &self.operands {
             ChainOperands::Owned(values) => values,
@@ -1134,6 +1135,7 @@ impl Narrower {
 
     /// Direct Boolean parents followed by ordinal-cut parents. The ordinal
     /// incidences are streamed from compact row postings, never materialized.
+    #[inline]
     fn logical_parents(&self, node: usize) -> impl DoubleEndedIterator<Item = usize> + Clone + '_ {
         self.parents[node]
             .iter()
@@ -1820,6 +1822,7 @@ impl CommonScratch {
     /// Queue the atom's support recheck unless one is already pending. Its
     /// supporters only fall as knowledge grows, so the pending recheck,
     /// made with the later knowledge, derives what this one would have.
+    #[inline]
     fn queue_recheck(&mut self, atom: usize) {
         if !self.pending.contains(atom) {
             self.pending.insert(atom);
@@ -1829,6 +1832,7 @@ impl CommonScratch {
 
     /// The next atom to recheck, no longer pending: a support change during
     /// or after its recheck queues it again.
+    #[inline]
     fn next_recheck(&mut self) -> Option<usize> {
         let atom = self.heads.pop()?;
         self.pending.remove(atom);
@@ -1950,6 +1954,7 @@ impl<C: Count> Known<C> {
 
 impl<W: Count, C: ReadingClass> Closure<'_, W, C> {
     /// A node learns to hold; it is revisited if that is new.
+    #[inline]
     fn sure(&mut self, index: usize) -> Step {
         let step = learn(&mut self.known.sure, &self.known.never, index);
         if step == Step::Changed {
@@ -1959,6 +1964,7 @@ impl<W: Count, C: ReadingClass> Closure<'_, W, C> {
     }
 
     /// A node learns to fail; it is revisited if that is new.
+    #[inline]
     fn never(&mut self, index: usize) -> Step {
         let step = learn(&mut self.known.never, &self.known.sure, index);
         if step == Step::Changed {
