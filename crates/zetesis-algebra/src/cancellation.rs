@@ -361,6 +361,21 @@ impl Meter<'static> {
     /// The final conversion asserts the preceding u64-ceiling check. No input
     /// can violate that invariant while this check is preserved.
     pub fn check_receipt(recorded: u64, count: u128, limit: u64) -> Result<u64, MeterWorkError> {
+        // The machine-width case first, which every charge of a bounded
+        // operation is: the increment fits u64 and the sum does not wrap. The
+        // wide check decides the rest with the same answers.
+        if let Ok(count) = u64::try_from(count)
+            && let Some(observed) = recorded.checked_add(count)
+        {
+            return if observed <= limit {
+                Ok(observed)
+            } else {
+                Err(MeterWorkError::Limit {
+                    observed: u128::from(observed),
+                    limit: u128::from(limit),
+                })
+            };
+        }
         let observed = Self::check_wide_receipt(u128::from(recorded), count, u128::from(limit))?;
         Ok(u64::try_from(observed).expect("work checked against u64 ceiling"))
     }
