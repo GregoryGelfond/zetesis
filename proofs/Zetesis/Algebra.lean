@@ -1281,8 +1281,11 @@ it, then every member of `C` in `r` is allowed. `Allowed` depends on `S` alone.
 Proof. A member lies in the region deciding its own restriction to `S`
 (`contains_decideAll`); soundness keeps it in the narrowing, so its restriction is
 not among the refuted patterns, and `Allowed` transfers to the member. The Rust
-discharges the premise by the frozen narrowing's refutations, whose soundness is
-the walk's own obligation (`ReductRegions.masked_known_sound`); with
+discharges the premise by the refutations of each probe's narrowing: in the first
+probing round the frozen subject's, whose soundness is the walk's own obligation
+(`ReductRegions.masked_known_sound`), and in a later round the frozen subject's
+composed with the row subjects of the round before, sound for the class as their
+joint closure is (`joint_sound`); with
 `AlgebraicRows.measure_congr` an equation holding on every allowed pattern is an
 equation of the class in `r`, and `AlgebraicRows.bounds_of_allowed` gives its
 count bounds. -/
@@ -1309,7 +1312,10 @@ theorem entailed_by_refutations (C : Class α) (s : Subject C) (r : Region α) (
 countermodels: if narrowing the query root with `a` held leaves only interpretations
 that contain `M` or are no countermodel, then `¬ a` is a row of the countermodels
 with no conditions. A countermodel holding `a` lies in that narrowing, so it would
-contain `M`, contradicting `ProperSub`, or it is no countermodel. -/
+contain `M`, contradicting `ProperSub`, or it is no countermodel. The Rust probes
+from the closed root, `s.narrow (query M)`, with `a` held: a countermodel holding
+`a` lies in the query root and, by `s`'s soundness, in the closed root and in that
+probe's region, so a probe that reaches `M` or is refuted discharges the premise. -/
 theorem saturation_unit (T : Theory α) (M : Atoms α) (s : Subject (Countermodels T M)) (a : α)
     (reaches : ∀ z,
       (s.narrow ((ReductRegions.query M).decideAll [a] (fun _ => True))).Contains z →
@@ -1335,7 +1341,9 @@ theorem saturation_unit (T : Theory α) (M : Atoms α) (s : Subject (Countermode
 theory and the candidate: its root is `ReductRegions.query M` and its subjects are
 built from `T` and `M` alone: the frozen subject, and the rows of the countermodels
 a preparation installs, each a subject of the class through `row` with a `RowOf`
-proof from `entailed_by_refutations` or `saturation_unit` over the frozen subject.
+proof from `entailed_by_refutations` or `saturation_unit`, over the frozen subject
+in the first probing round and, in a later round, over the frozen subject composed
+with the rows of the round before (`joint_sound`).
 It takes no supplied subject and no supplied root knowledge. That the Rust reduct
 query keeps to this construction, probing from the closed query root and never
 sharing a preparation across candidates, is an implementation obligation, a

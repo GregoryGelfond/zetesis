@@ -2672,9 +2672,17 @@ The subjects built from the library's laws:
 | the rows of `countermodelSubjects`, through `row` | `Algebra.entailed_by_refutations` over `contains_decideAll` for a probed group's allowed patterns, `Algebra.saturation_unit` for a unit, `LearnedRegions.row_under_unit` for a row found under a guard the class cuts, `AlgebraicRows.upper_of_clique`, `bounds_of_allowed` and `lower_of_clause` for count bounds | A candidate's inner preparation: rows of the countermodel class recognized by probing the closed query root, loaded into the same parity and cardinality systems the candidate walk uses, applied by the countermodel walk's late tier. The preparation is built from the theory and the candidate alone and dropped with the query |
 
 What the Rust establishes for those rows, beyond the obligations the arithmetic subjects already carry for forced literals
-and threshold guards: recognition reads only the masked DAG and the closed root's knowledge; every probe is the frozen
-narrowing from a copy of the closed query root with exactly the guard and the pattern decided, so a refuted probe is the
-premise of `entailed_by_refutations` with the frozen subject as `s`; a parity row or a count bound is installed only
+and threshold guards: recognition reads only the masked DAG and the closed root's knowledge; every probe narrows a copy of
+the closed query root with exactly the guard and the pattern decided, in the first probing round by the frozen subject
+and in a later round by the frozen subject composed with the row subjects of the round before, each sound for the class
+and so their joint closure (`Algebra.joint_sound`), the complete consistency check of those rows entering as a refuting
+subject of the class (a `0 = 1` combination under the region's decisions is a sum of class equations,
+`AlgebraicRows.equation_sum`, every variable of which the region decides, `equation_excludes_given` and
+`excludes_region`); so a refuted probe is the premise of `entailed_by_refutations` with that round's subject as `s`. A
+unit's probe narrows the closed root, `s.narrow (query M)`, with the guard held, where `saturation_unit` quantifies over
+the raw query root with the guard held: a countermodel in the law's region holds the guard and lies in `query M`, so by
+the frozen subject's soundness it lies in the closed root and, holding the guard, in the probed region, which is how a
+probe that reaches the candidate or is refuted discharges the law's premise. A parity row or a count bound is installed only
 under a guard the closed root cuts, a saturation unit or a residual root's own decision, and enters without the guard,
 which the unit discharges (`row_under_unit`), every region the preparation serves descending from that root; the
 preparation is built from the theory and the candidate, authenticated at every use, and never
