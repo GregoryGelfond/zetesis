@@ -1,9 +1,13 @@
 use zetesis_algebra::{Cancellation, Countermodels, Failure, Meter, Stop};
 
 use super::super::budget::Budget;
+use super::super::source::{MAX_SUPPORT, Support};
 use super::super::uniform::BoundSide;
-use super::proposals::{Proposals, propose};
-use super::{ClosedQuery, FrozenPreparation, FrozenPreparationAttempt, FrozenPreparationLimits};
+use super::proposals::{Group, Proposals, propose};
+use super::{
+    ClosedQuery, FrozenPreparation, FrozenPreparationAttempt, FrozenPreparationLimits, Leased,
+    known_refutations,
+};
 use crate::test_support::{Allowance, constructed_theory, push};
 use crate::{
     EvaluationLimits, EvaluationWorkspace, FrozenSubject, Interpretation, Knowledge, Narrower,
@@ -729,6 +733,52 @@ fn a_preparation_belongs_to_one_candidate() {
     assert!(!preparation.belongs_to(&fixture.theory, &smaller));
     let twin = Saturation::build(3, &gate(0, 1, 2), &[]);
     assert!(!preparation.belongs_to(&twin.theory, &twin.candidate));
+}
+
+#[test]
+fn the_known_refutations_charge_each_pair_of_groups_compared() {
+    // Two groups, the narrower's support inside the wider's: the floor is
+    // charged one operation per clause pattern read, one per pair of groups
+    // compared, whether or not the comparison reaches the containment test,
+    // and one per pattern examined against a contained group's forbidden
+    // pattern.
+    let support = |atoms: &[usize]| {
+        let mut support = Support {
+            atoms: [0; MAX_SUPPORT],
+            len: atoms.len(),
+        };
+        support.atoms[..atoms.len()].copy_from_slice(atoms);
+        support
+    };
+    let wide = Group {
+        guard: 9,
+        support: support(&[0, 1, 2]),
+        patterns: vec![0b001],
+    };
+    let narrow = Group {
+        guard: 9,
+        support: support(&[0, 1]),
+        patterns: vec![0b01],
+    };
+    let mut quota = Allowance {
+        remaining: u64::MAX,
+        failure: Stop::WorkLimit,
+    };
+    let mut lease = Leased {
+        account: &mut quota,
+        remaining: u64::MAX,
+        used: 0,
+        extended: 0,
+    };
+    let known = known_refutations(&[&wide, &narrow], &mut lease).unwrap();
+    let refuted =
+        |table: &super::probes::Table| (0..8).filter(|&p| table.contains(p)).collect::<Vec<_>>();
+    assert_eq!(
+        known.iter().map(refuted).collect::<Vec<_>>(),
+        vec![vec![1, 5], vec![1]]
+    );
+    // Two patterns read, four pairs compared, eight patterns examined.
+    assert_eq!(lease.used, 2 + 4 + 8);
 }
 
 #[test]

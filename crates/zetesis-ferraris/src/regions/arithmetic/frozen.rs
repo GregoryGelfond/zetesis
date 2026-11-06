@@ -478,7 +478,7 @@ struct Probing<'l, 'q, Q: Quota + ?Sized> {
 /// probe of such a pattern would find the clause's own refutation, since
 /// every admitted group's guard is cut at the root; the table records it
 /// without running the probe. One word operation is charged to the floor per
-/// clause read and per pattern examined.
+/// clause read, per pair of groups compared and per pattern examined.
 ///
 /// # Errors
 /// The lease's refusal.
@@ -496,6 +496,7 @@ fn known_refutations<Q: Quota + ?Sized>(
             refuted.insert(usize::from(pattern));
         }
         for other in groups {
+            meter.tick().map_err(from_meter)?;
             if other.support.len > group.support.len || std::ptr::eq(*other, *group) {
                 continue;
             }
