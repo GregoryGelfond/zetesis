@@ -135,3 +135,100 @@ fn decision_refusal_retains_the_actual_visit_prefix() {
     assert_eq!(worker.levels(), Some([1, 1, 1].as_slice()));
     assert_eq!(trace.published_splits, 2);
 }
+
+#[test]
+fn a_disjunctive_body_does_not_establish_a_particular_head_in_a_residual() {
+    // x; x -> (a | b | c); p | q; (a & p) -> g; (a & q) -> g.
+    let (condition, first, second, third, left, right, guard) = (0, 1, 2, 3, 4, 5, 6);
+    let mut nodes: Vec<_> = (0..7).map(Node::atom).collect();
+    nodes.extend([
+        Node::or_pair([first, second]),
+        Node::or_pair([7, third]),
+        Node::implies(condition, 8),
+        Node::or_pair([left, right]),
+        Node::and_pair([first, left]),
+        Node::implies(11, guard),
+        Node::and_pair([first, right]),
+        Node::implies(13, guard),
+    ]);
+    let theory = zetesis_theory_support::theories::theory(7, nodes, vec![condition, 9, 10, 12, 14]);
+    let mut root = Region::all_open(7);
+    assert!(root.cut(guard));
+    let (check, _) = from_root(
+        &theory,
+        &[condition, first, second, third, left, right, guard],
+        root,
+        u64::MAX,
+        None,
+    );
+    let witness = check.unwrap().expect("the residual contains {x,b,p}");
+    assert!(witness.contains(condition) && !witness.contains(first) && !witness.contains(guard));
+    assert!(witness.contains(second) || witness.contains(third));
+    assert!(witness.contains(left) || witness.contains(right));
+}
+
+#[test]
+fn a_masked_antecedent_cannot_activate_a_disjunction_in_a_residual() {
+    // ((a -> b) | h) -> (y | z); y -> g; z -> g.
+    // M omits b and holds a, so its reduct replaces (a -> b) with falsum.
+    let (first, second, other_body, left_head, right_head, guard) = (0, 1, 2, 3, 4, 5);
+    let mut nodes: Vec<_> = (0..6).map(Node::atom).collect();
+    nodes.extend([
+        Node::implies(first, second),
+        Node::or_pair([6, other_body]),
+        Node::or_pair([left_head, right_head]),
+        Node::implies(7, 8),
+        Node::implies(left_head, guard),
+        Node::implies(right_head, guard),
+    ]);
+    let theory = zetesis_theory_support::theories::theory(6, nodes, vec![9, 10, 11]);
+    let mut root = Region::all_open(6);
+    assert!(root.cut(first) && root.cut(second) && root.cut(guard));
+    let (check, _) = from_root(
+        &theory,
+        &[first, other_body, left_head, right_head, guard],
+        root,
+        u64::MAX,
+        None,
+    );
+    let witness = check.unwrap().expect("the residual contains the empty set");
+    assert!(witness.atoms().next().is_none());
+}
+
+#[test]
+fn an_open_body_does_not_establish_a_particular_binary_head_in_a_residual() {
+    // t | u and t -> x, u -> x entail x only after an alternative is explored.
+    // The open body of x -> (a | b) cannot establish a on its own.
+    let (condition, first, second, left, right, guard, branch_one, branch_two) =
+        (0, 1, 2, 3, 4, 5, 6, 7);
+    let mut nodes: Vec<_> = (0..8).map(Node::atom).collect();
+    nodes.extend([
+        Node::or_pair([branch_one, branch_two]),
+        Node::implies(branch_one, condition),
+        Node::implies(branch_two, condition),
+        Node::or_pair([first, second]),
+        Node::implies(condition, 11),
+        Node::or_pair([left, right]),
+        Node::and_pair([first, left]),
+        Node::implies(14, guard),
+        Node::and_pair([first, right]),
+        Node::implies(16, guard),
+    ]);
+    let theory = zetesis_theory_support::theories::theory(8, nodes, vec![8, 9, 10, 12, 13, 15, 17]);
+    let mut root = Region::all_open(8);
+    assert!(root.cut(guard));
+    let (check, _) = from_root(
+        &theory,
+        &[
+            condition, first, second, left, right, guard, branch_one, branch_two,
+        ],
+        root,
+        u64::MAX,
+        None,
+    );
+    let witness = check.unwrap().expect("the residual contains {t,x,b,p}");
+    assert!(witness.contains(condition) && witness.contains(second));
+    assert!(!witness.contains(first) && !witness.contains(guard));
+    assert!(witness.contains(branch_one) || witness.contains(branch_two));
+    assert!(witness.contains(left) || witness.contains(right));
+}

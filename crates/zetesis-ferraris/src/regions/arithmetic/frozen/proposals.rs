@@ -332,8 +332,11 @@ fn follow<Q: Quota + ?Sized>(
     budget.charge(1)?;
     if let (1, Some(rule)) = (alive, live) {
         let producer = &masked.producers.rules[rule];
-        if let Some(body) = producer.body
+        // Following a rule body requires it to entail this particular head.
+        budget.charge(1)?;
+        if producer.heads.len() == 1
             && !producer.choice
+            && let Some(body) = producer.body
         {
             match budget.node(masked.theory, body)? {
                 NodeView::Atom(next) => {
@@ -393,6 +396,10 @@ fn known<Q: Quota + ?Sized>(
     budget.charge(1)?;
     if depth > MAX_NESTING {
         return Ok(None);
+    }
+    budget.charge(1)?; // Read the candidate's frozen node mask.
+    if !masked.truth[node] {
+        return Ok(Some(false));
     }
     Ok(match budget.node(masked.theory, node)? {
         NodeView::Atom(atom) => masked.root.decision(atom),
