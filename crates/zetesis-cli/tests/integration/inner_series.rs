@@ -79,8 +79,6 @@ struct Receipt {
     visited: u64,
     refuted: u64,
     preparation: Value,
-    /// Regions of published queries served by other workers, none at one.
-    served: u64,
 }
 
 /// A term as clingo displays it: a number or a symbol.
@@ -174,9 +172,6 @@ fn solve_with(program: &str, workers: u64) -> Receipt {
         visited: regions["visited"].as_u64().unwrap(),
         refuted: regions["refuted"].as_u64().unwrap(),
         preparation: regions["preparation"].clone(),
-        served: search["candidate_regions"]["workers"]["query_division"]["served"]
-            .as_u64()
-            .unwrap_or(0),
     }
 }
 
@@ -359,22 +354,18 @@ fn g_census_inner_finds_the_cores_groups_and_rows() {
 }
 
 #[test]
-#[ignore = "requires clingo: the series' families agree at fourteen workers, through the I1 servers"]
+#[ignore = "requires clingo: the series' families agree at fourteen workers"]
 fn the_series_families_agree_at_fourteen_workers() {
-    // At fourteen workers a published query's regions are served by other
-    // workers with the query's preparation: each family's two smallest sizes
-    // give clingo's family, and some region is served.
+    // Each family's two smallest sizes give clingo's family at fourteen
+    // workers too. Whether a published query's region is served under the
+    // default division is the schedule's; serving with the query's
+    // preparation, forced, is zetesis-stable's query-division test.
     for family in [PARITY, TSEITIN, PIGEONHOLE] {
         for &size in &family.sizes[..2] {
             let program = family.program(size);
             let expected = external(&program);
             let receipt = solve_with(&program, 14);
             assert_eq!(receipt.family, expected, "{} {size}", family.name);
-            assert!(
-                receipt.served > 0,
-                "{} {size}: no region served",
-                family.name
-            );
         }
     }
 }
