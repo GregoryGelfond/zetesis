@@ -63,7 +63,7 @@ pub struct InnerPreparationStatistics {
     pub unsupported_clauses: u64,
     /// Parity groups proposed.
     pub groups: u64,
-    /// Probes run.
+    /// Probes run to their verdict.
     pub probes: u64,
     /// Probing rounds run: one by the frozen reading alone per preparation,
     /// each further one under the rows the round before established.

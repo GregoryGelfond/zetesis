@@ -109,7 +109,8 @@ pub struct FrozenPreparationStatistics {
     /// Parity groups probed, under a guard the root cuts: a unit's, or one
     /// the root cut already.
     pub probed_groups: u64,
-    /// Probes run, unit probes included.
+    /// Probes run to their verdict, unit probes included; one the lease or
+    /// the account interrupts is not counted.
     pub probes: u64,
     /// Patterns forbidden: by a probe that was refuted, or read off the
     /// clauses of the group, or of a group whose support it contains, before
@@ -411,10 +412,10 @@ fn build<Q: Quota + ?Sized>(
             // there unconditionally. An open guard is probed held; one whose
             // narrowing reaches the candidate, or is refuted, is a unit.
             if query.region.is_open(guard) {
-                statistics.probes += 1;
                 let refuted = probe
                     .run(&[(guard, true)], None, scratch, cancellation, &mut meter)
                     .map_err(from_meter)?;
+                statistics.probes += 1;
                 let reaches = refuted
                     || query
                         .candidate

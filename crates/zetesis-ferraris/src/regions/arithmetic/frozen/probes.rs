@@ -175,8 +175,9 @@ impl<'a> Probe<'a> {
                     .enumerate()
                     .map(|(position, &atom)| (atom, pattern & (1 << position) != 0)),
             );
+            let refuting = self.run(&decisions, rows, scratch, cancellation, meter)?;
             run += 1;
-            if self.run(&decisions, rows, scratch, cancellation, meter)? {
+            if refuting {
                 forbidden.insert(pattern);
                 refuted += 1;
             }

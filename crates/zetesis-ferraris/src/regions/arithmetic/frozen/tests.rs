@@ -1462,3 +1462,28 @@ fn probing_stops_after_the_second_round() {
     let prepared = attempt.result.unwrap().unwrap();
     assert!(prepared.parity().is_some());
 }
+
+#[test]
+fn a_probe_the_account_interrupts_is_not_counted() {
+    // A probe is counted when it returns its verdict. The account's
+    // allowance is swept across a preparation whose first probe is the
+    // gate's unit: wherever the account refuses inside that probe no probe
+    // is counted, since a counted probe has had its verdict read, which for
+    // the first one is the unit.
+    let fixture = Saturation::build(3, &gate(0, 1, 2), &[]);
+    let complete = fixture.prepared();
+    assert_eq!(complete.statistics.saturation_units, 1);
+    let total = usize::try_from(complete.work).unwrap();
+    for allowance in (0..total).step_by((total / 1024).max(1)) {
+        let (attempt, _) = fixture.prepare(
+            unbounded(),
+            u64::try_from(allowance).unwrap(),
+            &Cancellation::default(),
+        );
+        let statistics = attempt.statistics;
+        assert!(
+            statistics.probes == 0 || statistics.saturation_units >= 1,
+            "allowance {allowance}: {statistics:?}"
+        );
+    }
+}
