@@ -923,12 +923,38 @@ impl<C: Count> Known<C> {
 #[cfg(test)]
 mod tests;
 
+/// What the index reads of a node: the atom it carries, or an implication's
+/// operands. The nodes are decoded once into these, so the adjacencies built
+/// from them read a slot on each of their passes instead of decoding again.
+#[derive(Clone, Copy)]
+enum NodeRead {
+    Atom(usize),
+    Implies(usize, usize),
+    Other,
+}
+
+/// Every node's read, in node order.
+fn node_reads(nodes: FormulaView<'_>) -> Result<Vec<NodeRead>, Stop> {
+    let mut reads = Vec::new();
+    reads
+        .try_reserve_exact(nodes.len())
+        .map_err(|_| Stop::Allocation)?;
+    for index in 0..nodes.len() {
+        reads.push(match nodes.node(index).map_err(|_| Stop::InvalidProgram)? {
+            NodeView::Atom(atom) => NodeRead::Atom(atom),
+            NodeView::Implies(a, b) => NodeRead::Implies(a, b),
+            _ => NodeRead::Other,
+        });
+    }
+    Ok(reads)
+}
+
 /// The ordered operand-to-parent incidences already chosen by chain formation.
 /// Chains precede implications as in the original index; a repeated implication
 /// operand is one incidence. Distinct atom nodes carrying the same atom remain
 /// distinct occurrences when this stream is projected to atom operands.
 fn dependencies<'a>(
-    nodes: FormulaView<'a>,
+    reads: &'a [NodeRead],
     chains: &'a [Chain],
 ) -> impl Iterator<Item = (usize, usize)> + Clone + 'a {
     chains
@@ -938,9 +964,9 @@ fn dependencies<'a>(
             ChainOperands::Ordinal { .. } => None,
         })
         .flat_map(|(chain, operands)| operands.iter().map(move |&operand| (operand, chain.root)))
-        .chain((0..nodes.len()).flat_map(move |index| {
-            let operands = match nodes.node(index).expect("admitted node") {
-                NodeView::Implies(a, b) => [Some(a), (b != a).then_some(b)],
+        .chain(reads.iter().enumerate().flat_map(|(index, read)| {
+            let operands = match *read {
+                NodeRead::Implies(a, b) => [Some(a), (b != a).then_some(b)],
                 _ => [None, None],
             };
             operands
@@ -1060,24 +1086,27 @@ impl Narrower {
             &extrema,
             !witness_chains.is_empty(),
         )?;
-        let parents = Adjacency::build(nodes.len(), dependencies(nodes, &chains))?;
+        let reads = node_reads(nodes)?;
+        let parents = Adjacency::build(nodes.len(), dependencies(&reads, &chains))?;
         let atom_operands = Adjacency::try_build(
             nodes.len(),
-            dependencies(nodes, &chains)
+            dependencies(&reads, &chains)
                 .chain(thresholds.dependencies())
-                .filter_map(|(operand, parent)| match nodes.node(operand) {
-                    Ok(NodeView::Atom(atom)) => Some(Ok((parent, atom))),
-                    Ok(_) => None,
-                    Err(_) => Some(Err(Stop::InvalidProgram)),
+                .filter_map(|(operand, parent)| match reads.get(operand) {
+                    Some(NodeRead::Atom(atom)) => Some(Ok((parent, *atom))),
+                    Some(_) => None,
+                    None => Some(Err(Stop::InvalidProgram)),
                 }),
         )?;
-        let atom_nodes = Adjacency::try_build(
+        let atom_nodes = Adjacency::build(
             theory.atom_count(),
-            (0..nodes.len()).filter_map(|index| match nodes.node(index) {
-                Ok(NodeView::Atom(atom)) => Some(Ok((atom, index))),
-                Ok(_) => None,
-                Err(_) => Some(Err(Stop::InvalidProgram)),
-            }),
+            reads
+                .iter()
+                .enumerate()
+                .filter_map(|(index, read)| match *read {
+                    NodeRead::Atom(atom) => Some((atom, index)),
+                    _ => None,
+                }),
         )?;
         let counter_bound = counter_bound(&chains, &parents, &atom_nodes, &thresholds, &extrema);
         let mut result = Self {
