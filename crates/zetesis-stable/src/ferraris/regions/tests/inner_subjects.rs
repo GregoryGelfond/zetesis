@@ -586,6 +586,24 @@ fn a_residual_query_prepares_from_its_own_root() {
 }
 
 #[test]
+fn the_index_takes_the_opened_roots_producers_without_extracting_again() {
+    // The outer walk extracted the theory's producers when it opened the
+    // root; an index seeded with them hands them to the first preparation
+    // without a second extraction or charge.
+    let fixture = Saturation::build(7, &two_chains());
+    let cancellation = Cancellation::default();
+    let extraction = producers(&fixture.theory, RegionLimits::default(), &cancellation).unwrap();
+    let extracted = extraction.producers.map(Arc::new);
+    assert!(extracted.is_some());
+    let mut owner = OriginalIndex::seeded(&fixture.theory, u64::MAX, extracted);
+    let index = owner.ensure(&cancellation, |_| Ok(())).unwrap();
+    let found = index
+        .producers(&cancellation, |_| panic!("the seeded index extracts again"))
+        .unwrap();
+    assert!(found.is_some());
+}
+
+#[test]
 fn a_preparation_of_another_candidate_is_refused_by_identity() {
     // A preparation serves its own candidate's query alone: offered to a
     // region of another theory's candidate, the inner narrowing refuses it

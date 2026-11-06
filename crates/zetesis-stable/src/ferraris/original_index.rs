@@ -24,10 +24,11 @@ use crate::Incomplete;
 pub(crate) struct IndexedTheory {
     theory: Theory,
     narrower: Narrower,
-    /// The theory's producers when every root is a rule, extracted once by
+    /// The theory's producers when every root is a rule, taken from the
+    /// opened root when the owner was seeded with them, else extracted once by
     /// the first inner preparation that needs them and charged to it; what
     /// every candidate's inner preparation reads.
-    producers: OnceLock<Option<Producers>>,
+    producers: OnceLock<Option<Arc<Producers>>>,
     /// Serializes the one extraction, so that concurrent preparations
     /// neither extract nor charge it twice.
     extraction: Mutex<()>,
@@ -56,20 +57,23 @@ impl IndexedTheory {
         charge: impl FnOnce(u64) -> Result<(), Incomplete>,
     ) -> Result<Option<&Producers>, Incomplete> {
         if let Some(producers) = self.producers.get() {
-            return Ok(producers.as_ref());
+            return Ok(producers.as_deref());
         }
         let _one_at_a_time = self
             .extraction
             .lock()
             .unwrap_or_else(PoisonError::into_inner);
         if let Some(producers) = self.producers.get() {
-            return Ok(producers.as_ref());
+            return Ok(producers.as_deref());
         }
         let extraction =
             zetesis_ferraris::producers(&self.theory, RegionLimits::default(), cancellation)
                 .map_err(stopped)?;
         charge(extraction.work)?;
-        Ok(self.producers.get_or_init(|| extraction.producers).as_ref())
+        Ok(self
+            .producers
+            .get_or_init(|| extraction.producers.map(Arc::new))
+            .as_deref())
     }
 
     /// Authenticate before borrowing the indexed subject for any traversal.
@@ -88,6 +92,19 @@ pub(crate) struct OriginalIndex {
     theory: Theory,
     index: Option<Arc<IndexedTheory>>,
     native_byte_limit: u64,
+    /// The opened root's extraction, when the owner was seeded with it: the
+    /// index hands these producers to its first preparation instead of
+    /// extracting them again.
+    producers: Seed,
+}
+
+/// Whether an index owner carries the opened root's extraction.
+#[derive(Debug)]
+enum Seed {
+    Unseeded,
+    /// Extracted at the opening: the producers, or none when the theory is
+    /// outside the support fragment.
+    Extracted(Option<Arc<Producers>>),
 }
 
 impl OriginalIndex {
@@ -97,6 +114,20 @@ impl OriginalIndex {
             theory: theory.clone(),
             index: None,
             native_byte_limit,
+            producers: Seed::Unseeded,
+        }
+    }
+
+    /// An owner seeded with the producers the opened root extracted, `None`
+    /// when the extraction found the theory outside the support fragment.
+    pub(crate) fn seeded(
+        theory: &Theory,
+        native_byte_limit: u64,
+        producers: Option<Arc<Producers>>,
+    ) -> Self {
+        Self {
+            producers: Seed::Extracted(producers),
+            ..Self::new(theory, native_byte_limit)
         }
     }
 
@@ -140,7 +171,10 @@ impl OriginalIndex {
             Arc::new(IndexedTheory {
                 theory: self.theory.clone(),
                 narrower,
-                producers: OnceLock::new(),
+                producers: match std::mem::replace(&mut self.producers, Seed::Unseeded) {
+                    Seed::Unseeded => OnceLock::new(),
+                    Seed::Extracted(producers) => OnceLock::from(producers),
+                },
                 extraction: Mutex::new(()),
             })
         };

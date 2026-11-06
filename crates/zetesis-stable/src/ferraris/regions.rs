@@ -454,12 +454,19 @@ pub(crate) struct RegionSearch {
 /// its walks learn, and the store its tiers share them through, if any.
 #[derive(Debug)]
 pub(crate) struct OriginalParts {
-    producers: Option<Producers>,
+    producers: Option<Arc<Producers>>,
     choice_heads: ChoiceHeads,
     generator_order: Option<GeneratorOrder>,
     arithmetic: Option<subjects::PreparedArithmetic>,
     learning: LearningOwner,
     learned: Option<Arc<LearnedStore>>,
+}
+
+impl OriginalParts {
+    /// The producers the opening extracted, shared with the theory's index.
+    pub(crate) fn producers(&self) -> Option<&Arc<Producers>> {
+        self.producers.as_ref()
+    }
 }
 
 /// Borrow the original candidate reading and its immutable arithmetic systems.
@@ -494,7 +501,7 @@ impl OriginalParts {
             return Err(Incomplete::WrongTheory);
         }
         Ok(
-            OriginalSubject::carrier(&self.learning, self.producers.as_ref())
+            OriginalSubject::carrier(&self.learning, self.producers.as_deref())
                 .with_choices(&self.choice_heads)
                 .with_generator_order(self.generator_order.as_ref()),
         )
@@ -755,7 +762,7 @@ fn open_recording(
     Ok(Opened {
         statistics: *statistics,
         parts: OriginalParts {
-            producers: extraction.producers,
+            producers: extraction.producers.map(Arc::new),
             choice_heads: extraction.choice_heads,
             generator_order,
             arithmetic,
