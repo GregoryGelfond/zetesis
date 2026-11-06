@@ -20,6 +20,8 @@ struct Family {
     constant: &'static str,
     default: u64,
     sizes: [u64; 4],
+    /// The core's universal atoms at a size.
+    universals: fn(u64) -> u64,
 }
 
 const PARITY: Family = Family {
@@ -28,6 +30,8 @@ const PARITY: Family = Family {
     constant: "n",
     default: 6,
     sizes: [16, 20, 24, 28],
+    // The inputs and the gates' outputs.
+    universals: |n| 3 * n - 2,
 };
 const TSEITIN: Family = Family {
     name: "tseitin",
@@ -35,6 +39,8 @@ const TSEITIN: Family = Family {
     constant: "vertices",
     default: 12,
     sizes: [12, 18, 24, 30],
+    // The edges of a 3-regular graph.
+    universals: |vertices| 3 * vertices / 2,
 };
 const PIGEONHOLE: Family = Family {
     name: "pigeonhole",
@@ -42,6 +48,8 @@ const PIGEONHOLE: Family = Family {
     constant: "holes",
     default: 4,
     sizes: [5, 6, 7, 8],
+    // The places: every pigeon in every hole.
+    universals: |holes| holes * (holes + 1),
 };
 
 impl Family {
@@ -54,14 +62,9 @@ impl Family {
         text.replace(&line, &format!("#const {} = {}.", self.constant, size))
     }
 
-    /// The core's universal atoms at `size`: parity inputs and gate outputs,
-    /// Tseitin edges, pigeonhole places.
+    /// The core's universal atoms at `size`.
     fn universals(self, size: u64) -> u64 {
-        match self.name {
-            "parity" => 3 * size - 2,
-            "tseitin" => 3 * size / 2,
-            _ => size * (size + 1),
-        }
+        (self.universals)(size)
     }
 }
 
@@ -278,9 +281,11 @@ fn g_census_inner_finds_the_cores_groups_and_rows() {
         let candidates = receipt.candidates;
         assert_eq!((receipt.models, candidates), (1, 4), "holes={h}");
         assert_eq!(count(p, "saturation_units"), candidates, "holes={h}");
+        // Every candidate's pigeon clauses and hole pairs, less the one
+        // clause each non-minimal candidate drops.
         assert_eq!(
             count(p, "groups"),
-            candidates * (h + 1 + h * h * (h + 1) / 2) - 3,
+            candidates * (h + 1 + h * h * (h + 1) / 2) - (candidates - receipt.models),
             "holes={h}"
         );
         assert_eq!(count(p, "bounds"), 12 * h + 5, "holes={h}");
