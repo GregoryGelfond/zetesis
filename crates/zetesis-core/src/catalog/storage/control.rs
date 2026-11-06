@@ -11,8 +11,9 @@ use super::{
 };
 
 /// The hash of a key's words, deterministic and cheap: each written word is
-/// folded into the state by a rotate, an exclusive or and a multiplication by
-/// an odd constant, and the finish mixes the state's halves. The index that
+/// folded into the state by [`mix_word`](crate::mix_word), the mix the
+/// solver's fixed hashers share; bytes are folded eight at a time, the tail
+/// tagged with its length, and the finish mixes the state's halves. The index that
 /// reads it probes by equality, so a hash only has to spread keys, never to
 /// resist an adversary, and the ids the catalog assigns do not depend on it.
 /// Keys crafted to collide degrade the index to linear probes; a program from
@@ -22,10 +23,8 @@ use super::{
 struct KeyHasher(u64);
 
 impl KeyHasher {
-    const MULTIPLIER: u64 = 0x9E37_79B9_7F4A_7C15;
-
     fn fold(&mut self, word: u64) {
-        self.0 = (self.0.rotate_left(29) ^ word).wrapping_mul(Self::MULTIPLIER);
+        self.0 = crate::mix_word(self.0, word);
     }
 }
 
