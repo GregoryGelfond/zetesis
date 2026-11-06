@@ -140,6 +140,10 @@ Notable changes by release. Versions follow Semantic Versioning.
 
 ### Changed
 
+- The candidate setup's generator order builds both adjacencies of the
+  dependency graph, by source and by target, from two passes over the
+  incidences where it made four, so `generator_order.work` in the receipts
+  falls with the reads; the order found is unchanged.
 - The native session owner `zetesis_solve::Subject`, also re-exported by
   `zetesis_cli`, is renamed to `Original`. Themelios
   `ProgramSubject` becomes `ProgramOriginal`. Result fields and accessors
