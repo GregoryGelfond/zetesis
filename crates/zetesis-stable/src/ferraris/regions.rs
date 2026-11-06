@@ -1393,12 +1393,7 @@ impl<'a> ReductQuery<'a> {
         let (theory, narrower) = self.index.subject(evaluated.theory())?;
         let candidate = evaluated.interpretation();
         let truth = evaluated.truth();
-        let reading = InnerReading {
-            narrower,
-            subject: FrozenSubject::new(theory, truth),
-            index: self.index,
-            candidate,
-        };
+        let reading = InnerReading::new(self.index, (theory, narrower), truth, candidate);
         if !theory.same_instance(candidate.theory()) {
             return Err(Incomplete::WrongTheory);
         }
@@ -1428,27 +1423,18 @@ impl<'a> ReductQuery<'a> {
                     return Err(Interrupt::Publish);
                 }
                 observation.enter();
-                let before = statistics.reduct.regions.work;
-                let mut result = narrow_inner(
+                let closure = narrow_region(
                     reading,
                     preparation.installed(),
                     entry,
-                    scratch,
-                    budget,
-                    &mut statistics.reduct.regions,
+                    (scratch, budget, statistics),
                 )
                 .map_err(Interrupt::Stopped)?;
+                let mut result = closure.narrowing;
                 if preparation.is_pending() && result != Narrowing::Refuted {
-                    let closure_work = statistics.reduct.regions.work - before;
-                    let (installed, after_units) = prepare_at_root(
-                        (reading, closure_work),
-                        entry,
-                        limits,
-                        budget,
-                        scratch,
-                        statistics,
-                    )
-                    .map_err(Interrupt::Stopped)?;
+                    let (installed, after_units) =
+                        prepare_at_root(closure, entry, limits, (scratch, budget, statistics))
+                            .map_err(Interrupt::Stopped)?;
                     preparation = InnerPreparation::Prepared(installed);
                     result = after_units;
                 }
@@ -1518,33 +1504,19 @@ impl<'a> ReductQuery<'a> {
     ) -> Result<Served, Incomplete> {
         let candidate = query.candidate;
         let (theory, narrower) = self.index.subject(candidate.theory())?;
-        let reading = InnerReading {
-            narrower,
-            subject: FrozenSubject::new(theory, query.truth),
-            index: self.index,
-            candidate,
-        };
-        let before = statistics.reduct.regions.work;
-        let mut narrowing = narrow_inner(
+        let reading = InnerReading::new(self.index, (theory, narrower), query.truth, candidate);
+        let closure = narrow_region(
             reading,
             query.preparation,
             entry,
-            scratch,
-            budget,
-            &mut statistics.reduct.regions,
+            (scratch, budget, statistics),
         )?;
+        let mut narrowing = closure.narrowing;
         if query.prepare_root && narrowing != Narrowing::Refuted {
             // The query published before its root closed: this region is
             // that root, and its server prepares what the publisher would.
-            let closure_work = statistics.reduct.regions.work - before;
-            let (prepared, after_units) = prepare_at_root(
-                (reading, closure_work),
-                entry,
-                limits,
-                budget,
-                scratch,
-                statistics,
-            )?;
+            let (prepared, after_units) =
+                prepare_at_root(closure, entry, limits, (scratch, budget, statistics))?;
             *installed = InnerPreparation::Prepared(prepared);
             narrowing = after_units;
         }
@@ -1699,22 +1671,83 @@ struct InnerReading<'a> {
     candidate: &'a Interpretation,
 }
 
+impl<'a> InnerReading<'a> {
+    fn new(
+        index: &'a IndexedTheory,
+        (theory, narrower): (&'a Theory, &'a Narrower),
+        truth: &'a [bool],
+        candidate: &'a Interpretation,
+    ) -> Self {
+        Self {
+            narrower,
+            subject: FrozenSubject::new(theory, truth),
+            index,
+            candidate,
+        }
+    }
+}
+
+/// One region's narrowing: what it read, what its closure charged and how it
+/// ended. The query root's first closure, kept this way, is what a
+/// preparation reads.
+#[derive(Clone, Copy)]
+struct Narrowed<'a> {
+    reading: InnerReading<'a>,
+    work: u64,
+    narrowing: Narrowing,
+}
+
+/// Narrow one region with the query's reading and its installed subjects,
+/// measuring what the closure charged.
+///
+/// # Errors
+/// As [`narrow_inner`].
+fn narrow_region<'a, Q: Quota>(
+    reading: InnerReading<'a>,
+    preparation: Option<&FrozenPreparation>,
+    entry: &mut Entry<CountermodelKnowledge>,
+    (scratch, budget, statistics): (
+        &mut NarrowingScratch,
+        &mut Budget<'_, Q>,
+        &mut crate::Statistics,
+    ),
+) -> Result<Narrowed<'a>, Incomplete> {
+    let before = statistics.reduct.regions.work;
+    let narrowing = narrow_inner(
+        reading,
+        preparation,
+        entry,
+        scratch,
+        budget,
+        &mut statistics.reduct.regions,
+    )?;
+    Ok(Narrowed {
+        reading,
+        work: statistics.reduct.regions.work - before,
+        narrowing,
+    })
+}
+
 /// On the root's first closure: prepare the candidate's inner subjects from
 /// the closed root, cut their units into it and narrow it again with them.
 /// A unit the closed root already holds leaves the class empty: refuted,
 /// through the walk as always. Returns the preparation to read from now on
-/// and the root's narrowing.
+/// and the root's narrowing, the first closure's own when nothing is
+/// installed.
 ///
 /// # Errors
 /// As [`prepare_inner`] and [`narrow_inner`].
 fn prepare_at_root<Q: Quota>(
-    (reading, closure_work): (InnerReading<'_>, u64),
+    closed: Narrowed<'_>,
     entry: &mut Entry<CountermodelKnowledge>,
     limits: crate::Limits,
-    budget: &mut Budget<'_, Q>,
-    scratch: &mut NarrowingScratch,
-    statistics: &mut crate::Statistics,
+    (scratch, budget, statistics): (
+        &mut NarrowingScratch,
+        &mut Budget<'_, Q>,
+        &mut crate::Statistics,
+    ),
 ) -> Result<(Option<Box<FrozenPreparation>>, Narrowing), Incomplete> {
+    let reading = closed.reading;
     let preparation = prepare_inner(
         ClosedQuery {
             narrower: reading.narrower,
@@ -1725,7 +1758,7 @@ fn prepare_at_root<Q: Quota>(
             candidate: reading.candidate,
             region: &entry.region,
             knowledge: &entry.state.frozen,
-            closure_work,
+            closure_work: closed.work,
         },
         limits,
         budget,
@@ -1733,7 +1766,7 @@ fn prepare_at_root<Q: Quota>(
         &mut statistics.reduct,
     )?;
     let Some(installed) = preparation.map(Box::new) else {
-        return Ok((None, Narrowing::Fixed { changed: false }));
+        return Ok((None, closed.narrowing));
     };
     if !installed.units().iter().all(|&atom| entry.region.cut(atom)) {
         return Ok((Some(installed), Narrowing::Refuted));

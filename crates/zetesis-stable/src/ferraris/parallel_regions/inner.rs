@@ -409,7 +409,8 @@ impl Publication for WalkPublication<'_, '_> {
         if let InnerPreparation::Prepared(installed) =
             std::mem::replace(preparation, InnerPreparation::Pending)
         {
-            let _ = cell.preparation.set(installed);
+            let fresh = cell.preparation.set(installed).is_ok();
+            debug_assert!(fresh, "a new cell takes the publisher's subjects once");
         }
         let cell = Arc::new(cell);
         if self
@@ -499,8 +500,9 @@ pub(super) fn serve<'a>(
     );
     if let InnerPreparation::Prepared(installed) = installed {
         // The root's server sets the query's subjects before its children
-        // are published below.
-        let _ = cell.preparation.set(installed);
+        // are published below, so the cell is still unset.
+        let first = cell.preparation.set(installed).is_ok();
+        debug_assert!(first, "the root's server sets the query's subjects once");
     }
     timing::finish(&mut report.statistics.phase_timings, Phase::Reduct, started);
     publish_timings(shared, (report, reported));
