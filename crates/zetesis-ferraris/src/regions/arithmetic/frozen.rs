@@ -63,10 +63,11 @@ pub struct ClosedQuery<'a> {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct FrozenPreparationLimits {
     /// Word operations, charged to the caller's account as performed: the
-    /// floor, which must cover the proposal pass and the rows' loading. The
-    /// probes are leased on top, each the root closure's own cost plus one
-    /// pass over the index (`ClosedQuery::closure_work`), as a probe narrows
-    /// that closed root again with a few more decisions.
+    /// floor, which must cover the proposal pass and the rows' loading, the
+    /// one ceiling on the preparation's work, held by its lease across every
+    /// phase. The probes are leased on top, each the root closure's own cost
+    /// plus one pass over the index (`ClosedQuery::closure_work`), as a probe
+    /// narrows that closed root again with a few more decisions.
     pub work: u64,
     /// Peak simultaneous named bytes.
     pub bytes: usize,
@@ -354,7 +355,8 @@ fn build<Q: Quota + ?Sized>(
     };
     let proposals = {
         let mut meter = Meter::reserved(lease);
-        let mut budget = Budget::new(&mut meter, limits.work, limits.bytes, cancellation);
+        // The lease is the one ceiling on work; this budget bounds bytes.
+        let mut budget = Budget::new(&mut meter, u64::MAX, limits.bytes, cancellation);
         let proposals = budget.in_phase(Phase::Recognition, |budget| {
             proposals::propose(
                 theory,
@@ -450,8 +452,9 @@ fn build<Q: Quota + ?Sized>(
 type Systems = (Option<ParitySystem>, Option<CardinalitySystem>);
 
 /// What a probing round may spend: the lease it draws on, the allowance each
-/// probe is leased, the floor's limits for the loading, and the cancellation
-/// the loading polls.
+/// probe is leased, the floor's byte limit for the loading, and the
+/// cancellation the loading polls. The lease is the one ceiling on work; the
+/// loading's budget bounds bytes.
 struct Probing<'l, 'q, Q: Quota + ?Sized> {
     lease: &'l mut Leased<'q, Q>,
     allowance: u64,
@@ -529,7 +532,7 @@ fn probe_rounds<Q: Quota + ?Sized>(
             let mut meter = Meter::reserved(probing.lease);
             let mut budget = Budget::new(
                 &mut meter,
-                probing.limits.work,
+                u64::MAX,
                 probing.limits.bytes,
                 probing.cancellation,
             );
