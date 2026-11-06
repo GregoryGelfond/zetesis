@@ -71,12 +71,10 @@ pub struct FrozenPreparationLimits {
     /// Word operations, charged to the caller's account as performed: the
     /// floor of the lease, which must cover the proposal pass, the
     /// refutations read off the clauses before probing, and the rows'
-    /// loading. Each probe run extends the lease by one allowance, the root
-    /// closure's own cost plus one pass over the index
-    /// (`ClosedQuery::closure_work`), as a probe narrows that closed root
-    /// again with a few more decisions. The lease, floor plus allowances, is
-    /// the one ceiling on the preparation's work, held across every phase;
-    /// the preparation's work exceeds the floor whenever a probe runs.
+    /// loading. Before probing, the lease grants an allowance per scheduled
+    /// probe equal to the root closure's work ([`ClosedQuery::closure_work`])
+    /// plus one pass over the index. The floor and these allowances bound
+    /// work across all phases. The receipt records the operations performed.
     pub work: u64,
     /// Peak simultaneous named bytes.
     pub bytes: usize,
@@ -156,8 +154,8 @@ pub struct FrozenPreparationAttempt<E = Stop> {
 }
 
 /// One candidate's inner subjects: the units its query root cuts, and the
-/// parity and counting systems of its countermodel class. Immutable for the
-/// query's life and consulted for no other candidate.
+/// parity and counting systems derived for that candidate within the supplied
+/// closed region. Its descendants may reuse them throughout this query.
 #[derive(Debug)]
 pub struct FrozenPreparation {
     owner: Theory,
@@ -219,8 +217,8 @@ impl FrozenPreparation {
         }
     }
 
-    /// Whether this preparation is `candidate`'s under `theory`: the same
-    /// theory instance and the same atoms.
+    /// Check the theory instance and candidate atoms. To reuse the prepared
+    /// systems, the caller must also stay within the original closed region.
     #[must_use]
     pub fn belongs_to(&self, theory: &Theory, candidate: &Interpretation) -> bool {
         self.owner.same_instance(theory)

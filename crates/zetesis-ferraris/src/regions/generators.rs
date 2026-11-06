@@ -112,11 +112,10 @@ impl GeneratorOrder {
     /// value is read. A theory without choices or competing heads declines
     /// without graph allocation. Cancellation precedes that fast path.
     ///
-    /// The meter here is local and has no quota to poll, so control is
-    /// observed at entry and again before a refused charge is reported, and
-    /// not between them: a stop requested meanwhile waits for the preparation
-    /// to finish or to reach `limits.max_work`. [`Self::prepare_reserved`],
-    /// under a quota that polls, observes it at every refill as well.
+    /// Preparation polls for cancellation at entry, before reserving vector
+    /// storage and before reporting a refused work charge. With
+    /// [`Self::prepare_reserved`], a polling quota also observes cancellation
+    /// when the meter refills.
     #[must_use]
     pub fn prepare(
         original: OriginalSubject<'_>,

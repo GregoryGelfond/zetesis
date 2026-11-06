@@ -59,6 +59,9 @@ pub struct Limits {
     /// Per-call work ceiling for independent original/reduct formula evaluation.
     pub max_verification_work: u64,
     /// Retained capacity of each proper-subset query's workspace.
+    /// Optional inner arithmetic preparation applies the same ceiling to
+    /// its own peak of simultaneously live storage. If preparation exceeds
+    /// it, the query continues with ordinary reduct search.
     /// Original candidate generator ordering uses the same ceiling independently
     /// for its transient graph and retained ranks; a named byte refusal declines
     /// that optional preference, with its work prefix retained in search work.

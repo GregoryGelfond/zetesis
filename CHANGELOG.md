@@ -213,8 +213,8 @@ Notable changes by release. Versions follow Semantic Versioning.
   nothing for it: a stop that arrives while the next slate is produced, and, in
   a GPU formula session, a work or decision limit that the next slate's
   production reaches or brings within reach of the current slate's completion.
-  Optimizing searches still check one slate at a time. The physical
-  qualification has 75 exact tests per backend.
+  Optimizing searches still check one slate at a time. The physical gate
+  compares complete CPU and device answer families on its reviewed inputs.
 - Support completion keeps its integer key certificates and source-column hulls
   from one round to the next and extends them with each round's new rows instead
   of rebuilding them over every snapshot. An ordering query whose key range would
