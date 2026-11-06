@@ -23,10 +23,11 @@ use super::super::{
     budget::{Budget, BudgetError},
     cardinality::sort,
     cardinality_source::{Bound, Kind, Source, push_bound},
-    source::{MAX_SUPPORT, Support},
+    source::MAX_SUPPORT,
     storage::Storage,
     uniform::BoundSide,
 };
+use super::{ProbedGroup, probes::Table};
 use crate::Theory;
 
 /// The bounds the tables establish, the tables' first, the cliques' after
@@ -34,7 +35,7 @@ use crate::Theory;
 /// lower and upper bounds.
 pub(super) fn propose<Q: Quota + ?Sized>(
     theory: &Theory,
-    tables: &[(Support, Words<u64, [u64; 4]>)],
+    tables: &[ProbedGroup],
     statistics: &mut CardinalityStatistics,
     storage: &mut Storage,
     budget: &mut Budget<'_, '_, Q>,
@@ -42,13 +43,13 @@ pub(super) fn propose<Q: Quota + ?Sized>(
     let width = theory.atom_count().div_ceil(128) * 2;
     let mut bounds = storage.reserve(0, budget)?;
     let mut exclusions: Vec<(usize, usize)> = storage.reserve(0, budget)?;
-    for (group, (support, forbidden)) in tables.iter().enumerate() {
-        let atoms = &support.atoms[..support.len];
+    for (group, table) in tables.iter().enumerate() {
+        let atoms = &table.support.atoms[..table.support.len];
         let Some(Counted {
             least,
             greatest,
             together,
-        }) = counts(atoms.len(), forbidden, budget)?
+        }) = counts(atoms.len(), &table.forbidden, budget)?
         else {
             continue;
         };
@@ -177,7 +178,7 @@ struct Counted {
 /// allowed, which the parity rows refute.
 fn counts<Q: Quota + ?Sized>(
     len: usize,
-    forbidden: &Words<u64, [u64; 4]>,
+    forbidden: &Table,
     budget: &mut Budget<'_, '_, Q>,
 ) -> Result<Option<Counted>, BudgetError<Q::Error>> {
     let mut least = u64::MAX;

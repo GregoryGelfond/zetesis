@@ -478,6 +478,13 @@ struct Probing<'l, 'q, Q: Quota + ?Sized> {
     cancellation: &'l Cancellation,
 }
 
+/// A probed group's table over its support: the patterns found forbidden,
+/// those known before any probe among them.
+struct ProbedGroup {
+    support: Support,
+    forbidden: probes::Table,
+}
+
 /// The patterns of each group refuted before any probe runs: those a clause
 /// of the group forbids, and those whose restriction to a group whose
 /// support this one contains is a pattern that group's clauses forbid. The
@@ -576,7 +583,13 @@ fn probe_rounds<Q: Quota + ?Sized>(
 ) -> Result<Systems, BudgetError<LeaseRefusal<Q::Error>>> {
     let mut parity: Option<ParitySystem> = None;
     let mut cardinality: Option<CardinalitySystem> = None;
-    let mut tables: Vec<(Support, Words<u64, [u64; 4]>)> = Vec::new();
+    let mut tables: Vec<ProbedGroup> = groups
+        .iter()
+        .map(|group| ProbedGroup {
+            support: group.support,
+            forbidden: Words::new([0; 4]),
+        })
+        .collect();
     let mut refuted: Vec<u64> = vec![0; groups.len()];
     let known = known_refutations(groups, probing.lease)?;
     // Round one probes every group; a later round only those whose hull was
@@ -619,11 +632,7 @@ fn probe_rounds<Q: Quota + ?Sized>(
                 statistics.probes += found.run;
                 progressed |= found.refuted > refuted[index];
                 refuted[index] = found.refuted;
-                if tables.len() == index {
-                    tables.push((groups[index].support, found.table));
-                } else {
-                    tables[index].1 = found.table;
-                }
+                tables[index].forbidden = found.table;
             }
             meter.refund();
         }
@@ -665,7 +674,7 @@ struct Loaded {
 /// indices of the tables whose hull is inexact.
 fn load<Q: Quota + ?Sized>(
     theory: &Theory,
-    tables: &[(Support, Words<u64, [u64; 4]>)],
+    tables: &[ProbedGroup],
     statistics: &mut FrozenPreparationStatistics,
     budget: &mut Budget<'_, '_, Q>,
 ) -> Result<Loaded, BudgetError<Q::Error>> {
@@ -689,26 +698,32 @@ fn load<Q: Quota + ?Sized>(
             let facts = CheckedRootFacts::none(theory, &mut storage, budget)?;
             let mut equations = storage.reserve(0, budget)?;
             let mut counts = rows::Counts::default();
-            for (group, (support, forbidden)) in tables.iter().enumerate() {
+            for (group, table) in tables.iter().enumerate() {
                 let fixed = size_of::<hull::Hull>() as u128;
                 storage.admit_record(fixed, budget)?;
                 let proposed =
                     storage.with_record(hull::SCRATCH_BYTES as u128, budget, |_, budget| {
-                        rows::propose(*support, forbidden.storage(), &mut counts, budget)
+                        rows::propose(
+                            table.support,
+                            table.forbidden.storage(),
+                            &mut counts,
+                            budget,
+                        )
                     })?;
                 if !proposed.exact {
                     inexact.push(group);
                 }
                 for &local in proposed.equations() {
-                    let words = rows::materialize(theory, *support, local, &mut storage, budget)?;
+                    let words =
+                        rows::materialize(theory, table.support, local, &mut storage, budget)?;
                     budget.charge(1)?; // the constant
                     let candidate = rows::Equation {
                         words,
                         constant: local.constant,
                     };
                     let valid = source::implied_by_table(
-                        forbidden.storage(),
-                        support.len,
+                        table.forbidden.storage(),
+                        table.support.len,
                         local.coefficients,
                         local.constant,
                         budget,
@@ -762,7 +777,7 @@ fn load<Q: Quota + ?Sized>(
 /// double count taken, as the outer preparation takes them.
 fn load_counts<Q: Quota + ?Sized>(
     theory: &Theory,
-    tables: &[(Support, Words<u64, [u64; 4]>)],
+    tables: &[ProbedGroup],
     statistics: &mut FrozenPreparationStatistics,
     storage: &mut Storage,
     budget: &mut Budget<'_, '_, Q>,
