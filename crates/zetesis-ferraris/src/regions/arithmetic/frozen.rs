@@ -63,9 +63,9 @@ pub struct ClosedQuery<'a> {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct FrozenPreparationLimits {
     /// Word operations, charged to the caller's account as performed: the
-    /// floor, which must cover the proposal pass and the rows' loading, the
-    /// one ceiling on the preparation's work, held by its lease across every
-    /// phase. The probes are leased on top, each the root closure's own cost
+    /// floor, which must cover the proposal pass, the refutations read off the
+    /// clauses before probing, and the rows' loading, the one ceiling on the
+    /// preparation's work, held by its lease across every phase. The probes are leased on top, each the root closure's own cost
     /// plus one pass over the index (`ClosedQuery::closure_work`), as a probe
     /// narrows that closed root again with a few more decisions.
     pub work: u64,
@@ -462,6 +462,68 @@ struct Probing<'l, 'q, Q: Quota + ?Sized> {
     cancellation: &'l Cancellation,
 }
 
+/// The patterns of each group refuted before any probe runs: those a clause
+/// of the group forbids, and those whose restriction to a group whose
+/// support this one contains is a pattern that group's clauses forbid. A
+/// probe of such a pattern would find the clause's own refutation, since
+/// every admitted group's guard is cut at the root; the table records it
+/// without running the probe. One word operation is charged to the floor per
+/// clause read and per pattern examined.
+///
+/// # Errors
+/// The lease's refusal.
+fn known_refutations<Q: Quota + ?Sized>(
+    groups: &[&proposals::Group],
+    lease: &mut Leased<'_, Q>,
+) -> Result<Vec<probes::Table>, BudgetError<LeaseRefusal<Q::Error>>> {
+    let mut meter = Meter::reserved(lease);
+    let mut known = Vec::with_capacity(groups.len());
+    for group in groups {
+        let support = &group.support.atoms[..group.support.len];
+        let mut refuted = Words::<u64, _>::new([0; 4]);
+        for &(_, pattern) in &group.clauses {
+            meter.tick().map_err(from_meter)?;
+            refuted.insert(usize::from(pattern));
+        }
+        for other in groups {
+            if other.support.len > group.support.len || std::ptr::eq(*other, *group) {
+                continue;
+            }
+            // Where `other`'s atoms sit in this support, if all of them do.
+            let mut positions = [0_usize; super::source::MAX_SUPPORT];
+            let contained = other.support.atoms[..other.support.len]
+                .iter()
+                .enumerate()
+                .all(|(k, atom)| {
+                    support.iter().position(|a| a == atom).is_some_and(|here| {
+                        positions[k] = here;
+                        true
+                    })
+                });
+            if !contained {
+                continue;
+            }
+            let mask = positions[..other.support.len]
+                .iter()
+                .fold(0_usize, |mask, &here| mask | (1 << here));
+            for &(_, forbidden) in &other.clauses {
+                let value = (0..other.support.len)
+                    .filter(|&k| forbidden & (1 << k) != 0)
+                    .fold(0_usize, |value, k| value | (1 << positions[k]));
+                for pattern in 0..(1_usize << group.support.len) {
+                    meter.tick().map_err(from_meter)?;
+                    if pattern & mask == value {
+                        refuted.insert(pattern);
+                    }
+                }
+            }
+        }
+        known.push(refuted);
+    }
+    meter.refund();
+    Ok(known)
+}
+
 /// The probing rounds a preparation may run: the first by the frozen reading
 /// alone, the second under the rows it established. A later round tightens
 /// a hull the round before left inexact, one probe per pattern of each such
@@ -490,14 +552,24 @@ fn probe_rounds<Q: Quota + ?Sized>(
     let mut cardinality: Option<CardinalitySystem> = None;
     let mut tables: Vec<(Support, Words<u64, [u64; 4]>)> = Vec::new();
     let mut refuted: Vec<u64> = vec![0; groups.len()];
+    let known = known_refutations(groups, probing.lease)?;
     // Round one probes every group; a later round only those whose hull was
     // inexact, keeping the others' tables, up to `MAX_ROUNDS`.
     let mut pending: Vec<usize> = (0..groups.len()).collect();
     while !pending.is_empty() && statistics.rounds < MAX_ROUNDS {
         statistics.rounds += 1;
+        // The probes this round runs: the patterns not known refuted.
         let probes: u64 = pending
             .iter()
-            .map(|&index| 1_u64 << groups[index].support.len)
+            .map(|&index| {
+                let patterns = 1_u64 << groups[index].support.len;
+                let settled: u64 = known[index]
+                    .storage()
+                    .iter()
+                    .map(|word| u64::from(word.count_ones()))
+                    .sum();
+                patterns - settled
+            })
             .sum();
         probing
             .lease
@@ -509,7 +581,10 @@ fn probe_rounds<Q: Quota + ?Sized>(
                 let mut counts = (0, 0);
                 let forbidden = probe
                     .table(
-                        groups[index],
+                        probes::Target {
+                            group: groups[index],
+                            known: &known[index],
+                        },
                         parity.as_ref(),
                         &mut counts,
                         scratch,

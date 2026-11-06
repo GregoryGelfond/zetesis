@@ -16,6 +16,17 @@ use crate::{FrozenSubject, Knowledge, Narrower, Narrowing, NarrowingScratch, Reg
 /// refutes what either alone cannot.
 pub(super) type Rows<'a> = Option<&'a ParitySystem>;
 
+/// A group's forbidden table: one bit per pattern over its support.
+pub(super) type Table = Words<u64, [u64; 4]>;
+
+/// The group a table is probed for, with the patterns already known refuted,
+/// which run no probe.
+#[derive(Clone, Copy)]
+pub(super) struct Target<'a> {
+    pub group: &'a Group,
+    pub known: &'a Table,
+}
+
 /// The closed root, its knowledge, and one retired region and knowledge the
 /// probes reuse.
 pub(super) struct Probe<'a> {
@@ -124,23 +135,30 @@ impl<'a> Probe<'a> {
     }
 
     /// The forbidden table of `group` under its guard cut: every pattern over
-    /// the support whose probe is refuted. Counts the probes and refutations.
+    /// the support whose probe is refuted, and every pattern `known` refuted
+    /// already, which runs no probe. Counts the probes and the refutations.
     ///
     /// # Errors
     /// As [`Self::run`].
     pub(super) fn table<Q: Quota + ?Sized>(
         &mut self,
-        group: &Group,
+        target: Target<'_>,
         rows: Rows<'_>,
         counts: &mut (u64, u64),
         scratch: &mut NarrowingScratch,
         cancellation: &Cancellation,
         meter: &mut Meter<'_, Q>,
-    ) -> Result<Words<u64, [u64; 4]>, Failure<Q::Error>> {
+    ) -> Result<Table, Failure<Q::Error>> {
+        let Target { group, known } = target;
         let mut forbidden = Words::<u64, _>::new([0; 4]);
         let support = &group.support.atoms[..group.support.len];
         let mut decisions = Vec::with_capacity(support.len() + 1);
         for pattern in 0..(1_usize << support.len()) {
+            if known.contains(pattern) {
+                forbidden.insert(pattern);
+                counts.1 += 1;
+                continue;
+            }
             decisions.clear();
             decisions.push((group.guard, false));
             decisions.extend(

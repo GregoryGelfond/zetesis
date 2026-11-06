@@ -494,13 +494,45 @@ fn the_odd_patterns_of_a_gate_are_refuted_and_the_hull_is_exact() {
     let fixture = Saturation::build(3, &gate(0, 1, 2), &[]);
     let attempt = fixture.prepared();
     let preparation = attempt.result.unwrap().unwrap();
-    assert_eq!(attempt.statistics.probes, 9);
+    // The guard and the four patterns the gate's clauses leave open; the odd
+    // patterns are refuted by the clauses themselves and run no probe.
+    assert_eq!(attempt.statistics.probes, 5);
     assert_eq!(attempt.statistics.refuted_patterns, 4);
     assert_eq!(attempt.statistics.inexact_hulls, 0);
     assert_eq!(attempt.statistics.parity.rows, 1);
     assert_eq!(attempt.statistics.parity.wider, 1);
     assert!(!preparation.root_refuted());
     assert!(preparation.parity().is_some());
+}
+
+#[test]
+fn a_pattern_a_clause_of_the_group_forbids_needs_no_probe() {
+    // Each gate's four clauses forbid four of its eight patterns outright:
+    // probing them would only rediscover the clause. The probes are the
+    // guard's and the other four patterns of each gate, and the pair's two
+    // open patterns; the rows and the root's refutation are as before.
+    let fixture = Saturation::build(7, &two_chains(), &[]);
+    let attempt = fixture.prepared();
+    let preparation = attempt.result.unwrap().unwrap();
+    assert_eq!(attempt.statistics.probes, 1 + 4 * 4 + 2);
+    assert_eq!(attempt.statistics.parity.rows, 5);
+    assert!(preparation.root_refuted());
+}
+
+#[test]
+fn a_pattern_holding_an_excluded_pair_needs_no_probe() {
+    // Five pigeons over four holes: a pigeon's clause forbids the one pattern
+    // holding none of its holes, and each pair clause forbids its two held;
+    // those run no probe. The pigeon's other fifteen patterns are probed,
+    // since no other clause speaks of one pigeon's holes alone, and each
+    // pair's other three; the bounds and the double count are as before.
+    let (n, clauses) = pigeonhole(4);
+    let fixture = Saturation::build(n, &clauses, &[]);
+    let attempt = fixture.prepared();
+    let preparation = attempt.result.unwrap().unwrap();
+    assert_eq!(attempt.statistics.probes, 1 + 5 * 15 + 40 * 3);
+    assert_eq!(attempt.statistics.cardinality.rows, 3 * 4 + 2);
+    assert!(preparation.root_refuted());
 }
 
 #[test]
@@ -620,15 +652,16 @@ fn the_floor_covers_the_proposals_and_the_loading_and_the_probes_are_leased() {
 
 #[test]
 fn a_later_round_reprobes_only_the_inexact_groups() {
-    // Two chains less one clause: round one probes the unit and every group
-    // (four gates and the differing pair, 4 · 8 + 4 patterns); round two
-    // probes only the inexact gate's eight patterns.
+    // Two chains less one clause: round one probes the unit and every
+    // pattern no clause forbids (four for each whole gate, five for the gate
+    // less a clause, two for the differing pair); round two probes only the
+    // inexact gate's five again.
     let mut clauses = two_chains();
     clauses.remove(0);
     let fixture = Saturation::build(7, &clauses, &[]);
     let attempt = fixture.prepared();
     assert_eq!(attempt.statistics.rounds, 2);
-    assert_eq!(attempt.statistics.probes, 1 + 4 * 8 + 4 + 8);
+    assert_eq!(attempt.statistics.probes, 1 + (3 * 4 + 5) + 2 + 5);
 }
 
 #[test]
@@ -893,14 +926,14 @@ fn a_guard_cut_at_the_root_needs_no_probe() {
     let attempt = prepared_from(&fixture, |root| assert!(root.cut(valid)));
     let preparation = attempt.result.unwrap().unwrap();
     assert_eq!(attempt.statistics.guards, 1);
-    assert_eq!(attempt.statistics.probes, 8);
+    assert_eq!(attempt.statistics.probes, 4);
     assert_eq!(attempt.statistics.saturation_units, 0);
     assert!(preparation.units().is_empty());
     assert_eq!(attempt.statistics.parity.rows, 1);
-    // Only the eight pattern probes are leased: no unit probe for a guard
-    // the root already cuts.
+    // Only the four pattern probes that run are leased: no unit probe for a
+    // guard the root already cuts, none for the patterns its clauses forbid.
     let allowance = fixture.closure_work() + Narrower::new(&fixture.theory).work();
-    assert_eq!(attempt.statistics.leased, 8 * allowance);
+    assert_eq!(attempt.statistics.leased, 4 * allowance);
 }
 
 #[test]
@@ -923,7 +956,7 @@ fn a_preparation_with_nothing_to_install_is_not_prepared() {
             attempt.statistics.parity.rows,
             attempt.statistics.cardinality.rows
         ),
-        (super::super::PreparationStatus::NotPrepared, 8, 0, 0)
+        (super::super::PreparationStatus::NotPrepared, 5, 0, 0)
     );
 }
 
