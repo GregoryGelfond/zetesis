@@ -2,13 +2,16 @@
 //! countermodel class, recognized by probing the closed query root under the
 //! candidate's frozen reduct.
 //!
-//! Proposals are syntactic (`proposals`); nothing rests on them. Every row's
-//! provenance is a refuted probe (`probes`): a frozen narrowing from a copy of
-//! the closed root with exactly a guard and a pattern decided, the premise of
-//! `Zetesis.Algebra.entailed_by_refutations`. A saturation guard whose probe
-//! reaches the candidate is a unit (`Zetesis.Algebra.saturation_unit`). The
-//! preparation is built from the theory and the candidate, under its own
-//! lease of the caller's account, and belongs to that candidate alone.
+//! Proposals are syntactic (`proposals`). A row's provenance is a refuted
+//! probe (`probes`): a frozen narrowing from a copy of the closed root with
+//! exactly a guard and a pattern decided, the premise of
+//! `Zetesis.Algebra.entailed_by_refutations`. A pattern a clause of its group
+//! forbids is refuted without a probe, on the proposal pass's reading of the
+//! clause, a trusted computation that discharges the same premise
+//! (`known_refutations`). A saturation guard whose probe reaches the
+//! candidate is a unit (`Zetesis.Algebra.saturation_unit`). The preparation is
+//! built from the theory and the candidate, under its own lease of the
+//! caller's account, and belongs to that candidate alone.
 
 mod counts;
 mod probes;
