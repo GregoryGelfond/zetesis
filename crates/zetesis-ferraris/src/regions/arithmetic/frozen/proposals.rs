@@ -67,12 +67,9 @@ pub(super) struct Proposals {
     pub counts: ProposalCounts,
 }
 
-/// A chain from a guard's conjunct is followed through at most this many
-/// producers; the quantified encodings need three.
-const MAX_CHAIN: usize = 8;
-
-/// A body is read through at most this many nested connectives; the DAG is
-/// finite and each node read is charged, so this bounds the recursion only.
+/// A body is read through at most this many nested connectives, and a chain
+/// followed through at most this many producers; the DAG is finite and each
+/// node read is charged, so this bounds the recursion only.
 const MAX_NESTING: usize = 1024;
 
 /// One base atom reached by a chain, and whether it was reached through the
@@ -116,7 +113,7 @@ struct Falsifier {
 /// of a two-atom disjunctive root being read as the lower disjunct, through
 /// its complement when it is the higher. A clause whose chain leaves the
 /// candidate, reads the same base with both polarities, or runs deeper than
-/// `MAX_CHAIN` proposes nothing; a support wider than `MAX_SUPPORT` is counted
+/// `MAX_NESTING` proposes nothing; a support wider than `MAX_SUPPORT` is counted
 /// as a clause and as unsupported, and proposes no group, an all-cut one being
 /// kept as a wide clause.
 ///
@@ -298,7 +295,7 @@ fn follow<Q: Quota + ?Sized>(
     budget: &mut Budget<'_, '_, Q>,
 ) -> Result<bool, BudgetError<Q::Error>> {
     budget.charge(2)?;
-    if !masked.candidate.contains(atom) || depth > MAX_CHAIN {
+    if !masked.candidate.contains(atom) || depth > MAX_NESTING {
         return Ok(false);
     }
     let definitions = &masked.producers.by_head[atom];
