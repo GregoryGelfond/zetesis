@@ -559,7 +559,8 @@ const MAX_ROUNDS: u64 = 2;
 /// the frozen reading alone, each later round under the parity rows the
 /// round before established, sound for the class as their joint closure is,
 /// while a round refutes more patterns than the one before, some hull is
-/// still inexact and no system refutes the root; each round leases its
+/// still inexact, a parity row was loaded for a later round to narrow under
+/// and no system refutes the root; each round leases its
 /// probes at `allowance` each. The systems of the last round are the
 /// preparation's.
 fn probe_rounds<Q: Quota + ?Sized>(
