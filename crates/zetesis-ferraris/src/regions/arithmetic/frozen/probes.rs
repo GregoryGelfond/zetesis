@@ -5,9 +5,13 @@
 
 use zetesis_algebra::region::SubjectStep;
 use zetesis_algebra::words::Words;
-use zetesis_algebra::{Cancellation, Countermodels, Failure, Meter, Quota};
+use zetesis_algebra::{Cancellation, Countermodels, Quota};
 
-use super::super::ParitySystem;
+use super::super::{
+    ParitySystem,
+    budget::{Budget, BudgetError},
+    storage::Storage,
+};
 use super::proposals::Group;
 use crate::{FrozenSubject, Knowledge, Narrower, Narrowing, NarrowingScratch, Region};
 
@@ -21,16 +25,15 @@ pub(super) type Table = Words<u64, [u64; 4]>;
 
 /// The group a table is probed for, with the patterns already known refuted,
 /// which run no probe.
-#[derive(Clone, Copy)]
 pub(super) struct Target<'a> {
     pub group: &'a Group,
     pub known: &'a Table,
+    pub forbidden: &'a mut Table,
 }
 
 /// A group's probed table with what it cost and what it found: the probes
 /// run and the patterns refuted, the known ones included.
 pub(super) struct Probed {
-    pub table: Table,
     pub run: u64,
     pub refuted: u64,
 }
@@ -68,15 +71,21 @@ impl<'a> Probe<'a> {
         self.region.retained_bytes() + self.retired.retained_bytes()
     }
 
+    /// Bytes of this private probe, including both copies and its borrowed
+    /// handles. The copied region and knowledge have fixed-size payloads.
+    pub(super) fn copy_bytes(root: &Region, knowledge: &Knowledge<Countermodels>) -> u128 {
+        (size_of::<Self>() - size_of::<Region>() - size_of::<Knowledge<Countermodels>>()) as u128
+            + root.retained_bytes()
+            + knowledge.retained_bytes()
+    }
+
+    pub(super) fn live_bytes(&self) -> u128 {
+        Self::copy_bytes(&self.region, &self.retired)
+    }
+
     /// The region the last probe narrowed.
     pub(super) const fn region(&self) -> &Region {
         &self.region
-    }
-
-    /// The narrower's work: one unit per node and operand occurrence, which
-    /// bounds one narrowing of the closed root and so one probe.
-    pub(super) fn narrower_work(&self) -> u64 {
-        self.narrower.work()
     }
 
     /// Narrow a copy of the closed root with `decisions` applied; whether the
@@ -93,11 +102,12 @@ impl<'a> Probe<'a> {
         rows: Rows<'_>,
         scratch: &mut NarrowingScratch,
         cancellation: &Cancellation,
-        meter: &mut Meter<'_, Q>,
-    ) -> Result<bool, Failure<Q::Error>> {
+        storage: &Storage,
+        budget: &mut Budget<'_, '_, Q>,
+    ) -> Result<bool, BudgetError<Q::Error>> {
         let words = u64::try_from(self.retained_bytes().div_ceil(8)).unwrap_or(u64::MAX);
         let copying = words.saturating_add(decisions.len() as u64);
-        let consistent = meter.bounded(copying, || {
+        let consistent = budget.meter_mut().bounded(copying, || {
             self.region.clone_from(self.root);
             self.retired.clone_from(self.knowledge);
             let consistent = decisions.iter().all(|&(atom, held)| {
@@ -112,7 +122,10 @@ impl<'a> Probe<'a> {
         if !consistent {
             return Ok(true);
         }
-        let mut known = rows.map(ParitySystem::knowledge);
+        // The snapshot is private to this probe. A Boolean refutation reaches
+        // no arithmetic check and requires no arithmetic workspace.
+        let mut storage = Storage::with_live_bytes(storage.bytes());
+        let mut known = None;
         loop {
             let attempt = self.narrower.narrow_frozen_known_reserved(
                 self.subject,
@@ -120,23 +133,34 @@ impl<'a> Probe<'a> {
                 &mut self.retired,
                 scratch,
                 cancellation,
-                meter,
+                budget.meter_mut(),
             );
             if attempt.result? == Narrowing::Refuted {
                 return Ok(true);
             }
-            let (Some(system), Some(known)) = (rows, known.as_mut()) else {
+            let Some(system) = rows else {
                 return Ok(false);
             };
-            let inspected =
-                system.inspect_reserved(&mut self.region, known, scratch, cancellation, meter);
+            let known = match &mut known {
+                Some(prior) => prior,
+                None => known.insert(system.probe_knowledge(&self.region, &mut storage, budget)?),
+            };
+            let (knowledge, buffer) = known;
+            let inspected = system.inspect_with_buffer(
+                &mut self.region,
+                knowledge,
+                scratch,
+                cancellation,
+                Some(buffer),
+                budget.meter_mut(),
+            );
             match inspected.result? {
                 SubjectStep::Refuted => return Ok(true),
                 SubjectStep::Changed => {}
                 // The rows one at a time are at their fixed point; as a
                 // linear system under the decisions they may still contradict.
                 SubjectStep::Unchanged => {
-                    return Ok(!system.consistent_in_reserved(&self.region, meter)?);
+                    return Ok(!system.probe_consistent(&self.region, &storage, budget)?);
                 }
             }
         }
@@ -154,13 +178,19 @@ impl<'a> Probe<'a> {
         rows: Rows<'_>,
         scratch: &mut NarrowingScratch,
         cancellation: &Cancellation,
-        meter: &mut Meter<'_, Q>,
-    ) -> Result<Probed, Failure<Q::Error>> {
-        let Target { group, known } = target;
-        let mut forbidden = Words::<u64, _>::new([0; 4]);
+        storage: &Storage,
+        budget: &mut Budget<'_, '_, Q>,
+    ) -> Result<Probed, BudgetError<Q::Error>> {
+        let Target {
+            group,
+            known,
+            forbidden,
+        } = target;
+        *forbidden = Words::<u64, _>::new([0; 4]);
         let (mut run, mut refuted) = (0, 0);
         let support = &group.support.atoms[..group.support.len];
-        let mut decisions = Vec::with_capacity(support.len() + 1);
+        let mut storage = Storage::with_live_bytes(storage.bytes());
+        let mut decisions = storage.reserve_bytes(support.len() + 1, budget)?;
         for pattern in 0..(1_usize << support.len()) {
             if known.contains(pattern) {
                 forbidden.insert(pattern);
@@ -175,17 +205,13 @@ impl<'a> Probe<'a> {
                     .enumerate()
                     .map(|(position, &atom)| (atom, pattern & (1 << position) != 0)),
             );
-            let refuting = self.run(&decisions, rows, scratch, cancellation, meter)?;
+            let refuting = self.run(&decisions, rows, scratch, cancellation, &storage, budget)?;
             run += 1;
             if refuting {
                 forbidden.insert(pattern);
                 refuted += 1;
             }
         }
-        Ok(Probed {
-            table: forbidden,
-            run,
-            refuted,
-        })
+        Ok(Probed { run, refuted })
     }
 }

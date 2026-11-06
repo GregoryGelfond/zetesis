@@ -40,6 +40,15 @@ impl Snapshot {
         atom_words: usize,
         work: &mut Meter<'_, Q>,
     ) -> Result<(), Failure<Q::Error>> {
+        self.prepare_using(atom_words, None, work)
+    }
+
+    fn prepare_using<Q: Quota + ?Sized>(
+        &mut self,
+        atom_words: usize,
+        supplied: Option<&mut Vec<u64>>,
+        work: &mut Meter<'_, Q>,
+    ) -> Result<(), Failure<Q::Error>> {
         runtime::charge(work, 2)?;
         let length = atom_words
             .checked_mul(2)
@@ -49,7 +58,16 @@ impl Snapshot {
                 !self.initialized,
                 "a live snapshot retains its coordinate universe"
             );
-            runtime::prepare_words(&mut self.words, length, work)?;
+            if let Some(buffer) = supplied {
+                runtime::prepare_supplied_words(
+                    &mut self.words,
+                    length,
+                    std::mem::take(buffer),
+                    work,
+                )?;
+            } else {
+                runtime::prepare_words(&mut self.words, length, work)?;
+            }
         }
         Ok(())
     }
@@ -119,7 +137,20 @@ impl Snapshot {
         scratch: &mut ArithmeticScratch,
         work: &mut Meter<'_, Q>,
     ) -> Result<(), Failure<Q::Error>> {
-        self.prepare(region.mask_words(), work)?;
+        self.select_using(region, index, scratch, None, work)
+    }
+
+    /// As select, using an admitted replacement buffer for a probe snapshot's
+    /// first allocation. Repeated rounds reuse the snapshot as usual.
+    pub(super) fn select_using<Q: Quota + ?Sized>(
+        &mut self,
+        region: &Region,
+        index: &Index,
+        scratch: &mut ArithmeticScratch,
+        supplied: Option<&mut Vec<u64>>,
+        work: &mut Meter<'_, Q>,
+    ) -> Result<(), Failure<Q::Error>> {
+        self.prepare_using(region.mask_words(), supplied, work)?;
         runtime::charge(work, 1)?;
         let logical = index.rows.div_ceil(64);
         runtime::prepare_words(&mut scratch.touched, logical, work)?;

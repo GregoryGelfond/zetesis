@@ -113,11 +113,12 @@ fn overwrite<T: Copy, Q: Quota + ?Sized>(
     length: usize,
     fields: u64,
     mut value: impl FnMut(usize) -> T,
+    acquire: impl FnOnce(usize, &mut Meter<'_, Q>) -> Result<Vec<T>, Failure<Q::Error>>,
     work: &mut Meter<'_, Q>,
 ) -> Result<(), Failure<Q::Error>> {
     charge(work, 1)?;
     if target.capacity() < length {
-        let mut next = reserved(length, work)?;
+        let mut next = acquire(length, work)?;
         for index in 0..length {
             charge(
                 work,
@@ -159,7 +160,30 @@ pub(super) fn prepare_words<Q: Quota + ?Sized>(
     length: usize,
     work: &mut Meter<'_, Q>,
 ) -> Result<(), Failure<Q::Error>> {
-    overwrite(target.storage_mut(), length, 1, |_| 0, work)
+    overwrite(target.storage_mut(), length, 1, |_| 0, reserved, work)
+}
+
+/// Initialize the snapshot through the same metered replacement operation
+/// with storage already reserved by the caller. Moving the three-word header
+/// takes the place of building it in the ordinary reservation.
+pub(super) fn prepare_supplied_words<Q: Quota + ?Sized>(
+    target: &mut Words<u64>,
+    length: usize,
+    supplied: Vec<u64>,
+    work: &mut Meter<'_, Q>,
+) -> Result<(), Failure<Q::Error>> {
+    overwrite(
+        target.storage_mut(),
+        length,
+        1,
+        |_| 0,
+        |length, work| {
+            charge(work, 3)?;
+            debug_assert!(supplied.is_empty() && supplied.capacity() >= length);
+            Ok(supplied)
+        },
+        work,
+    )
 }
 
 /// Copy initialized words without allocation, preserving the next-word refusal.
@@ -205,7 +229,14 @@ pub(super) fn copy_values<T: Copy, Q: Quota + ?Sized>(
     fields: u64,
     work: &mut Meter<'_, Q>,
 ) -> Result<(), Failure<Q::Error>> {
-    overwrite(target, source.len(), fields, |index| source[index], work)
+    overwrite(
+        target,
+        source.len(),
+        fields,
+        |index| source[index],
+        reserved,
+        work,
+    )
 }
 
 /// Append a scalar record under the existing preparation-style doubling rule.

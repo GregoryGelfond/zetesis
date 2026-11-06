@@ -9,6 +9,7 @@ use zetesis_algebra::{Quota, Stop};
 use super::super::{
     budget::{Budget, BudgetError},
     source::{MAX_SUPPORT, Support},
+    storage::Storage,
 };
 use crate::{Interpretation, NodeView, Producers, Region, Theory};
 
@@ -92,12 +93,6 @@ struct Masked<'a> {
     root: &'a Region,
 }
 
-/// A rule of a guard whose body is a conjunction over atoms, after dropping
-/// the conjuncts the closed root holds: the open conjuncts, in body order.
-struct Falsifier {
-    conjuncts: Vec<usize>,
-}
-
 /// Propose the guards of `candidate`'s frozen reduct and their clauses.
 ///
 /// A guard is an atom of the candidate not held in `root`, open or already
@@ -126,6 +121,7 @@ pub(super) fn propose<Q: Quota + ?Sized>(
     candidate: &Interpretation,
     truth: &[bool],
     root: &Region,
+    storage: &mut Storage,
     budget: &mut Budget<'_, '_, Q>,
 ) -> Result<Proposals, BudgetError<Q::Error>> {
     budget.charge(2)?;
@@ -139,33 +135,38 @@ pub(super) fn propose<Q: Quota + ?Sized>(
         truth,
         root,
     };
+    storage.admit_record(size_of::<Proposals>() as u128, budget)?;
     let mut proposals = Proposals::default();
-    let mut falsifiers = Vec::new();
+    let mut falsifiers = storage.reserve_bytes(0, budget)?;
     for guard in (0..theory.atom_count()).filter(|&atom| candidate.contains(atom)) {
         budget.charge(1)?;
         if root.is_held(guard) {
             continue;
         }
-        falsifiers.clear();
         for &rule in &producers.by_head[guard] {
             budget.charge(1)?;
-            if let Some(falsifier) = falsifier(masked, rule, budget)? {
-                falsifiers.push(falsifier);
+            if let Some(falsifier) = falsifier(masked, rule, storage, budget)? {
+                storage.push_bytes(&mut falsifiers, falsifier, budget)?;
+                storage.embed::<usize>()?;
             }
         }
         budget.charge(1)?;
-        if falsifiers.len() < 2 {
-            continue;
+        let is_guard = falsifiers.len() >= 2;
+        if is_guard {
+            storage.push_bytes(&mut proposals.guards, guard, budget)?;
+            proposals.counts.guards += 1;
         }
-        proposals.guards.push(guard);
-        proposals.counts.guards += 1;
-        for falsifier in falsifiers.drain(..) {
-            if let Some(clause) = clause(masked, guard, &falsifier, budget)? {
-                admit(&mut proposals, &clause, budget)?;
+        for conjuncts in falsifiers.drain(..) {
+            if is_guard && let Some(clause) = clause(masked, guard, &conjuncts, storage, budget)? {
+                admit(&mut proposals, &clause, storage, budget)?;
+                clause.release(storage)?;
             }
+            storage.release_embedded(conjuncts)?;
         }
     }
-    budget.admit_bytes(retained(&proposals))?;
+    storage.release(falsifiers)?;
+    debug_assert_eq!(storage.bytes(), retained(&proposals));
+    budget.admit_bytes(storage.bytes())?;
     Ok(proposals)
 }
 
@@ -176,8 +177,9 @@ pub(super) fn propose<Q: Quota + ?Sized>(
 fn falsifier<Q: Quota + ?Sized>(
     masked: Masked<'_>,
     rule: usize,
+    storage: &mut Storage,
     budget: &mut Budget<'_, '_, Q>,
-) -> Result<Option<Falsifier>, BudgetError<Q::Error>> {
+) -> Result<Option<Vec<usize>>, BudgetError<Q::Error>> {
     let producer = &masked.producers.rules[rule];
     budget.charge(3)?;
     let Some(body) = producer.body else {
@@ -186,22 +188,25 @@ fn falsifier<Q: Quota + ?Sized>(
     if producer.choice || producer.heads.len() != 1 || !masked.truth[body] {
         return Ok(None);
     }
-    let mut conjuncts = Vec::new();
-    if !conjunction(masked, body, 0, &mut conjuncts, budget)? {
+    let mut conjuncts = storage.reserve_bytes(0, budget)?;
+    if !conjunction(masked, body, 0, &mut conjuncts, storage, budget)? {
+        storage.release(conjuncts)?;
         return Ok(None);
     }
-    let mut unheld = Vec::new();
-    for atom in conjuncts {
+    let mut unheld = storage.reserve_bytes(0, budget)?;
+    for &atom in &conjuncts {
         budget.charge(1)?;
         if !masked.root.is_held(atom) {
-            unheld.push(atom);
+            storage.push_bytes(&mut unheld, atom, budget)?;
         }
     }
+    storage.release(conjuncts)?;
     budget.charge(1)?;
     if unheld.is_empty() {
+        storage.release(unheld)?;
         return Ok(None);
     }
-    Ok(Some(Falsifier { conjuncts: unheld }))
+    Ok(Some(unheld))
 }
 
 /// Collect the atoms of a conjunction, read through nested conjunction nodes
@@ -214,6 +219,7 @@ fn conjunction<Q: Quota + ?Sized>(
     node: usize,
     depth: usize,
     atoms: &mut Vec<usize>,
+    storage: &mut Storage,
     budget: &mut Budget<'_, '_, Q>,
 ) -> Result<bool, BudgetError<Q::Error>> {
     budget.charge(1)?;
@@ -221,10 +227,10 @@ fn conjunction<Q: Quota + ?Sized>(
         return Ok(false);
     }
     match budget.node(masked.theory, node)? {
-        NodeView::Atom(atom) => atoms.push(atom),
+        NodeView::Atom(atom) => storage.push_bytes(atoms, atom, budget)?,
         NodeView::And(children) => {
             for &child in children {
-                if !conjunction(masked, child, depth + 1, atoms, budget)? {
+                if !conjunction(masked, child, depth + 1, atoms, storage, budget)? {
                     return Ok(false);
                 }
             }
@@ -236,7 +242,7 @@ fn conjunction<Q: Quota + ?Sized>(
             // conjunction.
             match known(masked, antecedent, depth + 1, budget)? {
                 Some(true) => {
-                    if !conjunction(masked, consequent, depth + 1, atoms, budget)? {
+                    if !conjunction(masked, consequent, depth + 1, atoms, storage, budget)? {
                         return Ok(false);
                     }
                 }
@@ -254,34 +260,47 @@ fn conjunction<Q: Quota + ?Sized>(
 fn clause<Q: Quota + ?Sized>(
     masked: Masked<'_>,
     guard: usize,
-    falsifier: &Falsifier,
+    conjuncts: &[usize],
+    storage: &mut Storage,
     budget: &mut Budget<'_, '_, Q>,
 ) -> Result<Option<Clause>, BudgetError<Q::Error>> {
-    let mut reached = Vec::new();
-    for &conjunct in &falsifier.conjuncts {
-        if !follow(masked, conjunct, 0, &mut reached, budget)? {
+    let mut reached = storage.reserve_bytes(0, budget)?;
+    for &conjunct in conjuncts {
+        if !follow(masked, conjunct, 0, &mut reached, storage, budget)? {
+            storage.release(reached)?;
             return Ok(None);
         }
     }
     reached.sort_unstable_by_key(|entry| entry.base);
-    let mut support = Vec::new();
-    let mut held = Vec::new();
-    for entry in reached {
+    storage.admit_record(size_of::<Clause>() as u128, budget)?;
+    let mut clause = Clause {
+        guard,
+        support: Vec::new(),
+        held: Vec::new(),
+    };
+    for entry in &reached {
         budget.charge(1)?;
-        if support.last() == Some(&entry.base) {
-            if held.last() == Some(&!entry.complement) {
+        if clause.support.last() == Some(&entry.base) {
+            if clause.held.last() == Some(&!entry.complement) {
                 continue;
             }
+            storage.release(reached)?;
+            clause.release(storage)?;
             return Ok(None);
         }
-        support.push(entry.base);
-        held.push(!entry.complement);
+        storage.push_bytes(&mut clause.support, entry.base, budget)?;
+        storage.push_bytes(&mut clause.held, !entry.complement, budget)?;
     }
-    Ok(Some(Clause {
-        guard,
-        support,
-        held,
-    }))
+    storage.release(reached)?;
+    Ok(Some(clause))
+}
+
+impl Clause {
+    fn release(self, storage: &mut Storage) -> Result<(), Stop> {
+        storage.release_embedded(self.support)?;
+        storage.release_embedded(self.held)?;
+        storage.release_record(size_of::<Self>() as u128)
+    }
 }
 
 /// Follow `atom` to its base atoms, appending them to `reached`; `false` when
@@ -292,6 +311,7 @@ fn follow<Q: Quota + ?Sized>(
     atom: usize,
     depth: usize,
     reached: &mut Vec<Reached>,
+    storage: &mut Storage,
     budget: &mut Budget<'_, '_, Q>,
 ) -> Result<bool, BudgetError<Q::Error>> {
     budget.charge(2)?;
@@ -313,7 +333,14 @@ fn follow<Q: Quota + ?Sized>(
             };
             budget.charge(1)?;
             if masked.candidate.contains(other) {
-                return Ok(settle(masked, atom.min(other), other < atom, reached));
+                return settle(
+                    masked,
+                    atom.min(other),
+                    other < atom,
+                    reached,
+                    storage,
+                    budget,
+                );
             }
         }
     }
@@ -340,21 +367,24 @@ fn follow<Q: Quota + ?Sized>(
         {
             match budget.node(masked.theory, body)? {
                 NodeView::Atom(next) => {
-                    return follow(masked, next, depth + 1, reached, budget);
+                    return follow(masked, next, depth + 1, reached, storage, budget);
                 }
                 NodeView::And(_) => {
-                    let mut conjuncts = Vec::new();
-                    if !conjunction(masked, body, 0, &mut conjuncts, budget)? {
+                    let mut conjuncts = storage.reserve_bytes(0, budget)?;
+                    if !conjunction(masked, body, 0, &mut conjuncts, storage, budget)? {
                         // A body the reader cannot read through, an
                         // aggregate's among them, makes the atom a base of
                         // the clause, ruled by the root as any base is.
-                        return Ok(settle(masked, atom, false, reached));
+                        storage.release(conjuncts)?;
+                        return settle(masked, atom, false, reached, storage, budget);
                     }
-                    for next in conjuncts {
-                        if !follow(masked, next, depth + 1, reached, budget)? {
+                    for &next in &conjuncts {
+                        if !follow(masked, next, depth + 1, reached, storage, budget)? {
+                            storage.release(conjuncts)?;
                             return Ok(false);
                         }
                     }
+                    storage.release(conjuncts)?;
                     return Ok(true);
                 }
                 _ => {}
@@ -362,7 +392,7 @@ fn follow<Q: Quota + ?Sized>(
         }
     }
     budget.charge(1)?;
-    Ok(settle(masked, atom, false, reached))
+    settle(masked, atom, false, reached, storage, budget)
 }
 
 /// Whether a two-headed disjunctive root is in force at the closed root: a
@@ -445,15 +475,19 @@ fn known<Q: Quota + ?Sized>(
 /// falsified when cut), unless the root has decided it: a literal already
 /// satisfied contributes nothing, and one already false satisfies the clause,
 /// which then proposes nothing.
-fn settle(masked: Masked<'_>, base: usize, complement: bool, reached: &mut Vec<Reached>) -> bool {
-    match masked.root.decision(base) {
-        Some(decided) if decided != complement => true,
-        Some(_) => false,
-        None => {
-            reached.push(Reached { base, complement });
-            true
-        }
+fn settle<Q: Quota + ?Sized>(
+    masked: Masked<'_>,
+    base: usize,
+    complement: bool,
+    reached: &mut Vec<Reached>,
+    storage: &mut Storage,
+    budget: &mut Budget<'_, '_, Q>,
+) -> Result<bool, BudgetError<Q::Error>> {
+    if let Some(decided) = masked.root.decision(base) {
+        return Ok(decided != complement);
     }
+    storage.push_bytes(reached, Reached { base, complement }, budget)?;
+    Ok(true)
 }
 
 /// Record a clause, and its parity group when its support fits the table, or
@@ -461,6 +495,7 @@ fn settle(masked: Masked<'_>, base: usize, complement: bool, reached: &mut Vec<R
 fn admit<Q: Quota + ?Sized>(
     proposals: &mut Proposals,
     clause: &Clause,
+    storage: &mut Storage,
     budget: &mut Budget<'_, '_, Q>,
 ) -> Result<(), BudgetError<Q::Error>> {
     budget.charge(1)?;
@@ -477,46 +512,74 @@ fn admit<Q: Quota + ?Sized>(
                 .any(|wide| wide.guard == clause.guard && wide.support == clause.support);
             if !known {
                 budget.charge(clause.support.len() as u64)?;
-                proposals.wide.push(Wide {
-                    guard: clause.guard,
-                    support: clause.support.clone(),
-                });
+                let mut support = storage.reserve_bytes(clause.support.len(), budget)?;
+                support.extend_from_slice(&clause.support);
+                storage.push_bytes(
+                    &mut proposals.wide,
+                    Wide {
+                        guard: clause.guard,
+                        support,
+                    },
+                    budget,
+                )?;
+                storage.embed::<usize>()?;
             }
         }
     } else {
-        let mut support = Support {
-            atoms: [0; MAX_SUPPORT],
-            len: clause.support.len(),
-        };
-        support.atoms[..support.len].copy_from_slice(&clause.support);
-        let pattern = clause
-            .held
-            .iter()
-            .enumerate()
-            .fold(0_u8, |bits, (position, &held)| {
-                bits | (u8::from(held) << position)
-            });
-        let position = proposals
-            .parity
-            .iter()
-            .position(|group| group.guard == clause.guard && group.support == support);
-        budget.charge(proposals.parity.len() as u64 + 1)?;
-        if let Some(index) = position {
-            proposals.parity[index].patterns.push(pattern);
-        } else {
-            proposals.counts.groups += 1;
-            proposals.parity.push(Group {
-                guard: clause.guard,
-                support,
-                patterns: vec![pattern],
-            });
-        }
+        storage.with_record(size_of::<Support>() as u128, budget, |storage, budget| {
+            admit_group(proposals, clause, storage, budget)
+        })?;
     }
     Ok(())
 }
 
+/// Group a clause within the table width, under its fixed support scratch.
+fn admit_group<Q: Quota + ?Sized>(
+    proposals: &mut Proposals,
+    clause: &Clause,
+    storage: &mut Storage,
+    budget: &mut Budget<'_, '_, Q>,
+) -> Result<(), BudgetError<Q::Error>> {
+    let mut support = Support {
+        atoms: [0; MAX_SUPPORT],
+        len: clause.support.len(),
+    };
+    support.atoms[..support.len].copy_from_slice(&clause.support);
+    let pattern = clause
+        .held
+        .iter()
+        .enumerate()
+        .fold(0_u8, |bits, (position, &held)| {
+            bits | (u8::from(held) << position)
+        });
+    let position = proposals
+        .parity
+        .iter()
+        .position(|group| group.guard == clause.guard && group.support == support);
+    budget.charge(proposals.parity.len() as u64 + 1)?;
+    if let Some(index) = position {
+        storage.push_bytes(&mut proposals.parity[index].patterns, pattern, budget)?;
+    } else {
+        proposals.counts.groups += 1;
+        let mut patterns = storage.reserve_bytes(1, budget)?;
+        patterns.push(pattern);
+        storage.push_bytes(
+            &mut proposals.parity,
+            Group {
+                guard: clause.guard,
+                support,
+                patterns,
+            },
+            budget,
+        )?;
+        storage.embed::<u8>()?;
+    }
+
+    Ok(())
+}
+
 /// The proposals' retained bytes: headers and actual capacities.
-fn retained(proposals: &Proposals) -> u128 {
+pub(super) fn retained(proposals: &Proposals) -> u128 {
     let patterns: u128 = proposals
         .parity
         .iter()

@@ -309,3 +309,30 @@ fn bad_lineage_stops_at_its_first_missing_word() {
         }
     }
 }
+
+#[test]
+fn supplied_snapshot_storage_preserves_every_work_cutoff() {
+    // Two mask words per polarity. Preparing from empty costs 2 + 1 + 3
+    // plus four two-unit insertions and the six-unit publication.
+    for limit in 0..=20 {
+        let mut ordinary = Snapshot::default();
+        let mut ordinary_work = Meter::local(limit);
+        let expected = ordinary.prepare(2, &mut ordinary_work);
+        let mut probe = Snapshot::default();
+        let mut buffer = Vec::with_capacity(4);
+        let mut probe_work = Meter::local(limit);
+        let actual = probe.prepare_using(2, Some(&mut buffer), &mut probe_work);
+        assert_eq!(actual, expected, "limit {limit}");
+        assert_eq!(
+            probe_work.charged(),
+            ordinary_work.charged(),
+            "limit {limit}"
+        );
+        assert_eq!(
+            probe.words.storage(),
+            ordinary.words.storage(),
+            "limit {limit}"
+        );
+        assert_eq!(actual.is_ok(), limit == 20);
+    }
+}

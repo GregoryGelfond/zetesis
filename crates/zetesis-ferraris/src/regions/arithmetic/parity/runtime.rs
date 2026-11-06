@@ -8,16 +8,18 @@
 use std::mem::size_of;
 
 use zetesis_algebra::{
-    Cancellation, Failure, Meter, Quota,
+    Cancellation, Failure, Meter, Quota, Stop,
     region::{Region, SubjectStep},
     words::{self, Words},
 };
 
 use super::super::{
     ParitySystem,
+    budget::{Budget, BudgetError},
     rows::Equation,
     runtime::{self, ArithmeticAttempt, ArithmeticScratch, charge},
     snapshot::Snapshot,
+    storage::Storage,
 };
 use crate::regions::{NarrowingScratch, NarrowingStatistics};
 
@@ -80,6 +82,24 @@ impl ParitySystem {
         ParityKnowledge::empty()
     }
 
+    /// Reserve the fresh knowledge and its replacement buffer before inspection.
+    /// The empty snapshot and the buffer each own a vector header. The buffer's
+    /// payload passes to the snapshot on its first metered initialization.
+    pub(in super::super) fn probe_knowledge<Q: Quota + ?Sized>(
+        &self,
+        region: &Region,
+        storage: &mut Storage,
+        budget: &mut Budget<'_, '_, Q>,
+    ) -> Result<(ParityKnowledge, Vec<u64>), BudgetError<Q::Error>> {
+        storage.admit_record(size_of::<ParityKnowledge>() as u128, budget)?;
+        let words = if self.prepared.root_refuted || self.prepared.basis.is_empty() {
+            0
+        } else {
+            region.mask_words().checked_mul(2).ok_or(Stop::Allocation)?
+        };
+        Ok((self.knowledge(), storage.reserve_bytes(words, budget)?))
+    }
+
     /// Whether the rows are consistent under the region's decisions: the
     /// decided atoms substituted, the rows over the open atoms eliminated
     /// to echelon form, and no row left reading `0 = 1`. Complete for the
@@ -94,23 +114,47 @@ impl ParitySystem {
         region: &Region,
         work: &mut Meter<'_, Q>,
     ) -> Result<bool, Failure<Q::Error>> {
+        // The standalone operation has a work account and no optional byte
+        // ceiling. Both callers use the same elimination and fallible storage.
+        let cancellation = Cancellation::default();
+        let mut budget = Budget::new(work, u64::MAX, usize::MAX, &cancellation);
+        self.probe_consistent(region, &Storage::default(), &mut budget)
+            .map_err(|error| match error {
+                BudgetError::Refused(error) => Failure::Refused(error),
+                BudgetError::Stopped(stop) => Failure::Stopped(stop),
+                BudgetError::StorageDeclined { .. } => Failure::Stopped(Stop::Allocation),
+                BudgetError::WorkDeclined => Failure::Stopped(Stop::WorkLimit),
+                BudgetError::Source(_) => Failure::Stopped(Stop::InvalidProgram),
+            })
+    }
+
+    /// The elimination workspace lives alongside the query's other probe
+    /// owners. Growing the pivot directory admits old and new capacities; a
+    /// retained row transfers its vector header into that directory.
+    pub(in super::super) fn probe_consistent<Q: Quota + ?Sized>(
+        &self,
+        region: &Region,
+        outer: &Storage,
+        budget: &mut Budget<'_, '_, Q>,
+    ) -> Result<bool, BudgetError<Q::Error>> {
         let (held, cut) = region.decision_words();
         let width = held.len();
-        let mut pivots: Vec<(Vec<u64>, bool)> = Vec::new();
+        let mut storage = Storage::with_live_bytes(outer.bytes());
+        let mut pivots: Vec<(Vec<u64>, bool)> = storage.reserve_bytes(0, budget)?;
         for &source in &self.prepared.basis {
             let row = &self.recognized.equations[source];
             let coefficients = &row.words[..width];
-            charge(work, 2 * width as u64 + 1)?;
+            charge(budget.meter_mut(), 2 * width as u64 + 1)?;
             // Substitute the decided atoms: held ones flip the constant.
             let mut constant = row.constant;
-            let mut reduced: Vec<u64> = Vec::with_capacity(width);
+            let mut reduced = storage.reserve_bytes(width, budget)?;
             for ((&word, &held), &cut) in coefficients.iter().zip(held).zip(cut) {
                 constant ^= (word & held).count_ones() % 2 == 1;
                 reduced.push(word & !(held | cut));
             }
             // Eliminate against the pivots found so far.
             for (pivot, pivot_constant) in &pivots {
-                charge(work, width as u64 + 1)?;
+                charge(budget.meter_mut(), width as u64 + 1)?;
                 let Some(bit) = lowest_bit(pivot) else {
                     continue;
                 };
@@ -121,14 +165,16 @@ impl ParitySystem {
                     constant ^= pivot_constant;
                 }
             }
-            charge(work, width as u64 + 1)?;
+            charge(budget.meter_mut(), width as u64 + 1)?;
             if lowest_bit(&reduced).is_none() {
                 if constant {
                     return Ok(false);
                 }
+                storage.release(reduced)?;
                 continue;
             }
-            pivots.push((reduced, constant));
+            storage.push_bytes(&mut pivots, (reduced, constant), budget)?;
+            storage.embed::<u64>()?;
         }
         Ok(true)
     }
@@ -154,6 +200,20 @@ impl ParitySystem {
         cancellation: &Cancellation,
         work: &mut Meter<'_, Q>,
     ) -> ArithmeticAttempt<Failure<Q::Error>> {
+        self.inspect_with_buffer(region, known, scratch, cancellation, None, work)
+    }
+
+    /// A probe supplies its accounted buffer at the ordinary snapshot
+    /// replacement step. Both paths charge the same initialization prefix.
+    pub(in super::super) fn inspect_with_buffer<Q: Quota + ?Sized>(
+        &self,
+        region: &mut Region,
+        known: &mut ParityKnowledge,
+        scratch: &mut NarrowingScratch,
+        cancellation: &Cancellation,
+        supplied: Option<&mut Vec<u64>>,
+        work: &mut Meter<'_, Q>,
+    ) -> ArithmeticAttempt<Failure<Q::Error>> {
         let before = work.charged();
         let mut statistics = NarrowingStatistics::default();
         let result = cancellation.poll().map_err(Failure::from).and_then(|()| {
@@ -164,7 +224,7 @@ impl ParitySystem {
                 self,
                 region,
                 &mut known.snapshot,
-                &mut scratch.arithmetic,
+                (&mut scratch.arithmetic, supplied),
                 work,
                 &mut statistics,
             )
@@ -188,7 +248,7 @@ fn inspect<Q: Quota + ?Sized>(
     system: &ParitySystem,
     region: &mut Region,
     snapshot: &mut Snapshot,
-    scratch: &mut ArithmeticScratch,
+    (scratch, supplied): (&mut ArithmeticScratch, Option<&mut Vec<u64>>),
     work: &mut Meter<'_, Q>,
     statistics: &mut NarrowingStatistics,
 ) -> Result<SubjectStep, Failure<Q::Error>> {
@@ -208,7 +268,7 @@ fn inspect<Q: Quota + ?Sized>(
         .index
         .as_ref()
         .expect("complete nonrefuting preparation has its index");
-    snapshot.select(region, index, scratch, work)?;
+    snapshot.select_using(region, index, scratch, supplied, work)?;
     if words::first(&scratch.touched, &mut |amount| charge(work, amount))?.is_none() {
         // No row can read an open mask or collect a consequence. Retain this
         // inspected input even when its new decisions touch no parity row.

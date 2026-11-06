@@ -323,14 +323,6 @@ impl<Q: Quota + ?Sized> Leased<'_, Q> {
     }
 }
 
-/// A probe's meter failure as the budget reports it.
-fn from_meter<E>(failure: Failure<E>) -> BudgetError<E> {
-    match failure {
-        Failure::Refused(error) => BudgetError::Refused(error),
-        Failure::Stopped(stop) => BudgetError::Stopped(stop),
-    }
-}
-
 /// Settle a refusal: a crossed lease declines, the rest keep their error.
 fn settle<E>(
     error: BudgetError<LeaseRefusal<E>>,
@@ -374,56 +366,52 @@ fn build<Q: Quota + ?Sized>(
     let Some(producers) = query.producers else {
         return Ok(None);
     };
-    let proposals = {
-        let mut meter = Meter::reserved(lease);
-        // The lease is the one ceiling on work; this budget bounds bytes.
-        let mut budget = Budget::new(&mut meter, u64::MAX, limits.bytes, cancellation);
-        let proposals = budget.in_phase(Phase::Recognition, |budget| {
-            proposals::propose(
-                theory,
-                producers,
-                query.candidate,
-                query.subject.truth(),
-                query.region,
-                budget,
-            )
-        });
-        *peak = (*peak).max(budget.peak_bytes());
-        budget.finish();
-        proposals?
+    let mut storage = Storage::default();
+    let mut probing = Probing {
+        lease,
+        allowance: query.closure_work.saturating_add(query.narrower.work()),
+        bytes: limits.bytes,
+        cancellation,
+        storage: &mut storage,
     };
-    statistics.guards = proposals.counts.guards;
-    statistics.clauses = proposals.counts.clauses;
-    statistics.unsupported_clauses = proposals.counts.unsupported_clauses;
-    statistics.groups = proposals.counts.groups;
+    let proposals = probing.proposals(query, producers, statistics, peak)?;
     if proposals.guards.is_empty() {
         return Ok(None);
     }
-    let mut probe =
-        probes::Probe::new(query.narrower, query.subject, query.region, query.knowledge);
-    *peak = (*peak).max(probe.retained_bytes());
-    let mut units = Vec::new();
-    let mut admitted = Admitted {
-        groups: Vec::new(),
-        wide: Vec::new(),
-    };
-    let allowance = query.closure_work.saturating_add(probe.narrower_work());
+    let proposal_bytes = probing.storage.bytes();
     let open_guards = proposals
         .guards
         .iter()
         .filter(|&&guard| query.region.is_open(guard))
         .count() as u64;
-    lease.extend(open_guards.saturating_mul(allowance));
-    {
-        let mut meter = Meter::reserved(lease);
+    probing
+        .lease
+        .extend(open_guards.saturating_mul(probing.allowance));
+    let (mut probe, units, admitted) = probing.with_budget(peak, |storage, budget| {
+        let copies = probes::Probe::copy_bytes(query.region, query.knowledge);
+        storage.admit_record(copies, budget)?;
+        let mut probe =
+            probes::Probe::new(query.narrower, query.subject, query.region, query.knowledge);
+        storage.release_record(copies)?;
+        storage.admit_record(probe.live_bytes(), budget)?;
+        let mut units = storage.reserve_bytes(0, budget)?;
+        let mut admitted = Admitted {
+            groups: storage.reserve_bytes(0, budget)?,
+            wide: storage.reserve_bytes(0, budget)?,
+        };
         for &guard in &proposals.guards {
             // A guard the root already cuts needs no probe: its clauses hold
             // there unconditionally. An open guard is probed held; one whose
             // narrowing reaches the candidate, or is refuted, is a unit.
             if query.region.is_open(guard) {
-                let refuted = probe
-                    .run(&[(guard, true)], None, scratch, cancellation, &mut meter)
-                    .map_err(from_meter)?;
+                let refuted = probe.run(
+                    &[(guard, true)],
+                    None,
+                    scratch,
+                    cancellation,
+                    storage,
+                    budget,
+                )?;
                 statistics.probes += 1;
                 let reaches = refuted
                     || query
@@ -433,25 +421,20 @@ fn build<Q: Quota + ?Sized>(
                 if !reaches {
                     continue;
                 }
-                units.push(guard);
+                storage.push_bytes(&mut units, guard, budget)?;
                 statistics.saturation_units += 1;
             }
-            admitted.admit_guard(&proposals, guard);
+            admitted.admit_guard(&proposals, guard, storage, budget)?;
         }
-        meter.refund();
-    }
+        Ok((probe, units, admitted))
+    })?;
     statistics.probed_groups = admitted.groups.len() as u64;
     let (parity, cardinality) = probe_rounds(
         theory,
         &admitted,
         &mut probe,
         scratch,
-        &mut Probing {
-            lease,
-            allowance,
-            bytes: limits.bytes,
-            cancellation,
-        },
+        &mut probing,
         statistics,
         peak,
     )?;
@@ -463,14 +446,50 @@ fn build<Q: Quota + ?Sized>(
         // Nothing to install: no unit, no row, no bound.
         return Ok(None);
     }
+    probing.storage.release(admitted.groups)?;
+    probing.storage.release(admitted.wide)?;
+    probing
+        .storage
+        .release_record(probe.live_bytes() + proposal_bytes)?;
+    drop(probe);
+    drop(proposals);
+    probing.with_budget(peak, |storage, budget| {
+        publish(query, units, (parity, cardinality), storage, budget).map(Some)
+    })
+}
+
+/// Transfer the accounted units and systems into the published record and
+/// reserve an owned copy of the candidate's words. The theory stays shared.
+fn publish<Q: Quota + ?Sized>(
+    query: ClosedQuery<'_>,
+    units: Vec<usize>,
+    (parity, cardinality): Systems,
+    storage: &mut Storage,
+    budget: &mut Budget<'_, '_, Q>,
+) -> Result<FrozenPreparation, BudgetError<Q::Error>> {
+    let mut embedded = size_of::<Vec<usize>>();
+    if parity.is_some() {
+        embedded += size_of::<ParitySystem>();
+    }
+    if cardinality.is_some() {
+        embedded += size_of::<CardinalitySystem>();
+    }
+    storage.admit_record((size_of::<FrozenPreparation>() - embedded) as u128, budget)?;
+    let requested = query.candidate.words.len() as u128 * size_of::<u64>() as u128;
+    storage.admit_record(requested, budget)?;
     let candidate = query.candidate.try_clone().map_err(BudgetError::Source)?;
-    Ok(Some(FrozenPreparation {
-        owner: theory.clone(),
+    storage.release_record(requested)?;
+    storage.admit_record(
+        candidate.words.capacity() as u128 * size_of::<u64>() as u128,
+        budget,
+    )?;
+    Ok(FrozenPreparation {
+        owner: query.subject.theory().clone(),
         candidate,
         units,
         parity,
         cardinality,
-    }))
+    })
 }
 
 /// The systems a preparation installs: the parity rows and the count
@@ -486,6 +505,56 @@ struct Probing<'l, 'q, Q: Quota + ?Sized> {
     allowance: u64,
     bytes: usize,
     cancellation: &'l Cancellation,
+    storage: &'l mut Storage,
+}
+
+impl<'q, Q: Quota + ?Sized> Probing<'_, 'q, Q> {
+    /// Publish the census after successful recognition, including when a
+    /// later phase declines. Only the returned proposals remain live.
+    fn proposals(
+        &mut self,
+        query: ClosedQuery<'_>,
+        producers: &Producers,
+        statistics: &mut FrozenPreparationStatistics,
+        peak: &mut u128,
+    ) -> Result<proposals::Proposals, BudgetError<LeaseRefusal<Q::Error>>> {
+        let proposals = self.with_budget(peak, |storage, budget| {
+            budget.in_phase(Phase::Recognition, |budget| {
+                proposals::propose(
+                    query.subject.theory(),
+                    producers,
+                    query.candidate,
+                    query.subject.truth(),
+                    query.region,
+                    storage,
+                    budget,
+                )
+            })
+        })?;
+        statistics.guards = proposals.counts.guards;
+        statistics.clauses = proposals.counts.clauses;
+        statistics.unsupported_clauses = proposals.counts.unsupported_clauses;
+        statistics.groups = proposals.counts.groups;
+        Ok(proposals)
+    }
+
+    /// Settle each phase's work and observed peak, including a refused
+    /// request. Live storage crosses the phase boundary with its owners.
+    fn with_budget<T>(
+        &mut self,
+        peak: &mut u128,
+        operation: impl FnOnce(
+            &mut Storage,
+            &mut Budget<'_, '_, Leased<'q, Q>>,
+        ) -> Result<T, BudgetError<LeaseRefusal<Q::Error>>>,
+    ) -> Result<T, BudgetError<LeaseRefusal<Q::Error>>> {
+        let mut meter = Meter::reserved(self.lease);
+        let mut budget = Budget::new(&mut meter, u64::MAX, self.bytes, self.cancellation);
+        let result = operation(self.storage, &mut budget);
+        *peak = (*peak).max(budget.peak_bytes());
+        budget.finish();
+        result
+    }
 }
 
 /// What the root admits under the guards it cuts: the groups to probe, and
@@ -498,11 +567,20 @@ struct Admitted<'p> {
 
 impl<'p> Admitted<'p> {
     /// Admit the groups and wide clauses of a guard the root cuts.
-    fn admit_guard(&mut self, proposals: &'p proposals::Proposals, guard: usize) {
-        self.groups
-            .extend(proposals.parity.iter().filter(|group| group.guard == guard));
-        self.wide
-            .extend(proposals.wide.iter().filter(|clause| clause.guard == guard));
+    fn admit_guard<Q: Quota + ?Sized>(
+        &mut self,
+        proposals: &'p proposals::Proposals,
+        guard: usize,
+        storage: &mut Storage,
+        budget: &mut Budget<'_, '_, Q>,
+    ) -> Result<(), BudgetError<Q::Error>> {
+        for group in proposals.parity.iter().filter(|group| group.guard == guard) {
+            storage.push_bytes(&mut self.groups, group, budget)?;
+        }
+        for clause in proposals.wide.iter().filter(|clause| clause.guard == guard) {
+            storage.push_bytes(&mut self.wide, clause, budget)?;
+        }
+        Ok(())
     }
 }
 
@@ -542,23 +620,28 @@ fn count_forbidden(table: &probes::Table) -> u64 {
 /// The lease's refusal.
 fn known_refutations<Q: Quota + ?Sized>(
     groups: &[&proposals::Group],
-    lease: &mut Leased<'_, Q>,
-) -> Result<Vec<probes::Table>, BudgetError<LeaseRefusal<Q::Error>>> {
-    let mut meter = Meter::reserved(lease);
-    let mut known = Vec::with_capacity(groups.len());
+    storage: &mut Storage,
+    budget: &mut Budget<'_, '_, Q>,
+) -> Result<Vec<probes::Table>, BudgetError<Q::Error>> {
+    let mut known = storage.reserve_bytes(groups.len(), budget)?;
     for group in groups {
         let support = &group.support.atoms[..group.support.len];
-        let mut refuted = Words::<u64, _>::new([0; 4]);
+        known.push(Words::<u64, _>::new([0; 4]));
+        let refuted = known.last_mut().expect("the current table was appended");
         for &pattern in &group.patterns {
-            meter.tick().map_err(from_meter)?;
+            budget.charge(1)?;
             refuted.insert(usize::from(pattern));
         }
         for other in groups {
-            meter.tick().map_err(from_meter)?;
+            budget.charge(1)?;
             if other.support.len > group.support.len || std::ptr::eq(*other, *group) {
                 continue;
             }
             // Where `other`'s atoms sit in this support, if all of them do.
+            storage.admit_record(
+                size_of::<[usize; super::source::MAX_SUPPORT]>() as u128,
+                budget,
+            )?;
             let mut positions = [0_usize; super::source::MAX_SUPPORT];
             let contained = other.support.atoms[..other.support.len]
                 .iter()
@@ -570,6 +653,7 @@ fn known_refutations<Q: Quota + ?Sized>(
                     })
                 });
             if !contained {
+                storage.release_record(size_of::<[usize; super::source::MAX_SUPPORT]>() as u128)?;
                 continue;
             }
             let mask = positions[..other.support.len]
@@ -580,16 +664,15 @@ fn known_refutations<Q: Quota + ?Sized>(
                     .filter(|&k| forbidden & (1 << k) != 0)
                     .fold(0_usize, |value, k| value | (1 << positions[k]));
                 for pattern in 0..(1_usize << group.support.len) {
-                    meter.tick().map_err(from_meter)?;
+                    budget.charge(1)?;
                     if pattern & mask == value {
                         refuted.insert(pattern);
                     }
                 }
             }
+            storage.release_record(size_of::<[usize; super::source::MAX_SUPPORT]>() as u128)?;
         }
-        known.push(refuted);
     }
-    meter.refund();
     Ok(known)
 }
 
@@ -623,18 +706,20 @@ fn probe_rounds<Q: Quota + ?Sized>(
     let groups = &admitted.groups[..];
     let mut parity: Option<ParitySystem> = None;
     let mut cardinality: Option<CardinalitySystem> = None;
-    let mut tables: Vec<ProbedGroup> = groups
-        .iter()
-        .map(|group| ProbedGroup {
-            support: group.support,
-            forbidden: Words::new([0; 4]),
-        })
-        .collect();
-    let mut refuted: Vec<u64> = vec![0; groups.len()];
-    let known = known_refutations(groups, probing.lease)?;
-    // Round one probes every group; a later round only those whose hull was
-    // inexact, keeping the others' tables, up to `MAX_ROUNDS`.
-    let mut pending: Vec<usize> = (0..groups.len()).collect();
+    let (mut tables, mut refuted, known, mut pending) =
+        probing.with_budget(peak, |storage, budget| {
+            let mut tables = storage.reserve_bytes(groups.len(), budget)?;
+            tables.extend(groups.iter().map(|group| ProbedGroup {
+                support: group.support,
+                forbidden: Words::new([0; 4]),
+            }));
+            let mut refuted = storage.reserve_bytes(groups.len(), budget)?;
+            refuted.resize(groups.len(), 0);
+            let known = known_refutations(groups, storage, budget)?;
+            let mut pending = storage.reserve_bytes(groups.len(), budget)?;
+            pending.extend(0..groups.len());
+            Ok((tables, refuted, known, pending))
+        })?;
     while !pending.is_empty() && statistics.rounds < MAX_ROUNDS {
         statistics.rounds += 1;
         // The first round leaves a group of one clause cutting its whole
@@ -652,8 +737,8 @@ fn probe_rounds<Q: Quota + ?Sized>(
             .lease
             .extend(probes.saturating_mul(probing.allowance));
         let mut progressed = false;
-        {
-            let mut meter = Meter::reserved(probing.lease);
+        let cancellation = probing.cancellation;
+        probing.with_budget(peak, |storage, budget| {
             for &index in &pending {
                 if settled_by_clause(index) {
                     tables[index].forbidden = Words::new(*known[index].storage());
@@ -661,24 +746,32 @@ fn probe_rounds<Q: Quota + ?Sized>(
                     progressed = true;
                     continue;
                 }
-                let found = probe
-                    .table(
-                        probes::Target {
-                            group: groups[index],
-                            known: &known[index],
-                        },
-                        parity.as_ref(),
-                        scratch,
-                        probing.cancellation,
-                        &mut meter,
-                    )
-                    .map_err(from_meter)?;
+                let found = probe.table(
+                    probes::Target {
+                        group: groups[index],
+                        known: &known[index],
+                        forbidden: &mut tables[index].forbidden,
+                    },
+                    parity.as_ref(),
+                    scratch,
+                    cancellation,
+                    storage,
+                    budget,
+                )?;
                 statistics.probes += found.run;
                 progressed |= found.refuted > refuted[index];
                 refuted[index] = found.refuted;
-                tables[index].forbidden = found.table;
             }
-            meter.refund();
+            Ok(())
+        })?;
+        // The old systems and worklist have served their last probe. End their
+        // lifetimes before loading the replacement, and retain the tables.
+        probing.storage.release(pending)?;
+        if let Some(previous) = parity.take() {
+            probing.storage.release_record(previous.retained_bytes())?;
+        }
+        if let Some(previous) = cardinality.take() {
+            probing.storage.release_record(previous.retained_bytes())?;
         }
         let loaded = load_round(theory, &tables, &admitted.wide, probing, statistics, peak)?;
         parity = loaded.parity;
@@ -698,8 +791,13 @@ fn probe_rounds<Q: Quota + ?Sized>(
         let loaded = load_round(theory, &tables, &admitted.wide, probing, statistics, peak)?;
         parity = loaded.parity;
         cardinality = loaded.cardinality;
+        probing.storage.release(loaded.inexact)?;
     }
     statistics.refuted_patterns = refuted.iter().sum();
+    probing.storage.release(pending)?;
+    probing.storage.release(known)?;
+    probing.storage.release(refuted)?;
+    probing.storage.release(tables)?;
     Ok((parity, cardinality))
 }
 
@@ -713,12 +811,9 @@ fn load_round<Q: Quota + ?Sized>(
     statistics: &mut FrozenPreparationStatistics,
     peak: &mut u128,
 ) -> Result<Loaded, BudgetError<LeaseRefusal<Q::Error>>> {
-    let mut meter = Meter::reserved(probing.lease);
-    let mut budget = Budget::new(&mut meter, u64::MAX, probing.bytes, probing.cancellation);
-    let loaded = load(theory, tables, wide, statistics, &mut budget);
-    *peak = (*peak).max(budget.peak_bytes());
-    budget.finish();
-    loaded
+    probing.with_budget(peak, |storage, budget| {
+        load(theory, tables, wide, statistics, storage, budget)
+    })
 }
 
 /// What a round loaded: the parity and counting systems, when any row or
@@ -738,23 +833,53 @@ fn load<Q: Quota + ?Sized>(
     tables: &[ProbedGroup],
     wide: &[&proposals::Wide],
     statistics: &mut FrozenPreparationStatistics,
+    outer: &mut Storage,
     budget: &mut Budget<'_, '_, Q>,
 ) -> Result<Loaded, BudgetError<Q::Error>> {
+    let mut inexact = outer.reserve_bytes(tables.len(), budget)?;
     if tables.is_empty() && wide.is_empty() {
         return Ok(Loaded {
             parity: None,
             cardinality: None,
-            inexact: Vec::new(),
+            inexact,
         });
     }
-    let mut storage = Storage::default();
-    let mut inexact = Vec::new();
+    let parity = load_parity(theory, tables, &mut inexact, statistics, outer, budget)?;
+    // Transfer only the surviving parity owner. Its builder can also have
+    // held temporary empty evidence and vector headers on a row-free input.
+    if let Some(system) = &parity {
+        outer.admit_record(system.retained_bytes(), budget)?;
+    }
+    let mut storage = Storage::with_live_bytes(outer.bytes());
+    let cardinality = load_counts(theory, tables, wide, statistics, &mut storage, budget)?;
+    if let Some(system) = &cardinality {
+        outer.admit_record(system.retained_bytes(), budget)?;
+    }
+    Ok(Loaded {
+        parity,
+        cardinality,
+        inexact,
+    })
+}
+
+/// Load the tables' implied equations into a parity system. The caller has
+/// reserved one inexact-index slot per input table.
+fn load_parity<Q: Quota + ?Sized>(
+    theory: &Theory,
+    tables: &[ProbedGroup],
+    inexact: &mut Vec<usize>,
+    statistics: &mut FrozenPreparationStatistics,
+    outer: &Storage,
+    budget: &mut Budget<'_, '_, Q>,
+) -> Result<Option<ParitySystem>, BudgetError<Q::Error>> {
+    let mut storage = Storage::with_live_bytes(outer.bytes());
     let (facts, mut recognized_equations, counts) =
         budget.in_phase(Phase::Recognition, |budget| {
             storage.admit_record(
                 (size_of::<rows::Recognized>()
                     - size_of::<CheckedRootFacts>()
-                    - 2 * size_of::<Vec<source::Clause>>()) as u128,
+                    - size_of::<Vec<rows::Equation>>()
+                    - size_of::<Vec<source::Clause>>()) as u128,
                 budget,
             )?;
             let facts = CheckedRootFacts::none(theory, &mut storage, budget)?;
@@ -806,32 +931,27 @@ fn load<Q: Quota + ?Sized>(
         })?;
     statistics.inexact_hulls = counts.inexact_hulls;
     budget.charge(1)?;
-    let parity = if recognized_equations.is_empty() {
-        None
-    } else {
-        let prepared = budget.in_phase(Phase::Reduction, |budget| {
-            parity::prepare(
-                &mut recognized_equations,
-                theory.atom_count(),
-                &mut storage,
-                budget,
-            )
-        })?;
-        let recognized = rows::Recognized {
-            facts,
-            clauses: Vec::new(),
-            equations: recognized_equations,
-            counts,
-        };
-        statistics.parity = ParityStatistics::from_preparation(&recognized, &prepared, budget);
-        Some(ParitySystem::from_rows(recognized, prepared))
+    if recognized_equations.is_empty() {
+        return Ok(None);
+    }
+
+    let prepared = budget.in_phase(Phase::Reduction, |budget| {
+        parity::prepare(
+            &mut recognized_equations,
+            theory.atom_count(),
+            &mut storage,
+            budget,
+        )
+    })?;
+    storage.admit_record(size_of::<Vec<source::Clause>>() as u128, budget)?;
+    let recognized = rows::Recognized {
+        facts,
+        clauses: Vec::new(),
+        equations: recognized_equations,
+        counts,
     };
-    let cardinality = load_counts(theory, tables, wide, statistics, &mut storage, budget)?;
-    Ok(Loaded {
-        parity,
-        cardinality,
-        inexact,
-    })
+    statistics.parity = ParityStatistics::from_preparation(&recognized, &prepared, budget);
+    Ok(Some(ParitySystem::from_rows(recognized, prepared)))
 }
 
 /// The counting system of the tables' bounds and the wide clauses', when
@@ -873,6 +993,12 @@ fn load_counts<Q: Quota + ?Sized>(
     }
     counted.preparation_work = budget.work() - start;
     counted.preparation_bytes = budget.peak_bytes();
+    storage.admit_record(
+        (size_of::<CardinalitySystem>()
+            - size_of::<cardinality::Prepared>()
+            - size_of::<Vec<super::cardinality_source::Bound>>()) as u128,
+        budget,
+    )?;
     let system = CardinalitySystem::from_bounds(theory.clone(), bounds, prepared);
     counted.retained_bytes = system.retained_bytes();
     statistics.cardinality = counted;

@@ -172,6 +172,12 @@ impl<'a, 'q, Q: Quota + ?Sized> Budget<'a, 'q, Q> {
         self.work.charged() - self.start
     }
 
+    /// Use the same work owner for a narrowing kernel that already meters
+    /// its operations. Its performed prefix remains part of this budget.
+    pub(super) fn meter_mut(&mut self) -> &mut Meter<'q, Q> {
+        self.work
+    }
+
     /// Observe a phase's own prefix, excluding work already attributed to its
     /// nested phases. Both successful and failed prefixes remain in receipts.
     pub(super) fn in_phase<T>(

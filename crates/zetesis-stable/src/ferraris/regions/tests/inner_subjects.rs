@@ -775,3 +775,71 @@ fn a_stop_inside_the_late_tier_is_a_stopped_query() {
         "of {total} at stride {stride}"
     );
 }
+
+#[test]
+fn optional_inner_storage_refusal_preserves_the_complete_family() {
+    // Either first disjunct forces the guard, which forces every pair.
+    // The final independent disjunction gives exactly two minimal models.
+    // The pairwise guards supply distinct optional groups over those same
+    // atoms, so that their table needs more space than ordinary checking.
+    let pairs = 6;
+    let guard = 2 * pairs;
+    let (left, right) = (guard + 1, guard + 2);
+    let mut nodes: Vec<_> = (0..=right).map(Node::atom).collect();
+    let mut roots = Vec::new();
+    let mut append = |node| {
+        nodes.push(node);
+        nodes.len() - 1
+    };
+    for p in 0..pairs {
+        let q = pairs + p;
+        roots.push(append(Node::or_pair([p, q])));
+        roots.push(append(Node::implies(guard, p)));
+        roots.push(append(Node::implies(guard, q)));
+    }
+    roots.push(append(Node::implies(0, guard)));
+    roots.push(append(Node::implies(pairs, guard)));
+    roots.push(append(Node::or_pair([left, right])));
+    for p in 0..pairs {
+        for q in p + 1..pairs {
+            let both = append(Node::and_pair([p, q]));
+            roots.push(append(Node::implies(both, guard)));
+        }
+    }
+    let theory = Theory::new(
+        right + 1,
+        FormulaParts::new(nodes, vec![]).unwrap(),
+        roots,
+        AdmissionLimits::default(),
+    )
+    .unwrap();
+    let expected = [left, right].map(|atom| (0..=guard).chain([atom]).collect::<Vec<_>>());
+    let enumerate = |bytes| {
+        let limits = Limits {
+            max_reduct_bytes: bytes,
+            ..Limits::default()
+        };
+        let mut search = StableModels::new(&theory, limits, Cancellation::default()).unwrap();
+        let mut family: Vec<_> = search
+            .by_ref()
+            .map(|model| model.unwrap().atoms().collect::<Vec<_>>())
+            .collect();
+        family.sort();
+        assert_eq!(family, expected);
+        search.statistics().reduct
+    };
+    // The unrestricted run measures the retained workspace the ordinary
+    // reduct check actually requires on this target.
+    let unrestricted = enumerate(u64::MAX);
+    let baseline = unrestricted.inner_preparation;
+    assert_eq!(
+        (baseline.attempts, baseline.prepared, baseline.declined),
+        (2, 2, 0)
+    );
+    let tight = enumerate(u64::try_from(unrestricted.peak_workspace_bytes).unwrap());
+    let fallback = tight.inner_preparation;
+    assert_eq!(
+        (fallback.attempts, fallback.prepared, fallback.declined),
+        (2, 0, 2)
+    );
+}

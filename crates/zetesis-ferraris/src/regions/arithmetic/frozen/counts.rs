@@ -50,12 +50,14 @@ pub(super) fn propose<Q: Quota + ?Sized>(
     let mut exclusions: Vec<(usize, usize)> = storage.reserve(0, budget)?;
     for (group, table) in tables.iter().enumerate() {
         let atoms = &table.support.atoms[..table.support.len];
+        storage.admit_record(size_of::<Counted>() as u128, budget)?;
         let Some(Counted {
             least,
             greatest,
             together,
         }) = counts(atoms.len(), &table.forbidden, budget)?
         else {
+            storage.release_record(size_of::<Counted>() as u128)?;
             continue;
         };
         if least >= 1 {
@@ -97,6 +99,7 @@ pub(super) fn propose<Q: Quota + ?Sized>(
                 }
             }
         }
+        storage.release_record(size_of::<Counted>() as u128)?;
     }
     // A clause too wide for a group, its pattern cutting its whole support:
     // no countermodel in the root cuts every atom of it (`lower_of_clause`).
@@ -352,11 +355,12 @@ fn cliques<Q: Quota + ?Sized>(
             push_bound(bounds, bound, storage, budget)?;
             statistics.upper += 1;
             storage.push(&mut found, clique, 3, budget)?;
+            storage.embed::<usize>()?;
         }
         start = end;
     }
     for clique in found.drain(..) {
-        storage.release(clique)?;
+        storage.release_embedded(clique)?;
     }
     storage.release(found)?;
     Ok(())

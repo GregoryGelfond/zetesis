@@ -720,7 +720,7 @@ fn empty_selection_cutoffs_retain_the_exact_prefix() {
             &system,
             &mut region,
             &mut known.snapshot,
-            &mut scratch.arithmetic,
+            (&mut scratch.arithmetic, None),
             &mut work,
             &mut statistics,
         );

@@ -1,3 +1,5 @@
+mod storage_tests;
+
 use zetesis_algebra::{Cancellation, Countermodels, Failure, Meter, Stop};
 
 use super::super::budget::Budget;
@@ -244,6 +246,7 @@ impl Saturation {
             &self.candidate,
             &self.truth,
             &root,
+            &mut super::Storage::default(),
             &mut budget,
         )
         .unwrap()
@@ -794,7 +797,12 @@ fn the_known_refutations_charge_each_pair_of_groups_compared() {
         used: 0,
         extended: 0,
     };
-    let known = known_refutations(&[&wide, &narrow], &mut lease).unwrap();
+    let cancellation = Cancellation::default();
+    let mut meter = Meter::reserved(&mut lease);
+    let mut budget = Budget::new(&mut meter, u64::MAX, usize::MAX, &cancellation);
+    let mut storage = super::Storage::default();
+    let known = known_refutations(&[&wide, &narrow], &mut storage, &mut budget).unwrap();
+    budget.finish();
     let refuted =
         |table: &super::probes::Table| (0..8).filter(|&p| table.contains(p)).collect::<Vec<_>>();
     assert_eq!(
@@ -868,7 +876,16 @@ fn a_nested_conjunction_body_is_read_through() {
     let mut meter = Meter::reserved(&mut quota);
     let cancellation = Cancellation::default();
     let mut budget = Budget::new(&mut meter, u64::MAX, usize::MAX, &cancellation);
-    let proposals = propose(&theory, &producers, &candidate, &truth, &root, &mut budget).unwrap();
+    let proposals = propose(
+        &theory,
+        &producers,
+        &candidate,
+        &truth,
+        &root,
+        &mut super::Storage::default(),
+        &mut budget,
+    )
+    .unwrap();
     assert_eq!(proposals.guards, vec![6]);
     assert_eq!(
         clause_patterns(&proposals),
@@ -960,7 +977,16 @@ fn an_unreadable_definition_decided_at_the_root_contributes_nothing() {
         (Some(true), None)
     );
     let mut budget = Budget::new(&mut meter, u64::MAX, usize::MAX, &cancellation);
-    let proposals = propose(&theory, &producers, &candidate, &truth, &root, &mut budget).unwrap();
+    let proposals = propose(
+        &theory,
+        &producers,
+        &candidate,
+        &truth,
+        &root,
+        &mut super::Storage::default(),
+        &mut budget,
+    )
+    .unwrap();
     assert_eq!(proposals.guards, vec![valid]);
     assert_eq!(
         clause_patterns(&proposals),
