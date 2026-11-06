@@ -737,12 +737,12 @@
   {
     "name": "Zetesis.Algebra.entailed_by_refutations",
     "file": "Zetesis/Algebra.lean",
-    "line": 1289
+    "line": 1292
   },
   {
     "name": "Zetesis.Algebra.saturation_unit",
     "file": "Zetesis/Algebra.lean",
-    "line": 1313
+    "line": 1319
   },
   {
     "name": "Zetesis.AlgebraicRows.contribution_of_holds",
