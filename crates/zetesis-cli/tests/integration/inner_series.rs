@@ -206,7 +206,8 @@ fn g_census_inner_finds_the_cores_groups_and_rows() {
     // per candidate. The stable candidate's rows refute its root in the
     // first round; each dropped-clause candidate's inexact gate is probed to
     // exactness in a second round under the other rows, so every hull ends
-    // exact and the rows number at least the gates' (8n - 7 in all).
+    // exact and the rows number at least the groups' less one per
+    // non-minimal candidate.
     for n in PARITY.sizes {
         let receipt = checked(PARITY, n);
         let p = &receipt.preparation;
@@ -218,11 +219,16 @@ fn g_census_inner_finds_the_cores_groups_and_rows() {
         assert_eq!(count(p, "groups"), candidates * (2 * (n - 1) + 1), "n={n}");
         assert_eq!(count(p, "inexact_hulls"), 0, "n={n}");
         assert!(
-            count(p, "rows") >= 8 * n - 7,
+            count(p, "rows") >= count(p, "groups") - (candidates - receipt.models),
             "n={n}: rows {}",
             count(p, "rows")
         );
-        assert_eq!(count(p, "rounds"), candidates + 3, "n={n}");
+        // One round for the stable candidate, two for each other.
+        assert_eq!(
+            count(p, "rounds"),
+            receipt.models + 2 * (candidates - receipt.models),
+            "n={n}"
+        );
         println!(
             "parity n={n}: probes={} rounds={} rows={} work={} regions={} refuted={}",
             count(p, "probes"),
@@ -253,7 +259,7 @@ fn g_census_inner_finds_the_cores_groups_and_rows() {
         );
         assert_eq!(count(p, "inexact_hulls"), 0, "vertices={vertices}");
         assert!(
-            count(p, "rows") >= 4 * vertices - 3,
+            count(p, "rows") >= count(p, "groups") - (candidates - receipt.models),
             "vertices={vertices}: rows {}",
             count(p, "rows")
         );
@@ -288,7 +294,18 @@ fn g_census_inner_finds_the_cores_groups_and_rows() {
             candidates * (h + 1 + h * h * (h + 1) / 2) - (candidates - receipt.models),
             "holes={h}"
         );
-        assert_eq!(count(p, "bounds"), 12 * h + 5, "holes={h}");
+        // Per candidate a lower bound per pigeon clause, a clique per hole
+        // and a clique per pigeon; a dropped-pigeon candidate has one clause
+        // and one pigeon clique the fewer, and the completing bound of
+        // nothing over the dropped pigeon's places.
+        let pigeons = h + 1;
+        let stable = pigeons + h + pigeons;
+        let dropped = (pigeons - 1) + h + (pigeons - 1) + 1;
+        assert_eq!(
+            count(p, "bounds"),
+            receipt.models * stable + (candidates - receipt.models) * dropped,
+            "holes={h}"
+        );
         assert!(
             count(p, "families") >= candidates,
             "holes={h}: families {}",
