@@ -27,7 +27,7 @@ Notable changes by release. Versions follow Semantic Versioning.
   upper, families, root refutations and work. The Lean library adds
   `Region.decideAll`, `contains_decideAll`, `entailed_by_refutations`,
   `saturation_unit`, `countermodelSubjects`, `count_of_none`,
-  `upper_of_clique`, `bounds_of_allowed` and `row_under_unit`.
+  `upper_of_clique`, `bounds_of_allowed`, `guarded_row` and `row_under_unit`.
 - Hybrid statistics report how lazy grounding divided the eligible constraints:
   the streamed templates and instances and those grounded in the core, as
   `HybridExecutionStatistics::streamed` (a `StreamedConstraints`, which adds
