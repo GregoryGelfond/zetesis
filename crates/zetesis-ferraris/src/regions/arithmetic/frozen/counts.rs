@@ -2,9 +2,11 @@
 //!
 //! A table's least and greatest allowed counts bound its support
 //! (`bounds_of_allowed`), the least one when the empty pattern is forbidden,
-//! a clause's (`lower_of_clause`); and the pairs no allowed pattern holds
+//! a clause's (`lower_of_clause`), the greatest one when it is two or more
+//! and below the support's size; and the pairs no allowed pattern holds
 //! together, read from every table, grow into cliques, each an upper bound
-//! of one (`upper_of_clique`). Atoms one side covers and the other does not
+//! of one (`upper_of_clique`), which carry a greatest count of one, as the
+//! hull's unit rows carry one of nothing. Atoms one side covers and the other does not
 //! get the other side's trivial bound, nothing at least or everything at
 //! most, so that the families partition one atom set both ways. The bounds
 //! carry no guard: a table's guard is cut at the closed root, by a
@@ -63,6 +65,11 @@ pub(super) fn propose<Q: Quota + ?Sized>(
             statistics.lower += 1;
         }
         budget.charge(1)?;
+        // A greatest count below two is carried elsewhere: of one, every pair
+        // of the support is an exclusion, so the cliques bound the support,
+        // or a superset of it, by one; of nothing, the one allowed pattern's
+        // hull is the unit rows cutting every atom. The table's own bound
+        // would duplicate them.
         if greatest >= 2 && greatest < atoms.len() as u64 {
             let bound = bound(
                 (BoundSide::Upper, greatest),
