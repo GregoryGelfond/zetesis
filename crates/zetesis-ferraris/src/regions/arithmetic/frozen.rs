@@ -418,7 +418,12 @@ fn build<Q: Quota + ?Sized>(
         &groups,
         &mut probe,
         scratch,
-        (limits, cancellation, lease, allowance),
+        &mut Probing {
+            lease,
+            allowance,
+            limits,
+            cancellation,
+        },
         statistics,
         peak,
     )?;
@@ -444,6 +449,16 @@ fn build<Q: Quota + ?Sized>(
 /// bounds, each when any was found.
 type Systems = (Option<ParitySystem>, Option<CardinalitySystem>);
 
+/// What a probing round may spend: the lease it draws on, the allowance each
+/// probe is leased, the floor's limits for the loading, and the cancellation
+/// the loading polls.
+struct Probing<'l, 'q, Q: Quota + ?Sized> {
+    lease: &'l mut Leased<'q, Q>,
+    allowance: u64,
+    limits: FrozenPreparationLimits,
+    cancellation: &'l Cancellation,
+}
+
 /// The probing rounds a preparation may run: the first by the frozen reading
 /// alone, the second under the rows it established. A later round tightens
 /// a hull the round before left inexact, one probe per pattern of each such
@@ -464,12 +479,7 @@ fn probe_rounds<Q: Quota + ?Sized>(
     groups: &[&proposals::Group],
     probe: &mut probes::Probe<'_>,
     scratch: &mut NarrowingScratch,
-    (limits, cancellation, lease, allowance): (
-        FrozenPreparationLimits,
-        &Cancellation,
-        &mut Leased<'_, Q>,
-        u64,
-    ),
+    probing: &mut Probing<'_, '_, Q>,
     statistics: &mut FrozenPreparationStatistics,
     peak: &mut u128,
 ) -> Result<Systems, BudgetError<LeaseRefusal<Q::Error>>> {
@@ -486,10 +496,12 @@ fn probe_rounds<Q: Quota + ?Sized>(
             .iter()
             .map(|&index| 1_u64 << groups[index].support.len)
             .sum();
-        lease.extend(probes.saturating_mul(allowance));
+        probing
+            .lease
+            .extend(probes.saturating_mul(probing.allowance));
         let mut progressed = false;
         {
-            let mut meter = Meter::reserved(lease);
+            let mut meter = Meter::reserved(probing.lease);
             for &index in &pending {
                 let mut counts = (0, 0);
                 let forbidden = probe
@@ -498,7 +510,7 @@ fn probe_rounds<Q: Quota + ?Sized>(
                         parity.as_ref(),
                         &mut counts,
                         scratch,
-                        cancellation,
+                        probing.cancellation,
                         &mut meter,
                     )
                     .map_err(from_meter)?;
@@ -514,8 +526,13 @@ fn probe_rounds<Q: Quota + ?Sized>(
             meter.refund();
         }
         let loaded = {
-            let mut meter = Meter::reserved(lease);
-            let mut budget = Budget::new(&mut meter, limits.work, limits.bytes, cancellation);
+            let mut meter = Meter::reserved(probing.lease);
+            let mut budget = Budget::new(
+                &mut meter,
+                probing.limits.work,
+                probing.limits.bytes,
+                probing.cancellation,
+            );
             let loaded = load(theory, &tables, statistics, &mut budget);
             *peak = (*peak).max(budget.peak_bytes());
             budget.finish();
