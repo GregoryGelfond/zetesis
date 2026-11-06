@@ -28,7 +28,7 @@ use super::{
     budget::{Budget, BudgetError},
     cardinality, hull, parity,
     root_facts::CheckedRootFacts,
-    rows::{self, Source},
+    rows,
     source::{self, Support},
     storage::Storage,
     work::Phase,
@@ -697,11 +697,10 @@ fn load<Q: Quota + ?Sized>(
                 }
                 for &local in proposed.equations() {
                     let words = rows::materialize(theory, *support, local, &mut storage, budget)?;
-                    budget.charge(3)?; // constant, probed-source tag and group
+                    budget.charge(1)?; // the constant
                     let candidate = rows::Equation {
                         words,
                         constant: local.constant,
-                        source: Source::Probed { group },
                     };
                     let valid = source::implied_by_table(
                         forbidden.storage(),

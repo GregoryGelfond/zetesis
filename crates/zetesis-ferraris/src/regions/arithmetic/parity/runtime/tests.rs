@@ -7,7 +7,7 @@ use super::super::super::{
     ParitySystem,
     budget::Budget,
     parity, root_facts,
-    rows::{Counts, Equation, Recognized, Source},
+    rows::{Counts, Equation, Recognized},
     storage::Storage,
 };
 use crate::{regions::NarrowingScratch, test_support::constructed_theory};
@@ -32,7 +32,6 @@ fn system(atoms: usize, specifications: &[(Vec<usize>, bool)]) -> ParitySystem {
             Equation {
                 words: words.into(),
                 constant: *constant,
-                source: Source::Clauses { first: 0, count: 0 },
             }
         })
         .collect();

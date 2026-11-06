@@ -7,7 +7,7 @@ use zetesis_algebra::{Cancellation, Stop};
 use super::super::{
     budget::{Budget, BudgetError},
     parity::{Prepared, Unit, build_index, prepare},
-    rows::{Equation, Source},
+    rows::Equation,
     storage::Storage,
 };
 
@@ -22,7 +22,6 @@ fn equations(atom_count: usize, specifications: &[(usize, bool)]) -> Vec<Equatio
             Equation {
                 words: words.into(),
                 constant,
-                source: Source::Clauses { first: 0, count: 0 },
             }
         })
         .collect()
