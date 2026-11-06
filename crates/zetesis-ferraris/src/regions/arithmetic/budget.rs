@@ -3,7 +3,11 @@
 //! A primitive reserves its complete worst-case chunk before it executes and
 //! settles only its actual logical work, including a typed failure. Optional
 //! preparation exhaustion does not conceal cancellation or a refused global
-//! reservation. The existing narrowing meter retains and refunds spare permits.
+//! reservation. Control is observed as every metered operation observes it:
+//! by the reserved meter's account at every refill of `POLL_INTERVAL` permits,
+//! by this budget before a refusal is reported, and where an operation begins
+//! work it must not start once stopped. The existing narrowing meter retains
+//! and refunds spare permits.
 
 use zetesis_algebra::{Cancellation, Failure, LocalQuota, Meter, MeterBytes, Quota, Stop};
 
@@ -77,18 +81,44 @@ impl<'a, 'q, Q: Quota + ?Sized> Budget<'a, 'q, Q> {
         maximum: u64,
         operation: impl FnOnce() -> (T, u64),
     ) -> Result<T, BudgetError<Q::Error>> {
-        self.cancellation.poll().map_err(BudgetError::Stopped)?;
-        let fits = maximum <= self.max_work.saturating_sub(self.work());
-        self.work
-            .bounded(maximum, || {
-                if fits {
-                    let (value, actual) = operation();
-                    (Ok(value), actual)
-                } else {
-                    (Err(BudgetError::WorkDeclined), 0)
-                }
-            })
-            .map_err(BudgetError::from)?
+        if maximum > self.max_work.saturating_sub(self.work()) {
+            return Err(self.declined(maximum));
+        }
+        match self.work.bounded(maximum, operation) {
+            Ok(value) => Ok(value),
+            Err(failure) => Err(self.refused(BudgetError::from(failure))),
+        }
+    }
+
+    /// The optional allowance declines: the global reservation is still made
+    /// first, so its refusal takes precedence, and a stop observed before
+    /// either is reported in their place.
+    #[cold]
+    #[inline(never)]
+    fn declined(&mut self, maximum: u64) -> BudgetError<Q::Error> {
+        match self.work.bounded(maximum, || ((), 0)) {
+            Ok(()) => self.refused(BudgetError::WorkDeclined),
+            Err(failure) => self.refused(BudgetError::from(failure)),
+        }
+    }
+
+    /// A refusal as reported: a stop observed first takes its place.
+    #[cold]
+    #[inline(never)]
+    fn refused(&self, error: BudgetError<Q::Error>) -> BudgetError<Q::Error> {
+        match self.cancellation.poll() {
+            Err(stop) => BudgetError::Stopped(stop),
+            Ok(()) => error,
+        }
+    }
+
+    /// Observe control: a requested stop is reported before any further work.
+    /// Out of line, so that the bounded charge it guards stays small enough to
+    /// inline where it is hot.
+    #[cold]
+    #[inline(never)]
+    pub(super) fn poll(&self) -> Result<(), BudgetError<Q::Error>> {
+        self.cancellation.poll().map_err(BudgetError::Stopped)
     }
 
     /// Read through the canonical formula view of an admitted owner.

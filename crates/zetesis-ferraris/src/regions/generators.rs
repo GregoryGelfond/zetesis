@@ -470,9 +470,25 @@ struct Budget<'a, 'q, Q: Quota + ?Sized> {
 }
 
 impl<Q: Quota + ?Sized> Budget<'_, '_, Q> {
+    /// Charge one operation. Control is observed as a metered operation
+    /// observes it: the order's entry before the first charge, the reserved
+    /// meter's account at every refill of `POLL_INTERVAL` permits, and this
+    /// tick before a refused charge is reported.
     fn tick(&mut self) -> Result<(), GeneratorOrderError<Failure<Q::Error>>> {
+        if let Err(failure) = self.work.tick() {
+            self.poll()?;
+            return Err(GeneratorOrderError::from(failure));
+        }
+        Ok(())
+    }
+
+    /// Observe control, out of line so that the tick it guards stays small
+    /// enough to inline where it is hot.
+    #[cold]
+    #[inline(never)]
+    fn poll(&self) -> Result<(), GeneratorOrderError<Failure<Q::Error>>> {
         self.cancellation.poll()?;
-        self.work.tick().map_err(GeneratorOrderError::from)
+        Ok(())
     }
 
     fn observe(&mut self, bytes: u128) -> Result<(), GeneratorOrderError<Failure<Q::Error>>> {
