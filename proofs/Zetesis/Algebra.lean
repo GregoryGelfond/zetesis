@@ -1339,11 +1339,13 @@ theorem saturation_unit (T : Theory α) (M : Atoms α) (s : Subject (Countermode
 
 /-- **The membership check's construction.** The countermodel walk takes only the
 theory and the candidate: its root is `ReductRegions.query M` and its subjects are
-built from `T` and `M` alone: the frozen subject, and the rows of the countermodels
-a preparation installs, each a subject of the class through `row` with a `RowOf`
+built from `T` and `M` alone: the frozen subject; the parity rows and units a
+preparation installs, each a subject of the class through `row` with a `RowOf`
 proof from `entailed_by_refutations` or `saturation_unit`, over the frozen subject
 in the first probing round and, in a later round, over the frozen subject composed
-with the rows of the round before (`joint_sound`).
+with the rows of the round before (`joint_sound`); and its count bounds, subjects
+through `doubleCount` and the guarded bounds, with `LowerOf` and `UpperOf` from
+`AlgebraicRows.bounds_of_allowed`, `upper_of_clique` and `lower_of_clause`.
 It takes no supplied subject and no supplied root knowledge. That the Rust reduct
 query keeps to this construction, probing from the closed query root and never
 sharing a preparation across candidates, is an implementation obligation, a
