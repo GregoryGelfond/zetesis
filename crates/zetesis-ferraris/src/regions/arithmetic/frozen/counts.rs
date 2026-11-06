@@ -1,4 +1,5 @@
-//! Count bounds of the countermodel class from the probed tables.
+//! Count bounds of the countermodel class from the probed tables and the
+//! clauses too wide for a group.
 //!
 //! A table's least and greatest allowed counts bound its support
 //! (`bounds_of_allowed`), the least one when the empty pattern is forbidden,
@@ -6,16 +7,15 @@
 //! and below the support's size; and the pairs no allowed pattern holds
 //! together, read from every table, grow into cliques, each an upper bound
 //! of one (`upper_of_clique`), which carry a greatest count of one, as the
-//! A clause too wide for a group whose pattern cuts its whole support
-//! bounds that support from below by one with no table (`lower_of_clause`):
-//! no countermodel in the root cuts it whole, by the static refutations'
-//! argument.
-//! hull's unit rows carry one of nothing. Atoms one side covers and the other does not
-//! get the other side's trivial bound, nothing at least or everything at
-//! most, so that the families partition one atom set both ways. The bounds
-//! carry no guard: a table's guard is cut at the closed root, by a
-//! saturation unit or already, which makes the bound a row of the class as
-//! the parity rows are.
+//! hull's unit rows carry one of nothing. A clause too wide for a group
+//! whose pattern cuts its whole support bounds that support from below by
+//! one with no table (`lower_of_clause`): no countermodel in the root cuts
+//! it whole, by the static refutations' argument. Atoms one side covers and
+//! the other does not get the other side's trivial bound, nothing at least
+//! or everything at most, so that the families partition one atom set both
+//! ways. The bounds carry no guard: a table's guard is cut at the closed
+//! root, by a saturation unit or already, which makes the bound a row of the
+//! class as the parity rows are.
 
 use zetesis_algebra::{
     Quota, Stop,
