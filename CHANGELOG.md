@@ -4,6 +4,12 @@ Notable changes by release. Versions follow Semantic Versioning.
 
 ## Unreleased
 
+The 0.7.0 candidate brings candidate search and reduct checking onto the same
+region algebra. On eligible quantified programs, the checker derives parity and
+count bounds from the frozen reduct to rule out whole groups of subsets. Users
+of the Rust libraries and consumers of JSON model output should review the
+compatibility changes below before upgrading.
+
 ### Added
 
 - The membership check's inner walk is narrowed by subjects of its own. Before
@@ -401,6 +407,13 @@ Notable changes by release. Versions follow Semantic Versioning.
   on the schedule.
 
 ### Fixed
+
+- A search within a supplied countermodel region preserves witnesses when a
+  rule has multiple possible heads or a nested formula is false in the
+  candidate. This also applies when the host completes a GPU residual.
+- Preparing parity and count bounds for a candidate's reduct now accounts for
+  simultaneously live temporary and retained storage. If the optional byte
+  allowance is too small, the solver continues the ordinary reduct check.
 
 - A default install no longer replaces the GPU-capable `zetesis` in Cargo's
   build output with the CPU front, so running that copy serves GPU requests. A
