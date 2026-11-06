@@ -500,9 +500,9 @@ clause form is built anywhere on the route.
 The query walk has subjects of its own. After its root's first closure the
 candidate's inner subjects are prepared from that closed root: the guards
 whose holding reaches the candidate are cut as units; each clause group's
-patterns are probed, in at most two rounds, by narrowing a copy of the closed
-root with the guard and the pattern decided, and the allowed patterns' affine
-hull and least and greatest counts, with the cliques of pairwise exclusions
+patterns that a clause does not already forbid are probed, in at most two
+rounds, by narrowing a copy of the closed root with the guard and the pattern
+decided, and the allowed patterns' affine hull and least and greatest counts, with the cliques of pairwise exclusions
 and the trivial bounds completing a partition, load the same parity and
 cardinality systems the candidate walk uses. From then on every region of the
 query, inline or served, narrows through the one joint driver with the frozen

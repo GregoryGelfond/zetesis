@@ -176,11 +176,11 @@ since only the leaf's emission resolves its region.
 After the query root's first closure, the candidate's inner subjects are
 prepared from that closed root (`zetesis_ferraris::FrozenPreparation`): the
 saturation units it cuts, the parity rows and count bounds of its countermodel
-class, probed by narrowing copies of the closed root with a guard and a pattern
-decided, in at most two rounds. Every later narrowing of the query, inline or
-served, runs through the same joint driver with the frozen reading eager and
-those systems late; a preparation serves its own candidate's query alone and is
-dropped with it. `ReductStatistics::inner_preparation` reports it.
+class, the patterns a clause does not already forbid probed by narrowing
+copies of the closed root with a guard and a pattern decided, in at most two
+rounds. Every later narrowing of the query, inline or served, runs through the
+same joint driver with the frozen reading eager and those systems late; a
+preparation serves its own candidate's query alone and is dropped with it. `ReductStatistics::inner_preparation` reports it.
 
 The narrowing is driven by a worklist over an index of the theory, built
 once, when the walk first needs it (a run a positive certificate decides
