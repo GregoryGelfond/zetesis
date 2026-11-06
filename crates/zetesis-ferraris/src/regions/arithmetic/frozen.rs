@@ -380,7 +380,12 @@ fn build<Q: Quota + ?Sized>(
     let mut units = Vec::new();
     let mut groups = Vec::new();
     let allowance = query.closure_work.saturating_add(probe.narrower_work());
-    lease.extend((proposals.guards.len() as u64).saturating_mul(allowance));
+    let open_guards = proposals
+        .guards
+        .iter()
+        .filter(|&&guard| query.region.is_open(guard))
+        .count() as u64;
+    lease.extend(open_guards.saturating_mul(allowance));
     {
         let mut meter = Meter::reserved(lease);
         for &guard in &proposals.guards {
@@ -421,6 +426,10 @@ fn build<Q: Quota + ?Sized>(
         || cardinality
             .as_ref()
             .is_some_and(CardinalitySystem::root_refuted);
+    if units.is_empty() && parity.is_none() && cardinality.is_none() {
+        // Nothing to install: no unit, no row, no bound.
+        return Ok(None);
+    }
     let candidate = query.candidate.try_clone().map_err(BudgetError::Source)?;
     Ok(Some(FrozenPreparation {
         owner: theory.clone(),

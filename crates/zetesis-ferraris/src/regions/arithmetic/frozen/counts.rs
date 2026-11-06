@@ -124,20 +124,24 @@ fn complete<Q: Quota + ?Sized>(
         (BoundSide::Lower, &lower, &upper),
         (BoundSide::Upper, &upper, &lower),
     ] {
+        // Two passes over the atoms, each charged: the count names the
+        // bound's value, the second pass its support.
+        let missing = || {
+            (0..theory.atom_count()).filter(|&atom| other.contains(atom) && !covered.contains(atom))
+        };
         budget.charge(theory.atom_count() as u64)?;
-        let missing: Vec<usize> = (0..theory.atom_count())
-            .filter(|&atom| other.contains(atom) && !covered.contains(atom))
-            .collect();
-        if missing.is_empty() {
+        let count = missing().count();
+        if count == 0 {
             continue;
         }
         let value = match side {
             BoundSide::Lower => 0,
-            BoundSide::Upper => missing.len() as u64,
+            BoundSide::Upper => count as u64,
         };
+        budget.charge(theory.atom_count() as u64)?;
         let bound = bound(
             (side, value),
-            missing.iter().copied(),
+            missing(),
             (bounds.len(), 0),
             width,
             storage,

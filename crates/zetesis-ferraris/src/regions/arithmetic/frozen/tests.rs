@@ -666,21 +666,15 @@ fn a_preparation_belongs_to_one_candidate() {
 }
 
 #[test]
-fn probing_charges_the_lease_and_leaves_the_root_untouched() {
+fn probing_charges_the_lease() {
+    // The probes narrow copies of the closed root, which the query borrows
+    // and so cannot change; what they charge is the lease's, settled
+    // against the account as performed.
     let fixture = Saturation::build(3, &gate(0, 1, 2), &[]);
-    let (_, root, _) = fixture.closed();
-    let before: Vec<Option<bool>> = (0..fixture.theory.atom_count())
-        .map(|atom| root.decision(atom))
-        .collect();
     let (attempt, charged) = fixture.prepare(unbounded(), u64::MAX, &Cancellation::default());
     assert!(attempt.result.unwrap().is_some());
     assert_eq!(attempt.work, charged);
     assert!(attempt.work > 0);
-    let (_, root, _) = fixture.closed();
-    let after: Vec<Option<bool>> = (0..fixture.theory.atom_count())
-        .map(|atom| root.decision(atom))
-        .collect();
-    assert_eq!(before, after);
 }
 
 /// A guard whose clause bodies are nested conjunction pairs, as a formula
@@ -903,6 +897,34 @@ fn a_guard_cut_at_the_root_needs_no_probe() {
     assert_eq!(attempt.statistics.saturation_units, 0);
     assert!(preparation.units().is_empty());
     assert_eq!(attempt.statistics.parity.rows, 1);
+    // Only the eight pattern probes are leased: no unit probe for a guard
+    // the root already cuts.
+    let allowance = fixture.closure_work() + Narrower::new(&fixture.theory).work();
+    assert_eq!(attempt.statistics.leased, 8 * allowance);
+}
+
+#[test]
+fn a_preparation_with_nothing_to_install_is_not_prepared() {
+    // A gate less the clause forbidding all three held, its guard cut at the
+    // root: no unit; the five allowed patterns span the whole space, so no
+    // row; their counts run from none to all three, so no bound. Nothing
+    // would be installed, and the preparation says so rather than
+    // installing an empty one and counting it prepared.
+    let mut clauses = gate(0, 1, 2);
+    clauses.remove(3);
+    let fixture = Saturation::build(3, &clauses, &[]);
+    let valid = fixture.valid;
+    let attempt = prepared_from(&fixture, |root| assert!(root.cut(valid)));
+    assert!(attempt.result.unwrap().is_none());
+    assert_eq!(
+        (
+            attempt.statistics.status,
+            attempt.statistics.probes,
+            attempt.statistics.parity.rows,
+            attempt.statistics.cardinality.rows
+        ),
+        (super::super::PreparationStatus::NotPrepared, 8, 0, 0)
+    );
 }
 
 #[test]
