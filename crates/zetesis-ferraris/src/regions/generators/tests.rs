@@ -403,7 +403,7 @@ fn every_prefix_across_observation_boundaries_has_exact_quota_work() {
     );
     let expected = expected.result.unwrap().unwrap();
     let interval = zetesis_algebra::POLL_INTERVAL;
-    for batch in [1, 7, 255, 256, 257, 16_384] {
+    for batch in [1, 7, interval - 1, interval, interval + 1, 16_384] {
         let near = |limit: u64, step: u64| {
             let offset = limit % step;
             offset <= 2 || step - offset <= 2
