@@ -458,7 +458,8 @@ fn a_pigeonhole_core_is_decided_at_the_root() {
     );
     let preparation = statistics.reduct.inner_preparation;
     assert_eq!(preparation.root_refuted, 1);
-    assert_eq!(preparation.bounds, 3 * 4 + 2);
+    // Five pigeons' clauses and four holes' cliques.
+    assert_eq!(preparation.bounds, 5 + 4);
 }
 
 #[test]
@@ -475,9 +476,9 @@ fn a_dropped_pigeon_candidate_finds_its_countermodel_in_few_regions() {
         (regions.regions, regions.refuted, regions.leaves),
         (55, 0, 1)
     );
-    // Four pigeons' clauses, four holes' cliques, four pigeons' own, and the
-    // bound of nothing completing the lower side over the dropped pigeon's.
-    assert_eq!(statistics.reduct.inner_preparation.bounds, 3 * 4 + 1);
+    // Four pigeons' clauses, four holes' cliques, and the bound of nothing
+    // completing the lower side over the dropped pigeon's.
+    assert_eq!(statistics.reduct.inner_preparation.bounds, 4 + 4 + 1);
 }
 
 #[test]

@@ -178,7 +178,7 @@ prepared from that closed root (`zetesis_ferraris::FrozenPreparation`): the
 saturation units it cuts, the parity rows and count bounds of its countermodel
 class, the patterns a clause does not already forbid probed by narrowing
 copies of the closed root with a guard and a pattern decided, in at most two
-rounds. Every later narrowing of the query, inline or served, runs through the
+rounds, a group of one clause cutting its whole support only in the second. Every later narrowing of the query, inline or served, runs through the
 same joint driver with the frozen reading eager and those systems late; a
 preparation serves its own candidate's query alone and is dropped with it. `ReductStatistics::inner_preparation` reports it.
 

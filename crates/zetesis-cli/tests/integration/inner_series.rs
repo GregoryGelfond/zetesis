@@ -278,12 +278,11 @@ fn tseitin_census(vertices: u64, receipt: &Receipt) {
 
 /// Pigeonhole with h holes: h + 1 pigeon clauses, each a group over its h
 /// holes, and h · (h + 1) · h / 2 exclusion pairs, each a group of two.
-/// Every table bounds its support: a pigeon's clause its lower bound of one,
-/// and the pairs grow into the holes' cliques and the pigeons' own, since a
-/// pigeon in two holes leaves the others too few. The stable candidate's
-/// root falls to the double count; a dropped-pigeon candidate's stands, with
-/// one clause and one clique the fewer and a bound of nothing over the
-/// dropped pigeon's places completing the lower side.
+/// A pigeon's clause, left to itself by the first round, bounds its holes
+/// from below by one, and the pairs grow into the holes' cliques. The stable
+/// candidate's root falls to the double count; a dropped-pigeon candidate's
+/// stands, with one clause the fewer and a bound of nothing over the dropped
+/// pigeon's places completing the lower side.
 fn pigeonhole_census(h: u64, receipt: &Receipt) {
     let p = &receipt.preparation;
     let candidates = receipt.candidates;
@@ -296,13 +295,12 @@ fn pigeonhole_census(h: u64, receipt: &Receipt) {
         candidates * (h + 1 + h * h * (h + 1) / 2) - (candidates - receipt.models),
         "holes={h}"
     );
-    // Per candidate a lower bound per pigeon clause, a clique per hole
-    // and a clique per pigeon; a dropped-pigeon candidate has one clause
-    // and one pigeon clique the fewer, and the completing bound of
-    // nothing over the dropped pigeon's places.
+    // Per candidate a lower bound per pigeon clause and a clique per hole;
+    // a dropped-pigeon candidate has one clause the fewer and the completing
+    // bound of nothing over the dropped pigeon's places.
     let pigeons = h + 1;
-    let stable = pigeons + h + pigeons;
-    let dropped = (pigeons - 1) + h + (pigeons - 1) + 1;
+    let stable = pigeons + h;
+    let dropped = (pigeons - 1) + h + 1;
     assert_eq!(
         count(p, "bounds"),
         receipt.models * stable + (candidates - receipt.models) * dropped,

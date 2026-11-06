@@ -593,8 +593,10 @@ fn known_refutations<Q: Quota + ?Sized>(
 const MAX_ROUNDS: u64 = 2;
 
 /// Probe the groups in rounds and load their rows and bounds: round one by
-/// the frozen reading alone, each later round under the parity rows the
-/// round before established, sound for the class as their joint closure is,
+/// the frozen reading alone, leaving a group of one clause cutting its whole
+/// support to that clause, whose table already bounds the support from below
+/// by one; each later round under the parity rows the round before
+/// established, sound for the class as their joint closure is,
 /// while a round refutes more patterns than the one before, some hull is
 /// still inexact, a parity row was loaded for a later round to narrow under
 /// and no system refutes the root; each round leases its
@@ -626,9 +628,15 @@ fn probe_rounds<Q: Quota + ?Sized>(
     let mut pending: Vec<usize> = (0..groups.len()).collect();
     while !pending.is_empty() && statistics.rounds < MAX_ROUNDS {
         statistics.rounds += 1;
+        // The first round leaves a group of one clause cutting its whole
+        // support to that clause: its table bounds the support from below by
+        // one, and only a later round's rows could refute more of it.
+        let settled_by_clause =
+            |index: usize| statistics.rounds == 1 && groups[index].patterns == [0];
         // The probes this round runs: the patterns not known refuted.
         let probes: u64 = pending
             .iter()
+            .filter(|&&index| !settled_by_clause(index))
             .map(|&index| {
                 let patterns = 1_u64 << groups[index].support.len;
                 let settled: u64 = known[index]
@@ -646,6 +654,12 @@ fn probe_rounds<Q: Quota + ?Sized>(
         {
             let mut meter = Meter::reserved(probing.lease);
             for &index in &pending {
+                if settled_by_clause(index) {
+                    tables[index].forbidden = Words::new(*known[index].storage());
+                    refuted[index] = 1;
+                    progressed = true;
+                    continue;
+                }
                 let found = probe
                     .table(
                         probes::Target {

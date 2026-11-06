@@ -16,7 +16,9 @@ Notable changes by release. Versions follow Semantic Versioning.
   quantified saturation cores (parity, Tseitin, pigeonhole) are decided at the
   root for their stable candidates and walked polynomially for the others. The
   probing runs at most two rounds, the second under the rows the first
-  established, and loads what they found with the remaining hulls inexact.
+  established, and loads what they found with the remaining hulls inexact; a
+  group of one clause cutting its whole support is left to that clause until
+  the second.
   zetesis-ferraris adds `FrozenPreparation`, `FrozenPreparationAttempt`,
   `FrozenPreparationLimits`, `FrozenPreparationStatistics`, `ClosedQuery` and
   `ParitySystem::consistent_in_reserved`; zetesis-stable adds
