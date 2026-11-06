@@ -24,6 +24,9 @@ pub(super) enum Kind {
     Asserted,
     ClauseLower,
     /// A frozen preparation's probed table or clique; never source-checked.
+    /// Its `Source` carries no formula coordinates: `root` and `node` hold a
+    /// table's index and side, a completing bound's ordinal, or a clique's
+    /// two lowest atoms, read only as the comparator's final tiebreak.
     Probed,
 }
 

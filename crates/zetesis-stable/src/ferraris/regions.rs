@@ -1562,7 +1562,8 @@ pub(crate) enum InnerPreparation {
     /// The query root has not closed under this walk: its first narrowed
     /// region, the root, prepares.
     Pending,
-    /// Prepared at the root, or found to propose nothing.
+    /// Prepared at the root; `None` when nothing was proposed or would be
+    /// installed, or the lease declined.
     Prepared(Option<Box<FrozenPreparation>>),
     /// Handed to a publication that could not return it: the walk goes on
     /// without rows and never prepares at a region below the root.

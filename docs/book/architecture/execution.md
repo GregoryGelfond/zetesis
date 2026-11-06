@@ -497,6 +497,19 @@ and a covered tree with no such leaf is the proof of minimality
 are then the same operation over the same index of the theory, and no
 clause form is built anywhere on the route.
 
+The query walk has subjects of its own. After its root's first closure the
+candidate's inner subjects are prepared from that closed root: the guards
+whose holding reaches the candidate are cut as units; each clause group's
+patterns are probed, in at most two rounds, by narrowing a copy of the closed
+root with the guard and the pattern decided, and the allowed patterns' affine
+hull and least and greatest counts, with the cliques of pairwise exclusions
+and the trivial bounds completing a partition, load the same parity and
+cardinality systems the candidate walk uses. From then on every region of the
+query, inline or served, narrows through the one joint driver with the frozen
+reading eager and these systems late, each preparation authenticated to its
+candidate at every use and dropped with the query. The receipts' `preparation`
+object (see the outcomes reference) reports what was prepared and what it cost.
+
 Because the regions share nothing, several workers can walk the tree at
 once (`--threads`, the host's available parallelism by default), started once
 the walk has run on one thread, in wall time since it began, for longer than
