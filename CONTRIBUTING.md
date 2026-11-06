@@ -336,7 +336,7 @@ Every target group must report its
 expected named passing tests. `scripts/check.sh hardware` qualifies the host's
 own device backend without instrumentation, Metal on macOS and Vulkan
 elsewhere, or the one named by `--metal` or `--vulkan`: the same eleven groups
-of 58 exact tests, each backend's reviewed selection, checking complete CPU/device
+of 59 exact tests, each backend's reviewed selection, checking complete CPU/device
 answer families and explicit failure boundaries; a change to a device route is qualified on
 every backend the hosts at hand expose, and the record says which. The
 portable report is retained separately; the CPU-only profile independently
