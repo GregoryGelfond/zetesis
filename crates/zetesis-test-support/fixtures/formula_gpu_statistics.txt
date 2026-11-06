@@ -10,4 +10,4 @@
   formula GPU slates: committed=1; largest=2; feedback resets=0; each slate takes one or more submitted batches
   formula GPU limits: propagation sweeps/candidate=64; propagation work/candidate=100000
   formula GPU resources: peak authored GPU bytes=4096; workgroup size=64
-  countermodel: search work=1581; decisions=1; candidates=2; queries=2; witnesses=0; candidate restrictions=0; verified stable models=2
+  countermodel: search work=1511; decisions=1; candidates=2; queries=2; witnesses=0; candidate restrictions=0; verified stable models=2
