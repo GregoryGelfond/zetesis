@@ -38,7 +38,7 @@ pub(super) fn record_candidate_worker(report: &WorkerReport) {
 /// The returned charge is one cold worker's extra work, not a fitted constant.
 fn cold_arithmetic_scratch_work(theory: &Theory) -> u64 {
     assert!((1..=64).contains(&theory.atom_count()));
-    let (search, index) = walk(theory, NEVER);
+    let (search, index) = with_region_checks(walk(theory, NEVER));
     let reading = search
         .shared
         .parts
@@ -341,8 +341,11 @@ fn outcome(search: &ParallelRegions, models: &[Vec<usize>]) -> Outcome {
 
 /// The reference: the walk that never engages, which steps the scalar walk's
 /// order on the calling thread.
-fn unengaged(theory: &Theory, certificate: Option<&Arc<Certification>>, refuted: bool) -> Outcome {
-    let (mut search, index) = walk(theory, NEVER);
+fn unengaged(
+    (mut search, index): (ParallelRegions, Arc<IndexedTheory>),
+    certificate: Option<&Arc<Certification>>,
+    refuted: bool,
+) -> Outcome {
     if refuted {
         omit_producers_for_membership_test(&mut search);
     }
@@ -465,7 +468,7 @@ impl Drop for FaultyWorker {
 /// engaging pull holds that step's lease and unmerged receipts when it
 /// engages.
 fn handoff(
-    theory: &Theory,
+    (mut search, index): (ParallelRegions, Arc<IndexedTheory>),
     certificate: Option<&Arc<Certification>>,
     filter: Option<&Arc<dyn crate::region_filter::tests::injection::Source>>,
     refuted: bool,
@@ -473,7 +476,6 @@ fn handoff(
 ) -> (ParallelRegions, Vec<Vec<usize>>) {
     CANDIDATE_WORKERS.set(0);
     ARITHMETIC_WORKERS.set(0);
-    let (mut search, index) = walk(theory, LATE);
     if refuted {
         // These handoffs require a rejected membership leaf in the engaging
         // pull, so optional original-producer pruning must not remove it.
@@ -559,7 +561,7 @@ fn the_deadline_can_pass_between_two_steps_of_a_pull() {
     // lease when it engages.
     let theory = loop_beside_choices(3);
     let scratch_initialization = cold_arithmetic_scratch_work(&theory);
-    let expected = unengaged(&theory, None, true);
+    let expected = unengaged(with_region_checks(walk(&theory, NEVER)), None, true);
     assert!(expected.countermodels > 0, "the reduct refutes leaves");
     let cold = expected.reduct.frozen_positive_preparation_work;
     assert!(
@@ -567,7 +569,13 @@ fn the_deadline_can_pass_between_two_steps_of_a_pull() {
         "the scalar workspace prepares its incidence graph"
     );
     for skip in 0..4 {
-        let (search, models) = handoff(&theory, None, None, true, skip);
+        let (search, models) = handoff(
+            with_region_checks(walk(&theory, LATE)),
+            None,
+            None,
+            true,
+            skip,
+        );
         let mut actual = outcome(&search, &models);
         let preparation = actual.reduct.frozen_positive_preparation_work;
         // The coordinator checked a leaf before handoff. One or both launched
@@ -595,10 +603,20 @@ fn a_handoff_keeps_the_certificate_checks_of_the_engaging_pull() {
     let theory = positive_loops(3);
     let scratch_initialization = cold_arithmetic_scratch_work(&theory);
     let certificate = positive(&theory);
-    let expected = unengaged(&theory, Some(&certificate), true);
+    let expected = unengaged(
+        with_region_checks(walk(&theory, NEVER)),
+        Some(&certificate),
+        true,
+    );
     assert_eq!(expected.certificate_checks, Some((8, 1, 7)));
     assert_eq!(expected.countermodel_queries, 0, "the certificate decides");
-    let (search, models) = handoff(&theory, Some(&certificate), None, true, 0);
+    let (search, models) = handoff(
+        with_region_checks(walk(&theory, LATE)),
+        Some(&certificate),
+        None,
+        true,
+        0,
+    );
     let mut actual = outcome(&search, &models);
     retain_single_workspace_work(&mut actual, &expected, scratch_initialization);
     assert_eq!(actual, expected);
@@ -612,10 +630,10 @@ fn a_handoff_counts_the_coordinators_tight_checks_once() {
     // workers theirs after it.
     let theory = tautologies(4);
     let certificate = tight(&theory);
-    let expected = unengaged(&theory, Some(&certificate), false);
+    let expected = unengaged(walk(&theory, NEVER), Some(&certificate), false);
     assert_eq!(expected.certificate_checks, Some((16, 16, 0)));
     for skip in 0..4 {
-        let (search, models) = handoff(&theory, Some(&certificate), None, false, skip);
+        let (search, models) = handoff(walk(&theory, LATE), Some(&certificate), None, false, skip);
         assert_eq!(outcome(&search, &models), expected, "after {skip} models");
     }
 }
@@ -628,8 +646,8 @@ fn a_filtered_handoff_prepares_at_most_one_checker_more_than_its_workers() {
         theory: theory.clone(),
         live: Arc::clone(&live),
     });
-    let expected = unengaged(&theory, None, true);
-    let (search, models) = handoff(&theory, None, Some(&filter), true, 1);
+    let expected = unengaged(walk(&theory, NEVER), None, true);
+    let (search, models) = handoff(walk(&theory, LATE), None, Some(&filter), true, 1);
     let preparations = search.filter().unwrap().statistics().preparations;
     assert!((1..=3).contains(&preparations), "{preparations}");
     assert_eq!(live.load(Ordering::SeqCst), 0);

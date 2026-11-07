@@ -2669,7 +2669,7 @@ The subjects built from the library's laws:
 | `frozen`, the head of `countermodelSubjects` | `known_sound` over the frozen reduct, and `ReductRegions.masked_known_sound` for propagation under the candidate's mask | The private frozen adapter reads `zetesis_ferraris::FrozenSubject`. The reduct query takes the existing authenticated `FormulaEvaluation`, derives its theory, candidate and frozen truth, and constructs its adapter, subset region and fresh frozen knowledge internally. It accepts no supplied subject or root state. Published query continuations retain their own authenticated entries; they are not new root constructors. Ferraris now indexes its knowledge and private reading context by the sealed class markers. The frozen closure borrows only common worker scratch; its learning capability is unit. A candidate closure can borrow the worker-owned ledger, which is never copied into regional knowledge. The marker does not bind a particular theory, candidate or state; the existing runtime ownership checks remain necessary |
 | `row` | `LearnedRegions.consequence_row_narrows` | The learned-row ledger's narrowing, and algebraic forcing rows (`AlgebraicRows.equation_forces_true`, `equation_forces_false`) |
 | `exclusion`, `doubleCount`, through `refuting` | `AlgebraicRows.excludes_region`, `double_count_excludes_region` | Algebraic refutations, a recognized parity row's exclusion and the double count |
-| the rows of `countermodelSubjects`: the parity rows and units through `row`, the count bounds through `doubleCount` and the guarded bounds | `Algebra.entailed_by_refutations` over `contains_decideAll` for a probed group's allowed patterns, `Algebra.saturation_unit` for a unit, `LearnedRegions.row_under_unit` for a row found under a guard the class cuts; `AlgebraicRows.upper_of_clique`, `bounds_of_allowed` and `lower_of_clause` giving the count bounds' `LowerOf` and `UpperOf` | A candidate's inner preparation: rows of the countermodel class recognized by probing the closed query root, loaded into the same parity and cardinality systems the candidate walk uses, applied by the countermodel walk's late tier. The preparation is built from the theory and the candidate alone and dropped with the query |
+| the rows of `countermodelSubjects`: the parity rows and units through `row`, the count bounds through `doubleCount` and the guarded bounds | `Algebra.entailed_by_refutations` over `contains_decideAll` for a probed group's allowed patterns, `Algebra.saturation_unit` for a unit, `LearnedRegions.row_under_unit` for a row found under a guard the class cuts; `AlgebraicRows.upper_of_clique`, `bounds_of_allowed` and `lower_of_clause` giving the count bounds' `LowerOf` and `UpperOf` | The inner preparation probes the closed query root for rows of the countermodel class. The countermodel walk's late tier applies them through the shared parity and cardinality systems. The preparation is built from the theory and the candidate alone and dropped with the query |
 
 What the Rust establishes for those rows, beyond the obligations the arithmetic subjects already carry for forced literals
 and threshold guards: recognition reads only the masked DAG and the closed root's knowledge; every probe narrows a copy of
@@ -3994,21 +3994,21 @@ checks do not authenticate system identity. The `copy_reserved` operations
 preserve the source and make a failed destination unavailable. Ordinary `Clone`
 does not provide metered copying.
 
-These are candidate-only kernels. The general laws quantify over a consequence
-class, but that does not authorize applying original-answer-set rows to
-`Countermodels`. The scalar walk, native workers, coordinator and slate producers
-compose these inspections through the common Subject driver. Parity, cardinality
-and streamed constraints follow the eager subjects; a changed late subject
-restarts eager propagation. The source adapter retains its own first-call marker,
-so arithmetic progress cannot make the source's first call a continuation.
+Rows prepared from the original theory are consequences for its answer sets.
+The frozen countermodel walk uses rows proved for its own candidate and reduct.
+The default candidate schedules omit per-region parity and cardinality
+inspections after root preparation. When composing these inspections, the
+common Subject driver orders parity, cardinality and streamed constraints after
+the eager subjects. A changed late subject restarts eager propagation. The source
+adapter retains its own first-call marker so its first visit starts a source pass.
 
 `CandidateKnowledge` keeps the arithmetic snapshots separate from restriction
 and objective generations. The charged copy operation preserves parent state
 and makes a refused child unavailable. Each returned attempt publishes its work
 and applied decisions before its outcome is handled. Completed inspections and
 semantic refutations have separate activity fields; an interrupted attempt
-claims neither. These schedule adapters introduce no arithmetic subject or
-receipt into the frozen countermodel walk.
+claims neither. The frozen countermodel walk records its own arithmetic in
+`ReductStatistics::inner_preparation`.
 
 The general laws do not establish the adapters' exact permit ownership, refund,
 publication or concurrent lifetime behavior. Those remain executable refinement

@@ -14,6 +14,13 @@ use crate::{
 };
 use zetesis_ferraris::{AdmissionLimits, Interpretation, Narrower, Node, Region, Theory};
 
+impl RegionProposals {
+    pub(in crate::ferraris) fn enable_region_checks(&mut self) {
+        let statistics = self.statistics();
+        self.parts.enable_region_checks(&statistics);
+    }
+}
+
 fn nonzero(count: usize) -> NonZeroUsize {
     NonZeroUsize::new(count).unwrap()
 }

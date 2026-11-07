@@ -5,8 +5,8 @@ use std::time::Duration;
 
 use super::*;
 use crate::budget::LocalQuota;
-use crate::ferraris::fresh_membership;
 use crate::ferraris::original_index::{OriginalIndex, hooks};
+use crate::ferraris::{Proposer, fresh_membership};
 use crate::reduct::State;
 use crate::{
     BatchLimits, BatchVerdict, CertificateLimits, CertificateOrder, Limits, SearchLimits,
@@ -102,6 +102,17 @@ fn indexing_work(theory: &Theory) -> u64 {
 // classical-candidate route even when optional producer pruning can decide the
 // fixture earlier. The original theory, index identity and choice marks remain.
 impl OriginalParts {
+    pub(in crate::ferraris) fn enable_region_checks(
+        &mut self,
+        statistics: &RegionSearchStatistics,
+    ) {
+        assert_eq!(statistics.counts.regions, 0, "before the first narrowing");
+        self.arithmetic
+            .as_mut()
+            .expect("fixture has checked arithmetic")
+            .enable_region_checks(statistics.parity.rank, statistics.cardinality.families);
+    }
+
     pub(in crate::ferraris) fn omit_producers_for_membership_test(&mut self) {
         self.producers = None;
     }
@@ -209,61 +220,87 @@ fn unchanged_arithmetic_work(
     arithmetic.charged()
 }
 
+/// Measure the root's direct narrowing and any explicitly enabled inspection.
+fn cycle_root_work(theory: &Theory, outer_checks: bool) -> u64 {
+    let cancellation = Cancellation::default();
+    let extraction =
+        zetesis_ferraris::producers(theory, RegionLimits::default(), &cancellation).unwrap();
+    let narrower = Narrower::new(theory);
+    let mut region = Region::all_open(theory.atom_count());
+    let mut scratch = NarrowingScratch::default();
+    let prepared = RootPreparation::prepare_reserved(
+        theory,
+        extraction.producers.as_ref(),
+        PreparationLimits {
+            work: PreparationLimits::DEFAULT_WORK,
+            bytes: usize::try_from(Limits::default().max_reduct_bytes).unwrap_or(usize::MAX),
+        },
+        &cancellation,
+        &mut Meter::local(u64::MAX),
+    );
+    assert!(
+        prepared.parity.rank > 0,
+        "cycle supplies a real parity basis"
+    );
+    assert_eq!(
+        prepared.cardinality.families, 0,
+        "cycle supplies no counting pair"
+    );
+    let prepared = prepared
+        .result
+        .unwrap()
+        .expect("the tiny original arithmetic is prepared");
+    assert!(!prepared.root_refuted());
+    // The walk's subject carries its learned rows; so does this one.
+    let learning = LearningOwner::theory(theory, LearningLimits::default());
+    let attempt = narrower.narrow_known(
+        OriginalSubject::carrier(&learning, extraction.producers.as_ref())
+            .with_choices(&extraction.choice_heads),
+        &mut region,
+        &mut narrower.knowledge(),
+        &mut scratch,
+        RegionLimits::default(),
+        &cancellation,
+    );
+    let closed = attempt.result.unwrap();
+    let direct = attempt.statistics;
+    assert!(matches!(closed, Narrowing::Fixed { .. }));
+    assert_eq!(region.open().count(), 0);
+    assert_eq!(region.held().count(), 0);
+    let arithmetic = if outer_checks {
+        unchanged_arithmetic_work(&prepared, &mut region, &mut scratch, &cancellation)
+    } else {
+        0
+    };
+    direct.work + arithmetic
+}
+
 #[test]
 fn an_enumeration_builds_one_original_index() {
+    assert_single_index_work(false);
+}
+
+#[test]
+fn outer_arithmetic_reuses_the_original_index() {
+    assert_single_index_work(true);
+}
+
+fn assert_single_index_work(outer_checks: bool) {
     // The candidate walk builds one original index. Possible-founded closure
     // cuts the positive cycle before membership, leaving the empty candidate.
     // Its frozen-positive check shares that index and builds no subset regions.
     for (route, workers, producers) in ROUTES {
         let theory = cycle();
-        let cancellation = Cancellation::default();
-        let extraction =
-            zetesis_ferraris::producers(&theory, RegionLimits::default(), &cancellation).unwrap();
-        let narrower = Narrower::new(&theory);
-        let mut region = Region::all_open(theory.atom_count());
-        let mut scratch = NarrowingScratch::default();
-        let prepared = RootPreparation::prepare_reserved(
-            &theory,
-            extraction.producers.as_ref(),
-            PreparationLimits {
-                work: PreparationLimits::DEFAULT_WORK,
-                bytes: usize::try_from(Limits::default().max_reduct_bytes).unwrap_or(usize::MAX),
-            },
-            &cancellation,
-            &mut Meter::local(u64::MAX),
-        );
-        assert!(
-            prepared.parity.rank > 0,
-            "cycle supplies a real parity basis"
-        );
-        assert_eq!(
-            prepared.cardinality.families, 0,
-            "cycle supplies no counting pair"
-        );
-        let prepared = prepared
-            .result
-            .unwrap()
-            .expect("the tiny original arithmetic is prepared");
-        assert!(!prepared.root_refuted());
-        // The walk's subject carries its learned rows; so does this one.
-        let learning = LearningOwner::theory(&theory, LearningLimits::default());
-        let attempt = narrower.narrow_known(
-            OriginalSubject::carrier(&learning, extraction.producers.as_ref())
-                .with_choices(&extraction.choice_heads),
-            &mut region,
-            &mut narrower.knowledge(),
-            &mut scratch,
-            RegionLimits::default(),
-            &cancellation,
-        );
-        let closed = attempt.result.unwrap();
-        let direct = attempt.statistics;
-        assert!(matches!(closed, Narrowing::Fixed { .. }));
-        assert_eq!(region.open().count(), 0);
-        assert_eq!(region.held().count(), 0);
-        let arithmetic_work =
-            unchanged_arithmetic_work(&prepared, &mut region, &mut scratch, &cancellation);
+        let root_work = cycle_root_work(&theory, outer_checks);
         let mut search = enumeration(&theory, route, workers, producers, Limits::default());
+        if outer_checks {
+            match &mut search.proposer {
+                Proposer::Regions(walk) => walk.parts.enable_region_checks(&walk.statistics),
+                Proposer::Parallel(walk) => walk.enable_region_checks(),
+                Proposer::Proposals(walk) => walk.enable_region_checks(),
+                Proposer::Refuted(_) => panic!("the cycle must reach the candidate walk"),
+            }
+        }
         let setup = search.statistics();
         assert_eq!(setup.regions.unwrap().counts.regions, 0, "{route}");
         assert_eq!(
@@ -272,9 +309,8 @@ fn an_enumeration_builds_one_original_index() {
             "{route}"
         );
         // The independent constructor receipt, exact N+E index charge,
-        // direct core narrowing and actual late arithmetic are the walk.
-        let region_work =
-            setup.search.work + indexing_work(&theory) + direct.work + arithmetic_work;
+        // and the independent root closure account for the entire walk.
+        let region_work = setup.search.work + indexing_work(&theory) + root_work;
         assert_eq!(
             hooks::builds(&theory),
             0,
@@ -294,10 +330,10 @@ fn an_enumeration_builds_one_original_index() {
         assert_eq!(
             counts.arithmetic,
             arithmetic_counts::ArithmeticCounts {
-                parity_passes: 1,
+                parity_passes: u64::from(outer_checks),
                 ..Default::default()
             },
-            "{route}: only the nonempty basis is inspected"
+            "{route} with outer checks {outer_checks}"
         );
         assert_eq!(statistics.reduct.regions.work, 0, "{route}");
         assert_eq!(statistics.reduct.frozen_positive_attempts, 1, "{route}");

@@ -444,11 +444,10 @@ Both systems share an optional allowance of 100,000,000 logical word operations
 and the inherited preparation-byte allowance. Exhausting an optional allowance
 discards the whole preparation and keeps ordinary candidate generation.
 Cancellation, global work refusal, allocation and invalid source reads remain
-typed failures. No partially prepared rows or units escape. If a candidate
-walk starts, it runs the parity check only when the prepared basis has a row,
-and the counting check only when preparation retained a checked pair of
-families. Empty systems consume no per-region arithmetic passes. Preparation
-work and candidate-state copies retain their own charges.
+typed failures. Only a completed preparation publishes rows or units. The default
+candidate walk uses the prepared root and skips further parity and cardinality
+inspections of candidate regions, even when preparation found a nonempty basis
+or a checked pair of counting families.
 
 With an active restriction or without a prepared generator order, the existing
 preference applies. Open atoms that head an atomic choice root of the
@@ -503,9 +502,9 @@ whose holding reaches the candidate are cut as units; each clause group's
 patterns that a clause does not already forbid are probed, in at most two
 rounds, by narrowing a copy of the closed root with the guard and the pattern
 decided (a group of one clause cutting its whole support only in the second), and the allowed patterns' affine hull and least and greatest counts, with the cliques of pairwise exclusions
-and the trivial bounds completing a partition, load the same parity and
-cardinality systems the candidate walk uses. From then on every region of the
-query, inline or served, narrows through the one joint driver with the frozen
+and the trivial bounds completing a partition, supply rows and bounds to the
+parity and cardinality systems for this query. From then on every region of
+the query, inline or served, narrows through the one joint driver with the frozen
 reading eager and these systems late, each preparation authenticated to its
 candidate at every use and dropped with the query. The receipts' `preparation`
 object (see the outcomes reference) reports what was prepared and what it cost.

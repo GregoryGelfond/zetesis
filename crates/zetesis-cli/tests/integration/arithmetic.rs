@@ -192,6 +192,14 @@ fn even_parity_preserves_both_complete_answers() {
         assert_eq!(regions.parity.status, PreparationStatus::Prepared);
         assert_eq!(regions.parity.rows, 4);
         assert_eq!(regions.parity.rank, 3);
+        assert_eq!(
+            (
+                regions.parity.region_passes,
+                regions.parity.forced,
+                regions.parity.refuted
+            ),
+            (0, 0, 0)
+        );
         assert!(!regions.parity.root_refuted);
         assert!(!regions.cardinality.root_refuted);
         receipts(&document, regions.parity, regions.cardinality);
@@ -224,6 +232,13 @@ fn a_guarded_count_preserves_inactive_guard_answers() {
         assert!(regions.cardinality.guarded > 0);
         assert!(regions.cardinality.upper > 0);
         assert!(regions.cardinality.phases.provenance > 0);
+        assert_eq!(
+            (
+                regions.cardinality.region_passes,
+                regions.cardinality.refuted
+            ),
+            (0, 0)
+        );
         assert!(!regions.parity.root_refuted);
         assert!(!regions.cardinality.root_refuted);
         receipts(&document, regions.parity, regions.cardinality);

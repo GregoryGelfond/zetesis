@@ -50,6 +50,14 @@ fn search_engaging(
         zetesis_ferraris::AdmissionLimits::default(),
     )
     .unwrap();
+    search_theory(&theory, workers, engagement)
+}
+
+fn search_theory(
+    theory: &Theory,
+    workers: usize,
+    engagement: Engagement,
+) -> (ParallelRegions, Arc<IndexedTheory>) {
     let cancellation = Cancellation::with_deadline(Instant::now() + 3 * WAIT).unwrap();
     let limits = Limits::default();
     let mut budget = Budget {
@@ -60,7 +68,7 @@ fn search_engaging(
     };
     let search = ParallelRegions::new(
         crate::ferraris::regions::open(
-            &theory,
+            theory,
             limits.max_reduct_bytes,
             limits.learning,
             &mut budget,
@@ -73,7 +81,7 @@ fn search_engaging(
         &mut budget,
     )
     .unwrap();
-    (search, super::original(&theory))
+    (search, super::original(theory))
 }
 
 /// Created-but-unresolved regions, as the workers read them.
@@ -946,7 +954,9 @@ fn a_worker_splits_the_root_on_the_original_choice_head() {
 
 /// Isolate the worker allowance from preparation already completed by `search`.
 fn copy_search(max_work: u64) -> (ParallelRegions, Arc<IndexedTheory>) {
-    let (mut search, original) = search(2);
+    let theory = crate::ferraris::fixtures::choice_beside_a_loop();
+    let (mut search, original) =
+        with_region_checks(search_theory(&theory, 2, Engagement::Immediate));
     Arc::get_mut(&mut search.shared).unwrap().budget = SharedBudget::new(
         crate::SearchLimits {
             max_work,
@@ -980,10 +990,6 @@ fn split_copy_work() -> (SearchStatistics, RegionCounts, u64) {
         .parts
         .reading(original.theory(), original.narrower())
         .unwrap();
-    assert!(
-        reading.arithmetic.is_some(),
-        "exercise the actual arithmetic subject slots"
-    );
     let narrowing = super::super::super::regions::narrow(
         reading,
         &search.shared.restrictions.read().unwrap(),
@@ -1004,6 +1010,10 @@ fn split_copy_work() -> (SearchStatistics, RegionCounts, u64) {
             &mut counts,
         )
         .unwrap();
+    assert!(
+        counts.arithmetic.parity_passes > 0,
+        "the split copies knowledge initialized by a parity inspection"
+    );
     assert!(matches!(
         walk::inspect(&entry, narrowing, Counting::Never, false),
         walk::Step::Split(_)

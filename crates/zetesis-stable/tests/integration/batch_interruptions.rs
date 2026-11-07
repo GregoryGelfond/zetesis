@@ -177,17 +177,11 @@ fn residual_work_exhaustion_cannot_commit_an_earlier_certified_prefix() {
 
 #[test]
 fn every_first_proposal_work_cutoff_returns_only_proved_models_and_a_terminal_stop() {
-    assert!(
-        !has_unused_proposal_work(&three_choices_falsum_first()),
-        "empty arithmetic leaves only scalar post-index charges on this fixture"
-    );
-    assert!(
-        has_unused_proposal_work(&exclusive_choices()),
-        "a checked arithmetic batch reaches indivisible admission"
-    );
+    check_first_proposal_cutoffs(&three_choices_falsum_first());
+    check_first_proposal_cutoffs(&exclusive_choices());
 }
 
-fn has_unused_proposal_work(theory: &Theory) -> bool {
+fn check_first_proposal_cutoffs(theory: &Theory) {
     let (encoded, proposed) = proposal_work(theory, 1);
     // The original index is charged whole when the walk starts: an
     // allowance short of it spends nothing and stops the batch.
@@ -208,7 +202,6 @@ fn has_unused_proposal_work(theory: &Theory) -> bool {
         assert_eq!(search.batch_statistics().pending, 0);
         closed(&mut search);
     }
-    let mut saw_unused_allowance = false;
     for allowance in walk..=proposed {
         let mut search = with_work(theory, allowance);
         match search.next_batch(batch(1), certified) {
@@ -237,13 +230,9 @@ fn has_unused_proposal_work(theory: &Theory) -> bool {
             zetesis_stable::ReductStatistics::default()
         );
         assert!(statistics.certified.is_none());
-        assert!(statistics.search.work <= allowance);
-        saw_unused_allowance |= statistics.search.work < allowance;
+        // Both default fixtures use scalar charges after admitting the index.
+        assert_eq!(statistics.search.work, allowance);
         assert_eq!(search.batch_statistics().pending, 0);
         closed(&mut search);
     }
-    // The separate Meter/lease regression observes the bounded closure not
-    // being called, exact performed work, and exact refund. Return whether
-    // this real theory's post-index path reached an indivisible refusal.
-    saw_unused_allowance
 }

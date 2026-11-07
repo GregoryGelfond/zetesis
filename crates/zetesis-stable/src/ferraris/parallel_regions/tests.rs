@@ -8,6 +8,24 @@ pub(super) fn record_candidate_worker(report: &WorkerReport) {
     engagement_tests::record_candidate_worker(report);
 }
 
+/// Install the eligible outer inspections for tests of their work and ownership.
+fn with_region_checks(
+    (mut search, index): (ParallelRegions, Arc<IndexedTheory>),
+) -> (ParallelRegions, Arc<IndexedTheory>) {
+    search.enable_region_checks();
+    (search, index)
+}
+
+impl ParallelRegions {
+    pub(in crate::ferraris) fn enable_region_checks(&mut self) {
+        assert!(matches!(self.record, WalkRecord::NotBegun));
+        Arc::get_mut(&mut self.shared)
+            .expect("the unbegun walk exclusively owns its shared state")
+            .parts
+            .enable_region_checks(&self.statistics);
+    }
+}
+
 /// The original index the enumeration would build and hand the workers.
 fn original(theory: &Theory) -> Arc<IndexedTheory> {
     let mut owner = super::super::OriginalIndex::new(theory, u64::MAX);

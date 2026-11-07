@@ -6,6 +6,22 @@ use crate::{SearchLimits, SearchStatistics};
 use zetesis_ferraris::{Node, PreparationLimits};
 use zetesis_theory_support::theories::theory;
 
+impl PreparedArithmetic {
+    /// Exercise only inspections for which this preparation has evidence.
+    pub(in crate::ferraris::regions) fn enable_region_checks(
+        &mut self,
+        rank: usize,
+        families: u64,
+    ) {
+        self.parity = rank != 0 || self.owner.parity().root_refuted();
+        self.cardinality = families != 0
+            || self
+                .owner
+                .cardinality()
+                .is_some_and(CardinalitySystem::root_refuted);
+    }
+}
+
 fn fixture() -> (Theory, PreparedArithmetic) {
     use zetesis_ferraris::{AdmissionLimits, FormulaNodes, FormulaParts, NodeView};
     let parts = FormulaParts::new(
@@ -53,14 +69,9 @@ fn fixture() -> (Theory, PreparedArithmetic) {
     );
     assert_eq!(attempt.parity.rank, 1);
     assert!(attempt.cardinality.families > 0);
-    (
-        theory,
-        PreparedArithmetic::new(
-            attempt.result.unwrap().unwrap(),
-            attempt.parity.rank,
-            attempt.cardinality.families,
-        ),
-    )
+    let mut prepared = PreparedArithmetic::root_only(attempt.result.unwrap().unwrap());
+    prepared.enable_region_checks(attempt.parity.rank, attempt.cardinality.families);
+    (theory, prepared)
 }
 
 fn budget(cancellation: &Cancellation, work: u64) -> Budget<'_> {

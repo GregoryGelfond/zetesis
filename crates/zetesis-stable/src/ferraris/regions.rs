@@ -697,15 +697,9 @@ fn open_recording(
         cancellation,
         &mut meter,
     );
-    let prepared = arithmetic.result.map(|published| {
-        published.map(|owner| {
-            subjects::PreparedArithmetic::new(
-                owner,
-                arithmetic.parity.rank,
-                arithmetic.cardinality.families,
-            )
-        })
-    });
+    let prepared = arithmetic
+        .result
+        .map(|published| published.map(subjects::PreparedArithmetic::root_only));
     statistics.parity = arithmetic.parity;
     statistics.cardinality = arithmetic.cardinality;
     let mut arithmetic = prepared.map_err(|error| match error {

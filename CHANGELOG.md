@@ -6,7 +6,9 @@ Notable changes by release. Versions follow Semantic Versioning.
 
 The 0.7.0 candidate brings candidate search and reduct checking onto the same
 region algebra. On eligible quantified programs, the checker derives parity and
-count bounds from the frozen reduct to rule out whole groups of subsets. Users
+count bounds from the frozen reduct to rule out whole groups of subsets.
+Candidate generation uses arithmetic deductions at the root and skips repeated
+parity and cardinality inspections of candidate regions by default. Users
 of the Rust libraries and consumers of JSON model output should review the
 compatibility changes below before upgrading.
 
@@ -17,8 +19,8 @@ compatibility changes below before upgrading.
   the countermodel class: the saturation units it cuts, the affine hulls and
   the least and greatest allowed counts of each clause group's probed patterns,
   the cliques of pairwise exclusions, a lower bound of one over a clause too
-  wide for a group, and the trivial bounds completing a partition. They load into the same parity and cardinality systems the
-  candidate walk uses and apply through the walk's joint closure, so the
+  wide for a group, and the trivial bounds completing a partition. The inner
+  walk applies those rows through the shared parity and cardinality systems, so the
   quantified saturation cores (parity, Tseitin, pigeonhole) are decided at the
   root for their stable candidates and walked polynomially for the others. The
   probing runs at most two rounds, the second under the rows the first

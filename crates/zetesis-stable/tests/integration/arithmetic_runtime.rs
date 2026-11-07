@@ -1,4 +1,4 @@
-//! Complete families on the actual candidate schedules, with runtime activity.
+//! Root arithmetic and complete answer families on the default candidate schedules.
 
 use std::collections::BTreeSet;
 
@@ -8,7 +8,27 @@ use crate::support::routes::{ROUTES, Route};
 use zetesis_ferraris::{
     AdmissionLimits, FormulaNodes, FormulaParts, Node, PreparationStatus, Theory,
 };
-use zetesis_stable::{Cancellation, RegionWalkEngagement, StableModels};
+use zetesis_stable::{Cancellation, RegionSearchStatistics, RegionWalkEngagement, StableModels};
+
+fn assert_no_regional_inspections(regions: &RegionSearchStatistics, route: Route) {
+    assert_eq!(
+        (
+            regions.parity.region_passes,
+            regions.parity.forced,
+            regions.parity.refuted
+        ),
+        (0, 0, 0),
+        "{route:?}"
+    );
+    assert_eq!(
+        (
+            regions.cardinality.region_passes,
+            regions.cardinality.refuted
+        ),
+        (0, 0),
+        "{route:?}"
+    );
+}
 
 fn assert_route(route: Route, search: &StableModels) {
     let regions = search.statistics().regions.unwrap();
@@ -45,7 +65,7 @@ fn assert_route(route: Route, search: &StableModels) {
 }
 
 #[test]
-fn every_candidate_schedule_checks_arithmetic_and_returns_the_exact_family() {
+fn candidate_schedules_skip_outer_arithmetic_inspections() {
     let theory = exclusive_choices();
     let expected = BTreeSet::from([vec![0], vec![1]]);
     // Independently enumerate every interpretation through the maintained
@@ -60,8 +80,7 @@ fn every_candidate_schedule_checks_arithmetic_and_returns_the_exact_family() {
         assert_eq!(initial.parity.units, 0);
         assert_eq!(initial.cardinality.status, PreparationStatus::Prepared);
         assert!(initial.cardinality.families > 0);
-        assert_eq!(initial.parity.region_passes, 0);
-        assert_eq!(initial.cardinality.region_passes, 0);
+        assert_no_regional_inspections(&initial, route);
 
         // The existing route helper rejects duplicates and requires exhausted
         // coverage; its producer path uses residual batched membership.
@@ -73,11 +92,8 @@ fn every_candidate_schedule_checks_arithmetic_and_returns_the_exact_family() {
         let regions = statistics.regions.unwrap();
         assert_eq!(statistics.stable_models, 2);
         assert!(statistics.certified.is_none());
-        assert!(regions.parity.region_passes > 0, "{route:?}");
-        assert!(regions.cardinality.region_passes > 0, "{route:?}");
+        assert_no_regional_inspections(&regions, route);
         assert!(!regions.parity.root_refuted && !regions.cardinality.root_refuted);
-        assert!(regions.parity.refuted <= regions.parity.region_passes);
-        assert!(regions.cardinality.refuted <= regions.cardinality.region_passes);
         assert_eq!(search.statistics(), statistics);
     }
 }
@@ -120,10 +136,7 @@ fn a_prepared_empty_basis_and_unpaired_bounds_skip_only_runtime_batches() {
             assert_eq!(stats.cardinality.status, PreparationStatus::Prepared);
             assert_eq!(stats.cardinality.rows, usize::from(native_lower));
             assert_eq!((stats.parity.rank, stats.cardinality.families), (0, 0));
-            assert_eq!(
-                (stats.parity.region_passes, stats.cardinality.region_passes),
-                (0, 0)
-            );
+            assert_no_regional_inspections(&stats, route);
             assert!(stats.parity.preparation_work > 0 && stats.cardinality.preparation_work > 0);
         }
     }
@@ -152,19 +165,13 @@ fn a_false_constant_equation_refutes_before_any_runtime_subject() {
         assert_eq!(stats.parity.rank, 0);
         assert!(stats.parity.root_refuted);
         assert_eq!(stats.cardinality.status, PreparationStatus::NotPrepared);
-        assert_eq!(
-            (
-                stats.counts.regions,
-                stats.parity.region_passes,
-                stats.cardinality.region_passes
-            ),
-            (0, 0, 0)
-        );
+        assert_eq!(stats.counts.regions, 0);
+        assert_no_regional_inspections(&stats, route);
     }
 }
 
 #[test]
-fn a_checked_unit_keeps_its_seed_and_nonempty_runtime_basis() {
+fn root_preparation_seeds_a_checked_parity_unit() {
     let theory = Theory::new(
         1,
         FormulaParts::new(
@@ -190,13 +197,13 @@ fn a_checked_unit_keeps_its_seed_and_nonempty_runtime_basis() {
         let stats = search.statistics().regions.unwrap();
         assert_eq!((stats.parity.rank, stats.parity.units), (1, 1));
         assert!(stats.parity.phases.root_seed > 0);
-        assert!(stats.parity.region_passes > 0);
-        assert_eq!(stats.cardinality.region_passes, 0);
+        assert!(stats.counts.regions > 0);
+        assert_no_regional_inspections(&stats, route);
     }
 }
 
 #[test]
-fn a_guarded_counting_pair_remains_active_on_a_region_with_the_guard_cut() {
+fn root_preparation_retains_the_guarded_counting_pair() {
     use zetesis_ferraris::NodeView;
     let mut nodes = FormulaNodes::new(
         FormulaParts::new(
@@ -232,6 +239,7 @@ fn a_guarded_counting_pair_remains_active_on_a_region_with_the_guard_cut() {
         let stats = search.statistics().regions.unwrap();
         assert_eq!((stats.cardinality.rows, stats.cardinality.guarded), (2, 2));
         assert!(stats.cardinality.families > 0);
-        assert!(stats.cardinality.region_passes > 0);
+        assert!(stats.counts.regions > 0);
+        assert_no_regional_inspections(&stats, route);
     }
 }

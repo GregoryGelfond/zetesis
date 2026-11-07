@@ -109,6 +109,8 @@ fn every_parity_refusal_preserves_its_applied_decision_receipt() {
     assert_eq!(full.result, Ok(SubjectStep::Changed));
     let complete_work = full.counts.work;
     let mut completed = false;
+    let mut previous_work = 0;
+    let mut saw_unused_allowance = false;
     // The successful attempt supplies the finite cutoff range. Every prefix
     // is checked against the actual mutation, not a duplicate charge formula.
     for maximum in 0..=complete_work {
@@ -130,11 +132,14 @@ fn every_parity_refusal_preserves_its_applied_decision_receipt() {
         );
         let result = attempt.account(&mut counts);
         assert_eq!(counts.work, budget.statistics.work);
+        assert!(counts.work <= maximum);
         assert_eq!(counts.arithmetic.parity_forced, u64::from(region.is_cut(1)));
         assert_eq!(counts.arithmetic.parity_refuted, 0);
         assert_eq!(counts.arithmetic.cardinality_passes, 0);
         match result {
             Ok(SubjectStep::Changed) => {
+                assert_eq!(maximum, complete_work);
+                assert_eq!(counts.work, complete_work);
                 assert_eq!(counts.arithmetic.parity_passes, 1);
                 completed = true;
                 break;
@@ -142,12 +147,19 @@ fn every_parity_refusal_preserves_its_applied_decision_receipt() {
             Err(Incomplete::WorkLimit) => {
                 assert_eq!(counts.arithmetic.parity_passes, 0);
                 saw_failed_application |= region.is_cut(1);
+                if counts.work < maximum {
+                    // One more unit still could not admit the next operation.
+                    assert_eq!(counts.work, previous_work);
+                    saw_unused_allowance = true;
+                }
+                previous_work = counts.work;
             }
             other => panic!("unexpected parity attempt: {other:?}"),
         }
     }
     assert!(completed);
     assert!(saw_failed_application);
+    assert!(saw_unused_allowance);
 }
 
 #[test]

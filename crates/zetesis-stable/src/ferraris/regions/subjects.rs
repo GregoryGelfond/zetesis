@@ -18,8 +18,8 @@ use crate::subject::{Pass, Subject, SubjectAttempt, SubjectContext, SubjectStep}
 use crate::{Cancellation, Incomplete, RegionCounts};
 use zetesis_algebra::region::Region;
 
-/// Preserve the complete preparation for root and ownership checks. Only a
-/// nonempty echelon basis or a checked family pair has a late-region action.
+/// Checked arithmetic for the original root. Candidate-region inspections
+/// have a separate cost and are disabled in the release configuration.
 #[derive(Debug)]
 pub(in crate::ferraris) struct PreparedArithmetic {
     pub(super) owner: RootPreparation,
@@ -28,16 +28,11 @@ pub(in crate::ferraris) struct PreparedArithmetic {
 }
 
 impl PreparedArithmetic {
-    pub(super) fn new(owner: RootPreparation, rank: usize, families: u64) -> Self {
-        let parity = rank != 0 || owner.parity().root_refuted();
-        let cardinality = families != 0
-            || owner
-                .cardinality()
-                .is_some_and(CardinalitySystem::root_refuted);
+    pub(super) const fn root_only(owner: RootPreparation) -> Self {
         Self {
             owner,
-            parity,
-            cardinality,
+            parity: false,
+            cardinality: false,
         }
     }
 
