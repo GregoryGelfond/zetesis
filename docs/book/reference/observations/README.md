@@ -25,7 +25,13 @@ retains input report hashes, timing and memory observations, actual execution
 routes and qualification scope. Non-completed cells retain their reasons.
 These CPU observations do not establish Metal performance or qualification.
 
-The [0.6.0 coverage snapshot](../coverage-0.6.0.md) records the current portable,
+The [0.7.0 coverage snapshot](../coverage-0.7.0.md) records the portable workspace,
+combined portable-plus-Metal workspace and independent CPU-only populations at
+`878f08509`. Its [receipt](coverage-0.7.0.json) identifies the report hashes and
+59 exact Metal tests in 11 groups. The [source manifest](coverage-0.7.0-sources.json)
+identifies the measured source and build inputs.
+
+The [0.6.0 coverage snapshot](../coverage-0.6.0.md) records its portable,
 combined workspace and independent CPU-only populations. Its
 [receipt](coverage-0.6.0.json) identifies tools, reports and all 63 physical tests;
 the [source manifest](coverage-0.6.0-sources.json) identifies the measured contents.
