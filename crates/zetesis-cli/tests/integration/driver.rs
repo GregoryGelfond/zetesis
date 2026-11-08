@@ -34,15 +34,28 @@ fn solve(source: &str, extra: &[&str]) -> (zetesis_cli::Report, String) {
 
 #[test]
 fn exhaustive_models_are_streamed_once_with_coverage() {
-    // Deciding b decides a, so the two regions below the root are the two
-    // answers, the held branch first, and nothing else is checked.
-    let (report, text) = solve("a :- not b. b :- not a.", &["--models", "0"]);
-    assert_eq!(report.completion, Completion::Exhausted);
-    assert_eq!((report.models, report.checked), (2, 2));
-    assert!(
-        text.contains("Answer: 1\nb\nAnswer: 2\na\nSATISFIABLE\nModels:"),
-        "{text}"
-    );
+    // The two regions are the complete family. A single worker visits the
+    // held branch first; two workers can publish either branch first.
+    let held_first = "Answer: 1\nb\nAnswer: 2\na\nSATISFIABLE\nModels: 2\n";
+    let cut_first = "Answer: 1\na\nAnswer: 2\nb\nSATISFIABLE\nModels: 2\n";
+    for workers in ["1", "2"] {
+        let (report, text) = solve(
+            "a :- not b. b :- not a.",
+            &["--models", "0", "--threads", workers],
+        );
+        assert_eq!(report.completion, Completion::Exhausted);
+        assert_eq!((report.models, report.checked), (2, 2));
+        assert_eq!(
+            text.lines()
+                .filter(|line| line.starts_with("Answer:"))
+                .count(),
+            2
+        );
+        assert!(
+            text.contains(held_first) || (workers == "2" && text.contains(cut_first)),
+            "{text}"
+        );
+    }
 }
 
 #[test]

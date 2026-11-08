@@ -40,12 +40,12 @@ fn retired_backend_values_are_explained() {
 
 /// A tiny automatic run, one node and one choice, with its models and its
 /// diagnostics as text.
-fn tiny_auto_run() -> (Report, String, String) {
+fn tiny_auto_run(arguments: &[&str]) -> (Report, String, String) {
     let mut models = Vec::new();
     let mut diagnostics = Vec::new();
     let report = run_with_diagnostics(
         "node(a). {chosen(X)} :- node(X).".into(),
-        &options(&[]),
+        &options(arguments),
         &mut models,
         &mut diagnostics,
         &Cancellation::default(),
@@ -59,11 +59,11 @@ fn tiny_auto_run() -> (Report, String, String) {
 }
 
 #[test]
-fn a_tiny_auto_run_finds_its_first_answer_after_one_check() {
+fn one_worker_finds_the_first_answer_after_one_check() {
     // The root leaves the one choice open; the walk splits on it, held branch
     // first, so the first answer holds the choice and is found after one
     // check.
-    let (report, models, _) = tiny_auto_run();
+    let (report, models, _) = tiny_auto_run(&["--threads", "1"]);
     assert_eq!(report.completion, Completion::RequestedModels);
     assert_eq!(report.checked, 1);
     assert!(
@@ -73,8 +73,30 @@ fn a_tiny_auto_run_finds_its_first_answer_after_one_check() {
 }
 
 #[test]
+fn parallel_workers_publish_only_the_requested_answer() {
+    let (report, models, _) = tiny_auto_run(&["--threads", "2"]);
+    assert_eq!(report.completion, Completion::RequestedModels);
+    assert_eq!(report.models, 1);
+    // Either leaf can finish first, and its peer may finish a check before
+    // the stop. Only the requested answer can reach the output.
+    assert!((1..=2).contains(&report.checked));
+    assert_eq!(
+        models
+            .lines()
+            .filter(|line| line.starts_with("Answer:"))
+            .count(),
+        1
+    );
+    let mut lines = models.lines().skip_while(|line| *line != "Answer: 1");
+    assert!(
+        matches!(lines.nth(1), Some("chosen(a) node(a)" | "node(a)")),
+        "{models}"
+    );
+}
+
+#[test]
 fn default_configuration_precedes_the_models() {
-    let (_, models, diagnostics) = tiny_auto_run();
+    let (_, models, diagnostics) = tiny_auto_run(&[]);
     assert!(models.contains("Backend: CPU"));
     assert!(diagnostics.is_empty());
     assert!(!diagnostics.contains("Answer:"));
