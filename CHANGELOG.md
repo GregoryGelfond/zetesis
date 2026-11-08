@@ -4,7 +4,9 @@ Notable changes by release. Versions follow Semantic Versioning.
 
 ## Unreleased
 
-The 0.7.0 candidate brings candidate search and reduct checking onto the same
+## 0.7.0 — 2026-11-08
+
+Zetesis 0.7.0 brings candidate search and reduct checking onto the same
 region algebra. On eligible quantified programs, the checker derives parity and
 count bounds from the frozen reduct to rule out whole groups of subsets.
 Candidate generation uses arithmetic deductions at the root and skips repeated
