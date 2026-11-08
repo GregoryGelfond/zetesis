@@ -2,7 +2,7 @@
 
 use std::io::{self, Write};
 
-use zetesis_cpu::Cancellation;
+use zetesis_algebra::Cancellation;
 
 use crate::{PublicationConfig, PublicationFailure, PublicationOutcome};
 
@@ -60,8 +60,11 @@ pub(crate) fn with_diagnostics(
     );
     let result = crate::publication::solve(
         input,
-        None,
         config,
+        crate::publication::RunResources {
+            execution: &crate::ExecutionResources::default(),
+            evidence_request: options.residual_evidence_request.as_deref(),
+        },
         &mut invocation,
         &mut diagnostics,
         cancellation,

@@ -108,11 +108,12 @@ fn all_small_masks_match_the_queued_seed_schedule() {
                 }
             }
             for cut in 0..1_u64 << owner.atom_count() {
-                let mut work = Work::new(u64::MAX);
+                let mut work = Meter::local(u64::MAX);
                 actual
                     .complete(&owner, &index, &producers, &never, &[cut], &mut work)
+                    .map_err(zetesis_algebra::Failure::into_stop)
                     .unwrap();
-                let mut reference_work = Work::new(u64::MAX);
+                let mut reference_work = Meter::local(u64::MAX);
                 expected
                     .complete(
                         &owner,
@@ -122,6 +123,7 @@ fn all_small_masks_match_the_queued_seed_schedule() {
                         &[cut],
                         &mut reference_work,
                     )
+                    .map_err(zetesis_algebra::Failure::into_stop)
                     .unwrap();
                 assert_same_closure(&actual, &expected);
                 let active = seeds
@@ -129,7 +131,7 @@ fn all_small_masks_match_the_queued_seed_schedule() {
                     .filter(|&&node| matches!(actual.states[node], State::True))
                     .count();
                 assert_eq!(
-                    reference_work.spent - work.spent,
+                    reference_work.charged() - work.charged(),
                     2 * u64::try_from(active).unwrap()
                 );
                 assert!(
@@ -192,7 +194,9 @@ fn seed_partition_uses_existing_storage_and_preserves_roles() {
     ];
     let mut roles = original;
     let mut ids = [0, 1, 2, 3];
-    let split = initialization::partition(&mut ids, &mut roles, &mut Work::new(u64::MAX)).unwrap();
+    let split = initialization::partition(&mut ids, &mut roles, &mut Meter::local(u64::MAX))
+        .map_err(zetesis_algebra::Failure::into_stop)
+        .unwrap();
     assert_eq!(split, 2);
     for (position, &node) in ids.iter().enumerate() {
         assert_eq!(
@@ -216,31 +220,35 @@ fn interrupted_seed_replay_rebuilds_every_current_state() {
     let never = vec![0; flag_words(owner.nodes().len())];
     let mut expected = Scratch::default();
     expected.prepare_projected(&owner, &index, &producers);
-    let mut completed = Work::new(u64::MAX);
+    let mut completed = Meter::local(u64::MAX);
     expected
         .complete(&owner, &index, &producers, &never, &[0], &mut completed)
+        .map_err(zetesis_algebra::Failure::into_stop)
         .unwrap();
     for failure in [Stop::WorkLimit, Stop::Cancelled, Stop::Deadline] {
-        for ceiling in 0..completed.spent {
+        for ceiling in 0..completed.charged() {
             let mut actual = Scratch::default();
             actual.prepare_projected(&owner, &index, &producers);
             let mut allowance = crate::test_support::Allowance {
                 remaining: ceiling,
                 failure,
             };
-            let mut work = Work::reserved(&mut allowance);
+            let mut work = Meter::reserved(&mut allowance);
             assert_eq!(
-                actual.complete(&owner, &index, &producers, &never, &[0], &mut work),
+                actual
+                    .complete(&owner, &index, &producers, &never, &[0], &mut work)
+                    .map_err(zetesis_algebra::Failure::into_stop),
                 Err(failure)
             );
-            assert_eq!(work.spent, ceiling);
+            assert_eq!(work.charged(), ceiling);
             work.refund();
-            let mut retry = Work::new(u64::MAX);
+            let mut retry = Meter::local(u64::MAX);
             actual
                 .complete(&owner, &index, &producers, &never, &[0], &mut retry)
+                .map_err(zetesis_algebra::Failure::into_stop)
                 .unwrap();
             assert_same_closure(&actual, &expected);
-            assert_eq!(retry.spent, completed.spent);
+            assert_eq!(retry.charged(), completed.charged());
         }
     }
 }
@@ -252,36 +260,45 @@ fn interrupted_partition_has_no_owner_authority() {
     let producers = producers(&owner);
     let mut expected = Scratch::default();
     expected
-        .prepare_bodies(&owner, &index, &producers, &mut Work::new(u64::MAX))
+        .prepare_bodies(&owner, &index, &producers, &mut Meter::local(u64::MAX))
+        .map_err(zetesis_algebra::Failure::into_stop)
         .unwrap();
-    let mut full = Work::new(u64::MAX);
+    let mut full = Meter::local(u64::MAX);
     expected
         .prepare_bodies(&owner, &index, &producers, &mut full)
+        .map_err(zetesis_algebra::Failure::into_stop)
         .unwrap();
     // Stop at every prefix of the final partition, including its charged swap
     // reads. A separate copy supplies its cost without depending on row order.
     let mut before = Scratch::default();
     before
-        .prepare_bodies(&owner, &index, &producers, &mut Work::new(u64::MAX))
+        .prepare_bodies(&owner, &index, &producers, &mut Meter::local(u64::MAX))
+        .map_err(zetesis_algebra::Failure::into_stop)
         .unwrap();
     let mut roles = initialization::prepare(
         &owner,
         &index,
         &before.body_nodes,
         &before.cyclic_atoms,
-        &mut Work::new(u64::MAX),
+        &mut Meter::local(u64::MAX),
     )
+    .map_err(zetesis_algebra::Failure::into_stop)
     .unwrap();
-    let mut partition = Work::new(u64::MAX);
-    initialization::partition(&mut before.body_nodes, &mut roles, &mut partition).unwrap();
-    let start = full.spent - partition.spent;
-    for cutoff in start..full.spent {
+    let mut partition = Meter::local(u64::MAX);
+    initialization::partition(&mut before.body_nodes, &mut roles, &mut partition)
+        .map_err(zetesis_algebra::Failure::into_stop)
+        .unwrap();
+    let start = full.charged() - partition.charged();
+    for cutoff in start..full.charged() {
         let mut actual = Scratch::default();
         actual
-            .prepare_bodies(&owner, &index, &producers, &mut Work::new(u64::MAX))
+            .prepare_bodies(&owner, &index, &producers, &mut Meter::local(u64::MAX))
+            .map_err(zetesis_algebra::Failure::into_stop)
             .unwrap();
         assert_eq!(
-            actual.prepare_bodies(&owner, &index, &producers, &mut Work::new(cutoff)),
+            actual
+                .prepare_bodies(&owner, &index, &producers, &mut Meter::local(cutoff))
+                .map_err(zetesis_algebra::Failure::into_stop),
             Err(Stop::WorkLimit)
         );
         assert!(actual.owner.is_none());
@@ -321,8 +338,9 @@ fn seed_plans_rebuild_across_different_exact_owners() {
                         &producers,
                         &never,
                         &[0],
-                        &mut Work::new(u64::MAX),
+                        &mut Meter::local(u64::MAX),
                     )
+                    .map_err(zetesis_algebra::Failure::into_stop)
                     .unwrap();
             }
             assert_same_closure(&reused, &expected);

@@ -86,7 +86,7 @@ fn interrupted_widening_retains_the_original_owner() {
                 ..
             })
         ));
-        assert_eq!(work.used, u128::from(limit));
+        assert_eq!(work.charged(), u128::from(limit));
         assert_eq!(work.live, initial);
         assert_eq!(column.retained_bytes(), capacity);
         assert_eq!(column.view().bits(), 8);
@@ -105,7 +105,7 @@ fn widening_charges_each_copied_cell_once() {
         },
     );
     column.reserve(256, &mut work).unwrap();
-    assert_eq!(work.used, 4);
+    assert_eq!(work.charged(), 4);
 }
 
 #[test]

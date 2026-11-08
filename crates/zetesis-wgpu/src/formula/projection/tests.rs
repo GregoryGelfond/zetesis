@@ -9,7 +9,7 @@ use std::borrow::Cow;
 fn default_shader_remains_the_borrowed_baseline() {
     assert!(
         matches!(GateProjection::Enumerated.shader().unwrap(), Cow::Borrowed(source)
-        if source == concat!(include_str!("../../formula.wgsl"), include_str!("../../formula_graph/numeric.wgsl"), include_str!("../numeric.wgsl"), include_str!("../subset.wgsl")))
+        if source == concat!(include_str!("../../formula.wgsl"), include_str!("../../words.wgsl"), include_str!("../../formula_graph/truth.wgsl"), include_str!("../../formula_graph/numeric.wgsl"), include_str!("../numeric.wgsl"), include_str!("../subset.wgsl"), include_str!("../../reduction.wgsl")))
     );
 }
 
@@ -17,9 +17,12 @@ fn default_shader_remains_the_borrowed_baseline() {
 fn bitwise_transfer_preserves_the_shader_scaffold() {
     let baseline = concat!(
         include_str!("../../formula.wgsl"),
+        include_str!("../../words.wgsl"),
+        include_str!("../../formula_graph/truth.wgsl"),
         include_str!("../../formula_graph/numeric.wgsl"),
         include_str!("../numeric.wgsl"),
-        include_str!("../subset.wgsl")
+        include_str!("../subset.wgsl"),
+        include_str!("../../reduction.wgsl")
     );
     let (prefix, transfer) = baseline.split_once("fn gate(").unwrap();
     let suffix = &transfer[transfer.find("fn finish(").unwrap()..];
@@ -44,6 +47,7 @@ fn projection_variants_preserve_the_device_interface() {
         )
         .validate(&module)
         .expect("portable shader validation");
+        crate::formula_graph::assert_candidate_word_binding(&module, &info, 3);
         let (module, _) = naga::back::pipeline_constants::process_overrides(
             &module,
             &info,
@@ -106,8 +110,8 @@ fn optional_instructions_require_granted_features() {
                 naga::valid::Validator::new(naga::valid::ValidationFlags::all(), capabilities)
                     .validate(&module)
                     .unwrap();
-            for width in [GpuWorkgroupSize::Threads32, GpuWorkgroupSize::Threads64] {
-                let constants = [("WORKGROUP_SIZE".to_owned(), f64::from(width.invocations()))]
+            for size in GpuWorkgroupSize::ALL {
+                let constants = [("WORKGROUP_SIZE".to_owned(), f64::from(size.invocations()))]
                     .into_iter()
                     .collect();
                 let (compiled, _) = naga::back::pipeline_constants::process_overrides(
@@ -116,7 +120,7 @@ fn optional_instructions_require_granted_features() {
                 .unwrap();
                 assert_eq!(
                     compiled.entry_points[0].workgroup_size,
-                    [width.invocations(), 1, 1]
+                    [size.invocations(), 1, 1]
                 );
             }
             if !features.is_empty() {
@@ -146,4 +150,32 @@ fn portable_selection_ignores_optional_device_features() {
         )
         .unwrap();
     assert!(matches!(source, Cow::Borrowed(_)));
+}
+
+#[test]
+fn formula_source_owns_only_projection_or_feature_assembly() {
+    for projection in GateProjection::ALL {
+        for optional_features in [false, true] {
+            let kernel = Kernel::Formula(GpuKernelOptions {
+                optional_features,
+                ..Default::default()
+            });
+            for granted in [
+                wgpu::Features::empty(),
+                wgpu::Features::SUBGROUP,
+                wgpu::Features::SHADER_INT64,
+                wgpu::Features::SUBGROUP | wgpu::Features::SHADER_INT64,
+            ] {
+                let source = kernel
+                    .source(projection.shader().unwrap(), granted)
+                    .unwrap();
+                assert_eq!(
+                    matches!(source, Cow::Owned(_)),
+                    projection == GateProjection::Bitwise
+                        || (optional_features && !granted.is_empty()),
+                    "{projection:?}, {optional_features}, {granted:?}"
+                );
+            }
+        }
+    }
 }

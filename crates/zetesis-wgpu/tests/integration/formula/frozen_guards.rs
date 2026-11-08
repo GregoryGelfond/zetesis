@@ -1,6 +1,6 @@
 //! Shared threshold requirements are useful even before a condition is known.
 
-use zetesis_cpu::Cancellation;
+use zetesis_algebra::Cancellation;
 use zetesis_ferraris::{
     AdmissionLimits, EvaluationLimits, EvaluationWorkspace, FormulaNodes, FrozenSubject,
     Interpretation, Narrower, Narrowing, NarrowingScratch, NodeView, Region, RegionLimits, Theory,
@@ -61,15 +61,16 @@ fn required_bound_closes_the_frozen_candidate_without_splitting() {
             assert!(truth.is_model());
             let narrower = Narrower::new(&theory);
             let mut region = Region::all_open(3);
-            let (outcome, _) = narrower
+            let outcome = narrower
                 .narrow_frozen_known(
                     FrozenSubject::new(&theory, truth.truth()),
                     &mut region,
-                    &mut narrower.knowledge(),
+                    &mut narrower.frozen_knowledge(),
                     &mut NarrowingScratch::default(),
                     RegionLimits::default(),
                     &cancellation,
                 )
+                .result
                 .unwrap();
             assert!(matches!(outcome, Narrowing::Fixed { .. }));
             assert_eq!(region.held().collect::<Vec<_>>(), [0, 1, 2]);

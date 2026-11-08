@@ -2,8 +2,8 @@
 
 use crate::support::observation_reference;
 
+use zetesis_algebra::{Cancellation, Stop};
 use zetesis_core::Model;
-use zetesis_cpu::{Cancellation, Stop};
 use zetesis_reference_support::{admit, formula, resource_limits};
 use zetesis_themelios::observation::{ErrorKind, Feature, Limits, Resource};
 use zetesis_themelios::{FormulaFailure, FormulaLimits};

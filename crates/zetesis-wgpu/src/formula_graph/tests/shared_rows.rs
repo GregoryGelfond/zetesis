@@ -215,7 +215,7 @@ fn packed_ordinal_columns_preserve_sentinel_boundaries() {
                     ranks: &ranks,
                     rank_count,
                 }
-                .reduce(|child| Ok::<_, zetesis_cpu::Stop>(reduced[child]))
+                .reduce(|child| Ok::<_, zetesis_algebra::Stop>(reduced[child]))
                 .unwrap();
                 for (&root, rule) in theory.roots().iter().zip(&rules) {
                     assert_eq!(reduced[root], original[root] && rule.holds(measure));

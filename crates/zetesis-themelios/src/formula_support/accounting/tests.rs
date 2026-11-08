@@ -7,8 +7,8 @@ use crate::{
     GroundingPhase, GroundingWork,
 };
 use std::cell::RefCell;
+use zetesis_algebra::{Cancellation, Stop};
 use zetesis_core::Value;
-use zetesis_cpu::{Cancellation, Stop};
 
 #[test]
 fn refused_checks_retain_their_accepted_prefix() {

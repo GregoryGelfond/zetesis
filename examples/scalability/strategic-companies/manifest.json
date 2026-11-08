@@ -1,0 +1,58 @@
+{
+  "schema_version": 1,
+  "root": ".",
+  "cases": [
+    {
+      "entry": "strategic_companies.lp",
+      "contract": {
+        "satisfiability": "sat",
+        "family": "all",
+        "model_count": 29,
+        "cost": null,
+        "witnesses": [
+          ["strat(1)", "strat(10)", "strat(11)", "strat(12)", "strat(2)", "strat(4)", "strat(8)"],
+          ["strat(1)", "strat(10)", "strat(11)", "strat(12)", "strat(2)", "strat(6)", "strat(9)"],
+          ["strat(1)", "strat(10)", "strat(11)", "strat(12)", "strat(2)", "strat(8)", "strat(9)"],
+          ["strat(1)", "strat(10)", "strat(11)", "strat(12)", "strat(4)", "strat(6)", "strat(8)"],
+          ["strat(1)", "strat(10)", "strat(11)", "strat(12)", "strat(6)", "strat(8)", "strat(9)"],
+          ["strat(1)", "strat(10)", "strat(12)", "strat(4)", "strat(6)", "strat(7)", "strat(8)"],
+          ["strat(1)", "strat(10)", "strat(5)", "strat(7)", "strat(8)", "strat(9)"],
+          ["strat(1)", "strat(10)", "strat(6)", "strat(7)", "strat(8)", "strat(9)"],
+          ["strat(1)", "strat(11)", "strat(12)", "strat(2)", "strat(3)", "strat(4)", "strat(8)"],
+          ["strat(1)", "strat(11)", "strat(12)", "strat(2)", "strat(3)", "strat(8)", "strat(9)"],
+          ["strat(1)", "strat(11)", "strat(12)", "strat(3)", "strat(4)", "strat(6)"],
+          ["strat(1)", "strat(11)", "strat(12)", "strat(3)", "strat(6)", "strat(9)"],
+          ["strat(1)", "strat(12)", "strat(3)", "strat(4)", "strat(6)", "strat(7)", "strat(8)"],
+          ["strat(10)", "strat(11)", "strat(12)", "strat(2)", "strat(4)", "strat(7)"],
+          ["strat(10)", "strat(11)", "strat(12)", "strat(2)", "strat(5)", "strat(9)"],
+          ["strat(10)", "strat(11)", "strat(2)", "strat(7)", "strat(9)"],
+          ["strat(10)", "strat(12)", "strat(2)", "strat(4)", "strat(7)", "strat(8)"],
+          ["strat(10)", "strat(12)", "strat(6)", "strat(7)", "strat(8)", "strat(9)"],
+          ["strat(10)", "strat(2)", "strat(7)", "strat(8)", "strat(9)"],
+          ["strat(11)", "strat(12)", "strat(2)", "strat(3)", "strat(4)", "strat(7)"],
+          ["strat(11)", "strat(12)", "strat(2)", "strat(3)", "strat(7)", "strat(9)"],
+          ["strat(11)", "strat(12)", "strat(3)", "strat(5)", "strat(9)"],
+          ["strat(11)", "strat(12)", "strat(3)", "strat(6)", "strat(7)", "strat(9)"],
+          ["strat(12)", "strat(2)", "strat(3)", "strat(4)", "strat(7)", "strat(8)"],
+          ["strat(12)", "strat(3)", "strat(6)", "strat(7)", "strat(8)", "strat(9)"],
+          ["strat(12)", "strat(4)", "strat(5)", "strat(8)"],
+          ["strat(12)", "strat(5)", "strat(8)", "strat(9)"],
+          ["strat(2)", "strat(3)", "strat(7)", "strat(8)", "strat(9)"],
+          ["strat(2)", "strat(5)", "strat(7)", "strat(8)", "strat(9)"]
+        ],
+        "required_symbols": [],
+        "notes": [
+          "Twelve companies and 24 products, each produced by four companies; one company in three jointly controlled by four others; seed 1. The 29 answer sets are the strategic sets.",
+          "Disjunctive heads with control rules through strategic companies: every candidate runs the proper-subset query over its frozen reduct."
+        ]
+      },
+      "files": [
+        {
+          "path": "strategic_companies.lp",
+          "sha256": "cf562da040add78158e15760e7cdd2c2fa859bb9dd7e2c4f1194494a6cf8cc93",
+          "includes": []
+        }
+      ]
+    }
+  ]
+}

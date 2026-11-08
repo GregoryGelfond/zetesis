@@ -1,12 +1,11 @@
 //! Public controlled doors preserve empty/stop precedence and complete results.
 
 use crate::{
-    FormulaLimits, FormulaVerdict, GpuContext, GpuErrorKind, GpuFormulaOracle, GpuLimits,
-    GpuOptions, GpuOracle, GpuSelection,
+    FormulaLimits, FormulaVerdict, GpuContext, GpuErrorKind, GpuFormulaOracle, GpuOptions,
+    GpuSelection,
 };
+use zetesis_algebra::Cancellation;
 use zetesis_backend::GpuApi;
-use zetesis_core::{AdmissionLimits, GroundProgram, Program, Seed, StaticLimits};
-use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{Interpretation, Node, Theory};
 
 fn cancelled() -> Cancellation {
@@ -21,16 +20,7 @@ fn controlled_calls(backend: GpuApi) {
     assert!(context.info().is_hardware_gpu());
     assert_eq!(context.info().backend(), backend.name());
     eprintln!("controlled calls adapter={:?}", context.info());
-    let mut ordinary = GpuOracle::from_context(&context).unwrap();
     let mut formula = GpuFormulaOracle::from_context(&context).unwrap();
-    let program = Program::new(
-        vec![],
-        zetesis_core::FactTables::default(),
-        AdmissionLimits::default(),
-    )
-    .unwrap();
-    let ground = GroundProgram::compile(&program, StaticLimits::default()).unwrap();
-    let seeds = [Seed::new(&program, []).unwrap()];
     let theory = Theory::new(
         1,
         zetesis_ferraris::FormulaParts::new(vec![Node::atom(0)], Vec::new()).unwrap(),
@@ -48,18 +38,7 @@ fn controlled_calls(backend: GpuApi) {
     ] {
         let expected = cancellation.poll().unwrap_err();
         for empty in [true, false] {
-            let ordinary_error = ordinary
-                .check_batch_with_cancellation(
-                    &ground,
-                    if empty { &[] } else { &seeds },
-                    GpuLimits {
-                        timeout: std::time::Duration::ZERO,
-                        ..GpuLimits::default()
-                    },
-                    &cancellation,
-                )
-                .unwrap_err();
-            let formula_error = formula
+            let error = formula
                 .propagate_batch_with_cancellation(
                     &theory,
                     if empty { &[] } else { &candidates },
@@ -70,27 +49,12 @@ fn controlled_calls(backend: GpuApi) {
                     &cancellation,
                 )
                 .unwrap_err();
-            for error in [ordinary_error, formula_error] {
-                assert_eq!(error.kind(), GpuErrorKind::Interrupted);
-                assert_eq!(error.interruption(), Some(expected));
-            }
-            assert_eq!(ordinary.epoch, 0);
-            assert!(ordinary.last_batch_stats().is_none());
+            assert_eq!(error.kind(), GpuErrorKind::Interrupted);
+            assert_eq!(error.interruption(), Some(expected));
             assert!(formula.last_batch_stats().is_none());
             context.check_health().unwrap();
         }
     }
-    let complete = ordinary
-        .check_batch_with_cancellation(
-            &ground,
-            &seeds,
-            GpuLimits::default(),
-            &Cancellation::default(),
-        )
-        .unwrap();
-    assert_eq!(complete.len(), 1);
-    assert!(complete[0].accepted());
-    assert!(complete[0].closure_words().is_empty());
     let checks = formula
         .propagate_batch_with_cancellation(
             &theory,
@@ -104,21 +68,13 @@ fn controlled_calls(backend: GpuApi) {
             .iter()
             .map(crate::FormulaCheck::verdict)
             .collect::<Vec<_>>(),
-        [FormulaVerdict::NotModel, FormulaVerdict::NoProperSubset]
+        [&FormulaVerdict::NotModel, &FormulaVerdict::NoProperSubset]
     );
-    settled_stops(&context, &mut ordinary, &mut formula);
-    entry_precedence(&context, &mut ordinary, &mut formula, &ground, &theory);
+    settled_stops(&context, &mut formula);
+    entry_precedence(&context, &mut formula, &theory);
 }
 
-fn settled_stops(context: &GpuContext, ordinary: &mut GpuOracle, formula: &mut GpuFormulaOracle) {
-    let program = Program::new(
-        vec![],
-        zetesis_core::FactTables::default(),
-        AdmissionLimits::default(),
-    )
-    .unwrap();
-    let ground = GroundProgram::compile(&program, StaticLimits::default()).unwrap();
-    let seeds = [Seed::new(&program, []).unwrap()];
+fn settled_stops(context: &GpuContext, formula: &mut GpuFormulaOracle) {
     let theory = Theory::new(
         0,
         zetesis_ferraris::FormulaParts::new(vec![], Vec::new()).unwrap(),
@@ -127,27 +83,28 @@ fn settled_stops(context: &GpuContext, ordinary: &mut GpuOracle, formula: &mut G
     )
     .unwrap();
     let candidates = [Interpretation::new(&theory, []).unwrap()];
-    for stop in [zetesis_cpu::Stop::Cancelled, zetesis_cpu::Stop::Deadline] {
+    for stop in [
+        zetesis_algebra::Stop::Cancelled,
+        zetesis_algebra::Stop::Deadline,
+    ] {
         for after_decode in [false, true] {
-            settled_read(&ordinary.runtime, stop, after_decode);
+            settled_read(formula.runtime(), stop, after_decode);
             context.check_health().unwrap();
-            assert!(ordinary.context().same_instance(context));
             assert!(formula.context().same_instance(context));
-            let checks = ordinary
-                .check_batch(&ground, &seeds, GpuLimits::default())
-                .unwrap();
-            assert_eq!(checks.len(), 1);
-            assert!(checks[0].accepted());
             let checks = formula
                 .propagate_batch(&theory, &candidates, FormulaLimits::default())
                 .unwrap();
             assert_eq!(checks.len(), 1);
-            assert_eq!(checks[0].verdict(), FormulaVerdict::NoProperSubset);
+            assert_eq!(checks[0].verdict(), &FormulaVerdict::NoProperSubset);
         }
     }
 }
 
-fn settled_read(runtime: &crate::runtime::Runtime, stop: zetesis_cpu::Stop, after_decode: bool) {
+fn settled_read(
+    runtime: &crate::runtime::Runtime,
+    stop: zetesis_algebra::Stop,
+    after_decode: bool,
+) {
     // A real submission/map is settled before deterministic control injection.
     // Inject either at decoder entry or after decoding. A poll can legitimately
     // require multiple quanta, so counting control calls cannot locate settlement.
@@ -203,21 +160,8 @@ fn settled_read(runtime: &crate::runtime::Runtime, stop: zetesis_cpu::Stop, afte
     println!("settled readback stop={stop:?} after_decode={after_decode} context=reusable");
 }
 
-fn entry_precedence(
-    context: &GpuContext,
-    ordinary: &mut GpuOracle,
-    formula: &mut GpuFormulaOracle,
-    ground: &GroundProgram,
-    theory: &Theory,
-) {
+fn entry_precedence(context: &GpuContext, formula: &mut GpuFormulaOracle, theory: &Theory) {
     let lease = context.lease().unwrap();
-    assert_eq!(
-        ordinary
-            .check_batch_with_cancellation(ground, &[], GpuLimits::default(), &cancelled())
-            .unwrap_err()
-            .kind(),
-        GpuErrorKind::Busy
-    );
     assert_eq!(
         formula
             .propagate_batch_with_cancellation(theory, &[], FormulaLimits::default(), &cancelled())
@@ -228,25 +172,11 @@ fn entry_precedence(
     drop(lease);
     context.invalidate();
     assert_eq!(
-        ordinary
-            .check_batch_with_cancellation(ground, &[], GpuLimits::default(), &cancelled())
-            .unwrap_err()
-            .kind(),
-        GpuErrorKind::Interrupted
-    );
-    assert_eq!(
         formula
             .propagate_batch_with_cancellation(theory, &[], FormulaLimits::default(), &cancelled())
             .unwrap_err()
             .kind(),
         GpuErrorKind::Interrupted
-    );
-    assert_eq!(
-        ordinary
-            .check_batch(ground, &[], GpuLimits::default())
-            .unwrap_err()
-            .kind(),
-        GpuErrorKind::Device
     );
     assert_eq!(
         formula

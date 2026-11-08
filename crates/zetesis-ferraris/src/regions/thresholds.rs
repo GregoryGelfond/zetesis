@@ -11,20 +11,20 @@
 use std::collections::HashMap;
 
 use crate::{NodeView, Theory, Threshold};
-use zetesis_cpu::Stop;
+use zetesis_algebra::Stop;
 
 use super::adjacency::Adjacency;
 
-mod connectives;
 mod capacity;
+mod connectives;
 #[cfg(test)]
 mod frozen_tests;
 #[cfg(test)]
 mod incremental_tests;
+mod possible_sums;
 mod prefixes;
 mod propagate;
 mod residual;
-mod possible_sums;
 
 #[derive(Clone, Debug)]
 pub(super) struct Thresholds {
@@ -315,7 +315,7 @@ fn reserve<T>(length: usize) -> Result<Vec<T>, Stop> {
 mod tests {
     use crate::{AdmissionLimits, FormulaNodes, FormulaParts, Node, NodeView, Theory};
     use crate::{Narrower, Narrowing, NarrowingScratch, OriginalSubject, Region, RegionLimits};
-    use zetesis_cpu::Cancellation;
+    use zetesis_algebra::Cancellation;
 
     fn theory(conditions: &[usize], weights: &[u64], bounds: &[i128], negative: bool) -> Theory {
         let mut nodes =
@@ -353,8 +353,8 @@ mod tests {
                 RegionLimits::default(),
                 &Cancellation::default(),
             )
+            .result
             .unwrap()
-            .0
     }
 
     #[test]

@@ -17,6 +17,7 @@ pub(super) fn base(
     context: &mut Context<'_, '_>,
 ) -> Result<(Program, themelios_analysis::Analysis), FormulaFailure> {
     // Definitions are found by address, so each statement costs a search.
+    // Addresses differ from run to run; the search's charge must not.
     let mut addresses = Scratch::new(context)?;
     addresses.reserve(definitions.len(), context)?;
     for definition in definitions {
@@ -68,7 +69,21 @@ fn selected(
     addresses: &[usize],
     context: &mut Context<'_, '_>,
 ) -> Result<bool, FormulaFailure> {
-    let address = std::ptr::from_ref(source).addr();
-    let found = index::partition(addresses, context, |&entry| entry < address)?;
-    Ok(addresses.get(found) == Some(&address))
+    contains(addresses, std::ptr::from_ref(source).addr(), |amount| {
+        context.charge(amount)
+    })
+}
+
+/// Whether the sorted `addresses` hold `address`. The search charges the bound
+/// on its probes, ⌈log₂(n + 1)⌉ steps, as the sort charges its model: the
+/// number of probes depends on where `address` falls among the others, and
+/// allocation addresses change from run to run, so charging the probes would
+/// make the same program's work receipts differ between runs.
+pub(super) fn contains(
+    addresses: &[usize],
+    address: usize,
+    mut charge: impl FnMut(u128) -> Result<(), FormulaFailure>,
+) -> Result<bool, FormulaFailure> {
+    charge(u128::from(usize::BITS - addresses.len().leading_zeros()))?;
+    Ok(addresses.binary_search(&address).is_ok())
 }

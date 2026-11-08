@@ -49,6 +49,7 @@ fn sufficient_evidence_uses_weights_and_multiplicity() {
             )
             .unwrap();
         let plan = ObjectivePlan {
+            identity: zetesis_objective::PlanIdentity::fresh(),
             original,
             objectives: ObjectiveProgram::none(),
             nodes: nodes.into_parts(),
@@ -57,12 +58,7 @@ fn sufficient_evidence_uses_weights_and_multiplicity() {
             statistics: ObjectiveBoundStatistics::default(),
         };
         let cancellation = Cancellation::default();
-        let mut work = Work {
-            limits: ObjectivePlanLimits::default(),
-            cancellation: &cancellation,
-            template: None,
-            statistics: ObjectiveBoundStatistics::default(),
-        };
+        let mut work = Work::new(ObjectivePlanLimits::default(), &cancellation);
         let mut memory = Storage {
             bytes: 0,
             limit: u128::MAX,
@@ -101,12 +97,7 @@ fn activation_copies_preserve_shared_numeric_rows() {
         })
         .collect();
     let cancellation = Cancellation::default();
-    let mut work = Work {
-        limits: ObjectivePlanLimits::default(),
-        cancellation: &cancellation,
-        template: None,
-        statistics: ObjectiveBoundStatistics::default(),
-    };
+    let mut work = Work::new(ObjectivePlanLimits::default(), &cancellation);
     let mut memory = Storage {
         bytes: 0,
         limit: u128::MAX,

@@ -3,6 +3,33 @@ mod shared_rows;
 use super::*;
 use zetesis_ferraris::{AdmissionLimits, FormulaParts, Node, OperandSpan};
 
+/// The same packed reader must load the host's candidate buffer for each
+/// route. Both modules already contain other read-only u32 arrays.
+pub(crate) fn assert_candidate_word_binding(
+    module: &naga::Module,
+    info: &naga::valid::ModuleInfo,
+    candidate_binding: u32,
+) {
+    let (reader, _) = module
+        .functions
+        .iter()
+        .find(|(_, f)| f.name.as_deref() == Some("candidate_contains"))
+        .expect("shared candidate reader");
+    let mut reads = Vec::new();
+    for (handle, global) in module.global_variables.iter() {
+        let usage = info[reader][handle];
+        if !usage.is_empty() {
+            assert_eq!(usage, naga::valid::GlobalUse::READ);
+            let binding = global
+                .binding
+                .expect("candidate reader loads bound storage");
+            reads.push((binding.group, binding.binding));
+        }
+    }
+    reads.sort_unstable();
+    assert_eq!(reads, [(0, 0), (0, candidate_binding)]);
+}
+
 fn theory() -> Theory {
     Theory::new(
         2,
@@ -84,7 +111,7 @@ fn cancelled_operand_packing_returns_a_typed_interruption() {
         )
         .unwrap_err()
         .interruption(),
-        Some(zetesis_cpu::Stop::Cancelled)
+        Some(zetesis_algebra::Stop::Cancelled)
     );
 }
 
@@ -229,7 +256,7 @@ fn native_shape_scan_preserves_cancellation() {
         .err()
         .unwrap()
         .interruption(),
-        Some(zetesis_cpu::Stop::Cancelled)
+        Some(zetesis_algebra::Stop::Cancelled)
     );
 }
 
@@ -324,7 +351,7 @@ fn ordinal_transport_preserves_original_and_arbitrary_frozen_truth() {
                 if let NodeView::ExtremumCut(cut) = theory.view().node(index).unwrap() {
                     let measure = cut
                         .row
-                        .reduce(|child| Ok::<_, zetesis_cpu::Stop>(reduct[child]))
+                        .reduce(|child| Ok::<_, zetesis_algebra::Stop>(reduct[child]))
                         .unwrap();
                     assert_eq!(reduct[index], original[index] && cut.rule.holds(measure));
                 }
@@ -386,14 +413,14 @@ fn ordinal_shape_scan_and_packing_preserve_cancellation() {
             .err()
             .unwrap()
             .interruption(),
-        Some(zetesis_cpu::Stop::Cancelled)
+        Some(zetesis_algebra::Stop::Cancelled)
     );
     let mut words = Vec::with_capacity(usize::try_from(shape.bytes).unwrap() / 4);
     assert_eq!(
         pack(&theory, &shape.rows, &mut words, &cancellation)
             .unwrap_err()
             .interruption(),
-        Some(zetesis_cpu::Stop::Cancelled)
+        Some(zetesis_algebra::Stop::Cancelled)
     );
     assert!(words.is_empty());
 }
@@ -608,4 +635,100 @@ fn numeric_directory_reservation_obeys_staging_allowance() {
     assert!(shape.rows.bytes().unwrap() > 0);
     shape.rows.release();
     assert_eq!(shape.rows.bytes().unwrap(), 0);
+}
+
+#[test]
+fn a_serial_schedule_has_no_level_widths() {
+    let packed = [7, 9];
+    assert_eq!(
+        dependency::level_widths(&packed, 2, 0)
+            .unwrap()
+            .collect::<Vec<_>>(),
+        Vec::<u32>::new()
+    );
+}
+
+#[test]
+fn level_widths_are_offset_differences() {
+    // Two root IDs, then the starts of three levels and the node count.
+    let packed = [7, 9, 0, 3, 3, 7, 4, 5, 6];
+    assert_eq!(
+        dependency::level_widths(&packed, 2, 3)
+            .unwrap()
+            .collect::<Vec<_>>(),
+        [3, 0, 4]
+    );
+}
+
+#[test]
+fn level_offsets_beyond_the_schedule_are_refused() {
+    let packed = [7, 9, 0, 3];
+    assert_eq!(
+        dependency::level_widths(&packed, 2, 3)
+            .err()
+            .map(|error| error.kind()),
+        Some(GpuErrorKind::Capacity)
+    );
+}
+
+#[test]
+fn decreasing_level_offsets_are_refused() {
+    let packed = [7, 9, 0, 5, 3, 7];
+    assert_eq!(
+        dependency::level_widths(&packed, 2, 3)
+            .err()
+            .map(|error| error.kind()),
+        Some(GpuErrorKind::Capacity)
+    );
+}
+
+/// The largest loop bound the formula and tight kernels admit.
+const STRIDED_END: u32 = u32::MAX - crate::kernel::MAX_FORMULA_STRIDE;
+
+#[test]
+fn schedule_words_end_within_the_stride_headroom() {
+    // Roots, then the starts of three levels and the node count, then 8 nodes.
+    let roots = STRIDED_END - (3 + 1 + 8);
+    assert_eq!(dependency::root_words(8, roots, 3).unwrap(), STRIDED_END);
+    assert_eq!(
+        dependency::root_words(8, roots + 1, 3)
+            .err()
+            .map(|error| error.kind()),
+        Some(GpuErrorKind::Capacity)
+    );
+}
+
+#[test]
+fn incidence_directories_end_within_the_stride_headroom() {
+    // One binary gate over one variable: the variable's start, a closing
+    // offset and three entries (two operands and the gate) take five words.
+    let gate = [2, 0, 0, 0];
+    let layout = |offset| incidence::Layout::new(&gate, 1, 1, offset, &Cancellation::default());
+    let at = layout(STRIDED_END - 5).unwrap().unwrap();
+    assert_eq!(at.offset + at.words, STRIDED_END);
+    assert_eq!(
+        layout(STRIDED_END - 4).err().map(|error| error.kind()),
+        Some(GpuErrorKind::Capacity)
+    );
+}
+
+#[test]
+fn group_maps_end_within_the_stride_headroom() {
+    // One empty group over one variable: a three-word directory, then a map
+    // word per node and a closing word.
+    let group = [5, 0, 0, 0];
+    let grouped = |offset| {
+        incidence::Layout::new(&group, 1, 1, offset, &Cancellation::default())
+            .and_then(|layout| layout.unwrap().with_groups())
+    };
+    let at = grouped(STRIDED_END - 5).unwrap();
+    assert_eq!(at.offset + at.words, STRIDED_END);
+    // The directory alone still fits; only the map crosses the headroom.
+    assert!(
+        incidence::Layout::new(&group, 1, 1, STRIDED_END - 4, &Cancellation::default()).is_ok()
+    );
+    assert_eq!(
+        grouped(STRIDED_END - 4).err().map(|error| error.kind()),
+        Some(GpuErrorKind::Capacity)
+    );
 }

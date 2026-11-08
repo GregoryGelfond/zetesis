@@ -1,6 +1,6 @@
 //! Actual occurrence masks acquired with the existing topological formula evaluator.
 
-use zetesis_cpu::{Cancellation, Meter, Stop};
+use zetesis_algebra::{Cancellation, Meter, MeterBytes, Stop};
 
 use super::{
     Error, ErrorKind, Group, GroupRef, Reduction, ReductionLimits, Resource, Statistics, add, bytes,
@@ -176,9 +176,11 @@ impl<'a> GroupRef<'a> {
             u64::try_from(NumericRowScratch::default().required_bytes(&self.data.theory))
                 .map_err(|_| ErrorKind::Overflow)?,
         )?;
-        if statistics.peak_bytes > limits.max_bytes {
-            return Err(ErrorKind::Limit(Resource::Bytes));
-        }
+        MeterBytes::check(
+            u128::from(statistics.peak_bytes),
+            u128::from(limits.max_bytes),
+        )
+        .map_err(|_| ErrorKind::Limit(Resource::Bytes))?;
         let mut work = oracle::Work::new(0, meter);
         let observations = observations(
             *self,
@@ -264,16 +266,16 @@ fn observe_capacity(
     limit: u64,
     statistics: &mut Statistics,
 ) -> Result<(), ErrorKind> {
-    let actual = u64::try_from(bytes).map_err(|_| ErrorKind::Overflow);
-    if let Ok(actual) = &actual {
-        statistics.storage_peak_bytes = statistics.storage_peak_bytes.max(*actual);
-    }
-    // Preserve the original allocation failure if observation also refuses.
+    let observation = u64::try_from(bytes)
+        .map_err(|_| ErrorKind::Overflow)
+        .and_then(|actual| {
+            MeterBytes::observe_peak_u64(actual, limit, &mut statistics.storage_peak_bytes)
+                .map_err(|_| ErrorKind::Limit(Resource::Bytes))
+        });
+    // Observation records actual capacity even on refusal. The original
+    // reservation failure still takes precedence over this pure decision.
     reservation?;
-    if actual? > limit {
-        return Err(ErrorKind::Limit(Resource::Bytes));
-    }
-    Ok(())
+    observation
 }
 
 fn reserve_mask(target: &mut Vec<bool>, count: usize) -> Result<(), ErrorKind> {
@@ -346,3 +348,6 @@ fn stopped(stop: Stop) -> ErrorKind {
         _ => ErrorKind::Stopped(stop),
     }
 }
+
+#[cfg(test)]
+mod tests;

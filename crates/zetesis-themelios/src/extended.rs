@@ -1,4 +1,4 @@
-//! Opt-in scalar definitions and bounded fact expansion over original syntax.
+//! Checked scalar definitions and normalization over original syntax and logical values.
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -6,202 +6,19 @@ use themelios_base::span::Location;
 use themelios_program::program::{
     BodyElement, Const, Head, Literal, LiteralInner, Program as SourceProgram, Rule, Statement,
 };
-use themelios_program::provenance::{Origin, TransformTag, WithProvenance};
+use themelios_program::provenance::{Origin, WithProvenance};
 use themelios_program::symbol::{Sign, Symbol};
 use themelios_program::term::{EvalError, Term, TermParts};
-use themelios_program::transform::{Rewrite, rewrite};
 use themelios_syntax::ast::{self, AstToken};
 use themelios_syntax::parse::Parse;
 use themelios_syntax::tree::AstNode;
-use zetesis_core::{AdmissionLimits, Program};
 
 use crate::diagnostic::unsupported;
 use crate::expansion::{Budget, check};
 use crate::{
-    AdmissionFailure, AdmissionOptions, Admitted, ExpansionFailure, ExpansionLimits,
-    ExpansionResource, ExpansionUsage, FormulaPurpose, ParsedSource, ProfileFeature, ProgramSite,
-    SourceFailure, SourceMetadata, StatementId, compile, fact_expansion, metadata, profile,
+    ExpansionFailure, ExpansionLimits, ExpansionResource, ProfileFeature, ProgramSite, StatementId,
+    compile,
 };
-
-/// Admit a bounded extension of S0: unannotated acyclic scalar `#const`
-/// definitions; checked ground scalar arithmetic in ordinary S0 terms; and
-/// finite pools/intervals in ordinary fact heads. A bare undefined constant name
-/// remains a symbolic value. Definition names do not rename predicates.
-///
-/// Intervals have scalar integer endpoints; arithmetic over a set, variable
-/// arithmetic, and pools/intervals in non-fact rules remain unsupported. A
-/// descending interval denotes no facts. Fact products are bounded before
-/// allocation. The resulting core program uses the existing S0 semantics.
-/// Original source bytes and parsed rule locations are preserved; no source text
-/// is regenerated. Signed `#defined` signatures and signature/empty `#show`
-/// are retained as metadata; display selection never changes model identity.
-/// Includes require bundle admission and other directives remain unsupported.
-///
-/// # Errors
-/// Refuses every parser/raiser diagnostic, unsupported construct, ambiguous or
-/// cyclic definition, undefined/overflowing scalar operation, expansion limit,
-/// or independent core admission error. No successful partial program is
-/// returned. This partial profile refuses undefined arithmetic rather than
-/// emulating clingo's warning-and-drop behavior.
-pub fn admit_extended(
-    text: String,
-    options: AdmissionOptions,
-    limits: ExpansionLimits,
-) -> Result<Admitted, ExpansionFailure> {
-    ParsedSource::new(text, options)?
-        .admit_extended(limits)
-        .map_err(SourceFailure::into_error)
-}
-
-/// One admission's compiled program with the evidence its boundary retains.
-pub(crate) struct Compilation {
-    pub(crate) program: Program,
-    pub(crate) template_origins: Vec<Vec<Location>>,
-    pub(crate) fact_origins: Vec<Vec<Location>>,
-    pub(crate) metadata: SourceMetadata,
-    pub(crate) expansion: ExpansionUsage,
-}
-
-pub(crate) fn admit_parsed(
-    source: ParsedSource,
-    limits: ExpansionLimits,
-    cancellation: Option<zetesis_cpu::Cancellation>,
-) -> Result<Admitted, SourceFailure<ExpansionFailure>> {
-    admit_parsed_recording(source, limits, cancellation, None)
-}
-
-pub(crate) fn admit_parsed_recording(
-    source: ParsedSource,
-    limits: ExpansionLimits,
-    cancellation: Option<zetesis_cpu::Cancellation>,
-    recorder: Option<&mut crate::automatic::handoff::Recorder>,
-) -> Result<Admitted, SourceFailure<ExpansionFailure>> {
-    match compile_parsed(&source, limits, cancellation, recorder) {
-        Ok(compiled) => Ok(Admitted {
-            program: compiled.program,
-            source: source.into_source(),
-            template_origins: compiled.template_origins,
-            fact_origins: compiled.fact_origins,
-            metadata: compiled.metadata,
-            expansion: compiled.expansion,
-        }),
-        Err(error) => Err(SourceFailure::new(source, error)),
-    }
-}
-
-fn compile_parsed(
-    source: &ParsedSource,
-    limits: ExpansionLimits,
-    cancellation: Option<zetesis_cpu::Cancellation>,
-    mut recorder: Option<&mut crate::automatic::handoff::Recorder>,
-) -> Result<Compilation, ExpansionFailure> {
-    let parsed = source.parsed();
-    let options = source.options();
-    let location = Location {
-        source: source.source().id(),
-        span: source.source().span(),
-    };
-    let budget =
-        Budget::new(limits, options.core_limits.max_templates).with_cancellation(cancellation);
-    budget.poll(location.into())?;
-    if let Some(recorder) = recorder.as_deref_mut() {
-        recorder.check_profile(parsed, options, false)?;
-    } else {
-        profile::check_extended(parsed, options)?;
-    }
-    check_definitions(parsed, limits)?;
-    metadata::check_count(parsed, limits, &mut 0)?;
-    let raised = crate::automatic::handoff::raise(parsed, recorder.as_deref_mut())?;
-    budget.poll(location.into())?;
-    let mut source_metadata = metadata::Builder::default();
-    metadata::collect(&raised, &mut source_metadata)?;
-    let result = compile_owned(
-        &raised,
-        options.core_limits,
-        budget,
-        location.into(),
-        source_metadata.finish(location.into())?,
-    );
-    if result.is_err()
-        && let Some(recorder) = recorder
-    {
-        recorder.retain_program(raised);
-    }
-    result
-}
-
-/// Compile the source into the program with its template and fact origins and the
-/// expansion charges it accepted, as one compilation with `metadata`.
-pub(crate) fn compile_owned(
-    source: &SourceProgram,
-    core_limits: AdmissionLimits,
-    mut budget: Budget,
-    location: ProgramSite,
-    metadata: SourceMetadata,
-) -> Result<Compilation, ExpansionFailure> {
-    let compiled = compile_relational(
-        source,
-        core_limits,
-        &mut budget,
-        location,
-        FormulaPurpose::Ordinary,
-        |carrier, _| parsed_origins(carrier),
-        |location| ProgramSite::from(*location),
-    )?;
-    budget.poll(location)?;
-    Ok(Compilation {
-        program: compiled.program,
-        template_origins: compiled.template_origins,
-        fact_origins: compiled.fact_origins,
-        metadata,
-        expansion: budget.usage(),
-    })
-}
-
-/// Share normalization, fact expansion and signed coherence while retaining the
-/// caller's evidence representation and one cumulative preparation budget.
-pub(crate) fn compile_relational<P: Clone + Ord>(
-    source: &SourceProgram,
-    core_limits: AdmissionLimits,
-    budget: &mut Budget,
-    fallback: ProgramSite,
-    purpose: FormulaPurpose,
-    evidence: impl Fn(&WithProvenance<Statement>, ProgramSite) -> Vec<P>,
-    site: impl Fn(&P) -> ProgramSite,
-) -> Result<compile::CompiledProgram<P>, ExpansionFailure> {
-    budget.poll(fallback)?;
-    let constants = resolve(source, budget, fallback)?;
-    let mut compiled = compile_extended(source, &constants, budget, fallback, purpose, evidence)?;
-    budget.poll(fallback)?;
-    crate::coherence::append_with(
-        &mut compiled,
-        core_limits,
-        |resource, count, evidence| {
-            budget.charge(resource, count, evidence.first().map_or(fallback, &site))
-        },
-        |error, evidence| {
-            ExpansionFailure::from(AdmissionFailure::Core {
-                error,
-                location: evidence.first().map_or(fallback, &site),
-            })
-        },
-    )?;
-    budget.poll(fallback)?;
-    let compiled = compiled.admit(core_limits, |error, origins| {
-        let location = origins.first().map_or(fallback, &site);
-        AdmissionFailure::Core { error, location }
-    })?;
-    budget.poll(fallback)?;
-    Ok(compiled)
-}
-
-fn check_definitions(
-    parsed: &Parse<ast::Program>,
-    limits: ExpansionLimits,
-) -> Result<(), ExpansionFailure> {
-    let mut names = BTreeMap::new();
-    check_definitions_in(parsed, limits, &mut names)
-}
 
 pub(crate) fn check_definitions_in(
     parsed: &Parse<ast::Program>,
@@ -344,139 +161,10 @@ pub(crate) fn resolve(
     Ok(values)
 }
 
-/// Normalize each statement and compile it. A statement whose every term
-/// normalization would return as it is, charged and validated by
-/// [`kept_as_is`], is compiled from the original carrier: the rewrite would
-/// hand back the same statement, stamped with a transformation tag that
-/// nothing after this point reads, at the cost of copying and rebuilding it.
-/// Every other statement is rebuilt by the rewrite, alone in a program of
-/// its own so that no two statements merge.
-fn compile_extended<P: Clone>(
-    source: &SourceProgram,
-    constants: &BTreeMap<String, Symbol>,
-    budget: &mut Budget,
-    fallback: ProgramSite,
-    purpose: FormulaPurpose,
-    evidence: impl Fn(&WithProvenance<Statement>, ProgramSite) -> Vec<P>,
-) -> Result<compile::Compiled<P>, ExpansionFailure> {
-    let mut compiled = compile::Compiled::default();
-    for (index, carrier) in source.statements().enumerate() {
-        let location = origin(carrier, fallback.with_statement(StatementId::new(index)));
-        budget.poll(location)?;
-        if !purpose.includes(carrier.get())
-            || matches!(
-                carrier.get(),
-                Statement::Const(_) | Statement::Defined(_) | Statement::Show(_)
-            )
-        {
-            continue;
-        }
-        let locations = evidence(carrier, location);
-        if kept_as_is(
-            carrier.get(),
-            constants,
-            Normalization::Extended,
-            budget,
-            location,
-        )? {
-            emit(carrier, locations, budget, location, &mut compiled)?;
-            continue;
-        }
-        let mut normalizer = Normalizer {
-            constants,
-            budget,
-            location,
-            failure: None,
-        };
-        let rewritten = rewrite(SourceProgram::of_nodes([carrier.clone()]), &mut normalizer);
-        if let Some(failure) = normalizer.failure {
-            return Err(failure);
-        }
-        budget.poll(location)?;
-        let normalized_carrier = rewritten
-            .statements()
-            .next()
-            .expect("a rule rewrite keeps its statement");
-        emit(
-            normalized_carrier,
-            locations,
-            budget,
-            location,
-            &mut compiled,
-        )?;
-    }
-    Ok(compiled)
-}
-
-/// Emit one normalized statement into the shared classified source owner.
-/// Checked products retain compact columns, with evidence for every occurrence.
-fn emit<P: Clone>(
-    statement: &WithProvenance<Statement>,
-    locations: Vec<P>,
-    budget: &mut Budget,
-    location: ProgramSite,
-    compiled: &mut compile::Compiled<P>,
-) -> Result<(), ExpansionFailure> {
-    if let Some(facts) = fact_expansion::facts(statement, budget, location)? {
-        budget.charge(
-            ExpansionResource::Origins,
-            (facts.len() as u128).saturating_mul(locations.len() as u128),
-            location,
-        )?;
-        for product in facts.products() {
-            let mut columns = Vec::new();
-            columns
-                .try_reserve_exact(product.predicate().arity())
-                .map_err(|error| ExpansionFailure::Allocation { error, location })?;
-            for source in product.columns() {
-                let mut column = Vec::new();
-                for cell in source {
-                    budget.poll(location)?;
-                    column
-                        .try_reserve(1)
-                        .map_err(|error| ExpansionFailure::Allocation { error, location })?;
-                    column.push(match cell {
-                        fact_expansion::Cell::Scalar(value) => {
-                            zetesis_core::FactSegment::Value(value.clone())
-                        }
-                        fact_expansion::Cell::Interval(range) => {
-                            zetesis_core::FactSegment::Interval {
-                                first: *range.start(),
-                                last: *range.end(),
-                            }
-                        }
-                    });
-                }
-                columns.push(column);
-            }
-            compiled.product(
-                product.predicate().clone(),
-                columns,
-                &locations,
-                || budget.poll(location),
-                |error| ExpansionFailure::from(AdmissionFailure::Core { error, location }),
-            )?;
-        }
-    } else {
-        budget.charge(ExpansionResource::Templates, 1, location)?;
-        budget.charge(
-            ExpansionResource::Origins,
-            locations.len() as u128,
-            location,
-        )?;
-        compiled
-            .push(compile::statement(statement, location)?, locations)
-            .map_err(|error| AdmissionFailure::Core { error, location })?;
-    }
-    Ok(())
-}
-
-/// The normalizer a kept statement must match: the extended profile's, or
-/// the formula route's, which keeps the sentinels `#inf` and `#sup` with one
-/// unit of term work where the extended profile validates them as scalars.
+/// The normalization contract a kept formula statement must match. Sentinels
+/// `#inf` and `#sup` consume one unit of term work without scalar payload work.
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Normalization {
-    Extended,
     Formula,
 }
 
@@ -749,33 +437,6 @@ pub(crate) fn origin(
             Origin::Constructed | Origin::Transformed(_) => None,
         })
         .unwrap_or(fallback)
-}
-
-struct Normalizer<'a> {
-    constants: &'a BTreeMap<String, Symbol>,
-    budget: &'a mut Budget,
-    location: ProgramSite,
-    failure: Option<ExpansionFailure>,
-}
-
-impl Rewrite for Normalizer<'_> {
-    fn tag(&self) -> TransformTag {
-        TransformTag::new("zetesis-scalar-expansion")
-    }
-    fn rewrite_term(&mut self, term: Term) -> Term {
-        if self.failure.is_some() {
-            return term;
-        }
-        match normalize_node(term, self.constants, self.budget, self.location) {
-            Ok(term) => term,
-            Err(error) => {
-                self.failure = Some(error);
-                // Only a failed private intermediate uses this placeholder;
-                // the entire rewrite is refused before compilation.
-                Term::Symbolic(Symbol::Number(0))
-            }
-        }
-    }
 }
 
 pub(crate) fn normalize_node(

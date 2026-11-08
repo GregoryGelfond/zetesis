@@ -1,5 +1,10 @@
 # Facts as columnar relation rows
 
+This record includes the former relational admission route. Its `Program`,
+carrier and automatic-retry APIs have since been removed. The shared formula
+fact blocks and normalization mechanisms remain; use the
+[current preparation guide](../book/rust/source.md) for supported entry points.
+
 A fact `p(t) ← ⊤` is a body-free ground rule, and zetesis has built general rule machinery for each one on both
 routes. This note normalizes facts into the representation the system already has for data, the columnar,
 dictionary-encoded support relations, in four stages. Each stage is an execution choice: answers and output are
@@ -425,7 +430,7 @@ full-round closure, so 3b is designed separately. 3a leaves its seam: workspaces
 The Ferraris theory already treats an atomic root as a fact. Stage 1 keeps one atomic root and one producer per fact.
 The end state replaces them with a fixed-true atom bit set over theory atoms, with per-family evidence, removing the
 per-fact root, producer and evidence entries from the theory, search, certificates and metadata. It changes the
-per-root `formula_origins()` contract, touches `zetesis-ferraris` and `zetesis-sat`, and states its own membership
+per-root `formula_origins()` contract, touches `zetesis-ferraris` and `zetesis-stable`, and states its own membership
 argument: facts hold in every answer set because the reduct's least model contains them.
 
 ### Staging

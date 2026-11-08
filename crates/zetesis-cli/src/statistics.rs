@@ -3,7 +3,7 @@
 use std::io::{self, Write};
 use std::time::Duration;
 
-use crate::{Backend, Completion, Grounder, Options, PublicationFailure, Report};
+use crate::{Completion, Options, PublicationFailure, Report};
 
 fn header(
     sink: &mut impl Write,
@@ -27,11 +27,10 @@ fn header(
     )?;
     writeln!(
         sink,
-        "  requested: backend={}; oracle={}; grounder={}; search={}",
+        "  requested: backend={}; oracle={}; grounder={}",
         options.backend.label(),
         options.oracle.label(),
-        options.grounder.label(),
-        options.search.label()
+        options.grounder.label()
     )?;
     writeln!(
         sink,
@@ -96,26 +95,18 @@ pub(crate) fn write_progress(
     }
     details(
         sink,
-        options,
         &config,
         &Details {
             models: progress.publication.models,
             checked: semantic.candidate_progress(),
             optimum_proved: semantic.optimum_proved(),
             interruption: semantic.interruption(),
-            discovered_gate_atoms: semantic.discovered_gate_atoms(),
-            expansion: progress.expansion,
-            candidate_statistics: semantic.candidate_statistics(),
             countermodel_statistics: semantic.countermodel_statistics(),
             formula_execution: semantic.formula_execution(),
             hybrid_execution: semantic.hybrid_execution(),
             terminal_execution: semantic.terminal_execution(),
             source_evaluation: semantic.source_evaluation(),
             model_construction: semantic.model_construction(),
-            lazy_execution: semantic.lazy_execution(),
-            shared_execution: semantic.shared_execution(),
-            closure_execution: semantic.closure_execution(),
-            query_execution: semantic.query_execution(),
             optimization: semantic.incumbent(),
         },
     )
@@ -130,7 +121,7 @@ pub(crate) fn write_detailed(
     let config = crate::SolveConfig::from(options);
     header(sink, options, &config, elapsed)?;
     match result {
-        Ok(report) => completed(sink, options, &config, report),
+        Ok(report) => completed(sink, &config, report),
         Err(failure) => {
             writeln!(sink, "  status: failed; completion=unavailable")?;
             if let Some(partial) = &failure.partial_report {
@@ -142,7 +133,7 @@ pub(crate) fn write_detailed(
                     partial.completion,
                     partial.summary_published,
                 )?;
-                details(sink, options, &config, &Details::from(partial.as_ref()))?;
+                details(sink, &config, &Details::from(partial.as_ref()))?;
             } else {
                 writeln!(
                     sink,
@@ -180,13 +171,12 @@ fn limits(sink: &mut impl Write, o: &Options, c: &crate::SolveConfig) -> io::Res
     )?;
     writeln!(
         sink,
-        "  configured execution storage: candidate bytes={}; reduct bytes/owner={}; completion bytes={}; closure bytes/worker={}; closure bytes/collective={}; batch bytes={}",
+        "  configured execution storage: candidate bytes={}; reduct bytes/owner={}; completion bytes={}; batch bytes={}; tight batch bytes={}",
         c.max_candidate_bytes,
         c.max_reduct_bytes,
         c.max_completion_scratch_bytes,
-        c.max_closure_bytes,
-        c.max_closure_batch_bytes,
-        c.max_batch_bytes
+        c.max_batch_bytes,
+        c.max_tight_batch_bytes
     )?;
     writeln!(
         sink,
@@ -200,7 +190,6 @@ fn limits(sink: &mut impl Write, o: &Options, c: &crate::SolveConfig) -> io::Res
 
 fn completed(
     sink: &mut impl Write,
-    options: &Options,
     config: &crate::SolveConfig,
     report: &Report,
 ) -> io::Result<()> {
@@ -210,7 +199,7 @@ fn completed(
         Completion::Interrupted => "interrupted (partial coverage)",
     };
     writeln!(sink, "  completion: {status}")?;
-    details(sink, options, config, &Details::from(report))
+    details(sink, config, &Details::from(report))
 }
 
 /// Borrow the shared statistics fields without inventing a successful report.
@@ -220,19 +209,14 @@ struct Details<'a> {
     checked: u64,
     optimum_proved: bool,
     interruption: Option<crate::Interruption>,
-    discovered_gate_atoms: usize,
-    expansion: Option<zetesis_themelios::ExpansionUsage>,
-    candidate_statistics: Option<zetesis_cpu::CandidateStatistics>,
-    countermodel_statistics: Option<&'a zetesis_sat::Statistics>,
+
+    countermodel_statistics: Option<&'a zetesis_stable::Statistics>,
     formula_execution: Option<&'a crate::FormulaExecutionStatistics>,
     hybrid_execution: Option<&'a zetesis_solve::HybridExecutionStatistics>,
     terminal_execution: Option<&'a zetesis_solve::TerminalExecutionStatistics>,
     source_evaluation: Option<&'a zetesis_themelios::SourceEvaluationStatistics>,
     model_construction: Option<&'a zetesis_solve::ModelConstructionStatistics>,
-    lazy_execution: Option<&'a crate::LazyExecutionStatistics>,
-    shared_execution: Option<&'a crate::SharedExecutionStatistics>,
-    closure_execution: Option<&'a crate::ClosureExecutionStatistics>,
-    query_execution: Option<&'a crate::QueryExecutionObservation>,
+
     optimization: Option<&'a crate::Optimization>,
 }
 
@@ -243,19 +227,12 @@ impl<'a> From<&'a Report> for Details<'a> {
             checked: report.checked,
             optimum_proved: report.optimum_proved,
             interruption: report.interruption,
-            discovered_gate_atoms: report.discovered_gate_atoms,
-            expansion: report.expansion,
-            candidate_statistics: report.candidate_statistics,
             countermodel_statistics: report.countermodel_statistics.as_ref(),
             formula_execution: report.formula_execution.as_ref(),
             hybrid_execution: report.hybrid_execution.as_ref(),
             terminal_execution: report.terminal_execution.as_ref(),
             source_evaluation: report.source_evaluation.as_ref(),
             model_construction: report.model_construction.as_ref(),
-            lazy_execution: report.lazy_execution.as_ref(),
-            shared_execution: report.shared_execution.as_ref(),
-            closure_execution: report.closure_execution.as_ref(),
-            query_execution: report.query_execution.as_ref(),
             optimization: report.optimization.as_ref(),
         }
     }
@@ -268,19 +245,12 @@ impl<'a> From<&'a crate::PartialReport> for Details<'a> {
             checked: report.checked,
             optimum_proved: report.optimum_proved,
             interruption: report.interruption,
-            discovered_gate_atoms: report.discovered_gate_atoms,
-            expansion: report.expansion,
-            candidate_statistics: report.candidate_statistics,
             countermodel_statistics: report.countermodel_statistics.as_ref(),
             formula_execution: report.formula_execution.as_ref(),
             hybrid_execution: report.hybrid_execution.as_ref(),
             terminal_execution: report.terminal_execution.as_ref(),
             source_evaluation: report.source_evaluation.as_ref(),
             model_construction: report.model_construction.as_ref(),
-            lazy_execution: report.lazy_execution.as_ref(),
-            shared_execution: report.shared_execution.as_ref(),
-            closure_execution: report.closure_execution.as_ref(),
-            query_execution: report.query_execution.as_ref(),
             optimization: report.optimization.as_ref(),
         }
     }
@@ -288,25 +258,9 @@ impl<'a> From<&'a crate::PartialReport> for Details<'a> {
 
 fn details(
     sink: &mut impl Write,
-    options: &Options,
     config: &crate::SolveConfig,
     report: &Details<'_>,
 ) -> io::Result<()> {
-    if let Some(usage) = report.expansion {
-        expansion(sink, options, usage)?;
-    }
-    if let Some(stats) = report.candidate_statistics {
-        candidates(sink, stats)?;
-    }
-    if let Some(observation) = report.query_execution {
-        query(sink, observation)?;
-    }
-    if let Some(stats) = report.shared_execution {
-        shared(sink, stats)?;
-    }
-    if let Some(stats) = report.lazy_execution {
-        lazy(sink, stats)?;
-    }
     if let Some(stats) = report.hybrid_execution {
         hybrid(sink, config, stats)?;
     }
@@ -322,8 +276,6 @@ fn details(
     }
     let examined = if report.source_evaluation.is_some() {
         "completed source evaluations"
-    } else if report.shared_execution.is_some() {
-        "closure result/control records examined"
     } else {
         "candidates examined"
     };
@@ -359,59 +311,13 @@ fn details(
                 "verified stable models"
             },
         )?;
-        writeln!(
-            sink,
-            "  discovered gate tuples: inapplicable (complete semantic candidates)"
-        )?;
-    } else if report.checked > 0 {
-        closure(sink, options, report)?;
     } else {
-        if report
-            .candidate_statistics
-            .is_some_and(|stats| stats.root_refuted)
-        {
-            // The root's narrowing settled the program: no seed was offered
-            // and no execution route ran; the carrier statistics above say
-            // what refuted it.
-            writeln!(
-                sink,
-                "  effective execution: none needed; the root narrowing refuted every seed"
-            )?;
-        } else {
-            writeln!(
-                sink,
-                "  effective execution: unavailable (stopped before execution counters)"
-            )?;
-        }
         writeln!(
             sink,
-            "  oracle work: unavailable; discovered gate tuples: {}",
-            report.discovered_gate_atoms
+            "  effective execution: unavailable (stopped before execution counters)"
         )?;
     }
     objective(sink, report)
-}
-
-fn expansion(
-    sink: &mut impl Write,
-    options: &Options,
-    usage: zetesis_themelios::ExpansionUsage,
-) -> io::Result<()> {
-    let limits = crate::admission::expansion_limits(options);
-    writeln!(
-        sink,
-        "  expansion used: term work={} of {}; templates={} of {}; values={} of {}; scalar bytes={} of {}; origins={} of {}",
-        usage.term_work,
-        limits.max_term_work,
-        usage.templates,
-        limits.max_templates,
-        usage.values,
-        limits.max_values,
-        usage.scalar_bytes,
-        limits.max_scalar_bytes,
-        usage.origin_locations,
-        limits.max_origin_locations
-    )
 }
 
 fn objective(sink: &mut impl Write, report: &Details<'_>) -> io::Result<()> {
@@ -421,11 +327,15 @@ fn objective(sink: &mut impl Write, report: &Details<'_>) -> io::Result<()> {
         } else {
             "incumbent only"
         };
+        let ties = if optimum.ties_pruned {
+            "unavailable".to_owned()
+        } else {
+            optimum.tied_models.to_string()
+        };
         writeln!(
             sink,
-            "  objective: {qualification}; costs(priority,value)={:?}; full ties={}; scored models={}; evaluation work={}",
+            "  objective: {qualification}; costs(priority,value)={:?}; full ties={ties}; scored models={}; evaluation work={}",
             optimum.score.costs(),
-            optimum.tied_models,
             optimum.scored_models,
             optimum.work
         )?;
@@ -433,49 +343,6 @@ fn objective(sink: &mut impl Write, report: &Details<'_>) -> io::Result<()> {
         writeln!(
             sink,
             "  objective: no retained score; evaluation counters=unavailable"
-        )?;
-    }
-    Ok(())
-}
-
-fn candidates(sink: &mut impl Write, stats: zetesis_cpu::CandidateStatistics) -> io::Result<()> {
-    writeln!(
-        sink,
-        "  candidate restrictions: work={}; conjunctions={}; skipped impossible intervals={}; prepared atom occurrences={}; copied payload bytes={}; peak copied payload bytes={}; allocator/index overhead excluded",
-        stats.restriction_work,
-        stats.restriction_conjunctions,
-        stats.conflicts,
-        stats.restriction_atoms,
-        stats.restriction_bytes,
-        stats.restriction_peak_bytes
-    )?;
-    if stats.root_refuted {
-        return writeln!(
-            sink,
-            "  carrier narrowing: refuted by a definite constraint after {} passes; no seed offered",
-            stats.narrowing_passes
-        );
-    }
-    writeln!(
-        sink,
-        "  carrier narrowing: passes={}; cut gate atoms={}; held gate atoms={}",
-        stats.narrowing_passes, stats.cut_gate_atoms, stats.held_gate_atoms
-    )?;
-    if let Some(stop) = stats.narrowing_stop {
-        writeln!(
-            sink,
-            "  carrier narrowing stop: {stop}; the completed passes' bounds were kept"
-        )?;
-    }
-    if stats.regions > 0 {
-        writeln!(
-            sink,
-            "  carrier regions: visited={}; refuted={}; leaves={}; counted={}; narrowing passes={}",
-            stats.regions,
-            stats.regions_refuted,
-            stats.regions_leaves,
-            stats.regions_counted,
-            stats.region_passes
         )?;
     }
     Ok(())
@@ -521,8 +388,15 @@ fn hybrid(
 ) -> io::Result<()> {
     writeln!(
         sink,
-        "  hybrid grounding: eager retained core; streamed source constraints; core answers={}; accepted={}; rejected={}; pending={}",
-        stats.core_answers, stats.accepted, stats.rejected, stats.pending
+        "  hybrid grounding: eager retained core; streamed source constraints: templates={}, instances={}; grounded in the core: templates={}, instances={}; core answers={}; accepted={}; rejected={}; pending={}",
+        stats.streamed.templates,
+        stats.streamed.instances,
+        stats.streamed.retained_templates,
+        stats.streamed.retained_instances,
+        stats.core_answers,
+        stats.accepted,
+        stats.rejected,
+        stats.pending
     )?;
     writeln!(
         sink,
@@ -536,160 +410,10 @@ fn hybrid(
     )
 }
 
-fn query(sink: &mut impl Write, observation: &crate::QueryExecutionObservation) -> io::Result<()> {
-    if observation.fault.is_some() && observation.statistics.is_some() {
-        writeln!(
-            sink,
-            "  query statistics: retaining last successful snapshot; current snapshot failed"
-        )?;
-    }
-    if let Some(stats) = observation.statistics {
-        writeln!(
-            sink,
-            "  prepared CPU queries: builds={}; adoptions={}; retained workspaces={}; active ranges={}; reused slots={}; retained bytes={}; reserved envelope bytes={}",
-            stats.preparation_builds,
-            stats.preparation_adoptions,
-            stats.retained_workspaces,
-            stats.active_workspaces,
-            stats.reused_workspaces,
-            stats.retained_bytes,
-            stats.reserved_bytes
-        )?;
-        if let Some(preparation) = stats.preparation {
-            writeln!(
-                sink,
-                "  query preparation: work={}; retained bytes={}; dense predicates={} of {}; separate from candidate work; capacities are not RSS",
-                preparation.work,
-                preparation.retained_bytes,
-                preparation.dense_predicates,
-                preparation.predicates
-            )?;
-        }
-    } else {
-        writeln!(
-            sink,
-            "  prepared CPU queries: no successful ownership snapshot"
-        )?;
-    }
-    if let Some(fault) = &observation.fault {
-        writeln!(sink, "  query observation fault: {fault}")?;
-    }
-    Ok(())
-}
-
-fn shared(sink: &mut impl Write, stats: &crate::SharedExecutionStatistics) -> io::Result<()> {
-    writeln!(
-        sink,
-        "  shared CPU: source={:?}; workers={}; batches={}; submitted={}; completed={}; stopped={}; queued={}",
-        stats.selection,
-        stats.workers,
-        stats.batches,
-        stats.submitted_candidates,
-        stats.completed_candidates,
-        stats.stopped_candidates,
-        stats.queued_results
-    )?;
-    writeln!(
-        sink,
-        "  shared source: rounds={}; work={}; instances={}; peak catalog atoms={}; mask words={}; pruned prefixes={}; peak mask payload bytes={}",
-        stats.source_rounds,
-        stats.source_work,
-        stats.source_instances,
-        stats.peak_catalog_atoms,
-        stats.mask_words,
-        stats.pruned_prefixes,
-        stats.peak_mask_bytes
-    )?;
-    writeln!(
-        sink,
-        "  CPU world evaluation: record visits plus antecedent tests={}; record visits={}",
-        stats.world_work, stats.world_instances
-    )?;
-    if let Some(cause) = stats.last_stop {
-        writeln!(sink, "  shared batch interruption: {cause}")?;
-    }
-    Ok(())
-}
-
-fn lazy(sink: &mut impl Write, stats: &crate::LazyExecutionStatistics) -> io::Result<()> {
-    writeln!(
-        sink,
-        "  lazy device: requested={}; observed={}; adapter={}",
-        stats.requested_backend.label(),
-        stats.backend,
-        stats.adapter
-    )?;
-    writeln!(
-        sink,
-        "  lazy candidates: submitted={}; completed={}; stopped={}; queued results={}",
-        stats.submitted_candidates,
-        stats.completed_candidates,
-        stats.stopped_candidates,
-        stats.queued_results
-    )?;
-    writeln!(
-        sink,
-        "  lazy source: batches={}; completed rounds={}; shared work={}; offered instances={}; peak catalog atoms={}",
-        stats.batches,
-        stats.source_rounds,
-        stats.source_work,
-        stats.source_instances,
-        stats.peak_catalog_atoms
-    )?;
-    writeln!(
-        sink,
-        "  lazy GPU: dispatches={}; instance/world checks={}; uploaded bytes={}; decoded bytes={}; host wait={:.3} ms (kernel time unmeasured)",
-        stats.dispatches,
-        stats.world_instances,
-        stats.uploaded_bytes,
-        stats.downloaded_bytes,
-        stats.host_wait.as_secs_f64() * 1000.0
-    )?;
-    writeln!(
-        sink,
-        "  lazy transport: chunks allocating buffers={}; complete-set reuses={}; peak requested device bytes={} (RSS unmeasured)",
-        stats.transport_allocations, stats.transport_reuses, stats.peak_transport_bytes
-    )?;
-    let reasons = stats.transport_replacements;
-    writeln!(
-        sink,
-        "  lazy replacements (overlapping): initial={}; offsets growth={}; records growth={}; snapshots growth={}; seeds growth={}; result shape={}; budget={}; accounting overflow={}",
-        reasons.initial,
-        reasons.offsets_growth,
-        reasons.records_growth,
-        reasons.snapshots_growth,
-        reasons.seeds_growth,
-        reasons.result_shape,
-        reasons.budget,
-        reasons.accounting_overflow
-    )?;
-    lazy_buffer_usage(sink, stats.transport_usage)
-}
-
-fn lazy_buffer_usage(sink: &mut impl Write, usage: crate::LazyTransportUsage) -> io::Result<()> {
-    write!(sink, "  lazy buffer requests (allocated/reused):")?;
-    for (name, binding) in [
-        ("uniform", usage.uniform),
-        ("offsets", usage.offsets),
-        ("records", usage.records),
-        ("snapshots", usage.snapshots),
-        ("seeds", usage.seeds),
-        ("output", usage.output),
-        ("readback", usage.readback),
-    ] {
-        write!(sink, " {name}={}/{};", binding.allocations, binding.reuses)?;
-    }
-    writeln!(
-        sink,
-        " slack releases: budget={}; accounting overflow={}",
-        usage.budget_releases, usage.accounting_overflow_releases
-    )
-}
-
 fn countermodel(
     sink: &mut impl Write,
     config: &crate::SolveConfig,
-    stats: &zetesis_sat::Statistics,
+    stats: &zetesis_stable::Statistics,
     membership: &str,
 ) -> io::Result<()> {
     if let Some(filter) = stats.region_filter {
@@ -699,56 +423,20 @@ fn countermodel(
             filter.preparations, filter.checks, filter.refuted, filter.failed, filter.overflowed
         )?;
     }
-    if let Some(support) = stats.support {
-        writeln!(
-            sink,
-            "  necessary disjunctive support: status={:?}; construction work={}; encoding work={} (included in search work)",
-            support.status, support.construction_work, support.encoding_work
-        )?;
-    }
     if let Some(regions) = stats.regions.as_ref() {
         candidate_regions(sink, regions)?;
     }
     writeln!(
         sink,
-        "  countermodel: search work={}; decisions={}; candidates={}; queries={}; witnesses={}; candidate restrictions={}; classical queries={}; {membership}={}",
+        "  countermodel: search work={}; decisions={}; candidates={}; queries={}; witnesses={}; candidate restrictions={}; {membership}={}",
         stats.search.work,
         stats.search.decisions,
         stats.candidates,
         stats.countermodel_queries,
         stats.countermodels,
         stats.candidate_restrictions,
-        stats.candidate_queries,
         stats.stable_models
     )?;
-    writeln!(
-        sink,
-        "  projection history: entries={}; nodes={}; retained bytes={}; peak bytes={}; work={} (included in search work)",
-        stats.projections.entries,
-        stats.projections.nodes,
-        stats.projections.retained_bytes,
-        stats.projections.peak_bytes,
-        stats.projections.work,
-    )?;
-    if let Some(preparation) = stats.reduct.preparation {
-        writeln!(
-            sink,
-            "  prepared reduct: work={}; variables={}; clauses={}; literals={}; retained bytes={}; construction peak bytes={}; work included in search; capacities exclude allocator overhead",
-            preparation.work,
-            preparation.variables,
-            preparation.clauses,
-            preparation.literals,
-            preparation.retained_bytes,
-            preparation.peak_bytes,
-        )?;
-        writeln!(
-            sink,
-            "  prepared reduct queries: original evaluation work={}; parameter work={} (included in search); peak worker workspace bytes={}",
-            stats.reduct.original_work,
-            stats.reduct.parameter_work,
-            stats.reduct.peak_workspace_bytes,
-        )?;
-    }
     if stats.reduct.frozen_positive_attempts > 0 {
         writeln!(
             sink,
@@ -775,7 +463,7 @@ fn countermodel(
 
 fn candidate_regions(
     sink: &mut impl Write,
-    regions: &zetesis_sat::RegionSearchStatistics,
+    regions: &zetesis_stable::RegionSearchStatistics,
 ) -> io::Result<()> {
     let counts = regions.counts;
     writeln!(
@@ -806,6 +494,34 @@ fn candidate_regions(
     if let Some(workers) = regions.workers {
         region_workers(sink, workers)?;
     }
+    let parity = regions.parity;
+    writeln!(
+        sink,
+        "  candidate parity: status={}; rows={}; rank={}; root refuted={}; units={}; region passes={}; forced={}; refuted={}; preparation work={}; preparation peak bytes={} (work included in reading work)",
+        parity.status.label(),
+        parity.rows,
+        parity.rank,
+        parity.root_refuted,
+        parity.units,
+        parity.region_passes,
+        parity.forced,
+        parity.refuted,
+        parity.preparation_work,
+        parity.preparation_bytes,
+    )?;
+    let cardinality = regions.cardinality;
+    writeln!(
+        sink,
+        "  candidate cardinality: status={}; rows={}; families={}; root refuted={}; region passes={}; refuted={}; preparation work={}; preparation peak bytes={} (work included in reading work)",
+        cardinality.status.label(),
+        cardinality.rows,
+        cardinality.families,
+        cardinality.root_refuted,
+        cardinality.region_passes,
+        cardinality.refuted,
+        cardinality.preparation_work,
+        cardinality.preparation_bytes,
+    )?;
     writeln!(
         sink,
         "  candidate support: producer work={}; possible-foundedness work={} (included in reading work)",
@@ -839,9 +555,9 @@ pub(crate) struct WorkerRecord {
     pub(crate) spawn: Option<Duration>,
 }
 
-impl From<zetesis_sat::RegionWalkEngagement> for WorkerRecord {
-    fn from(engagement: zetesis_sat::RegionWalkEngagement) -> Self {
-        use zetesis_sat::RegionWalkEngagement as State;
+impl From<zetesis_stable::RegionWalkEngagement> for WorkerRecord {
+    fn from(engagement: zetesis_stable::RegionWalkEngagement) -> Self {
+        use zetesis_stable::RegionWalkEngagement as State;
         match engagement {
             State::Unengaged { elapsed, walking } => Self {
                 elapsed: Some(elapsed),
@@ -868,10 +584,11 @@ impl From<zetesis_sat::RegionWalkEngagement> for WorkerRecord {
 }
 
 /// The parallel walk's workers, under its candidate regions, with the JSON's
-/// keys: `engagement_delay_ns=never` for a delay whose deadline overflows.
+/// keys: `engagement_delay_ns=never` for a delay whose deadline overflows. The
+/// queries the workers divided follow on their own line.
 fn region_workers(
     sink: &mut impl Write,
-    workers: zetesis_sat::RegionWorkerStatistics,
+    workers: zetesis_stable::RegionWorkerStatistics,
 ) -> io::Result<()> {
     let record = WorkerRecord::from(workers.engagement);
     write!(
@@ -903,12 +620,23 @@ fn region_workers(
     if let Some(spawn) = record.spawn {
         write!(sink, "; spawn_ns={}", spawn.as_nanos())?;
     }
-    writeln!(sink)
+    writeln!(sink)?;
+    let division = workers.query_division;
+    writeln!(
+        sink,
+        "    query division: division={}; published={}; served={}; stolen={}; servers={}; peak served={}",
+        division.division.label().replace('_', " "),
+        division.published,
+        division.served,
+        division.stolen,
+        division.servers,
+        division.peak_served,
+    )
 }
 
 fn certificate(
     sink: &mut impl Write,
-    certified: &zetesis_sat::CertifiedStatistics,
+    certified: &zetesis_stable::CertifiedStatistics,
     max_bytes: u64,
 ) -> io::Result<()> {
     writeln!(
@@ -926,12 +654,12 @@ fn certificate(
     )?;
     if let Some(plan) = certified.plan {
         match plan {
-            zetesis_sat::CertificatePlanStatistics::Tight(plan) => writeln!(
+            zetesis_stable::CertificatePlanStatistics::Tight(plan) => writeln!(
                 sink,
                 "  tight certificate storage: construction logical bytes={}; resident logical bytes={}; dependencies={}",
                 plan.construction_bytes, plan.resident_bytes, plan.dependencies
             )?,
-            zetesis_sat::CertificatePlanStatistics::Positive(plan) => writeln!(
+            zetesis_stable::CertificatePlanStatistics::Positive(plan) => writeln!(
                 sink,
                 "  positive certificate: derived atoms={}; activated formula nodes={}; dependencies={}; propagated dependencies={}; construction peak bytes={}; retained bytes={}",
                 plan.derived_atoms,
@@ -941,7 +669,7 @@ fn certificate(
                 plan.peak_bytes,
                 plan.retained_bytes
             )?,
-            zetesis_sat::CertificatePlanStatistics::Stratified(plan) => writeln!(
+            zetesis_stable::CertificatePlanStatistics::Stratified(plan) => writeln!(
                 sink,
                 "  stratified certificate: components={}; derived atoms={}; activated formula nodes={}; dependencies={}; propagated dependencies={}; construction peak bytes={}; retained bytes={}",
                 plan.components,
@@ -956,13 +684,8 @@ fn certificate(
     }
     writeln!(
         sink,
-        "  class attempts: tight refusal={:?}; positive refusal={:?}; stratified refusal={:?}; restriction refusal={:?}; restriction work={}; committed restriction clauses={}",
-        certified.tight_refusal,
-        certified.positive_refusal,
-        certified.stratified_refusal,
-        certified.restriction_refusal,
-        certified.restriction_work,
-        certified.restriction_clauses
+        "  class attempts: tight refusal={:?}; positive refusal={:?}; stratified refusal={:?}",
+        certified.tight_refusal, certified.positive_refusal, certified.stratified_refusal
     )?;
     if let Some(peak) = certified.tight_check_peak_bytes {
         writeln!(
@@ -978,7 +701,7 @@ fn certificate(
     }
     if !matches!(
         certified.plan,
-        Some(zetesis_sat::CertificatePlanStatistics::Positive(_))
+        Some(zetesis_stable::CertificatePlanStatistics::Positive(_))
     ) && let Some(attempt) = certified.positive_attempt
     {
         writeln!(
@@ -995,7 +718,7 @@ fn certificate(
     }
     if !matches!(
         certified.plan,
-        Some(zetesis_sat::CertificatePlanStatistics::Stratified(_))
+        Some(zetesis_stable::CertificatePlanStatistics::Stratified(_))
     ) && let Some(attempt) = certified.stratified_attempt
     {
         writeln!(
@@ -1027,9 +750,9 @@ fn formula(
         .and_then(|s| s.certified)
         .and_then(|s| s.plan)
     {
-        Some(zetesis_sat::CertificatePlanStatistics::Tight(_)) => "tight-support",
-        Some(zetesis_sat::CertificatePlanStatistics::Positive(_)) => "positive-consequences",
-        Some(zetesis_sat::CertificatePlanStatistics::Stratified(_)) => "stratified-consequences",
+        Some(zetesis_stable::CertificatePlanStatistics::Tight(_)) => "tight-support",
+        Some(zetesis_stable::CertificatePlanStatistics::Positive(_)) => "positive-consequences",
+        Some(zetesis_stable::CertificatePlanStatistics::Stratified(_)) => "stratified-consequences",
         None => "countermodel",
     };
     if let Some(execution) = report.formula_execution {
@@ -1085,11 +808,23 @@ fn formula(
             "  formula accounting: pending candidates={}; queued verified models={}",
             execution.pending_candidates, execution.queued_models
         )?;
-        writeln!(
-            sink,
-            "  formula batch limits: candidates={}; pending bytes={}",
-            config.batch_size, config.max_batch_bytes
-        )?;
+        if config.gpu_batching == zetesis_solve::GpuBatching::Adaptive
+            && !execution.adapter.is_empty()
+        {
+            // Adaptive GPU slates have no ceiling; the batch size is where
+            // they start and where bound feedback returns them.
+            writeln!(
+                sink,
+                "  formula batch limits: adaptive slates; initial and reset slate size={}; pending bytes={}",
+                config.batch_size, config.max_batch_bytes
+            )?;
+        } else {
+            writeln!(
+                sink,
+                "  formula batch limits: candidates={}; pending bytes={}",
+                config.batch_size, config.max_batch_bytes
+            )?;
+        }
         if !execution.adapter.is_empty() {
             formula_gpu(sink, execution)?;
         }
@@ -1100,6 +835,31 @@ fn formula(
             "  effective execution: backend=cpu; oracle={oracle}; grounder={grounder}; native CPU search; batch-completion scratch limit=inapplicable"
         )
     }
+}
+
+/// The slates a GPU enumeration proposed ahead, and its time to first answer.
+fn formula_gpu_lookahead(
+    sink: &mut impl Write,
+    execution: &crate::FormulaExecutionStatistics,
+) -> io::Result<()> {
+    if let Some(decision) = execution.gpu_lookahead {
+        writeln!(
+            sink,
+            "  formula GPU lookahead: slates proposed ahead={}; last decision={}; overlapped device compute={}ns; finish waits={}ns; unmeasured submissions={}; device time hidden behind production is the compute less the waits, paired over the measured submissions",
+            execution.gpu_lookahead_slates,
+            decision.label(),
+            execution.gpu_lookahead_device_ns,
+            execution.gpu_lookahead_finish_wait_ns,
+            execution.gpu_lookahead_unmeasured,
+        )?;
+    }
+    if let Some(first) = execution.first_answer_ns {
+        writeln!(
+            sink,
+            "  formula GPU first answer: {first}ns after the device execution began; reported, not judged"
+        )?;
+    }
+    Ok(())
 }
 
 fn formula_gpu(
@@ -1121,6 +881,16 @@ fn formula_gpu(
         "  formula GPU submitted: batches={}; candidates={}; completed work/sweeps for unreturned results=unavailable",
         execution.gpu_submitted_batches, execution.gpu_submitted_candidates
     )?;
+    writeln!(
+        sink,
+        "  formula GPU slates: committed={}; largest={}; feedback resets={}; each slate takes one or more submitted batches",
+        execution.gpu_slates,
+        execution
+            .gpu_largest_slate
+            .map_or_else(|| "none".to_owned(), |largest| largest.to_string()),
+        execution.gpu_slate_resets
+    )?;
+    formula_gpu_lookahead(sink, execution)?;
     if let Some(residuals) = execution.gpu_residuals {
         writeln!(
             sink,
@@ -1131,13 +901,36 @@ fn formula_gpu(
     if let Some(work) = execution.tight_work_per_candidate {
         writeln!(
             sink,
-            "  tight GPU limits: complete support scan work/candidate={work}; propagation sweeps=not applicable"
+            "  tight GPU limits: work/candidate={work}; propagation sweeps=not applicable"
         )?;
     }
     if let Some(work) = execution.gpu_scheduled_work {
         writeln!(
             sink,
-            "  tight GPU scheduled full-scan work={work}; includes submitted unreturned batches"
+            "  tight GPU scheduled work={work}; performed by decoded batches, reserved by submitted unreturned batches"
+        )?;
+    }
+    if let Some(routes) = execution.gpu_tight_routes {
+        writeln!(
+            sink,
+            "  tight GPU routes: complete={}; dense reuse={} (beyond update threshold={}); update={}; nodes evaluated by update={}",
+            routes.complete,
+            routes.dense_reuse,
+            routes.beyond_threshold,
+            routes.update,
+            routes.nodes_evaluated
+        )?;
+    }
+    if let Some(updates) = execution.gpu_tight_updates {
+        writeln!(
+            sink,
+            "  tight GPU update route: {}; count width={}; steady state={}; guard declined batches={}",
+            updates.availability.label(),
+            updates
+                .count_bits
+                .map_or_else(|| "unavailable".to_owned(), |bits| bits.to_string()),
+            updates.steady_state,
+            updates.guard_declined_batches
         )?;
     }
     if let Some(limits) = execution.gpu_limits {
@@ -1149,13 +942,16 @@ fn formula_gpu(
     }
     writeln!(
         sink,
-        "  formula GPU resources: peak authored GPU bytes={}",
-        execution.peak_accounted_bytes
+        "  formula GPU resources: peak authored GPU bytes={}; workgroup size={}",
+        execution.peak_accounted_bytes,
+        execution
+            .gpu_workgroup_size
+            .map_or_else(|| "unavailable".to_owned(), |size| size.to_string())
     )?;
     let timing = &execution.gpu_compute_timing;
     writeln!(
         sink,
-        "  GPU compute passes: status={}; elapsed_ns={}; measured batches={}; unavailable batches={}; complete={}; host preparation, transfers and waits excluded",
+        "  GPU compute passes: status={}; elapsed_ns={}; measured batches={}; unavailable batches={}; unresolved batches={}; flush submissions={}; complete={}; host preparation, transfers and waits excluded",
         timing.status.label(),
         timing.elapsed.map_or_else(
             || "unavailable".to_owned(),
@@ -1163,86 +959,10 @@ fn formula_gpu(
         ),
         timing.measured_batches,
         timing.unavailable_batches,
+        timing.unresolved_batches,
+        timing.flush_submissions,
         timing.is_complete(),
     )
-}
-
-fn closure(sink: &mut impl Write, options: &Options, report: &Details<'_>) -> io::Result<()> {
-    // The statistics say which route ran; without one, the requested policy
-    // says which would have.
-    let grounder = report.closure_execution.map_or(
-        if options.grounder == Grounder::Eager {
-            "eager"
-        } else {
-            "lazy"
-        },
-        |closure| closure.route.label(),
-    );
-    let cpu = report.shared_execution.is_some() || options.backend == Backend::Cpu;
-    if cpu {
-        writeln!(
-            sink,
-            "  effective execution: backend=cpu; oracle=closure; grounder={grounder}; workers={}",
-            options.workers
-        )?;
-    } else {
-        writeln!(
-            sink,
-            "  effective execution: oracle=closure; backend=requested GPU policy; grounder={grounder}; see backend diagnostics for actual adapter"
-        )?;
-    }
-    if report.shared_execution.is_some() {
-        writeln!(
-            sink,
-            "  discovered gate tuples: {}; source and world work reported separately above",
-            report.discovered_gate_atoms
-        )
-    } else if let Some(closure) = report.closure_execution {
-        writeln!(
-            sink,
-            "  discovered gate tuples: {}",
-            report.discovered_gate_atoms
-        )?;
-        independent_closure(sink, closure)
-    } else {
-        writeln!(
-            sink,
-            "  discovered gate tuples: {}; oracle work=unavailable (not accumulated by this driver)",
-            report.discovered_gate_atoms
-        )
-    }
-}
-
-fn independent_closure(
-    sink: &mut impl Write,
-    closure: &crate::ClosureExecutionStatistics,
-) -> io::Result<()> {
-    let (rounds, units) = match closure.route {
-        crate::ClosureRoute::Eager => ("rule passes", "eager scan units"),
-        crate::ClosureRoute::Lazy(_) => ("source rounds", "join/copy units"),
-    };
-    writeln!(
-        sink,
-        "  independent closure: checks completed={}; stopped={}; {rounds}={}; work={} ({units}); derived atoms={}; stopped checks return no counters",
-        closure.completed_checks,
-        closure.stopped_checks,
-        closure.rounds,
-        closure.work,
-        closure.derived_atoms
-    )?;
-    if let crate::ClosureRoute::Lazy(joins) = closure.route {
-        writeln!(
-            sink,
-            "  closure joins: catalog work={} (within work); bindings={}; tuple probes={}; dense heads={} (recorded as bits); block steps={} (blocks joined by words); peak named closure bytes={} (admitted or reserved capacity, not RSS)",
-            joins.catalog_work,
-            joins.bindings,
-            joins.tuple_probes,
-            joins.dense_heads,
-            joins.block_steps,
-            joins.peak_closure_bytes
-        )?;
-    }
-    Ok(())
 }
 
 /// The executable doing this run's work, resolved through links, for evidence

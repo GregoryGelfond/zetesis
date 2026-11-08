@@ -3,8 +3,8 @@
 use std::io::{self, Write};
 
 use crate::support::options::serial;
+use zetesis_algebra::Cancellation;
 use zetesis_cli::{Options, StatisticsView, run_with_diagnostics};
-use zetesis_cpu::Cancellation;
 use zetesis_test_support::io::Chunks;
 
 const SOURCE: &str = "a :- not b. b :- not a.";

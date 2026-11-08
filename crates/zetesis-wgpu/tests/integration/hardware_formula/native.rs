@@ -8,6 +8,7 @@ pub(super) fn qualify(oracle: &mut GpuFormulaOracle) {
     qualify_carry_and_borrow(oracle);
     qualify_settled_rows(oracle);
     qualify_threshold_guard_families(oracle);
+    qualify_shared_interval(oracle);
     for bound in -1..=8 {
         let mut nodes = FormulaNodes::new(
             FormulaParts::new(
@@ -113,7 +114,7 @@ fn qualify_carry_and_borrow_at(oracle: &mut GpuFormulaOracle, weight: u64) {
     let result = oracle
         .propagate_batch(&theory, &[both], FormulaLimits::default())
         .unwrap();
-    assert_eq!(result[0].verdict(), FormulaVerdict::NoProperSubset);
+    assert_eq!(result[0].verdict(), &FormulaVerdict::NoProperSubset);
 }
 
 // The same result must survive both entailed rows and rows still requiring a
@@ -215,8 +216,8 @@ fn compare_native(oracle: &mut GpuFormulaOracle, theory: &Theory) {
             if matches!(result.verdict(), FormulaVerdict::NoProperSubset) {
                 assert!(expected.accepted());
             }
-            // Device domains never cross this API. A surviving proper-subset
-            // reduct model must leave exact CPU completion as a residual query.
+            // Every independently checked proper-subset witness must remain
+            // represented in the device's semantic root.
             if !matches!(expected.verdict(), Verdict::NotModel { .. }) {
                 let frozen =
                     FrozenReduct::new(candidate, Limits::default(), &Cancellation::default())
@@ -228,7 +229,15 @@ fn compare_native(oracle: &mut GpuFormulaOracle, theory: &Theory) {
                             .is_satisfied_by(tested, Limits::default(), &Cancellation::default())
                             .unwrap()
                     {
-                        assert!(matches!(result.verdict(), FormulaVerdict::Residual(_)));
+                        let FormulaVerdict::Residual(_, root) = result.verdict() else {
+                            panic!("a proper frozen witness requires residual completion");
+                        };
+                        assert_eq!(root.len(), theory.atom_count());
+                        for atom in 0..root.len() {
+                            if let Some(value) = root.decision(atom) {
+                                assert_eq!(value, tested.contains(atom));
+                            }
+                        }
                     }
                 }
             }
@@ -445,11 +454,85 @@ fn qualify_threshold_guard_families(oracle: &mut GpuFormulaOracle) {
             let result = oracle
                 .propagate_batch(&theory, &[candidate], FormulaLimits::default())
                 .unwrap();
-            assert_eq!(result[0].verdict(), FormulaVerdict::NoProperSubset);
+            assert_eq!(result[0].verdict(), &FormulaVerdict::NoProperSubset);
             assert_eq!(
                 oracle.last_batch_stats().unwrap().propagation,
                 super::requested_groups(oracle, &theory)
             );
         }
     }
+}
+
+// The lower requirement must force b before strict-subset pruning can cut a.
+// The final witness then gives the same row a true lower and false upper guard.
+fn qualify_shared_interval(oracle: &mut GpuFormulaOracle) {
+    let mut nodes =
+        FormulaNodes::new(FormulaParts::new((0..3).map(Node::atom).collect(), vec![]).unwrap());
+    let mut transaction = nodes.transaction();
+    let guards = transaction
+        .push_threshold_family(
+            &[0, 0, 1, 2],
+            &[1, 1, 4, 1],
+            &[7, 4],
+            usize::MAX,
+            usize::MAX,
+        )
+        .unwrap();
+    let implication = transaction
+        .push(NodeView::Implies(guards[0], 0), usize::MAX, usize::MAX)
+        .unwrap();
+    transaction.commit();
+    let theory = Theory::new(
+        3,
+        nodes.into_parts(),
+        vec![2, guards[1], implication],
+        zetesis_ferraris::AdmissionLimits::default(),
+    )
+    .unwrap();
+    let descriptors = [guards[0], guards[1]].map(|guard| {
+        theory.parts().thresholds()[theory.nodes()[guard].threshold_descriptor().unwrap()]
+    });
+    assert_eq!(descriptors[0].row, descriptors[1].row);
+    assert_eq!([descriptors[0].bound, descriptors[1].bound], [7, 4]);
+    let control = Cancellation::default();
+    let candidate = Interpretation::new(&theory, [0, 1, 2]).unwrap();
+    let mut workspace = zetesis_ferraris::EvaluationWorkspace::default();
+    let evaluated = workspace
+        .evaluate(
+            &candidate,
+            zetesis_ferraris::EvaluationLimits::default(),
+            &control,
+        )
+        .result
+        .unwrap();
+    assert!(evaluated.is_model());
+    for &guard in &guards {
+        assert_eq!(evaluated.node_truth(guard), Some(true));
+    }
+    let family: Vec<Vec<_>> = candidates(&theory)
+        .iter()
+        .filter(|tested| {
+            check(&theory, tested, Limits::default(), &control)
+                .unwrap()
+                .accepted()
+        })
+        .map(|tested| tested.atoms().collect())
+        .collect();
+    assert_eq!(family, vec![vec![1, 2]]);
+    compare_native(oracle, &theory);
+    let results = oracle
+        .propagate_batch(&theory, &[candidate], FormulaLimits::default())
+        .unwrap();
+    let root = residual_root(&results[0], ResidualReason::FixedPoint);
+    assert_eq!(root.held().collect::<Vec<_>>(), [1, 2]);
+    assert!(root.is_cut(0));
+    assert_eq!(root.open().count(), 0);
+    assert_eq!(
+        oracle.last_batch_stats().unwrap().propagation,
+        super::requested_groups(oracle, &theory)
+    );
+    // These are device-returned decisions, before any CPU completion. They
+    // detect a skipped shared-row forcing pass: b and a would remain open.
+    // Opposite guard requirements arise only after the last atom is decided;
+    // this does not claim both forcing predicates visited an undecided slot.
 }

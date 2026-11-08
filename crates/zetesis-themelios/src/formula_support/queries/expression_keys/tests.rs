@@ -281,7 +281,7 @@ fn a_cancelled_cache_hit_returns_no_posting() {
             .unwrap()
             .unwrap();
         assert_eq!(positions(&first).len(), 1);
-        let cancellation = zetesis_cpu::Cancellation::default();
+        let cancellation = zetesis_algebra::Cancellation::default();
         cancellation.cancel();
         counters.attach_test_control(&cancellation);
         assert!(matches!(
@@ -294,7 +294,7 @@ fn a_cancelled_cache_hit_returns_no_posting() {
                 Context::new(computation, &limits, counters, location())
             ),
             Err(FormulaFailure::Interrupted {
-                reason: zetesis_cpu::Stop::Cancelled,
+                reason: zetesis_algebra::Stop::Cancelled,
                 ..
             })
         ));

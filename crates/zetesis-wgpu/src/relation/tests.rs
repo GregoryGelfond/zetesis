@@ -89,8 +89,8 @@ fn records(
         .collect()
 }
 
-fn output(plan: &packing::Plan) -> Vec<u32> {
-    vec![0; usize::try_from(plan.mask_bytes / 4).unwrap()]
+fn output(plan: &packing::Plan) -> Words<u32> {
+    vec![0; usize::try_from(plan.mask_bytes / 4).unwrap()].into()
 }
 
 #[test]

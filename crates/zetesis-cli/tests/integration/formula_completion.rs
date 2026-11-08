@@ -5,21 +5,21 @@ use std::num::NonZeroUsize;
 use crate::support::prepared;
 use crate::support::runs::detailed as cli_solve;
 use clap::Parser;
+use zetesis_algebra::Cancellation;
 use zetesis_cli::{Completion, Interruption, Options, RunError};
-use zetesis_cpu::Cancellation;
-use zetesis_sat::Incomplete;
+use zetesis_stable::Incomplete;
 
 use zetesis_test_support::io::FailAt;
 
-/// The batched completion and its pool belong to the clause search; the
-/// region walk decides its leaves in its workers.
+/// One region walker, whose candidates the completion pool checks in batches;
+/// several walkers decide their leaves themselves.
 fn options() -> Options {
     Options::try_parse_from([
         "zetesis",
         "--backend",
         "cpu",
-        "--search",
-        "clauses",
+        "--threads",
+        "1",
         "--oracle",
         "countermodel",
         "--models",
@@ -214,7 +214,6 @@ fn default_scalar_cursor_keeps_its_existing_storage_contract() {
 fn native_parallel_statistics_do_not_claim_scalar_execution() {
     for workers in [4, 14] {
         let mut configured = options();
-        configured.search = zetesis_cli::SearchMethod::Regions;
         configured.workers = NonZeroUsize::new(workers).unwrap();
         let actual = cli_solve("{a;b}.", &configured);
         let mut bounded = zetesis_cli::PublicationConfig::from(&configured);

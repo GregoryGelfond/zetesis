@@ -6,7 +6,7 @@
 //! expansion or second numeric semantic owner is introduced.
 
 use crate::{GpuError, GpuErrorKind};
-use zetesis_cpu::Cancellation;
+use zetesis_algebra::Cancellation;
 use zetesis_ferraris::{ExtremumCutRule, NodeView, Theory};
 
 pub(crate) mod dependency;
@@ -237,5 +237,7 @@ fn append(words: &mut Vec<u32>, values: &[u32]) -> Result<(), GpuError> {
     Ok(())
 }
 
+#[cfg(test)]
+pub(crate) use tests::assert_candidate_word_binding;
 #[cfg(test)]
 mod tests;

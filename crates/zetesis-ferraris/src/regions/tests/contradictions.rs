@@ -1,14 +1,14 @@
 //! Refutation needs only the prefix that establishes a contradiction.
 
 use crate::test_support::SinglePermits;
-use zetesis_cpu::{Cancellation, Stop};
+use zetesis_algebra::{Cancellation, Stop};
 
 use crate::{
     AdmissionLimits, FormulaParts, Narrower, Node, OperandSpan, OriginalSubject, Region,
     RegionLimits, Theory,
 };
 
-use super::super::{Closure, NarrowingScratch, Step, Subject, Work, bit, producers};
+use super::super::{Closure, Context, Meter, NarrowingScratch, Step, producers};
 use super::compact_mut;
 
 fn chain(disjunction: bool, atoms: usize) -> Theory {
@@ -41,7 +41,7 @@ fn chain_refutation_visits_only_its_prefix() {
             for failure in [Stop::WorkLimit, Stop::Cancelled, Stop::Deadline] {
                 for limit in [needed - 1, needed] {
                     let mut knowledge = index.knowledge();
-                    let known = compact_mut(&mut knowledge);
+                    let mut known = compact_mut(&mut knowledge);
                     // These bits are known before their events update the
                     // counters. Teaching the root conflicts at this operand.
                     if disjunction {
@@ -52,16 +52,18 @@ fn chain_refutation_visits_only_its_prefix() {
                         known.never[0] |= 1 << conflict;
                     }
                     let mut scratch = NarrowingScratch::default();
-                    scratch.prepare(9);
+                    scratch.common.prepare(9);
                     let mut quota = SinglePermits::new(limit, failure);
-                    let mut work = Work::reserved(&mut quota);
-                    let result = Closure {
+                    let mut work = Meter::reserved(&mut quota);
+                    let result = Closure::<_, zetesis_algebra::AnswerSetsSought> {
                         known: compact_mut(&mut knowledge),
-                        lists: &mut scratch,
+                        lists: &mut scratch.common,
+                        learning: &mut scratch.learning,
                     }
-                    .teach_chain(&index, 0, &mut work);
+                    .teach_chain(&index, 0, &mut work)
+                    .map_err(zetesis_algebra::Failure::into_stop);
                     work.refund();
-                    assert_eq!(work.spent, limit);
+                    assert_eq!(work.charged(), limit);
                     if limit < needed {
                         assert!(result == Err(failure));
                     } else {
@@ -69,7 +71,7 @@ fn chain_refutation_visits_only_its_prefix() {
                     }
                     // No event from the unread tail may survive the shortcut.
                     assert_eq!(
-                        scratch.nodes,
+                        scratch.common.nodes,
                         (0..conflict)
                             .map(|operand| (operand, !disjunction))
                             .collect::<Vec<_>>()
@@ -92,27 +94,29 @@ fn parent_refutation_visits_only_its_prefix() {
     )
     .unwrap();
     let index = Narrower::new(&theory);
-    let subject = Subject::from(OriginalSubject::new(&theory, None));
+    let subject = Context::from(OriginalSubject::new(&theory, None));
     for failure in [Stop::WorkLimit, Stop::Cancelled, Stop::Deadline] {
         for limit in 0..=2 {
             let mut knowledge = index.knowledge();
-            let known = compact_mut(&mut knowledge);
+            let mut known = compact_mut(&mut knowledge);
             known.sure[0] |= 1;
             known.never[0] |= 1 << 1;
             for parent in 9..17 {
                 known.sure[0] |= 1 << parent;
             }
             let mut scratch = NarrowingScratch::default();
-            scratch.prepare(9);
+            scratch.common.prepare(9);
             let mut quota = SinglePermits::new(limit, failure);
-            let mut work = Work::reserved(&mut quota);
-            let result = Closure {
+            let mut work = Meter::reserved(&mut quota);
+            let result = Closure::<_, zetesis_algebra::AnswerSetsSought> {
                 known: compact_mut(&mut knowledge),
-                lists: &mut scratch,
+                lists: &mut scratch.common,
+                learning: &mut scratch.learning,
             }
-            .revisit(subject, &index, 0, true, &mut work);
+            .revisit(subject, &index, 0, true, &mut work)
+            .map_err(zetesis_algebra::Failure::into_stop);
             work.refund();
-            assert_eq!(work.spent, limit);
+            assert_eq!(work.charged(), limit);
             if limit < 2 {
                 assert!(result == Err(failure));
             } else {
@@ -121,8 +125,8 @@ fn parent_refutation_visits_only_its_prefix() {
             // The first parent conflicts; none of its siblings can force its
             // consequent after that refutation, even with a fresh work permit.
             let known = compact_mut(&mut knowledge);
-            assert!((2..9).all(|atom| !bit(known.sure, atom)));
-            assert!(scratch.nodes.is_empty());
+            assert!((2..9).all(|atom| !known.sure.contains(atom)));
+            assert!(scratch.common.nodes.is_empty());
         }
     }
 }
@@ -152,27 +156,29 @@ fn downward_refutation_omits_support_wakeups() {
         .producers
         .unwrap();
     let mut knowledge = index.knowledge();
-    let known = compact_mut(&mut knowledge);
+    let mut known = compact_mut(&mut knowledge);
     known.sure[0] |= 1;
     known.never[0] |= 1 << 3;
     let mut scratch = NarrowingScratch::default();
-    scratch.prepare(3);
-    let mut work = Work::new(u64::MAX);
-    let result = Closure {
+    scratch.common.prepare(3);
+    let mut work = Meter::local(u64::MAX);
+    let result = Closure::<_, zetesis_algebra::AnswerSetsSought> {
         known: compact_mut(&mut knowledge),
-        lists: &mut scratch,
+        lists: &mut scratch.common,
+        learning: &mut scratch.learning,
     }
     .revisit(
-        Subject::from(OriginalSubject::new(&theory, Some(&producers))),
+        Context::from(OriginalSubject::new(&theory, Some(&producers))),
         &index,
         3,
         false,
         &mut work,
-    );
+    )
+    .map_err(zetesis_algebra::Failure::into_stop);
     assert!(result == Ok(Step::Contradiction));
-    assert_eq!(work.spent, 2);
-    assert!(scratch.heads.is_empty());
-    assert!(scratch.pending.iter().all(|word| *word == 0));
+    assert_eq!(work.charged(), 2);
+    assert!(scratch.common.heads.is_empty());
+    assert!(scratch.common.pending.iter().all(|word| *word == 0));
 }
 
 #[test]
@@ -180,30 +186,31 @@ fn early_refutation_leaves_no_scratch_authority() {
     let theory = chain(false, 9);
     let index = Narrower::new(&theory);
     let mut knowledge = index.knowledge();
-    let known = compact_mut(&mut knowledge);
+    let mut known = compact_mut(&mut knowledge);
     known.sure[0] |= 1 << 9;
     known.never[0] |= 1 << 4;
     let mut scratch = NarrowingScratch::default();
-    scratch.prepare(9);
-    let result = Closure {
+    scratch.common.prepare(9);
+    let result = Closure::<_, zetesis_algebra::AnswerSetsSought> {
         known: compact_mut(&mut knowledge),
-        lists: &mut scratch,
+        lists: &mut scratch.common,
+        learning: &mut scratch.learning,
     }
-    .teach_chain(&index, 0, &mut Work::new(u64::MAX));
+    .teach_chain(&index, 0, &mut Meter::local(u64::MAX))
+    .map_err(zetesis_algebra::Failure::into_stop);
     assert!(result == Ok(Step::Contradiction));
-    assert_eq!(scratch.nodes.len(), 4);
+    assert_eq!(scratch.common.nodes.len(), 4);
     let close = |scratch: &mut NarrowingScratch| {
         let mut region = Region::all_open(9);
-        let result = index
-            .narrow_known(
-                OriginalSubject::new(&theory, None),
-                &mut region,
-                &mut index.knowledge(),
-                scratch,
-                RegionLimits::default(),
-                &Cancellation::default(),
-            )
-            .unwrap();
+        let result = index.narrow_known(
+            OriginalSubject::new(&theory, None),
+            &mut region,
+            &mut index.knowledge(),
+            scratch,
+            RegionLimits::default(),
+            &Cancellation::default(),
+        );
+        let result = (result.result.unwrap(), result.statistics, result.preferred);
         (result, region)
     };
     let reused = close(&mut scratch);
@@ -228,16 +235,17 @@ fn atom_refutation_stops_before_later_occurrences() {
     let mut knowledge = index.knowledge();
     compact_mut(&mut knowledge).never[0] |= 1 << 1;
     let mut scratch = NarrowingScratch::default();
-    scratch.prepare(1);
-    let result = Closure {
+    scratch.common.prepare(1);
+    let result = Closure::<_, zetesis_algebra::AnswerSetsSought> {
         known: compact_mut(&mut knowledge),
-        lists: &mut scratch,
+        lists: &mut scratch.common,
+        learning: &mut scratch.learning,
     }
     .atom(&index, Some(&producers), None, 0, true);
     assert!(result == Step::Contradiction);
-    assert_eq!(scratch.nodes, [(0, true)]);
-    assert!(scratch.heads.is_empty());
-    assert!(!bit(compact_mut(&mut knowledge).sure, 2));
+    assert_eq!(scratch.common.nodes, [(0, true)]);
+    assert!(scratch.common.heads.is_empty());
+    assert!(!compact_mut(&mut knowledge).sure.contains(2));
 }
 
 #[test]
@@ -256,21 +264,21 @@ fn root_refutation_stops_seeding() {
         .unwrap();
     let mut knowledge = index.knowledge();
     let mut scratch = NarrowingScratch::default();
-    let (result, receipt) = index
-        .narrow_known(
-            OriginalSubject::new(&theory, Some(&producers)),
-            &mut Region::all_open(1),
-            &mut knowledge,
-            &mut scratch,
-            RegionLimits::default(),
-            &Cancellation::default(),
-        )
-        .unwrap();
+    let attempt = index.narrow_known(
+        OriginalSubject::new(&theory, Some(&producers)),
+        &mut Region::all_open(1),
+        &mut knowledge,
+        &mut scratch,
+        RegionLimits::default(),
+        &Cancellation::default(),
+    );
+    let result = attempt.result.unwrap();
+    let receipt = attempt.statistics;
     assert_eq!(result, crate::Narrowing::Refuted);
     assert_eq!(receipt.work, 0);
-    assert_eq!(scratch.nodes, [(0, false)]);
-    assert!(scratch.heads.is_empty());
-    assert!(!bit(compact_mut(&mut knowledge).sure, 1));
+    assert_eq!(scratch.common.nodes, [(0, false)]);
+    assert!(scratch.common.heads.is_empty());
+    assert!(!compact_mut(&mut knowledge).sure.contains(1));
 }
 
 #[test]
@@ -287,7 +295,7 @@ fn decision_refutation_restores_unadvanced_seen_storage() {
     let mut region = Region::all_open(2);
     assert!(region.cut(0));
     assert!(region.hold(1));
-    let (result, _) = index
+    let result = index
         .narrow_known(
             OriginalSubject::new(&theory, None),
             &mut region,
@@ -296,9 +304,10 @@ fn decision_refutation_restores_unadvanced_seen_storage() {
             RegionLimits::default(),
             &Cancellation::default(),
         )
+        .result
         .unwrap();
     assert_eq!(result, crate::Narrowing::Refuted);
     let known = compact_mut(&mut knowledge);
-    assert_eq!(known.seen, &[0]);
-    assert!(!bit(known.atom_sure, 1));
+    assert_eq!(&*known.seen, &[0]);
+    assert!(!known.atom_sure.contains(1));
 }

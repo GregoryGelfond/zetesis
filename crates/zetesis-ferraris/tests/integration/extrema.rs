@@ -5,7 +5,7 @@ use std::time::Instant;
 use crate::support::aggregate_theories::{COMPARISONS, EXTREMA, copy, prefix, push, raw, snapshot};
 use crate::support::worlds::{eval, interpretation};
 use proptest::prelude::*;
-use zetesis_cpu::{Cancellation, Stop};
+use zetesis_algebra::{Cancellation, Stop};
 use zetesis_ferraris::{
     AdmissionLimits, AggregateComparison as Comparison, AggregateElement as Element,
     AggregateErrorKind as Error, AggregateExtremum as Extremum, AggregateLimits, AggregateProfile,

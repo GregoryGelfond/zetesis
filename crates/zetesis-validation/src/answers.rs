@@ -8,6 +8,7 @@
 
 use std::collections::BTreeMap;
 use std::fmt;
+use zetesis_algebra::Meter;
 
 mod clingo;
 mod display;
@@ -190,15 +191,13 @@ fn invalid(issue: Issue, detail: &'static str) -> Error {
     Error::Invalid { issue, detail }
 }
 fn check(resource: Resource, limit: usize, attempted: usize) -> Result<(), Error> {
-    if attempted > limit {
-        Err(Error::Limit {
+    Meter::check_count(attempted, 0, limit)
+        .map(|_| ())
+        .map_err(|_| Error::Limit {
             resource,
             limit,
             attempted,
         })
-    } else {
-        Ok(())
-    }
 }
 fn text(bytes: &[u8], limits: Limits) -> Result<&str, Error> {
     check(Resource::InputBytes, limits.max_input_bytes, bytes.len())?;

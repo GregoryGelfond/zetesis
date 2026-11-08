@@ -6,7 +6,7 @@ use std::{
     io::{self, Write},
     num::NonZeroUsize,
 };
-use zetesis_cpu::Cancellation;
+use zetesis_algebra::Cancellation;
 use zetesis_test_support::io::BoundedWriter;
 
 fn options() -> crate::publication_fixture::FormulaCase {
@@ -16,9 +16,9 @@ fn options() -> crate::publication_fixture::FormulaCase {
         "cpu",
         "--oracle",
         "countermodel",
-        // The batched completion protocol is the clause method's.
-        "--search",
-        "clauses",
+        // One region walker, whose candidates completion checks in batches.
+        "--threads",
+        "1",
         "--models",
         "0",
     ])
@@ -166,7 +166,9 @@ fn failed_bound_diagnostics_leave_incumbents_unpublished() {
     assert_eq!(semantic.retained_models(), 1);
     assert_eq!(semantic.incumbent().unwrap().tied_models, 1);
     assert_eq!(semantic.incumbent().unwrap().scored_models, 1);
-    assert_eq!(semantic.incumbent().unwrap().score.costs(), [(0, 1)]);
+    // The walk proposes c first, and its bound diagnostic fails before a
+    // cheaper model is scored.
+    assert_eq!(semantic.incumbent().unwrap().score.costs(), [(0, 2)]);
     assert_eq!(semantic.completion(), None);
     assert!(!semantic.optimum_proved());
     assert_eq!(failure.publication().unwrap().models(), 0);

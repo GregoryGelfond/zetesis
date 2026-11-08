@@ -13,17 +13,35 @@
 //! work and O(n + m) space; the retained index lookup takes O(log(n)) work and
 //! constant space. A range query selects k entries, clips their source IDs and
 //! sorts its temporary union in source order: O(log(n) + k + s*log(s)) work
-//! and O(s) transient space for s rows inside the source interval. With d retained
+//! and O(s) transient space for s rows inside the source interval. When the
+//! key range holds more than half as many entries as the interval has rows,
+//! the query instead reads the interval's own keys in source order:
+//! O(log(n) + s) work, no sort. With d retained
 //! descriptors and a columns, descriptor matching costs O(d*m*a); the consumer
 //! also evaluates its bound operand.
+//!
+//! Support completion keeps its certificates from one round to the next. Its
+//! rows are only appended and keep their positions, so a certificate over a
+//! relation's first rows remains a certificate over those rows in every later
+//! snapshot, and a decline stays a decline. A kept certificate holds no snapshot
+//! borrow: the next snapshot finds it again by its relation's signature, then
+//! extends it with the rows appended since. For Δ new rows the extension
+//! evaluates and sorts them, O(Δ*m + Δ*log(Δ)), and merges them from the end.
+//! The merge moves only the kept entries whose key exceeds the smallest new
+//! key: none when the new keys are at or above the kept maximum, as for a
+//! counter, and at most all n otherwise. The kept bytes stay leased in the
+//! support workspace for the whole fixpoint, under `max_support_bytes`.
 
 use std::cell::RefCell;
+use std::mem::size_of;
 use std::ops::Range;
 
 use themelios_program::program::Relation;
 use zetesis_core::{PatternRef, TemplateTerm, ValueNodeRef};
 
+use super::signature::{Signature, signature};
 use super::{RelationRows, Support};
+use crate::ProgramSite;
 use crate::formula::ceiling;
 use crate::formula_ir::{Expression, Operation};
 use crate::formula_support::{
@@ -42,14 +60,23 @@ pub(in crate::formula_support) struct Workspace<'source> {
     cache: RefCell<Option<Cache<'source>>>,
 }
 
+/// Certificates kept between rounds of one support completion. They borrow no
+/// snapshot; the next round's queries find each again by relation signature.
+#[derive(Default)]
+pub(in crate::formula_support) struct Retained(Option<Cache<'static>>);
+
 struct Cache<'source> {
     entries: Vec<Entry<'source>>,
     lease: StorageLease,
 }
 
 struct Entry<'source> {
-    source: &'source RelationRows<'source>,
+    /// The source in this snapshot, once a query here has named its relation.
+    source: Option<&'source RelationRows<'source>>,
+    relation: Signature,
     expression: Buffer<Operation>,
+    /// The certificate or decline covers the source rows before this position.
+    covered: usize,
     /// None is a completed decline, never an interrupted or partial build.
     integer: Option<IntegerIndex>,
 }
@@ -98,7 +125,8 @@ impl<'source> Support<'source> {
                         .entries
                         .iter()
                         .map(|entry| {
-                            entry.expression.capacity() * size_of::<Operation>()
+                            entry.relation.name_bytes()
+                                + entry.expression.capacity() * size_of::<Operation>()
                                 + entry.integer.as_ref().map_or(0, |integer| {
                                     integer.entries.capacity() * size_of::<(i32, usize)>()
                                 })
@@ -153,11 +181,15 @@ impl<'source> Support<'source> {
             return Ok(None);
         };
         let cache = self.expression_keys.cache.borrow();
-        let integer = cache.as_ref().expect("selected numeric cache").entries[index]
+        let entry = &cache.as_ref().expect("selected numeric cache").entries[index];
+        let integer = entry
             .integer
             .as_ref()
             .expect("selected integer certificate");
-        let selected = integer.range(comparison, rows, &mut context)?;
+        let [Operation::Variable(column)] = *entry.expression.slice() else {
+            unreachable!("an ordering key is one column");
+        };
+        let selected = integer.range(comparison, rows, (source, column), &mut context)?;
         context.work.counters.record(Event::RangeProbe);
         Ok(Some(selected.embedded(context.work.location)?))
     }
@@ -196,11 +228,13 @@ impl<'source> Support<'source> {
             return Ok(None);
         }
         let mut cache = self.expression_keys.cache.borrow_mut();
-        let found = match cache.as_ref() {
-            Some(cache) => find(&cache.entries, source, expression, pattern, context)?,
+        let found = match cache.as_mut() {
+            Some(cache) => find(&mut cache.entries, source, expression, pattern, context)?,
             None => None,
         };
         let index = if let Some(index) = found {
+            let cache = cache.as_mut().expect("a found index has an owner");
+            self.extend(&mut cache.entries[index], source, context)?;
             index
         } else {
             let Some(index) =
@@ -227,6 +261,8 @@ impl<'source> Support<'source> {
         let Some(expression) = columns(expression, pattern, context)? else {
             return Ok(None);
         };
+        let relation = signature(source.relation.predicate(), context)?;
+        let covered = source.row_count();
         let integer = build(source, expression.slice(), self.entries.get(), context)?;
         if cache.is_none() {
             *cache = Some(Cache {
@@ -258,8 +294,10 @@ impl<'source> Support<'source> {
             })
             .transpose()?;
         let entry = Entry {
-            source,
+            source: Some(source),
+            relation,
             expression: expression.embedded(context.work.location)?,
+            covered,
             integer,
         };
         let index = cache.entries.len();
@@ -271,6 +309,104 @@ impl<'source> Support<'source> {
             Event::NumericIndexBuild
         });
         Ok(Some(index))
+    }
+
+    /// Bring a kept certificate up to this snapshot's rows. The rows it covers
+    /// are unchanged, so it stays valid for them; only the appended rows are
+    /// evaluated. One undefined appended key declines the whole index, exactly
+    /// as a build over the complete snapshot would.
+    fn extend(
+        &self,
+        entry: &mut Entry<'source>,
+        source: &RelationRows<'_>,
+        context: &mut Context<'_, &Computation<'_, '_>>,
+    ) -> Result<(), FormulaFailure> {
+        let rows = source.row_count();
+        if entry.covered == rows {
+            return Ok(());
+        }
+        debug_assert!(entry.covered < rows, "support rows are only appended");
+        if let Some(integer) = &mut entry.integer {
+            let retained = integer.entries.len();
+            let rows = entry.covered..rows;
+            if let Some(added) = keys(
+                source,
+                entry.expression.slice(),
+                rows,
+                self.entries.get(),
+                context,
+            )? {
+                integer.merge(&added, context)?;
+                self.entries.set(self.entries.get() + added.len());
+                context.work.counters.record(Event::NumericIndexExtension);
+            } else {
+                entry.integer = None;
+                self.entries.set(self.entries.get() - retained);
+                context.work.counters.record(Event::NumericIndexDeclined);
+            }
+        }
+        entry.covered = rows;
+        Ok(())
+    }
+}
+
+impl Workspace<'_> {
+    /// Keep this snapshot's certificates for the next round of the same support.
+    /// Their snapshot borrows end here; signatures find them again.
+    pub(in crate::formula_support) fn retain(
+        self,
+        location: ProgramSite,
+    ) -> Result<Retained, FormulaFailure> {
+        let Some(Cache { entries, mut lease }) = self.cache.into_inner() else {
+            return Ok(Retained::default());
+        };
+        let entries: Vec<Entry<'static>> = entries.into_iter().map(Entry::unresolved).collect();
+        lease.observe(entries.capacity() * size_of::<Entry<'_>>(), location)?;
+        Ok(Retained(Some(Cache { entries, lease })))
+    }
+}
+
+impl Retained {
+    /// The integer entries these certificates keep, for the index ceiling.
+    pub(in crate::formula_support) fn entries(&self) -> usize {
+        self.0.as_ref().map_or(0, |cache| {
+            cache
+                .entries
+                .iter()
+                .filter_map(|entry| entry.integer.as_ref())
+                .map(|integer| integer.entries.len())
+                .sum()
+        })
+    }
+
+    /// Lend the kept certificates to the next snapshot's queries.
+    pub(in crate::formula_support) fn into_workspace<'source>(self) -> Workspace<'source> {
+        Workspace {
+            cache: RefCell::new(self.0.map(|Cache { entries, lease }| Cache {
+                entries: entries.into_iter().map(Entry::unresolved).collect(),
+                lease,
+            })),
+        }
+    }
+}
+
+impl Entry<'_> {
+    /// The same certificate with no snapshot borrow: a later query resolves it.
+    fn unresolved<'next>(self) -> Entry<'next> {
+        let Entry {
+            source: _,
+            relation,
+            expression,
+            covered,
+            integer,
+        } = self;
+        Entry {
+            source: None,
+            relation,
+            expression,
+            covered,
+            integer,
+        }
     }
 }
 
@@ -301,10 +437,14 @@ impl IntegerIndex {
         let end = lower_bound(entries, (wanted, rows.end), context)?;
         Ok(start..end)
     }
+    /// Select the interval's rows whose key satisfies the comparison, in source
+    /// order. The certificate covers every row of `source`, so a column read
+    /// from an interval row is the key the index holds for it.
     fn range(
         &self,
         (relation, bound): (Relation, i32),
         rows: Range<usize>,
+        (source, column): (&RelationRows<'_>, usize),
         context: &mut Context<'_, &Computation<'_, '_>>,
     ) -> Result<Buffer<usize>, FormulaFailure> {
         tick(context)?;
@@ -317,6 +457,23 @@ impl IntegerIndex {
             _ => unreachable!("an ordering query has an ordering relation"),
         };
         let mut selected = buffer(context)?;
+        if 2 * keys.len() > rows.len() {
+            // The key range would not halve the interval: reading the
+            // interval's own keys visits fewer entries and needs no sort. A
+            // round's new rows are usually far fewer than the key range.
+            for position in rows {
+                tick(context)?;
+                let key = source
+                    .row(position)
+                    .and_then(|row| row.value(column))
+                    .and_then(|value| number(value.descriptor()))
+                    .expect("the certificate covers every source row with an integer");
+                if ordered(relation, key, bound) {
+                    push(&mut selected, position, context)?;
+                }
+            }
+            return Ok(selected);
+        }
         for &(_, position) in &entries[keys] {
             tick(context)?;
             // Clip before retention and before any row is offered. The full
@@ -336,20 +493,69 @@ impl IntegerIndex {
         )?;
         Ok(selected)
     }
+
+    /// Merge sorted entries for rows after every row this index holds. Equal
+    /// keys keep source order, since each added position exceeds every kept
+    /// one. Working from the end moves a kept entry only when an added key is
+    /// below it.
+    fn merge(
+        &mut self,
+        added: &Buffer<(i32, usize)>,
+        context: &mut Context<'_, &Computation<'_, '_>>,
+    ) -> Result<(), FormulaFailure> {
+        let added = added.slice();
+        let kept = self.entries.len();
+        self.entries.resize_embedded(
+            kept + added.len(),
+            (0, 0),
+            context.computation,
+            context.work.limits,
+            context.work.counters,
+            context.work.location,
+        )?;
+        let entries = self.entries.slice_mut();
+        let (mut old, mut new) = (kept, added.len());
+        while new > 0 {
+            tick(context)?;
+            if old > 0 && entries[old - 1] > added[new - 1] {
+                entries[old + new - 1] = entries[old - 1];
+                old -= 1;
+            } else {
+                entries[old + new - 1] = added[new - 1];
+                new -= 1;
+            }
+        }
+        Ok(())
+    }
 }
 
-fn find(
-    entries: &[Entry<'_>],
-    source: &RelationRows<'_>,
+fn ordered(relation: Relation, key: i32, bound: i32) -> bool {
+    match relation {
+        Relation::Lt => key < bound,
+        Relation::Le => key <= bound,
+        Relation::Gt => key > bound,
+        Relation::Ge => key >= bound,
+        _ => unreachable!("an ordering query has an ordering relation"),
+    }
+}
+
+/// A certificate this snapshot has resolved, or one kept from an earlier round
+/// whose relation signature names `source`; the latter is resolved here.
+fn find<'source>(
+    entries: &mut [Entry<'source>],
+    source: &'source RelationRows<'source>,
     expression: &Expression,
     pattern: PatternRef<'_>,
     context: &mut Context<'_, &Computation<'_, '_>>,
 ) -> Result<Option<usize>, FormulaFailure> {
-    for (index, entry) in entries.iter().enumerate() {
+    for (index, entry) in entries.iter_mut().enumerate() {
         tick(context)?;
-        if std::ptr::eq(entry.source, source)
-            && same_expression(entry.expression.slice(), expression, pattern, context)?
-        {
+        let same_source = match entry.source {
+            Some(resolved) => std::ptr::eq(resolved, source),
+            None => entry.relation.names(source.relation.predicate(), context)?,
+        };
+        if same_source && same_expression(entry.expression.slice(), expression, pattern, context)? {
+            entry.source = Some(source);
             return Ok(Some(index));
         }
     }
@@ -402,9 +608,27 @@ fn build(
     retained_entries: usize,
     context: &mut Context<'_, &Computation<'_, '_>>,
 ) -> Result<Option<IntegerIndex>, FormulaFailure> {
+    Ok(keys(
+        source,
+        expression,
+        0..source.row_count(),
+        retained_entries,
+        context,
+    )?
+    .map(|entries| IntegerIndex { entries }))
+}
+
+/// The sorted (key, row) entries of `rows`, or `None` when one key declines.
+fn keys(
+    source: &RelationRows<'_>,
+    expression: &[Operation],
+    rows: Range<usize>,
+    retained_entries: usize,
+    context: &mut Context<'_, &Computation<'_, '_>>,
+) -> Result<Option<Buffer<(i32, usize)>>, FormulaFailure> {
     let mut entries = buffer(context)?;
     let mut scratch = buffer(context)?;
-    for position in 0..source.row_count() {
+    for position in rows {
         tick(context)?;
         let row = source
             .row(position)
@@ -436,7 +660,7 @@ fn build(
         ),
         |left, right, _| Ok(left.cmp(right)),
     )?;
-    Ok(Some(IntegerIndex { entries }))
+    Ok(Some(entries))
 }
 
 /// Checked evaluation of existing IR nodes, with the caller supplying either

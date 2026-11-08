@@ -7,9 +7,18 @@ use reference::native;
 use themelios_base::source::SourceId;
 use zetesis_reference_support::{formula, prepared, resource_limits};
 use zetesis_themelios::{
-    AdmissionFailure, AdmissionOptions, AdmittedFormula, ExpansionLimits, FormulaLimits,
-    InputLimit, ProfileFeature, admit, admit_extended,
+    AdmissionFailure, AdmissionOptions, AdmittedFormula, ExpansionFailure, ExpansionLimits,
+    FormulaFailure, FormulaLimits, InputLimit, ProfileFeature, admit_formula,
 };
+
+fn admit(source: String, options: AdmissionOptions) -> Result<AdmittedFormula, FormulaFailure> {
+    admit_formula(
+        source,
+        options,
+        ExpansionLimits::default(),
+        FormulaLimits::default(),
+    )
+}
 
 const CASES: &[(&str, &str)] = &[
     ("#program base.", ""),
@@ -65,24 +74,37 @@ fn explicit_base_matches_clingo_full_models() {
 }
 
 #[test]
-fn scalar_admission_preserves_explicit_base_rules() {
-    for source in [
-        "#program base.",
-        "#program base().",
-        "a. #program base. {b}. c :- b.",
+fn scalar_base_sections_keep_their_models_and_source() {
+    for (source, expected) in [
+        ("#program base.", &[&[][..]][..]),
+        ("#program base().", &[&[][..]][..]),
+        (
+            "a. #program base. {b}. c :- b.",
+            &[&["a"][..], &["a", "b", "c"][..]][..],
+        ),
     ] {
-        let direct = admit(source.into(), AdmissionOptions::default()).unwrap();
-        let extended = admit_extended(
-            source.into(),
-            AdmissionOptions::default(),
-            ExpansionLimits::default(),
-        )
-        .unwrap();
-        assert_eq!(
-            zetesis_test_support::programs::rules(direct.program()).collect::<Vec<_>>(),
-            zetesis_test_support::programs::rules(extended.program()).collect::<Vec<_>>()
-        );
-        assert_eq!(direct.source().text(), source);
+        let input = formula(source);
+        let wanted = expected
+            .iter()
+            .map(|atoms| {
+                atoms
+                    .iter()
+                    .map(|atom| (*atom).to_owned())
+                    .collect::<std::collections::BTreeSet<_>>()
+            })
+            .collect::<std::collections::BTreeSet<_>>();
+        let actual = zetesis_reference_support::exhaustive_models(&input)
+            .iter()
+            .map(|model| {
+                model
+                    .atoms()
+                    .iter()
+                    .map(zetesis_reference_support::canonical)
+                    .collect()
+            })
+            .collect::<std::collections::BTreeSet<_>>();
+        assert_eq!(actual, wanted);
+        assert_eq!(input.source().unwrap().text(), source);
     }
 }
 
@@ -143,7 +165,11 @@ fn nonbase_parts_remain_located_refusals() {
             format!("p. {delimiter} #program base. q."),
         ] {
             let error = admit(source.clone(), admission::options(SourceId::new(61))).unwrap_err();
-            let AdmissionFailure::Profile { feature, location } = error else {
+            let FormulaFailure::Expansion(ExpansionFailure::Admission(AdmissionFailure::Profile {
+                feature,
+                location,
+            })) = error
+            else {
                 panic!("expected a program-part refusal: {error}");
             };
             assert_eq!(feature, ProfileFeature::ProgramPart);
@@ -182,12 +208,12 @@ fn base_delimiters_consume_the_syntax_budget() {
             source.into(),
             resource_limits::admission(InputLimit::SyntaxNodes, exact - 1)
         ),
-        Err(AdmissionFailure::Limit {
+        Err(FormulaFailure::Expansion(ExpansionFailure::Admission(AdmissionFailure::Limit {
             resource: InputLimit::SyntaxNodes,
             limit,
             observed,
             ..
-        }) if limit == nodes - 1 && observed == nodes
+        }))) if limit == nodes - 1 && observed == nodes
     ));
 }
 

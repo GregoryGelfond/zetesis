@@ -23,7 +23,7 @@ The observer's error must implement `Error + Send + Sync + 'static`.
 an observer failure cannot cause GPU fallback and a second observation attempt.
 Initialization may return a setup failure or retain it for the first pull, as
 documented on `Session::new_observed`. After a failed pull, subsequent pulls
-return `None`. The failure retains any established evidence and original subject.
+return `None`. The failure retains any established evidence and original input.
 
 ## Define a measurement scope
 
@@ -59,7 +59,7 @@ Its assertions concern presence and semantic completion, not a timing threshold.
 
 ```rust
 # extern crate zetesis_solve;
-# extern crate zetesis_cpu;
+# extern crate zetesis_algebra;
 # extern crate zetesis_themelios;
 {{#include ../examples/measurements.rs:example}}
 ```
@@ -88,12 +88,16 @@ records accepted operations and actual metadata peaks without requiring clocks;
 constructed model counts establish neither publication nor complete enumeration.
 
 The grounding profile also exposes `support_producer_visits`,
-`support_rich_traversals`, `support_unchanged_visits` and
-`support_snapshot_preparations`. These count entered operations, including
-those followed by failure. Rich traversals and unchanged visits are disjoint
-subsets of producer visits. `support_rich_traversals` includes the first round.
-`support_unchanged_visits` counts the rich-producer visits after the first round
-that ended without a traversal because nothing the producer reads had changed.
+`support_rich_traversals`, `support_unchanged_visits`,
+`support_deferred_visits` and `support_snapshot_preparations`. These count
+entered operations, including those followed by failure. Rich traversals,
+unchanged visits and deferred visits are disjoint subsets of producer visits.
+`support_rich_traversals` includes the first round. `support_unchanged_visits`
+counts the rich-producer visits after the first round that ended without a
+traversal because nothing the producer reads had changed, or because a
+component-scheduled producer was already traversed. `support_deferred_visits`
+counts the visits of a component-scheduled producer that waits for the
+components it reads to reach their fixed point.
 They distinguish affected-producer scheduling from a full round scan without
 asserting a timing benefit. Fields missing from older
 reports remain unavailable.
@@ -106,8 +110,8 @@ wgpu timestamp queries when the session creates its own device. The CLI's
 selected primitive's capability requirements. No timing feature or storage is
 requested by the ordinary statistics-off constructors.
 
-Caller-supplied resources retain their exact context and compiled profile;
-statistics do not replace either owner. To opt in explicitly, use
+Caller-supplied resources retain their exact context and profile; statistics do
+not replace either owner. To opt in explicitly, use
 `GpuContext::new_selected_with_timing` and pass it through
 `ExecutionResources::with_gpu`, or create a
 `GpuFormulaProfile::new_selected_with_timing` for reuse. Standalone formula and
@@ -115,30 +119,163 @@ tight oracles also have `new_selected_with_timing` constructors.
 `GpuContext::compute_timing()` reports `NotRequested`, `Unsupported` or `Enabled`.
 Unsupported timestamps do not prevent solving.
 
-`FormulaExecutionStatistics::gpu_compute_timing` sums valid durations from
-successfully decoded batches. `elapsed` stays absent until a valid sample is
-recorded. Equal device counter readings are unavailable: they do not distinguish
-an unresolved interval from zero compute cost.
-`is_complete()` requires at least one valid sample and no missing sample or
-accounting overflow among decoded batches. Submitted batches that fail before
-decoding retain their submission receipts separately. Neither timing completeness
-nor a timestamp establishes complete enumeration or optimality.
+`FormulaExecutionStatistics::gpu_compute_timing` counts each successfully
+decoded batch once: measured, with its own compute pass's duration; unavailable,
+when that interval was not established; or unresolved, when the record was taken
+before the interval could be read. `elapsed` sums the measured durations and stays
+absent until a valid sample is recorded. Equal device counter readings are
+unavailable: they do not distinguish an unresolved interval from zero compute
+cost. So are failed samples, unwritten or unrewritten counter slots, and intervals
+longer than the host's own observation of their submission.
+`measured + unavailable + unresolved` equals the decoded batches the solver
+accepted; a failed execution's record is partial evidence.
+`is_complete()` requires at least one valid sample, no unavailable or unresolved
+batch, and no accounting overflow. Submitted batches that fail before decoding
+retain their submission receipts separately. Neither timing completeness nor a
+timestamp establishes complete enumeration or optimality.
 
 The interval covers the compute pass, including memory access within it. It
 excludes host preparation, command-buffer copies, submission and waiting.
 `GpuHostOracle` continues to measure the broader host call; these durations are
-not interchangeable. Each resident transport reuses two timestamp slots and a
-resolve buffer, appending the result to its ordinary readback. There is no
-additional submission or wait. Admission reserves 48 logical bytes for the query
-slots, resolve buffer and readback tail; this allowance does not measure
-additional driver-private allocation. Timing adds device work and should be
-kept consistent across measured versions.
+not interchangeable. Each device oracle owns four timestamp slots, used as two
+pairs, and one resolve buffer per pair, until it clears its residency or a
+failure follows one of its submissions. A batch writes the pair that is not
+pending. After its pass, the batch's wgpu command buffer records the resolve of
+the previous batch's pair, whose completion the host has already observed, into
+that pair's resolve buffer, and its copy into the batch's ordinary readback, so
+every batch reports the one before it from that batch's own pass. Because that
+pair was written by an earlier submission, wgpu-core runs the resolve in a hal
+command buffer of its own and the copy in another (on Metal, two more
+`MTLCommandBuffer`s), within the batch's one queue submission: no batch adds a
+submission or a wait. A resolve that writes nothing leaves its pair's buffer with
+values already read, or zero, which are refused, never the other pair's interval.
+When an execution settles, one resolve-only submission reads its final batch's
+interval and is counted as a flush, not a batch. A stopped execution skips it,
+and a settlement that meets a busy or unhealthy context cannot make it; either
+reports that batch unresolved. Admission reserves 96 logical bytes per timed
+batch: the oracle's query slots, two resolve buffers and flush readback, and the
+transport's 16-byte readback tail. This allowance does not measure additional
+driver-private allocation. Timing adds device work and should be kept consistent across measured
+versions.
 
-JSON statistics retain the status, elapsed nanoseconds, measured and unavailable
-batch counts, and the explicit `decoded_device_compute_passes` scope. Human
-statistics show the corresponding interval and availability. The maintained
-benchmark runner already requests these statistics and preserves them in its raw
-native reports.
+JSON statistics retain the status, elapsed nanoseconds, the measured,
+unavailable and unresolved batch counts, the flush submissions, and the explicit
+`decoded_device_compute_passes` scope. Human statistics show the corresponding
+interval and counts. The maintained benchmark runner already requests these
+statistics and preserves them in its raw native reports.
+
+## GPU workgroup size
+
+`FormulaExecutionStatistics::gpu_workgroup_size`, the JSON key
+`gpu_workgroup_size` and the human "workgroup size" report the invocations that
+cooperated on each candidate in the decoded device batches, as an integer. One
+value describes a solve: its execution owns one oracle checking one theory, and
+the retained graph fixes the size. Under the default fitted sizing this is the
+size the theory's dependency schedule fits
+(see [formula evaluation on the device](../architecture/execution.md#formula-evaluation-on-the-device));
+it is absent before the first decoded batch. Device timings, sweep counts and
+round- or work-limit residuals can differ between sizes, so compare them only
+between runs that dispatched the same size, or report the sizes beside them.
+Fixed-point residuals agree across sizes where every propagation transfer is
+order-preserving: established for binary gates, and checked on the device but
+not proved for native groups and numeric rows
+([the obligation](../lean/correspondence.md#ownership-and-execution-correspondence)),
+so report the size beside a comparison of verdict classes too. Under fitted
+sizing the dispatched size's pipeline is compiled by the solve's first device
+check, so its compilation time falls in that check's `GpuHostOracle` phase
+rather than in `ExecutionSetup`; a fixed size is compiled during setup. When a
+command-line GPU solve began its adapter enumeration before reading its sources,
+`ExecutionSetup` holds what remains of that adapter enumeration, if anything, and
+the primitive's own device request, so the phase is shorter than one that
+enumerates adapters at setup.
+
+## GPU candidate slates
+
+A slate is the candidates a GPU formula session's stream proposes together for
+one membership check and commit; `batch_size` is the size of the first slate
+and of the slate bound feedback returns to. The device checks a slate in one or
+more submissions: `gpu_submitted_batches` and `gpu_batches` count those
+submissions, and `gpu_rounds` counts propagation sweeps, which are unrelated to
+slates. Three statistics, in `FormulaExecutionStatistics`, the JSON and the
+human "formula GPU slates" line, describe the slates:
+
+- `gpu_slates` ("committed"): slates committed with at least one candidate.
+- `gpu_largest_slate` ("largest"): the largest committed slate's candidate
+  count, at most the batch size under `GpuBatching::Fixed` and possibly more
+  under the adaptive default. It is absent before the first commit.
+- `gpu_slate_resets` ("feedback resets"): the selections that returned adaptive
+  slates to the batch size because the previous slate's answers tightened the
+  objective bound. Every such selection counts, including one already at the
+  batch size and the session's last selection, which follows its last
+  non-empty slate; a program reports one reset per slate whose answers
+  installed a bound. It is zero under fixed batching and for programs without
+  objectives.
+
+All three are zero or absent on CPU routes. Slate sizes change search and
+device work, so compare runs with matching policies, or report these
+statistics beside them.
+
+A GPU enumeration proposes its next slate while the device checks the current
+slate's last submission. Five statistics, in `FormulaExecutionStatistics`, the
+JSON and the human "formula GPU lookahead" line, describe that overlap:
+
+- `gpu_lookahead_slates` ("slates proposed ahead"): slates proposed while their
+  predecessor's last submission was checked.
+- `gpu_lookahead` ("last decision"): `engaged`, or why the next slate waited:
+  `optimizing` (the session selects optimal answers), `requested_answers` (the
+  answers still owed fit the slate under check), or the stream's own reason,
+  such as `candidate_bounds`, `pending_bytes` or `pending_stop`. It is absent on
+  CPU routes and before a GPU session's first slate.
+- `gpu_lookahead_device_ns` ("overlapped device compute"): the measured compute
+  intervals of the submissions checked beside production, from
+  `gpu_compute_timing`. The timer reports a submission's interval one call
+  late, with the next submission or at the settlement's flush, and each is
+  booked with its own submission's wait.
+- `gpu_lookahead_finish_wait_ns` ("finish waits"): the finish's waits on the
+  same submissions, each from the end of the production run beside it to the
+  submission's observed completion, before its readback is mapped and decoded.
+- `gpu_lookahead_unmeasured` ("unmeasured submissions"): the submissions checked
+  beside production whose interval the timer refused or never resolved. Neither
+  sum includes them.
+
+The device time hidden behind production is the difference of the two paired
+sums, the compute less the waits, over the submissions with a measured
+interval. Device work outside the compute pass lies within the wait, so the
+difference understates the hidden time by that work.
+
+`first_answer_ns` (the "formula GPU first answer" line) is the elapsed time from
+the device execution's construction to the release of its first answer. It is
+reported beside the wall time, never judged.
+
+## Tight GPU routes
+
+Tight support checking reports which route evaluated each decoded slot.
+`FormulaExecutionStatistics::gpu_tight_routes` and the JSON key
+`gpu_tight_routes` hold `complete`, `dense_reuse` (with `beyond_threshold`, the
+dense slots whose change count exceeded the update threshold), `update` and
+`nodes_evaluated`, the nodes the update slots re-evaluated, summed over the
+decoded batches. `gpu_tight_updates` holds the update route's `availability`
+(`pending`, `admitted`, `serial_schedule`, `narrow_schedule`,
+`candidate_ceiling`, `index_bounds`, `bytes`, `work`, `declined` or
+`guard_declined`) and its support counts' `count_bits`, as the last decoded
+batch holding reuse authority reported them: a batch without authority cannot
+update, whatever its limits. Until a batch holds authority, they are the last
+decoded batch's report, which names the reason whenever that batch's schedule or
+limits already decline the route, so a narrow schedule reports `narrow_schedule`
+from its first batch; `pending` then means that no batch has held authority and
+the last did not decline the route. `steady_state` says which of the two the run
+reports. `guard_declined_batches` counts the decoded batches the runtime guard
+declined the route for, so a run that declined and then re-engaged shows both.
+All are absent before the first decoded tight batch and for other primitives.
+Each `TightGpuBatchStats` also carries the guard's two inputs:
+`update_critical_path`, the largest path among the batch's update slots, and
+`dense_critical_path`, dense reuse's least path for one candidate by the same
+cost table.
+`gpu_scheduled_work` attributes to each submitted tight batch the work its
+validated readback reports, or else its reservation. Admitting the update state
+can shorten the device's admitted prefix, and with it adaptive slates, never
+below the batch size. Compare tight device timings only between runs whose
+routes and slate statistics are reported beside them.
 
 ## Thread and failure contracts
 

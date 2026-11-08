@@ -2,8 +2,8 @@
 
 use crate::optimization::Incumbents;
 use crate::{Interruption, SolveConfig};
+use zetesis_algebra::Cancellation;
 use zetesis_core::Model;
-use zetesis_cpu::Cancellation;
 use zetesis_ferraris::Interpretation;
 use zetesis_reference_support::{formula as admitted, resource_limits};
 use zetesis_themelios::objective_bound::{

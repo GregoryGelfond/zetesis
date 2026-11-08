@@ -51,7 +51,6 @@ pub(crate) fn source_compatible(config: &SolveConfig) -> bool {
     config.backend == crate::Backend::Cpu
         && config.oracle == crate::Oracle::Auto
         && config.grounder == Grounder::Auto
-        && config.source_batching == crate::SourceBatching::Independent
 }
 
 /// Prepare one source or typed program for an ordinary solve. Automatic CPU

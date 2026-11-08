@@ -1,5 +1,11 @@
 // One workgroup per frozen candidate. Domains are sets {false,true} encoded
 // as 1,2,3. Every atomic intersection preserves all satisfying completions.
+// Every workgroup location an invocation reads was written earlier in its
+// workgroup, by the same invocation or by another ordered before the read by a
+// barrier or uniform load, and every workgroup array index is within its array.
+// The pipeline keeps WebGPU's zero-fill of workgroup memory, which this rule
+// makes unobservable; CONTRIBUTING ("Carry the semantic contract into Lean and
+// Rust") records the fill's status and what removing it requires.
 override WORKGROUP_SIZE: u32 = 64u;
 struct Params {
     atoms: u32, nodes: u32, roots: u32, variables: u32,
@@ -11,14 +17,25 @@ struct Node { tag: u32, left: u32, right: u32, output: u32, }
 @group(0) @binding(0) var<uniform> params: Params;
 @group(0) @binding(1) var<storage, read> nodes: array<u32>;
 @group(0) @binding(2) var<storage, read> roots: array<u32>;
-@group(0) @binding(3) var<storage, read> seeds: array<u32>;
+@group(0) @binding(3) var<storage, read> candidates: array<u32>;
 @group(0) @binding(4) var<storage, read_write> frozen: array<u32>;
 @group(0) @binding(5) var<storage, read_write> domains: array<atomic<u32>>;
 @group(0) @binding(6) var<storage, read_write> results: array<u32>;
+// Each sweep's flags: invocation 0 zeroes them at the sweep's start, the
+// sweep's opening barrier orders the zeroes before any narrowing, and
+// invocation 0 reads them after the barrier that follows its own narrowing.
 var<workgroup> changed: atomic<u32>;
 var<workgroup> conflict: atomic<u32>;
+// Invocation 0 zeroes it at entry; the barrier that ends original truth orders
+// the zero before any root's store, and invocation 0 reads it after the
+// barrier that follows the roots.
 var<workgroup> bad_root: atomic<u32>;
+// Written by invocation 0 and read by every invocation through
+// workgroupUniformLoad: whether to finish.
 var<workgroup> stage: u32;
+// The strict-subset summary: zeroed with the sweep's flags, merged through
+// merge_subset after the barrier that ends propagation, and read by invocation
+// 0 after the barrier that ends the merge.
 var<workgroup> subset_count: atomic<u32>;
 var<workgroup> subset_last: atomic<u32>;
 var<private> domain_base: u32;
@@ -46,32 +63,16 @@ fn wake(index: u32, removed: u32) {
     for (var position = start; position < end; position++) {
         let gate = roots[order + position];
         if (params.group_map != 0u) { update_group(gate, slot, removed); }
-        let bit = 1u << (gate % 32u);
-        atomicOr(&domains[current + gate / 32u], bit);
-        atomicOr(&domains[next + gate / 32u], bit);
+        let bit = packed_bit(gate);
+        atomicOr(&domains[current + bit.word], bit.mask);
+        atomicOr(&domains[next + bit.word], bit.mask);
     }
 }
-// Headers occupy 4*N words; wide rows occupy the checked appended tail.
-fn node_at(index: u32) -> Node {
-    let base = index * 4u;
-    return Node(nodes[base], nodes[base + 1u], nodes[base + 2u], nodes[base + 3u]);
-}
-fn operand_at(node: Node, index: u32) -> u32 {
-    return nodes[params.nodes * 4u + node.left + index];
-}
-
-fn contains(world: u32, atom: u32) -> bool {
-    return (seeds[world * params.words + atom / 32u] & (1u << (atom % 32u))) != 0u;
-}
-fn operation(tag: u32, left: bool, right: bool) -> bool {
-    if (tag == 2u) { return left && right; }
-    if (tag == 3u) { return left || right; }
-    return !left || right;
-}
-fn original(world: u32, mask_base: u32, index: u32) {
+// Formula truth is always fresh; the shared pass reserves reuse for tight checking.
+fn original(world: u32, mask_base: u32, index: u32, _reuse: bool) {
     let node = node_at(index);
     var value = false;
-    if (node.tag == 1u) { value = contains(world, node.left); }
+    if (node.tag == 1u) { value = candidate_contains(world, node.left); }
     if (node.tag >= 2u && node.tag <= 4u) {
         value = operation(node.tag, frozen[mask_base + node.left] != 0u,
             frozen[mask_base + node.right] != 0u);
@@ -205,20 +206,45 @@ fn gate(base: u32, node: Node) {
     narrow(base + right, sy);
     narrow(base + node.output, sz);
 }
-fn finish(world: u32, status: u32, rounds: u32, work: u32) {
-    let base = world * 6u;
-    results[base] = params.epoch;
-    results[base + 1u] = world;
-    results[base + 2u] = status;
-    results[base + 3u] = rounds;
-    results[base + 4u] = work;
-    results[base + 5u] = 0x46525031u;
+// The complete workgroup reaches each terminal after the existing storage
+// barrier for its root initialization or completed sweep. One invocation writes
+// each pair of output words. No atomic merge or cleared result buffer is needed.
+fn finish(world: u32, lane: u32, base: u32, status: u32, rounds: u32, work: u32) {
+    let start = world * (6u + 2u * params.words);
+    if (lane == 0u) {
+        results[start] = params.epoch;
+        results[start + 1u] = world;
+        results[start + 2u] = status;
+        results[start + 3u] = rounds;
+        // The admitted word stores are performed on every path. A terminal
+        // verdict did not scan its atom domains. Release that reserved part.
+        results[start + 4u] = select(work, work - params.atoms, status < 3u);
+        results[start + 5u] = 0x46525031u;
+    }
+    for (var word = lane; word < params.words; word += WORKGROUP_SIZE) {
+        var held = 0u;
+        var cut = 0u;
+        if (status >= 3u) {
+            let first = word * 32u;
+            for (var bit = 0u; bit < min(32u, params.atoms - first); bit++) {
+                let mask = 1u << bit;
+                switch atomicLoad(&domains[base + first + bit]) {
+                    case 1u: { cut |= mask; }
+                    case 2u: { held |= mask; }
+                    case 3u: {}
+                    default: { held |= mask; cut |= mask; }
+                }
+            }
+        }
+        results[start + 6u + word] = held;
+        results[start + 6u + params.words + word] = cut;
+    }
 }
 fn propagate_node(base: u32, mask_base: u32, index: u32) {
     let node = node_at(index);
     // A frozen-false owner can still carry other live guards of the same row.
     // The family operation itself gates every source and target by original truth.
-    if (node.tag == 7u) { threshold_guard_family(base, mask_base, index, node); }
+    if (node.tag == 7u && threshold_guard_family(base, mask_base, index, node)) { return; }
     // Crucial reduct boundary: an M-false composite is just false.
     // Its original connective must not constrain the children.
     if (frozen[mask_base + index] != 0u) {
@@ -298,28 +324,11 @@ fn propagate(@builtin(workgroup_id) group: vec3<u32>,
     // Original truth precedes every frozen simplification. Pure chains retain
     // serial order; other DAGs visit each original node in its dependency level.
     if (lane == 0u) { atomicStore(&bad_root, 0u); }
-    if (params.levels == 0u) {
-        if (lane == 0u) {
-            for (var index = 0u; index < params.nodes; index++) {
-                original(world, mask_base, index);
-            }
-        }
-    } else {
-        let order = params.roots + params.levels + 1u;
-        for (var level = 0u; level < params.levels; level++) {
-            let start = roots[params.roots + level];
-            let end = roots[params.roots + level + 1u];
-            for (var offset = start + lane; offset < end; offset += WORKGROUP_SIZE) {
-                original(world, mask_base, roots[order + offset]);
-            }
-            storageBarrier();
-            workgroupBarrier();
-        }
-    }
+    evaluate_original(world, lane, mask_base, false);
     storageBarrier();
     workgroupBarrier();
     for (var atom = lane; atom < params.atoms; atom += WORKGROUP_SIZE) {
-        atomicStore(&domains[base + atom], select(1u, 3u, contains(world, atom)));
+        atomicStore(&domains[base + atom], select(1u, 3u, candidate_contains(world, atom)));
     }
     for (var index = lane; index < params.nodes; index += WORKGROUP_SIZE) {
         let node = node_at(index);
@@ -346,7 +355,7 @@ fn propagate(@builtin(workgroup_id) group: vec3<u32>,
     workgroupBarrier();
     if (lane == 0u) { stage = atomicLoad(&bad_root); }
     if (workgroupUniformLoad(&stage) != 0u) {
-        if (lane == 0u) { finish(world, 1u, 0u, params.setup_work); }
+        finish(world, lane, base, 1u, 0u, params.setup_work);
         return;
     }
     // No shrinking transfer may run until every group's initial permissions
@@ -361,11 +370,11 @@ fn propagate(@builtin(workgroup_id) group: vec3<u32>,
     var work = params.setup_work;
     loop {
         if (rounds == params.max_rounds) {
-            if (lane == 0u) { finish(world, 4u, rounds, work); }
+            finish(world, lane, base, 4u, rounds, work);
             return;
         }
         if (params.max_work - work < params.sweep_work) {
-            if (lane == 0u) { finish(world, 5u, rounds, work); }
+            finish(world, lane, base, 5u, rounds, work);
             return;
         }
         dirty_generation = rounds & 1u;
@@ -394,7 +403,7 @@ fn propagate(@builtin(workgroup_id) group: vec3<u32>,
         var available = 0u;
         var last = 0u;
         for (var atom = lane; atom < params.atoms; atom += WORKGROUP_SIZE) {
-            if (contains(world, atom) && (atomicLoad(&domains[base + atom]) & 1u) != 0u) {
+            if (candidate_contains(world, atom) && (atomicLoad(&domains[base + atom]) & 1u) != 0u) {
                 available += 1u;
                 last = atom;
             }
@@ -417,7 +426,7 @@ fn propagate(@builtin(workgroup_id) group: vec3<u32>,
         }
         let status = workgroupUniformLoad(&stage);
         if (status != 0u) {
-            if (lane == 0u) { finish(world, status, rounds, work); }
+            finish(world, lane, base, status, rounds, work);
             return;
         }
     }

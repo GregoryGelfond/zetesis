@@ -4,8 +4,8 @@ use std::cell::Cell;
 use std::fmt::Write;
 use zetesis_reference_support::{hybrid, prepare, prepared};
 
+use zetesis_algebra::{Cancellation, Stop};
 use zetesis_core::Model;
-use zetesis_cpu::{Cancellation, Stop};
 use zetesis_themelios::{
     ConstraintAllowance, ConstraintCheckCause, ConstraintCheckLimits, ConstraintCheckStatistics,
     ConstraintVerdict, ExpansionFailure, FormulaFailure, FormulaResource, GroundingObserver,
@@ -141,11 +141,13 @@ fn captured(source: &str) -> (HybridFormula, (u64, u64)) {
 
 #[test]
 fn frozen_checks_decide_integer_comparisons_without_admitted_operands() {
-    // X - Y takes the values -2 to 2; no fact or head constructs -2, -1 or 0.
-    // Capture decides the comparison on its nine rows by its form, admitting
+    // X - Y takes the values -4 to 4; no fact or head constructs -4 to 0.
+    // Capture decides the comparison on its 25 rows by its form, admitting
     // none of them, and so do the frozen checks, which could not admit them.
-    let (owner, receipts) = captured("{q(1..3)}. :- q(X), q(Y), X - Y = 2.");
-    assert_eq!(receipts, (9, 0));
+    // The pairs q(3), q(1) and q(5), q(3) leave q(1), q(3) and q(5) an
+    // incomplete component, so the template stays a stream.
+    let (owner, receipts) = captured("{q(1..5)}. :- q(X), q(Y), X - Y = 2.");
+    assert_eq!(receipts, (25, 0));
     assert!(matches!(
         verdict(&owner, &["q(1)", "q(3)"]),
         ConstraintVerdict::Violated { .. }
@@ -888,14 +890,59 @@ fn refused_checks_publish_before_returning() {
     assert_eq!(checker.statistics(), failure.statistics);
 }
 
+/// The original family of a hybrid owner: every subset of its atoms that is
+/// a stable model of its core theory and satisfies its streamed constraints.
+fn full_family(
+    owner: &HybridFormula,
+) -> std::collections::BTreeSet<std::collections::BTreeSet<String>> {
+    let count = owner.atom_catalog().atoms().len();
+    assert!(count <= 8, "bounded independent complete enumeration");
+    let mut checker = owner.checker(ConstraintCheckLimits::default()).unwrap();
+    let cancellation = Cancellation::default();
+    let mut answers = std::collections::BTreeSet::new();
+    for mask in 0..1_usize << count {
+        let candidate = zetesis_ferraris::Interpretation::new(
+            owner.core_theory(),
+            (0..count).filter(|atom| mask & (1 << atom) != 0),
+        )
+        .unwrap();
+        if !zetesis_ferraris::check(
+            owner.core_theory(),
+            &candidate,
+            zetesis_ferraris::Limits::default(),
+            &cancellation,
+        )
+        .unwrap()
+        .accepted()
+        {
+            continue;
+        }
+        let model = Model::from_positions(owner.atom_catalog(), candidate.atoms()).unwrap();
+        if checker.check(&model, &cancellation).unwrap() == ConstraintVerdict::Satisfied {
+            answers.insert(
+                candidate
+                    .atoms()
+                    .map(|atom| {
+                        zetesis_reference_support::canonical(
+                            owner.atom_catalog().atoms().at(atom).unwrap(),
+                        )
+                    })
+                    .collect(),
+            );
+        }
+    }
+    answers
+}
+
 mod numeric_totality;
+mod retention;
 
 #[test]
 fn late_fact_substitution_preserves_eager_and_streamed_families() {
     use std::collections::BTreeSet;
     use zetesis_ferraris::{NodeView, Theory};
     use zetesis_reference_support::{canonical, exhaustive};
-    use zetesis_sat::{Limits, StableModels};
+    use zetesis_stable::{Limits, StableModels};
 
     let source = include_str!("../fixtures/hybrid-constraints/late-facts.lp");
     let eager = prepared(source).ground().unwrap();

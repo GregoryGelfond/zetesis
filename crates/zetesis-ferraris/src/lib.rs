@@ -16,7 +16,6 @@ mod evaluation;
 mod extremum_cut;
 pub mod extremum_lowering;
 mod frozen_positive;
-mod normal;
 mod numeric_evaluation;
 mod operand_evaluation;
 mod oracle;
@@ -24,6 +23,7 @@ pub mod partition;
 mod positive;
 mod reduct;
 mod regions;
+mod slate;
 mod stratified;
 mod support;
 #[cfg(test)]
@@ -51,22 +51,27 @@ pub use evaluation::{
     EvaluationAttempt, EvaluationError, EvaluationLimits, EvaluationWorkspace, FormulaEvaluation,
 };
 pub use frozen_positive::{FrozenPositiveAttempt, FrozenPositiveOutcome, FrozenPositiveWorkspace};
-pub use normal::{from_ground_program, from_ground_program_supported};
 pub use oracle::{Check, Limits, Statistics, Verdict, check, models, models_reduct};
 pub use reduct::FrozenReduct;
+pub use regions::ParityKnowledge;
 pub use regions::{
-    ChoiceHeads, Extraction, FrozenSubject, GeneratorOrder, GeneratorOrderAttempt,
-    GeneratorOrderError, GeneratorOrderLimits, Knowledge, NARROWING_BATCH, Narrower,
-    NarrowingAttempt, NarrowingQuota, NarrowingScratch, NarrowingStatistics, OriginalSubject,
-    PreferenceAttempt, Producers, RegionLimits, SupportExplanationStatistics, producers,
+    ArithmeticAttempt, CardinalityKnowledge, CardinalityStatistics, CardinalitySystem, ChoiceHeads,
+    ClosedQuery, Extraction, FrozenPreparation, FrozenPreparationAttempt, FrozenPreparationLimits,
+    FrozenPreparationStatistics, FrozenSubject, GeneratorOrder, GeneratorOrderAttempt,
+    GeneratorOrderError, GeneratorOrderLimits, Knowledge, LearningAttempt, LearningLimits,
+    LearningOwner, LearningStore, NARROWING_BATCH, Narrower, NarrowingAttempt, NarrowingScratch,
+    NarrowingStatistics, OriginalSubject, ParityStatistics, ParitySystem, PreferenceAttempt,
+    PreparationAttempt, PreparationError, PreparationLimits, PreparationStatus, PreparationWork,
+    Producers, RegionLimits, RootPreparation, SupportExplanationStatistics, producers,
 };
+pub use slate::{SlateId, SlateRef};
 pub use theory::{
     AdmissionError, AdmissionLimits, ContributionRow, ExtremumCutDescriptor, FormulaParts,
     FormulaSuffix, FormulaTransaction, FormulaView, Interpretation, InterpretationWords, Node,
     NodeView, NumericDomain, NumericRow, OperandSpan, Theory, TheoryAdmission, Threshold,
     ThresholdDescriptor,
 };
-pub use zetesis_cpu::regions::{Narrowing, Region};
+pub use zetesis_algebra::region::{Narrowing, Region};
 
 pub use tight::{
     TightAttempt, TightCheck, TightCheckLimits, TightError, TightPlan, TightPlanLimits,

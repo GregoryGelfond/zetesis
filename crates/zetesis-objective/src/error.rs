@@ -60,7 +60,7 @@ pub enum Stop {
     /// Size or accounting arithmetic cannot be represented on this host.
     ArithmeticOverflow,
     /// An unexpected shared-control refusal, retained without reclassification.
-    Control(zetesis_cpu::Stop),
+    Control(zetesis_algebra::Stop),
 }
 impl fmt::Display for Stop {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {

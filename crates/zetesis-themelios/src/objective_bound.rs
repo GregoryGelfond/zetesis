@@ -11,17 +11,19 @@ mod bound;
 mod choices;
 mod join;
 mod score;
+#[cfg(test)]
+mod tests;
 pub use score::{ObjectiveScore, ObjectiveScoreError, ObjectiveScoreErrorKind};
 
 use std::collections::BTreeMap;
 use std::fmt;
 
+use zetesis_algebra::{Cancellation, Meter, MeterCountError, Stop};
 use zetesis_core::catalog::Atoms;
-use zetesis_cpu::{Cancellation, Stop};
 use zetesis_ferraris::{
     AggregateElement, AggregateError, AggregateLimits, FormulaNodes, FormulaParts, NodeView, Theory,
 };
-use zetesis_objective::{ObjectiveProgram, Score};
+use zetesis_objective::{ObjectiveProgram, PlanIdentity, Score};
 
 /// Inclusive construction limits; zero is a real ceiling.
 #[derive(Clone, Copy, Debug)]
@@ -193,6 +195,7 @@ impl std::error::Error for ObjectiveBoundError {}
 /// Reusable exact positive eligibility formulas, independent of any incumbent.
 #[derive(Debug)]
 pub struct ObjectivePlan {
+    identity: PlanIdentity,
     original: Theory,
     objectives: ObjectiveProgram,
     nodes: FormulaParts,
@@ -269,6 +272,13 @@ impl ObjectivePlan {
     pub fn original(&self) -> &Theory {
         &self.original
     }
+    /// This plan's identity, fixed when it was compiled. Its bounds are
+    /// installed in a candidate stream under it, which compares their scores
+    /// only with other bounds of the same plan.
+    #[must_use]
+    pub const fn identity(&self) -> PlanIdentity {
+        self.identity
+    }
     /// Complete planning accounting.
     #[must_use]
     pub const fn statistics(&self) -> ObjectiveBoundStatistics {
@@ -292,7 +302,37 @@ impl ObjectivePlan {
         limits: ObjectiveBoundLimits,
         cancellation: &Cancellation,
     ) -> Result<ObjectiveBound, ObjectiveBoundError> {
-        bound::compile(self, incumbent, limits, cancellation)
+        bound::compile(
+            self,
+            incumbent,
+            bound::Comparison::AtMost,
+            limits,
+            cancellation,
+        )
+    }
+
+    /// Compile lexicographic cost strictly less than `incumbent`, so that no
+    /// tie at the incumbent's cost survives, under the same conditions as
+    /// [`Self::bound`]. A better incumbent's strict bound implies an earlier
+    /// strict or non-strict bound under the original theory, as non-strict
+    /// bounds do. The optional choice strengthening compares certified lower
+    /// costs strictly too: a model's lower cost never exceeds its cost.
+    ///
+    /// # Errors
+    /// As [`Self::bound`].
+    pub fn strict_bound(
+        &self,
+        incumbent: &Score,
+        limits: ObjectiveBoundLimits,
+        cancellation: &Cancellation,
+    ) -> Result<ObjectiveBound, ObjectiveBoundError> {
+        bound::compile(
+            self,
+            incumbent,
+            bound::Comparison::Below,
+            limits,
+            cancellation,
+        )
     }
 }
 
@@ -331,14 +371,39 @@ struct Work<'a> {
     cancellation: &'a Cancellation,
     limits: ObjectivePlanLimits,
     template: Option<usize>,
-    statistics: ObjectiveBoundStatistics,
+    meter: Meter<'static>,
+    bindings: u64,
+    keys: usize,
+    key_bytes: usize,
+    nodes: usize,
 }
-impl Work<'_> {
+impl<'a> Work<'a> {
+    fn new(limits: ObjectivePlanLimits, cancellation: &'a Cancellation) -> Self {
+        Self {
+            cancellation,
+            limits,
+            template: None,
+            meter: Meter::local(limits.max_work),
+            bindings: 0,
+            keys: 0,
+            key_bytes: 0,
+            nodes: 0,
+        }
+    }
+    fn statistics(&self) -> ObjectiveBoundStatistics {
+        ObjectiveBoundStatistics {
+            work: self.meter.charged(),
+            bindings: self.bindings,
+            keys: self.keys,
+            key_bytes: self.key_bytes,
+            nodes: self.nodes,
+        }
+    }
     fn error(&self, kind: ObjectiveBoundErrorKind) -> ObjectiveBoundError {
         ObjectiveBoundError {
             kind,
             template: self.template,
-            statistics: self.statistics,
+            statistics: self.statistics(),
         }
     }
     fn limit(&self, resource: ObjectiveBoundResource) -> ObjectiveBoundError {
@@ -353,16 +418,17 @@ impl Work<'_> {
     // Imported kernel work has already happened, including on cancellation.
     // Record it without another cancellation check discarding that evidence.
     fn account(&mut self, amount: u64) -> Result<(), ObjectiveBoundError> {
-        let next = self
-            .statistics
-            .work
-            .checked_add(amount)
-            .ok_or_else(|| self.error(ObjectiveBoundErrorKind::Overflow))?;
-        if next > self.limits.max_work {
-            return Err(self.limit(ObjectiveBoundResource::Work));
+        // The native contract distinguishes an unrepresentable total from an
+        // exhausted allowance; the shared meter owns the accepted count.
+        if self.meter.charged().checked_add(amount).is_none() {
+            return Err(self.error(ObjectiveBoundErrorKind::Overflow));
         }
-        self.statistics.work = next;
-        Ok(())
+        self.meter
+            .bounded(amount, || ((), amount))
+            .map_err(|failure| match failure.into_stop() {
+                Stop::WorkLimit => self.limit(ObjectiveBoundResource::Work),
+                stop => self.error(ObjectiveBoundErrorKind::Control(stop)),
+            })
     }
     fn tick(&mut self) -> Result<(), ObjectiveBoundError> {
         self.charge(1)
@@ -389,22 +455,18 @@ impl Work<'_> {
             NodeView::Implies(_, _) => (1, 2),
             NodeView::Atom(_) | NodeView::False => (1, 0),
         };
-        let count = nodes
-            .view()
-            .len()
-            .checked_add(added_nodes)
-            .ok_or_else(|| self.error(ObjectiveBoundErrorKind::Overflow))?;
-        if count > self.limits.max_nodes {
-            return Err(self.limit(ObjectiveBoundResource::Nodes));
-        }
-        let occurrences = nodes
-            .parts()
-            .occurrences()
-            .checked_add(edges)
-            .ok_or_else(|| self.error(ObjectiveBoundErrorKind::Overflow))?;
-        if occurrences > self.limits.max_operands {
-            return Err(self.limit(ObjectiveBoundResource::Operands));
-        }
+        Meter::check_count(nodes.view().len(), added_nodes, self.limits.max_nodes).map_err(
+            |error| match error {
+                MeterCountError::Overflow => self.error(ObjectiveBoundErrorKind::Overflow),
+                MeterCountError::Limit { .. } => self.limit(ObjectiveBoundResource::Nodes),
+            },
+        )?;
+        Meter::check_count(nodes.parts().occurrences(), edges, self.limits.max_operands).map_err(
+            |error| match error {
+                MeterCountError::Overflow => self.error(ObjectiveBoundErrorKind::Overflow),
+                MeterCountError::Limit { .. } => self.limit(ObjectiveBoundResource::Operands),
+            },
+        )?;
         // Charge child validation and copied arena cells before publication.
         // Numeric copies include both columns and row/threshold descriptors.
         // The range-returning append allocates no root vector. The builder has
@@ -455,7 +517,7 @@ impl Work<'_> {
                 })
             })?;
         transaction.commit();
-        self.statistics.nodes = nodes.view().len();
+        self.nodes = nodes.view().len();
         Ok(index)
     }
 }

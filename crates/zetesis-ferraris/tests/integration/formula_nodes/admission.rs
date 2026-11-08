@@ -1,7 +1,7 @@
 //! Consumed topology evidence removes only already completed child scans.
 
 use proptest::prelude::*;
-use zetesis_cpu::Cancellation;
+use zetesis_algebra::Cancellation;
 use zetesis_ferraris::{
     AdmissionError, AdmissionLimits, AggregateFamilyLimits, FormulaNodes, FormulaParts,
     Interpretation, Limits, Node, NodeView, OperandSpan, Theory, models, models_reduct,

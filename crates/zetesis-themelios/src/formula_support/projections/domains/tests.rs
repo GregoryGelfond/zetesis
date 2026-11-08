@@ -425,7 +425,7 @@ fn cancelled_domains_cannot_publish_a_restriction() {
                 counters,
                 location,
             );
-            let cancellation = zetesis_cpu::Cancellation::default();
+            let cancellation = zetesis_algebra::Cancellation::default();
             cancellation.cancel();
             counters.attach_test_control(&cancellation);
             assert!(matches!(
@@ -436,7 +436,7 @@ fn cancelled_domains_cannot_publish_a_restriction() {
                     Context::new(&*computation, &FormulaLimits::default(), counters, location)
                 ),
                 Err(FormulaFailure::Interrupted {
-                    reason: zetesis_cpu::Stop::Cancelled,
+                    reason: zetesis_algebra::Stop::Cancelled,
                     ..
                 })
             ));

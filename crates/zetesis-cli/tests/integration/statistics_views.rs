@@ -3,11 +3,11 @@
 use std::{io, num::NonZeroUsize};
 
 use clap::Parser;
+use zetesis_algebra::Cancellation;
 use zetesis_cli::{
     Backend, ColorMode, Options, PublicationOutcome, SemanticOutcome, SolveConfig,
     SolveMeasurements, run_finalized_with_diagnostics, statistics_view::Statistics,
 };
-use zetesis_cpu::Cancellation;
 use zetesis_presentation::Layout;
 
 use zetesis_test_support::io::BoundedWriter;
@@ -98,27 +98,6 @@ fn requested_device_cannot_supply_missing_execution() {
 }
 
 #[test]
-fn closure_work_names_its_completed_check_scope() {
-    let (options, outcome) = solve(
-        "p:-not q.q:-not p.",
-        &["--backend", "cpu", "--grounder", "lazy"],
-        true,
-    );
-    let semantic = outcome.semantic();
-    let execution = semantic.closure_execution().unwrap();
-    assert!(execution.work > 0);
-    let text = render(&SolveConfig::from(&options), Some(semantic));
-    let work = value(&text, "Closure work");
-    assert_eq!(
-        work.split_whitespace().next().unwrap(),
-        execution.work.to_string()
-    );
-    assert!(work.contains("join/copy units; completed checks only"));
-    assert!(text.contains("partial work omitted from closure totals"));
-    assert!(value(&text, "Recorded execution").starts_with("CPU independent lazy closure"));
-}
-
-#[test]
 fn disabled_measurements_keep_mandatory_work_receipts() {
     let (options, outcome) = solve("a|b.", &["--oracle", "countermodel"], false);
     let text = render(&SolveConfig::from(&options), Some(outcome.semantic()));
@@ -130,7 +109,7 @@ fn disabled_measurements_keep_mandatory_work_receipts() {
 #[test]
 fn recorded_zero_does_not_become_unavailable() {
     let semantic = SemanticOutcome::interrupted_before_start(
-        zetesis_cli::Interruption::Preparation(zetesis_cpu::Stop::Cancelled),
+        zetesis_cli::Interruption::Preparation(zetesis_algebra::Stop::Cancelled),
     );
     let text = render(&SolveConfig::default(), Some(&semantic));
     assert_eq!(
@@ -143,51 +122,10 @@ fn recorded_zero_does_not_become_unavailable() {
 }
 
 #[test]
-fn shared_work_keeps_distinct_operation_counts() {
-    let (options, outcome) = solve("{a}. {b}.", &["--source-batching", "worlds"], true);
-    let semantic = outcome.semantic();
-    let execution = semantic.shared_execution().unwrap();
-    assert!(execution.source_work > 0);
-    assert!(execution.world_work > 0);
-    let text = render(&SolveConfig::from(&options), Some(semantic));
-    assert_eq!(
-        value(&text, "Recorded execution"),
-        "CPU shared lazy closure"
-    );
-    for (label, expected) in [
-        ("Shared source work", execution.source_work),
-        ("Shared world work", execution.world_work),
-    ] {
-        assert_eq!(
-            value(&text, label).split_whitespace().next().unwrap(),
-            expected.to_string()
-        );
-    }
-    assert!(!text.contains("Closure tuple probes"));
-    assert!(!text.contains("GPU decoded work"));
-}
-
-#[test]
-fn eager_closure_work_does_not_claim_tuple_probes() {
-    let (options, outcome) = solve("{a}. {b}.", &["--grounder", "eager"], true);
-    let semantic = outcome.semantic();
-    let execution = semantic.closure_execution().unwrap();
-    assert_eq!(execution.route, zetesis_cli::ClosureRoute::Eager);
-    assert!(execution.work > 0);
-    let text = render(&SolveConfig::from(&options), Some(semantic));
-    assert_eq!(
-        value(&text, "Recorded execution"),
-        "CPU independent eager closure"
-    );
-    assert!(value(&text, "Closure work").contains("eager scan units; completed checks only"));
-    assert!(!text.contains("Closure tuple probes"));
-}
-
-#[test]
 fn positive_execution_is_named_from_its_certificate() {
     let (options, outcome) = solve(
         "a. b:-a. a:-b. #minimize{2@3,k:b;1@1,k:a}.",
-        &["--grounder", "eager", "--search", "clauses"],
+        &["--grounder", "eager"],
         true,
     );
     let semantic = outcome.semantic();
@@ -198,7 +136,7 @@ fn positive_execution_is_named_from_its_certificate() {
         .unwrap();
     assert!(matches!(
         certified.plan,
-        Some(zetesis_sat::CertificatePlanStatistics::Positive(_))
+        Some(zetesis_stable::CertificatePlanStatistics::Positive(_))
     ));
     assert!(certified.checks > 0);
     let text = render(&SolveConfig::from(&options), Some(semantic));
@@ -227,13 +165,7 @@ fn objective_work_preserves_the_recorded_count() {
 #[test]
 fn batched_cpu_completion_does_not_claim_device_work() {
     let admitted = zetesis_reference_support::formula("a|b.");
-    let mut config = crate::support::prepared::config(&[
-        "--oracle",
-        "countermodel",
-        "--search",
-        "clauses",
-        "--stats",
-    ]);
+    let mut config = crate::support::prepared::config(&["--oracle", "countermodel", "--stats"]);
     config.solve.completion_workers = NonZeroUsize::new(2).unwrap();
     let outcome = zetesis_cli::publish_prepared(
         zetesis_cli::PreparedInput::formula(&admitted),

@@ -64,7 +64,6 @@ pub(super) fn campaign(request: &Request<'_>, helper: Option<&Path>) -> Result<R
         manifest_sha256: examples::MANIFEST_SHA256,
         schedule: request.schedule.clone(),
         formula_joins: request.formula_joins,
-        search: request.search,
         limits: request.limits,
         started_unix_ns,
         finished_unix_ns: None,
@@ -364,11 +363,6 @@ fn arguments<'a>(
         && let Some(joins) = request.formula_joins
     {
         arguments.extend(["--formula-joins".into(), joins.label().into()]);
-    }
-    if slot.producer == Producer::Native
-        && let Some(search) = request.search
-    {
-        arguments.extend(["--search".into(), search.label().into()]);
     }
     if slot.phase == Phase::Diagnostics {
         arguments.push("--stats".into());

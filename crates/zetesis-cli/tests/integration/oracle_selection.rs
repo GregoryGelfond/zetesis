@@ -6,10 +6,10 @@ use zetesis_reference_support::resource_limits;
 use zetesis_test_support::thresholds::first_success;
 
 use clap::Parser;
+use zetesis_algebra::Cancellation;
 use zetesis_cli::{
     Completion, Interruption, Options, Oracle, Report, RunError, run_with_diagnostics,
 };
-use zetesis_cpu::{Cancellation, Stop};
 use zetesis_themelios::{
     AdmissionFailure, ExpansionFailure, FormulaFailure, FormulaResource, InputLimit,
 };
@@ -74,34 +74,11 @@ fn supported_language_is_automatic_with_optional_reduct_oracle_selection() {
     assert_eq!(options(&[]).oracle, Oracle::Auto);
     for (name, oracle) in [
         ("auto", Oracle::Auto),
-        ("closure", Oracle::Closure),
         ("countermodel", Oracle::Countermodel),
     ] {
         assert_eq!(options(&["--oracle", name]).oracle, oracle);
     }
     assert!(Options::try_parse_from(["zetesis", "--extended"]).is_err());
-    assert!(Options::try_parse_from(["zetesis", "--search", "sat"]).is_err());
-}
-
-#[test]
-fn auto_uses_closure_for_supported_scalar_normal_programs() {
-    for source in [
-        "a.",
-        "#const n=1+1. d(1..n). p(X) :- d(X), X != 1.",
-        "a :- not b. b :- not a.",
-    ] {
-        let (automatic, auto_output, auto_diagnostics) = run(source, &options(&[]));
-        let (explicit, explicit_output, explicit_diagnostics) =
-            run(source, &options(&["--oracle", "closure"]));
-        let automatic = automatic.expect("automatic closure admission");
-        let explicit = explicit.expect("explicit closure admission");
-        assert_eq!(automatic.completion, Completion::Exhausted);
-        assert_eq!(automatic.models, explicit.models);
-        assert_eq!(answers(&auto_output), answers(&explicit_output));
-        assert!(auto_diagnostics.contains("Oracle: reduct closure"));
-        assert!(explicit_diagnostics.contains("Oracle: reduct closure"));
-        assert!(automatic.countermodel_statistics.is_none());
-    }
 }
 
 #[test]
@@ -121,10 +98,6 @@ fn auto_uses_formula_membership_for_choices() {
         assert!(diagnostics.contains("oracle: Ferraris reduct membership"));
         assert!(!diagnostics.contains("Oracle: reduct closure"));
         assert!(automatic.countermodel_statistics.is_some());
-        assert!(matches!(
-            assert_refused_without_output(source, &options(&["--oracle", "closure"])),
-            RunError::Expansion(_)
-        ));
     }
 }
 
@@ -150,17 +123,13 @@ fn auto_evaluates_acyclic_arithmetic_sources_directly() {
         assert!(automatic.countermodel_statistics.is_none());
         assert!(explicit.source_evaluation.is_none());
         assert!(explicit.countermodel_statistics.is_some());
-        assert!(matches!(
-            assert_refused_without_output(source, &options(&["--oracle", "closure"])),
-            RunError::Expansion(_)
-        ));
     }
 }
 
 #[test]
 fn empty_and_unsupported_positive_cycles_have_one_empty_stable_model() {
     for source in ["", "a :- a.", "a :- b. b :- a."] {
-        for oracle in ["auto", "closure", "countermodel"] {
+        for oracle in ["auto", "countermodel"] {
             let (result, output, _) = run(source, &options(&["--oracle", oracle]));
             let report = result.expect("finite cyclic program");
             assert_eq!(report.completion, Completion::Exhausted);
@@ -174,18 +143,25 @@ fn empty_and_unsupported_positive_cycles_have_one_empty_stable_model() {
 
 #[test]
 fn source_limits_preserve_typed_admission_refusals() {
-    use zetesis_themelios::{AdmissionOptions, ExpansionLimits, admit_extended};
+    use zetesis_themelios::{AdmissionOptions, ExpansionLimits, FormulaLimits, admit_formula};
     let bounded = resource_limits::admission(InputLimit::SourceBytes, 1);
     assert!(matches!(
-        admit_extended("1 {a;b} 1.".into(), bounded, ExpansionLimits::default()),
-        Err(ExpansionFailure::Admission(AdmissionFailure::Limit {
-            resource: InputLimit::SourceBytes,
-            ..
-        }))
+        admit_formula(
+            "1 {a;b} 1.".into(),
+            bounded,
+            ExpansionLimits::default(),
+            FormulaLimits::default()
+        ),
+        Err(FormulaFailure::Expansion(ExpansionFailure::Admission(
+            AdmissionFailure::Limit {
+                resource: InputLimit::SourceBytes,
+                ..
+            }
+        )))
     ));
     assert!(matches!(
         assert_refused_without_output("a(", &options(&[])),
-        RunError::Expansion(ExpansionFailure::Admission(AdmissionFailure::Syntax(_)))
+        RunError::FormulaAdmission(_)
     ));
     for (source, resource) in [
         (
@@ -198,18 +174,20 @@ fn source_limits_preserve_typed_admission_refusals() {
         ),
     ] {
         assert!(
-            matches!(admit_extended(source, AdmissionOptions::default(), ExpansionLimits::default()), Err(ExpansionFailure::Admission(AdmissionFailure::Limit {resource: actual, ..})) if actual == resource)
+            matches!(admit_formula(source, AdmissionOptions::default(), ExpansionLimits::default(), FormulaLimits::default()), Err(FormulaFailure::Expansion(ExpansionFailure::Admission(AdmissionFailure::Limit {resource: actual, ..}))) if actual == resource)
         );
     }
 }
 
 #[test]
 fn undefined_arithmetic_and_expansion_limits_remain_refusals() {
-    use zetesis_themelios::{AdmissionOptions, ExpansionLimits, ExpansionResource, admit_extended};
+    use zetesis_themelios::{
+        AdmissionOptions, ExpansionLimits, ExpansionResource, FormulaLimits, admit_formula,
+    };
     for source in ["p(1/0).", "p(2147483647+1)."] {
         assert!(matches!(
             assert_refused_without_output(source, &options(&[])),
-            RunError::Expansion(ExpansionFailure::Evaluation { .. })
+            RunError::FormulaAdmission(_)
         ));
     }
     for resource in [
@@ -219,8 +197,13 @@ fn undefined_arithmetic_and_expansion_limits_remain_refusals() {
     ] {
         let limits = resource_limits::expansion(resource, 0);
         assert!(matches!(
-            admit_extended("p(1..2).".into(), AdmissionOptions::default(), limits),
-            Err(ExpansionFailure::Limit { .. })
+            admit_formula(
+                "p(1..2).".into(),
+                AdmissionOptions::default(),
+                limits,
+                FormulaLimits::default()
+            ),
+            Err(FormulaFailure::Expansion(ExpansionFailure::Limit { .. }))
         ));
     }
     for resource in [
@@ -347,61 +330,28 @@ fn statistics_report_memory_derived_support_bytes() {
 
 #[test]
 fn incomplete_oracles_do_not_claim_unsatisfiable() {
-    for (countermodel, carrier) in [(false, false), (false, true), (true, false)] {
-        let mut config = crate::support::prepared::config(&[
-            "--oracle",
-            if countermodel {
-                "countermodel"
-            } else {
-                "closure"
-            },
-        ]);
-        if countermodel {
-            config.solve.max_search_work = 0;
-        } else if carrier {
-            config.solve.max_carrier_atoms = 0;
-        } else {
-            config.solve.max_work = 0;
-        }
-        let mut output = Vec::new();
-        let mut renderer = zetesis_cli::HumanRenderer::new(
-            &mut output,
-            zetesis_cli::ColorMode::Never,
-            config.observations.max_output_bytes,
-        );
-        let report = if countermodel {
-            crate::support::prepared::formula(
-                "{a}.",
-                &config,
-                &mut renderer,
-                &mut std::io::sink(),
-                &Cancellation::default(),
-            )
-        } else {
-            crate::support::prepared::relational(
-                "{a}.",
-                &config,
-                &mut renderer,
-                &mut std::io::sink(),
-                &Cancellation::default(),
-            )
-        }
-        .unwrap();
-        assert_eq!(report.completion, Completion::Interrupted);
-        if countermodel {
-            assert!(matches!(
-                report.interruption,
-                Some(Interruption::Countermodel(_))
-            ));
-        } else {
-            assert!(matches!(
-                report.interruption,
-                Some(Interruption::Oracle(Stop::WorkLimit | Stop::CarrierLimit))
-            ));
-            assert!(report.countermodel_statistics.is_none());
-        }
-        let output = String::from_utf8(output).unwrap();
-        assert!(output.contains("INCOMPLETE:"));
-        assert!(!output.contains("UNSATISFIABLE"));
-    }
+    let mut config = crate::support::prepared::config(&["--oracle", "countermodel"]);
+    config.solve.max_search_work = 0;
+    let mut output = Vec::new();
+    let mut renderer = zetesis_cli::HumanRenderer::new(
+        &mut output,
+        zetesis_cli::ColorMode::Never,
+        config.observations.max_output_bytes,
+    );
+    let report = crate::support::prepared::formula(
+        "{a}.",
+        &config,
+        &mut renderer,
+        &mut std::io::sink(),
+        &Cancellation::default(),
+    )
+    .unwrap();
+    assert_eq!(report.completion, Completion::Interrupted);
+    assert!(matches!(
+        report.interruption,
+        Some(Interruption::Countermodel(_))
+    ));
+    let output = String::from_utf8(output).unwrap();
+    assert!(output.contains("INCOMPLETE:"));
+    assert!(!output.contains("UNSATISFIABLE"));
 }

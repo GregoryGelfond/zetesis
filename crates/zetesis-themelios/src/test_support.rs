@@ -106,3 +106,55 @@ pub(crate) fn prepared(source: &str) -> PreparedFormula {
 pub(crate) fn hybrid(source: &str) -> HybridFormula {
     prepared(source).ground_hybrid().unwrap()
 }
+
+thread_local! {
+    /// Whether constraint grounding collects pairwise exclusions on this
+    /// thread: on, as in every run, except inside `without_pair_exclusions`.
+    static PAIR_EXCLUSIONS: Cell<bool> = const { Cell::new(true) };
+}
+
+/// Whether pairwise-exclusion collection is on for this thread.
+pub(crate) fn pair_exclusions_enabled() -> bool {
+    PAIR_EXCLUSIONS.get()
+}
+
+/// Run `run` with pairwise-exclusion collection off on this thread, restoring
+/// it afterwards even if `run` unwinds: every pairwise constraint then takes
+/// the route it would take were it not a pair family.
+pub(crate) fn without_pair_exclusions<T>(run: impl FnOnce() -> T) -> T {
+    struct Restore(bool);
+    impl Drop for Restore {
+        fn drop(&mut self) {
+            PAIR_EXCLUSIONS.set(self.0);
+        }
+    }
+    let _restore = Restore(PAIR_EXCLUSIONS.replace(false));
+    run()
+}
+
+/// `source` grounded for hybrid execution with its constraints streamed: the
+/// fixture of the streamed route's own tests. Capture would move a pairwise
+/// family whose every component is complete into the core, and these tests
+/// exercise the stream, not that disposition.
+pub(crate) fn streamed_hybrid(source: &str) -> HybridFormula {
+    without_pair_exclusions(|| hybrid(source))
+}
+
+/// Source preparation and occurrence-raising edge cases, including refusals.
+pub(crate) const PREPARATION_CASES: &[&str] = &[
+    "a.",
+    "#const n=2. p(1..n).",
+    "{p}.",
+    "1{p;q}1.",
+    "p|q.",
+    "p(1). q(X) :- p(X), X+1=2.",
+    "#show p/0. #show p/0. p.",
+    "#show p(X) : p(X). p(1).",
+    "#project p/0. {p}.",
+    ":~ p. [1@0] {p}.",
+    "p(X) :- not q(X).",
+    "#const a=b. #const b=a. p(a).",
+    "p(1/0).",
+    "p(2147483648).",
+    "#program step(t). p(t).",
+];

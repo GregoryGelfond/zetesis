@@ -291,9 +291,7 @@ impl SupportAppend<'_> {
     }
 
     pub(super) fn is_supported(&self, position: usize) -> bool {
-        self.supported
-            .get(position / 64)
-            .is_some_and(|word| word & (1_u64 << (position % 64)) != 0)
+        self.supported.get_bit(position).unwrap_or(false)
     }
 
     /// A single checked bit covers committed and pending support. Canonical
@@ -321,7 +319,7 @@ impl SupportAppend<'_> {
         refreshed?;
         // The final permit in reserve_membership covers these disjoint writes.
         self.pending.push(atom.position);
-        self.supported[atom.position / 64] |= 1_u64 << (atom.position % 64);
+        self.supported.insert(atom.position);
         Ok(())
     }
 
@@ -342,14 +340,15 @@ impl SupportAppend<'_> {
             counters.charge_work(self.supported.len() as u128, limits, location)?;
             counters.work(limits, location)?;
         }
-        memory.reserve(self.supported, additional)?;
+        memory.reserve(self.supported.storage_mut(), additional)?;
         if self.pending.len() == self.pending.capacity() {
             counters.charge_work(self.pending.len() as u128, limits, location)?;
             counters.work(limits, location)?;
         }
         memory.reserve(self.pending, 1)?;
         counters.charge_work(additional as u128, limits, location)?;
-        self.supported.resize(words.max(self.supported.len()), 0);
+        let initialized = words.max(self.supported.len());
+        self.supported.storage_mut().resize(initialized, 0);
         counters.work(limits, location)?;
         Ok(())
     }

@@ -167,12 +167,8 @@ fn formula_core_field(
     resource: FormulaResource,
 ) -> Field<'_> {
     match resource {
-        FormulaResource::Variables => {
-            core_field(limits, zetesis_core::AdmissionResource::Variables)
-        }
-        FormulaResource::Arity => {
-            core_field(limits, zetesis_core::AdmissionResource::PredicateArity)
-        }
+        FormulaResource::Variables => Field::Size(&mut limits.max_variables_per_template),
+        FormulaResource::Arity => Field::Size(&mut limits.max_predicate_arity),
         _ => panic!("{resource:?} is not counted against the core admission limits"),
     }
 }
@@ -213,21 +209,6 @@ fn bundle_field(options: &mut BundleAdmissionOptions, resource: InputLimit) -> F
         InputLimit::SourceBytes => {
             panic!("{resource:?} is bounded when a bundle is loaded, not admitted")
         }
-    }
-}
-
-/// The field of `limits` that bounds the core admission `resource`.
-fn core_field(
-    limits: &mut zetesis_core::AdmissionLimits,
-    resource: zetesis_core::AdmissionResource,
-) -> Field<'_> {
-    use zetesis_core::AdmissionResource;
-    match resource {
-        AdmissionResource::Templates => Field::Size(&mut limits.max_templates),
-        AdmissionResource::PredicateArity => Field::Size(&mut limits.max_predicate_arity),
-        AdmissionResource::Variables => Field::Size(&mut limits.max_variables_per_template),
-        AdmissionResource::PositiveBody => Field::Size(&mut limits.max_positive_body),
-        AdmissionResource::DomainValues => Field::Size(&mut limits.max_domain_values),
     }
 }
 
@@ -454,18 +435,6 @@ pub fn admission(resource: InputLimit, limit: u64) -> AdmissionOptions {
     options
 }
 
-/// The default admission options of one source, with the core admission
-/// `resource` bounded by `limit`.
-///
-/// # Panics
-/// Panics for a `limit` that does not fit the field's width.
-#[must_use]
-pub fn admission_core(resource: zetesis_core::AdmissionResource, limit: u64) -> AdmissionOptions {
-    let mut options = AdmissionOptions::default();
-    core_field(&mut options.core_limits, resource).set(limit);
-    options
-}
-
 /// The default admission options of one source, with the formula `resource`
 /// bounded by `limit`: formula admission counts template variables and
 /// predicate arity against the core admission limits.
@@ -502,21 +471,6 @@ pub fn bundle(resource: InputLimit, limit: u64) -> BundleAdmissionOptions {
 pub fn program(resource: ProgramResource, limit: u64) -> ProgramAdmissionOptions {
     let mut options = ProgramAdmissionOptions::default();
     program_field(&mut options, resource).set(limit);
-    options
-}
-
-/// The default logical program admission options, with the core admission
-/// `resource` bounded by `limit`.
-///
-/// # Panics
-/// Panics for a `limit` that does not fit the field's width.
-#[must_use]
-pub fn program_core(
-    resource: zetesis_core::AdmissionResource,
-    limit: u64,
-) -> ProgramAdmissionOptions {
-    let mut options = ProgramAdmissionOptions::default();
-    core_field(&mut options.core_limits, resource).set(limit);
     options
 }
 

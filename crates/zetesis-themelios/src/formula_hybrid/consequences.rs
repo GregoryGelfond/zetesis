@@ -27,8 +27,8 @@ use crate::formula_ir::LiteralIr;
 use crate::formula_support::{Context, Counters, GroundingWork, PositiveRows};
 use crate::{FormulaFailure, ProgramSite};
 use themelios_program::program::DefaultNegation;
+use zetesis_algebra::{Cancellation, region::Region};
 use zetesis_core::AtomLookup;
-use zetesis_cpu::{Cancellation, regions::Region};
 use zetesis_ferraris::Theory;
 
 /// A candidate closure gets one allowance across all its source passes.

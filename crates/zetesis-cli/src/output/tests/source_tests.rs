@@ -3,7 +3,7 @@
 use std::{io, num::NonZeroUsize, time::Duration};
 
 use clap::Parser;
-use zetesis_cpu::Cancellation;
+use zetesis_algebra::Cancellation;
 use zetesis_themelios::{SourceAdmission, SourceEvaluationStatistics};
 
 use crate::failure::Progress;
@@ -130,18 +130,13 @@ fn assert_source_json(bytes: &[u8], receipt: SourceEvaluationStatistics) {
             "scope":"source_admission", "work":receipt.work, "substitutions":receipt.substitutions,
         })
     );
-    for field in [
-        "search",
-        "execution",
-        "closure_execution",
-        "query_execution",
-    ] {
+    for field in ["search", "execution"] {
         assert!(stats[field].is_null(), "no invented {field} receipt");
     }
 }
 
 #[test]
-fn source_human_views_report_admission_without_closure_oracle_claims() {
+fn source_human_views_report_admission_without_oracle_claims() {
     let (progress, receipt) = evaluated("a. b :- a.", false);
     let options = Options::try_parse_from([
         "zetesis",
@@ -163,7 +158,6 @@ fn source_human_views_report_admission_without_closure_oracle_claims() {
         receipt.work, receipt.substitutions,
     )));
     assert!(records.contains("completed source evaluations=1"));
-    assert!(!records.contains("oracle=closure"));
     assert!(!records.contains("oracle work: unavailable"));
     let config = config();
     let view = crate::statistics_view::Statistics {

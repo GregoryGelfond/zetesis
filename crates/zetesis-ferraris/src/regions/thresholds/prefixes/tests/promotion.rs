@@ -1,7 +1,7 @@
 //! Residual notifications do not change mandatory transport order.
 //! Both pending schedules must reach the same closed facts and split score.
 
-use crate::regions::{Closure, NarrowingStatistics, Step, Subject, Width, Work, bit};
+use crate::regions::{Closure, Context, Meter, NarrowingStatistics, Step, Width};
 use crate::{
     AdmissionLimits, FormulaNodes, FormulaParts, Knowledge, Narrower, Narrowing, NarrowingScratch,
     Node, NodeView, Region, Theory,
@@ -88,19 +88,21 @@ impl Fixture {
 
     fn queued(&self, promoted: bool) -> NarrowingScratch {
         let mut scratch = NarrowingScratch::default();
-        scratch.prepare(self.theory.atom_count());
+        scratch.common.prepare(self.theory.atom_count());
         scratch
+            .common
             .prepare_thresholds(self.index.thresholds.rows.len())
             .unwrap();
         let [initial, extended] = self.endpoints;
         if promoted {
             scratch
+                .common
                 .prepare_residuals(self.index.thresholds.rows.len())
                 .unwrap();
-            scratch.queue_residual(initial);
+            scratch.common.queue_residual(initial);
         }
-        scratch.queue_threshold(extended);
-        scratch.queue_threshold(initial);
+        scratch.common.queue_threshold(extended);
+        scratch.common.queue_threshold(initial);
         scratch
     }
 
@@ -115,11 +117,11 @@ impl Fixture {
         let order = [initial, extended];
         let mut scratch = self.queued(promoted);
         for row in order {
-            assert_eq!(scratch.next_threshold(), Some(row));
+            assert_eq!(scratch.common.next_threshold(), Some(row));
         }
-        assert_eq!(scratch.next_threshold(), None);
-        assert_eq!(scratch.next_residual(), promoted.then_some(initial));
-        assert_eq!(scratch.next_residual(), None);
+        assert_eq!(scratch.common.next_threshold(), None);
+        assert_eq!(scratch.common.next_residual(), promoted.then_some(initial));
+        assert_eq!(scratch.common.next_residual(), None);
         scratch = self.queued(promoted);
         finish_pending(&self.theory, &self.index, region, knowledge, &mut scratch)
     }
@@ -137,36 +139,32 @@ fn finish_pending(
     let Width::Compact16(known) = &mut knowledge.width else {
         panic!("the small prefix fixture uses compact counters");
     };
-    let mut closure = Closure {
+    let mut closure = Closure::<_, zetesis_algebra::AnswerSetsSought> {
         known: known.borrow(),
-        lists: scratch,
+        lists: &mut scratch.common,
+        learning: &mut scratch.learning,
     };
     let outcome = closure
         .close(
-            Subject {
-                theory,
-                producers: None,
-                frozen: None,
-                choices: &crate::regions::NO_CHOICES,
-                generator_order: None,
-            },
+            Context::from(crate::OriginalSubject::new(theory, None)),
             index,
             region,
-            &mut Work::new(u64::MAX),
+            &mut Meter::local(u64::MAX),
             &mut NarrowingStatistics::default(),
         )
+        .map_err(zetesis_algebra::Failure::into_stop)
         .unwrap();
     if outcome == Step::Contradiction {
         return true;
     }
     for atom in closure.lists.learned.drain(..) {
-        assert!(if bit(closure.known.atom_sure, atom) {
+        assert!(if closure.known.atom_sure.contains(atom) {
             region.hold(atom)
         } else {
             region.cut(atom)
         });
     }
-    region.snapshot_decided(closure.known.seen);
+    region.snapshot_decided(&mut closure.known.seen);
     assert!(closure.lists.threshold_rows.is_empty());
     assert!(closure.lists.residual_rows.is_empty());
     assert!(
@@ -203,8 +201,9 @@ fn assert_same_choice(index: &Narrower, region: &Region, left: &Knowledge, right
         .preferred_atom(
             region,
             &crate::ChoiceHeads::default(),
-            &mut Work::new(u64::MAX),
+            &mut Meter::local(u64::MAX),
         )
+        .map_err(zetesis_algebra::Failure::into_stop)
         .unwrap();
     assert_eq!(preferred.is_some(), region.open().next().is_some());
     assert_eq!(
@@ -213,8 +212,9 @@ fn assert_same_choice(index: &Narrower, region: &Region, left: &Knowledge, right
             .preferred_atom(
                 region,
                 &crate::ChoiceHeads::default(),
-                &mut Work::new(u64::MAX)
+                &mut Meter::local(u64::MAX)
             )
+            .map_err(zetesis_algebra::Failure::into_stop)
             .unwrap()
     );
 }

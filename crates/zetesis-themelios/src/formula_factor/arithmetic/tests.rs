@@ -7,8 +7,8 @@ use crate::formula_ir::{HeadIr, LiteralIr};
 use crate::formula_support::{Counters, testing};
 use crate::test_support::compiled_atoms;
 use crate::{ExpansionFailure, FormulaFailure, FormulaResource};
+use zetesis_algebra::Cancellation;
 use zetesis_core::Atom;
-use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{Interpretation, Limits, models, models_reduct};
 
 const INDEPENDENT: &str = "{p(1,a);p(1,b);q(2,a);q(2,b)}. h(X,X+1) :- p(X,_), q(X+1,_).";
@@ -257,7 +257,7 @@ fn interrupted_certification_or_emission_publishes_no_theory() {
         let error = result.unwrap_err();
         assert_eq!(
             error.interruption(),
-            Some(zetesis_cpu::Stop::Cancelled),
+            Some(zetesis_algebra::Stop::Cancelled),
             "{error:?}"
         );
         assert!(counts.heads > 0);

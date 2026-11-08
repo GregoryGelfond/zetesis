@@ -1,8 +1,8 @@
 use super::{Outcome, Progress, Support, scan};
 use crate::{Node, RegionLimits, test_support::theory};
-use zetesis_cpu::{Cancellation, Stop};
+use zetesis_algebra::{Cancellation, Stop};
 
-use super::super::{NarrowingQuota, Producers, Work};
+use super::super::{Meter, Producers};
 
 fn producers(bodies: usize) -> Producers {
     let mut nodes: Vec<_> = (0..=bodies).map(Node::atom).collect();
@@ -35,7 +35,7 @@ fn expected(possible: usize, length: usize, held: bool) -> Outcome {
 }
 
 fn checked(positions: &mut [usize; 2], possible: usize, length: usize, held: bool) {
-    let result = scan(positions, length, held, |position| {
+    let result = scan::<_, Stop>(positions, length, held, |position| {
         Ok(possible & (1 << position) != 0)
     })
     .unwrap();
@@ -70,7 +70,7 @@ fn repeated_withdrawals_read_only_witnesses_and_new_rows() {
     let mut positions = [0_usize; 2];
     let mut visited = 0;
     let mut check = |available: &[bool; ROWS]| {
-        scan(&mut positions, ROWS, true, |position| {
+        scan::<_, Stop>(&mut positions, ROWS, true, |position| {
             visited += 1;
             Ok(available[position])
         })
@@ -97,7 +97,7 @@ fn repeated_withdrawals_read_only_witnesses_and_new_rows() {
     // first witness fails, with only that witness read once more.
     let mut final_reads = 0;
     assert_eq!(
-        scan(&mut positions, ROWS, true, |_| {
+        scan::<_, Stop>(&mut positions, ROWS, true, |_| {
             final_reads += 1;
             Ok(false)
         })
@@ -111,13 +111,13 @@ fn repeated_withdrawals_read_only_witnesses_and_new_rows() {
 fn newly_held_heads_require_a_second_witness() {
     let mut positions = [0_usize; 2];
     assert_eq!(
-        scan(&mut positions, 5, false, |position| Ok(position == 2)).unwrap(),
+        scan::<_, Stop>(&mut positions, 5, false, |position| Ok(position == 2)).unwrap(),
         Outcome::Enough
     );
     assert_eq!(positions, [2, 2]);
     let mut visited = Vec::new();
     assert_eq!(
-        scan(&mut positions, 5, true, |position| {
+        scan::<_, Stop>(&mut positions, 5, true, |position| {
             visited.push(position);
             Ok(position == 2)
         })
@@ -133,19 +133,24 @@ fn preparation_is_private_until_every_row_is_charged() {
     let needed = u64::try_from(producers.by_head.len()).unwrap() + 1;
     for limit in 0..needed {
         let mut progress = Progress::default();
-        let mut work = Work::new(limit);
+        let mut work = Meter::local(limit);
         assert_eq!(
-            progress.prepare(&producers, &mut work),
+            progress
+                .prepare(&producers, &mut work)
+                .map_err(zetesis_algebra::Failure::into_stop),
             Err(Stop::WorkLimit)
         );
-        assert_eq!(work.spent, limit);
+        assert_eq!(work.charged(), limit);
         assert_eq!(progress, Progress::Vacant);
         assert_eq!(progress.allocated_bytes(), 0);
     }
     let mut progress = Progress::default();
-    let mut work = Work::new(needed);
-    progress.prepare(&producers, &mut work).unwrap();
-    assert_eq!(work.spent, needed);
+    let mut work = Meter::local(needed);
+    progress
+        .prepare(&producers, &mut work)
+        .map_err(zetesis_algebra::Failure::into_stop)
+        .unwrap();
+    assert_eq!(work.charged(), needed);
     let Progress::Small(rows) = &progress else {
         panic!("the complete producer count fits compact positions");
     };
@@ -161,7 +166,8 @@ struct Quota {
     failure: Stop,
 }
 
-impl NarrowingQuota for Quota {
+impl zetesis_algebra::Quota for Quota {
+    type Error = Stop;
     fn reserve(&mut self, _: u64) -> Result<u64, Stop> {
         if self.remaining == 0 {
             Err(self.failure)
@@ -185,10 +191,15 @@ fn interrupted_preparation_publishes_no_positions() {
                 remaining: u64::try_from(permitted).unwrap(),
                 failure,
             };
-            let mut work = Work::reserved(&mut quota);
+            let mut work = Meter::reserved(&mut quota);
             let mut progress = Progress::default();
-            assert_eq!(progress.prepare(&producers, &mut work), Err(failure));
-            assert_eq!(work.spent, u64::try_from(permitted).unwrap());
+            assert_eq!(
+                progress
+                    .prepare(&producers, &mut work)
+                    .map_err(zetesis_algebra::Failure::into_stop),
+                Err(failure)
+            );
+            assert_eq!(work.charged(), u64::try_from(permitted).unwrap());
             assert_eq!(progress, Progress::Vacant);
         }
     }
@@ -201,27 +212,30 @@ fn stopped_scans_never_manufacture_a_completed_outcome() {
         for permitted in 0..5 {
             let mut progress = Progress::default();
             progress
-                .prepare(&producers, &mut Work::new(u64::MAX))
+                .prepare(&producers, &mut Meter::local(u64::MAX))
+                .map_err(zetesis_algebra::Failure::into_stop)
                 .unwrap();
             let mut quota = Quota {
                 remaining: permitted,
                 failure,
             };
-            let mut work = Work::reserved(&mut quota);
+            let mut work = Meter::reserved(&mut quota);
             // Only the last producer remains possible. Every shorter scan
             // must refuse before either the sole or zero-support conclusion.
             let never = [(1_u64 << 5) - 2];
             assert!(matches!(
-                progress.check(&producers, 0, true, &never, &[1], &mut work),
+                progress.check(&producers, 0, true, &never, &[1], &mut work).map_err(zetesis_algebra::Failure::into_stop),
                 Err(stop) if stop == failure
             ));
-            assert_eq!(work.spent, permitted);
-            let mut resumed = Work::new(5 - permitted);
+            assert_eq!(work.charged(), permitted);
+            let mut resumed = Meter::local(5 - permitted);
             assert!(matches!(
-                progress.check(&producers, 0, true, &never, &[1], &mut resumed),
+                progress
+                    .check(&producers, 0, true, &never, &[1], &mut resumed)
+                    .map_err(zetesis_algebra::Failure::into_stop),
                 Ok(Support::Sole(Some(5)))
             ));
-            assert_eq!(resumed.spent, 5 - permitted);
+            assert_eq!(resumed.charged(), 5 - permitted);
         }
     }
 }
@@ -231,9 +245,10 @@ fn short_rows_need_no_progress_allocation() {
     for length in 0..=2 {
         let producers = producers(length);
         let mut progress = Progress::default();
-        let mut work = Work::new(u64::try_from(length).unwrap());
+        let mut work = Meter::local(u64::try_from(length).unwrap());
         let result = progress
             .check(&producers, 0, true, &[0], &[1], &mut work)
+            .map_err(zetesis_algebra::Failure::into_stop)
             .unwrap();
         assert!(matches!(
             (length, result),
@@ -253,18 +268,22 @@ fn compact_and_native_positions_preserve_the_same_scan() {
         Progress::Wide(vec![[0; 2]; 6]),
     ];
     for progress in &mut widths {
-        let mut work = Work::new(5);
+        let mut work = Meter::local(5);
         assert!(matches!(
-            progress.check(&producers, 0, true, &[0b01110], &[1], &mut work),
+            progress
+                .check(&producers, 0, true, &[0b01110], &[1], &mut work)
+                .map_err(zetesis_algebra::Failure::into_stop),
             Ok(Support::Possible)
         ));
-        assert_eq!(work.spent, 5);
-        let mut work = Work::new(2);
+        assert_eq!(work.charged(), 5);
+        let mut work = Meter::local(2);
         assert!(matches!(
-            progress.check(&producers, 0, true, &[0b11110], &[1], &mut work),
+            progress
+                .check(&producers, 0, true, &[0b11110], &[1], &mut work)
+                .map_err(zetesis_algebra::Failure::into_stop),
             Ok(Support::Sole(Some(5)))
         ));
-        assert_eq!(work.spent, 2);
+        assert_eq!(work.charged(), 2);
     }
 }
 
@@ -329,7 +348,7 @@ fn every_interrupted_prefix_retains_only_proved_failures() {
             for permitted in 0..ROWS {
                 let mut positions = [0_usize; 2];
                 let mut visited = 0;
-                let result = scan(&mut positions, ROWS, held, |position| {
+                let result = scan::<_, Stop>(&mut positions, ROWS, held, |position| {
                     if visited == permitted {
                         return Err(Stop::Cancelled);
                     }

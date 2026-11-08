@@ -2,6 +2,8 @@
 
 use std::{cmp::Ordering, fmt};
 
+use zetesis_algebra::Meter;
+
 use crate::{Sign, Value};
 
 mod view;
@@ -175,15 +177,13 @@ pub(crate) fn ceiling(
     observed: u128,
     limit: usize,
 ) -> Result<(), ValueError> {
-    if observed > limit as u128 {
-        Err(ValueError::Limit {
+    Meter::check_wide_count(observed, 0, limit as u128)
+        .map(|_| ())
+        .map_err(|_| ValueError::Limit {
             resource,
             observed,
             limit,
         })
-    } else {
-        Ok(())
-    }
 }
 
 impl Value {
@@ -396,3 +396,6 @@ fn render_nodes(
     }
     Ok(())
 }
+
+#[cfg(test)]
+mod tests;

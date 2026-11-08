@@ -1,13 +1,13 @@
 //! Capacity implications require original aliases, grouped unit rows and paid
 //! condition events. Pending truth can weaken a bound but cannot strengthen it.
 
-use crate::regions::{Closure, Known, Step, Work, bit};
+use crate::regions::{Closure, Known, Meter, Step, bit};
 use crate::test_support::{SinglePermits, close};
 use crate::{
     AdmissionLimits, FormulaNodes, FormulaParts, Narrower, Narrowing, NarrowingScratch, Node,
     NodeView, Region, Theory,
 };
-use zetesis_cpu::Stop;
+use zetesis_algebra::Stop;
 
 use super::push;
 
@@ -102,16 +102,18 @@ fn pending_truth_waits_for_its_counted_event() {
     let mut known = index.root_known::<u16>();
     known.thresholds[0].upper = Some(3);
     let mut lists = NarrowingScratch::default();
-    lists.prepare_thresholds(1).unwrap();
-    let mut closure = Closure {
+    lists.common.prepare_thresholds(1).unwrap();
+    let mut closure = Closure::<_, zetesis_algebra::AnswerSetsSought> {
         known: known.borrow(),
-        lists: &mut lists,
+        lists: &mut lists.common,
+        learning: &mut lists.learning,
     };
     assert!(closure.sure(2) == Step::Changed);
     assert_eq!(closure.lists.nodes.pop(), Some((2, true)));
     assert!(
         closure
-            .threshold_condition(&index, 2, true, None, &mut Work::new(u64::MAX))
+            .threshold_condition(&index, 2, true, None, &mut Meter::local(u64::MAX))
+            .map_err(zetesis_algebra::Failure::into_stop)
             .is_ok()
     );
     assert_eq!(closure.known.thresholds[0].known, 1);
@@ -119,29 +121,32 @@ fn pending_truth_waits_for_its_counted_event() {
     assert_eq!(closure.lists.next_threshold(), Some(0));
     assert!(
         closure
-            .threshold_capacity(&index, 0, &mut Work::new(u64::MAX))
+            .threshold_capacity(&index, 0, &mut Meter::local(u64::MAX))
+            .map_err(zetesis_algebra::Failure::into_stop)
             .unwrap()
             == Step::Unchanged
     );
-    assert!(!bit(closure.known.never, first));
+    assert!(!closure.known.never.contains(first));
     assert_eq!(closure.lists.next_threshold(), None);
     // The pending true bit is not a counted contribution yet. Processing its
     // event must request another row visit, even though the upper did not move.
     assert_eq!(closure.lists.nodes.pop(), Some((0, true)));
     assert!(
         closure
-            .threshold_condition(&index, 0, true, None, &mut Work::new(u64::MAX))
+            .threshold_condition(&index, 0, true, None, &mut Meter::local(u64::MAX))
+            .map_err(zetesis_algebra::Failure::into_stop)
             .is_ok()
     );
     assert_eq!(closure.known.thresholds[0].known, 2);
     assert_eq!(closure.lists.next_threshold(), Some(0));
     assert!(
         closure
-            .threshold_capacity(&index, 0, &mut Work::new(u64::MAX))
+            .threshold_capacity(&index, 0, &mut Meter::local(u64::MAX))
+            .map_err(zetesis_algebra::Failure::into_stop)
             .unwrap()
             == Step::Changed
     );
-    assert!(bit(closure.known.never, first));
+    assert!(closure.known.never.contains(first));
 }
 
 struct Attempt {
@@ -150,25 +155,32 @@ struct Attempt {
     events: Vec<(usize, bool)>,
 }
 
-fn attempt(index: &Narrower, held: Option<usize>, work: &mut Work<'_>) -> Attempt {
+fn attempt<Q: zetesis_algebra::Quota<Error = Stop> + ?Sized>(
+    index: &Narrower,
+    held: Option<usize>,
+    work: &mut Meter<'_, Q>,
+) -> Attempt {
     let mut known = index.root_known::<u16>();
     known.thresholds[0].known = 1;
     known.thresholds[0].upper = Some(3);
     let mut lists = NarrowingScratch::default();
-    let mut closure = Closure {
+    let mut closure = Closure::<_, zetesis_algebra::AnswerSetsSought> {
         known: known.borrow(),
-        lists: &mut lists,
+        lists: &mut lists.common,
+        learning: &mut lists.learning,
     };
     assert!(closure.sure(2) == Step::Changed);
     if let Some(node) = held {
         assert!(closure.sure(node) == Step::Changed);
     }
     closure.lists.nodes.clear();
-    let result = closure.threshold_capacity(index, 0, work);
+    let result = closure
+        .threshold_capacity(index, 0, work)
+        .map_err(zetesis_algebra::Failure::into_stop);
     Attempt {
         result,
         known,
-        events: lists.nodes,
+        events: lists.common.nodes,
     }
 }
 
@@ -177,7 +189,7 @@ fn interrupted_capacity_keeps_only_paid_deductions() {
     let (theory, heads) = direct([1; 4]);
     let index = Narrower::new(&theory);
     for held in [None, Some(heads[1])] {
-        let mut full_work = Work::new(u64::MAX);
+        let mut full_work = Meter::local(u64::MAX);
         let full = attempt(&index, held, &mut full_work);
         assert!(
             full.result
@@ -189,14 +201,14 @@ fn interrupted_capacity_keeps_only_paid_deductions() {
         );
         assert_eq!(full.events.first(), Some(&(heads[0], false)));
         // Each deduction needs a footprint visit and two distinct conditions.
-        assert_eq!(full_work.spent, 6);
+        assert_eq!(full_work.charged(), 6);
         for stop in [Stop::WorkLimit, Stop::Cancelled, Stop::Deadline] {
-            for limit in 0..=full_work.spent {
+            for limit in 0..=full_work.charged() {
                 let mut quota = SinglePermits::new(limit, stop);
-                let mut work = Work::reserved(&mut quota);
+                let mut work = Meter::reserved(&mut quota);
                 let partial = attempt(&index, held, &mut work);
-                assert_eq!(work.spent, limit);
-                if limit == full_work.spent {
+                assert_eq!(work.charged(), limit);
+                if limit == full_work.charged() {
                     assert!(partial.result == full.result);
                     assert_eq!(partial.events, full.events);
                     assert_eq!(partial.known.masks.slices(), full.known.masks.slices());

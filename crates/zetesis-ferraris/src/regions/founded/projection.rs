@@ -15,12 +15,14 @@
 //! The permutation has no owner authority until publication and adds no heap
 //! storage. Current region masks are applied to every role on every pass.
 
+use zetesis_algebra::{Failure, Quota};
+
 use super::super::adjacency::Construction;
 use super::{
-    Adjacency, Initial, Narrower, NodeView, Producers, Scratch, State, Theory, Work, bit,
+    Adjacency, Initial, Meter, Narrower, NodeView, Producers, Scratch, State, Theory, bit,
     initialization,
 };
-use zetesis_cpu::Stop;
+use zetesis_algebra::Stop;
 
 #[derive(Debug)]
 pub(super) struct Projection {
@@ -32,13 +34,13 @@ pub(super) struct Projection {
 }
 
 impl Projection {
-    pub(super) fn prepare(
+    pub(super) fn prepare<Q: Quota + ?Sized>(
         theory: &Theory,
         index: &Narrower,
         producers: &Producers,
         scratch: &mut Scratch,
-        work: &mut Work<'_>,
-    ) -> Result<Self, Stop> {
+        work: &mut Meter<'_, Q>,
+    ) -> Result<Self, Failure<Q::Error>> {
         let parents = prepare_parents(theory, index, scratch, work)?;
         let heads = prepare_heads(theory, producers, scratch, work)?;
         let mut initial = initialization::prepare(
@@ -70,12 +72,12 @@ impl Projection {
     }
 }
 
-fn prepare_parents(
+fn prepare_parents<Q: Quota + ?Sized>(
     theory: &Theory,
     index: &Narrower,
     scratch: &Scratch,
-    work: &mut Work<'_>,
-) -> Result<Adjacency, Stop> {
+    work: &mut Meter<'_, Q>,
+) -> Result<Adjacency, Failure<Q::Error>> {
     let edges = scratch.body_nodes.iter().flat_map(|&node| {
         // Charge an inspected source even when it has no parent occurrences.
         std::iter::once(Ok(None)).chain(index.parents[node].iter().map(move |&parent| {
@@ -95,12 +97,12 @@ fn prepare_parents(
     Adjacency::try_build_in(theory.nodes().len(), edges, &mut Preparation { work })
 }
 
-fn prepare_heads(
+fn prepare_heads<Q: Quota + ?Sized>(
     theory: &Theory,
     producers: &Producers,
     scratch: &Scratch,
-    work: &mut Work<'_>,
-) -> Result<Adjacency, Stop> {
+    work: &mut Meter<'_, Q>,
+) -> Result<Adjacency, Failure<Q::Error>> {
     let fact_row = theory.nodes().len();
     let rows = fact_row.checked_add(1).ok_or(Stop::Allocation)?;
     let bodies = scratch.body_nodes.iter().flat_map(|&node| {
@@ -139,16 +141,17 @@ fn head_events(
 /// Narrowing has a work quota and fallible scratch allocation, but no separate
 /// memory ceiling. Retained capacities are reported by Scratch; construction's
 /// additional row cursors are dropped before publication, including on failure.
-struct Preparation<'w, 'q> {
-    work: &'w mut Work<'q>,
+struct Preparation<'w, 'q, Q: Quota + ?Sized> {
+    work: &'w mut Meter<'q, Q>,
 }
 
-impl Construction for Preparation<'_, '_> {
-    fn tick(&mut self) -> Result<(), Stop> {
+impl<Q: Quota + ?Sized> Construction for Preparation<'_, '_, Q> {
+    type Error = Failure<Q::Error>;
+    fn tick(&mut self) -> Result<(), Self::Error> {
         self.work.tick()
     }
 
-    fn zeros(&mut self, count: usize) -> Result<Vec<usize>, Stop> {
+    fn zeros(&mut self, count: usize) -> Result<Vec<usize>, Self::Error> {
         let mut values = self.reserve(count)?;
         for _ in 0..count {
             self.work.tick()?;
@@ -157,7 +160,7 @@ impl Construction for Preparation<'_, '_> {
         Ok(values)
     }
 
-    fn reserve(&mut self, count: usize) -> Result<Vec<usize>, Stop> {
+    fn reserve(&mut self, count: usize) -> Result<Vec<usize>, Self::Error> {
         let mut values = Vec::new();
         values
             .try_reserve_exact(count)
@@ -165,7 +168,7 @@ impl Construction for Preparation<'_, '_> {
         Ok(values)
     }
 
-    fn release(&mut self, values: Vec<usize>) -> Result<(), Stop> {
+    fn release(&mut self, values: Vec<usize>) -> Result<(), Self::Error> {
         drop(values);
         Ok(())
     }

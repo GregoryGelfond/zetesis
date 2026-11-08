@@ -4,8 +4,8 @@ use std::process::{Command as ProcessCommand, Stdio};
 
 use crate::support::options::plain as options;
 use clap::Parser;
+use zetesis_algebra::Cancellation;
 use zetesis_cli::{Backend, Command, Completion, Options, Report, RunError, run_with_diagnostics};
-use zetesis_cpu::Cancellation;
 use zetesis_test_support::io::Closed;
 
 #[test]
@@ -40,12 +40,12 @@ fn retired_backend_values_are_explained() {
 
 /// A tiny automatic run, one node and one choice, with its models and its
 /// diagnostics as text.
-fn tiny_auto_run() -> (Report, String, String) {
+fn tiny_auto_run(arguments: &[&str]) -> (Report, String, String) {
     let mut models = Vec::new();
     let mut diagnostics = Vec::new();
     let report = run_with_diagnostics(
         "node(a). {chosen(X)} :- node(X).".into(),
-        &options(&[]),
+        &options(arguments),
         &mut models,
         &mut diagnostics,
         &Cancellation::default(),
@@ -59,19 +59,44 @@ fn tiny_auto_run() -> (Report, String, String) {
 }
 
 #[test]
-fn a_tiny_auto_run_finds_its_first_answer_after_one_check() {
-    // The narrowed root holds the one undecided gate atom; its out branch is
-    // the first answer, found after one check.
-    let (report, models, _) = tiny_auto_run();
+fn one_worker_finds_the_first_answer_after_one_check() {
+    // The root leaves the one choice open; the walk splits on it, held branch
+    // first, so the first answer holds the choice and is found after one
+    // check.
+    let (report, models, _) = tiny_auto_run(&["--threads", "1"]);
     assert_eq!(report.completion, Completion::RequestedModels);
     assert_eq!(report.checked, 1);
-    assert_eq!(report.discovered_gate_atoms, 1);
-    assert!(models.contains("Answer: 1\nnode(a)\n"));
+    assert!(
+        models.contains("Answer: 1\nchosen(a) node(a)\n"),
+        "{models}"
+    );
+}
+
+#[test]
+fn parallel_workers_publish_only_the_requested_answer() {
+    let (report, models, _) = tiny_auto_run(&["--threads", "2"]);
+    assert_eq!(report.completion, Completion::RequestedModels);
+    assert_eq!(report.models, 1);
+    // Either leaf can finish first, and its peer may finish a check before
+    // the stop. Only the requested answer can reach the output.
+    assert!((1..=2).contains(&report.checked));
+    assert_eq!(
+        models
+            .lines()
+            .filter(|line| line.starts_with("Answer:"))
+            .count(),
+        1
+    );
+    let mut lines = models.lines().skip_while(|line| *line != "Answer: 1");
+    assert!(
+        matches!(lines.nth(1), Some("chosen(a) node(a)" | "node(a)")),
+        "{models}"
+    );
 }
 
 #[test]
 fn default_configuration_precedes_the_models() {
-    let (_, models, diagnostics) = tiny_auto_run();
+    let (_, models, diagnostics) = tiny_auto_run(&[]);
     assert!(models.contains("Backend: CPU"));
     assert!(diagnostics.is_empty());
     assert!(!diagnostics.contains("Answer:"));
@@ -116,24 +141,27 @@ fn finite_expansion_is_automatic_and_respects_its_own_limits() {
     assert!(
         String::from_utf8(diagnostics)
             .unwrap()
-            .contains("Oracle: reduct closure")
+            .contains("oracle: Ferraris reduct membership")
     );
     let error = zetesis_themelios::ParsedSource::new(
         source.into(),
         zetesis_themelios::AdmissionOptions::default(),
     )
     .unwrap()
-    .admit_extended(zetesis_reference_support::resource_limits::expansion(
-        zetesis_themelios::ExpansionResource::Templates,
-        2,
-    ))
+    .prepare_formula(
+        zetesis_reference_support::resource_limits::expansion(
+            zetesis_themelios::ExpansionResource::Templates,
+            2,
+        ),
+        zetesis_themelios::FormulaLimits::default(),
+    )
     .unwrap_err();
     assert!(matches!(
         error.error(),
-        zetesis_themelios::ExpansionFailure::Limit {
+        zetesis_themelios::FormulaFailure::Expansion(zetesis_themelios::ExpansionFailure::Limit {
             resource: zetesis_themelios::ExpansionResource::Templates,
             ..
-        }
+        })
     ));
     assert!(error.error().site().is_some());
     assert!(!error.error().diagnostics().is_empty());
@@ -265,7 +293,7 @@ fn default_execution_ignores_device_transport_limits() {
     let mut config =
         zetesis_cli::PublicationConfig::from(&options(&["--models", "0", "--grounder", "eager"]));
     config.solve.max_batch_bytes = 0;
-    let report = crate::support::prepared::relational(
+    let report = crate::support::prepared::formula(
         "{a}. {b}. {c}. {d}. {e}. {f}.",
         &config,
         &mut zetesis_cli::HumanRenderer::new(
@@ -300,39 +328,71 @@ fn default_execution_ignores_device_transport_limits() {
         .collect();
     assert_eq!(answers, expected);
     assert!(models.contains("Backend: CPU"));
-    assert!(report.lazy_execution.is_none());
 }
 
 #[cfg(feature = "gpu")]
 #[test]
-fn explicit_gpu_failure_cannot_publish_a_cpu_model() {
+fn explicit_gpu_refusal_cannot_publish_a_cpu_model() {
+    use zetesis_wgpu::{GpuErrorKind, GpuOptions, GpuSelection, discover_adapters};
+
     let mut models = Vec::new();
-    let mut diagnostics = Vec::new();
     let mut config = zetesis_cli::PublicationConfig::from(&options(&[
         "--backend",
         "gpu",
         "--grounder",
         "eager",
     ]));
+    // Device selection precedes the first batch. Determine which refusal the
+    // host should reach independently of the publication result.
+    let selection = discover_adapters().and_then(|adapters| {
+        GpuSelection::default()
+            .chosen(&adapters, GpuOptions::default())
+            .map(|_| ())
+    });
     config.solve.max_batch_bytes = 0;
-    let failure = crate::support::prepared::relational(
+    let result = crate::support::prepared::human(
         "a.",
         &config,
-        &mut zetesis_cli::HumanRenderer::new(
-            &mut models,
-            zetesis_cli::ColorMode::Never,
-            config.observations.max_output_bytes,
-        ),
-        &mut diagnostics,
+        &mut models,
+        &mut Vec::new(),
         &Cancellation::default(),
-    )
-    .unwrap_err();
-    let error = *failure.cause;
-    assert!(matches!(error, RunError::Gpu(_)));
-    assert!(crate::support::human::preamble(&String::from_utf8_lossy(
-        &models
-    )));
-    assert!(!String::from_utf8_lossy(&models).contains("Answer:"));
-    assert!(!String::from_utf8_lossy(&models).contains("Backend: CPU"));
-    println!("explicit device refusal: {error}");
+    );
+    let text = String::from_utf8_lossy(&models);
+    assert!(!text.contains("Answer:"), "{text}");
+    assert!(!text.contains("Backend: CPU"), "{text}");
+    assert!(!text.contains("SATISFIABLE"), "{text}");
+    match selection {
+        Ok(()) => {
+            let report = result.unwrap();
+            assert_eq!(report.completion, Completion::Interrupted);
+            assert_eq!(
+                report.interruption,
+                Some(zetesis_solve::Interruption::Countermodel(
+                    zetesis_stable::Incomplete::PendingBytes
+                ))
+            );
+            assert_eq!(report.models, 0);
+            assert!(
+                text.contains("INCOMPLETE: pending candidate byte limit reached"),
+                "{text}"
+            );
+        }
+        Err(expected) => {
+            assert!(
+                matches!(
+                    expected.kind(),
+                    GpuErrorKind::AdapterUnavailable
+                        | GpuErrorKind::AdapterRefused
+                        | GpuErrorKind::Capacity
+                ),
+                "unexpected inventory error: {expected}"
+            );
+            let failure = result.unwrap_err();
+            let RunError::Gpu(error) = failure.cause.as_ref() else {
+                panic!("expected a GPU selection failure, got {failure}");
+            };
+            assert_eq!(error.kind(), expected.kind());
+            assert!(failure.partial_report.is_none());
+        }
+    }
 }

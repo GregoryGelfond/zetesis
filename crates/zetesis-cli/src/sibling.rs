@@ -103,16 +103,24 @@ pub(crate) fn hand_off_from(
             None => {
                 return Some(RunError::GpuExecutableUnavailable {
                     path: None,
+                    installed: false,
                     error: std::io::Error::other("this executable's path names no directory"),
                 });
             }
         },
-        Err(error) => return Some(RunError::GpuExecutableUnavailable { path: None, error }),
+        Err(error) => {
+            return Some(RunError::GpuExecutableUnavailable {
+                path: None,
+                installed: false,
+                error,
+            });
+        }
     };
     let path = sibling(&directory, identity);
     let error = std::os::unix::process::CommandExt::exec(&mut prepared(&path, arguments));
     Some(RunError::GpuExecutableUnavailable {
         path: Some(path),
+        installed: directory.join(LIBEXEC).is_dir(),
         error,
     })
 }

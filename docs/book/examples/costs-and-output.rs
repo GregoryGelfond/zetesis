@@ -1,7 +1,7 @@
 //! Score and display completed answers without changing their identity.
 
 // ANCHOR: example
-use zetesis_cpu::Cancellation;
+use zetesis_algebra::Cancellation;
 use zetesis_solve::{
     Backend, Completion, Grounder, Oracle, PreparedInput, Session, SolveConfig, WorldViewLimits,
 };

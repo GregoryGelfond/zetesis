@@ -4,7 +4,7 @@ use super::TerminalSession;
 use crate::execution_observation::Ignore;
 use crate::phase_timing::Recorder;
 use crate::{Backend, Completion, ExecutionResources, Grounder, Interruption, SolveConfig};
-use zetesis_cpu::{Cancellation, Stop};
+use zetesis_algebra::{Cancellation, Stop};
 use zetesis_reference_support::prepared;
 use zetesis_themelios::FormulaMaterialization;
 

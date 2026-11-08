@@ -5,13 +5,13 @@ use std::{
     io,
     time::{Duration, Instant},
 };
+use zetesis_algebra::Cancellation;
 use zetesis_cli::{
     AnswerRenderer, AnswerView, BackendView, ColorMode, Completion, ConfigurationView,
     GroundingDisplay, GroundingMode, JsonRenderer, Options, PreparedInput, PublicationConfig,
     PublicationView, Report, RunError, SolvePhase, SolveStage, StatisticsView, SummaryDelivery,
     publish_prepared, run_with_diagnostics, run_with_renderer,
 };
-use zetesis_cpu::Cancellation;
 use zetesis_reference_support::formula;
 use zetesis_themelios::GroundingPhase;
 
@@ -83,18 +83,19 @@ fn automatic_summary_identifies_direct_source_evaluation() {
 }
 
 #[test]
-fn lazy_summary_reports_interleaved_work() {
+fn lazy_summary_reports_hybrid_work() {
     let rendered = solve("p:-not q. q:-not p.", &serial(&["--grounder", "lazy"]));
     assert_eq!(rendered.report.completion, Completion::Exhausted);
     assert_eq!(rendered.report.models, 2);
     let stages = rendered.report.phase_timings.unwrap().stages;
-    assert_eq!(stages.grounding_mode, GroundingMode::LazyInterleaved);
-    assert!(stages.get(SolveStage::Grounding).is_none());
+    assert_eq!(stages.grounding_mode, GroundingMode::Mixed);
+    // The retained core is grounded eagerly, so its grounding is measured.
+    assert!(stages.get(SolveStage::Grounding).is_some());
     assert!(stages.get(SolveStage::Solving).is_some());
     assert!(
         rendered
             .answers
-            .contains("\nBackend: CPU · 1 thread · lazy grounding\n\n")
+            .contains("\nBackend: CPU · 1 thread · hybrid grounding\n\n")
     );
     let (summary, timing) = rendered.answers.split_once("\nTime: ").unwrap();
     assert!(summary.ends_with("SATISFIABLE\nModels: 2\n"));

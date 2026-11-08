@@ -27,8 +27,8 @@ universe u
 
 /-- A region reached and not yet visited, with the subtree that covers it. -/
 structure Pending {α : Type u} (valid : Atoms α → Prop) where
-  cube : Cube α
-  tree : CoverageTree valid cube
+  region : Region α
+  tree : CoverageTree valid region
 
 namespace Pending
 
@@ -51,20 +51,20 @@ frontier, with the leaves emitted so far. -/
 inductive Step :
     List (Pending valid) → List (Atoms α) → List (Pending valid) → List (Atoms α) → Prop
   | refuted (before after : List (Pending valid)) (emitted : List (Atoms α))
-      (c : Cube α) (sound : ∀ z, c.Contains z → ¬ valid z) :
+      (c : Region α) (sound : ∀ z, c.Contains z → ¬ valid z) :
       Step (before ++ ⟨c, .refuted c sound⟩ :: after) emitted (before ++ after) emitted
   | accepted (before after : List (Pending valid)) (emitted : List (Atoms α))
       (z : Atoms α) (sound : valid z) :
-      Step (before ++ ⟨Cube.singleton z, .accepted z sound⟩ :: after) emitted
+      Step (before ++ ⟨Region.singleton z, .accepted z sound⟩ :: after) emitted
         (before ++ after) (emitted ++ [z])
   | split (before after : List (Pending valid)) (emitted : List (Atoms α))
-      (c : Cube α) (a : α) (fresh : c.Fresh a)
+      (c : Region α) (a : α) (fresh : c.Fresh a)
       (left : CoverageTree valid (c.splitFalse a))
       (right : CoverageTree valid (c.splitTrue a)) :
       Step (before ++ ⟨c, .split c a fresh left right⟩ :: after) emitted
         (before ++ ⟨c.splitFalse a, left⟩ :: ⟨c.splitTrue a, right⟩ :: after) emitted
   | narrowed (before after : List (Pending valid)) (emitted : List (Atoms α))
-      (c : Cube α) (lo hi : Atoms α)
+      (c : Region α) (lo hi : Atoms α)
       (forcedLower : ∀ z, c.Contains z → valid z → Sub lo z)
       (forcedUpper : ∀ z, c.Contains z → valid z → Sub z hi)
       (child : CoverageTree valid (c.narrow lo hi)) :
@@ -120,7 +120,7 @@ theorem Walk.perm {frontier frontier' : List (Pending valid)}
 /-- A walk from the root that empties the frontier has emitted the tree's
 accepted leaves in some order, each once: exactly the valid seeds of the root
 region, by `mem_outputs_iff` and `outputs_nodup`. The order is the walk's. -/
-theorem Walk.exhausted {c : Cube α} (tree : CoverageTree valid c)
+theorem Walk.exhausted {c : Region α} (tree : CoverageTree valid c)
     {emitted : List (Atoms α)} (walk : Walk [⟨c, tree⟩] [] [] emitted) :
     emitted.Perm tree.outputs ∧ (∀ z, z ∈ emitted ↔ c.Contains z ∧ valid z) ∧ emitted.Nodup := by
   have law : ([] ++ outputs [⟨c, tree⟩]).Perm (emitted ++ outputs []) := walk.perm

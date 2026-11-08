@@ -1,6 +1,6 @@
 //! A formula reduct bound to the interpretation that determines its falsum mask.
 
-use zetesis_cpu::{Cancellation, Stop};
+use zetesis_algebra::{Cancellation, Stop};
 
 use crate::numeric_evaluation::NumericRowScratch;
 use crate::oracle::{Work, evaluate, failed_root, identities, reserve};

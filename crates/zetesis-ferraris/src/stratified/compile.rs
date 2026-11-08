@@ -4,7 +4,7 @@ use std::mem::size_of;
 
 use super::{Budget, StratifiedError, StratifiedPlan, evaluate, order};
 use crate::{ExtremumCut, Interpretation, NodeView, Theory, Threshold};
-use zetesis_cpu::Stop;
+use zetesis_algebra::Stop;
 
 #[derive(Clone, Copy)]
 pub(super) enum Kind {
@@ -84,7 +84,7 @@ pub(super) fn build(
     budget.release(kinds)?;
     let consequences = Interpretation {
         theory: theory.clone(),
-        words,
+        words: words.into(),
     };
     let failed_constraint = evaluate::validate(&consequences, budget)?;
     Ok((consequences, failed_constraint))

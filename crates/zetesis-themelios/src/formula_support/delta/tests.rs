@@ -332,8 +332,10 @@ fn disjunctive(fixture: &mut Fixture) -> RuleIr {
 }
 
 #[test]
-fn a_rich_producer_is_traversed_when_a_read_predicate_gained_rows() {
-    // The catalog publishes `p`'s second row last, so `p` has a new row.
+fn a_disjunctive_producer_takes_its_body_delta_when_a_read_predicate_gained_rows() {
+    // The catalog publishes `p`'s second row last, so `p` has a new row. A
+    // disjunctive head over a flat body is certified: its body takes delta
+    // variants, since each binding makes every disjunct possible.
     let mut fixture = catalog();
     let rule = disjunctive(&mut fixture);
     let limits = FormulaLimits::default();
@@ -344,7 +346,7 @@ fn a_rich_producer_is_traversed_when_a_read_predicate_gained_rows() {
             .unwrap();
         assert!(matches!(
             schedule.next(&limits, counters).unwrap(),
-            Some(Variant::Full)
+            Some(Variant::Delta(0))
         ));
         assert!(schedule.next(&limits, counters).unwrap().is_none());
         assert_eq!(
@@ -355,8 +357,9 @@ fn a_rich_producer_is_traversed_when_a_read_predicate_gained_rows() {
 }
 
 #[test]
-fn a_rich_producer_whose_reads_are_unchanged_takes_no_variant() {
-    // Publishing `q` after `p` leaves every row of `p` old.
+fn a_disjunctive_producer_whose_reads_are_unchanged_takes_no_variant() {
+    // Publishing `q` after `p` leaves every row of `p` old: no body
+    // occurrence has a delta, in the first round as in any other.
     let mut fixture = Fixture::from_atoms(
         [
             Atom::new(Predicate::new("p", 1).unwrap(), vec![Value::Number(7)]).unwrap(),
@@ -377,15 +380,12 @@ fn a_rich_producer_whose_reads_are_unchanged_takes_no_variant() {
         let mut first = registration
             .variants(0, &rule, support, true, &limits, counters)
             .unwrap();
-        assert!(matches!(
-            first.next(&limits, counters).unwrap(),
-            Some(Variant::Full)
-        ));
+        assert!(first.next(&limits, counters).unwrap().is_none());
     });
 }
 
 #[test]
-fn a_rich_producer_whose_own_heads_alone_gained_rows_takes_no_variant() {
+fn a_disjunctive_producer_whose_own_heads_alone_gained_rows_takes_no_variant() {
     // `r` is the producer's head relation, published after its read `p`.
     let mut fixture = Fixture::from_atoms(
         [

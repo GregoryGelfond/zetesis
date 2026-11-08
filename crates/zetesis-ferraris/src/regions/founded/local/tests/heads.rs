@@ -37,7 +37,8 @@ fn partition_preserves_every_discovered_vertex() {
         let marks = actual.local.marks.clone();
         let touched = actual.local.touched.clone();
         actual
-            .partition_heads(heads.len(), &mut Work::new(u64::MAX))
+            .partition_heads(heads.len(), &mut Meter::local(u64::MAX))
+            .map_err(zetesis_algebra::Failure::into_stop)
             .unwrap();
         assert_eq!(&actual.queue[..heads.len()], &heads);
         assert!(
@@ -58,27 +59,36 @@ fn partition_preserves_every_discovered_vertex() {
 #[test]
 fn partition_stops_after_the_last_head() {
     let mut actual = scratch(vec![8, 0, 9, 10, 11, 12], 8);
-    let mut work = Work::new(u64::MAX);
-    actual.partition_heads(1, &mut work).unwrap();
-    assert_eq!(work.spent, 3); // Two visited entries and one swap.
+    let mut work = Meter::local(u64::MAX);
+    actual
+        .partition_heads(1, &mut work)
+        .map_err(zetesis_algebra::Failure::into_stop)
+        .unwrap();
+    assert_eq!(work.charged(), 3); // Two visited entries and one swap.
     assert_eq!(actual.queue, vec![0, 8, 9, 10, 11, 12]);
     let mut empty = scratch(vec![8, 9, 10], 8);
-    empty.partition_heads(0, &mut Work::new(0)).unwrap();
+    empty
+        .partition_heads(0, &mut Meter::local(0))
+        .map_err(zetesis_algebra::Failure::into_stop)
+        .unwrap();
 }
 
 #[test]
 fn stopped_partitions_keep_membership_clearable() {
     let vertices = vec![8, 0, 9, 1, 10, 2, 11, 3];
     let mut measured = scratch(vertices.clone(), 8);
-    let mut complete = Work::new(u64::MAX);
-    measured.partition_heads(4, &mut complete).unwrap();
+    let mut complete = Meter::local(u64::MAX);
+    measured
+        .partition_heads(4, &mut complete)
+        .map_err(zetesis_algebra::Failure::into_stop)
+        .unwrap();
     for failure in [
         Stop::WorkLimit,
         Stop::Cancelled,
         Stop::Deadline,
         Stop::Allocation,
     ] {
-        for ceiling in 0..complete.spent {
+        for ceiling in 0..complete.charged() {
             let mut actual = scratch(vertices.clone(), 8);
             let marks = actual.local.marks.clone();
             let touched = actual.local.touched.clone();
@@ -86,8 +96,13 @@ fn stopped_partitions_keep_membership_clearable() {
                 remaining: ceiling,
                 failure,
             };
-            let mut work = Work::reserved(&mut allowance);
-            assert_eq!(actual.partition_heads(4, &mut work), Err(failure));
+            let mut work = Meter::reserved(&mut allowance);
+            assert_eq!(
+                actual
+                    .partition_heads(4, &mut work)
+                    .map_err(zetesis_algebra::Failure::into_stop),
+                Err(failure)
+            );
             work.refund();
             let mut expected = vertices.clone();
             expected.sort_unstable();
@@ -95,7 +110,11 @@ fn stopped_partitions_keep_membership_clearable() {
             assert_eq!(actual.queue, expected);
             assert_eq!(actual.local.marks, marks);
             assert_eq!(actual.local.touched, touched);
-            actual.local.clear(&mut Work::new(u64::MAX)).unwrap();
+            actual
+                .local
+                .clear(&mut Meter::local(u64::MAX))
+                .map_err(zetesis_algebra::Failure::into_stop)
+                .unwrap();
             assert!(actual.local.marks.iter().all(|mark| *mark == 0));
             assert!(actual.local.touched.is_empty());
         }

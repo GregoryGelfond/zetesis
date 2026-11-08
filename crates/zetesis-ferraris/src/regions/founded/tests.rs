@@ -1,12 +1,12 @@
 //! Candidate cuts preserve every independently checked stable completion.
 
 use super::*;
-use crate::test_support::{theory, world};
+use crate::test_support::{learning, theory, world};
 use crate::{
-    FrozenSubject, Interpretation, Limits, Narrowing, NarrowingAttempt, NarrowingQuota,
-    NarrowingScratch, Node, OriginalSubject, Region, RegionLimits,
+    FrozenSubject, Interpretation, Limits, Narrowing, NarrowingAttempt, NarrowingScratch, Node,
+    OriginalSubject, Region, RegionLimits,
 };
-use zetesis_cpu::Cancellation;
+use zetesis_algebra::Cancellation;
 
 mod projected_heads;
 mod projected_parents;
@@ -20,8 +20,9 @@ impl Scratch {
             index,
             &self.body_nodes,
             &self.cyclic_atoms,
-            &mut Work::new(u64::MAX),
+            &mut Meter::local(u64::MAX),
         )
+        .map_err(zetesis_algebra::Failure::into_stop)
         .unwrap();
         self.projected = Some(Projection {
             parents: index.parents.clone(),
@@ -34,7 +35,8 @@ impl Scratch {
     /// Complete both cone preparation and the deferred incidence projection.
     fn prepare_projected(&mut self, owner: &Theory, index: &Narrower, producers: &Producers) {
         for _ in 0..2 {
-            self.prepare_bodies(owner, index, producers, &mut Work::new(u64::MAX))
+            self.prepare_bodies(owner, index, producers, &mut Meter::local(u64::MAX))
+                .map_err(zetesis_algebra::Failure::into_stop)
                 .unwrap();
         }
         assert!(self.projected.is_some());
@@ -49,11 +51,12 @@ impl Scratch {
         producers: &Producers,
     ) {
         self.owner = None;
-        self.cyclic_atoms = vec![0; flag_words(owner.atom_count())];
+        self.cyclic_atoms = vec![0; flag_words(owner.atom_count())].into();
         for atom in 0..owner.atom_count() {
             self.cyclic_atoms[atom / 64] |= 1 << (atom % 64);
         }
-        self.prepare_cone(owner, index, producers, false, &mut Work::new(u64::MAX))
+        self.prepare_cone(owner, index, producers, false, &mut Meter::local(u64::MAX))
+            .map_err(zetesis_algebra::Failure::into_stop)
             .unwrap();
         self.use_original_projection(owner, index, producers);
         self.owner = Some(owner.clone());
@@ -69,17 +72,18 @@ fn producers(owner: &Theory) -> Producers {
 
 fn narrow(owner: &Theory, region: &mut Region) -> Narrowing {
     let index = Narrower::new(owner);
+    let learning = learning(owner);
     index
         .narrow_known(
-            OriginalSubject::new(owner, Some(&producers(owner))),
+            OriginalSubject::carrier(&learning, Some(&producers(owner))),
             region,
             &mut index.knowledge(),
             &mut NarrowingScratch::default(),
             RegionLimits::default(),
             &Cancellation::default(),
         )
+        .result
         .unwrap()
-        .0
 }
 
 fn cycle() -> Theory {
@@ -315,18 +319,20 @@ fn every_tiny_cut_preserves_stable_completions() {
                 .collect();
             let index = Narrower::new(&owner);
             let producers = producers(&owner);
+            let learning = learning(&owner);
             for code in 0..27 {
                 let mut region = partial_region(code, 3);
                 let expected: Vec<_> = answers.iter().filter(|m| compatible(&region, m)).collect();
-                let (result, _) = index
+                let result = index
                     .narrow_known(
-                        OriginalSubject::new(&owner, Some(&producers)),
+                        OriginalSubject::carrier(&learning, Some(&producers)),
                         &mut region,
                         &mut index.knowledge(),
                         &mut scratch,
                         RegionLimits::default(),
                         &Cancellation::default(),
                     )
+                    .result
                     .unwrap();
                 match result {
                     Narrowing::Refuted => {
@@ -355,19 +361,20 @@ fn frozen_queries_do_not_compute_possible_support() {
     let truth = vec![true; owner.nodes().len()];
     let mut region = Region::all_open(2);
     let mut scratch = NarrowingScratch::default();
-    let (result, _) = index
+    let result = index
         .narrow_frozen_known(
             FrozenSubject::new(&owner, &truth),
             &mut region,
-            &mut index.knowledge(),
+            &mut index.frozen_knowledge(),
             &mut scratch,
             RegionLimits::default(),
             &Cancellation::default(),
         )
+        .result
         .unwrap();
     assert_eq!(result, Narrowing::Fixed { changed: false });
     assert_eq!(region.open().count(), 2);
-    assert_eq!(scratch.founded.retained_bytes(), 0);
+    assert_eq!(scratch.common.founded.retained_bytes(), 0);
 }
 
 #[test]
@@ -376,7 +383,7 @@ fn incomplete_producer_inventory_does_not_cut_cycles() {
     let index = Narrower::new(&owner);
     let mut region = Region::all_open(2);
     let mut scratch = NarrowingScratch::default();
-    let (result, _) = index
+    let result = index
         .narrow_known(
             OriginalSubject::new(&owner, None),
             &mut region,
@@ -385,14 +392,16 @@ fn incomplete_producer_inventory_does_not_cut_cycles() {
             RegionLimits::default(),
             &Cancellation::default(),
         )
+        .result
         .unwrap();
     assert_eq!(result, Narrowing::Fixed { changed: false });
     assert_eq!(region.open().count(), 2);
-    assert_eq!(scratch.founded.retained_bytes(), 0);
+    assert_eq!(scratch.common.founded.retained_bytes(), 0);
 }
 
 struct Allowance(u64);
-impl NarrowingQuota for Allowance {
+impl zetesis_algebra::Quota for Allowance {
+    type Error = Stop;
     fn reserve(&mut self, wanted: u64) -> Result<u64, Stop> {
         if self.0 == 0 {
             return Err(Stop::WorkLimit);
@@ -422,14 +431,15 @@ fn limited_region(
     work: u64,
 ) -> NarrowingAttempt {
     let index = Narrower::new(owner);
-    index.narrow_known_reserved(
-        OriginalSubject::new(owner, Some(&producers(owner))),
+    let learning = learning(owner);
+    crate::test_support::stop_narrowing(&index.narrow_known_reserved(
+        OriginalSubject::carrier(&learning, Some(&producers(owner))),
         region,
         &mut index.knowledge(),
         scratch,
         &Cancellation::default(),
-        &mut Allowance(work),
-    )
+        &mut zetesis_algebra::Meter::reserved(&mut Allowance(work)),
+    ))
 }
 
 #[test]
@@ -450,14 +460,14 @@ fn interrupted_foundation_passes_leave_no_stale_support() {
         let stopped = limited(&owner, &mut scratch, ceiling);
         assert_eq!(stopped.result.unwrap_err(), Stop::WorkLimit);
         assert_eq!(stopped.statistics.work, ceiling);
-        let retained = scratch.explanations.len();
+        let retained = scratch.learning.explanations.len();
         assert_eq!(
             u64::try_from(retained).unwrap(),
             stopped.statistics.support_explanations.certified
         );
         assert!(retained <= 1);
         if retained == 1 {
-            assert_eq!(scratch.explanations.outputs(0).collect::<Vec<_>>(), [0, 1]);
+            assert_eq!(scratch.learning.explanations.absent_outputs(0), [0, 1]);
             retained_prefixes += 1;
         }
         let mut retry_region = Region::all_open(owner.atom_count());
@@ -538,23 +548,25 @@ fn acyclic_gate_reuses_only_its_completed_result() {
     let owner = acyclic_disjunction();
     let index = Narrower::new(&owner);
     let producers = producers(&owner);
-    let mut work = Work::new(u64::MAX);
+    let mut work = Meter::local(u64::MAX);
     assert!(
         !Scratch::default()
             .needed(&owner, &index, &producers, &mut work)
+            .map_err(zetesis_algebra::Failure::into_stop)
             .unwrap()
     );
-    assert!(work.spent > 0);
+    assert!(work.charged() > 0);
     // A different worker gets the completed original classification without
     // preparing a second graph or growing per-region closure scratch.
     let mut untouched = Scratch::default();
-    let mut none = Work::new(0);
+    let mut none = Meter::local(0);
     assert!(
         !untouched
             .needed(&owner, &index, &producers, &mut none)
+            .map_err(zetesis_algebra::Failure::into_stop)
             .unwrap()
     );
-    assert_eq!(none.spent, 0);
+    assert_eq!(none.charged(), 0);
     assert_eq!(untouched.retained_bytes(), 0);
 }
 
@@ -565,7 +577,8 @@ fn positive_cycles_retain_foundedness_propagation() {
     let producers = producers(&owner);
     assert!(
         Scratch::default()
-            .needed(&owner, &index, &producers, &mut Work::new(u64::MAX),)
+            .needed(&owner, &index, &producers, &mut Meter::local(u64::MAX),)
+            .map_err(zetesis_algebra::Failure::into_stop)
             .unwrap()
     );
     let mut region = Region::all_open(2);
@@ -580,25 +593,28 @@ fn positive_cycles_retain_foundedness_propagation() {
 fn interrupted_cycle_tests_publish_no_classification() {
     for owner in [cycle(), acyclic_disjunction()] {
         let index = Narrower::new(&owner);
-        let mut spent = Work::new(u64::MAX);
+        let mut spent = Meter::local(u64::MAX);
         let expected = Scratch::default()
             .needed(&owner, &index, &producers(&owner), &mut spent)
+            .map_err(zetesis_algebra::Failure::into_stop)
             .unwrap();
-        for ceiling in 0..spent.spent {
+        for ceiling in 0..spent.charged() {
             let producers = producers(&owner);
             let mut scratch = Scratch::default();
-            let mut limited = Work::new(ceiling);
+            let mut limited = Meter::local(ceiling);
             assert_eq!(
                 scratch
                     .needed(&owner, &index, &producers, &mut limited,)
+                    .map_err(zetesis_algebra::Failure::into_stop)
                     .unwrap_err(),
                 Stop::WorkLimit
             );
-            assert_eq!(limited.spent, ceiling);
+            assert_eq!(limited.charged(), ceiling);
             assert!(producers.founded_cycles.get().is_none());
             assert_eq!(
                 scratch
-                    .needed(&owner, &index, &producers, &mut Work::new(u64::MAX),)
+                    .needed(&owner, &index, &producers, &mut Meter::local(u64::MAX),)
+                    .map_err(zetesis_algebra::Failure::into_stop)
                     .unwrap(),
                 expected
             );
@@ -663,8 +679,9 @@ fn projected_bodies_match_full_node_relaxation() {
                     &producers,
                     &never,
                     &atom_never,
-                    &mut Work::new(u64::MAX),
+                    &mut Meter::local(u64::MAX),
                 )
+                .map_err(zetesis_algebra::Failure::into_stop)
                 .unwrap();
             full.complete(
                 &owner,
@@ -672,8 +689,9 @@ fn projected_bodies_match_full_node_relaxation() {
                 &producers,
                 &never,
                 &atom_never,
-                &mut Work::new(u64::MAX),
+                &mut Meter::local(u64::MAX),
             )
+            .map_err(zetesis_algebra::Failure::into_stop)
             .unwrap();
             for atom in 0..owner.atom_count() {
                 let present = !bit(&atom_never, atom)
@@ -708,7 +726,7 @@ fn unrelated_constraints_add_no_warm_initialization_work() {
         let producers = producers(owner);
         let mut scratch = Scratch::default();
         scratch.prepare_projected(owner, &index, &producers);
-        let mut work = Work::new(u64::MAX);
+        let mut work = Meter::local(u64::MAX);
         scratch
             .complete(
                 owner,
@@ -718,8 +736,9 @@ fn unrelated_constraints_add_no_warm_initialization_work() {
                 &[0],
                 &mut work,
             )
+            .map_err(zetesis_algebra::Failure::into_stop)
             .unwrap();
-        (work.spent, scratch.body_nodes.len())
+        (work.charged(), scratch.body_nodes.len())
     }
     let base = cycle();
     let mut nodes = vec![
@@ -743,35 +762,40 @@ fn interrupted_body_preparation_publishes_no_owner() {
     let index = Narrower::new(&owner);
     let producers = producers(&owner);
     let mut expected = Scratch::default();
-    let mut cone = Work::new(u64::MAX);
+    let mut cone = Meter::local(u64::MAX);
     expected
         .prepare_bodies(&owner, &index, &producers, &mut cone)
+        .map_err(zetesis_algebra::Failure::into_stop)
         .unwrap();
     assert!(expected.owner.as_ref().unwrap().same_instance(&owner));
     assert!(expected.projected.is_none());
-    let mut parents = Work::new(u64::MAX);
+    let mut parents = Meter::local(u64::MAX);
     expected
         .prepare_bodies(&owner, &index, &producers, &mut parents)
+        .map_err(zetesis_algebra::Failure::into_stop)
         .unwrap();
-    assert!(cone.spent > 0 && parents.spent > 0);
+    assert!(cone.charged() > 0 && parents.charged() > 0);
     projected_parents::assert_rows(&expected, &owner, &index);
     projected_heads::assert_rows(&expected, &owner, &producers);
-    for (phase, spent) in [cone.spent, parents.spent].into_iter().enumerate() {
+    for (phase, spent) in [cone.charged(), parents.charged()].into_iter().enumerate() {
         for ceiling in 0..spent {
             let mut scratch = Scratch::default();
             if phase == 1 {
                 scratch
-                    .prepare_bodies(&owner, &index, &producers, &mut Work::new(u64::MAX))
+                    .prepare_bodies(&owner, &index, &producers, &mut Meter::local(u64::MAX))
+                    .map_err(zetesis_algebra::Failure::into_stop)
                     .unwrap();
                 assert!(scratch.projected.is_none());
             }
-            let mut limited = Work::new(ceiling);
+            let mut limited = Meter::local(ceiling);
             assert_eq!(
-                scratch.prepare_bodies(&owner, &index, &producers, &mut limited),
+                scratch
+                    .prepare_bodies(&owner, &index, &producers, &mut limited)
+                    .map_err(zetesis_algebra::Failure::into_stop),
                 Err(Stop::WorkLimit),
                 "phase {phase}, work prefix {ceiling}"
             );
-            assert_eq!(limited.spent, ceiling);
+            assert_eq!(limited.charged(), ceiling);
             assert!(scratch.owner.is_none());
             assert!(scratch.projected.is_none());
             scratch.prepare_projected(&owner, &index, &producers);
@@ -791,7 +815,7 @@ fn body_preparation_requires_exact_original_identity() {
     assert!(!first.same_instance(&second));
     let mut scratch = Scratch::default();
     scratch.prepare_projected(&first, &Narrower::new(&first), &producers(&first));
-    let mut none = Work::new(0);
+    let mut none = Meter::local(0);
     scratch
         .prepare_bodies(
             &first.clone(),
@@ -799,17 +823,20 @@ fn body_preparation_requires_exact_original_identity() {
             &producers(&first),
             &mut none,
         )
+        .map_err(zetesis_algebra::Failure::into_stop)
         .unwrap();
-    assert_eq!(none.spent, 0);
+    assert_eq!(none.charged(), 0);
     projected_parents::assert_rows(&scratch, &first, &Narrower::new(&first));
     projected_heads::assert_rows(&scratch, &first, &producers(&first));
     assert_eq!(
-        scratch.prepare_bodies(
-            &second,
-            &Narrower::new(&second),
-            &producers(&second),
-            &mut Work::new(0)
-        ),
+        scratch
+            .prepare_bodies(
+                &second,
+                &Narrower::new(&second),
+                &producers(&second),
+                &mut Meter::local(0)
+            )
+            .map_err(zetesis_algebra::Failure::into_stop),
         Err(Stop::WorkLimit)
     );
     assert!(
@@ -832,20 +859,23 @@ fn interrupted_projected_rounds_reinitialize_every_active_cell() {
     let never = vec![0; flag_words(owner.nodes().len())];
     let mut prepared = Scratch::default();
     prepared.prepare_projected(&owner, &index, &producers);
-    let mut complete = Work::new(u64::MAX);
+    let mut complete = Meter::local(u64::MAX);
     prepared
         .complete(&owner, &index, &producers, &never, &[0], &mut complete)
+        .map_err(zetesis_algebra::Failure::into_stop)
         .unwrap();
     let expected = prepared.atoms.clone();
-    for ceiling in 0..complete.spent {
+    for ceiling in 0..complete.charged() {
         let mut scratch = Scratch::default();
         scratch.prepare_projected(&owner, &index, &producers);
-        let mut limited = Work::new(ceiling);
+        let mut limited = Meter::local(ceiling);
         assert_eq!(
-            scratch.complete(&owner, &index, &producers, &never, &[0], &mut limited),
+            scratch
+                .complete(&owner, &index, &producers, &never, &[0], &mut limited)
+                .map_err(zetesis_algebra::Failure::into_stop),
             Err(Stop::WorkLimit)
         );
-        assert_eq!(limited.spent, ceiling);
+        assert_eq!(limited.charged(), ceiling);
         scratch
             .complete(
                 &owner,
@@ -853,8 +883,9 @@ fn interrupted_projected_rounds_reinitialize_every_active_cell() {
                 &producers,
                 &never,
                 &[0],
-                &mut Work::new(u64::MAX),
+                &mut Meter::local(u64::MAX),
             )
+            .map_err(zetesis_algebra::Failure::into_stop)
             .unwrap();
         assert_eq!(scratch.atoms, expected);
     }

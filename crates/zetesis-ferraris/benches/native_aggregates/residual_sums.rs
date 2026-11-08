@@ -9,7 +9,7 @@
 use std::{hint::black_box, time::Duration};
 
 use criterion::{BatchSize, BenchmarkId, Criterion, Throughput};
-use zetesis_cpu::Cancellation;
+use zetesis_algebra::Cancellation;
 use zetesis_ferraris::{
     AdmissionLimits, FormulaNodes, FormulaParts, Interpretation, Knowledge, Limits, Narrower,
     Narrowing, NarrowingScratch, Node, NodeView, OriginalSubject, Region, RegionLimits, Theory,
@@ -87,17 +87,16 @@ impl Fixture {
         let atoms = self.theory.atom_count();
         let mut region = self.region.clone();
         let mut scratch = NarrowingScratch::default();
-        let (outcome, statistics) = self
-            .index
-            .narrow_known(
-                OriginalSubject::new(&self.theory, None),
-                &mut region,
-                &mut self.knowledge.clone(),
-                &mut scratch,
-                RegionLimits::default(),
-                control,
-            )
-            .unwrap();
+        let attempt = self.index.narrow_known(
+            OriginalSubject::new(&self.theory, None),
+            &mut region,
+            &mut self.knowledge.clone(),
+            &mut scratch,
+            RegionLimits::default(),
+            control,
+        );
+        let outcome = attempt.result.unwrap();
+        let statistics = attempt.statistics;
         // Fixed complete valuations check the exact scalar weighted denotation.
         // The first three also include 17=1+6+10 for residual open/held controls.
         for pattern in 0..16 {
@@ -221,19 +220,15 @@ pub(super) fn bench(criterion: &mut Criterion) {
                 bencher.iter_batched_ref(
                     || (fixture.region.clone(), fixture.knowledge.clone()),
                     |(region, knowledge)| {
-                        black_box(
-                            fixture
-                                .index
-                                .narrow_known(
-                                    OriginalSubject::new(&fixture.theory, None),
-                                    region,
-                                    knowledge,
-                                    &mut scratch,
-                                    RegionLimits::default(),
-                                    &control,
-                                )
-                                .unwrap(),
-                        )
+                        let attempt = fixture.index.narrow_known(
+                            OriginalSubject::new(&fixture.theory, None),
+                            region,
+                            knowledge,
+                            &mut scratch,
+                            RegionLimits::default(),
+                            &control,
+                        );
+                        black_box((attempt.result.unwrap(), attempt.statistics))
                     },
                     BatchSize::SmallInput,
                 );

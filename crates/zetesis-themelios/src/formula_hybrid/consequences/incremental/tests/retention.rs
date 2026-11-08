@@ -216,7 +216,7 @@ fn cancellation_invalidates_completed_scans() {
             .unwrap_err();
         assert!(matches!(
             error.cause,
-            crate::ConstraintCheckCause::Stopped(zetesis_cpu::Stop::Cancelled)
+            crate::ConstraintCheckCause::Stopped(zetesis_algebra::Stop::Cancelled)
         ));
     });
 }

@@ -1,6 +1,6 @@
 //! Storage reuse copies complete knowledge; a retired destination supplies no truth.
 
-use zetesis_cpu::Cancellation;
+use zetesis_algebra::Cancellation;
 
 use crate::{
     AdmissionLimits, FormulaParts, Knowledge, Narrower, Narrowing, NarrowingScratch, Region,
@@ -19,15 +19,16 @@ fn narrow(
     region: &mut Region,
     knowledge: &mut Knowledge,
     max_work: u64,
-) -> Result<(Narrowing, crate::NarrowingStatistics), zetesis_cpu::Stop> {
-    narrower.narrow_known(
+) -> Result<(Narrowing, crate::NarrowingStatistics), zetesis_algebra::Stop> {
+    let attempt = narrower.narrow_known(
         crate::OriginalSubject::new(theory, None),
         region,
         knowledge,
         &mut NarrowingScratch::default(),
         RegionLimits { max_work },
         &Cancellation::default(),
-    )
+    );
+    attempt.result.map(|outcome| (outcome, attempt.statistics))
 }
 
 fn refuted(theory: &Theory, narrower: &Narrower) -> Knowledge {

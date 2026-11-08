@@ -1,5 +1,7 @@
 //! Selected discovery order derives from the existing semantic AVL trees.
 
+use zetesis_algebra::words::Words;
+
 use super::{
     AtomAppender, Failure, Limits, Link, Node, Step, Subtree, admit, cells, path_bound, population,
     position, reserve,
@@ -7,7 +9,10 @@ use super::{
 
 enum Selection<'a> {
     Prefix(usize),
-    Mask { words: &'a [u64], count: usize },
+    Mask {
+        words: Words<u64, &'a [u64]>,
+        count: usize,
+    },
 }
 
 impl Selection<'_> {
@@ -20,7 +25,7 @@ impl Selection<'_> {
     fn contains(&self, position: usize) -> bool {
         match self {
             Self::Prefix(count) => position < *count,
-            Self::Mask { words, .. } => words[position / 64] & (1_u64 << (position % 64)) != 0,
+            Self::Mask { words, .. } => words.contains(position),
         }
     }
 }
@@ -49,7 +54,7 @@ impl AtomAppender<'_> {
         let path = path_bound(count);
         Some(
             self.storage_bytes()
-                + size_of::<Vec<u64>>() as u128
+                + size_of::<Words<u64>>() as u128
                 + cells::<u64>(count.div_ceil(64))
                 + size_of::<Vec<usize>>() as u128
                 + cells::<usize>(selected)
@@ -105,10 +110,10 @@ impl AtomAppender<'_> {
             return Ok(());
         }
         let mask = self.selection_mask(selected, limits, &mut before)?;
-        let extra = size_of::<Vec<u64>>() as u128 + cells::<u64>(mask.capacity());
+        let extra = size_of::<Words<u64>>() as u128 + cells::<u64>(mask.capacity());
         let output = self.collect_order(
             &Selection::Mask {
-                words: &mask,
+                words: Words::new(&mask[..]),
                 count: selected.len(),
             },
             extra,
@@ -127,11 +132,11 @@ impl AtomAppender<'_> {
         selected: &[usize],
         limits: Limits,
         before: &mut impl FnMut() -> Result<(), E>,
-    ) -> Result<Vec<u64>, Failure<E>> {
+    ) -> Result<Words<u64>, Failure<E>> {
         let mut checked = || before().map_err(Failure::Stopped);
         let mut mask = Vec::new();
         let words = self.len().div_ceil(64);
-        let live = self.storage_bytes() + size_of::<Vec<u64>>() as u128;
+        let live = self.storage_bytes() + size_of::<Words<u64>>() as u128;
         reserve(
             &mut mask,
             words,
@@ -145,19 +150,18 @@ impl AtomAppender<'_> {
             checked()?;
             mask.push(0_u64);
         }
+        let mut mask = Words::<u64>::new(mask);
         for position in selected {
             checked()?;
             let position = *position;
             if position >= self.len() {
                 return Err(shape());
             }
-            let word = &mut mask[position / 64];
-            let bit = 1_u64 << (position % 64);
-            if *word & bit != 0 {
+            if mask.contains(position) {
                 return Err(shape());
             }
             checked()?;
-            *word |= bit;
+            mask.insert(position);
         }
         Ok(mask)
     }
@@ -293,3 +297,6 @@ impl Traversal<'_> {
 fn shape<E>() -> Failure<E> {
     Failure::Catalog(crate::catalog::Error::Shape)
 }
+
+#[cfg(test)]
+mod tests;

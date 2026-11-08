@@ -3,8 +3,8 @@
 use serde_json::Value as Json;
 use std::collections::BTreeSet;
 use std::time::Duration;
+use zetesis_algebra::Cancellation;
 use zetesis_clingo_support as oracle;
-use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{NodeView as Node, Theory};
 use zetesis_reference_support::canonical;
 use zetesis_themelios::AdmittedFormula;
@@ -99,9 +99,9 @@ pub(crate) fn exhaustive(input: &AdmittedFormula) -> Models {
 }
 
 pub(crate) fn native(input: &AdmittedFormula) -> Models {
-    let mut search = zetesis_sat::StableModels::new(
+    let mut search = zetesis_stable::StableModels::new(
         input.theory(),
-        zetesis_sat::Limits::default(),
+        zetesis_stable::Limits::default(),
         Cancellation::default(),
     )
     .unwrap();

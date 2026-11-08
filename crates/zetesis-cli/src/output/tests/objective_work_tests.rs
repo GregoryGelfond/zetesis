@@ -2,7 +2,7 @@
 
 use clap::Parser;
 use std::io;
-use zetesis_cpu::Cancellation;
+use zetesis_algebra::Cancellation;
 
 fn options() -> crate::Options {
     crate::Options::parse_from([

@@ -2,12 +2,7 @@ use super::*;
 use zetesis_ferraris::{ContributionRow, Node};
 
 fn work(cancellation: &Cancellation) -> Work<'_> {
-    Work {
-        cancellation,
-        limits: ObjectivePlanLimits::default(),
-        template: None,
-        statistics: ObjectiveBoundStatistics::default(),
-    }
+    Work::new(ObjectivePlanLimits::default(), cancellation)
 }
 
 #[test]
@@ -25,9 +20,9 @@ fn eligibility_copy_retains_shared_numeric_rows() {
     assert_eq!(copied.parts().thresholds(), source.thresholds());
     assert_eq!(copied.parts().conditions(), source.conditions());
     assert_eq!(copied.parts().numeric_values(), source.numeric_values());
-    assert_eq!(work.statistics.nodes, 5);
+    assert_eq!(work.nodes, 5);
     // Two node passes, both numeric columns, one row and three descriptors.
-    assert_eq!(work.statistics.work, 2 * 5 + 2 * 3 + 1 + 3);
+    assert_eq!(work.meter.charged(), 2 * 5 + 2 * 3 + 1 + 3);
 }
 
 #[test]
@@ -54,7 +49,7 @@ fn eligibility_copy_bounds_unused_numeric_rows() {
         copy(&source, &mut work).unwrap_err().kind,
         Kind::Limit(ObjectiveBoundResource::Nodes)
     );
-    assert_eq!(work.statistics.work, 0);
+    assert_eq!(work.meter.charged(), 0);
 }
 
 #[test]
@@ -74,5 +69,5 @@ fn numeric_append_charges_columns_and_descriptors() {
         )
         .unwrap();
     // Node, child checks, both columns, row and threshold descriptor.
-    assert_eq!(measured.statistics.work, 1 + 3 + 6 + 2);
+    assert_eq!(measured.meter.charged(), 1 + 3 + 6 + 2);
 }

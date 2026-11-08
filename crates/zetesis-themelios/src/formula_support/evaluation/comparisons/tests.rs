@@ -280,7 +280,7 @@ fn comparison_fallback_retains_undefined_arithmetic() {
 fn cancellation_precedes_borrowed_variable_lookup() {
     Fixture::default().with(location(), |_, computation, counters| {
         let source = binding(&[], computation, counters, location());
-        let cancellation = zetesis_cpu::Cancellation::default();
+        let cancellation = zetesis_algebra::Cancellation::default();
         cancellation.cancel();
         counters.attach_test_control(&cancellation);
         let expression = Expression::new(vec![Operation::Variable(usize::MAX)]);
@@ -292,7 +292,7 @@ fn cancellation_precedes_borrowed_variable_lookup() {
         assert!(matches!(
             result,
             Err(FormulaFailure::Interrupted {
-                reason: zetesis_cpu::Stop::Cancelled,
+                reason: zetesis_algebra::Stop::Cancelled,
                 ..
             })
         ));

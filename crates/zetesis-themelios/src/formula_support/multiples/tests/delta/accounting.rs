@@ -70,12 +70,12 @@ fn refused_round_preparation_publishes_no_selection() {
 #[test]
 fn cancelled_round_preparation_can_retry() {
     at_delta(|rule, join, computation, counters| {
-        let cancellation = zetesis_cpu::Cancellation::default();
+        let cancellation = zetesis_algebra::Cancellation::default();
         cancellation.cancel();
         counters.attach_test_control(&cancellation);
         assert!(matches!(
             join.select_round_multiples(rule, computation, &FormulaLimits::default(), counters),
-            Err(FormulaFailure::Interrupted { reason: zetesis_cpu::Stop::Cancelled, location }) if location == rule.location
+            Err(FormulaFailure::Interrupted { reason: zetesis_algebra::Stop::Cancelled, location }) if location == rule.location
         ));
         assert!(join.multiples.is_none());
         assert!(!join.certified_total);

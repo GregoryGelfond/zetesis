@@ -6,10 +6,9 @@ use std::time::Duration;
 use clap::Parser;
 
 use crate::{
-    Backend, Completion, Options, PublicationFailure, Report, RunError,
-    run_finalized_with_diagnostics,
+    Completion, Options, PublicationFailure, Report, RunError, run_finalized_with_diagnostics,
 };
-use zetesis_cpu::Cancellation;
+use zetesis_algebra::Cancellation;
 use zetesis_test_support::io::{BoundedWriter, FULL, FailAt};
 
 fn options(arguments: &[&str]) -> Options {
@@ -94,50 +93,18 @@ fn bounded_statistics(
 }
 
 #[test]
-fn cpu_closure_refuses_an_oversized_reservation() {
-    let options = options(&["--stats", "--memory", "2147483648"]);
-    let mut config = crate::PublicationConfig::from(&options);
-    config.solve.workers = std::num::NonZeroUsize::new(5).unwrap();
-    config.solve.max_closure_bytes = 134_217_728;
-    let admitted = zetesis_themelios::admit_extended(
-        "{a}.".into(),
-        zetesis_themelios::AdmissionOptions::default(),
-        zetesis_themelios::ExpansionLimits::default(),
-    )
-    .unwrap();
-    let mut output = Vec::new();
-    let failure = crate::publication_fixture::with_diagnostics(
-        crate::PreparedInput::admitted(&admitted),
-        &config,
-        &options,
-        &mut output,
-        &mut Vec::new(),
-        &Cancellation::default(),
-    )
-    .unwrap_err();
-    let text = failure.cause.to_string();
-    assert!(
-        text.contains("5 threads with 134217728 closure bytes each"),
-        "{text}"
-    );
-    assert!(text.contains("671088640"), "{text}");
-    assert!(text.contains("536870912"), "{text}");
-    assert!(!std::str::from_utf8(&output).unwrap().contains("Answer:"));
-}
-
-#[test]
 fn every_completed_cpu_statistics_prefix_is_fallible_without_losing_bytes() {
-    for (source, arguments, formula, optimum) in [
-        ("p.", vec!["--grounder", "lazy"], false, false),
-        ("p.", vec!["--grounder", "eager"], false, false),
-        ("a | b.", vec![], true, false),
-        ("1 {a;b} 1. #minimize{1,a:a;2,b:b}.", vec![], true, true),
+    for (source, arguments, optimum) in [
+        ("p.", vec!["--grounder", "lazy"], false),
+        ("p.", vec!["--grounder", "eager"], false),
+        ("a | b.", vec![], false),
+        ("1 {a;b} 1. #minimize{1,a:a;2,b:b}.", vec![], true),
     ] {
         let options = options(&arguments);
         let outcome = actual(source, &options, &Cancellation::default());
         let report = outcome.as_ref().unwrap();
         assert_eq!(report.completion, Completion::Exhausted);
-        assert_eq!(report.countermodel_statistics.is_some(), formula);
+        assert!(report.countermodel_statistics.is_some());
         assert_eq!(report.optimization.is_some(), optimum);
         let text = every_prefix(&options, &outcome);
         assert!(text.contains("completion: exhausted"));
@@ -149,100 +116,7 @@ fn every_completed_cpu_statistics_prefix_is_fallible_without_losing_bytes() {
     assert_eq!(report.completion, Completion::Exhausted);
     let text = every_prefix(&options, &outcome);
     assert!(text.contains("grounder=eager"));
-    assert!(text.contains("backend=cpu; oracle=closure; grounder=eager"));
-}
-
-#[test]
-fn shared_cpu_statistics_preserve_every_writer_prefix() {
-    for selection in ["union", "worlds"] {
-        for stop in [None, Some(false), Some(true)] {
-            let options = options(&["--source-batching", selection]);
-            let mut config = crate::PublicationConfig::from(&options);
-            match stop {
-                Some(true) => config.solve.max_source_work = 0,
-                Some(false) => config.solve.max_work = 0,
-                None => {}
-            }
-            let admitted = zetesis_themelios::admit_extended(
-                "a.".into(),
-                zetesis_themelios::AdmissionOptions::default(),
-                zetesis_themelios::ExpansionLimits::default(),
-            )
-            .unwrap();
-            let outcome = crate::publish_prepared(
-                crate::PreparedInput::admitted(&admitted),
-                &config,
-                &mut crate::HumanRenderer::new(io::sink(), crate::ColorMode::Never, 65_536),
-                &mut io::sink(),
-                &Cancellation::default(),
-            )
-            .and_then(crate::PublicationOutcome::into_legacy)
-            .map(crate::PublicationReport::into_report);
-            let report = outcome.as_ref().unwrap();
-            let stats = report.shared_execution.as_ref().unwrap();
-            assert_eq!(stats.submitted_candidates, 1);
-            assert_eq!(stats.completed_candidates, u64::from(stop.is_none()));
-            assert_eq!(stats.stopped_candidates, u64::from(stop.is_some()));
-            assert_eq!(report.models, usize::from(stop.is_none()));
-            assert_eq!(
-                report.completion,
-                if stop.is_some() {
-                    Completion::Interrupted
-                } else {
-                    Completion::Exhausted
-                }
-            );
-            let text = every_prefix(&options, &outcome);
-            assert!(text.contains("  shared CPU: source="));
-            assert!(text.contains("  shared source: rounds="));
-            assert!(text.contains("  CPU world evaluation: record visits plus antecedent tests="));
-            assert!(text.contains("closure result/control records examined=1"));
-            assert_eq!(
-                text.contains("  shared batch interruption:"),
-                stop.is_some()
-            );
-        }
-    }
-}
-
-#[test]
-fn lazy_metadata_rendering_preserves_every_writer_failure() {
-    let options = options(&["--grounder", "lazy"]);
-    let mut report = actual("p.", &options, &Cancellation::default()).unwrap();
-    report.lazy_execution = Some(crate::output::fixtures::lazy_statistics());
-    let text = every_prefix(&options, &Ok(report));
-    assert!(text.contains("requested=metal; observed=Metal"));
-    assert!(text.contains("submitted=7; completed=4; stopped=3; queued results=2"));
-    assert!(text.contains("kernel time unmeasured"));
-    assert!(text.contains("chunks allocating buffers=2; complete-set reuses=3; peak requested device bytes=1024 (RSS unmeasured)"));
-    assert!(text.contains("buffer requests (allocated/reused): uniform=1/4; offsets=1/4; records=2/3; snapshots=1/4; seeds=1/4; output=2/3; readback=2/3; slack releases: budget=0; accounting overflow=0"));
-    assert!(text.contains("FORMAT FIXTURE: no physical execution"));
-}
-
-#[test]
-fn lazy_gpu_statistics_name_the_observed_grounder() {
-    // This tests the view of an explicit device report, not physical execution.
-    let mut options = options(&["--grounder", "lazy"]);
-    let mut report = actual("p.", &options, &Cancellation::default()).unwrap();
-    options.backend = Backend::Gpu(Some(zetesis_backend::GpuApi::Metal));
-    report.lazy_execution = Some(crate::output::fixtures::lazy_statistics());
-    let text = every_prefix(&options, &Ok(report));
-    assert!(text.contains(
-        "effective execution: oracle=closure; backend=requested GPU policy; grounder=lazy; see backend diagnostics for actual adapter"
-    ));
-    assert!(!text.contains("grounder=eager"));
-}
-
-#[test]
-fn static_gpu_statistics_retain_eager_grounding() {
-    // No physical device is invoked by this formatting control.
-    let mut options = options(&["--grounder", "eager"]);
-    let report = actual("p.", &options, &Cancellation::default()).unwrap();
-    options.backend = Backend::Gpu(Some(zetesis_backend::GpuApi::Metal));
-    let text = every_prefix(&options, &Ok(report));
-    assert!(text.contains(
-        "effective execution: oracle=closure; backend=requested GPU policy; grounder=eager; see backend diagnostics for actual adapter"
-    ));
+    assert!(text.contains("backend=cpu; oracle=positive-consequences; grounder=eager"));
 }
 
 #[test]
@@ -333,7 +207,6 @@ fn every_partial_or_cancelled_statistics_prefix_preserves_incomplete_qualificati
     assert!(report.countermodel_statistics.is_none());
     let text = every_prefix(&cancelled, &outcome);
     assert!(text.contains("effective execution: unavailable (stopped before execution counters)"));
-    assert!(text.contains("oracle work: unavailable"));
 }
 
 #[test]
@@ -356,33 +229,38 @@ fn hybrid_statistics_preserve_reported_fields() {
     for (pending, queued, completed) in [(0, 0, true), (3, 2, false)] {
         let options = options(&["--oracle", "countermodel"]);
         let mut report = actual("a | b.", &options, &Cancellation::default()).unwrap();
-        report.formula_execution = Some(crate::FormulaExecutionStatistics {
-            completion: crate::CompletionAccounting::default(),
-            gpu_residuals: None,
-            tight_work_per_candidate: None,
-            gpu_scheduled_work: None,
-            gpu_compute_timing: zetesis_backend::ComputeTiming::default(),
-            gpu_limits: Some(crate::FormulaDeviceLimits {
-                work_per_candidate: 789,
-                rounds_per_candidate: 17,
-            }),
-            gpu_submitted_batches: 3,
-            gpu_submitted_candidates: 10,
-            adapter: "FORMAT FIXTURE: no physical execution".to_owned(),
-            gpu_batches: 2,
-            gpu_candidates: 7,
-            gpu_work: 123,
-            gpu_rounds: 4,
-            cpu_residuals: 2,
-            gpu_decided: 2,
-            pending_candidates: pending,
-            queued_models: queued,
-            peak_accounted_bytes: 456,
+        let mut execution = crate::FormulaExecutionStatistics::default();
+        execution.gpu_limits = Some(crate::FormulaDeviceLimits {
+            work_per_candidate: 789,
+            rounds_per_candidate: 17,
         });
+        execution.gpu_submitted_batches = 3;
+        execution.gpu_submitted_candidates = 10;
+        "FORMAT FIXTURE: no physical execution".clone_into(&mut execution.adapter);
+        execution.gpu_batches = 2;
+        execution.gpu_candidates = 7;
+        execution.gpu_work = 123;
+        execution.gpu_rounds = 4;
+        execution.cpu_residuals = 2;
+        execution.gpu_decided = 2;
+        execution.pending_candidates = pending;
+        execution.queued_models = queued;
+        execution.peak_accounted_bytes = 456;
+        execution.gpu_workgroup_size = Some(128);
+        execution.gpu_slates = 9;
+        execution.gpu_largest_slate = Some(256);
+        execution.gpu_slate_resets = 5;
+        execution.gpu_lookahead_slates = 3;
+        execution.gpu_lookahead = Some(zetesis_solve::GpuLookahead::Engaged);
+        execution.gpu_lookahead_device_ns = 700;
+        execution.gpu_lookahead_finish_wait_ns = 200;
+        execution.gpu_lookahead_unmeasured = 1;
+        execution.first_answer_ns = Some(4_000);
+        report.formula_execution = Some(execution);
         if !completed {
             report.completion = Completion::Interrupted;
             report.interruption = Some(crate::Interruption::Countermodel(
-                zetesis_sat::Incomplete::WorkLimit,
+                zetesis_stable::Incomplete::WorkLimit,
             ));
         }
         let text = every_prefix(&options, &Ok(report));
@@ -393,6 +271,13 @@ fn hybrid_statistics_preserve_reported_fields() {
             "pending candidates={pending}; queued verified models={queued}"
         )));
         assert!(text.contains("peak authored GPU bytes=456"));
+        assert!(text.contains("workgroup size=128"));
+        assert!(text.contains(
+            "formula GPU lookahead: slates proposed ahead=3; last decision=engaged; overlapped device compute=700ns; finish waits=200ns; unmeasured submissions=1; device time hidden behind production is the compute less the waits, paired over the measured submissions"
+        ));
+        assert!(text.contains("formula GPU first answer: 4000ns after the device execution began"));
+        assert!(text.contains("adaptive slates; initial and reset slate size=64"));
+        assert!(text.contains("formula GPU slates: committed=9; largest=256; feedback resets=5"));
         assert!(text.contains("GPU compute passes: status=not_requested; elapsed_ns=unavailable"));
         assert!(text.contains("propagation sweeps/candidate=17; propagation work/candidate=789"));
         assert!(text.contains("submitted: batches=3; candidates=10"));
@@ -401,6 +286,114 @@ fn hybrid_statistics_preserve_reported_fields() {
             assert!(!text.contains("completion: exhausted"));
         }
     }
+}
+
+#[test]
+fn tight_statistics_report_routes_and_update_availability() {
+    // Only rendering is exercised here, with authored values.
+    let options = options(&["--oracle", "countermodel"]);
+    let mut report = actual("a | b.", &options, &Cancellation::default()).unwrap();
+    let mut execution = crate::FormulaExecutionStatistics::default();
+    "FORMAT FIXTURE: no physical execution".clone_into(&mut execution.adapter);
+    execution.tight_work_per_candidate = Some(500);
+    execution.gpu_scheduled_work = Some(4_000);
+    let mut routes = zetesis_solve::TightRouteStatistics::default();
+    routes.complete = 4;
+    routes.dense_reuse = 3;
+    routes.beyond_threshold = 1;
+    routes.update = 9;
+    routes.nodes_evaluated = 85;
+    execution.gpu_tight_routes = Some(routes);
+    let mut updates = zetesis_solve::TightUpdateStatistics::default();
+    updates.availability = zetesis_solve::TightUpdateAvailability::Bytes;
+    updates.guard_declined_batches = 2;
+    execution.gpu_tight_updates = Some(updates);
+    report.formula_execution = Some(execution);
+    let text = every_prefix(&options, &Ok(report));
+    assert!(text.contains("tight GPU limits: work/candidate=500"));
+    assert!(text.contains("tight GPU scheduled work=4000; performed by decoded batches"));
+    assert!(text.contains(
+        "tight GPU routes: complete=4; dense reuse=3 (beyond update threshold=1); update=9; nodes evaluated by update=85"
+    ));
+    assert!(
+        text.contains("tight GPU update route: bytes; count width=unavailable; steady state=false; guard declined batches=2")
+    );
+}
+
+/// The lines validation reads from a formula run: exhaustion, the execution
+/// route, the countermodel counters and every formula line.
+fn validation_section(text: &str) -> String {
+    let mut section = String::new();
+    for line in text.lines().filter(|line| {
+        [
+            "  completion: ",
+            "  effective execution: ",
+            "  countermodel: ",
+            "  formula ",
+        ]
+        .iter()
+        .any(|prefix| line.starts_with(prefix))
+    }) {
+        section.push_str(line);
+        section.push('\n');
+    }
+    section
+}
+
+#[test]
+fn gpu_formula_statistics_render_the_shared_validation_fixture() {
+    // Validation qualifies the shared fixture, so this rendering cannot change
+    // without validation's own test seeing the change. The search counters are
+    // a real solve's; the device counters are authored to agree with them,
+    // under a format-fixture adapter: no physical execution is claimed. The
+    // allowance is explicit so that no derived limit depends on the host.
+    let options = options(&["--oracle", "countermodel", "--memory", "1GiB"]);
+    let mut report = actual("a | b.", &options, &Cancellation::default()).unwrap();
+    let search = report.countermodel_statistics.unwrap();
+    let candidates = search.candidates;
+    let residuals = search.countermodel_queries;
+    let mut execution = crate::FormulaExecutionStatistics::default();
+    "format fixture adapter, Metal; vendor=0x106b".clone_into(&mut execution.adapter);
+    execution.completion.requested_workers = 1;
+    execution.completion.effective_workers = usize::from(residuals > 0);
+    execution.completion.requested_scratch_bytes = 1_600;
+    execution.completion.peak_scratch_bytes = 2_400;
+    execution.completion.entered = candidates;
+    execution.completion.residuals = residuals;
+    execution.completion.completed = candidates;
+    execution.completion.residual_completed = residuals;
+    execution.gpu_batches = 1;
+    execution.gpu_candidates = candidates;
+    execution.gpu_work = 12 * candidates;
+    execution.gpu_rounds = 2 * candidates;
+    execution.gpu_decided = candidates - residuals;
+    execution.cpu_residuals = residuals;
+    execution.gpu_submitted_batches = 1;
+    execution.gpu_submitted_candidates = candidates;
+    execution.gpu_slates = 1;
+    execution.gpu_largest_slate = Some(usize::try_from(candidates).unwrap());
+    execution.gpu_limits = Some(crate::FormulaDeviceLimits {
+        work_per_candidate: 100_000,
+        rounds_per_candidate: 64,
+    });
+    execution.peak_accounted_bytes = 4_096;
+    execution.gpu_workgroup_size = Some(64);
+    report.formula_execution = Some(execution);
+    let mut rendered = Vec::new();
+    super::write_detailed(
+        &mut rendered,
+        &options,
+        Ok(&report),
+        Duration::from_micros(1),
+    )
+    .unwrap();
+    let section = validation_section(std::str::from_utf8(&rendered).unwrap());
+    assert!(
+        section == zetesis_test_support::fixtures::FORMULA_GPU_STATISTICS,
+        "the formula statistics differ from zetesis-test-support's \
+         fixtures/formula_gpu_statistics.txt; if the change is intended, record \
+         this rendering and make validation qualify it:\n{section}"
+    );
 }
 
 #[test]
@@ -481,15 +474,14 @@ fn incomplete_and_requested_model_statistics_do_not_claim_exhaustion_or_optimali
 
 #[test]
 fn frozen_positive_statistics_report_incomplete_attempts() {
-    let statistics = zetesis_sat::Statistics {
-        reduct: zetesis_sat::ReductStatistics {
-            frozen_positive_attempts: 3,
-            frozen_positive_completed: 2,
-            frozen_positive_preparation_work: 5,
-            frozen_positive_work: 17,
-            ..zetesis_sat::ReductStatistics::default()
-        },
-        ..zetesis_sat::Statistics::default()
+    let mut reduct = zetesis_stable::ReductStatistics::default();
+    reduct.frozen_positive_attempts = 3;
+    reduct.frozen_positive_completed = 2;
+    reduct.frozen_positive_preparation_work = 5;
+    reduct.frozen_positive_work = 17;
+    let statistics = zetesis_stable::Statistics {
+        reduct,
+        ..zetesis_stable::Statistics::default()
     };
     let mut output = Vec::new();
     super::countermodel(
@@ -506,7 +498,7 @@ fn frozen_positive_statistics_report_incomplete_attempts() {
 
 #[test]
 fn support_explanation_statistics_include_declined_work() {
-    let mut statistics = zetesis_sat::RegionSearchStatistics::default();
+    let mut statistics = zetesis_stable::RegionSearchStatistics::default();
     statistics.counts.support_explanations = zetesis_ferraris::SupportExplanationStatistics {
         attempts: 2,
         certified: 1,

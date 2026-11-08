@@ -5,6 +5,7 @@ fn atomic(device: &wgpu::Limits) -> Packing<'_> {
     Packing {
         device,
         support: TightSupport::Atomic,
+        workgroup_sizing: crate::GpuWorkgroupSizing::Fixed(crate::GpuWorkgroupSize::Threads64),
     }
 }
 
@@ -99,7 +100,7 @@ fn decode_present(
     cancellation: &Cancellation,
 ) -> Result<Vec<TightGpuCheck>, GpuError> {
     let seeds = vec![7; usize::try_from(plan.seeds / 4).unwrap()];
-    super::decode(records, graph, plan, &seeds, cancellation)
+    super::decode(records, graph, plan, &seeds, cancellation).map(|decoded| decoded.checks)
 }
 
 #[test]
@@ -119,7 +120,7 @@ fn certificate_packing_retains_original_formula_structure() {
     assert_eq!(graph.work, 28);
     assert_eq!(
         plan(&graph, 2, true).params(&graph),
-        [3, 9, 4, 3, 1, 0, 28, 7]
+        [3, 9, 4, 3, 1, 0, 28, 7, 0, 0, 0, 0, 0, 0, 0, 0]
     );
 }
 
@@ -140,6 +141,9 @@ fn valid_rank_choices_do_not_change_cached_producers() {
             Packing {
                 device: &wgpu::Limits::default(),
                 support,
+                workgroup_sizing: crate::GpuWorkgroupSizing::Fixed(
+                    crate::GpuWorkgroupSize::Threads64,
+                ),
             },
         )
         .unwrap();
@@ -352,11 +356,13 @@ fn cold_bytes_include_simultaneous_host_graph_packing() {
     let cold = plan(&graph, 2, true);
     let hot = plan(&graph, 2, false);
     assert_eq!(graph.bytes, 9 * 16 + 4 * 4 + 3 * 16);
-    assert_eq!(hot.transport, 32 + 8 + 72 + 8 + 48 + 48);
+    // Parameters, candidates, truth, support, and results and their readback;
+    // a plan without update state binds nothing in its place.
+    assert_eq!(hot.transport, 64 + 8 + 72 + 8 + 72 + 72);
     assert_eq!(cold.accounted - hot.accounted, graph.bytes);
     assert_eq!(
         hot.accounted,
-        graph.bytes + hot.transport + 32 + 8 + 2 * std::mem::size_of::<TightGpuCheck>() as u64
+        graph.bytes + hot.transport + 64 + 8 + 2 * std::mem::size_of::<TightGpuCheck>() as u64
     );
 }
 
@@ -514,7 +520,26 @@ fn zero_epoch_cannot_alias_cleared_result_storage() {
 fn false_root_witnesses_use_assertion_order() {
     let graph = graph();
     let plan = plan(&graph, 2, false);
-    let records = [7, 0, 1, 0, 28, RESULT_MAGIC, 7, 1, 1, 3, 28, RESULT_MAGIC];
+    let records = [
+        7,
+        0,
+        1,
+        0,
+        28,
+        RESULT_MAGIC,
+        0,
+        0,
+        0,
+        7,
+        1,
+        1,
+        3,
+        28,
+        RESULT_MAGIC,
+        0,
+        0,
+        0,
+    ];
     let result = decode_present(&records, &graph, &plan, &Cancellation::default()).unwrap();
     assert_eq!(result[0].verdict(), TightVerdict::NotModel { root: 8 });
     assert_eq!(result[1].verdict(), TightVerdict::NotModel { root: 1 });
@@ -532,18 +557,27 @@ fn all_verdict_kinds_decode_without_losing_witnesses() {
         0,
         28,
         RESULT_MAGIC,
+        0,
+        0,
+        0,
         7,
         1,
         2,
         2,
         28,
         RESULT_MAGIC,
+        0,
+        0,
+        0,
         7,
         2,
         1,
         1,
         28,
         RESULT_MAGIC,
+        0,
+        0,
+        0,
     ];
     let result = decode_present(&records, &graph, &plan, &Cancellation::default()).unwrap();
     assert_eq!(
@@ -565,8 +599,44 @@ fn all_verdict_kinds_decode_without_losing_witnesses() {
 fn corrupt_records_never_produce_a_partial_batch() {
     let graph = graph();
     let plan = plan(&graph, 2, false);
-    let valid = [7, 0, 0, 0, 28, RESULT_MAGIC, 7, 1, 2, 2, 28, RESULT_MAGIC];
-    for (index, value) in [(6, 0), (7, 0), (8, 3), (9, 3), (10, 29), (11, 0), (8, 0)] {
+    let valid = [
+        7,
+        0,
+        0,
+        0,
+        28,
+        RESULT_MAGIC,
+        0,
+        0,
+        0,
+        7,
+        1,
+        2,
+        2,
+        28,
+        RESULT_MAGIC,
+        0,
+        0,
+        0,
+    ];
+    // The second record's epoch, slot, status, witness, work and marker, a
+    // route other than complete without reuse, an evaluation receipt, and a
+    // seeded record without the update route allowed.
+    for (index, value) in [
+        (9, 0),
+        (10, 0),
+        (11, 3),
+        (12, 3),
+        (13, 29),
+        (14, 0),
+        (11, 0),
+        (15, ROUTE_DENSE),
+        (15, ROUTE_UPDATE),
+        (15, ROUTE_BEYOND_THRESHOLD),
+        (15, 4),
+        (16, 1),
+        (17, 1),
+    ] {
         let mut corrupt = valid;
         corrupt[index] = value;
         assert_eq!(
@@ -577,7 +647,7 @@ fn corrupt_records_never_produce_a_partial_batch() {
         );
     }
     assert_eq!(
-        decode_present(&valid[..11], &graph, &plan, &Cancellation::default())
+        decode_present(&valid[..17], &graph, &plan, &Cancellation::default())
             .unwrap_err()
             .kind(),
         GpuErrorKind::Readback
@@ -590,7 +660,7 @@ fn out_of_range_root_ordinals_are_readback_failures() {
     let plan = plan(&graph, 1, false);
     assert_eq!(
         decode_present(
-            &[7, 0, 1, 4, 28, RESULT_MAGIC],
+            &[7, 0, 1, 4, 28, RESULT_MAGIC, 0, 0, 0],
             &graph,
             &plan,
             &Cancellation::default()
@@ -613,14 +683,14 @@ fn cancellation_prevents_completed_results() {
         graph.pack(&certificate, &cancellation).err().unwrap(),
         candidate_words(&plan, &graph, &input, &cancellation).unwrap_err(),
         decode_present(
-            &[7, 0, 0, 0, 28, RESULT_MAGIC],
+            &[7, 0, 0, 0, 28, RESULT_MAGIC, 0, 0, 0],
             &graph,
             &plan,
             &cancellation,
         )
         .unwrap_err(),
     ] {
-        assert_eq!(error.interruption, Some(zetesis_cpu::Stop::Cancelled));
+        assert_eq!(error.interruption, Some(zetesis_algebra::Stop::Cancelled));
     }
 }
 
@@ -628,7 +698,26 @@ fn cancellation_prevents_completed_results() {
 fn absent_residual_witnesses_are_readback_failures() {
     let graph = graph();
     let plan = plan(&graph, 2, false);
-    let records = [7, 0, 2, 2, 28, RESULT_MAGIC, 7, 1, 2, 2, 28, RESULT_MAGIC];
+    let records = [
+        7,
+        0,
+        2,
+        2,
+        28,
+        RESULT_MAGIC,
+        0,
+        0,
+        0,
+        7,
+        1,
+        2,
+        2,
+        28,
+        RESULT_MAGIC,
+        0,
+        0,
+        0,
+    ];
     let present = Interpretation::new(&graph.theory, [0, 1, 2]).unwrap();
     let absent = Interpretation::new(&graph.theory, [0, 1]).unwrap();
     let mut staging = crate::candidates::Staging::default();
@@ -679,7 +768,7 @@ fn malformed_candidate_storage_cannot_validate_receipts() {
     let plan = plan(&graph, 1, false);
     assert_eq!(
         super::decode(
-            &[7, 0, 0, 0, 28, RESULT_MAGIC],
+            &[7, 0, 0, 0, 28, RESULT_MAGIC, 0, 0, 0],
             &graph,
             &plan,
             &[],
@@ -714,18 +803,19 @@ fn empty_storage_padding_never_becomes_a_witness() {
     let empty = plan(&graph, 1, false);
     let cancellation = Cancellation::default();
     let stable = super::decode(
-        &[7, 0, STATUS_STABLE, 0, 0, RESULT_MAGIC],
+        &[7, 0, STATUS_STABLE, 0, 0, RESULT_MAGIC, 0, 0, 0],
         &graph,
         &empty,
         &[0],
         &cancellation,
     )
-    .unwrap();
+    .unwrap()
+    .checks;
     assert_eq!(stable[0].verdict(), TightVerdict::Stable);
     assert_eq!(stable[0].work(), 0);
     for status in [STATUS_NOT_MODEL, STATUS_RESIDUAL] {
         let error = super::decode(
-            &[7, 0, status, 0, 0, RESULT_MAGIC],
+            &[7, 0, status, 0, 0, RESULT_MAGIC, 0, 0, 0],
             &graph,
             &empty,
             &[0],
@@ -748,20 +838,21 @@ fn empty_storage_padding_never_becomes_a_witness() {
     let graph = Graph::new(&certificate, atomic(&wgpu::Limits::default())).unwrap();
     let asserted = plan(&graph, 1, false);
     let result = super::decode(
-        &[7, 0, STATUS_NOT_MODEL, 0, 2, RESULT_MAGIC],
+        &[7, 0, STATUS_NOT_MODEL, 0, 2, RESULT_MAGIC, 0, 0, 0],
         &graph,
         &asserted,
         &[0],
         &cancellation,
     )
-    .unwrap();
+    .unwrap()
+    .checks;
     assert_eq!(result[0].verdict(), TightVerdict::NotModel { root: 0 });
 }
 
 #[test]
 fn uniform_storage_requires_its_full_size() {
     let graph = empty_graph();
-    for (max_buffer_size, admitted) in [(32, true), (31, false)] {
+    for (max_buffer_size, admitted) in [(64, true), (63, false)] {
         let device = wgpu::Limits {
             max_buffer_size,
             ..Default::default()
@@ -771,10 +862,10 @@ fn uniform_storage_requires_its_full_size() {
         match result {
             Ok(plan) => {
                 // Every storage buffer fits even the smaller limit. Only the
-                // uniform's independent 32-byte requirement separates the cases.
+                // uniform's independent 64-byte requirement separates the cases.
                 assert_eq!(
                     (plan.seeds, plan.truth, plan.support, plan.results),
-                    (4, 4, 4, 24)
+                    (4, 4, 4, 36)
                 );
             }
             Err(error) => {
@@ -806,7 +897,7 @@ fn result_addressing_has_an_independent_ceiling() {
     // allocated for these deliberately hypothetical device dimensions.
     let largest = usize::try_from(u32::MAX).unwrap() / RESULT_WORDS;
     let boundary = Plan::new(&graph, largest, limits, &device, false, 1).unwrap();
-    assert_eq!(boundary.results, u64::try_from(largest).unwrap() * 6 * 4);
+    assert_eq!(boundary.results, u64::try_from(largest).unwrap() * 9 * 4);
     assert_eq!(
         (boundary.seeds, boundary.truth, boundary.support),
         (4, 4, 4)
@@ -856,6 +947,9 @@ fn native_tight_rows_retain_tail_and_complete_scan_allowance() {
             Packing {
                 device: &device,
                 support,
+                workgroup_sizing: crate::GpuWorkgroupSizing::Fixed(
+                    crate::GpuWorkgroupSize::Threads64,
+                ),
             },
         )
         .unwrap();
@@ -952,6 +1046,9 @@ fn threshold_producer_bodies_use_physical_result_addresses() {
             Packing {
                 device: &wgpu::Limits::default(),
                 support,
+                workgroup_sizing: crate::GpuWorkgroupSizing::Fixed(
+                    crate::GpuWorkgroupSize::Threads64,
+                ),
             },
         )
         .unwrap();
@@ -1014,6 +1111,9 @@ fn ordinal_producer_bodies_use_physical_result_addresses() {
             Packing {
                 device: &wgpu::Limits::default(),
                 support,
+                workgroup_sizing: crate::GpuWorkgroupSizing::Fixed(
+                    crate::GpuWorkgroupSize::Threads64,
+                ),
             },
         )
         .unwrap();
@@ -1053,18 +1153,19 @@ fn dependency_schedule_preserves_ids_and_charges_cold_storage() {
     assert_eq!(graph.levels, 3);
     assert_eq!(selected.levels, 3);
     assert_eq!(selected.work, 31);
+    // The scheduled roots twice, resident and packing. The schedule is too
+    // narrow for the update route, so the per-head producer counter its
+    // admission reserved is released.
     assert_eq!(selected.accounted, serial_bytes + 104);
     assert_eq!(
         packed.roots,
         [8, 5, 7, 1, 0, 4, 6, 9, 0, 1, 2, 3, 4, 6, 5, 7, 8]
     );
-    assert!(
-        packed
-            .nodes
-            .chunks_exact(4)
-            .take(graph.nodes as usize)
-            .all(|node| node[3] == 0)
-    );
+    // Header word 3 holds each node's position in the level order.
+    let order = &packed.roots[4 + 3 + 1..];
+    for (position, &node) in order.iter().enumerate() {
+        assert_eq!(packed.nodes[node as usize * 4 + 3] as usize, position);
+    }
     assert_eq!(selected.params(&graph)[5], 3);
 }
 
@@ -1142,6 +1243,43 @@ fn resident_schedule_can_use_serial_work_but_retains_its_real_bytes() {
 }
 
 #[test]
+fn optional_schedule_work_uses_authored_and_wire_ceilings() {
+    let mut graph = graph();
+    let device = wgpu::Limits::default();
+    // Synthetic work dimensions exercise the host gate without constructing
+    // huge source graphs or changing any transport dimension.
+    for (work, levels, ceiling, expected_levels, expected_work) in [
+        (0, 0, 0, 0, 0),
+        (0, 1, 0, 0, 0),
+        (7, 0, 7, 0, 7),
+        (7, 2, 9, 2, 9),
+        (7, 2, 8, 0, 7),
+        (u32::MAX - 1, 1, u64::from(u32::MAX), 1, u32::MAX),
+        (u32::MAX, 1, u64::MAX, 0, u32::MAX),
+    ] {
+        graph.work = work;
+        graph.levels = levels;
+        let selected = Plan::new(
+            &graph,
+            1,
+            TightGpuLimits {
+                max_work_per_candidate: ceiling,
+                ..TightGpuLimits::default()
+            },
+            &device,
+            false,
+            1,
+        )
+        .unwrap();
+        assert_eq!(selected.levels, expected_levels);
+        assert_eq!(selected.work, expected_work);
+        assert_eq!(selected.allowance, expected_work);
+        assert_eq!(selected.params(&graph)[6], expected_work);
+        assert_eq!(graph.levels, levels);
+    }
+}
+
+#[test]
 fn pure_chain_needs_no_level_storage() {
     let mut nodes = vec![Node::atom(0)];
     for index in 1..128 {
@@ -1198,7 +1336,7 @@ fn interrupted_schedule_preparation_retains_no_publishable_buffers() {
             .err()
             .unwrap()
             .interruption,
-        Some(zetesis_cpu::Stop::Cancelled)
+        Some(zetesis_algebra::Stop::Cancelled)
     );
     assert_eq!(graph.levels, 0);
 }
@@ -1271,4 +1409,96 @@ fn retained_truth_work_overflow_keeps_complete_scan() {
     selected.reuse_original_truth(&graph, u64::MAX);
     assert!(!selected.original_truth_reused);
     assert_eq!(selected.work, u32::MAX);
+}
+
+#[test]
+fn retained_truth_refusal_preserves_an_existing_reuse_plan() {
+    let graph = graph();
+    let mut selected = plan(&graph, 2, false);
+    selected.reuse_original_truth(&graph, u64::MAX);
+    assert!(selected.original_truth_reused);
+    let before = (
+        selected.work,
+        selected.allowance,
+        selected.accounted,
+        selected.transport,
+        selected.params(&graph),
+    );
+    selected.reuse_original_truth(&graph, 0);
+    assert!(selected.original_truth_reused);
+    assert_eq!(
+        (
+            selected.work,
+            selected.allowance,
+            selected.accounted,
+            selected.transport,
+            selected.params(&graph),
+        ),
+        before
+    );
+}
+
+#[test]
+fn retained_truth_work_accepts_the_wire_ceiling() {
+    let graph = graph();
+    // This fixture's retained-truth increment is 32, independently recorded in
+    // retained_truth_work_falls_back_without_new_storage above.
+    for (initial, ceiling, accepted) in [
+        (u32::MAX - 32, u64::from(u32::MAX), true),
+        (u32::MAX - 32, u64::from(u32::MAX) - 1, false),
+        (u32::MAX - 31, u64::MAX, false),
+    ] {
+        let mut selected = plan(&graph, 2, false);
+        let allowance = selected.allowance;
+        selected.work = initial;
+        selected.reuse_original_truth(&graph, ceiling);
+        assert_eq!(selected.original_truth_reused, accepted);
+        assert_eq!(selected.work, if accepted { u32::MAX } else { initial });
+        assert_eq!(
+            selected.allowance,
+            if accepted { u32::MAX } else { allowance }
+        );
+        assert_eq!(selected.params(&graph)[6], selected.work);
+    }
+}
+
+#[test]
+fn dispatch_call_keeps_its_original_borrowed_layout() {
+    use super::super::transport::Call;
+    use std::mem::{align_of, offset_of, size_of};
+    use zetesis_algebra::words::Words;
+
+    struct Original<'a> {
+        seeds: &'a [u32],
+        plan: &'a Plan,
+    }
+    assert_eq!(size_of::<Call<'_>>(), size_of::<Original<'_>>());
+    assert_eq!(align_of::<Call<'_>>(), align_of::<Original<'_>>());
+    assert_eq!(offset_of!(Call<'_>, seeds), offset_of!(Original<'_>, seeds));
+    assert_eq!(offset_of!(Call<'_>, plan), offset_of!(Original<'_>, plan));
+    let graph = graph();
+    let plan = plan(&graph, 2, true);
+    let candidates = [
+        Interpretation::new(&graph.theory, [0]).unwrap(),
+        Interpretation::new(&graph.theory, [1, 2]).unwrap(),
+    ];
+    let mut staging = crate::candidates::Staging::default();
+    plan.pack(
+        &graph,
+        &candidates,
+        &mut staging,
+        u64::MAX,
+        &Cancellation::default(),
+    )
+    .unwrap();
+    let call = Call {
+        seeds: Words::new(staging.words()),
+        plan: &plan,
+    };
+    assert_eq!(
+        (call.seeds.as_ptr(), call.seeds.len()),
+        (staging.words().as_ptr(), staging.words().len())
+    );
+    assert!(std::ptr::eq(call.plan, &raw const plan));
+    assert_eq!(&*call.seeds, &[1, 6]);
 }

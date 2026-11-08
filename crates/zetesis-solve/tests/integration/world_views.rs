@@ -1,15 +1,13 @@
 //! Complete original families require unrestricted coverage and retained members.
 
-use std::{collections::BTreeSet, convert::Infallible, io, num::NonZeroUsize, sync::Arc};
+use std::{collections::BTreeSet, convert::Infallible, io, num::NonZeroUsize};
 
-use crate::support::sessions::normal;
-use zetesis_core::{GroundProgram, StaticLimits};
-use zetesis_cpu::Cancellation;
-use zetesis_reference_support::formula;
+use crate::support::sessions::formula;
+use zetesis_algebra::Cancellation;
 use zetesis_solve::{
     AnswerSelection, AnswerSet, Backend, Completion, ExecutionObservation, ExecutionObserver,
-    ExecutionResources, Grounder, Interruption, Oracle, PreparedInput, Session, SolveConfig,
-    SolveError, Subject, WorldView, WorldViewError, WorldViewFailure, WorldViewLimits,
+    ExecutionResources, Grounder, Interruption, Oracle, Original, PreparedInput, Session,
+    SolveConfig, SolveError, WorldView, WorldViewError, WorldViewFailure, WorldViewLimits,
 };
 
 fn config() -> SolveConfig {
@@ -180,7 +178,10 @@ fn capped_optimal_ties_do_not_describe_every_answer() {
     assert_eq!(selected.by_ref().count(), 1);
     let outcome = selected.outcome().unwrap();
     assert!(outcome.optimum_proved());
-    assert_eq!(outcome.incumbent().unwrap().tied_models, 2);
+    // The strict bound for one requested answer pruned the other tie, so
+    // the session establishes no size for the optimal family.
+    assert!(outcome.incumbent().unwrap().ties_pruned);
+    assert_eq!(outcome.complete_answer_count(), None);
     assert_eq!(outcome.retained_models(), 1);
     assert_eq!(collect(PreparedInput::formula(&owner)).len(), 2);
 }
@@ -200,8 +201,8 @@ fn objective_absence_differs_from_an_active_zero_score() {
 
 #[test]
 fn full_identity_survives_identical_empty_displays() {
-    let owner = normal("{a}. {b}. #show.");
-    let world_view = collect(PreparedInput::admitted(&owner));
+    let owner = formula("{a}. {b}. #show.");
+    let world_view = collect(PreparedInput::formula(&owner));
     assert_eq!(
         family(&world_view),
         BTreeSet::from([
@@ -230,10 +231,10 @@ fn full_identity_survives_identical_empty_displays() {
 
 #[test]
 fn empty_program_has_one_empty_answer() {
-    let relational = normal("");
+    let relational = formula("");
     let formulas = formula("");
     for input in [
-        PreparedInput::admitted(&relational),
+        PreparedInput::formula(&relational),
         PreparedInput::formula(&formulas),
     ] {
         let world_view = collect(input);
@@ -246,10 +247,10 @@ fn empty_program_has_one_empty_answer() {
 
 #[test]
 fn inconsistent_program_has_an_empty_complete_family() {
-    let relational = normal(":-.");
+    let relational = formula(":-.");
     let formulas = formula(":-.");
     for input in [
-        PreparedInput::admitted(&relational),
+        PreparedInput::formula(&relational),
         PreparedInput::formula(&formulas),
     ] {
         let world_view = WorldView::collect(
@@ -274,21 +275,21 @@ fn inconsistent_program_has_an_empty_complete_family() {
 
 #[test]
 fn detached_answer_retains_original_instance() {
-    let owner = normal("a.");
-    let other = normal("a.");
-    let answer = collect(PreparedInput::admitted(&owner))
+    let owner = formula("a.");
+    let other = formula("a.");
+    let answer = collect(PreparedInput::formula(&owner))
         .into_answer_sets()
         .pop()
         .unwrap();
     assert!(
         answer
-            .subject()
-            .same_instance(&Subject::Program(owner.program().clone()))
+            .original()
+            .same_instance(&Original::Theory(owner.theory().clone()))
     );
     assert!(
         !answer
-            .subject()
-            .same_instance(&Subject::Program(other.program().clone()))
+            .original()
+            .same_instance(&Original::Theory(other.theory().clone()))
     );
     assert_eq!(names(&answer), ["a"]);
 }
@@ -302,18 +303,18 @@ fn world_view_keeps_its_subject_after_owner_drop() {
     let other = formula("a | b.");
     assert!(
         !world_view
-            .subject()
-            .same_instance(&Subject::Theory(other.theory().clone()))
+            .original()
+            .same_instance(&Original::Theory(other.theory().clone()))
     );
     for answer in world_view.answer_sets() {
-        assert!(answer.subject().same_instance(world_view.subject()));
+        assert!(answer.original().same_instance(world_view.original()));
     }
     assert!(
         world_view
             .outcome()
-            .subject()
+            .original()
             .unwrap()
-            .same_instance(world_view.subject())
+            .same_instance(world_view.original())
     );
     assert_eq!(
         family(&world_view),
@@ -323,96 +324,41 @@ fn world_view_keeps_its_subject_after_owner_drop() {
 
 #[test]
 fn distinct_semantic_profiles_do_not_share_instance() {
-    let relational = normal("a.");
+    let relational = formula("a.");
     let formulas = formula("a.");
     assert!(
-        !Subject::Program(relational.program().clone())
-            .same_instance(&Subject::Theory(formulas.theory().clone()))
+        !Original::Theory(relational.theory().clone())
+            .same_instance(&Original::Theory(formulas.theory().clone()))
     );
 }
 
 #[test]
-fn exact_prepared_routes_enumerate_the_same_family() {
-    let source = "a :- not b. b :- not a. {hidden}.";
-    let relational = normal(source);
-    let formulas = formula(source);
-    let graph =
-        Arc::new(GroundProgram::compile(relational.program(), StaticLimits::default()).unwrap());
+fn formula_collection_enumerates_the_original_family() {
+    let owner = formula("a :- not b. b :- not a. {hidden}.");
     let expected = BTreeSet::from([
         vec!["a".into()],
         vec!["a".into(), "hidden".into()],
         vec!["b".into()],
         vec!["b".into(), "hidden".into()],
     ]);
-    for (input, oracle, grounder) in [
-        (
-            PreparedInput::admitted(&relational),
-            Oracle::Closure,
-            Grounder::Lazy,
-        ),
-        (
-            PreparedInput::ground(&graph),
-            Oracle::Closure,
-            Grounder::Eager,
-        ),
-        (
-            PreparedInput::formula(&formulas),
-            Oracle::Countermodel,
-            Grounder::Eager,
-        ),
-    ] {
-        let configured = SolveConfig {
-            oracle,
-            grounder,
-            ..config()
-        };
-        let mut routes = Routes::default();
-        let world_view = Session::builder(input, configured, Cancellation::default())
-            .resources(&ExecutionResources::default())
-            .collect_observed(WorldViewLimits::default(), &mut routes)
-            .unwrap();
-        assert_eq!(family(&world_view), expected);
-        if oracle == Oracle::Countermodel {
-            assert_eq!(routes.formulas, 1);
-            assert!(routes.closures.is_empty());
-        } else {
-            assert_eq!(routes.closures, [grounder]);
-            assert_eq!(routes.formulas, 0);
-        }
-        assert_eq!(
-            world_view.outcome().countermodel_statistics().is_some(),
-            oracle == Oracle::Countermodel
-        );
-        assert!(world_view.outcome().formula_execution().is_none());
-        assert!(world_view.outcome().lazy_execution().is_none());
-    }
-}
-
-#[test]
-fn ground_collection_reuses_the_supplied_graph() {
-    let owner = normal("a. b :- a.");
-    let graph = Arc::new(GroundProgram::compile(owner.program(), StaticLimits::default()).unwrap());
     let configured = SolveConfig {
-        max_ground_rules: 0,
-        max_substitutions: 0,
+        oracle: Oracle::Countermodel,
+        grounder: Grounder::Eager,
         ..config()
     };
-    let world_view = WorldView::collect(
-        PreparedInput::ground(&graph),
+    let mut routes = Routes::default();
+    let world_view = Session::builder(
+        PreparedInput::formula(&owner),
         configured,
-        WorldViewLimits::default(),
         Cancellation::default(),
     )
+    .resources(&ExecutionResources::default())
+    .collect_observed(WorldViewLimits::default(), &mut routes)
     .unwrap();
-    assert_eq!(
-        family(&world_view),
-        BTreeSet::from([vec!["a".into(), "b".into()]])
-    );
-    assert!(
-        world_view
-            .subject()
-            .same_instance(&Subject::Program(graph.program().clone()))
-    );
+    assert_eq!(family(&world_view), expected);
+    assert_eq!(routes.formulas, 1);
+    assert!(world_view.outcome().countermodel_statistics().is_some());
+    assert!(world_view.outcome().formula_execution().is_none());
 }
 
 #[test]
@@ -466,8 +412,8 @@ fn requested_model_limit_refuses_complete_collection() {
     );
     assert!(
         failure.answer_sets()[0]
-            .subject()
-            .same_instance(failure.subject())
+            .original()
+            .same_instance(failure.original())
     );
 }
 
@@ -484,16 +430,16 @@ fn consumer_stop_does_not_establish_coverage() {
     let outcome = session.stop();
     assert_eq!(outcome.completion(), None);
     assert_eq!(outcome.selection(), Some(AnswerSelection::All));
-    assert!(outcome.subject().unwrap().same_instance(answer.subject()));
+    assert!(outcome.original().unwrap().same_instance(answer.original()));
     assert!(!outcome.unsatisfiable());
 }
 
 #[test]
 fn cancellation_cannot_produce_an_empty_world_view() {
-    let relational = normal("a.");
+    let relational = formula("a.");
     let formulas = formula("a.");
     for input in [
-        PreparedInput::admitted(&relational),
+        PreparedInput::formula(&relational),
         PreparedInput::formula(&formulas),
     ] {
         let cancellation = Cancellation::default();
@@ -530,8 +476,8 @@ fn search_budget_retains_only_a_checked_prefix() {
     assert_eq!(failure.outcome().unwrap().verified_models(), 1);
     assert!(
         failure.answer_sets()[0]
-            .subject()
-            .same_instance(failure.subject())
+            .original()
+            .same_instance(failure.original())
     );
     assert_eq!(failure.into_answer_sets().len(), 1);
 }
@@ -683,16 +629,16 @@ fn collection_refusal_preserves_queued_cpu_membership() {
     );
     assert!(
         failure.answer_sets()[0]
-            .subject()
-            .same_instance(failure.subject())
+            .original()
+            .same_instance(failure.original())
     );
 }
 
 #[test]
 fn atom_storage_limit_counts_hidden_atoms() {
-    let owner = normal("a. b. #show.");
+    let owner = formula("a. b. #show.");
     let failure = WorldView::collect(
-        PreparedInput::admitted(&owner),
+        PreparedInput::formula(&owner),
         config(),
         WorldViewLimits {
             max_atoms: 1,
@@ -708,9 +654,9 @@ fn atom_storage_limit_counts_hidden_atoms() {
 
 #[test]
 fn zero_payload_budget_refuses_even_an_empty_answer() {
-    let owner = normal("");
+    let owner = formula("");
     let failure = WorldView::collect(
-        PreparedInput::admitted(&owner),
+        PreparedInput::formula(&owner),
         config(),
         WorldViewLimits {
             max_bytes: 0,
@@ -760,7 +706,7 @@ fn setup_refusal_preserves_the_original_subject() {
     let failure = Session::builder(
         PreparedInput::formula(&owner),
         SolveConfig {
-            oracle: Oracle::Closure,
+            grounder: Grounder::Lazy,
             ..config()
         },
         Cancellation::default(),
@@ -774,14 +720,13 @@ fn setup_refusal_preserves_the_original_subject() {
     assert!(failure.outcome().is_none());
     assert!(
         failure
-            .subject()
-            .same_instance(&Subject::Theory(owner.theory().clone()))
+            .original()
+            .same_instance(&Original::Theory(owner.theory().clone()))
     );
 }
 
 #[derive(Default)]
 struct Routes {
-    closures: Vec<Grounder>,
     formulas: usize,
 }
 
@@ -789,10 +734,8 @@ impl ExecutionObserver for Routes {
     type Error = Infallible;
 
     fn observe(&mut self, observation: ExecutionObservation<'_>) -> Result<(), Self::Error> {
-        match observation {
-            ExecutionObservation::CpuClosure { grounder, .. } => self.closures.push(grounder),
-            ExecutionObservation::CpuFormula { .. } => self.formulas += 1,
-            _ => {}
+        if let ExecutionObservation::CpuFormula { .. } = observation {
+            self.formulas += 1;
         }
         Ok(())
     }
@@ -866,8 +809,8 @@ fn observer_failure(
     .unwrap_err();
     assert!(
         failure
-            .subject()
-            .same_instance(&Subject::Theory(owner.theory().clone()))
+            .original()
+            .same_instance(&Original::Theory(owner.theory().clone()))
     );
     assert!(failure.answer_sets().is_empty());
     let WorldViewError::Solve(solve) = failure.cause() else {
@@ -922,7 +865,12 @@ fn collection_preserves_deferred_formula_failure() {
     let (failure, events, timings) = observer_failure(Refusal::Formula);
     assert_eq!(events, [Observation::Formula]);
     let outcome = failure.outcome().unwrap();
-    assert!(outcome.subject().unwrap().same_instance(failure.subject()));
+    assert!(
+        outcome
+            .original()
+            .unwrap()
+            .same_instance(failure.original())
+    );
     assert_eq!(outcome.selection(), Some(AnswerSelection::All));
     assert_eq!(outcome.verified_models(), 0);
     assert_eq!(outcome.completion(), None);
@@ -940,3 +888,28 @@ fn collection_preserves_deferred_formula_failure() {
 }
 
 mod failure_contracts;
+
+#[test]
+fn exact_collection_counts_admit_the_complete_family() {
+    let owner = formula("a. {b}.");
+    let world_view = WorldView::collect(
+        PreparedInput::formula(&owner),
+        config(),
+        WorldViewLimits {
+            max_answer_sets: 2,
+            max_atoms: 3,
+            ..Default::default()
+        },
+        Cancellation::default(),
+    )
+    .unwrap();
+    assert_eq!(
+        family(&world_view),
+        BTreeSet::from([vec!["a".into()], vec!["a".into(), "b".into()]])
+    );
+    assert_eq!(world_view.answer_sets().len(), 2);
+    assert_eq!(
+        world_view.outcome().completion(),
+        Some(Completion::Exhausted)
+    );
+}

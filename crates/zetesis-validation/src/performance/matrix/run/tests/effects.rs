@@ -892,3 +892,5 @@ fn cancelled_matrix_retains_the_active_position() {
     assert_eq!(published["passed"], false);
     assert_eq!(published["accounted"], true);
 }
+
+mod residual_evidence;

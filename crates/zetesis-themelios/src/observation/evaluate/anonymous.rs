@@ -4,6 +4,7 @@
 use super::{AtomRef, Binding, Error, ErrorKind, Interpreter, Metric, Resource, Work};
 use crate::observation::{AtomKeyTemplate, KeyTemplate};
 use std::{cmp::Ordering, ops::Range};
+use zetesis_algebra::MeterBytes;
 use zetesis_core::{
     ValueNodeRef,
     catalog::{PredicateRef, TermAssignment, TermKey, TermRead},
@@ -109,12 +110,15 @@ fn reserve<T>(
     work.step(values.len() as u128 + 1)?;
     let mut next = work.reserve(count)?;
     let actual = *current + next.capacity() as u128 * size_of::<T>() as u128;
-    *peak = (*peak).max(arena + actual);
-    work.check(
-        Resource::TermStorageBytes,
-        arena + actual,
-        work.limits.max_term_storage_bytes as u128,
-    )?;
+    let observed = arena + actual;
+    let limit = work.limits.max_term_storage_bytes as u128;
+    MeterBytes::observe_peak(observed, limit, peak).map_err(|_| {
+        work.error(ErrorKind::Limit {
+            resource: Resource::TermStorageBytes,
+            observed,
+            limit,
+        })
+    })?;
     *current = actual - values.capacity() as u128 * size_of::<T>() as u128;
     next.append(values);
     *values = next;

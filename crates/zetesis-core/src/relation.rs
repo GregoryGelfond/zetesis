@@ -30,7 +30,9 @@
 //! allocated buffers. Other live caller frames and borrowed source allocations
 //! remain the caller's responsibility. Reported capacity is not process RSS.
 
-use std::{fmt, mem::size_of};
+use std::{convert::Infallible, fmt, mem::size_of};
+
+use zetesis_algebra::{Meter, MeterBytes};
 
 use crate::catalog::{AtomRef, Atoms, PredicateRef, TermRef};
 use crate::{Atom, Predicate};
@@ -565,7 +567,7 @@ fn ceiling(resource: Resource, observed: u128, limit: u128) -> Result<(), Failur
 
 struct Work {
     limits: Limits,
-    used: u128,
+    meter: Meter<'static>,
     live: usize,
     peak: usize,
 }
@@ -576,17 +578,49 @@ impl Work {
         let live = usize::try_from(bytes).map_err(|_| Failure::Overflow)?;
         Ok(Self {
             limits,
-            used: 0,
+            meter: Meter::local(limits.max_work),
             live,
             peak: live,
         })
     }
 
+    fn charged(&self) -> u128 {
+        u128::from(self.meter.charged())
+    }
+
     fn tick(&mut self, amount: u128) -> Result<(), Failure> {
-        let next = self.used.checked_add(amount).ok_or(Failure::Overflow)?;
-        ceiling(Resource::Work, next, u128::from(self.limits.max_work))?;
-        self.used = next;
-        Ok(())
+        self.tick_with(amount, || Ok::<(), Infallible>(()))
+            .map_err(|error| match error {
+                QueryFailure::Relation(error) => error,
+                QueryFailure::Stopped(never) => match never {},
+            })
+    }
+
+    fn tick_with<E>(
+        &mut self,
+        amount: u128,
+        before: impl FnOnce() -> Result<(), E>,
+    ) -> Result<(), QueryFailure<E>> {
+        let observed = self
+            .charged()
+            .checked_add(amount)
+            .ok_or(Failure::Overflow)?;
+        let limit = u128::from(self.limits.max_work);
+        let refusal = || Failure::Limit {
+            resource: Resource::Work,
+            observed,
+            limit,
+        };
+        let charge = u64::try_from(amount).map_err(|_| refusal())?;
+        self.meter
+            .bounded(charge, || {
+                let result = before().map_err(QueryFailure::Stopped);
+                let actual = if result.is_ok() { charge } else { 0 };
+                (result, actual)
+            })
+            // This private local meter has no control observer or quota: only
+            // local admission can fail. Caller errors are the nested result.
+            .map_err(|_| refusal())?
     }
 
     fn compare(
@@ -605,6 +639,16 @@ impl Work {
         Ok(())
     }
 
+    fn observe(&mut self, bytes: usize) -> Result<(), Failure> {
+        MeterBytes::observe_peak_usize(bytes, self.limits.max_bytes, &mut self.peak).map_err(|_| {
+            Failure::Limit {
+                resource: Resource::Bytes,
+                observed: bytes as u128,
+                limit: self.limits.max_bytes as u128,
+            }
+        })
+    }
+
     fn reserve<T>(&mut self, count: usize) -> Result<Vec<T>, Failure> {
         let requested = self.live as u128 + count as u128 * size_of::<T>() as u128;
         ceiling(Resource::Bytes, requested, self.limits.max_bytes as u128)?;
@@ -614,8 +658,7 @@ impl Work {
             .map_err(|_| Failure::Allocation)?;
         let actual = self.live as u128 + values.capacity() as u128 * size_of::<T>() as u128;
         self.live = usize::try_from(actual).map_err(|_| Failure::Overflow)?;
-        self.peak = self.peak.max(self.live);
-        ceiling(Resource::Bytes, actual, self.limits.max_bytes as u128)?;
+        self.observe(self.live)?;
         Ok(values)
     }
 
@@ -652,11 +695,8 @@ impl Work {
         let overlap = self.live as u128 + current as u128;
         let actual = self.live as u128 + (current - previous) as u128;
         self.live = usize::try_from(actual).map_err(|_| Failure::Overflow)?;
-        self.peak = self
-            .peak
-            .max(usize::try_from(overlap).map_err(|_| Failure::Overflow)?);
-        ceiling(Resource::Bytes, overlap, self.limits.max_bytes as u128)?;
-        Ok(())
+        let overlap = usize::try_from(overlap).map_err(|_| Failure::Overflow)?;
+        self.observe(overlap)
     }
 
     fn release<T>(&mut self, values: Vec<T>) {

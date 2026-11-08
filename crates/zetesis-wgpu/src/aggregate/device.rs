@@ -10,7 +10,7 @@ use crate::{
     runtime::{DeviceProfile, ErrorScopes, Runtime},
 };
 use std::sync::Arc;
-use zetesis_cpu::Cancellation;
+use zetesis_algebra::Cancellation;
 use zetesis_ferraris::native_aggregate::Eligibility;
 
 /// Exact device reduction of already-acquired aggregate eligibility.
@@ -33,7 +33,14 @@ impl GpuAggregateOracle {
     /// # Errors
     /// Returns typed adapter, capability, allocation, validation or device failure.
     pub fn new_selected(options: GpuOptions, selection: GpuSelection) -> Result<Self, GpuError> {
-        let runtime = pollster::block_on(Runtime::new(options, selection, Self::profile()))?;
+        let runtime = pollster::block_on(Runtime::open(
+            crate::GpuDeviceSource::Selected {
+                options,
+                selection,
+                timing: false,
+            },
+            Self::profile(),
+        ))?;
         Ok(Self::with_runtime(runtime))
     }
 
@@ -46,7 +53,10 @@ impl GpuAggregateOracle {
     /// Refuses an active or invalidated context, unsupported granted limits,
     /// allocation and shader validation failure. No adapter selection occurs.
     pub fn from_context(context: &crate::GpuContext) -> Result<Self, GpuError> {
-        let runtime = pollster::block_on(Runtime::from_context(context, Self::profile()))?;
+        let runtime = pollster::block_on(Runtime::open(
+            crate::GpuDeviceSource::Context(context),
+            Self::profile(),
+        ))?;
         Ok(Self::with_runtime(runtime))
     }
 
@@ -73,6 +83,7 @@ impl GpuAggregateOracle {
             pipeline_label: "original and frozen aggregate guards",
             shader: SHADER.into(),
             entry_point: "reduce",
+            dense_entry_point: None,
             kernel: crate::kernel::Kernel::Fixed,
             validate_limits: check_limits,
         }

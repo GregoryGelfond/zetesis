@@ -1,0 +1,69 @@
+{
+  "schema_version": 1,
+  "root": ".",
+  "cases": [
+    {
+      "entry": "s_crossing.lp",
+      "contract": {
+        "satisfiability": "sat",
+        "family": "all",
+        "model_count": 4,
+        "cost": null,
+        "witnesses": [],
+        "required_symbols": [],
+        "notes": [
+          "Full ordinary answer family; fresh clingo qualification required."
+        ]
+      },
+      "files": [
+        {
+          "path": "s_crossing.lp",
+          "sha256": "917cadb0e57c53b542f3b939452506809bbd04f1e53e2336d029036b8361341d",
+          "includes": []
+        }
+      ]
+    },
+    {
+      "entry": "sudoku_simple.lp",
+      "contract": {
+        "satisfiability": "sat",
+        "family": "all",
+        "model_count": 1,
+        "cost": null,
+        "witnesses": [],
+        "required_symbols": [],
+        "notes": [
+          "Full ordinary answer family; fresh clingo qualification required."
+        ]
+      },
+      "files": [
+        {
+          "path": "sudoku_simple.lp",
+          "sha256": "ed2f31273197c9723267f9834e1b68688817bb62ec2c997531d8c3e9922bf063",
+          "includes": []
+        }
+      ]
+    },
+    {
+      "entry": "elias_pr_simp.lp",
+      "contract": {
+        "satisfiability": "sat",
+        "family": "all",
+        "model_count": 1,
+        "cost": null,
+        "witnesses": [],
+        "required_symbols": [],
+        "notes": [
+          "Full ordinary answer family; fresh clingo qualification required."
+        ]
+      },
+      "files": [
+        {
+          "path": "elias_pr_simp.lp",
+          "sha256": "1f0b9239719b08dac0336a7b0b25ec133c0132786629859e0a1fb46cd557e22f",
+          "includes": []
+        }
+      ]
+    }
+  ]
+}

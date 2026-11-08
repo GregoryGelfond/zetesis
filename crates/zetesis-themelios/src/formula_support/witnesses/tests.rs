@@ -299,13 +299,13 @@ fn applicability_obeys_its_work_bound() {
 #[test]
 fn interrupted_applicability_returns_no_certificate() {
     let (_, rule) = fixture();
-    let cancellation = zetesis_cpu::Cancellation::default();
+    let cancellation = zetesis_algebra::Cancellation::default();
     cancellation.cancel();
     let mut counters = Counters::default().with_cancellation(Some(&cancellation));
     assert!(matches!(
         eligible(&rule, &FormulaLimits::default(), &mut counters),
         Err(FormulaFailure::Interrupted {
-            reason: zetesis_cpu::Stop::Cancelled,
+            reason: zetesis_algebra::Stop::Cancelled,
             location: actual,
         }) if actual == rule.location
     ));

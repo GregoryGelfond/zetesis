@@ -3,7 +3,7 @@
 use super::packing::{Graph, PARAM_BYTES, Packed, Packing, Plan};
 use super::{TightGpuBatchStats, TightGpuLimits, poll};
 use crate::{GpuError, GpuErrorKind};
-use zetesis_cpu::Cancellation;
+use zetesis_algebra::Cancellation;
 use zetesis_ferraris::{Interpretation, TightPlan};
 
 pub(super) struct Admission {
@@ -100,7 +100,13 @@ pub(super) fn batch_stats(
         work: u64::from(plan.worlds) * u64::from(plan.work),
         dispatches: 1,
         truth_levels: plan.levels,
+        workgroup_size: graph.workgroup_size.invocations(),
         original_truth_reused: plan.original_truth_reused,
+        routes: super::TightGpuRoutes::default(),
+        nodes_evaluated: 0,
+        update_critical_path: 0,
+        dense_critical_path: graph.dense_path,
+        updates: super::TightGpuUpdates::Pending,
         uploaded_bytes: PARAM_BYTES + plan.seeds + if fresh { graph.bytes } else { 0 },
         downloaded_bytes: plan.results,
     }

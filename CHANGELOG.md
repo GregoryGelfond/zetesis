@@ -4,19 +4,251 @@ Notable changes by release. Versions follow Semantic Versioning.
 
 ## Unreleased
 
+## 0.7.0 — 2026-11-08
+
+Zetesis 0.7.0 brings candidate search and reduct checking onto the same
+region algebra. On eligible quantified programs, the checker derives parity and
+count bounds from the frozen reduct to rule out whole groups of subsets.
+Candidate generation uses arithmetic deductions at the root and skips repeated
+parity and cardinality inspections of candidate regions by default. Users
+of the Rust libraries and consumers of JSON model output should review the
+compatibility changes below before upgrading.
+
 ### Added
 
+- The membership check's inner walk is narrowed by subjects of its own. Before
+  a candidate's countermodel walk, its closed query root is probed for rows of
+  the countermodel class: the saturation units it cuts, the affine hulls and
+  the least and greatest allowed counts of each clause group's probed patterns,
+  the cliques of pairwise exclusions, a lower bound of one over a clause too
+  wide for a group, and the trivial bounds completing a partition. The inner
+  walk applies those rows through the shared parity and cardinality systems, so the
+  quantified saturation cores (parity, Tseitin, pigeonhole) are decided at the
+  root for their stable candidates and walked polynomially for the others. The
+  probing runs at most two rounds, the second under the rows the first
+  established, and loads what they found with the remaining hulls inexact; a
+  group of one clause cutting its whole support is left to that clause until
+  the second.
+  zetesis-ferraris adds `FrozenPreparation`, `FrozenPreparationAttempt`,
+  `FrozenPreparationLimits`, `FrozenPreparationStatistics`, `ClosedQuery` and
+  `ParitySystem::consistent_in_reserved`; zetesis-stable adds
+  `ReductStatistics::inner_preparation` (`InnerPreparationStatistics`),
+  printed as the `preparation` object of `reduct_query_regions` in the JSON
+  statistics: attempts, prepared, declined, saturation units, clauses read and
+  unsupported clauses, groups, probes, rounds, refuted patterns, rows, rank, units, inexact hulls, bounds, lower,
+  upper, families, root refutations and work. The Lean library adds
+  `Region.decideAll`, `contains_decideAll`, `entailed_by_refutations`,
+  `saturation_unit`, `countermodelSubjects`, `count_of_none`,
+  `upper_of_clique`, `bounds_of_allowed`, `guarded_row` and `row_under_unit`.
+- Hybrid statistics report how lazy grounding divided the eligible constraints:
+  the streamed templates and instances and those grounded in the core, as
+  `HybridExecutionStatistics::streamed` (a `StreamedConstraints`, which adds
+  `retained_templates` and `retained_instances`), in the `streamed` object of
+  the JSON statistics' `hybrid_execution`, and as four rows of the human
+  statistics. `HybridFormula` and `StreamedCore` add `retained_templates` and
+  `retained_instances`. The recorded execution reads "no streamed constraints"
+  when nothing was streamed.
+- An ordering between tuples that still contain variables, such as
+  `(M,L) < (K,J)`, is admitted wherever a comparison can stand, including
+  aggregate element conditions and guards. It compares complete values in ASP
+  term order, arity first and then components, and binds nothing. Such orderings
+  were refused as an unsupported term; equality and disequality keep binding
+  their components.
+- GPU formula and tight sessions that enumerate answers can check a slate while
+  the stream produces the next one, through a two-phase slate protocol:
+  `StableModels::propose_slate`, `propose_lookahead`, `slate` and `commit_slate`,
+  with `SlateTicket`, `SlateProposal`, `Lookahead`, `LookaheadDeclined` and
+  `BatchError::SlateOrder` in zetesis-stable, and `lookahead_capacity` to size the
+  slate proposed ahead. zetesis-ferraris adds `SlateId` and `SlateRef`, the
+  identity that binds a slate's results to it. The general and tight GPU oracles
+  add `prepare`, returning a `PreparedFormulaSubmission` or
+  `PreparedTightSubmission` that holds its oracle until checked, with a
+  synchronous `check` and a `check_overlapping` that runs a closure while the
+  submission is in flight, both returning a `CheckedSlate`. An overlapping
+  check's `CheckedSlate::finish_wait` reports the finish's wait after the
+  closure, up to the submission's observed completion.
+- `FormulaExecutionStatistics` reports `gpu_lookahead_slates`, the last
+  `gpu_lookahead` decision (`GpuLookahead`, `GpuLookaheadDeclined`),
+  `gpu_lookahead_device_ns`, `gpu_lookahead_finish_wait_ns`,
+  `gpu_lookahead_unmeasured` and `first_answer_ns`, in the JSON and the human
+  statistics. The device compute and the finish waits are paired per overlapped
+  submission, so their difference is the device time hidden behind production
+  over the submissions measured.
 - The regular benchmark corpus includes integrated Family Crossing, checking all
   eight optimal answers alongside the existing 94 cases.
 - Requested GPU statistics include compute-pass time when the device supports
-  timestamps, separately from host preparation and waiting.
-- The GPU library exposes checked workgroup choices and optional changed-dependency
-  propagation for controlled comparisons. Dense propagation remains the default.
+  timestamps, separately from host preparation and waiting. Each batch's time is
+  measured from its own compute pass; the final batch is read once when the solve
+  settles, and a solve that stops, or cannot read it then, reports it unresolved.
+- The GPU library exposes workgroup sizing and optional changed-dependency
+  propagation for controlled comparisons. Fitted workgroup sizes and dense
+  propagation are the defaults.
+- Requested GPU statistics report the workgroup size the device checks used.
+- The GPU library can begin adapter enumeration ahead of the primitive that uses
+  it (`GpuDiscovery`, which creates no device). Each solve-path primitive takes a
+  `GpuDeviceSource` (`from_source`): its own selection, a selection over such an
+  adapter enumeration, or an existing context. `ExecutionResources::discovering`
+  retains an adapter enumeration for a session. Adapter choice, errors and
+  timestamp requests are those of ordinary selection at the moment the
+  enumeration began; the enumeration is a snapshot of the adapters present then.
+- GPU formula sessions size their candidate slates, the candidates checked and
+  committed together, adaptively by default. Slates start at the batch size,
+  double after a filled slate whose answers leave the objective bound unchanged,
+  and return to the batch size after a slate whose answers tighten it. Growth
+  stops at the device's admitted prefix, never below the batch size, and at the
+  pending-memory allowance. `GpuBatching::Fixed` keeps every slate at the batch
+  size for controlled comparisons. Answer sets, optima and ties are unchanged.
+- Requested GPU statistics report committed candidate slates, the largest slate
+  and the slates that returned to the batch size on objective-bound feedback.
+- `StableModels::bound_generation` reports how many objective bounds the
+  candidate stream has installed.
+- `StableModels::expect_candidate_bounds` declares, before the stream's first
+  proposal, a caller that tightens candidate bounds as it commits answers, so
+  GPU-route producers share one frontier for the whole stream; a started stream
+  refuses the declaration with `Incomplete::LateCandidateBounds`.
+  `RegionSearchStatistics::frontier_order` and the statistics JSON's
+  `search.candidate_regions.frontier_order` report the stream's order.
+- Requested GPU statistics report how tight support checking evaluated each
+  candidate (complete, dense reuse or update) and whether the update route was
+  available, with its reason when it was not, and whether any batch held the
+  reuse authority the route needs.
 - A maintained draw-poker workload checks complete enumeration against clingo,
   with portable filenames and a recorded 36-answer contract.
+- A maintained wide Mastermind workload, outside the regular benchmark corpus,
+  checks complete enumeration against clingo, with its original sources kept
+  byte for byte and a recorded 45,832-answer contract.
+- Native sessions decide questions about a program's world view, its set of
+  answer sets, by folding answer sets as they arrive instead of collecting the
+  family: `SessionBuilder::known` and `possible`, whether a literal holds in
+  every or in some answer set; `cautious` and `brave`, the atoms that do; and
+  `answer`, a ground literal query's three-valued `QueryAnswer`, the agent's
+  reading of complete families. Each returns a `WorldViewDecision` whose
+  `WorldViewVerdict` is `Decided` once the fold reaches its absorbing value,
+  stopping the session with at most two witness answer sets; `Complete` after
+  the unrestricted family is exhausted; or `Inconsistent` when it has no answer
+  set. The request is `WorldView::collect`'s with any requested model count
+  cleared, so a projection, an objective's selection or `config.models` never
+  narrows the folded family, and a session stopped before either is a
+  `WorldViewDecisionFailure`, never a value. Brave consequences are decided only
+  by exhaustion.
+- `zetesis_core::Atom::contrary` gives an atom's strong contrary: the same
+  tuple under the opposite classical sign.
+- Learned rows generalize the founded collector's ledger. A row pairs signed
+  atom conditions with signed outputs, each an atom required present or absent,
+  under a consequence class; the Lean module `LearnedRegions` states what such a
+  row may decide about a region. zetesis-ferraris adds `LearningOwner`, the
+  explicit owner of a class's rows, `LearningLimits` with
+  `LearningLimits::for_allowance`, `LearningStore`, `LearningAttempt`,
+  `OriginalSubject::carrier`, the one subject of a walk that matches and
+  captures rows, and `NarrowingScratch::{seed_learning, deliver_learning,
+  learned_rows, learned_evictions}`. A full tier evicts the row with the fewest
+  decayed hits; founded rows keep a reserved floor. Above 64 rows matching
+  reads an occurrence index over condition and output atoms.
+- A solve's candidate walks share learned rows through one store:
+  `StableModels::set_learned_store` with `LearnedStore`, the type it takes, in
+  zetesis-stable. Its public surface is creating an empty store; no public
+  operation adds, seeds, edits or reads a row. Walks seed their tiers from the
+  store and deliver to it at their boundaries only: their end, a parallel
+  walk's handover to its workers, every join of the GPU route's producers, and
+  every `publish_regions` regions visited. `SolveConfig::share_learned_rows`, on
+  by default, turns sharing off for measurement; it has no command-line flag.
+  Answer sets are unchanged; work counts depend on the schedule under sharing.
+- Three 2QBF workloads put a hard unsatisfiable core on the universal side of
+  the saturation encoding, so that one candidate's proper-subset query is the
+  solve: a parity contradiction, Tseitin's formula on committed 3-regular
+  graphs, and the pigeonhole formula. Each records its complete default
+  contract, and the oracle gate checks their families against clingo.
+- `QueryDivision` in zetesis-stable selects when a parallel region walk divides
+  a candidate's proper-subset query among its workers: `WhenIdle`, the default,
+  `Immediate`, for tests and measurement, or `Never`.
+  `StableModels::set_query_division` sets it before the walk begins, and
+  zetesis-solve re-exports it and carries it in `SolveConfig::query_division`;
+  the command has no flag for it.
+- `RegionWorkerStatistics::query_division` (`QueryDivisionStatistics`) reports
+  the division a walk ran with, the queries it published, the published regions
+  its workers served and stole, the workers that served any and the most one
+  served, in the human statistics' `query division` line and the statistics
+  JSON's `search.candidate_regions.workers.query_division` object.
+- zetesis-cpu's `Traversal::pending` and `Traversal::surrender` report and hand
+  over a traversal's regions still to visit, the oldest first.
 
 ### Changed
 
+- Release builds use fat link-time optimization and one codegen unit. The
+  [CPU build comparison](docs/book/reference/performance.md#cpu-release-build-profile)
+  records executable size, retired instructions and elapsed time on four inputs.
+- The candidate setup's generator order builds both adjacencies of the
+  dependency graph, by source and by target, from two passes over the
+  incidences where it made four, so `generator_order.work` in the receipts
+  falls with the reads; the order found is unchanged.
+- The native session owner `zetesis_solve::Subject`, also re-exported by
+  `zetesis_cli`, is renamed to `Original`. Themelios
+  `ProgramSubject` becomes `ProgramOriginal`. Result fields and accessors
+  named `subject` become `original`, including solve, world-view, formula
+  admission and publication failures. Variants, owner identity, typed failures
+  and retained evidence are unchanged. Update imports, field patterns and
+  accessor calls; no aliases retain the old names. `OriginalSubject` and
+  `FrozenSubject` keep their distinct narrowing contracts.
+- **Breaking Rust API:** a split preference belongs to
+  `zetesis_algebra::region::Entry<S>`, alongside its `Region` and lineage state.
+  Region equality compares the atom universe and decisions only. `Walk` passes
+  entries to narrowing and surrenders entries intact; `with_entry` and
+  `with_narrowed_root` retain an existing entry's preference. Ferraris's
+  `narrow_known` and `narrow_frozen_known` now return `NarrowingAttempt`, like
+  their quota variants, with the result, work receipt and completed preference.
+  Propagation-only, refuted and stopped attempts return no new preference.
+- **Breaking Rust API:** `zetesis-cpu` is renamed `zetesis-algebra`, with no
+  compatibility alias. Its scalar region walk is now
+  `zetesis_algebra::walk::Walk` instead of `zetesis_cpu::regions::Traversal`;
+  `Region` and `Narrowing` live in `zetesis_algebra::region`. Finite tables move
+  from `zetesis_cpu::table` to `zetesis_core::table`, and packed-word operations
+  from `zetesis_core::packed` to `zetesis_algebra::words`.
+- `--grounder lazy` and the hybrid formula schedule stream an integrity constraint
+  only when its instances do not fit in the formula. Once the producer core and its
+  completion are built, each eligible template is grounded into the core, in
+  program order, while an upper bound on its instances fits the share
+  `FormulaLimits::max_retained_constraint_nodes` grants and the theory ceilings.
+  The ordinary resource policy grants the theory's node share, a quarter of the
+  memory allowance, so lazy grounding streams only what eager grounding could not
+  hold; a smaller `--memory` allowance streams more. Answer sets are unchanged.
+  Streaming joined every streamed rule again in every search region, so programs
+  whose constraints fit no longer pay that cost. `FormulaLimits::default()`
+  grants no share, so a library caller of
+  the explicit schedule with default limits streams every eligible constraint as
+  before.
+- The `--grounder` help no longer reads as though `auto` streams constraints: it
+  says that `auto` never does, and that `lazy` streams only what does not fit.
+- GPU formula and tight sessions that enumerate answers produce the next slate
+  of candidates while the device checks the current slate, with one device
+  submission in flight. Answer families, membership checks, failure and
+  exhaustion semantics and the release of answers in proposal order are
+  unchanged. Two cases can leave the slate under check undelivered, and claim
+  nothing for it: a stop that arrives while the next slate is produced, and, in
+  a GPU formula session, a work or decision limit that the next slate's
+  production reaches or brings within reach of the current slate's completion.
+  Optimizing searches still check one slate at a time. The physical gate
+  compares complete CPU and device answer families on its reviewed inputs.
+- Support completion keeps its integer key certificates and source-column hulls
+  from one round to the next and extends them with each round's new rows instead
+  of rebuilding them over every snapshot. An ordering query whose key range would
+  not halve its source interval reads the interval's own keys. Recursion through
+  arithmetic grounds in time linear in the rounds where it was quadratic: about
+  9x fewer instructions for a 2,048-step chain under a range comparison and 13x
+  for a counter whose rule assigns from the chain. Possible atoms, the emitted
+  formula and answer sets are unchanged. Grounding statistics add
+  `numeric_index_extensions`. The kept bytes count against `max_support_bytes`
+  until completion.
+- Support completion schedules an aggregate, conditional or conditioned-head
+  rule whose reads all lie in dependency components before its heads' by
+  component: it waits for those components to reach their fixed point and is
+  traversed once, instead of once for every round in which a read grew.
+  Possible atoms, the emitted formula and answer sets are unchanged.
+  `max_support_rounds` still counts every round; a waiting rule adds none, but
+  its heads, and their consumers, can arrive in later rounds. A disjunctive head,
+  or a choice without element conditions, over a flat body is now scheduled like
+  a normal rule, by delta variants of its body. Grounding statistics add
+  `support_deferred_visits`. An aggregate over a 1,224-row chain grounds with
+  about 27x fewer instructions.
 - Numeric grounding joins combine certified divisibility and range filters before
   producing tuples; equal-size sources prefer the bindings needed by those filters.
 - Repeated support checks consume initial support seeds directly after resetting
@@ -26,12 +258,56 @@ Notable changes by release. Versions follow Semantic Versioning.
   excluded from the candidate region.
 - Possible-sum checks detect an allowed value while updating the packed sum set,
   avoiding a separate scan.
+- Region narrowing keeps its admitted and unspent reads as one count, so
+  charging a read within them is a single decrement; the work ceiling is met, or
+  the quota consulted, only when they run out. Receipts, quota reservations,
+  refunds and refusals are unchanged.
+- Split selection walks the region's open atoms a mask word at a time, through
+  `Region::mask_words` and `Region::open_word` in zetesis-cpu, instead of
+  chained atom iterators. The atoms ranked, their order, the chosen atom and
+  the charged reads are unchanged.
 - Weighted aggregate comparisons can determine a condition when its opposite
   value leaves no possible remainder in the required interval. These deductions
   use the existing propagation queues and preserve answer-set semantics.
 - GPU formula checking retains shared numeric aggregate rows instead of expanding
   them into Boolean formulas. Original satisfaction and reduct membership keep
   their existing meaning; unresolved device checks still receive exact CPU checks.
+- GPU formula and tight checks choose each program's workgroup size from its
+  dependency schedule: 128 or 256 invocations evaluate wide levels together,
+  while serial and narrow schedules keep 64. Each solve compiles only the size it
+  uses, when its first device check needs it. Answer sets are unchanged; bounded
+  device checks still receive exact CPU checks.
+- GPU tight checking can bring each candidate slot's previous evaluation to its
+  next candidate when successive batches share a program and size, evaluating
+  again only the formulas the change reaches; larger changes keep evaluating
+  every formula. It engages only for programs whose dependency levels are wide
+  enough that evaluating every formula takes several passes per level; other
+  programs, and every batch the route cannot run, keep evaluating every
+  formula, on a kernel compiled without the route, which binds no retained
+  state. Each slot's retained state counts toward the batch's memory
+  allowance, so adaptive slates can settle at a smaller device prefix, never
+  below the batch size. Answer sets are unchanged.
+- In the GPU library, tight checks report the work their route performed, and
+  `TightGpuLimits` gains `min_update_candidates`. `TightGpuBatchStats` reports
+  routes and the update route's availability, and
+  `GpuTightOracle::UPDATE_ENGAGEMENT_STRIDES` names the strides per dependency
+  level from which the route engages. The tight kernel requires eight storage
+  buffers per shader stage and 48 bytes of workgroup storage.
+- GPU tight checking guards its update route while it runs: after a batch
+  whose slowest update costs more than evaluating every formula, both measured
+  by the busiest invocation's operations under one cost table, the route waits
+  for 1, 2, 4 and up to 32 batches, which run the kernel without the update
+  route, before it is tried again. An update's cost includes rebuilding its
+  slot's support summaries after a change too large to update. Answer sets are
+  unchanged. In the GPU library, `TightGpuUpdateUnavailable::GuardDeclined`
+  reports a declined batch, `TightGpuCheck::critical_path` an update's path,
+  and `TightGpuBatchStats` gains `update_critical_path`, the batch's slowest,
+  and `dense_critical_path`. The solver's `TightUpdateAvailability` gains
+  `GuardDeclined` (`guard_declined`) and `TightUpdateStatistics` the count
+  `guard_declined_batches`, which the statistics JSON and both views report.
+- Command-line GPU solves begin adapter enumeration once their configuration is
+  validated, while the program is read and admitted, and on the formula routes
+  grounded, so the device is ready sooner; CPU solves start none.
 - GPU tight checking evaluates independent formulas in parallel. General reduct
   propagation alternates directions through the same dependency schedule, carrying
   deductions between parents and operands; bounded checks retain exact CPU completion.
@@ -66,6 +342,279 @@ Notable changes by release. Versions follow Semantic Versioning.
   with unchanged deductions. Native count, sum and min/max conditions can supply
   support explanations. Identical conditions can share their outputs, and stronger
   explanations can replace weaker retained entries.
+- Parallel region walks take their shared idle lock after publishing a region
+  only when a worker is waiting for one. Answer sets are unchanged.
+- GPU-route candidate producers keep a deque each, continue depth first on their
+  own regions and steal a peer's oldest region only with an empty deque,
+  holding one work lease per slate instead of one per region. A producer
+  reserves a candidate's output slot only when it reaches a leaf, so the end of
+  a slate no longer leaves one producer to find its last candidates. In a slate
+  of more than one candidate a step under way when the slate fills finishes
+  after it, so a step's stop, or a returned region's refused entry capacity,
+  can then follow the filling emission; the slate's
+  candidates are still checked and committed before the stop is reported. A
+  leaf the slate cannot take is narrowed again by a later one, so the regions
+  count can exceed the tree's regions. An
+  optimizing search's producers instead share one deque and take the region
+  published most recently, so regions far from the current work wait for
+  tighter bounds. Proposal order remains schedule-dependent, and answer sets are
+  unchanged.
+- Lazy grounding moves a pairwise constraint into the retained core when every
+  component of its pairs is complete, two-atom components included: each
+  two-atom component becomes its pair constraint, once, and each larger
+  component still becomes one at-most-one condition. A single two-atom
+  component, such as a corner diagonal in n-queens, previously kept the whole
+  constraint streamed; a constraint with an incomplete component still streams.
+  Answer sets are unchanged.
+- JSON answer output recognizes the atoms that reconstructed answers inherit from
+  their shared base by identity instead of by structure, from the third answer
+  on: the first is written whole, and the second records the identities.
+  Documents are unchanged.
+- GPU tight support checks may account a sixteenth of the memory allowance per
+  batch, rather than the thirty-second other device batches use, so that their
+  update route engages under smaller allowances. On a theory of about 790,000
+  nodes and 262,000 atoms, the default allowance engages it on hosts with about
+  9.3 GiB of memory, rather than about 18.7 GiB. Requested statistics report the
+  tight batch bytes beside the batch bytes. Answer sets are unchanged.
+- An optimizing search for one answer, the command line's default, bounds the
+  candidates strictly: each better answer admits only candidates cheaper than
+  itself, where it admitted those as cheap, so the search no longer walks the
+  ties of incumbents it has beaten. Its exhaustion proves the optimum as before.
+  On integrated Family Crossing, with one thread, it walks 115,389 candidate
+  regions instead of 661,303, and returns the same answer. A request for more
+  answers, `--all` included, and `--count` keep the inclusive bound, which
+  still meets every optimal tie in one pass.
+- Such a one-answer search counts only the optimal answers it met, not every
+  tie of the optimum. `--stats` prints `full ties=unavailable` for it, its JSON
+  `outcome.optimization.tied_models` is `null`, and the library reports
+  `Optimization::ties_pruned`, under which
+  `SemanticOutcome::complete_answer_count` gives no total. Requests for more
+  answers count every tie, as before.
+- The library schedule `OptimumSearch::StrictWithTiePass` bounds every request
+  strictly and, when more than one answer is requested, enumerates the proved
+  optimum's ties in a second pass over the same theory, bounded to cost at most
+  the optimum. It returns the same optimal answers, each once, and is kept for
+  measurement, as `OptimumSearch::Inclusive` keeps the earlier schedule: for all
+  eight optimal answers of Family Crossing it walks 2,946,650 candidate regions,
+  2,831,261 of them in the second pass, where the inclusive schedule walks
+  661,303. A stop in the second pass keeps the optimum the first proved
+  (`SemanticOutcome::optimum_proved`) and reports the family incomplete.
+  `SolveConfig::optimum_search` selects the schedule; no command-line option
+  does.
+- With several CPU region workers, a candidate's proper-subset query that runs,
+  from its first narrowing, for the cost of engaging one worker while another
+  waits idle publishes its pending regions for any worker to serve, and the
+  candidate is decided by the regions' servers: refuted by a validated
+  countermodel, or proved stable once every region is resolved without one. The
+  calling thread publishes its query only once its engagement deadline has
+  passed, and then starts the workers. Answer sets are unchanged; a stop or a
+  countermodel whose check stopped still ends the enumeration incomplete. A
+  refuted query's regions, divided, may be narrowed beyond those the undivided
+  query visits, so the reduct statistics' region counts of such queries depend
+  on the schedule.
+
+### Fixed
+
+- A search within a supplied countermodel region preserves witnesses when a
+  rule has multiple possible heads or a nested formula is false in the
+  candidate. This also applies when the host completes a GPU residual.
+- Preparing parity and count bounds for a candidate's reduct now accounts for
+  simultaneously live temporary and retained storage. If the optional byte
+  allowance is too small, the solver continues the ordinary reduct check.
+
+- A default install no longer replaces the GPU-capable `zetesis` in Cargo's
+  build output with the CPU front, so running that copy serves GPU requests. A
+  front copied away from its install now explains that it is not an installed
+  copy and points to the installed one, instead of advising a reinstall that
+  cannot repair it.
+- With phase timing enabled, batched completion's region queries are timed in
+  the reduct phase, as scalar membership's are: in
+  `SearchPhaseTimings::reduct` and the workers' `worker_reduct`, and so in the
+  exact reduct membership phase of `--stats`. They were missing there.
+
+### Compatibility
+
+- Formula narrowing distinguishes candidate knowledge from frozen-reduct
+  knowledge. `Narrower::knowledge()` returns `Knowledge<AnswerSetsSought>`;
+  frozen callers use `frozen_knowledge()` and `Knowledge<Countermodels>`.
+  Both sealed markers are exported by `zetesis-algebra`. Frozen execution
+  has no access to the candidate worker's learned rows.
+
+- In the Lean library, `Zetesis.Cube` and its geometry namespace become
+  `Zetesis.Region`; the temporary `Zetesis.Algebra.Region` abbreviation is
+  removed. `Pending.cube` becomes `Pending.region`, and `sampleCube` becomes
+  `sampleRegion`. The statements and proofs retain the same mathematical
+  meaning; callers must use the new names.
+- `ExecutionObservation::HybridGrounding` carries one `streamed:
+  StreamedConstraints` in place of `streamed_templates` and `streamed_instances`.
+  `StreamedConstraints` adds `retained_templates` and `retained_instances`,
+  `HybridExecutionStatistics` adds `streamed`, and `FormulaLimits` adds
+  `max_retained_constraint_nodes`; a struct literal naming every field must add
+  them, and one completed from a default needs no change.
+- Fields added to exhaustive public structs: `zetesis_stable::Limits::learning`
+  and `SolveConfig::share_learned_rows`. A struct literal naming every field must
+  add them; one completed from a default needs no change.
+- `Incomplete` adds `LateLearnedStore` and `LearnedStoreAlreadySet`, refusing a
+  learned store for a started stream and a replacement. It is exhaustive, so a
+  match without a wildcard must add them. The JSON output's interruption `code`
+  names them `late_learned_store` and `learned_store_already_set`.
+- In zetesis-ferraris, only a subject built by `OriginalSubject::carrier`
+  matches and captures learned rows. An original subject built by
+  `OriginalSubject::new` no longer does; its narrowing is otherwise unchanged.
+- The clause search is removed, with no alias and no deprecation period: the
+  region search, already the default, is the only formula search. Membership,
+  answer sets and the region search's work are unchanged. The command line
+  refuses `--search`, and `zetesis-bench run` refuses its `--search`.
+  zetesis-sat removes `SearchMethod`, `StableModels::with_method`, `check_with`,
+  the clause kernel (`Cnf`, `Clause`, `Clauses`, `Literal`, `Assignment`,
+  `AdmissionError`, `AdmissionLimits`, `Resource`, `Solve`, `solve`,
+  `solve_with_statistics`), the prepared reduct (`PreparedReduct`,
+  `ReductPreparationAttempt`, `ReductPreparationLimits`,
+  `ReductPreparationStatistics`, `ReductQueryStatistics`, `ReductWorkspace`),
+  the projection history (`ProjectionLimits`, `ProjectionResource`,
+  `ProjectionStatistics`), `SupportStatistics`, `SupportStatus` and
+  `CompletionScratch`; the fields `Limits::{admission, reduct_admission,
+  projections}`, `Statistics::{candidate_queries, projections, support}`,
+  `ReductStatistics::{preparation, parameter_work}`,
+  `SearchStatistics::{propagations, conflicts}`,
+  `CertifiedStatistics::{restriction_refusal, restriction_work,
+  restriction_clauses}` and `SearchPhaseTimings::reduct_preparation`; and the
+  variants `Incomplete::{Admission, ProjectionLimit, RegionFilterUnsupported}`
+  and `CertificateError::Restriction`. `Incomplete::ReductStorage` now reads
+  "reduct query storage".
+- zetesis-solve removes `SearchMethod`, `SolveConfig::search`,
+  `SolveConfig::max_projection_nodes`, `SolvePhase::ReductPreparation` and the
+  `search` field of `ExecutionObservation::{CpuFormula, DeviceFormula,
+  DeviceTight}`. `max_projection_entries` and `max_projection_bytes` remain, for
+  an explicit `#project` session's history. zetesis-validation removes
+  `selected::SearchMethod`, `NativeExecution::search` and the performance
+  request's `search`, and still reads archived reports and statistics that
+  record the clause search; zetesis-bench removes `Search`.
+- `--stats` no longer prints a search method, the clause search's classical
+  query count, its projection history and necessary-support lines, or the class
+  attempts' restriction fields. The statistics JSON's `search` object drops
+  `candidate_queries`, `projection_history` and `necessary_support`, and the
+  interruption codes `admission`, `projection_entries`, `projection_nodes`,
+  `projection_bytes` and `region_filter_unsupported` no longer occur. The phase
+  timing section, in text and in JSON, drops `reduct_preparation`.
+- The closure route is removed, with no alias and no deprecation period: every
+  program is prepared as formulas and solved by region search, whose answer
+  sets equal the closure route's on normal programs
+  (`NormalFerraris.answer_set_iff`). The command line refuses `--oracle closure`
+  and `--source-batching`, and `--oracle auto` prepares formulas directly.
+  - zetesis-solve removes the closure session and executions
+    (`ClosureExecutionStatistics`, `ClosureJoinStatistics`, `ClosureRoute`, and
+    the lazy and shared executions), `PreparedInput`'s relational and ground
+    constructors, `Oracle::Closure`, `SourceBatching`, the closure-only
+    `SolveConfig` fields, `SolveError::{Batch, ClosureReservation,
+    UnsupportedSourceBatching}` and `ExecutionObservation::{CpuClosure,
+    DeviceClosure}`.
+  - zetesis-cpu removes the closure oracles, candidates, batches and lazy
+    rounds, keeping cancellation, regions and tables.
+  - zetesis-wgpu removes the static and lazy GPU oracles and their shaders.
+    `GpuInfo::supports_static_oracle` is now `supports_formula_oracle`, and it
+    screens adapters by the formula kernel's limits.
+  - The phase timing section is schema 7, without the closure membership phase.
+    zetesis-validation reads schema 7 and every earlier schema.
+  - Answers arrive in the region walk's order, held branch first.
+  - A facts-only program is evaluated completely at admission, so `--models 1`
+    reports exhaustion.
+  - `--backend gpu` with a zero device batch allowance reports an incomplete run
+    instead of a GPU error.
+  - An automatic run's parse error has the JSON error kind `formula_admission`
+    instead of `expansion`.
+- The JSON document is schema 3. Its model records are unchanged from schema
+  2; its statistics drop the keys of the removed routes: the clause search's
+  `search.candidate_queries`, `search.projection_history` and
+  `search.necessary_support`, and the closure route's `closure_execution`,
+  `lazy_execution`, `shared_execution`, `candidate_restrictions`,
+  `query_execution` and `expansion`. zetesis-validation reads schemas 1 to 3,
+  so documents of earlier executables can still be compared.
+- zetesis-sat is renamed zetesis-stable, and its library `zetesis_sat` is now
+  `zetesis_stable`, with no alias and no deprecation period: depend on
+  `zetesis-stable` and import from `zetesis_stable`. With the clause search
+  removed, the crate holds region search for the stable models of finite
+  general-formula theories, which its new name states. Its API is otherwise
+  unchanged by the rename.
+
+- `BatchError` gains `SlateOrder`. `BatchError` is not non-exhaustive, so an
+  exhaustive match by a library caller must add the variant. The new public
+  enums are non-exhaustive.
+- An overlapping check holds the context's lease while the production it runs
+  is under way, so another operation on a shared context is refused with
+  `Busy` for that span. The synchronous device forms and their `CheckedBatch`
+  receipts are unchanged.
+- `FormulaBatchStats`, `TightGpuBatchStats` and `FormulaExecutionStatistics`
+  report the workgroup size each device batch dispatched. These statistics
+  structs are now non-exhaustive: read their fields by name, and build a
+  `FormulaExecutionStatistics` from `Default` before assigning its fields.
+- GPU formula and tight graphs whose largest address lies within 256 of
+  `u32::MAX` are refused with a capacity error, where 0.6.0 refused only those
+  within 64, keeping room for the largest workgroup stride. Device buffer limits
+  keep such graphs out of reach on the adapters measured.
+- `zetesis_stable::Incomplete` gains `LateCandidateBounds`, so an exhaustive match
+  on it needs an arm for the new variant.
+- `zetesis_core::catalog::AtomIdentityMap` changes from owner-scoped to
+  row-scoped identity: it keys a row of a closed catalog by the writer that was
+  closed, so a value recorded for that atom through one descendant, or through
+  the writer's own snapshot, is found through every other. A caller's value must
+  therefore depend on the atom alone, not on the owner that presented it. Rows a
+  descendant appends keep their own owner's identity, as before.
+- `SolveConfig` has a new public field, `max_tight_batch_bytes`, which bounds
+  the accounted bytes of each GPU tight support batch. A struct literal that
+  names every field must add it; one completed from `SolveConfig::default()` or
+  `SolveConfig::for_allowance` needs no change.
+- `SolveConfig::max_batch_bytes` no longer bounds GPU tight support checks;
+  `max_tight_batch_bytes` does. Code that sets only `max_batch_bytes` still
+  compiles, but its tight checks keep the ceiling the configuration was built
+  with: a sixteenth of the allowance from `Resources`, and 128 MiB under
+  `SolveConfig::DEFAULT`. A caller who bounds device memory through these fields
+  sets both.
+- `StableModels::tighten_candidate_bound` is removed, with no alias and no
+  deprecation period. `StableModels::improve_candidate_bound` replaces it: it
+  takes the identity of the objective plan that compiled the bound and the
+  incumbent score it was compiled at, beside the restriction. The first bound of
+  a stream is accepted as given; a later one from another plan is refused with
+  `Incomplete::CandidateBoundPlan`, and one at a score no better than the active
+  bound's with `Incomplete::CandidateBoundNotImproving`, and the active bound
+  stays. An exhaustive match on `zetesis_stable::Incomplete` needs arms for both
+  variants; the JSON interruption codes name them `candidate_bound_plan` and
+  `candidate_bound_not_improving`. zetesis-objective adds `PlanIdentity` and
+  `Score::from_costs`, `ObjectivePlan::identity` returns a plan's identity, and
+  zetesis-stable now depends on zetesis-objective.
+- zetesis-themelios adds `ObjectivePlan::strict_bound`. zetesis-stable adds
+  `StableModels::follow`, which reports an earlier stream's receipts before a
+  stream's own, and `Limits::remaining_after`, which leaves a later pass of one
+  run what the earlier passes did not spend.
+- `SolveConfig` has a new public field, `optimum_search`, of the new type
+  `OptimumSearch`, which zetesis-cli also exports, and `Optimization` a new
+  public field, `ties_pruned`. A struct literal that names every field must add
+  them; a `SolveConfig` completed from `SolveConfig::default()` or
+  `SolveConfig::for_allowance` needs no change.
+- `ExecutionObservation::ObjectiveBound` has a new field, `strict`, and
+  `ExecutionObservation` a new variant, `ObjectiveTiePass`. A pattern that names
+  every field of `ObjectiveBound` must add `strict`, and an exhaustive match on
+  `ExecutionObservation` needs an arm for the variant.
+- The JSON `outcome.optimization.tied_models` is `null` when a strict bound
+  pruned the optimum's ties, where it was always a number.
+- `SolveConfig` has a new public field, `query_division`. A struct literal that
+  names every field must add it; one completed from `SolveConfig::default()` or
+  `SolveConfig::for_allowance` needs no change.
+- The caller-supplied candidate-region filter is removed from zetesis-stable,
+  with no alias and no deprecation period: `RegionFilter`, `RegionFilterWorker`,
+  `RegionFeasibility`, `RegionPass`, `RegionConsequence` and
+  `StableModels::set_region_filter`. A filter could refute regions or decide
+  atoms under an obligation nothing checked. The hybrid route's check of an
+  admitted program's streamed integrity constraints, the only filter in the
+  tree, is now zetesis-stable's own: `StreamedConstraints::new` takes the
+  program's `StreamedCore` and a `ConstraintAllowance`, and
+  `StableModels::set_streamed_constraints` installs it.
+  `Statistics::region_filter` and its `RegionFilterStatistics` remain, as do
+  `Incomplete::RegionFilter`, `InvalidRegionConsequence`, `LateRegionFilter`
+  and `RegionFilterAlreadySet` and their JSON interruption codes, which now
+  report this check and its installer. zetesis-stable now depends on
+  zetesis-themelios, whose streamed core holds the checker; every crate that
+  used zetesis-stable already depended on it.
 
 ## 0.6.0 — 2026-10-14
 
@@ -106,7 +655,7 @@ Notable changes by release. Versions follow Semantic Versioning.
   Eligible acyclic normal programs can be evaluated during preparation.
   Answer sets and optima are unchanged; search order and bounded work can differ.
   See [membership plans](docs/book/rust/sessions.md#formula-membership-plans) and
-  [parallel walks](crates/zetesis-sat/README.md#walking-the-tree-with-several-workers).
+  [parallel walks](crates/zetesis-stable/README.md#walking-the-tree-with-several-workers).
 - Metered operations check cancellation at entry, exit, resource refusals and
   256-unit work boundaries. Work and storage receipts reflect the new execution
   routes, so resource ceilings can be reached at different points. See
@@ -127,7 +676,7 @@ Notable changes by release. Versions follow Semantic Versioning.
 - `Program::new` now takes `FactTables`; `rules()` includes facts, while
   `templates()` contains only explicit templates. `AdmissionError::Canonical`
   replaces `template` with `origin: AdmissionOrigin`, and matches must handle
-  `FactLimitExceeded`. See [explicit facts](docs/book/rust/parallel.md#construct-templates-and-explicit-facts).
+  `FactLimitExceeded`.
 - `DomainObservation::Analyzed` carries `NumericAnalysis`; `Inapplicable` is
   removed. Use `analysis()`, `catalog()` and `arguments()` to read the new view.
   Observers can decline census work with `domain_diagnostics_enabled()`, whose

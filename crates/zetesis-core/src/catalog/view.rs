@@ -911,7 +911,6 @@ pub struct AtomRef<'a>(AtomSource<'a>);
 enum AtomSource<'a> {
     Canonical { snapshot: Read<'a>, id: AtomId },
     Ingress(&'a Atom),
-    Carrier(&'a crate::carrier::CarrierAtom),
 }
 // Every atom row was admitted only after its predicate and argument IDs.
 // Its references therefore remain valid in this same read prefix; following a
@@ -925,7 +924,6 @@ pub(super) enum AtomRead<'a> {
         row: storage::Atom<'a>,
     },
     Ingress(&'a Atom),
-    Carrier(&'a crate::carrier::CarrierAtom),
 }
 impl<'a> AtomRead<'a> {
     pub(super) fn predicate(self) -> PredicateRef<'a> {
@@ -935,7 +933,6 @@ impl<'a> AtomRead<'a> {
                 id: row.predicate(),
             }),
             Self::Ingress(atom) => PredicateRef::from(atom.predicate()),
-            Self::Carrier(atom) => atom.predicate(),
         }
     }
 
@@ -946,7 +943,6 @@ impl<'a> AtomRead<'a> {
                 id: row.argument(column)?,
             })),
             Self::Ingress(atom) => atom.values().get(column).map(TermRef::from),
-            Self::Carrier(atom) => atom.argument(column),
         }
     }
 
@@ -958,12 +954,10 @@ impl<'a> AtomRead<'a> {
             .expect("column is within the admitted atom arity")
     }
 
-    // A carrier atom holds one domain coordinate per argument of its signature.
     pub(super) fn arity(self) -> usize {
         match self {
             Self::Canonical { row, .. } => row.arity(),
             Self::Ingress(atom) => atom.predicate().arity(),
-            Self::Carrier(atom) => atom.coordinates().len(),
         }
     }
 
@@ -980,16 +974,11 @@ impl<'a> From<&'a Atom> for AtomRef<'a> {
         Self(AtomSource::Ingress(atom))
     }
 }
-impl<'a> From<&'a crate::carrier::CarrierAtom> for AtomRef<'a> {
-    fn from(atom: &'a crate::carrier::CarrierAtom) -> Self {
-        Self(AtomSource::Carrier(atom))
-    }
-}
 impl<'a> AtomRef<'a> {
     pub(super) fn canonical(self) -> Option<(Read<'a>, AtomId)> {
         match self.0 {
             AtomSource::Canonical { snapshot, id } => Some((snapshot, id)),
-            AtomSource::Ingress(_) | AtomSource::Carrier(_) => None,
+            AtomSource::Ingress(_) => None,
         }
     }
 
@@ -1010,7 +999,6 @@ impl<'a> AtomRef<'a> {
                     .expect("validated atom remains in its read prefix"),
             },
             AtomSource::Ingress(atom) => AtomRead::Ingress(atom),
-            AtomSource::Carrier(atom) => AtomRead::Carrier(atom),
         }
     }
     pub(super) fn same_identity(self, other: Self) -> bool {
@@ -1019,7 +1007,6 @@ impl<'a> AtomRef<'a> {
         }
         match (self.0, other.0) {
             (AtomSource::Ingress(left), AtomSource::Ingress(right)) => std::ptr::eq(left, right),
-            (AtomSource::Carrier(left), AtomSource::Carrier(right)) => left.same_identity(right),
             _ => false,
         }
     }

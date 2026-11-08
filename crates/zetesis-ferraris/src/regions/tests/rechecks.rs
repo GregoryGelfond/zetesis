@@ -2,13 +2,13 @@
 //! falls after an atom's recheck has it rechecked again.
 
 use crate::test_support::theory;
-use zetesis_cpu::{Cancellation, Stop};
+use zetesis_algebra::{Cancellation, Stop};
 
-use super::super::{Closure, Step, Work, support::Progress};
+use super::super::{Closure, Meter, Step, support::Progress};
 
 use crate::{
-    AdmissionLimits, Narrower, Narrowing, NarrowingQuota, NarrowingScratch, NarrowingStatistics,
-    Node, OriginalSubject, Producers, Region, RegionLimits, Theory,
+    AdmissionLimits, Narrower, Narrowing, NarrowingScratch, NarrowingStatistics, Node,
+    OriginalSubject, Producers, Region, RegionLimits, Theory,
 };
 
 /// Atom 0 with one producer per body atom `1..=bodies`, `a ← b_i`, each body
@@ -49,16 +49,15 @@ fn narrow(
     knowledge: &mut crate::Knowledge,
     scratch: &mut NarrowingScratch,
 ) -> (Narrowing, NarrowingStatistics) {
-    narrower
-        .narrow_known(
-            OriginalSubject::new(theory, Some(producers)),
-            region,
-            knowledge,
-            scratch,
-            RegionLimits::default(),
-            &Cancellation::default(),
-        )
-        .unwrap()
+    let attempt = narrower.narrow_known(
+        OriginalSubject::new(theory, Some(producers)),
+        region,
+        knowledge,
+        scratch,
+        RegionLimits::default(),
+        &Cancellation::default(),
+    );
+    (attempt.result.unwrap(), attempt.statistics)
 }
 
 /// The work of narrowing a held head with `bodies` producers, all but two of
@@ -135,20 +134,21 @@ fn a_support_that_falls_after_a_recheck_is_rechecked() {
 /// Isolate one support reduction from the surrounding formula propagation.
 /// Atom nodes in these fixtures have their atom's index. A refused scan must
 /// preserve every learned flag and publish no pending propagation.
-fn support_attempt(
+fn support_attempt<Q: zetesis_algebra::Quota<Error = Stop> + ?Sized>(
     theory: &Theory,
     held: &[usize],
     failed: &[usize],
-    work: &mut Work<'_>,
+    work: &mut Meter<'_, Q>,
 ) -> (Result<Step, Stop>, Vec<(usize, bool)>) {
     let index = Narrower::new(theory);
     let producers = producers(theory);
     let mut knowledge = index.knowledge();
     let mut lists = NarrowingScratch::default();
-    lists.prepare(theory.atom_count());
-    let mut closure = Closure {
+    lists.common.prepare(theory.atom_count());
+    let mut closure = Closure::<_, zetesis_algebra::AnswerSetsSought> {
         known: super::compact_mut(&mut knowledge),
-        lists: &mut lists,
+        lists: &mut lists.common,
+        learning: &mut lists.learning,
     };
     // These tests measure only producer reads. Prepare empty positions outside
     // that receipt; support::tests separately checks charged initialization and
@@ -172,7 +172,9 @@ fn support_attempt(
         closure.known.atom_sure.to_vec(),
         closure.known.atom_never.to_vec(),
     ];
-    let result = closure.recheck(&index, &producers, 0, work);
+    let result = closure
+        .recheck(&index, &producers, 0, work)
+        .map_err(zetesis_algebra::Failure::into_stop);
     if result.is_err() {
         assert_eq!(&*closure.known.sure, before[0].as_slice());
         assert_eq!(&*closure.known.never, before[1].as_slice());
@@ -188,47 +190,47 @@ fn support_attempt(
 
 #[test]
 fn an_open_head_stops_at_its_first_supporter() {
-    let mut work = Work::new(1);
+    let mut work = Meter::local(1);
     let (result, learned) = support_attempt(&shared_head(8), &[], &[], &mut work);
     assert!(matches!(result, Ok(Step::Unchanged)));
     assert!(learned.is_empty());
-    assert_eq!(work.spent, 1);
+    assert_eq!(work.charged(), 1);
 }
 
 #[test]
 fn a_held_head_stops_at_its_second_supporter() {
-    let mut work = Work::new(2);
+    let mut work = Meter::local(2);
     let (result, learned) = support_attempt(&shared_head(8), &[0], &[], &mut work);
     assert!(matches!(result, Ok(Step::Unchanged)));
     assert!(learned.is_empty());
-    assert_eq!(work.spent, 2);
+    assert_eq!(work.charged(), 2);
 }
 
 #[test]
 fn sole_support_requires_the_complete_scan() {
-    let mut work = Work::new(4);
+    let mut work = Meter::local(4);
     let (result, learned) = support_attempt(&shared_head(4), &[0], &[1, 2, 3], &mut work);
     assert!(matches!(result, Ok(Step::Changed)));
     assert_eq!(learned, [(4, true)]);
-    assert_eq!(work.spent, 4);
+    assert_eq!(work.charged(), 4);
 }
 
 #[test]
 fn an_unsupported_cut_requires_the_complete_scan() {
-    let mut work = Work::new(4);
+    let mut work = Meter::local(4);
     let (result, learned) = support_attempt(&shared_head(4), &[], &[1, 2, 3, 4], &mut work);
     assert!(matches!(result, Ok(Step::Changed)));
     assert_eq!(learned, [(0, false)]);
-    assert_eq!(work.spent, 4);
+    assert_eq!(work.charged(), 4);
 }
 
 #[test]
 fn a_held_unsupported_head_refutes_the_region() {
-    let mut work = Work::new(4);
+    let mut work = Meter::local(4);
     let (result, learned) = support_attempt(&shared_head(4), &[0], &[1, 2, 3, 4], &mut work);
     assert!(matches!(result, Ok(Step::Contradiction)));
     assert!(learned.is_empty());
-    assert_eq!(work.spent, 4);
+    assert_eq!(work.charged(), 4);
 }
 
 #[test]
@@ -243,11 +245,11 @@ fn duplicate_producers_remain_distinct_supporters() {
         ],
         vec![2, 3],
     );
-    let mut work = Work::new(2);
+    let mut work = Meter::local(2);
     let (result, learned) = support_attempt(&theory, &[0], &[], &mut work);
     assert!(matches!(result, Ok(Step::Unchanged)));
     assert!(learned.is_empty());
-    assert_eq!(work.spent, 2);
+    assert_eq!(work.charged(), 2);
 }
 
 #[test]
@@ -266,11 +268,11 @@ fn a_competing_head_cannot_supply_support() {
         ],
         vec![5, 6],
     );
-    let mut work = Work::new(2);
+    let mut work = Meter::local(2);
     let (result, learned) = support_attempt(&theory, &[0, 1], &[], &mut work);
     assert!(matches!(result, Ok(Step::Changed)));
     assert_eq!(learned, [(3, true)]);
-    assert_eq!(work.spent, 2);
+    assert_eq!(work.charged(), 2);
 }
 
 #[test]
@@ -288,11 +290,11 @@ fn choice_support_prevents_a_spurious_sole_body() {
         ],
         vec![4, 5],
     );
-    let mut work = Work::new(2);
+    let mut work = Meter::local(2);
     let (result, learned) = support_attempt(&theory, &[0], &[], &mut work);
     assert!(matches!(result, Ok(Step::Unchanged)));
     assert!(learned.is_empty());
-    assert_eq!(work.spent, 2);
+    assert_eq!(work.charged(), 2);
 }
 
 #[test]
@@ -302,11 +304,11 @@ fn a_bodyless_sole_support_forces_no_body() {
         vec![Node::atom(0), Node::atom(1), Node::implies(1, 0)],
         vec![0, 2],
     );
-    let mut work = Work::new(2);
+    let mut work = Meter::local(2);
     let (result, learned) = support_attempt(&theory, &[0], &[1], &mut work);
     assert!(matches!(result, Ok(Step::Unchanged)));
     assert!(learned.is_empty());
-    assert_eq!(work.spent, 2);
+    assert_eq!(work.charged(), 2);
 }
 
 #[test]
@@ -432,9 +434,9 @@ fn support_refusal_retains_the_exact_charged_prefix() {
     ];
     for &(held, failed, needed) in cases {
         for limit in 0..=needed {
-            let mut work = Work::new(limit);
+            let mut work = Meter::local(limit);
             let (result, _) = support_attempt(&theory, held, failed, &mut work);
-            assert_eq!(work.spent, limit);
+            assert_eq!(work.charged(), limit);
             if limit == needed {
                 assert!(result.is_ok());
             } else {
@@ -451,7 +453,8 @@ struct SupportQuota {
     refunded: u64,
 }
 
-impl NarrowingQuota for SupportQuota {
+impl zetesis_algebra::Quota for SupportQuota {
+    type Error = Stop;
     fn reserve(&mut self, wanted: u64) -> Result<u64, Stop> {
         if self.remaining == 0 {
             return Err(self.failure);
@@ -477,10 +480,10 @@ fn support_quota_stops_before_the_next_producer() {
                 failure,
                 refunded: 0,
             };
-            let mut work = Work::reserved(&mut quota);
+            let mut work = Meter::reserved(&mut quota);
             let (result, _) = support_attempt(&theory, &[0], &[1, 2, 3], &mut work);
             assert!(matches!(result, Err(stop) if stop == failure));
-            assert_eq!(work.spent, permitted);
+            assert_eq!(work.charged(), permitted);
             work.refund();
             assert_eq!(quota.remaining, 0);
             assert_eq!(quota.refunded, 0);
@@ -498,11 +501,11 @@ fn support_saturation_refunds_unvisited_permits() {
             failure: Stop::WorkLimit,
             refunded: 0,
         };
-        let mut work = Work::reserved(&mut quota);
+        let mut work = Meter::reserved(&mut quota);
         let (result, learned) = support_attempt(&theory, held, &[], &mut work);
         assert!(matches!(result, Ok(Step::Unchanged)));
         assert!(learned.is_empty());
-        let spent = work.spent;
+        let spent = work.charged();
         work.refund();
         assert_eq!(quota.refunded, 64 - spent);
         assert_eq!(quota.remaining, 0);

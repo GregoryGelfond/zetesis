@@ -18,7 +18,7 @@ use zetesis_validation::{
     answers::native_json,
     examples,
     performance::{self, families::Family, matrix},
-    selected::{Backend, FormulaJoins, Grounder, NativeExecution, SearchMethod},
+    selected::{Backend, FormulaJoins, Grounder, NativeExecution},
 };
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, ValueEnum)]
@@ -113,7 +113,6 @@ fn plan(workers: NonZeroUsize) -> Result<matrix::Plan, performance::Error> {
         backend: Backend::Cpu,
         threads: workers,
         formula_joins: Some(FormulaJoins::Indexed),
-        search: Some(SearchMethod::Regions),
         ..NativeExecution::default()
     };
     matrix::Plan::new(

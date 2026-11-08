@@ -1,46 +1,7 @@
 use super::*;
 use std::collections::BTreeSet;
-use zetesis_ferraris::{Interpretation, Limits, check};
 use zetesis_reference_support as reference;
 use zetesis_reference_support::{prepare, prepared};
-
-fn full_family(owner: &HybridFormula) -> BTreeSet<BTreeSet<String>> {
-    let count = owner.atom_catalog().atoms().len();
-    assert!(count <= 8, "bounded independent complete enumeration");
-    let mut checker = owner.checker(ConstraintCheckLimits::default()).unwrap();
-    let cancellation = Cancellation::default();
-    let mut answers = BTreeSet::new();
-    for mask in 0..1_usize << count {
-        let candidate = Interpretation::new(
-            owner.core_theory(),
-            (0..count).filter(|atom| mask & (1 << atom) != 0),
-        )
-        .unwrap();
-        if !check(
-            owner.core_theory(),
-            &candidate,
-            Limits::default(),
-            &cancellation,
-        )
-        .unwrap()
-        .accepted()
-        {
-            continue;
-        }
-        let model = Model::from_positions(owner.atom_catalog(), candidate.atoms()).unwrap();
-        if checker.check(&model, &cancellation).unwrap() == ConstraintVerdict::Satisfied {
-            answers.insert(
-                candidate
-                    .atoms()
-                    .map(|atom| {
-                        reference::canonical(owner.atom_catalog().atoms().at(atom).unwrap())
-                    })
-                    .collect(),
-            );
-        }
-    }
-    answers
-}
 
 #[test]
 fn normal_arithmetic_preserves_eager_and_hybrid_families() {

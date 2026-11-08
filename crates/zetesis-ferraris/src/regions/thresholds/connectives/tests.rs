@@ -9,7 +9,7 @@ use crate::{
     FrozenSubject, Interpretation, Knowledge, Narrower, Narrowing, NarrowingScratch,
     NarrowingStatistics, Node, NodeView, OriginalSubject, Region, RegionLimits, Theory,
 };
-use zetesis_cpu::{Cancellation, Stop};
+use zetesis_algebra::{Cancellation, Stop};
 
 /// Atom 4 reports the endpoint truth. All contributing atoms can stay open.
 fn witness(native_source: bool, positive: bool) -> Theory {
@@ -110,8 +110,14 @@ fn original_bounds_cross_the_connective_boundary() {
             assert!(!region.is_open(4));
             assert_eq!(region.is_held(4), positive);
             assert!((0..4).all(|atom| region.is_open(atom)));
-            assert!(scratch.threshold_rows.is_empty());
-            assert!(scratch.pending_thresholds.iter().all(|&word| word == 0));
+            assert!(scratch.common.threshold_rows.is_empty());
+            assert!(
+                scratch
+                    .common
+                    .pending_thresholds
+                    .iter()
+                    .all(|&word| word == 0)
+            );
             assert_eq!(
                 index.knowledge().retained_bytes(),
                 without.knowledge().retained_bytes()
@@ -228,16 +234,15 @@ fn frozen_closure_ignores_connective_links() {
                     let mut scratch = NarrowingScratch::default();
                     let run =
                         |index: &Narrower, region: &mut Region, scratch: &mut NarrowingScratch| {
-                            index
-                                .narrow_frozen_known(
-                                    FrozenSubject::new(&theory, &truth),
-                                    region,
-                                    &mut index.knowledge(),
-                                    scratch,
-                                    RegionLimits::default(),
-                                    &Cancellation::default(),
-                                )
-                                .unwrap()
+                            let attempt = index.narrow_frozen_known(
+                                FrozenSubject::new(&theory, &truth),
+                                region,
+                                &mut index.frozen_knowledge(),
+                                scratch,
+                                RegionLimits::default(),
+                                &Cancellation::default(),
+                            );
+                            (attempt.result.unwrap(), attempt.statistics)
                         };
                     let actual = run(&index, &mut actual_region, &mut scratch);
                     let expected = run(
@@ -248,8 +253,8 @@ fn frozen_closure_ignores_connective_links() {
                     assert_eq!(actual.0, expected.0);
                     assert_eq!(actual_region, expected_region);
                     assert_eq!(receipt(actual.1), receipt(expected.1));
-                    assert_eq!(scratch.threshold_rows.capacity(), 0);
-                    assert_eq!(scratch.pending_thresholds.capacity(), 0);
+                    assert_eq!(scratch.common.threshold_rows.capacity(), 0);
+                    assert_eq!(scratch.common.pending_thresholds.capacity(), 0);
                 }
             }
         }
@@ -271,14 +276,14 @@ fn interrupted_bridge_work_does_not_taint_reuse() {
     let mut scratch = NarrowingScratch::default();
     for failure in [Stop::WorkLimit, Stop::Cancelled, Stop::Deadline] {
         for remaining in 0..expected.1.work {
-            let attempt = index.narrow_known_reserved(
+            let attempt = crate::test_support::stop_narrowing(&index.narrow_known_reserved(
                 OriginalSubject::new(&theory, None),
                 &mut Region::all_open(5),
                 &mut index.knowledge(),
                 &mut scratch,
                 &Cancellation::default(),
-                &mut Allowance { remaining, failure },
-            );
+                &mut zetesis_algebra::Meter::reserved(&mut Allowance { remaining, failure }),
+            ));
             assert_eq!(attempt.result, Err(failure));
             assert_eq!(attempt.statistics.work, remaining);
             let mut region = Region::all_open(5);
@@ -350,8 +355,9 @@ fn discovery_authenticates_complete_unit_prefixes() {
                     super::exact_prefix(
                         &row.terms,
                         chain.ordinary_leaves(),
-                        &mut crate::regions::Work::new(u64::MAX),
+                        &mut crate::regions::Meter::local(u64::MAX),
                     )
+                    .map_err(zetesis_algebra::Failure::into_stop)
                     .unwrap()
                 })
         });
@@ -367,8 +373,9 @@ fn discovery_authenticates_complete_unit_prefixes() {
                 if super::exact_prefix(
                     &row.terms,
                     chain.ordinary_leaves(),
-                    &mut crate::regions::Work::new(u64::MAX),
+                    &mut crate::regions::Meter::local(u64::MAX),
                 )
+                .map_err(zetesis_algebra::Failure::into_stop)
                 .unwrap()
                 {
                     assert!(index.thresholds.connectives.is_some());

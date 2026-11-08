@@ -341,7 +341,8 @@ pub struct Comparison {
     /// same cells by design. A report written before the `search` field
     /// carries the method as `candidates`, and one campaign's reports name
     /// the region workers beside it as `region_workers`; both are read as
-    /// the method and left out of the profile comparison.
+    /// the method and left out of the profile comparison. Reports written
+    /// since the clause search's removal request no method.
     pub methods: BTreeMap<String, String>,
     /// Each report's and profile's standing against the reference, in report
     /// order and then profile order; a report whose campaign ran without

@@ -248,7 +248,11 @@ fn emit<'plan, 'source>(
             ),
         )? {
             // The borrowed cursor exposes scalar-rejected completions. They
-            // name no atoms and must not advance the emitted-node prefix.
+            // name no atoms and must not advance the unchanged prefix. Unlike
+            // ordinary emission, they need no rejected-row validation: every
+            // component variable is a fixed head slot or bound by a positive
+            // atom of this component, and its fixed-input arithmetic was
+            // certified over the head carrier, so no atom key can be unbound.
             if !row.passes {
                 continue;
             }

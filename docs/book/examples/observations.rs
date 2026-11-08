@@ -1,13 +1,14 @@
-//! Observe execution choices while solving a native program through a session.
+//! Observe execution choices while solving an admitted formula through a session.
 
 // ANCHOR: example
 use std::convert::Infallible;
-use zetesis_core::{AdmissionLimits, Atom, AtomPattern, Model, Predicate, Program, Template};
-use zetesis_cpu::Cancellation;
+use zetesis_algebra::Cancellation;
+use zetesis_core::{Atom, Model, Predicate};
 use zetesis_solve::{
     Backend, Completion, ExecutionObservation, ExecutionObserver, Grounder, PreparedInput, Session,
     SolveConfig,
 };
+use zetesis_themelios::{AdmissionOptions, ExpansionLimits, FormulaLimits, admit_formula};
 
 #[derive(Default)]
 struct Preparation {
@@ -18,7 +19,7 @@ impl ExecutionObserver for Preparation {
     type Error = Infallible;
 
     fn observe(&mut self, event: ExecutionObservation<'_>) -> Result<(), Self::Error> {
-        if let ExecutionObservation::CpuClosure { grounder, .. } = event {
+        if let ExecutionObservation::CpuFormula { grounder, .. } = event {
             self.grounder = Some(grounder);
         }
         Ok(())
@@ -26,38 +27,31 @@ impl ExecutionObserver for Preparation {
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let ready = Predicate::new("ready", 0)?;
-    let fact = Template::new(
-        Some(AtomPattern::new(ready.clone(), vec![])?),
-        vec![],
-        vec![],
-        vec![],
-        vec![],
-    );
-    let program = Program::new(
-        vec![fact],
-        zetesis_core::FactTables::default(),
-        AdmissionLimits::default(),
+    let admitted = admit_formula(
+        "ready.".into(),
+        AdmissionOptions::default(),
+        ExpansionLimits::default(),
+        FormulaLimits::default(),
     )?;
     let config = SolveConfig {
         backend: Backend::Cpu,
-        grounder: Grounder::Lazy,
+        grounder: Grounder::Eager,
         models: 0,
         ..SolveConfig::default()
     };
     let mut preparation = Preparation::default();
     let mut session = Session::enumerate_observed(
-        PreparedInput::program(&program),
+        PreparedInput::formula(&admitted),
         config,
         Cancellation::default(),
         &mut preparation,
     )?;
-    assert_eq!(preparation.grounder, Some(Grounder::Lazy));
+    assert_eq!(preparation.grounder, Some(Grounder::Eager));
 
     let answer = session.next_observed(&mut preparation).unwrap()?;
     assert_eq!(
         answer.interpretation(),
-        &Model::new([Atom::new(ready, vec![])?])?
+        &Model::new([Atom::new(Predicate::new("ready", 0)?, vec![])?])?
     );
     assert!(session.next_observed(&mut preparation).is_none());
     assert_eq!(

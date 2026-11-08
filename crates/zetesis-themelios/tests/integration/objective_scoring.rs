@@ -1,7 +1,7 @@
 //! Prepared eligibility must give the same score as complete contribution evidence.
 
+use zetesis_algebra::Cancellation;
 use zetesis_core::{Atom, AtomCatalog, Model, Term, Value};
-use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{Interpretation, Node, Theory};
 use zetesis_objective::{
     Condition, ConditionNode, Limits, ObjectiveProgram, ObjectiveTemplate, evaluate,

@@ -1,8 +1,8 @@
 //! Ordinary formula invocations select the hybrid before answer-set publication.
 
 use crate::support::options::enumerating;
+use zetesis_algebra::Cancellation;
 use zetesis_cli::{Completion, RunError, run_with_diagnostics};
-use zetesis_cpu::Cancellation;
 
 mod formula_records;
 
@@ -337,6 +337,18 @@ mod physical {
     }
 
     #[test]
+    #[ignore = "requires Metal: the quantified series' families through the batched completion match the CPU's"]
+    fn ordinary_metal_series_families_match_cpu_through_the_batched_completion() {
+        crate::inner_series::qualify_batched_completion(GpuApi::Metal.argument());
+    }
+
+    #[test]
+    #[ignore = "requires Vulkan: the quantified series' families through the batched completion match the CPU's"]
+    fn ordinary_vulkan_series_families_match_cpu_through_the_batched_completion() {
+        crate::inner_series::qualify_batched_completion(GpuApi::Vulkan.argument());
+    }
+
+    #[test]
     #[ignore = "requires Metal: ordinary Metal table joins preserve complete answers"]
     fn ordinary_metal_table_joins_preserve_complete_answers() {
         qualify_table_joins(GpuApi::Metal);
@@ -518,9 +530,10 @@ mod physical {
     }
 
     fn qualify_hybrid_output(backend: GpuApi) {
+        const OBJECTIVES: &str = include_str!("../fixtures/hybrid-gpu/objectives.lp");
         for source in [
             include_str!("../fixtures/observations/conditional.lp"),
-            include_str!("../fixtures/hybrid-gpu/objectives.lp"),
+            OBJECTIVES,
             include_str!("../fixtures/hybrid-gpu/terminal.lp"),
         ] {
             for json in [false, true] {
@@ -567,6 +580,15 @@ mod physical {
                     let core = report.hybrid_execution.unwrap();
                     assert_eq!(core.pending, 0);
                     assert_eq!(core.core_answers, core.accepted + core.rejected);
+                    if source == OBJECTIVES {
+                        // Its one constraint instance fits the formula's
+                        // share of the ordinary allowance, so lazy grounding
+                        // grounds it with the core the device checks.
+                        assert_eq!(
+                            (core.streamed.templates, core.streamed.retained_templates),
+                            (0, 1)
+                        );
+                    }
                     let execution = report.formula_execution.unwrap();
                     assert!(execution.adapter.contains(backend.name()));
                     assert!(execution.gpu_candidates > 0);
@@ -659,23 +681,32 @@ mod physical {
             zetesis_backend::ComputeTimingStatus::NotRequested
         );
         assert!(!timing.overflowed);
+        // Each decoded batch is reported once: measured, unavailable, or
+        // unresolved while its execution has not settled.
         assert_eq!(
-            timing.measured_batches + timing.unavailable_batches,
+            timing.measured_batches + timing.unavailable_batches + timing.unresolved_batches,
             stats.gpu_batches
         );
         assert_eq!(timing.elapsed.is_some(), timing.measured_batches > 0);
         if timing.status == zetesis_backend::ComputeTimingStatus::Unsupported {
             assert_eq!(timing.measured_batches, 0);
+            assert_eq!(timing.flush_submissions, 0);
+        } else if stats.gpu_batches > 0 {
+            // The completed solve settled once, reading its final batch.
+            assert_eq!(timing.unresolved_batches, 0);
+            assert_eq!(timing.flush_submissions, 1);
         }
         let elapsed = timing.elapsed.map_or_else(
             || "unavailable".to_owned(),
             |duration| duration.as_nanos().to_string(),
         );
         let expected = format!(
-            "GPU compute passes: status={}; elapsed_ns={elapsed}; measured batches={}; unavailable batches={}; complete={}; host preparation, transfers and waits excluded",
+            "GPU compute passes: status={}; elapsed_ns={elapsed}; measured batches={}; unavailable batches={}; unresolved batches={}; flush submissions={}; complete={}; host preparation, transfers and waits excluded",
             timing.status.label(),
             timing.measured_batches,
             timing.unavailable_batches,
+            timing.unresolved_batches,
+            timing.flush_submissions,
             timing.is_complete(),
         );
         assert!(

@@ -23,7 +23,7 @@ use themelios_program::provenance::WithProvenance;
 use themelios_program::symbol::{Signature, Symbol, VarName};
 use themelios_program::term::{Term, Variable};
 
-use crate::limits::{Resource, Stop, check};
+use crate::limits::{Stop, charge_work};
 
 /// A relation whose value position is a function of its key positions,
 /// total over the body of the one choice rule that produces it.
@@ -155,10 +155,7 @@ impl KeyWork {
     /// # Errors
     /// Returns the work stop before the inspection would exceed the ceiling.
     pub fn step(&mut self) -> Result<(), Stop> {
-        let observed = u128::from(self.steps) + 1;
-        check(Resource::Work, observed, u128::from(self.limit))?;
-        self.steps += 1;
-        Ok(())
+        charge_work(&mut self.steps, 1, self.limit)
     }
 }
 
@@ -605,3 +602,6 @@ fn positive_atom_literal(literal: &Literal) -> Option<&Atom> {
     };
     Some(atom.get())
 }
+
+#[cfg(test)]
+mod tests;

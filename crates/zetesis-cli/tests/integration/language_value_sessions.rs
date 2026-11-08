@@ -11,15 +11,15 @@ use std::collections::BTreeSet;
 use std::num::NonZeroUsize;
 
 use clap::Parser;
+use zetesis_algebra::Cancellation;
 use zetesis_cli::{
-    Backend, Completion, Interruption, Options, Oracle, PreparedInput, SearchMethod, Session,
-    SolveConfig, run_with_diagnostics,
+    Backend, Completion, Interruption, Options, Oracle, PreparedInput, Session, SolveConfig,
+    run_with_diagnostics,
 };
 use zetesis_clingo_support as oracle;
 use zetesis_core::{Value, ValueLimits};
-use zetesis_cpu::Cancellation;
 use zetesis_reference_support::{admit, canonical, exhaustive, formula};
-use zetesis_sat::Incomplete;
+use zetesis_stable::Incomplete;
 use zetesis_test_support::programs::atom;
 use zetesis_test_support::records::Records;
 use zetesis_themelios::FormulaLimits;
@@ -163,11 +163,10 @@ fn source_extensions_preserve_complete_session_records() {
                 for pruning in [false, true] {
                     let mut config = SolveConfig {
                         backend: Backend::Cpu,
-                        // The batched completion and its accounting belong to the clause search.
-                        search: SearchMethod::Clauses,
+                        // One region walker; a completion pool checks its candidates in batches.
                         oracle: Oracle::Countermodel,
                         models: 0,
-                        workers: NonZeroUsize::new(workers).unwrap(),
+                        workers: NonZeroUsize::MIN,
                         completion_workers: NonZeroUsize::new(workers).unwrap(),
                         batch_size: NonZeroUsize::new(batch).unwrap(),
                         ..Default::default()
@@ -278,6 +277,19 @@ fn automatic_admission_preserves_typed_json_records() {
     }
 }
 
+/// The candidates the region walk proposes up to and including its first
+/// answer; the earlier ones are classical models the reduct rejects.
+fn first_answer_candidates(input: &zetesis_themelios::AdmittedFormula) -> u64 {
+    let mut walk = zetesis_stable::StableModels::new(
+        input.theory(),
+        zetesis_stable::Limits::default(),
+        Cancellation::default(),
+    )
+    .unwrap();
+    walk.next().unwrap().unwrap();
+    walk.statistics().candidates
+}
+
 #[test]
 fn stopped_composition_preserves_objective_presence() {
     // Each pair contrasts absent objectives with a retained numeric-zero
@@ -289,17 +301,20 @@ fn stopped_composition_preserves_objective_presence() {
         )
         .unwrap();
         let expected = records(&EXPECTED[index]);
+        // A candidate limit at the walk's first answer stops the stream right
+        // after that answer.
+        let first = first_answer_candidates(&input);
         for workers in [2, 4] {
             for batch in [3, 7] {
                 let config = SolveConfig {
                     backend: Backend::Cpu,
-                    // The batched completion and its accounting belong to the clause search.
-                    search: SearchMethod::Clauses,
+                    // One region walker; a completion pool checks its candidates in batches.
+                    workers: NonZeroUsize::MIN,
                     oracle: Oracle::Countermodel,
                     models: 0,
                     completion_workers: NonZeroUsize::new(workers).unwrap(),
                     batch_size: NonZeroUsize::new(batch).unwrap(),
-                    max_candidates: 1,
+                    max_candidates: first,
                     ..Default::default()
                 };
                 let mut session = Session::new(
@@ -331,7 +346,7 @@ fn stopped_composition_preserves_objective_presence() {
                     outcome.interruption(),
                     Some(Interruption::Countermodel(Incomplete::CandidateLimit))
                 );
-                assert_eq!(outcome.candidate_progress(), 1);
+                assert_eq!(outcome.candidate_progress(), first);
                 assert_eq!(outcome.verified_models(), 1);
                 assert!(!outcome.unsatisfiable());
                 assert!(!outcome.optimum_proved());
@@ -346,8 +361,8 @@ fn stopped_composition_preserves_objective_presence() {
                 let execution = outcome.formula_execution().unwrap();
                 assert_eq!(execution.pending_candidates, 0);
                 assert_eq!(execution.queued_models, 0);
-                assert_eq!(execution.completion.entered, 1);
-                assert_eq!(execution.completion.completed, 1);
+                assert_eq!(execution.completion.entered, first);
+                assert_eq!(execution.completion.completed, first);
                 assert_eq!(execution.completion.failed, 0);
             }
         }

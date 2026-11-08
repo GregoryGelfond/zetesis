@@ -103,8 +103,6 @@ pub enum Oracle {
     /// Solver's automatic choice.
     #[default]
     Auto,
-    /// Least-consequence closure.
-    Closure,
     /// Countermodel search.
     Countermodel,
 }
@@ -112,25 +110,7 @@ impl From<Oracle> for selected::Oracle {
     fn from(value: Oracle) -> Self {
         match value {
             Oracle::Auto => Self::Auto,
-            Oracle::Closure => Self::Closure,
             Oracle::Countermodel => Self::Countermodel,
-        }
-    }
-}
-
-/// Requested formula search method.
-#[derive(Clone, Copy, Debug, ValueEnum)]
-pub enum Search {
-    /// Region search.
-    Regions,
-    /// Clause search.
-    Clauses,
-}
-impl From<Search> for selected::SearchMethod {
-    fn from(value: Search) -> Self {
-        match value {
-            Search::Regions => Self::Regions,
-            Search::Clauses => Self::Clauses,
         }
     }
 }
@@ -175,6 +155,11 @@ pub struct RunOptions {
         conflicts_with_all = ["suite", "cases", "examples", "include_einstein", "without_clingo"]
     )]
     pub workloads: Option<PathBuf>,
+    /// Capture mergeable GPU residual samples for a named fixture family.
+    /// Select its members explicitly with --case or --workloads. Each
+    /// requested GPU profile has its own pool; this campaign is untimed.
+    #[arg(long, value_name = "COHORT", conflicts_with_all = ["warmups", "repetitions", "memory_runs"])]
+    pub residual_evidence: Option<String>,
     /// Authored examples root for --suite scalability; defaults to examples.
     #[arg(long)]
     pub examples: Option<PathBuf>,
@@ -214,7 +199,7 @@ pub struct RunOptions {
     /// Requested materialization policy.
     #[arg(long, value_enum, default_value_t)]
     pub grounder: Grounder,
-    /// Native candidate/closure workers; auto uses the host's available parallelism.
+    /// Native region walkers; auto uses the host's available parallelism.
     #[arg(long, alias = "workers", value_name = "auto|N", value_parser = zetesis_backend::parse_threads, default_value = "auto")]
     pub threads: NonZeroUsize,
     /// Compare native thread counts, for example 1,2,4; clingo only qualifies.
@@ -235,14 +220,6 @@ pub struct RunOptions {
         help_heading = "Advanced measurement controls"
     )]
     pub oracle: Oracle,
-    /// Formula search method for every profile; omitted, the suite's default.
-    #[arg(
-        long,
-        value_enum,
-        hide_short_help = true,
-        help_heading = "Advanced measurement controls"
-    )]
-    pub search: Option<Search>,
     /// Eager-formula join strategy for every profile; omitted, the suite's default.
     #[arg(
         long,
@@ -382,10 +359,6 @@ impl RunOptions {
                 .formula_joins
                 .map(Into::into)
                 .or(scalability.then_some(selected::FormulaJoins::Indexed)),
-            search: self
-                .search
-                .map(Into::into)
-                .or(scalability.then_some(selected::SearchMethod::Regions)),
             time_limit_seconds: self.time_limit,
         };
         let backends = if self.compare_backends.is_empty() {
@@ -416,14 +389,24 @@ impl RunOptions {
                 }
             }
         }
-        let plan = matrix::Plan::new(
-            self.suite.into(),
-            profiles,
-            self.clingo_threads,
-            self.warmups,
-            self.repetitions,
-        )?
-        .with_memory(self.memory_runs)?;
+        let plan = if let Some(cohort) = &self.residual_evidence {
+            if self.cases.is_empty() && self.workloads.is_none() {
+                return Err(performance::Error::Configuration(
+                    "--residual-evidence requires explicit --case or --workloads family members",
+                ));
+            }
+            matrix::Plan::qualification(self.suite.into(), profiles, self.clingo_threads)?
+                .with_residual_evidence(cohort.clone())?
+        } else {
+            matrix::Plan::new(
+                self.suite.into(),
+                profiles,
+                self.clingo_threads,
+                self.warmups,
+                self.repetitions,
+            )?
+            .with_memory(self.memory_runs)?
+        };
         if self.cases.is_empty() {
             Ok(plan)
         } else {

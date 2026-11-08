@@ -6,6 +6,7 @@ use super::{
 };
 use crate::Theory;
 use std::cmp::Ordering;
+use zetesis_algebra::{Cancellation, MeterBytes};
 use zetesis_core::catalog::{
     CatalogRead, Error as CatalogError, Limits, TermKey, TermRef, VocabularyBuilder,
     VocabularyFailure,
@@ -13,7 +14,6 @@ use zetesis_core::catalog::{
 use zetesis_core::{
     TemplateCatalogFailure, TemplateComponents, TemplateTerm, Value as Term, ValueNodeRef,
 };
-use zetesis_cpu::Cancellation;
 
 pub(super) fn build(
     theory: &Theory,
@@ -23,11 +23,7 @@ pub(super) fn build(
     limits: AdmissionLimits,
     cancellation: &Cancellation,
 ) -> Result<Group, Error> {
-    let mut work = Work {
-        maximum: limits.max_work,
-        cancellation,
-        statistics: Statistics::default(),
-    };
+    let mut work = Work::new(limits.max_work, cancellation);
     let result = (|| {
         work.poll()?;
         let maximum = usize::try_from(limits.max_storage_bytes).unwrap_or(usize::MAX);
@@ -76,12 +72,11 @@ pub(super) fn build(
         let vocabulary = owner
             .finish_with(data_bytes(&data), || work.charge(1))
             .map_err(vocabulary)?;
-        work.statistics.storage_bytes = narrow(data_bytes(&data) + vocabulary.storage_bytes())?;
-        work.statistics.storage_peak_bytes = work
-            .statistics
+        work.storage_bytes = narrow(data_bytes(&data) + vocabulary.storage_bytes())?;
+        work.storage_peak_bytes = work
             .storage_peak_bytes
             .max(narrow(vocabulary.publication_peak_bytes())?);
-        data.statistics = work.statistics;
+        data.statistics = work.statistics();
         Ok(Group { vocabulary, data })
     })();
     result.map_err(|kind| work.failure(kind))
@@ -96,11 +91,7 @@ pub(super) fn borrowed<'a>(
     limits: AdmissionLimits,
     cancellation: &Cancellation,
 ) -> Result<GroupData, Error> {
-    let mut work = Work {
-        maximum: limits.max_work,
-        cancellation,
-        statistics: Statistics::default(),
-    };
+    let mut work = Work::new(limits.max_work, cancellation);
     let result = (|| {
         work.poll()?;
         let mut admission = Admission::new(
@@ -144,7 +135,7 @@ pub(super) fn borrowed<'a>(
             });
         }
         let (mut data, _) = admission.finish()?;
-        data.statistics = work.statistics;
+        data.statistics = work.statistics();
         Ok(data)
     })();
     result.map_err(|kind| work.failure(kind))
@@ -191,9 +182,8 @@ impl Authority for VocabularyBuilder {
             || work.charge(1),
         );
         let current = external + self.storage_bytes();
-        work.statistics.storage_bytes = narrow(current)?;
-        work.statistics.storage_peak_bytes = work
-            .statistics
+        work.storage_bytes = narrow(current)?;
+        work.storage_peak_bytes = work
             .storage_peak_bytes
             .max(narrow(external + self.storage_peak_bytes())?);
         result.map(Some).map_err(vocabulary)
@@ -293,10 +283,13 @@ impl<'w, 'c, A: Authority> Admission<'w, 'c, A> {
     fn observe(&mut self, overlap: u128) -> Result<(), ErrorKind> {
         let current = self.current();
         let peak = current.checked_add(overlap).ok_or(ErrorKind::Overflow)?;
-        self.work.statistics.storage_bytes = narrow(current)?;
-        self.work.statistics.storage_peak_bytes =
-            self.work.statistics.storage_peak_bytes.max(narrow(peak)?);
-        storage_limit(peak, self.limits)
+        self.work.storage_bytes = narrow(current)?;
+        MeterBytes::observe_peak_u64(
+            narrow(peak)?,
+            self.limits.max_storage_bytes,
+            &mut self.work.storage_peak_bytes,
+        )
+        .map_err(|_| ErrorKind::Limit(Resource::StorageBytes))
     }
     fn reserve_buffers(&mut self, tuples: usize, guards: usize) -> Result<(), ErrorKind> {
         self.data.tuples = reserve(tuples, self.current(), self.limits, self.work)?;
@@ -311,13 +304,13 @@ impl<'w, 'c, A: Authority> Admission<'w, 'c, A> {
         self.observe(0)
     }
     fn logical(&mut self, added: u64) -> Result<(), ErrorKind> {
-        self.work.statistics.resident_bytes = add(self.work.statistics.resident_bytes, added)?;
-        self.work.statistics.peak_bytes =
-            add(self.work.statistics.resident_bytes, self.logical_scratch)?;
-        if self.work.statistics.peak_bytes > self.limits.max_bytes {
-            return Err(ErrorKind::Limit(Resource::Bytes));
-        }
-        Ok(())
+        self.work.resident_bytes = add(self.work.resident_bytes, added)?;
+        self.work.peak_bytes = add(self.work.resident_bytes, self.logical_scratch)?;
+        MeterBytes::check(
+            u128::from(self.work.peak_bytes),
+            u128::from(self.limits.max_bytes),
+        )
+        .map_err(|_| ErrorKind::Limit(Resource::Bytes))
     }
     fn begin_tuple(
         &mut self,
@@ -406,9 +399,8 @@ impl<'w, 'c, A: Authority> Admission<'w, 'c, A> {
             maximum,
             || self.work.charge(1),
         );
-        self.work.statistics.storage_peak_bytes = self
+        self.work.storage_peak_bytes = self
             .work
-            .statistics
             .storage_peak_bytes
             .max(narrow(other + self.data.components.storage_peak_bytes())?);
         let range = result.map_err(component)?;
@@ -453,8 +445,7 @@ impl<'w, 'c, A: Authority> Admission<'w, 'c, A> {
         self.work.poll()?;
         self.key_costs.clear();
         drop(self.key_costs);
-        self.work.statistics.storage_bytes =
-            narrow(self.authority.bytes() + data_bytes(&self.data))?;
+        self.work.storage_bytes = narrow(self.authority.bytes() + data_bytes(&self.data))?;
         Ok((self.data, self.authority))
     }
 }
@@ -471,11 +462,8 @@ fn narrow(bytes: u128) -> Result<u64, ErrorKind> {
     u64::try_from(bytes).map_err(|_| ErrorKind::Overflow)
 }
 fn storage_limit(required: u128, limits: AdmissionLimits) -> Result<(), ErrorKind> {
-    if required > u128::from(limits.max_storage_bytes) {
-        Err(ErrorKind::Limit(Resource::StorageBytes))
-    } else {
-        Ok(())
-    }
+    MeterBytes::check(required, u128::from(limits.max_storage_bytes))
+        .map_err(|_| ErrorKind::Limit(Resource::StorageBytes))
 }
 fn available(limits: AdmissionLimits, outside: u128) -> Result<usize, ErrorKind> {
     storage_limit(outside, limits)?;
@@ -491,14 +479,18 @@ fn reserve<T>(
     storage_limit(current + count as u128 * size_of::<T>() as u128, limits)?;
     let result = super::storage(count)?;
     let peak = current + result.capacity() as u128 * size_of::<T>() as u128;
-    work.statistics.storage_peak_bytes = work.statistics.storage_peak_bytes.max(narrow(peak)?);
-    storage_limit(peak, limits)?;
+    MeterBytes::observe_peak_u64(
+        narrow(peak)?,
+        limits.max_storage_bytes,
+        &mut work.storage_peak_bytes,
+    )
+    .map_err(|_| ErrorKind::Limit(Resource::StorageBytes))?;
     Ok(result)
 }
 fn catalog(error: CatalogError) -> ErrorKind {
     match error {
         CatalogError::Storage { .. } => ErrorKind::Limit(Resource::StorageBytes),
-        CatalogError::Allocation => ErrorKind::Stopped(zetesis_cpu::Stop::Allocation),
+        CatalogError::Allocation => ErrorKind::Stopped(zetesis_algebra::Stop::Allocation),
         other => ErrorKind::Catalog(other),
     }
 }
@@ -663,3 +655,6 @@ fn ceiling(actual: usize, maximum: usize, resource: Resource) -> Result<(), Erro
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod tests;

@@ -2,7 +2,10 @@ mod evidence;
 mod predicates;
 use super::*;
 use crate::formula_support::RowSelection;
-use crate::test_support::hybrid;
+// These tests exercise the streamed route, so their fixtures are grounded with
+// pairwise-exclusion capture off: capture would move a pairwise family whose
+// every component is complete into the core.
+use crate::test_support::streamed_hybrid as hybrid;
 use crate::{ConstraintCheckCause, ConstraintCheckLimits, FormulaResource, HybridFormula};
 use zetesis_core::relation::{Limits, Relation};
 
@@ -568,13 +571,13 @@ fn source_resolution_retains_refused_work_prefixes() {
         last
     );
     assert_eq!(counters.accounting.work, (last + 1) as u64);
-    let cancellation = zetesis_cpu::Cancellation::default();
+    let cancellation = zetesis_algebra::Cancellation::default();
     cancellation.cancel();
     let mut counters = Counters::default().with_cancellation(Some(&cancellation));
     assert!(matches!(
         selection.resolve(atoms, &limits, &mut counters, prepared.source.location),
         Err(FormulaFailure::Interrupted {
-            reason: zetesis_cpu::Stop::Cancelled,
+            reason: zetesis_algebra::Stop::Cancelled,
             ..
         })
     ));

@@ -82,7 +82,7 @@ fn refused_intersection_prefixes_publish_nothing() {
 #[test]
 fn cancelled_intersections_publish_nothing() {
     at_probe(|join, computation, counters, location| {
-        let cancellation = zetesis_cpu::Cancellation::default();
+        let cancellation = zetesis_algebra::Cancellation::default();
         cancellation.cancel();
         counters.attach_test_control(&cancellation);
         let live = join.support.live_bytes();
@@ -92,7 +92,7 @@ fn cancelled_intersections_publish_nothing() {
                 Context::new(computation, &FormulaLimits::default(), counters, location)
             ),
             Err(FormulaFailure::Interrupted {
-                reason: zetesis_cpu::Stop::Cancelled,
+                reason: zetesis_algebra::Stop::Cancelled,
                 ..
             })
         ));

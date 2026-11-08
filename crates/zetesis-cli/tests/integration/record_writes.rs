@@ -4,8 +4,8 @@
 use std::io;
 
 use crate::support::options::serial;
+use zetesis_algebra::Cancellation;
 use zetesis_cli::{ColorMode, Options, RunError, StatisticsView, run_with_diagnostics};
-use zetesis_cpu::Cancellation;
 use zetesis_test_support::io::{Chunks, ChunksFailingAt, FAILED};
 
 /// An optimization program whose search installs two objective bounds at one

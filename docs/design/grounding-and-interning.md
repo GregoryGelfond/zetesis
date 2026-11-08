@@ -22,7 +22,7 @@ The coordinate systems remain distinct:
 | [`TermKey`](../../crates/zetesis-core/src/catalog/terms.rs) | A typed term in a particular vocabulary and readable prefix |
 | Canonical atom identity | One signed predicate with its ordered arguments in an owner |
 | [`AtomCatalog`](../../crates/zetesis-core/src/catalog.rs) position | An occurrence in a published catalog, which may contain duplicate atoms |
-| [`GroundProgram`](../../crates/zetesis-core/src/ground.rs) or formula atom position | An atom coordinate in that execution program |
+| Formula atom position | An atom coordinate in that execution theory |
 | [`Relation`](../../crates/zetesis-core/src/relation.rs) dictionary ID | A whole typed value in one equality dictionary |
 | Relation row position | An original tuple occurrence, including repetitions |
 

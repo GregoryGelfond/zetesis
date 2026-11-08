@@ -15,11 +15,13 @@
 //! Preparation sorts occurrences and guards in O(E log E + G log G). It has no
 //! independent cancellation contract, like the enclosing narrower constructor.
 
-use zetesis_cpu::Stop;
+use zetesis_algebra::{Failure, Quota};
+
+use zetesis_algebra::Stop;
 
 use crate::{ExtremumCutRule, NodeView, Theory};
 
-use super::{Adjacency, Chain, ChainOperands, Closure, Count, Narrower, Step, Work, bit};
+use super::{Adjacency, Chain, ChainOperands, Closure, Count, Meter, Narrower, Step};
 
 #[derive(Clone, Debug, Default)]
 pub(super) struct Extrema {
@@ -42,12 +44,12 @@ impl Column {
     /// towards shorter ones. Equal lengths belong to both implication ranges.
     /// The sorted guard column admits a charged binary boundary search, followed
     /// by the original target order. No target is taught during the search.
-    fn consequences(
+    fn consequences<Q: Quota + ?Sized>(
         &self,
         length: usize,
         value: bool,
-        work: &mut Work<'_>,
-    ) -> Result<&[(usize, usize)], Stop> {
+        work: &mut Meter<'_, Q>,
+    ) -> Result<&[(usize, usize)], Failure<Q::Error>> {
         let (mut start, mut end) = (0, self.guards.len());
         while start < end {
             work.tick()?;
@@ -305,13 +307,13 @@ impl Extrema {
     }
 }
 
-impl<C: Count> Closure<'_, C> {
-    pub(super) fn seed_extrema(
+impl<W: Count, C: crate::regions::ReadingClass> Closure<'_, W, C> {
+    pub(super) fn seed_extrema<Q: Quota + ?Sized>(
         &mut self,
         index: &Narrower,
         frozen: Option<&[bool]>,
-        work: &mut Work<'_>,
-    ) -> Result<Step, Stop> {
+        work: &mut Meter<'_, Q>,
+    ) -> Result<Step, Failure<Q::Error>> {
         let mut step = Step::Unchanged;
         for &(node, value) in &index.extrema.constants {
             work.tick()?;
@@ -331,13 +333,13 @@ impl<C: Count> Closure<'_, C> {
     /// Cuts in one sorted column are nested disjunctions. A true shorter cut
     /// forces longer cuts; a false longer cut excludes shorter cuts. Original
     /// gates remain authoritative: an inactive frozen cut cannot teach a bound.
-    pub(super) fn extremum_order(
+    pub(super) fn extremum_order<Q: Quota + ?Sized>(
         &mut self,
         index: &Narrower,
         chain: usize,
         frozen: Option<&[bool]>,
-        work: &mut Work<'_>,
-    ) -> Result<Step, Stop> {
+        work: &mut Meter<'_, Q>,
+    ) -> Result<Step, Failure<Q::Error>> {
         let source = &index.chains[chain];
         let ChainOperands::Ordinal { column, length } = source.operands else {
             return Ok(Step::Unchanged);
@@ -345,7 +347,7 @@ impl<C: Count> Closure<'_, C> {
         if frozen.is_some_and(|truth| !truth[source.root]) {
             return Ok(Step::Unchanged);
         }
-        let value = bit(self.known.sure, source.root);
+        let value = self.known.sure.contains(source.root);
         let guards = index.extrema.columns[column].consequences(length, value, work)?;
         let mut step = Step::Unchanged;
         for &(_, node) in guards {

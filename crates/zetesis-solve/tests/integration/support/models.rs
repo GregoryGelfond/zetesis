@@ -16,12 +16,12 @@ pub(crate) type CostFamily = BTreeSet<(Model, Option<Vec<(i32, i64)>>)>;
 pub(crate) type ScoredFamily = BTreeMap<Model, Option<Score>>;
 
 /// The answer sets of `view` with their costs; each answer set belongs to the
-/// view's subject.
+/// view's original input.
 pub(crate) fn cost_family(view: &WorldView) -> CostFamily {
     view.answer_sets()
         .iter()
         .map(|answer| {
-            assert!(answer.subject().same_instance(view.subject()));
+            assert!(answer.original().same_instance(view.original()));
             (
                 answer.interpretation().clone(),
                 answer.score().map(|score| score.costs().to_vec()),

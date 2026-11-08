@@ -46,16 +46,15 @@ fn settled_shared_prefixes_do_not_queue_dirty_notifications() {
         });
         let close =
             |region: &mut Region, known: &mut crate::Knowledge, scratch: &mut NarrowingScratch| {
-                index
-                    .narrow_known(
-                        OriginalSubject::new(&theory, None),
-                        region,
-                        known,
-                        scratch,
-                        RegionLimits::default(),
-                        &Cancellation::default(),
-                    )
-                    .unwrap()
+                let attempt = index.narrow_known(
+                    OriginalSubject::new(&theory, None),
+                    region,
+                    known,
+                    scratch,
+                    RegionLimits::default(),
+                    &Cancellation::default(),
+                );
+                (attempt.result.unwrap(), attempt.statistics)
             };
         assert_ne!(
             close(&mut region, &mut known, &mut scratch).0,
@@ -110,8 +109,8 @@ fn newly_required_root_restarts_its_witness_check() {
                     RegionLimits::default(),
                     &Cancellation::default(),
                 )
+                .result
                 .unwrap()
-                .0
         };
     let mut inherited = Region::all_open(4);
     let mut known = index.knowledge();

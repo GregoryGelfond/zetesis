@@ -4,9 +4,9 @@ mod join;
 mod plan;
 
 use std::fmt;
+use zetesis_algebra::{Cancellation, Stop};
 use zetesis_core::atom_interner::{AtomInterner, ClosedCatalog};
 use zetesis_core::{Model, ModelFailure, UnificationError};
-use zetesis_cpu::{Cancellation, Stop};
 
 use super::{TerminalFormula, storage::Work};
 use crate::FormulaFailure;

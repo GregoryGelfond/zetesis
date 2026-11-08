@@ -11,12 +11,12 @@ pub(super) use predicates::RulePredicates;
 
 use crate::ProgramSite;
 use themelios_program::program::DefaultNegation;
+use zetesis_algebra::region::Region;
 use zetesis_core::{
     AtomLookup, AtomRow, Model,
     catalog::Atoms,
     relation::{Failure, Row},
 };
-use zetesis_cpu::regions::Region;
 
 use crate::formula_ir::RuleIr;
 use crate::formula_support::{CompletedSupport, Counters, RowFilter, RowSelection};
@@ -639,7 +639,7 @@ impl RowFilter for Selection<'_, '_> {
 }
 
 #[cfg(test)]
-mod routes;
+mod borrowing;
 
 #[cfg(test)]
 mod tests;

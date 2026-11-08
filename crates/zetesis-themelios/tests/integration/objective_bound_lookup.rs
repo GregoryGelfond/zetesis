@@ -1,10 +1,10 @@
 //! Prepared objective lookup keeps original dense identities and typed keys.
 //! Query work is compared separately from the fully charged preparation cost.
 
+use zetesis_algebra::Cancellation;
 use zetesis_core::{
     Atom, AtomPattern, Filter, Model, Predicate, Sign, Term, Value, ValueLimits, ValueNode,
 };
-use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{Interpretation, Node, Theory, models};
 use zetesis_objective::{Condition, ConditionNode, ObjectiveProgram, ObjectiveTemplate, evaluate};
 use zetesis_reference_support::resource_limits;

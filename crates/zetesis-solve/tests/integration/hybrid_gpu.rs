@@ -2,13 +2,13 @@
 
 use crate::support::models::ScoredFamily as Family;
 use std::{convert::Infallible, num::NonZeroUsize};
+use zetesis_algebra::Cancellation;
 use zetesis_core::Model;
-use zetesis_cpu::Cancellation;
 use zetesis_reference_support::{hybrid, prepared};
 use zetesis_solve::{
     AnswerSelection, Backend, Completion, ExecutionObservation, ExecutionObserver,
-    ExecutionResources, GpuApi, Grounder, Oracle, PreparedInput, SearchMethod, SemanticOutcome,
-    Session, SolveConfig, SolveError,
+    ExecutionResources, GpuApi, Grounder, Oracle, PreparedInput, SemanticOutcome, Session,
+    SolveConfig, SolveError,
 };
 use zetesis_themelios::{ConstraintCheckLimits, FormulaMaterialization};
 use zetesis_wgpu::{AdapterBackend, GpuContext, GpuOptions, GpuSelection};
@@ -52,9 +52,7 @@ impl ExecutionObserver for Routes {
         match event {
             ExecutionObservation::DeviceTight { .. } => self.tight += 1,
             ExecutionObservation::DeviceFormula { .. } => self.general += 1,
-            ExecutionObservation::CpuFormula { .. } | ExecutionObservation::CpuClosure { .. } => {
-                self.cpu += 1;
-            }
+            ExecutionObservation::CpuFormula { .. } => self.cpu += 1,
             _ => {}
         }
         Ok(())
@@ -112,11 +110,10 @@ fn complete_scored_families(api: GpuApi) {
             }
         );
         for oracle in [Oracle::Auto, Oracle::Countermodel] {
-            for (search, workers) in [(SearchMethod::Clauses, 1), (SearchMethod::Regions, 2)] {
+            for workers in [1, 2] {
                 let (actual, outcome, routes) = capture(
                     PreparedInput::hybrid(&owner),
                     SolveConfig {
-                        search,
                         workers: NonZeroUsize::new(workers).unwrap(),
                         ..config(api, oracle)
                     },
@@ -138,28 +135,46 @@ fn complete_scored_families(api: GpuApi) {
                 assert_eq!(receipt.accepted, outcome.verified_models());
                 assert_eq!(receipt.pending, 0);
                 assert!(outcome.formula_execution().unwrap().gpu_candidates > 0);
-                if search == SearchMethod::Regions {
-                    let filters = outcome
-                        .countermodel_statistics()
-                        .unwrap()
-                        .region_filter
-                        .unwrap();
-                    assert!((1..=u64::try_from(workers).unwrap()).contains(&filters.preparations));
-                    assert!(filters.checks > filters.preparations);
-                }
+                let filters = outcome
+                    .countermodel_statistics()
+                    .unwrap()
+                    .region_filter
+                    .unwrap();
+                assert!((1..=u64::try_from(workers).unwrap()).contains(&filters.preparations));
+                assert!(filters.checks > filters.preparations);
                 if selection == AnswerSelection::Optimal {
                     assert!(outcome.optimum_proved());
                     assert_eq!(outcome.incumbent().unwrap().tied_models, 2);
-                } else if search == SearchMethod::Clauses {
-                    assert_eq!(
-                        (receipt.core_answers, receipt.accepted, receipt.rejected),
-                        (8, 6, 2)
-                    );
                 }
             }
         }
     }
     rejected_cheapest_answer(api, &resources);
+    settled_timing(api, &owner);
+}
+
+// A completed hybrid solve settles its core execution, which reads the final
+// batch's interval: each decoded batch is then measured or unavailable.
+fn settled_timing(api: GpuApi, owner: &zetesis_themelios::HybridFormula) {
+    let context =
+        GpuContext::new_selected_with_timing(GpuOptions::default(), GpuSelection { api }).unwrap();
+    let enabled = context.compute_timing() == zetesis_backend::ComputeTimingStatus::Enabled;
+    let (_, outcome, routes) = capture(
+        PreparedInput::hybrid(owner),
+        config(api, Oracle::Auto),
+        &ExecutionResources::with_gpu(&context),
+        AnswerSelection::All,
+    );
+    assert_eq!(routes.cpu, 0);
+    let execution = outcome.formula_execution().unwrap();
+    let timing = execution.gpu_compute_timing;
+    assert!(execution.gpu_batches > 0);
+    assert_eq!(
+        timing.measured_batches + timing.unavailable_batches + timing.unresolved_batches,
+        execution.gpu_batches
+    );
+    assert_eq!(timing.unresolved_batches, 0);
+    assert_eq!(timing.flush_submissions, u64::from(enabled));
 }
 
 fn rejected_cheapest_answer(api: GpuApi, resources: &ExecutionResources) {
@@ -169,10 +184,7 @@ fn rejected_cheapest_answer(api: GpuApi, resources: &ExecutionResources) {
     for oracle in [Oracle::Auto, Oracle::Countermodel] {
         let (answers, outcome, _) = capture(
             PreparedInput::hybrid(&owner),
-            SolveConfig {
-                search: SearchMethod::Clauses,
-                ..config(api, oracle)
-            },
+            config(api, oracle),
             resources,
             AnswerSelection::Optimal,
         );
@@ -185,11 +197,19 @@ fn rejected_cheapest_answer(api: GpuApi, resources: &ExecutionResources) {
             [(0, 1)]
         );
         assert!(outcome.optimum_proved());
+        // The region filter's source consequences exclude the invalid cheaper
+        // answer before it is a core answer.
         let receipt = outcome.hybrid_execution().unwrap();
         assert_eq!(
             (receipt.accepted, receipt.rejected, receipt.pending),
-            (1, 1, 0)
+            (1, 0, 0)
         );
+        let filter = outcome
+            .countermodel_statistics()
+            .unwrap()
+            .region_filter
+            .unwrap();
+        assert!(filter.checks > 0);
     }
 }
 
@@ -204,7 +224,6 @@ fn source_failure(api: GpuApi) {
         let mut session = Session::builder(
             PreparedInput::hybrid(&owner),
             SolveConfig {
-                search: SearchMethod::Clauses,
                 constraints: ConstraintCheckLimits {
                     max_work: prepared.work,
                     ..Default::default()
@@ -220,6 +239,8 @@ fn source_failure(api: GpuApi) {
         let failure = session.next().unwrap().unwrap_err();
         assert!(matches!(failure.cause.as_ref(), SolveError::Constraint(_)));
         let outcome = session.outcome().unwrap();
+        // The region filter's own source check stops first, before any
+        // candidate reaches the device: no core answer is published or pending.
         let receipt = outcome.hybrid_execution().unwrap();
         assert_eq!(
             (
@@ -228,9 +249,15 @@ fn source_failure(api: GpuApi) {
                 receipt.rejected,
                 receipt.pending
             ),
-            (1, 0, 0, 1)
+            (0, 0, 0, 0)
         );
-        assert!(outcome.formula_execution().unwrap().gpu_candidates > 0);
+        let filter = outcome
+            .countermodel_statistics()
+            .unwrap()
+            .region_filter
+            .unwrap();
+        assert_eq!(filter.failed, 1);
+        assert_eq!(outcome.formula_execution().unwrap().gpu_candidates, 0);
         assert_eq!((outcome.verified_models(), outcome.scored_models()), (0, 0));
         assert!(!outcome.optimum_proved());
         assert!(!outcome.unsatisfiable());
@@ -248,10 +275,7 @@ fn cancelled_queue(api: GpuApi) {
         let cancellation = Cancellation::default();
         let mut session = Session::builder(
             PreparedInput::hybrid(&owner),
-            SolveConfig {
-                search: SearchMethod::Clauses,
-                ..config(api, oracle)
-            },
+            config(api, oracle),
             cancellation.clone(),
         )
         .resources(&resources)
@@ -312,19 +336,24 @@ fn terminal_families(api: GpuApi) {
     for oracle in [Oracle::Auto, Oracle::Countermodel] {
         let (actual, outcome, routes) = capture(
             PreparedInput::terminal(&owner),
-            SolveConfig {
-                search: SearchMethod::Clauses,
-                ..config(api, oracle)
-            },
+            config(api, oracle),
             &resources,
             AnswerSelection::All,
         );
         assert_eq!(actual, expected);
         assert_eq!(routes.cpu, 0);
         assert_eq!(routes.tight + routes.general, 1);
+        // The region filter's source consequences exclude the answers holding
+        // b before they are core answers; only accepted ones are reconstructed.
         let core = outcome.hybrid_execution().unwrap();
         let terminal = outcome.terminal_execution().unwrap();
-        assert_eq!((core.accepted, core.rejected, core.pending), (2, 2, 0));
+        assert_eq!((core.accepted, core.rejected, core.pending), (2, 0, 0));
+        let filter = outcome
+            .countermodel_statistics()
+            .unwrap()
+            .region_filter
+            .unwrap();
+        assert!(filter.checks > 0);
         assert_eq!(
             (
                 terminal.base_answers,

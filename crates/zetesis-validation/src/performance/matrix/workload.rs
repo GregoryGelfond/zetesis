@@ -10,6 +10,7 @@ pub use bundle::{BundleFile, BundleInclude, BundleProgram};
 use serde::Serialize;
 use sha2::{Digest, Sha256};
 use std::path::Path;
+use zetesis_algebra::{Meter, MeterBytes, MeterCountError};
 
 use super::super::Error;
 use super::super::families::Family;
@@ -553,12 +554,14 @@ struct Budget {
 }
 impl Budget {
     fn metadata(&mut self, bytes: usize) -> Result<(), Error> {
-        let next = add(self.metadata, bytes)?;
-        if next > self.limits.metadata_bytes {
-            return Err(Error::Configuration(
-                "workload metadata exceeds its byte ceiling",
-            ));
-        }
+        let next = Meter::check_count(self.metadata, bytes, self.limits.metadata_bytes).map_err(
+            |error| match error {
+                MeterCountError::Overflow => Error::Configuration("workload byte count overflow"),
+                MeterCountError::Limit { .. } => {
+                    Error::Configuration("workload metadata exceeds its byte ceiling")
+                }
+            },
+        )?;
         self.metadata = next;
         Ok(())
     }
@@ -573,12 +576,13 @@ impl Budget {
     }
     fn source(&mut self, bytes: usize) -> Result<(), Error> {
         let next = add(self.sources, bytes)?;
-        if bytes > self.limits.source_bytes || next > self.limits.total_source_bytes {
-            return Err(Error::Configuration(
-                "workload source exceeds its byte ceiling",
-            ));
-        }
+        MeterBytes::check(bytes as u128, self.limits.source_bytes as u128)
+            .and_then(|()| MeterBytes::check(next as u128, self.limits.total_source_bytes as u128))
+            .map_err(|_| Error::Configuration("workload source exceeds its byte ceiling"))?;
         self.sources = next;
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod tests;

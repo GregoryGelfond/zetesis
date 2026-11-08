@@ -4,12 +4,12 @@ use super::super::{certificate_limits, prepare_certificate, search_limits};
 use crate::SolveConfig;
 use crate::execution_observation::Ignore;
 use crate::phase_timing::Recorder;
-use zetesis_cpu::Cancellation;
+use zetesis_algebra::Cancellation;
 use zetesis_ferraris::{
     AdmissionLimits, FormulaParts, Node, PositiveError, PositiveResource, Theory, TightError,
     TightPlan, TightPlanLimits, TightResource,
 };
-use zetesis_sat::{CertificateOrder, CertificatePlanStatistics, Incomplete, StableModels};
+use zetesis_stable::{CertificateOrder, CertificatePlanStatistics, Incomplete, StableModels};
 
 fn repeated_fact(roots: usize) -> Theory {
     Theory::new(
@@ -25,13 +25,7 @@ fn repeated_fact(roots: usize) -> Theory {
 }
 
 fn models(theory: &Theory, config: &SolveConfig, cancellation: Cancellation) -> StableModels {
-    StableModels::with_method(
-        theory,
-        zetesis_sat::SearchMethod::Regions,
-        search_limits(config),
-        cancellation,
-    )
-    .unwrap()
+    StableModels::new(theory, search_limits(config), cancellation).unwrap()
 }
 
 fn prepare(

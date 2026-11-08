@@ -9,7 +9,7 @@
 use std::{error::Error, fmt};
 
 use zetesis_ferraris::{Interpretation, Theory};
-use zetesis_sat::BatchVerdict;
+use zetesis_stable::BatchVerdict;
 
 /// Original candidates borrowed for one membership check, in proposal order.
 ///
@@ -26,9 +26,8 @@ impl<'a> CandidateBatch<'a> {
         Self { theory, candidates }
     }
 
-    /// Exact original subject of every candidate, which the GPU routes and the
-    /// queue's native test route load.
-    #[cfg(any(test, feature = "gpu"))]
+    /// Exact original input used by the queue's native checker fixtures.
+    #[cfg(test)]
     pub(crate) const fn theory(&self) -> &'a Theory {
         self.theory
     }
@@ -101,11 +100,11 @@ pub(crate) struct DeviceVerdicts {
 
 #[cfg(feature = "gpu")]
 impl DeviceVerdicts {
-    pub(crate) fn new(count: usize) -> Result<Self, zetesis_sat::Incomplete> {
+    pub(crate) fn new(count: usize) -> Result<Self, zetesis_stable::Incomplete> {
         let mut values = Vec::new();
         values
             .try_reserve_exact(count)
-            .map_err(|_| zetesis_sat::Incomplete::Allocation)?;
+            .map_err(|_| zetesis_stable::Incomplete::Allocation)?;
         Ok(Self {
             values,
             prefix_limit: None,
@@ -136,7 +135,7 @@ impl DeviceVerdicts {
 /// route. Either is an internal invariant failure, never a membership verdict.
 #[derive(Debug)]
 pub enum ExecutorError {
-    /// A receipt belongs to a different exact subject or pending batch.
+    /// A receipt belongs to a different original input or pending batch.
     ForeignBatch,
     /// The route returned a different number of verdicts than candidates.
     Shape {
@@ -167,7 +166,7 @@ impl Error for ExecutorError {}
 mod tests {
     use super::{CandidateBatch, ExecutorError};
     use zetesis_ferraris::{AdmissionLimits, Interpretation, Theory};
-    use zetesis_sat::BatchVerdict;
+    use zetesis_stable::BatchVerdict;
 
     fn theory() -> Theory {
         Theory::new(

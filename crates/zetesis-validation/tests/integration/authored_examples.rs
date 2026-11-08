@@ -1,5 +1,9 @@
 //! Fixture integrity is portable; complete clingo contract checks are opt-in.
+mod algebraic_classes;
 mod shifted_sum;
+mod strategic_companies;
+mod two_qbf;
+mod two_qbf_cores;
 use std::collections::BTreeSet;
 use zetesis_test_support::repository::examples as root;
 use zetesis_validation::{
@@ -436,6 +440,89 @@ fn family_complete_optimal_family_satisfies_its_contract() {
             "--outf=2",
             workload.entry(),
         ],
+        &oracle::DECIDED,
+        oracle::Limits {
+            timeout: Duration::from_mins(2),
+            max_output_bytes: 32 * 1024 * 1024,
+        },
+    );
+    workload
+        .contract()
+        .unwrap()
+        .check(&oracle::answers(&run))
+        .unwrap();
+}
+
+fn wide_mastermind() -> Workload {
+    let mut workloads = bundles::load(
+        &root().join("wide-mastermind/manifest.json"),
+        WorkloadLimits::default(),
+    )
+    .unwrap();
+    assert_eq!(workloads.len(), 1);
+    workloads.pop().unwrap()
+}
+
+#[test]
+fn wide_mastermind_bundle_preserves_every_original_source_and_include() {
+    let workload = wide_mastermind();
+    assert!(workload.is_bundle());
+    assert!(!workload.is_amended());
+    let record = serde_json::to_value(&workload).unwrap();
+    assert!(record.get("manifest_sha256").is_none());
+    assert_eq!(
+        record["bundle"]["manifest"]["sha256"],
+        "f259b629f0fda2ee2a02996ec163c84f1d23fe165738c8261eaa94e7cc4f378e"
+    );
+    assert_eq!(
+        record["bundle"]["files"],
+        serde_json::json!([
+            {
+                "path": "wide-mastermind/68/mm-68-examples.lp",
+                "sha256": "7d201478242b35de73ed5e671388738eeffebb108044fc297bf513e302b93000",
+                "includes": [
+                    {"spelling": "mm-68.lp", "target": "wide-mastermind/68/mm-68.lp"},
+                    {"spelling": "../mm-base.lp", "target": "wide-mastermind/mm-base.lp"}
+                ]
+            },
+            {
+                "path": "wide-mastermind/68/mm-68.lp",
+                "sha256": "2ec0d379cfcced3ff156c4ca87dbb4bf3ccaef5aeba9c50ad04fc7e621a66a43",
+                "includes": []
+            },
+            {
+                "path": "wide-mastermind/mm-base.lp",
+                "sha256": "176a1598c9f946d1952195cdabe752088f65575a45d8fafd5d16b385f1aafa52",
+                "includes": []
+            }
+        ])
+    );
+    for source in record["sources"].as_array().unwrap() {
+        assert_eq!(source["base_sha256"], source["derived_sha256"]);
+        assert_eq!(source["edits"], serde_json::json!([]));
+    }
+}
+
+#[test]
+fn wide_mastermind_contract_requires_all_45832_consistent_codes() {
+    let workload = wide_mastermind();
+    let contract = workload.contract().unwrap();
+    assert_eq!(contract.satisfiability(), examples::Satisfiability::Sat);
+    assert_eq!(contract.family(), examples::Family::All);
+    assert_eq!(contract.model_count(), Some(45_832));
+    assert_eq!(contract.cost(), None);
+}
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+#[test]
+#[ignore = "requires clingo: wide Mastermind has 45,832 codes consistent with its scored guess"]
+fn wide_mastermind_complete_family_satisfies_its_contract() {
+    use std::time::Duration;
+    use zetesis_clingo_support as oracle;
+    let workload = wide_mastermind();
+    let run = oracle::run_in(
+        &root(),
+        ["--models=0", "--outf=2", workload.entry()],
         &oracle::DECIDED,
         oracle::Limits {
             timeout: Duration::from_mins(2),

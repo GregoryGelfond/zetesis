@@ -3,8 +3,8 @@
 use std::io;
 
 use clap::Parser;
+use zetesis_algebra::Cancellation;
 use zetesis_cli::{Completion, Interruption, Options, RunError, run_with_diagnostics};
-use zetesis_cpu::Cancellation;
 use zetesis_test_support::io::{BoundedWriter, FULL};
 
 const SOURCE: &str = "1 {a;b} 1. #minimize{1,a:a;2,b:b}.";
@@ -99,14 +99,12 @@ fn cancellation_before_auto_formula_fallback_has_no_fabricated_admission_or_mode
     assert_eq!(report.completion, Completion::Interrupted);
     assert_eq!(
         report.interruption,
-        Some(Interruption::Preparation(zetesis_cpu::Stop::Cancelled))
+        Some(Interruption::Preparation(zetesis_algebra::Stop::Cancelled))
     );
     assert_eq!((report.models, report.checked), (0, 0));
     assert!(report.optimization.is_none());
     assert!(report.countermodel_statistics.is_none());
     assert!(report.formula_execution.is_none());
-    assert!(report.lazy_execution.is_none());
-    assert!(report.shared_execution.is_none());
     assert!(
         diagnostics.is_empty(),
         "no formula execution or backend started"

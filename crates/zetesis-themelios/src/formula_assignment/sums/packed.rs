@@ -9,6 +9,8 @@
 #[cfg(test)]
 mod tests;
 
+use zetesis_algebra::words::Words;
+
 use super::{Buffer, Computation, Context, FormulaFailure, FormulaResource, Numbers, Runs};
 use super::{ceiling, overflow, tick};
 
@@ -191,7 +193,7 @@ impl Packed {
         for &sum in values.iter() {
             tick(context)?;
             let sum = above(sum);
-            words.slice_mut()[sum / WORD_BITS] |= 1 << (sum % WORD_BITS);
+            Words::<u64, _>::new(words.slice_mut()).insert(sum);
         }
         // The old canonical run and the new words overlap during conversion;
         // both leases remain live until this point, then the run is released.
@@ -225,16 +227,16 @@ impl Packed {
             )?;
         }
         let old_words = (self.maximum + 1).div_ceil(WORD_BITS);
-        zetesis_core::packed::union_shifted(
+        zetesis_algebra::words::union_shifted(
             self.words.slice_mut(),
             old_words,
             weight,
             &mut || tick(context),
         )?;
         let mut count = 0;
-        for &word in self.words.iter() {
+        for &word in &Words::<u64, _>::new(self.words.slice()) {
             tick(context)?;
-            count += word.count_ones() as usize;
+            count += Words::<u64>::popcount(word) as usize;
             let limit = context.work.limits.max_assignment_values as u128;
             // Preserve the first excess distinct-value count used by merging,
             // even when one packed word crosses several values at once.
@@ -267,23 +269,24 @@ impl Packed {
             context.work.counters,
             context.work.location,
         )?;
-        for (index, &word) in self.words.iter().enumerate() {
+        for (index, &word) in Words::<u64, _>::new(self.words.slice()).iter().enumerate() {
             tick(context)?;
-            let mut remaining = word;
-            while remaining != 0 {
-                let bit = remaining.trailing_zeros() as usize;
-                let above = i64::try_from(index * WORD_BITS + bit).expect("an admitted offset");
-                let sum = i32::try_from(i64::from(self.seed) + above)
-                    .expect("every set bit is an admitted i32 sum");
-                values.push(
-                    sum,
-                    context.computation,
-                    context.work.limits,
-                    context.work.counters,
-                    context.work.location,
-                )?;
-                remaining &= remaining - 1;
-            }
+            let mut remaining = Words::<u64>::bits(word);
+            while remaining
+                .visit_next(|bit| {
+                    let above = i64::try_from(index * WORD_BITS + bit).expect("an admitted offset");
+                    let sum = i32::try_from(i64::from(self.seed) + above)
+                        .expect("every set bit is an admitted i32 sum");
+                    values.push(
+                        sum,
+                        context.computation,
+                        context.work.limits,
+                        context.work.counters,
+                        context.work.location,
+                    )
+                })?
+                .is_some()
+            {}
         }
         Ok(values)
     }

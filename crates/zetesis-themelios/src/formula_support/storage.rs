@@ -13,9 +13,9 @@ use std::sync::{
 use crate::ProgramSite;
 use zetesis_core::catalog::{AssignmentError, AssignmentFailure, Error, ReadError};
 
-use crate::formula::ceiling;
 use crate::grounding_observer::Event;
 use crate::{FormulaFailure, FormulaResource};
+use zetesis_algebra::MeterBytes;
 
 #[derive(Clone, Debug, Default)]
 pub(crate) struct Workspace(Arc<AtomicUsize>);
@@ -92,12 +92,7 @@ impl Scope<'_> {
         location: ProgramSite,
     ) -> Result<usize, FormulaFailure> {
         let outside = self.outside();
-        ceiling(
-            FormulaResource::SupportBytes,
-            outside,
-            limits.max_support_bytes as u128,
-            location,
-        )?;
+        support_limit(outside, limits.max_support_bytes, location)?;
         Ok(limits.max_support_bytes - usize::try_from(outside).expect("admitted usize bound"))
     }
 
@@ -135,12 +130,7 @@ impl Scope<'_> {
             crate::formula_binding::assignment(AssignmentError::Storage(Error::Overflow), location)
         })?;
         counters.record(Event::SupportPeakBytes(peak));
-        ceiling(
-            FormulaResource::SupportBytes,
-            peak,
-            limits.max_support_bytes as u128,
-            location,
-        )
+        support_limit(peak, limits.max_support_bytes, location)
     }
 
     pub(crate) fn result<T>(
@@ -170,6 +160,19 @@ impl Scope<'_> {
             error => crate::formula_binding::failure(error, location),
         })
     }
+}
+
+fn support_limit(
+    observed: u128,
+    limit: usize,
+    location: ProgramSite,
+) -> Result<(), FormulaFailure> {
+    MeterBytes::check(observed, limit as u128).map_err(|_| FormulaFailure::Limit {
+        resource: FormulaResource::SupportBytes,
+        observed,
+        limit: limit as u128,
+        location,
+    })
 }
 
 impl StorageLease {
@@ -434,12 +437,7 @@ fn reserve_with_growth<T>(
         .ok_or_else(|| {
             crate::formula_binding::assignment(AssignmentError::Storage(Error::Overflow), location)
         })?;
-    ceiling(
-        FormulaResource::SupportBytes,
-        live,
-        limits.max_support_bytes as u128,
-        location,
-    )?;
+    support_limit(live, limits.max_support_bytes, location)?;
     let external = usize::try_from(external_bytes).expect("admitted usize ceiling");
     let maximum = workspace
         .scope(lease, external)
@@ -632,6 +630,88 @@ mod tests {
                 ..
             })
         ));
+    }
+
+    #[derive(Default)]
+    struct PeakObserver(std::cell::Cell<Option<u64>>);
+
+    impl crate::GroundingObserver for PeakObserver {
+        fn enter(&self) {}
+        fn exit(&self) {}
+        fn details_enabled(&self) -> bool {
+            true
+        }
+        fn phase_exit(
+            &self,
+            _: crate::GroundingPhase,
+            _: Option<ProgramSite>,
+            _: crate::GroundingOutcome,
+            work: crate::GroundingWork,
+        ) {
+            self.0.set(work.support_peak_bytes);
+        }
+    }
+
+    #[test]
+    fn refused_actual_scope_peak_is_published_before_return() {
+        let observer = PeakObserver::default();
+        let profile = crate::grounding_observer::Profile::new(Some(&observer));
+        let counters =
+            super::super::Counters::resume(super::super::Accounting::default(), profile.work());
+        let mut lease = counters.lease();
+        lease.observe(8, location()).unwrap();
+        let scope = counters.accounting.workspace.scope(&lease, 4).unwrap();
+        let limits = FormulaLimits {
+            max_support_bytes: 12,
+            ..FormulaLimits::default()
+        };
+        let result = profile.phase(crate::GroundingPhase::SupportCompletion, None, || {
+            scope.peak(9, &limits, &counters, location())
+        });
+        assert!(matches!(
+            result,
+            Err(FormulaFailure::Limit {
+                resource: FormulaResource::SupportBytes,
+                observed: 13,
+                limit: 12,
+                location: site,
+            }) if site == location()
+        ));
+        assert_eq!(observer.0.get(), Some(13));
+        assert_eq!(lease.bytes(), 8);
+        assert_eq!(counters.workspace_bytes(), 8);
+        assert_eq!(counters.accounting.work, 0);
+    }
+
+    #[test]
+    fn refused_scope_allowance_does_not_publish_an_actual_peak() {
+        let observer = PeakObserver::default();
+        let profile = crate::grounding_observer::Profile::new(Some(&observer));
+        let counters =
+            super::super::Counters::resume(super::super::Accounting::default(), profile.work());
+        let mut lease = counters.lease();
+        lease.observe(8, location()).unwrap();
+        let scope = counters.accounting.workspace.scope(&lease, 4).unwrap();
+        let limits = FormulaLimits {
+            max_support_bytes: 3,
+            ..FormulaLimits::default()
+        };
+        let result = profile.phase(crate::GroundingPhase::SupportCompletion, None, || {
+            scope.allowance(&limits, location())
+        });
+        assert!(matches!(
+            result,
+            Err(FormulaFailure::Limit {
+                resource: FormulaResource::SupportBytes,
+                observed: 4,
+                limit: 3,
+                location: site,
+            }) if site == location()
+        ));
+        assert_eq!(observer.0.get(), Some(0));
+        assert_eq!(lease.bytes(), 8);
+        assert_eq!(counters.workspace_bytes(), 8);
+        assert_eq!(counters.accounting.work, 0);
     }
 
     #[test]

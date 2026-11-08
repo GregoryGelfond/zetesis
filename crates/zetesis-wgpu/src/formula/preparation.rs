@@ -7,7 +7,7 @@ use crate::formula_graph::dependency;
 #[cfg(test)]
 use crate::formula_graph::dependency::insert_position;
 use crate::{GpuError, GpuErrorKind};
-use zetesis_cpu::Cancellation;
+use zetesis_algebra::Cancellation;
 use zetesis_ferraris::Theory;
 
 pub(super) struct Preparation {
@@ -15,6 +15,7 @@ pub(super) struct Preparation {
     minimum: Plan,
     limits: FormulaLimits,
     propagation: crate::GpuPropagation,
+    workgroup_sizing: crate::GpuWorkgroupSizing,
 }
 
 pub(super) struct PreparedGraph {
@@ -85,11 +86,18 @@ impl Preparation {
             minimum,
             limits,
             propagation: crate::GpuPropagation::Dense,
+            workgroup_sizing: crate::GpuWorkgroupSizing::default(),
         })
     }
 
     pub(super) fn with_propagation(mut self, propagation: crate::GpuPropagation) -> Self {
         self.propagation = propagation;
+        self
+    }
+
+    /// The sizing whose dispatched workgroup size the finished graph records.
+    pub(super) fn with_workgroup_sizing(mut self, sizing: crate::GpuWorkgroupSizing) -> Self {
+        self.workgroup_sizing = sizing;
         self
     }
 
@@ -146,12 +154,18 @@ impl Preparation {
         if let Some(incidence) = &schedule.incidence {
             incidence.pack(&nodes, self.shape.nodes, &mut roots, cancellation)?;
         }
+        let workgroup_size = crate::kernel::dispatch_size(
+            self.workgroup_sizing,
+            dependency::level_widths(&roots, self.shape.roots, schedule.levels)?,
+            device,
+        );
         poll(cancellation)?;
         Ok((
             PreparedGraph {
                 graph: Graph {
                     shape: self.shape,
                     schedule,
+                    workgroup_size,
                 },
                 nodes,
                 roots,

@@ -743,7 +743,7 @@ ties does not reveal its hidden interpretations.
 
 ## Link-time optimization
 
-The release profile stays normal. Fat LTO reduced the experimental executable
+This study retained the default release profile. Fat LTO reduced the experimental executable
 by 21.2% and reduced each of the nine observed native RSS pairs, but Queens 2,
 SEND and task allocation were slower in both Fat blocks. Thin LTO showed
 substantial drift and no clear overall benefit. No release setting was changed.

@@ -1,8 +1,8 @@
 //! Canonical ownership and named-capacity admission, independent of physical execution.
 
+use zetesis_algebra::{Cancellation, Stop};
 use zetesis_core::catalog::{Catalog, Limits, ReadError, Vocabulary, VocabularyBuilder};
 use zetesis_core::{Atom, Predicate, TemplateCatalogFailure, Value, ValueNodeRef};
-use zetesis_cpu::{Cancellation, Stop};
 use zetesis_ferraris::native_aggregate::{
     self as native, Bound, ErrorKind, Function, Group, GroupData, Guard, Resource, Tuple,
 };

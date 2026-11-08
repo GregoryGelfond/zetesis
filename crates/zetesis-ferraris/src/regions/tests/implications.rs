@@ -1,11 +1,11 @@
 //! Implication dispatch preserves ordered consequences and charged visits.
 
 use crate::test_support::SinglePermits;
-use zetesis_cpu::Stop;
+use zetesis_algebra::Stop;
 
 use crate::{AdmissionLimits, FormulaParts, Knowledge, Narrower, Node, Theory};
 
-use super::super::{Closure, NarrowingScratch, Step, Subject, Work};
+use super::super::{Closure, Context, Meter, NarrowingScratch, Step};
 use super::{compact_mut, counters::same_knowledge};
 
 fn implication(consequent: usize) -> Theory {
@@ -22,9 +22,12 @@ fn implication(consequent: usize) -> Theory {
     .unwrap()
 }
 
-fn knowledge(index: &Narrower, values: [Option<bool>; 3]) -> Knowledge {
-    let mut knowledge = index.knowledge();
-    let known = compact_mut(&mut knowledge);
+fn knowledge<C: zetesis_algebra::Class>(
+    index: &Narrower,
+    values: [Option<bool>; 3],
+) -> Knowledge<C> {
+    let mut knowledge = index.class_knowledge::<C>();
+    let mut known = compact_mut(&mut knowledge);
     for (node, value) in values.into_iter().enumerate() {
         match value {
             Some(true) => known.sure[0] |= 1 << node,
@@ -108,24 +111,26 @@ fn compare_transition(
         contradiction: false,
     };
     expected.implication(consequent, event.is_some());
-    let mut actual = knowledge(index, values);
+    let mut actual = knowledge::<zetesis_algebra::AnswerSetsSought>(index, values);
     let mut lists = NarrowingScratch::default();
-    lists.prepare(2);
-    let mut closure = Closure {
+    lists.common.prepare(2);
+    let mut closure = Closure::<_, zetesis_algebra::AnswerSetsSought> {
         known: compact_mut(&mut actual),
-        lists: &mut lists,
+        lists: &mut lists.common,
+        learning: &mut lists.learning,
     };
     let result = if let Some((changed, value)) = event {
         closure.revisit_implication(theory.view(), 2, changed, value)
     } else {
-        let subject = Subject::from(crate::OriginalSubject::new(theory, None));
+        let subject = Context::from(crate::OriginalSubject::new(theory, None));
         // Teaching an implication introduces no extra charged visit, even
         // when it learns an operand or refutes.
-        let mut work = Work::new(0);
+        let mut work = Meter::local(0);
         let result = closure
             .teach_operands(subject, index, 2, &mut work)
+            .map_err(zetesis_algebra::Failure::into_stop)
             .unwrap();
-        assert_eq!(work.spent, 0);
+        assert_eq!(work.charged(), 0);
         result
     };
     assert!(
@@ -133,9 +138,9 @@ fn compare_transition(
         "{values:?}, b={consequent}, event={event:?}"
     );
     same_knowledge(&actual, &knowledge(index, expected.values));
-    assert_eq!(lists.nodes, expected.events);
-    assert!(lists.learned.is_empty() && lists.heads.is_empty());
-    assert!(lists.pending.iter().all(|word| *word == 0));
+    assert_eq!(lists.common.nodes, expected.events);
+    assert!(lists.common.learned.is_empty() && lists.common.heads.is_empty());
+    assert!(lists.common.pending.iter().all(|word| *word == 0));
 }
 
 fn compare_transitions(upward: bool) {
@@ -185,25 +190,30 @@ fn implication_parents_learn_before_teaching() {
 fn implication_parent_keeps_two_charged_visits() {
     let theory = implication(1);
     let index = Narrower::new(&theory);
-    let subject = Subject::from(crate::OriginalSubject::new(&theory, None));
+    let subject = Context::from(crate::OriginalSubject::new(&theory, None));
     // Node 0 has learned to hold while its implication parent already holds.
     // The event first tells atom 0, then its charged parent visit forces node 1.
     // The parent's own event remains pending throughout either step.
     for failure in [Stop::WorkLimit, Stop::Cancelled, Stop::Deadline] {
         for limit in 0..=2 {
-            let mut actual = knowledge(&index, [Some(true), None, Some(true)]);
+            let mut actual = knowledge::<zetesis_algebra::AnswerSetsSought>(
+                &index,
+                [Some(true), None, Some(true)],
+            );
             let mut expected = actual.clone();
             let mut lists = NarrowingScratch::default();
-            lists.prepare(2);
-            lists.nodes.push((2, true));
+            lists.common.prepare(2);
+            lists.common.nodes.push((2, true));
             let mut quota = SinglePermits::new(limit, failure);
-            let mut work = Work::reserved(&mut quota);
-            let result = Closure {
+            let mut work = Meter::reserved(&mut quota);
+            let result = Closure::<_, zetesis_algebra::AnswerSetsSought> {
                 known: compact_mut(&mut actual),
-                lists: &mut lists,
+                lists: &mut lists.common,
+                learning: &mut lists.learning,
             }
-            .revisit(subject, &index, 0, true, &mut work);
-            assert_eq!(work.spent, limit);
+            .revisit(subject, &index, 0, true, &mut work)
+            .map_err(zetesis_algebra::Failure::into_stop);
+            assert_eq!(work.charged(), limit);
             work.refund();
             if limit < 2 {
                 assert!(result == Err(failure));
@@ -215,14 +225,17 @@ fn implication_parent_keeps_two_charged_visits() {
                 compact_mut(&mut expected).atom_sure[0] |= 1;
             }
             same_knowledge(&actual, &expected);
-            assert_eq!(lists.learned, if limit == 0 { vec![] } else { vec![0] });
+            assert_eq!(
+                lists.common.learned,
+                if limit == 0 { vec![] } else { vec![0] }
+            );
             let mut events = vec![(2, true)];
             if limit == 2 {
                 events.push((1, true));
             }
-            assert_eq!(lists.nodes, events);
-            assert!(lists.heads.is_empty());
-            assert!(lists.pending.iter().all(|word| *word == 0));
+            assert_eq!(lists.common.nodes, events);
+            assert!(lists.common.heads.is_empty());
+            assert!(lists.common.pending.iter().all(|word| *word == 0));
             assert_eq!(quota.calls, (limit + 1).min(2));
         }
     }
@@ -235,20 +248,22 @@ fn implication_events_preserve_frozen_boundaries() {
     for masked_child in [false, true] {
         for masked_parent in [false, true] {
             let truth = [!masked_child, true, !masked_parent];
-            let subject = Subject::from(crate::FrozenSubject::new(&theory, &truth));
+            let subject = Context::from(crate::FrozenSubject::new(&theory, &truth));
             let values = [Some(false), None, masked_parent.then_some(false)];
-            let mut actual = knowledge(&index, values);
+            let mut actual = knowledge::<zetesis_algebra::Countermodels>(&index, values);
             let mut expected = actual.clone();
             let mut lists = NarrowingScratch::default();
-            lists.prepare(2);
-            let mut work = Work::new(2);
-            let result = Closure {
+            lists.common.prepare(2);
+            let mut work = Meter::local(2);
+            let result = Closure::<_, zetesis_algebra::Countermodels> {
                 known: compact_mut(&mut actual),
-                lists: &mut lists,
+                lists: &mut lists.common,
+                learning: (),
             }
             .revisit(subject, &index, 0, false, &mut work)
+            .map_err(zetesis_algebra::Failure::into_stop)
             .unwrap();
-            assert_eq!(work.spent, 2);
+            assert_eq!(work.charged(), 2);
             if !masked_child {
                 compact_mut(&mut expected).atom_never[0] |= 1;
             }
@@ -264,17 +279,20 @@ fn implication_events_preserve_frozen_boundaries() {
                         Step::Changed
                     }
             );
-            assert_eq!(lists.learned, if masked_child { vec![] } else { vec![0] });
             assert_eq!(
-                lists.nodes,
+                lists.common.learned,
+                if masked_child { vec![] } else { vec![0] }
+            );
+            assert_eq!(
+                lists.common.nodes,
                 if masked_parent {
                     vec![]
                 } else {
                     vec![(2, true)]
                 }
             );
-            assert!(lists.heads.is_empty());
-            assert!(lists.pending.iter().all(|word| *word == 0));
+            assert!(lists.common.heads.is_empty());
+            assert!(lists.common.pending.iter().all(|word| *word == 0));
         }
     }
 }

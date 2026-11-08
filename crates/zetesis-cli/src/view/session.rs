@@ -4,7 +4,7 @@ use super::{
     AnswerRenderer, AnswerView, ConfigurationView, PublicationView, RunError, SummaryDelivery,
     SummaryStage,
 };
-use zetesis_cpu::Cancellation;
+use zetesis_algebra::Cancellation;
 
 /// Owns invocation policy while borrowing the consumer's rendering state.
 /// Changing that state during a callback cannot reschedule terminal publication.

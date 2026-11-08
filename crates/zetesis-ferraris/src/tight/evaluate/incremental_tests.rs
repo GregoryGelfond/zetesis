@@ -9,7 +9,7 @@ use crate::{
     FormulaTransaction, Interpretation, Node, NodeView, Theory, TightCheckLimits, TightPlan,
     TightPlanLimits,
 };
-use zetesis_cpu::Cancellation;
+use zetesis_algebra::Cancellation;
 
 const ATOMS: usize = 6;
 

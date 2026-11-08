@@ -5,8 +5,10 @@
 //! retained. Roles remain parallel to the selected node IDs; preparation may
 //! partition both together so mutable counters precede relaxed seed roles.
 
-use super::{Narrower, NodeView, State, Theory, Work, bit, chain_position};
-use zetesis_cpu::Stop;
+use zetesis_algebra::{Failure, Quota};
+
+use super::{Meter, Narrower, NodeView, State, Theory, bit, chain_position};
+use zetesis_algebra::Stop;
 
 #[derive(Clone, Copy, Debug)]
 pub(super) enum Initial {
@@ -74,13 +76,13 @@ impl Initial {
     }
 }
 
-pub(super) fn prepare(
+pub(super) fn prepare<Q: Quota + ?Sized>(
     theory: &Theory,
     index: &Narrower,
     body_nodes: &[usize],
     cyclic_atoms: &[u64],
-    work: &mut Work<'_>,
-) -> Result<Vec<Initial>, Stop> {
+    work: &mut Meter<'_, Q>,
+) -> Result<Vec<Initial>, Failure<Q::Error>> {
     work.tick()?;
     let mut initial = Vec::new();
     initial
@@ -96,11 +98,11 @@ pub(super) fn prepare(
 /// Keep node IDs and their immutable roles aligned while moving relaxed seeds
 /// after mutable counters. This changes no incidence row or semantic identity.
 /// Owner authority is absent until this complete permutation is published.
-pub(super) fn partition(
+pub(super) fn partition<Q: Quota + ?Sized>(
     body_nodes: &mut [usize],
     initial: &mut [Initial],
-    work: &mut Work<'_>,
-) -> Result<usize, Stop> {
+    work: &mut Meter<'_, Q>,
+) -> Result<usize, Failure<Q::Error>> {
     debug_assert_eq!(body_nodes.len(), initial.len());
     let mut seeds = initial.len();
     let mut position = 0;

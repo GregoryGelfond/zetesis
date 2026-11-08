@@ -27,7 +27,12 @@ fn objective_scopes_share_canonical_predicate_text() {
         span: source.span(),
     });
     let mut metadata = crate::metadata::Builder::default();
-    crate::metadata::collect_profile(raised.program(), &mut metadata, true).unwrap();
+    crate::metadata::collect_profile_at(
+        raised.program(),
+        &mut metadata,
+        crate::ProgramSite::program(),
+    )
+    .unwrap();
     let metadata = metadata.finish(location).unwrap();
     let prepared = PreparationContext {
         options: AdmissionOptions::default().into(),

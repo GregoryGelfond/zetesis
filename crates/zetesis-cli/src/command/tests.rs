@@ -196,8 +196,6 @@ fn parsed_type(argument: &Arg) -> &'static str {
         (TypeId::of::<crate::ColorMode>(), "ColorMode"),
         (TypeId::of::<crate::Grounder>(), "Grounder"),
         (TypeId::of::<crate::Oracle>(), "Oracle"),
-        (TypeId::of::<crate::SearchMethod>(), "SearchMethod"),
-        (TypeId::of::<crate::SourceBatching>(), "SourceBatching"),
         (
             TypeId::of::<zetesis_themelios::JoinStrategy>(),
             "JoinStrategy",

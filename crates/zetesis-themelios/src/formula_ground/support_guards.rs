@@ -37,32 +37,41 @@ struct Plan {
 }
 
 impl Builder<'_, '_, '_> {
+    /// The guards read the atom metadata while they add nodes, so it is lent
+    /// out for their duration and returned: constraints retained afterwards
+    /// still read its fixed facts.
     pub(super) fn support_guards(&mut self) -> Result<(), FormulaFailure> {
         let metadata = std::mem::take(&mut self.metadata);
+        let guarded = self.guards(&metadata);
+        self.metadata = metadata;
+        guarded
+    }
+
+    fn guards(&mut self, metadata: &Metadata) -> Result<(), FormulaFailure> {
         #[cfg(test)]
         if !tests::enabled() {
-            return self.unshared_guards(&metadata);
+            return self.unshared_guards(metadata);
         }
-        if let Some(plan) = Plan::prepare(self, &metadata)? {
+        if let Some(plan) = Plan::prepare(self, metadata)? {
             // Unselected guards keep their atom order. Transposed groups follow
             // in first-incidence order; original roots and evidence stay intact.
             for atom in 0..self.catalog.len() {
                 self.work(metadata.location(atom))?;
-                if producer(&metadata, atom).is_none() {
-                    self.support_guard(&metadata, atom)?;
+                if producer(metadata, atom).is_none() {
+                    self.support_guard(metadata, atom)?;
                 }
             }
             for group in plan.groups.iter() {
                 let heads = &plan.heads.slice()[group.start..group.start + group.length];
-                self.transposed_guard(&metadata, *group, heads)?;
+                self.transposed_guard(metadata, *group, heads)?;
             }
         } else {
-            self.unshared_guards(&metadata)?;
+            self.unshared_guards(metadata)?;
         }
         // This separate consequence pass preserves every guard above. It can
         // expose shared nested conditions even when full transposition is dearer.
-        nested::publish(self, &metadata)?;
-        alternatives::publish(self, &metadata)
+        nested::publish(self, metadata)?;
+        alternatives::publish(self, metadata)
     }
 
     fn unshared_guards(&mut self, metadata: &Metadata) -> Result<(), FormulaFailure> {

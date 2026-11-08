@@ -4,13 +4,13 @@ use std::{collections::BTreeSet, io};
 use zetesis_reference_support::formula;
 
 use crate::support::sessions::config;
-use zetesis_cpu::Cancellation;
+use zetesis_algebra::Cancellation;
 use zetesis_solve::{
     AnswerSelection, Backend, Completion, ExecutionObservation, ExecutionObserver,
-    ExecutionResources, GpuApi, Grounder, Oracle, PreparedInput, Session, SolveConfig, SolveError,
-    Subject,
+    ExecutionResources, GpuApi, Grounder, Original, PreparedInput, Session, SolveConfig,
+    SolveError,
 };
-use zetesis_themelios::{AdmissionOptions, AdmittedFormula, admit};
+use zetesis_themelios::AdmittedFormula;
 
 fn objective() -> AdmittedFormula {
     formula("1 {a;b} 1. #minimize {1@2,a:a; 2@2,b:b}. #show.")
@@ -35,8 +35,8 @@ fn all_selection_preserves_nonoptimal_answers() {
             let answer = answer.unwrap();
             assert!(
                 answer
-                    .subject()
-                    .same_instance(&Subject::Theory(owner.theory().clone()))
+                    .original()
+                    .same_instance(&Original::Theory(owner.theory().clone()))
             );
             let atoms: Vec<_> = answer
                 .interpretation()
@@ -91,10 +91,10 @@ fn default_selection_retains_the_optimum() {
 
 #[test]
 fn start_polls_control_before_device_setup() {
-    let owner = admit("a.".into(), AdmissionOptions::default()).unwrap();
+    let owner = zetesis_reference_support::formula("a.");
     let cancellation = Cancellation::default();
     let builder = Session::builder(
-        PreparedInput::admitted(&owner),
+        PreparedInput::formula(&owner),
         SolveConfig {
             backend: Backend::Gpu(Some(GpuApi::Metal)),
             grounder: Grounder::Eager,
@@ -115,11 +115,13 @@ fn start_polls_control_before_device_setup() {
 
 #[test]
 fn invalid_request_retains_its_original_subject() {
-    let owner = admit("a.".into(), AdmissionOptions::default()).unwrap();
+    let owner = zetesis_reference_support::formula("a.");
     let failure = Session::builder(
-        PreparedInput::admitted(&owner),
+        PreparedInput::formula(&owner),
         SolveConfig {
-            oracle: Oracle::Countermodel,
+            // A prepared formula is grounded already; it cannot be grounded
+            // lazily.
+            grounder: Grounder::Lazy,
             ..config()
         },
         Cancellation::default(),
@@ -131,9 +133,9 @@ fn invalid_request_retains_its_original_subject() {
     assert!(failure.semantic().is_none());
     assert!(
         failure
-            .subject()
+            .original()
             .unwrap()
-            .same_instance(&Subject::Program(owner.program().clone()))
+            .same_instance(&Original::Theory(owner.theory().clone()))
     );
 }
 
@@ -142,16 +144,24 @@ struct RefusePreparation;
 impl ExecutionObserver for RefusePreparation {
     type Error = io::Error;
 
-    fn observe(&mut self, _: ExecutionObservation<'_>) -> Result<(), Self::Error> {
-        Err(io::Error::other("preparation observation refused"))
+    // Formula initialization owns observer failures at its own setup and
+    // returns them from the first pull. Refusing the execution route's
+    // observation instead fails execution setup, which `start` returns.
+    fn observe(&mut self, observation: ExecutionObservation<'_>) -> Result<(), Self::Error> {
+        match observation {
+            ExecutionObservation::CpuFormula { .. } => {
+                Err(io::Error::other("preparation observation refused"))
+            }
+            _ => Ok(()),
+        }
     }
 }
 
 #[test]
 fn observed_start_preserves_the_external_failure() {
-    let owner = admit("a.".into(), AdmissionOptions::default()).unwrap();
+    let owner = zetesis_reference_support::formula("a.");
     let failure = Session::builder(
-        PreparedInput::admitted(&owner),
+        PreparedInput::formula(&owner),
         config(),
         Cancellation::default(),
     )
@@ -167,8 +177,8 @@ fn observed_start_preserves_the_external_failure() {
     assert!(failure.semantic().is_none());
     assert!(
         failure
-            .subject()
+            .original()
             .unwrap()
-            .same_instance(&Subject::Program(owner.program().clone()))
+            .same_instance(&Original::Theory(owner.theory().clone()))
     );
 }

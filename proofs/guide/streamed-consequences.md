@@ -1,7 +1,7 @@
 # Consequences from original streamed constraints
 
 [`StreamedConsequences`](../Zetesis/StreamedConsequences.lean) uses the existing
-`Cube`, original Ferraris truth and model predicates. It is a mathematical
+`Region`, original Ferraris truth and model predicates. It is a mathematical
 library over admitted grounded occurrences, independent of Rust source cursors.
 
 A body records signed atom occurrences and a successfully evaluated scalar
@@ -70,7 +70,7 @@ scalar and unit tests. The theorem does not
 identify source rows or prove that a particular changed atom is now held.
 
 Positive cuts need a different argument from unchanged reads. In a consistent
-cube, `positive_cut_blocks_consequence` says that a cut positive occurrence
+region, `positive_cut_blocks_consequence` says that a cut positive occurrence
 cannot make the body sure or remain the fresh pivot of a unit witness.
 `completed_template_positive_cuts` therefore preserves a completed unproductive
 scan when every affected occurrence is positive and cut. The proof reuses change

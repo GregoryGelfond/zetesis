@@ -1,7 +1,7 @@
 //! Thread-local reference and interruption controls for this optional route.
 
 use std::cell::RefCell;
-use zetesis_cpu::Cancellation;
+use zetesis_algebra::Cancellation;
 
 #[derive(Clone, Copy, Default, Debug, PartialEq, Eq)]
 pub(super) struct Counts {

@@ -1,8 +1,8 @@
 use super::{Error, Failure, atom_with, term_with};
 use themelios_program::{Name, Sign as SymbolSign, Symbol};
+use zetesis_algebra::{Cancellation, Stop};
 use zetesis_core::catalog::TermRef;
 use zetesis_core::{Atom, AtomCatalog, Predicate, Sign, Value, ValueLimits, ValueNode};
-use zetesis_cpu::{Cancellation, Stop};
 
 fn fixture() -> (AtomCatalog, Symbol) {
     let structured = Value::from_nodes(

@@ -162,9 +162,17 @@ fn source_admission_keeps_undefined_families() {
 
 #[test]
 fn hybrid_capture_keeps_its_original_rows() {
-    let reference = controlled(true, || ground_hybrid(testing::prepare(DIAGONAL), None)).unwrap();
+    // The diagonal family stays streamed with pairwise capture off, so the
+    // captured rows themselves are compared.
+    let reference = crate::test_support::without_pair_exclusions(|| {
+        controlled(true, || ground_hybrid(testing::prepare(DIAGONAL), None))
+    })
+    .unwrap();
     let receipts = Receipts::default();
-    let selected = ground_hybrid(testing::prepare(DIAGONAL), Some(&receipts)).unwrap();
+    let selected = crate::test_support::without_pair_exclusions(|| {
+        ground_hybrid(testing::prepare(DIAGONAL), Some(&receipts))
+    })
+    .unwrap();
     assert!(reference.1.is_some());
     assert!(selected.1.is_some());
     assert_same_program(&reference.0, &selected.0);
@@ -194,6 +202,19 @@ fn expression_postings_preserve_repeated_column_matching() {
     assert_eq!(receipts.emission.get().numeric_index_builds, Some(1));
     assert_eq!(receipts.emission.get().expression_key_probes, Some(1));
     assert_eq!(receipts.emission.get().expression_key_rows, Some(2));
+}
+
+#[test]
+fn unordered_appended_keys_merge_into_the_kept_index() {
+    // r's second column cycles through ten values, so most rounds append a key
+    // below the kept maximum and the merge moves kept entries.
+    let source = "r(0,3). r(I+1,(V*7)\\11) :- r(I,V), I<40. s(I) :- r(I,V), V<5.";
+    let reference = controlled(true, || ground(testing::prepare(source), None, None)).unwrap();
+    let receipts = Receipts::default();
+    let selected = ground(testing::prepare(source), Some(&receipts), None).unwrap();
+    assert_same_program(&reference, &selected);
+    assert_eq!(receipts.other.get().numeric_index_builds, Some(1));
+    assert_eq!(receipts.other.get().numeric_index_extensions, Some(40));
 }
 
 #[test]

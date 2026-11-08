@@ -1,7 +1,7 @@
 use std::borrow::Cow;
 use std::collections::BTreeMap;
 
-use zetesis_cpu::Cancellation;
+use zetesis_algebra::Cancellation;
 use zetesis_ferraris::{
     AdmissionLimits, AggregateComparison, AggregateElement, AggregateFamilyBuild,
     AggregateFamilyLimits, AggregateGuard, FormulaNodes, FormulaParts, NodeView,
@@ -11,34 +11,43 @@ use zetesis_objective::Score;
 
 use super::{
     ObjectiveBound, ObjectiveBoundError, ObjectiveBoundErrorKind as Kind, ObjectiveBoundLimits,
-    ObjectiveBoundResource, ObjectiveBoundStatistics, ObjectivePlan, ObjectivePlanLimits, Work,
+    ObjectiveBoundResource, ObjectivePlan, ObjectivePlanLimits, Work,
 };
 
 pub(super) mod normalize;
 
+/// Which lexicographic comparison with its incumbent a bound compiles.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) enum Comparison {
+    /// Cost at most the incumbent's, so that every tie survives.
+    AtMost,
+    /// Cost strictly less than the incumbent's, so that no tie survives.
+    Below,
+}
+
 pub(super) fn compile(
     plan: &ObjectivePlan,
     incumbent: &Score,
+    comparison: Comparison,
     limits: ObjectiveBoundLimits,
     cancellation: &Cancellation,
 ) -> Result<ObjectiveBound, ObjectiveBoundError> {
-    let mut work = Work {
-        cancellation,
-        limits: ObjectivePlanLimits {
+    let mut work = Work::new(
+        ObjectivePlanLimits {
             max_nodes: limits.aggregate.max_nodes,
             max_operands: limits.aggregate.max_operands,
             max_work: limits.max_work,
             ..ObjectivePlanLimits::default()
         },
-        template: None,
-        statistics: ObjectiveBoundStatistics::default(),
-    };
+        cancellation,
+    );
     work.tick()?;
     let mut nodes = copy(&plan.nodes, &mut work)?;
     let root = lexicographic(
         &mut nodes,
         plan.levels.keys().copied(),
         incumbent,
+        comparison,
         limits,
         &mut work,
         |priority, _| {
@@ -64,15 +73,11 @@ pub(super) fn compile(
     let exact = ObjectiveBound {
         original: plan.original.clone(),
         theory,
-        statistics: work.statistics,
+        statistics: work.statistics(),
         choice_failure: None,
     };
     Ok(super::choices::strengthen(
-        plan,
-        exact,
-        incumbent,
-        limits,
-        cancellation,
+        plan, exact, incumbent, comparison, limits, &mut work,
     ))
 }
 
@@ -108,18 +113,20 @@ fn copy(parts: &FormulaParts, work: &mut Work<'_>) -> Result<FormulaNodes, Objec
             _ => Kind::Theory(error),
         })
     })?;
-    work.statistics.nodes = copied.nodes().len();
+    work.nodes = copied.nodes().len();
     Ok(FormulaNodes::new(copied))
 }
 
-/// Compile the same non-strict lexicographic comparison for exact costs and
-/// certified lower costs. Priorities absent from either side have value zero.
-/// The ascending fold makes each higher priority dominate its existing suffix;
-/// the initial true suffix retains ties at every priority.
+/// Compile the same lexicographic comparison for exact costs and certified
+/// lower costs. Priorities absent from either side have value zero. The
+/// ascending fold makes each higher priority dominate its existing suffix. Its
+/// initial suffix decides costs equal at every priority: true retains every
+/// tie ([`Comparison::AtMost`]), false keeps none ([`Comparison::Below`]).
 pub(super) fn lexicographic<'a>(
     nodes: &mut FormulaNodes,
     priorities: impl Iterator<Item = i32>,
     incumbent: &Score,
+    comparison: Comparison,
     limits: ObjectiveBoundLimits,
     work: &mut Work<'_>,
     mut elements: impl FnMut(
@@ -128,7 +135,10 @@ pub(super) fn lexicographic<'a>(
     ) -> Result<Cow<'a, [AggregateElement]>, ObjectiveBoundError>,
 ) -> Result<usize, ObjectiveBoundError> {
     let falsum = work.node(nodes, NodeView::False)?;
-    let mut root = work.node(nodes, NodeView::Implies(falsum, falsum))?;
+    let mut root = match comparison {
+        Comparison::AtMost => work.node(nodes, NodeView::Implies(falsum, falsum))?,
+        Comparison::Below => falsum,
+    };
     let mut costs = BTreeMap::new();
     for priority in priorities {
         work.tick()?;
@@ -169,7 +179,7 @@ pub(super) fn family(
     let mut aggregate = limits.aggregate;
     aggregate.max_work = aggregate
         .max_work
-        .min(limits.max_work - work.statistics.work);
+        .min(limits.max_work - work.meter.charged());
     let result = append_aggregate_family(
         nodes,
         elements,
@@ -188,7 +198,7 @@ pub(super) fn family(
         }
     };
     work.account(build.statistics().work)?;
-    work.statistics.nodes = nodes.view().len();
+    work.nodes = nodes.view().len();
     Ok(build)
 }
 

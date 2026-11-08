@@ -46,52 +46,47 @@ the semantic laws from the remaining executable refinement obligations.
 
 ## Two exact membership paths
 
-For the normal profile, a seed fixes the reduct's gates. Positive inference
-starts empty, derives consequences, checks constraints, then compares the
-result's gate projection with the seed. The dense graph and source-driven
-oracles implement this same acceptance question.
+A certificate for the complete original theory can select a class-specific
+membership check. The CPU supports tight, positive and stratified plans.
+The GPU supports the tight plan. For normal rules,
+the answer-set condition is equality with the least consequences of the
+candidate's reduct together with satisfaction of its constraints.
 
-Ordinary sessions retain shared atom selections across each candidate batch.
-CPU and GPU checkers borrow their true atoms through `SeedView`; an owned `Seed`
-uses the same checking implementation. Eager device packing writes into the
-admitted batch buffer without constructing a temporary word vector for each
-seed. These ownership and transport choices do not change the frozen gates or
-the least-consequence check. Returned answer sets still own their interpretations.
+The general membership check rejects a proposed interpretation `M` that
+fails the original theory `T`. Candidate-only restrictions further select
+which models the session seeks. For each eligible `M`, the inner search
+asks whether a proper subset `J` of `M` satisfies the frozen reduct
+`T^M`. A subset can be a countermodel even
+when it fails a candidate-only restriction. A validated countermodel
+rejects `M`. Complete coverage without one establishes that `M` is an
+answer set of `T`. An interrupted search without a witness leaves the
+question open. Each candidate has its own frozen reduct. Packed atom
+positions form the third dimension inside each region of both searches.
+The exhaustive `zetesis-ferraris` checker provides a small-instance
+reference for the region search in `zetesis-stable`.
 
-For finite general formulas, the candidate must first satisfy the original
-theory. A frozen truth mask then permits repeated evaluations of its reduct
-without constructing a separate formula tree. Finding a proper-subset model
-rejects the candidate. Proving that none exists accepts it. The exhaustive
-`zetesis-ferraris` checker is an exact small-instance reference; ordinary formula
-search uses the native candidate and countermodel machinery in `zetesis-sat`.
-Its Boolean search representation does not redefine ASP as classical
-satisfiability: auxiliary encoding variables do not participate in answer-set
-identity or minimality.
+Before the candidate walk starts, arithmetic preparation can refute its
+root or fix atoms through proved units. Other atoms start open. Inside a
+region, a sure reading guarantees that every interpretation in the region
+satisfies the node, and a never reading guarantees that none does. A held
+atom is sure and a cut atom is never. Narrowing requires each asserted root
+to hold and propagates knowledge between nodes and their operands. For
+example, a conjunction required to hold requires both operands. If a
+disjunction must hold and one operand fails, the other must hold. These
+steps repeat until the readings stop changing or a contradiction refutes
+the region.
 
-Candidates on the formula route can be proposed by regions
-(`--search regions`), the same coverage tree the closure route walks
-(`Search.lean`), over the theory's atoms. The root leaves every atom open. Under a region every node of the formula DAG
-has two readings, decided by one pass over the DAG: sure, when every
-candidate of the region satisfies it, and never, when no candidate does; a
-held atom is sure, a cut atom never, and the connectives combine the
-readings as the closure route's definite and possible gates combine a
-rule's. The narrowing closes what every candidate must make of each node
-in both directions: every root holds, a node learns from its operands, and
-a node teaches its operands what its knowledge leaves them, a conjunction
-that holds both operands, a disjunction that holds with one operand
-failing the other, and so on through the connectives, until nothing
-changes; an atom known is decided and a node known both ways refutes,
-which is what unit propagation over a clause form decides. An atom none
-of whose producers can support it, each having a failing body or another
-head held, is cut, a held one refuting the region, and an atom held with
-one producer left demands that producer's body. The `zetesis-ferraris` crate narrows a region by
-these rules to a fixed point over the theory's own DAG, without a clause
-form (`FormulaBounds.read_sound`, `never_root_refutes`, `known_sound`,
-`unsupported_cut`). A region no reading refutes is split
-on the open atom the split ranking below prefers, held branch first;
-a region with every atom decided is a leaf, and a leaf is a classical model, since at a full decision every
-root is sure or never (`FormulaBounds.decided_leaf_models`). The leaf
-is the candidate the reduct decides.
+If an atom has no possible producer, narrowing cuts it. If it is already
+held, the region is refuted. A held atom with one possible producer
+requires that producer's body to hold. The `zetesis-ferraris` crate
+applies these rules to a fixed point over the theory's DAG
+(`FormulaBounds.read_sound`, `never_root_refutes`, `known_sound`,
+`unsupported_cut`). A surviving region with open atoms splits on the atom
+preferred by the ranking below, held branch first. At a fully decided
+leaf, each asserted root is sure or never. A never root refutes the leaf,
+so this region walk proposes only classical models of the original theory
+that satisfy its active candidate restrictions
+(`FormulaBounds.decided_leaf_models`).
 
 Support rechecks carry two producer-row positions with the region's inherited
 knowledge. A failed body or competing held head stays unavailable in every
@@ -204,22 +199,56 @@ possible-foundedness preparation, closure and publication (`founded_work`). Both
 are included in `reading_work`, and both retain work spent before interruption.
 An omitted closure pass contributes no foundedness work.
 
-A worker may retain a bounded ledger of conditional unsupported sets: if all
-signed atom conditions hold, every output atom must be absent. Identical
-conditions can share their output union, and a stronger newly certified row can
-replace older rows requiring more conditions and excluding fewer atoms. Unions
-retain the existing limit of 64 distinct outputs. Merely overlapping conditions
-are not combined. Comparisons, packing and bounded compaction are admitted before
-any old row is removed; an interrupted attempt preserves the old certificates.
-Unrelated rows retain their order. Capture still stops when the ledger is full.
-Matching and capture are counted in `support_explanations.work`, separately from
-`founded_work`, and both contribute to total reads. Consolidation changes the
-physical representation of established consequences, not their reduct meaning.
+A worker's tier of learned rows is bounded by its owner's limits: by default 64
+rows, 256 founded capture attempts and 131,072 capture reads over the tier's
+life, and per capture at most 4,096 reads, 65,536 workspace bytes, 16 signed
+conditions and 64 outputs. Identical conditions can share their output union,
+and a stronger newly certified row can replace older rows requiring more
+conditions and giving fewer outputs. Unions retain the limit of 64 distinct
+outputs. Merely overlapping conditions are not combined. Comparisons, packing
+and bounded compaction are admitted before any old row is removed; an
+interrupted attempt preserves the old certificates. Unrelated rows retain their
+order, and an evicted row's position takes the new row. By default the founded
+floor equals the tier's capacity, so a tier full of founded rows stops capturing
+as before. Matching and capture are counted in `support_explanations.work`,
+separately from `founded_work`, and both contribute to total reads.
+Consolidation changes the physical representation of established consequences,
+not their reduct meaning.
+
+Up to 64 rows, each matching step tests every row. Above that, a step reads an
+occurrence index of every row's condition and output atoms, and tests only the
+rows that mention an atom decided since the previous step. Within one narrowing
+knowledge only grows and a row's deduction reads only its own atoms, so a row
+the index skips has the deduction the previous step already applied. A
+narrowing's first step, whose inherited knowledge no earlier step of this tier
+read, and the first step after the rows change test every row. The first indexed
+step after a change rebuilds the index at one read per indexed occurrence; an
+interrupted rebuild is never read.
+
+Sharing rows is charged as it runs. Each store row a seeding passes over or
+copies, and each tier row a delivery examines or delivers, costs reads of the
+walk's budget, counted in `support_explanations.work`. The tier's sharing
+allowance, 131,072 reads over its life by default, bounds the copies and their
+comparisons; exhausting it ends that tier's sharing, never the walk. A tier that
+read the whole store before reads only the rows retained there since. One lock
+serializes the store, held by seeding and delivery and never by a narrowing. The
+work quota, a cancellation or an allocator refusal during seeding or delivery
+stops the walk as any read does: a walk whose final delivery exceeds the work
+ceiling ends incomplete and claims no exhaustion. A tier delivers only under its
+own class, the theory instance whose carrier learned its rows. Tier and store
+capacities grow with the candidate memory allowance: one tier row per MiB of it,
+between 64 and 4,096 rows, and a store four times a tier, so the library's
+default allowance keeps today's 64 rows. Under sharing, work counts depend on the
+schedule, since which worker learns a row first affects the others; answer sets
+do not.
+
 After a complete premise match, packed output words are filtered against current
-held and cut masks before decoding atom IDs. Already-cut outputs need no event;
-a held output must still refute the region, even if also cut. Ascending event
-order is preserved. The cursor lasts only for that traversal and stores no
-knowledge for another region. Work includes loaded words and emitted outputs.
+held and cut masks before decoding atom IDs: a required absence is visited when
+its atom is held or not yet cut, a required presence when its atom is cut or not
+yet held. Outputs already satisfied need no event; a contradicted output must
+still refute the region. Ascending event order is preserved, an absence before a
+presence of the same atom. The cursor lasts only for that traversal and stores
+no knowledge for another region. Work includes loaded words and emitted outputs.
 
 Native nonnegative threshold rows also share consequences during
 original-candidate narrowing. Preparation links exact prefixes of grouped
@@ -296,7 +325,7 @@ propagation; allocation failure and global work, cancellation or deadline stops
 remain errors. Used words are reinitialized for every attempt, and retained
 capacity is accounted as worker scratch. Grounding's complete assignment sums
 and this CPU check share one packed shift-and-union kernel. The propagation
-operation `zetesis_core::packed::union_shifted_until_hit` checks translated bits
+operation `zetesis_algebra::words::union_shifted_until_hit` checks translated bits
 while inserting them, avoiding a separate interval scan. Earlier iterations
 found no witness, so only the new translated bits can supply one. A hit may
 leave a partial union, which the caller discards; absence requires completing
@@ -371,6 +400,55 @@ grounding may give eager and hybrid executions different dependency graphs, so
 coverage and complete answer families, rather than identical traversal order,
 are the preserved contract.
 
+Before preparing that order, the same original-candidate owner recognizes
+checked affine equations and cardinality bounds. Clause groups and complete
+normal definitions supply parity equations over the original atom coordinates.
+Uniform positive thresholds and eligible constraints supply guarded count
+bounds. Recognition proposes each row; a separate source read authenticates it
+against the exact theory and complete producer inventory.
+
+For a bounded definition, signed atom columns are intersected within each body
+and united across its producers. XOR with the head column gives its forbidden
+patterns. These packed reductions retain every source check. The affine-hull
+reduction stops adding differences at full rank, while counting the remaining
+patterns to establish exactness.
+
+Nested conjunctions retain every leaf occurrence. In the declared clause
+contexts, an implication with the exact canonical-true antecedent is read through
+to its signed atom. An asserted conjunction may supply both lower and upper
+threshold bounds, including under original-world double negation; every child
+must qualify before the family is retained. These are checked source views, not
+rewrites of the original formula or its reduct.
+
+Clause recognition also uses independently checked positive facts. Selected
+original rules with atomic heads and positive conjunctive bodies feed the
+shared positive activation kernel. Its proposed facts carry ordered original
+rule witnesses; a separate replay starts empty and checks every premise before
+accepting a fresh head. Unseeded cycles cannot justify themselves, and unknown
+atoms are not assumed false. Recognition first checks the original clause's
+distinct atoms and eight-atom limit, then removes known positive leaves or
+discards a body falsified by a known negative leaf. The equation checker rereads
+that original clause using the same checked fact owner. Complete definitions
+and guarded counts retain their own source conditions.
+
+Root parity elimination uses packed row XOR. The counting preparation checks
+that proposed lower and upper families are disjoint covers of the same atoms,
+then compares their totals. A guarded bound contributes its unconditional
+fallback while its guard remains open. A proved root contradiction starts no
+candidate walk; otherwise one-atom parity rows seed the root. The original
+theory and frozen-reduct membership checks are unchanged. These preparations
+run once for each original candidate owner, before serial, parallel or device
+candidate scheduling; they are host preparation, not device kernels.
+
+Both systems share an optional allowance of 100,000,000 logical word operations
+and the inherited preparation-byte allowance. Exhausting an optional allowance
+discards the whole preparation and keeps ordinary candidate generation.
+Cancellation, global work refusal, allocation and invalid source reads remain
+typed failures. Only a completed preparation publishes rows or units. The default
+candidate walk uses the prepared root and skips further parity and cardinality
+inspections of candidate regions, even when preparation found a nonempty basis
+or a checked pair of counting families.
+
 With an active restriction or without a prepared generator order, the existing
 preference applies. Open atoms that head an atomic choice root of the
 original theory rank first, whether or not the theory lies in the producer
@@ -385,13 +463,13 @@ order changes the regions visited, never the answers. The packed region masks en
 open atoms in ascending order, excluding decided atoms and unused final bits;
 each inspected parent count spends one work permit. The primary count is read
 once per eligible atom; secondary counts are read only to resolve primary ties.
-The traversal itself is one operation in `zetesis-cpu`, shared by both
-routes when one worker walks; with several workers the formula route walks
-the same tree in `zetesis-sat`'s parallel regions: the walk begins on the
-calling thread, and the workers it then starts each own a deque of regions,
-from which idle workers steal. The closure
-route narrows by its two closures, the formula route by
-the readings.
+The scalar `zetesis_algebra::walk::Walk` covers candidate and proper-subset
+regions with the caller's narrowing. With several workers, `zetesis-stable`'s
+parallel regions walk the same tree: the walk begins on the calling thread,
+and the workers it then starts each own a deque of regions, from which idle
+workers steal. That schedule and the GPU candidate producers share the queue
+and termination protocol in `zetesis_algebra::walk::frontier::Frontier`.
+Their original-theory and frozen-reduct narrowing remain distinct.
 
 Before a CPU region query searches subsets, an optional checked fragment can
 decide membership by least consequences of the frozen reduct. Candidate-false
@@ -418,6 +496,19 @@ and a covered tree with no such leaf is the proof of minimality
 are then the same operation over the same index of the theory, and no
 clause form is built anywhere on the route.
 
+The query walk has subjects of its own. After its root's first closure the
+candidate's inner subjects are prepared from that closed root: the guards
+whose holding reaches the candidate are cut as units; each clause group's
+patterns that a clause does not already forbid are probed, in at most two
+rounds, by narrowing a copy of the closed root with the guard and the pattern
+decided (a group of one clause cutting its whole support only in the second), and the allowed patterns' affine hull and least and greatest counts, with the cliques of pairwise exclusions
+and the trivial bounds completing a partition, supply rows and bounds to the
+parity and cardinality systems for this query. From then on every region of
+the query, inline or served, narrows through the one joint driver with the frozen
+reading eager and these systems late, each preparation authenticated to its
+candidate at every use and dropped with the query. The receipts' `preparation`
+object (see the outcomes reference) reports what was prepared and what it cost.
+
 Because the regions share nothing, several workers can walk the tree at
 once (`--threads`, the host's available parallelism by default), started once
 the walk has run on one thread, in wall time since it began, for longer than
@@ -428,9 +519,53 @@ schedule's after, is not promised to repeat between runs, and is not a property
 of the result. Verification rests on the laws and on the
 oracle comparison of answer sets as sets, not on order or determinism.
 
+A worker decides each leaf it reaches, so a candidate whose subset query is
+wide would hold one worker while the others idle once the candidate frontier is
+thin, as on a 2QBF instance with few existential and many universal
+assignments. Such a query is divided. Once it has run, since its first
+narrowing, for the cost of engaging one worker while another waits idle
+(`QueryDivision::WhenIdle`, the default), it stops before a narrowing and
+publishes its pending regions, each with its frozen-narrowing knowledge, to its
+worker's deque of published regions; the regions it visited and the ones it
+published partition its tree. Any worker may then serve them, narrowing on its
+own reduct workspace and charging its own lease on the walk's allowance. A
+worker serves its own published regions before its candidate regions, and with
+both deques empty steals a peer's oldest published region before a peer's
+oldest candidate region. The query keeps one count of its live regions, raised
+before a split's children are visible. A validated countermodel refutes the
+candidate at once; the last region resolved with no countermodel and no stop
+proves it stable, and its server sends it. The leaf stays unresolved in the
+walk until then, so the walk cannot end beside a query in progress, and a stop
+or a region whose check stopped never becomes a stable verdict
+(`InnerQuery.exhausted_walk_decides`). The coordinator publishes only once its
+engagement deadline has passed, and then engages the workers to serve the
+query. A refused allocation keeps the query inline.
+
+The allocation refusal that keeps a query inline belongs to the initial handoff:
+its pending entries have not yet been surrendered. A later served-query split
+retains its parent until child capacity is admitted. If that reservation fails,
+the server records the query stop and the outer typed stop before abandoning the
+returned owner. Retirement after that stop is cleanup, not evidence of a stable
+candidate. Candidate workers and slate producers follow the same owned failure
+boundary; queued and in-hand entries preserve the unresolved partition until
+terminal abandonment. A failed return to a deque also returns its entry to the
+caller, including when a thief's home has no capacity or a shared home has gained
+other work. These paths preserve the original allocation error and claim no
+exhaustive result.
+
+Answer sets are the same under every division. A query that ends stable narrows
+each region once, wherever it is divided; a refuted query, divided, may narrow
+regions beside the subtree its witness lies in until a server finds a witness,
+so its region count depends on the schedule. `SolveConfig::query_division`
+selects `QueryDivision::Never` to keep every query on the worker that reached
+its candidate, for measurement; the command has no flag for it. The workers'
+statistics report the division, the queries published, the published regions
+served and stolen, the workers that served any, and the most one served.
+
 Candidate production and membership need not run on the same executor.
 `StableModels::with_region_producers` uses the same original-theory readings
-and disjoint splits in bounded Rayon rounds. A worker returns a classical leaf;
+and disjoint splits, filling each slate (the candidates checked and committed
+together, below) in one bounded Rayon run. A worker returns a classical leaf;
 the coordinator retains it until original satisfaction and reduct membership
 have been established. Device execution checks both in one operation. Native
 completion finishes any general-reduct residuals. Producers never complete
@@ -445,15 +580,43 @@ while candidate_frontier is unfinished:
     yield answers
 ```
 
-One output slot is reserved for every active producer region. Refutation or
-splitting returns the reservation; an emitted leaf consumes it. The batch is
-bounded even when workers finish together. A stopped validation retains its
-admitted prefix and reports the unfinished suffix explicitly. Every producer
-joins and settles its work before membership begins. Original validation has
-its own per-candidate work allowance. This schedule does not overlap production
-with device execution. Pending-byte limits cover pending/result storage and
-original-validation scratch, not the entire region frontier, thread stacks or
-process memory.
+A producer holds a region only in one of the slate's hands, as many as the
+slate admits candidates and never more than there are producers. A split keeps
+the hand for the child the producer continues and publishes the other child,
+where an idle producer can steal it; a refutation or an emission keeps it only
+when the producer finds another region at once, and otherwise releases it. A
+step reserves an output slot only when it reaches a leaf, so the slate is
+bounded even when producers finish together, and its end does not leave the
+search for its last candidates to the producers that have found none. Once
+every output slot is reserved the output is spoken for. A producer reads it
+after reserving its hand, and once it has read it so it takes no region and
+begins no step; a producer that has not yet read it holds one of the slate's
+other hands, and its step ends as a step under way does. A leaf that finds the
+output spoken for returns its region, unresolved, for a later slate.
+The producers keep one deque each, retained between slates, and share the
+region walker's frontier protocols: the count of unresolved regions, split
+publication and the idle back-off. A producer steals only with an empty deque,
+so its deque holds at most one sibling per atom split along its current path.
+That order suits an enumeration, which visits every region whatever the order.
+An optimizing search that generates candidate bounds tightens the bound as it commits answers, so its
+producers instead share one deque and each takes the region any of them
+published most recently. Production then stays where the latest splits are,
+and older, shallower regions wait for the tighter bounds that refute them near
+the root; producers kept apart would each descend a large subtree under the
+bound in force when they took it. The shared deque gives up the per-deque bound
+on retained regions, which only the tree then bounds, as with the single stack
+the producers used before. Each holds one work lease for the slate. A cancellation or deadline observed
+once the slate is full is left to the next slate's first poll. A stopped
+validation retains its admitted prefix and reports the unfinished suffix
+explicitly. Every producer joins and settles its work before membership begins.
+Original validation has its own per-candidate work allowance. On a device
+route, an enumeration produces its next slate while the device checks the
+current slate's last submission, within one call; optimizing searches and the
+CPU routes do not overlap production with device execution. The slate's own
+producers still join and settle before its device check begins, and the next
+slate is submitted only after the current one commits. Pending-byte limits cover
+pending/result storage and original-validation scratch, not the entire region
+frontier, thread stacks or process memory.
 
 The generic batch-checker API independently validates original satisfaction
 using one `EvaluationWorkspace` per owner. Each candidate receives a full
@@ -465,6 +628,8 @@ receipts report validation work and retained bytes.
 
 Device execution uses the explicit joint-check protocol. A successful
 `CheckedBatch` binds decoded results to the exact theory and candidate slice;
+an overlapped check's `CheckedSlate` binds them to the theory, the slate's
+identity, and the submission's offset and count;
 all non-`NotModel` results establish original satisfaction, including residuals.
 The coordinator consumes these receipts in order and commits only after the
 entire pending batch succeeds. A failed device call retains pending candidates;
@@ -473,37 +638,35 @@ retrying through the generic API first performs independent original validation.
 partially published batch. The trusted callback contract and actual device
 execution remain separate from mechanically proved correspondence.
 
-The executor and its producer slots persist between batches. Each slot keeps
-its narrowing worklists and, when needed, one checker for the immutable source.
-Slots are used exclusively, may move between executor threads and number at
-most the requested workers. The retained checker borrows one stable owner;
+The executor and its producers' workspaces persist between slates. Each
+workspace keeps its narrowing worklists and, when needed, one checker for the
+immutable source. Workspaces are used exclusively, may move between executor
+threads and number at most the requested workers. The retained checker borrows one stable owner;
 stopping or completing production drops the checkers before that owner.
 Candidate truth and support knowledge still travel with each region, so reuse
-does not transfer deductions between unrelated candidates. Source-filter
-callbacks retain their own checker lifetime, separate from formula evaluation.
+does not transfer deductions between unrelated candidates. The streamed
+constraints' checkers keep their own lifetime, separate from formula evaluation.
 
 The original CPU `with_region_workers` operation remains useful when each
 worker should perform both operations. The two schedules share the original
 formula readings, support conditions, candidate partitions and reduct semantics.
-The [batch API](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-sat/src/ferraris/batch.rs)
+The [batch API](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-stable/src/ferraris/batch.rs)
 owns proposal validation and publication; the
-[producer](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-sat/src/ferraris/region_proposals.rs)
+[producer](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-stable/src/ferraris/region_proposals.rs)
 owns the bounded parallel frontier. `Frontier` and `BatchAccounting` state the
 coverage and completion laws; concrete synchronization remains a refinement
 obligation.
 
-The regions method is the default, chosen by
+The region search became the default by
 [measurement](https://github.com/GregoryGelfond/zetesis/blob/main/docs/book/reference/observations/README.md#the-regions-default-and-one-worker-count)
-beside the classical search over a clause form on the same cells, with the
-host's workers on the tree; the classical search remains reachable for
-comparison. Read as regions the classical search is the same tree:
-a search node holds some atoms in and some out, propagation adds the atoms
-every classical model agrees on under those decisions, a conflict closes the
-node, and a complete assignment is a leaf the reduct decides
-(`FormulaRegions.classical_consequence_forces`, `no_model_refutes`). Under
-the clauses method the reduct's proper-subset query is the Boolean search
-too. Neither method decides membership by anything but the reduct, and
-neither keeps learned clauses.
+beside a classical search over a clause form on the same cells, with the host's
+workers on the tree. That clause search has since been removed. Read as regions
+it walked the same tree: a search node held some atoms in and some out,
+propagation added the atoms every classical model agrees on under those
+decisions, a conflict closed the node, and a complete assignment was a leaf the
+reduct decided (`FormulaRegions.classical_consequence_forces`,
+`no_model_refutes`). Neither search decided membership by anything but the
+reduct, and neither kept learned clauses.
 
 Both paths can restrict candidate generation by necessary conditions. A normal
 source constraint supplies a forbidden positive gate conjunction when its
@@ -555,10 +718,10 @@ counted region and no more. The statistics report the regions visited,
 refuted, reached as leaves and counted, and the narrowing passes below the root. Each
 offered seed is still checked in full against the whole gate carrier. The
 laws are `Bounds.narrowed_contains_accepted`, the iterated narrowing of the
-open cube (`Bounds.undecided` in the Lean), `Bounds.lower_constraint_refutes` and
+open region (`Bounds.undecided` in the Lean), `Bounds.lower_constraint_refutes` and
 `Bounds.conflicting_atom_refutes` for the refutations, and the coverage
-tree of `Search.lean`, whose `split` node with `Cube.split_partition` and
-`Cube.split_disjoint` makes the regions a partition of their parent and
+tree of `Search.lean`, whose `split` node with `Region.split_partition` and
+`Region.split_disjoint` makes the regions a partition of their parent and
 whose `CoverageTree.mem_outputs_iff` makes the leaves exactly the accepted
 seeds of the root.
 The program is prepared once for the narrowing and charged as one
@@ -572,12 +735,11 @@ For a theory whose complete asserted-head grammar combines ordinary disjunction
 and exact atomic choices, every true atom in an answer set needs original support:
 an ordinary producer whose body is true and whose other head atoms are false,
 or an atomic choice for that atom with a true body. Otherwise removing that atom
-leaves a proper-subset model of the reduct. The resulting support condition
-restricts only outer proposals; independent producers can still support several
-atoms in one disjunctive head. Richer or cross-atom choice forms decline the
-certificate, and choices alone do not trigger its construction: at least one
-ordinary head must contain a syntactic disjunction. The original theory and
-frozen reduct are unchanged.
+leaves a proper-subset model of the reduct. The removed clause search restricted
+its outer proposals by that condition; independent producers can still support
+several atoms in one disjunctive head. The region search's support cut reads the
+same producers inside its narrowing. The original theory and frozen reduct are
+unchanged.
 
 The [gate restriction laws](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/GateRestrictions.lean)
 and [disjunctive support laws](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/DisjunctiveSupport.lean)
@@ -587,43 +749,22 @@ certificate constructors retain separate refinement obligations.
 For a complete positive atomic-head theory, `PositivePlan` computes the least
 consequences once and checks every original constraint. CPU region modes then
 propose only that interpretation, or none when a constraint fails. Accumulated
-candidate restrictions and the region filter still apply to the singleton;
-the ordinary membership and publication checks retain the original theory owner.
+candidate restrictions and the streamed constraints still apply to the
+singleton; the ordinary membership and publication checks retain the original
+theory owner.
 No worker needs to explore candidate regions or allocate a reduct query for this
 case. Larger classical models need not be individually refuted: the certificate
 already rules them out as answer sets. An unsupported or resource-refused plan
 keeps general solving available; an interrupted attempt never establishes
 exhaustion. This CPU policy does not change explicit device checking.
 
-Under the clauses method, exact projection exclusions have one owner across
-candidate restrictions: the outer cursor retains an index of previously
-proposed semantic interpretations, and strengthening the candidate query
-rebuilds its traversal while preserving that index; the regions method keeps
-no such index, since it visits a leaf once. Original and restriction clauses alone enter the watch lists. A completed
-assignment is independently checked against those clauses and looked up in the
-exclusion index before becoming another candidate. The original theory and its
-reduct remain separate from both operations. The
-[projection contract](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-sat/docs/candidate-pruning.md)
-states its transactional insertion and logical admission units.
-
-Admitted classical queries use a single packed literal arena and clause-end
-offsets. A literal occupies one machine word; repeated offsets preserve empty
-clauses. Public `Literal` values remain lossless inputs until range admission.
-`Cnf::clauses()` yields ordered borrowed `Clause` views, and `Cnf::clause(index)`
-provides checked access. Decoding allocates nothing and preserves variable,
-polarity and canonical order. This is a query representation change, with
-[separate arithmetic laws](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/PackedQueryLiterals.lean);
-it does not replace the formula reduct or establish a process-memory bound.
-
-Local search operations can specialize while preserving the candidate sequence
-of completed search. In a three-literal clause, two distinct watched positions
-leave one possible replacement position: `3 - first - second`, with indices from zero to
-two. The [replacement operation](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-sat/src/search.rs)
-tests that occurrence once, after polling control and charging work. It returns
-the same replacement as the general scan. Omitting watched positions can reduce
-charged work, so a fixed work limit can permit more progress. The
-[ternary law](../lean/correspondence.md) states the position invariant; original
-satisfaction and reduct membership retain their existing obligations.
+The removed clause search also kept an exact projection history of the
+candidates it proposed, packed its clauses in one literal arena, and replaced a
+ternary clause's watch by position. The region search needs no such history,
+since it visits a leaf once. The
+[packed literal laws](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/PackedQueryLiterals.lean)
+and the [ternary law](../lean/correspondence.md) remain as statements; no
+current route implements them.
 
 A sufficient class certificate can avoid a full countermodel query. For example,
 ranked support under a complete original-producer representation justifies a
@@ -659,10 +800,12 @@ Cold preparation uses a level schedule when its extra storage
 and work fit; otherwise it retains serial evaluation. A tighter work allowance
 can also select serial evaluation over an already retained graph. Retained
 schedule storage remains accounted even then, so reducing a later byte allowance
-can still produce a typed capacity refusal. Work receipts and
-pre-dispatch admission use this same allowance: an exact allowance is admitted
-and one less is refused. Historical work counts need their source identity
-when compared. These counts do not measure latency or change membership.
+can still produce a typed capacity refusal. Pre-dispatch admission uses this
+allowance: an exact allowance is admitted and one less is refused. The complete
+and dense routes' receipts charge their fixed allowance; an update's receipt
+charges the work it performed, never more than was reserved (below). Historical
+work counts need their source identity when compared. These counts do not
+measure latency or change membership.
 
 A later tight batch can reuse original truth from a successful batch with the
 same theory and candidate count. Each existing truth word holds its value and a
@@ -677,10 +820,158 @@ is rebuilt. Reuse adds no buffers or bindings. Its optional allowance is
 evaluation. Change detection can add work when many values change, so reuse does
 not itself establish a speedup. `original_truth_reused` records the selected route.
 
+Dense reuse still visits every node. Successive batches of one theory and count
+can instead *update*: each candidate slot retains the candidate it last
+evaluated, that evaluation's enabled-producer count per head, and its sets of
+false root positions and unsupported present atoms, and re-evaluates only the
+nodes a new candidate's change reaches. A readers index, built once per theory
+at the first batch holding reuse authority and appended to the producer
+storage, lists for each node the connectives and numeric-row owners reading it,
+the heads of the producers whose body it is and the root positions holding it,
+and for each atom its atom nodes. An update first counts the slot's changed
+atoms; beyond `max(atoms / 8, 64)` the slot takes dense reuse instead. Otherwise
+it queues the changed atoms' nodes and visits the dependency levels in order.
+Each level takes exactly its own queued bits, so readers queued for later levels
+in a shared word survive, evaluates those nodes from final lower-level truth,
+and for each changed value queues its readers, adjusts its producers' heads'
+counts and flips its root positions. A numeric row's owner re-reduces the row
+and writes every live guard, the followers included, which share its level
+because all of them read the row's conditions. Afterwards the touched atoms'
+unsupported bits are settled. The witnesses are the least false root position,
+or else the least unsupported present atom, exactly as the dense scans find
+them. Every node then holds its truth under the new candidate: the node-table
+rule of `TightEvaluation.updated_values_exact`, applied in level order.
+
+The route engages only where dense evaluation is wide enough to repay it.
+Dense evaluation of one candidate takes `I(W) = Σ ⌈n_l / W⌉` strided iterations
+over the level widths `n_l` at the dispatched workgroup size `W`, and
+synchronizes the workgroup once per level and three more times. An update keeps
+the per-level synchronization, adds five more, eight when it summarizes, and at
+each level evaluates each queued word's taken nodes, maintaining their readers'
+queue bits, counts and root sets through storage atomics, in one invocation per
+word. A level therefore costs an update several dense strides even when little
+changed. A schedule engages the route when `I(W)` is at least
+`GpuTightOracle::UPDATE_ENGAGEMENT_STRIDES`, thirty-two, times its level count.
+Like the fitted size, the decision is structural, made once per resident theory
+and dispatched size, and on engaging schedules the change threshold still
+selects each slot's route. The factor is an execution choice and changes no
+verdict. Calibrated by measurement on an Apple M4 Pro GPU under Metal, it covers
+the change patterns measured there, their per-level chains included: scattered
+changes, and clustered changes of up to 64 atoms with one reader per input. The
+runtime guard below bounds the patterns beyond them, such as a change reaching
+many nodes of one queued word. The factor still decides whether a theory builds
+the index at all, sparing narrow theories the index, the state, the seeding
+batches and every losing probe, and it covers the update's extra
+synchronization, which the guard cannot see. Declining keeps the dense routes,
+so a factor set high forgoes gains on the schedules it declines, and one set low
+slows those it engages.
+
+On an engaged schedule a runtime guard bounds the loss of changes whose critical
+path, rather than their size, makes an update dearer than dense evaluation. It
+compares two paths counted by one cost table, which weighs the same evaluation
+alike on both routes: a node 1, each operand or condition it reads 1 (a wide
+conjunction or disjunction only those it reads before an absorbing value ends
+it), each readers entry an update visits 1, and each item of a scan 1, or 2
+where the scan reads two words per candidate word. Each update record carries
+the slot's path: in each phase after its summary, the costliest invocation of
+its workgroup, summed, with each invocation's share of the uniform scans and of
+the record. A summary after a batch that seeded every slot, such as the batch
+after the index is built or the guard's probe below, is a cost once per seeding,
+counted in the work but not in the path. A summary after the slot took dense
+reuse beyond the change threshold recurs with the changes, so its phases count
+in the path too, and the guard weighs them. The host computes dense reuse's
+path for one candidate, its busiest invocation over each level and each phase
+of support construction, once per resident theory and dispatched size in the
+pass that computes `I(W)`. It is a lower bound: where dense reuse's cost
+depends on the candidate, a wide gate's reduction or a numeric row skipped when
+none of its conditions changed, the path takes the least. After a batch decodes and its reuse authority is
+re-established, the guard judges it if any slot updated: when the batch's
+slowest update path exceeds the dense path, the route is declined. A batch's
+slots run concurrently, so a latency-bound batch waits for its slowest slot;
+judging the slowest keeps the loss bounded whether the batch holds the device
+or oversubscribes it, at the cost of declining a skewed batch whose sum would
+have won.
+
+The guard is engaged or declined. A losing judgment declines the route for the
+next batch, and each later one for twice as many batches as the last, up to 32;
+the wait never shrinks while the theory stays resident. While declined, every
+decoded batch counts the wait down and none is judged. A batch the guard
+declines runs the dense twin kernel, as a theory declined for its residency
+does, with its state allocated and accounted but unbound, so its count, prefix
+and reuse authority are an admitted batch's while every charge is the stateless
+one; it reports `GuardDeclined`. Once the wait ends, the next batch seeds the
+state, since every record written meanwhile says unseeded, and the batch after
+it updates and is judged. A failed or cancelled batch is never judged and
+consumes no wait. If every judged batch loses, at most one batch in 34 does so
+once the waits reach 32. The guard reads receipts, never a verdict or a
+witness, and changes which route evaluates a batch, never a verdict. The
+comparison sees operations, not their time: an update's storage atomics and
+indirect reads can cost more than dense evaluation's strided reads, invocations
+updating one word serialize, and neither route's synchronization is counted.
+Those errors vary with the device and the change, so how closely the guard
+follows the faster route is a measurement, not a consequence of the comparison.
+
+A narrower schedule declines the route with the typed reason `NarrowSchedule`
+from its theory's first batch on. It builds no index and holds no state, and its
+routes charge their stateless allowance and synchronize as they did before the
+route existed. Which kernel a batch runs follows whether its update route is
+allowed: the full kernel exactly when it is, and otherwise the kernel's dense
+twin. The twin therefore runs a theory declined for its whole residency, by a
+narrow or serial schedule or by refused index bounds; an engaging theory's
+batches before its index is built; and a batch whose route a limit or the guard
+declines. The twin is an entry point that evaluates complete or dense truth as
+the full kernel's complete and dense routes do, and whose call graph never
+names the route. Its pipeline therefore binds no state and compiles none of the
+route's phases, counters or decisions. Each variant is compiled at its first
+need, so a theory that engages the route compiles both. A batch that admitted
+the state keeps it allocated and accounted while the twin leaves it unbound.
+What the route still costs a declined schedule is its larger parameter block
+and result records, 64 rather than 32 bytes per batch and 36 rather than 24 per
+candidate. Admission of a scheduled layout also reserves the owner column and
+the per-head producer counters before the level widths are known; a narrow
+schedule releases both once packed, and its batch accounts neither. An exact
+call whose cold batch fits the scheduled layout only without those
+reservations, within `8 · live numeric rows + 4 · atoms` bytes of its
+allowance, keeps the theory on the serial schedule while it is resident; prefix
+calls, which admit their cold layout at one candidate, are unaffected.
+
+Each slot's state counts in the batch's byte allowance once admitted. A prefix
+call admits it only when the state-inclusive layout still admits
+`min_update_candidates` candidates, which the solver sets to its batch size, the
+slates' floor; an exact call admits it only when its whole count fits. Otherwise
+the dense routes run, and a state held from an earlier batch is released while
+truth and result authority remain; the next batch admitting the state allocates
+it zeroed and seeds it. With the floor, the state never splits a fixed slate,
+and adaptive slates settle at or below the prefix the state admits, since their
+growth stops at the smallest prefix the device has admitted, the batch building
+the index included; without it, a shorter prefix would split every slate into
+submissions of alternating counts, which hold no reuse authority. The tight
+check has its own byte allowance for this reason: a sixteenth of the memory
+allowance under the ordinary `Resources` policy, where every other device batch
+has a thirty-second, so the state reaches the floor under smaller allowances.
+On a theory of about 790,000 nodes and 262,000 atoms, the default allowance
+admits it on hosts with about 9.3 GiB of memory rather than about 18.7 GiB.
+Authority
+needs successive batches of one count, so neither reuse route runs while
+adaptive slates are still growing. The index stays resident with the theory and
+remains accounted, like a retained schedule. The route is allowed only when its
+derived worst case, and dense reuse after a change count, fit the work
+allowance. While it is allowed, the complete and dense routes also retain the
+evaluated candidate, `words + 1` operations. Each result record carries its
+route with whether the slot's state was seeded, the nodes an update evaluated,
+and an update's path; an update's work receipt is what it performed, at least a
+fixed floor of `5 * words + ceil(nodes / 32)` word operations, one queued-set
+scan per level and the record. Batch statistics report the slots per route, the
+route's availability, with a typed reason when it is unavailable, and the
+guard's two paths. The route's speed is a measurement, not a consequence of
+these bounds: on narrow changes it replaces most node evaluations by word scans,
+and on dense changes it falls back to dense reuse.
+
 Only complete decoding, healthy context completion and the final cancellation
 check authorize reuse. Dispatch consumes that authority before queue writes;
 any failure, changed theory/count or explicit clear invalidates it. Without
-valid authority, the same encoder clears the prior result hints before computing.
+valid authority, the same encoder clears the prior result hints before computing,
+including each slot's seeded record, so no update follows lost authority.
 Epoch and slot headers alone never authorize retained truth. All consumers mask
 the value bit, including roots and producer bodies.
 
@@ -703,19 +994,96 @@ no validated result supplies no decoded reason. Tight support and CPU execution
 leave this record absent. Aggregate sweep totals alone cannot identify the
 reason for each residual.
 
+The general GPU route also reports `gpu_residual_handovers`. Its latest attempt
+names the slate sequence and the attempt ordinal. On retry the slate keeps its
+sequence. A stop retains decoded residuals and work already performed. Only
+publication increments the committed-slate count. A slot settled by a CPU
+certificate contributes a residual but no regional search.
+
+When recording space permits, the coordinator joins the GPU reason and number
+of open atoms to the CPU receipt at the same original slot. It totals work and
+outcomes by reason. A slate's width is the maximum number of visited regions
+at a single depth, summed across its queries at that depth. Host time sums the
+individual query intervals, which may overlap. Unavailable measurements appear
+as null.
+
+The optional `gpu_residual_handovers.samples` report describes two populations
+across the run. Use `worlds` to ask how difficult the residual queries were.
+Use `batches` to ask how much work was handed over at each dispatch. Every
+successful batch enters once, including one with zero residuals. A failed
+attempt contributes to the attempt's work receipt. Its retry enters the batch
+population upon successful commit.
+
+While the session is live, the report gives population sizes and storage use.
+At settlement, `groups` gives the combined view and a view for each device
+stopping reason when recording space permits. Each measurement shows how many
+members were eligible, measured and retained. Its median uses the integer
+midpoint for an even sample. Its 90th percentile uses nearest rank. Ranks
+are marked `exact`, `estimated` or `unavailable`. Disabled timing stays
+unavailable. A stopped run describes the committed prefix of that run.
+
+The collector aims for 65,536 worlds and 4,096 batches. Its separate byte
+allowance is one eighth of the general GPU batch allowance. Lowering memory
+can reduce either sample or omit the report. The arrays belong to the
+session. Reading a snapshot never advances the samples. The
+[benchmark evidence campaign](../reference/benchmarking.md#pool-gpu-residual-observations)
+can request the actual records at settlement and combine separately qualified
+instances at their original population weights.
+
+For a separately requested benchmark capture, a Rust caller can offer an
+empty, privately held file with `Session::request_residual_evidence` and
+retrieve its one-shot receipt with `Session::finish_residual_evidence` after
+settlement. The host streams the two retained populations before selecting
+terminal ranks or releasing their storage. Only a sealed artifact carries the
+slot identity, population sizes, seed and complete-family or prefix status.
+An unavailable collector, insufficient file allowance or failed write leaves
+the ordinary solver outcome available. The benchmark's child request uses a
+private directory, verifies the matching answer document, and keeps the raw
+records outside ordinary CLI output.
+
+The optional slot journal uses idle CPU completion scratch during decoding.
+Before the CPU starts, the coordinator retains the journal only when the
+remaining GPU batch allowance covers it beside the admitted owners. Otherwise
+it releases the journal. Exact search proceeds with its original scratch limit.
+
 With several requested workers, the region proposer produces a bounded batch
-in parallel and joins before its device checker starts. CPU production and
-device checking do not overlap. Membership, scoring and objective feedback keep
+in parallel and joins before its own slate's device check starts. On an
+enumeration, the next slate's production overlaps the current slate's last
+submission; nothing else overlaps. A control stop during that production leaves
+the slate under check pending and undelivered, claims nothing for it, and lets
+the device observe its submission's completion. On a GPU formula session, the
+next slate's production and the current slate's residual completion draw on
+the stream's one cumulative search budget, production first: a work or decision
+limit that the production reaches, or brings within reach of that completion,
+leaves the slate under check pending and undelivered in the same way, while a
+slate the device decides wholly draws nothing at its commit and is delivered
+before the limit is reported. Membership, scoring and objective feedback keep
 the same original-theory and completed-batch boundaries. Failed device execution
 never triggers a hidden CPU replacement.
 
-GPU formula sessions use fixed candidate batches by default. Library callers can
-select `GpuBatching::Adaptive` in `SolveConfig`; `batch_size` then supplies the
-initial target. A filled, checked and committed batch can grow the next target
-within the pending-memory allowance. A smaller admitted device prefix bounds
-further growth. Failed checks retain the same pending candidates and target.
-Larger batches can reduce submissions but delay answer delivery and objective
-feedback; adaptive sizing is not a performance or allocation guarantee.
+A slate is the candidates the stream proposes together for one membership
+check and commit; the device checks a slate in one or more submissions. GPU
+formula sessions size their slates adaptively by default
+(`GpuBatching::Adaptive` in `SolveConfig`). Slates start at `batch_size`. The
+next slate is sized when it is selected, after the previous slate committed
+completely and its answers were scored. On an enumeration on a device route,
+the next slate is selected while the previous one is checked, from that slate's
+proposal and its submissions' admitted prefixes; an enumeration declares no
+bounds, so scoring cannot move its size. It returns to `batch_size` when those
+answers tightened the objective bound, doubles after a filled slate that left
+the bound unchanged, and otherwise keeps its size. The session's last selection
+follows its last non-empty slate and precedes the empty proposal that
+establishes exhaustion; on an enumeration, that proposal runs during the last
+slate's check, and exhaustion is established after its commit. Growth stops at the smallest device prefix observed,
+never below `batch_size`, and the pending-memory allowance bounds every slate.
+Under either policy a device submission takes as much of a slate as the device
+admits. Failed checks retain the same pending candidates and size. Larger
+slates mean fewer slates and submissions, but release their answers only after
+the whole slate is checked and, on an enumeration, after the next slate is
+produced, and are produced under the bound as it stood when
+they started. `GpuBatching::Fixed` keeps every slate at `batch_size` for
+controlled comparisons. Adaptive sizing is not a performance or allocation
+guarantee, and it never changes answer sets, optima or ties.
 
 The library also exposes `TightSupport::Grouped` through
 `GpuTightOracle::new_with_support`. Packing places each original producer in the
@@ -797,6 +1165,41 @@ one node per level keeps
 the serial fold because it contains no independent node work. Other narrow
 levels may still pay more in barriers than they gain in parallel evaluation.
 
+Each kernel strides every level, and every dense node, atom, root and word loop,
+by its workgroup size, the invocations cooperating on one candidate. By default
+the size fits the retained schedule. With `I(W) = Σ ⌈n_l / W⌉` the strided depth
+over the level widths `n_l` (each level's node count), the kernel dispatches,
+among the granted sizes 64, 128 and 256 whose invocation slots `W·I(W)` stay
+within twice those of 64, the smallest size attaining the least depth. A serial
+schedule, or one whose levels each hold at most 64 nodes, keeps 64. A widest
+level of 65 to 128 nodes selects 128, and 256 needs a wider level and
+`I(256) ≤ I(64)/2`. The selection depends on the level widths and the granted
+limits only, not on the adapter's subgroup size. Where a batch leaves the device
+latency-bound, the dense level pass takes time following the strided depth;
+where a batch oversubscribes the device it follows the invocation slots, which
+the bound keeps within twice the 64-invocation time. The bound covers that pass
+only: the tight kernel's serial bypass for a tight work allowance occupies the
+whole workgroup with one invocation, up to four times the 64-invocation cost,
+and the opt-in active-word routes are not modelled.
+
+Creating a kernel validates its shader. Each fitted size is compiled by the
+first check that dispatches it, before that check's dispatch, so a solve
+compiles only the size it uses. A failure to compile fails that check and
+invalidates the context, as every compilation failure does; no theory stays
+resident, because only a freshly prepared theory can need a size first and its
+cold preparation released the previous one. `GpuKernelOptions` can fix one size, which is then
+compiled when the kernel is created. The batch statistics report the size dispatched. A
+size changes which invocation evaluates which node, never a node's value. Under
+frozen-reduct propagation sibling gates narrow shared domains through atomics,
+so the number of sweeps, and whether a candidate reaches a sweep or work limit,
+can differ between sizes; such a residual is completed exactly on the host.
+Away from those limits a candidate's verdict class agrees across sizes where
+every transfer is order-preserving, which the contract tests establish for
+binary gates; for native groups, thresholds and extremum cuts it is a stated
+[implementation obligation](../lean/correspondence.md#ownership-and-execution-correspondence)
+that the physical tests check but do not prove. Work allowances do not depend on
+the size.
+
 Dense frozen-reduct propagation reuses those levels, starting downward and
 alternating direction each sweep. Asserted roots can constrain operands across
 several depths in a downward sweep; an upward sweep carries child consequences
@@ -836,10 +1239,14 @@ Auxiliary formula nodes never participate in this subset test. An original-false
 subformula remains disabled by the frozen mask throughout propagation. Native
 numeric projections make at most two linear scans per guard. Their conservative
 bounds preserve completions but may infer less than expanded Boolean formulas.
-A residual reports no narrowed atom region; exact host completion retains the
-original proper-subset query.
+A residual returns the held and cut masks for the semantic atoms of one
+candidate. The CPU starts from that region with fresh frozen-reduct knowledge.
+It performs the first narrowing even if the masks leave only one possible
+interpretation. A residual classifies every atom and writes two mask words per
+group of 32 atoms. A terminal result only writes the zero masks.
 
-Mandatory device setup charges `2*nodes+edges+atoms+roots+levels`; pure chains
+Mandatory device setup reserves `2*nodes + edges + atoms + roots + levels`
+for the formula and `atoms + 2*ceil(atoms/32)` for its result. Pure chains
 and empty graphs use zero levels. Each complete sweep reserves
 `9*nodes+2*edges+atoms+65+levels`, covering binary relation rows, both possible native
 operand scans, the dependency-level walk and the strict-subset reduction. Setup and each sweep also reserve
@@ -869,47 +1276,42 @@ from device qualification and timing evidence.
 | Capability | Execution boundary |
 | --- | --- |
 | Source loading, parsing, admission and output | Host libraries |
-| Independent relational membership | Scalar CPU or owned Rayon pool |
-| Shared lazy relational rounds | Host source stream with CPU or GPU chunk evaluation |
+| Independent formula membership | Scalar CPU or owned completion workers |
+| Hybrid source constraints | Host checks before original-answer acceptance or scoring |
 | Ordinary GPU formula membership | Complete tight support when certified; otherwise device propagation plus exact native CPU completion of residuals |
 | Native aggregate reductions | Bounded reusable CPU/device primitive; availability alone does not imply use by every solve |
 
 wgpu supplies portable device access, including Metal on supported macOS
 adapters. With default resources, device availability is discovered at runtime.
-Requesting a backend is
+A command-line GPU solve begins wgpu's adapter enumeration on a background
+thread once its configuration is validated and before it reads its sources, so
+the adapter enumeration overlaps reading and admission, and on the formula
+routes grounding as well. The solve's GPU primitive then selects over those
+adapters with its own capability check, as over an enumeration of its own,
+and requests its own device. Adapter choice and
+errors are therefore those of selection at the moment the enumeration began,
+which precedes construction by the time to read and admit the program and, on
+the formula routes, to ground it, so the gap grows with the program; timestamp
+requests are unchanged. An adapter added or removed in between is missed, or
+fails its device request (`GpuDiscovery` documents the snapshot). A
+solve that ends before constructing a primitive waits for the rest of the
+adapter enumeration, and wgpu's loader can report on it; a CPU solve starts none.
+Library entry points select per session unless their caller supplies such
+resources. Requesting a backend is
 not evidence that it ran; adapter identity, submitted work, completed work and
 residual work are separate observations. GPU support does not mean the complete
 solver is device-resident.
 
-The static reduct oracle reads one framed closure record per candidate. A checked
-nonzero epoch identifies the submission, an ordinal identifies the input seed,
-and a nonzero marker follows synchronized closure writes. The host validates
-these fields, the exact record population, verdict bits and unused closure bits.
-It also checks the gate-carrier projection against the original seed. A missing
-or inconsistent record fails the whole batch instead of becoming acceptance.
-The 32-byte parameter buffer and four-word per-record header count toward the
-ordinary authored payload ceiling. Empty batches validate context health and
-graph admission without consuming dispatch resources or an epoch. The epoch
-sequence survives residency clearing and refuses overflow.
-
-These checks establish transport identity and representation consistency, not
-an independent proof of every rule consequence or constraint verdict. Actual
-shader execution still relies on the device API contract and requires physical
-qualification for each claimed backend; an observed driver fault is not presumed.
-
-For admitted relational programs, automatic materialization selects lazy source
-grounding on both CPU and GPU. Hardware changes do not require a complete ground
-rule store. Explicit eager grounding retains its compiled graph. Automatic
-formula admission can defer eligible terminal positive definitions and reconstruct
-them after base membership; other formulas are materialized eagerly. Explicit lazy
-CPU execution can stream eligible constraints against answers of its retained
-producer core. Formula device membership consumes the materialized theory; terminal
-reconstruction runs on the host.
+Automatic and lazy formula materialization can defer eligible terminal positive definitions and
+reconstruct them after base membership; other formulas are materialized eagerly.
+Explicit lazy execution can stream eligible constraints against answers of its
+retained producer core, whose membership can use the selected CPU or GPU backend.
+Formula device membership consumes the materialized theory; streamed constraints
+and terminal reconstruction run on the host.
 
 CPU is the default backend throughout the solve. Existing measurements do not
 establish a device crossover for an automatic hardware policy; batch size alone
-is insufficient evidence. Explicit shared CPU source batching also
-remains a CPU policy. An explicit GPU backend prepares its executor during
+is insufficient evidence. An explicit GPU backend prepares its executor during
 session setup. Default resources discover a device at that boundary;
 caller-supplied [ExecutionResources](../rust/sessions.md#share-execution-resources)
 reuse their exact context after policy and capability checks, without discovering
@@ -963,10 +1365,12 @@ Performance work measures the actual boundary: admission, source work,
 candidate generation, oracle calls, residual completion, scoring and output.
 Host elapsed time around a GPU call includes transport and waiting; it is not
 kernel time. When statistics are requested, a newly created device context also
-requests optional wgpu timestamp queries. Formula and tight batches then measure
-their compute pass through the existing submission and readback. Unsupported,
-invalid or equal counter readings remain explicitly unavailable: equal readings
-do not establish zero compute cost. Caller-supplied contexts retain
+requests optional wgpu timestamp queries. Each formula or tight batch then reads
+the previous batch's compute pass through its own submission and readback, after
+the host has observed that batch complete, and a settling execution reads its
+final batch with one resolve-only submission. Unsupported, invalid or equal
+counter readings remain explicitly unavailable: equal readings do not establish
+zero compute cost. Caller-supplied contexts retain
 their granted features; statistics never replace them. Timing storage is accounted
 separately and absent when disabled. Logical storage budgets are not process RSS or total device memory.
 The [outcome contracts](../rust/outcomes.md) preserve these distinctions for

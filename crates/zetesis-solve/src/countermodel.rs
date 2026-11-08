@@ -11,7 +11,6 @@ use zetesis_ferraris::Theory;
 pub(crate) struct Input<'a> {
     pub(crate) theory: &'a Theory,
     pub(crate) atoms: &'a AtomCatalog,
-    pub(crate) gate_atoms: usize,
     /// Written constraints asked as the one atom their key admits.
     pub(crate) keyed_constraints: usize,
     /// How the key analysis that asked them ended.
@@ -20,38 +19,38 @@ pub(crate) struct Input<'a> {
     /// Optional necessary choice facts authenticated to this original theory.
     pub(crate) required_choices: Option<&'a zetesis_themelios::RequiredChoices>,
     /// Source analysis chooses attempt order; each plan checks the whole theory.
-    pub(crate) certificate_order: zetesis_sat::CertificateOrder,
+    pub(crate) certificate_order: zetesis_stable::CertificateOrder,
 }
 
 pub(crate) fn certificate_order(
     classes: &zetesis_themelios::analysis::classify::Classes,
     basis: zetesis_themelios::AnalysisBasis,
-) -> zetesis_sat::CertificateOrder {
+) -> zetesis_stable::CertificateOrder {
     use zetesis_themelios::analysis::classify::{HornKind, Normality, Stratification};
     if basis == zetesis_themelios::AnalysisBasis::NormalizedProgram
         && matches!(classes.horn(), HornKind::Horn)
     {
-        zetesis_sat::CertificateOrder::PositiveFirst
+        zetesis_stable::CertificateOrder::PositiveFirst
     } else if basis == zetesis_themelios::AnalysisBasis::NormalizedProgram
         && matches!(classes.normality(), Normality::Normal)
         && matches!(classes.stratification(), Stratification::Stratified)
     {
-        zetesis_sat::CertificateOrder::StratifiedFirst
+        zetesis_stable::CertificateOrder::StratifiedFirst
     } else {
-        zetesis_sat::CertificateOrder::TightFirst
+        zetesis_stable::CertificateOrder::TightFirst
     }
 }
 
 /// An optional setup interruption is retained by the same search report. A
 /// diagnostic failure propagates separately and never erases the owned stream.
 pub(crate) fn prepare_certificate(
-    models: &mut zetesis_sat::StableModels,
-    order: zetesis_sat::CertificateOrder,
+    models: &mut zetesis_stable::StableModels,
+    order: zetesis_stable::CertificateOrder,
     options: &SolveConfig,
     diagnostics: &mut impl ExecutionSink,
     phases: &Recorder,
-) -> Result<Option<zetesis_sat::Incomplete>, SolveError> {
-    if options.oracle != crate::Oracle::Auto {
+) -> Result<Option<zetesis_stable::Incomplete>, SolveError> {
+    if options.oracle != crate::Oracle::Auto || models.root_refuted() {
         return Ok(None);
     }
     let limits = certificate_limits(options);
@@ -68,16 +67,16 @@ pub(crate) fn prepare_certificate(
     });
     match eligibility {
         Ok(true) => match models.statistics().certified.and_then(|stats| stats.plan) {
-            Some(zetesis_sat::CertificatePlanStatistics::Tight(_)) => {
+            Some(zetesis_stable::CertificatePlanStatistics::Tight(_)) => {
                 diagnostics.record(Event::TightMembership)?;
             }
-            Some(zetesis_sat::CertificatePlanStatistics::Positive(_)) => {
+            Some(zetesis_stable::CertificatePlanStatistics::Positive(_)) => {
                 diagnostics.record(Event::PositiveMembership)?;
             }
-            Some(zetesis_sat::CertificatePlanStatistics::Stratified(_)) => {
+            Some(zetesis_stable::CertificatePlanStatistics::Stratified(_)) => {
                 diagnostics.record(Event::StratifiedMembership)?;
             }
-            None => return Ok(Some(zetesis_sat::Incomplete::InvalidWitness)),
+            None => return Ok(Some(zetesis_stable::Incomplete::InvalidWitness)),
         },
         Ok(false) => diagnostics.record(Event::GeneralMembership(
             models
@@ -95,8 +94,8 @@ pub(crate) fn prepare_certificate(
 /// counts the actual program and checks its storage before allocating; these
 /// ceilings are not reservation sizes. Preparation consumes the enumeration's
 /// remaining search work, so ordinary execution adds no independent work cap.
-fn certificate_limits(options: &SolveConfig) -> zetesis_sat::CertificateLimits {
-    zetesis_sat::CertificateLimits {
+fn certificate_limits(options: &SolveConfig) -> zetesis_stable::CertificateLimits {
+    zetesis_stable::CertificateLimits {
         tight: zetesis_ferraris::TightPlanLimits {
             max_producers: usize::MAX,
             max_dependencies: usize::MAX,
@@ -116,37 +115,21 @@ fn certificate_limits(options: &SolveConfig) -> zetesis_sat::CertificateLimits {
     }
 }
 
-pub(crate) fn search_limits(options: &SolveConfig) -> zetesis_sat::Limits {
-    zetesis_sat::Limits {
-        admission: cnf_admission(options.max_candidate_bytes as u128),
-        reduct_admission: cnf_admission(u128::from(options.max_reduct_bytes)),
-        search: zetesis_sat::SearchLimits {
+pub(crate) fn search_limits(options: &SolveConfig) -> zetesis_stable::Limits {
+    zetesis_stable::Limits {
+        search: zetesis_stable::SearchLimits {
             max_work: options.max_search_work,
             max_decisions: options.max_search_decisions,
-        },
-        projections: zetesis_sat::ProjectionLimits {
-            max_entries: options.max_projection_entries,
-            max_nodes: options.max_projection_nodes,
-            max_bytes: options.max_projection_bytes,
         },
         max_candidates: options.max_candidates,
         max_reduct_bytes: options.max_reduct_bytes,
         // Candidate-index storage uses the existing candidate memory allowance,
-        // independently of prepared-reduct storage. No additional CLI control.
+        // independently of the reduct query workspace. No additional CLI control.
         max_native_narrowing_bytes: options.max_candidate_bytes as u64,
         max_verification_work: options.max_work,
-    }
-}
-
-// These independent logical populations derive from their existing named owner
-// allowance. They do not estimate total RSS. The extent cap keeps doubling a
-// literal population and the variable/sign index within checked host indices.
-fn cnf_admission(bytes: u128) -> zetesis_sat::AdmissionLimits {
-    let extent = usize::try_from(bytes.min(isize::MAX as u128)).unwrap_or(isize::MAX as usize);
-    zetesis_sat::AdmissionLimits {
-        max_variables: extent / 32,
-        max_clauses: extent / (4 * size_of::<usize>()),
-        max_literals: extent / size_of::<zetesis_sat::Literal>(),
+        // Learned rows are candidate-narrowing state: their tiers grow with
+        // the same candidate memory allowance.
+        learning: zetesis_ferraris::LearningLimits::for_allowance(options.max_candidate_bytes),
     }
 }
 

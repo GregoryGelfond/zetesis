@@ -1,7 +1,7 @@
 //! Owner-checked word export into already admitted candidate transport storage.
 
 use crate::{GpuError, GpuErrorKind};
-use zetesis_cpu::Cancellation;
+use zetesis_algebra::{Cancellation, words::Words};
 use zetesis_ferraris::{Interpretation, Theory};
 
 /// Whether one dispatch checks the complete supplied slice or its largest
@@ -77,12 +77,12 @@ impl BatchSize {
 /// A failed export clears its length, so no incomplete prefix is dispatchable.
 #[derive(Default)]
 pub(crate) struct Staging {
-    words: Vec<u32>,
+    words: Words<u32>,
 }
 
 impl Staging {
     pub(crate) fn release(&mut self) {
-        self.words = Vec::new();
+        self.words = Words::new(Vec::new());
     }
 
     pub(crate) fn words(&self) -> &[u32] {
@@ -92,6 +92,10 @@ impl Staging {
     #[cfg(test)]
     pub(crate) fn capacity(&self) -> usize {
         self.words.capacity()
+    }
+
+    pub(crate) fn retained_bytes(&self) -> Result<u64, GpuError> {
+        capacity_charge(0, self.words.capacity())
     }
 
     /// Replace the plan's requested host seed bytes with actual capacity. The
@@ -127,7 +131,7 @@ impl Staging {
             Ok(actual)
         })();
         if result.is_err() {
-            self.words.clear();
+            self.words.storage_mut().clear();
         }
         result
     }
@@ -152,7 +156,7 @@ impl Staging {
         let fits = |words| capacity_charge(base, words).is_ok_and(|charge| charge <= ceiling);
         if self.words.capacity() < length || !fits(self.words.capacity()) {
             self.release();
-            self.words = allocate(length)?;
+            self.words = allocate(length)?.into();
         }
         let charge = capacity_charge(base, self.words.capacity());
         if self.words.capacity() < length || !charge.as_ref().is_ok_and(|charge| *charge <= ceiling)
@@ -164,7 +168,7 @@ impl Staging {
         }
         // Equal-shape reuse performs no zero filling. The exporter overwrites
         // every logical word; only fresh or previously interrupted storage grows.
-        self.words.resize(length, 0);
+        self.words.storage_mut().resize(length, 0);
         charge
     }
 }

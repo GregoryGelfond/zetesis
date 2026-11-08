@@ -2,7 +2,7 @@
 
 use themelios_base::source::SourceId;
 use themelios_base::span::{ByteOffset, Span};
-use zetesis_cpu::Cancellation;
+use zetesis_algebra::Cancellation;
 use zetesis_ferraris::{Interpretation, Limits, models, models_reduct};
 
 use super::*;
@@ -599,7 +599,8 @@ fn initialization_obeys_operand_ceiling() {
     }
 }
 
-/// The empty catalog leaves final admission as finish's only charged action.
+/// The empty catalog leaves final admission as the only charged action of
+/// completion and sealing.
 /// Both routes retain the same native row and roots; raw re-entry discards only
 /// the private topology frontier, without changing the source atom universe.
 fn final_admission(
@@ -634,7 +635,8 @@ fn final_admission(
             builder.counters.attach_test_control(&cancellation);
         }
         let before = builder.counters.accounting.work;
-        let emission = builder.finish(&Profile::new(None), location())?;
+        builder.complete(&Profile::new(None))?;
+        let emission = builder.seal(location())?;
         let work = emission.admission.work();
         assert_eq!(u128::from(counters.accounting.work - before), work);
         let theory = emission.admission.admit().unwrap();
@@ -674,7 +676,7 @@ fn final_admission_obeys_the_work_ceiling() {
 fn final_admission_keeps_cancellation_typed() {
     for retained in [false, true] {
         assert!(matches!(final_admission(retained, u64::MAX, true),
-            Err(FormulaFailure::Interrupted { reason: zetesis_cpu::Stop::Cancelled, location: origin })
+            Err(FormulaFailure::Interrupted { reason: zetesis_algebra::Stop::Cancelled, location: origin })
                 if origin == location()));
     }
 }

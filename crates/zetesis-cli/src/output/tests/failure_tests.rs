@@ -50,7 +50,7 @@ fn legacy_metadata_cannot_establish_optimality() {
         &crate::PublicationConfig::from(&options),
         1000,
         &mut Vec::new(),
-        &zetesis_cpu::Cancellation::default(),
+        &zetesis_algebra::Cancellation::default(),
     )
     .unwrap_err()
     .into_legacy();
@@ -85,7 +85,7 @@ fn input_failure_survives_a_broken_json_prefix() {
 
 #[test]
 fn source_stops_have_distinct_machine_codes() {
-    use zetesis_cpu::Stop;
+    use zetesis_algebra::Stop;
     for (stop, code) in [
         (Stop::Cancelled, "cancelled"),
         (Stop::Deadline, "deadline"),
@@ -108,7 +108,7 @@ fn source_stops_have_distinct_machine_codes() {
 
 #[test]
 fn countermodel_stops_have_distinct_machine_codes() {
-    use zetesis_sat::Incomplete;
+    use zetesis_stable::Incomplete;
     for (stop, code) in [
         (Incomplete::Cancelled, "cancelled"),
         (Incomplete::Deadline, "deadline"),
@@ -137,6 +137,12 @@ fn countermodel_stops_have_distinct_machine_codes() {
         (Incomplete::WrongTheory, "wrong_theory"),
         (Incomplete::ClosedEnumerator, "closed_enumerator"),
         (Incomplete::LateCertificate, "late_certificate"),
+        (Incomplete::LateCandidateBounds, "late_candidate_bounds"),
+        (Incomplete::CandidateBoundPlan, "candidate_bound_plan"),
+        (
+            Incomplete::CandidateBoundNotImproving,
+            "candidate_bound_not_improving",
+        ),
         (Incomplete::InvalidWitness, "invalid_witness"),
         (
             Incomplete::InvalidRegionConsequence,
@@ -198,7 +204,7 @@ fn failed_flush_prevents_a_later_json_footer() {
         )
         .unwrap_err();
     assert!(error.to_string().contains("original cause"));
-    assert_eq!(sink.0, b"{\"schema\":2,\"format\":\"zetesis\",\"models\":[");
+    assert_eq!(sink.0, b"{\"schema\":3,\"format\":\"zetesis\",\"models\":[");
 }
 
 #[test]
@@ -212,11 +218,11 @@ fn failure_envelopes_never_invent_search_coverage() {
             "observation_output_limit",
         ),
         (RunError::MixedStandardInput, "mixed_standard_input"),
-        (RunError::Batch(zetesis_cpu::BatchError::Busy), "batch"),
         (RunError::BackendUnavailable, "backend_unavailable"),
         (
             RunError::GpuExecutableUnavailable {
                 path: Some("zetesis-libexec/0/zetesis".into()),
+                installed: true,
                 error: std::io::ErrorKind::NotFound.into(),
             },
             "gpu_executable_unavailable",
@@ -230,21 +236,16 @@ fn failure_envelopes_never_invent_search_coverage() {
         ),
         (
             RunError::PreparedInput {
-                profile: crate::PreparedProfile::Relational,
+                profile: crate::PreparedProfile::AcyclicSource,
                 oracle: crate::Oracle::Countermodel,
                 grounder: crate::Grounder::Lazy,
             },
             "prepared_input",
         ),
         (
-            RunError::Formula(zetesis_ferraris::AdmissionError::Limit),
-            "formula",
-        ),
-        (
-            RunError::PublicationStopped(zetesis_cpu::Stop::Cancelled),
+            RunError::PublicationStopped(zetesis_algebra::Stop::Cancelled),
             "publication_stopped",
         ),
-        (RunError::Words(zetesis_core::WordError::TailBits), "words"),
         (
             RunError::Model(zetesis_core::ModelError::Position {
                 position: 1,
@@ -259,22 +260,9 @@ fn failure_envelopes_never_invent_search_coverage() {
             },
             "formula_batch_shape",
         ),
-        (RunError::LazyStatisticsOverflow, "lazy_statistics_overflow"),
-        (
-            RunError::ClosureReservation {
-                workers: 5,
-                max_closure_bytes: 3,
-                max_closure_batch_bytes: 4,
-            },
-            "closure_reservation",
-        ),
         (
             RunError::DeadlineTimer(io::Error::other("no thread")),
             "deadline_timer",
-        ),
-        (
-            RunError::ClosureStatisticsOverflow,
-            "closure_statistics_overflow",
         ),
     ];
     for (error, kind) in errors {
@@ -300,17 +288,15 @@ fn failure_envelopes_never_invent_search_coverage() {
 
 #[test]
 fn formula_json_keeps_submission_limits_and_decoding_distinct() {
-    let statistics = crate::FormulaExecutionStatistics {
-        gpu_limits: Some(crate::FormulaDeviceLimits {
-            work_per_candidate: 789,
-            rounds_per_candidate: 17,
-        }),
-        gpu_submitted_batches: 3,
-        gpu_submitted_candidates: 10,
-        gpu_batches: 2,
-        gpu_candidates: 7,
-        ..Default::default()
-    };
+    let mut statistics = crate::FormulaExecutionStatistics::default();
+    statistics.gpu_limits = Some(crate::FormulaDeviceLimits {
+        work_per_candidate: 789,
+        rounds_per_candidate: 17,
+    });
+    statistics.gpu_submitted_batches = 3;
+    statistics.gpu_submitted_candidates = 10;
+    statistics.gpu_batches = 2;
+    statistics.gpu_candidates = 7;
     let mut out = Buffer::new(4096);
     super::execution_statistics(&mut out, Some(&statistics)).unwrap();
     let value: serde_json::Value = serde_json::from_slice(&out.bytes).unwrap();
@@ -335,13 +321,68 @@ fn formula_json_keeps_submission_limits_and_decoding_distinct() {
 }
 
 #[test]
+fn slate_json_reports_committed_slates_their_largest_and_resets() {
+    let mut statistics = crate::FormulaExecutionStatistics::default();
+    statistics.gpu_slates = 7;
+    statistics.gpu_largest_slate = Some(32);
+    statistics.gpu_slate_resets = 2;
+    let mut out = Buffer::new(4096);
+    super::execution_statistics(&mut out, Some(&statistics)).unwrap();
+    let value: serde_json::Value = serde_json::from_slice(&out.bytes).unwrap();
+    assert_eq!(value["gpu_slates"], 7);
+    assert_eq!(value["gpu_largest_slate"], 32);
+    assert_eq!(value["gpu_slate_resets"], 2);
+    let mut out = Buffer::new(4096);
+    super::execution_statistics(
+        &mut out,
+        Some(&crate::FormulaExecutionStatistics::default()),
+    )
+    .unwrap();
+    let value: serde_json::Value = serde_json::from_slice(&out.bytes).unwrap();
+    // Before the first commit, and on CPU routes, no slate was committed.
+    assert_eq!(value["gpu_slates"], 0);
+    assert!(value["gpu_largest_slate"].is_null());
+    assert_eq!(value["gpu_slate_resets"], 0);
+}
+
+#[test]
+fn lookahead_json_reports_slates_ahead_the_decision_and_hidden_device_time() {
+    let mut statistics = crate::FormulaExecutionStatistics::default();
+    statistics.gpu_lookahead_slates = 6;
+    statistics.gpu_lookahead = Some(zetesis_solve::GpuLookahead::Declined(
+        zetesis_solve::GpuLookaheadDeclined::RequestedAnswers,
+    ));
+    statistics.gpu_lookahead_device_ns = 900;
+    statistics.gpu_lookahead_finish_wait_ns = 300;
+    statistics.gpu_lookahead_unmeasured = 2;
+    statistics.first_answer_ns = Some(1_234);
+    let mut out = Buffer::new(4096);
+    super::execution_statistics(&mut out, Some(&statistics)).unwrap();
+    let value: serde_json::Value = serde_json::from_slice(&out.bytes).unwrap();
+    assert_eq!(value["gpu_lookahead_slates"], 6);
+    assert_eq!(value["gpu_lookahead"], "requested_answers");
+    assert_eq!(value["gpu_lookahead_device_ns"], 900);
+    assert_eq!(value["gpu_lookahead_finish_wait_ns"], 300);
+    assert_eq!(value["gpu_lookahead_unmeasured"], 2);
+    assert_eq!(value["first_answer_ns"], 1_234);
+    let mut out = Buffer::new(4096);
+    super::execution_statistics(
+        &mut out,
+        Some(&crate::FormulaExecutionStatistics::default()),
+    )
+    .unwrap();
+    let value: serde_json::Value = serde_json::from_slice(&out.bytes).unwrap();
+    // On CPU routes, and before a device session's first slate, nothing was decided.
+    assert!(value["gpu_lookahead"].is_null());
+    assert!(value["first_answer_ns"].is_null());
+}
+
+#[test]
 fn tight_json_distinguishes_scheduled_and_completed_work() {
-    let statistics = crate::FormulaExecutionStatistics {
-        tight_work_per_candidate: Some(123),
-        gpu_scheduled_work: Some(246),
-        gpu_submitted_candidates: 2,
-        ..Default::default()
-    };
+    let mut statistics = crate::FormulaExecutionStatistics::default();
+    statistics.tight_work_per_candidate = Some(123);
+    statistics.gpu_scheduled_work = Some(246);
+    statistics.gpu_submitted_candidates = 2;
     let mut out = Buffer::new(4096);
     super::execution_statistics(&mut out, Some(&statistics)).unwrap();
     let value: serde_json::Value = serde_json::from_slice(&out.bytes).unwrap();
@@ -353,16 +394,54 @@ fn tight_json_distinguishes_scheduled_and_completed_work() {
 }
 
 #[test]
-fn residual_json_distinguishes_decoding_from_cpu_completion() {
-    let statistics = crate::FormulaExecutionStatistics {
-        gpu_residuals: Some(crate::FormulaResidualStatistics {
-            fixed_point: 2,
-            round_limit: 3,
-            work_limit: 1,
-        }),
-        cpu_residuals: 0,
-        ..Default::default()
+fn tight_json_separates_routes_from_update_availability() {
+    let json = |statistics: &crate::FormulaExecutionStatistics| {
+        let mut out = Buffer::new(4096);
+        super::execution_statistics(&mut out, Some(statistics)).unwrap();
+        serde_json::from_slice::<serde_json::Value>(&out.bytes).unwrap()
     };
+    let mut statistics = crate::FormulaExecutionStatistics::default();
+    let absent = json(&statistics);
+    assert!(absent["gpu_tight_routes"].is_null());
+    assert!(absent["gpu_tight_updates"].is_null());
+    let mut routes = zetesis_solve::TightRouteStatistics::default();
+    routes.complete = 4;
+    routes.dense_reuse = 3;
+    routes.beyond_threshold = 1;
+    routes.update = 9;
+    routes.nodes_evaluated = 85;
+    statistics.gpu_tight_routes = Some(routes);
+    let mut updates = zetesis_solve::TightUpdateStatistics::default();
+    updates.availability = zetesis_solve::TightUpdateAvailability::GuardDeclined;
+    updates.count_bits = Some(16);
+    updates.steady_state = true;
+    updates.guard_declined_batches = 3;
+    statistics.gpu_tight_updates = Some(updates);
+    let value = json(&statistics);
+    assert_eq!(
+        value["gpu_tight_routes"],
+        serde_json::json!({
+            "complete": 4, "dense_reuse": 3, "beyond_threshold": 1, "update": 9,
+            "nodes_evaluated": 85,
+        })
+    );
+    assert_eq!(
+        value["gpu_tight_updates"],
+        serde_json::json!({
+            "availability": "guard_declined", "count_bits": 16, "steady_state": true,
+            "guard_declined_batches": 3,
+        })
+    );
+}
+
+#[test]
+fn residual_json_distinguishes_decoding_from_cpu_completion() {
+    let mut statistics = crate::FormulaExecutionStatistics::default();
+    statistics.gpu_residuals = Some(crate::FormulaResidualStatistics {
+        fixed_point: 2,
+        round_limit: 3,
+        work_limit: 1,
+    });
     let mut out = Buffer::new(4096);
     super::execution_statistics(&mut out, Some(&statistics)).unwrap();
     let value: serde_json::Value = serde_json::from_slice(&out.bytes).unwrap();
@@ -385,44 +464,134 @@ fn residual_json_distinguishes_decoding_from_cpu_completion() {
 
 #[test]
 fn compute_timing_json_distinguishes_absence_from_zero() {
-    use zetesis_backend::{ComputeTiming, ComputeTimingStatus};
-    for (status, sample, expected) in [
+    use zetesis_backend::{BatchComputeTime, ComputeTiming, ComputeTimingStatus};
+    for (status, report, expected) in [
         (
             ComputeTimingStatus::NotRequested,
-            None,
+            BatchComputeTime::Unavailable,
             serde_json::Value::Null,
         ),
         (
             ComputeTimingStatus::Unsupported,
-            None,
+            BatchComputeTime::Unavailable,
             serde_json::Value::Null,
         ),
-        (ComputeTimingStatus::Enabled, None, serde_json::Value::Null),
         (
             ComputeTimingStatus::Enabled,
-            Some(std::time::Duration::ZERO),
+            BatchComputeTime::Unavailable,
+            serde_json::Value::Null,
+        ),
+        (
+            ComputeTimingStatus::Enabled,
+            BatchComputeTime::Measured(std::time::Duration::ZERO),
             serde_json::json!(0),
         ),
     ] {
         let mut timing = ComputeTiming::new(status);
-        timing.record(sample);
-        let statistics = crate::FormulaExecutionStatistics {
-            gpu_compute_timing: timing,
-            ..Default::default()
-        };
+        timing.record(report);
+        let measured_report = matches!(report, BatchComputeTime::Measured(_));
+        let mut statistics = crate::FormulaExecutionStatistics::default();
+        statistics.gpu_compute_timing = timing;
         let mut out = Buffer::new(4096);
         super::execution_statistics(&mut out, Some(&statistics)).unwrap();
         let value: serde_json::Value = serde_json::from_slice(&out.bytes).unwrap();
         let measured = &value["gpu_compute_timing"];
         assert_eq!(measured["status"], status.label());
         assert_eq!(measured["elapsed_ns"], expected);
-        assert_eq!(measured["complete"], sample.is_some());
-        assert_eq!(measured["measured_batches"], u64::from(sample.is_some()));
+        assert_eq!(measured["complete"], measured_report);
+        assert_eq!(measured["measured_batches"], u64::from(measured_report));
         assert_eq!(
             measured["unavailable_batches"],
-            u64::from(status != ComputeTimingStatus::NotRequested && sample.is_none())
+            u64::from(status != ComputeTimingStatus::NotRequested && !measured_report)
         );
         assert_eq!(measured["scope"], "decoded_device_compute_passes");
         assert_eq!(measured["host_oracle"], "excluded");
     }
+}
+
+#[test]
+fn compute_timing_json_reports_unresolved_batches_and_flushes() {
+    use zetesis_backend::{BatchComputeTime, ComputeTiming, ComputeTimingStatus};
+    let mut timing = ComputeTiming::new(ComputeTimingStatus::Enabled);
+    timing.record(BatchComputeTime::Measured(std::time::Duration::from_nanos(
+        7,
+    )));
+    timing.unresolved_batches = 1;
+    timing.record_flush_submission();
+    let mut statistics = crate::FormulaExecutionStatistics::default();
+    statistics.gpu_compute_timing = timing;
+    let mut out = Buffer::new(4096);
+    super::execution_statistics(&mut out, Some(&statistics)).unwrap();
+    let value: serde_json::Value = serde_json::from_slice(&out.bytes).unwrap();
+    let measured = &value["gpu_compute_timing"];
+    assert_eq!(measured["unresolved_batches"], 1);
+    assert_eq!(measured["flush_submissions"], 1);
+    assert_eq!(measured["complete"], false);
+}
+
+#[test]
+fn handover_json_distinguishes_absence_zero_and_a_failed_search_prefix() {
+    use zetesis_solve::{
+        ResidualHandoverAttempt, ResidualHandoverStatistics, ResidualSearchStatistics,
+    };
+    #[derive(serde::Deserialize)]
+    struct Output {
+        gpu_residual_handovers: zetesis_validation::performance::matrix::ResidualHandoverStatistics,
+    }
+    let mut statistics = crate::FormulaExecutionStatistics::default();
+    let encode = |stats: &crate::FormulaExecutionStatistics| {
+        let mut out = Buffer::new(8192);
+        super::execution_statistics(&mut out, Some(stats)).unwrap();
+        out.bytes
+    };
+    let absent: serde_json::Value = serde_json::from_slice(&encode(&statistics)).unwrap();
+    assert!(absent["gpu_residual_handovers"].is_null());
+    let mut receipt = ResidualHandoverStatistics::default();
+    statistics.gpu_residual_handovers = Some(receipt.clone());
+    let zero: serde_json::Value = serde_json::from_slice(&encode(&statistics)).unwrap();
+    assert_eq!(zero["gpu_residual_handovers"]["attempts"], 0);
+    assert!(zero["gpu_residual_handovers"]["last_attempt"].is_null());
+    let large = u128::from(u64::MAX) + 1;
+    let mut search = ResidualSearchStatistics::default();
+    search.totals.stopped = 1;
+    search.totals.visited = 1;
+    search.deepest = Some(0);
+    search.width = Some(1);
+    search.totals.work = large;
+    let mut attempt = ResidualHandoverAttempt::default();
+    attempt.ordinal = 1;
+    attempt.slate_sequence = 7;
+    attempt.decode_complete = true;
+    attempt.residuals.round_limit = 1;
+    attempt.open_atoms = 1;
+    attempt.peak_observation_bytes = 256;
+    let mut reasons = zetesis_solve::ResidualHandoverByReason::default();
+    search.totals.open_atoms = 1;
+    reasons.round_limit = search.totals.clone();
+    attempt.by_reason = Some(reasons);
+    attempt.search = Some(search);
+    receipt.attempts = 1;
+    receipt.incomplete_attempts = 1;
+    receipt.query_work = large;
+    receipt.last_attempt = Some(attempt);
+    statistics.gpu_residual_handovers = Some(receipt);
+    let decoded: Output = serde_json::from_slice(&encode(&statistics)).unwrap();
+    let retained = decoded.gpu_residual_handovers;
+    assert_eq!(retained.query_work, large);
+    assert_eq!(retained.incomplete_attempts, 1);
+    let last = retained.last_attempt.unwrap();
+    assert_eq!(last.slate_sequence, 7);
+    assert!(!last.committed);
+    assert_eq!(last.peak_observation_bytes, 256);
+    let joined = last.by_reason.unwrap();
+    assert_eq!(joined.round_limit.work, large);
+    assert_eq!(joined.round_limit.open_atoms, 1);
+    assert_eq!(joined.fixed_point.work, 0);
+    let query = last.search.unwrap();
+    assert_eq!(query.work, large);
+    assert_eq!(query.stopped, 1);
+    assert_eq!(
+        (query.deepest, query.width, query.host_time_ns),
+        (Some(0), Some(1), None)
+    );
 }

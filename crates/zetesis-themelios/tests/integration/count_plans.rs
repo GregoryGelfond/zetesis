@@ -5,8 +5,8 @@ use crate::support::finite_bindings as reference;
 use zetesis_reference_support::{BundleFixture, canonical, prepared, resource_limits};
 
 use reference::{exhaustive, external, holds, native, values};
+use zetesis_algebra::Cancellation;
 use zetesis_clingo_support as oracle;
-use zetesis_cpu::Cancellation;
 use zetesis_themelios::{
     AdmissionOptions, AdmittedFormula, CountPlanLimits, CountPlanResource, CountPlanStatus,
     ExpansionLimits, FormulaLimits, FormulaResource, prepare_formula,
@@ -45,10 +45,10 @@ fn plan(source: &AdmittedFormula) -> &zetesis_themelios::CountPlan {
 
 /// The complete family of stable models, enumerated under the plan's candidate
 /// restriction when planning produced one, with the search's statistics.
-fn planned_models(admitted: &AdmittedFormula) -> (reference::Models, zetesis_sat::Statistics) {
-    let mut models = zetesis_sat::StableModels::new(
+fn planned_models(admitted: &AdmittedFormula) -> (reference::Models, zetesis_stable::Statistics) {
+    let mut models = zetesis_stable::StableModels::new(
         admitted.theory(),
-        zetesis_sat::Limits::default(),
+        zetesis_stable::Limits::default(),
         Cancellation::default(),
     )
     .unwrap();
@@ -255,7 +255,7 @@ fn cancelled_planning_preserves_successful_admission() {
         };
         assert_eq!(
             error.kind(),
-            zetesis_themelios::CountPlanFailureKind::Stopped(zetesis_cpu::Stop::Cancelled)
+            zetesis_themelios::CountPlanFailureKind::Stopped(zetesis_algebra::Stop::Cancelled)
         );
         assert_eq!(native(&admitted), native(&self::admitted(source, false)));
     }

@@ -12,10 +12,8 @@ This chapter maps the implementation for readers extending the source language.
 The [source API guide](../rust/source.md) describes the public entry points;
 [grounding](grounding.md) explains their mathematical contracts.
 
-Closed-range facts use one checked product cursor in both relational and formula
-admission. It retains interval endpoints and scalar alternatives, then emits one
-head at a time in source order. Formula admission consumes that head directly;
-relational admission retains the templates its executor needs. Complete-family
+Closed-range facts use one checked product cursor in formula admission. It retains interval endpoints and scalar alternatives, then emits one
+head at a time in source order. Formula admission consumes that head directly. Complete-family
 validation and logical expansion limits precede emission. This removes temporary
 range columns and per-statement template vectors, without changing duplicates,
 provenance or arithmetic diagnostics.

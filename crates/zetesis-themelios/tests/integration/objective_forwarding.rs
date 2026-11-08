@@ -9,9 +9,9 @@ use crate::support::finite_bindings::values as truth;
 use crate::support::fixtures::OBJECTIVE_EXTREMA_REFUSALS as EXTREMA_REFUSALS;
 use oracle::records as clingo;
 use source_cases::cases;
+use zetesis_algebra::Cancellation;
 use zetesis_clingo_support as oracle;
 use zetesis_core::Model;
-use zetesis_cpu::Cancellation;
 use zetesis_test_support::records::Records;
 use zetesis_themelios::{FormulaFailure, FormulaLimits, FormulaResource};
 
@@ -116,9 +116,9 @@ fn signed_observer_sources_match_clingo_costs() {
 fn search_preserves_every_optimum_tie() {
     for case in cases(FIXTURE) {
         let input = admit(&case.source, &FormulaLimits::default()).unwrap();
-        let mut search = zetesis_sat::StableModels::new(
+        let mut search = zetesis_stable::StableModels::new(
             input.theory(),
-            zetesis_sat::Limits::default(),
+            zetesis_stable::Limits::default(),
             Cancellation::default(),
         )
         .unwrap();

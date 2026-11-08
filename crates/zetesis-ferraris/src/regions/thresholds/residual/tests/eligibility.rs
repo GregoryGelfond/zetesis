@@ -165,27 +165,32 @@ fn a_stopped_width_witness_preserves_closed_state_and_can_retry() {
     let Width::Compact16(known) = &mut knowledge.width else {
         panic!("the small residual fixture uses compact counters");
     };
-    let closure = Closure {
+    let closure = Closure::<_, zetesis_algebra::AnswerSetsSought> {
         known: known.borrow(),
-        lists: &mut NarrowingScratch::default(),
+        lists: &mut crate::regions::CommonScratch::default(),
+        learning: &mut crate::regions::LearningScratch::default(),
     };
     let state = closure.known.thresholds[0];
     let masks = (closure.known.sure.to_vec(), closure.known.never.to_vec());
     for cutoff in 0..2 {
-        let mut work = Work::new(cutoff);
+        let mut work = Meter::local(cutoff);
         assert!(matches!(
-            closure.threshold_residual_check(&index, 0, &mut work),
+            closure
+                .threshold_residual_check(&index, 0, &mut work)
+                .map_err(zetesis_algebra::Failure::into_stop),
             Err(Stop::WorkLimit),
         ));
-        assert_eq!(work.spent, cutoff);
+        assert_eq!(work.charged(), cutoff);
         assert_eq!(closure.known.thresholds[0], state);
         assert_eq!(&*closure.known.sure, masks.0.as_slice());
         assert_eq!(&*closure.known.never, masks.1.as_slice());
     }
-    let mut work = Work::new(2);
+    let mut work = Meter::local(2);
     assert!(matches!(
-        closure.threshold_residual_check(&index, 0, &mut work),
+        closure
+            .threshold_residual_check(&index, 0, &mut work)
+            .map_err(zetesis_algebra::Failure::into_stop),
         Ok(Step::Unchanged),
     ));
-    assert_eq!(work.spent, 2);
+    assert_eq!(work.charged(), 2);
 }

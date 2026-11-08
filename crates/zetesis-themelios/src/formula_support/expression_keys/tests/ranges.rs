@@ -86,9 +86,17 @@ fn ranges_preserve_excluded_and_retained_independent_fatal_errors() {
 #[test]
 fn hybrid_capture_does_not_select_ranges() {
     let source = "{p(1;2;3)}. {q(2)}. :- q(Y),p(X),X<Y+0.";
-    let reference = controlled(true, || ground_hybrid(testing::prepare(source), None)).unwrap();
+    // Its one pair stays streamed with pairwise capture off, so the captured
+    // rows themselves are compared.
+    let reference = crate::test_support::without_pair_exclusions(|| {
+        controlled(true, || ground_hybrid(testing::prepare(source), None))
+    })
+    .unwrap();
     let receipts = Receipts::default();
-    let selected = ground_hybrid(testing::prepare(source), Some(&receipts)).unwrap();
+    let selected = crate::test_support::without_pair_exclusions(|| {
+        ground_hybrid(testing::prepare(source), Some(&receipts))
+    })
+    .unwrap();
     assert!(selected.1.is_some());
     assert_same_program(&reference.0, &selected.0);
     assert_eq!(receipts.emission.get().range_probes, Some(0));

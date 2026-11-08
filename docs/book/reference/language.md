@@ -6,10 +6,8 @@ lowering, grounding or execution profile supports it. The tables below describe
 implemented forms and their boundaries; they are not a whole-language parity
 claim or a promise that every combination of individually supported forms works.
 
-The ordinary source driver selects a supported profile automatically. Explicit
-library admission doors are narrower: `admit` accepts the strict relational
-profile, `admit_extended` adds its scalar expansions, and `admit_formula` builds
-the broader finite Ferraris representation. Automatic formula admission can
+The ordinary source driver selects a supported profile automatically. The explicit
+library door `admit_formula` builds the finite Ferraris representation. Automatic formula admission can
 defer eligible terminal positive definitions and reconstruct them from verified
 base answers; the remaining rules are materialized eagerly.
 Explicit lazy execution can retain a producer core and stream
@@ -63,7 +61,7 @@ storage. See [resource controls](commands.md#choose-execution-and-limits).
 | Boolean literals | Signed `#true`/`#false` in rule bodies and choice/aggregate conditions; Boolean singleton heads and disjuncts with finite local conditions; signed Boolean choice and function-head elements | Separate objective/observation condition profiles |
 | Logical values | Closed signed functions, tuples, strings and extremal terms; complete variable copying, finite construction from bound inputs, nested pools/intervals and structural comparisons | Unbound expression inputs and unbounded recursive construction |
 | Positive witnesses | Constructor/tuple patterns preserve sign, name, arity and complete supporting atoms; evaluated positions consume bound inputs | Arithmetic inversion; a negative atom cannot supply a missing binding |
-| Comparisons | Equality/disequality, structural ordering, admitted flat-tuple equality and complete comparison chains, including default/double negation; directed finite integer-affine chains can bind several unresolved variables | Nonlinear inverse binders and simultaneous systems without directed finite bounds |
+| Comparisons | Equality/disequality, structural ordering, including orderings between open tuples, admitted flat-tuple equality and complete comparison chains, including default/double negation; directed finite integer-affine chains can bind several unresolved variables | Nonlinear inverse binders and simultaneous systems without directed finite bounds |
 | Finite generators | Scalar equality, admitted flat-tuple equality, closed integer bounds, dependent intervals and scoped finite pools in rules, local elements and objectives | Unresolved or circular binding dependencies and unsupported arithmetic inversion |
 | Universal body conditionals | Complete local implication families with signed atom and comparison alternatives, scoped pools/intervals, positive local witnesses and finite anonymous projections under `not` or `not not` | Unbound local inputs and unsupported arithmetic inversion |
 
@@ -95,9 +93,27 @@ numeric operands. Arithmetic is evaluated before comparison; defined `X + Y`
 requires numbers and remains subject to the
 [arithmetic refusal policy](#numeric-boundaries-and-refusal-meaning).
 
-The current flat-tuple comparison profile requires tuple operands on both sides
-when a tuple still contains variables after normalization. It cannot bind that
-whole tuple to a variable, even when a positive atom supplies its component bindings:
+An ordering between tuples that still contain variables after normalization,
+such as `(M,L) < (K,J)`, compares their complete values in the same term order:
+arity first, then components from left to right. It binds nothing, so each
+component must be bound elsewhere, and it is admitted wherever a comparison can
+stand, in bodies, aggregate element conditions, guards, choice conditions,
+conditional literals and objectives:
+
+```asp
+r(1,3).r(2,1).r(3,2).n(N):-N=#count{L:r(L,M),(M,L)<(2,9)}.
+```
+
+Its single answer contains `n(2)`: `(1,2)` and `(2,3)` precede `(2,9)`, and
+`(3,1)` does not. The
+[tuple orderings](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/tests/integration/tuple_orderings.rs)
+check every relation, unequal arities, mixed types, nesting, evaluated
+components, negation and chains against clingo 5.8.2.
+
+Equality and disequality keep the flat-tuple comparison profile, which may bind
+the components. It requires tuple operands on both sides when a tuple still
+contains variables after normalization. It cannot bind that whole tuple to a
+variable, even when a positive atom supplies its component bindings:
 
 ```asp
 d(1;2).p(Y):-d(X),Y=(-f(X),(X,))=(-f(2),(2,)).

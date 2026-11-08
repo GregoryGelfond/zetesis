@@ -3,10 +3,10 @@
 use std::error::Error as _;
 use std::time::Instant;
 
+use zetesis_algebra::Cancellation;
 use zetesis_core::{
     Atom, AtomPattern, Filter, FilterRef, Model, PatternRef, Predicate, TemplateTerm, Term, Value,
 };
-use zetesis_cpu::Cancellation;
 use zetesis_objective::{
     AdmissionError, AdmissionLimits, AdmissionResource, ErrorKind, Limits, ObjectiveProgram,
     ObjectiveTemplate, Stop, WeightPolarity, evaluate,

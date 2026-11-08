@@ -22,8 +22,12 @@ fn base_execution(semantic: Option<&SemanticOutcome>) -> String {
     if semantic.source_evaluation().is_some() {
         return "CPU direct source evaluation during admission".into();
     }
-    if semantic.hybrid_execution().is_some() {
-        return "CPU hybrid formula; eager core, streamed constraints".into();
+    if let Some(execution) = semantic.hybrid_execution() {
+        return if execution.streamed.templates == 0 {
+            "CPU hybrid formula; eager core, no streamed constraints".into()
+        } else {
+            "CPU hybrid formula; eager core, streamed constraints".into()
+        };
     }
     if let Some(execution) = semantic.formula_execution() {
         return if execution.adapter.is_empty() {
@@ -37,34 +41,16 @@ fn base_execution(semantic: Option<&SemanticOutcome>) -> String {
             )
         };
     }
-    if let Some(execution) = semantic.lazy_execution() {
-        return format!(
-            "GPU lazy closure; {} ({})",
-            execution.adapter, execution.backend
-        );
-    }
-    if semantic.shared_execution().is_some() {
-        return "CPU shared lazy closure".into();
-    }
-    if let Some(execution) = semantic.closure_execution() {
-        return format!("CPU independent {} closure", execution.route.label());
-    }
     if let Some(statistics) = semantic.countermodel_statistics() {
         let operation = match statistics.certified.and_then(|receipt| receipt.plan) {
-            Some(zetesis_sat::CertificatePlanStatistics::Tight(_)) => "tight support",
-            Some(zetesis_sat::CertificatePlanStatistics::Positive(_)) => "positive consequences",
-            Some(zetesis_sat::CertificatePlanStatistics::Stratified(_)) => {
+            Some(zetesis_stable::CertificatePlanStatistics::Tight(_)) => "tight support",
+            Some(zetesis_stable::CertificatePlanStatistics::Positive(_)) => "positive consequences",
+            Some(zetesis_stable::CertificatePlanStatistics::Stratified(_)) => {
                 "stratified consequences"
             }
             None => "general reduct",
         };
         return format!("CPU native formula ({operation})");
-    }
-    if semantic
-        .candidate_statistics()
-        .is_some_and(|statistics| statistics.root_refuted)
-    {
-        return "No membership check; root refuted".into();
     }
     "unavailable (no retained execution receipt)".into()
 }
@@ -135,40 +121,6 @@ fn semantic_rows(rows: &mut Vec<Row>, semantic: &SemanticOutcome) {
     }
     if let Some(statistics) = semantic.countermodel_statistics() {
         formula(rows, statistics);
-    }
-    if let Some(statistics) = semantic.candidate_statistics() {
-        rows.push(count(
-            "Candidate restriction work",
-            statistics.restriction_work,
-            "construction and traversal; includes stopped work",
-        ));
-    }
-    if let Some(execution) = semantic.closure_execution() {
-        closure(rows, execution);
-    }
-    if let Some(execution) = semantic.shared_execution() {
-        rows.push(count(
-            "Shared source work",
-            execution.source_work,
-            "host source operations; includes attempted batches",
-        ));
-        rows.push(count(
-            "Shared world work",
-            execution.world_work,
-            "per-world record visits and tests",
-        ));
-    }
-    if let Some(execution) = semantic.lazy_execution() {
-        rows.push(count(
-            "Lazy source work",
-            execution.source_work,
-            "charged host operations",
-        ));
-        rows.push(count(
-            "Lazy device dispatches",
-            execution.dispatches,
-            "submitted nonempty chunks; not decoded results",
-        ));
     }
     if let Some(execution) = semantic.formula_execution() {
         device(rows, execution);
@@ -252,6 +204,31 @@ fn terminal(rows: &mut Vec<Row>, execution: &zetesis_solve::TerminalExecutionSta
 }
 
 fn hybrid(rows: &mut Vec<Row>, execution: &zetesis_solve::HybridExecutionStatistics) {
+    let streamed = execution.streamed;
+    for (label, value, scope) in [
+        (
+            "Streamed constraint templates",
+            streamed.templates as u64,
+            "checked during search; they did not fit in the formula",
+        ),
+        (
+            "Streamed constraint instances",
+            streamed.instances,
+            "possible instances, visited during admission",
+        ),
+        (
+            "Grounded constraint templates",
+            streamed.retained_templates as u64,
+            "eligible for streaming, but fit in the formula",
+        ),
+        (
+            "Grounded constraint instances",
+            streamed.retained_instances,
+            "checked as formula nodes",
+        ),
+    ] {
+        rows.push(count(label, value, scope));
+    }
     for (label, value, scope) in [
         (
             "Core answers checked",
@@ -293,7 +270,7 @@ fn hybrid(rows: &mut Vec<Row>, execution: &zetesis_solve::HybridExecutionStatist
     ));
 }
 
-fn formula(rows: &mut Vec<Row>, statistics: &zetesis_sat::Statistics) {
+fn formula(rows: &mut Vec<Row>, statistics: &zetesis_stable::Statistics) {
     if let Some(filter) = statistics.region_filter {
         let scope = if filter.overflowed {
             "original candidate regions; counts overflowed"
@@ -338,26 +315,6 @@ fn formula(rows: &mut Vec<Row>, statistics: &zetesis_sat::Statistics) {
     ));
 }
 
-fn closure(rows: &mut Vec<Row>, execution: &crate::ClosureExecutionStatistics) {
-    let scope = match execution.route {
-        crate::ClosureRoute::Eager => "eager scan units; completed checks only",
-        crate::ClosureRoute::Lazy(_) => "join/copy units; completed checks only",
-    };
-    rows.push(count("Closure work", execution.work, scope));
-    rows.push(count(
-        "Stopped closure checks",
-        execution.stopped_checks,
-        "partial work omitted from closure totals",
-    ));
-    if let crate::ClosureRoute::Lazy(joins) = execution.route {
-        rows.push(count(
-            "Closure tuple probes",
-            joins.tuple_probes,
-            "rows offered to matching; completed checks only",
-        ));
-    }
-}
-
 fn device(rows: &mut Vec<Row>, execution: &crate::FormulaExecutionStatistics) {
     if execution.adapter.is_empty() {
         return;
@@ -377,29 +334,77 @@ fn device(rows: &mut Vec<Row>, execution: &crate::FormulaExecutionStatistics) {
         execution.gpu_work,
         "primitive units; unreturned work unknown",
     ));
+    rows.push(Row::new([
+        "GPU workgroup size".to_owned(),
+        execution
+            .gpu_workgroup_size
+            .map_or_else(|| "unavailable".to_owned(), |size| size.to_string()),
+        "invocations per candidate in the decoded batches".to_owned(),
+    ]));
     rows.push(count(
         "CPU residuals committed",
         execution.cpu_residuals,
         "completed exact residual results committed",
     ));
-    let timing = &execution.gpu_compute_timing;
-    rows.push(Row::new([
+    if let Some(routes) = execution.gpu_tight_routes {
+        rows.push(Row::new([
+            "Tight GPU slots by route".to_owned(),
+            format!(
+                "{} complete; {} dense reuse; {} update",
+                routes.complete, routes.dense_reuse, routes.update
+            ),
+            format!(
+                "dense reuse includes {} beyond the update threshold; updates re-evaluated {} nodes",
+                routes.beyond_threshold, routes.nodes_evaluated
+            ),
+        ]));
+    }
+    if let Some(updates) = execution.gpu_tight_updates {
+        let source = if updates.steady_state {
+            "as the last batch with reuse authority reported"
+        } else {
+            "as the last batch reported; none held reuse authority"
+        };
+        rows.push(Row::new([
+            "Tight GPU update route".to_owned(),
+            updates.availability.label().to_owned(),
+            updates.count_bits.map_or_else(
+                || source.to_owned(),
+                |bits| format!("{bits}-bit support counts; {source}"),
+            ),
+        ]));
+        rows.push(count(
+            "Tight GPU guard declines",
+            updates.guard_declined_batches,
+            "decoded batches the runtime guard declined the update route for",
+        ));
+    }
+    rows.push(Row::new(compute_passes(&execution.gpu_compute_timing)));
+}
+
+// The total covers measured batches only; an unresolved batch, whose interval
+// was not read before the record was taken, leaves it incomplete.
+fn compute_passes(timing: &zetesis_backend::ComputeTiming) -> [String; 3] {
+    [
         "GPU compute passes".to_owned(),
         timing.elapsed.map_or_else(
             || format!("unavailable ({})", timing.status.label()),
             |elapsed| format!("{:.3} ms", elapsed.as_secs_f64() * 1_000.0),
         ),
         format!(
-            "{} measured batches; {} unavailable; host preparation, transfers and waits excluded{}",
+            "{} measured batches; {} unavailable; {} unresolved; host preparation, transfers and waits excluded{}",
             timing.measured_batches,
             timing.unavailable_batches,
+            timing.unresolved_batches,
             if timing.overflowed {
                 "; accounting incomplete"
+            } else if timing.unresolved_batches != 0 {
+                "; total incomplete"
             } else {
                 ""
             },
         ),
-    ]));
+    ]
 }
 
 fn completion(rows: &mut Vec<Row>, execution: &crate::CompletionAccounting) {
@@ -439,4 +444,101 @@ fn grounding_rows(rows: &mut Vec<Row>, grounding: &GroundingTimings) {
 
 fn count(label: &str, value: impl Display, scope: &str) -> Row {
     Row::new([label.to_owned(), value.to_string(), scope.to_owned()])
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{compute_passes, device};
+    use zetesis_backend::{BatchComputeTime, ComputeTiming, ComputeTimingStatus};
+
+    fn measured() -> ComputeTiming {
+        let mut timing = ComputeTiming::new(ComputeTimingStatus::Enabled);
+        timing.record(BatchComputeTime::Measured(
+            std::time::Duration::from_micros(1_500),
+        ));
+        timing
+    }
+
+    #[test]
+    fn a_settled_total_is_not_marked_incomplete() {
+        let [_, total, scope] = compute_passes(&measured());
+        assert_eq!(total, "1.500 ms");
+        assert!(scope.starts_with("1 measured batches; 0 unavailable; 0 unresolved;"));
+        assert!(!scope.contains("incomplete"), "{scope}");
+    }
+
+    #[test]
+    fn an_unresolved_batch_marks_the_total_incomplete() {
+        let mut timing = measured();
+        timing.unresolved_batches = 1;
+        let [_, total, scope] = compute_passes(&timing);
+        assert_eq!(total, "1.500 ms");
+        assert!(scope.contains("1 unresolved"), "{scope}");
+        assert!(scope.ends_with("; total incomplete"), "{scope}");
+    }
+
+    #[test]
+    fn device_rows_report_the_dispatched_workgroup_size() {
+        let mut execution = crate::FormulaExecutionStatistics::default();
+        "FORMAT FIXTURE: no physical execution".clone_into(&mut execution.adapter);
+        execution.gpu_workgroup_size = Some(256);
+        let mut rows = Vec::new();
+        device(&mut rows, &execution);
+        let rendered = format!("{rows:?}");
+        assert!(
+            rendered.contains(r#""GPU workgroup size", "256""#),
+            "{rendered}"
+        );
+    }
+
+    #[test]
+    fn tight_device_rows_report_routes_and_update_availability() {
+        let mut execution = crate::FormulaExecutionStatistics::default();
+        "FORMAT FIXTURE: no physical execution".clone_into(&mut execution.adapter);
+        let mut routes = zetesis_solve::TightRouteStatistics::default();
+        routes.complete = 4;
+        routes.dense_reuse = 3;
+        routes.beyond_threshold = 1;
+        routes.update = 9;
+        routes.nodes_evaluated = 85;
+        execution.gpu_tight_routes = Some(routes);
+        let mut updates = zetesis_solve::TightUpdateStatistics::default();
+        updates.availability = zetesis_solve::TightUpdateAvailability::Admitted;
+        updates.count_bits = Some(16);
+        updates.steady_state = true;
+        updates.guard_declined_batches = 7;
+        execution.gpu_tight_updates = Some(updates);
+        let mut rows = Vec::new();
+        device(&mut rows, &execution);
+        let text = format!("{rows:?}");
+        for expected in [
+            "Tight GPU slots by route",
+            "4 complete; 3 dense reuse; 9 update",
+            "dense reuse includes 1 beyond the update threshold; updates re-evaluated 85 nodes",
+            "Tight GPU update route",
+            "admitted",
+            "16-bit support counts; as the last batch with reuse authority reported",
+            r#"["Tight GPU guard declines", "7", "decoded batches the runtime guard declined the update route for"]"#,
+        ] {
+            assert!(text.contains(expected), "{expected}: {text}");
+        }
+    }
+
+    #[test]
+    fn tight_update_row_says_when_no_batch_held_authority() {
+        let mut execution = crate::FormulaExecutionStatistics::default();
+        "FORMAT FIXTURE: no physical execution".clone_into(&mut execution.adapter);
+        let mut updates = zetesis_solve::TightUpdateStatistics::default();
+        updates.availability = zetesis_solve::TightUpdateAvailability::NarrowSchedule;
+        execution.gpu_tight_updates = Some(updates);
+        let mut rows = Vec::new();
+        device(&mut rows, &execution);
+        let text = format!("{rows:?}");
+        for expected in [
+            "narrow_schedule",
+            "as the last batch reported; none held reuse authority",
+        ] {
+            assert!(text.contains(expected), "{expected}: {text}");
+        }
+    }
 }

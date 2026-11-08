@@ -5,8 +5,8 @@ use super::{
     capacity, poll,
 };
 use std::sync::Arc;
+use zetesis_algebra::Cancellation;
 use zetesis_core::ValueNodeRef;
-use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{
     AggregateComparison,
     native_aggregate::{Bound, Function, GroupRef},

@@ -3,11 +3,10 @@
 use std::collections::BTreeSet;
 use zetesis_reference_support::formula;
 
-use super::by_clauses;
+use zetesis_algebra::Cancellation;
 use zetesis_core::Model;
-use zetesis_cpu::Cancellation;
 use zetesis_objective::Score;
-use zetesis_sat::{Limits, StableModels};
+use zetesis_stable::{Limits, StableModels};
 use zetesis_themelios::AdmittedFormula;
 
 use super::{Bounds, Preparation};
@@ -23,12 +22,11 @@ fn input(admitted: &AdmittedFormula) -> Input<'_> {
     Input {
         theory: admitted.theory(),
         atoms: admitted.atom_catalog(),
-        gate_atoms: 0,
         keyed_constraints: 0,
         key_analysis: zetesis_themelios::KeyAnalysis::Complete,
         objectives: admitted.objectives(),
         required_choices: admitted.required_choices(),
-        certificate_order: zetesis_sat::CertificateOrder::TightFirst,
+        certificate_order: zetesis_stable::CertificateOrder::TightFirst,
     }
 }
 
@@ -139,8 +137,8 @@ fn equal_atom_counts_do_not_authorize_a_bound_from_a_different_theory() {
 }
 
 #[test]
-fn bound_capacity_failure_restores_exact_search_and_disables_only_pruning() {
-    let admitted = admitted("{a;b}. #minimize{1:a;1:b}.");
+fn a_refused_bound_keeps_exact_search_and_disables_only_pruning() {
+    let admitted = admitted(super::HEAVY_OBJECTIVE);
     let options = SolveConfig::default();
     let mut observations = Observations::default();
     let preparation = Preparation::new(input(&admitted), &options, &Cancellation::default());
@@ -149,17 +147,10 @@ fn bound_capacity_failure_restores_exact_search_and_disables_only_pruning() {
         .unwrap();
     let mut bounds = Bounds::new(&options);
     assert!(preparation.plan().is_some());
-    // The original independent choices need no auxiliary candidate variables.
-    // The cost guard does; refusing it must roll back that candidate owner.
-    // Exact reduct checking has a separate admission allowance.
-    let limits = Limits {
-        admission: zetesis_sat::AdmissionLimits {
-            max_variables: admitted.atoms().len(),
-            ..Default::default()
-        },
-        ..Default::default()
-    };
-    let mut models = by_clauses(admitted.theory(), limits, Cancellation::default()).unwrap();
+    // At the exact search's own work ceiling, the cost guard's index does not
+    // fit; refusing its charge must leave the candidate owner unchanged.
+    let limits = super::exact_search_limits(admitted.theory());
+    let mut models = StableModels::new(admitted.theory(), limits, Cancellation::default()).unwrap();
     let original_nodes = models.theory().nodes().to_vec();
     bounds
         .improve(
@@ -179,15 +170,11 @@ fn bound_capacity_failure_restores_exact_search_and_disables_only_pruning() {
     assert_eq!(observations.mismatches, 0);
     assert!(matches!(
         observations.restrictions.as_slice(),
-        [zetesis_sat::Incomplete::Admission(
-            zetesis_sat::AdmissionError::Limit {
-                resource: zetesis_sat::Resource::Variables,
-                ..
-            }
-        )]
+        [zetesis_stable::Incomplete::WorkLimit]
     ));
     let actual = complete(&mut models);
-    let mut baseline = by_clauses(admitted.theory(), limits, Cancellation::default()).unwrap();
+    let mut baseline =
+        StableModels::new(admitted.theory(), limits, Cancellation::default()).unwrap();
     assert_eq!(actual, complete(&mut baseline));
     assert_eq!(
         actual,
@@ -198,7 +185,7 @@ fn bound_capacity_failure_restores_exact_search_and_disables_only_pruning() {
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 struct Observations {
     mismatches: usize,
-    restrictions: Vec<zetesis_sat::Incomplete>,
+    restrictions: Vec<zetesis_stable::Incomplete>,
 }
 
 impl ExecutionObserver for Observations {

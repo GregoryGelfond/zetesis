@@ -7,7 +7,7 @@
 
 use super::{address, capacity};
 use crate::GpuError;
-use zetesis_cpu::Cancellation;
+use zetesis_algebra::Cancellation;
 use zetesis_ferraris::Theory;
 
 fn poll(cancellation: &Cancellation) -> Result<(), GpuError> {
@@ -31,8 +31,35 @@ pub(crate) fn root_words(nodes: u32, roots: u32, levels: u32) -> Result<u32, Gpu
         .checked_add(levels)
         .and_then(|n| n.checked_add(1))
         .and_then(|n| n.checked_add(nodes))
-        .filter(|n| *n <= u32::MAX - 64)
+        .filter(|n| crate::kernel::fits_strided_loop(*n))
         .ok_or_else(|| capacity("formula schedule addresses overflow"))
+}
+
+/// Each level's width, its node count, in a packed parallel schedule, read
+/// from the `levels + 1` level-start offsets that follow its `roots` root IDs.
+/// A serial schedule (`levels = 0`) has no levels. Allocation-free; linear in
+/// `levels`.
+///
+/// # Errors
+/// Offsets outside `packed`, or decreasing, are a capacity failure; [`pack`]
+/// never produces either.
+pub(crate) fn level_widths(
+    packed: &[u32],
+    roots: u32,
+    levels: u32,
+) -> Result<impl Iterator<Item = u32> + Clone + '_, GpuError> {
+    let offsets: &[u32] = if levels == 0 {
+        &[]
+    } else {
+        let start = roots as usize;
+        packed
+            .get(start..=start + levels as usize)
+            .ok_or_else(|| capacity("formula level offsets exceed the packed schedule"))?
+    };
+    if offsets.windows(2).any(|pair| pair[1] < pair[0]) {
+        return Err(capacity("formula level offsets decrease"));
+    }
+    Ok(offsets.windows(2).map(|pair| pair[1] - pair[0]))
 }
 
 pub(crate) fn label_depths(

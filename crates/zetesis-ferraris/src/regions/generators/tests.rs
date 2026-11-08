@@ -2,7 +2,7 @@
 
 use super::{GeneratorOrder, GeneratorOrderError, GeneratorOrderLimits};
 use crate::{AdmissionLimits, FormulaParts, Node, OriginalSubject, Region, RegionLimits, Theory};
-use zetesis_cpu::{Cancellation, Stop};
+use zetesis_algebra::{Cancellation, Stop};
 
 fn theory(atoms: usize, nodes: Vec<Node>, roots: Vec<usize>) -> Theory {
     Theory::new(
@@ -32,7 +32,8 @@ fn prepare(theory: &Theory) -> super::GeneratorOrderAttempt {
 
 fn choose(order: &GeneratorOrder, theory: &Theory, region: &Region) -> Option<usize> {
     order
-        .preferred(theory, region, &mut crate::regions::Work::new(u64::MAX))
+        .preferred(theory, region, &mut crate::regions::Meter::local(u64::MAX))
+        .map_err(zetesis_algebra::Failure::into_stop)
         .unwrap()
 }
 
@@ -256,16 +257,20 @@ fn an_order_refuses_an_unrelated_same_shape_owner() {
     let other = upstream();
     let order = prepare(&theory).result.unwrap().unwrap();
     assert!(order.belongs_to(&theory.clone()));
-    let mut work = crate::regions::Work::new(u64::MAX);
+    let mut work = crate::regions::Meter::local(u64::MAX);
     assert_eq!(
-        order.preferred(&other, &Region::all_open(2), &mut work),
+        order
+            .preferred(&other, &Region::all_open(2), &mut work)
+            .map_err(zetesis_algebra::Failure::into_stop),
         Err(Stop::InvalidProgram)
     );
     assert_eq!(
-        order.preferred(&theory, &Region::all_open(3), &mut work),
+        order
+            .preferred(&theory, &Region::all_open(3), &mut work)
+            .map_err(zetesis_algebra::Failure::into_stop),
         Err(Stop::InvalidProgram)
     );
-    assert_eq!(work.spent, 0);
+    assert_eq!(work.charged(), 0);
 }
 
 #[test]
@@ -305,7 +310,8 @@ struct Allowance {
     spent: u64,
 }
 
-impl crate::NarrowingQuota for Allowance {
+impl zetesis_algebra::Quota for Allowance {
+    type Error = Stop;
     fn reserve(&mut self, wanted: u64) -> Result<u64, Stop> {
         let grant = wanted.min(self.remaining).min(self.batch);
         if grant == 0 {
@@ -336,12 +342,12 @@ fn every_preparation_prefix_has_exact_quota_work() {
                 batch,
                 spent: 0,
             };
-            let attempt = GeneratorOrder::prepare_reserved(
+            let attempt = crate::test_support::stop_generator(GeneratorOrder::prepare_reserved(
                 original,
                 usize::MAX,
                 &Cancellation::default(),
-                &mut quota,
-            );
+                &mut zetesis_algebra::Meter::reserved(&mut quota),
+            ));
             assert_eq!(attempt.work, limit.min(needed));
             assert_eq!(quota.spent, attempt.work);
             if limit < needed {
@@ -349,6 +355,90 @@ fn every_preparation_prefix_has_exact_quota_work() {
                     attempt.result,
                     Err(GeneratorOrderError::Stopped(Stop::WorkLimit))
                 ));
+            } else {
+                let order = attempt.result.unwrap().unwrap();
+                assert_eq!(order.heads, expected.heads);
+                assert_eq!(order.ranks, expected.ranks);
+            }
+        }
+    }
+}
+
+/// A chain of `n` choices, each guarded by the next: upstream's shape
+/// stretched, so the order's arrays run past several observation boundaries.
+fn chain(n: usize) -> Theory {
+    let falsum = n;
+    let mut nodes: Vec<Node> = (0..n).map(Node::atom).collect();
+    nodes.push(Node::falsum());
+    let mut choices = Vec::with_capacity(n);
+    for atom in 0..n {
+        let absent = nodes.len();
+        nodes.push(Node::implies(atom, falsum));
+        choices.push(nodes.len());
+        nodes.push(Node::or_pair([atom, absent]));
+    }
+    let mut roots = vec![choices[n - 1]];
+    for (atom, &choice) in choices.iter().enumerate().take(n - 1) {
+        roots.push(nodes.len());
+        nodes.push(Node::implies(atom + 1, choice));
+    }
+    theory(n, nodes, roots)
+}
+
+#[test]
+fn every_prefix_across_observation_boundaries_has_exact_quota_work() {
+    // The filled arrays here are longer than POLL_INTERVAL, so their charged
+    // runs end at observation boundaries and wherever the account refills.
+    // Each limit within two operations of a boundary or of a refill, against
+    // accounts that refill below, at and above the boundary, refuses at
+    // exactly its prefix, as a tick per copy would.
+    let theory = chain(150);
+    let extraction = extract(&theory);
+    let original = OriginalSubject::new(&theory, extraction.producers.as_ref());
+    let expected = prepare(&theory);
+    let needed = expected.work;
+    assert!(
+        needed > 4 * zetesis_algebra::POLL_INTERVAL,
+        "needed {needed}"
+    );
+    let expected = expected.result.unwrap().unwrap();
+    let interval = zetesis_algebra::POLL_INTERVAL;
+    for batch in [1, 7, interval - 1, interval, interval + 1, 16_384] {
+        let near = |limit: u64, step: u64| {
+            let offset = limit % step;
+            offset <= 2 || step - offset <= 2
+        };
+        let limits = (0..=needed + 1).filter(|&limit| {
+            limit + 2 >= needed
+                || near(limit, interval)
+                || (batch >= interval && near(limit, batch))
+        });
+        for limit in limits {
+            let mut quota = Allowance {
+                remaining: limit,
+                batch,
+                spent: 0,
+            };
+            let attempt = crate::test_support::stop_generator(GeneratorOrder::prepare_reserved(
+                original,
+                usize::MAX,
+                &Cancellation::default(),
+                &mut zetesis_algebra::Meter::reserved(&mut quota),
+            ));
+            assert_eq!(
+                attempt.work,
+                limit.min(needed),
+                "batch {batch} limit {limit}"
+            );
+            assert_eq!(quota.spent, attempt.work, "batch {batch} limit {limit}");
+            if limit < needed {
+                assert!(
+                    matches!(
+                        attempt.result,
+                        Err(GeneratorOrderError::Stopped(Stop::WorkLimit))
+                    ),
+                    "batch {batch} limit {limit}"
+                );
             } else {
                 let order = attempt.result.unwrap().unwrap();
                 assert_eq!(order.heads, expected.heads);
@@ -373,12 +463,12 @@ fn storage_refusal_keeps_its_spent_prefix() {
             batch: 7,
             spent: 0,
         };
-        let attempt = GeneratorOrder::prepare_reserved(
+        let attempt = crate::test_support::stop_generator(GeneratorOrder::prepare_reserved(
             original,
             allowance,
             &Cancellation::default(),
-            &mut quota,
-        );
+            &mut zetesis_algebra::Meter::reserved(&mut quota),
+        ));
         assert_eq!(quota.spent, attempt.work);
         if allowance < peak {
             assert!(
@@ -478,12 +568,12 @@ fn a_refused_selection_publishes_no_partial_winner() {
             batch: 7,
             spent: 0,
         };
-        let attempt = order.preferred_atom_reserved(
+        let attempt = crate::test_support::stop_preference(&order.preferred_atom_reserved(
             &theory,
             &Region::all_open(2),
             &Cancellation::default(),
-            &mut quota,
-        );
+            &mut zetesis_algebra::Meter::reserved(&mut quota),
+        ));
         assert_eq!(attempt.work, limit.min(2));
         assert_eq!(quota.spent, attempt.work);
         assert_eq!(
@@ -495,4 +585,98 @@ fn a_refused_selection_publishes_no_partial_winner() {
             }
         );
     }
+}
+
+#[test]
+fn a_refused_byte_observation_records_peak_without_committing_current() {
+    let cancellation = Cancellation::default();
+    let mut work = zetesis_algebra::Meter::local(0);
+    let mut budget = super::Budget {
+        max_bytes: 16,
+        cancellation: &cancellation,
+        work: &mut work,
+        bytes: 5,
+        peak: 5,
+    };
+    assert_eq!(
+        budget.observe(20),
+        Err(GeneratorOrderError::Storage {
+            required: 20,
+            limit: 16
+        })
+    );
+    assert_eq!(
+        (budget.bytes, budget.peak, budget.work.charged()),
+        (5, 20, 0)
+    );
+}
+
+#[test]
+fn historical_peak_does_not_refuse_a_fitting_unpolled_observation() {
+    let cancellation = Cancellation::default();
+    cancellation.cancel();
+    let mut work = zetesis_algebra::Meter::local(0);
+    let mut budget = super::Budget {
+        max_bytes: 16,
+        cancellation: &cancellation,
+        work: &mut work,
+        bytes: 5,
+        peak: 20,
+    };
+    for bytes in [0, 16] {
+        assert_eq!(budget.observe(bytes), Ok(()));
+        assert_eq!(
+            (budget.bytes, budget.peak, budget.work.charged()),
+            (bytes, 20, 0)
+        );
+    }
+}
+
+/// An iterator that counts how many times its clones are started: the number
+/// of traversals a consumer makes of the incidence events.
+#[derive(Clone)]
+struct Counted<I> {
+    inner: I,
+    started: bool,
+    traversals: std::rc::Rc<std::cell::Cell<usize>>,
+}
+
+impl<I: Iterator> Iterator for Counted<I> {
+    type Item = I::Item;
+    fn next(&mut self) -> Option<Self::Item> {
+        if !self.started {
+            self.started = true;
+            self.traversals.set(self.traversals.get() + 1);
+        }
+        self.inner.next()
+    }
+}
+
+#[test]
+fn the_dependency_graph_reads_the_incidences_twice() {
+    // Both adjacencies, outgoing and incoming, are built from two readings
+    // of the incidence events, one counting and one placing, not from two
+    // per adjacency: the events come through a long chain of adaptors over
+    // the theory, and each reading is paid in full.
+    let theory = upstream();
+    let extraction = extract(&theory);
+    let producers = extraction.producers.as_ref().unwrap();
+    let traversals = std::rc::Rc::new(std::cell::Cell::new(0));
+    let incidences = Counted {
+        inner: super::edges(&theory, producers),
+        started: false,
+        traversals: std::rc::Rc::clone(&traversals),
+    };
+    let cancellation = Cancellation::default();
+    let mut meter = crate::regions::Meter::local(u64::MAX);
+    let mut budget = super::Budget {
+        max_bytes: usize::MAX,
+        cancellation: &cancellation,
+        work: &mut meter,
+        bytes: 0,
+        peak: 0,
+    };
+    let order = super::build(&theory, producers, incidences, &mut budget).unwrap();
+    assert!(order.is_some());
+    assert_eq!(traversals.get(), 2);
 }

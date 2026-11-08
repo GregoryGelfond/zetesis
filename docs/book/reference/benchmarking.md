@@ -96,7 +96,7 @@ The ordinary `corpus` suite composes the pinned 94-case correctness catalog
 with `family-crossing/integrated.lp` from the enclosing examples directory.
 Family Crossing is one regular case in campaign totals and scorecards. Its
 three original source files and include spellings are preserved byte for byte;
-[its manifest](../../../examples/family-crossing/manifest.json) seals the graph
+[its manifest](https://github.com/GregoryGelfond/zetesis/blob/main/examples/family-crossing/manifest.json) seals the graph
 and records complete optimal enumeration: all eight final ties at cost 29.
 Fresh clingo qualification must corroborate this expectation in each campaign,
 followed by the ordinary full native-model and selected-output comparisons.
@@ -160,6 +160,39 @@ still apply. The effective values appear in `limits.answers` and
 `--native-report-bytes` separately for capture and native full-report decoding.
 A refusal retains the failed comparison; it does not establish an incomplete family as complete.
 
+### Pool GPU residual observations
+
+Use `--residual-evidence COHORT` to qualify an explicitly selected fixture
+family and pool measurements from the general GPU route. Give each family its
+own name and select its inputs with `--workloads` or `--case`. For example,
+from the repository root on a Metal host with clingo available:
+
+```sh
+zetesis-bench run --residual-evidence two-qbf \
+  --workloads examples/scalability/two-qbf/manifest.json \
+  --backend metal --grounder eager --oracle countermodel \
+  --report two-qbf-residuals.json
+```
+
+This is a separate qualification campaign. It checks the answers and requests
+an additional bounded artifact from each native child. It collects no timing
+or memory comparison rounds. Each profile gets its own pool. Every requested
+member must qualify and provide valid evidence for that pool to be published.
+A solver that lacks the artifact protocol can still return matching answers.
+Its evidence remains unavailable.
+
+The report records the relative path, exact byte length and SHA-256 of each
+retained artifact. Keep the adjacent evidence directory with the report. Each
+artifact contains the two retained populations and is at most 5,177,472 bytes.
+Ordinary stdout and stderr have first claim on the capture allowance. Missing,
+truncated or inconsistent observations cannot qualify the measurement.
+
+Pooling weights each run by its original population size. The batch count
+includes zero-residual commits. Query depth and work use eligible residual
+worlds. The reported coverage and retained counts tell you which ranks are
+exact, estimated or unavailable. Averaging individual run medians does not
+give the pooled median.
+
 ### Profiles
 
 A run measures one native profile, set by `--backend`, `--grounder` and
@@ -193,7 +226,6 @@ The advanced controls, listed by `zetesis-bench run --help` and omitted from
 | Advanced control | Default |
 | --- | --- |
 | `--oracle auto\|closure\|countermodel` | `auto` |
-| `--search regions\|clauses` | The suite's: region search for `scalability`, the solver's own otherwise |
 | `--formula-joins indexed\|table` | The suite's: indexed joins for `scalability`, the solver's own otherwise |
 | `--memory SIZE` | The solver's ordinary host-dependent memory allowance |
 | `--time-limit SECONDS` | None; a cooperative native deadline |
@@ -229,6 +261,15 @@ core admission. Streamed constraint checks occur during solving and are included
 in `original_validation`. The initial grounding time alone therefore does not
 measure all source evaluation work. Compare complete solve time, storage and
 the separate constraint-work counters as well.
+
+For direct CPU source evaluation, telemetry requires the typed
+`source_evaluation` admission receipt, matching operation metadata and eager
+admission measurements. Current `execution`, `hybrid_execution`,
+`terminal_execution` and `search` fields must be explicitly null. Earlier
+optional top-level `lazy_execution`, `shared_execution`, `closure_execution`,
+`query_execution` and `candidate_restrictions` fields may be absent or null;
+a non-null receipt still conflicts with direct source evaluation. Absence does
+not create an execution or work measurement for any of those routes.
 
 ### clingo
 
@@ -277,9 +318,12 @@ allocator counter. Primitive work counts are not elapsed time or machine
 instructions.
 
 Native GPU reports also retain optional compute-pass timestamps in
-`gpu_compute_timing`. Their scope is successfully decoded device batches,
-excluding host preparation, command-buffer copies and waiting; process and host
-oracle timings remain separate. An unavailable timestamp is not a measured zero.
+`gpu_compute_timing`. Each successfully decoded device batch is counted once,
+measured from its own compute pass, unavailable, or unresolved when its run
+stopped, or its settlement met a busy or unhealthy context, before the interval
+could be read; host preparation, command-buffer
+copies and waiting are excluded, and process and host oracle timings remain
+separate. An unavailable timestamp is not a measured zero.
 The normal `--stats` request enables timing when supported without changing the
 benchmark options. See [GPU timing](../rust/measurements.md#gpu-compute-pass-timing)
 for availability, resource accounting and interpretation.

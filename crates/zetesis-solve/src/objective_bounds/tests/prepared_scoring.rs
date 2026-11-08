@@ -4,8 +4,8 @@ use super::super::{Bounds, Preparation};
 use crate::SolveConfig;
 use crate::countermodel::Input;
 use crate::execution_observation::Ignore;
+use zetesis_algebra::Cancellation;
 use zetesis_core::Model;
-use zetesis_cpu::Cancellation;
 use zetesis_ferraris::Interpretation;
 use zetesis_reference_support::formula as admitted;
 use zetesis_themelios::AdmittedFormula;
@@ -14,12 +14,11 @@ fn input(owner: &AdmittedFormula) -> Input<'_> {
     Input {
         theory: owner.theory(),
         atoms: owner.atom_catalog(),
-        gate_atoms: 0,
         keyed_constraints: 0,
         key_analysis: zetesis_themelios::KeyAnalysis::Complete,
         objectives: owner.objectives(),
         required_choices: owner.required_choices(),
-        certificate_order: zetesis_sat::CertificateOrder::TightFirst,
+        certificate_order: zetesis_stable::CertificateOrder::TightFirst,
     }
 }
 
@@ -36,9 +35,9 @@ fn check_reuse(bound_work: u64) {
     let mut bounds = Bounds::new(&options);
     let mut incumbents = crate::optimization::Incumbents::default();
     incumbents.prepare(preparation.work()).unwrap();
-    let mut search = zetesis_sat::StableModels::new(
+    let mut search = zetesis_stable::StableModels::new(
         owner.theory(),
-        zetesis_sat::Limits::default(),
+        zetesis_stable::Limits::default(),
         cancellation.clone(),
     )
     .unwrap();

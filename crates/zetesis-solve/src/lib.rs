@@ -6,21 +6,26 @@
 //!
 //! # Begin with a coherent input
 //!
-//! Use [`PreparedInput::admitted`] for a source-admitted relational program,
-//! [`PreparedInput::formula`] for its finite formula counterpart, or
-//! [`PreparedInput::program`] for a native relational program. The input borrows
-//! one owner; atom indexes, objectives and the original subject cannot be mixed
-//! across unrelated admissions. Preparing this borrow performs no execution.
+//! Use [`PreparedInput::formula`] for a source admitted as finite formulas, or
+//! the hybrid, terminal-definition and acyclic-source inputs its preparation
+//! selects. The input borrows one owner; atom indexes, objectives and the
+//! original input cannot be mixed across unrelated admissions. Preparing this
+//! borrow performs no execution.
 //!
 //! ```
-//! use zetesis_cpu::Cancellation;
+//! use zetesis_algebra::Cancellation;
 //! use zetesis_solve::{Backend, PreparedInput, Session, SolveConfig, WorldViewLimits};
-//! use zetesis_themelios::{AdmissionOptions, admit};
+//! use zetesis_themelios::{AdmissionOptions, ExpansionLimits, FormulaLimits, admit_formula};
 //!
-//! let admitted = admit("a :- not b. b :- not a.".into(), AdmissionOptions::default())?;
+//! let admitted = admit_formula(
+//!     "a :- not b. b :- not a.".into(),
+//!     AdmissionOptions::default(),
+//!     ExpansionLimits::default(),
+//!     FormulaLimits::default(),
+//! )?;
 //! let config = SolveConfig { backend: Backend::Cpu, models: 0, ..Default::default() };
 //! let family = Session::builder(
-//!     PreparedInput::admitted(&admitted), config, Cancellation::default(),
+//!     PreparedInput::formula(&admitted), config, Cancellation::default(),
 //! ).collect(WorldViewLimits::default())?;
 //! assert_eq!(family.len(), 2);
 //! # Ok::<(), Box<dyn std::error::Error>>(())
@@ -31,7 +36,7 @@
 //! [`Session::new`] selects objective incumbents when an objective exists.
 //! [`Session::enumerate`] streams all original answer sets with their scores.
 //! Both yield privately constructed [`AnswerSet`] values. Their full atoms and
-//! [`Subject`] identity are independent of a source's displayed projection.
+//! [`Original`] identity are independent of a source's displayed projection.
 //! [`Session::progress`] records current evidence; [`Session::outcome`] becomes
 //! available when search finishes, stops or fails. Completion can remain absent
 //! after failure. Neither successful iteration
@@ -78,10 +83,10 @@ pub use grounding::{
     GroundedFormula, PreparedExecution, ground_bundle, ground_formula, prepare_bundle_execution,
     prepare_formula_execution,
 };
-mod engine;
 mod optimization;
 mod objective_bounds;
 mod formula_execution;
+mod residual_handovers;
 #[cfg(feature = "gpu")]
 mod formula_tight;
 mod completion_accounting;
@@ -90,15 +95,8 @@ mod solve_config;
 mod resources;
 pub use resources::Resources;
 mod semantic_outcome;
-mod lazy_execution;
-mod shared_execution;
-mod closure_execution;
-mod query_observation;
-pub use query_observation::QueryExecutionObservation;
-mod closure_session;
 mod formula_session;
 mod model_construction;
-mod hybrid_regions;
 mod hybrid_session;
 mod terminal_session;
 mod source_session;
@@ -113,42 +111,44 @@ mod stage_timing;
 mod grounding_timing;
 
 pub use batch_executor::ExecutorError;
-pub use closure_execution::{ClosureExecutionStatistics, ClosureJoinStatistics, ClosureRoute};
 pub use completion::{Completion, Interruption, SearchState};
 pub use error::{FailureParts, SolveError, SolveFailure};
 pub use execution_observation::{ExecutionObservation, ExecutionObserver, StreamedConstraints};
 pub use execution_resources::ExecutionResources;
 pub use formula_execution::{
     CompletionAccounting, FormulaDeviceLimits, FormulaExecutionStatistics,
-    FormulaResidualStatistics,
+    FormulaResidualStatistics, GpuLookahead, GpuLookaheadDeclined, TightRouteStatistics,
+    TightUpdateAvailability, TightUpdateStatistics,
 };
 pub use grounding_timing::{GroundingMeasurement, GroundingTimings};
 pub use hybrid_session::HybridExecutionStatistics;
-pub use lazy_execution::{
-    LazyBufferUsage, LazyExecutionStatistics, LazyTransportReplacements, LazyTransportUsage,
-};
 pub use model_construction::{ModelConstructionStatistics, ModelConstructionStop};
 pub use optimization::{Optimization, OptimizationStop};
 pub use phase_timing::{PhaseTimings, SolvePhase};
-pub use policy::{GpuBatching, Grounder, Oracle, SourceBatching};
+pub use policy::{GpuBatching, Grounder, OptimumSearch, Oracle};
 pub use projection::{ProjectionError, ProjectionLimits, ProjectionResource, ProjectionStatistics};
+pub use residual_handovers::sampling::{
+    ResidualQuantiles, ResidualRunSamples, ResidualSampleGroup, ResidualSampleMetric,
+    ResidualSamplePopulation,
+};
+pub use residual_handovers::{
+    ResidualHandoverAttempt, ResidualHandoverByReason, ResidualHandoverStatistics,
+    ResidualReasonSearch, ResidualSearchStatistics,
+};
 pub use semantic_outcome::{AnswerSelection, SemanticOutcome};
 pub use session::{
-    AnswerSet, PreparedInput, PreparedProfile, Session, SessionBuilder, SessionModel, Subject,
+    AnswerSet, Original, PreparedInput, PreparedProfile, Session, SessionBuilder, SessionModel,
 };
-pub use shared_execution::SharedExecutionStatistics;
 pub use solve_config::SolveConfig;
 pub use terminal_session::TerminalExecutionStatistics;
 pub use world_view::{
-    WorldView, WorldViewError, WorldViewFailure, WorldViewFailureParts, WorldViewLimits,
+    QueryAnswer, WorldView, WorldViewDecision, WorldViewDecisionError, WorldViewDecisionFailure,
+    WorldViewError, WorldViewFailure, WorldViewFailureParts, WorldViewLimits, WorldViewVerdict,
 };
 pub use zetesis_backend::{Backend, GpuApi};
-pub use zetesis_sat::BatchVerdict;
-pub use zetesis_sat::SearchMethod;
+pub use zetesis_stable::{BatchVerdict, QueryDivision};
 pub use zetesis_telemetry::{GroundingMode, SolveStage, StageMeasurement, StageTimings};
 pub use zetesis_themelios::{GroundingOutcome, GroundingPhase, GroundingWork};
 
 mod measurements;
-#[cfg(test)]
-mod test_support;
 pub use measurements::{MeasurementSpan, SolveMeasurements};

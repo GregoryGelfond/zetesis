@@ -79,39 +79,43 @@ new head. Its rejected result still contains the complete closure `{a,b,c}`.
 The fact need not be reevaluated in that final round because its earlier
 completed consequence is retained.
 
-## The scalar implementation boundary
+## Historical scalar implementation boundary
 
-The independent scalar evaluator in
-[`zetesis_cpu::oracle`](../../crates/zetesis-cpu/src/oracle.rs) keeps one
+The closure route's independent scalar evaluator, `zetesis_cpu::oracle`, was
+removed with that route. The relational `Program`, `SeedView`, carrier and fact
+owners used by that evaluator are also retired. The following is its historical
+correspondence record, not a description of current executable APIs.
+
+That evaluator kept one
 [`Catalog`](../../crates/zetesis-core/src/relation/catalog.rs) per signed
-predicate. `OrderedRows::row_id` connects canonical access positions to stable
-insertion IDs. The private
-[partition owner](../../crates/zetesis-cpu/src/oracle/relations/partition.rs)
-constructs ordered Old/New ID slices over that same tuple payload, with a cache
-key containing both cutoff and current extent. No second tuple store is created.
+predicate. `OrderedRows::row_id` connected canonical access positions to stable
+insertion IDs. Its private partition owner constructed ordered Old/New ID slices
+over that same tuple payload, with a cache key containing both cutoff and
+current extent. No second tuple store was created.
 
-`visit_round` checks complete selected bindings under the same frozen `SeedView`.
-Bootstrap uses full traversal, including zero-positive rules and constraints.
-After a growing round completes every selected scan, `least_closure_with`
-retains the constraint trigger, advances old cutoffs, and appends the bounded
-pending heads. It never
-appends while a borrowed round view is live. The final no-change round combines
-with completed history; it does not rescan every old binding. The existing gate
-comparison then checks the final closure's projection against the seed in both
-directions.
+`visit_round` checked complete selected bindings under the same frozen
+`SeedView`. Bootstrap used full traversal, including zero-positive rules and
+constraints. After a growing round completed every selected scan,
+`least_closure_with` retained the constraint trigger, advanced old cutoffs, and
+appended the bounded pending heads. It never appended while a borrowed round
+view was live. The final no-change round combined with completed history; it
+did not rescan every old binding. The gate comparison then checked the final
+closure's projection against the seed in both directions.
 
-The reusable workspace retires dirty state on failure, and successful atom
-extraction clears cutoffs, cache keys and logical ID lengths before another
-candidate. Typed rows, actual view capacity, preparation and probe work are
-covered by Rust controls. The private full-round reference compares literal
-closures, constraints and seed agreement, alongside inclusive work and named
-capacity receipts. Exact resource cutoffs can differ between schedules. The
-reference is not a runtime mode or a second public implementation.
+The reusable workspace retired dirty state on failure, and successful atom
+extraction cleared cutoffs, cache keys and logical ID lengths before another
+candidate. Rust controls covered typed rows, actual view capacity, preparation
+and probe work. The private full-round reference compared literal closures,
+constraints and seed agreement, alongside inclusive work and named capacity
+receipts. Exact resource cutoffs could differ between schedules. That reference
+was neither a runtime mode nor a second public implementation.
 
-Public `source::scan` and shared-world source traversal retain their full
-ordered schedules. Eager possible-support discovery has a separate eligible
-producer grammar and a distinct correspondence obligation. None of these
-scalar laws establishes shared-world or device delta execution.
+The retired public `source::scan` and shared-world source traversal kept their
+full ordered schedules. Eager possible-support discovery has a separate eligible
+producer grammar and a distinct correspondence obligation. Shared relation
+catalogs and formula-support joins remain independently maintained; the
+historical closure controls above are not current execution evidence. None of
+these scalar laws establishes shared-world or device delta execution.
 
 The Lean module does not prove that the concrete catalog, row matcher, source
 registration or publication code satisfies its premises. It also does not prove

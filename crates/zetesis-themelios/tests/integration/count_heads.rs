@@ -13,7 +13,7 @@ use serde_json::{Value as Json, json};
 use zetesis_clingo_support as oracle;
 use zetesis_themelios::{
     AdmissionOptions, BundleAdmissionOptions, ExpansionFailure, ExpansionLimits, ExpansionResource,
-    FormulaFailure, FormulaLimits, FormulaResource, admit_bundle_formula, admit_extended,
+    FormulaFailure, FormulaLimits, FormulaResource, admit_bundle_formula,
 };
 
 fn cases() -> Vec<Json> {
@@ -59,10 +59,10 @@ fn count_heads_preserve_stable_models() {
 fn native_count_search_preserves_full_models() {
     for case in cases() {
         let admitted = admit(case["source"].as_str().unwrap(), &FormulaLimits::default()).unwrap();
-        let mut search = zetesis_sat::StableModels::new(
+        let mut search = zetesis_stable::StableModels::new(
             admitted.theory(),
-            zetesis_sat::Limits::default(),
-            zetesis_cpu::Cancellation::default(),
+            zetesis_stable::Limits::default(),
+            zetesis_algebra::Cancellation::default(),
         )
         .unwrap();
         let mut models = Models::new();
@@ -224,18 +224,6 @@ fn count_aliases_admit_complete_groups() {
 #[test]
 fn count_heads_preserve_scored_answers() {
     objective_dependencies::check("1#count{1:a}1.#minimize{1:a}.");
-}
-
-#[test]
-fn extended_profile_refuses_count_heads() {
-    assert!(
-        admit_extended(
-            "1#count{X:p(X):X=1..4}2.".into(),
-            AdmissionOptions::default(),
-            ExpansionLimits::default()
-        )
-        .is_err()
-    );
 }
 
 #[test]

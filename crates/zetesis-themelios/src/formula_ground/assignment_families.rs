@@ -2,7 +2,7 @@
 use super::*;
 use crate::formula_support::testing;
 use crate::test_support::interpretation;
-use zetesis_cpu::Cancellation;
+use zetesis_algebra::Cancellation;
 use zetesis_ferraris::{Limits, models, models_reduct};
 
 /// Reproduce the prior cache boundary without changing the source or its joins.

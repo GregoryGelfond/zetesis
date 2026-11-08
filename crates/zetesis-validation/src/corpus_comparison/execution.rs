@@ -67,8 +67,8 @@ pub(crate) fn formula_for_policy(
     memory_bytes: Option<u64>,
     answer: &Answer,
 ) -> Result<FormulaExecution, String> {
-    let concurrency = route(stderr, backend)?.concurrency;
-    let storage = storage(stderr, concurrency.is_some())?;
+    let generation = route(stderr, backend)?.generation;
+    let storage = storage(stderr, generation)?;
     let batch =
         usize::try_from(storage.batch_limit).map_err(|_| "device batch does not fit host width")?;
     let execution = qualify(stderr, backend, batch, None, answer)?;
@@ -97,9 +97,9 @@ fn qualify(
         adapter,
         api,
         vendor_id,
-        concurrency,
+        generation,
     } = route(stderr, backend)?;
-    let [batches, candidates, work, sweeps, decided, residuals] = gpu_counters(stderr)?;
+    let [batches, candidates, work, sweeps, decided, residuals] = gpu_counters(stderr, generation)?;
     let Storage {
         pending,
         queued,
@@ -108,24 +108,35 @@ fn qualify(
         byte_limit,
         sweep_limit,
         work_limit,
-    } = storage(stderr, concurrency.is_some())?;
-    let [
-        _,
-        _,
-        search_candidates,
-        queries,
-        witnesses,
-        _,
+        adaptive,
+        submitted,
+        slates,
+    } = storage(stderr, generation)?;
+    let submission_limit = submission_limit(batch_limit, adaptive, slates, batches, candidates)?;
+    if submitted.is_some_and(|(submitted_batches, submitted_candidates)| {
+        submitted_batches < batches || submitted_candidates < candidates
+    }) {
+        return Err("formula GPU submissions are fewer than their decoded results".into());
+    }
+    let (
+        [
+            _,
+            _,
+            search_candidates,
+            queries,
+            witnesses,
+            _,
+            stable_models,
+        ],
         classical_queries,
-        stable_models,
-    ] = countermodel_counters(stderr)?;
+    ) = countermodel_counters(stderr)?;
     let completion = completion::record(
         stderr,
-        concurrency,
+        generation,
         request,
         candidates,
         residuals,
-        batch_limit,
+        submission_limit,
     )?;
     if u128::from(batch_limit) != batch_size as u128
         || pending != 0
@@ -137,9 +148,10 @@ fn qualify(
         || decided.checked_add(residuals - witnesses) != Some(stable_models)
         || stable_models < answer.model_count
         || (answer.cost.is_none() && stable_models != answer.model_count)
-        // The completed CLI uses only the batch route: one query per proposal,
-        // followed by exactly one final query establishing exhaustion.
-        || candidates.checked_add(1) != Some(classical_queries)
+        // A record of the removed clause search also counts its outer queries:
+        // one per proposal, then exactly one final query establishing
+        // exhaustion.
+        || classical_queries.is_some_and(|queries| candidates.checked_add(1) != Some(queries))
     {
         return Err(
             "formula execution counters contradict complete candidate/model accounting".into(),
@@ -157,7 +169,7 @@ fn qualify(
             || batches > candidates
             || work == 0
             || peak_bytes == 0
-            || u128::from(candidates) > u128::from(batches) * u128::from(batch_limit)
+            || u128::from(candidates) > u128::from(batches) * u128::from(submission_limit)
             || peak_bytes > byte_limit
             || u128::from(work) > u128::from(candidates) * u128::from(work_limit)
             || u128::from(sweeps) > u128::from(candidates) * u128::from(sweep_limit)
@@ -184,14 +196,23 @@ fn qualify(
     })
 }
 
-fn gpu_counters(text: &str) -> Result<[u64; 6], String> {
+/// The decoded device counters: batches, candidates, charged work, completed
+/// sweeps, GPU-decided candidates and CPU residuals. Released executables name
+/// the line "decoded" and the work "primitive work"; the checkpoints did not.
+fn gpu_counters(text: &str, generation: Generation) -> Result<[u64; 6], String> {
+    let (prefix, work) = match generation {
+        Generation::Released { .. } => ("  formula GPU decoded: ", "primitive work"),
+        Generation::ScalarCheckpoint | Generation::BoundedCheckpoint { .. } => {
+            ("  formula GPU: ", "propagation work")
+        }
+    };
     fields(
         text,
-        "  formula GPU: ",
+        prefix,
         [
             "batches",
             "candidates",
-            "propagation work",
+            work,
             "completed sweeps",
             "GPU-decided committed",
             "CPU residuals completed",
@@ -199,10 +220,46 @@ fn gpu_counters(text: &str) -> Result<[u64; 6], String> {
     )
 }
 
-fn countermodel_counters(text: &str) -> Result<[u64; 8], String> {
-    fields(
-        text,
-        "  countermodel: ",
+/// The countermodel line's counters, and the outer queries that records of
+/// the removed clause search also carry before the verified count.
+fn countermodel_counters(text: &str) -> Result<([u64; 7], Option<u64>), String> {
+    let value = line(text, "  countermodel: ")?;
+    if value.contains("; classical queries=") {
+        let [
+            work,
+            decisions,
+            candidates,
+            queries,
+            witnesses,
+            restrictions,
+            classical,
+            stable,
+        ] = field_values(
+            value,
+            [
+                "search work",
+                "decisions",
+                "candidates",
+                "queries",
+                "witnesses",
+                "candidate restrictions",
+                "classical queries",
+                "verified stable models",
+            ],
+        )?;
+        let counters = [
+            work,
+            decisions,
+            candidates,
+            queries,
+            witnesses,
+            restrictions,
+            stable,
+        ];
+        return Ok((counters, Some(classical)));
+    }
+    let counters = field_values(
+        value,
         [
             "search work",
             "decisions",
@@ -210,17 +267,35 @@ fn countermodel_counters(text: &str) -> Result<[u64; 8], String> {
             "queries",
             "witnesses",
             "candidate restrictions",
-            "classical queries",
             "verified stable models",
         ],
-    )
+    )?;
+    Ok((counters, None))
+}
+
+/// The statistics a native executable printed, identified by its execution
+/// header. A record is read only as the generation its header names; no field
+/// is borrowed from another generation's layout.
+#[derive(Clone, Copy, Debug)]
+pub(super) enum Generation {
+    /// Pre-release checkpoints of 2026-09-07 to 2026-09-12, before bounded
+    /// completion: one scalar CPU search worker. No tagged release prints it.
+    ScalarCheckpoint,
+    /// Pre-release checkpoints of 2026-09-12, the first bounded-completion
+    /// statistics (`peak effective workers`). No tagged release prints it.
+    BoundedCheckpoint { requested: u64, effective: u64 },
+    /// Every tagged release from v0.1.7 (2026-10-01) on, including qualified
+    /// baseline 5816005a and the current command line: bounded completion
+    /// reported as `peak preflight workers`, the maximum query concurrency
+    /// selected at preflight.
+    Released { requested: u64, effective: u64 },
 }
 
 struct PhysicalRoute {
     adapter: String,
     api: String,
     vendor_id: u32,
-    concurrency: Option<(u64, u64)>,
+    generation: Generation,
 }
 
 fn route(stderr: &str, backend: Backend) -> Result<PhysicalRoute, String> {
@@ -230,23 +305,29 @@ fn route(stderr: &str, backend: Backend) -> Result<PhysicalRoute, String> {
     let effective = line(stderr, "  effective execution: ")?;
     let header = effective.strip_prefix("backend=hybrid GPU propagation + exact CPU residual search; oracle=countermodel; grounder=eager; ")
         .ok_or("requested formula GPU route was not reported")?;
-    let (adapter, concurrency) =
+    let (adapter, generation) =
         if let Some(adapter) = header.strip_prefix("CPU search workers=1; adapter=") {
-            (adapter, None)
+            (adapter, Generation::ScalarCheckpoint)
         } else {
             let (requested, remaining) = header
                 .split_once("; ")
                 .ok_or("missing completion concurrency")?;
+            let requested = number(requested, "CPU completion requested workers")?;
             let (effective, adapter) = remaining
                 .split_once("; adapter=")
                 .ok_or("missing effective completion concurrency")?;
-            (
-                adapter,
-                Some((
-                    number(requested, "CPU completion requested workers")?,
-                    number(effective, "peak effective workers")?,
-                )),
-            )
+            let generation = if effective.starts_with("peak preflight workers=") {
+                Generation::Released {
+                    requested,
+                    effective: number(effective, "peak preflight workers")?,
+                }
+            } else {
+                Generation::BoundedCheckpoint {
+                    requested,
+                    effective: number(effective, "peak effective workers")?,
+                }
+            };
+            (adapter, generation)
         };
     let (name_api, vendor) = adapter
         .rsplit_once("; vendor=0x")
@@ -270,7 +351,7 @@ fn route(stderr: &str, backend: Backend) -> Result<PhysicalRoute, String> {
         adapter: adapter.into(),
         api: api.into(),
         vendor_id,
-        concurrency,
+        generation,
     })
 }
 
@@ -278,58 +359,207 @@ struct Storage {
     pending: u64,
     queued: u64,
     peak_bytes: u64,
+    /// The configured batch size: every slate's size under fixed batching, the
+    /// first and reset slate size under adaptive batching.
     batch_limit: u64,
     byte_limit: u64,
     sweep_limit: u64,
     work_limit: u64,
+    /// Whether slates adapt their size, which only released executables from
+    /// the GPU release on report.
+    adaptive: bool,
+    /// Submitted batches and candidates, which released records report.
+    submitted: Option<(u64, u64)>,
+    /// Committed slates and the largest, which records from the GPU release on
+    /// report.
+    slates: Option<Slates>,
 }
 
-fn storage(text: &str, current: bool) -> Result<Storage, String> {
-    if current {
-        let [pending, queued] = fields(
-            text,
-            "  formula accounting: ",
-            ["pending candidates", "queued verified models"],
-        )?;
-        let [batch_limit, byte_limit] = fields(
-            text,
-            "  formula batch limits: ",
-            ["candidates", "pending bytes"],
-        )?;
-        let (sweep_limit, work_limit, peak_bytes) = completion::gpu_limits(text)?;
-        if batch_limit == 0 || byte_limit == 0 {
-            return Err("unsupported formula batch-limit statistics".into());
+#[derive(Clone, Copy)]
+struct Slates {
+    committed: u64,
+    largest: Option<u64>,
+}
+
+fn storage(text: &str, generation: Generation) -> Result<Storage, String> {
+    match generation {
+        Generation::Released { .. } => released_storage(text),
+        Generation::BoundedCheckpoint { .. } => {
+            let [pending, queued] = fields(
+                text,
+                "  formula accounting: ",
+                ["pending candidates", "queued verified models"],
+            )?;
+            let [batch_limit, byte_limit] = fields(
+                text,
+                "  formula batch limits: ",
+                ["candidates", "pending bytes"],
+            )?;
+            let (sweep_limit, work_limit, peak_bytes) = completion::gpu_limits(text)?;
+            if batch_limit == 0 || byte_limit == 0 {
+                return Err("unsupported formula batch-limit statistics".into());
+            }
+            Ok(Storage {
+                pending,
+                queued,
+                peak_bytes,
+                batch_limit,
+                byte_limit,
+                sweep_limit,
+                work_limit,
+                adaptive: false,
+                submitted: None,
+                slates: None,
+            })
         }
-        Ok(Storage {
-            pending,
-            queued,
-            peak_bytes,
-            batch_limit,
-            byte_limit,
-            sweep_limit,
-            work_limit,
-        })
-    } else {
-        let [pending, queued, peak_bytes] = fields(
-            text,
-            "  formula accounting: ",
-            [
-                "pending candidates",
-                "queued verified models",
-                "peak authored GPU bytes",
-            ],
-        )?;
-        let (batch_limit, byte_limit, sweep_limit, work_limit) = batch_limits(text)?;
-        Ok(Storage {
-            pending,
-            queued,
-            peak_bytes,
-            batch_limit,
-            byte_limit,
-            sweep_limit,
-            work_limit,
-        })
+        Generation::ScalarCheckpoint => {
+            let [pending, queued, peak_bytes] = fields(
+                text,
+                "  formula accounting: ",
+                [
+                    "pending candidates",
+                    "queued verified models",
+                    "peak authored GPU bytes",
+                ],
+            )?;
+            let (batch_limit, byte_limit, sweep_limit, work_limit) = batch_limits(text)?;
+            Ok(Storage {
+                pending,
+                queued,
+                peak_bytes,
+                batch_limit,
+                byte_limit,
+                sweep_limit,
+                work_limit,
+                adaptive: false,
+                submitted: None,
+                slates: None,
+            })
+        }
     }
+}
+
+/// The released layout. Batch limits are fixed (`candidates=`) through
+/// qualified baseline 5816005a, or adaptive from the GPU release on. The
+/// resources line ends at the peak bytes in 5816005a, adds
+/// `GPU kernel timing=unavailable` through v0.6.0, and the workgroup size from
+/// the GPU release on. Adaptive limits always come with the slates line.
+fn released_storage(text: &str) -> Result<Storage, String> {
+    let [pending, queued] = fields(
+        text,
+        "  formula accounting: ",
+        ["pending candidates", "queued verified models"],
+    )?;
+    let limits = line(text, "  formula batch limits: ")?;
+    let (adaptive, [batch_limit, byte_limit]) =
+        if let Some(adaptive) = limits.strip_prefix("adaptive slates; ") {
+            (
+                true,
+                field_values(adaptive, ["initial and reset slate size", "pending bytes"])?,
+            )
+        } else {
+            (
+                false,
+                field_values(limits, ["candidates", "pending bytes"])?,
+            )
+        };
+    let [sweep_limit, work_limit] = fields(
+        text,
+        "  formula GPU limits: ",
+        ["propagation sweeps/candidate", "propagation work/candidate"],
+    )?;
+    let resources = line(text, "  formula GPU resources: ")?;
+    let (peak, suffix) = resources
+        .split_once("; ")
+        .map_or((resources, None), |(peak, suffix)| (peak, Some(suffix)));
+    let peak_bytes = number(peak, "peak authored GPU bytes")?;
+    let suffix_known = match suffix {
+        None | Some("GPU kernel timing=unavailable" | "workgroup size=unavailable") => true,
+        Some(size) => number(size, "workgroup size").is_ok(),
+    };
+    if !suffix_known {
+        return Err("unsupported formula GPU-resource statistics".into());
+    }
+    let submitted = line(text, "  formula GPU submitted: ")?
+        .strip_suffix("; completed work/sweeps for unreturned results=unavailable")
+        .ok_or("unsupported formula GPU-submission statistics")?;
+    let [submitted_batches, submitted_candidates] =
+        field_values(submitted, ["batches", "candidates"])?;
+    let slates = if text
+        .lines()
+        .any(|line| line.starts_with("  formula GPU slates: "))
+    {
+        Some(slates(text)?)
+    } else if adaptive {
+        return Err("adaptive slates without their slate statistics".into());
+    } else {
+        None
+    };
+    if batch_limit == 0 || byte_limit == 0 || work_limit > u64::from(u32::MAX) {
+        return Err("unsupported formula batch-limit statistics".into());
+    }
+    Ok(Storage {
+        pending,
+        queued,
+        peak_bytes,
+        batch_limit,
+        byte_limit,
+        sweep_limit,
+        work_limit,
+        adaptive,
+        submitted: Some((submitted_batches, submitted_candidates)),
+        slates,
+    })
+}
+
+fn slates(text: &str) -> Result<Slates, String> {
+    let value = line(text, "  formula GPU slates: ")?
+        .strip_suffix("; each slate takes one or more submitted batches")
+        .ok_or("unsupported formula GPU-slate statistics")?;
+    let mut parts = value.split("; ");
+    let committed = number(parts.next().ok_or("missing committed slates")?, "committed")?;
+    let largest = match parts.next().ok_or("missing largest slate")? {
+        "largest=none" => None,
+        largest => Some(number(largest, "largest")?),
+    };
+    number(
+        parts.next().ok_or("missing slate feedback resets")?,
+        "feedback resets",
+    )?;
+    if parts.next().is_some() {
+        return Err("unexpected formula GPU-slate fields".into());
+    }
+    Ok(Slates { committed, largest })
+}
+
+/// The most candidates one device submission may carry: the batch size under
+/// fixed batching, the largest committed slate under adaptive batching. Slate
+/// statistics, when reported, must agree with the decoded counters: every
+/// committed slate decoded at least one batch, the largest slate is one of the
+/// committed candidates' slates, and fixed slates never exceed the batch size.
+fn submission_limit(
+    batch_limit: u64,
+    adaptive: bool,
+    slates: Option<Slates>,
+    batches: u64,
+    candidates: u64,
+) -> Result<u64, String> {
+    let Some(Slates { committed, largest }) = slates else {
+        return Ok(batch_limit);
+    };
+    let consistent = (committed == 0) == (candidates == 0)
+        && (committed == 0) == largest.is_none()
+        && committed <= batches
+        && largest.is_none_or(|largest| largest <= candidates)
+        && (adaptive || largest.is_none_or(|largest| largest <= batch_limit));
+    if !consistent {
+        return Err("formula GPU slate statistics contradict the decoded counters".into());
+    }
+    Ok(if adaptive {
+        largest.unwrap_or(0)
+    } else {
+        batch_limit
+    })
 }
 
 /// Whether the adapter's reported API is the one the request resolves to: the

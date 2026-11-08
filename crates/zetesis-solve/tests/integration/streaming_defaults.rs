@@ -5,13 +5,13 @@ use std::num::NonZeroUsize;
 use zetesis_reference_support::formula;
 
 use crate::support::sessions::config;
+use zetesis_algebra::Cancellation;
 use zetesis_core::Predicate;
-use zetesis_cpu::Cancellation;
-use zetesis_sat::Incomplete;
 use zetesis_solve::{
     AnswerSet, Completion, Interruption, Oracle, PreparedInput, SemanticOutcome, Session,
     SolveConfig,
 };
+use zetesis_stable::Incomplete;
 
 const PATH_VERTICES: u32 = 24;
 

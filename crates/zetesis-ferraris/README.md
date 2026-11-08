@@ -1,8 +1,7 @@
 # zetesis-ferraris
 
-A native exact kernel for **finite propositional formula reducts**. The Horn
-oracle in `zetesis-cpu` computes a least closure. A general reduct may have
-incomparable minimal models; this kernel checks proper subsets instead.
+A native exact kernel for **finite propositional formula reducts**. A general
+reduct may have incomparable minimal models; this kernel checks proper subsets.
 
 The input is a bounded, immutable DAG of atoms, falsum, conjunction, disjunction,
 implication, nonnegative weighted thresholds and ordinal min/max cuts, plus asserted roots.
@@ -203,14 +202,13 @@ See [support API](src/support.rs) and [complete small-family controls](tests/int
 
 ## Narrowing regions by the theory's readings
 
-A `Region` (`zetesis_cpu::regions`) holds some atoms in every candidate, cuts
+A `Region` (`zetesis_algebra::region`) holds some atoms in every candidate, cuts
 some from every candidate and leaves the rest open; here it decides over the
 theory's atoms. Under a region every node of the DAG has
 two readings: *sure* when every candidate of the region satisfies it and
 *impossible* when none does. A held atom is sure, a cut atom impossible, and
-the connectives combine the readings as the closure route's definite and
-possible gates do; the knowledge the narrowing closes means them, a node
-known to hold being sure and one known to fail impossible.
+the connectives combine those readings. The narrowed knowledge records them:
+a node known to hold is sure, and one known to fail is impossible.
 `Narrower::narrow_known` closes the knowledge to a fixed point: every root
 and every decided atom is known, a node learns
 from its operands and teaches its operands what its own knowledge leaves
@@ -290,8 +288,9 @@ region's next split, which the traversal honours: an open atom heading one of th
 subject's atomic choice roots (`ChoiceHeads`, when the subject carries them) before
 any other, then the open atom with the most parents still unknown, ties to the
 lowest; without a preference the traversal splits the highest open atom. The traversal that splits regions and
-covers the tree is `zetesis_cpu::regions::Traversal`, shared with the closure
-route; `zetesis-sat` uses it with this narrowing to propose candidates.
+covers the tree is `zetesis_algebra::walk::Walk`; `zetesis-stable` uses it
+with original-theory narrowing for candidate generation and frozen-reduct
+narrowing for proper-subset queries.
 
 Carried knowledge requires the same narrower, theory, producer set and frozen
 truth, and a region contained in the ancestor for which that knowledge was
@@ -386,7 +385,7 @@ cargo test -p zetesis-ferraris --lib \
 ```
 
 The `traversal_copies_only_live_knowledge_arrays` test wraps actual
-`Traversal` state clones at 64, 512 and 4,096 atoms. Each fixture leaves eight
+`Walk` state clones at 64, 512 and 4,096 atoms. Each fixture leaves eight
 atoms free, visits all 256 complete candidates and compares native and selected
 counter widths. The receipt counts completed `Knowledge::clone` calls,
 initialized array representation bytes and the returned clones' nonempty
@@ -402,7 +401,7 @@ cargo test -p zetesis-ferraris --lib \
 This structural receipt excludes inline headers, region masks, shared indexes,
 measurement storage and allocator bookkeeping. It is neither an allocator-call
 trace nor a timing, RSS or memory-bus measurement. It covers the sequential
-`Traversal` fixture, not application-wide clone traffic or parallel workers'
+`Walk` fixture, not application-wide clone traffic or parallel workers'
 active and queued frontier. Those require separate observations; the retained
 bytes reported by a queued frontier do not include active worker state.
 

@@ -6,8 +6,8 @@ use crate::formula_support::{Support, testing};
 use crate::test_support::location;
 use crate::{ExpansionFailure, ExpansionLimits, FormulaLimits, FormulaResource};
 use themelios_program::program::DefaultNegation;
+use zetesis_algebra::{Cancellation, Stop};
 use zetesis_core::{AtomPattern, Predicate, Term, Value, ValueLimits};
-use zetesis_cpu::{Cancellation, Stop};
 
 fn with_atom<T>(
     value: Option<Value>,

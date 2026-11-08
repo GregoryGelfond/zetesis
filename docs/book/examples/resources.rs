@@ -1,12 +1,13 @@
-//! Reuse one device across independent native-program sessions.
+//! Reuse one device across independent formula sessions.
 
 // ANCHOR: example
-use zetesis_core::{AdmissionLimits, Atom, AtomPattern, Model, Predicate, Program, Template};
-use zetesis_cpu::Cancellation;
+use zetesis_algebra::Cancellation;
+use zetesis_core::{Atom, Model, Predicate};
 use zetesis_solve::{
-    AnswerSelection, Backend, Completion, ExecutionResources, Grounder, PreparedInput, Session,
-    SolveConfig, Subject,
+    AnswerSelection, Backend, Completion, ExecutionResources, Original, PreparedInput, Session,
+    SolveConfig,
 };
+use zetesis_themelios::{AdmissionOptions, ExpansionLimits, FormulaLimits, admit_formula};
 use zetesis_wgpu::{GpuContext, GpuOptions, GpuSelection};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -16,27 +17,19 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     drop(context);
 
     for name in ["ready", "available"] {
-        let predicate = Predicate::new(name, 0)?;
-        let fact = Template::new(
-            Some(AtomPattern::new(predicate.clone(), vec![])?),
-            vec![],
-            vec![],
-            vec![],
-            vec![],
-        );
-        let program = Program::new(
-            vec![fact],
-            zetesis_core::FactTables::default(),
-            AdmissionLimits::default(),
+        let program = admit_formula(
+            format!("{name}."),
+            AdmissionOptions::default(),
+            ExpansionLimits::default(),
+            FormulaLimits::default(),
         )?;
         let config = SolveConfig {
             backend: Backend::Gpu(None),
-            grounder: Grounder::Lazy,
             models: 0,
             ..Default::default()
         };
         let mut session = Session::builder(
-            PreparedInput::program(&program),
+            PreparedInput::formula(&program),
             config,
             Cancellation::default(),
         )
@@ -46,12 +39,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let answer = session.next().unwrap()?;
         assert_eq!(
             answer.interpretation(),
-            &Model::new([Atom::new(predicate, vec![])?])?
+            &Model::new([Atom::new(Predicate::new(name, 0)?, vec![])?])?
         );
         assert!(
             answer
-                .subject()
-                .same_instance(&Subject::Program(program.clone()))
+                .original()
+                .same_instance(&Original::Theory(program.theory().clone()))
         );
         assert!(session.next().is_none());
         assert_eq!(

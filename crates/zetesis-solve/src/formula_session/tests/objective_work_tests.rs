@@ -6,10 +6,10 @@ use crate::formula_execution::Execution;
 use crate::phase_timing::Recorder;
 use crate::{
     AnswerSelection, Backend, ExecutionObservation, ExecutionObserver, Interruption, Oracle,
-    SearchMethod, SolveConfig, SolveError,
+    SolveConfig, SolveError,
 };
 use std::io;
-use zetesis_cpu::Cancellation;
+use zetesis_algebra::Cancellation;
 use zetesis_ferraris::Interpretation;
 use zetesis_reference_support::formula;
 use zetesis_themelios::AdmittedFormula;
@@ -24,17 +24,15 @@ fn input(owner: &AdmittedFormula) -> Input<'_> {
         atoms: owner.atom_catalog(),
         objectives: owner.objectives(),
         required_choices: owner.required_choices(),
-        gate_atoms: 0,
         keyed_constraints: 0,
         key_analysis: zetesis_themelios::KeyAnalysis::Complete,
-        certificate_order: zetesis_sat::CertificateOrder::TightFirst,
+        certificate_order: zetesis_stable::CertificateOrder::TightFirst,
     }
 }
 fn config() -> SolveConfig {
     SolveConfig {
         backend: Backend::Cpu,
         oracle: Oracle::Countermodel,
-        search: SearchMethod::Clauses,
         workers: std::num::NonZeroUsize::MIN,
         models: 0,
         max_objective_bound_work: 0,

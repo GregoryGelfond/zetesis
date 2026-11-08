@@ -20,7 +20,7 @@ use super::{
 use crate::{
     answers::native_json,
     examples,
-    selected::{FormulaJoins, NativeExecution, SearchMethod},
+    selected::{FormulaJoins, NativeExecution},
 };
 
 /// Per-invocation capture and decoding bytes for the maintained population.
@@ -269,7 +269,6 @@ pub fn profiles(memory_bytes: Option<u64>) -> Vec<NativeExecution> {
         .map(|workers| NativeExecution {
             threads: workers,
             formula_joins: Some(FormulaJoins::Indexed),
-            search: Some(SearchMethod::Regions),
             memory_bytes,
             ..NativeExecution::default()
         })

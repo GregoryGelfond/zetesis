@@ -7,9 +7,9 @@ use std::collections::BTreeSet;
 
 use crate::support::unsigned_spellings::atom_text;
 use serde_json::Value as Json;
+use zetesis_algebra::Cancellation;
 use zetesis_clingo_support as oracle;
 use zetesis_core::Model;
-use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{Interpretation, Limits, check};
 use zetesis_test_support::records::Records;
 use zetesis_themelios::{AdmittedFormula, FormulaLimits};

@@ -2,8 +2,8 @@
 
 use clap::Parser;
 use serde_json::Value;
+use zetesis_algebra::Cancellation;
 use zetesis_cli::{GroundingOutcome, GroundingPhase, Options, run_detailed_with_diagnostics};
-use zetesis_cpu::Cancellation;
 
 fn options(extra: &[&str]) -> Options {
     Options::try_parse_from(
@@ -43,7 +43,7 @@ fn json_attribution_preserves_typed_measurements() {
     for phase in GroundingPhase::ALL {
         let json = &view["measurements"][phase.label()];
         let measurement = typed.get(phase).unwrap();
-        assert_eq!(json["work"].as_object().unwrap().len(), 52);
+        assert_eq!(json["work"].as_object().unwrap().len(), 54);
         assert_eq!(
             json["elapsed_ns"].as_u64().map(u128::from),
             measurement.elapsed.map(|value| value.as_nanos())
@@ -76,6 +76,7 @@ fn assert_work_fields(json: &Value, work: &zetesis_themelios::GroundingWork) {
         ("support_producer_visits", work.support_producer_visits),
         ("support_rich_traversals", work.support_rich_traversals),
         ("support_unchanged_visits", work.support_unchanged_visits),
+        ("support_deferred_visits", work.support_deferred_visits),
         (
             "support_snapshot_preparations",
             work.support_snapshot_preparations,
@@ -112,6 +113,7 @@ fn assert_work_fields(json: &Value, work: &zetesis_themelios::GroundingWork) {
         ),
         ("numeric_index_builds", work.numeric_index_builds),
         ("numeric_index_declines", work.numeric_index_declines),
+        ("numeric_index_extensions", work.numeric_index_extensions),
         ("range_probes", work.range_probes),
         ("range_probe_rows", work.range_probe_rows),
         ("expression_key_probes", work.expression_key_probes),
@@ -274,30 +276,6 @@ fn eager_formula_solving_uses_requested_table_joins() {
             view["support_peak_bytes"].as_u64(),
             measurement.work.support_peak_bytes
         );
-    }
-}
-
-#[test]
-fn relational_grounding_stays_unmeasured_in_formula_attribution() {
-    for grounder in ["eager", "lazy"] {
-        let mut output = Vec::new();
-        let report = run_detailed_with_diagnostics(
-            "p.".into(),
-            &options(&["--grounder", grounder]),
-            &mut output,
-            &mut std::io::sink(),
-            &Cancellation::default(),
-        )
-        .unwrap();
-        let typed = report.phase_timings.unwrap().grounding;
-        let document: Value = serde_json::from_slice(&output).unwrap();
-        for phase in GroundingPhase::ALL {
-            assert!(typed.get(phase).is_none());
-            assert!(
-                document["statistics"]["grounding_attribution"]["measurements"][phase.label()]
-                    .is_null()
-            );
-        }
     }
 }
 

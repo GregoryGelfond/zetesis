@@ -3,10 +3,10 @@
 A parallel region walk used to start all of its worker threads at the first proposal, whatever the walk turned out to
 need. This note makes the calling thread walk first, as the scalar walk does, and starts the workers only once the
 walk has run for as long as starting them costs. It is an execution choice: answer families and admission are
-unchanged at every worker count and at every engagement point. The [parallel execution
-chapter](../book/rust/parallel.md) describes the walk.
+unchanged at every worker count and at every engagement point. The [execution
+chapter](../book/architecture/execution.md) describes the walk.
 
-Paths are under `crates/zetesis-sat/src/ferraris/` unless another root is named. Measurement cells under
+Paths are under `crates/zetesis-stable/src/ferraris/` unless another root is named. Measurement cells under
 `scenarios/` and `standalone/` are in `examples/correctness/`, and those under `scalability/` in `examples/`.
 
 ## Status
@@ -442,7 +442,7 @@ observation record.
 
 1. Revise the statements the coordinator phase made false, which still say the workers start at the first proposal or
    that only workers step regions: three in `ferraris.rs`, five in `parallel_regions.rs`, one in
-   `crates/zetesis-sat/tests/integration/parallel_regions.rs` and one in `docs/book/rust/parallel.md`; then sweep the
+   `crates/zetesis-stable/tests/integration/parallel_regions.rs` and one in `docs/book/rust/parallel.md`; then sweep the
    remaining worker-only statements.
 2. Parameterize the route tests over `Immediate` and `After(Duration::MAX)` and assert the route each takes, including
    `NotBegun`.

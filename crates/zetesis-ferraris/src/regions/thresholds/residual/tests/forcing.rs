@@ -2,7 +2,6 @@
 
 use super::*;
 use crate::Knowledge;
-use crate::regions::bit;
 
 fn unopened_snapshot(index: &Narrower, bounds: [i128; 2]) -> Knowledge {
     let mut knowledge = index.knowledge();
@@ -27,12 +26,15 @@ fn a_batch_keeps_its_processed_snapshot_until_events_drain() {
         };
         let before = known.thresholds[0];
         let mut scratch = NarrowingScratch::default();
-        let mut closure = Closure {
+        let mut closure = Closure::<_, zetesis_algebra::AnswerSetsSought> {
             known: known.borrow(),
-            lists: &mut scratch,
+            lists: &mut scratch.common,
+            learning: &mut scratch.learning,
         };
         assert!(matches!(
-            closure.threshold_residual(&index, 0, &mut Work::new(u64::MAX)),
+            closure
+                .threshold_residual(&index, 0, &mut Meter::local(u64::MAX))
+                .map_err(zetesis_algebra::Failure::into_stop),
             Ok(Step::Changed)
         ));
         // All three complement results came from the same original masks and
@@ -40,8 +42,8 @@ fn a_batch_keeps_its_processed_snapshot_until_events_drain() {
         assert_eq!(closure.known.thresholds[0], before);
         assert_eq!(closure.lists.nodes.len(), 3);
         for (condition, truth) in expected.into_iter().enumerate() {
-            assert_eq!(bit(closure.known.sure, condition), truth);
-            assert_eq!(bit(closure.known.never, condition), !truth);
+            assert_eq!(closure.known.sure.contains(condition), truth);
+            assert_eq!(closure.known.never.contains(condition), !truth);
             assert!(closure.lists.nodes.contains(&(condition, truth)));
         }
         let mut region = Region::all_open(3);
@@ -58,8 +60,8 @@ fn a_batch_keeps_its_processed_snapshot_until_events_drain() {
         };
         assert_eq!(known.thresholds[0].known, target);
         assert_eq!(known.thresholds[0].possible, target);
-        assert!(scratch.nodes.is_empty());
-        assert!(scratch.residual_rows.is_empty());
+        assert!(scratch.common.nodes.is_empty());
+        assert!(scratch.common.residual_rows.is_empty());
     }
 }
 
@@ -84,7 +86,7 @@ fn one_small_coefficient_can_be_forced_and_two_open_choices_remain() {
     assert!(region.is_held(1));
     assert!(region.is_open(2));
     assert!(region.is_open(3));
-    assert!(scratch.residual_suffix.capacity() >= 5);
+    assert!(scratch.common.residual_suffix.capacity() >= 5);
     // A two-condition interval admitting both individual coefficients does not
     // force a choice merely because only one coefficient fits its width.
     let theory = interval(2, &[(0, 2), (1, 3)], [2, 4]);
@@ -126,7 +128,7 @@ fn wide_intervals_skip_complement_storage() {
         Narrowing::Refuted
     );
     assert!((0..8).all(|atom| region.is_open(atom)));
-    assert_eq!(scratch.residual_suffix.capacity(), 0);
+    assert_eq!(scratch.common.residual_suffix.capacity(), 0);
 }
 
 fn contradictory_conditions() -> Theory {
@@ -171,12 +173,15 @@ fn correlated_forced_conditions_return_through_the_boolean_queues() {
     };
     let before = known.thresholds[0];
     let mut scratch = NarrowingScratch::default();
-    let mut closure = Closure {
+    let mut closure = Closure::<_, zetesis_algebra::AnswerSetsSought> {
         known: known.borrow(),
-        lists: &mut scratch,
+        lists: &mut scratch.common,
+        learning: &mut scratch.learning,
     };
     assert!(matches!(
-        closure.threshold_residual(&index, 0, &mut Work::new(u64::MAX)),
+        closure
+            .threshold_residual(&index, 0, &mut Meter::local(u64::MAX))
+            .map_err(zetesis_algebra::Failure::into_stop),
         Ok(Step::Changed)
     ));
     // Atom 0 and its negation (node 3) are distinct conditions. Arithmetic
@@ -234,7 +239,7 @@ fn choices_with_interval(atoms: usize, terms: &[(usize, u64)], target: i128) -> 
 fn inherited_enumeration_matches_independent_complete_families() {
     // The expected families use raw input occurrences, not grouped rows or
     // divisibility. Choice roots make every satisfying selection stable, checked
-    // by the exhaustive reduct oracle. Traversal inherits real knowledge at splits.
+    // by the exhaustive reduct oracle. Walk inherits real knowledge at splits.
     for terms in [
         vec![(0, 6), (1, 10), (2, 15)],
         vec![(0, 2), (0, 4), (1, 10), (2, 15)],
@@ -307,20 +312,20 @@ fn stopped_forcing_batches_leave_only_reusable_scratch_capacity() {
         &mut scratch,
     );
     assert_ne!(completed.0, Narrowing::Refuted);
-    assert!(scratch.residual_suffix.capacity() >= 4);
+    assert!(scratch.common.residual_suffix.capacity() >= 4);
     for failure in [Stop::WorkLimit, Stop::Cancelled, Stop::Deadline] {
         for limit in 0..completed.1.work {
-            let attempt = index.narrow_known_reserved(
+            let attempt = crate::test_support::stop_narrowing(&index.narrow_known_reserved(
                 OriginalSubject::new(&theory, None),
                 &mut Region::all_open(3),
                 &mut index.knowledge(),
                 &mut scratch,
                 &Cancellation::default(),
-                &mut Allowance {
+                &mut zetesis_algebra::Meter::reserved(&mut Allowance {
                     remaining: limit,
                     failure,
-                },
-            );
+                }),
+            ));
             assert_eq!(attempt.result, Err(failure));
             assert_eq!(attempt.statistics.work, limit);
             let mut region = Region::all_open(3);
@@ -333,8 +338,14 @@ fn stopped_forcing_batches_leave_only_reusable_scratch_capacity() {
             );
             assert_eq!(retried, completed);
             assert!(region.is_held(0) && region.is_held(1) && region.is_cut(2));
-            assert!(scratch.nodes.is_empty() && scratch.residual_rows.is_empty());
-            assert!(scratch.pending_residuals.iter().all(|&word| word == 0));
+            assert!(scratch.common.nodes.is_empty() && scratch.common.residual_rows.is_empty());
+            assert!(
+                scratch
+                    .common
+                    .pending_residuals
+                    .iter()
+                    .all(|&word| word == 0)
+            );
         }
     }
 }
@@ -349,18 +360,20 @@ fn suffix_storage_is_metered_and_does_not_cross_owners_or_siblings() {
     };
     let mut scratch = NarrowingScratch::default();
     assert!(matches!(
-        Closure {
+        Closure::<_, zetesis_algebra::AnswerSetsSought> {
             known: known.borrow(),
-            lists: &mut scratch
+            lists: &mut scratch.common,
+            learning: &mut scratch.learning,
         }
-        .threshold_residual(&index, 0, &mut Work::new(u64::MAX)),
+        .threshold_residual(&index, 0, &mut Meter::local(u64::MAX))
+        .map_err(zetesis_algebra::Failure::into_stop),
         Ok(Step::Changed)
     ));
-    let expected = scratch.nodes.capacity() as u128 * size_of::<(usize, bool)>() as u128
-        + scratch.residual_suffix.capacity() as u128 * size_of::<i128>() as u128;
+    let expected = scratch.common.nodes.capacity() as u128 * size_of::<(usize, bool)>() as u128
+        + scratch.common.residual_suffix.capacity() as u128 * size_of::<i128>() as u128;
     assert_eq!(scratch.retained_bytes(), expected);
-    scratch.prepare(0);
-    assert!(scratch.residual_suffix.is_empty());
+    scratch.common.prepare(0);
+    assert!(scratch.common.residual_suffix.is_empty());
     assert_eq!(scratch.retained_bytes(), expected);
     for target in [15, 16, 15] {
         let theory = interval(3, &[(0, 6), (1, 10), (2, 15)], [target, target + 1]);

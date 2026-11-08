@@ -2,8 +2,8 @@
 //! is checked against the streamed constraints, then extended, then published.
 
 use std::{collections::BTreeSet, num::NonZeroUsize};
+use zetesis_algebra::Cancellation;
 use zetesis_core::Model;
-use zetesis_cpu::Cancellation;
 use zetesis_reference_support::prepared;
 use zetesis_solve::{
     Backend, Completion, Grounder, Oracle, PreparedInput, Session, SolveConfig, SolveError,
@@ -65,7 +65,10 @@ fn refused(failure: &zetesis_solve::WorldViewFailure, is: impl Fn(&SolveError) -
     matches!(failure.cause(), zetesis_solve::WorldViewError::Solve(solve) if is(&solve.cause))
 }
 
-const OPTIONAL: &str = "{seed(1);seed(2)}. receipt(X):-seed(X). :- seed(1), seed(2).";
+/// Three answer sets over a hybrid base that streams the constraint. The
+/// double negation keeps it a stream: pair capture would move
+/// `:- seed(1), seed(2).` into the core, leaving nothing to stream.
+const OPTIONAL: &str = "{seed(1);seed(2)}. receipt(X):-seed(X). :- seed(1), not not seed(2).";
 
 #[test]
 fn lazy_grounding_defers_terminal_definitions_over_a_hybrid_base() {
@@ -82,15 +85,12 @@ fn lazy_grounding_defers_terminal_definitions_over_a_hybrid_base() {
 }
 
 #[test]
-fn a_rejected_core_answer_is_never_extended() {
-    // The core answers {b} and {a, b} violate `:- b.` and would extend by t/1;
-    // only the two accepted ones are reconstructed. Clause search proposes
-    // every core answer, so each one reaches the full check.
+fn a_filtered_core_answer_is_never_extended() {
+    // The answers {b} and {a, b} violate `:- b.` and would extend by t/1; the
+    // region filter's source consequences exclude them before they are core
+    // answers, so only the two accepted ones are reconstructed.
     let owner = lazy_terminal("{a; b}. d(1..2). t(X) :- b, d(X). :- b.");
-    let config = SolveConfig {
-        search: zetesis_solve::SearchMethod::Clauses,
-        ..config(Grounder::Lazy)
-    };
+    let config = config(Grounder::Lazy);
     let (actual, view) = family(PreparedInput::terminal(&owner), config);
     assert_eq!(actual.len(), 2);
     assert!(actual.iter().all(|model| {
@@ -109,7 +109,13 @@ fn a_rejected_core_answer_is_never_extended() {
         2
     );
     let hybrid = outcome.hybrid_execution().unwrap();
-    assert_eq!((hybrid.core_answers, hybrid.rejected), (4, 2));
+    assert_eq!((hybrid.core_answers, hybrid.rejected), (2, 0));
+    let filter = outcome
+        .countermodel_statistics()
+        .unwrap()
+        .region_filter
+        .unwrap();
+    assert!(filter.checks > 0);
     assert_eq!(outcome.completion(), Some(Completion::Exhausted));
 }
 
@@ -190,10 +196,12 @@ fn a_stopped_constraint_check_never_claims_exhaustion() {
 #[test]
 fn a_streamed_check_constructs_terms_over_the_closed_base() {
     // The constraint's check builds f(X) for each p(X), resolving it through
-    // the closed base's terms.
+    // the closed base's terms. Its double negation keeps it a stream, as in
+    // `OPTIONAL`.
     const SOURCE: &str =
-        "{p(1); p(2)}. {q(f(1))}. r(X) :- p(X), seed(X). seed(1..2). :- p(X), q(f(X)).";
+        "{p(1); p(2)}. {q(f(1))}. r(X) :- p(X), seed(X). seed(1..2). :- p(X), not not q(f(X)).";
     let owner = lazy_terminal(SOURCE);
+    assert!(matches!(owner.base(), TerminalBase::Hybrid(core) if core.streamed_templates() == 1));
     let (actual, _) = family(PreparedInput::terminal(&owner), config(Grounder::Lazy));
     let reference = adaptive_terminal(SOURCE);
     let (expected, _) = family(PreparedInput::terminal(&reference), config(Grounder::Auto));

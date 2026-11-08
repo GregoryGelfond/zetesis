@@ -1,6 +1,6 @@
 //! A processed absorbing witness retires only its chain's bookkeeping.
 
-use zetesis_cpu::{Cancellation, Stop};
+use zetesis_algebra::{Cancellation, Class, Countermodels, Stop};
 
 use crate::test_support::SinglePermits;
 use crate::{
@@ -8,7 +8,7 @@ use crate::{
     Node, OperandSpan, OriginalSubject, Region, RegionLimits, Theory,
 };
 
-use super::super::{Closure, Known, Step, Subject, Width, Work, bit, counters::Count};
+use super::super::{Closure, Context, Known, Meter, Step, Width, bit, counters::Count};
 use super::{compact_mut, counters};
 
 fn theory(disjunction: bool, other_parent: bool) -> Theory {
@@ -35,7 +35,7 @@ fn theory(disjunction: bool, other_parent: bool) -> Theory {
 }
 
 /// Inspect each counter width without converting the tested state.
-fn evidence(knowledge: &Knowledge) -> (bool, usize, Option<bool>, Vec<usize>) {
+fn evidence<C: Class>(knowledge: &Knowledge<C>) -> (bool, usize, Option<bool>, Vec<usize>) {
     fn inspect<C: Count>(known: &Known<C>) -> (bool, usize, Option<bool>, Vec<usize>) {
         let masks = known.masks.slices();
         let root = if bit(masks[0], 4) {
@@ -59,6 +59,76 @@ fn evidence(knowledge: &Knowledge) -> (bool, usize, Option<bool>, Vec<usize>) {
     }
 }
 
+fn witness_orders<C: super::super::ReadingClass>(
+    index: &Narrower,
+    subject: Context<'_, C>,
+    disjunction: bool,
+    fresh: impl Fn() -> Knowledge<C>,
+) {
+    for width in 0..3 {
+        for values in 0..16 {
+            for mut order in 0..4_usize.pow(4) {
+                let order: [usize; 4] = std::array::from_fn(|_| {
+                    let next = order % 4;
+                    order /= 4;
+                    next
+                });
+                if (0..4).any(|position| order[..position].contains(&order[position])) {
+                    continue;
+                }
+                let fresh = fresh();
+                let mut knowledge = match width {
+                    0 => fresh,
+                    1 => counters::compact32(&fresh),
+                    _ => counters::native(&fresh),
+                };
+                let mut region = Region::all_open(4);
+                let mut scratch = NarrowingScratch::default();
+                let mut witnessed = false;
+                let mut neutral = 0;
+                for (position, atom) in order.into_iter().enumerate() {
+                    let value = values & (1 << atom) != 0;
+                    assert!(if value {
+                        region.hold(atom)
+                    } else {
+                        region.cut(atom)
+                    });
+                    if !witnessed {
+                        if value == disjunction {
+                            witnessed = true;
+                        } else {
+                            neutral += 1;
+                        }
+                    }
+                    let attempt = super::narrow_context(
+                        index,
+                        subject,
+                        &mut region,
+                        &mut knowledge,
+                        &mut scratch,
+                        RegionLimits::default(),
+                        &Cancellation::default(),
+                    );
+                    assert_eq!(attempt.result.unwrap(), Narrowing::Fixed { changed: false });
+                    let root = if witnessed {
+                        Some(disjunction)
+                    } else if position == 3 {
+                        Some(!disjunction)
+                    } else {
+                        None
+                    };
+                    // Root events still remove every parent occurrence
+                    // from split ranking, including open child atoms.
+                    let ranks = vec![usize::from(root.is_none()); 4];
+                    assert_eq!(evidence(&knowledge), (witnessed, neutral, root, ranks));
+                    assert!(scratch.common.nodes.is_empty());
+                    assert!(scratch.common.learned.is_empty());
+                }
+            }
+        }
+    }
+}
+
 #[test]
 fn witness_retirement_preserves_every_operand_order() {
     for disjunction in [false, true] {
@@ -70,92 +140,34 @@ fn witness_retirement_preserves_every_operand_order() {
         // frozen reduct, for either connective. Both subjects execute the
         // retiring parent path rather than taking a masked-parent exit.
         let truth = [true; 5];
-        for frozen in [false, true] {
-            for width in 0..3 {
-                for values in 0..16 {
-                    for mut order in 0..4_usize.pow(4) {
-                        let order: [usize; 4] = std::array::from_fn(|_| {
-                            let next = order % 4;
-                            order /= 4;
-                            next
-                        });
-                        if (0..4).any(|position| order[..position].contains(&order[position])) {
-                            continue;
-                        }
-                        let fresh = index.knowledge();
-                        let mut knowledge = match width {
-                            0 => fresh,
-                            1 => counters::compact32(&fresh),
-                            _ => counters::native(&fresh),
-                        };
-                        let mut region = Region::all_open(4);
-                        let mut scratch = NarrowingScratch::default();
-                        let mut witnessed = false;
-                        let mut neutral = 0;
-                        for (position, atom) in order.into_iter().enumerate() {
-                            let value = values & (1 << atom) != 0;
-                            assert!(if value {
-                                region.hold(atom)
-                            } else {
-                                region.cut(atom)
-                            });
-                            if !witnessed {
-                                if value == disjunction {
-                                    witnessed = true;
-                                } else {
-                                    neutral += 1;
-                                }
-                            }
-                            let attempt = if frozen {
-                                index.narrow_frozen_known(
-                                    FrozenSubject::new(&theory, &truth),
-                                    &mut region,
-                                    &mut knowledge,
-                                    &mut scratch,
-                                    RegionLimits::default(),
-                                    &Cancellation::default(),
-                                )
-                            } else {
-                                index.narrow_known(
-                                    OriginalSubject::new(&theory, None),
-                                    &mut region,
-                                    &mut knowledge,
-                                    &mut scratch,
-                                    RegionLimits::default(),
-                                    &Cancellation::default(),
-                                )
-                            };
-                            assert_eq!(attempt.unwrap().0, Narrowing::Fixed { changed: false });
-                            let root = if witnessed {
-                                Some(disjunction)
-                            } else if position == 3 {
-                                Some(!disjunction)
-                            } else {
-                                None
-                            };
-                            // Root events still remove every parent occurrence
-                            // from split ranking, including open child atoms.
-                            let ranks = vec![usize::from(root.is_none()); 4];
-                            assert_eq!(evidence(&knowledge), (witnessed, neutral, root, ranks));
-                            assert!(scratch.nodes.is_empty());
-                            assert!(scratch.learned.is_empty());
-                        }
-                    }
-                }
-            }
-        }
+        witness_orders(
+            &index,
+            Context::from(OriginalSubject::new(&theory, None)),
+            disjunction,
+            || index.knowledge(),
+        );
+        witness_orders(
+            &index,
+            Context::from(FrozenSubject::new(&theory, &truth)),
+            disjunction,
+            || index.frozen_knowledge(),
+        );
     }
 }
 
-fn assign(knowledge: &mut Knowledge, node: usize, value: bool) {
-    let known = compact_mut(knowledge);
-    let mask = if value { known.sure } else { known.never };
+fn assign<C: Class>(knowledge: &mut Knowledge<C>, node: usize, value: bool) {
+    let mut known = compact_mut(knowledge);
+    let mask = if value {
+        &mut known.sure
+    } else {
+        &mut known.never
+    };
     mask[0] |= 1 << node;
     if node < 4 {
         let atoms = if value {
-            known.atom_sure
+            &mut known.atom_sure
         } else {
-            known.atom_never
+            &mut known.atom_never
         };
         atoms[0] |= 1 << node;
     }
@@ -170,24 +182,26 @@ fn a_pending_witness_does_not_retire_the_counter() {
         assign(&mut knowledge, 0, !disjunction);
         assign(&mut knowledge, 1, disjunction);
         let mut scratch = NarrowingScratch::default();
-        scratch.prepare(4);
-        scratch.nodes.push((1, disjunction));
-        let mut work = Work::new(2);
-        let result = Closure {
+        scratch.common.prepare(4);
+        scratch.common.nodes.push((1, disjunction));
+        let mut work = Meter::local(2);
+        let result = Closure::<_, zetesis_algebra::AnswerSetsSought> {
             known: compact_mut(&mut knowledge),
-            lists: &mut scratch,
+            lists: &mut scratch.common,
+            learning: &mut scratch.learning,
         }
         .revisit(
-            Subject::from(OriginalSubject::new(&theory, None)),
+            Context::from(OriginalSubject::new(&theory, None)),
             &index,
             0,
             !disjunction,
             &mut work,
-        );
+        )
+        .map_err(zetesis_algebra::Failure::into_stop);
         assert!(result == Ok(Step::Unchanged));
         assert_eq!(evidence(&knowledge), (false, 1, None, vec![1; 4]));
-        assert_eq!(scratch.nodes, [(1, disjunction)]);
-        assert_eq!(work.spent, 2);
+        assert_eq!(scratch.common.nodes, [(1, disjunction)]);
+        assert_eq!(work.charged(), 2);
     }
 }
 
@@ -206,30 +220,32 @@ fn retired_parents_keep_their_read_permit() {
                     compact_mut(&mut knowledge).witnessed[0] |= 1;
                     let before = evidence(&knowledge);
                     let mut scratch = NarrowingScratch::default();
-                    scratch.prepare(4);
+                    scratch.common.prepare(4);
                     let mut quota = SinglePermits::new(limit, stop);
-                    let mut work = Work::reserved(&mut quota);
-                    let result = Closure {
+                    let mut work = Meter::reserved(&mut quota);
+                    let result = Closure::<_, zetesis_algebra::AnswerSetsSought> {
                         known: compact_mut(&mut knowledge),
-                        lists: &mut scratch,
+                        lists: &mut scratch.common,
+                        learning: &mut scratch.learning,
                     }
                     .revisit(
-                        Subject::from(OriginalSubject::new(&theory, None)),
+                        Context::from(OriginalSubject::new(&theory, None)),
                         &index,
                         0,
                         value,
                         &mut work,
-                    );
+                    )
+                    .map_err(zetesis_algebra::Failure::into_stop);
                     work.refund();
-                    assert_eq!(work.spent, limit);
+                    assert_eq!(work.charged(), limit);
                     if limit < 2 {
                         assert!(result == Err(stop));
                     } else {
                         assert!(result == Ok(Step::Unchanged));
                     }
                     assert_eq!(evidence(&knowledge), before);
-                    assert!(scratch.nodes.is_empty());
-                    assert!(scratch.learned.is_empty());
+                    assert!(scratch.common.nodes.is_empty());
+                    assert!(scratch.common.learned.is_empty());
                 }
             }
         }
@@ -245,21 +261,23 @@ fn a_first_witness_still_refutes_an_opposite_root() {
         assign(&mut knowledge, 0, disjunction);
         assign(&mut knowledge, 4, !disjunction);
         let mut scratch = NarrowingScratch::default();
-        scratch.prepare(4);
-        let mut work = Work::new(2);
-        let result = Closure {
+        scratch.common.prepare(4);
+        let mut work = Meter::local(2);
+        let result = Closure::<_, zetesis_algebra::AnswerSetsSought> {
             known: compact_mut(&mut knowledge),
-            lists: &mut scratch,
+            lists: &mut scratch.common,
+            learning: &mut scratch.learning,
         }
         .revisit(
-            Subject::from(OriginalSubject::new(&theory, None)),
+            Context::from(OriginalSubject::new(&theory, None)),
             &index,
             0,
             disjunction,
             &mut work,
-        );
+        )
+        .map_err(zetesis_algebra::Failure::into_stop);
         assert!(result == Ok(Step::Contradiction));
-        assert_eq!(work.spent, 2);
+        assert_eq!(work.charged(), 2);
     }
 }
 
@@ -281,21 +299,23 @@ fn a_retired_chain_does_not_hide_another_parent() {
         }
         compact_mut(&mut knowledge).witnessed[0] |= 1;
         let mut scratch = NarrowingScratch::default();
-        scratch.prepare(4);
-        let mut work = Work::new(3);
-        let result = Closure {
+        scratch.common.prepare(4);
+        let mut work = Meter::local(3);
+        let result = Closure::<_, zetesis_algebra::AnswerSetsSought> {
             known: compact_mut(&mut knowledge),
-            lists: &mut scratch,
+            lists: &mut scratch.common,
+            learning: &mut scratch.learning,
         }
         .revisit(
-            Subject::from(OriginalSubject::new(&theory, None)),
+            Context::from(OriginalSubject::new(&theory, None)),
             &index,
             0,
             true,
             &mut work,
-        );
+        )
+        .map_err(zetesis_algebra::Failure::into_stop);
         assert!(result == Ok(Step::Contradiction));
-        assert_eq!(work.spent, 3);
+        assert_eq!(work.charged(), 3);
         assert_eq!(evidence(&knowledge).1, 0);
     }
 }
@@ -308,25 +328,27 @@ fn a_frozen_falsum_parent_never_collects_a_witness() {
         // Actual truth masks: OR(false, false, false, false), or
         // AND(true, false, false, false). The parent is frozen falsum.
         let truth = [!disjunction, false, false, false, false];
-        let mut knowledge = index.knowledge();
+        let mut knowledge = index.frozen_knowledge();
         assign(&mut knowledge, 0, !disjunction);
         assign(&mut knowledge, 4, false);
         let mut scratch = NarrowingScratch::default();
-        scratch.prepare(4);
-        let mut work = Work::new(2);
-        let result = Closure {
+        scratch.common.prepare(4);
+        let mut work = Meter::local(2);
+        let result = Closure::<_, Countermodels> {
             known: compact_mut(&mut knowledge),
-            lists: &mut scratch,
+            lists: &mut scratch.common,
+            learning: (),
         }
         .revisit(
-            Subject::from(FrozenSubject::new(&theory, &truth)),
+            Context::from(FrozenSubject::new(&theory, &truth)),
             &index,
             0,
             !disjunction,
             &mut work,
-        );
+        )
+        .map_err(zetesis_algebra::Failure::into_stop);
         assert!(result == Ok(Step::Unchanged));
         assert_eq!(evidence(&knowledge), (false, 0, Some(false), vec![1; 4]));
-        assert_eq!(work.spent, 2);
+        assert_eq!(work.charged(), 2);
     }
 }

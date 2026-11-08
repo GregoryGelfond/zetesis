@@ -254,6 +254,55 @@ fn recursive_support_visits_only_new_positive_rows() {
     }
 }
 
+/// Support completion's work for a chain whose range-probed relation grows
+/// by one row each round.
+fn support_work(source: &str) -> GroundingWork {
+    let observer = Observer::default();
+    compile(source, &FormulaLimits::default(), Some(&observer)).unwrap();
+    let records = observer.records.borrow();
+    records
+        .iter()
+        .find(|record| record.phase == GroundingPhase::SupportCompletion)
+        .unwrap()
+        .work
+}
+
+fn range_chain(bound: usize) -> String {
+    format!("next(I,I+1) :- I=0..{bound}. c(0). c(J) :- c(I),next(I,J),I<{bound}.")
+}
+
+#[test]
+fn kept_range_certificates_extend_instead_of_rebuilding() {
+    let work = support_work(&range_chain(64));
+    // One certificate for c's first column, extended by each of 64 new rows.
+    assert_eq!(work.numeric_index_builds, Some(1));
+    assert_eq!(work.numeric_index_extensions, Some(64));
+}
+
+#[test]
+fn range_probes_over_new_rows_keep_chain_work_linear() {
+    // Rebuilding the certificate each round, or visiting every key in range
+    // to select one new row, makes doubling the chain quadruple this work.
+    let small = support_work(&range_chain(256))
+        .support_production_work
+        .unwrap();
+    let large = support_work(&range_chain(512))
+        .support_production_work
+        .unwrap();
+    assert!(large <= 2 * small + small / 10, "{small} -> {large}");
+}
+
+#[test]
+fn kept_column_hulls_keep_assignment_totality_linear() {
+    // q's assignment is certified total over p's whole column every round;
+    // reading that column's hull afresh each round makes the work quadratic.
+    let source =
+        |bound: usize| format!("p(0). p(X+1) :- p(X), X < {bound}. q(T) :- p(I), T = I / 3 + 1.");
+    let small = support_work(&source(256)).support_production_work.unwrap();
+    let large = support_work(&source(512)).support_production_work.unwrap();
+    assert!(large <= 2 * small + small / 10, "{small} -> {large}");
+}
+
 #[test]
 fn arithmetic_counts_describe_the_joined_rule() {
     let observer = Observer::default();

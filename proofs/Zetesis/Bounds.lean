@@ -4,9 +4,9 @@ import Zetesis.Search
 /-!
 # Concrete must/may bounds for reduct search
 
-The objects are a cube of seeds, the region of a search, and two readings of
-a rule's gates under it. `MustGate` requires every gate to hold for every seed
-in the cube. `MayGate` checks each gate's possibility separately; it can hold
+The objects are a search region of seeds and two readings of a rule's gates
+under it. `MustGate` requires every gate to hold for every seed
+in the region. `MayGate` checks each gate's possibility separately; it can hold
 without a single seed satisfying all the gates together. Each reading selects
 rules and gives a least consequence set, `LowerGamma` and
 `UpperGamma`, over the actual normalized rule semantics; positive bodies,
@@ -15,15 +15,15 @@ are approximated.
 
 The central laws are `gamma_sandwich`, that every seed's own closure lies
 between the two; `acceptance_survives_narrowing`, that an accepted seed
-lies in the cube narrowed by them, `Narrow`; `narrowed_contains_accepted`,
+lies in the region narrowed by them, `Narrow`; `narrowed_contains_accepted`,
 that it lies in every region of the narrowing iterated from the undecided
-cube; and `lower_constraint_refutes`, that a constraint whose gates must
+region; and `lower_constraint_refutes`, that a constraint whose gates must
 hold and whose body the lower closure satisfies leaves no accepted seed in
-the cube. `lower_prefix_sound` and `closed_upper_sound` say what an
+the region. `lower_prefix_sound` and `closed_upper_sound` say what an
 unfinished lower run and a closed upper approximation may still claim.
 
 The module rests on `Semantics` for acceptance and on `Search` for the
-cube and its narrowing node, `coverage_narrowed`. That the Rust closures
+region and its narrowing node, `coverage_narrowed`. That the Rust closures
 are the least fixed points of the two consequence operators over the exact
 admitted program, and that the counter enumerates exactly the seeds of a
 counted region, are the Rust obligations.
@@ -36,11 +36,11 @@ open Semantics
 universe u
 variable {α : Type u}
 
-def MustGate (r : Rule α) (c : Cube α) : Prop :=
+def MustGate (r : Rule α) (c : Region α) : Prop :=
   (∀ a, a ∈ r.gateTrue → c.lower a) ∧
   (∀ a, a ∈ r.gateFalse → ¬ c.upper a)
 
-def MayGate (r : Rule α) (c : Cube α) : Prop :=
+def MayGate (r : Rule α) (c : Region α) : Prop :=
   (∀ a, a ∈ r.gateTrue → c.upper a) ∧
   (∀ a, a ∈ r.gateFalse → ¬ c.lower a)
 
@@ -48,26 +48,26 @@ def SelectedConsequence (P : Program α) (enabled : Rule α → Prop) :
     Transformer α :=
   fun X a => ∃ r, r ∈ P ∧ r.head = some a ∧ r.filter ∧ enabled r ∧ Body r X
 
-def LowerConsequence (P : Program α) (c : Cube α) : Transformer α :=
+def LowerConsequence (P : Program α) (c : Region α) : Transformer α :=
   SelectedConsequence P (fun r => MustGate r c)
 
-def UpperConsequence (P : Program α) (c : Cube α) : Transformer α :=
+def UpperConsequence (P : Program α) (c : Region α) : Transformer α :=
   SelectedConsequence P (fun r => MayGate r c)
 
-def LowerGamma (P : Program α) (c : Cube α) : Atoms α :=
+def LowerGamma (P : Program α) (c : Region α) : Atoms α :=
   Least (LowerConsequence P c)
 
-def UpperGamma (P : Program α) (c : Cube α) : Atoms α :=
+def UpperGamma (P : Program α) (c : Region α) : Atoms α :=
   Least (UpperConsequence P c)
 
-def Narrow (P : Program α) (S : Atoms α) (c : Cube α) : Cube α :=
+def Narrow (P : Program α) (S : Atoms α) (c : Region α) : Region α :=
   c.narrow (Inter (LowerGamma P c) S) (Inter (UpperGamma P c) S)
 
-/-- The cube in which no atom is decided: every seed lies in it. A rule is
+/-- The region in which no atom is decided: every seed lies in it. A rule is
 definite here exactly when it has no gate, and possible whatever its gates. -/
-def undecided : Cube α := ⟨fun _ => False, fun _ => True⟩
+def undecided : Region α := ⟨fun _ => False, fun _ => True⟩
 
-theorem gate_sandwich (r : Rule α) {c : Cube α} {z : Atoms α}
+theorem gate_sandwich (r : Rule α) {c : Region α} {z : Atoms α}
     (hz : c.Contains z) :
     (MustGate r c → Gate r z) ∧ (Gate r z → MayGate r c) := by
   constructor
@@ -97,7 +97,7 @@ theorem selected_consequence_refines (P : Program α)
   obtain ⟨r, hr, hh, hf, hg, hb⟩ := ha
   exact ⟨r, hr, hh, hf, h r hg, hb⟩
 
-theorem consequence_sandwich (P : Program α) {c : Cube α} {z : Atoms α}
+theorem consequence_sandwich (P : Program α) {c : Region α} {z : Atoms α}
     (hz : c.Contains z) :
     TBelow (LowerConsequence P c) (Consequence P z) ∧
       TBelow (Consequence P z) (UpperConsequence P c) := by
@@ -106,21 +106,21 @@ theorem consequence_sandwich (P : Program α) {c : Cube α} {z : Atoms α}
   · exact selected_consequence_refines P (fun r => (gate_sandwich r hz).2)
 
 /-- The enclosures hold for every seed in the region, before acceptance is known. -/
-theorem gamma_sandwich (P : Program α) {c : Cube α} {z : Atoms α}
+theorem gamma_sandwich (P : Program α) {c : Region α} {z : Atoms α}
     (hz : c.Contains z) :
     Sub (LowerGamma P c) (Gamma P z) ∧ Sub (Gamma P z) (UpperGamma P c) :=
   ⟨least_mono (consequence_sandwich P hz).1,
    least_mono (consequence_sandwich P hz).2⟩
 
 /-- An unfinished lower run remains a sound lower bound. -/
-theorem lower_prefix_sound (P : Program α) {c : Cube α} {z : Atoms α}
+theorem lower_prefix_sound (P : Program α) {c : Region α} {z : Atoms α}
     (hz : c.Contains z) (n : Nat) :
     Sub (FiniteIter (LowerConsequence P c) n) (Gamma P z) :=
   sub_trans (finiteIter_sound (selected_consequence_mono P _) n)
     (gamma_sandwich P hz).1
 
 /-- An upper approximation must be closed, rather than merely an iteration prefix. -/
-theorem closed_upper_sound (P : Program α) {c : Cube α} {z X : Atoms α}
+theorem closed_upper_sound (P : Program α) {c : Region α} {z X : Atoms α}
     (hz : c.Contains z) (hX : Closed (UpperConsequence P c) X) :
     Sub (Gamma P z) X :=
   sub_trans (gamma_sandwich P hz).2 (least_le hX)
@@ -138,9 +138,9 @@ theorem accepted_seed_agrees {P : Program α} {S z : Atoms α}
 
 /-- No enclosure, agreement, or carrier assumption is left to the caller. -/
 theorem acceptance_survives_narrowing (P : Program α) (S : Atoms α)
-    {c : Cube α} {z : Atoms α} (hc : c.Contains z) (hz : Accept P S z) :
+    {c : Region α} {z : Atoms α} (hc : c.Contains z) (hz : Accept P S z) :
     (Narrow P S c).Contains z := by
-  apply Cube.consequence_narrow_preserves (Accept P S) (Gamma P)
+  apply Region.consequence_narrow_preserves (Accept P S) (Gamma P)
     c S (LowerGamma P c) (UpperGamma P c)
   · intro w hw
     exact accepted_seed_in_carrier hw
@@ -159,24 +159,24 @@ rules fire, belong to every accepted seed, and no accepted seed holds a gate
 atom outside the upper closure, where every gate passes. A seed counter may
 therefore hold the first set in every seed and never offer an atom outside
 the second; it loses no accepted seed, and each seed it returns is still
-checked in full. This is the narrowing of the undecided cube, read for the
+checked in full. This is the narrowing of the undecided region, read for the
 counter that enumerates between the two sets.
 
-Proof outline. Every seed lies in the undecided cube, so narrowing preserves
-the accepted seed (`acceptance_survives_narrowing`); the narrowed cube's two
-sides are the two claims (`Cube.contains_narrow`). -/
+Proof outline. Every seed lies in the undecided region, so narrowing preserves
+the accepted seed (`acceptance_survives_narrowing`); the narrowed region's two
+sides are the two claims (`Region.contains_narrow`). -/
 theorem undecided_bounds_accepted (P : Program α) (S z : Atoms α)
     (hz : Accept P S z) :
     Sub (Inter (LowerGamma P undecided) S) z ∧
       Sub z (Inter (UpperGamma P undecided) S) := by
-  have inside : (undecided : Cube α).Contains z :=
+  have inside : (undecided : Region α).Contains z :=
     ⟨fun _ h => h.elim, fun _ _ => trivial⟩
   have narrowed := acceptance_survives_narrowing P S inside hz
-  exact ⟨(Cube.contains_narrow.mp narrowed).2.1, (Cube.contains_narrow.mp narrowed).2.2⟩
+  exact ⟨(Region.contains_narrow.mp narrowed).2.1, (Region.contains_narrow.mp narrowed).2.2⟩
 
-/-- The regions of the iterated narrowing from the undecided cube: each one
+/-- The regions of the iterated narrowing from the undecided region: each one
 is the previous narrowed by its own two closures. -/
-def narrowed (P : Program α) (S : Atoms α) : Nat → Cube α
+def narrowed (P : Program α) (S : Atoms α) : Nat → Region α
   | 0 => undecided
   | n + 1 => Narrow P S (narrowed P S n)
 
@@ -185,7 +185,7 @@ seed counter may take any pass's bounds, in particular the fixed point where
 a pass changes nothing: the gate atoms of that region's lower closure are
 held in every seed and no gate atom outside its upper closure is offered.
 
-Proof outline. Induction on the pass: every seed lies in the undecided cube,
+Proof outline. Induction on the pass: every seed lies in the undecided region,
 and narrowing preserves an accepted seed (`acceptance_survives_narrowing`). -/
 theorem narrowed_contains_accepted (P : Program α) (S z : Atoms α)
     (hz : Accept P S z) : ∀ n, (narrowed P S n).Contains z
@@ -193,19 +193,19 @@ theorem narrowed_contains_accepted (P : Program α) (S z : Atoms α)
   | n + 1 => acceptance_survives_narrowing P S (narrowed_contains_accepted P S z hz n) hz
 
 /-- This creates the concrete ledger's narrowing node from must/may closure. -/
-def coverage_narrowed (P : Program α) (S : Atoms α) (c : Cube α)
+def coverage_narrowed (P : Program α) (S : Atoms α) (c : Region α)
     (child : CoverageTree (Accept P S) (Narrow P S c)) :
     CoverageTree (Accept P S) c :=
   .narrowed c (Inter (LowerGamma P c) S) (Inter (UpperGamma P c) S)
     (fun _ hc hz =>
-      (Cube.contains_narrow.mp (acceptance_survives_narrowing P S hc hz)).2.1)
+      (Region.contains_narrow.mp (acceptance_survives_narrowing P S hc hz)).2.1)
     (fun _ hc hz =>
-      (Cube.contains_narrow.mp (acceptance_survives_narrowing P S hc hz)).2.2)
+      (Region.contains_narrow.mp (acceptance_survives_narrowing P S hc hz)).2.2)
     child
 
 /-- A contradictory narrowed region refutes every accepted seed in its parent. -/
 theorem inconsistent_narrowing_refutes (P : Program α) (S : Atoms α)
-    (c : Cube α)
+    (c : Region α)
     (inconsistent : ¬ Sub (Narrow P S c).lower (Narrow P S c).upper) :
     ∀ z, c.Contains z → ¬ Accept P S z := by
   intro z hc hz
@@ -214,14 +214,14 @@ theorem inconsistent_narrowing_refutes (P : Program α) (S : Atoms α)
 
 /-- A single lower-true / upper-false atom is a concrete inconsistency witness. -/
 theorem conflicting_atom_refutes (P : Program α) (S : Atoms α)
-    (c : Cube α) (a : α) (hl : (Narrow P S c).lower a)
+    (c : Region α) (a : α) (hl : (Narrow P S c).lower a)
     (hu : ¬ (Narrow P S c).upper a) :
     ∀ z, c.Contains z → ¬ Accept P S z :=
   inconsistent_narrowing_refutes P S c (fun h => hu (h a hl))
 
 /-- Definite activation and a lower-satisfied constraint refute the whole region. -/
 theorem lower_constraint_refutes (P : Program α) (S : Atoms α)
-    (c : Cube α) (r : Rule α) (hr : r ∈ P) (hh : r.head = none)
+    (c : Region α) (r : Rule α) (hr : r ∈ P) (hh : r.head = none)
     (hf : r.filter) (hg : MustGate r c) (hb : Body r (LowerGamma P c)) :
     ∀ z, c.Contains z → ¬ Accept P S z := by
   intro z hc hz
@@ -230,7 +230,7 @@ theorem lower_constraint_refutes (P : Program α) (S : Atoms α)
 
 /-- Partial lower work already suffices to expose a definite constraint violation. -/
 theorem lower_prefix_constraint_refutes (P : Program α) (S : Atoms α)
-    (c : Cube α) (r : Rule α) (hr : r ∈ P) (hh : r.head = none)
+    (c : Region α) (r : Rule α) (hr : r ∈ P) (hh : r.head = none)
     (hf : r.filter) (hg : MustGate r c) (n : Nat)
     (hb : Body r (FiniteIter (LowerConsequence P c) n)) :
     ∀ z, c.Contains z → ¬ Accept P S z := by

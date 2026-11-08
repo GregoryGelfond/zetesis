@@ -1,8 +1,8 @@
 //! Finite inverse matching, structural alternatives and wildcard key identities.
 
 use crate::support::observation_rendering::shown;
+use zetesis_algebra::Cancellation;
 use zetesis_core::Model;
-use zetesis_cpu::Cancellation;
 use zetesis_reference_support::formula;
 use zetesis_themelios::observation::{ErrorKind, EvaluationError, Limits, Resource};
 

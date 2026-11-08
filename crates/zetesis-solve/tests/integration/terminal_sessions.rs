@@ -3,12 +3,13 @@
 use std::{collections::BTreeSet, convert::Infallible, num::NonZeroUsize};
 use zetesis_reference_support::{formula, prepared, resource_limits};
 
+use zetesis_algebra::{Cancellation, Stop};
 use zetesis_core::{Atom, Model, Predicate, Sign, Value, ValueLimits, ValueNode};
-use zetesis_cpu::{Cancellation, Stop};
 use zetesis_solve::{
     Backend, Completion, ExecutionObservation, ExecutionObserver, Grounder, GroundingMode,
-    Interruption, Oracle, PreparedInput, PreparedProfile, Session, SolveConfig, SolveError,
-    SolveMeasurements, SolvePhase, SolveStage, Subject, WorldView, WorldViewError, WorldViewLimits,
+    Interruption, Oracle, Original, PreparedInput, PreparedProfile, Session, SolveConfig,
+    SolveError, SolveMeasurements, SolvePhase, SolveStage, WorldView, WorldViewError,
+    WorldViewLimits,
 };
 use zetesis_test_support::programs::unary as atom;
 use zetesis_themelios::{
@@ -206,16 +207,16 @@ fn reconstruction_uses_answer_truth_not_possible_support() {
         assert!(
             view.answer_sets()
                 .iter()
-                .all(|answer| answer.subject().same_instance(view.subject()))
+                .all(|answer| answer.original().same_instance(view.original()))
         );
         assert!(
-            view.subject()
-                .same_instance(&Subject::TerminalDefinitions(owner.clone()))
+            view.original()
+                .same_instance(&Original::TerminalDefinitions(owner.clone()))
         );
         assert!(
             !view
-                .subject()
-                .same_instance(&Subject::Theory(owner.base_theory().unwrap().clone()))
+                .original()
+                .same_instance(&Original::Theory(owner.base_theory().unwrap().clone()))
         );
     }
 }
@@ -393,9 +394,9 @@ fn explicit_grounding_policies_do_not_acquire_terminal_meaning() {
         ));
         assert!(
             failure
-                .subject()
+                .original()
                 .unwrap()
-                .same_instance(&Subject::TerminalDefinitions(owner.clone()))
+                .same_instance(&Original::TerminalDefinitions(owner.clone()))
         );
     }
 }
@@ -434,9 +435,9 @@ fn pre_cancelled_sessions_retain_the_original_subject_without_reconstruction() {
     assert!(timings.get(SolvePhase::AnswerReconstruction).is_none());
     assert!(
         outcome
-            .subject()
+            .original()
             .unwrap()
-            .same_instance(&Subject::TerminalDefinitions(owner))
+            .same_instance(&Original::TerminalDefinitions(owner))
     );
 }
 
@@ -555,9 +556,9 @@ fn base_observer_failure_preserves_original_identity_without_reconstruction() {
     ));
     assert!(
         failure
-            .subject()
+            .original()
             .unwrap()
-            .same_instance(&Subject::TerminalDefinitions(owner.clone()))
+            .same_instance(&Original::TerminalDefinitions(owner.clone()))
     );
     let outcome = failure.semantic().unwrap();
     assert_eq!(outcome.completion(), None);

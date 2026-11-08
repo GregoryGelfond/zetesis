@@ -2,11 +2,11 @@
 //! flag is parsed here; tests set the existing publication or renderer limits.
 
 use std::io::Write;
+use zetesis_algebra::Cancellation;
 use zetesis_cli::{
     AnswerRenderer, ColorMode, HumanRenderer, PublicationConfig, PublicationOutcome,
     PublicationReport, Report, RunFailure, publish_prepared,
 };
-use zetesis_cpu::Cancellation;
 use zetesis_themelios::{AdmissionOptions, ExpansionLimits, FormulaLimits, ParsedSource};
 
 pub(crate) fn config(arguments: &[&str]) -> PublicationConfig {
@@ -14,7 +14,7 @@ pub(crate) fn config(arguments: &[&str]) -> PublicationConfig {
 }
 
 /// These callers test publication of a supported formula, independently of
-/// source-admission failures and the CLI's relational/formula route selection.
+/// source-admission failures and the CLI's route selection.
 pub(crate) fn formula(
     source: &str,
     config: &PublicationConfig,
@@ -59,30 +59,6 @@ pub(crate) fn human(
     )
 }
 
-/// Explicit relational admission for closure tests; no formula fallback.
-pub(crate) fn relational(
-    source: &str,
-    config: &PublicationConfig,
-    renderer: &mut impl AnswerRenderer,
-    diagnostics: &mut impl Write,
-    cancellation: &Cancellation,
-) -> Result<Report, RunFailure> {
-    let admitted = ParsedSource::new(source.into(), AdmissionOptions::default())
-        .unwrap()
-        .admit_extended(ExpansionLimits::default())
-        .unwrap();
-    publish_prepared(
-        zetesis_cli::PreparedInput::admitted(&admitted),
-        config,
-        renderer,
-        diagnostics,
-        cancellation,
-    )
-    .and_then(PublicationOutcome::into_legacy)
-    .map(PublicationReport::into_report)
-    .map_err(zetesis_cli::PublicationFailure::into_legacy)
-}
-
 pub(crate) fn formula_run(
     source: &str,
     arguments: &[&str],
@@ -104,26 +80,6 @@ pub(crate) fn formula_run(
         result,
         String::from_utf8(output).unwrap(),
         String::from_utf8(diagnostics).unwrap(),
-    )
-}
-
-pub(crate) fn relational_human(
-    source: &str,
-    config: &PublicationConfig,
-    output: &mut impl Write,
-    diagnostics: &mut impl Write,
-    cancellation: &Cancellation,
-) -> Result<Report, RunFailure> {
-    relational(
-        source,
-        config,
-        &mut HumanRenderer::new(
-            output,
-            ColorMode::Never,
-            config.observations.max_output_bytes,
-        ),
-        diagnostics,
-        cancellation,
     )
 }
 
@@ -160,28 +116,4 @@ pub(crate) fn bounded_admission(
         .map_err(|failure| *failure.into_legacy().cause)
     })();
     (result, String::from_utf8(output).unwrap())
-}
-
-/// The report and the JSON document of `source` published on the relational
-/// route under `config`, with the default resources' JSON record and atom
-/// bounds.
-pub(crate) fn relational_json(
-    source: &str,
-    config: &PublicationConfig,
-) -> (Report, serde_json::Value) {
-    let mut output = Vec::new();
-    let resources = zetesis_solve::Resources::default();
-    let report = relational(
-        source,
-        config,
-        &mut zetesis_cli::JsonRenderer::new(
-            &mut output,
-            resources.json_record_bytes(),
-            resources.formula_limits().theory.max_atoms,
-        ),
-        &mut Vec::new(),
-        &Cancellation::default(),
-    )
-    .unwrap();
-    (report, serde_json::from_slice(&output).unwrap())
 }

@@ -3,7 +3,7 @@
 //! Reuses the evaluator benchmark's transcription of the former shared Boolean DP.
 
 use super::{Row, boolean_family};
-use zetesis_cpu::Cancellation;
+use zetesis_algebra::Cancellation;
 use zetesis_ferraris::{
     AdmissionLimits, AggregateComparison, AggregateElement, AggregateFamilyLimits, AggregateGuard,
     FormulaNodes, FormulaParts, Interpretation, Limits, Narrower, Narrowing, NarrowingScratch,
@@ -91,16 +91,16 @@ pub(super) fn run() {
         let theory = theory(representation, &control);
         let narrower = Narrower::new(&theory);
         let mut region = Region::all_open(4);
-        let (outcome, statistics) = narrower
-            .narrow_known(
-                OriginalSubject::new(&theory, None),
-                &mut region,
-                &mut narrower.knowledge(),
-                &mut NarrowingScratch::default(),
-                RegionLimits::default(),
-                &control,
-            )
-            .unwrap();
+        let attempt = narrower.narrow_known(
+            OriginalSubject::new(&theory, None),
+            &mut region,
+            &mut narrower.knowledge(),
+            &mut NarrowingScratch::default(),
+            RegionLimits::default(),
+            &control,
+        );
+        let outcome = attempt.result.unwrap();
+        let statistics = attempt.statistics;
         let mut model_count = 0;
         for mask in 0_u32..16 {
             let candidate =
@@ -124,7 +124,7 @@ pub(super) fn run() {
              preferred={:?} propagation={statistics:?} checked_models={model_count}",
             representation.label(),
             (0..4).map(|atom| region.decision(atom)).collect::<Vec<_>>(),
-            region.split_atom(),
+            attempt.preferred.or_else(|| region.highest_open()),
         );
     }
 }

@@ -1,8 +1,8 @@
 //! Atom-channel membership is shared by charged and uncharged consumers.
 
+use zetesis_algebra::{Cancellation, Stop};
 use zetesis_core::catalog::AtomCatalog;
 use zetesis_core::{Atom, Predicate, Sign, Value};
-use zetesis_cpu::{Cancellation, Stop};
 use zetesis_reference_support::resource_limits;
 use zetesis_themelios::{AtomSelection, AtomSelectionLimits, PreparedSelection, observation};
 
@@ -114,7 +114,7 @@ fn constant_selections_need_no_signature_probe() {
 #[test]
 fn source_selection_matches_explicit_union_construction() {
     use std::fmt::Write;
-    use zetesis_themelios::{AdmissionOptions, ExpansionLimits, admit_extended};
+    use zetesis_themelios::FormulaLimits;
 
     let signatures: Vec<_> = (0..256)
         .rev()
@@ -146,12 +146,7 @@ fn source_selection_matches_explicit_union_construction() {
         )
         .unwrap();
     }
-    let admitted = admit_extended(
-        source,
-        AdmissionOptions::default(),
-        ExpansionLimits::default(),
-    )
-    .unwrap();
+    let admitted = zetesis_reference_support::admit(&source, &FormulaLimits::default()).unwrap();
     let expected =
         AtomSelection::from_signatures(&signatures, AtomSelectionLimits::default()).unwrap();
     assert_eq!(admitted.metadata().atom_selection(), &expected);

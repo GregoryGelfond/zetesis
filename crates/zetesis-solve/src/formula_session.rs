@@ -3,24 +3,35 @@
 use crate::ExecutionObservation as Event;
 use crate::execution_observation::ExecutionSink;
 use std::cell::Cell;
+use std::cmp::Ordering;
+use std::ops::ControlFlow;
+use std::sync::Arc;
 
+use zetesis_algebra::Cancellation;
 use zetesis_core::{Model, ModelOrder};
-use zetesis_cpu::Cancellation;
 use zetesis_objective::Score;
-use zetesis_sat::StableModels;
+use zetesis_stable::{LearnedStore, StableModels};
 
 use crate::countermodel::Input;
 use crate::formula_execution::{Failure, MembershipExecution};
 use crate::objective_bounds::{Bounds, Preparation};
 use crate::optimization::Incumbents;
 use crate::phase_timing::{Recorder, SolvePhase};
-use crate::{AnswerSelection, Interruption, SearchState, SemanticOutcome, SolveConfig, SolveError};
+use crate::{
+    AnswerSelection, Interruption, Optimization, SearchState, SemanticOutcome, SolveConfig,
+    SolveError,
+};
 
 pub(crate) struct FormulaSession<'a, E> {
     input: Input<'a>,
     selection: AnswerSelection,
     execution: Option<E>,
     models: Option<StableModels>,
+    /// The latest construction prefix until a complete stream owns it. On a
+    /// failed tie-pass construction this follows the retained earlier stream.
+    candidate_setup: Option<zetesis_stable::Statistics>,
+    /// The learned rows this solve's streams share, unless sharing is off.
+    learned: Option<Arc<LearnedStore>>,
     model_order: Option<ModelOrder<'a>>,
     construction: Option<crate::model_construction::Account>,
     objective_plan: Option<Preparation>,
@@ -32,19 +43,49 @@ pub(crate) struct FormulaSession<'a, E> {
     pending_error: Option<SolveError>,
     // This session's last imported cumulative prefix, independently of every
     // other session sharing the host recorder. Repeated outcomes import no work.
-    imported_timings: Cell<zetesis_sat::SearchPhaseTimings>,
+    imported_timings: Cell<zetesis_stable::SearchPhaseTimings>,
+    // The streamed constraints an owning session installed, which a tie
+    // pass's fresh stream installs again.
+    streamed_constraints: Option<std::sync::Arc<zetesis_stable::StreamedConstraints>>,
+    // While a tie pass runs: how many of the retained optima the strict
+    // search found, which the pass meets again and must not retain twice.
+    tie_pass: Option<usize>,
+    // The strict search exhausted at the optimum before its tie pass: a stop
+    // of that pass leaves the optimal family incomplete, not the optimum
+    // unproved.
+    optimum_established: bool,
+}
+
+/// What one pull returns: the next answer with its score, a fault, or the end
+/// of the answers.
+type Next = Option<Result<(Model, Option<Score>), SolveError>>;
+
+/// How the start of a tie pass ended.
+enum TiePass {
+    /// No tie pass is owed: the stream's end finishes the session.
+    Skipped,
+    /// A fresh stream bounded to cost at most the optimum replaced the
+    /// exhausted one.
+    Started,
+    /// The pass could not start; the proved optimum stands, and the family
+    /// is reported without a claim of completeness.
+    Stopped(zetesis_stable::Incomplete),
+    /// An execution or observation fault.
+    Failed(SolveError),
 }
 
 impl<'a, E: MembershipExecution> FormulaSession<'a, E> {
-    /// Install an original-only source restriction before the first proposal.
-    /// An already stopped initialization has no traversal left to configure.
-    pub(crate) fn set_region_filter(
+    /// Check the owner's streamed constraints over candidate regions, from the
+    /// first proposal on. An already stopped initialization has no traversal
+    /// left to configure.
+    pub(crate) fn set_streamed_constraints(
         &mut self,
-        filter: std::sync::Arc<dyn zetesis_sat::RegionFilter>,
+        constraints: std::sync::Arc<zetesis_stable::StreamedConstraints>,
         phases: &Recorder,
     ) {
+        self.streamed_constraints = Some(constraints.clone());
         if let Some(models) = self.models.as_mut()
-            && let Err(error) = models.set_region_filter(filter)
+            && let Err(error) = models.set_streamed_constraints(constraints)
         {
             self.complete(
                 SearchState::Interrupted(Interruption::Countermodel(error)),
@@ -54,9 +95,16 @@ impl<'a, E: MembershipExecution> FormulaSession<'a, E> {
     }
 
     /// Stop candidate production and join native workers without cancelling the
-    /// caller's shared token. Refresh receipts after the workers have settled.
-    pub(crate) fn stop(&mut self, phases: &Recorder) -> Result<(), zetesis_sat::Incomplete> {
+    /// caller's shared token. A device execution then reads its last batch's
+    /// compute-pass interval, unless the session's control, which it kept from
+    /// construction, has fired. Every completion, failure and stop of this
+    /// session or of an owning hybrid or terminal-definition session passes
+    /// here. Refresh receipts after the workers and the execution have settled.
+    pub(crate) fn stop(&mut self, phases: &Recorder) -> Result<(), zetesis_stable::Incomplete> {
         let result = self.models.as_mut().map_or(Ok(()), StableModels::stop);
+        if let Some(execution) = self.execution.as_mut() {
+            execution.settle(phases);
+        }
         if let Some(previous) = self.final_outcome.take() {
             let mut outcome = self.snapshot(phases);
             outcome.search_state = previous.search_state;
@@ -83,7 +131,16 @@ impl<'a, E: MembershipExecution> FormulaSession<'a, E> {
         if let Err(error) = session.initialize(config, observations, cancellation, phases) {
             session.fail(error, phases);
         }
+        session.hand_learned_store();
         session
+    }
+
+    /// Hand the solve's learned store to the membership execution once both
+    /// exist.
+    fn hand_learned_store(&mut self) {
+        if let (Some(execution), Some(store)) = (self.execution.as_mut(), &self.learned) {
+            execution.learned_store(Arc::clone(store));
+        }
     }
 
     fn uninitialized(input: Input<'a>, selection: AnswerSelection) -> Self {
@@ -96,6 +153,8 @@ impl<'a, E: MembershipExecution> FormulaSession<'a, E> {
             },
             execution: None,
             models: None,
+            candidate_setup: None,
+            learned: None,
             model_order: None,
             construction: None,
             objective_plan: None,
@@ -105,8 +164,45 @@ impl<'a, E: MembershipExecution> FormulaSession<'a, E> {
             yielded: 0,
             final_outcome: None,
             pending_error: None,
-            imported_timings: Cell::new(zetesis_sat::SearchPhaseTimings::default()),
+            imported_timings: Cell::new(zetesis_stable::SearchPhaseTimings::default()),
+            streamed_constraints: None,
+            tie_pass: None,
+            optimum_established: false,
         }
+    }
+
+    /// The candidate stream this session's configuration selects over its
+    /// theory, within `limits`: native region workers, device region
+    /// producers, or one walk.
+    fn candidate_stream(
+        &self,
+        config: &SolveConfig,
+        limits: zetesis_stable::Limits,
+        cancellation: &Cancellation,
+        phases: &Recorder,
+    ) -> zetesis_stable::ConstructionAttempt {
+        phases.measure(SolvePhase::CandidateSetup, || {
+            // CPU workers decide their own leaves. Device producers return
+            // unchecked leaves to the bounded batch protocol and join before
+            // membership execution starts.
+            if let Some(workers) = config.region_workers() {
+                StableModels::prepare_with_region_workers(
+                    self.input.theory,
+                    workers,
+                    limits,
+                    cancellation.clone(),
+                )
+            } else if config.workers.get() > 1 {
+                StableModels::prepare_with_region_producers(
+                    self.input.theory,
+                    config.workers,
+                    limits,
+                    cancellation.clone(),
+                )
+            } else {
+                StableModels::prepare(self.input.theory, limits, cancellation.clone())
+            }
+        })
     }
 
     fn initialize(
@@ -143,34 +239,10 @@ impl<'a, E: MembershipExecution> FormulaSession<'a, E> {
             }
             Err(crate::model_construction::Failure::Run(error)) => return Err(error),
         }
-        let models = phases.measure(SolvePhase::CandidateSetup, || {
-            // CPU workers decide their own leaves. Device producers return
-            // unchecked leaves to the bounded batch protocol and join before
-            // membership execution starts.
-            if let Some(workers) = config.region_workers() {
-                StableModels::with_region_workers(
-                    self.input.theory,
-                    workers,
-                    crate::countermodel::search_limits(config),
-                    cancellation.clone(),
-                )
-            } else if config.search == crate::SearchMethod::Regions && config.workers.get() > 1 {
-                StableModels::with_region_producers(
-                    self.input.theory,
-                    config.workers,
-                    crate::countermodel::search_limits(config),
-                    cancellation.clone(),
-                )
-            } else {
-                StableModels::with_method(
-                    self.input.theory,
-                    config.search,
-                    crate::countermodel::search_limits(config),
-                    cancellation.clone(),
-                )
-            }
-        });
-        let mut models = match models {
+        let limits = crate::countermodel::search_limits(config);
+        let models = self.candidate_stream(config, limits, cancellation, phases);
+        self.candidate_setup = Some(models.statistics);
+        let mut models = match models.result {
             Ok(models) => models,
             Err(error) => {
                 self.complete(
@@ -180,16 +252,29 @@ impl<'a, E: MembershipExecution> FormulaSession<'a, E> {
                 return Ok(());
             }
         };
+        models.set_query_division(config.query_division);
         if config.stats {
             models.enable_phase_timing();
         }
         // Ownership is established before any fallible certificate/diagnostic
         // operation, so its attempted work remains available on failure.
         self.models = Some(models);
-        if config.region_workers().is_none()
-            && config.search == crate::SearchMethod::Regions
-            && config.workers.get() > 1
-        {
+        self.candidate_setup = None;
+        // One store for this solve call: every stream the session builds
+        // shares it, and so does the membership execution.
+        if config.share_learned_rows {
+            let store = Arc::new(LearnedStore::new());
+            let models = self.models.as_mut().expect("candidate stream installed");
+            if let Err(error) = models.set_learned_store(Arc::clone(&store)) {
+                self.complete(
+                    SearchState::Interrupted(Interruption::Countermodel(error)),
+                    phases,
+                );
+                return Ok(());
+            }
+            self.learned = Some(store);
+        }
+        if config.region_workers().is_none() && config.workers.get() > 1 {
             observations.record(Event::ParallelProposals {
                 workers: config.workers,
             })?;
@@ -243,6 +328,25 @@ impl<'a, E: MembershipExecution> FormulaSession<'a, E> {
             preparation.observe(observations)?;
         }
         self.bounds = Bounds::new(config);
+        // An optimizing search tightens the candidate bound with each better
+        // answer, so its producers share one frontier: production then stays
+        // where the latest splits are, and older regions wait for the tighter
+        // bounds that can refute them near the root.
+        if self.selection == AnswerSelection::Optimal
+            && self.bounds.is_enabled()
+            && self
+                .objective_plan
+                .as_ref()
+                .and_then(Preparation::plan)
+                .is_some()
+            && let Some(models) = self.models.as_mut()
+            && let Err(error) = models.expect_candidate_bounds()
+        {
+            self.complete(
+                SearchState::Interrupted(Interruption::Countermodel(error)),
+                phases,
+            );
+        }
         Ok(())
     }
 
@@ -311,11 +415,19 @@ impl<'a, E: MembershipExecution> FormulaSession<'a, E> {
                 .models
                 .as_mut()
                 .expect("unfinished session has a candidate stream");
-            let next = self
+            let execution = self
                 .execution
                 .as_mut()
-                .expect("unfinished session has a membership executor")
-                .next(models, config, cancellation, phases);
+                .expect("unfinished session has a membership executor");
+            // An enumeration owes the answers it has not yet yielded; a
+            // request of zero is unbounded.
+            let enumerates = self.selection == AnswerSelection::All;
+            execution.demand(
+                enumerates,
+                (enumerates && config.models != 0)
+                    .then(|| config.models.saturating_sub(self.yielded)),
+            );
+            let next = execution.next(models, config, cancellation, phases);
             let interpretation = match next {
                 Some(Ok(model)) => model,
                 Some(Err(Failure::Search(error))) => {
@@ -329,7 +441,10 @@ impl<'a, E: MembershipExecution> FormulaSession<'a, E> {
                     self.fail(error, phases);
                     return self.pending_error.take().map(Err);
                 }
-                None => return self.finish_candidate_stream(phases),
+                None => match self.end_of_stream(config, observations, cancellation, phases) {
+                    ControlFlow::Continue(()) => continue,
+                    ControlFlow::Break(result) => return result,
+                },
             };
             let model =
                 match self.construct_model(interpretation.atoms(), config, cancellation, phases) {
@@ -348,42 +463,107 @@ impl<'a, E: MembershipExecution> FormulaSession<'a, E> {
             if self.selection == AnswerSelection::All {
                 return self.score_model(model, &interpretation, config, cancellation, phases);
             }
-            let scored = phases.measure(SolvePhase::ObjectiveScoringRetention, || {
-                self.incumbents.consider(
-                    self.input.objectives,
-                    model,
+            if let ControlFlow::Break(result) = self.select_optimal(
+                model,
+                &interpretation,
+                config,
+                observations,
+                cancellation,
+                phases,
+            ) {
+                return result;
+            }
+        }
+    }
+
+    /// Score and retain one verified model of an optimizing search, and bound
+    /// the candidates by it when it improves the incumbent. Continue to search
+    /// on, or break with what the pull returns.
+    fn select_optimal(
+        &mut self,
+        model: Model,
+        interpretation: &zetesis_ferraris::Interpretation,
+        config: &SolveConfig,
+        observations: &mut impl ExecutionSink,
+        cancellation: &Cancellation,
+        phases: &Recorder,
+    ) -> ControlFlow<Next> {
+        if let Some(revisit) = self.tie_pass
+            && self.incumbents.holds_among(revisit, &model)
+        {
+            // The strict search already retained this optimum.
+            return ControlFlow::Continue(());
+        }
+        let scored = phases.measure(SolvePhase::ObjectiveScoringRetention, || {
+            self.incumbents.consider(
+                self.input.objectives,
+                model,
+                config,
+                cancellation,
+                self.objective_plan
+                    .as_ref()
+                    .and_then(Preparation::plan)
+                    .map(|plan| (plan, interpretation)),
+            )
+        });
+        match scored {
+            Ok(true) if self.tie_pass.is_some() => {
+                // The strict search's exhaustion proved that nothing is
+                // cheaper, so this cannot occur; if it did, the pass, under
+                // a bound it never tightens, still meets every model at
+                // the better cost, and the retained models are its own.
+                self.tie_pass = Some(0);
+            }
+            Ok(true) => {
+                let _feedback = (config.max_objective_bound_work != 0)
+                    .then(|| phases.start(SolvePhase::ObjectiveFeedback));
+                let improved = self.bounds.improve(
+                    self.objective_plan.as_ref().and_then(Preparation::plan),
+                    self.incumbents
+                        .score()
+                        .expect("retained improvement has a score"),
+                    self.models.as_mut().expect("owned candidate stream"),
                     config,
+                    observations,
                     cancellation,
-                    self.objective_plan
-                        .as_ref()
-                        .and_then(Preparation::plan)
-                        .map(|plan| (plan, &interpretation)),
-                )
-            });
-            match scored {
-                Ok(true) => {
-                    let _feedback = (config.max_objective_bound_work != 0)
-                        .then(|| phases.start(SolvePhase::ObjectiveFeedback));
-                    let improved = self.bounds.improve(
-                        self.objective_plan.as_ref().and_then(Preparation::plan),
-                        self.incumbents
-                            .score()
-                            .expect("retained improvement has a score"),
-                        self.models.as_mut().expect("owned candidate stream"),
-                        config,
-                        observations,
-                        cancellation,
-                    );
-                    if let Err(error) = improved {
-                        self.fail(error, phases);
-                        return self.pending_error.take().map(Err);
-                    }
+                );
+                if let Err(error) = improved {
+                    self.fail(error, phases);
+                    return ControlFlow::Break(self.pending_error.take().map(Err));
                 }
-                Ok(false) => {}
-                Err(reason) => {
-                    self.complete(SearchState::Interrupted(reason), phases);
-                    return self.next_retained().map(Ok);
-                }
+            }
+            Ok(false) => {}
+            Err(reason) => {
+                self.complete(SearchState::Interrupted(reason), phases);
+                return ControlFlow::Break(self.next_retained().map(Ok));
+            }
+        }
+        ControlFlow::Continue(())
+    }
+
+    /// At the end of a candidate stream, begin the tie pass when one is owed
+    /// and continue to search it, or break with what the finished search
+    /// returns.
+    fn end_of_stream(
+        &mut self,
+        config: &SolveConfig,
+        observations: &mut impl ExecutionSink,
+        cancellation: &Cancellation,
+        phases: &Recorder,
+    ) -> ControlFlow<Next> {
+        match self.begin_tie_pass(config, observations, cancellation, phases) {
+            TiePass::Started => ControlFlow::Continue(()),
+            TiePass::Skipped => ControlFlow::Break(self.finish_candidate_stream(phases)),
+            TiePass::Stopped(error) => {
+                self.complete(
+                    SearchState::Interrupted(Interruption::Countermodel(error)),
+                    phases,
+                );
+                ControlFlow::Break(self.next_retained().map(Ok))
+            }
+            TiePass::Failed(error) => {
+                self.fail(error, phases);
+                ControlFlow::Break(self.pending_error.take().map(Err))
             }
         }
     }
@@ -464,6 +644,118 @@ impl<'a, E: MembershipExecution> FormulaSession<'a, E> {
         }
     }
 
+    /// At the end of a candidate stream under strict bounds, start the tie
+    /// pass when one is owed: more than one optimal answer is requested, and
+    /// the last installed bound, strict at the optimum, pruned its ties. The
+    /// exhausted stream proved that no model is cheaper than the optimum; a
+    /// fresh stream over the same theory, with the same certificate and
+    /// streamed constraints and bounded to cost at most the optimum, then
+    /// enumerates every optimal model, each once. It reports its receipts after
+    /// the exhausted stream's, and only its exhaustion completes the optimal
+    /// family; a stop from here on leaves that family incomplete and the
+    /// optimum proved. Its one bound never tightens, so the fresh stream
+    /// declares no candidate bounds: its producers walk apart, as an
+    /// enumeration's do.
+    fn begin_tie_pass(
+        &mut self,
+        config: &SolveConfig,
+        observations: &mut impl ExecutionSink,
+        cancellation: &Cancellation,
+        phases: &Recorder,
+    ) -> TiePass {
+        if self.tie_pass.is_some()
+            || self.selection != AnswerSelection::Optimal
+            || config.models == 1
+        {
+            return TiePass::Skipped;
+        }
+        let Some(optimum) = self.incumbents.score().cloned() else {
+            return TiePass::Skipped;
+        };
+        if self
+            .bounds
+            .pruned_ties_at()
+            .is_none_or(|pruned| pruned.compare_costs(&optimum) != Ordering::Equal)
+        {
+            return TiePass::Skipped;
+        }
+        let earlier = self
+            .models
+            .as_mut()
+            .expect("unfinished session has a candidate stream");
+        if !earlier.exhausted() {
+            // Finishing the stream reports that it did not exhaust.
+            return TiePass::Skipped;
+        }
+        // The exhausted strict search proved that no model is cheaper than
+        // the optimum; whatever stops the tie pass, that proof stands.
+        self.optimum_established = true;
+        if let Err(error) = earlier.stop() {
+            return TiePass::Stopped(error);
+        }
+        // The run's cumulative limits cover both passes together.
+        let limits =
+            crate::countermodel::search_limits(config).remaining_after(&earlier.statistics());
+        let attempt = self.candidate_stream(config, limits, cancellation, phases);
+        self.candidate_setup = Some(attempt.statistics);
+        let mut fresh = match attempt.result {
+            Ok(fresh) => fresh,
+            Err(error) => return TiePass::Stopped(error),
+        };
+        if config.stats {
+            fresh.enable_phase_timing();
+        }
+        if let Err(error) = fresh.follow(self.models.as_ref().expect("exhausted stream")) {
+            return TiePass::Stopped(error);
+        }
+        // The fresh stream reports the exhausted one's receipts with its own,
+        // so it owns them before any fallible step, whose attempted work then
+        // remains in the session's receipts.
+        let fresh = self.models.insert(fresh);
+        self.candidate_setup = None;
+        // The same certificate as the strict search's, already reported.
+        match crate::countermodel::prepare_certificate(
+            fresh,
+            self.input.certificate_order,
+            config,
+            &mut crate::execution_observation::Ignore,
+            phases,
+        ) {
+            Ok(None) => {}
+            Ok(Some(error)) => return TiePass::Stopped(error),
+            Err(error) => return TiePass::Failed(error),
+        }
+        if let Some(constraints) = self.streamed_constraints.clone()
+            && let Err(error) = fresh.set_streamed_constraints(constraints)
+        {
+            return TiePass::Stopped(error);
+        }
+        // The tie pass is another stream of this solve call, so it shares the
+        // call's learned store: the strict pass's rows seed its walk.
+        if let Some(store) = self.learned.clone()
+            && let Err(error) = fresh.set_learned_store(store)
+        {
+            return TiePass::Stopped(error);
+        }
+        if let Err(error) = observations.record(Event::ObjectiveTiePass {
+            costs: optimum.costs(),
+        }) {
+            return TiePass::Failed(error);
+        }
+        if let Err(error) = self.bounds.bound_ties(
+            self.objective_plan.as_ref().and_then(Preparation::plan),
+            &optimum,
+            fresh,
+            config,
+            observations,
+            cancellation,
+        ) {
+            return TiePass::Failed(error);
+        }
+        self.tie_pass = Some(self.incumbents.begin_tie_pass());
+        TiePass::Started
+    }
+
     fn finish_candidate_stream(
         &mut self,
         phases: &Recorder,
@@ -532,29 +824,39 @@ impl<'a, E: MembershipExecution> FormulaSession<'a, E> {
     }
 
     fn snapshot(&self, phases: &Recorder) -> SemanticOutcome {
-        let statistics = self.models.as_ref().map(StableModels::statistics);
+        let statistics = match (
+            self.models.as_ref().map(StableModels::statistics),
+            self.candidate_setup,
+        ) {
+            (Some(earlier), Some(setup)) => Some(earlier.followed_by(&setup)),
+            (earlier, setup) => setup.or(earlier),
+        };
         self.import_timings(
             phases,
             statistics.and_then(|statistics| statistics.phase_timings),
         );
         SemanticOutcome {
             projection: None,
-            subject: Some(crate::Subject::Theory(self.input.theory.clone())),
+            original: Some(crate::Original::Theory(self.input.theory.clone())),
             selection: Some(self.selection),
             verified: statistics.map_or(0, |s| s.stable_models),
             scored: self.incumbents.scored(),
             retained: self.incumbents.retained(),
             search_state: None,
-            optimization: self.incumbents.metadata().cloned(),
+            optimum_established: self.optimum_established,
+            optimization: self.incumbents.metadata().map(|best| Optimization {
+                // A strict bound at the optimum pruned its ties, and no tie
+                // pass began to count them again.
+                ties_pruned: self.tie_pass.is_none()
+                    && self
+                        .bounds
+                        .pruned_ties_at()
+                        .is_some_and(|pruned| pruned.compare_costs(&best.score) == Ordering::Equal),
+                ..best.clone()
+            }),
             objective_work: self.incumbents.work(),
             checked: statistics.map_or(0, |s| s.candidates),
-            gate_atoms: self.input.gate_atoms,
-            candidate_statistics: None,
             countermodel_statistics: statistics,
-            lazy_execution: None,
-            shared_execution: None,
-            closure_execution: None,
-            query_execution: None,
             hybrid_execution: None,
             terminal_execution: None,
             source_evaluation: None,
@@ -569,7 +871,11 @@ impl<'a, E: MembershipExecution> FormulaSession<'a, E> {
         }
     }
 
-    fn import_timings(&self, phases: &Recorder, timing: Option<zetesis_sat::SearchPhaseTimings>) {
+    fn import_timings(
+        &self,
+        phases: &Recorder,
+        timing: Option<zetesis_stable::SearchPhaseTimings>,
+    ) {
         if let Some(timing) = timing {
             phases.search(self.imported_timings.replace(timing), timing);
         }
@@ -580,6 +886,23 @@ impl<'a, E: MembershipExecution> FormulaSession<'a, E> {
 mod tests;
 
 impl<'a> FormulaSession<'a, crate::formula_execution::Execution> {
+    #[cfg(feature = "gpu")]
+    pub(crate) fn observe_samples(&self, stats: &mut crate::ResidualHandoverStatistics) {
+        if let Some(crate::formula_execution::Execution::Hybrid { queue, .. }) = &self.execution {
+            queue.observe_samples(stats);
+        }
+    }
+
+    #[cfg(feature = "gpu")]
+    pub(crate) fn run_samples_mut(
+        &mut self,
+    ) -> Option<&mut crate::residual_handovers::sampling::RunSamples> {
+        match self.execution.as_mut()? {
+            crate::formula_execution::Execution::Hybrid { queue, .. } => queue.run_samples_mut(),
+            _ => None,
+        }
+    }
+
     /// Own semantic preparation before choosing its execution route. A stopped
     /// preparation retains its receipts without constructing a device pipeline.
     /// Route construction keeps the ordinary session's fallible start door.
@@ -606,9 +929,11 @@ impl<'a> FormulaSession<'a, crate::formula_execution::Execution> {
                     config,
                     resources,
                     plan,
+                    cancellation,
                     observations,
                 )
             })?);
+            session.hand_learned_store();
         }
         Ok(session)
     }

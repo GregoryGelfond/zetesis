@@ -1,32 +1,13 @@
-use std::cell::Cell;
-
 use super::*;
 use crate::formula::Compiled;
 use crate::formula_ground::ground;
 use crate::formula_support::testing;
 use crate::test_support::compiled_atoms;
 use crate::{ExpansionLimits, FormulaLimits};
-use zetesis_cpu::Cancellation;
+use zetesis_algebra::Cancellation;
 use zetesis_ferraris::{Interpretation, Limits, RegionLimits, models, models_reduct, producers};
 
-thread_local! {
-    static ENABLED: Cell<bool> = const { Cell::new(true) };
-}
-
-pub(super) fn enabled() -> bool {
-    ENABLED.get()
-}
-
-fn without<T>(run: impl FnOnce() -> T) -> T {
-    struct Restore(bool);
-    impl Drop for Restore {
-        fn drop(&mut self) {
-            ENABLED.set(self.0);
-        }
-    }
-    let _restore = Restore(ENABLED.replace(false));
-    run()
-}
+use crate::test_support::without_pair_exclusions as without;
 
 fn compile(source: &str) -> Compiled {
     ground(testing::prepare(source), None, None).unwrap()

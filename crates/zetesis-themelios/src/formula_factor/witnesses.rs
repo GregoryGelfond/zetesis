@@ -5,8 +5,8 @@ use crate::formula_ground::{ground, ground_retained};
 use crate::formula_support::testing;
 use crate::test_support::compiled_atoms;
 use crate::{ExpansionFailure, FormulaFailure, FormulaResource};
+use zetesis_algebra::Cancellation;
 use zetesis_core::Atom;
-use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{Interpretation, Limits, models, models_reduct};
 
 fn compile(source: &str, factored: bool) -> (Compiled, Counts) {
@@ -220,7 +220,7 @@ fn interrupted_factoring_never_publishes_a_theory() {
         };
         assert_eq!(
             error.interruption(),
-            Some(zetesis_cpu::Stop::Cancelled),
+            Some(zetesis_algebra::Stop::Cancelled),
             "{error:?}"
         );
         assert_eq!(counts.runs, 1);

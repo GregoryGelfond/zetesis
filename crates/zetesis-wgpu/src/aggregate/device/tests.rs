@@ -6,6 +6,11 @@ use zetesis_ferraris::native_aggregate::Function;
 use zetesis_theory_support::aggregate as reference;
 
 #[test]
+fn the_aggregate_kernel_translates_to_spirv() {
+    crate::spirv_translation::assert_profile_translates(&GpuAggregateOracle::profile());
+}
+
+#[test]
 fn granted_aggregate_resources_are_checked_individually() {
     let limits = wgpu::Limits::default();
     assert!(check_limits(&limits).is_ok());
@@ -47,15 +52,19 @@ fn corrupt_identity(selection: GpuSelection) -> GpuAggregateOracle {
     // is deliberately corrupt, so successful submissions cannot become verdicts.
     let shader = SHADER.replace("output[result] = dimensions.epoch;", "output[result] = 0u;");
     assert_ne!(shader, SHADER);
-    let runtime = pollster::block_on(Runtime::new(
-        GpuOptions::default(),
-        selection,
+    let runtime = pollster::block_on(Runtime::open(
+        crate::GpuDeviceSource::Selected {
+            options: GpuOptions::default(),
+            selection,
+            timing: false,
+        },
         DeviceProfile {
             device_label: "aggregate malformed readback control",
             shader_label: "aggregate corrupted epoch control",
             pipeline_label: "aggregate invalid result control",
             shader: shader.into(),
             entry_point: "reduce",
+            dense_entry_point: None,
             kernel: crate::kernel::Kernel::Fixed,
             validate_limits: check_limits,
         },
@@ -129,25 +138,7 @@ fn invalidates_shared_primitive(backend: GpuApi) {
     assert!(aggregate.info().is_hardware_gpu());
     let context = aggregate.context().clone();
     let mut formula = crate::GpuFormulaOracle::from_context(&context).unwrap();
-    let mut lazy = crate::GpuLazyOracle::from_context(&context).unwrap();
     assert!(formula.context().same_instance(aggregate.context()));
-    assert!(lazy.context().same_instance(aggregate.context()));
-    let empty = zetesis_core::Program::new(
-        vec![],
-        zetesis_core::FactTables::default(),
-        zetesis_core::AdmissionLimits::default(),
-    )
-    .unwrap();
-    let empty_batch = lazy
-        .check_batch(
-            &empty,
-            &[],
-            zetesis_cpu::lazy::Limits::default(),
-            crate::GpuLimits::default(),
-            &Cancellation::default(),
-        )
-        .unwrap();
-    assert!(empty_batch.checks.is_empty());
     let theory = reference::theory();
     let group = reference::group(&theory, Function::Sum, 1);
     let worlds = reference::worlds(&theory);
@@ -174,35 +165,6 @@ fn invalidates_shared_primitive(backend: GpuApi) {
         .propagate_batch(&theory, &[], crate::FormulaLimits::default())
         .unwrap_err();
     assert_eq!(failure.kind(), GpuErrorKind::Device);
-    let failure = lazy
-        .check_batch(
-            &empty,
-            &[],
-            zetesis_cpu::lazy::Limits::default(),
-            crate::GpuLimits::default(),
-            &Cancellation::default(),
-        )
-        .unwrap_err();
-    assert!(matches!(failure.cause,
-        zetesis_cpu::lazy::Cause::Execution(error) if error.kind() == GpuErrorKind::Device
-    ));
-    assert_eq!(failure.progress, zetesis_cpu::lazy::Progress::default());
-    assert_eq!(lazy.statistics().dispatches, 0);
-    let cancelled = Cancellation::default();
-    cancelled.cancel();
-    let failure = lazy
-        .check_batch(
-            &empty,
-            &[],
-            zetesis_cpu::lazy::Limits::default(),
-            crate::GpuLimits::default(),
-            &cancelled,
-        )
-        .unwrap_err();
-    assert!(matches!(
-        failure.cause,
-        zetesis_cpu::lazy::Cause::Source(zetesis_cpu::Stop::Cancelled)
-    ));
     aggregate.clear_residency();
     formula.clear_residency();
     assert!(matches!(

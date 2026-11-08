@@ -20,8 +20,10 @@
 //! Allocation, global work refusal, cancellation and deadlines remain typed
 //! failures. No condition-dependent result or proof is retained between calls.
 
-use crate::regions::{Closure, Count, Narrower, Step, Work, bit};
-use zetesis_cpu::Stop;
+use zetesis_algebra::{Failure, Quota};
+
+use crate::regions::{Closure, Count, Meter, Narrower, Step, bit};
+use zetesis_algebra::{Stop, words::Words};
 
 use super::{Row, State};
 
@@ -63,42 +65,47 @@ impl Plan {
 }
 
 #[derive(Debug, PartialEq, Eq)]
-enum Failure {
+enum AttemptFailure<E> {
     Declined,
-    Stopped(Stop),
+    Stopped(Failure<E>),
 }
 
-impl From<Stop> for Failure {
+impl<E> From<Stop> for AttemptFailure<E> {
     fn from(stop: Stop) -> Self {
-        Self::Stopped(stop)
+        Self::Stopped(Failure::Stopped(stop))
     }
 }
 
-struct Allowance<'a, 'q> {
-    remaining: usize,
-    work: &'a mut Work<'q>,
+impl<E> From<Failure<E>> for AttemptFailure<E> {
+    fn from(failure: Failure<E>) -> Self {
+        Self::Stopped(failure)
+    }
 }
 
-impl Allowance<'_, '_> {
-    fn tick(&mut self) -> Result<(), Failure> {
-        if self.remaining == 0 {
-            return Err(Failure::Declined);
+struct Allowance<'a, 'q, Q: Quota + ?Sized> {
+    remaining: u64,
+    work: &'a mut Meter<'q, Q>,
+}
+
+impl<Q: Quota + ?Sized> Allowance<'_, '_, Q> {
+    fn tick(&mut self) -> Result<(), AttemptFailure<Q::Error>> {
+        if self.work.tick_within(&mut self.remaining)? {
+            Ok(())
+        } else {
+            Err(AttemptFailure::Declined)
         }
-        self.work.tick()?;
-        self.remaining -= 1;
-        Ok(())
     }
 }
 
-impl<C: Count> Closure<'_, C> {
+impl<W: Count, C: crate::regions::ReadingClass> Closure<'_, W, C> {
     /// Called only when the preceding residual check left all queues drained.
     /// No deductions are published by this operation.
-    pub(in crate::regions) fn threshold_possible_sums(
+    pub(in crate::regions) fn threshold_possible_sums<Q: Quota + ?Sized>(
         &mut self,
         index: &Narrower,
         row: usize,
-        work: &mut Work<'_>,
-    ) -> Result<Step, Stop> {
+        work: &mut Meter<'_, Q>,
+    ) -> Result<Step, Failure<Q::Error>> {
         let data = &index.thresholds.rows[row];
         let Some(plan) = Plan::for_row(data, self.known.thresholds[row]) else {
             return Ok(Step::Unchanged);
@@ -111,32 +118,32 @@ impl<C: Count> Closure<'_, C> {
         );
         let result = attempt(
             data,
-            self.known.sure,
-            self.known.never,
+            &self.known.sure,
+            &self.known.never,
             &mut self.lists.possible_sums,
             plan,
             &mut Allowance {
-                remaining: plan.visits,
+                remaining: plan.visits as u64,
                 work,
             },
         );
-        self.lists.possible_sums.clear();
+        self.lists.possible_sums.storage_mut().clear();
         match result {
             Ok(step) => Ok(step),
-            Err(Failure::Declined) => Ok(Step::Unchanged),
-            Err(Failure::Stopped(stop)) => Err(stop),
+            Err(AttemptFailure::Declined) => Ok(Step::Unchanged),
+            Err(AttemptFailure::Stopped(stop)) => Err(stop),
         }
     }
 }
 
-fn attempt(
+fn attempt<Q: Quota + ?Sized>(
     row: &Row,
     sure: &[u64],
     never: &[u64],
-    words: &mut Vec<u64>,
+    words: &mut Words<u64>,
     plan: Plan,
-    allowance: &mut Allowance<'_, '_>,
-) -> Result<Step, Failure> {
+    allowance: &mut Allowance<'_, '_, Q>,
+) -> Result<Step, AttemptFailure<Q::Error>> {
     prepare(words, plan, allowance)?;
     let mut maximum = 0;
     for term in row.terms.iter().rev() {
@@ -156,7 +163,7 @@ fn attempt(
         // Only this translated copy can supply the first witness. It merely
         // declines optional pruning, never proves a compatible model. A hit
         // may leave the shift incomplete; no later code consumes that scratch.
-        if zetesis_core::packed::union_shifted_until_hit(
+        if zetesis_algebra::words::union_shifted_until_hit(
             words,
             source_words,
             weight,
@@ -172,29 +179,30 @@ fn attempt(
     Ok(Step::Contradiction)
 }
 
-fn prepare(
-    words: &mut Vec<u64>,
+fn prepare<Q: Quota + ?Sized>(
+    words: &mut Words<u64>,
     plan: Plan,
-    allowance: &mut Allowance<'_, '_>,
-) -> Result<(), Failure> {
-    words.clear();
+    allowance: &mut Allowance<'_, '_, Q>,
+) -> Result<(), AttemptFailure<Q::Error>> {
+    words.storage_mut().clear();
     if words.capacity() < plan.words {
         allowance.tick()?;
         // These values have no authority outside one attempt. Releasing an
         // undersized allocation first avoids old/replacement payload overlap.
-        *words = Vec::new();
+        *words = Words::new(Vec::new());
         words
+            .storage_mut()
             .try_reserve_exact(plan.words)
             .map_err(|_| Stop::Allocation)?;
         // Admission uses actual capacity, including allocator over-allocation.
         if words.capacity() > plan.visits {
-            *words = Vec::new();
-            return Err(Failure::Declined);
+            *words = Words::new(Vec::new());
+            return Err(AttemptFailure::Declined);
         }
     }
     for _ in 0..plan.words {
         allowance.tick()?;
-        words.push(0);
+        words.storage_mut().push(0);
     }
     allowance.tick()?;
     words[0] = 1;

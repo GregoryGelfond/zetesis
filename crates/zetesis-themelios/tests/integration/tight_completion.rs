@@ -6,20 +6,20 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::num::NonZeroUsize;
 use zetesis_reference_support::formula;
 
+use zetesis_algebra::{Cancellation, Stop};
 use zetesis_core::{AtomCatalog, Model};
-use zetesis_cpu::{Cancellation, Stop};
 use zetesis_ferraris::{
     Theory, TightCheckLimits, TightError, TightPlan, TightPlanLimits, TightVerdict,
 };
 use zetesis_objective::{ObjectiveProgram, Score, evaluate};
-use zetesis_sat::{BatchLimits, BatchVerdict, CompletionExecutor, StableModels};
+use zetesis_stable::{BatchLimits, BatchVerdict, CompletionExecutor, StableModels};
 
 type ScoredModels = BTreeMap<Vec<usize>, Score>;
 
 struct Run {
     models: ScoredModels,
-    statistics: zetesis_sat::Statistics,
-    batch: zetesis_sat::BatchStatistics,
+    statistics: zetesis_stable::Statistics,
+    batch: zetesis_stable::BatchStatistics,
 }
 
 fn run(
@@ -30,8 +30,12 @@ fn run(
     workers: usize,
 ) -> Run {
     let cancellation = Cancellation::default();
-    let mut search =
-        StableModels::new(theory, zetesis_sat::Limits::default(), cancellation.clone()).unwrap();
+    let mut search = StableModels::new(
+        theory,
+        zetesis_stable::Limits::default(),
+        cancellation.clone(),
+    )
+    .unwrap();
     let mut executor = CompletionExecutor::new(NonZeroUsize::new(workers).unwrap()).unwrap();
     let batch_limits = BatchLimits {
         max_candidates: NonZeroUsize::new(17).unwrap(),

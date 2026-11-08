@@ -2,9 +2,9 @@
 use crate::support::finite_bindings as reference;
 use crate::support::objective_plans;
 use reference::{Models, exhaustive, native};
+use zetesis_algebra::Cancellation;
 use zetesis_clingo_support as oracle;
 use zetesis_core::Model;
-use zetesis_cpu::Cancellation;
 use zetesis_reference_support::{admit, formula, resource_limits};
 use zetesis_themelios::{AdmissionOptions, ExpansionResource, FormulaLimits, admit_formula};
 fn expected(models: &[&[&str]]) -> Models {

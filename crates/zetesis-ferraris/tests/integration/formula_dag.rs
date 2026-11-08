@@ -1,7 +1,7 @@
 //! Shrinking generated DAGs checked against an independently materialized tree.
 
 use proptest::prelude::*;
-use zetesis_cpu::Cancellation;
+use zetesis_algebra::Cancellation;
 use zetesis_ferraris::{
     AdmissionLimits, FrozenReduct, Interpretation, Limits, Node, Theory, Verdict, check, models,
     models_reduct,
@@ -265,7 +265,7 @@ zetesis_ferraris::FormulaParts::new(case.nodes, vec![]).unwrap(), case.roots, Ad
         prop_assert_eq!(frozen.is_satisfied_by(&tested, limits(tested_work), &cancellation).unwrap(), expected);
         prop_assert_eq!(
             frozen.is_satisfied_by(&tested, limits(tested_work - 1), &cancellation).unwrap_err(),
-            zetesis_cpu::Stop::WorkLimit
+            zetesis_algebra::Stop::WorkLimit
         );
         prop_assert_eq!(
             models_reduct(&theory, &candidate, &tested, limits(original_work + tested_work), &cancellation).unwrap(),
@@ -273,7 +273,7 @@ zetesis_ferraris::FormulaParts::new(case.nodes, vec![]).unwrap(), case.roots, Ad
         );
         prop_assert_eq!(
             models_reduct(&theory, &candidate, &tested, limits(original_work + tested_work - 1), &cancellation).unwrap_err(),
-            zetesis_cpu::Stop::WorkLimit
+            zetesis_algebra::Stop::WorkLimit
         );
     }
 }

@@ -33,7 +33,10 @@ true-atom set. Inspect `Session::outcome` separately to determine what completed
 - `Session::enumerate` streams every original answer set with its score, including
   nonoptimal answers when objectives exist.
 - `Session::new` uses ordinary optimization selection when an objective exists.
-  An interrupted incumbent is not a proved optimum; inspect the outcome.
+  An interrupted incumbent is not a proved optimum; inspect the outcome. A
+  request for one optimal answer bounds the search strictly by default, so it
+  proves the optimum without counting its ties (`Optimization::ties_pruned`);
+  `SolveConfig::optimum_search` selects another schedule for measurement.
 - `Session::builder(...).collect(...)` returns a `WorldView` only after complete
   capture within `WorldViewLimits`. Failure retains a checked prefix instead.
 - `Session::builder(...).counting().start()` requests exhaustive full-answer
@@ -48,22 +51,25 @@ inconsistency; an empty partial result, or one answer with no true atoms, does n
 
 Keep the admitted theory, atom catalog, objectives and observations together.
 A prepared input borrows one coherent owner; it cannot combine unrelated source
-admissions. Returned answers retain their subject and full interpretation,
+admissions. Returned answers retain their original input and full interpretation,
 independently of displayed projections.
 
 ## Execution and cancellation
 
 `SolveConfig` selects CPU or device execution and named resource limits.
-`zetesis_cpu::Cancellation` supplies cooperative cancellation and deadlines. GPU
+`zetesis_algebra::Cancellation` supplies cooperative cancellation and deadlines. GPU
 support is enabled by default; use `default-features = false` for a CPU-only
 consumer. Cargo feature unification can enable it through another dependency.
 Compiling GPU support does not select a device.
 
-GPU formula checks use fixed candidate batches by default. Library callers may
-select `GpuBatching::Adaptive`: `batch_size` becomes the initial target, with
-growth after successful batch commits bounded by pending memory and admitted
-device prefixes. Larger batches may delay answers and objective feedback; they
-do not alter membership or permit partial batch publication.
+GPU formula checks size their candidate slates, the candidates checked and
+committed together, adaptively by default (`GpuBatching::Adaptive`). Slates
+start at `batch_size`, return to it after a slate whose answers tightened the
+objective bound, and double after a filled slate that left the bound unchanged,
+bounded by pending memory and, never below `batch_size`, by admitted device
+prefixes. `GpuBatching::Fixed` keeps every slate at `batch_size` for controlled
+comparisons. Larger slates may delay answers and objective feedback; they do not
+alter membership or permit partial batch publication.
 
 `SessionBuilder` can accept shared `ExecutionResources`, optional
 `SolveMeasurements`, and an `ExecutionObserver`. Membership is always decided by

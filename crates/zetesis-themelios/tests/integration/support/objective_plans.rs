@@ -1,6 +1,6 @@
 //! The objective plan of an admitted formula.
 
-use zetesis_cpu::Cancellation;
+use zetesis_algebra::Cancellation;
 use zetesis_themelios::AdmittedFormula;
 use zetesis_themelios::objective_bound::{ObjectivePlan, ObjectivePlanLimits};
 

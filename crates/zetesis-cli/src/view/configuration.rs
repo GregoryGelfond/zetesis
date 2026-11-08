@@ -83,45 +83,7 @@ impl Configuration {
                 self.grounding = GroundingDisplay::Hybrid;
                 return None;
             }
-            Event::StaticGrounding { .. } => {
-                self.grounding = GroundingDisplay::Eager;
-                return None;
-            }
-            Event::LazyGrounding { .. } => {
-                self.grounding = GroundingDisplay::Lazy;
-                return None;
-            }
-            Event::CpuClosure { grounder, .. } => {
-                // The executor reports an effective closure mode, not its request.
-                self.grounding = if *grounder == crate::Grounder::Eager {
-                    GroundingDisplay::Eager
-                } else {
-                    GroundingDisplay::Lazy
-                };
-                BackendView::Cpu
-            }
             Event::CpuFormula { .. } => BackendView::Cpu,
-            #[cfg(feature = "gpu")]
-            Event::LazyDeviceGrounding { .. } => {
-                self.grounding = GroundingDisplay::Lazy;
-                return None;
-            }
-            #[cfg(feature = "gpu")]
-            Event::DeviceClosure {
-                adapter,
-                static_counts,
-            } => {
-                self.grounding = if static_counts.is_some() {
-                    GroundingDisplay::Eager
-                } else {
-                    GroundingDisplay::Lazy
-                };
-                BackendView::Gpu {
-                    adapter: adapter.name,
-                    api: adapter.backend.label(),
-                    cpu_completion: false,
-                }
-            }
             #[cfg(feature = "gpu")]
             Event::DeviceFormula { adapter, .. } => BackendView::Gpu {
                 adapter: adapter.name,

@@ -1,7 +1,7 @@
 use super::*;
 use crate::observation::evaluate::test_support::work;
+use zetesis_algebra::Cancellation;
 use zetesis_core::{Atom, Model, Predicate, Sign, Value, ValueLimits, ValueNode};
-use zetesis_cpu::Cancellation;
 use zetesis_test_support::programs::function;
 
 fn model(nodes: Vec<ValueNode>) -> Model {

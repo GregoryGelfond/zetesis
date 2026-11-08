@@ -2,24 +2,31 @@
 
 // ANCHOR: example
 use std::collections::BTreeSet;
-use zetesis_core::{Atom, Model, Predicate, Seed};
-use zetesis_cpu::{Cancellation, Limits, check};
+use zetesis_algebra::Cancellation;
+use zetesis_core::{Atom, Model, Predicate};
+use zetesis_ferraris::Interpretation;
 use zetesis_solve::{
     Backend, Completion, PreparedInput, Session, SolveConfig, WorldView, WorldViewLimits,
 };
-use zetesis_themelios::{AdmissionOptions, admit};
+use zetesis_stable::{Check, Limits, check};
+use zetesis_themelios::{AdmissionOptions, ExpansionLimits, FormulaLimits, admit_formula};
 
 const CHOICES: &str = "a :- not b.\nb :- not a.\n";
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let admitted = admit(CHOICES.into(), AdmissionOptions::default())?;
+    let admitted = admit_formula(
+        CHOICES.into(),
+        AdmissionOptions::default(),
+        ExpansionLimits::default(),
+        FormulaLimits::default(),
+    )?;
     let config = SolveConfig {
         backend: Backend::Cpu,
         models: 0,
         ..SolveConfig::default()
     };
     let mut session = Session::enumerate(
-        PreparedInput::admitted(&admitted),
+        PreparedInput::formula(&admitted),
         config,
         Cancellation::default(),
     )?;
@@ -41,21 +48,26 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     assert_eq!(outcome.completion(), Some(Completion::Exhausted));
     assert!(!outcome.unsatisfiable());
 
-    // Check the tour's representative seed directly, without a search session.
-    let seed = Seed::new(admitted.program(), [a.clone()])?;
-    let checked = check(
-        admitted.program(),
-        &seed,
+    // Check the tour's representative candidate directly, without a search
+    // session: the frozen reduct's proper-subset query decides membership.
+    let index = admitted
+        .atoms()
+        .iter()
+        .position(|atom| atom == a)
+        .ok_or("the theory contains a")?;
+    let candidate = Interpretation::new(admitted.theory(), [index])?;
+    let verdict = check(
+        admitted.theory(),
+        &candidate,
         Limits::default(),
         &Cancellation::default(),
-    )?;
-    assert!(checked.accepted());
-    assert_eq!(checked.closure(), &Model::new([a])?);
+    );
+    assert!(matches!(verdict, Check::Stable));
 
     // A fresh bounded collection owns the complete-family claim. A Vec gathered
     // from an arbitrary stream cannot acquire it from a separate outcome.
     let world_view = WorldView::collect(
-        PreparedInput::admitted(&admitted),
+        PreparedInput::formula(&admitted),
         config,
         WorldViewLimits {
             max_answer_sets: 2,

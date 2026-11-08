@@ -13,7 +13,7 @@ use crate::presentation::Diagnostics;
 use crate::{
     ColorMode, Completion, Options, RunError, StatisticsView, run_finalized_with_diagnostics,
 };
-use zetesis_cpu::Cancellation;
+use zetesis_algebra::Cancellation;
 
 fn options(stats: bool) -> Options {
     let mut options = Options::try_parse_from([

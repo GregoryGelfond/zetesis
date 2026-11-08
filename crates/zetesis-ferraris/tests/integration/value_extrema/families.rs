@@ -3,8 +3,8 @@
 use super::{COMPARISONS, EXTREMA, Element, Extremum, ordered, reference};
 use crate::support::aggregate_theories::{prefix, push};
 use crate::support::worlds::eval;
+use zetesis_algebra::Cancellation;
 use zetesis_core::{Atom, AtomCatalog, Predicate, Value};
-use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{
     AggregateFamilyLimits, NodeView, ValueExtremumGuard, append_value_extremum_family_refs,
 };

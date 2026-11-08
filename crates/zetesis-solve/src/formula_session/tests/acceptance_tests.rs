@@ -6,12 +6,12 @@ use crate::formula_execution::{Failure, MembershipExecution};
 use crate::phase_timing::Recorder;
 use crate::{
     AnswerSelection, Backend, ExecutionObservation, ExecutionObserver, FormulaExecutionStatistics,
-    SearchMethod, SolveConfig,
+    SolveConfig,
 };
 use std::convert::Infallible;
-use zetesis_cpu::Cancellation;
+use zetesis_algebra::Cancellation;
 use zetesis_ferraris::Interpretation;
-use zetesis_sat::{Incomplete, StableModels};
+use zetesis_stable::{Incomplete, StableModels};
 use zetesis_themelios::{ConstraintCheckLimits, ConstraintVerdict};
 
 /// A fixed order of independently checked core interpretations. Ending this
@@ -80,7 +80,6 @@ fn a_rejected_cheap_proposal_cannot_tighten_the_bound() {
     }
     let config = SolveConfig {
         backend: Backend::Cpu,
-        search: SearchMethod::Clauses,
         workers: std::num::NonZeroUsize::MIN,
         models: 0,
         ..SolveConfig::default()
@@ -92,10 +91,9 @@ fn a_rejected_cheap_proposal_cannot_tighten_the_bound() {
             atoms: owner.atom_catalog(),
             objectives: owner.objectives(),
             required_choices: owner.core().required_choices(),
-            gate_atoms: 0,
             keyed_constraints: 0,
             key_analysis: zetesis_themelios::KeyAnalysis::Complete,
-            certificate_order: zetesis_sat::CertificateOrder::TightFirst,
+            certificate_order: zetesis_stable::CertificateOrder::TightFirst,
         },
         OrderedAnswers(proposals.into_iter()),
         &config,

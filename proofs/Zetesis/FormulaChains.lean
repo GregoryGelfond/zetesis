@@ -76,7 +76,7 @@ theorem position_in_append {X : Type u} {ls rs before after : List X} {u : X}
       · exact Or.inl ⟨y :: b, a, by rw [head, split]; rfl, by rw [hb], ha⟩
       · exact Or.inr ⟨b, split, by rw [head, hb, List.cons_append]⟩
 
-variable (T : Theory α) (c : Cube α)
+variable (T : Theory α) (c : Region α)
 
 /-- A disjunction chain with a leaf known to hold is known to hold:
 `disj_up_left` or `disj_up_right` at each node above the leaf. -/

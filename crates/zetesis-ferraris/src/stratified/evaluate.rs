@@ -8,7 +8,7 @@ use super::{
     order::Schedule,
 };
 use crate::{EvaluationError, EvaluationWorkspace, Interpretation, NodeView, Theory};
-use zetesis_cpu::Stop;
+use zetesis_algebra::{Stop, words::Words};
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(super) enum State {
@@ -37,7 +37,7 @@ pub(super) fn consequences(
             Kind::Unsupported | Kind::False | Kind::True | Kind::Negative(_) => State::Inactive,
         });
     }
-    let mut words = budget.filled(theory.atom_count().div_ceil(64), 0_u64)?;
+    let mut words = Words::<u64, _>::new(budget.filled(theory.atom_count().div_ceil(64), 0_u64)?);
     let mut queue = budget.reserve(graph.vertices())?;
     for &root in theory.roots() {
         budget.tick()?;
@@ -54,7 +54,7 @@ pub(super) fn consequences(
             } else if vertex >= theory.atom_count() {
                 let seed = match kinds[vertex - theory.atom_count()] {
                     Kind::True => true,
-                    Kind::Negative(atom) => words[atom / 64] & (1 << (atom % 64)) == 0,
+                    Kind::Negative(atom) => !words.contains(atom),
                     _ => false,
                 };
                 if seed {
@@ -70,7 +70,7 @@ pub(super) fn consequences(
             schedule,
             &mut Progress {
                 states: &mut states,
-                words: &mut words,
+                words: Words::new(&mut words[..]),
                 queue: &mut queue,
             },
             budget,
@@ -79,12 +79,12 @@ pub(super) fn consequences(
     }
     budget.release(states)?;
     budget.release(queue)?;
-    Ok(words)
+    Ok(words.into_storage())
 }
 
 struct Progress<'a> {
     states: &'a mut [State],
-    words: &'a mut [u64],
+    words: Words<u64, &'a mut [u64]>,
     queue: &'a mut Vec<usize>,
 }
 
@@ -108,7 +108,13 @@ fn propagate(
             }
             match progress.states[edge.target] {
                 State::Awaiting(1) => {
-                    publish(edge.target, atoms, progress.states, progress.words, budget)?;
+                    publish(
+                        edge.target,
+                        atoms,
+                        progress.states,
+                        &mut progress.words,
+                        budget,
+                    )?;
                     // Earlier components may establish a later vertex's truth;
                     // its outgoing edges are visited only when that component starts.
                     if schedule.component[edge.target] == component {
@@ -136,7 +142,7 @@ fn publish(
         budget.tick()?;
         states[vertex] = State::True;
         if vertex < atoms {
-            words[vertex / 64] |= 1 << (vertex % 64);
+            Words::<u64, _>::new(words).insert(vertex);
             budget.statistics.derived_atoms += 1;
         } else {
             budget.statistics.activated_nodes += 1;

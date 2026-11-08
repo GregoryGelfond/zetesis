@@ -1,9 +1,9 @@
 //! Structural values cross closure/reduct, scoring, retention and output boundaries.
 use clap::Parser;
+use zetesis_algebra::Cancellation;
 use zetesis_cli::{
     Completion, Interruption, OptimizationStop, Options, RunError, run_with_diagnostics,
 };
-use zetesis_cpu::Cancellation;
 
 fn solve(source: &str, extra: &[&str]) -> (Result<zetesis_cli::Report, RunError>, String) {
     let options = Options::try_parse_from(
@@ -25,8 +25,8 @@ fn solve(source: &str, extra: &[&str]) -> (Result<zetesis_cli::Report, RunError>
 #[test]
 fn closed_values_are_preserved_across_membership_routes() {
     for args in [
-        vec!["--oracle", "closure", "--grounder", "lazy"],
-        vec!["--oracle", "closure", "--grounder", "eager"],
+        vec!["--oracle", "countermodel", "--grounder", "lazy"],
+        vec!["--oracle", "countermodel", "--grounder", "eager"],
         vec!["--oracle", "countermodel"],
     ] {
         let (report, output) = solve("p(f(1,g(2))).q(X):-p(X).", &args);

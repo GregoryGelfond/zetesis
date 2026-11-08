@@ -7,7 +7,7 @@ use zetesis_reference_support::{prepared, resource_limits};
 use super::{Models, native};
 use crate::support::finite_bindings::expected;
 use themelios_base::source::SourceId;
-use zetesis_cpu::Cancellation;
+use zetesis_algebra::Cancellation;
 use zetesis_themelios::{
     AdmittedFormula, AnalysisBasis, CountPlanLimits, CountPlanStatus, ExpansionLimits,
     FormulaFailure, FormulaLimits, FormulaResource,

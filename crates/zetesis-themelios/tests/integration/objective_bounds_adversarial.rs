@@ -8,13 +8,13 @@ use std::collections::BTreeSet;
 use std::time::Duration;
 
 use serde_json::Value as Json;
+use zetesis_algebra::Cancellation;
 use zetesis_clingo_support as oracle;
 use zetesis_core::{Model, Term, Value};
-use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{Interpretation, Limits, check, models};
 use zetesis_objective::{ObjectiveProgram, ObjectiveTemplate, Score};
 use zetesis_reference_support::formula;
-use zetesis_sat::{Limits as SearchLimits, StableModels};
+use zetesis_stable::{Limits as SearchLimits, StableModels};
 use zetesis_test_support::records::Records;
 use zetesis_themelios::AdmittedFormula;
 use zetesis_themelios::objective_bound::{

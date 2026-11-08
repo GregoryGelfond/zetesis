@@ -1,7 +1,7 @@
 //! Necessary support for complete mixed ordinary/atomic-choice theories.
 
 use crate::{AdmissionError, AdmissionLimits, ExtremumCut, FormulaNodes, NodeView, Theory};
-use zetesis_cpu::{Cancellation, Meter, Refusal, Stop};
+use zetesis_algebra::{Cancellation, Meter, Refusal, Stop};
 
 #[cfg(test)]
 mod tests;

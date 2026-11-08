@@ -206,11 +206,11 @@ fn stdin_reader_failure_keeps_its_original_cause() {
 fn cooperative_publication_has_the_incomplete_process_status() {
     let mut progress = crate::failure::Progress::new();
     progress.apply(crate::SemanticOutcome::interrupted_before_start(
-        crate::Interruption::Preparation(zetesis_cpu::Stop::Cancelled),
+        crate::Interruption::Preparation(zetesis_algebra::Stop::Cancelled),
     ));
     progress.stop = Some(
         crate::PublicationStop::classify(RunError::PublicationStopped(
-            zetesis_cpu::Stop::Cancelled,
+            zetesis_algebra::Stop::Cancelled,
         ))
         .unwrap(),
     );
@@ -225,6 +225,7 @@ mod human_summary;
 fn failed_hand_off() -> RunError {
     RunError::GpuExecutableUnavailable {
         path: Some("zetesis-libexec/0/zetesis".into()),
+        installed: true,
         error: io::ErrorKind::NotFound.into(),
     }
 }

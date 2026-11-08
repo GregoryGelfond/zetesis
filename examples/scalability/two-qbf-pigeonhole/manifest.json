@@ -1,0 +1,30 @@
+{
+  "schema_version": 1,
+  "root": ".",
+  "cases": [
+    {
+      "entry": "two_qbf_pigeonhole.lp",
+      "contract": {
+        "satisfiability": "sat",
+        "family": "all",
+        "model_count": 1,
+        "cost": null,
+        "witnesses": [
+          ["nx(1)", "nx(2)"]
+        ],
+        "required_symbols": [],
+        "notes": [
+          "Two existential variables; the core is the pigeonhole formula with 5 pigeons and 4 holes (20 universal variables, 45 clauses). The first existential assignment gets the whole contradiction, the other three lose one clause each.",
+          "Every candidate's minimality check carries work, since the satisfiable cores are hard to search too. At 6 holes the subset queries walk about 33,000 regions."
+        ]
+      },
+      "files": [
+        {
+          "path": "two_qbf_pigeonhole.lp",
+          "sha256": "4de3da43035196cf7f37e5ba17222ceba22d019e223eb6e682c450a8dd6a0c7f",
+          "includes": []
+        }
+      ]
+    }
+  ]
+}

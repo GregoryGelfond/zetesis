@@ -12,7 +12,7 @@ pub use evaluate::TightWorkspace;
 use std::fmt;
 
 use crate::Theory;
-use zetesis_cpu::{Cancellation, ChargeError, Meter, Refusal, Stop};
+use zetesis_algebra::{Cancellation, ChargeError, Meter, MeterBytes, Refusal, Stop};
 
 /// Admission bounds for the optional class certificate. Logical bytes cover the
 /// plan and all construction vectors, excluding the borrowed theory, allocator
@@ -490,10 +490,10 @@ impl Tick for Meter<'_> {
 
 /// Admit `value` logical bytes under `limit`.
 fn bytes(value: u128, limit: u64) -> Result<u64, TightError> {
-    match u64::try_from(value) {
-        Ok(value) if value <= limit => Ok(value),
-        _ => Err(TightError::Limit(TightResource::Bytes)),
-    }
+    let value = u64::try_from(value).map_err(|_| TightError::Limit(TightResource::Bytes))?;
+    MeterBytes::check(u128::from(value), u128::from(limit))
+        .map_err(|_| TightError::Limit(TightResource::Bytes))?;
+    Ok(value)
 }
 
 fn reserve<T>(count: usize) -> Result<Vec<T>, TightError> {

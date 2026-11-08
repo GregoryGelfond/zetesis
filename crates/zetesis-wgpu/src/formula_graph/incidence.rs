@@ -8,7 +8,7 @@
 
 use super::capacity;
 use crate::GpuError;
-use zetesis_cpu::Cancellation;
+use zetesis_algebra::Cancellation;
 
 /// Appended CSR offsets and gate IDs, followed nowhere by candidate state.
 /// `offset` is nonzero, leaving zero available for the dense execution route.
@@ -86,7 +86,7 @@ impl Layout {
             .ok_or_else(|| capacity("formula incidence directory overflows"))?;
         offset
             .checked_add(words)
-            .filter(|end| *end <= u32::MAX - 64)
+            .filter(|end| crate::kernel::fits_strided_loop(*end))
             .ok_or_else(|| capacity("formula incidence address overflows"))?;
         let dirty_words = node_count.div_ceil(32);
         let setup_work = dirty_words
@@ -133,7 +133,7 @@ impl Layout {
             .ok_or_else(|| capacity("formula group map size overflows"))?;
         self.offset
             .checked_add(self.words)
-            .filter(|end| *end <= u32::MAX - 64)
+            .filter(|end| crate::kernel::fits_strided_loop(*end))
             .ok_or_else(|| capacity("formula group map addresses overflow"))?;
         // One initialization scan: node headers, operand/domain reads, counters.
         self.setup_work = self
@@ -167,7 +167,7 @@ impl Layout {
                 let groups = if self.group_map == 0 { 0 } else { self.groups };
                 groups.checked_mul(2).and_then(|g| n.checked_add(g))
             })
-            .filter(|n| *n <= u32::MAX - 64)
+            .filter(|n| crate::kernel::fits_strided_loop(*n))
             .ok_or_else(|| capacity("formula dirty domain addresses overflow"))
     }
 

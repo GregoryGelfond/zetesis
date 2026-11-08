@@ -1,17 +1,33 @@
 //! Real authored defaults cross the CLI and complete-display contract boundary.
 use clap::Parser;
+use zetesis_algebra::Cancellation;
 use zetesis_cli::{Completion, Options, run_with_diagnostics};
-use zetesis_cpu::Cancellation;
 use zetesis_test_support::repository::examples as root;
 use zetesis_validation::{
     answers::native_json,
     performance::{
+        bundles,
         matrix::{NativeInvocation, Workload, WorkloadLimits},
         scalability,
     },
 };
 
 fn check(workload: &Workload) {
+    check_source(&root().join(workload.entry()), workload);
+}
+
+/// A contributed workload's default, solved from the directory its manifest
+/// names as the workload's root.
+fn check_bundle(directory: &str) {
+    let directory = root().join(directory);
+    let mut workloads =
+        bundles::load(&directory.join("manifest.json"), WorkloadLimits::default()).unwrap();
+    assert_eq!(workloads.len(), 1);
+    let workload = workloads.pop().unwrap();
+    check_source(&directory.join(workload.entry()), &workload);
+}
+
+fn check_source(path: &std::path::Path, workload: &Workload) {
     // Exercise ordinary automatic admission with unchanged resource defaults.
     // The scalability profiles intentionally request complete eager grounding.
     let options = Options::try_parse_from([
@@ -25,7 +41,7 @@ fn check(workload: &Workload) {
         "60",
     ])
     .unwrap();
-    let source = std::fs::read_to_string(root().join(workload.entry())).unwrap();
+    let source = std::fs::read_to_string(path).unwrap();
     let mut output = Vec::new();
     let report = run_with_diagnostics(
         source,
@@ -63,6 +79,63 @@ fn default_limits_admit_the_unique_einstein_assignment() {
 #[test]
 fn default_limits_admit_the_complete_sudoku_grid() {
     check(&scalability::sudoku(&root(), WorkloadLimits::default()).unwrap());
+}
+
+#[test]
+fn two_qbf_default_satisfies_its_complete_contract() {
+    // The corpus's first disjunctive program: every membership check runs the
+    // proper-subset query over the candidate's frozen reduct.
+    check_bundle("scalability/two-qbf");
+}
+
+#[test]
+fn strategic_companies_default_satisfies_its_complete_contract() {
+    // Disjunctive heads with control rules through strategic companies: every
+    // candidate runs the proper-subset query over its frozen reduct.
+    check_bundle("scalability/strategic-companies");
+}
+
+#[test]
+fn two_qbf_parity_default_satisfies_its_complete_contract() {
+    // One candidate's proper-subset query refutes a parity contradiction.
+    check_bundle("scalability/two-qbf-parity");
+}
+
+#[test]
+fn two_qbf_tseitin_default_satisfies_its_complete_contract() {
+    // One candidate's proper-subset query refutes a Tseitin contradiction.
+    check_bundle("scalability/two-qbf-tseitin");
+}
+
+#[test]
+fn two_qbf_pigeonhole_default_satisfies_its_complete_contract() {
+    // Every candidate's proper-subset query searches a pigeonhole core.
+    check_bundle("scalability/two-qbf-pigeonhole");
+}
+
+#[test]
+fn parity_tseitin_default_satisfies_its_complete_contract() {
+    // Tseitin's parity formula with an odd total charge: no choice of edges
+    // satisfies every vertex.
+    check_bundle("scalability/parity-tseitin");
+}
+
+#[test]
+fn parity_chain_default_satisfies_its_complete_contract() {
+    // Two parity chains over the same inputs cannot have differing results.
+    check_bundle("scalability/parity-chain");
+}
+
+#[test]
+fn pigeonhole_clauses_default_satisfies_its_complete_contract() {
+    // Five pigeons cannot occupy four holes alone, stated as clauses.
+    check_bundle("scalability/pigeonhole-clauses");
+}
+
+#[test]
+fn parity_mixed_default_satisfies_its_complete_contract() {
+    // Random clauses cut the even subgraphs down to the complete family.
+    check_bundle("scalability/parity-mixed");
 }
 
 #[test]

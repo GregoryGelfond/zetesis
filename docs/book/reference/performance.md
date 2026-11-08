@@ -5,7 +5,56 @@ program. The [README overview](https://github.com/GregoryGelfond/zetesis/blob/ma
 summarizes the latest complete CPU corpus comparison. The studies below retain
 their own source revisions, workloads and measurement conditions.
 
+## CPU release build profile
+
+Two builds of Zetesis at `949bc942d67d860ce965d44edd0a519aeee60c0d` used
+Rust 1.97.1 on an Apple M4 Pro running macOS 26.6.2. Both used
+`cargo build --release --locked --offline --all-features -p zetesis-cli --bin zetesis`.
+The first used the Cargo settings at that revision. The second set
+`CARGO_PROFILE_RELEASE_LTO=fat` and `CARGO_PROFILE_RELEASE_CODEGEN_UNITS=1`
+in a separate target directory. The arm64 executable shrank from
+23,398,832 to 17,539,264 bytes (25.0%).
+
+| Program | Answers | Change in instructions, 1 worker | Original, 14 workers | Fat LTO, 14 workers |
+| --- | ---: | ---: | ---: | ---: |
+| Family Crossing, integrated | 8 optimal, cost 29 | −7.19% | 6.40 s | 5.83 s |
+| Queens, size 12 | 14,200 | −0.43% | 0.13 s | 0.12 s |
+| Scalability Mastermind, 6 pegs and 8 colors | 45,832 | −2.08% | 0.24 s | 0.23 s |
+| Quantified parity, size 16 | 1 | −7.31% | 0.21 s | 0.19 s |
+
+Times and instruction changes use medians of three fresh processes per build on AC power.
+The two executables alternated order across repetitions. macOS `/usr/bin/time -l` recorded
+retired instructions and elapsed process time (0.01 s resolution). The timed
+command was `zetesis solve --backend cpu --threads W --grounder G --oracle O --color never --count FILE --time-limit 120s`.
+A separate single-worker run with `--all --json --stats` in place of `--count`
+checked every model and its cost against the reference family.
+
+On the regular 95-program corpus, both builds exhausted every input under
+automatic checking and forced reduct checking. Each of the 190 one-worker pairs
+matched the reference answer family, including costs and multiplicities.
+Each build produced one JSON observation per input and route. The fat-LTO
+build retired fewer instructions in every pair, with median reductions of
+6.53% for automatic checking and 6.48% for forced reduct checking.
+
+To reproduce the inputs, run `examples/family-crossing/integrated.lp` in place.
+Under `examples/scalability/`, make temporary copies of `n-queens.lp` with
+`n = 12` and `mastermind.lp` with `colors = 8`. This timing uses the scalability
+encoding. The wide Mastermind benchmark uses `examples/wide-mastermind/68/mm-68-examples.lp`.
+The first three cases used automatic grounding and checking. For quantified parity,
+copy the ASP generator `examples/scalability/two-qbf-parity/two_qbf_parity.lp`,
+set `n = 16`, retain `exists = 2`, `stable = 1`, and `seed = 1`, then select
+`--grounder eager --oracle countermodel`.
+
+SHA-256 digests of the measured executables
+
+```text
+original   01a6902f369a3992342ead7d315e5a2ba1df8b14edb09bb47742fc527fd3837d
+fat LTO    d54b261b40dc78bf30130379ac589e811bd59d5e048503d77ae722eb0ea5cf25
+```
+
 ## Recorded comparisons
+
+The [0.7.0 CPU comparison](cpu-0.7.0.md) records outcomes for all 299 distinct inputs at 14 zetesis workers and one clingo worker. Among 286 comparable cases the 3% band gave 200 zetesis wins, 11 close and 75 clingo wins. The per-case record includes the quantified inputs, Family Crossing, USA, both large Mastermind encodings, Poker and arithmetic.
 
 The [final 0.6.0 CPU check](cpu-corpus-final-20261014.md) records all 94 cases at
 one and fourteen threads. At fourteen, summed process time is 520.523 ms against

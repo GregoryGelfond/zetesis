@@ -2,8 +2,8 @@ use super::super::{
     AggregateGpuCapability as Capability, AggregateGpuError as Error, AggregateGpuPlan,
     AggregateGpuPlanLimits, preparation::signed,
 };
+use zetesis_algebra::{Cancellation, Stop};
 use zetesis_core::Value;
-use zetesis_cpu::{Cancellation, Stop};
 use zetesis_ferraris::native_aggregate::{Bound, Function, Guard};
 use zetesis_theory_support::aggregate as reference;
 

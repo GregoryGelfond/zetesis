@@ -2,6 +2,15 @@
 
 <!-- A dated record: its commands keep the spellings of the binaries it records. -->
 
+Records made before the clause search's removal can name it, as a `clauses`
+arm or a `--search clauses` command; the solver no longer has it, and those
+records describe the executables they measured.
+
+The [0.7.0 CPU comparison](../cpu-0.7.0.md) retains its
+[measurement receipt](cpu-0.7.0-process.json) and
+[per-case table](cpu-0.7.0-process.tsv) for the full 299-input inventory. The [single-worker instruction record](cpu-0.7.0-instructions.csv)
+compares the same candidate source with an earlier zetesis baseline.
+
 The [final 0.6.0 CPU check](../cpu-corpus-final-20261014.md) retains
 [all timed observations](cpu-corpus-final-20261014.json) and the
 [complete table](cpu-corpus-final-20261014.tsv), separately from the earlier
@@ -21,7 +30,13 @@ retains input report hashes, timing and memory observations, actual execution
 routes and qualification scope. Non-completed cells retain their reasons.
 These CPU observations do not establish Metal performance or qualification.
 
-The [0.6.0 coverage snapshot](../coverage-0.6.0.md) records the current portable,
+The [0.7.0 coverage snapshot](../coverage-0.7.0.md) records the portable workspace,
+combined portable-plus-Metal workspace and independent CPU-only populations at
+`878f08509`. Its [receipt](coverage-0.7.0.json) identifies the report hashes and
+59 exact Metal tests in 11 groups. The [source manifest](coverage-0.7.0-sources.json)
+identifies the measured source and build inputs.
+
+The [0.6.0 coverage snapshot](../coverage-0.6.0.md) records its portable,
 combined workspace and independent CPU-only populations. Its
 [receipt](coverage-0.6.0.json) identifies tools, reports and all 63 physical tests;
 the [source manifest](coverage-0.6.0-sources.json) identifies the measured contents.
@@ -1476,6 +1491,9 @@ on the host's workers, and it is faster than clingo on four of the twenty
 cells and within a twentieth of it on three more; what remains above the
 reference is the closure route's fixed cost on small programs and the
 per-region cost of one long chain of refutations.
+
+The clause search measured here as the `clauses` arm was later removed, with
+its `--search` option; the region search is the only formula search since.
 
 ## The region workers' engagement cost
 

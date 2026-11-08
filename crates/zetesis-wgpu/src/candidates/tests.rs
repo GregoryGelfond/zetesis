@@ -1,5 +1,5 @@
 use super::*;
-use zetesis_cpu::Stop;
+use zetesis_algebra::Stop;
 use zetesis_ferraris::AdmissionLimits;
 
 fn theory(atoms: usize) -> Theory {
@@ -121,10 +121,15 @@ fn equal_shape_reuses_initialized_storage_and_overwrites_every_word() {
             })
             .unwrap();
         let initialized = staging.words().to_vec();
+        let allocation = (staging.words.as_ptr(), staging.words.capacity());
         staging
             .reserve_with(36, 100, u64::MAX, |_| panic!("warm reservation"))
             .unwrap();
         assert_eq!(staging.words(), initialized);
+        assert_eq!(
+            (staging.words.as_ptr(), staging.words.capacity()),
+            allocation
+        );
         let charge = staging
             .pack(
                 &theory,
@@ -138,6 +143,10 @@ fn equal_shape_reuses_initialized_storage_and_overwrites_every_word() {
         let mut fresh = vec![u32::MAX; 9];
         pack(&theory, &candidates, &mut fresh, || Ok(())).unwrap();
         assert_eq!(staging.words(), fresh);
+        assert_eq!(
+            (staging.words.as_ptr(), staging.words.capacity()),
+            allocation
+        );
         assert_eq!(
             charge,
             capacity_charge(64, staging.words.capacity()).unwrap()
@@ -375,4 +384,16 @@ fn prefix_selection_is_bounded_at_host_count_maximum() {
         .unwrap();
     assert_eq!(count, 7);
     assert!(calls <= usize::BITS + 2);
+}
+
+#[test]
+fn staging_keeps_its_original_owner_layout() {
+    use std::mem::{align_of, offset_of, size_of};
+
+    struct Original {
+        words: Vec<u32>,
+    }
+    assert_eq!(size_of::<Staging>(), size_of::<Original>());
+    assert_eq!(align_of::<Staging>(), align_of::<Original>());
+    assert_eq!(offset_of!(Staging, words), offset_of!(Original, words));
 }

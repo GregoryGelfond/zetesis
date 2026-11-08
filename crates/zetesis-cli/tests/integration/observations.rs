@@ -1,10 +1,9 @@
 //! Display-only queries preserve full enumeration and never emit partial answers.
 
 use clap::Parser;
+use zetesis_algebra::Cancellation;
 use zetesis_cli::{Completion, Options, Report, RunError, run_with_diagnostics};
-use zetesis_cpu::Cancellation;
 use zetesis_themelios::observation::{ErrorKind, Resource};
-use zetesis_themelios::{AdmissionFailure, ExpansionFailure, ProfileFeature};
 
 fn solve(source: &str, arguments: &[&str]) -> (Result<Report, RunError>, String, String) {
     let options =
@@ -84,29 +83,6 @@ fn hidden_full_models_and_every_optimal_tie_keep_their_multiplicity() {
             }
         }
     }
-}
-#[test]
-fn closure_observation_refuses_the_unsupported_directive() {
-    let (result, output, _) = solve(
-        include_str!("../fixtures/observations/conditional.lp"),
-        &["--oracle", "closure"],
-    );
-    assert!(
-        matches!(
-            result,
-            Err(RunError::Expansion(ExpansionFailure::Admission(
-                AdmissionFailure::Profile {
-                    feature: ProfileFeature::ShowTerm,
-                    ..
-                }
-            )))
-        ),
-        "{result:?}"
-    );
-    assert!(
-        crate::support::human::preamble(&output),
-        "no answer from unsupported route: {output}"
-    );
 }
 
 #[test]

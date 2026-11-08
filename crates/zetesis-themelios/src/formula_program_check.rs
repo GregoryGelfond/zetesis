@@ -19,7 +19,7 @@ use themelios_program::term::Term;
 use crate::program_limits::{Budget, Limits};
 use crate::{
     CompilationFailure, ProfileFeature, ProgramAdmissionFailure, ProgramAdmissionOptions,
-    ProgramFailureKind, ProgramSubject,
+    ProgramFailureKind, ProgramOriginal,
 };
 
 type Check = Result<(), ProgramFailureKind>;
@@ -41,7 +41,7 @@ pub(crate) fn check(
     for part in program.parts() {
         if part.key().name.as_str() != "base" || !part.key().formals.is_empty() {
             return Err(ProgramAdmissionFailure {
-                subject: ProgramSubject::Part(part.key()),
+                original: ProgramOriginal::Part(part.key()),
                 kind: unsupported(ProfileFeature::ProgramPart),
             });
         }
@@ -50,7 +50,7 @@ pub(crate) fn check(
                 .provenance(carrier, 1)
                 .and_then(|()| checker.statement(carrier.get(), 1))
                 .map_err(|kind| ProgramAdmissionFailure {
-                    subject: ProgramSubject::Statement(carrier),
+                    original: ProgramOriginal::Statement(carrier),
                     kind,
                 })?;
         }

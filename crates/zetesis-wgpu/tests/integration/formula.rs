@@ -1,5 +1,6 @@
 //! Portable formula layout, shader validation and independent propagation laws.
 
+use zetesis_algebra::region::Region;
 use zetesis_ferraris::{AdmissionLimits, Node, NodeView, Theory};
 use zetesis_wgpu::{FormulaLimits, FormulaVerdict, GateProjection, ResidualReason};
 
@@ -13,9 +14,12 @@ pub(crate) mod wide;
 fn cooperative_formula_shader_validates_without_optional_capabilities() {
     let module = naga::front::wgsl::parse_str(concat!(
         include_str!("../../src/formula.wgsl"),
+        include_str!("../../src/words.wgsl"),
+        include_str!("../../src/formula_graph/truth.wgsl"),
         include_str!("../../src/formula_graph/numeric.wgsl"),
         include_str!("../../src/formula/numeric.wgsl"),
-        include_str!("../../src/formula/subset.wgsl")
+        include_str!("../../src/formula/subset.wgsl"),
+        include_str!("../../src/reduction.wgsl")
     ))
     .unwrap();
     let info = naga::valid::Validator::new(
@@ -201,6 +205,43 @@ fn group_support(conjunction: bool, ids: &[usize], output: usize, domains: &mut 
     }
 }
 
+// The reference projection uses the scalar oracle's semantic atom prefix.
+fn project(atoms: usize, domains: &[u8]) -> Region {
+    let mut root = Region::all_open(atoms);
+    for (atom, &domain) in domains[..atoms].iter().enumerate() {
+        match domain {
+            1 => assert!(root.cut(atom)),
+            2 => assert!(root.hold(atom)),
+            3 => {}
+            _ => panic!("an unresolved atom must have a nonempty Boolean domain"),
+        }
+    }
+    root
+}
+
+fn check_residual_witnesses(theory: &Theory, candidate: usize, root: &Region) {
+    let mask = values(theory, candidate, None);
+    assert_eq!(root.len(), theory.atom_count());
+    for atom in 0..root.len() {
+        if candidate & (1 << atom) == 0 {
+            assert!(root.is_cut(atom));
+        }
+    }
+    for inner in 0..1usize << theory.atom_count() {
+        if inner != candidate && inner & !candidate == 0 && model(theory, inner, Some(&mask)) {
+            for atom in 0..root.len() {
+                if let Some(held) = root.decision(atom) {
+                    assert_eq!(
+                        held,
+                        inner & (1 << atom) != 0,
+                        "the residual root excluded an independently enumerated witness"
+                    );
+                }
+            }
+        }
+    }
+}
+
 fn propagate_with(
     theory: &Theory,
     candidate: usize,
@@ -293,10 +334,16 @@ fn propagate_with(
             domains[available[0]] &= 1;
         }
         if domains == before {
-            return FormulaVerdict::Residual(ResidualReason::FixedPoint);
+            return FormulaVerdict::Residual(
+                ResidualReason::FixedPoint,
+                project(theory.atom_count(), &domains),
+            );
         }
     }
-    FormulaVerdict::Residual(ResidualReason::RoundLimit)
+    FormulaVerdict::Residual(
+        ResidualReason::RoundLimit,
+        project(theory.atom_count(), &domains),
+    )
 }
 #[test]
 fn projections_preserve_frozen_query_completions() {
@@ -344,8 +391,9 @@ fn projections_preserve_frozen_query_completions() {
                                     assert!(stable);
                                     refuted += 1;
                                 }
-                                FormulaVerdict::Residual(_) => {
+                                FormulaVerdict::Residual(_, root) => {
                                     assert!(model(&theory, candidate, None));
+                                    check_residual_witnesses(&theory, candidate, &root);
                                     residuals += 1;
                                 }
                             }
@@ -376,7 +424,7 @@ fn empty_queries_and_inactive_composites_do_not_forge_stability() {
         );
         assert_eq!(
             propagate_with(&empty, 0, 0, projection),
-            FormulaVerdict::Residual(ResidualReason::RoundLimit)
+            FormulaVerdict::Residual(ResidualReason::RoundLimit, Region::all_open(0))
         );
     }
     let theory = Theory::new(
@@ -397,10 +445,12 @@ fn empty_queries_and_inactive_composites_do_not_forge_stability() {
     .unwrap();
     // Bare not not p supplies no reduct support for p; its false inner not-p
     // connective must be disabled. The proper empty subset remains possible.
+    let mut only_empty = Region::all_open(1);
+    assert!(only_empty.cut(0));
     for projection in GateProjection::ALL {
         assert_eq!(
             propagate_with(&theory, 1, 16, projection),
-            FormulaVerdict::Residual(ResidualReason::FixedPoint)
+            FormulaVerdict::Residual(ResidualReason::FixedPoint, only_empty.clone())
         );
     }
     assert!(!model(&theory, 0, None));

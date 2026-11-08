@@ -3,7 +3,10 @@
 use super::*;
 use crate::formula_support::{Accounting, testing::budget};
 use crate::grounding_observer::Profile;
-use crate::test_support::{Observer, hybrid};
+// These tests exercise the streamed route, so their fixtures are grounded with
+// pairwise-exclusion capture off: capture would move a pairwise family whose
+// every component is complete into the core.
+use crate::test_support::{Observer, streamed_hybrid as hybrid};
 use crate::{ConstraintCheckLimits, GroundingPhase, HybridFormula};
 use std::cell::Cell;
 use std::collections::BTreeSet;

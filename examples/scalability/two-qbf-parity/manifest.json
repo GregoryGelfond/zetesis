@@ -1,0 +1,30 @@
+{
+  "schema_version": 1,
+  "root": ".",
+  "cases": [
+    {
+      "entry": "two_qbf_parity.lp",
+      "contract": {
+        "satisfiability": "sat",
+        "family": "all",
+        "model_count": 1,
+        "cost": null,
+        "witnesses": [
+          ["nx(1)", "nx(2)"]
+        ],
+        "required_symbols": [],
+        "notes": [
+          "Two existential variables; the core is a parity contradiction over n=6 inputs, computed by two chains of three-variable exclusive-or gates (16 universal variables, 42 clauses); seed 1 orders the second chain. The first existential assignment gets the whole contradiction, the other three lose one clause each.",
+          "Every answer set is saturated, so membership needs the complete check that no universal assignment satisfies its core: the frozen reduct's proper-subset query. At n=16 the stable candidate's query walks about 131,000 regions."
+        ]
+      },
+      "files": [
+        {
+          "path": "two_qbf_parity.lp",
+          "sha256": "2c3a862dabf858f0f017083a3c6753cf97fb33a7d69092817a451b78f98ff3ea",
+          "includes": []
+        }
+      ]
+    }
+  ]
+}

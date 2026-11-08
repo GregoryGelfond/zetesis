@@ -1,6 +1,6 @@
 # Selecting and projecting finite table rows
 
-`zetesis_cpu::table` selects complete rows from an immutable typed relation.
+`zetesis_core::table` selects complete rows from an immutable typed relation.
 Callers can retain the selected row positions directly or project the values
 witnessed by those rows. Eager formula grounding can explicitly choose this
 primitive for flat positive joins over completed possible support; the default
@@ -60,7 +60,7 @@ returned values borrow the original source.
 
 ```rust
 # extern crate zetesis_core;
-# extern crate zetesis_cpu;
+# extern crate zetesis_algebra;
 {{#include ../examples/finite-tables.rs:example}}
 ```
 

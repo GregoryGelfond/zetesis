@@ -61,8 +61,7 @@ pub struct ExpansionLimits {
     /// outside this envelope. The host signed allocation extent is also checked.
     pub max_family_bytes: usize,
     /// Maximum retained origin-evidence entries. Canonical-program evidence carries a
-    /// statement identity and an optional real location; source-only relational
-    /// evidence retains its parsed locations.
+    /// statement identity and an optional real location.
     pub max_origin_locations: usize,
     /// Maximum original `#defined` and `#show` occurrences before deduplication.
     pub max_metadata_statements: usize,
@@ -85,8 +84,7 @@ impl Default for ExpansionLimits {
 
 /// Charges accumulated by one admission under [`ExpansionLimits`], in the
 /// units of the ceiling each names. Every count is at most its ceiling; a
-/// refused admission reports no usage. Plain S0 admission expands nothing
-/// and reports zero throughout.
+/// refused admission reports no usage.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct ExpansionUsage {
     /// Charged term work, under `max_term_work`.
@@ -138,7 +136,7 @@ pub enum ExpansionFailure {
     /// Shared cancellation or deadline observed before the next expansion step.
     Interrupted {
         /// The control signal; separate from configured resource ceilings.
-        reason: zetesis_cpu::Stop,
+        reason: zetesis_algebra::Stop,
         /// Original statement or whole-program site at the stopped boundary.
         location: ProgramSite,
     },
@@ -210,23 +208,6 @@ impl ExpansionFailure {
             Self::DuplicateConstant { duplicate, .. } => Some(*duplicate),
         }
     }
-    /// Whether another source profile may handle this refusal. This permits
-    /// automatic formula admission after an unsupported profile construct or
-    /// scalar evaluation stopped at a variable. Syntax, arithmetic undefinedness,
-    /// overflow, source/expansion limits, and core failures must not be retried
-    /// as if a more permissive mode had resolved them.
-    #[must_use]
-    pub fn needs_formula_admission(&self) -> bool {
-        matches!(
-            self,
-            Self::Admission(AdmissionFailure::Profile { .. })
-                | Self::Evaluation {
-                    error: themelios_program::term::EvalError::NotGround { .. },
-                    ..
-                }
-        )
-    }
-
     /// Render diagnostics for actual source coordinates, without discarding the
     /// typed refusal or inventing a span for a logical statement.
     #[must_use]
@@ -316,7 +297,7 @@ pub(crate) struct Budget {
     scalar_bytes: u128,
     origins: u128,
     allowance: Option<crate::constraint_allowance::Pending>,
-    cancellation: Option<zetesis_cpu::Cancellation>,
+    cancellation: Option<zetesis_algebra::Cancellation>,
 }
 
 impl Clone for Budget {
@@ -347,17 +328,17 @@ impl Budget {
 
     pub(crate) fn with_cancellation(
         mut self,
-        cancellation: Option<zetesis_cpu::Cancellation>,
+        cancellation: Option<zetesis_algebra::Cancellation>,
     ) -> Self {
         self.set_cancellation(cancellation);
         self
     }
 
-    pub(crate) fn set_cancellation(&mut self, cancellation: Option<zetesis_cpu::Cancellation>) {
+    pub(crate) fn set_cancellation(&mut self, cancellation: Option<zetesis_algebra::Cancellation>) {
         self.cancellation = cancellation;
     }
 
-    pub(crate) fn cancellation(&self) -> Option<&zetesis_cpu::Cancellation> {
+    pub(crate) fn cancellation(&self) -> Option<&zetesis_algebra::Cancellation> {
         self.cancellation.as_ref()
     }
 
@@ -452,8 +433,31 @@ impl Budget {
                 unreachable!("source occurrence and family bounds are checked directly")
             }
         };
-        let observed = used.saturating_add(amount);
-        check(resource, observed, ceiling, location)?;
+        let observed = if matches!(resource, ExpansionResource::TermWork) {
+            zetesis_algebra::Meter::check_wide_receipt(*used, amount, ceiling as u128).map_err(
+                |error| ExpansionFailure::Limit {
+                    resource,
+                    observed: match error {
+                        zetesis_algebra::MeterWorkError::Limit { observed, .. } => observed,
+                        zetesis_algebra::MeterWorkError::Overflow => u128::MAX,
+                    },
+                    limit: ceiling as u128,
+                    location,
+                },
+            )?
+        } else {
+            zetesis_algebra::Meter::check_wide_count(*used, amount, ceiling as u128).map_err(
+                |error| ExpansionFailure::Limit {
+                    resource,
+                    observed: match error {
+                        zetesis_algebra::MeterWideCountError::Limit { observed, .. } => observed,
+                        zetesis_algebra::MeterWideCountError::Overflow => u128::MAX,
+                    },
+                    limit: ceiling as u128,
+                    location,
+                },
+            )?
+        };
         if matches!(resource, ExpansionResource::ScalarBytes)
             && let Some(allowance) = &mut self.allowance
         {
@@ -505,16 +509,14 @@ pub(crate) fn check(
     ceiling: usize,
     location: ProgramSite,
 ) -> Result<(), ExpansionFailure> {
-    if observed > ceiling as u128 {
-        Err(ExpansionFailure::Limit {
+    zetesis_algebra::Meter::check_wide_count(observed, 0, ceiling as u128)
+        .map(|_| ())
+        .map_err(|_| ExpansionFailure::Limit {
             resource,
             limit: ceiling as u128,
             observed,
             location,
         })
-    } else {
-        Ok(())
-    }
 }
 
 /// Settlement does not reset enforcement history or retain runtime control.

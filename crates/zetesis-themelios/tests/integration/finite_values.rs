@@ -440,7 +440,7 @@ proptest::proptest! {
 #[test]
 fn competition_matches_bounded_completion() {
     use std::num::NonZeroUsize;
-    use zetesis_sat::{
+    use zetesis_stable::{
         BatchLimits, BatchVerdict, Cancellation, CompletionExecutor, Limits, StableModels,
     };
     let admitted = formula(&competition());
@@ -520,7 +520,7 @@ fn constructed_keys_retain_objective_contributions() {
             admitted.objectives(),
             &model,
             zetesis_objective::Limits::default(),
-            &zetesis_cpu::Cancellation::default(),
+            &zetesis_algebra::Cancellation::default(),
         )
         .unwrap();
         costs.push(score.score().costs().to_vec());

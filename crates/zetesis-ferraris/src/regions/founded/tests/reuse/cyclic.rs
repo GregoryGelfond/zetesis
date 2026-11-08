@@ -65,17 +65,21 @@ fn aliased_boundary() -> Theory {
 fn global_scratch(program: &Program) -> NarrowingScratch {
     let mut scratch = NarrowingScratch::default();
     scratch
+        .common
         .founded
         .needed(
             &program.owner,
             &program.index,
             &program.producers,
-            &mut Work::new(u64::MAX),
+            &mut Meter::local(u64::MAX),
         )
+        .map_err(zetesis_algebra::Failure::into_stop)
         .unwrap();
-    scratch
-        .founded
-        .prepare_global_reference(&program.owner, &program.index, &program.producers);
+    scratch.common.founded.prepare_global_reference(
+        &program.owner,
+        &program.index,
+        &program.producers,
+    );
     scratch
 }
 
@@ -90,11 +94,13 @@ fn acyclic_bridges_delay_cuts_without_changing_the_fixed_point() {
             &program.producers,
             &[0],
             &[0],
-            &mut Work::new(u64::MAX),
+            &mut Meter::local(u64::MAX),
         )
+        .map_err(zetesis_algebra::Failure::into_stop)
         .unwrap();
     let mut global = global_scratch(&program);
     global
+        .common
         .founded
         .complete(
             &program.owner,
@@ -102,17 +108,18 @@ fn acyclic_bridges_delay_cuts_without_changing_the_fixed_point() {
             &program.producers,
             &[0],
             &[0],
-            &mut Work::new(u64::MAX),
+            &mut Meter::local(u64::MAX),
         )
+        .map_err(zetesis_algebra::Failure::into_stop)
         .unwrap();
-    assert_eq!(restricted.cyclic_atoms, [0b0_1111]);
+    assert_eq!(&*restricted.cyclic_atoms, [0b0_1111]);
     assert_eq!(
-        restricted.atoms,
+        &*restricted.atoms,
         [0b0_1100],
         "the bridge initially supports the downstream cycle"
     );
-    assert_eq!(global.founded.atoms, [0]);
-    let global_before = global.founded.passes;
+    assert_eq!(&*global.common.founded.atoms, [0]);
+    let global_before = global.common.founded.passes;
     let mut left = Region::all_open(5);
     let mut right = left.clone();
     let mut left_scratch = NarrowingScratch::default();
@@ -125,7 +132,7 @@ fn acyclic_bridges_delay_cuts_without_changing_the_fixed_point() {
     assert_eq!(left_result, right_result);
     assert_eq!(left, right);
     assert!((0..5).all(|atom| left.is_cut(atom)));
-    assert!(left_scratch.founded.passes > global.founded.passes - global_before);
+    assert!(left_scratch.common.founded.passes > global.common.founded.passes - global_before);
 }
 
 #[test]
@@ -238,10 +245,11 @@ fn component_preparation_requires_the_exact_owner() {
                 &program.owner,
                 &program.index,
                 &program.producers,
-                &mut Work::new(u64::MAX),
+                &mut Meter::local(u64::MAX),
             )
+            .map_err(zetesis_algebra::Failure::into_stop)
             .unwrap();
-        assert_eq!(scratch.cyclic_atoms, [expected]);
+        assert_eq!(&*scratch.cyclic_atoms, [expected]);
         assert!(
             scratch
                 .owner
@@ -261,7 +269,7 @@ fn component_preparation_requires_the_exact_owner() {
 #[test]
 fn stopped_component_prefixes_publish_no_authority() {
     let program = Program::new(bridged_cycles());
-    let mut complete = Work::new(u64::MAX);
+    let mut complete = Meter::local(u64::MAX);
     let mut expected = Scratch::default();
     expected
         .prepare_bodies(
@@ -270,26 +278,29 @@ fn stopped_component_prefixes_publish_no_authority() {
             &program.producers,
             &mut complete,
         )
+        .map_err(zetesis_algebra::Failure::into_stop)
         .unwrap();
     let mut interrupted_visits = false;
     for failure in [Stop::WorkLimit, Stop::Cancelled, Stop::Deadline] {
-        for ceiling in 0..complete.spent {
+        for ceiling in 0..complete.charged() {
             let mut scratch = Scratch::default();
             let mut quota = RefuseAfter {
                 remaining: ceiling,
                 failure,
             };
-            let mut work = Work::reserved(&mut quota);
+            let mut work = Meter::reserved(&mut quota);
             assert_eq!(
-                scratch.prepare_bodies(
-                    &program.owner,
-                    &program.index,
-                    &program.producers,
-                    &mut work
-                ),
+                scratch
+                    .prepare_bodies(
+                        &program.owner,
+                        &program.index,
+                        &program.producers,
+                        &mut work
+                    )
+                    .map_err(zetesis_algebra::Failure::into_stop),
                 Err(failure)
             );
-            assert_eq!(work.spent, ceiling);
+            assert_eq!(work.charged(), ceiling);
             assert!(scratch.owner.is_none());
             assert!(scratch.may_affect_body(0));
             interrupted_visits |= scratch
@@ -301,8 +312,9 @@ fn stopped_component_prefixes_publish_no_authority() {
                     &program.owner,
                     &program.index,
                     &program.producers,
-                    &mut Work::new(u64::MAX),
+                    &mut Meter::local(u64::MAX),
                 )
+                .map_err(zetesis_algebra::Failure::into_stop)
                 .unwrap();
             assert_eq!(scratch.cyclic_atoms, expected.cyclic_atoms);
             assert_eq!(scratch.body_nodes, expected.body_nodes);
@@ -335,7 +347,7 @@ fn boundary_seeds_skip_unrelated_atom_occurrences() {
         let program = Program::new(theory(3, nodes, vec![2, 3, 4, 5]));
         let mut scratch = Scratch::default();
         scratch.prepare_projected(&program.owner, &program.index, &program.producers);
-        let mut work = Work::new(u64::MAX);
+        let mut work = Meter::local(u64::MAX);
         scratch
             .complete(
                 &program.owner,
@@ -345,11 +357,12 @@ fn boundary_seeds_skip_unrelated_atom_occurrences() {
                 &[0],
                 &mut work,
             )
+            .map_err(zetesis_algebra::Failure::into_stop)
             .unwrap();
-        assert_eq!(scratch.cyclic_atoms, [0b011]);
-        assert_eq!(scratch.atoms, [0b011]);
+        assert_eq!(&*scratch.cyclic_atoms, [0b011]);
+        assert_eq!(&*scratch.atoms, [0b011]);
         assert_eq!(scratch.body_nodes.len(), 3);
-        work.spent
+        work.charged()
     }
     assert_eq!(warm(0), warm(200));
 }

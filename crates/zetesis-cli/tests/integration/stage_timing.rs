@@ -1,9 +1,9 @@
 //! Actual routes expose exclusive typed stages without changing model output.
 use crate::support::options::serial_with_statistics as options;
+use zetesis_algebra::Cancellation;
 use zetesis_cli::{
     Completion, GroundingMode, PhaseTimings, SolvePhase, SolveStage, run_detailed_with_diagnostics,
 };
-use zetesis_cpu::Cancellation;
 
 fn partition(timings: &PhaseTimings) {
     let stages = timings.stages;
@@ -47,7 +47,7 @@ fn eager_lazy_formula_certified_and_parallel_routes_preserve_results() {
         (
             "p:-not q.q:-not p.",
             vec!["--grounder", "lazy"],
-            GroundingMode::LazyInterleaved,
+            GroundingMode::Mixed,
         ),
         (
             "p:-not q.q:-not p.",
@@ -100,28 +100,31 @@ fn eager_lazy_formula_certified_and_parallel_routes_preserve_results() {
                     timings.stages.get(SolveStage::Grounding).is_some(),
                     matches!(
                         mode,
-                        GroundingMode::Eager | GroundingMode::EagerBaseTerminalDefinitions
+                        GroundingMode::Eager
+                            | GroundingMode::Mixed
+                            | GroundingMode::EagerBaseTerminalDefinitions
                     )
                 );
                 if enabled {
                     assert!(
                         text.find("Stage timings:").unwrap() < text.find("Phase timings:").unwrap()
                     );
-                    assert!(text.contains("failed_attempts=included; schema=5"));
+                    assert!(text.contains("failed_attempts=included; schema=7"));
                 } else {
                     for phase in SolvePhase::ALL {
                         assert!(timings.get(phase).is_none());
                     }
                 }
                 if enabled && source == "1{p;q}1." {
-                    // One parse, one closure admission and one formula admission.
+                    // One parse and one formula admission: automatic execution
+                    // admits the formula directly, with no earlier attempt.
                     // Retrying the grammar reuses the original parsed owner.
                     assert_eq!(
                         timings
                             .get(SolvePhase::AdmissionMaterialization)
                             .unwrap()
                             .calls,
-                        3
+                        2
                     );
                     assert_eq!(
                         timings
@@ -129,7 +132,7 @@ fn eager_lazy_formula_certified_and_parallel_routes_preserve_results() {
                             .get(SolveStage::SourcePreparation)
                             .unwrap()
                             .calls,
-                        3
+                        2
                     );
                     assert!(timings.get(SolvePhase::CertificateSetup).is_some());
                 }
@@ -188,26 +191,6 @@ fn source_grounding_and_setup_failures_keep_only_entered_stages() {
     partition(&timings);
     assert!(timings.stages.get(SolveStage::Solving).is_some());
     assert!(timings.get(SolvePhase::CandidateSetup).is_some());
-}
-
-#[test]
-fn bounded_static_setup_retains_entered_stages() {
-    let mut config = zetesis_cli::PublicationConfig::from(&options(&["--grounder", "eager"], true));
-    config.solve.max_ground_rules = 0;
-    let failure = crate::support::prepared::relational_human(
-        "p.",
-        &config,
-        &mut Vec::new(),
-        &mut Vec::new(),
-        &Cancellation::default(),
-    )
-    .unwrap_err();
-    let timings = *failure.phase_timings.unwrap();
-    partition(&timings);
-    assert!(timings.stages.get(SolveStage::SourcePreparation).is_none());
-    assert!(timings.stages.get(SolveStage::Grounding).is_some());
-    assert!(timings.stages.get(SolveStage::Solving).is_some());
-    assert!(timings.stages.get(SolveStage::ObservationOutput).is_none());
 }
 
 #[test]

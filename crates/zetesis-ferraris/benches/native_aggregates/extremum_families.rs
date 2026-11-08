@@ -10,10 +10,10 @@
 use std::{cell::OnceCell, hint::black_box, time::Duration};
 
 use criterion::{BatchSize, BenchmarkId, Criterion, Throughput};
+use zetesis_algebra::Cancellation;
 use zetesis_core::{
     Atom, AtomCatalog, Predicate, Sign, Value, ValueLimits, ValueNode, catalog::TermRef,
 };
-use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{
     AdmissionLimits, AggregateComparison, AggregateExtremum, AggregateFamilyBuild,
     AggregateFamilyLimits, AggregateLimits, EvaluationLimits, EvaluationWorkspace, FormulaNodes,

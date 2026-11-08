@@ -1,0 +1,183 @@
+//! Syntactic dominance preserves each complete conditional-absence consequence.
+
+use super::*;
+
+fn copy(source: &Literals) -> Literals {
+    Literals {
+        conditions: source.conditions.clone(),
+        outputs: source.outputs.clone(),
+    }
+}
+
+fn verdict(row: &Row, proposed: &Literals) -> bool {
+    let mut remaining = u64::MAX;
+    row.subsumes(proposed, &mut remaining, &mut Meter::local(u64::MAX))
+        .map_err(zetesis_algebra::Failure::into_stop)
+        .unwrap()
+        .unwrap()
+}
+
+fn satisfied(row: &Literals, interpretation: usize) -> bool {
+    !row.conditions
+        .iter()
+        .all(|&(atom, value)| (interpretation & (1 << atom) != 0) == value)
+        || row
+            .outputs
+            .iter()
+            .all(|&(atom, present)| (interpretation & (1 << atom) != 0) == present)
+}
+
+#[test]
+fn an_output_of_the_opposite_sign_does_not_subsume() {
+    let absent = Literals {
+        conditions: vec![(0, true)],
+        outputs: vec![(5, false)],
+    };
+    let present = Literals {
+        conditions: vec![(0, true)],
+        outputs: vec![(5, true)],
+    };
+    for row in [Row::Scalar(copy(&absent)), packed(&absent)] {
+        assert!(!verdict(&row, &present));
+        assert!(verdict(&row, &absent));
+    }
+}
+
+#[test]
+fn subsumption_matches_sets_and_preserves_consequences() {
+    let mut rows = Vec::new();
+    for mut conditions in 0..9 {
+        let mut literals = Vec::new();
+        for atom in 0..2 {
+            match conditions % 3 {
+                1 => literals.push((atom, false)),
+                2 => literals.push((atom, true)),
+                _ => {}
+            }
+            conditions /= 3;
+        }
+        for outputs in 0..4 {
+            rows.push(explanation(
+                &literals,
+                &(2..4)
+                    .filter(|&atom| outputs & (1 << (atom - 2)) != 0)
+                    .collect::<Vec<_>>(),
+            ));
+        }
+    }
+    for retained in &rows {
+        for proposed in &rows {
+            // An independent set definition, not the production ordered merge.
+            let wanted = retained
+                .conditions
+                .iter()
+                .all(|value| proposed.conditions.contains(value))
+                && proposed
+                    .outputs
+                    .iter()
+                    .all(|output| retained.outputs.contains(output));
+            for row in [Row::Scalar(copy(retained)), packed(retained)] {
+                assert_eq!(verdict(&row, proposed), wanted);
+            }
+            if wanted {
+                // Exhaust every interpretation over these two premises and outputs.
+                for interpretation in 0..16 {
+                    assert!(
+                        !satisfied(retained, interpretation) || satisfied(proposed, interpretation)
+                    );
+                }
+            }
+        }
+    }
+}
+
+#[test]
+fn stronger_rows_subsume_without_changing_their_storage() {
+    let retained = dense();
+    let mut conditions = retained.conditions.clone();
+    conditions.push((80, false));
+    let proposed = explanation(&conditions, &[17, 64]);
+    let packed = prepared(copy(&retained));
+    assert!(matches!(packed, Row::Packed { .. }));
+    for row in [Row::Scalar(copy(&retained)), packed] {
+        let before = row.retained_bytes();
+        assert!(verdict(&row, &proposed));
+        assert_eq!(row.retained_bytes(), before);
+        assert_eq!(row.conditions().collect::<Vec<_>>(), retained.conditions);
+        assert_eq!(row.outputs().collect::<Vec<_>>(), retained.outputs);
+    }
+    assert!(
+        !verdict(&prepared(proposed), &retained),
+        "dominance is directional"
+    );
+}
+
+#[test]
+fn opposite_premises_and_missing_outputs_do_not_subsume() {
+    let retained = explanation(&[(1, true), (64, false)], &[2, 63, 65, 127]);
+    for row in [Row::Scalar(copy(&retained)), packed(&retained)] {
+        assert!(!verdict(
+            &row,
+            &explanation(&[(1, false), (64, false)], &[63])
+        ));
+        assert!(!verdict(
+            &row,
+            &explanation(&[(1, true), (64, false)], &[63, 128])
+        ));
+        assert!(!verdict(&row, &explanation(&[(1, true)], &[63])));
+        assert!(verdict(
+            &row,
+            &explanation(&[(0, false), (1, true), (64, false)], &[63, 127])
+        ));
+    }
+}
+
+#[test]
+fn every_interrupted_inclusion_prefix_preserves_its_stop() {
+    let retained = explanation(&[(1, true), (64, false)], &[2, 63, 65, 127]);
+    let proposed = explanation(
+        &[(0, false), (1, true), (32, true), (64, false), (100, true)],
+        &[63, 127],
+    );
+    for row in [Row::Scalar(copy(&retained)), packed(&retained)] {
+        let mut complete = Meter::local(u64::MAX);
+        let mut remaining = u64::MAX;
+        assert_eq!(
+            row.subsumes(&proposed, &mut remaining, &mut complete)
+                .map_err(zetesis_algebra::Failure::into_stop)
+                .unwrap(),
+            Some(true)
+        );
+        // Four proposed premises and four retained outputs are compared; the
+        // extra final premise cannot change inclusion and is not traversed.
+        assert_eq!(complete.charged(), 8);
+        for failure in [Stop::WorkLimit, Stop::Cancelled, Stop::Deadline] {
+            for prefix in 0..complete.charged() {
+                let mut permits = SinglePermits::new(prefix, failure);
+                let mut work = Meter::reserved(&mut permits);
+                let mut remaining = u64::MAX;
+                assert_eq!(
+                    row.subsumes(&proposed, &mut remaining, &mut work)
+                        .map_err(zetesis_algebra::Failure::into_stop),
+                    Err(failure)
+                );
+                assert_eq!(work.charged(), prefix);
+                assert_eq!(row.conditions().collect::<Vec<_>>(), retained.conditions);
+                assert_eq!(row.outputs().collect::<Vec<_>>(), retained.outputs);
+            }
+        }
+        for prefix in 0..complete.charged() {
+            let mut remaining = prefix;
+            let mut work = Meter::local(u64::MAX);
+            assert_eq!(
+                row.subsumes(&proposed, &mut remaining, &mut work)
+                    .map_err(zetesis_algebra::Failure::into_stop)
+                    .unwrap(),
+                None
+            );
+            assert_eq!(work.charged(), prefix);
+            assert_eq!(remaining, 0);
+            assert!(verdict(&row, &proposed));
+        }
+    }
+}

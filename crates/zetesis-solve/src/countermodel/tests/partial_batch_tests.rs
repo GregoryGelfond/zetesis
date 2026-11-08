@@ -4,15 +4,15 @@
 use std::io;
 use std::num::NonZeroUsize;
 
-use zetesis_cpu::Cancellation;
+use zetesis_algebra::Cancellation;
 use zetesis_ferraris::Interpretation;
-use zetesis_sat::{BatchVerdict, StableModels};
+use zetesis_stable::{BatchVerdict, StableModels};
 
 use super::test_harness::{admitted, input, run};
 use crate::formula_execution::{Failure, FormulaExecutionStatistics, MembershipExecution};
 use crate::formula_queue::BatchQueue;
 use crate::phase_timing::Recorder;
-use crate::{Backend, Oracle, SearchMethod, SolveConfig, SolveError};
+use crate::{Backend, Oracle, SolveConfig, SolveError};
 
 #[derive(Default)]
 struct Injected {
@@ -57,12 +57,24 @@ impl MembershipExecution for Injected {
         Some(FormulaExecutionStatistics {
             gpu_limits: None,
             gpu_residuals: None,
+            gpu_residual_handovers: None,
             tight_work_per_candidate: None,
             gpu_scheduled_work: None,
+            gpu_tight_routes: None,
+            gpu_tight_updates: None,
             gpu_submitted_batches: 0,
             gpu_submitted_candidates: 0,
             adapter: "injected native checker; no physical device".into(),
             gpu_batches: 0,
+            gpu_slates: 0,
+            gpu_largest_slate: None,
+            gpu_slate_resets: 0,
+            gpu_lookahead_slates: 0,
+            gpu_lookahead: None,
+            gpu_lookahead_device_ns: 0,
+            gpu_lookahead_finish_wait_ns: 0,
+            gpu_lookahead_unmeasured: 0,
+            first_answer_ns: None,
             gpu_candidates: 0,
             gpu_work: 0,
             gpu_rounds: 0,
@@ -71,18 +83,19 @@ impl MembershipExecution for Injected {
             pending_candidates: batch.pending,
             queued_models: self.queue.len(),
             peak_accounted_bytes: 0,
+            gpu_workgroup_size: None,
             gpu_compute_timing: zetesis_backend::ComputeTiming::default(),
             completion: self.queue.accounting(),
         })
     }
 }
 
-/// The batched protocol the injected checker takes part in belongs to
-/// the clause search.
+/// One region walker, whose candidates the injected checker answers in
+/// batches; several walkers would decide their leaves themselves.
 fn config() -> SolveConfig {
     SolveConfig {
         backend: Backend::Cpu,
-        search: SearchMethod::Clauses,
+        workers: NonZeroUsize::MIN,
         oracle: Oracle::Countermodel,
         models: 0,
         batch_size: NonZeroUsize::new(2).unwrap(),
@@ -226,7 +239,8 @@ fn stopping_pulls_preserves_unconsumed_membership() {
         )
         .unwrap()
         .unwrap();
-    assert!(first.0.atoms().is_empty());
+    // The walk visits the held branch first: the full choice comes first.
+    assert_eq!(first.0.atoms().len(), 2);
     let outcome = session.outcome(&phases);
     assert_eq!(outcome.verified_models(), 3);
     let statistics = outcome.formula_execution().unwrap();

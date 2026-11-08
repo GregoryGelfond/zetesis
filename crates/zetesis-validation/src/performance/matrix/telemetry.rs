@@ -13,6 +13,21 @@ pub(super) fn observe(
     stderr: &[u8],
     request: NativeExecution,
 ) -> Result<Observation, String> {
+    observe_with_source(document, stderr, request, None)
+}
+
+pub(super) fn observe_with_source(
+    document: &Value,
+    stderr: &[u8],
+    request: NativeExecution,
+    source: Option<&[u8]>,
+) -> Result<Observation, String> {
+    let mut observation = route(document, stderr, request)?;
+    super::handovers::attach(&mut observation.execution.device, document, source)?;
+    Ok(observation)
+}
+
+fn route(document: &Value, stderr: &[u8], request: NativeExecution) -> Result<Observation, String> {
     let timing = super::super::timing::parse_any(stderr)?;
     let statistics = &document["statistics"];
     measured_statistics(statistics, &timing)?;
@@ -134,6 +149,8 @@ fn measured_statistics(
 
 fn procedure(effective: &str, request: Oracle) -> Result<Procedure, String> {
     let procedure = match field(effective, "oracle")? {
+        // Reported by binaries built before the closure route was removed,
+        // which a comparison can still measure.
         "closure" => Procedure::Closure,
         "countermodel" => Procedure::Countermodel,
         "tight-support" => Procedure::TightSupport,
@@ -143,7 +160,6 @@ fn procedure(effective: &str, request: Oracle) -> Result<Procedure, String> {
     };
     let matches_request = match request {
         Oracle::Auto => true,
-        Oracle::Closure => procedure == Procedure::Closure,
         Oracle::Countermodel => procedure == Procedure::Countermodel,
     };
     if !matches_request {
@@ -204,9 +220,10 @@ fn device(
     procedure: Procedure,
     adapter: Option<&str>,
 ) -> Result<DeviceWork, String> {
-    let lazy_stats = statistics
-        .get("lazy_execution")
-        .ok_or("missing lazy activity field")?;
+    // Only the closure route's lazy GPU oracle filled this record. Binaries
+    // built before that route was removed report it, null elsewhere; current
+    // binaries omit it, which reads as the same absence of lazy activity.
+    let lazy_stats = statistics.get("lazy_execution").unwrap_or(&Value::Null);
     let formula_stats = statistics
         .get("execution")
         .ok_or("missing formula activity field")?;
@@ -310,6 +327,7 @@ fn formula(value: &Value, api: GpuApi, adapter: Option<&str>) -> Result<DeviceWo
         work: activity.work,
         cpu_residuals: activity.residuals,
         gpu_residuals: residual_reasons(value, activity.residuals)?,
+        gpu_residual_handovers: None,
         peak_accounted_bytes: activity.peak_bytes,
     })
 }

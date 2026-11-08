@@ -22,7 +22,8 @@ use std::num::NonZeroUsize;
 use std::str::FromStr;
 
 mod compute_timing;
-pub use compute_timing::{ComputeTiming, ComputeTimingStatus};
+pub mod residual_evidence;
+pub use compute_timing::{BatchComputeTime, ComputeTiming, ComputeTimingStatus};
 
 /// The CPU backend's default thread count, which `--threads auto` means: the
 /// host's available parallelism, or one when availability is unknown. It reads

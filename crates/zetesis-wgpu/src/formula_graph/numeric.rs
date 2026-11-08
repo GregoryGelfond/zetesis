@@ -2,7 +2,7 @@
 
 use super::{address, capacity};
 use crate::{GpuError, GpuErrorKind};
-use zetesis_cpu::Cancellation;
+use zetesis_algebra::Cancellation;
 use zetesis_ferraris::{ExtremumCutRule, NodeView, Theory};
 
 mod summary;
@@ -209,10 +209,11 @@ impl Rows {
         Ok(())
     }
 
-    /// Conservative frozen-query work for the existing threshold guard family.
+    /// Conservative guard-family supplement to `numeric_work`.
     /// Every live guard checks ownership; a shared owner scans G bounds twice.
     /// The 64 units per guard cover four-limb comparisons, descriptor/mask
-    /// reads and one intersection. No row contribution or extra storage is read.
+    /// reads and one intersection. Condition visits and forcing arithmetic
+    /// remain covered by `numeric_work`; this supplement adds no storage.
     pub(super) fn threshold_guard_work(
         &self,
         cancellation: &Cancellation,
@@ -236,6 +237,36 @@ impl Rows {
                 .ok_or_else(|| capacity("threshold guard work overflows"))?;
         }
         Ok(work)
+    }
+
+    /// The owner column of the packed live rows: each row's source index and
+    /// the guard its transport descriptor names as owner, the row's first
+    /// nonconstant guard. A row whose guards are all constant has no entry.
+    /// This is the one decision of row ownership; consumers that outlive the
+    /// directory retain this column rather than deriving ownership again.
+    ///
+    /// # Errors
+    /// Refuses a source index beyond `u32` and reports a failed reservation.
+    pub(crate) fn owners(&self, cancellation: &Cancellation) -> Result<Vec<(u32, u32)>, GpuError> {
+        let mut owners = Vec::new();
+        owners
+            .try_reserve_exact(self.live_rows())
+            .map_err(|error| allocation(&error))?;
+        for entry in &self.entries {
+            poll(cancellation)?;
+            if let Some(&(_, owner)) = self.guards[entry.guards.clone()].first() {
+                owners.push((address(entry.source)?, owner));
+            }
+        }
+        Ok(owners)
+    }
+
+    /// Rows with at least one nonconstant guard, the rows the transport packs.
+    pub(crate) fn live_rows(&self) -> usize {
+        self.entries
+            .iter()
+            .filter(|entry| !entry.guards.is_empty())
+            .count()
     }
 
     pub(crate) fn release(&mut self) {

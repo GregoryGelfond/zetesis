@@ -2,17 +2,18 @@
 //! read queued bits as processed evidence. Guard and forcing cursors advance
 //! monotonically, so each completed scan position is paid once per branch.
 
-use crate::Theory;
-use crate::regions::{Closure, Count, Narrower, Step, Work, bit};
-use zetesis_cpu::Stop;
+use zetesis_algebra::{Failure, Quota};
 
-impl<C: Count> Closure<'_, C> {
-    pub(in crate::regions) fn seed_thresholds(
+use crate::Theory;
+use crate::regions::{Closure, Count, Meter, Narrower, Step};
+
+impl<W: Count, C: crate::regions::ReadingClass> Closure<'_, W, C> {
+    pub(in crate::regions) fn seed_thresholds<Q: Quota + ?Sized>(
         &mut self,
         index: &Narrower,
         frozen: Option<&[bool]>,
-        work: &mut Work<'_>,
-    ) -> Result<Step, Stop> {
+        work: &mut Meter<'_, Q>,
+    ) -> Result<Step, Failure<Q::Error>> {
         let mut step = Step::Unchanged;
         for row in 0..index.thresholds.rows.len() {
             step = step.join(self.threshold_row(index, row, frozen, work)?);
@@ -23,18 +24,18 @@ impl<C: Count> Closure<'_, C> {
         Ok(step)
     }
 
-    pub(in crate::regions) fn threshold_guard(
+    pub(in crate::regions) fn threshold_guard<Q: Quota + ?Sized>(
         &mut self,
         index: &Narrower,
         theory: &Theory,
         node: usize,
         bound: i128,
         frozen: Option<&[bool]>,
-        work: &mut Work<'_>,
-    ) -> Result<Step, Stop> {
+        work: &mut Meter<'_, Q>,
+    ) -> Result<Step, Failure<Q::Error>> {
         let row = index.thresholds.row(theory, node);
         let state = &mut self.known.thresholds[row];
-        if bit(self.known.sure, node) {
+        if self.known.sure.contains(node) {
             if state.lower >= bound {
                 return Ok(Step::Unchanged);
             }
@@ -53,14 +54,14 @@ impl<C: Count> Closure<'_, C> {
 
     /// Called once when the canonical node event is processed, including a
     /// frozen-false condition's event. No pending condition updates a sum.
-    pub(in crate::regions) fn threshold_condition(
+    pub(in crate::regions) fn threshold_condition<Q: Quota + ?Sized>(
         &mut self,
         index: &Narrower,
         node: usize,
         value: bool,
         frozen: Option<&[bool]>,
-        work: &mut Work<'_>,
-    ) -> Result<Step, Stop> {
+        work: &mut Meter<'_, Q>,
+    ) -> Result<Step, Failure<Q::Error>> {
         let mut step = Step::Unchanged;
         for &edge in index.thresholds.condition(node) {
             work.tick()?;
@@ -90,13 +91,13 @@ impl<C: Count> Closure<'_, C> {
         Ok(step)
     }
 
-    pub(super) fn threshold_row(
+    pub(super) fn threshold_row<Q: Quota + ?Sized>(
         &mut self,
         index: &Narrower,
         row: usize,
         frozen: Option<&[bool]>,
-        work: &mut Work<'_>,
-    ) -> Result<Step, Stop> {
+        work: &mut Meter<'_, Q>,
+    ) -> Result<Step, Failure<Q::Error>> {
         work.tick()?;
         let state = self.known.thresholds[row];
         if state.lower > state.possible
@@ -127,13 +128,13 @@ impl<C: Count> Closure<'_, C> {
 
     /// Bound implications and numeric truth use the same ordered guard ranges.
     /// Frozen-false targets are constants and supply no row requirement.
-    fn threshold_guards(
+    fn threshold_guards<Q: Quota + ?Sized>(
         &mut self,
         index: &Narrower,
         row: usize,
         frozen: Option<&[bool]>,
-        work: &mut Work<'_>,
-    ) -> Result<Step, Stop> {
+        work: &mut Meter<'_, Q>,
+    ) -> Result<Step, Failure<Q::Error>> {
         let guards = &index.thresholds.rows[row].guards;
         let mut step = Step::Unchanged;
         loop {
@@ -177,13 +178,13 @@ impl<C: Count> Closure<'_, C> {
     /// Descending coefficients cross each forcing cutoff at most once. Decided
     /// bits may be skipped before their events run: they need no further forcing,
     /// but their contributions still wait for `threshold_condition` to update sums.
-    fn threshold_terms(
+    fn threshold_terms<Q: Quota + ?Sized>(
         &mut self,
         index: &Narrower,
         row: usize,
         value: bool,
-        work: &mut Work<'_>,
-    ) -> Result<Step, Stop> {
+        work: &mut Meter<'_, Q>,
+    ) -> Result<Step, Failure<Q::Error>> {
         let state = self.known.thresholds[row];
         let cutoff = if value {
             if state.known >= state.lower {
@@ -211,7 +212,8 @@ impl<C: Count> Closure<'_, C> {
                 break;
             };
             work.tick()?;
-            let decided = bit(self.known.sure, condition) || bit(self.known.never, condition);
+            let decided =
+                self.known.sure.contains(condition) || self.known.never.contains(condition);
             if !decided
                 && if value {
                     weight <= cutoff

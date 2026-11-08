@@ -1,8 +1,8 @@
 //! Objective ranking is subordinate to complete stable-model verification.
 
 use clap::Parser;
+use zetesis_algebra::Cancellation;
 use zetesis_cli::{Completion, Options, Report, run_with_diagnostics};
-use zetesis_cpu::Cancellation;
 
 fn solve(source: &str, arguments: &[&str]) -> (Report, String) {
     let options =
@@ -88,9 +88,30 @@ fn all_optimal_hidden_models_retain_multiplicity_and_fixed_priorities() {
     assert_eq!(best.tied_models, 2);
     assert!(best.scored_models >= best.tied_models);
     assert_eq!(text.matches("Optimization: 0 -1\n").count(), 2);
-    let (one, _) = solve(HIDDEN_TIES, &[]);
+}
+
+#[test]
+fn one_requested_answer_proves_the_optimum_without_counting_its_ties() {
+    // The default bounds one requested answer strictly: a tie of the proved
+    // optimum is pruned, so the number of ties is not established.
+    let (one, text) = solve(HIDDEN_TIES, &[]);
+    assert_eq!(one.completion, Completion::Exhausted);
     assert_eq!(one.models, 1);
-    assert_eq!(one.optimization.unwrap().tied_models, 2);
+    let best = one.optimization.unwrap();
+    assert_eq!(best.score.costs(), &[(7, 0), (2, -1)]);
+    assert!(best.ties_pruned);
+    assert!(text.contains("OPTIMUM FOUND\nModels: 1\n"), "{text}");
+}
+
+#[test]
+fn the_inclusive_schedule_counts_every_tie_of_one_requested_answer() {
+    let (one, _) = bounded(HIDDEN_TIES, &[], |config| {
+        config.optimum_search = zetesis_cli::OptimumSearch::Inclusive;
+    });
+    assert_eq!(one.models, 1);
+    let best = one.optimization.unwrap();
+    assert_eq!(best.tied_models, 2);
+    assert!(!best.ties_pruned);
 }
 
 #[test]
@@ -235,4 +256,72 @@ fn answer_records(text: &str) -> Vec<(&str, &str)> {
     }
     records.sort_unstable();
     records
+}
+
+/// Three of the six pairs tie at the optimum, cost two; the others cost three.
+const PAIRS: &str = "2 { p(1..4) } 2. w(1,1). w(2,1). w(3,1). w(4,2).
+#minimize { W,X : p(X), w(X,W) }.";
+
+/// One CPU worker, whose candidate order is fixed, so that a candidate limit
+/// falls in a chosen pass.
+const SERIAL: [&str; 4] = ["--backend", "cpu", "--workers", "1"];
+
+/// The candidates a strict search for one answer checks, all in its one pass.
+fn strict_candidates() -> u64 {
+    let (one, _) = bounded(PAIRS, &SERIAL, |config| {
+        config.optimum_search = zetesis_cli::OptimumSearch::StrictForOneAnswer;
+    });
+    assert_eq!(one.completion, Completion::Exhausted);
+    one.checked
+}
+
+/// Every optimal answer under the tie-pass schedule, within a candidate limit
+/// that the strict pass fits and the tie pass exceeds.
+fn tie_pass_cut_short(config: &mut zetesis_cli::SolveConfig, strict: u64) {
+    config.optimum_search = zetesis_cli::OptimumSearch::StrictWithTiePass;
+    config.models = 0;
+    config.max_candidates = strict + 1;
+}
+
+#[test]
+fn a_stopped_tie_pass_reports_its_proved_optimum_to_people() {
+    let strict = strict_candidates();
+    let (report, text) = bounded(PAIRS, &SERIAL, |config| {
+        tie_pass_cut_short(config, strict);
+    });
+    assert_eq!(report.completion, Completion::Interrupted);
+    assert!(report.optimum_proved);
+    assert!(text.contains("INCOMPLETE: "), "{text}");
+    assert!(
+        text.contains("Optimum proved; optimal family incomplete\n"),
+        "{text}"
+    );
+    assert!(!text.contains("OPTIMUM FOUND"), "{text}");
+}
+
+#[test]
+fn a_stopped_tie_pass_reports_its_proved_optimum_in_json() {
+    let strict = strict_candidates();
+    let options = Options::try_parse_from(["zetesis"].into_iter().chain(SERIAL)).unwrap();
+    let mut config = zetesis_cli::PublicationConfig::from(&options);
+    tie_pass_cut_short(&mut config.solve, strict);
+    let mut output = Vec::new();
+    crate::support::prepared::formula(
+        PAIRS,
+        &config,
+        &mut zetesis_cli::JsonRenderer::new(
+            &mut output,
+            options.resources().json_record_bytes(),
+            options.resources().formula_limits().theory.max_atoms,
+        ),
+        &mut Vec::new(),
+        &Cancellation::default(),
+    )
+    .unwrap();
+    let document: serde_json::Value = serde_json::from_slice(&output).unwrap();
+    let outcome = &document["outcome"];
+    assert_eq!(outcome["status"], "incomplete");
+    assert_eq!(outcome["coverage"], "partial");
+    assert_eq!(outcome["optimization"]["optimal"], true);
+    assert!(outcome["interruption"].is_object(), "{outcome}");
 }

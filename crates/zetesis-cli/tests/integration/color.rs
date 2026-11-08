@@ -3,11 +3,11 @@
 use std::io;
 use std::process::{Command, Stdio};
 
+use zetesis_algebra::Cancellation;
 use zetesis_cli::{
     ColorMode, Completion, Options, RunError, run_detailed_with_diagnostics,
     run_finalized_with_diagnostics,
 };
-use zetesis_cpu::Cancellation;
 use zetesis_test_support::io::BoundedWriter;
 use zetesis_test_support::repository;
 
@@ -174,7 +174,9 @@ fn unsatisfiable_status_is_untagged_styled_metadata() {
 fn requested_model_completion_styles_its_status() {
     let mut settings = options(&["--color", "always"]);
     settings.models = 1;
-    for source in ["a.", "a|b."] {
+    // Each program has two answers, so the requested count is what stops it.
+    // (Facts alone are evaluated completely, and report exhaustion.)
+    for source in ["{a}.", "a|b."] {
         let mut bytes = Vec::new();
         let report = run_detailed_with_diagnostics(
             source.into(),

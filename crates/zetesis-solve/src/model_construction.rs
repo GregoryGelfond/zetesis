@@ -3,10 +3,10 @@
 
 use std::fmt;
 
+use zetesis_algebra::{Cancellation, Stop};
 use zetesis_core::{
     AtomCatalog, Model, ModelError, ModelFailure, ModelOrder, ModelPublicationFailure,
 };
-use zetesis_cpu::{Cancellation, Stop};
 
 use crate::{SolveConfig, SolveError};
 
@@ -110,7 +110,7 @@ impl Account {
             .statistics
             .constructed
             .checked_add(1)
-            .ok_or(Failure::Run(SolveError::ModelStatisticsOverflow))?;
+            .ok_or_else(|| Failure::Run(SolveError::ModelStatisticsOverflow))?;
         let mut work = 0;
         let publication = order
             .select_with(positions, config.max_model_bytes, || {
@@ -143,7 +143,7 @@ impl Account {
             .statistics
             .work
             .checked_add(1)
-            .ok_or(Failure::Run(SolveError::ModelStatisticsOverflow))?;
+            .ok_or_else(|| Failure::Run(SolveError::ModelStatisticsOverflow))?;
         // Only accepted operations enter either receipt. The inclusive u64
         // allowance admits the local addition; the total has its own check.
         *work += 1;

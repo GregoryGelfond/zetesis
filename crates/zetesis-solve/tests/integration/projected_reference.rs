@@ -8,10 +8,10 @@
 use std::{collections::BTreeSet, ffi::OsStr, num::NonZeroUsize, path::Path};
 use zetesis_reference_support::{formula, resource_limits};
 
+use zetesis_algebra::Cancellation;
 use zetesis_clingo_support as oracle;
 use zetesis_clingo_support::REPORT_BYTES;
 use zetesis_core::Model;
-use zetesis_cpu::Cancellation;
 use zetesis_solve::{
     AnswerSelection, Backend, Completion, Grounder, Oracle, PreparedInput, ProjectionLimits,
     Session, SolveConfig,

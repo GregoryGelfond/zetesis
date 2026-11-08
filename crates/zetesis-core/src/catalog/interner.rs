@@ -19,6 +19,8 @@ pub use terms::{AssignedFailure, PreparedPattern, PreparedRows, RowColumn, TermL
 use std::cmp::Ordering;
 use std::{collections::TryReserveError, fmt};
 
+use zetesis_algebra::{Meter, MeterBytes};
+
 use super::{
     AtomCatalog, AtomRef, Atoms, CatalogRead, DeclaredConstructor, DeclaredPredicate,
     Limits as TermLimits, PredicateRef,
@@ -255,20 +257,6 @@ impl AtomInterner {
         Self::default()
     }
 
-    /// Create one tuple authority over the admitted program's exact vocabulary.
-    /// Terms and signed predicates share their original immutable allocations;
-    /// this request has a fresh atom identity scope and empty discovery/truth.
-    /// New terms or signatures are refused rather than extending the domain.
-    /// The byte allowance includes shared base retention and this owner's named
-    /// metadata. Arc envelopes follow the ordinary constructor's allocation
-    /// boundary. Later operations retain their own population/work allowances.
-    ///
-    /// # Errors
-    /// Refuses an initial named-storage footprint beyond `max_bytes`.
-    pub fn for_program(program: &crate::Program, max_bytes: usize) -> Result<Self, super::Error> {
-        Self::with_vocabulary(program.vocabulary().clone(), max_bytes)
-    }
-
     /// Create an independent tuple authority over an admitted template vocabulary.
     /// Shared terms and predicates retain their canonical identity; atoms receive
     /// a fresh scope. No new vocabulary is admitted by the returned writer.
@@ -295,17 +283,17 @@ impl AtomInterner {
         max_bytes: usize,
     ) -> Result<Self, super::Error> {
         let owner = Self::from_store(Store::with_vocabulary(vocabulary, max_bytes)?);
-        if owner.storage_bytes() > max_bytes as u128 {
-            return Err(super::Error::Storage {
+        MeterBytes::check(owner.storage_bytes(), max_bytes as u128).map_err(|_| {
+            super::Error::Storage {
                 required: owner.storage_bytes(),
                 limit: max_bytes,
-            });
-        }
+            }
+        })?;
         Ok(owner)
     }
 
     /// Shared immutable vocabulary already included in [`Self::storage_bytes`].
-    /// A combined Program/tuple ledger counts that same retained base once.
+    /// A combined template-catalog/tuple ledger counts that same retained base once.
     /// General evolving owners have no separately shared vocabulary allocation.
     #[must_use]
     pub fn shared_vocabulary_bytes(&self) -> u128 {
@@ -1621,24 +1609,18 @@ fn cells<T>(count: usize) -> u128 {
     count as u128 * size_of::<T>() as u128
 }
 fn admit<E>(required: u128, limits: Limits) -> Result<(), Failure<E>> {
-    if required > limits.max_bytes {
-        Err(Failure::Bytes {
-            required,
-            limit: limits.max_bytes,
-        })
-    } else {
-        Ok(())
-    }
+    MeterBytes::check(required, limits.max_bytes).map_err(|_| Failure::Bytes {
+        required,
+        limit: limits.max_bytes,
+    })
 }
 fn population<E>(required: usize, limits: Limits) -> Result<(), Failure<E>> {
-    if required > limits.max_atoms {
-        Err(Failure::Atoms {
+    Meter::check_count(required, 0, limits.max_atoms)
+        .map(|_| ())
+        .map_err(|_| Failure::Atoms {
             required,
             limit: limits.max_atoms,
         })
-    } else {
-        Ok(())
-    }
 }
 fn path_bound(count: usize) -> usize {
     2 * (usize::BITS - count.leading_zeros()) as usize + 1

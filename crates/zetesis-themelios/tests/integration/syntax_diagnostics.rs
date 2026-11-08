@@ -4,18 +4,22 @@ use crate::support::admission;
 use themelios_base::{diagnostic::ToDiagnostic, source::SourceId};
 use zetesis_themelios::{
     AdmissionFailure, ExpansionFailure, ExpansionLimits, FormulaFailure, FormulaLimits,
-    SyntaxFailure, admit, admit_extended, prepare_formula,
+    ParsedSource, SyntaxFailure, admit_formula, prepare_formula,
 };
 
 const SOURCE: &str = "% original é\r\n{a,b :- q.\r\nq :- c.\r\n";
 
 fn failures() -> [AdmissionFailure; 3] {
     let options = admission::options(SourceId::new(7));
-    let direct = admit(SOURCE.to_owned(), options).unwrap_err();
-    let ExpansionFailure::Admission(extended) =
-        admit_extended(SOURCE.to_owned(), options, ExpansionLimits::default()).unwrap_err()
-    else {
-        panic!("malformed source must stop in syntax admission")
+    let direct = ParsedSource::new(SOURCE.to_owned(), options).unwrap_err();
+    let FormulaFailure::Expansion(ExpansionFailure::Admission(admitted)) = admit_formula(
+        SOURCE.to_owned(),
+        options,
+        ExpansionLimits::default(),
+        FormulaLimits::default(),
+    )
+    .unwrap_err() else {
+        panic!("malformed source must stop before formula admission")
     };
     let FormulaFailure::Expansion(ExpansionFailure::Admission(formula)) = prepare_formula(
         SOURCE.to_owned(),
@@ -26,7 +30,7 @@ fn failures() -> [AdmissionFailure; 3] {
     .unwrap_err() else {
         panic!("malformed source must stop before formula preparation")
     };
-    [direct, extended, formula]
+    [direct, admitted, formula]
 }
 
 fn syntax(failure: &AdmissionFailure) -> &SyntaxFailure {

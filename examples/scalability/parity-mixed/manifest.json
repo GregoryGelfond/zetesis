@@ -1,0 +1,50 @@
+{
+  "schema_version": 1,
+  "root": ".",
+  "cases": [
+    {
+      "entry": "parity_mixed.lp",
+      "contract": {
+        "satisfiability": "sat",
+        "family": "all",
+        "model_count": 21,
+        "cost": null,
+        "witnesses": [
+          ["on(1)", "on(10)", "on(12)", "on(6)", "on(7)", "on(8)", "on(9)"],
+          ["on(1)", "on(10)", "on(2)", "on(3)", "on(4)", "on(5)", "on(6)", "on(7)", "on(8)", "on(9)"],
+          ["on(1)", "on(11)", "on(12)", "on(13)", "on(14)", "on(15)", "on(3)", "on(5)", "on(7)", "on(9)"],
+          ["on(1)", "on(11)", "on(12)", "on(13)", "on(14)", "on(3)", "on(6)", "on(9)"],
+          ["on(1)", "on(11)", "on(12)", "on(13)", "on(15)", "on(3)", "on(4)", "on(6)", "on(7)", "on(9)"],
+          ["on(1)", "on(11)", "on(12)", "on(13)", "on(3)", "on(4)", "on(5)", "on(9)"],
+          ["on(1)", "on(11)", "on(12)", "on(6)", "on(7)", "on(8)"],
+          ["on(1)", "on(11)", "on(13)", "on(14)", "on(2)", "on(4)", "on(5)", "on(6)", "on(9)"],
+          ["on(1)", "on(11)", "on(15)", "on(2)", "on(3)", "on(4)", "on(8)"],
+          ["on(1)", "on(11)", "on(2)", "on(3)", "on(4)", "on(5)", "on(6)", "on(7)", "on(8)"],
+          ["on(10)", "on(11)", "on(12)", "on(13)", "on(2)", "on(6)", "on(7)", "on(8)"],
+          ["on(10)", "on(11)", "on(12)", "on(14)", "on(15)", "on(2)", "on(3)", "on(5)", "on(7)", "on(9)"],
+          ["on(10)", "on(11)", "on(12)", "on(15)", "on(2)", "on(3)", "on(4)", "on(6)", "on(7)", "on(9)"],
+          ["on(10)", "on(11)", "on(13)", "on(15)", "on(3)", "on(4)", "on(8)"],
+          ["on(10)", "on(11)", "on(13)", "on(3)", "on(4)", "on(5)", "on(6)", "on(7)", "on(8)"],
+          ["on(10)", "on(11)", "on(14)", "on(15)", "on(4)", "on(7)", "on(9)"],
+          ["on(12)", "on(13)", "on(14)", "on(15)", "on(2)", "on(4)", "on(6)", "on(8)", "on(9)"],
+          ["on(12)", "on(13)", "on(14)", "on(2)", "on(4)", "on(5)", "on(7)", "on(8)", "on(9)"],
+          ["on(12)", "on(13)", "on(2)", "on(6)", "on(7)", "on(8)", "on(9)"],
+          ["on(13)", "on(15)", "on(3)", "on(4)", "on(8)", "on(9)"],
+          ["on(13)", "on(3)", "on(4)", "on(5)", "on(6)", "on(7)", "on(8)", "on(9)"]
+        ],
+        "required_symbols": [],
+        "notes": [
+          "Tseitin's parity formula with every vertex charged 0 on the 3-regular graph with p = 5, whose 64 solutions are the graph's even subgraphs, cut down to 21 by eight random three-literal clauses over the 15 edge atoms.",
+          "The parity constraints form a linear system over GF(2); the random clauses do not, so the even subgraphs the clauses allow must still be searched."
+        ]
+      },
+      "files": [
+        {
+          "path": "parity_mixed.lp",
+          "sha256": "850168bb72c8068b6f9e067400a688293df88b5187409093c1be88754cbd80fe",
+          "includes": []
+        }
+      ]
+    }
+  ]
+}

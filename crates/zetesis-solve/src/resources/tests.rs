@@ -15,7 +15,6 @@ fn mandatory_traversal_uses_counter_representation() {
         solve.max_objective_bindings,
         solve.max_candidates,
         solve.max_work,
-        solve.max_source_work,
         solve.constraints.max_work,
         solve.constraints.max_substitutions,
     ] {
@@ -67,9 +66,7 @@ fn memory_controls_retained_populations() {
 fn zero_memory_does_not_gain_population_headroom() {
     let resources = Resources::new(0, NonZeroUsize::MIN);
     let solve = resources.solve_config();
-    assert_eq!(solve.max_closure_bytes, 0);
     assert_eq!(solve.max_atoms, 0);
-    assert_eq!(solve.max_projection_nodes, 0);
     assert_eq!(resources.formula_limits().theory.max_nodes, 0);
     assert_eq!(resources.formula_limits().max_support_bytes, 0);
     assert_eq!(resources.expansion_limits().max_templates, 0);
@@ -78,20 +75,48 @@ fn zero_memory_does_not_gain_population_headroom() {
     assert_eq!(resources.bundle_limits().max_files, 0);
     assert_eq!(resources.observation_limits().max_terms, 0);
     assert_eq!(resources.json_record_bytes(), 0);
+    assert_eq!(solve.max_batch_bytes, 0);
+    assert_eq!(solve.max_tight_batch_bytes, 0);
+}
+
+/// Zero, the divisors' rounding edge, the library reference, the default
+/// allowances of 8, 16 and 48 GiB hosts (half their memory), and the clamped
+/// maximum.
+const ALLOWANCES: [u64; 8] = [
+    0,
+    15,
+    16,
+    Resources::REFERENCE_MEMORY,
+    4 * 1024 * 1024 * 1024,
+    8 * 1024 * 1024 * 1024,
+    24 * 1024 * 1024 * 1024,
+    u64::MAX,
+];
+
+/// The allowance `Resources::new` keeps after clamping to the host's extent.
+fn clamped(memory: u64) -> u64 {
+    memory.min(u64::try_from(isize::MAX).unwrap())
 }
 
 #[test]
-fn closure_workers_share_the_collective_capacity() {
-    for memory in [0, 1, 63, 1024, Resources::REFERENCE_MEMORY, u64::MAX] {
-        for workers in [1, 3, 7, 64] {
-            let workers = NonZeroUsize::new(workers).unwrap();
-            let config = Resources::new(memory, workers).solve_config();
-            assert_eq!(config.workers, workers);
-            assert!(
-                config.max_closure_bytes.checked_mul(workers.get()).unwrap()
-                    <= config.max_closure_batch_bytes
-            );
-        }
+fn the_tight_batch_ceiling_is_a_sixteenth_of_the_allowance() {
+    for memory in ALLOWANCES {
+        let config = Resources::new(memory, NonZeroUsize::MIN).solve_config();
+        assert_eq!(
+            config.max_tight_batch_bytes,
+            clamped(memory) / 16,
+            "{memory}"
+        );
+    }
+}
+
+#[test]
+fn other_device_batches_keep_a_thirty_second_of_the_allowance() {
+    // Every device batch but the tight support check's reads `max_batch_bytes`,
+    // which keeps the share it had before the tight batch got its own.
+    for memory in ALLOWANCES {
+        let config = Resources::new(memory, NonZeroUsize::MIN).solve_config();
+        assert_eq!(config.max_batch_bytes, clamped(memory) / 32, "{memory}");
     }
 }
 
@@ -122,8 +147,6 @@ fn ordinary_solve_defaults_share_the_factory() {
 #[test]
 fn maximal_memory_retains_checked_coordinate_extents() {
     let resources = Resources::new(u64::MAX, NonZeroUsize::MIN);
-    let config = resources.solve_config();
-    assert!(u32::try_from(config.max_projection_nodes).is_ok());
     let formula = resources.formula_limits();
     assert!(isize::try_from(formula.max_support_bytes).is_ok());
     assert!(

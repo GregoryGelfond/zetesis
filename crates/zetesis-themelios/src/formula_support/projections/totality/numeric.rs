@@ -40,8 +40,10 @@ pub(super) fn arithmetic(operation: &Operation) -> bool {
 /// Only those hulls are retained; unknown domains still decline the certificate.
 /// The buffers are created when interval analysis is needed, including scalar
 /// body assignments. They share the ordinary support-storage leases and are
-/// released with the attempt. No evidence crosses
-/// a rule, support snapshot, candidate, or later totality attempt.
+/// released with the attempt. No evidence in them crosses a rule, support
+/// snapshot, candidate, or later totality attempt. The column hulls they read
+/// come from the snapshot's support, which in support completion keeps each
+/// hull across rounds and extends it with the appended rows.
 ///
 /// Each used variable's distinct numeric values are scanned at most once. Space
 /// is O(rule variables + longest visited expression), independently of the number
@@ -272,7 +274,16 @@ fn numeric_domain(
     let Some(domain) = domain(slot, literals, support, context)? else {
         return Ok(None);
     };
-    column_bounds(domain.rows, domain.column, context)
+    support.column_hull(
+        domain.rows,
+        domain.column,
+        &mut Context::new(
+            &*context.computation,
+            context.work.limits,
+            context.work.counters,
+            context.work.location,
+        ),
+    )
 }
 
 /// A target-column hull, distinct from the smallest covering variable domain.
@@ -287,7 +298,7 @@ pub(in crate::formula_support) fn positive_bounds<C>(
 
 /// Every numeric value in one complete immutable column, or a conservative
 /// decline for empty, mixed or unindexed columns. No binding existence follows.
-pub(in crate::formula_support) fn column_bounds<C>(
+fn column_bounds<C>(
     rows: &crate::formula_support::relations::RelationRows<'_>,
     column: usize,
     context: &mut Context<'_, C>,

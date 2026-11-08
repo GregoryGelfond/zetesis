@@ -1,4 +1,4 @@
-//! First-pass replay below inherited completed founded knowledge.
+//! Replay below completed founded knowledge.
 //!
 //! Every old uncut cyclic atom belongs to the old least upper closure. Collect
 //! all newly false selected inputs, then close their forward dependency cone.
@@ -10,17 +10,27 @@
 //! heads under current masks. The final
 //! atom mask contains the unaffected seeds and the complete local result.
 //!
-//! Only the inherited knowledge supplies this premise. Owner-bound scratch stores
-//! disposable membership/worklists, never an ancestor's truth. A partial attempt
-//! consumes the premise and leaves marks that require a full retry. Publication
-//! and explanation capture retain their existing complete-result boundary.
+//! Inherited completion or a complete successful missing-head publication
+//! supplies this premise. The latter erases only heads absent from the completed
+//! least closure, before ordinary propagation changes other body masks.
+//! Owner-bound scratch stores disposable membership/worklists, never previous
+//! body truth. A partial attempt consumes the premise and leaves marks that
+//! require a full retry of that region. Marks a sibling left when it was
+//! refuted or stopped before its pass describe that sibling's inputs only;
+//! the next inherited narrowing resets them, charged per mark, and then
+//! collects its own. Publication and explanation capture retain their
+//! existing complete-result boundary.
+
+use zetesis_algebra::{Failure, Quota};
+
+use zetesis_algebra::words::Words;
 
 use super::{
-    Initial, Narrower, NodeView, Producers, Scratch, State, Theory, Work, bit, chain_position,
+    Initial, Meter, Narrower, NodeView, Producers, Scratch, State, Theory, bit, chain_position,
     flag_words, reserve,
 };
 use std::mem::size_of;
-use zetesis_cpu::Stop;
+use zetesis_algebra::Stop;
 
 #[cfg(test)]
 mod tests;
@@ -40,6 +50,8 @@ pub(super) struct Replay {
     touched: Vec<usize>,
     #[cfg(test)]
     passes: usize,
+    #[cfg(test)]
+    force_full: bool,
 }
 
 impl Replay {
@@ -53,14 +65,14 @@ impl Replay {
 
     /// Preparation publishes under the same exact owner as the immutable rows.
     /// Reserve false-event slots before infallible ordinary propagation begins.
-    pub(super) fn prepare(
+    pub(super) fn prepare<Q: Quota + ?Sized>(
         &mut self,
         atoms: usize,
         nodes: usize,
         bodies: usize,
         cyclic: &[u64],
-        work: &mut Work<'_>,
-    ) -> Result<(), Stop> {
+        work: &mut Meter<'_, Q>,
+    ) -> Result<(), Failure<Q::Error>> {
         self.end();
         self.clear(work)?;
         let vertices = atoms.checked_add(nodes).ok_or(Stop::Allocation)?;
@@ -75,12 +87,15 @@ impl Replay {
         self.cyclic = 0;
         for &word in cyclic {
             work.tick()?;
-            self.cyclic += word.count_ones() as usize;
+            self.cyclic += Words::<u64>::popcount(word) as usize;
         }
         Ok(())
     }
 
-    pub(super) fn clear(&mut self, work: &mut Work<'_>) -> Result<(), Stop> {
+    pub(super) fn clear<Q: Quota + ?Sized>(
+        &mut self,
+        work: &mut Meter<'_, Q>,
+    ) -> Result<(), Failure<Q::Error>> {
         while let Some(&vertex) = self.touched.last() {
             work.tick()?;
             self.marks[vertex] = 0;
@@ -99,13 +114,13 @@ impl Replay {
 
     /// Discovery can grow beyond the initial false inputs. Reserve before
     /// publishing a mark so every prefix remains clearable after allocation fails.
-    fn enqueue(
+    fn enqueue<Q: Quota + ?Sized>(
         &mut self,
         queue: &mut Vec<usize>,
         vertex: usize,
         flag: u8,
-        work: &mut Work<'_>,
-    ) -> Result<(), Stop> {
+        work: &mut Meter<'_, Q>,
+    ) -> Result<(), Failure<Q::Error>> {
         work.tick()?;
         if self.marks[vertex] & flag != 0 {
             return Ok(());
@@ -128,28 +143,74 @@ impl Scratch {
         self.local.end();
     }
 
-    /// Called once before original events. Unchanged checks incur no traversal
-    /// or allocation. Dirty scratch from a stopped sibling declines this route.
-    pub(in crate::regions) fn begin_local(&mut self, theory: &Theory, inherited: bool) {
+    /// Called once before original events. A sibling refuted or stopped before
+    /// its founded pass leaves its recorded inputs here; they describe another
+    /// region and carry no authority, so they are reset, one charged operation
+    /// per mark, before this region collects. Clean scratch incurs no traversal
+    /// or allocation.
+    ///
+    /// # Errors
+    /// Returns the exact refusal of a reset. The marks not yet reset remain,
+    /// so a later reset continues from them, and no authority is granted.
+    pub(in crate::regions) fn begin_local<Q: Quota + ?Sized>(
+        &mut self,
+        theory: &Theory,
+        inherited: bool,
+        work: &mut Meter<'_, Q>,
+    ) -> Result<(), Failure<Q::Error>> {
         self.local.end();
-        if inherited
-            && self
-                .owner
-                .as_ref()
-                .is_some_and(|owner| owner.same_instance(theory))
+        if inherited {
+            self.begin_completed(theory, work)?;
+        }
+        Ok(())
+    }
+
+    /// Called only after explanation capture and the entire missing-head
+    /// publication succeeded. Every remaining uncut cyclic head is in the
+    /// completed result; dependent ordinary events have not yet been drained.
+    ///
+    /// # Errors
+    /// As [`Self::begin_local`]; the completed pass left no mark to reset.
+    pub(in crate::regions) fn begin_after_publication<Q: Quota + ?Sized>(
+        &mut self,
+        theory: &Theory,
+        work: &mut Meter<'_, Q>,
+    ) -> Result<(), Failure<Q::Error>> {
+        self.local.end();
+        self.begin_completed(theory, work)
+    }
+
+    /// Both callers supply complete baseline knowledge, never a partial pass.
+    /// Authority is granted only once every stale mark has been reset.
+    fn begin_completed<Q: Quota + ?Sized>(
+        &mut self,
+        theory: &Theory,
+        work: &mut Meter<'_, Q>,
+    ) -> Result<(), Failure<Q::Error>> {
+        #[cfg(test)]
+        if self.local.force_full {
+            return Ok(());
+        }
+        if self
+            .owner
+            .as_ref()
+            .is_some_and(|owner| owner.same_instance(theory))
             && self.projected.is_some()
-            && self.local.touched.is_empty()
             && self.local.atoms == theory.atom_count()
             && self.local.marks.len() == theory.atom_count().saturating_add(theory.nodes().len())
         {
+            self.local.clear(work)?;
             self.queue.clear();
             self.local.collecting = true;
         }
+        Ok(())
     }
 
     /// Ordinary evidence only appends selected node IDs, once each. Storage was
     /// reserved with the immutable projection. Atom events also call this for
     /// already-false occurrences, preserving conservative invalidation coverage.
+    // Hot in the narrowing's closure; the hint measured to pay.
+    #[inline]
     pub(in crate::regions) fn record_false(&mut self, node: usize) {
         if !self.local.collecting || matches!(self.states[node], State::Outside) {
             return;
@@ -162,19 +223,19 @@ impl Scratch {
         }
     }
 
-    /// Consume first-pass authority before any fallible work. A declined local
+    /// Consume completed-baseline authority before any fallible work. A declined local
     /// plan leaves only disposable marks; the caller must complete a full pass.
-    pub(super) fn complete_local(
+    pub(super) fn complete_local<Q: Quota + ?Sized>(
         &mut self,
         theory: &Theory,
         index: &Narrower,
         producers: &Producers,
         never: &[u64],
         atom_never: &[u64],
-        work: &mut Work<'_>,
-    ) -> Result<bool, Stop> {
-        let inherited = std::mem::take(&mut self.local.collecting);
-        if !inherited
+        work: &mut Meter<'_, Q>,
+    ) -> Result<bool, Failure<Q::Error>> {
+        let completed = std::mem::take(&mut self.local.collecting);
+        if !completed
             || !self
                 .owner
                 .as_ref()
@@ -189,7 +250,7 @@ impl Scratch {
         let mut live = self.local.cyclic;
         for (&cyclic, &cut) in self.cyclic_atoms.iter().zip(atom_never) {
             work.tick()?;
-            live -= (cyclic & cut).count_ones() as usize;
+            live -= Words::<u64>::popcount(cyclic & cut) as usize;
         }
         if heads == live {
             return Ok(false);
@@ -227,12 +288,12 @@ impl Scratch {
     /// A false destination therefore either has its own input event or was
     /// already inactive in the inherited closure. Neither case needs another
     /// incoming traversal. Current masks, not sibling scratch truth, decide this.
-    fn local_forward(
+    fn local_forward<Q: Quota + ?Sized>(
         &mut self,
         index: &Narrower,
         (never, atom_never): (&[u64], &[u64]),
-        work: &mut Work<'_>,
-    ) -> Result<usize, Stop> {
+        work: &mut Meter<'_, Q>,
+    ) -> Result<usize, Failure<Q::Error>> {
         let projected = self.projected.as_ref().ok_or(Stop::InvalidProgram)?;
         let mut heads = 0;
         let mut next = 0;
@@ -280,7 +341,11 @@ impl Scratch {
     /// Group discovered heads before producer selection. Discovery has finished,
     /// so its vertex order is no longer needed; marks and the forward boundary
     /// remain unchanged. A stopped partition is disposable on the full retry.
-    fn partition_heads(&mut self, heads: usize, work: &mut Work<'_>) -> Result<(), Stop> {
+    fn partition_heads<Q: Quota + ?Sized>(
+        &mut self,
+        heads: usize,
+        work: &mut Meter<'_, Q>,
+    ) -> Result<(), Failure<Q::Error>> {
         let mut placed = 0;
         for position in 0..self.queue.len() {
             if placed == heads {
@@ -298,19 +363,19 @@ impl Scratch {
         if placed == heads {
             Ok(())
         } else {
-            Err(Stop::InvalidProgram)
+            Err(Failure::Stopped(Stop::InvalidProgram))
         }
     }
 
-    fn local_bodies(
+    fn local_bodies<Q: Quota + ?Sized>(
         &mut self,
         theory: &Theory,
         index: &Narrower,
         producers: &Producers,
         (heads, forward_end): (usize, usize),
         (never, atom_never): (&[u64], &[u64]),
-        work: &mut Work<'_>,
-    ) -> Result<(), Stop> {
+        work: &mut Meter<'_, Q>,
+    ) -> Result<(), Failure<Q::Error>> {
         for position in 0..heads {
             work.tick()?;
             let head = self.queue[position];
@@ -336,7 +401,7 @@ impl Scratch {
             next += 1;
             let node = vertex - self.local.atoms;
             if matches!(self.states[node], State::Outside) || index.absorbed[node] {
-                return Err(Stop::InvalidProgram);
+                return Err(Failure::Stopped(Stop::InvalidProgram));
             }
             // Keep the body selected: current initialization makes it Inactive.
             // Its operands cannot enable it. A descendant needed through another
@@ -359,15 +424,15 @@ impl Scratch {
         Ok(())
     }
 
-    fn local_initialize(
+    fn local_initialize<Q: Quota + ?Sized>(
         &mut self,
         theory: &Theory,
         index: &Narrower,
         (forward_end, body_end, heads): (usize, usize, usize),
         never: &[u64],
         atom_never: &[u64],
-        work: &mut Work<'_>,
-    ) -> Result<(), Stop> {
+        work: &mut Meter<'_, Q>,
+    ) -> Result<(), Failure<Q::Error>> {
         let events = (body_end - forward_end)
             .checked_add(heads)
             .ok_or(Stop::Allocation)?;
@@ -375,16 +440,16 @@ impl Scratch {
             &mut self.queue,
             body_end.checked_add(events).ok_or(Stop::Allocation)?,
         )?;
-        self.atoms.clear();
-        reserve(&mut self.atoms, flag_words(theory.atom_count()))?;
+        self.atoms.storage_mut().clear();
+        reserve(self.atoms.storage_mut(), flag_words(theory.atom_count()))?;
         for (&cyclic, &never) in self.cyclic_atoms.iter().zip(atom_never) {
             work.tick()?;
-            self.atoms.push(cyclic & !never);
+            self.atoms.storage_mut().push(cyclic & !never);
         }
         for position in 0..heads {
             work.tick()?;
             let head = self.queue[position];
-            self.atoms[head / 64] &= !(1_u64 << (head % 64));
+            self.atoms.remove(head);
         }
         for position in forward_end..body_end {
             work.tick()?;
@@ -429,14 +494,14 @@ impl Scratch {
         Ok(Initial::read(theory, index, &self.cyclic_atoms, node)?.state(atom_never))
     }
 
-    fn local_events(
+    fn local_events<Q: Quota + ?Sized>(
         &mut self,
         index: &Narrower,
         producers: &Producers,
         mut next: usize,
         atom_never: &[u64],
-        work: &mut Work<'_>,
-    ) -> Result<(), Stop> {
+        work: &mut Meter<'_, Q>,
+    ) -> Result<(), Failure<Q::Error>> {
         while let Some(&vertex) = self.queue.get(next) {
             work.tick()?;
             next += 1;
@@ -454,7 +519,7 @@ impl Scratch {
                     }
                 }
             } else {
-                self.propagate_node::<true>(
+                self.propagate_node::<true, Q>(
                     index,
                     producers,
                     vertex - self.local.atoms,

@@ -4,3 +4,5 @@ use super::*;
 mod resource_tests;
 #[cfg(all(test, feature = "gpu"))]
 mod residual_tests;
+#[cfg(all(test, feature = "gpu"))]
+mod update_availability_tests;

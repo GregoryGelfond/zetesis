@@ -45,6 +45,14 @@ The consuming `TheoryAdmission` topology frontier remains outside this raw
 constructor correspondence. Building a selected constructor does not prove its
 semantics. Preserve the historical binary audits separately.
 
+The current workspace's primitive owner is `zetesis-algebra`; its corresponding
+extraction include is `zetesis_algebra::cancellation`. The recorded commands
+below and `native-replay/replay.sh` retain `zetesis_cpu::cancellation` for their
+source-locked generations. Run those recipes against their matching source
+inventory. A replay of the current owner needs a separately reviewed extraction,
+namespace/proof update and source/artifact record; do not change the include and
+replace expected hashes to bypass the historical guards.
+
 ## Prepare and check
 
 Install the Lean toolchain through elan. The commands below download the pinned

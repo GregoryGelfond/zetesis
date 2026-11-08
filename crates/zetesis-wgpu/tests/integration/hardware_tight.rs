@@ -2,18 +2,20 @@
 //! These tests select Metal or Vulkan; adapter absence never silently skips qualification.
 
 mod native;
+mod updates;
 
 use crate::support::physical;
 
+use zetesis_algebra::{Cancellation, Stop};
 use zetesis_backend::GpuApi;
-use zetesis_cpu::{Cancellation, Stop};
 use zetesis_ferraris::{
     AdmissionLimits, Interpretation, Limits, Node, Theory, TightCheckLimits, TightPlan,
     TightPlanLimits, TightVerdict, Verdict, check,
 };
 use zetesis_wgpu::{
     GpuErrorKind, GpuKernelOptions, GpuOptions, GpuSelection, GpuTightOracle, GpuWorkgroupSize,
-    TightGpuActivity, TightGpuError, TightGpuLimits, TightSupport,
+    GpuWorkgroupSizing, TightGpuActivity, TightGpuBatchStats, TightGpuError, TightGpuLimits,
+    TightGpuUpdateUnavailable, TightGpuUpdates, TightSupport,
 };
 
 fn certificate(atoms: usize, nodes: Vec<Node>, roots: Vec<usize>) -> TightPlan {
@@ -55,6 +57,27 @@ fn oracle(backend: GpuApi, support: TightSupport) -> GpuTightOracle {
         oracle.info().name()
     );
     oracle
+}
+
+/// Default limits with the update route declined, for qualifications whose
+/// proposition is the complete route or dense reuse.
+fn dense_only() -> TightGpuLimits {
+    TightGpuLimits {
+        min_update_candidates: 0,
+        ..TightGpuLimits::default()
+    }
+}
+
+// With the update route declined, every slot takes the complete route without
+// reuse authority and dense reuse with it.
+fn assert_dense_routes(stats: &TightGpuBatchStats, reused: bool) {
+    let slots = stats.candidates;
+    let routes = stats.routes;
+    assert_eq!(
+        (routes.complete, routes.dense_reuse, routes.update),
+        if reused { (0, slots, 0) } else { (slots, 0, 0) }
+    );
+    assert_eq!(stats.nodes_evaluated, 0);
 }
 
 fn inputs(theory: &Theory) -> Vec<Interpretation> {
@@ -126,6 +149,8 @@ fn conditional_support_matches_exhaustive_reducts() {
     }
 }
 
+// Two batches of one count qualify the complete route, then dense reuse; the
+// update route is declined, so its receipts do not replace dense reuse's.
 fn compare(oracle: &mut GpuTightOracle, certificate: &TightPlan) -> usize {
     let theory = certificate.theory();
     let mut candidates = inputs(theory);
@@ -134,12 +159,14 @@ fn compare(oracle: &mut GpuTightOracle, certificate: &TightPlan) -> usize {
             .check_batch(
                 certificate,
                 &candidates,
-                TightGpuLimits::default(),
+                dense_only(),
                 &Cancellation::default(),
             )
             .unwrap();
         assert_eq!(results.len(), candidates.len());
-        if let Some(elapsed) = oracle.last_compute_time() {
+        if let Some(zetesis_backend::BatchComputeTime::Measured(elapsed)) =
+            oracle.reported_compute_time()
+        {
             assert_eq!(
                 oracle.context().compute_timing(),
                 zetesis_backend::ComputeTimingStatus::Enabled
@@ -159,6 +186,12 @@ fn compare(oracle: &mut GpuTightOracle, certificate: &TightPlan) -> usize {
         assert_eq!(stats.theory_uploaded, repeat == 0);
         assert_eq!(stats.transport_allocated, repeat == 0);
         assert_eq!(stats.original_truth_reused, repeat != 0);
+        assert_dense_routes(&stats, repeat != 0);
+        // A declined route says so from a fresh theory's first batch on.
+        assert_eq!(
+            stats.updates,
+            TightGpuUpdates::Unavailable(TightGpuUpdateUnavailable::Declined)
+        );
         let activity = oracle.activity();
         assert_eq!(activity.submissions, 1);
         assert_eq!(activity.submitted_candidates, stats.candidates);
@@ -344,15 +377,16 @@ fn qualify_support_matches_exact_reduct_semantics(backend: GpuApi, support: Tigh
     assert_eq!(compared, 370);
     println!("tight support exact candidate occurrences={compared}");
     qualify_kernel_options(&oracle);
+    updates::qualify_admission(&mut oracle);
 }
 
 fn qualify_kernel_options(oracle: &GpuTightOracle) {
     let context = oracle.context().clone();
     println!("tight granted features={:?}", context.features());
-    for workgroup_size in [GpuWorkgroupSize::Threads32, GpuWorkgroupSize::Threads64] {
+    for workgroup_sizing in SIZINGS {
         for optional_features in [false, true] {
             let options = GpuKernelOptions {
-                workgroup_size,
+                workgroup_sizing,
                 optional_features,
                 ..GpuKernelOptions::default()
             };
@@ -364,9 +398,29 @@ fn qualify_kernel_options(oracle: &GpuTightOracle) {
             assert_eq!(configured.support(), oracle.support());
             println!("tight qualified options={options:?}");
             native::qualify(&mut configured);
+            assert_dispatched_size(
+                workgroup_sizing,
+                configured.last_batch_stats().unwrap().workgroup_size,
+            );
             qualify_dependency_schedules(&mut configured);
+            qualify_size_boundaries(&mut configured, workgroup_sizing);
+            updates::qualify(&mut configured);
         }
     }
+}
+
+#[test]
+#[ignore = "requires Metal: overlapped support checks match sequential checks"]
+fn metal_support_overlapped_checks_match_sequential_checks() {
+    updates::qualify_overlapped(GpuApi::Metal, TightSupport::Atomic);
+    updates::qualify_overlapped(GpuApi::Metal, TightSupport::Grouped);
+}
+
+#[test]
+#[ignore = "requires Vulkan: overlapped support checks match sequential checks"]
+fn vulkan_support_overlapped_checks_match_sequential_checks() {
+    updates::qualify_overlapped(GpuApi::Vulkan, TightSupport::Atomic);
+    updates::qualify_overlapped(GpuApi::Vulkan, TightSupport::Grouped);
 }
 
 #[test]
@@ -391,43 +445,50 @@ fn qualify_support_preserves_batch_isolation(backend: GpuApi, support: TightSupp
     compare_skewed_support(&mut oracle);
     compare_word_witnesses(&mut oracle);
     for atoms in [1, 31, 32, 33, 63, 64, 65, 4097] {
-        let certificate = certificate(atoms, vec![Node::atom(atoms - 1)], vec![0]);
-        let theory = certificate.theory();
-        let patterns = [
-            Interpretation::new(theory, []).unwrap(),
-            Interpretation::new(theory, [atoms - 1]).unwrap(),
-            Interpretation::new(theory, 0..atoms).unwrap(),
-        ];
-        for worlds in [1, 31, 32, 33, 63, 64, 65] {
-            let candidates: Vec<_> = (0..worlds)
-                .map(|world| patterns[world % 3].clone())
-                .collect();
-            let results = oracle
-                .check_batch(
-                    &certificate,
-                    &candidates,
-                    TightGpuLimits::default(),
-                    &Cancellation::default(),
-                )
-                .unwrap();
-            assert_eq!(results.len(), worlds);
-            for (candidate, result) in candidates.iter().zip(results) {
-                assert_eq!(
-                    result.verdict(),
-                    certificate
-                        .check(
-                            candidate,
-                            TightCheckLimits::default(),
-                            &Cancellation::default()
-                        )
-                        .unwrap()
-                        .verdict
-                );
-            }
-            let stats = oracle.last_batch_stats().unwrap();
-            assert_eq!(stats.theory_uploaded, worlds == 1);
-            assert!(stats.transport_allocated);
+        compare_atom_boundary(&mut oracle, atoms);
+    }
+}
+
+// One root over the last of `atoms` atoms: every candidate-local atom and word
+// loop runs to its bound under batches of 1 to 65 candidates, compared with the
+// scalar plan. The first batch uploads the theory; each batch size reallocates.
+fn compare_atom_boundary(oracle: &mut GpuTightOracle, atoms: usize) {
+    let certificate = certificate(atoms, vec![Node::atom(atoms - 1)], vec![0]);
+    let theory = certificate.theory();
+    let patterns = [
+        Interpretation::new(theory, []).unwrap(),
+        Interpretation::new(theory, [atoms - 1]).unwrap(),
+        Interpretation::new(theory, 0..atoms).unwrap(),
+    ];
+    for worlds in [1, 31, 32, 33, 63, 64, 65] {
+        let candidates: Vec<_> = (0..worlds)
+            .map(|world| patterns[world % 3].clone())
+            .collect();
+        let results = oracle
+            .check_batch(
+                &certificate,
+                &candidates,
+                TightGpuLimits::default(),
+                &Cancellation::default(),
+            )
+            .unwrap();
+        assert_eq!(results.len(), worlds);
+        for (candidate, result) in candidates.iter().zip(results) {
+            assert_eq!(
+                result.verdict(),
+                certificate
+                    .check(
+                        candidate,
+                        TightCheckLimits::default(),
+                        &Cancellation::default()
+                    )
+                    .unwrap()
+                    .verdict
+            );
         }
+        let stats = oracle.last_batch_stats().unwrap();
+        assert_eq!(stats.theory_uploaded, worlds == 1);
+        assert!(stats.transport_allocated);
     }
 }
 
@@ -835,7 +896,7 @@ fn qualify_dependency_schedules(oracle: &mut GpuTightOracle) {
             &Cancellation::default(),
         )
         .unwrap();
-    assert_eq!(oracle.last_compute_time(), None);
+    assert_eq!(oracle.reported_compute_time(), None);
 }
 
 fn qualify_prefixes(oracle: &mut GpuTightOracle) {
@@ -952,15 +1013,11 @@ fn qualify_original_truth_reuse(oracle: &mut GpuTightOracle) {
     for (index, bits) in batches.iter().enumerate() {
         let input = worlds(bits);
         let checked = oracle
-            .check_batch(
-                &certificate,
-                &input,
-                TightGpuLimits::default(),
-                &Cancellation::default(),
-            )
+            .check_batch(&certificate, &input, dense_only(), &Cancellation::default())
             .unwrap();
         let stats = oracle.last_batch_stats().unwrap();
         assert_eq!(stats.original_truth_reused, index != 0);
+        assert_dense_routes(stats, index != 0);
         for (candidate, checked) in input.iter().zip(&checked) {
             assert_eq!(
                 checked.verdict(),
@@ -988,12 +1045,13 @@ fn qualify_original_truth_reuse(oracle: &mut GpuTightOracle) {
             &input,
             TightGpuLimits {
                 max_work_per_candidate: cold_work,
-                ..Default::default()
+                ..dense_only()
             },
             &Cancellation::default(),
         )
         .unwrap();
     assert!(!oracle.last_batch_stats().unwrap().original_truth_reused);
+    assert_dense_routes(oracle.last_batch_stats().unwrap(), false);
     assert!(fallback.iter().all(|check| check.work() == cold_work));
     qualify_truth_invalidation(oracle, &certificate, &input);
 }
@@ -1027,13 +1085,14 @@ fn qualify_boolean_change_bits(oracle: &mut GpuTightOracle) {
                 .check_batch(
                     &certificate,
                     &[candidate],
-                    TightGpuLimits::default(),
+                    dense_only(),
                     &Cancellation::default(),
                 )
                 .unwrap();
             assert_eq!(actual[0].verdict(), expected.verdict);
             let stats = oracle.last_batch_stats().unwrap();
             assert_eq!(stats.original_truth_reused, index != 0);
+            assert_dense_routes(stats, index != 0);
             if index == 0 {
                 cold_work = actual[0].work();
                 levels = stats.truth_levels;
@@ -1047,7 +1106,7 @@ fn qualify_boolean_change_bits(oracle: &mut GpuTightOracle) {
                 &[candidate],
                 TightGpuLimits {
                     max_work_per_candidate: cold_work - u64::from(levels),
-                    ..TightGpuLimits::default()
+                    ..dense_only()
                 },
                 &Cancellation::default(),
             )
@@ -1173,4 +1232,86 @@ fn qualify_truth_invalidation(
         )
         .unwrap();
     assert!(!oracle.last_batch_stats().unwrap().original_truth_reused);
+}
+
+/// Rule, root and producer counts one below, at and one above the sizes 64, 128
+/// and 256, each with the size the fitted policy selects for that many rules on
+/// one dependency level over two atom leaves (level widths 2 and the count).
+const LEVEL_BOUNDARIES: [(usize, u32); 9] = [
+    (63, 64),
+    (64, 64),
+    (65, 128),
+    (127, 128),
+    (128, 128),
+    (129, 256),
+    (255, 256),
+    (256, 256),
+    (257, 256),
+];
+
+/// Atom counts one below, at and one above 128 and 256, then the atom counts
+/// whose candidates span that many 32-bit words.
+const ATOM_BOUNDARIES: [usize; 12] = [
+    127,
+    128,
+    129,
+    255,
+    256,
+    257,
+    32 * 127,
+    32 * 128,
+    32 * 129,
+    32 * 255,
+    32 * 256,
+    32 * 257,
+];
+
+// `count` separate rules `1 :- 0`: structural duplicates are not interned, so
+// each is its own node, root and producer of atom 1.
+fn level_boundary(count: usize) -> TightPlan {
+    let mut nodes = vec![Node::atom(0), Node::atom(1)];
+    nodes.extend(std::iter::repeat_n(Node::implies(0, 1), count));
+    certificate(2, nodes, (2..count + 2).collect())
+}
+
+// Each boundary fixture is checked exactly under `sizing`, which dispatches the
+// fixed size or the size the fitted policy selects for the fixture's schedule;
+// a single-node fixture has a serial schedule, which keeps 64.
+fn qualify_size_boundaries(oracle: &mut GpuTightOracle, sizing: GpuWorkgroupSizing) {
+    let limits = oracle.context().limits();
+    assert!(
+        limits
+            .max_compute_invocations_per_workgroup
+            .min(limits.max_compute_workgroup_size_x)
+            >= 256,
+        "the fitted expectations assume a device granting 256 invocations"
+    );
+    let dispatched = |oracle: &GpuTightOracle| oracle.last_batch_stats().unwrap().workgroup_size;
+    let expected = |fitted: u32| sizing.fixed().map_or(fitted, GpuWorkgroupSize::invocations);
+    for (count, fitted) in LEVEL_BOUNDARIES {
+        compare(oracle, &level_boundary(count));
+        assert_eq!(dispatched(oracle), expected(fitted), "{count} rules");
+    }
+    for atoms in ATOM_BOUNDARIES {
+        compare_atom_boundary(oracle, atoms);
+        assert_eq!(dispatched(oracle), expected(64), "{atoms} atoms");
+    }
+}
+
+/// Every size a tight kernel compiles, fixed, and the fitted policy.
+const SIZINGS: [GpuWorkgroupSizing; 5] = [
+    GpuWorkgroupSizing::Fixed(GpuWorkgroupSize::Threads32),
+    GpuWorkgroupSizing::Fixed(GpuWorkgroupSize::Threads64),
+    GpuWorkgroupSizing::Fixed(GpuWorkgroupSize::Threads128),
+    GpuWorkgroupSizing::Fixed(GpuWorkgroupSize::Threads256),
+    GpuWorkgroupSizing::Fitted,
+];
+
+/// A fixed size dispatches as requested; a fitted one dispatches a size the
+/// fitted policy may select.
+fn assert_dispatched_size(requested: GpuWorkgroupSizing, dispatched: u32) {
+    match requested.fixed() {
+        Some(size) => assert_eq!(dispatched, size.invocations()),
+        None => assert!(matches!(dispatched, 64 | 128 | 256)),
+    }
 }

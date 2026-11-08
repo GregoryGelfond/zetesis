@@ -161,7 +161,7 @@ fn every_stopped_planning_prefix_refuses_publication() {
 fn cancelled_planning_refuses_publication() {
     let (result, spent) = inspect(&[[1, 2], [1, 3], [2, 3]], None, true);
     assert!(matches!(result, Err(FormulaFailure::Interrupted {
-        reason: zetesis_cpu::Stop::Cancelled, location: origin,
+        reason: zetesis_algebra::Stop::Cancelled, location: origin,
     }) if origin == location()));
     assert_eq!(spent, 0);
 }
