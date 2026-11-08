@@ -35,10 +35,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-fbb9e008.js";
+            window.path_to_searchindex_js = "../searchindex-8dfd52fd.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-5c747b16.js"></script>
+        <script src="../toc-25cd24fd.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -191,10 +191,8 @@ candidate regions.</p>
 <p>This chapter maps the implementation for readers extending the source language.
 The <a href="../rust/source.html">source API guide</a> describes the public entry points;
 <a href="grounding.html">grounding</a> explains their mathematical contracts.</p>
-<p>Closed-range facts use one checked product cursor in both relational and formula
-admission. It retains interval endpoints and scalar alternatives, then emits one
-head at a time in source order. Formula admission consumes that head directly;
-relational admission retains the templates its executor needs. Complete-family
+<p>Closed-range facts use one checked product cursor in formula admission. It retains interval endpoints and scalar alternatives, then emits one
+head at a time in source order. Formula admission consumes that head directly. Complete-family
 validation and logical expansion limits precede emission. This removes temporary
 range columns and per-statement template vectors, without changing duplicates,
 provenance or arithmetic diagnostics.</p>
@@ -278,7 +276,7 @@ those instructions rather than interpreting the plan as new program semantics.</
 <tr><td>Complete joins and possible support</td><td><code>formula_support</code>, <code>formula_pattern</code></td><td>Transactional whole-tuple matching, snapshots, indexes and support completion</td></tr>
 <tr><td>Positive-row query strategy</td><td><code>grounding_options</code>, <code>formula_support::queries</code>, CPU <code>table</code></td><td>Explicit completed-support table indices and owned row masks; shared matcher and cumulative source budgets</td></tr>
 <tr><td>Formula emission</td><td><code>formula_ground</code>, <code>formula_guard</code>, <code>formula_conditional</code></td><td>Original implications, aggregate conditions and universal instances</td></tr>
-<tr><td>Optional formula factoring</td><td><code>formula_factor</code></td><td>Qualified existential components with the complete-join path as fallback</td></tr>
+<tr><td>Optional formula factoring</td><td><code>formula_factor</code></td><td>Independent body components over fixed heads, and shared continuations for equivalent existential witnesses; arithmetic components require full-carrier certification</td></tr>
 <tr><td>Optional count certificates</td><td><code>formula_count_plan</code></td><td>Capture, derivation and emitted correspondence to the original theory</td></tr>
 <tr><td>Source activity</td><td><code>formula_source_activity</code></td><td>Bounded absent/optional/required producer refinement over completed support, shared by objectives and projection; each fact row is a required producer</td></tr>
 <tr><td>Original-model queries</td><td><code>formula_source_activity::model_query</code></td><td>Closed conditions over full original atom identities, separate from source activity and reduct formulas</td></tr>

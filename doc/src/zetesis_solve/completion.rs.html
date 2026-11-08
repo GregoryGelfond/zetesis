@@ -1,7 +1,7 @@
 <!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `crates/zetesis-solve/src/completion.rs`."><title>completion.rs - source</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2"href="../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../static.files/rustdoc-17e0aaed.css"><meta name="rustdoc-vars" data-root-path="../../" data-static-root-path="../../static.files/" data-current-crate="zetesis_solve" data-themes="" data-resource-suffix="" data-rustdoc-version="1.97.1 (8bab26f4f 2026-07-14)" data-channel="1.97.1" data-search-js="search-fd9372ac.js" data-stringdex-js="stringdex-2da4960a.js" data-settings-js="settings-170eb4bf.js" ><script src="../../static.files/storage-41dd4d93.js"></script><script defer src="../../static.files/src-script-813739b1.js"></script><script defer src="../../src-files.js"></script><script defer src="../../static.files/main-fcd733ba.js"></script><noscript><link rel="stylesheet" href="../../static.files/noscript-f7c3ffd8.css"></noscript><link rel="alternate icon" type="image/png" href="../../static.files/favicon-32x32-eab170b8.png"><link rel="icon" type="image/svg+xml" href="../../static.files/favicon-044be391.svg"></head><body class="rustdoc src"><a class="skip-main-content" href="#main-content">Skip to main content</a><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"><div class="src-sidebar-title"><h2>Files</h2></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><section id="main-content" class="content" tabindex="-1"><div class="main-heading"><h1><div class="sub-heading">zetesis_solve/</div>completion.rs</h1><rustdoc-toolbar></rustdoc-toolbar></div><div class="example-wrap digits-3"><pre class="rust"><code><a href=#1 id=1 data-nosnippet>1</a><span class="doccomment">//! Search completion and logical interruption.
 <a href=#2 id=2 data-nosnippet>2</a>
 <a href=#3 id=3 data-nosnippet>3</a></span><span class="kw">use </span>std::fmt;
-<a href=#4 id=4 data-nosnippet>4</a><span class="kw">use </span>zetesis_cpu::Stop;
+<a href=#4 id=4 data-nosnippet>4</a><span class="kw">use </span>zetesis_algebra::Stop;
 <a href=#5 id=5 data-nosnippet>5</a>
 <a href=#6 id=6 data-nosnippet>6</a><span class="doccomment">/// Why a successful driver invocation stopped.
 <a href=#7 id=7 data-nosnippet>7</a></span><span class="attr">#[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -61,7 +61,7 @@
 <a href=#61 id=61 data-nosnippet>61</a>/// A cleanup failure still prevents exhaustion or a requested-count outcome.
 <a href=#62 id=62 data-nosnippet>62</a></span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>after_cleanup(
 <a href=#63 id=63 data-nosnippet>63</a>    state: <span class="prelude-ty">Option</span>&lt;SearchState&gt;,
-<a href=#64 id=64 data-nosnippet>64</a>    cleanup: <span class="prelude-ty">Result</span>&lt;(), zetesis_sat::Incomplete&gt;,
+<a href=#64 id=64 data-nosnippet>64</a>    cleanup: <span class="prelude-ty">Result</span>&lt;(), zetesis_stable::Incomplete&gt;,
 <a href=#65 id=65 data-nosnippet>65</a>) -&gt; <span class="prelude-ty">Option</span>&lt;SearchState&gt; {
 <a href=#66 id=66 data-nosnippet>66</a>    <span class="kw">if </span><span class="macro">matches!</span>(state, <span class="prelude-val">Some</span>(SearchState::Interrupted(<span class="kw">_</span>))) {
 <a href=#67 id=67 data-nosnippet>67</a>        state
@@ -82,7 +82,7 @@
 <a href=#82 id=82 data-nosnippet>82</a>    <span class="doccomment">/// Incremental candidate enumeration or a closure oracle stopped.
 <a href=#83 id=83 data-nosnippet>83</a>    </span>Oracle(Stop),
 <a href=#84 id=84 data-nosnippet>84</a>    <span class="doccomment">/// Reduct countermodel encoding, search or independent witness checking stopped.
-<a href=#85 id=85 data-nosnippet>85</a>    </span>Countermodel(zetesis_sat::Incomplete),
+<a href=#85 id=85 data-nosnippet>85</a>    </span>Countermodel(zetesis_stable::Incomplete),
 <a href=#86 id=86 data-nosnippet>86</a>    <span class="doccomment">/// A streamed source constraint stopped before original-program membership.
 <a href=#87 id=87 data-nosnippet>87</a>    </span>Constraint(Stop),
 <a href=#88 id=88 data-nosnippet>88</a>    <span class="doccomment">/// Full-answer reconstruction stopped after verified base membership.
@@ -137,7 +137,7 @@
 <a href=#137 id=137 data-nosnippet>137</a></span><span class="kw">mod </span>tests {
 <a href=#138 id=138 data-nosnippet>138</a>    <span class="kw">use super</span>::{Completion, Interruption, SearchState};
 <a href=#139 id=139 data-nosnippet>139</a>    <span class="kw">use </span>std::error::Error;
-<a href=#140 id=140 data-nosnippet>140</a>    <span class="kw">use </span>zetesis_cpu::Stop;
+<a href=#140 id=140 data-nosnippet>140</a>    <span class="kw">use </span>zetesis_algebra::Stop;
 <a href=#141 id=141 data-nosnippet>141</a>
 <a href=#142 id=142 data-nosnippet>142</a>    <span class="attr">#[test]
 <a href=#143 id=143 data-nosnippet>143</a>    </span><span class="kw">fn </span>interruption_retains_its_public_type_when_boxed() {
@@ -166,11 +166,11 @@
 <a href=#166 id=166 data-nosnippet>166</a>
 <a href=#167 id=167 data-nosnippet>167</a>    <span class="attr">#[test]
 <a href=#168 id=168 data-nosnippet>168</a>    </span><span class="kw">fn </span>countermodel_interruption_preserves_the_nested_error_chain() {
-<a href=#169 id=169 data-nosnippet>169</a>        <span class="kw">let </span>native = zetesis_sat::Incomplete::Verification(Stop::Deadline);
+<a href=#169 id=169 data-nosnippet>169</a>        <span class="kw">let </span>native = zetesis_stable::Incomplete::Verification(Stop::Deadline);
 <a href=#170 id=170 data-nosnippet>170</a>        <span class="kw">let </span>reason = Interruption::Countermodel(native);
 <a href=#171 id=171 data-nosnippet>171</a>        <span class="kw">let </span>source = reason.source().expect(<span class="string">"the native countermodel cause"</span>);
 <a href=#172 id=172 data-nosnippet>172</a>        <span class="macro">assert_eq!</span>(
-<a href=#173 id=173 data-nosnippet>173</a>            source.downcast_ref::&lt;zetesis_sat::Incomplete&gt;(),
+<a href=#173 id=173 data-nosnippet>173</a>            source.downcast_ref::&lt;zetesis_stable::Incomplete&gt;(),
 <a href=#174 id=174 data-nosnippet>174</a>            <span class="prelude-val">Some</span>(<span class="kw-2">&amp;</span>native)
 <a href=#175 id=175 data-nosnippet>175</a>        );
 <a href=#176 id=176 data-nosnippet>176</a>        <span class="macro">assert_eq!</span>(
@@ -238,10 +238,10 @@
 <a href=#238 id=238 data-nosnippet>238</a>                limit: <span class="number">7</span>,
 <a href=#239 id=239 data-nosnippet>239</a>            },
 <a href=#240 id=240 data-nosnippet>240</a>        ));
-<a href=#241 id=241 data-nosnippet>241</a>        <span class="kw">let </span>cleanup = <span class="prelude-val">Err</span>(zetesis_sat::Incomplete::RegionFilter);
+<a href=#241 id=241 data-nosnippet>241</a>        <span class="kw">let </span>cleanup = <span class="prelude-val">Err</span>(zetesis_stable::Incomplete::RegionFilter);
 <a href=#242 id=242 data-nosnippet>242</a>        <span class="macro">assert_eq!</span>(<span class="kw">super</span>::after_cleanup(<span class="prelude-val">Some</span>(primary), cleanup), <span class="prelude-val">Some</span>(primary));
 <a href=#243 id=243 data-nosnippet>243</a>        <span class="kw">let </span>secondary = <span class="prelude-val">Some</span>(SearchState::Interrupted(Interruption::Countermodel(
-<a href=#244 id=244 data-nosnippet>244</a>            zetesis_sat::Incomplete::RegionFilter,
+<a href=#244 id=244 data-nosnippet>244</a>            zetesis_stable::Incomplete::RegionFilter,
 <a href=#245 id=245 data-nosnippet>245</a>        )));
 <a href=#246 id=246 data-nosnippet>246</a>        <span class="macro">assert_eq!</span>(
 <a href=#247 id=247 data-nosnippet>247</a>            <span class="kw">super</span>::after_cleanup(<span class="prelude-val">Some</span>(SearchState::RequestedModels), cleanup),

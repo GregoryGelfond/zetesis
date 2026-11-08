@@ -35,10 +35,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-fbb9e008.js";
+            window.path_to_searchindex_js = "../searchindex-8dfd52fd.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-5c747b16.js"></script>
+        <script src="../toc-25cd24fd.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -185,7 +185,53 @@
 program. The <a href="https://github.com/GregoryGelfond/zetesis/blob/main/README.md#performance-at-a-glance">README overview</a>
 summarizes the latest complete CPU corpus comparison. The studies below retain
 their own source revisions, workloads and measurement conditions.</p>
+<h2 id="cpu-release-build-profile"><a class="header" href="#cpu-release-build-profile">CPU release build profile</a></h2>
+<p>Two builds of Zetesis at <code>949bc942d67d860ce965d44edd0a519aeee60c0d</code> used
+Rust 1.97.1 on an Apple M4 Pro running macOS 26.6.2. Both used
+<code>cargo build --release --locked --offline --all-features -p zetesis-cli --bin zetesis</code>.
+The first used the Cargo settings at that revision. The second set
+<code>CARGO_PROFILE_RELEASE_LTO=fat</code> and <code>CARGO_PROFILE_RELEASE_CODEGEN_UNITS=1</code>
+in a separate target directory. The arm64 executable shrank from
+23,398,832 to 17,539,264 bytes (25.0%).</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Program</th><th style="text-align: right">Answers</th><th style="text-align: right">Change in instructions, 1 worker</th><th style="text-align: right">Original, 14 workers</th><th style="text-align: right">Fat LTO, 14 workers</th></tr>
+</thead>
+<tbody>
+<tr><td>Family Crossing, integrated</td><td style="text-align: right">8 optimal, cost 29</td><td style="text-align: right">−7.19%</td><td style="text-align: right">6.40 s</td><td style="text-align: right">5.83 s</td></tr>
+<tr><td>Queens, size 12</td><td style="text-align: right">14,200</td><td style="text-align: right">−0.43%</td><td style="text-align: right">0.13 s</td><td style="text-align: right">0.12 s</td></tr>
+<tr><td>Scalability Mastermind, 6 pegs and 8 colors</td><td style="text-align: right">45,832</td><td style="text-align: right">−2.08%</td><td style="text-align: right">0.24 s</td><td style="text-align: right">0.23 s</td></tr>
+<tr><td>Quantified parity, size 16</td><td style="text-align: right">1</td><td style="text-align: right">−7.31%</td><td style="text-align: right">0.21 s</td><td style="text-align: right">0.19 s</td></tr>
+</tbody>
+</table>
+</div>
+<p>Times and instruction changes use medians of three fresh processes per build on AC power.
+The two executables alternated order across repetitions. macOS <code>/usr/bin/time -l</code> recorded
+retired instructions and elapsed process time (0.01 s resolution). The timed
+command was <code>zetesis solve --backend cpu --threads W --grounder G --oracle O --color never --count FILE --time-limit 120s</code>.
+A separate single-worker run with <code>--all --json --stats</code> in place of <code>--count</code>
+checked every model and its cost against the reference family.</p>
+<p>On the regular 95-program corpus, both builds exhausted every input under
+automatic checking and forced reduct checking. Each of the 190 one-worker pairs
+matched the reference answer family, including costs and multiplicities.
+Each build produced one JSON observation per input and route. The fat-LTO
+build retired fewer instructions in every pair, with median reductions of
+6.53% for automatic checking and 6.48% for forced reduct checking.</p>
+<p>To reproduce the inputs, run <code>examples/family-crossing/integrated.lp</code> in place.
+Under <code>examples/scalability/</code>, make temporary copies of <code>n-queens.lp</code> with
+<code>n = 12</code> and <code>mastermind.lp</code> with <code>colors = 8</code>. This timing uses the scalability
+encoding. The wide Mastermind benchmark uses <code>examples/wide-mastermind/68/mm-68-examples.lp</code>.
+The first three cases used automatic grounding and checking. For quantified parity,
+copy the ASP generator <code>examples/scalability/two-qbf-parity/two_qbf_parity.lp</code>,
+set <code>n = 16</code>, retain <code>exists = 2</code>, <code>stable = 1</code>, and <code>seed = 1</code>, then select
+<code>--grounder eager --oracle countermodel</code>.</p>
+<p>SHA-256 digests of the measured executables</p>
+<pre><code class="language-text">original   01a6902f369a3992342ead7d315e5a2ba1df8b14edb09bb47742fc527fd3837d
+fat LTO    d54b261b40dc78bf30130379ac589e811bd59d5e048503d77ae722eb0ea5cf25
+</code></pre>
 <h2 id="recorded-comparisons"><a class="header" href="#recorded-comparisons">Recorded comparisons</a></h2>
+<p>The <a href="cpu-0.7.0.html">0.7.0 CPU comparison</a> records outcomes for all 299 distinct inputs at 14 zetesis workers and one clingo worker. Among 286 comparable cases the 3% band gave 200 zetesis wins, 11 close and 75 clingo wins. The per-case record includes the quantified inputs, Family Crossing, USA, both large Mastermind encodings, Poker and arithmetic.</p>
 <p>The <a href="cpu-corpus-final-20261014.html">final 0.6.0 CPU check</a> records all 94 cases at
 one and fourteen threads. At fourteen, summed process time is 520.523 ms against
 clingo’s 803.673 ms, with 16 wins, 65 close cases and 13 losses under a 3% band.
@@ -392,7 +438,7 @@ as <code>--report LABEL=PATH</code>, are operands.</p>
                                 <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                             </a>
 
-                            <a rel="next prefetch" href="../reference/cpu-corpus-final-20261014.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                            <a rel="next prefetch" href="../reference/cpu-0.7.0.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                                 <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
                             </a>
 
@@ -406,7 +452,7 @@ as <code>--report LABEL=PATH</code>, are operands.</p>
                         <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                     </a>
 
-                    <a rel="next prefetch" href="../reference/cpu-corpus-final-20261014.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                    <a rel="next prefetch" href="../reference/cpu-0.7.0.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                         <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
                     </a>
             </nav>

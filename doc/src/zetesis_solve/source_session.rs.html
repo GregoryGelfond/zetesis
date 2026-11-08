@@ -3,8 +3,8 @@
 <a href=#3 id=3 data-nosnippet>3</a>//! The evaluator establishes membership before ordinary bounded model
 <a href=#4 id=4 data-nosnippet>4</a>//! construction. No candidate theory is substituted for the original source.
 <a href=#5 id=5 data-nosnippet>5</a>
-<a href=#6 id=6 data-nosnippet>6</a></span><span class="kw">use </span>zetesis_core::Model;
-<a href=#7 id=7 data-nosnippet>7</a><span class="kw">use </span>zetesis_cpu::Cancellation;
+<a href=#6 id=6 data-nosnippet>6</a></span><span class="kw">use </span>zetesis_algebra::Cancellation;
+<a href=#7 id=7 data-nosnippet>7</a><span class="kw">use </span>zetesis_core::Model;
 <a href=#8 id=8 data-nosnippet>8</a><span class="kw">use </span>zetesis_objective::Score;
 <a href=#9 id=9 data-nosnippet>9</a><span class="kw">use </span>zetesis_themelios::AcyclicSource;
 <a href=#10 id=10 data-nosnippet>10</a>
@@ -96,28 +96,23 @@
 <a href=#96 id=96 data-nosnippet>96</a>    <span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>outcome(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; SemanticOutcome {
 <a href=#97 id=97 data-nosnippet>97</a>        SemanticOutcome {
 <a href=#98 id=98 data-nosnippet>98</a>            projection: <span class="prelude-val">None</span>,
-<a href=#99 id=99 data-nosnippet>99</a>            subject: <span class="prelude-val">Some</span>(<span class="kw">crate</span>::Subject::Source(<span class="self">self</span>.owner.clone())),
+<a href=#99 id=99 data-nosnippet>99</a>            original: <span class="prelude-val">Some</span>(<span class="kw">crate</span>::Original::Source(<span class="self">self</span>.owner.clone())),
 <a href=#100 id=100 data-nosnippet>100</a>            selection: <span class="prelude-val">Some</span>(AnswerSelection::All),
 <a href=#101 id=101 data-nosnippet>101</a>            verified: <span class="self">self</span>.verified,
 <a href=#102 id=102 data-nosnippet>102</a>            scored: <span class="number">0</span>,
 <a href=#103 id=103 data-nosnippet>103</a>            retained: <span class="number">0</span>,
 <a href=#104 id=104 data-nosnippet>104</a>            search_state: <span class="self">self</span>.state,
-<a href=#105 id=105 data-nosnippet>105</a>            optimization: <span class="prelude-val">None</span>,
-<a href=#106 id=106 data-nosnippet>106</a>            objective_work: <span class="number">0</span>,
-<a href=#107 id=107 data-nosnippet>107</a>            checked: <span class="self">self</span>.checked,
-<a href=#108 id=108 data-nosnippet>108</a>            gate_atoms: <span class="number">0</span>,
-<a href=#109 id=109 data-nosnippet>109</a>            candidate_statistics: <span class="prelude-val">None</span>,
-<a href=#110 id=110 data-nosnippet>110</a>            countermodel_statistics: <span class="prelude-val">None</span>,
-<a href=#111 id=111 data-nosnippet>111</a>            formula_execution: <span class="prelude-val">None</span>,
-<a href=#112 id=112 data-nosnippet>112</a>            lazy_execution: <span class="prelude-val">None</span>,
-<a href=#113 id=113 data-nosnippet>113</a>            shared_execution: <span class="prelude-val">None</span>,
-<a href=#114 id=114 data-nosnippet>114</a>            closure_execution: <span class="prelude-val">None</span>,
-<a href=#115 id=115 data-nosnippet>115</a>            query_execution: <span class="prelude-val">None</span>,
-<a href=#116 id=116 data-nosnippet>116</a>            hybrid_execution: <span class="prelude-val">None</span>,
-<a href=#117 id=117 data-nosnippet>117</a>            terminal_execution: <span class="prelude-val">None</span>,
-<a href=#118 id=118 data-nosnippet>118</a>            source_evaluation: <span class="prelude-val">Some</span>(<span class="self">self</span>.owner.statistics()),
-<a href=#119 id=119 data-nosnippet>119</a>            model_construction: <span class="self">self</span>.construction.as_ref().map(Account::statistics),
-<a href=#120 id=120 data-nosnippet>120</a>        }
-<a href=#121 id=121 data-nosnippet>121</a>    }
-<a href=#122 id=122 data-nosnippet>122</a>}
+<a href=#105 id=105 data-nosnippet>105</a>            optimum_established: <span class="bool-val">false</span>,
+<a href=#106 id=106 data-nosnippet>106</a>            optimization: <span class="prelude-val">None</span>,
+<a href=#107 id=107 data-nosnippet>107</a>            objective_work: <span class="number">0</span>,
+<a href=#108 id=108 data-nosnippet>108</a>            checked: <span class="self">self</span>.checked,
+<a href=#109 id=109 data-nosnippet>109</a>            countermodel_statistics: <span class="prelude-val">None</span>,
+<a href=#110 id=110 data-nosnippet>110</a>            formula_execution: <span class="prelude-val">None</span>,
+<a href=#111 id=111 data-nosnippet>111</a>            hybrid_execution: <span class="prelude-val">None</span>,
+<a href=#112 id=112 data-nosnippet>112</a>            terminal_execution: <span class="prelude-val">None</span>,
+<a href=#113 id=113 data-nosnippet>113</a>            source_evaluation: <span class="prelude-val">Some</span>(<span class="self">self</span>.owner.statistics()),
+<a href=#114 id=114 data-nosnippet>114</a>            model_construction: <span class="self">self</span>.construction.as_ref().map(Account::statistics),
+<a href=#115 id=115 data-nosnippet>115</a>        }
+<a href=#116 id=116 data-nosnippet>116</a>    }
+<a href=#117 id=117 data-nosnippet>117</a>}
 </code></pre></div></section></main></body></html>

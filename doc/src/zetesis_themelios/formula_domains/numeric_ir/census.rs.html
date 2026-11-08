@@ -371,7 +371,7 @@
 <a href=#371 id=371 data-nosnippet>371</a>
 <a href=#372 id=372 data-nosnippet>372</a><span class="doccomment">/// Match the initial ordinary join profile. This collects only its positive
 <a href=#373 id=373 data-nosnippet>373</a>/// slot coverage; the shared Decisions fold remains the readiness authority.
-<a href=#374 id=374 data-nosnippet>374</a></span><span class="kw">fn </span>readiness(
+<a href=#374 id=374 data-nosnippet>374</a></span><span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">fn </span>readiness(
 <a href=#375 id=375 data-nosnippet>375</a>    source: <span class="kw-2">&amp;</span>RuleIr,
 <a href=#376 id=376 data-nosnippet>376</a>    components: TemplateComponentsRef&lt;<span class="lifetime">'_</span>&gt;,
 <a href=#377 id=377 data-nosnippet>377</a>    limits: <span class="kw-2">&amp;</span>FormulaLimits,
@@ -423,7 +423,7 @@
 <a href=#423 id=423 data-nosnippet>423</a>    }
 <a href=#424 id=424 data-nosnippet>424</a>}
 <a href=#425 id=425 data-nosnippet>425</a>
-<a href=#426 id=426 data-nosnippet>426</a><span class="kw">fn </span>leaf(expression: <span class="kw-2">&amp;</span>Expression, bound: <span class="prelude-ty">Option</span>&lt;<span class="kw-2">&amp;</span>[<span class="prelude-ty">Option</span>&lt;usize&gt;]&gt;) -&gt; bool {
+<a href=#426 id=426 data-nosnippet>426</a><span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">fn </span>leaf(expression: <span class="kw-2">&amp;</span>Expression, bound: <span class="prelude-ty">Option</span>&lt;<span class="kw-2">&amp;</span>[<span class="prelude-ty">Option</span>&lt;usize&gt;]&gt;) -&gt; bool {
 <a href=#427 id=427 data-nosnippet>427</a>    <span class="kw">match </span>expression.nodes.as_slice() {
 <a href=#428 id=428 data-nosnippet>428</a>        [Operation::Constant(<span class="kw">_</span>)] =&gt; <span class="bool-val">true</span>,
 <a href=#429 id=429 data-nosnippet>429</a>        [Operation::Variable(slot)] =&gt; bound

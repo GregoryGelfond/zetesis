@@ -1,0 +1,52 @@
+{
+  "schema_version": 1,
+  "root": ".",
+  "cases": [
+    {
+      "entry": "usa/usaSP1.lp",
+      "contract": {
+        "satisfiability": "sat",
+        "family": "optimal",
+        "model_count": 32,
+        "cost": [
+          4
+        ],
+        "witnesses": [],
+        "required_symbols": [],
+        "notes": [
+          "Historical complete-family expectation from retained original-source comparison; fresh reference qualification is required.",
+          "USA, from the controls manifest; the pair fix's population scan found its lazy route changed (124 to 122 streamed templates)."
+        ]
+      },
+      "files": [
+        {
+          "path": "usa/usaSP1.lp",
+          "sha256": "5eafd56cc63772e4527625412075f205bae0531f73b458fd71b426b92189f040",
+          "includes": []
+        }
+      ]
+    },
+    {
+      "entry": "queens-n12.lp",
+      "contract": {
+        "satisfiability": "sat",
+        "family": "all",
+        "model_count": 14200,
+        "cost": null,
+        "witnesses": [],
+        "required_symbols": [],
+        "notes": [
+          "examples/scalability/n-queens.lp with #const n = 12",
+          "From the enumeration manifest; the pair fix's population scan found its lazy route changed (2 to 0 streamed templates)."
+        ]
+      },
+      "files": [
+        {
+          "path": "queens-n12.lp",
+          "sha256": "8fb2458a582c5cc418a9e2215909f8b3feb94fb76bd62ad5ef55d71489f6fb1c",
+          "includes": []
+        }
+      ]
+    }
+  ]
+}

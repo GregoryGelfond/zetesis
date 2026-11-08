@@ -35,10 +35,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-fbb9e008.js";
+            window.path_to_searchindex_js = "../searchindex-8dfd52fd.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-5c747b16.js"></script>
+        <script src="../toc-25cd24fd.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -183,8 +183,9 @@
                         <h1 id="benchmarking-with-zetesis-bench"><a class="header" href="#benchmarking-with-zetesis-bench">Benchmarking with zetesis-bench</a></h1>
 <p><code>zetesis-bench</code> runs the zetesis benchmark suite and shows the results as
 tables or as JSON. It compares zetesis with the installed clingo when there is
-one, times zetesis alone when there is not, and compares saved runs. It runs
-the solvers as separate programs, as a user would, and counts a time only after
+one, supports zetesis-only runs for catalog workloads, and compares saved runs.
+The full corpus includes a source bundle that requires fresh clingo qualification.
+It runs the solvers as separate programs, as a user would, and counts a time only after
 zetesis’s answers are qualified: against clingo’s when clingo takes part, and
 against each workload’s recorded answers when it does not.
 <a href="https://github.com/GregoryGelfond/zetesis/blob/main/INSTALL.md">INSTALL.md</a>
@@ -236,7 +237,7 @@ inputs.</p>
 <tr><th><code>--suite</code></th><th>Workloads</th></tr>
 </thead>
 <tbody>
-<tr><td><code>corpus</code> (the default)</td><td>All 94 verified corpus cases</td></tr>
+<tr><td><code>corpus</code> (the default)</td><td>All 95 maintained cases: the 94-case correctness catalog and integrated Family Crossing</td></tr>
 <tr><td><code>baseline</code></td><td>SEND, queens variant 02 and task allocation</td></tr>
 <tr><td><code>queens</code></td><td>The six unchanged eight-queens encodings</td></tr>
 <tr><td><code>series</code></td><td>The maintained 22 generated, constant-amended and original workloads</td></tr>
@@ -245,7 +246,9 @@ inputs.</p>
 </table>
 </div>
 <p><code>--case PATH</code> measures one case of the suite, named relative to the corpus
-directory; repeat it to measure several, in the order given. For <code>series</code>, use
+directory; repeat it to measure several, in the order given. Family Crossing
+uses <code>--case family-crossing/integrated.lp</code>, relative to the enclosing
+<code>examples</code> directory. For <code>series</code>, use
 the workload entry path (including <code>generated/...</code>); a repeated amended entry
 such as <code>standalone/n-queens/variant-01.lp</code> selects both its ten- and eleven-queen
 cells in their series order. A case outside the suite is refused before anything
@@ -254,7 +257,7 @@ own workloads and accepts no <code>--case</code>; it alone accepts <code>--examp
 authored root, which defaults to <code>examples</code>, and <code>--include-einstein</code>, which
 adds the unchanged Einstein riddle as a twenty-first workload. Prime sieve at
 n=30/100/300 and subset sum at n=12/20/30 follow the established fourteen
-workloads; the separate 94-case corpus is unchanged. The maintained
+workloads; the 94-case correctness catalog is unchanged. The maintained
 Sudoku case has eight givens per row: it tests grounding and language handling,
 not difficult Sudoku search. The series suite raises the per-invocation,
 capture, evidence and native-decoder ceilings to the sizes of its records.
@@ -268,6 +271,27 @@ The report records the resulting capacities in <code>limits</code> and
 resource limits or relax complete-family comparison. Library callers explicitly
 apply <code>scalability::limits</code> and <code>scalability::native_answers</code> before constructing
 their matrix request; execution itself never raises supplied limits.</p>
+<h3 id="the-maintained-corpus"><a class="header" href="#the-maintained-corpus">The maintained corpus</a></h3>
+<p>The ordinary <code>corpus</code> suite composes the pinned 94-case correctness catalog
+with <code>family-crossing/integrated.lp</code> from the enclosing examples directory.
+Family Crossing is one regular case in campaign totals and scorecards. Its
+three original source files and include spellings are preserved byte for byte;
+<a href="https://github.com/GregoryGelfond/zetesis/blob/main/examples/family-crossing/manifest.json">its manifest</a> seals the graph
+and records complete optimal enumeration: all eight final ties at cost 29.
+Fresh clingo qualification must corroborate this expectation in each campaign,
+followed by the ordinary full native-model and selected-output comparisons.
+A best incumbent, cost alone or an interrupted enumeration cannot qualify it.</p>
+<p>The original catalog and its correctness-gate population remain 94 cases.
+Historical 94-case performance reports keep that population; do not combine
+them with a separately timed Family Crossing run to claim a new 95-case total.
+A current whole-corpus comparison runs all 95 cases under one recorded plan.
+Existing caller time, solver, capture and decoding limits still apply, so a
+refused Family Crossing slot remains a visible non-pass in that population.</p>
+<p>Library callers use <code>performance::command::run</code> for the composed suite, or
+<code>performance::corpus::workloads</code> to prepare it without launching processes.
+The low-level <code>matrix::run</code> still uses the historical catalog directly.
+<code>performance::Limits</code> defaults to 95 case slots; an explicit caller case
+ceiling remains binding. The source catalog’s independent default stays 94.</p>
 <h3 id="declared-external-bundles"><a class="header" href="#declared-external-bundles">Declared external bundles</a></h3>
 <p><code>run --workloads PATH</code> measures the external programs in a source-bundle JSON
 manifest through the same matrix. It requires a runnable clingo for fresh
@@ -308,6 +332,32 @@ still apply. The effective values appear in <code>limits.answers</code> and
 <code>native_normalization_limits.spelling_bytes</code>. Set <code>--sample-bytes</code> and
 <code>--native-report-bytes</code> separately for capture and native full-report decoding.
 A refusal retains the failed comparison; it does not establish an incomplete family as complete.</p>
+<h3 id="pool-gpu-residual-observations"><a class="header" href="#pool-gpu-residual-observations">Pool GPU residual observations</a></h3>
+<p>Use <code>--residual-evidence COHORT</code> to qualify an explicitly selected fixture
+family and pool measurements from the general GPU route. Give each family its
+own name and select its inputs with <code>--workloads</code> or <code>--case</code>. For example,
+from the repository root on a Metal host with clingo available:</p>
+<pre><code class="language-sh">zetesis-bench run --residual-evidence two-qbf \
+  --workloads examples/scalability/two-qbf/manifest.json \
+  --backend metal --grounder eager --oracle countermodel \
+  --report two-qbf-residuals.json
+</code></pre>
+<p>This is a separate qualification campaign. It checks the answers and requests
+an additional bounded artifact from each native child. It collects no timing
+or memory comparison rounds. Each profile gets its own pool. Every requested
+member must qualify and provide valid evidence for that pool to be published.
+A solver that lacks the artifact protocol can still return matching answers.
+Its evidence remains unavailable.</p>
+<p>The report records the relative path, exact byte length and SHA-256 of each
+retained artifact. Keep the adjacent evidence directory with the report. Each
+artifact contains the two retained populations and is at most 5,177,472 bytes.
+Ordinary stdout and stderr have first claim on the capture allowance. Missing,
+truncated or inconsistent observations cannot qualify the measurement.</p>
+<p>Pooling weights each run by its original population size. The batch count
+includes zero-residual commits. Query depth and work use eligible residual
+worlds. The reported coverage and retained counts tell you which ranks are
+exact, estimated or unavailable. Averaging individual run medians does not
+give the pooled median.</p>
 <h3 id="profiles"><a class="header" href="#profiles">Profiles</a></h3>
 <p>A run measures one native profile, set by <code>--backend</code>, <code>--grounder</code> and
 <code>--threads</code>, or compares several. Each compared axis replaces its single
@@ -352,7 +402,6 @@ choose an explicit count within that bound.</p>
 </thead>
 <tbody>
 <tr><td><code>--oracle auto|closure|countermodel</code></td><td><code>auto</code></td></tr>
-<tr><td><code>--search regions|clauses</code></td><td>The suite’s: region search for <code>scalability</code>, the solver’s own otherwise</td></tr>
 <tr><td><code>--formula-joins indexed|table</code></td><td>The suite’s: indexed joins for <code>scalability</code>, the solver’s own otherwise</td></tr>
 <tr><td><code>--memory SIZE</code></td><td>The solver’s ordinary host-dependent memory allowance</td></tr>
 <tr><td><code>--time-limit SECONDS</code></td><td>None; a cooperative native deadline</td></tr>
@@ -385,6 +434,14 @@ core admission. Streamed constraint checks occur during solving and are included
 in <code>original_validation</code>. The initial grounding time alone therefore does not
 measure all source evaluation work. Compare complete solve time, storage and
 the separate constraint-work counters as well.</p>
+<p>For direct CPU source evaluation, telemetry requires the typed
+<code>source_evaluation</code> admission receipt, matching operation metadata and eager
+admission measurements. Current <code>execution</code>, <code>hybrid_execution</code>,
+<code>terminal_execution</code> and <code>search</code> fields must be explicitly null. Earlier
+optional top-level <code>lazy_execution</code>, <code>shared_execution</code>, <code>closure_execution</code>,
+<code>query_execution</code> and <code>candidate_restrictions</code> fields may be absent or null;
+a non-null receipt still conflicts with direct source evaluation. Absence does
+not create an execution or work measurement for any of those routes.</p>
 <h3 id="clingo"><a class="header" href="#clingo">clingo</a></h3>
 <p><code>--clingo PATH</code> names the clingo to compare with, and it must be a runnable
 file: anything else is an error, never a silent fallback. Without it, the first
@@ -395,9 +452,11 @@ on purpose, and cannot be combined with <code>--clingo</code>.</p>
 recorded answers, and every later native sample against the first qualified
 family. A workload with no recorded answers, such as an amended series cell,
 whose family only clingo establishes, is recorded as needing clingo: it is not
-launched, and it is a non-pass shown with that reason. Every corpus case has
-recorded answers, so a plain run without clingo measures the whole default
-suite. The evidence records the policy the run used: <code>all_phases</code>,
+launched, and it is a non-pass shown with that reason. The 94 catalog cases have recorded contracts. Family Crossing retains the
+external-bundle requirement for fresh clingo qualification, so the complete
+default corpus refuses a clingo-free request before launching any process.
+Choose a catalog-only suite or select catalog entries to measure without clingo;
+Family Crossing is never silently omitted from the regular corpus. The evidence records the policy the run used: <code>all_phases</code>,
 <code>qualification_only</code> or <code>clingo_free</code>. The table and the JSON summary say what
 qualified each cell: clingo, the recorded contract, or nothing, because the
 cell needs clingo.</p>
@@ -422,6 +481,16 @@ Wall time includes process launch, grounding, solving and captured machine
 output. RSS is a separate child-resource observation, not device memory or an
 allocator counter. Primitive work counts are not elapsed time or machine
 instructions.</p>
+<p>Native GPU reports also retain optional compute-pass timestamps in
+<code>gpu_compute_timing</code>. Each successfully decoded device batch is counted once,
+measured from its own compute pass, unavailable, or unresolved when its run
+stopped, or its settlement met a busy or unhealthy context, before the interval
+could be read; host preparation, command-buffer
+copies and waiting are excluded, and process and host oracle timings remain
+separate. An unavailable timestamp is not a measured zero.
+The normal <code>--stats</code> request enables timing when supported without changing the
+benchmark options. See <a href="../rust/measurements.html#gpu-compute-pass-timing">GPU timing</a>
+for availability, resource accounting and interpretation.</p>
 <p>A first non-pass disables later launches for that cell; a campaign stop retains
 the remaining planned positions. Neither is replaced by another sample. The
 human and JSON summaries compute wall-time distributions only when the cell’s

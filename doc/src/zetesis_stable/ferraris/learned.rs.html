@@ -1,0 +1,61 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `crates/zetesis-stable/src/ferraris/learned.rs`."><title>learned.rs - source</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2"href="../../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../../static.files/rustdoc-17e0aaed.css"><meta name="rustdoc-vars" data-root-path="../../../" data-static-root-path="../../../static.files/" data-current-crate="zetesis_stable" data-themes="" data-resource-suffix="" data-rustdoc-version="1.97.1 (8bab26f4f 2026-07-14)" data-channel="1.97.1" data-search-js="search-fd9372ac.js" data-stringdex-js="stringdex-2da4960a.js" data-settings-js="settings-170eb4bf.js" ><script src="../../../static.files/storage-41dd4d93.js"></script><script defer src="../../../static.files/src-script-813739b1.js"></script><script defer src="../../../src-files.js"></script><script defer src="../../../static.files/main-fcd733ba.js"></script><noscript><link rel="stylesheet" href="../../../static.files/noscript-f7c3ffd8.css"></noscript><link rel="alternate icon" type="image/png" href="../../../static.files/favicon-32x32-eab170b8.png"><link rel="icon" type="image/svg+xml" href="../../../static.files/favicon-044be391.svg"></head><body class="rustdoc src"><a class="skip-main-content" href="#main-content">Skip to main content</a><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"><div class="src-sidebar-title"><h2>Files</h2></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><section id="main-content" class="content" tabindex="-1"><div class="main-heading"><h1><div class="sub-heading">zetesis_stable/ferraris/</div>learned.rs</h1><rustdoc-toolbar></rustdoc-toolbar></div><div class="example-wrap digits-2"><pre class="rust"><code><a href=#1 id=1 data-nosnippet>1</a><span class="doccomment">//! The learned rows one solve's candidate streams share.
+<a href=#2 id=2 data-nosnippet>2</a>//!
+<a href=#3 id=3 data-nosnippet>3</a>//! A [`LearnedStore`] holds, by consequence class, the rows its streams' tiers
+<a href=#4 id=4 data-nosnippet>4</a>//! delivered. Its public surface is creating an empty store and handing it to
+<a href=#5 id=5 data-nosnippet>5</a>//! streams ([`crate::StableModels::set_learned_store`]): no public operation
+<a href=#6 id=6 data-nosnippet>6</a>//! adds, seeds, edits or reads a row, so a caller chooses which streams share
+<a href=#7 id=7 data-nosnippet>7</a>//! a store, never what is learned. A walk seeds a tier from the store before
+<a href=#8 id=8 data-nosnippet>8</a>//! the tier's first narrowing and delivers it at the walk's boundaries: when
+<a href=#9 id=9 data-nosnippet>9</a>//! the walk ends, when a parallel walk's coordinator hands over to its
+<a href=#10 id=10 data-nosnippet>10</a>//! workers, at the GPU route's slate joins, and each time the walk has visited
+<a href=#11 id=11 data-nosnippet>11</a>//! the owner's `publish_regions` regions since the tier last delivered. None
+<a href=#12 id=12 data-nosnippet>12</a>//! of these is inside a narrowing. One lock serializes the store; the tier
+<a href=#13 id=13 data-nosnippet>13</a>//! pays for every read.
+<a href=#14 id=14 data-nosnippet>14</a>
+<a href=#15 id=15 data-nosnippet>15</a></span><span class="kw">use </span>std::sync::{Mutex, MutexGuard, PoisonError};
+<a href=#16 id=16 data-nosnippet>16</a>
+<a href=#17 id=17 data-nosnippet>17</a><span class="kw">use </span>zetesis_ferraris::LearningStore;
+<a href=#18 id=18 data-nosnippet>18</a>
+<a href=#19 id=19 data-nosnippet>19</a><span class="doccomment">/// The learned rows the candidate streams of one solve share, by consequence
+<a href=#20 id=20 data-nosnippet>20</a>/// class. Create an empty store and hand it to every stream that should
+<a href=#21 id=21 data-nosnippet>21</a>/// share; rows enter it only from those streams' own narrowing.
+<a href=#22 id=22 data-nosnippet>22</a></span><span class="attr">#[derive(Debug, Default)]
+<a href=#23 id=23 data-nosnippet>23</a></span><span class="kw">pub struct </span>LearnedStore {
+<a href=#24 id=24 data-nosnippet>24</a>    rows: Mutex&lt;LearningStore&gt;,
+<a href=#25 id=25 data-nosnippet>25</a>}
+<a href=#26 id=26 data-nosnippet>26</a>
+<a href=#27 id=27 data-nosnippet>27</a><span class="kw">impl </span>LearnedStore {
+<a href=#28 id=28 data-nosnippet>28</a>    <span class="doccomment">/// An empty store.
+<a href=#29 id=29 data-nosnippet>29</a>    </span><span class="attr">#[must_use]
+<a href=#30 id=30 data-nosnippet>30</a>    </span><span class="kw">pub fn </span>new() -&gt; <span class="self">Self </span>{
+<a href=#31 id=31 data-nosnippet>31</a>        <span class="self">Self</span>::default()
+<a href=#32 id=32 data-nosnippet>32</a>    }
+<a href=#33 id=33 data-nosnippet>33</a>
+<a href=#34 id=34 data-nosnippet>34</a>    <span class="doccomment">/// Exclusive access for one seeding or delivery. Retention publishes a
+<a href=#35 id=35 data-nosnippet>35</a>    /// row only after every fallible step succeeds, so a panic while the lock
+<a href=#36 id=36 data-nosnippet>36</a>    /// was held leaves only complete rows.
+<a href=#37 id=37 data-nosnippet>37</a>    </span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>lock(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; MutexGuard&lt;<span class="lifetime">'_</span>, LearningStore&gt; {
+<a href=#38 id=38 data-nosnippet>38</a>        <span class="self">self</span>.rows.lock().unwrap_or_else(PoisonError::into_inner)
+<a href=#39 id=39 data-nosnippet>39</a>    }
+<a href=#40 id=40 data-nosnippet>40</a>}
+<a href=#41 id=41 data-nosnippet>41</a>
+<a href=#42 id=42 data-nosnippet>42</a><span class="doccomment">/// A walk's sharing state beside its scratch's tier: whether the tier has
+<a href=#43 id=43 data-nosnippet>43</a>/// drawn the store's rows, and the regions the walk visited since the tier
+<a href=#44 id=44 data-nosnippet>44</a>/// last delivered.
+<a href=#45 id=45 data-nosnippet>45</a></span><span class="attr">#[derive(Debug, Default)]
+<a href=#46 id=46 data-nosnippet>46</a></span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">struct </span>Tier {
+<a href=#47 id=47 data-nosnippet>47</a>    <span class="kw">pub</span>(<span class="kw">super</span>) seeded: bool,
+<a href=#48 id=48 data-nosnippet>48</a>    <span class="kw">pub</span>(<span class="kw">super</span>) visited: u64,
+<a href=#49 id=49 data-nosnippet>49</a>}
+<a href=#50 id=50 data-nosnippet>50</a>
+<a href=#51 id=51 data-nosnippet>51</a><span class="kw">impl </span>Tier {
+<a href=#52 id=52 data-nosnippet>52</a>    <span class="doccomment">/// Draw the store's rows again before the tier's next narrowing, as a
+<a href=#53 id=53 data-nosnippet>53</a>    /// producer does after each slate's join.
+<a href=#54 id=54 data-nosnippet>54</a>    </span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>reseed(<span class="kw-2">&amp;mut </span><span class="self">self</span>) {
+<a href=#55 id=55 data-nosnippet>55</a>        <span class="self">self</span>.seeded = <span class="bool-val">false</span>;
+<a href=#56 id=56 data-nosnippet>56</a>    }
+<a href=#57 id=57 data-nosnippet>57</a>}
+<a href=#58 id=58 data-nosnippet>58</a>
+<a href=#59 id=59 data-nosnippet>59</a><span class="attr">#[cfg(test)]
+<a href=#60 id=60 data-nosnippet>60</a></span><span class="kw">mod </span>tests;
+</code></pre></div></section></main></body></html>

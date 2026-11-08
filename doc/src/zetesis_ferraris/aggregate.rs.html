@@ -159,7 +159,7 @@
 <a href=#159 id=159 data-nosnippet>159</a></span><span class="attr">#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 <a href=#160 id=160 data-nosnippet>160</a></span><span class="kw">pub enum </span>AggregateErrorKind {
 <a href=#161 id=161 data-nosnippet>161</a>    <span class="doccomment">/// Shared cancellation or deadline, preserved as supplied by the CPU control.
-<a href=#162 id=162 data-nosnippet>162</a>    </span>Control(zetesis_cpu::Stop),
+<a href=#162 id=162 data-nosnippet>162</a>    </span>Control(zetesis_algebra::Stop),
 <a href=#163 id=163 data-nosnippet>163</a>    <span class="doccomment">/// Too many input elements.
 <a href=#164 id=164 data-nosnippet>164</a>    </span>ElementLimit,
 <a href=#165 id=165 data-nosnippet>165</a>    <span class="doccomment">/// Too many requested guards in one aggregate family.
@@ -196,7 +196,7 @@
 <a href=#196 id=196 data-nosnippet>196</a>    </span><span class="attr">#[must_use]
 <a href=#197 id=197 data-nosnippet>197</a>    </span><span class="kw">pub fn </span>is_resource_refusal(<span class="self">self</span>) -&gt; bool {
 <a href=#198 id=198 data-nosnippet>198</a>        <span class="kw">match </span><span class="self">self </span>{
-<a href=#199 id=199 data-nosnippet>199</a>            <span class="self">Self</span>::Control(stop) =&gt; zetesis_cpu::Refusal::is_resource_refusal(<span class="kw-2">&amp;</span>stop),
+<a href=#199 id=199 data-nosnippet>199</a>            <span class="self">Self</span>::Control(stop) =&gt; zetesis_algebra::Refusal::is_resource_refusal(<span class="kw-2">&amp;</span>stop),
 <a href=#200 id=200 data-nosnippet>200</a>            <span class="self">Self</span>::ElementLimit
 <a href=#201 id=201 data-nosnippet>201</a>            | <span class="self">Self</span>::GuardLimit
 <a href=#202 id=202 data-nosnippet>202</a>            | <span class="self">Self</span>::NodeLimit

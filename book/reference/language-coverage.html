@@ -35,10 +35,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-fbb9e008.js";
+            window.path_to_searchindex_js = "../searchindex-8dfd52fd.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-5c747b16.js"></script>
+        <script src="../toc-25cd24fd.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -197,7 +197,7 @@ associated Lean results and documented refinement limits must remain current.
 The linked tests are representative evidence for these contracts, not a claim
 that every syntactically valid program belongs to an admitted finite profile.</p>
 <h2 id="ordinary-language"><a class="header" href="#ordinary-language">Ordinary language</a></h2>
-<p>L01–L18 are closed within their documented finite profiles. Stable identifiers
+<p>L01–L19 are closed within their documented finite profiles. Stable identifiers
 connect these contracts to their tests and the admitted-language reference.
 The separate state/input obligations and unclassified scopes below remain open.</p>
 <div class="table-wrapper">
@@ -224,6 +224,7 @@ The separate state/input obligations and unclassified scopes below remain open.<
 <tr><td>L16</td><td><strong>Closed:</strong> filtered and multiple observers, mixed extrema and recursive observer dependencies preserve complete finite source rows, independently applicable carrier refinements and original-model costs</td><td><a href="https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/tests/integration/aggregate_objective_observers.rs">Aggregate objective observers</a>, <a href="https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/tests/integration/objective_carrier_composition.rs">carrier composition</a></td></tr>
 <tr><td>L17</td><td><strong>Closed:</strong> finite observation bindings preserve whole-chain values, pooled structural capture and single-occurrence checked arithmetic inversion; anonymous negative cardinality keys preserve existential pattern identity, while full answer identity remains unchanged</td><td><a href="https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/tests/integration/observation_bindings.rs">Observation bindings</a>, <a href="https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/tests/integration/observation_inverse.rs">Inverse contracts</a>, <a href="https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/tests/integration/observation_expressions.rs">Expressions</a></td></tr>
 <tr><td>L18</td><td><strong>Closed:</strong> explicit source projection prepares a fixed typed atom domain; projected sessions return unique full answer-set representatives after objective selection with bounded history and separate completion, while ordinary enumeration and WorldView retain full identity</td><td><a href="https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/tests/integration/project_metadata.rs">Projection metadata</a>, <a href="https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-solve/tests/integration/projected_sessions.rs">Projected sessions</a>, <a href="https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-solve/tests/integration/projected_reference.rs">Projected references</a></td></tr>
+<tr><td>L19</td><td><strong>Closed:</strong> an ordering between tuples that still contain variables compares complete values in ASP term order, arity first and then components, wherever a comparison can stand (bodies, aggregate element conditions and guards, choice conditions, conditional literals and objectives), binding nothing; equality and disequality keep binding their components</td><td><a href="https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/tests/integration/tuple_orderings.rs">Tuple orderings</a></td></tr>
 </tbody>
 </table>
 </div>
@@ -299,7 +300,8 @@ without an established local evaluation order still need precise classification.
 existing entry or explicitly identified additions. Unsafe scopes and
 ungroundable cycles require a sound finite binding contract before admission.
 The <a href="language.html#rules-terms-and-bindings">whole-value/open-tuple comparison refusal</a>
-is one concrete unclassified logical-value boundary. It is separate from L05’s
+is one concrete unclassified logical-value boundary: equality or disequality
+between an open tuple and a whole value. Orderings between open tuples are L19. It is separate from L05’s
 nested pools and intervals and does not change the classified counts above.</p>
 <p>ASPIF import/export and any libclingo interoperability require their own
 interchange contracts; they are not included in the ordinary-language count.

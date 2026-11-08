@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["ARTIFACT_NAME","MAX_BYTES","REQUEST_NAME"],"fn":["read"],"struct":["Artifact","Pool","PooledSamples","Request"]};

@@ -35,10 +35,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-fbb9e008.js";
+            window.path_to_searchindex_js = "../searchindex-8dfd52fd.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-5c747b16.js"></script>
+        <script src="../toc-25cd24fd.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -248,6 +248,11 @@ that all answer sets were enumerated. With an objective, search still seeks a
 proved optimum; the limit then selects how many tied optima to display. An
 interrupted optimization may report verified incumbents whose optimality is
 unproved. <code>--all</code> requests all tied optima, rather than every nonoptimal model.</p>
+<p>For one answer, the default, each better answer bounds the search to strictly
+cheaper candidates. The search then proves the optimum without visiting its
+other ties, and <code>--stats</code> reports their number as unavailable. A larger limit,
+or <code>--all</code>, admits candidates as cheap as the best answer so far, and counts
+every optimal tie.</p>
 <p>Shown atoms and terms are a presentation of an answer set. Two full answer sets
 can have the same display. Parallel search can change answer order and which
 answers appear before a finite display limit; it preserves the complete family
@@ -262,8 +267,9 @@ has one empty answer set and prints <code>1</code>.</p>
 </code></pre>
 <p>Counting skips display-term evaluation and projection history. It streams
 ordinary answers and retains at most one optimal representative while counting
-all optimal ties. Resource limits still apply. An interrupted or failed search
-prints no count and reports the reason on stderr with a nonzero exit status.
+all optimal ties, under bounds that admit them. Resource limits still apply. An
+interrupted or failed search prints no count and reports the reason on stderr
+with a nonzero exit status.
 An output failure can occur after bytes have been written; consumers must check
 the exit status before accepting the total. <code>--count</code> cannot be combined with <code>--answers</code>, <code>--all</code>,
 <code>--models</code> or <code>--json</code>. <code>--stats</code> remains available on stderr.</p>
@@ -276,7 +282,7 @@ the exit status before accepting the total. <code>--count</code> cannot be combi
 <tbody>
 <tr><td><code>--backend cpu</code></td><td>CPU execution, or <code>gpu</code>, which uses the platform’s native API (Metal on macOS, Vulkan elsewhere). The full help also lists <code>metal</code> and <code>vulkan</code>, which name the API. A GPU request is honored or refused.</td></tr>
 <tr><td><code>--threads auto</code></td><td>The host’s available parallelism; one if availability is unknown.</td></tr>
-<tr><td><code>--grounder auto</code></td><td>Prefer lazy source joins where admitted; formula admission can defer eligible terminal definitions and ground the remaining rules eagerly.</td></tr>
+<tr><td><code>--grounder auto</code></td><td>Prefer lazy source joins where admitted; formula admission can defer eligible terminal definitions and ground the remaining rules eagerly. It never streams integrity constraints.</td></tr>
 <tr><td><code>--time-limit DURATION</code></td><td>No deadline when omitted; accepts whole seconds or <code>s</code>, <code>m</code>, <code>h</code>.</td></tr>
 <tr><td><code>--memory SIZE</code></td><td>Allowance for named storage, derived from the host by default; accepts bytes or <code>B</code>, <code>KiB</code>, <code>MiB</code>, <code>GiB</code>, <code>TiB</code>. Listed under <code>--help-all</code>.</td></tr>
 </tbody>
@@ -288,8 +294,13 @@ definitions from each verified base answer. It returns full original answers;
 <a href="../architecture/grounding.html#terminal-definition-analysis">grounding contract</a>.
 Explicit <code>--grounder eager</code> still requests complete materialization.</p>
 <p>For a formula input, explicit <code>--grounder lazy</code> selects hybrid grounding:
-the producer core is materialized, while eligible integrity constraints are
-checked from their admitted source families. Certified terminal definitions are
+the producer core is materialized with every eligible integrity constraint whose
+instances fit in the formula’s share of the memory allowance, the share eager
+grounding has. Only constraints that do not fit are streamed: checked from their
+admitted source families during search. Streaming saves formula memory but
+re-joins the streamed bodies in every search region, which can cost many times
+eager grounding’s time, so a smaller <code>--memory</code> allowance streams more
+constraints and trades time for memory. Certified terminal definitions are
 deferred too, and reconstructed from each accepted base answer, as automatic
 admission does over an eager base. The core uses the selected CPU or GPU backend;
 source joins and streamed constraint checks run on the host. Hybrid grounding
@@ -297,13 +308,13 @@ uses indexed joins and refuses table joins. With objectives, terminal definition
 the core. Only answers that pass every original constraint enter scoring and
 optimal-tie retention.</p>
 <p>The three grounders: <code>eager</code> instantiates every rule before solving; <code>lazy</code>
-instantiates on demand wherever admitted — relational source joins, or the
-hybrid formula schedule with terminal definitions deferred; <code>auto</code> admits
-relational source joins where it can, and otherwise instantiates an eager base
-and defers certified terminal definitions. Relational lazy
-closure retains its existing CPU and device routes.</p>
+grounds an eager producer core with the constraints that fit the formula’s memory
+share, streams the rest and defers terminal definitions; <code>auto</code> instantiates an
+eager base and defers certified terminal definitions, and never streams
+constraints.</p>
 <p>Hybrid statistics distinguish retained-core models from original answers accepted
-after complete constraint checks. Checks observe the solve’s cancellation token
+after complete constraint checks, and count the constraint templates and instances
+streamed and those grounded in the core. Checks observe the solve’s cancellation token
 and memory policy. Work and substitution counts remain available in statistics.
 A stopped check is incomplete, never an accepted answer or an UNSAT result.</p>
 <pre><code class="language-sh">zetesis solve program.lp --backend cpu --threads 4
@@ -332,7 +343,10 @@ its memory, the allowance is two GiB.
 It determines named capacities for source loading, grounding, solving and
 output. These capacities do not cover every allocation and can overlap;
 the allowance is not a process RSS cap. Closure workers share a collective
-capacity, so increasing <code>--threads</code> reduces each worker’s share.</p>
+capacity, so increasing <code>--threads</code> reduces each worker’s share. Device batches
+may each account a thirty-second of the allowance, except a GPU tight support
+batch, which may account a sixteenth so that its update route can engage under
+smaller allowances.</p>
 <p>Ordinary execution has no selected operation-count or grounding-round ceiling.
 Work counters remain available through <code>--stats</code>; counter overflow and storage
 failures remain checked. Optional analyses and GPU dispatches retain internal
@@ -443,7 +457,7 @@ tight support, a general reduct query, and optimum ties. It compares the
 selected route with CPU execution and known full-model contracts. Actual route
 and work evidence is mandatory; a requested device name alone cannot pass a
 check. This small installed check is distinct from the repository’s maintained
-63-test physical qualification suite.</p>
+58-test physical qualification suite.</p>
 <p>Corpus and backend checks accept every backend: <code>--backend cpu</code> (the default),
 <code>gpu</code>, <code>metal</code> or <code>vulkan</code>. GPU corpus checks request the eager general formula
 route. Decoding a Vulkan route awaits qualification on a Vulkan host. An

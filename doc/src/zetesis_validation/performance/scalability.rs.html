@@ -20,7 +20,7 @@
 <a href=#20 id=20 data-nosnippet>20</a><span class="kw">use crate</span>::{
 <a href=#21 id=21 data-nosnippet>21</a>    answers::native_json,
 <a href=#22 id=22 data-nosnippet>22</a>    examples,
-<a href=#23 id=23 data-nosnippet>23</a>    selected::{FormulaJoins, NativeExecution, SearchMethod},
+<a href=#23 id=23 data-nosnippet>23</a>    selected::{FormulaJoins, NativeExecution},
 <a href=#24 id=24 data-nosnippet>24</a>};
 <a href=#25 id=25 data-nosnippet>25</a>
 <a href=#26 id=26 data-nosnippet>26</a><span class="doccomment">/// Per-invocation capture and decoding bytes for the maintained population.
@@ -269,43 +269,42 @@
 <a href=#269 id=269 data-nosnippet>269</a>        .map(|workers| NativeExecution {
 <a href=#270 id=270 data-nosnippet>270</a>            threads: workers,
 <a href=#271 id=271 data-nosnippet>271</a>            formula_joins: <span class="prelude-val">Some</span>(FormulaJoins::Indexed),
-<a href=#272 id=272 data-nosnippet>272</a>            search: <span class="prelude-val">Some</span>(SearchMethod::Regions),
-<a href=#273 id=273 data-nosnippet>273</a>            memory_bytes,
-<a href=#274 id=274 data-nosnippet>274</a>            ..NativeExecution::default()
-<a href=#275 id=275 data-nosnippet>275</a>        })
-<a href=#276 id=276 data-nosnippet>276</a>        .to_vec()
-<a href=#277 id=277 data-nosnippet>277</a>}
-<a href=#278 id=278 data-nosnippet>278</a>
-<a href=#279 id=279 data-nosnippet>279</a><span class="doccomment">/// Run the maintained scalability population through the shared matrix owner.
-<a href=#280 id=280 data-nosnippet>280</a>/// The request must select [`matrix::Suite::Scalability`]. Qualification-only
-<a href=#281 id=281 data-nosnippet>281</a>/// and measurement plans use the same workloads, provenance and complete-family
-<a href=#282 id=282 data-nosnippet>282</a>/// checks. All request limits are honored without raising them. Callers may apply
-<a href=#283 id=283 data-nosnippet>283</a>/// [`limits`] and [`native_answers`] before constructing the request. The caller owns
-<a href=#284 id=284 data-nosnippet>284</a>/// cancellation and publication of the returned report.
-<a href=#285 id=285 data-nosnippet>285</a>///
-<a href=#286 id=286 data-nosnippet>286</a>/// # Errors
-<a href=#287 id=287 data-nosnippet>287</a>/// Refuses a different suite, changed input identities, workload admission
-<a href=#288 id=288 data-nosnippet>288</a>/// limits, or the matrix's pre-launch configuration and source failures.
-<a href=#289 id=289 data-nosnippet>289</a></span><span class="kw">pub fn </span>run_with_cancellation(
-<a href=#290 id=290 data-nosnippet>290</a>    request: <span class="kw-2">&amp;</span>matrix::Request&lt;<span class="lifetime">'_</span>&gt;,
-<a href=#291 id=291 data-nosnippet>291</a>    root: <span class="kw-2">&amp;</span>Path,
-<a href=#292 id=292 data-nosnippet>292</a>    include_einstein: bool,
-<a href=#293 id=293 data-nosnippet>293</a>    invocation: matrix::NativeInvocation,
-<a href=#294 id=294 data-nosnippet>294</a>    cancelled: <span class="kw-2">&amp;</span>std::sync::atomic::AtomicBool,
-<a href=#295 id=295 data-nosnippet>295</a>) -&gt; <span class="prelude-ty">Result</span>&lt;matrix::Report, Error&gt; {
-<a href=#296 id=296 data-nosnippet>296</a>    <span class="kw">if </span>request.plan.suite() != matrix::Suite::Scalability {
-<a href=#297 id=297 data-nosnippet>297</a>        <span class="kw">return </span><span class="prelude-val">Err</span>(Error::Configuration(
-<a href=#298 id=298 data-nosnippet>298</a>            <span class="string">"authored scalability requires the scalability suite"</span>,
-<a href=#299 id=299 data-nosnippet>299</a>        ));
-<a href=#300 id=300 data-nosnippet>300</a>    }
-<a href=#301 id=301 data-nosnippet>301</a>    <span class="kw">let </span>corpus = examples::load(request.corpus, request.limits.corpus).map_err(Error::Corpus)<span class="question-mark">?</span>;
-<a href=#302 id=302 data-nosnippet>302</a>    <span class="kw">let </span>limits = WorkloadLimits {
-<a href=#303 id=303 data-nosnippet>303</a>        source_bytes: request.limits.corpus.source_bytes,
-<a href=#304 id=304 data-nosnippet>304</a>        total_source_bytes: request.limits.corpus.total_source_bytes,
-<a href=#305 id=305 data-nosnippet>305</a>        metadata_bytes: request.limits.corpus.manifest_bytes,
-<a href=#306 id=306 data-nosnippet>306</a>        ..WorkloadLimits::default()
-<a href=#307 id=307 data-nosnippet>307</a>    };
-<a href=#308 id=308 data-nosnippet>308</a>    <span class="kw">let </span>workloads = workloads(<span class="kw-2">&amp;</span>corpus, root, include_einstein, limits)<span class="question-mark">?</span>;
-<a href=#309 id=309 data-nosnippet>309</a>    matrix::run_workloads_with_cancellation(request, <span class="kw-2">&amp;</span>workloads, invocation, cancelled)
-<a href=#310 id=310 data-nosnippet>310</a>}
+<a href=#272 id=272 data-nosnippet>272</a>            memory_bytes,
+<a href=#273 id=273 data-nosnippet>273</a>            ..NativeExecution::default()
+<a href=#274 id=274 data-nosnippet>274</a>        })
+<a href=#275 id=275 data-nosnippet>275</a>        .to_vec()
+<a href=#276 id=276 data-nosnippet>276</a>}
+<a href=#277 id=277 data-nosnippet>277</a>
+<a href=#278 id=278 data-nosnippet>278</a><span class="doccomment">/// Run the maintained scalability population through the shared matrix owner.
+<a href=#279 id=279 data-nosnippet>279</a>/// The request must select [`matrix::Suite::Scalability`]. Qualification-only
+<a href=#280 id=280 data-nosnippet>280</a>/// and measurement plans use the same workloads, provenance and complete-family
+<a href=#281 id=281 data-nosnippet>281</a>/// checks. All request limits are honored without raising them. Callers may apply
+<a href=#282 id=282 data-nosnippet>282</a>/// [`limits`] and [`native_answers`] before constructing the request. The caller owns
+<a href=#283 id=283 data-nosnippet>283</a>/// cancellation and publication of the returned report.
+<a href=#284 id=284 data-nosnippet>284</a>///
+<a href=#285 id=285 data-nosnippet>285</a>/// # Errors
+<a href=#286 id=286 data-nosnippet>286</a>/// Refuses a different suite, changed input identities, workload admission
+<a href=#287 id=287 data-nosnippet>287</a>/// limits, or the matrix's pre-launch configuration and source failures.
+<a href=#288 id=288 data-nosnippet>288</a></span><span class="kw">pub fn </span>run_with_cancellation(
+<a href=#289 id=289 data-nosnippet>289</a>    request: <span class="kw-2">&amp;</span>matrix::Request&lt;<span class="lifetime">'_</span>&gt;,
+<a href=#290 id=290 data-nosnippet>290</a>    root: <span class="kw-2">&amp;</span>Path,
+<a href=#291 id=291 data-nosnippet>291</a>    include_einstein: bool,
+<a href=#292 id=292 data-nosnippet>292</a>    invocation: matrix::NativeInvocation,
+<a href=#293 id=293 data-nosnippet>293</a>    cancelled: <span class="kw-2">&amp;</span>std::sync::atomic::AtomicBool,
+<a href=#294 id=294 data-nosnippet>294</a>) -&gt; <span class="prelude-ty">Result</span>&lt;matrix::Report, Error&gt; {
+<a href=#295 id=295 data-nosnippet>295</a>    <span class="kw">if </span>request.plan.suite() != matrix::Suite::Scalability {
+<a href=#296 id=296 data-nosnippet>296</a>        <span class="kw">return </span><span class="prelude-val">Err</span>(Error::Configuration(
+<a href=#297 id=297 data-nosnippet>297</a>            <span class="string">"authored scalability requires the scalability suite"</span>,
+<a href=#298 id=298 data-nosnippet>298</a>        ));
+<a href=#299 id=299 data-nosnippet>299</a>    }
+<a href=#300 id=300 data-nosnippet>300</a>    <span class="kw">let </span>corpus = examples::load(request.corpus, request.limits.corpus).map_err(Error::Corpus)<span class="question-mark">?</span>;
+<a href=#301 id=301 data-nosnippet>301</a>    <span class="kw">let </span>limits = WorkloadLimits {
+<a href=#302 id=302 data-nosnippet>302</a>        source_bytes: request.limits.corpus.source_bytes,
+<a href=#303 id=303 data-nosnippet>303</a>        total_source_bytes: request.limits.corpus.total_source_bytes,
+<a href=#304 id=304 data-nosnippet>304</a>        metadata_bytes: request.limits.corpus.manifest_bytes,
+<a href=#305 id=305 data-nosnippet>305</a>        ..WorkloadLimits::default()
+<a href=#306 id=306 data-nosnippet>306</a>    };
+<a href=#307 id=307 data-nosnippet>307</a>    <span class="kw">let </span>workloads = workloads(<span class="kw-2">&amp;</span>corpus, root, include_einstein, limits)<span class="question-mark">?</span>;
+<a href=#308 id=308 data-nosnippet>308</a>    matrix::run_workloads_with_cancellation(request, <span class="kw-2">&amp;</span>workloads, invocation, cancelled)
+<a href=#309 id=309 data-nosnippet>309</a>}
 </code></pre></div></section></main></body></html>

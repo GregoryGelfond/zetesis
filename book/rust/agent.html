@@ -35,10 +35,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-fbb9e008.js";
+            window.path_to_searchindex_js = "../searchindex-8dfd52fd.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-5c747b16.js"></script>
+        <script src="../toc-25cd24fd.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -558,6 +558,13 @@ declared capability is <code>DerivedByEnumeration</code>. A program with no answ
 unfinished search yields a typed fault. <code>Snapshot::cautious()</code> and
 <code>Snapshot::brave()</code> reuse an already retained complete family without solving
 again.</p>
+<p>The native session answers ground literal queries and both consequence sets
+without the agent’s complete enumeration:
+<a href="sessions.html#deciding-questions-over-the-world-view"><code>SessionBuilder::answer</code>, <code>known</code>, <code>possible</code>, <code>cautious</code> and <code>brave</code></a>
+fold answer sets as they arrive and stop once the answer is decided, for example
+at the first answer set in which the literal is unknown. <code>Agent</code> and <code>Snapshot</code>
+are unchanged. A snapshot already holds its complete family, so deciding early
+has nothing to shorten there.</p>
 <h2 id="change-the-knowledge-base"><a class="header" href="#change-the-knowledge-base">Change the knowledge base</a></h2>
 <p>An agent retains the logical program between questions. Assertion returns a
 handle that identifies the statement to retract:</p>

@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"mod":["answers","backend_check","corpus_comparison","curated","examples","performance","process","selected"]};
+window.SIDEBAR_ITEMS = {"mod":["answers","backend_check","corpus_comparison","curated","examples","performance","process","residual_evidence","selected"]};

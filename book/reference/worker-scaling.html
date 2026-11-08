@@ -35,10 +35,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-fbb9e008.js";
+            window.path_to_searchindex_js = "../searchindex-8dfd52fd.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-5c747b16.js"></script>
+        <script src="../toc-25cd24fd.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -437,7 +437,7 @@ For each fixed backend/worker configuration, derive the maintained comparison:</
 <pre><code class="language-sh">zetesis-series --report "A1=$A1" --report "B1=$B1" \
   --report "B2=$B2" --report "A2=$A2" --json "$COMPARISON" &gt; "$TABLES"
 </code></pre>
-<p>The <a href="../rust/parallel.html">parallel execution contract</a> keeps pending, local and
+<p>The <a href="../architecture/execution.html">parallel region walk</a> keeps pending, local and
 active regions in the unfinished frontier until they are refuted, split or
 checked. <code>Pending.Step.perm</code>, <code>Pending.Walk.exhausted</code> and <code>WorkPermits</code> provide
 abstract preservation, exhaustion and work-conservation laws. As the

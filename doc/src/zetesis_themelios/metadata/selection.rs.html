@@ -208,21 +208,21 @@
 <a href=#208 id=208 data-nosnippet>208</a>        signatures: <span class="kw-2">&amp;</span>[OwnedPredicate],
 <a href=#209 id=209 data-nosnippet>209</a>        limits: AtomSelectionLimits,
 <a href=#210 id=210 data-nosnippet>210</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="self">Self</span>, AtomSelectionError&gt; {
-<a href=#211 id=211 data-nosnippet>211</a>        <span class="kw">if </span>signatures.len() &gt; limits.max_signatures {
-<a href=#212 id=212 data-nosnippet>212</a>            <span class="kw">return </span><span class="prelude-val">Err</span>(AtomSelectionError::Signatures {
+<a href=#211 id=211 data-nosnippet>211</a>        zetesis_algebra::Meter::check_count(signatures.len(), <span class="number">0</span>, limits.max_signatures).map_err(
+<a href=#212 id=212 data-nosnippet>212</a>            |<span class="kw">_</span>| AtomSelectionError::Signatures {
 <a href=#213 id=213 data-nosnippet>213</a>                limit: limits.max_signatures,
 <a href=#214 id=214 data-nosnippet>214</a>                observed: signatures.len(),
-<a href=#215 id=215 data-nosnippet>215</a>            });
-<a href=#216 id=216 data-nosnippet>216</a>        }
+<a href=#215 id=215 data-nosnippet>215</a>            },
+<a href=#216 id=216 data-nosnippet>216</a>        )<span class="question-mark">?</span>;
 <a href=#217 id=217 data-nosnippet>217</a>        <span class="kw">let </span><span class="kw-2">mut </span>bytes = <span class="number">0u128</span>;
 <a href=#218 id=218 data-nosnippet>218</a>        <span class="kw">for </span>signature <span class="kw">in </span>signatures {
 <a href=#219 id=219 data-nosnippet>219</a>            bytes += signature.name().len() <span class="kw">as </span>u128;
-<a href=#220 id=220 data-nosnippet>220</a>            <span class="kw">if </span>bytes &gt; limits.max_name_bytes <span class="kw">as </span>u128 {
-<a href=#221 id=221 data-nosnippet>221</a>                <span class="kw">return </span><span class="prelude-val">Err</span>(AtomSelectionError::NameBytes {
+<a href=#220 id=220 data-nosnippet>220</a>            zetesis_algebra::MeterBytes::check(bytes, limits.max_name_bytes <span class="kw">as </span>u128).map_err(
+<a href=#221 id=221 data-nosnippet>221</a>                |<span class="kw">_</span>| AtomSelectionError::NameBytes {
 <a href=#222 id=222 data-nosnippet>222</a>                    limit: limits.max_name_bytes,
 <a href=#223 id=223 data-nosnippet>223</a>                    observed: bytes,
-<a href=#224 id=224 data-nosnippet>224</a>                });
-<a href=#225 id=225 data-nosnippet>225</a>            }
+<a href=#224 id=224 data-nosnippet>224</a>                },
+<a href=#225 id=225 data-nosnippet>225</a>            )<span class="question-mark">?</span>;
 <a href=#226 id=226 data-nosnippet>226</a>        }
 <a href=#227 id=227 data-nosnippet>227</a>        <span class="kw">if </span>signatures.is_empty() {
 <a href=#228 id=228 data-nosnippet>228</a>            <span class="kw">return </span><span class="prelude-val">Ok</span>(<span class="self">Self</span>::none());

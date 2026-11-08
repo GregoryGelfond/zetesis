@@ -1,7 +1,7 @@
 //! Test a disjunction's frozen reduct against proper subsets of its candidate.
 
 // ANCHOR: example
-use zetesis_cpu::Cancellation;
+use zetesis_algebra::Cancellation;
 use zetesis_ferraris::{
     AdmissionLimits, FormulaParts, FrozenReduct, Interpretation, Limits, Node, Theory, Verdict,
     check, models, models_reduct,

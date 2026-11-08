@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["MAX_BYTES"],"enum":["Query","Reason"],"struct":["Batch","Draw","Header","World"]};

@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["Attempt"],"fn":["reserve_entries"],"struct":["Busy","Frontier","Statistics","Termination"],"trait":["Payload"]};

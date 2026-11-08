@@ -35,10 +35,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-fbb9e008.js";
+            window.path_to_searchindex_js = "../searchindex-8dfd52fd.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-5c747b16.js"></script>
+        <script src="../toc-25cd24fd.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -193,9 +193,9 @@ new atoms. Complete collection retains both answers, including the more costly
 one.</p>
 <pre class="playground"><code class="language-rust edition2024"><span class="boring">extern crate zetesis_solve;
 </span><span class="boring">extern crate zetesis_core;
-</span><span class="boring">extern crate zetesis_cpu;
+</span><span class="boring">extern crate zetesis_algebra;
 </span><span class="boring">extern crate zetesis_themelios;
-</span>use zetesis_cpu::Cancellation;
+</span>use zetesis_algebra::Cancellation;
 use zetesis_solve::{
     Backend, Completion, Grounder, Oracle, PreparedInput, Session, SolveConfig, WorldViewLimits,
 };
@@ -294,14 +294,51 @@ Optional pruning has separate mutable status: disabling it, or refusing an
 incumbent constraint, leaves scoring preparation available. Enumerating all
 answers also reuses preparation while leaving pruning disabled.</p>
 <p>For region search, each improved incumbent replaces the previous optimizer
-bound through <code>StableModels::tighten_candidate_bound</code>. Independent caller
-restrictions remain. The caller must establish that the original theory and new
-bound together imply the previous bound; the API does not check that implication.
-Active workers may finish
+bound through <code>StableModels::improve_candidate_bound</code>, which takes the bound
+with its plan’s identity and its incumbent’s score. Independent caller
+restrictions remain. The stream refuses a bound from another plan, or at a score
+no better than the active bound’s, so each installed bound implies its
+predecessor relative to the original theory when the restriction is the plan’s
+bound at that score. Active workers may finish
 under an older bound, so returned answers are still scored against the current
 incumbent. The original theory and reduct remain unchanged.
 <a href="https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/ObjectiveBounds.lean"><code>ObjectiveBounds.replacement_preserves_candidates_relative</code></a>
 states the preservation law; it does not verify worker synchronization.</p>
+<p><code>ObjectivePlan::bound</code> keeps cost at most the incumbent’s, and
+<code>ObjectivePlan::strict_bound</code> cost strictly below it. Both come from one
+lexicographic fold over the priorities, whose initial suffix decides costs
+equal at every priority: true keeps every tie, false none. A strict bound at a
+better score implies the earlier bound, strict or not, so the stream accepts it
+under the same check. <code>SolveConfig::optimum_search</code> chooses between them. The
+default, <code>OptimumSearch::StrictForOneAnswer</code>, bounds a request for one optimal
+answer strictly: the search meets no tie of an incumbent it has beaten, and its
+exhaustion still proves the optimum, but not how many answers share it
+(<code>Optimization::ties_pruned</code>). A request for more answers keeps the inclusive
+bound, which meets and counts every tie in one pass.</p>
+<p><code>OptimumSearch::StrictWithTiePass</code> bounds every request strictly. When more
+than one answer is requested and the last bound, strict at the proved optimum,
+pruned its ties, a second stream over the same theory enumerates them: it has
+the first stream’s certificate and streamed constraints, and its one bound keeps
+cost at most the optimum. Models the first stream retained are not retained
+again, so each optimal answer is returned once. The second stream reports its
+receipts after the first’s (<code>StableModels::follow</code>) and runs within what the
+run’s cumulative limits leave (<code>Limits::remaining_after</code>). A stop in the first
+pass claims neither the optimum nor the family. The first pass’s exhaustion
+proves the optimum, so a stop in the second leaves
+<code>SemanticOutcome::optimum_proved</code> true and the family incomplete:
+<code>complete_answer_count</code> gives no total, the human renderer adds “Optimum proved;
+optimal family incomplete” to its <code>INCOMPLETE</code> verdict, and the JSON outcome has
+status <code>incomplete</code> with <code>optimization.optimal</code> true. For all eight optimal
+answers of integrated Family Crossing, with one thread, this schedule walked
+2,946,650 candidate regions, 2,831,261 of them in the second pass, where the
+single inclusive pass walked 661,303. It is therefore kept for measurement, like
+<code>OptimumSearch::Inclusive</code>, the earlier schedule.</p>
+<p>The optional choice strengthening compares certified lower costs with the same
+comparison. A model’s certified lower cost never exceeds its cost at any
+priority, so a cost below the incumbent has a lower cost below it too.
+<a href="https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/RequiredChoiceCosts.lean"><code>RequiredChoiceCosts.lexicographic_lower_bound</code></a>
+proves this for the inclusive comparison, and
+<code>RequiredChoiceCosts.lexicographic_lower_bound_strict</code> for the strict one.</p>
 <p>Source admission also retains checked required-choice groups when the program
 has objectives. These are complete positive head groups with a positive numeric
 lower bound; the group’s body remains its activation condition. Conditional

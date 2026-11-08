@@ -1,0 +1,611 @@
+{
+  "schema": 1,
+  "workspace_version": "0.7.0",
+  "measured_commit": "878f08509852654a27e3cb6158e746c9d39a1a1d",
+  "measured_tree": "d37a7b6d8cf33c2d13ccdc5513ce6ae80deb31ca",
+  "date": "2026-11-07",
+  "command": "sh scripts/check.sh coverage --metal",
+  "status": "gate-passed",
+  "release_relationship": "Measured on the clean local 0.7.0 release candidate with its shipping arithmetic defaults.",
+  "source_correspondence": {
+    "manifest": "coverage-0.7.0-sources.json",
+    "manifest_sha256": "fdaf1a2f90aae44a34ff1e4af9ff4e283150a246856dd13c74225a21506d8359",
+    "file_count": 2573,
+    "sources_sha256": "ab2e3741900823fdc7205f716f7f28c70ce03cc7641f579e64e49c5d35525e0e",
+    "coverage_source_files": 808,
+    "note": "The listed files match the Git blobs at the measured revision. LLVM reports identify source filenames. The manifest records the checked contents of those files and additional build inputs."
+  },
+  "coverage": {
+    "committed_floor_percent": 91,
+    "independent_floor_profiles": [
+      "workspace",
+      "cli-cpu"
+    ],
+    "floor_statuses": {
+      "workspace": 0,
+      "cli-cpu": 0
+    },
+    "populations": [
+      {
+        "population": "workspace",
+        "covered_lines": 157762,
+        "instrumented_lines": 166644,
+        "percent": 94.67007513021771,
+        "report": {
+          "path": "target/coverage/workspace/coverage.json",
+          "sha256": "3b60772b06895be0c61bd8b56b5246c627f08aa6577ae1b1d17b9bc0533578f8",
+          "bytes": 132938708
+        },
+        "reported_files": 808
+      },
+      {
+        "population": "portable",
+        "covered_lines": 154371,
+        "instrumented_lines": 166644,
+        "percent": 92.63519838698063,
+        "report": {
+          "path": "target/coverage/workspace/portable/coverage.json",
+          "sha256": "bfb4bcf329726df31e389f2698edf4b8e6d4e02bf4eaaa128181536710201aea",
+          "bytes": 132820671
+        },
+        "reported_files": 808
+      },
+      {
+        "population": "cli-cpu",
+        "covered_lines": 10666,
+        "instrumented_lines": 11603,
+        "percent": 91.9245022838921,
+        "report": {
+          "path": "target/coverage/cli-cpu/coverage.json",
+          "sha256": "b48e786588853e2495a2892ebfb0f1b3e45d601fb3c6070f473f6ea5c98e0d45",
+          "bytes": 33268763
+        },
+        "reported_files": 81
+      }
+    ],
+    "portable_badge_percent": 92.64,
+    "note": "Portable and selected Metal tests share workspace instrumentation. The portable snapshot precedes Metal. The CPU-only profile uses independent instrumentation."
+  },
+  "tools": {
+    "cargo_llvm_cov": "0.8.7",
+    "cargo_llvm_cov_observation": "cargo-llvm-cov 0.8.7",
+    "committed_floor": "91",
+    "default_filename_filters": "cargo-llvm-cov 0.8.7 src/report.rs::ignore_filename_regex",
+    "expected_physical_tests": 59,
+    "floor_profiles": [
+      "workspace",
+      "cli-cpu"
+    ],
+    "llvm_tools": {
+      "LLVM_COV": {
+        "path": "llvm-cov",
+        "sha256": "daf1e963b717c1635a61dbbd624f6d0301f77190019b994d6a40d5960db4eec8",
+        "version": "LLVM (http://llvm.org/):\n  LLVM version 22.1.6-rust-1.97.1-stable\n  Optimized build."
+      },
+      "LLVM_PROFDATA": {
+        "path": "llvm-profdata",
+        "sha256": "8c25063ab1edb41b7fb7ad878476058fedf20369072691133b5736b5a4e1f01c",
+        "version": "LLVM (http://llvm.org/):\n  LLVM version 22.1.6-rust-1.97.1-stable\n  Optimized build."
+      }
+    },
+    "mode": "gate",
+    "physical_scope": "59 exact Metal tests: native aggregate reduction, tight and formula oracles, their overlapping checks matching synchronous ones, ordinary formula CLI paths with partial coverage and writer errors, complete-world-view collection, bounded relation equality filtering with 8/16/32-bit column transport, shared-context composition with compute-pass timestamps attributed to their own batches, contention and shared failure handling, a stop during an overlapping check's production observing its submission and a panic there invalidating the context, caller-supplied session resources with policy and observer failures, observed complete collection on supplied contexts, explicit formula profiles with independent oracle state, compilation identity and each fitted workgroup size compiled once at its first dispatch (a refused compilation failing its check), fixed sizes compiled with their kernel, primitives selecting over a prefetched adapter enumeration as their independent constructors do, and combined language-consumer families with scored observations and optimum ties. Cooperative device control, interrupted preparation reuse and actual submission receipts are included, alongside completed-support table joins with actual GPU candidates and complete CPU/Metal answer families, and the quantified series' families through the batched completion with each residual root's inner preparation. Ordinary automatic membership sessions check complete tight families, the general device route for non-tight theories, and tight work refusal before dispatch. An ordinary session grows its adaptive candidate slates during steady enumeration, and an enumeration proposes its next slate while the device checks the current one, on each device route, with the CPU family. Terminal sessions check complete reconstruction from device-verified base answers. Hybrid device sessions check original acceptance, objective ties, constraint failures, queued cancellation and reconstruction after streamed host constraints. Unlisted tests and Vulkan are not selected.",
+    "physical_test_groups": [
+      {
+        "expected_tests": 15,
+        "group": "wgpu-lib",
+        "target": "workspace libraries",
+        "target_kind": "lib",
+        "tests": [
+          "aggregate::device::tests::metal_aggregate_readback_failure_retains_submitted_work",
+          "formula::device::tests::metal_busy_refusal_preserves_formula_state",
+          "aggregate::device::tests::metal_readback_failure_invalidates_context_peers",
+          "formula::device::tests::metal_profile_starts_fresh_formula_oracles",
+          "formula::device::tests::metal_profiles_identify_exact_compilations",
+          "formula::device::tests::metal_profile_reuse_checks_context_lifecycle",
+          "relation::device::tests::metal_interrupted_preparation_preserves_context",
+          "context::tests::control_tests::metal_controlled_calls_preserve_stop_identity",
+          "formula::device::tests::metal_formula_submission_receipt_survives_interruption",
+          "relation::device::tests::compact::metal_compact_widths_match_cpu",
+          "formula::device::tests::metal_fitted_profiles_compile_each_dispatched_size_once",
+          "formula::device::tests::metal_fixed_profiles_compile_their_size_with_the_kernel",
+          "formula::device::tests::metal_tight_oracles_compile_their_fitted_size_at_first_need",
+          "formula::device::tests::metal_a_refused_first_need_compilation_fails_its_check",
+          "discovery::tests::metal_discovered_primitives_choose_the_independent_adapter"
+        ]
+      },
+      {
+        "expected_tests": 5,
+        "group": "tight",
+        "target": "integration",
+        "target_kind": "test",
+        "tests": [
+          "hardware_tight::metal_support_matches_exact_reduct_semantics",
+          "hardware_tight::metal_support_preserves_batch_isolation",
+          "hardware_tight::metal_support_refusals_preserve_reusable_residency",
+          "hardware_tight::metal_support_residency_tracks_theory_identity",
+          "hardware_tight::metal_support_overlapped_checks_match_sequential_checks"
+        ]
+      },
+      {
+        "expected_tests": 3,
+        "group": "formula",
+        "target": "integration",
+        "target_kind": "test",
+        "tests": [
+          "hardware_formula::metal_formula_limits_resize_identity_and_word_boundaries_remain_explicit",
+          "hardware_formula::metal_formula_queries_preserve_exact_frozen_semantics_and_residency",
+          "hardware_formula::metal_formula_overlapped_query_matches_sequential_query"
+        ]
+      },
+      {
+        "expected_tests": 3,
+        "group": "aggregate",
+        "target": "integration",
+        "target_kind": "test",
+        "tests": [
+          "hardware_aggregate::metal_aggregate_reductions_match_native_occurrences",
+          "hardware_aggregate::metal_aggregate_guards_preserve_numeric_boundaries",
+          "hardware_aggregate::metal_aggregate_exact_admission_preserves_cache_lifecycle"
+        ]
+      },
+      {
+        "expected_tests": 4,
+        "group": "cli-formula",
+        "target": "integration",
+        "target_kind": "test",
+        "tests": [
+          "formula_gpu::physical::ordinary_metal_formula_batches_match_complete_cpu_models_costs_and_displays",
+          "formula_gpu::physical::ordinary_metal_formula_limits_preserve_partial_coverage_and_writer_errors",
+          "formula_gpu::physical::ordinary_metal_table_joins_preserve_complete_answers",
+          "formula_gpu::physical::ordinary_metal_series_families_match_cpu_through_the_batched_completion"
+        ]
+      },
+      {
+        "expected_tests": 4,
+        "group": "world-views",
+        "target": "integration",
+        "target_kind": "test",
+        "tests": [
+          "world_views_gpu::metal_world_view_preserves_nonoptimal_answers",
+          "world_views_gpu::metal_collection_limit_retains_checked_accounting",
+          "world_views_gpu::metal_collection_refuses_a_foreign_context",
+          "world_views_gpu::metal_resources_leave_a_cpu_collection_on_the_cpu"
+        ]
+      },
+      {
+        "expected_tests": 2,
+        "group": "relation",
+        "target": "integration",
+        "target_kind": "test",
+        "tests": [
+          "hardware_relation::metal_relation_masks_match_typed_rows",
+          "hardware_relation::metal_relation_refusals_preserve_prepared_view"
+        ]
+      },
+      {
+        "expected_tests": 4,
+        "group": "context",
+        "target": "integration",
+        "target_kind": "test",
+        "tests": [
+          "hardware_context::metal_formula_executes_while_relation_columns_remain_prepared",
+          "hardware_context::metal_compute_times_belong_to_their_own_batches",
+          "hardware_context::metal_stop_during_overlapped_production_observes_the_submission",
+          "hardware_context::metal_panic_during_overlapped_production_invalidates_the_context"
+        ]
+      },
+      {
+        "expected_tests": 3,
+        "group": "solve-context",
+        "target": "workspace libraries",
+        "target_kind": "lib",
+        "tests": [
+          "formula_execution::tests::resource_tests::metal_formula_retains_the_supplied_context",
+          "formula_execution::tests::resource_tests::metal_formula_sessions_reuse_the_supplied_profile",
+          "formula_execution::tests::resource_tests::metal_steady_enumeration_grows_candidate_slates"
+        ]
+      },
+      {
+        "expected_tests": 14,
+        "group": "session-resources",
+        "target": "integration",
+        "target_kind": "test",
+        "tests": [
+          "session_resources_gpu::metal_resources_preserve_independent_sessions",
+          "session_resources_gpu::metal_resource_policy_refusal_preserves_reuse",
+          "session_resources_gpu::metal_resources_preserve_cpu_policies",
+          "session_resources_gpu::metal_observer_failure_preserves_resource_reuse",
+          "session_resources_gpu::metal_formula_profiles_preserve_independent_sessions",
+          "session_resources_gpu::metal_tight_sessions_preserve_complete_families",
+          "session_resources_gpu::metal_general_formulas_keep_device_execution",
+          "session_resources_gpu::metal_tight_refusal_preserves_pending_coverage",
+          "session_resources_gpu::metal_terminal_sessions_preserve_complete_families",
+          "session_resources_gpu::metal_enumeration_looks_ahead_with_the_same_family",
+          "hybrid_gpu::metal_hybrid_preserves_complete_scored_families",
+          "hybrid_gpu::metal_hybrid_source_failure_preserves_pending_acceptance",
+          "hybrid_gpu::metal_hybrid_cancellation_stops_queued_core_models",
+          "hybrid_gpu::metal_hybrid_reconstructs_only_accepted_answers"
+        ]
+      },
+      {
+        "expected_tests": 2,
+        "group": "language-consumers",
+        "target": "integration",
+        "target_kind": "test",
+        "tests": [
+          "language_consumers::physical::metal_families_retain_scored_observations",
+          "language_consumers::physical::metal_optimum_ties_retain_full_answers"
+        ]
+      }
+    ],
+    "physical_tests": [
+      "aggregate::device::tests::metal_aggregate_readback_failure_retains_submitted_work",
+      "formula::device::tests::metal_busy_refusal_preserves_formula_state",
+      "aggregate::device::tests::metal_readback_failure_invalidates_context_peers",
+      "formula::device::tests::metal_profile_starts_fresh_formula_oracles",
+      "formula::device::tests::metal_profiles_identify_exact_compilations",
+      "formula::device::tests::metal_profile_reuse_checks_context_lifecycle",
+      "relation::device::tests::metal_interrupted_preparation_preserves_context",
+      "context::tests::control_tests::metal_controlled_calls_preserve_stop_identity",
+      "formula::device::tests::metal_formula_submission_receipt_survives_interruption",
+      "relation::device::tests::compact::metal_compact_widths_match_cpu",
+      "formula::device::tests::metal_fitted_profiles_compile_each_dispatched_size_once",
+      "formula::device::tests::metal_fixed_profiles_compile_their_size_with_the_kernel",
+      "formula::device::tests::metal_tight_oracles_compile_their_fitted_size_at_first_need",
+      "formula::device::tests::metal_a_refused_first_need_compilation_fails_its_check",
+      "discovery::tests::metal_discovered_primitives_choose_the_independent_adapter",
+      "hardware_tight::metal_support_matches_exact_reduct_semantics",
+      "hardware_tight::metal_support_preserves_batch_isolation",
+      "hardware_tight::metal_support_refusals_preserve_reusable_residency",
+      "hardware_tight::metal_support_residency_tracks_theory_identity",
+      "hardware_tight::metal_support_overlapped_checks_match_sequential_checks",
+      "hardware_formula::metal_formula_limits_resize_identity_and_word_boundaries_remain_explicit",
+      "hardware_formula::metal_formula_queries_preserve_exact_frozen_semantics_and_residency",
+      "hardware_formula::metal_formula_overlapped_query_matches_sequential_query",
+      "hardware_aggregate::metal_aggregate_reductions_match_native_occurrences",
+      "hardware_aggregate::metal_aggregate_guards_preserve_numeric_boundaries",
+      "hardware_aggregate::metal_aggregate_exact_admission_preserves_cache_lifecycle",
+      "formula_gpu::physical::ordinary_metal_formula_batches_match_complete_cpu_models_costs_and_displays",
+      "formula_gpu::physical::ordinary_metal_formula_limits_preserve_partial_coverage_and_writer_errors",
+      "formula_gpu::physical::ordinary_metal_table_joins_preserve_complete_answers",
+      "formula_gpu::physical::ordinary_metal_series_families_match_cpu_through_the_batched_completion",
+      "world_views_gpu::metal_world_view_preserves_nonoptimal_answers",
+      "world_views_gpu::metal_collection_limit_retains_checked_accounting",
+      "world_views_gpu::metal_collection_refuses_a_foreign_context",
+      "world_views_gpu::metal_resources_leave_a_cpu_collection_on_the_cpu",
+      "hardware_relation::metal_relation_masks_match_typed_rows",
+      "hardware_relation::metal_relation_refusals_preserve_prepared_view",
+      "hardware_context::metal_formula_executes_while_relation_columns_remain_prepared",
+      "hardware_context::metal_compute_times_belong_to_their_own_batches",
+      "hardware_context::metal_stop_during_overlapped_production_observes_the_submission",
+      "hardware_context::metal_panic_during_overlapped_production_invalidates_the_context",
+      "formula_execution::tests::resource_tests::metal_formula_retains_the_supplied_context",
+      "formula_execution::tests::resource_tests::metal_formula_sessions_reuse_the_supplied_profile",
+      "formula_execution::tests::resource_tests::metal_steady_enumeration_grows_candidate_slates",
+      "session_resources_gpu::metal_resources_preserve_independent_sessions",
+      "session_resources_gpu::metal_resource_policy_refusal_preserves_reuse",
+      "session_resources_gpu::metal_resources_preserve_cpu_policies",
+      "session_resources_gpu::metal_observer_failure_preserves_resource_reuse",
+      "session_resources_gpu::metal_formula_profiles_preserve_independent_sessions",
+      "session_resources_gpu::metal_tight_sessions_preserve_complete_families",
+      "session_resources_gpu::metal_general_formulas_keep_device_execution",
+      "session_resources_gpu::metal_tight_refusal_preserves_pending_coverage",
+      "session_resources_gpu::metal_terminal_sessions_preserve_complete_families",
+      "session_resources_gpu::metal_enumeration_looks_ahead_with_the_same_family",
+      "hybrid_gpu::metal_hybrid_preserves_complete_scored_families",
+      "hybrid_gpu::metal_hybrid_source_failure_preserves_pending_acceptance",
+      "hybrid_gpu::metal_hybrid_cancellation_stops_queued_core_models",
+      "hybrid_gpu::metal_hybrid_reconstructs_only_accepted_answers",
+      "language_consumers::physical::metal_families_retain_scored_observations",
+      "language_consumers::physical::metal_optimum_ties_retain_full_answers"
+    ],
+    "primary": "workspace --all-features",
+    "profile_merge_scope": "profiles_merged describes floor profiles; raw execution profiles combine only within their own floor profile",
+    "profiles_merged": false,
+    "project_added_filename_filters": [
+      "/crates/zetesis-(test|theory|clingo|reference)-support/"
+    ],
+    "rustc": "rustc 1.97.1 (8bab26f4f 2026-07-14)\nbinary: rustc\ncommit-hash: 8bab26f4f68e0e26f0bb7960be334d5b520ea452\ncommit-date: 2026-07-14\nhost: aarch64-apple-darwin\nrelease: 1.97.1\nLLVM version: 22.1.6",
+    "supplemental": "--package zetesis-cli --package zetesis-solve --package zetesis-engine --package zetesis --no-default-features",
+    "workspace_execution": "portable+metal",
+    "workspace_stages": [
+      "portable",
+      "metal"
+    ]
+  },
+  "status_records": [
+    {
+      "path": "target/coverage/status.txt",
+      "sha256": "2512a9b18801df4969f6030190c5c9b3feb4c9c5ee7380132e0bf6ffdc342ce9",
+      "bytes": 12
+    },
+    {
+      "path": "target/coverage/floors.tsv",
+      "sha256": "2b1a8809c412156d61081dc5141279fca9a8e2c24ff4af0c3ec49cff1afdd378",
+      "bytes": 22
+    },
+    {
+      "path": "target/coverage/toolchain.json",
+      "sha256": "73967a6d22645ac05ec7ca83c8c0e65a7dd2aae558ce16ff0b5b40c700e31e55",
+      "bytes": 15345
+    },
+    {
+      "path": "target/coverage/workspace/metal-status.txt",
+      "sha256": "2700165975f68815c97d605c56eca8e90d497ade1264b6282401d13fee99ac27",
+      "bytes": 7
+    }
+  ],
+  "hardware": {
+    "backend": "Metal",
+    "adapter": "Apple M4 Pro",
+    "instrumented": true,
+    "status": "passed",
+    "exact_tests": 59,
+    "group_count": 11,
+    "selection": {
+      "path": "crates/zetesis-maintenance/src/coverage/physical-selection.txt",
+      "sha256": "01311070169279287cd5cdb040fe0dfc8d92f11b0d328e0efefd2f19c0138a79",
+      "bytes": 4598
+    },
+    "groups": [
+      {
+        "group": "wgpu-lib",
+        "target": "workspace libraries",
+        "count": 15,
+        "names": [
+          "aggregate::device::tests::metal_aggregate_readback_failure_retains_submitted_work",
+          "formula::device::tests::metal_busy_refusal_preserves_formula_state",
+          "aggregate::device::tests::metal_readback_failure_invalidates_context_peers",
+          "formula::device::tests::metal_profile_starts_fresh_formula_oracles",
+          "formula::device::tests::metal_profiles_identify_exact_compilations",
+          "formula::device::tests::metal_profile_reuse_checks_context_lifecycle",
+          "relation::device::tests::metal_interrupted_preparation_preserves_context",
+          "context::tests::control_tests::metal_controlled_calls_preserve_stop_identity",
+          "formula::device::tests::metal_formula_submission_receipt_survives_interruption",
+          "relation::device::tests::compact::metal_compact_widths_match_cpu",
+          "formula::device::tests::metal_fitted_profiles_compile_each_dispatched_size_once",
+          "formula::device::tests::metal_fixed_profiles_compile_their_size_with_the_kernel",
+          "formula::device::tests::metal_tight_oracles_compile_their_fitted_size_at_first_need",
+          "formula::device::tests::metal_a_refused_first_need_compilation_fails_its_check",
+          "discovery::tests::metal_discovered_primitives_choose_the_independent_adapter"
+        ],
+        "status": "passed",
+        "log": {
+          "path": "target/coverage/workspace/metal-wgpu-lib.log",
+          "sha256": "cfcf163cc2ab3d4a51f9aaa63e0e0ca2a0a20fb312d070d3d9f93b50dff8467b",
+          "bytes": 11793
+        },
+        "status_record": {
+          "path": "target/coverage/workspace/metal-wgpu-lib-status.txt",
+          "sha256": "2700165975f68815c97d605c56eca8e90d497ade1264b6282401d13fee99ac27",
+          "bytes": 7
+        }
+      },
+      {
+        "group": "tight",
+        "target": "integration",
+        "count": 5,
+        "names": [
+          "hardware_tight::metal_support_matches_exact_reduct_semantics",
+          "hardware_tight::metal_support_preserves_batch_isolation",
+          "hardware_tight::metal_support_refusals_preserve_reusable_residency",
+          "hardware_tight::metal_support_residency_tracks_theory_identity",
+          "hardware_tight::metal_support_overlapped_checks_match_sequential_checks"
+        ],
+        "status": "passed",
+        "log": {
+          "path": "target/coverage/workspace/metal-tight.log",
+          "sha256": "dad721156d601d3a5de2359e9dc40e1fe18f37bf26514e70f286cacdb1fd0227",
+          "bytes": 10174
+        },
+        "status_record": {
+          "path": "target/coverage/workspace/metal-tight-status.txt",
+          "sha256": "2700165975f68815c97d605c56eca8e90d497ade1264b6282401d13fee99ac27",
+          "bytes": 7
+        }
+      },
+      {
+        "group": "formula",
+        "target": "integration",
+        "count": 3,
+        "names": [
+          "hardware_formula::metal_formula_limits_resize_identity_and_word_boundaries_remain_explicit",
+          "hardware_formula::metal_formula_queries_preserve_exact_frozen_semantics_and_residency",
+          "hardware_formula::metal_formula_overlapped_query_matches_sequential_query"
+        ],
+        "status": "passed",
+        "log": {
+          "path": "target/coverage/workspace/metal-formula.log",
+          "sha256": "2212d1c1d1e0bcd965ddeed0a60dd6795ca80b39e13d4a702e9cfea87e081674",
+          "bytes": 19008
+        },
+        "status_record": {
+          "path": "target/coverage/workspace/metal-formula-status.txt",
+          "sha256": "2700165975f68815c97d605c56eca8e90d497ade1264b6282401d13fee99ac27",
+          "bytes": 7
+        }
+      },
+      {
+        "group": "aggregate",
+        "target": "integration",
+        "count": 3,
+        "names": [
+          "hardware_aggregate::metal_aggregate_reductions_match_native_occurrences",
+          "hardware_aggregate::metal_aggregate_guards_preserve_numeric_boundaries",
+          "hardware_aggregate::metal_aggregate_exact_admission_preserves_cache_lifecycle"
+        ],
+        "status": "passed",
+        "log": {
+          "path": "target/coverage/workspace/metal-aggregate.log",
+          "sha256": "708a8151980cec07f9d32bf2227d102355fe7eed14a4fdf628c31f297a3b3b0b",
+          "bytes": 4875
+        },
+        "status_record": {
+          "path": "target/coverage/workspace/metal-aggregate-status.txt",
+          "sha256": "2700165975f68815c97d605c56eca8e90d497ade1264b6282401d13fee99ac27",
+          "bytes": 7
+        }
+      },
+      {
+        "group": "cli-formula",
+        "target": "integration",
+        "count": 4,
+        "names": [
+          "formula_gpu::physical::ordinary_metal_formula_batches_match_complete_cpu_models_costs_and_displays",
+          "formula_gpu::physical::ordinary_metal_formula_limits_preserve_partial_coverage_and_writer_errors",
+          "formula_gpu::physical::ordinary_metal_table_joins_preserve_complete_answers",
+          "formula_gpu::physical::ordinary_metal_series_families_match_cpu_through_the_batched_completion"
+        ],
+        "status": "passed",
+        "log": {
+          "path": "target/coverage/workspace/metal-cli-formula.log",
+          "sha256": "72f38e1f2268f0dbe885e80d5154f7e7e2105159c75452589d6a995872750ca1",
+          "bytes": 4458
+        },
+        "status_record": {
+          "path": "target/coverage/workspace/metal-cli-formula-status.txt",
+          "sha256": "2700165975f68815c97d605c56eca8e90d497ade1264b6282401d13fee99ac27",
+          "bytes": 7
+        }
+      },
+      {
+        "group": "world-views",
+        "target": "integration",
+        "count": 4,
+        "names": [
+          "world_views_gpu::metal_world_view_preserves_nonoptimal_answers",
+          "world_views_gpu::metal_collection_limit_retains_checked_accounting",
+          "world_views_gpu::metal_collection_refuses_a_foreign_context",
+          "world_views_gpu::metal_resources_leave_a_cpu_collection_on_the_cpu"
+        ],
+        "status": "passed",
+        "log": {
+          "path": "target/coverage/workspace/metal-world-views.log",
+          "sha256": "47da381458816cf4b4ae7d2c7acec54b631713036bbc6c20d9a342046fee6b43",
+          "bytes": 5107
+        },
+        "status_record": {
+          "path": "target/coverage/workspace/metal-world-views-status.txt",
+          "sha256": "2700165975f68815c97d605c56eca8e90d497ade1264b6282401d13fee99ac27",
+          "bytes": 7
+        }
+      },
+      {
+        "group": "relation",
+        "target": "integration",
+        "count": 2,
+        "names": [
+          "hardware_relation::metal_relation_masks_match_typed_rows",
+          "hardware_relation::metal_relation_refusals_preserve_prepared_view"
+        ],
+        "status": "passed",
+        "log": {
+          "path": "target/coverage/workspace/metal-relation.log",
+          "sha256": "cb024e1846f002219b196ca6d461b8b86aa00fe45de368547839298c01d5894a",
+          "bytes": 4545
+        },
+        "status_record": {
+          "path": "target/coverage/workspace/metal-relation-status.txt",
+          "sha256": "2700165975f68815c97d605c56eca8e90d497ade1264b6282401d13fee99ac27",
+          "bytes": 7
+        }
+      },
+      {
+        "group": "context",
+        "target": "integration",
+        "count": 4,
+        "names": [
+          "hardware_context::metal_formula_executes_while_relation_columns_remain_prepared",
+          "hardware_context::metal_compute_times_belong_to_their_own_batches",
+          "hardware_context::metal_stop_during_overlapped_production_observes_the_submission",
+          "hardware_context::metal_panic_during_overlapped_production_invalidates_the_context"
+        ],
+        "status": "passed",
+        "log": {
+          "path": "target/coverage/workspace/metal-context.log",
+          "sha256": "3edf5e71603c049b5ba893f9977b283a90b915369253e09ab1f0d17a02816ea1",
+          "bytes": 9004
+        },
+        "status_record": {
+          "path": "target/coverage/workspace/metal-context-status.txt",
+          "sha256": "2700165975f68815c97d605c56eca8e90d497ade1264b6282401d13fee99ac27",
+          "bytes": 7
+        }
+      },
+      {
+        "group": "solve-context",
+        "target": "workspace libraries",
+        "count": 3,
+        "names": [
+          "formula_execution::tests::resource_tests::metal_formula_retains_the_supplied_context",
+          "formula_execution::tests::resource_tests::metal_formula_sessions_reuse_the_supplied_profile",
+          "formula_execution::tests::resource_tests::metal_steady_enumeration_grows_candidate_slates"
+        ],
+        "status": "passed",
+        "log": {
+          "path": "target/coverage/workspace/metal-solve-context.log",
+          "sha256": "fdcf58dccc3eba57a221d0d9c7a2ad2f3d3348ea1bed73656d74d7b148db9533",
+          "bytes": 5745
+        },
+        "status_record": {
+          "path": "target/coverage/workspace/metal-solve-context-status.txt",
+          "sha256": "2700165975f68815c97d605c56eca8e90d497ade1264b6282401d13fee99ac27",
+          "bytes": 7
+        }
+      },
+      {
+        "group": "session-resources",
+        "target": "integration",
+        "count": 14,
+        "names": [
+          "session_resources_gpu::metal_resources_preserve_independent_sessions",
+          "session_resources_gpu::metal_resource_policy_refusal_preserves_reuse",
+          "session_resources_gpu::metal_resources_preserve_cpu_policies",
+          "session_resources_gpu::metal_observer_failure_preserves_resource_reuse",
+          "session_resources_gpu::metal_formula_profiles_preserve_independent_sessions",
+          "session_resources_gpu::metal_tight_sessions_preserve_complete_families",
+          "session_resources_gpu::metal_general_formulas_keep_device_execution",
+          "session_resources_gpu::metal_tight_refusal_preserves_pending_coverage",
+          "session_resources_gpu::metal_terminal_sessions_preserve_complete_families",
+          "session_resources_gpu::metal_enumeration_looks_ahead_with_the_same_family",
+          "hybrid_gpu::metal_hybrid_preserves_complete_scored_families",
+          "hybrid_gpu::metal_hybrid_source_failure_preserves_pending_acceptance",
+          "hybrid_gpu::metal_hybrid_cancellation_stops_queued_core_models",
+          "hybrid_gpu::metal_hybrid_reconstructs_only_accepted_answers"
+        ],
+        "status": "passed",
+        "log": {
+          "path": "target/coverage/workspace/metal-session-resources.log",
+          "sha256": "41881d78c853f447c11c7199143e85d5444cd6513a9d863165f4530c94c405bc",
+          "bytes": 7741
+        },
+        "status_record": {
+          "path": "target/coverage/workspace/metal-session-resources-status.txt",
+          "sha256": "2700165975f68815c97d605c56eca8e90d497ade1264b6282401d13fee99ac27",
+          "bytes": 7
+        }
+      },
+      {
+        "group": "language-consumers",
+        "target": "integration",
+        "count": 2,
+        "names": [
+          "language_consumers::physical::metal_families_retain_scored_observations",
+          "language_consumers::physical::metal_optimum_ties_retain_full_answers"
+        ],
+        "status": "passed",
+        "log": {
+          "path": "target/coverage/workspace/metal-language-consumers.log",
+          "sha256": "2062e2e6f6c1307fbc0677f3378fd5b3c979dda67d8d559de74277d091e6c93a",
+          "bytes": 4583
+        },
+        "status_record": {
+          "path": "target/coverage/workspace/metal-language-consumers-status.txt",
+          "sha256": "2700165975f68815c97d605c56eca8e90d497ade1264b6282401d13fee99ac27",
+          "bytes": 7
+        }
+      }
+    ]
+  }
+}

@@ -35,10 +35,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-fbb9e008.js";
+            window.path_to_searchindex_js = "../searchindex-8dfd52fd.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-5c747b16.js"></script>
+        <script src="../toc-25cd24fd.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -198,15 +198,13 @@ Use the tables below to find a specific capability.</p>
 <tbody>
 <tr><td>Construct canonical ASP and use upstream solve/query vocabulary</td><td><code>zetesis::{Program, Symbol, program, syntax, analysis, solve, query, prelude}</code></td><td><a href="https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis/README.md">Facade</a></td></tr>
 <tr><td>Solve and query a canonical knowledge base</td><td><code>zetesis::{Solver, Config}</code>, <code>zetesis::solve::agent::Agent</code>, <code>zetesis::query::AgentReading</code></td><td><a href="agent.html">Programs, answers and queries</a></td></tr>
-<tr><td>Admit ASP source</td><td><code>zetesis_themelios::{admit, admit_extended, prepare_formula, admit_formula}</code> and bundle counterparts</td><td><a href="source.html">Source preparation</a></td></tr>
+<tr><td>Admit ASP source</td><td><code>zetesis_themelios::{prepare_formula, admit_formula}</code> and bundle counterparts</td><td><a href="source.html">Source preparation</a></td></tr>
 <tr><td>Prepare or admit a logical formula program</td><td><code>zetesis_themelios::{prepare_program_formula, admit_program_formula, ProgramAdmissionOptions, PreparedFormula, ProgramSite}</code></td><td><a href="source.html#prepare-a-logical-formula-program">Typed formula preparation</a></td></tr>
-<tr><td>Prepare an owned logical relational program</td><td><code>zetesis_themelios::{prepare_program_relational, ProgramRelationalOptions, PreparedRelational}</code></td><td><a href="source.html#admit-an-existing-logical-program">Owned relational preparation</a></td></tr>
-<tr><td>Choose extended or formula admission once per input door</td><td><code>ParsedSource::admit_automatic_with_cancellation</code>, <code>admit_bundle_automatic_with_cancellation</code>, <code>prepare_program_automatic</code>, <code>AutomaticAdmission</code>, <code>AutomaticAdmissionFailure</code></td><td><a href="source.html#reuse-original-input-across-profiles">Parsed-source transfer</a> and <a href="source.html#admit-an-existing-logical-program">logical programs</a></td></tr>
-<tr><td>Admit a logical program under S0</td><td><code>zetesis_themelios::{admit_program, ProgramAdmissionOptions, AdmittedProgram}</code></td><td><a href="source.html#borrow-the-strict-relational-input">Typed program admission</a></td></tr>
 <tr><td>Configure ordinary resource policy</td><td><code>zetesis_solve::Resources</code></td><td><a href="sessions.html">Sessions</a></td></tr>
 <tr><td>Solve admitted input</td><td><code>zetesis_solve::{PreparedInput, Session, SessionBuilder, SolveConfig}</code></td><td><a href="sessions.html">Sessions</a></td></tr>
 <tr><td>Count full answer sets or optimal ties</td><td><code>zetesis_solve::{SessionBuilder::counting, SemanticOutcome::complete_answer_count}</code></td><td><a href="outcomes.html#replace-answer-presentation">Counting</a></td></tr>
 <tr><td>Collect a complete native family</td><td><code>zetesis_solve::WorldView::collect</code>, <code>SessionBuilder::collect</code>, <code>WorldViewLimits</code></td><td><a href="outcomes.html">Completion and output</a></td></tr>
+<tr><td>Decide a world-view question without collecting the family</td><td><code>SessionBuilder::{known, possible, cautious, brave, answer}</code>, <code>WorldViewDecision</code>, <code>WorldViewVerdict</code>, <code>QueryAnswer</code></td><td><a href="sessions.html#deciding-questions-over-the-world-view">Deciding questions over the world view</a></td></tr>
 <tr><td>Inspect an answer or interpretation</td><td><code>AnswerSet</code>, <code>zetesis_core::{Interpretation, Model}</code>, <code>catalog::{AtomRef, TermRef}</code></td><td><a href="models.html">Interpretations and atoms</a></td></tr>
 <tr><td>Evaluate costs and source displays</td><td><code>zetesis_objective</code>, admitted-owner observation APIs</td><td><a href="costs-and-output.html">Costs and shown terms</a></td></tr>
 <tr><td>Observe execution without parsing statistics text</td><td><code>ExecutionObserver</code>, <code>SolveMeasurements</code>, <code>SemanticOutcome</code></td><td><a href="measurements.html">Observations and measurements</a></td></tr>
@@ -232,55 +230,61 @@ retain the contracts documented in the themelios manual.</p>
 <tr><th>Task</th><th>Public library entry points</th><th>Contract or example</th></tr>
 </thead>
 <tbody>
-<tr><td>Construct finite relational programs</td><td><code>zetesis_core::{Program, Template, FactTables, FactSegment, Atom, Seed}</code></td><td><a href="parallel.html">Parallel and lazy checking</a></td></tr>
-<tr><td>Share admitted template components</td><td><code>TemplateCatalogBuilder</code>, <code>TemplateCatalog</code>, <code>TemplateRef</code>, <code>PatternRef</code>, <code>TemplateTerm</code></td><td><a href="../architecture/ownership.html">Canonical ownership</a></td></tr>
+<tr><td>Share admitted template components</td><td><code>TemplateCatalogBuilder</code>, <code>TemplateCatalog</code>, <code>TemplateRow</code>, <code>PatternRef</code>, <code>TemplateTerm</code></td><td><a href="../architecture/ownership.html">Canonical ownership</a></td></tr>
 <tr><td>Read or explicitly export canonical values</td><td><code>catalog::{AtomRef, PredicateRef, TermRef}</code>, <code>TermRef::nodes</code>, <code>TermRef::write_with</code>, <code>AtomRef::to_atom</code></td><td><a href="models.html#borrowing-and-explicit-copies">Borrowing and explicit copies</a></td></tr>
 <tr><td>Build typed vocabulary without a program or atom population</td><td><code>catalog::{VocabularyBuilder, Vocabulary}</code></td><td><a href="models.html#scoped-term-workspaces">Scoped term workspaces</a></td></tr>
 <tr><td>Retain scoped bindings and selected roots</td><td><code>catalog::{CatalogRead, TermRead, TermKey, TermAssignment, AssignmentSlice, TermSet}</code></td><td><a href="models.html#scoped-term-workspaces">Scoped term workspaces</a></td></tr>
 <tr><td>Decide each predicate of one vocabulary once</td><td><code>catalog::{CatalogRead::predicate_mask_with, PredicateMask}</code></td><td><a href="models.html#scoped-term-workspaces">Scoped term workspaces</a></td></tr>
-<tr><td>Key values by canonical atom identity per owner</td><td><code>catalog::AtomIdentityMap</code></td><td><a href="models.html#scoped-term-workspaces">Scoped term workspaces</a></td></tr>
+<tr><td>Key values by canonical atom identity per row scope</td><td><code>catalog::AtomIdentityMap</code></td><td><a href="models.html#scoped-term-workspaces">Scoped term workspaces</a></td></tr>
 <tr><td>Construct derived terms over immutable input owners</td><td><code>catalog::{DerivedTerms, DeclaredConstructor}</code></td><td><a href="models.html#scoped-term-workspaces">Scoped term workspaces</a></td></tr>
-<tr><td>Locate sparse carrier coordinates</td><td><code>Program::locate_atom_with</code>, <code>CarrierAtom</code></td><td><a href="../architecture/ownership.html">Canonical ownership</a></td></tr>
-<tr><td>Borrow candidate membership</td><td><code>SeedSelection</code>, <code>SeedView</code>, <code>Candidates::next_selection</code></td><td><a href="parallel.html">Parallel and lazy checking</a></td></tr>
-<tr><td>Locate an atom in the original gate carrier</td><td><code>GateIndex::locate</code>, <code>Program::indexed_gate_atoms</code></td><td><a href="parallel.html">Candidate identities</a></td></tr>
 <tr><td>Look up complete typed atoms</td><td><code>Model::lookup</code>, <code>AtomIndex</code>, <code>CatalogIndex</code>, <code>AtomLookup</code>, <code>AtomPattern::key</code>, <code>BindingView</code></td><td><a href="https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-core/examples/README.md#checked-atom-lookup-probe">Checked lookup example</a></td></tr>
 <tr><td>Build an append-only atom catalog</td><td><code>atom_interner::{AtomInterner, CommittedAtoms, AtomAppender}</code></td><td><a href="models.html#building-a-catalog-during-grounding">Catalog construction</a></td></tr>
 <tr><td>Select equality matches in one relation</td><td><code>zetesis_core::relation::{Relation, Query, Selection, Mask}</code></td><td><a href="https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-core/src/relation.rs">Core relation API</a></td></tr>
-<tr><td>Restrict rows and project finite domains</td><td><code>zetesis_cpu::table::{Table, Domain, Selection}</code></td><td><a href="finite-tables.html">Finite tables</a></td></tr>
+<tr><td>Restrict rows and project finite domains</td><td><code>zetesis_core::table::{Table, Domain, Selection}</code></td><td><a href="finite-tables.html">Finite tables</a></td></tr>
 <tr><td>Inspect source domains and keyed relations</td><td><code>zetesis_domain</code></td><td><a href="source.html">Source preparation</a></td></tr>
 </tbody>
 </table>
 </div>
 <p>Atoms retain signed predicates, argument order and typed values. Dense positions,
 query masks and indexed tokens belong to their exact owner; equal lengths or
-printed values do not make them interchangeable. Constructing a seed, finding a
-row or locating a gate atom does not establish answer-set membership. See
+printed values do not make them interchangeable. Constructing a model or finding a
+row does not establish answer-set membership. See
 <a href="../architecture/ownership.html">ownership and reuse</a> for these boundaries.</p>
 <h2 id="membership-and-execution"><a class="header" href="#membership-and-execution">Membership and execution</a></h2>
+<p><code>zetesis-algebra</code> is the bottom execution layer and depends on no workspace
+crate. It owns cancellation, regions, word operations, the scalar walk and the
+generic frontier. Source tables belong to <code>zetesis-core</code> alongside their typed
+relations; the semantic solver libraries retain theory and answer-set meaning.</p>
 <div class="table-wrapper">
 <table>
 <thead>
 <tr><th>Task</th><th>Public library entry points</th><th>Guide</th></tr>
 </thead>
 <tbody>
-<tr><td>Compile a complete relational graph</td><td><code>zetesis_core::GroundProgram::compile</code></td><td><a href="parallel.html">Parallel and lazy checking</a></td></tr>
-<tr><td>Check a normal program’s reduct</td><td><code>zetesis_cpu::{check, check_static, BatchOracle}</code></td><td><a href="parallel.html">Parallel and lazy checking</a></td></tr>
-<tr><td>Reuse scalar query preparation</td><td><code>PreparedQueries</code>, <code>PreparationLimits</code>, <code>ClosureWorkspace</code></td><td><a href="parallel.html#reuse-preparation-across-scalar-checks">Repeated checks</a></td></tr>
 <tr><td>Build finite formulas and check membership</td><td><code>zetesis_ferraris::{Theory, FormulaParts, NodeView, Interpretation, check}</code></td><td><a href="reducts.html">Finite reducts</a></td></tr>
 <tr><td>Reuse original truth or a frozen reduct</td><td><code>EvaluationWorkspace</code>, <code>FormulaEvaluation</code>, <code>FrozenReduct</code></td><td><a href="reducts.html">Finite reducts</a></td></tr>
 <tr><td>Use checked formula specializations</td><td><code>zetesis_ferraris::{PositivePlan, StratifiedPlan, TightPlan, TightWorkspace}</code></td><td><a href="sessions.html#formula-membership-plans">Formula plans</a></td></tr>
-<tr><td>Cover and narrow candidate regions</td><td><code>zetesis_cpu::regions::{Region, Traversal}</code>, <code>zetesis_ferraris::{Narrower, producers}</code></td><td><a href="../architecture/execution.html">Exact execution</a></td></tr>
-<tr><td>Enumerate formula answers and complete reduct queries</td><td><code>zetesis_sat::{StableModels, SearchMethod, check_with, PreparedReduct, ReductWorkspace}</code></td><td><a href="sessions.html">Sessions</a></td></tr>
+<tr><td>Cover and narrow candidate regions</td><td><code>zetesis_algebra::{region::Region, walk::Walk}</code>, <code>zetesis_ferraris::{Narrower, producers}</code></td><td><a href="../architecture/execution.html">Exact execution</a></td></tr>
+<tr><td>Share packed word operations</td><td><code>zetesis_algebra::words</code></td><td><a href="../architecture/execution.html">Exact execution</a></td></tr>
+<tr><td>Share parallel frontier protocols</td><td><code>zetesis_algebra::walk::frontier::Frontier</code></td><td><a href="https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-stable/README.md#walking-the-tree-with-several-workers">Parallel walks</a></td></tr>
+<tr><td>Enumerate formula answers and complete reduct queries</td><td><code>zetesis_stable::{StableModels, check, CompletionExecutor}</code></td><td><a href="sessions.html">Sessions</a></td></tr>
+<tr><td>Check an admitted program’s streamed constraints over candidate regions</td><td><code>zetesis_stable::StreamedConstraints</code>, <code>StableModels::set_streamed_constraints</code></td><td><a href="sessions.html#hybrid-formula-sessions">Hybrid formula sessions</a></td></tr>
 <tr><td>Produce parallel candidate batches</td><td><code>StableModels::with_region_producers</code>, <code>next_batch_with_completion</code></td><td><a href="sessions.html#formula-membership-plans">Formula plans</a></td></tr>
 <tr><td>Share device resources</td><td><code>zetesis_wgpu::GpuContext</code>, <code>GpuFormulaProfile</code>, <code>ExecutionResources</code></td><td><a href="../architecture/ownership.html#device-resource-scope">Device ownership</a></td></tr>
 <tr><td>Select relation masks on a device</td><td><code>zetesis_wgpu::GpuRelationExecutor</code></td><td><a href="https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-wgpu/README.md#immutable-relation-selection">Relation selection</a></td></tr>
 </tbody>
 </table>
 </div>
-<p><code>PreparedInput</code> borrows a coherent admitted owner, native program or complete
-ground graph. Keep the theory, atom catalog, objectives and source observations
-from the same admission together. A supplied <code>GroundProgram</code> is reused; it does
-not support a request to replace that graph with lazy grounding.</p>
+<p><code>zetesis_algebra::words::Words</code> wraps existing packed storage or a borrowed slice
+without allocating, normalizing tails or acquiring semantic owner identity.
+Region and interpretation owners retain their logical extents; interpretations
+also retain the exact theory. The same primitive home supplies 64-bit membership
+and ascending bit traversal, numeric 32-bit halves, and 32-bit borrowed table
+intersection. Each caller retains its allocation and work-admission contract.</p>
+<p><code>PreparedInput</code> borrows a coherent formula, hybrid, terminal-definition or
+certified source owner. Keep the theory, atom catalog, objectives and source
+observations from the same admission together. Borrowing a prepared owner does
+not repeat admission or choose a different representation.</p>
 <p>Prepared resources can share immutable data and reusable storage. Candidate
 truth, search coverage and resource budgets remain local to the computation.
 Device primitives have explicit capability, limit and failure contracts; enabling
@@ -312,6 +316,88 @@ semantic solver libraries. Record checks, physical tests and Lean proofs have
 different scopes; none alone certifies the complete Rust/WGSL implementation.
 See <a href="../reference/validation.html">validation</a> and
 <a href="../lean/correspondence.html">proof correspondence</a> before extending those claims.</p>
+<h2 id="shared-primitive-ownership"><a class="header" href="#shared-primitive-ownership">Shared primitive ownership</a></h2>
+<p>Direct callers of the former <code>zetesis-cpu</code> package use <code>zetesis-algebra</code>.
+The move preserves primitive behavior, typed failures and receipts; it does not
+replace the reduct check or change the available execution backends.</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Former owner</th><th>Current owner</th></tr>
+</thead>
+<tbody>
+<tr><td><code>zetesis_cpu::{Cancellation, Stop, Meter, Metered, poll_due}</code></td><td>Same names in <code>zetesis_algebra</code></td></tr>
+<tr><td><code>zetesis_cpu::regions::{Region, Narrowing}</code></td><td><code>zetesis_algebra::region::{Region, Narrowing}</code></td></tr>
+<tr><td><code>zetesis_cpu::regions::{Traversal, Counting, Visit, RegionStatistics}</code></td><td><code>zetesis_algebra::walk::{Walk, Counting, Visit, RegionStatistics}</code></td></tr>
+<tr><td><code>zetesis_core::packed</code></td><td><code>zetesis_algebra::words</code></td></tr>
+<tr><td><code>zetesis_cpu::table</code></td><td><code>zetesis_core::table</code></td></tr>
+<tr><td><code>zetesis_solve::Subject</code> (also re-exported by <code>zetesis_cli</code>)</td><td><code>zetesis_solve::Original</code>, also re-exported as <code>zetesis_cli::Original</code></td></tr>
+<tr><td><code>zetesis_themelios::ProgramSubject</code></td><td><code>zetesis_themelios::ProgramOriginal</code></td></tr>
+<tr><td>Original-input result fields and accessors named <code>subject</code></td><td><code>original</code></td></tr>
+</tbody>
+</table>
+</div>
+<p><code>Original</code> retains the session’s immutable source or theory identity.
+<code>ProgramOriginal</code> identifies the program, part or statement retained by an
+admission failure. Result owners and typed failure wrappers expose this
+evidence through <code>original</code>; <code>FormulaFailure::original_program()</code> still
+returns the whole retained program. These names do not change
+<code>OriginalSubject</code>, <code>FrozenSubject</code> or the class-indexed narrowing subjects.</p>
+<p>The scalar walk’s type is <code>Walk</code>; there is no old-package forwarding crate.
+<code>zetesis_stable::RegionFrontierStatistics</code> keeps its public fields and now
+re-exports the shared frontier’s statistics. The schedules use the shared
+<code>walk::inspect</code> classifier and retain their receipt and publication boundaries.
+These operations and the separate <code>Reduction</code>/<code>Verdict</code> interface are described
+below; moving their namespaces alone establishes none of their contracts.</p>
+<p><code>zetesis_algebra::reduction::Reduction</code> combines pure values: <code>All</code> and <code>Any</code>
+combine Booleans, tuple products combine both coordinates, <code>CheckedSum</code> records
+exact nonnegative sums or overflow, and <code>Minimum</code> selects a value under its
+lawful-order contract. <code>Verdict</code> separately carries accepted absorption,
+completion, emptiness or a typed undecided result. The <code>reduction::sets</code> cursors
+refine intersection and union on finite occurrence streams; they introduce no
+set owner and leave canonical <code>Model</code> construction and its failures with the
+caller. None of these value operations proves membership, coverage or optimality.</p>
+<h3 id="candidate-and-countermodel-knowledge"><a class="header" href="#candidate-and-countermodel-knowledge">Candidate and countermodel knowledge</a></h3>
+<p><code>Narrower::knowledge()</code> constructs <code>Knowledge&lt;AnswerSetsSought&gt;</code> for original
+formula narrowing, restrictions and objective bounds.
+<code>Narrower::frozen_knowledge()</code> constructs <code>Knowledge&lt;Countermodels&gt;</code> for a
+candidate’s frozen reduct. The markers are sealed types from <code>zetesis_algebra</code>;
+the two knowledge types cannot be substituted for one another.</p>
+<p>Direct callers of frozen narrowing must use <code>frozen_knowledge()</code> and explicitly
+name <code>Knowledge&lt;Countermodels&gt;</code> wherever they store its result. The default
+<code>Knowledge</code> parameter remains <code>AnswerSetsSought</code>. Each value still belongs to
+the narrower that constructed it; the class marker does not authenticate that
+runtime owner. <code>NarrowingScratch</code> retains its worker-owned allocations, while
+frozen execution borrows only the common scratch and cannot read learned rows.</p>
+<h3 id="region-intervals-and-walk-entries"><a class="header" href="#region-intervals-and-walk-entries">Region intervals and walk entries</a></h3>
+<p><code>Region</code> contains the atom universe and its held/cut masks. Equality compares
+that interval; selection policy is carried by <code>region::Entry&lt;S&gt;</code>, with the
+caller’s lineage state. <code>Entry::prefer</code> records an open atom, <code>split_atom</code>
+rechecks it after narrowing, and <code>split_with</code> clears it in both children.</p>
+<p><code>Walk::next</code> borrows the complete entry. <code>Walk::surrender</code> transfers pending
+entries, including preference and state; resume them through <code>with_entry</code>, or
+<code>with_narrowed_root</code> when their closure is already established. <code>Visit</code> hands
+terminal regions and state to its consumer, where split policy is no longer
+needed.</p>
+<p><code>walk::inspect</code> is the shared allocation-free classification after narrowing:
+refuted, fully decided, counted, or split on an open atom. Scalar, parallel,
+slate and published countermodel paths use it. The schedules keep their own
+receipt publication and capacity admission; the classifier neither checks
+answer-set membership nor declares a counted region accepted.</p>
+<p><code>Frontier::publish_split_with</code> reserves queue capacity while retaining the parent,
+then constructs the children only after admission. Failure returns the original
+typed error and that parent, with its preference and state intact. One queued
+child and one child kept in hand still increase unresolved work by one.
+<code>Frontier::requeue</code> likewise returns the entry on refusal. The scalar walk keeps
+its parent for retry or surrender. Concurrent schedules retain returned owners
+until they commit the terminal stop, then may deliberately abandon them; such
+cleanup is not resolution or exhaustion and does not promise failed-search resumption.</p>
+<p>Ferraris’s fixed-ceiling and quota narrowing calls return one
+<code>NarrowingAttempt</code>: inspect <code>result</code>, account <code>statistics</code> even on failure, and
+install a completed <code>preferred</code> atom in the entry only after success. <code>None</code>
+leaves existing policy untouched; it accompanies propagation-only attempts,
+refutations and failures. A failed attempt’s partially closed knowledge retains
+the abandonment contract documented on <code>Narrower</code>.</p>
 <h2 id="migrating-from-050"><a class="header" href="#migrating-from-050">Migrating from 0.5.0</a></h2>
 <p>The changes below affect direct library callers. Source syntax is unchanged;
 aggregate admission and execution/resource behavior are described in the
@@ -323,14 +409,14 @@ and <a href="outcomes.html#resource-contracts">resource contracts</a>.</p>
 <tr><th>Previous use</th><th>Migration</th></tr>
 </thead>
 <tbody>
-<tr><td><code>zetesis_core::Program::new(templates, limits)</code></td><td>Pass <code>FactTables::default()</code> as the second argument, or supply explicit facts. Use <code>rules()</code> for all original rule occurrences and <code>templates()</code> for the separate template sequence. See <a href="parallel.html#construct-templates-and-explicit-facts">explicit facts</a>.</td></tr>
-<tr><td>Matching <code>zetesis_core::AdmissionError</code></td><td>Replace <code>Canonical { error, template }</code> with <code>Canonical { error, origin }</code> and handle <code>FactLimitExceeded</code>. <code>template_index()</code> and <code>fact_index()</code> resolve their separate input sequences; see <a href="parallel.html#construct-templates-and-explicit-facts">explicit facts</a>.</td></tr>
+<tr><td><code>zetesis_core::Program</code>, its fact/carrier owners, or relational admission</td><td>Use <code>prepare_formula</code> for source or <code>prepare_program_formula</code> for a canonical logical program, then choose eager or hybrid grounding. The relational compiler and its errors have been removed; shared limits remain in <code>AdmissionOptions</code> and <code>ProgramAdmissionOptions</code>. See <a href="source.html">source preparation</a>.</td></tr>
 <tr><td>Matching <code>DomainObservation::Inapplicable</code> or reading its former <code>Analyzed(&amp;Analysis)</code> payload</td><td>Remove the <code>Inapplicable</code> arm. <code>Analyzed</code> carries <code>NumericAnalysis</code>: use <code>analysis()</code> for bounds/statistics, <code>catalog()</code> for canonical keys, and <code>arguments()</code> for predicate coordinates. Finite-guard applicability is separate; see <a href="source.html#optional-numeric-analysis-and-domain-guards">domain observation</a>.</td></tr>
 <tr><td>Exhaustive <code>zetesis_ferraris::NodeView</code> matches</td><td>Handle <code>Threshold</code> and <code>ExtremumCut</code>. Formula storage now includes shared numeric arenas; preserve them when copying. See <a href="reducts.html#numeric-formula-storage">finite formulas</a>.</td></tr>
 <tr><td>Exhaustive <code>zetesis_ferraris::AdmissionError</code> matches</td><td>Handle <code>ThresholdShape</code>, <code>ThresholdMeasure</code>, <code>NumericShape</code>, <code>NumericDomain</code>, <code>OrdinalRank</code> and <code>OrdinalCut</code>. These distinguish numeric shape/measure refusals from allocation and configured limits.</td></tr>
 <tr><td>Calling <code>zetesis_ferraris::Knowledge::preferred_atom_reserved</code></td><td>Pass <code>&amp;ChoiceHeads</code> before cancellation. <code>ChoiceHeads::default()</code> preserves the previous ranking; <code>Extraction::choice_heads</code> supplies the extracted choice heads. <code>OriginalSubject::with_choices</code> selects the same ranking for narrowing that chooses its own split.</td></tr>
 <tr><td>Constructing or destructuring <code>zetesis_sat::RegionSearchStatistics</code></td><td>It now has <code>workers</code> and is non-exhaustive. Construct with <code>Default::default()</code> and assign fields; destructure with <code>..</code>. The new <code>RegionWorkerStatistics</code> is also non-exhaustive.</td></tr>
-<tr><td>Selecting or matching worker engagement</td><td><code>StableModels::with_region_workers_engaging</code> accepts <code>Engagement</code>; <code>Immediate</code> starts workers at the first pull. <code>Engagement</code> and the reported <code>RegionWalkEngagement</code> are non-exhaustive, so external matches need a fallback arm. See <a href="https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-sat/README.md#walking-the-tree-with-several-workers">parallel walks</a>.</td></tr>
+<tr><td>Selecting or matching worker engagement</td><td><code>StableModels::with_region_workers_engaging</code> accepts <code>Engagement</code>; <code>Immediate</code> starts workers at the first pull. <code>Engagement</code> and the reported <code>RegionWalkEngagement</code> are non-exhaustive, so external matches need a fallback arm. See <a href="https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-stable/README.md#walking-the-tree-with-several-workers">parallel walks</a>.</td></tr>
+<tr><td>Constructing <code>zetesis_solve::SolveConfig</code> with every field</td><td>Add <code>query_division</code>, a <code>QueryDivision</code> (<code>WhenIdle</code> by default). <code>QueryDivision</code> and the reported <code>QueryDivisionStatistics</code> are non-exhaustive. See <a href="https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-stable/README.md#walking-the-tree-with-several-workers">parallel walks</a>.</td></tr>
 <tr><td>Exhaustive <code>zetesis_cli::RunError</code> or <code>zetesis_validation::performance::matrix::Decision</code> matches</td><td>Handle <code>GpuExecutableUnavailable</code>, meaning the installed CPU front could not run its GPU executable. This remains separate from unavailable compiled backend support.</td></tr>
 <tr><td>Exhaustive <code>zetesis_validation::curated::Error</code> or <code>zetesis_validation::examples::Error</code> matches</td><td>Handle <code>Irregular(PathBuf)</code> for a resolved input that is not a regular file. These cases previously used <code>Path</code>; that variant still reports paths outside the selected root.</td></tr>
 <tr><td>Injecting a diagnostics writer whose behavior depends on write-call boundaries</td><td>Records and styled diagnostic lines now reach <code>write_all</code> as complete units. Bytes are unchanged; see <a href="outcomes.html#diagnostic-writer-boundaries">writer boundaries</a>.</td></tr>
@@ -348,7 +434,9 @@ with <code>new_selected(options, GpuSelection { api: GpuApi::Metal })</code>.
 For <code>GpuFormulaOracle::new_metal_with_projection</code>, use
 <code>new_selected_with_projection</code> with the same selection and projection.
 <code>zetesis_core::catalog::CatalogRead::constructor_of_predicate</code> is removed.</p>
-<p>The following helpers were public in 0.5.0 and are now crate-private:</p>
+<p>The former <code>zetesis-cpu</code> closure helpers <code>CONSTRAINT_HEAD</code> and <code>InstanceAtomIter</code>
+were removed with that route. The following helpers were public in 0.5.0 and
+are now crate-private:</p>
 <div class="table-wrapper">
 <table>
 <thead>
@@ -357,10 +445,9 @@ For <code>GpuFormulaOracle::new_metal_with_projection</code>, use
 <tbody>
 <tr><td><code>zetesis-cli</code></td><td><code>RunFailure::into_cause</code></td></tr>
 <tr><td><code>zetesis-core</code></td><td><code>AtomKey::compare_ref</code>, <code>AtomRef::compare_key_with</code>, <code>Model::selection_payload_bytes</code>, <code>Predicate::shares_name</code></td></tr>
-<tr><td><code>zetesis-cpu</code></td><td><code>CONSTRAINT_HEAD</code>, <code>InstanceAtomIter</code></td></tr>
 <tr><td><code>zetesis-engine</code></td><td><code>OutputLimits::for_resources</code></td></tr>
 <tr><td><code>zetesis-maintenance</code></td><td><code>is_record</code></td></tr>
-<tr><td><code>zetesis-sat</code></td><td><code>CompletionExecutor::DEFAULT_SCRATCH_BYTES</code>, <code>ReductPreparationLimits::DEFAULT_BYTES</code></td></tr>
+<tr><td>zetesis-sat (now <code>zetesis-stable</code>)</td><td><code>CompletionExecutor::DEFAULT_SCRATCH_BYTES</code>, <code>ReductPreparationLimits::DEFAULT_BYTES</code></td></tr>
 <tr><td><code>zetesis-themelios</code></td><td><code>SourceBundle::working_directory</code>, <code>Encoded::into_text</code>, <code>ProgramSite::with_location</code>, <code>ProgramSite::with_statement</code></td></tr>
 <tr><td><code>zetesis-validation</code></td><td><code>Contract::with_witnesses</code>, <code>Contract::optimal_family</code>, <code>Capture::stderr_text</code>, <code>process::invoke_supervised_with_cancellation</code></td></tr>
 <tr><td><code>zetesis-wgpu</code></td><td><code>GpuLazyOracle::check_batch_with_source</code>, <code>GpuTightOracle::from_context_with_support</code></td></tr>
@@ -401,12 +488,12 @@ limits remain available for an explicitly bounded operation.</p>
 </thead>
 <tbody>
 <tr><td><code>zetesis::Config::{admission, expansion, formula, output}</code></td><td>Configure <code>grounder</code>, <code>workers</code> and <code>memory</code>; the adapter derives preparation, solve and output settings together. For individual bounds, use the underlying preparation/session APIs.</td></tr>
-<tr><td><code>zetesis::Grounder::Hybrid</code></td><td>Use <code>Grounder::Lazy</code>. Relational admission still takes its source-join route; unsupported relational constructs can take the hybrid formula route. Other refusals are returned.</td></tr>
+<tr><td><code>zetesis::Grounder::Hybrid</code></td><td>Use <code>Grounder::Lazy</code> for hybrid formula materialization. Retained streamed constraints are checked before publishing original answers; refusals are returned without changing representation.</td></tr>
 <tr><td><code>Theory::new</code> over <code>Vec&lt;Node&gt;</code> and matching binary <code>Node</code> variants</td><td>Supply <code>FormulaParts</code> containing nodes and their operand arena. Inspect <code>theory.view().node(index)</code> as <code>NodeView</code>; <code>And</code> and <code>Or</code> expose complete slices. Raw pairs use <code>Node::and_pair</code>/<code>or_pair</code>; wide rows use checked arena spans.</td></tr>
 <tr><td>Aggregate append functions over a node vector</td><td>Use the paired <code>FormulaNodes</code> owner. Transactions commit, roll back or detach both suffixes together. <code>into_parts</code> discards topology evidence; <code>prepare_admission</code> consumes it for checked final admission.</td></tr>
 <tr><td>Complete literals of formula/aggregate or expansion limits</td><td>Include the new operand ceilings and <code>ExpansionLimits::max_family_bytes</code>. Exhaustive failures must cover operand-span/arity and materialized-family refusals. Node count alone no longer describes graph size.</td></tr>
 <tr><td><code>TerminalFormula::base_theory() -&gt; &amp;Theory</code></td><td>It returns <code>Option&lt;&amp;Theory&gt;</code>. Match <code>base()</code> for eager versus streamed bases; a hybrid core’s proposals must pass its constraints before reconstruction. Terminal observations add <code>base</code> and <code>streamed</code>, and grounding-mode matches include the hybrid terminal route.</td></tr>
-<tr><td>Narrowing with separate theory/producer/truth arguments and per-read callbacks</td><td>Pass <code>OriginalSubject</code> or <code>FrozenSubject</code> and reusable <code>NarrowingScratch</code>. Quota variants use <code>NarrowingQuota</code>; <code>narrow_known_metered</code> and <code>narrow_frozen_known_metered</code> are removed.</td></tr>
+<tr><td>Narrowing with separate theory/producer/truth arguments and per-read callbacks</td><td>Pass <code>OriginalSubject</code> or <code>FrozenSubject</code> and reusable <code>NarrowingScratch</code>. Reserved variants borrow <code>zetesis_algebra::Meter</code> over a typed <code>Quota</code>; <code>Failure</code> preserves caller refusals separately from local stops. <code>NarrowingQuota</code>, <code>narrow_known_metered</code> and <code>narrow_frozen_known_metered</code> are removed.</td></tr>
 <tr><td><code>AtomTable::index</code> as an identity-recording operation</td><td>It performs structural lookup; the record encoder owns identity recording. <code>AtomIdentityMap::retain_held</code> releases unneeded owners.</td></tr>
 <tr><td>Native benchmark execution fields for workers, completion, batch and work caps</td><td>Use <code>NativeExecution::{threads, memory_bytes, time_limit_seconds}</code> with algorithm choices. New records identify the requested ordinary policy; historical report readers retain earlier fields.</td></tr>
 </tbody>

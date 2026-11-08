@@ -102,7 +102,7 @@
 <a href=#102 id=102 data-nosnippet>102</a><span class="doccomment">/// Decoded general-device outcomes requiring exact residual membership checks.
 <a href=#103 id=103 data-nosnippet>103</a>/// These count device verdicts, separately from host completion attempts and
 <a href=#104 id=104 data-nosnippet>104</a>/// commits. Historical observations can lack this receipt entirely.
-<a href=#105 id=105 data-nosnippet>105</a></span><span class="attr">#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
+<a href=#105 id=105 data-nosnippet>105</a></span><span class="attr">#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, serde::Deserialize)]
 <a href=#106 id=106 data-nosnippet>106</a></span><span class="kw">pub struct </span>FormulaResidualStatistics {
 <a href=#107 id=107 data-nosnippet>107</a>    <span class="doccomment">/// A complete no-change sweep left the proper-subset query unresolved.
 <a href=#108 id=108 data-nosnippet>108</a>    </span><span class="kw">pub </span>fixed_point: u64,
@@ -145,220 +145,234 @@
 <a href=#145 id=145 data-nosnippet>145</a>        /// absence remains unavailable rather than becoming zero.
 <a href=#146 id=146 data-nosnippet>146</a>        </span><span class="attr">#[serde(skip_serializing_if = <span class="string">"Option::is_none"</span>)]
 <a href=#147 id=147 data-nosnippet>147</a>        </span>gpu_residuals: <span class="prelude-ty">Option</span>&lt;FormulaResidualStatistics&gt;,
-<a href=#148 id=148 data-nosnippet>148</a>        <span class="doccomment">/// Peak logical accounted GPU bytes.
-<a href=#149 id=149 data-nosnippet>149</a>        </span>peak_accounted_bytes: u64,
-<a href=#150 id=150 data-nosnippet>150</a>    },
-<a href=#151 id=151 data-nosnippet>151</a>    <span class="doccomment">/// Complete tight-support scans, with submitted work distinct from decoded
-<a href=#152 id=152 data-nosnippet>152</a>    /// results. Propagation sweeps do not describe this primitive.
-<a href=#153 id=153 data-nosnippet>153</a>    </span>TightSupport {
-<a href=#154 id=154 data-nosnippet>154</a>        <span class="doccomment">/// Successfully decoded device batches.
-<a href=#155 id=155 data-nosnippet>155</a>        </span>batches: u64,
-<a href=#156 id=156 data-nosnippet>156</a>        <span class="doccomment">/// Candidates returned by decoded batches.
-<a href=#157 id=157 data-nosnippet>157</a>        </span>candidates: u64,
-<a href=#158 id=158 data-nosnippet>158</a>        <span class="doccomment">/// Complete support-scan work in decoded results.
-<a href=#159 id=159 data-nosnippet>159</a>        </span>work: u64,
-<a href=#160 id=160 data-nosnippet>160</a>        <span class="doccomment">/// Submitted batches, including any without a decoded result.
-<a href=#161 id=161 data-nosnippet>161</a>        </span>submitted_batches: u64,
-<a href=#162 id=162 data-nosnippet>162</a>        <span class="doccomment">/// Submitted candidates, including any without a decoded result.
-<a href=#163 id=163 data-nosnippet>163</a>        </span>submitted_candidates: u64,
-<a href=#164 id=164 data-nosnippet>164</a>        <span class="doccomment">/// Scheduled complete-scan work, not a claim that readback completed.
-<a href=#165 id=165 data-nosnippet>165</a>        </span>scheduled_work: u64,
-<a href=#166 id=166 data-nosnippet>166</a>        <span class="doccomment">/// Configured complete support-scan work ceiling per candidate.
-<a href=#167 id=167 data-nosnippet>167</a>        </span>work_per_candidate_limit: u64,
-<a href=#168 id=168 data-nosnippet>168</a>        <span class="doccomment">/// Peak logical accounted GPU bytes from decoded batches.
-<a href=#169 id=169 data-nosnippet>169</a>        </span>peak_accounted_bytes: u64,
-<a href=#170 id=170 data-nosnippet>170</a>    },
-<a href=#171 id=171 data-nosnippet>171</a>    <span class="doccomment">/// Existing static closure driver exposes adapter identity but no device work total.
-<a href=#172 id=172 data-nosnippet>172</a>    </span>Unavailable {
-<a href=#173 id=173 data-nosnippet>173</a>        <span class="doccomment">/// Explicit measurement limitation.
-<a href=#174 id=174 data-nosnippet>174</a>        </span>reason: <span class="kw-2">&amp;</span><span class="lifetime">'static </span>str,
-<a href=#175 id=175 data-nosnippet>175</a>    },
-<a href=#176 id=176 data-nosnippet>176</a>}
-<a href=#177 id=177 data-nosnippet>177</a><span class="doccomment">/// Native execution identity reported by the existing authored output views.
-<a href=#178 id=178 data-nosnippet>178</a></span><span class="attr">#[derive(Debug, Serialize)]
-<a href=#179 id=179 data-nosnippet>179</a></span><span class="kw">pub struct </span>Execution {
-<a href=#180 id=180 data-nosnippet>180</a>    <span class="doccomment">/// Backend established by reported route metadata, not copied from the request.
-<a href=#181 id=181 data-nosnippet>181</a>    </span><span class="kw">pub </span>backend: Backend,
-<a href=#182 id=182 data-nosnippet>182</a>    <span class="doccomment">/// Reported procedure.
-<a href=#183 id=183 data-nosnippet>183</a>    </span><span class="kw">pub </span>procedure: Procedure,
-<a href=#184 id=184 data-nosnippet>184</a>    <span class="doccomment">/// Device adapter where a device route was entered.
-<a href=#185 id=185 data-nosnippet>185</a>    </span><span class="kw">pub </span>adapter: <span class="prelude-ty">Option</span>&lt;String&gt;,
-<a href=#186 id=186 data-nosnippet>186</a>    <span class="doccomment">/// Device activity with its measured or unavailable scope.
-<a href=#187 id=187 data-nosnippet>187</a>    </span><span class="kw">pub </span>device: DeviceWork,
-<a href=#188 id=188 data-nosnippet>188</a>}
-<a href=#189 id=189 data-nosnippet>189</a><span class="doccomment">/// One instrumented native observation; raw JSON preserves all other statistics.
-<a href=#190 id=190 data-nosnippet>190</a></span><span class="attr">#[derive(Debug, Serialize)]
-<a href=#191 id=191 data-nosnippet>191</a></span><span class="kw">pub struct </span>Observation {
-<a href=#192 id=192 data-nosnippet>192</a>    <span class="doccomment">/// Strict existing phase/stage partition; lazy grounding is interleaved.
-<a href=#193 id=193 data-nosnippet>193</a>    </span><span class="kw">pub </span>timing: Diagnostics,
-<a href=#194 id=194 data-nosnippet>194</a>    <span class="doccomment">/// Actual execution metadata and measured device counters.
-<a href=#195 id=195 data-nosnippet>195</a>    </span><span class="kw">pub </span>execution: Execution,
-<a href=#196 id=196 data-nosnippet>196</a>    <span class="doccomment">/// Completed streamed-source checking, absent on ordinary eager/lazy routes.
-<a href=#197 id=197 data-nosnippet>197</a>    /// Core search counters remain separate from original-program acceptance.
-<a href=#198 id=198 data-nosnippet>198</a>    </span><span class="attr">#[serde(skip_serializing_if = <span class="string">"Option::is_none"</span>)]
-<a href=#199 id=199 data-nosnippet>199</a>    </span><span class="kw">pub </span>hybrid: <span class="prelude-ty">Option</span>&lt;HybridStatistics&gt;,
-<a href=#200 id=200 data-nosnippet>200</a>    <span class="doccomment">/// Completed full-answer reconstruction from a verified base. Absent for
-<a href=#201 id=201 data-nosnippet>201</a>    /// ordinary and streamed-constraint routes and older records.
+<a href=#148 id=148 data-nosnippet>148</a>        <span class="doccomment">/// Decoded and completed handover activity when supplied by the general device.
+<a href=#149 id=149 data-nosnippet>149</a>        </span><span class="attr">#[serde(skip_serializing_if = <span class="string">"Option::is_none"</span>)]
+<a href=#150 id=150 data-nosnippet>150</a>        </span>gpu_residual_handovers: <span class="prelude-ty">Option</span>&lt;Box&lt;<span class="kw">super</span>::ResidualHandoverStatistics&gt;&gt;,
+<a href=#151 id=151 data-nosnippet>151</a>        <span class="doccomment">/// Peak logical accounted GPU bytes.
+<a href=#152 id=152 data-nosnippet>152</a>        </span>peak_accounted_bytes: u64,
+<a href=#153 id=153 data-nosnippet>153</a>    },
+<a href=#154 id=154 data-nosnippet>154</a>    <span class="doccomment">/// Complete tight-support checks, with submitted work distinct from decoded
+<a href=#155 id=155 data-nosnippet>155</a>    /// results. Propagation sweeps do not describe this primitive.
+<a href=#156 id=156 data-nosnippet>156</a>    </span>TightSupport {
+<a href=#157 id=157 data-nosnippet>157</a>        <span class="doccomment">/// Successfully decoded device batches.
+<a href=#158 id=158 data-nosnippet>158</a>        </span>batches: u64,
+<a href=#159 id=159 data-nosnippet>159</a>        <span class="doccomment">/// Candidates returned by decoded batches.
+<a href=#160 id=160 data-nosnippet>160</a>        </span>candidates: u64,
+<a href=#161 id=161 data-nosnippet>161</a>        <span class="doccomment">/// Sum of the dispatched plans' work allowances in decoded results.
+<a href=#162 id=162 data-nosnippet>162</a>        /// Cold and retained-truth batches may charge differently.
+<a href=#163 id=163 data-nosnippet>163</a>        </span>work: u64,
+<a href=#164 id=164 data-nosnippet>164</a>        <span class="doccomment">/// Submitted batches, including any without a decoded result.
+<a href=#165 id=165 data-nosnippet>165</a>        </span>submitted_batches: u64,
+<a href=#166 id=166 data-nosnippet>166</a>        <span class="doccomment">/// Submitted candidates, including any without a decoded result.
+<a href=#167 id=167 data-nosnippet>167</a>        </span>submitted_candidates: u64,
+<a href=#168 id=168 data-nosnippet>168</a>        <span class="doccomment">/// Sum of submitted work allowances, not a claim that readback completed.
+<a href=#169 id=169 data-nosnippet>169</a>        </span>scheduled_work: u64,
+<a href=#170 id=170 data-nosnippet>170</a>        <span class="doccomment">/// Configured work allowance ceiling per candidate.
+<a href=#171 id=171 data-nosnippet>171</a>        </span>work_per_candidate_limit: u64,
+<a href=#172 id=172 data-nosnippet>172</a>        <span class="doccomment">/// Peak logical accounted GPU bytes from decoded batches.
+<a href=#173 id=173 data-nosnippet>173</a>        </span>peak_accounted_bytes: u64,
+<a href=#174 id=174 data-nosnippet>174</a>    },
+<a href=#175 id=175 data-nosnippet>175</a>    <span class="doccomment">/// Existing static closure driver exposes adapter identity but no device work total.
+<a href=#176 id=176 data-nosnippet>176</a>    </span>Unavailable {
+<a href=#177 id=177 data-nosnippet>177</a>        <span class="doccomment">/// Explicit measurement limitation.
+<a href=#178 id=178 data-nosnippet>178</a>        </span>reason: <span class="kw-2">&amp;</span><span class="lifetime">'static </span>str,
+<a href=#179 id=179 data-nosnippet>179</a>    },
+<a href=#180 id=180 data-nosnippet>180</a>}
+<a href=#181 id=181 data-nosnippet>181</a><span class="doccomment">/// Native execution identity reported by the existing authored output views.
+<a href=#182 id=182 data-nosnippet>182</a></span><span class="attr">#[derive(Debug, Serialize)]
+<a href=#183 id=183 data-nosnippet>183</a></span><span class="kw">pub struct </span>Execution {
+<a href=#184 id=184 data-nosnippet>184</a>    <span class="doccomment">/// Backend established by reported route metadata, not copied from the request.
+<a href=#185 id=185 data-nosnippet>185</a>    </span><span class="kw">pub </span>backend: Backend,
+<a href=#186 id=186 data-nosnippet>186</a>    <span class="doccomment">/// Reported procedure.
+<a href=#187 id=187 data-nosnippet>187</a>    </span><span class="kw">pub </span>procedure: Procedure,
+<a href=#188 id=188 data-nosnippet>188</a>    <span class="doccomment">/// Device adapter where a device route was entered.
+<a href=#189 id=189 data-nosnippet>189</a>    </span><span class="kw">pub </span>adapter: <span class="prelude-ty">Option</span>&lt;String&gt;,
+<a href=#190 id=190 data-nosnippet>190</a>    <span class="doccomment">/// Device activity with its measured or unavailable scope.
+<a href=#191 id=191 data-nosnippet>191</a>    </span><span class="kw">pub </span>device: DeviceWork,
+<a href=#192 id=192 data-nosnippet>192</a>}
+<a href=#193 id=193 data-nosnippet>193</a><span class="doccomment">/// One instrumented native observation; raw JSON preserves all other statistics.
+<a href=#194 id=194 data-nosnippet>194</a></span><span class="attr">#[derive(Debug, Serialize)]
+<a href=#195 id=195 data-nosnippet>195</a></span><span class="kw">pub struct </span>Observation {
+<a href=#196 id=196 data-nosnippet>196</a>    <span class="doccomment">/// Strict existing phase/stage partition; lazy grounding is interleaved.
+<a href=#197 id=197 data-nosnippet>197</a>    </span><span class="kw">pub </span>timing: Diagnostics,
+<a href=#198 id=198 data-nosnippet>198</a>    <span class="doccomment">/// Actual execution metadata and measured device counters.
+<a href=#199 id=199 data-nosnippet>199</a>    </span><span class="kw">pub </span>execution: Execution,
+<a href=#200 id=200 data-nosnippet>200</a>    <span class="doccomment">/// Completed streamed-source checking, absent on ordinary eager/lazy routes.
+<a href=#201 id=201 data-nosnippet>201</a>    /// Core search counters remain separate from original-program acceptance.
 <a href=#202 id=202 data-nosnippet>202</a>    </span><span class="attr">#[serde(skip_serializing_if = <span class="string">"Option::is_none"</span>)]
-<a href=#203 id=203 data-nosnippet>203</a>    </span><span class="kw">pub </span>terminal: <span class="prelude-ty">Option</span>&lt;TerminalStatistics&gt;,
-<a href=#204 id=204 data-nosnippet>204</a>    <span class="doccomment">/// Exact source preparation, absent for formula and relational routes and
-<a href=#205 id=205 data-nosnippet>205</a>    /// older records. These charges are not repeated session search work.
+<a href=#203 id=203 data-nosnippet>203</a>    </span><span class="kw">pub </span>hybrid: <span class="prelude-ty">Option</span>&lt;HybridStatistics&gt;,
+<a href=#204 id=204 data-nosnippet>204</a>    <span class="doccomment">/// Completed full-answer reconstruction from a verified base. Absent for
+<a href=#205 id=205 data-nosnippet>205</a>    /// ordinary and streamed-constraint routes and older records.
 <a href=#206 id=206 data-nosnippet>206</a>    </span><span class="attr">#[serde(skip_serializing_if = <span class="string">"Option::is_none"</span>)]
-<a href=#207 id=207 data-nosnippet>207</a>    </span><span class="kw">pub </span>source_evaluation: <span class="prelude-ty">Option</span>&lt;SourceEvaluationStatistics&gt;,
-<a href=#208 id=208 data-nosnippet>208</a>}
-<a href=#209 id=209 data-nosnippet>209</a>
-<a href=#210 id=210 data-nosnippet>210</a><span class="doccomment">/// Accepted admission charges for a completely evaluated acyclic source.
-<a href=#211 id=211 data-nosnippet>211</a>/// The reader authenticates the original receipt's `source_admission` scope.
-<a href=#212 id=212 data-nosnippet>212</a></span><span class="attr">#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
-<a href=#213 id=213 data-nosnippet>213</a></span><span class="kw">pub struct </span>SourceEvaluationStatistics {
-<a href=#214 id=214 data-nosnippet>214</a>    <span class="doccomment">/// Cumulative source preparation work, including support and arithmetic.
-<a href=#215 id=215 data-nosnippet>215</a>    </span><span class="kw">pub </span>work: u64,
-<a href=#216 id=216 data-nosnippet>216</a>    <span class="doccomment">/// Cumulative complete source substitutions admitted during preparation.
-<a href=#217 id=217 data-nosnippet>217</a>    </span><span class="kw">pub </span>substitutions: u64,
-<a href=#218 id=218 data-nosnippet>218</a>}
-<a href=#219 id=219 data-nosnippet>219</a>
-<a href=#220 id=220 data-nosnippet>220</a><span class="doccomment">/// Original-answer reconstruction receipt, independent of base membership work.
-<a href=#221 id=221 data-nosnippet>221</a></span><span class="attr">#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
-<a href=#222 id=222 data-nosnippet>222</a></span><span class="kw">pub struct </span>TerminalStatistics {
-<a href=#223 id=223 data-nosnippet>223</a>    <span class="doccomment">/// Base answers consumed by reconstruction.
-<a href=#224 id=224 data-nosnippet>224</a>    </span><span class="kw">pub </span>base_answers: u64,
-<a href=#225 id=225 data-nosnippet>225</a>    <span class="doccomment">/// Complete original answers.
-<a href=#226 id=226 data-nosnippet>226</a>    </span><span class="kw">pub </span>reconstructed: u64,
-<a href=#227 id=227 data-nosnippet>227</a>    <span class="doccomment">/// Consumed unfinished reconstructions; zero for a complete observation.
-<a href=#228 id=228 data-nosnippet>228</a>    </span><span class="kw">pub </span>pending: u64,
-<a href=#229 id=229 data-nosnippet>229</a>    <span class="doccomment">/// Reconstruction calls, including refused attempts.
-<a href=#230 id=230 data-nosnippet>230</a>    </span><span class="kw">pub </span>attempts: u64,
-<a href=#231 id=231 data-nosnippet>231</a>    <span class="doccomment">/// Completed frontend reconstructions.
-<a href=#232 id=232 data-nosnippet>232</a>    </span><span class="kw">pub </span>completed: u64,
-<a href=#233 id=233 data-nosnippet>233</a>    <span class="doccomment">/// Accepted work including source admission; excludes base membership work.
-<a href=#234 id=234 data-nosnippet>234</a>    </span><span class="kw">pub </span>work: u64,
-<a href=#235 id=235 data-nosnippet>235</a>    <span class="doccomment">/// Accepted source and reconstruction substitutions.
-<a href=#236 id=236 data-nosnippet>236</a>    </span><span class="kw">pub </span>substitutions: u64,
-<a href=#237 id=237 data-nosnippet>237</a>    <span class="doccomment">/// The base streamed its constraints (lazy grounding) rather than being
-<a href=#238 id=238 data-nosnippet>238</a>    /// instantiated whole; omitted from records when false.
-<a href=#239 id=239 data-nosnippet>239</a>    </span><span class="attr">#[serde(skip_serializing_if = <span class="string">"std::ops::Not::not"</span>)]
-<a href=#240 id=240 data-nosnippet>240</a>    </span><span class="kw">pub </span>hybrid_base: bool,
-<a href=#241 id=241 data-nosnippet>241</a>}
-<a href=#242 id=242 data-nosnippet>242</a>
-<a href=#243 id=243 data-nosnippet>243</a><span class="doccomment">/// Completed hybrid source-checking receipt, independent of device execution.
-<a href=#244 id=244 data-nosnippet>244</a></span><span class="attr">#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
-<a href=#245 id=245 data-nosnippet>245</a></span><span class="kw">pub struct </span>HybridStatistics {
-<a href=#246 id=246 data-nosnippet>246</a>    <span class="doccomment">/// Optional early region checks; absent in records from earlier executables.
-<a href=#247 id=247 data-nosnippet>247</a>    </span><span class="attr">#[serde(skip_serializing_if = <span class="string">"Option::is_none"</span>)]
-<a href=#248 id=248 data-nosnippet>248</a>    </span><span class="kw">pub </span>regions: <span class="prelude-ty">Option</span>&lt;RegionChecks&gt;,
-<a href=#249 id=249 data-nosnippet>249</a>    <span class="doccomment">/// Core answers consumed by the checker, including rejected ones.
-<a href=#250 id=250 data-nosnippet>250</a>    </span><span class="kw">pub </span>core_answers: u64,
-<a href=#251 id=251 data-nosnippet>251</a>    <span class="doccomment">/// Original-program answers after checking all required constraints.
-<a href=#252 id=252 data-nosnippet>252</a>    </span><span class="kw">pub </span>accepted: u64,
-<a href=#253 id=253 data-nosnippet>253</a>    <span class="doccomment">/// Core answers with an observed source-constraint violation.
-<a href=#254 id=254 data-nosnippet>254</a>    </span><span class="kw">pub </span>rejected: u64,
-<a href=#255 id=255 data-nosnippet>255</a>    <span class="doccomment">/// Unfinished consumed checks; zero for a complete observation.
-<a href=#256 id=256 data-nosnippet>256</a>    </span><span class="kw">pub </span>pending: u64,
-<a href=#257 id=257 data-nosnippet>257</a>    <span class="doccomment">/// Cumulative checker work, including its snapshot preparation.
-<a href=#258 id=258 data-nosnippet>258</a>    </span><span class="kw">pub </span>work: u64,
-<a href=#259 id=259 data-nosnippet>259</a>    <span class="doccomment">/// Complete source substitutions visited by checks.
-<a href=#260 id=260 data-nosnippet>260</a>    </span><span class="kw">pub </span>substitutions: u64,
-<a href=#261 id=261 data-nosnippet>261</a>    <span class="doccomment">/// Cumulative copied scalar payload, not retained memory or RSS.
-<a href=#262 id=262 data-nosnippet>262</a>    </span><span class="kw">pub </span>scalar_bytes: u64,
-<a href=#263 id=263 data-nosnippet>263</a>}
-<a href=#264 id=264 data-nosnippet>264</a>
-<a href=#265 id=265 data-nosnippet>265</a><span class="doccomment">/// Completed candidate-region restriction counts, independent of membership.
-<a href=#266 id=266 data-nosnippet>266</a></span><span class="attr">#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
-<a href=#267 id=267 data-nosnippet>267</a></span><span class="kw">pub struct </span>RegionChecks {
-<a href=#268 id=268 data-nosnippet>268</a>    <span class="doccomment">/// Checker preparations, including attempts.
-<a href=#269 id=269 data-nosnippet>269</a>    </span><span class="kw">pub </span>preparations: u64,
-<a href=#270 id=270 data-nosnippet>270</a>    <span class="doccomment">/// Candidate regions checked before splitting or membership.
-<a href=#271 id=271 data-nosnippet>271</a>    </span><span class="kw">pub </span>checks: u64,
-<a href=#272 id=272 data-nosnippet>272</a>    <span class="doccomment">/// Regions rejected by a certain original constraint violation.
-<a href=#273 id=273 data-nosnippet>273</a>    </span><span class="kw">pub </span>refuted: u64,
-<a href=#274 id=274 data-nosnippet>274</a>}
-<a href=#275 id=275 data-nosnippet>275</a><span class="kw">impl </span>Observation {
-<a href=#276 id=276 data-nosnippet>276</a>    <span class="doccomment">/// Reconcile already-parsed native statistics with their captured text view.
-<a href=#277 id=277 data-nosnippet>277</a>    ///
-<a href=#278 id=278 data-nosnippet>278</a>    /// This pure decoder accepts only the supported finite phase/stage schemas
-<a href=#279 id=279 data-nosnippet>279</a>    /// and reconciles the actual route with the explicit request. It does not
-<a href=#280 id=280 data-nosnippet>280</a>    /// establish process completion, answer-family parity or semantic correctness.
-<a href=#281 id=281 data-nosnippet>281</a>    /// The caller bounds and parses `document` and bounds `stderr` before calling.
-<a href=#282 id=282 data-nosnippet>282</a>    /// The decoder scans the text linearly and reads a fixed set of JSON fields.
-<a href=#283 id=283 data-nosnippet>283</a>    /// Temporary line storage is linear in the supplied text; retained storage
-<a href=#284 id=284 data-nosnippet>284</a>    /// contains the finite measurements and reported adapter name.
-<a href=#285 id=285 data-nosnippet>285</a>    ///
-<a href=#286 id=286 data-nosnippet>286</a>    /// # Errors
-<a href=#287 id=287 data-nosnippet>287</a>    /// Refuses malformed, incomplete, unsupported or contradictory telemetry,
-<a href=#288 id=288 data-nosnippet>288</a>    /// including a route that differs from an explicit requested procedure.
-<a href=#289 id=289 data-nosnippet>289</a>    </span><span class="kw">pub fn </span>from_statistics(
-<a href=#290 id=290 data-nosnippet>290</a>        document: <span class="kw-2">&amp;</span>serde_json::Value,
-<a href=#291 id=291 data-nosnippet>291</a>        stderr: <span class="kw-2">&amp;</span>[u8],
-<a href=#292 id=292 data-nosnippet>292</a>        request: <span class="kw">crate</span>::selected::NativeExecution,
-<a href=#293 id=293 data-nosnippet>293</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="self">Self</span>, String&gt; {
-<a href=#294 id=294 data-nosnippet>294</a>        <span class="kw">super</span>::telemetry::observe(document, stderr, request)
-<a href=#295 id=295 data-nosnippet>295</a>    }
-<a href=#296 id=296 data-nosnippet>296</a>}
-<a href=#297 id=297 data-nosnippet>297</a><span class="doccomment">/// A schedule position with its raw capture when launched.
-<a href=#298 id=298 data-nosnippet>298</a></span><span class="attr">#[derive(Debug, Serialize)]
-<a href=#299 id=299 data-nosnippet>299</a></span><span class="kw">pub struct </span>Sample {
-<a href=#300 id=300 data-nosnippet>300</a>    <span class="kw">pub</span>(<span class="kw">super</span>) slot: Slot,
-<a href=#301 id=301 data-nosnippet>301</a>    <span class="kw">pub</span>(<span class="kw">super</span>) capture: <span class="prelude-ty">Option</span>&lt;MatrixCapture&gt;,
-<a href=#302 id=302 data-nosnippet>302</a>    <span class="kw">pub</span>(<span class="kw">super</span>) decision: Decision,
-<a href=#303 id=303 data-nosnippet>303</a>    <span class="kw">pub</span>(<span class="kw">super</span>) detail: <span class="prelude-ty">Option</span>&lt;String&gt;,
-<a href=#304 id=304 data-nosnippet>304</a>    <span class="kw">pub</span>(<span class="kw">super</span>) blocked_by: <span class="prelude-ty">Option</span>&lt;usize&gt;,
-<a href=#305 id=305 data-nosnippet>305</a>    <span class="kw">pub</span>(<span class="kw">super</span>) selected_models: <span class="prelude-ty">Option</span>&lt;u64&gt;,
-<a href=#306 id=306 data-nosnippet>306</a>    <span class="kw">pub</span>(<span class="kw">super</span>) cost: <span class="prelude-ty">Option</span>&lt;Vec&lt;i64&gt;&gt;,
-<a href=#307 id=307 data-nosnippet>307</a>    <span class="kw">pub</span>(<span class="kw">super</span>) observation: <span class="prelude-ty">Option</span>&lt;Observation&gt;,
-<a href=#308 id=308 data-nosnippet>308</a>    <span class="doccomment">/// The child's peak resident set, on a memory round whose record was valid.
-<a href=#309 id=309 data-nosnippet>309</a>    </span><span class="attr">#[serde(skip_serializing_if = <span class="string">"Option::is_none"</span>)]
-<a href=#310 id=310 data-nosnippet>310</a>    </span><span class="kw">pub</span>(<span class="kw">super</span>) memory: <span class="prelude-ty">Option</span>&lt;<span class="kw">crate</span>::process::memory::Measurement&gt;,
-<a href=#311 id=311 data-nosnippet>311</a>}
-<a href=#312 id=312 data-nosnippet>312</a><span class="kw">impl </span>Sample {
-<a href=#313 id=313 data-nosnippet>313</a>    <span class="doccomment">/// The child's peak resident set, present only on a memory round whose
-<a href=#314 id=314 data-nosnippet>314</a>    /// separate record was valid.
-<a href=#315 id=315 data-nosnippet>315</a>    </span><span class="attr">#[must_use]
-<a href=#316 id=316 data-nosnippet>316</a>    </span><span class="kw">pub const fn </span>memory(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="prelude-ty">Option</span>&lt;<span class="kw-2">&amp;</span><span class="kw">crate</span>::process::memory::Measurement&gt; {
-<a href=#317 id=317 data-nosnippet>317</a>        <span class="self">self</span>.memory.as_ref()
-<a href=#318 id=318 data-nosnippet>318</a>    }
-<a href=#319 id=319 data-nosnippet>319</a>    <span class="doccomment">/// Fixed requested schedule position.
-<a href=#320 id=320 data-nosnippet>320</a>    </span><span class="attr">#[must_use]
-<a href=#321 id=321 data-nosnippet>321</a>    </span><span class="kw">pub const fn </span>slot(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; Slot {
-<a href=#322 id=322 data-nosnippet>322</a>        <span class="self">self</span>.slot
-<a href=#323 id=323 data-nosnippet>323</a>    }
-<a href=#324 id=324 data-nosnippet>324</a>    <span class="doccomment">/// Typed final disposition.
-<a href=#325 id=325 data-nosnippet>325</a>    </span><span class="attr">#[must_use]
-<a href=#326 id=326 data-nosnippet>326</a>    </span><span class="kw">pub const fn </span>decision(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; Decision {
-<a href=#327 id=327 data-nosnippet>327</a>        <span class="self">self</span>.decision
-<a href=#328 id=328 data-nosnippet>328</a>    }
-<a href=#329 id=329 data-nosnippet>329</a>    <span class="doccomment">/// Retained explanation of a refusal, mismatch or skipped position.
-<a href=#330 id=330 data-nosnippet>330</a>    </span><span class="attr">#[must_use]
-<a href=#331 id=331 data-nosnippet>331</a>    </span><span class="kw">pub fn </span>detail(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="prelude-ty">Option</span>&lt;<span class="kw-2">&amp;</span>str&gt; {
-<a href=#332 id=332 data-nosnippet>332</a>        <span class="self">self</span>.detail.as_deref()
-<a href=#333 id=333 data-nosnippet>333</a>    }
-<a href=#334 id=334 data-nosnippet>334</a>    <span class="doccomment">/// Decoded selected model count, when answer normalization succeeded.
-<a href=#335 id=335 data-nosnippet>335</a>    /// A count alone does not establish that the position passed qualification.
-<a href=#336 id=336 data-nosnippet>336</a>    </span><span class="attr">#[must_use]
-<a href=#337 id=337 data-nosnippet>337</a>    </span><span class="kw">pub const fn </span>selected_models(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="prelude-ty">Option</span>&lt;u64&gt; {
-<a href=#338 id=338 data-nosnippet>338</a>        <span class="self">self</span>.selected_models
-<a href=#339 id=339 data-nosnippet>339</a>    }
-<a href=#340 id=340 data-nosnippet>340</a>    <span class="doccomment">/// Decoded selected cost vector, when one was reported and normalized.
-<a href=#341 id=341 data-nosnippet>341</a>    </span><span class="attr">#[must_use]
-<a href=#342 id=342 data-nosnippet>342</a>    </span><span class="kw">pub fn </span>cost(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="prelude-ty">Option</span>&lt;<span class="kw-2">&amp;</span>[i64]&gt; {
-<a href=#343 id=343 data-nosnippet>343</a>        <span class="self">self</span>.cost.as_deref()
-<a href=#344 id=344 data-nosnippet>344</a>    }
-<a href=#345 id=345 data-nosnippet>345</a>    <span class="doccomment">/// Exact launched process record, absent for a skipped position.
-<a href=#346 id=346 data-nosnippet>346</a>    </span><span class="attr">#[must_use]
-<a href=#347 id=347 data-nosnippet>347</a>    </span><span class="kw">pub const fn </span>capture(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="prelude-ty">Option</span>&lt;<span class="kw-2">&amp;</span>Capture&gt; {
-<a href=#348 id=348 data-nosnippet>348</a>        <span class="kw">match </span><span class="kw-2">&amp;</span><span class="self">self</span>.capture {
-<a href=#349 id=349 data-nosnippet>349</a>            <span class="prelude-val">Some</span>(capture) =&gt; <span class="prelude-val">Some</span>(<span class="kw-2">&amp;</span>capture.<span class="number">0</span>),
-<a href=#350 id=350 data-nosnippet>350</a>            <span class="prelude-val">None </span>=&gt; <span class="prelude-val">None</span>,
-<a href=#351 id=351 data-nosnippet>351</a>        }
-<a href=#352 id=352 data-nosnippet>352</a>    }
-<a href=#353 id=353 data-nosnippet>353</a>    <span class="doccomment">/// Earlier failed sample disabling this cell, when applicable.
-<a href=#354 id=354 data-nosnippet>354</a>    </span><span class="attr">#[must_use]
-<a href=#355 id=355 data-nosnippet>355</a>    </span><span class="kw">pub const fn </span>blocked_by(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="prelude-ty">Option</span>&lt;usize&gt; {
-<a href=#356 id=356 data-nosnippet>356</a>        <span class="self">self</span>.blocked_by
-<a href=#357 id=357 data-nosnippet>357</a>    }
-<a href=#358 id=358 data-nosnippet>358</a>    <span class="doccomment">/// Checked instrumented route/phase observation.
-<a href=#359 id=359 data-nosnippet>359</a>    </span><span class="attr">#[must_use]
-<a href=#360 id=360 data-nosnippet>360</a>    </span><span class="kw">pub const fn </span>observation(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="prelude-ty">Option</span>&lt;<span class="kw-2">&amp;</span>Observation&gt; {
-<a href=#361 id=361 data-nosnippet>361</a>        <span class="self">self</span>.observation.as_ref()
-<a href=#362 id=362 data-nosnippet>362</a>    }
-<a href=#363 id=363 data-nosnippet>363</a>}
+<a href=#207 id=207 data-nosnippet>207</a>    </span><span class="kw">pub </span>terminal: <span class="prelude-ty">Option</span>&lt;TerminalStatistics&gt;,
+<a href=#208 id=208 data-nosnippet>208</a>    <span class="doccomment">/// Exact source preparation, absent for formula and relational routes and
+<a href=#209 id=209 data-nosnippet>209</a>    /// older records. These charges are not repeated session search work.
+<a href=#210 id=210 data-nosnippet>210</a>    </span><span class="attr">#[serde(skip_serializing_if = <span class="string">"Option::is_none"</span>)]
+<a href=#211 id=211 data-nosnippet>211</a>    </span><span class="kw">pub </span>source_evaluation: <span class="prelude-ty">Option</span>&lt;SourceEvaluationStatistics&gt;,
+<a href=#212 id=212 data-nosnippet>212</a>}
+<a href=#213 id=213 data-nosnippet>213</a>
+<a href=#214 id=214 data-nosnippet>214</a><span class="doccomment">/// Accepted admission charges for a completely evaluated acyclic source.
+<a href=#215 id=215 data-nosnippet>215</a>/// The reader authenticates the original receipt's `source_admission` scope.
+<a href=#216 id=216 data-nosnippet>216</a></span><span class="attr">#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
+<a href=#217 id=217 data-nosnippet>217</a></span><span class="kw">pub struct </span>SourceEvaluationStatistics {
+<a href=#218 id=218 data-nosnippet>218</a>    <span class="doccomment">/// Cumulative source preparation work, including support and arithmetic.
+<a href=#219 id=219 data-nosnippet>219</a>    </span><span class="kw">pub </span>work: u64,
+<a href=#220 id=220 data-nosnippet>220</a>    <span class="doccomment">/// Cumulative complete source substitutions admitted during preparation.
+<a href=#221 id=221 data-nosnippet>221</a>    </span><span class="kw">pub </span>substitutions: u64,
+<a href=#222 id=222 data-nosnippet>222</a>}
+<a href=#223 id=223 data-nosnippet>223</a>
+<a href=#224 id=224 data-nosnippet>224</a><span class="doccomment">/// Original-answer reconstruction receipt, independent of base membership work.
+<a href=#225 id=225 data-nosnippet>225</a></span><span class="attr">#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
+<a href=#226 id=226 data-nosnippet>226</a></span><span class="kw">pub struct </span>TerminalStatistics {
+<a href=#227 id=227 data-nosnippet>227</a>    <span class="doccomment">/// Base answers consumed by reconstruction.
+<a href=#228 id=228 data-nosnippet>228</a>    </span><span class="kw">pub </span>base_answers: u64,
+<a href=#229 id=229 data-nosnippet>229</a>    <span class="doccomment">/// Complete original answers.
+<a href=#230 id=230 data-nosnippet>230</a>    </span><span class="kw">pub </span>reconstructed: u64,
+<a href=#231 id=231 data-nosnippet>231</a>    <span class="doccomment">/// Consumed unfinished reconstructions; zero for a complete observation.
+<a href=#232 id=232 data-nosnippet>232</a>    </span><span class="kw">pub </span>pending: u64,
+<a href=#233 id=233 data-nosnippet>233</a>    <span class="doccomment">/// Reconstruction calls, including refused attempts.
+<a href=#234 id=234 data-nosnippet>234</a>    </span><span class="kw">pub </span>attempts: u64,
+<a href=#235 id=235 data-nosnippet>235</a>    <span class="doccomment">/// Completed frontend reconstructions.
+<a href=#236 id=236 data-nosnippet>236</a>    </span><span class="kw">pub </span>completed: u64,
+<a href=#237 id=237 data-nosnippet>237</a>    <span class="doccomment">/// Accepted work including source admission; excludes base membership work.
+<a href=#238 id=238 data-nosnippet>238</a>    </span><span class="kw">pub </span>work: u64,
+<a href=#239 id=239 data-nosnippet>239</a>    <span class="doccomment">/// Accepted source and reconstruction substitutions.
+<a href=#240 id=240 data-nosnippet>240</a>    </span><span class="kw">pub </span>substitutions: u64,
+<a href=#241 id=241 data-nosnippet>241</a>    <span class="doccomment">/// The base streamed its constraints (lazy grounding) rather than being
+<a href=#242 id=242 data-nosnippet>242</a>    /// instantiated whole; omitted from records when false.
+<a href=#243 id=243 data-nosnippet>243</a>    </span><span class="attr">#[serde(skip_serializing_if = <span class="string">"std::ops::Not::not"</span>)]
+<a href=#244 id=244 data-nosnippet>244</a>    </span><span class="kw">pub </span>hybrid_base: bool,
+<a href=#245 id=245 data-nosnippet>245</a>}
+<a href=#246 id=246 data-nosnippet>246</a>
+<a href=#247 id=247 data-nosnippet>247</a><span class="doccomment">/// Completed hybrid source-checking receipt, independent of device execution.
+<a href=#248 id=248 data-nosnippet>248</a></span><span class="attr">#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
+<a href=#249 id=249 data-nosnippet>249</a></span><span class="kw">pub struct </span>HybridStatistics {
+<a href=#250 id=250 data-nosnippet>250</a>    <span class="doccomment">/// Optional early region checks; absent in records from earlier executables.
+<a href=#251 id=251 data-nosnippet>251</a>    </span><span class="attr">#[serde(skip_serializing_if = <span class="string">"Option::is_none"</span>)]
+<a href=#252 id=252 data-nosnippet>252</a>    </span><span class="kw">pub </span>regions: <span class="prelude-ty">Option</span>&lt;RegionChecks&gt;,
+<a href=#253 id=253 data-nosnippet>253</a>    <span class="doccomment">/// Core answers consumed by the checker, including rejected ones.
+<a href=#254 id=254 data-nosnippet>254</a>    </span><span class="kw">pub </span>core_answers: u64,
+<a href=#255 id=255 data-nosnippet>255</a>    <span class="doccomment">/// Original-program answers after checking all required constraints.
+<a href=#256 id=256 data-nosnippet>256</a>    </span><span class="kw">pub </span>accepted: u64,
+<a href=#257 id=257 data-nosnippet>257</a>    <span class="doccomment">/// Core answers with an observed source-constraint violation.
+<a href=#258 id=258 data-nosnippet>258</a>    </span><span class="kw">pub </span>rejected: u64,
+<a href=#259 id=259 data-nosnippet>259</a>    <span class="doccomment">/// Unfinished consumed checks; zero for a complete observation.
+<a href=#260 id=260 data-nosnippet>260</a>    </span><span class="kw">pub </span>pending: u64,
+<a href=#261 id=261 data-nosnippet>261</a>    <span class="doccomment">/// Cumulative checker work, including its snapshot preparation.
+<a href=#262 id=262 data-nosnippet>262</a>    </span><span class="kw">pub </span>work: u64,
+<a href=#263 id=263 data-nosnippet>263</a>    <span class="doccomment">/// Complete source substitutions visited by checks.
+<a href=#264 id=264 data-nosnippet>264</a>    </span><span class="kw">pub </span>substitutions: u64,
+<a href=#265 id=265 data-nosnippet>265</a>    <span class="doccomment">/// Cumulative copied scalar payload, not retained memory or RSS.
+<a href=#266 id=266 data-nosnippet>266</a>    </span><span class="kw">pub </span>scalar_bytes: u64,
+<a href=#267 id=267 data-nosnippet>267</a>}
+<a href=#268 id=268 data-nosnippet>268</a>
+<a href=#269 id=269 data-nosnippet>269</a><span class="doccomment">/// Completed candidate-region restriction counts, independent of membership.
+<a href=#270 id=270 data-nosnippet>270</a></span><span class="attr">#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
+<a href=#271 id=271 data-nosnippet>271</a></span><span class="kw">pub struct </span>RegionChecks {
+<a href=#272 id=272 data-nosnippet>272</a>    <span class="doccomment">/// Checker preparations, including attempts.
+<a href=#273 id=273 data-nosnippet>273</a>    </span><span class="kw">pub </span>preparations: u64,
+<a href=#274 id=274 data-nosnippet>274</a>    <span class="doccomment">/// Candidate regions checked before splitting or membership.
+<a href=#275 id=275 data-nosnippet>275</a>    </span><span class="kw">pub </span>checks: u64,
+<a href=#276 id=276 data-nosnippet>276</a>    <span class="doccomment">/// Regions rejected by a certain original constraint violation.
+<a href=#277 id=277 data-nosnippet>277</a>    </span><span class="kw">pub </span>refuted: u64,
+<a href=#278 id=278 data-nosnippet>278</a>}
+<a href=#279 id=279 data-nosnippet>279</a><span class="kw">impl </span>Observation {
+<a href=#280 id=280 data-nosnippet>280</a>    <span class="doccomment">/// Reconcile already-parsed native statistics with their captured text view.
+<a href=#281 id=281 data-nosnippet>281</a>    ///
+<a href=#282 id=282 data-nosnippet>282</a>    /// This pure decoder accepts only the supported finite phase/stage schemas
+<a href=#283 id=283 data-nosnippet>283</a>    /// and reconciles the actual route with the explicit request. It does not
+<a href=#284 id=284 data-nosnippet>284</a>    /// establish process completion, answer-family parity or semantic correctness.
+<a href=#285 id=285 data-nosnippet>285</a>    /// The caller bounds and parses `document` and bounds `stderr` before calling.
+<a href=#286 id=286 data-nosnippet>286</a>    /// The decoder scans the text linearly and reads a fixed set of JSON fields.
+<a href=#287 id=287 data-nosnippet>287</a>    /// Temporary line storage is linear in the supplied text; retained storage
+<a href=#288 id=288 data-nosnippet>288</a>    /// contains the finite measurements and reported adapter name.
+<a href=#289 id=289 data-nosnippet>289</a>    ///
+<a href=#290 id=290 data-nosnippet>290</a>    /// # Errors
+<a href=#291 id=291 data-nosnippet>291</a>    /// Refuses malformed, incomplete, unsupported or contradictory telemetry,
+<a href=#292 id=292 data-nosnippet>292</a>    /// including a route that differs from an explicit requested procedure.
+<a href=#293 id=293 data-nosnippet>293</a>    </span><span class="kw">pub fn </span>from_statistics(
+<a href=#294 id=294 data-nosnippet>294</a>        document: <span class="kw-2">&amp;</span>serde_json::Value,
+<a href=#295 id=295 data-nosnippet>295</a>        stderr: <span class="kw-2">&amp;</span>[u8],
+<a href=#296 id=296 data-nosnippet>296</a>        request: <span class="kw">crate</span>::selected::NativeExecution,
+<a href=#297 id=297 data-nosnippet>297</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="self">Self</span>, String&gt; {
+<a href=#298 id=298 data-nosnippet>298</a>        <span class="kw">super</span>::telemetry::observe(document, stderr, request)
+<a href=#299 id=299 data-nosnippet>299</a>    }
+<a href=#300 id=300 data-nosnippet>300</a>    <span class="doccomment">/// Use the captured native JSON for exact wide handover integers when the
+<a href=#301 id=301 data-nosnippet>301</a>    /// general-purpose Value parser could not retain their unsigned magnitude.
+<a href=#302 id=302 data-nosnippet>302</a>    </span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>from_capture(
+<a href=#303 id=303 data-nosnippet>303</a>        document: <span class="kw-2">&amp;</span>serde_json::Value,
+<a href=#304 id=304 data-nosnippet>304</a>        raw: <span class="kw-2">&amp;</span>[u8],
+<a href=#305 id=305 data-nosnippet>305</a>        stderr: <span class="kw-2">&amp;</span>[u8],
+<a href=#306 id=306 data-nosnippet>306</a>        request: <span class="kw">crate</span>::selected::NativeExecution,
+<a href=#307 id=307 data-nosnippet>307</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="self">Self</span>, String&gt; {
+<a href=#308 id=308 data-nosnippet>308</a>        <span class="kw">super</span>::telemetry::observe_with_source(document, stderr, request, <span class="prelude-val">Some</span>(raw))
+<a href=#309 id=309 data-nosnippet>309</a>    }
+<a href=#310 id=310 data-nosnippet>310</a>}
+<a href=#311 id=311 data-nosnippet>311</a><span class="doccomment">/// A schedule position with its raw capture when launched.
+<a href=#312 id=312 data-nosnippet>312</a></span><span class="attr">#[derive(Debug, Serialize)]
+<a href=#313 id=313 data-nosnippet>313</a></span><span class="kw">pub struct </span>Sample {
+<a href=#314 id=314 data-nosnippet>314</a>    <span class="kw">pub</span>(<span class="kw">super</span>) slot: Slot,
+<a href=#315 id=315 data-nosnippet>315</a>    <span class="kw">pub</span>(<span class="kw">super</span>) capture: <span class="prelude-ty">Option</span>&lt;MatrixCapture&gt;,
+<a href=#316 id=316 data-nosnippet>316</a>    <span class="kw">pub</span>(<span class="kw">super</span>) decision: Decision,
+<a href=#317 id=317 data-nosnippet>317</a>    <span class="kw">pub</span>(<span class="kw">super</span>) detail: <span class="prelude-ty">Option</span>&lt;String&gt;,
+<a href=#318 id=318 data-nosnippet>318</a>    <span class="kw">pub</span>(<span class="kw">super</span>) blocked_by: <span class="prelude-ty">Option</span>&lt;usize&gt;,
+<a href=#319 id=319 data-nosnippet>319</a>    <span class="kw">pub</span>(<span class="kw">super</span>) selected_models: <span class="prelude-ty">Option</span>&lt;u64&gt;,
+<a href=#320 id=320 data-nosnippet>320</a>    <span class="kw">pub</span>(<span class="kw">super</span>) cost: <span class="prelude-ty">Option</span>&lt;Vec&lt;i64&gt;&gt;,
+<a href=#321 id=321 data-nosnippet>321</a>    <span class="kw">pub</span>(<span class="kw">super</span>) observation: <span class="prelude-ty">Option</span>&lt;Observation&gt;,
+<a href=#322 id=322 data-nosnippet>322</a>    <span class="doccomment">/// The child's peak resident set, on a memory round whose record was valid.
+<a href=#323 id=323 data-nosnippet>323</a>    </span><span class="attr">#[serde(skip_serializing_if = <span class="string">"Option::is_none"</span>)]
+<a href=#324 id=324 data-nosnippet>324</a>    </span><span class="kw">pub</span>(<span class="kw">super</span>) memory: <span class="prelude-ty">Option</span>&lt;<span class="kw">crate</span>::process::memory::Measurement&gt;,
+<a href=#325 id=325 data-nosnippet>325</a>}
+<a href=#326 id=326 data-nosnippet>326</a><span class="kw">impl </span>Sample {
+<a href=#327 id=327 data-nosnippet>327</a>    <span class="doccomment">/// The child's peak resident set, present only on a memory round whose
+<a href=#328 id=328 data-nosnippet>328</a>    /// separate record was valid.
+<a href=#329 id=329 data-nosnippet>329</a>    </span><span class="attr">#[must_use]
+<a href=#330 id=330 data-nosnippet>330</a>    </span><span class="kw">pub const fn </span>memory(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="prelude-ty">Option</span>&lt;<span class="kw-2">&amp;</span><span class="kw">crate</span>::process::memory::Measurement&gt; {
+<a href=#331 id=331 data-nosnippet>331</a>        <span class="self">self</span>.memory.as_ref()
+<a href=#332 id=332 data-nosnippet>332</a>    }
+<a href=#333 id=333 data-nosnippet>333</a>    <span class="doccomment">/// Fixed requested schedule position.
+<a href=#334 id=334 data-nosnippet>334</a>    </span><span class="attr">#[must_use]
+<a href=#335 id=335 data-nosnippet>335</a>    </span><span class="kw">pub const fn </span>slot(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; Slot {
+<a href=#336 id=336 data-nosnippet>336</a>        <span class="self">self</span>.slot
+<a href=#337 id=337 data-nosnippet>337</a>    }
+<a href=#338 id=338 data-nosnippet>338</a>    <span class="doccomment">/// Typed final disposition.
+<a href=#339 id=339 data-nosnippet>339</a>    </span><span class="attr">#[must_use]
+<a href=#340 id=340 data-nosnippet>340</a>    </span><span class="kw">pub const fn </span>decision(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; Decision {
+<a href=#341 id=341 data-nosnippet>341</a>        <span class="self">self</span>.decision
+<a href=#342 id=342 data-nosnippet>342</a>    }
+<a href=#343 id=343 data-nosnippet>343</a>    <span class="doccomment">/// Retained explanation of a refusal, mismatch or skipped position.
+<a href=#344 id=344 data-nosnippet>344</a>    </span><span class="attr">#[must_use]
+<a href=#345 id=345 data-nosnippet>345</a>    </span><span class="kw">pub fn </span>detail(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="prelude-ty">Option</span>&lt;<span class="kw-2">&amp;</span>str&gt; {
+<a href=#346 id=346 data-nosnippet>346</a>        <span class="self">self</span>.detail.as_deref()
+<a href=#347 id=347 data-nosnippet>347</a>    }
+<a href=#348 id=348 data-nosnippet>348</a>    <span class="doccomment">/// Decoded selected model count, when answer normalization succeeded.
+<a href=#349 id=349 data-nosnippet>349</a>    /// A count alone does not establish that the position passed qualification.
+<a href=#350 id=350 data-nosnippet>350</a>    </span><span class="attr">#[must_use]
+<a href=#351 id=351 data-nosnippet>351</a>    </span><span class="kw">pub const fn </span>selected_models(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="prelude-ty">Option</span>&lt;u64&gt; {
+<a href=#352 id=352 data-nosnippet>352</a>        <span class="self">self</span>.selected_models
+<a href=#353 id=353 data-nosnippet>353</a>    }
+<a href=#354 id=354 data-nosnippet>354</a>    <span class="doccomment">/// Decoded selected cost vector, when one was reported and normalized.
+<a href=#355 id=355 data-nosnippet>355</a>    </span><span class="attr">#[must_use]
+<a href=#356 id=356 data-nosnippet>356</a>    </span><span class="kw">pub fn </span>cost(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="prelude-ty">Option</span>&lt;<span class="kw-2">&amp;</span>[i64]&gt; {
+<a href=#357 id=357 data-nosnippet>357</a>        <span class="self">self</span>.cost.as_deref()
+<a href=#358 id=358 data-nosnippet>358</a>    }
+<a href=#359 id=359 data-nosnippet>359</a>    <span class="doccomment">/// Exact launched process record, absent for a skipped position.
+<a href=#360 id=360 data-nosnippet>360</a>    </span><span class="attr">#[must_use]
+<a href=#361 id=361 data-nosnippet>361</a>    </span><span class="kw">pub const fn </span>capture(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="prelude-ty">Option</span>&lt;<span class="kw-2">&amp;</span>Capture&gt; {
+<a href=#362 id=362 data-nosnippet>362</a>        <span class="kw">match </span><span class="kw-2">&amp;</span><span class="self">self</span>.capture {
+<a href=#363 id=363 data-nosnippet>363</a>            <span class="prelude-val">Some</span>(capture) =&gt; <span class="prelude-val">Some</span>(<span class="kw-2">&amp;</span>capture.<span class="number">0</span>),
+<a href=#364 id=364 data-nosnippet>364</a>            <span class="prelude-val">None </span>=&gt; <span class="prelude-val">None</span>,
+<a href=#365 id=365 data-nosnippet>365</a>        }
+<a href=#366 id=366 data-nosnippet>366</a>    }
+<a href=#367 id=367 data-nosnippet>367</a>    <span class="doccomment">/// Earlier failed sample disabling this cell, when applicable.
+<a href=#368 id=368 data-nosnippet>368</a>    </span><span class="attr">#[must_use]
+<a href=#369 id=369 data-nosnippet>369</a>    </span><span class="kw">pub const fn </span>blocked_by(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="prelude-ty">Option</span>&lt;usize&gt; {
+<a href=#370 id=370 data-nosnippet>370</a>        <span class="self">self</span>.blocked_by
+<a href=#371 id=371 data-nosnippet>371</a>    }
+<a href=#372 id=372 data-nosnippet>372</a>    <span class="doccomment">/// Checked instrumented route/phase observation.
+<a href=#373 id=373 data-nosnippet>373</a>    </span><span class="attr">#[must_use]
+<a href=#374 id=374 data-nosnippet>374</a>    </span><span class="kw">pub const fn </span>observation(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="prelude-ty">Option</span>&lt;<span class="kw-2">&amp;</span>Observation&gt; {
+<a href=#375 id=375 data-nosnippet>375</a>        <span class="self">self</span>.observation.as_ref()
+<a href=#376 id=376 data-nosnippet>376</a>    }
+<a href=#377 id=377 data-nosnippet>377</a>}
 </code></pre></div></section></main></body></html>

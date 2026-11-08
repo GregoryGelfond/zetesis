@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["count","disjoint","first","intersection_count","union_assign","union_shifted","union_shifted_until_hit","visit_set_bits","xor_assign"],"struct":["SetBits","Words"]};

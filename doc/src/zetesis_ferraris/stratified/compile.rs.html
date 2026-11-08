@@ -4,7 +4,7 @@
 <a href=#4 id=4 data-nosnippet>4</a>
 <a href=#5 id=5 data-nosnippet>5</a><span class="kw">use super</span>::{Budget, StratifiedError, StratifiedPlan, evaluate, order};
 <a href=#6 id=6 data-nosnippet>6</a><span class="kw">use crate</span>::{ExtremumCut, Interpretation, NodeView, Theory, Threshold};
-<a href=#7 id=7 data-nosnippet>7</a><span class="kw">use </span>zetesis_cpu::Stop;
+<a href=#7 id=7 data-nosnippet>7</a><span class="kw">use </span>zetesis_algebra::Stop;
 <a href=#8 id=8 data-nosnippet>8</a>
 <a href=#9 id=9 data-nosnippet>9</a><span class="attr">#[derive(Clone, Copy)]
 <a href=#10 id=10 data-nosnippet>10</a></span><span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">enum </span>Kind {
@@ -84,7 +84,7 @@
 <a href=#84 id=84 data-nosnippet>84</a>    budget.release(kinds)<span class="question-mark">?</span>;
 <a href=#85 id=85 data-nosnippet>85</a>    <span class="kw">let </span>consequences = Interpretation {
 <a href=#86 id=86 data-nosnippet>86</a>        theory: theory.clone(),
-<a href=#87 id=87 data-nosnippet>87</a>        words,
+<a href=#87 id=87 data-nosnippet>87</a>        words: words.into(),
 <a href=#88 id=88 data-nosnippet>88</a>    };
 <a href=#89 id=89 data-nosnippet>89</a>    <span class="kw">let </span>failed_constraint = evaluate::validate(<span class="kw-2">&amp;</span>consequences, budget)<span class="question-mark">?</span>;
 <a href=#90 id=90 data-nosnippet>90</a>    <span class="prelude-val">Ok</span>((consequences, failed_constraint))

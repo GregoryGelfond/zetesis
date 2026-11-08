@@ -35,10 +35,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-fbb9e008.js";
+            window.path_to_searchindex_js = "../searchindex-8dfd52fd.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-5c747b16.js"></script>
+        <script src="../toc-25cd24fd.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -186,10 +186,8 @@ explicit scope. Parsing a construct does not establish that its current
 lowering, grounding or execution profile supports it. The tables below describe
 implemented forms and their boundaries; they are not a whole-language parity
 claim or a promise that every combination of individually supported forms works.</p>
-<p>The ordinary source driver selects a supported profile automatically. Explicit
-library admission doors are narrower: <code>admit</code> accepts the strict relational
-profile, <code>admit_extended</code> adds its scalar expansions, and <code>admit_formula</code> builds
-the broader finite Ferraris representation. Automatic formula admission can
+<p>The ordinary source driver selects a supported profile automatically. The explicit
+library door <code>admit_formula</code> builds the finite Ferraris representation. Automatic formula admission can
 defer eligible terminal positive definitions and reconstruct them from verified
 base answers; the remaining rules are materialized eagerly.
 Explicit lazy execution can retain a producer core and stream
@@ -240,7 +238,7 @@ storage. See <a href="commands.html#choose-execution-and-limits">resource contro
 <tr><td>Boolean literals</td><td>Signed <code>#true</code>/<code>#false</code> in rule bodies and choice/aggregate conditions; Boolean singleton heads and disjuncts with finite local conditions; signed Boolean choice and function-head elements</td><td>Separate objective/observation condition profiles</td></tr>
 <tr><td>Logical values</td><td>Closed signed functions, tuples, strings and extremal terms; complete variable copying, finite construction from bound inputs, nested pools/intervals and structural comparisons</td><td>Unbound expression inputs and unbounded recursive construction</td></tr>
 <tr><td>Positive witnesses</td><td>Constructor/tuple patterns preserve sign, name, arity and complete supporting atoms; evaluated positions consume bound inputs</td><td>Arithmetic inversion; a negative atom cannot supply a missing binding</td></tr>
-<tr><td>Comparisons</td><td>Equality/disequality, structural ordering, admitted flat-tuple equality and complete comparison chains, including default/double negation; directed finite integer-affine chains can bind several unresolved variables</td><td>Nonlinear inverse binders and simultaneous systems without directed finite bounds</td></tr>
+<tr><td>Comparisons</td><td>Equality/disequality, structural ordering, including orderings between open tuples, admitted flat-tuple equality and complete comparison chains, including default/double negation; directed finite integer-affine chains can bind several unresolved variables</td><td>Nonlinear inverse binders and simultaneous systems without directed finite bounds</td></tr>
 <tr><td>Finite generators</td><td>Scalar equality, admitted flat-tuple equality, closed integer bounds, dependent intervals and scoped finite pools in rules, local elements and objectives</td><td>Unresolved or circular binding dependencies and unsupported arithmetic inversion</td></tr>
 <tr><td>Universal body conditionals</td><td>Complete local implication families with signed atom and comparison alternatives, scoped pools/intervals, positive local witnesses and finite anonymous projections under <code>not</code> or <code>not not</code></td><td>Unbound local inputs and unsupported arithmetic inversion</td></tr>
 </tbody>
@@ -270,9 +268,23 @@ choice and function-head elements remain unsupported.</p>
 numeric operands. Arithmetic is evaluated before comparison; defined <code>X + Y</code>
 requires numbers and remains subject to the
 <a href="#numeric-boundaries-and-refusal-meaning">arithmetic refusal policy</a>.</p>
-<p>The current flat-tuple comparison profile requires tuple operands on both sides
-when a tuple still contains variables after normalization. It cannot bind that
-whole tuple to a variable, even when a positive atom supplies its component bindings:</p>
+<p>An ordering between tuples that still contain variables after normalization,
+such as <code>(M,L) &lt; (K,J)</code>, compares their complete values in the same term order:
+arity first, then components from left to right. It binds nothing, so each
+component must be bound elsewhere, and it is admitted wherever a comparison can
+stand, in bodies, aggregate element conditions, guards, choice conditions,
+conditional literals and objectives:</p>
+<pre><code class="language-asp">r(1,3).r(2,1).r(3,2).n(N):-N=#count{L:r(L,M),(M,L)&lt;(2,9)}.
+</code></pre>
+<p>Its single answer contains <code>n(2)</code>: <code>(1,2)</code> and <code>(2,3)</code> precede <code>(2,9)</code>, and
+<code>(3,1)</code> does not. The
+<a href="https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/tests/integration/tuple_orderings.rs">tuple orderings</a>
+check every relation, unequal arities, mixed types, nesting, evaluated
+components, negation and chains against clingo 5.8.2.</p>
+<p>Equality and disequality keep the flat-tuple comparison profile, which may bind
+the components. It requires tuple operands on both sides when a tuple still
+contains variables after normalization. It cannot bind that whole tuple to a
+variable, even when a positive atom supplies its component bindings:</p>
 <pre><code class="language-asp">d(1;2).p(Y):-d(X),Y=(-f(X),(X,))=(-f(2),(2,)).
 </code></pre>
 <p>Parsing and raising accept this program, but formula admission returns the

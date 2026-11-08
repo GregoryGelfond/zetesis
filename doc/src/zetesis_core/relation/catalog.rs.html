@@ -159,13 +159,13 @@
 <a href=#159 id=159 data-nosnippet>159</a>                    peak_construction_bytes: work.peak,
 <a href=#160 id=160 data-nosnippet>160</a>                    referenced_encoding_bytes: <span class="number">0</span>,
 <a href=#161 id=161 data-nosnippet>161</a>                    borrowed_mapping_bytes: <span class="number">0</span>,
-<a href=#162 id=162 data-nosnippet>162</a>                    construction_work: work.used,
+<a href=#162 id=162 data-nosnippet>162</a>                    construction_work: work.charged(),
 <a href=#163 id=163 data-nosnippet>163</a>                },
 <a href=#164 id=164 data-nosnippet>164</a>            })
 <a href=#165 id=165 data-nosnippet>165</a>        })();
 <a href=#166 id=166 data-nosnippet>166</a>        build.map_err(|error| CatalogFailure {
 <a href=#167 id=167 data-nosnippet>167</a>            error,
-<a href=#168 id=168 data-nosnippet>168</a>            work: work.used,
+<a href=#168 id=168 data-nosnippet>168</a>            work: work.charged(),
 <a href=#169 id=169 data-nosnippet>169</a>            retained_bytes: <span class="number">0</span>,
 <a href=#170 id=170 data-nosnippet>170</a>            peak_construction_bytes: work.peak,
 <a href=#171 id=171 data-nosnippet>171</a>        })
@@ -563,7 +563,7 @@
 <a href=#563 id=563 data-nosnippet>563</a>    <span class="kw">fn </span>failed(<span class="kw-2">&amp;</span><span class="self">self</span>, error: Failure, work: <span class="kw-2">&amp;</span>Work) -&gt; CatalogFailure {
 <a href=#564 id=564 data-nosnippet>564</a>        CatalogFailure {
 <a href=#565 id=565 data-nosnippet>565</a>            error,
-<a href=#566 id=566 data-nosnippet>566</a>            work: work.used,
+<a href=#566 id=566 data-nosnippet>566</a>            work: work.charged(),
 <a href=#567 id=567 data-nosnippet>567</a>            retained_bytes: <span class="self">self</span>.retained_bytes(),
 <a href=#568 id=568 data-nosnippet>568</a>            peak_construction_bytes: work.peak,
 <a href=#569 id=569 data-nosnippet>569</a>        }
@@ -599,7 +599,7 @@
 <a href=#599 id=599 data-nosnippet>599</a>            peak_construction_bytes: work.peak,
 <a href=#600 id=600 data-nosnippet>600</a>            referenced_encoding_bytes: <span class="self">self</span>.encoding_bytes,
 <a href=#601 id=601 data-nosnippet>601</a>            borrowed_mapping_bytes: <span class="number">0</span>,
-<a href=#602 id=602 data-nosnippet>602</a>            construction_work: work.used,
+<a href=#602 id=602 data-nosnippet>602</a>            construction_work: work.charged(),
 <a href=#603 id=603 data-nosnippet>603</a>        }
 <a href=#604 id=604 data-nosnippet>604</a>    }
 <a href=#605 id=605 data-nosnippet>605</a>}

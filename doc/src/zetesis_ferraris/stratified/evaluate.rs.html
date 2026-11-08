@@ -8,7 +8,7 @@
 <a href=#8 id=8 data-nosnippet>8</a>    order::Schedule,
 <a href=#9 id=9 data-nosnippet>9</a>};
 <a href=#10 id=10 data-nosnippet>10</a><span class="kw">use crate</span>::{EvaluationError, EvaluationWorkspace, Interpretation, NodeView, Theory};
-<a href=#11 id=11 data-nosnippet>11</a><span class="kw">use </span>zetesis_cpu::Stop;
+<a href=#11 id=11 data-nosnippet>11</a><span class="kw">use </span>zetesis_algebra::{Stop, words::Words};
 <a href=#12 id=12 data-nosnippet>12</a>
 <a href=#13 id=13 data-nosnippet>13</a><span class="attr">#[derive(Clone, Copy, PartialEq, Eq)]
 <a href=#14 id=14 data-nosnippet>14</a></span><span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">enum </span>State {
@@ -37,7 +37,7 @@
 <a href=#37 id=37 data-nosnippet>37</a>            Kind::Unsupported | Kind::False | Kind::True | Kind::Negative(<span class="kw">_</span>) =&gt; State::Inactive,
 <a href=#38 id=38 data-nosnippet>38</a>        });
 <a href=#39 id=39 data-nosnippet>39</a>    }
-<a href=#40 id=40 data-nosnippet>40</a>    <span class="kw">let </span><span class="kw-2">mut </span>words = budget.filled(theory.atom_count().div_ceil(<span class="number">64</span>), <span class="number">0_u64</span>)<span class="question-mark">?</span>;
+<a href=#40 id=40 data-nosnippet>40</a>    <span class="kw">let </span><span class="kw-2">mut </span>words = Words::&lt;u64, <span class="kw">_</span>&gt;::new(budget.filled(theory.atom_count().div_ceil(<span class="number">64</span>), <span class="number">0_u64</span>)<span class="question-mark">?</span>);
 <a href=#41 id=41 data-nosnippet>41</a>    <span class="kw">let </span><span class="kw-2">mut </span>queue = budget.reserve(graph.vertices())<span class="question-mark">?</span>;
 <a href=#42 id=42 data-nosnippet>42</a>    <span class="kw">for </span><span class="kw-2">&amp;</span>root <span class="kw">in </span>theory.roots() {
 <a href=#43 id=43 data-nosnippet>43</a>        budget.tick()<span class="question-mark">?</span>;
@@ -54,7 +54,7 @@
 <a href=#54 id=54 data-nosnippet>54</a>            } <span class="kw">else if </span>vertex &gt;= theory.atom_count() {
 <a href=#55 id=55 data-nosnippet>55</a>                <span class="kw">let </span>seed = <span class="kw">match </span>kinds[vertex - theory.atom_count()] {
 <a href=#56 id=56 data-nosnippet>56</a>                    Kind::True =&gt; <span class="bool-val">true</span>,
-<a href=#57 id=57 data-nosnippet>57</a>                    Kind::Negative(atom) =&gt; words[atom / <span class="number">64</span>] &amp; (<span class="number">1 </span>&lt;&lt; (atom % <span class="number">64</span>)) == <span class="number">0</span>,
+<a href=#57 id=57 data-nosnippet>57</a>                    Kind::Negative(atom) =&gt; !words.contains(atom),
 <a href=#58 id=58 data-nosnippet>58</a>                    <span class="kw">_ </span>=&gt; <span class="bool-val">false</span>,
 <a href=#59 id=59 data-nosnippet>59</a>                };
 <a href=#60 id=60 data-nosnippet>60</a>                <span class="kw">if </span>seed {
@@ -70,7 +70,7 @@
 <a href=#70 id=70 data-nosnippet>70</a>            schedule,
 <a href=#71 id=71 data-nosnippet>71</a>            <span class="kw-2">&amp;mut </span>Progress {
 <a href=#72 id=72 data-nosnippet>72</a>                states: <span class="kw-2">&amp;mut </span>states,
-<a href=#73 id=73 data-nosnippet>73</a>                words: <span class="kw-2">&amp;mut </span>words,
+<a href=#73 id=73 data-nosnippet>73</a>                words: Words::new(<span class="kw-2">&amp;mut </span>words[..]),
 <a href=#74 id=74 data-nosnippet>74</a>                queue: <span class="kw-2">&amp;mut </span>queue,
 <a href=#75 id=75 data-nosnippet>75</a>            },
 <a href=#76 id=76 data-nosnippet>76</a>            budget,
@@ -79,12 +79,12 @@
 <a href=#79 id=79 data-nosnippet>79</a>    }
 <a href=#80 id=80 data-nosnippet>80</a>    budget.release(states)<span class="question-mark">?</span>;
 <a href=#81 id=81 data-nosnippet>81</a>    budget.release(queue)<span class="question-mark">?</span>;
-<a href=#82 id=82 data-nosnippet>82</a>    <span class="prelude-val">Ok</span>(words)
+<a href=#82 id=82 data-nosnippet>82</a>    <span class="prelude-val">Ok</span>(words.into_storage())
 <a href=#83 id=83 data-nosnippet>83</a>}
 <a href=#84 id=84 data-nosnippet>84</a>
 <a href=#85 id=85 data-nosnippet>85</a><span class="kw">struct </span>Progress&lt;<span class="lifetime">'a</span>&gt; {
 <a href=#86 id=86 data-nosnippet>86</a>    states: <span class="kw-2">&amp;</span><span class="lifetime">'a </span><span class="kw-2">mut </span>[State],
-<a href=#87 id=87 data-nosnippet>87</a>    words: <span class="kw-2">&amp;</span><span class="lifetime">'a </span><span class="kw-2">mut </span>[u64],
+<a href=#87 id=87 data-nosnippet>87</a>    words: Words&lt;u64, <span class="kw-2">&amp;</span><span class="lifetime">'a </span><span class="kw-2">mut </span>[u64]&gt;,
 <a href=#88 id=88 data-nosnippet>88</a>    queue: <span class="kw-2">&amp;</span><span class="lifetime">'a </span><span class="kw-2">mut </span>Vec&lt;usize&gt;,
 <a href=#89 id=89 data-nosnippet>89</a>}
 <a href=#90 id=90 data-nosnippet>90</a>
@@ -108,93 +108,99 @@
 <a href=#108 id=108 data-nosnippet>108</a>            }
 <a href=#109 id=109 data-nosnippet>109</a>            <span class="kw">match </span>progress.states[edge.target] {
 <a href=#110 id=110 data-nosnippet>110</a>                State::Awaiting(<span class="number">1</span>) =&gt; {
-<a href=#111 id=111 data-nosnippet>111</a>                    publish(edge.target, atoms, progress.states, progress.words, budget)<span class="question-mark">?</span>;
-<a href=#112 id=112 data-nosnippet>112</a>                    <span class="comment">// Earlier components may establish a later vertex's truth;
-<a href=#113 id=113 data-nosnippet>113</a>                    // its outgoing edges are visited only when that component starts.
-<a href=#114 id=114 data-nosnippet>114</a>                    </span><span class="kw">if </span>schedule.component[edge.target] == component {
-<a href=#115 id=115 data-nosnippet>115</a>                        progress.queue.push(edge.target);
-<a href=#116 id=116 data-nosnippet>116</a>                    }
-<a href=#117 id=117 data-nosnippet>117</a>                }
-<a href=#118 id=118 data-nosnippet>118</a>                State::Awaiting(remaining) =&gt; {
-<a href=#119 id=119 data-nosnippet>119</a>                    progress.states[edge.target] = State::Awaiting(remaining - <span class="number">1</span>);
-<a href=#120 id=120 data-nosnippet>120</a>                }
-<a href=#121 id=121 data-nosnippet>121</a>                State::Inactive | State::True =&gt; {}
-<a href=#122 id=122 data-nosnippet>122</a>            }
-<a href=#123 id=123 data-nosnippet>123</a>        }
-<a href=#124 id=124 data-nosnippet>124</a>    }
-<a href=#125 id=125 data-nosnippet>125</a>    <span class="prelude-val">Ok</span>(())
-<a href=#126 id=126 data-nosnippet>126</a>}
-<a href=#127 id=127 data-nosnippet>127</a>
-<a href=#128 id=128 data-nosnippet>128</a><span class="kw">fn </span>publish(
-<a href=#129 id=129 data-nosnippet>129</a>    vertex: usize,
-<a href=#130 id=130 data-nosnippet>130</a>    atoms: usize,
-<a href=#131 id=131 data-nosnippet>131</a>    states: <span class="kw-2">&amp;mut </span>[State],
-<a href=#132 id=132 data-nosnippet>132</a>    words: <span class="kw-2">&amp;mut </span>[u64],
-<a href=#133 id=133 data-nosnippet>133</a>    budget: <span class="kw-2">&amp;mut </span>Budget&lt;<span class="lifetime">'_</span>, <span class="lifetime">'_</span>&gt;,
-<a href=#134 id=134 data-nosnippet>134</a>) -&gt; <span class="prelude-ty">Result</span>&lt;(), StratifiedError&gt; {
-<a href=#135 id=135 data-nosnippet>135</a>    <span class="kw">if </span>states[vertex] != State::True {
-<a href=#136 id=136 data-nosnippet>136</a>        budget.tick()<span class="question-mark">?</span>;
-<a href=#137 id=137 data-nosnippet>137</a>        states[vertex] = State::True;
-<a href=#138 id=138 data-nosnippet>138</a>        <span class="kw">if </span>vertex &lt; atoms {
-<a href=#139 id=139 data-nosnippet>139</a>            words[vertex / <span class="number">64</span>] |= <span class="number">1 </span>&lt;&lt; (vertex % <span class="number">64</span>);
-<a href=#140 id=140 data-nosnippet>140</a>            budget.statistics.derived_atoms += <span class="number">1</span>;
-<a href=#141 id=141 data-nosnippet>141</a>        } <span class="kw">else </span>{
-<a href=#142 id=142 data-nosnippet>142</a>            budget.statistics.activated_nodes += <span class="number">1</span>;
-<a href=#143 id=143 data-nosnippet>143</a>        }
-<a href=#144 id=144 data-nosnippet>144</a>    }
-<a href=#145 id=145 data-nosnippet>145</a>    <span class="prelude-val">Ok</span>(())
-<a href=#146 id=146 data-nosnippet>146</a>}
-<a href=#147 id=147 data-nosnippet>147</a>
-<a href=#148 id=148 data-nosnippet>148</a><span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">fn </span>validate(
-<a href=#149 id=149 data-nosnippet>149</a>    consequences: <span class="kw-2">&amp;</span>Interpretation,
-<a href=#150 id=150 data-nosnippet>150</a>    budget: <span class="kw-2">&amp;mut </span>Budget&lt;<span class="lifetime">'_</span>, <span class="lifetime">'_</span>&gt;,
-<a href=#151 id=151 data-nosnippet>151</a>) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="prelude-ty">Option</span>&lt;usize&gt;, StratifiedError&gt; {
-<a href=#152 id=152 data-nosnippet>152</a>    budget.meter.poll()<span class="question-mark">?</span>;
-<a href=#153 id=153 data-nosnippet>153</a>    <span class="comment">// All graph, scheduling and closure vectors have been released. Only the
-<a href=#154 id=154 data-nosnippet>154</a>    // final plan and its packed interpretation overlap exact original evaluation.
-<a href=#155 id=155 data-nosnippet>155</a>    </span><span class="kw">let </span>base = size_of::&lt;StratifiedPlan&gt;() <span class="kw">as </span>u128
-<a href=#156 id=156 data-nosnippet>156</a>        + consequences.words.capacity() <span class="kw">as </span>u128 * size_of::&lt;u64&gt;() <span class="kw">as </span>u128;
-<a href=#157 id=157 data-nosnippet>157</a>    <span class="kw">let </span><span class="kw-2">mut </span>workspace = EvaluationWorkspace::default();
-<a href=#158 id=158 data-nosnippet>158</a>    budget.observe_bytes(base + workspace.retained_bytes())<span class="question-mark">?</span>;
-<a href=#159 id=159 data-nosnippet>159</a>    <span class="kw">let </span>available = usize::try_from(budget.limits.max_bytes <span class="kw">as </span>u128 - base)
-<a href=#160 id=160 data-nosnippet>160</a>        .map_err(|<span class="kw">_</span>| StratifiedError::Overflow)<span class="question-mark">?</span>;
-<a href=#161 id=161 data-nosnippet>161</a>    <span class="comment">// Evaluation charges this check's meter.
-<a href=#162 id=162 data-nosnippet>162</a>    </span><span class="kw">let </span>attempt =
-<a href=#163 id=163 data-nosnippet>163</a>        workspace.evaluate_within(consequences, available, budget.cancellation, budget.meter);
-<a href=#164 id=164 data-nosnippet>164</a>    <span class="kw">let </span>capacity = budget.observe_bytes(base + attempt.retained_bytes);
-<a href=#165 id=165 data-nosnippet>165</a>    <span class="kw">let </span>truth = attempt.result.map_err(|error| <span class="kw">match </span>error {
-<a href=#166 id=166 data-nosnippet>166</a>        EvaluationError::Stopped(Stop::WorkLimit) =&gt; StratifiedError::Limit {
-<a href=#167 id=167 data-nosnippet>167</a>            resource: StratifiedResource::Work,
-<a href=#168 id=168 data-nosnippet>168</a>            observed: u128::from(budget.meter.charged()) + <span class="number">1</span>,
-<a href=#169 id=169 data-nosnippet>169</a>            limit: u128::from(budget.meter.limit()),
-<a href=#170 id=170 data-nosnippet>170</a>        },
-<a href=#171 id=171 data-nosnippet>171</a>        EvaluationError::Stopped(stop) =&gt; StratifiedError::Stopped(stop),
-<a href=#172 id=172 data-nosnippet>172</a>        EvaluationError::Storage { required, .. } =&gt; StratifiedError::Limit {
-<a href=#173 id=173 data-nosnippet>173</a>            resource: StratifiedResource::Bytes,
-<a href=#174 id=174 data-nosnippet>174</a>            observed: base + required,
-<a href=#175 id=175 data-nosnippet>175</a>            limit: budget.limits.max_bytes <span class="kw">as </span>u128,
+<a href=#111 id=111 data-nosnippet>111</a>                    publish(
+<a href=#112 id=112 data-nosnippet>112</a>                        edge.target,
+<a href=#113 id=113 data-nosnippet>113</a>                        atoms,
+<a href=#114 id=114 data-nosnippet>114</a>                        progress.states,
+<a href=#115 id=115 data-nosnippet>115</a>                        <span class="kw-2">&amp;mut </span>progress.words,
+<a href=#116 id=116 data-nosnippet>116</a>                        budget,
+<a href=#117 id=117 data-nosnippet>117</a>                    )<span class="question-mark">?</span>;
+<a href=#118 id=118 data-nosnippet>118</a>                    <span class="comment">// Earlier components may establish a later vertex's truth;
+<a href=#119 id=119 data-nosnippet>119</a>                    // its outgoing edges are visited only when that component starts.
+<a href=#120 id=120 data-nosnippet>120</a>                    </span><span class="kw">if </span>schedule.component[edge.target] == component {
+<a href=#121 id=121 data-nosnippet>121</a>                        progress.queue.push(edge.target);
+<a href=#122 id=122 data-nosnippet>122</a>                    }
+<a href=#123 id=123 data-nosnippet>123</a>                }
+<a href=#124 id=124 data-nosnippet>124</a>                State::Awaiting(remaining) =&gt; {
+<a href=#125 id=125 data-nosnippet>125</a>                    progress.states[edge.target] = State::Awaiting(remaining - <span class="number">1</span>);
+<a href=#126 id=126 data-nosnippet>126</a>                }
+<a href=#127 id=127 data-nosnippet>127</a>                State::Inactive | State::True =&gt; {}
+<a href=#128 id=128 data-nosnippet>128</a>            }
+<a href=#129 id=129 data-nosnippet>129</a>        }
+<a href=#130 id=130 data-nosnippet>130</a>    }
+<a href=#131 id=131 data-nosnippet>131</a>    <span class="prelude-val">Ok</span>(())
+<a href=#132 id=132 data-nosnippet>132</a>}
+<a href=#133 id=133 data-nosnippet>133</a>
+<a href=#134 id=134 data-nosnippet>134</a><span class="kw">fn </span>publish(
+<a href=#135 id=135 data-nosnippet>135</a>    vertex: usize,
+<a href=#136 id=136 data-nosnippet>136</a>    atoms: usize,
+<a href=#137 id=137 data-nosnippet>137</a>    states: <span class="kw-2">&amp;mut </span>[State],
+<a href=#138 id=138 data-nosnippet>138</a>    words: <span class="kw-2">&amp;mut </span>[u64],
+<a href=#139 id=139 data-nosnippet>139</a>    budget: <span class="kw-2">&amp;mut </span>Budget&lt;<span class="lifetime">'_</span>, <span class="lifetime">'_</span>&gt;,
+<a href=#140 id=140 data-nosnippet>140</a>) -&gt; <span class="prelude-ty">Result</span>&lt;(), StratifiedError&gt; {
+<a href=#141 id=141 data-nosnippet>141</a>    <span class="kw">if </span>states[vertex] != State::True {
+<a href=#142 id=142 data-nosnippet>142</a>        budget.tick()<span class="question-mark">?</span>;
+<a href=#143 id=143 data-nosnippet>143</a>        states[vertex] = State::True;
+<a href=#144 id=144 data-nosnippet>144</a>        <span class="kw">if </span>vertex &lt; atoms {
+<a href=#145 id=145 data-nosnippet>145</a>            Words::&lt;u64, <span class="kw">_</span>&gt;::new(words).insert(vertex);
+<a href=#146 id=146 data-nosnippet>146</a>            budget.statistics.derived_atoms += <span class="number">1</span>;
+<a href=#147 id=147 data-nosnippet>147</a>        } <span class="kw">else </span>{
+<a href=#148 id=148 data-nosnippet>148</a>            budget.statistics.activated_nodes += <span class="number">1</span>;
+<a href=#149 id=149 data-nosnippet>149</a>        }
+<a href=#150 id=150 data-nosnippet>150</a>    }
+<a href=#151 id=151 data-nosnippet>151</a>    <span class="prelude-val">Ok</span>(())
+<a href=#152 id=152 data-nosnippet>152</a>}
+<a href=#153 id=153 data-nosnippet>153</a>
+<a href=#154 id=154 data-nosnippet>154</a><span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">fn </span>validate(
+<a href=#155 id=155 data-nosnippet>155</a>    consequences: <span class="kw-2">&amp;</span>Interpretation,
+<a href=#156 id=156 data-nosnippet>156</a>    budget: <span class="kw-2">&amp;mut </span>Budget&lt;<span class="lifetime">'_</span>, <span class="lifetime">'_</span>&gt;,
+<a href=#157 id=157 data-nosnippet>157</a>) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="prelude-ty">Option</span>&lt;usize&gt;, StratifiedError&gt; {
+<a href=#158 id=158 data-nosnippet>158</a>    budget.meter.poll()<span class="question-mark">?</span>;
+<a href=#159 id=159 data-nosnippet>159</a>    <span class="comment">// All graph, scheduling and closure vectors have been released. Only the
+<a href=#160 id=160 data-nosnippet>160</a>    // final plan and its packed interpretation overlap exact original evaluation.
+<a href=#161 id=161 data-nosnippet>161</a>    </span><span class="kw">let </span>base = size_of::&lt;StratifiedPlan&gt;() <span class="kw">as </span>u128
+<a href=#162 id=162 data-nosnippet>162</a>        + consequences.words.capacity() <span class="kw">as </span>u128 * size_of::&lt;u64&gt;() <span class="kw">as </span>u128;
+<a href=#163 id=163 data-nosnippet>163</a>    <span class="kw">let </span><span class="kw-2">mut </span>workspace = EvaluationWorkspace::default();
+<a href=#164 id=164 data-nosnippet>164</a>    budget.observe_bytes(base + workspace.retained_bytes())<span class="question-mark">?</span>;
+<a href=#165 id=165 data-nosnippet>165</a>    <span class="kw">let </span>available = usize::try_from(budget.limits.max_bytes <span class="kw">as </span>u128 - base)
+<a href=#166 id=166 data-nosnippet>166</a>        .map_err(|<span class="kw">_</span>| StratifiedError::Overflow)<span class="question-mark">?</span>;
+<a href=#167 id=167 data-nosnippet>167</a>    <span class="comment">// Evaluation charges this check's meter.
+<a href=#168 id=168 data-nosnippet>168</a>    </span><span class="kw">let </span>attempt =
+<a href=#169 id=169 data-nosnippet>169</a>        workspace.evaluate_within(consequences, available, budget.cancellation, budget.meter);
+<a href=#170 id=170 data-nosnippet>170</a>    <span class="kw">let </span>capacity = budget.observe_bytes(base + attempt.retained_bytes);
+<a href=#171 id=171 data-nosnippet>171</a>    <span class="kw">let </span>truth = attempt.result.map_err(|error| <span class="kw">match </span>error {
+<a href=#172 id=172 data-nosnippet>172</a>        EvaluationError::Stopped(Stop::WorkLimit) =&gt; StratifiedError::Limit {
+<a href=#173 id=173 data-nosnippet>173</a>            resource: StratifiedResource::Work,
+<a href=#174 id=174 data-nosnippet>174</a>            observed: u128::from(budget.meter.charged()) + <span class="number">1</span>,
+<a href=#175 id=175 data-nosnippet>175</a>            limit: u128::from(budget.meter.limit()),
 <a href=#176 id=176 data-nosnippet>176</a>        },
-<a href=#177 id=177 data-nosnippet>177</a>    })<span class="question-mark">?</span>;
-<a href=#178 id=178 data-nosnippet>178</a>    capacity<span class="question-mark">?</span>;
-<a href=#179 id=179 data-nosnippet>179</a>    <span class="kw">let </span>failed = truth.failed_root();
-<a href=#180 id=180 data-nosnippet>180</a>    <span class="kw">if let </span><span class="prelude-val">Some</span>(root) = failed {
-<a href=#181 id=181 data-nosnippet>181</a>        <span class="kw">let </span>view = consequences.theory().view();
-<a href=#182 id=182 data-nosnippet>182</a>        <span class="kw">let </span>constraint = <span class="kw">match </span>view.node(root).map_err(|<span class="kw">_</span>| Stop::InvalidProgram)<span class="question-mark">? </span>{
-<a href=#183 id=183 data-nosnippet>183</a>            NodeView::False =&gt; <span class="bool-val">true</span>,
-<a href=#184 id=184 data-nosnippet>184</a>            NodeView::Implies(<span class="kw">_</span>, head) =&gt; {
-<a href=#185 id=185 data-nosnippet>185</a>                view.node(head).map_err(|<span class="kw">_</span>| Stop::InvalidProgram)<span class="question-mark">? </span>== NodeView::False
-<a href=#186 id=186 data-nosnippet>186</a>            }
-<a href=#187 id=187 data-nosnippet>187</a>            NodeView::Atom(<span class="kw">_</span>)
-<a href=#188 id=188 data-nosnippet>188</a>            | NodeView::And(<span class="kw">_</span>)
-<a href=#189 id=189 data-nosnippet>189</a>            | NodeView::Or(<span class="kw">_</span>)
-<a href=#190 id=190 data-nosnippet>190</a>            | NodeView::Threshold(<span class="kw">_</span>)
-<a href=#191 id=191 data-nosnippet>191</a>            | NodeView::ExtremumCut(<span class="kw">_</span>) =&gt; <span class="bool-val">false</span>,
-<a href=#192 id=192 data-nosnippet>192</a>        };
-<a href=#193 id=193 data-nosnippet>193</a>        <span class="kw">if </span>!constraint {
-<a href=#194 id=194 data-nosnippet>194</a>            <span class="kw">return </span><span class="prelude-val">Err</span>(StratifiedError::InvalidClosure { root });
-<a href=#195 id=195 data-nosnippet>195</a>        }
-<a href=#196 id=196 data-nosnippet>196</a>    }
-<a href=#197 id=197 data-nosnippet>197</a>    budget.meter.poll()<span class="question-mark">?</span>;
-<a href=#198 id=198 data-nosnippet>198</a>    <span class="prelude-val">Ok</span>(failed)
-<a href=#199 id=199 data-nosnippet>199</a>}
+<a href=#177 id=177 data-nosnippet>177</a>        EvaluationError::Stopped(stop) =&gt; StratifiedError::Stopped(stop),
+<a href=#178 id=178 data-nosnippet>178</a>        EvaluationError::Storage { required, .. } =&gt; StratifiedError::Limit {
+<a href=#179 id=179 data-nosnippet>179</a>            resource: StratifiedResource::Bytes,
+<a href=#180 id=180 data-nosnippet>180</a>            observed: base + required,
+<a href=#181 id=181 data-nosnippet>181</a>            limit: budget.limits.max_bytes <span class="kw">as </span>u128,
+<a href=#182 id=182 data-nosnippet>182</a>        },
+<a href=#183 id=183 data-nosnippet>183</a>    })<span class="question-mark">?</span>;
+<a href=#184 id=184 data-nosnippet>184</a>    capacity<span class="question-mark">?</span>;
+<a href=#185 id=185 data-nosnippet>185</a>    <span class="kw">let </span>failed = truth.failed_root();
+<a href=#186 id=186 data-nosnippet>186</a>    <span class="kw">if let </span><span class="prelude-val">Some</span>(root) = failed {
+<a href=#187 id=187 data-nosnippet>187</a>        <span class="kw">let </span>view = consequences.theory().view();
+<a href=#188 id=188 data-nosnippet>188</a>        <span class="kw">let </span>constraint = <span class="kw">match </span>view.node(root).map_err(|<span class="kw">_</span>| Stop::InvalidProgram)<span class="question-mark">? </span>{
+<a href=#189 id=189 data-nosnippet>189</a>            NodeView::False =&gt; <span class="bool-val">true</span>,
+<a href=#190 id=190 data-nosnippet>190</a>            NodeView::Implies(<span class="kw">_</span>, head) =&gt; {
+<a href=#191 id=191 data-nosnippet>191</a>                view.node(head).map_err(|<span class="kw">_</span>| Stop::InvalidProgram)<span class="question-mark">? </span>== NodeView::False
+<a href=#192 id=192 data-nosnippet>192</a>            }
+<a href=#193 id=193 data-nosnippet>193</a>            NodeView::Atom(<span class="kw">_</span>)
+<a href=#194 id=194 data-nosnippet>194</a>            | NodeView::And(<span class="kw">_</span>)
+<a href=#195 id=195 data-nosnippet>195</a>            | NodeView::Or(<span class="kw">_</span>)
+<a href=#196 id=196 data-nosnippet>196</a>            | NodeView::Threshold(<span class="kw">_</span>)
+<a href=#197 id=197 data-nosnippet>197</a>            | NodeView::ExtremumCut(<span class="kw">_</span>) =&gt; <span class="bool-val">false</span>,
+<a href=#198 id=198 data-nosnippet>198</a>        };
+<a href=#199 id=199 data-nosnippet>199</a>        <span class="kw">if </span>!constraint {
+<a href=#200 id=200 data-nosnippet>200</a>            <span class="kw">return </span><span class="prelude-val">Err</span>(StratifiedError::InvalidClosure { root });
+<a href=#201 id=201 data-nosnippet>201</a>        }
+<a href=#202 id=202 data-nosnippet>202</a>    }
+<a href=#203 id=203 data-nosnippet>203</a>    budget.meter.poll()<span class="question-mark">?</span>;
+<a href=#204 id=204 data-nosnippet>204</a>    <span class="prelude-val">Ok</span>(failed)
+<a href=#205 id=205 data-nosnippet>205</a>}
 </code></pre></div></section></main></body></html>

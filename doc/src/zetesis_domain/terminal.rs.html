@@ -190,66 +190,64 @@
 <a href=#190 id=190 data-nosnippet>190</a>
 <a href=#191 id=191 data-nosnippet>191</a><span class="kw">impl</span>&lt;<span class="lifetime">'p</span>&gt; Engine&lt;<span class="lifetime">'p</span>&gt; {
 <a href=#192 id=192 data-nosnippet>192</a>    <span class="kw">fn </span>work(<span class="kw-2">&amp;mut </span><span class="self">self</span>) -&gt; <span class="prelude-ty">Result</span>&lt;(), Failure&gt; {
-<a href=#193 id=193 data-nosnippet>193</a>        <span class="kw">let </span>observed = u128::from(<span class="self">self</span>.result.statistics.work) + <span class="number">1</span>;
-<a href=#194 id=194 data-nosnippet>194</a>        check(Resource::Work, observed, u128::from(<span class="self">self</span>.limits.max_work))<span class="question-mark">?</span>;
-<a href=#195 id=195 data-nosnippet>195</a>        <span class="self">self</span>.result.statistics.work += <span class="number">1</span>;
-<a href=#196 id=196 data-nosnippet>196</a>        <span class="prelude-val">Ok</span>(())
-<a href=#197 id=197 data-nosnippet>197</a>    }
-<a href=#198 id=198 data-nosnippet>198</a>
-<a href=#199 id=199 data-nosnippet>199</a>    <span class="kw">fn </span>bytes(<span class="kw-2">&amp;mut </span><span class="self">self</span>, count: usize) -&gt; <span class="prelude-ty">Result</span>&lt;(), Failure&gt; {
-<a href=#200 id=200 data-nosnippet>200</a>        <span class="kw">let </span>observed = u128::from(<span class="self">self</span>.result.statistics.inspected_bytes) + count <span class="kw">as </span>u128;
-<a href=#201 id=201 data-nosnippet>201</a>        check(
-<a href=#202 id=202 data-nosnippet>202</a>            Resource::InspectedBytes,
-<a href=#203 id=203 data-nosnippet>203</a>            observed,
-<a href=#204 id=204 data-nosnippet>204</a>            u128::from(<span class="self">self</span>.limits.max_inspected_bytes),
-<a href=#205 id=205 data-nosnippet>205</a>        )<span class="question-mark">?</span>;
-<a href=#206 id=206 data-nosnippet>206</a>        <span class="self">self</span>.result.statistics.inspected_bytes =
-<a href=#207 id=207 data-nosnippet>207</a>            u64::try_from(observed).expect(<span class="string">"bounded by u64 limit"</span>);
-<a href=#208 id=208 data-nosnippet>208</a>        <span class="prelude-val">Ok</span>(())
-<a href=#209 id=209 data-nosnippet>209</a>    }
-<a href=#210 id=210 data-nosnippet>210</a>
-<a href=#211 id=211 data-nosnippet>211</a>    <span class="kw">fn </span>link(<span class="kw-2">&amp;mut </span><span class="self">self</span>) -&gt; <span class="prelude-ty">Result</span>&lt;(), Failure&gt; {
-<a href=#212 id=212 data-nosnippet>212</a>        <span class="kw">let </span>observed = <span class="self">self</span>.result.statistics.links <span class="kw">as </span>u128 + <span class="number">1</span>;
-<a href=#213 id=213 data-nosnippet>213</a>        check(Resource::Links, observed, <span class="self">self</span>.limits.max_links <span class="kw">as </span>u128)<span class="question-mark">?</span>;
-<a href=#214 id=214 data-nosnippet>214</a>        <span class="self">self</span>.result.statistics.links += <span class="number">1</span>;
-<a href=#215 id=215 data-nosnippet>215</a>        <span class="prelude-val">Ok</span>(())
-<a href=#216 id=216 data-nosnippet>216</a>    }
-<a href=#217 id=217 data-nosnippet>217</a>
-<a href=#218 id=218 data-nosnippet>218</a>    <span class="kw">fn </span>signature(<span class="kw-2">&amp;mut </span><span class="self">self</span>, atom: <span class="kw-2">&amp;</span><span class="lifetime">'p </span>Atom, arity: usize) -&gt; <span class="prelude-ty">Result</span>&lt;Signature&lt;<span class="lifetime">'p</span>&gt;, Failure&gt; {
-<a href=#219 id=219 data-nosnippet>219</a>        <span class="self">self</span>.work()<span class="question-mark">?</span>;
-<a href=#220 id=220 data-nosnippet>220</a>        <span class="self">self</span>.bytes(atom.name.as_str().len())<span class="question-mark">?</span>;
-<a href=#221 id=221 data-nosnippet>221</a>        <span class="kw">let </span>arity = u32::try_from(arity)
-<a href=#222 id=222 data-nosnippet>222</a>            .map_err(|<span class="kw">_</span>| Failure::Unknown(UnknownReason::Source(<span class="kw">crate</span>::UnknownReason::Head)))<span class="question-mark">?</span>;
-<a href=#223 id=223 data-nosnippet>223</a>        <span class="kw">let </span>signature = Signature {
-<a href=#224 id=224 data-nosnippet>224</a>            name: atom.name.as_str(),
-<a href=#225 id=225 data-nosnippet>225</a>            arity,
-<a href=#226 id=226 data-nosnippet>226</a>            sign: atom.sign,
-<a href=#227 id=227 data-nosnippet>227</a>        };
-<a href=#228 id=228 data-nosnippet>228</a>        <span class="kw">if </span>!<span class="self">self</span>.signatures.contains_key(<span class="kw-2">&amp;</span>signature) {
-<a href=#229 id=229 data-nosnippet>229</a>            <span class="kw">let </span>predicates = <span class="self">self</span>.result.statistics.predicates <span class="kw">as </span>u128 + <span class="number">1</span>;
-<a href=#230 id=230 data-nosnippet>230</a>            <span class="kw">let </span>positions = <span class="self">self</span>.result.statistics.positions <span class="kw">as </span>u128 + u128::from(arity);
-<a href=#231 id=231 data-nosnippet>231</a>            check(
-<a href=#232 id=232 data-nosnippet>232</a>                Resource::Predicates,
-<a href=#233 id=233 data-nosnippet>233</a>                predicates,
-<a href=#234 id=234 data-nosnippet>234</a>                <span class="self">self</span>.limits.max_predicates <span class="kw">as </span>u128,
-<a href=#235 id=235 data-nosnippet>235</a>            )<span class="question-mark">?</span>;
-<a href=#236 id=236 data-nosnippet>236</a>            check(
-<a href=#237 id=237 data-nosnippet>237</a>                Resource::Positions,
-<a href=#238 id=238 data-nosnippet>238</a>                positions,
-<a href=#239 id=239 data-nosnippet>239</a>                <span class="self">self</span>.limits.max_positions <span class="kw">as </span>u128,
-<a href=#240 id=240 data-nosnippet>240</a>            )<span class="question-mark">?</span>;
-<a href=#241 id=241 data-nosnippet>241</a>            <span class="self">self</span>.signatures.insert(
-<a href=#242 id=242 data-nosnippet>242</a>                signature,
-<a href=#243 id=243 data-nosnippet>243</a>                Usage {
-<a href=#244 id=244 data-nosnippet>244</a>                    read: <span class="bool-val">false</span>,
-<a href=#245 id=245 data-nosnippet>245</a>                    qualified: <span class="bool-val">true</span>,
-<a href=#246 id=246 data-nosnippet>246</a>                },
-<a href=#247 id=247 data-nosnippet>247</a>            );
-<a href=#248 id=248 data-nosnippet>248</a>            <span class="self">self</span>.result.statistics.predicates += <span class="number">1</span>;
-<a href=#249 id=249 data-nosnippet>249</a>            <span class="self">self</span>.result.statistics.positions =
-<a href=#250 id=250 data-nosnippet>250</a>                usize::try_from(positions).expect(<span class="string">"bounded by usize limit"</span>);
-<a href=#251 id=251 data-nosnippet>251</a>        }
-<a href=#252 id=252 data-nosnippet>252</a>        <span class="prelude-val">Ok</span>(signature)
-<a href=#253 id=253 data-nosnippet>253</a>    }
-<a href=#254 id=254 data-nosnippet>254</a>}
+<a href=#193 id=193 data-nosnippet>193</a>        <span class="kw">crate</span>::limits::charge_work(<span class="kw-2">&amp;mut </span><span class="self">self</span>.result.statistics.work, <span class="number">1</span>, <span class="self">self</span>.limits.max_work)<span class="question-mark">?</span>;
+<a href=#194 id=194 data-nosnippet>194</a>        <span class="prelude-val">Ok</span>(())
+<a href=#195 id=195 data-nosnippet>195</a>    }
+<a href=#196 id=196 data-nosnippet>196</a>
+<a href=#197 id=197 data-nosnippet>197</a>    <span class="kw">fn </span>bytes(<span class="kw-2">&amp;mut </span><span class="self">self</span>, count: usize) -&gt; <span class="prelude-ty">Result</span>&lt;(), Failure&gt; {
+<a href=#198 id=198 data-nosnippet>198</a>        <span class="kw">let </span>observed = u128::from(<span class="self">self</span>.result.statistics.inspected_bytes) + count <span class="kw">as </span>u128;
+<a href=#199 id=199 data-nosnippet>199</a>        check(
+<a href=#200 id=200 data-nosnippet>200</a>            Resource::InspectedBytes,
+<a href=#201 id=201 data-nosnippet>201</a>            observed,
+<a href=#202 id=202 data-nosnippet>202</a>            u128::from(<span class="self">self</span>.limits.max_inspected_bytes),
+<a href=#203 id=203 data-nosnippet>203</a>        )<span class="question-mark">?</span>;
+<a href=#204 id=204 data-nosnippet>204</a>        <span class="self">self</span>.result.statistics.inspected_bytes =
+<a href=#205 id=205 data-nosnippet>205</a>            u64::try_from(observed).expect(<span class="string">"bounded by u64 limit"</span>);
+<a href=#206 id=206 data-nosnippet>206</a>        <span class="prelude-val">Ok</span>(())
+<a href=#207 id=207 data-nosnippet>207</a>    }
+<a href=#208 id=208 data-nosnippet>208</a>
+<a href=#209 id=209 data-nosnippet>209</a>    <span class="kw">fn </span>link(<span class="kw-2">&amp;mut </span><span class="self">self</span>) -&gt; <span class="prelude-ty">Result</span>&lt;(), Failure&gt; {
+<a href=#210 id=210 data-nosnippet>210</a>        <span class="kw">let </span>observed = <span class="self">self</span>.result.statistics.links <span class="kw">as </span>u128 + <span class="number">1</span>;
+<a href=#211 id=211 data-nosnippet>211</a>        check(Resource::Links, observed, <span class="self">self</span>.limits.max_links <span class="kw">as </span>u128)<span class="question-mark">?</span>;
+<a href=#212 id=212 data-nosnippet>212</a>        <span class="self">self</span>.result.statistics.links += <span class="number">1</span>;
+<a href=#213 id=213 data-nosnippet>213</a>        <span class="prelude-val">Ok</span>(())
+<a href=#214 id=214 data-nosnippet>214</a>    }
+<a href=#215 id=215 data-nosnippet>215</a>
+<a href=#216 id=216 data-nosnippet>216</a>    <span class="kw">fn </span>signature(<span class="kw-2">&amp;mut </span><span class="self">self</span>, atom: <span class="kw-2">&amp;</span><span class="lifetime">'p </span>Atom, arity: usize) -&gt; <span class="prelude-ty">Result</span>&lt;Signature&lt;<span class="lifetime">'p</span>&gt;, Failure&gt; {
+<a href=#217 id=217 data-nosnippet>217</a>        <span class="self">self</span>.work()<span class="question-mark">?</span>;
+<a href=#218 id=218 data-nosnippet>218</a>        <span class="self">self</span>.bytes(atom.name.as_str().len())<span class="question-mark">?</span>;
+<a href=#219 id=219 data-nosnippet>219</a>        <span class="kw">let </span>arity = u32::try_from(arity)
+<a href=#220 id=220 data-nosnippet>220</a>            .map_err(|<span class="kw">_</span>| Failure::Unknown(UnknownReason::Source(<span class="kw">crate</span>::UnknownReason::Head)))<span class="question-mark">?</span>;
+<a href=#221 id=221 data-nosnippet>221</a>        <span class="kw">let </span>signature = Signature {
+<a href=#222 id=222 data-nosnippet>222</a>            name: atom.name.as_str(),
+<a href=#223 id=223 data-nosnippet>223</a>            arity,
+<a href=#224 id=224 data-nosnippet>224</a>            sign: atom.sign,
+<a href=#225 id=225 data-nosnippet>225</a>        };
+<a href=#226 id=226 data-nosnippet>226</a>        <span class="kw">if </span>!<span class="self">self</span>.signatures.contains_key(<span class="kw-2">&amp;</span>signature) {
+<a href=#227 id=227 data-nosnippet>227</a>            <span class="kw">let </span>predicates = <span class="self">self</span>.result.statistics.predicates <span class="kw">as </span>u128 + <span class="number">1</span>;
+<a href=#228 id=228 data-nosnippet>228</a>            <span class="kw">let </span>positions = <span class="self">self</span>.result.statistics.positions <span class="kw">as </span>u128 + u128::from(arity);
+<a href=#229 id=229 data-nosnippet>229</a>            check(
+<a href=#230 id=230 data-nosnippet>230</a>                Resource::Predicates,
+<a href=#231 id=231 data-nosnippet>231</a>                predicates,
+<a href=#232 id=232 data-nosnippet>232</a>                <span class="self">self</span>.limits.max_predicates <span class="kw">as </span>u128,
+<a href=#233 id=233 data-nosnippet>233</a>            )<span class="question-mark">?</span>;
+<a href=#234 id=234 data-nosnippet>234</a>            check(
+<a href=#235 id=235 data-nosnippet>235</a>                Resource::Positions,
+<a href=#236 id=236 data-nosnippet>236</a>                positions,
+<a href=#237 id=237 data-nosnippet>237</a>                <span class="self">self</span>.limits.max_positions <span class="kw">as </span>u128,
+<a href=#238 id=238 data-nosnippet>238</a>            )<span class="question-mark">?</span>;
+<a href=#239 id=239 data-nosnippet>239</a>            <span class="self">self</span>.signatures.insert(
+<a href=#240 id=240 data-nosnippet>240</a>                signature,
+<a href=#241 id=241 data-nosnippet>241</a>                Usage {
+<a href=#242 id=242 data-nosnippet>242</a>                    read: <span class="bool-val">false</span>,
+<a href=#243 id=243 data-nosnippet>243</a>                    qualified: <span class="bool-val">true</span>,
+<a href=#244 id=244 data-nosnippet>244</a>                },
+<a href=#245 id=245 data-nosnippet>245</a>            );
+<a href=#246 id=246 data-nosnippet>246</a>            <span class="self">self</span>.result.statistics.predicates += <span class="number">1</span>;
+<a href=#247 id=247 data-nosnippet>247</a>            <span class="self">self</span>.result.statistics.positions =
+<a href=#248 id=248 data-nosnippet>248</a>                usize::try_from(positions).expect(<span class="string">"bounded by usize limit"</span>);
+<a href=#249 id=249 data-nosnippet>249</a>        }
+<a href=#250 id=250 data-nosnippet>250</a>        <span class="prelude-val">Ok</span>(signature)
+<a href=#251 id=251 data-nosnippet>251</a>    }
+<a href=#252 id=252 data-nosnippet>252</a>}
 </code></pre></div></section></main></body></html>

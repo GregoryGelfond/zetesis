@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["AnswerSetsSought","Countermodels"],"trait":["Class"]};

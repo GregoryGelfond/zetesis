@@ -35,10 +35,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-fbb9e008.js";
+            window.path_to_searchindex_js = "../searchindex-8dfd52fd.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-5c747b16.js"></script>
+        <script src="../toc-25cd24fd.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -191,9 +191,9 @@ those buffers with the roots, without grounding or searching. Semantic inspectio
 uses <code>theory.view().node(index)</code> to borrow the entire <code>NodeView</code> operand row.</p>
 <p>Here atom indices <code>0</code> and <code>1</code> denote <code>a</code> and <code>b</code>. The theory is <code>a | b.</code>.
 The candidate <code>{a,b}</code> satisfies the theory but has a proper-subset reduct model:</p>
-<pre class="playground"><code class="language-rust edition2024"><span class="boring">extern crate zetesis_cpu;
+<pre class="playground"><code class="language-rust edition2024"><span class="boring">extern crate zetesis_algebra;
 </span><span class="boring">extern crate zetesis_ferraris;
-</span>use zetesis_cpu::Cancellation;
+</span>use zetesis_algebra::Cancellation;
 use zetesis_ferraris::{
     AdmissionLimits, FormulaParts, FrozenReduct, Interpretation, Limits, Node, Theory, Verdict,
     check, models, models_reduct,
@@ -255,7 +255,7 @@ comparisons; use the ordinary session for the composed native search.</p>
 min/max cut over an ordered value dictionary. Both borrow shared numeric rows.
 Exhaustive visitors must handle these variants and preserve their original-truth
 gates when evaluating a frozen reduct. The <a href="../architecture/alignment.html#ordered-comparisons-and-objective-reductions">aggregate representation</a>
-explains their semantics and the Boolean lowering used for device transport.</p>
+explains their semantics and the shared numeric columns used for device transport.</p>
 <p>Keep all arenas together when copying a formula. <code>theory.parts().try_clone()</code>
 copies its complete raw storage, including shared numeric rows; the result still
 needs admission and does not retain the original theory’s identity.
@@ -319,7 +319,7 @@ those per-call budgets do not establish a cumulative campaign bound. Neither
 operation consumes a subset budget.</p>
 <p><code>Limits::max_work</code> bounds charged operations; <code>max_subsets</code> bounds the reference
 membership check’s proper-subset queries. Cancellation and deadlines use
-<code>zetesis_cpu::Cancellation</code>.</p>
+<code>zetesis_algebra::Cancellation</code>.</p>
 <p>Every operation returns a typed stop on exceeded limits or invalid identity.
 The <a href="../../doc/zetesis_ferraris/index.html">local Rust API reference</a>, generated
 and served as described in <a href="../building.html">Building the documentation</a>,
@@ -338,7 +338,7 @@ provides the same public declarations without a local documentation build.</p>
                                 <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                             </a>
 
-                            <a rel="next prefetch" href="../rust/parallel.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                            <a rel="next prefetch" href="../rust/finite-tables.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                                 <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
                             </a>
 
@@ -352,7 +352,7 @@ provides the same public declarations without a local documentation build.</p>
                         <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                     </a>
 
-                    <a rel="next prefetch" href="../rust/parallel.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                    <a rel="next prefetch" href="../rust/finite-tables.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                         <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
                     </a>
             </nav>

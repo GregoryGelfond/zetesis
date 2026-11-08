@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"enum":["ScanCause"],"fn":["scan"],"struct":["Instance","InstanceAtoms","ScanFailure","ScanLimits","ScanStatistics"]};

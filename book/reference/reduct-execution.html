@@ -35,10 +35,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-fbb9e008.js";
+            window.path_to_searchindex_js = "../searchindex-8dfd52fd.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-5c747b16.js"></script>
+        <script src="../toc-25cd24fd.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -182,6 +182,12 @@
                     <main>
                         <h1 id="prepared-reduct-execution"><a class="header" href="#prepared-reduct-execution">Prepared reduct execution</a></h1>
 <!-- A dated record: its commands keep the spellings of the binaries it records. -->
+<p>The prepared reduct measured here belonged to the clause search, which has since
+been removed; the region search queries the reduct without preparing an
+encoding. What it prepares instead is each candidate’s inner subjects: the
+parity rows and count bounds of its countermodel class, probed from the closed
+query root and reported under <code>reduct_query_regions.preparation</code> in the
+<a href="../rust/outcomes.html">solve statistics</a>.</p>
 <p>Retaining a prepared reduct removes repeated construction, but does not guarantee
 faster membership checks. In this comparison, task allocation’s Metal route uses
 <strong>21.87% less named completion capacity</strong> while taking <strong>10.25% more process

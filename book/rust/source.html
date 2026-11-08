@@ -35,10 +35,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-fbb9e008.js";
+            window.path_to_searchindex_js = "../searchindex-8dfd52fd.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-5c747b16.js"></script>
+        <script src="../toc-25cd24fd.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -247,7 +247,7 @@ contains an optional <code>StatementId</code> in that owner’s canonical statem
 and an optional real <code>Location</code>; a constructed statement needs no source span.
 Emitted roots, objectives, warnings and delayed work retain these sites. Typed
 formula failures retain the original owner and expose <code>site()</code>,
-<code>original_program()</code> and <code>subject()</code>. Observation errors expose <code>site()</code> for
+<code>original_program()</code> and <code>original()</code>. Observation errors expose <code>site()</code> for
 resolution through the formula owner. IDs belong to that original program and
 cannot be transferred between owners. Formula owners’ <code>source()</code> is optional:
 it returns <code>Some</code> for single-source input and <code>None</code> for this door, even if a
@@ -266,7 +266,7 @@ states the remaining obligations.</p>
 answer sets, <code>{chosen(1)}</code> and <code>{chosen(2)}</code>. With the macro, the program reads
 as ASP:</p>
 <pre class="playground"><code class="language-rust edition2024"><span class="boring">extern crate zetesis;
-</span><span class="boring">extern crate zetesis_cpu;
+</span><span class="boring">extern crate zetesis_algebra;
 </span><span class="boring">extern crate zetesis_solve;
 </span><span class="boring">extern crate zetesis_themelios;
 </span>use std::sync::Arc;
@@ -288,7 +288,7 @@ fn main() -&gt; Result&lt;(), Box&lt;dyn std::error::Error&gt;&gt; {
 </span><span class="boring">// Shared preparation and enumeration for the two construction examples.
 </span><span class="boring">use std::{collections::BTreeSet, sync::Arc};
 </span><span class="boring">use zetesis::program::{AnswerSet, Program};
-</span><span class="boring">use zetesis_cpu::Cancellation;
+</span><span class="boring">use zetesis_algebra::Cancellation;
 </span><span class="boring">use zetesis_solve::{Backend, Completion, PreparedInput, Session, SolveConfig};
 </span><span class="boring">use zetesis_themelios::{
 </span><span class="boring">    ExpansionLimits, FormulaLimits, ProgramAdmissionOptions, prepare_program_formula, symbols,
@@ -339,7 +339,7 @@ fn main() -&gt; Result&lt;(), Box&lt;dyn std::error::Error&gt;&gt; {
 </span><span class="boring">}</span></code></pre>
 <p>The constructors expose the choice elements and bounds for composition in Rust:</p>
 <pre class="playground"><code class="language-rust edition2024"><span class="boring">extern crate zetesis;
-</span><span class="boring">extern crate zetesis_cpu;
+</span><span class="boring">extern crate zetesis_algebra;
 </span><span class="boring">extern crate zetesis_solve;
 </span><span class="boring">extern crate zetesis_themelios;
 </span>use std::sync::Arc;
@@ -372,7 +372,7 @@ fn main() -&gt; Result&lt;(), Box&lt;dyn std::error::Error&gt;&gt; {
 </span><span class="boring">// Shared preparation and enumeration for the two construction examples.
 </span><span class="boring">use std::{collections::BTreeSet, sync::Arc};
 </span><span class="boring">use zetesis::program::{AnswerSet, Program};
-</span><span class="boring">use zetesis_cpu::Cancellation;
+</span><span class="boring">use zetesis_algebra::Cancellation;
 </span><span class="boring">use zetesis_solve::{Backend, Completion, PreparedInput, Session, SolveConfig};
 </span><span class="boring">use zetesis_themelios::{
 </span><span class="boring">    ExpansionLimits, FormulaLimits, ProgramAdmissionOptions, prepare_program_formula, symbols,
@@ -428,13 +428,13 @@ are the full answer sets.</p>
 <pre class="playground"><code class="language-rust edition2024"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
 </span><span class="boring">extern crate zetesis;
-</span><span class="boring">extern crate zetesis_cpu;
+</span><span class="boring">extern crate zetesis_algebra;
 </span><span class="boring">extern crate zetesis_solve;
 </span><span class="boring">extern crate zetesis_themelios;
 </span>mod execution {
 use std::{collections::BTreeSet, sync::Arc};
 use zetesis::program::{AnswerSet, Program};
-use zetesis_cpu::Cancellation;
+use zetesis_algebra::Cancellation;
 use zetesis_solve::{Backend, Completion, PreparedInput, Session, SolveConfig};
 use zetesis_themelios::{
     ExpansionLimits, FormulaLimits, ProgramAdmissionOptions, prepare_program_formula, symbols,
@@ -514,38 +514,20 @@ execution. This is not a hard real-time deadline. These operations provide
 preparation controls; they do not themselves implement the themelios <code>Backend</code>
 run protocol.</p>
 <h2 id="admit-an-existing-logical-program"><a class="header" href="#admit-an-existing-logical-program">Admit an existing logical program</a></h2>
-<p>For an owned relational input with display metadata, use
-<code>prepare_program_relational(Arc&lt;Program&gt;, ProgramRelationalOptions)</code> and lend
-its result through <code>PreparedInput::relational</code>. The same admitted program can
-run with <code>Grounder::Lazy</code> or <code>Grounder::Eager</code>. Preparation admits finite facts
-into the native fact store and compiles the remaining templates; lazy execution still performs variable joins during
-candidate checking. This reuses the extended relational compiler, including
-scalar constants, finite fact expansion and signed coherence.</p>
-<p>The owner retains the original program, template and fact statement identities,
-and compiled <code>#show</code> queries together. <code>template_sites()</code> follows the native
-<code>templates()</code> sequence; <code>fact_sites()</code> follows <code>facts()</code>, including duplicate
-occurrences and every row of an expanded family. <code>FormulaPurpose::AnswerSets</code> has the same
-meaning here as in formula preparation: objectives and <code>#project</code> are excluded
-before evaluation, while structural input limits still apply. Preparation shares
-one expansion allowance and optional cancellation token across normalization and
-observation preparation. Pass that token to the session to preserve the same
-deadline through solving.</p>
-<p><code>prepare_program_automatic(program, ProgramFormulaOptions)</code> makes the extended-to-formula
-choice in the library when that choice is wanted. Its <code>AutomaticAdmission</code> result
-retains the accepted owner and original <code>Arc</code>; its failure names the selected
-profile. Both attempts use the supplied admission, expansion, declaration-purpose
-and cancellation settings, and both derive observation and metadata-storage
-limits from <code>options.formula</code>. Formula domain analysis remains opt-in. The engine
-uses this entry only for its existing lazy-grounder relational-first policy.</p>
-<p>This relational profile remains narrower than the formula profile. General
-disjunction, bounded choices and aggregates are explicit refusals; preparation
-does not silently switch them to eager or hybrid execution. Existing Lean closure
-laws apply to the admitted normal program, but do not yet prove this Rust input
-conversion.</p>
+<p>A canonical logical program, built with the themelios macro or constructors or
+raised from parsed source, is prepared through the formula profile.
+<code>prepare_program_formula_with(program, ProgramFormulaOptions)</code> prepares it for
+execution, and <code>admit_program_formula</code> composes that preparation with eager
+grounding, as <a href="#prepare-a-logical-formula-program">above</a>.
+<code>FormulaPurpose::AnswerSets</code> excludes objectives and <code>#project</code> before evaluation,
+while structural input limits still apply. Preparation shares one expansion
+allowance and optional cancellation token across normalization and observation
+preparation; pass that token to the session to keep the same deadline through
+solving.</p>
 <p>These examples construct one optional selection with conditional display terms.
 The macro writes the choice and <code>#show</code> directives directly:</p>
 <pre class="playground"><code class="language-rust edition2024"><span class="boring">extern crate zetesis;
-</span><span class="boring">extern crate zetesis_cpu;
+</span><span class="boring">extern crate zetesis_algebra;
 </span><span class="boring">extern crate zetesis_solve;
 </span><span class="boring">extern crate zetesis_themelios;
 </span>use std::sync::Arc;
@@ -569,12 +551,10 @@ fn main() -&gt; Result&lt;(), Box&lt;dyn std::error::Error&gt;&gt; {
 </span><span class="boring">// Shared preparation and enumeration for the two construction examples.
 </span><span class="boring">use std::{collections::BTreeMap, sync::Arc};
 </span><span class="boring">use zetesis::program::{AnswerSet, Program, Symbol};
-</span><span class="boring">use zetesis_cpu::Cancellation;
-</span><span class="boring">use zetesis_solve::{
-</span><span class="boring">    Backend, ClosureRoute, Completion, Grounder, PreparedInput, Session, SolveConfig,
-</span><span class="boring">};
+</span><span class="boring">use zetesis_algebra::Cancellation;
+</span><span class="boring">use zetesis_solve::{Backend, Completion, Session, SolveConfig, prepare_formula_execution};
 </span><span class="boring">use zetesis_themelios::{
-</span><span class="boring">    FormulaPurpose, ProgramRelationalOptions, observation, prepare_program_relational, symbols,
+</span><span class="boring">    FormulaPurpose, ProgramFormulaOptions, observation, prepare_program_formula_with, symbols,
 </span><span class="boring">};
 </span><span class="boring">
 </span><span class="boring">const ATOM_EXPORT_BYTES: u128 = 4096;
@@ -583,25 +563,22 @@ fn main() -&gt; Result&lt;(), Box&lt;dyn std::error::Error&gt;&gt; {
 </span><span class="boring">    program: Arc&lt;Program&gt;,
 </span><span class="boring">) -&gt; Result&lt;BTreeMap&lt;AnswerSet, Vec&lt;Symbol&gt;&gt;, Box&lt;dyn std::error::Error&gt;&gt; {
 </span><span class="boring">    let cancellation = Cancellation::default();
-</span><span class="boring">    let prepared = prepare_program_relational(
+</span><span class="boring">    let prepared = prepare_program_formula_with(
 </span><span class="boring">        program,
-</span><span class="boring">        ProgramRelationalOptions {
+</span><span class="boring">        ProgramFormulaOptions {
 </span><span class="boring">            purpose: FormulaPurpose::AnswerSets,
 </span><span class="boring">            cancellation: Some(cancellation.clone()),
-</span><span class="boring">            ..ProgramRelationalOptions::default()
+</span><span class="boring">            ..ProgramFormulaOptions::default()
 </span><span class="boring">        },
 </span><span class="boring">    )?;
-</span><span class="boring">    let mut session = Session::enumerate(
-</span><span class="boring">        PreparedInput::relational(&amp;prepared),
-</span><span class="boring">        SolveConfig {
-</span><span class="boring">            backend: Backend::Cpu,
-</span><span class="boring">            grounder: Grounder::Lazy,
-</span><span class="boring">            models: 0,
-</span><span class="boring">            ..SolveConfig::default()
-</span><span class="boring">        },
-</span><span class="boring">        cancellation.clone(),
-</span><span class="boring">    )?;
-</span><span class="boring">    let observations = prepared.metadata().observations();
+</span><span class="boring">    let config = SolveConfig {
+</span><span class="boring">        backend: Backend::Cpu,
+</span><span class="boring">        models: 0,
+</span><span class="boring">        ..SolveConfig::default()
+</span><span class="boring">    };
+</span><span class="boring">    let execution = prepare_formula_execution(prepared, &amp;config, None)?;
+</span><span class="boring">    let mut session = Session::enumerate(execution.input(), config, cancellation.clone())?;
+</span><span class="boring">    let observations = execution.metadata().observations();
 </span><span class="boring">    let limits = observation::Limits::default();
 </span><span class="boring">    let mut answers = BTreeMap::new();
 </span><span class="boring">    for answer in session.by_ref() {
@@ -623,19 +600,13 @@ fn main() -&gt; Result&lt;(), Box&lt;dyn std::error::Error&gt;&gt; {
 </span><span class="boring">    if outcome.completion() != Some(Completion::Exhausted) {
 </span><span class="boring">        return Err(format!("enumeration unfinished: {:?}", outcome.search_state()).into());
 </span><span class="boring">    }
-</span><span class="boring">    if !matches!(
-</span><span class="boring">        outcome.closure_execution().map(|execution| execution.route),
-</span><span class="boring">        Some(ClosureRoute::Lazy(_))
-</span><span class="boring">    ) {
-</span><span class="boring">        return Err("the session did not use lazy closure".into());
-</span><span class="boring">    }
 </span><span class="boring">    Ok(answers)
 </span><span class="boring">}
 </span><span class="boring">
 </span><span class="boring">}</span></code></pre>
 <p>The corresponding constructors keep each statement available for composition:</p>
 <pre class="playground"><code class="language-rust edition2024"><span class="boring">extern crate zetesis;
-</span><span class="boring">extern crate zetesis_cpu;
+</span><span class="boring">extern crate zetesis_algebra;
 </span><span class="boring">extern crate zetesis_solve;
 </span><span class="boring">extern crate zetesis_themelios;
 </span>use std::sync::Arc;
@@ -666,12 +637,10 @@ fn main() -&gt; Result&lt;(), Box&lt;dyn std::error::Error&gt;&gt; {
 </span><span class="boring">// Shared preparation and enumeration for the two construction examples.
 </span><span class="boring">use std::{collections::BTreeMap, sync::Arc};
 </span><span class="boring">use zetesis::program::{AnswerSet, Program, Symbol};
-</span><span class="boring">use zetesis_cpu::Cancellation;
-</span><span class="boring">use zetesis_solve::{
-</span><span class="boring">    Backend, ClosureRoute, Completion, Grounder, PreparedInput, Session, SolveConfig,
-</span><span class="boring">};
+</span><span class="boring">use zetesis_algebra::Cancellation;
+</span><span class="boring">use zetesis_solve::{Backend, Completion, Session, SolveConfig, prepare_formula_execution};
 </span><span class="boring">use zetesis_themelios::{
-</span><span class="boring">    FormulaPurpose, ProgramRelationalOptions, observation, prepare_program_relational, symbols,
+</span><span class="boring">    FormulaPurpose, ProgramFormulaOptions, observation, prepare_program_formula_with, symbols,
 </span><span class="boring">};
 </span><span class="boring">
 </span><span class="boring">const ATOM_EXPORT_BYTES: u128 = 4096;
@@ -680,25 +649,22 @@ fn main() -&gt; Result&lt;(), Box&lt;dyn std::error::Error&gt;&gt; {
 </span><span class="boring">    program: Arc&lt;Program&gt;,
 </span><span class="boring">) -&gt; Result&lt;BTreeMap&lt;AnswerSet, Vec&lt;Symbol&gt;&gt;, Box&lt;dyn std::error::Error&gt;&gt; {
 </span><span class="boring">    let cancellation = Cancellation::default();
-</span><span class="boring">    let prepared = prepare_program_relational(
+</span><span class="boring">    let prepared = prepare_program_formula_with(
 </span><span class="boring">        program,
-</span><span class="boring">        ProgramRelationalOptions {
+</span><span class="boring">        ProgramFormulaOptions {
 </span><span class="boring">            purpose: FormulaPurpose::AnswerSets,
 </span><span class="boring">            cancellation: Some(cancellation.clone()),
-</span><span class="boring">            ..ProgramRelationalOptions::default()
+</span><span class="boring">            ..ProgramFormulaOptions::default()
 </span><span class="boring">        },
 </span><span class="boring">    )?;
-</span><span class="boring">    let mut session = Session::enumerate(
-</span><span class="boring">        PreparedInput::relational(&amp;prepared),
-</span><span class="boring">        SolveConfig {
-</span><span class="boring">            backend: Backend::Cpu,
-</span><span class="boring">            grounder: Grounder::Lazy,
-</span><span class="boring">            models: 0,
-</span><span class="boring">            ..SolveConfig::default()
-</span><span class="boring">        },
-</span><span class="boring">        cancellation.clone(),
-</span><span class="boring">    )?;
-</span><span class="boring">    let observations = prepared.metadata().observations();
+</span><span class="boring">    let config = SolveConfig {
+</span><span class="boring">        backend: Backend::Cpu,
+</span><span class="boring">        models: 0,
+</span><span class="boring">        ..SolveConfig::default()
+</span><span class="boring">    };
+</span><span class="boring">    let execution = prepare_formula_execution(prepared, &amp;config, None)?;
+</span><span class="boring">    let mut session = Session::enumerate(execution.input(), config, cancellation.clone())?;
+</span><span class="boring">    let observations = execution.metadata().observations();
 </span><span class="boring">    let limits = observation::Limits::default();
 </span><span class="boring">    let mut answers = BTreeMap::new();
 </span><span class="boring">    for answer in session.by_ref() {
@@ -720,36 +686,28 @@ fn main() -&gt; Result&lt;(), Box&lt;dyn std::error::Error&gt;&gt; {
 </span><span class="boring">    if outcome.completion() != Some(Completion::Exhausted) {
 </span><span class="boring">        return Err(format!("enumeration unfinished: {:?}", outcome.search_state()).into());
 </span><span class="boring">    }
-</span><span class="boring">    if !matches!(
-</span><span class="boring">        outcome.closure_execution().map(|execution| execution.route),
-</span><span class="boring">        Some(ClosureRoute::Lazy(_))
-</span><span class="boring">    ) {
-</span><span class="boring">        return Err("the session did not use lazy closure".into());
-</span><span class="boring">    }
 </span><span class="boring">    Ok(answers)
 </span><span class="boring">}
 </span><span class="boring">
 </span><span class="boring">}</span></code></pre>
 <p>Both use the following native preparation and enumeration function. The same
-cancellation token covers preparation, lazy solving and observation. It returns
-full atoms separately from the conditional <code>#show</code> terms and checks both
-exhaustion and the actual closure route. The complete results are an empty
-answer with no shown terms, and <code>{chosen(1)}</code> with the shown term <code>1</code>.</p>
+cancellation token covers preparation, solving and observation. It returns full
+atoms separately from the conditional <code>#show</code> terms and checks exhaustion. The
+complete results are an empty answer with no shown terms, and <code>{chosen(1)}</code> with
+the shown term <code>1</code>.</p>
 <pre class="playground"><code class="language-rust edition2024"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
 </span><span class="boring">extern crate zetesis;
-</span><span class="boring">extern crate zetesis_cpu;
+</span><span class="boring">extern crate zetesis_algebra;
 </span><span class="boring">extern crate zetesis_solve;
 </span><span class="boring">extern crate zetesis_themelios;
 </span>mod execution {
 use std::{collections::BTreeMap, sync::Arc};
 use zetesis::program::{AnswerSet, Program, Symbol};
-use zetesis_cpu::Cancellation;
-use zetesis_solve::{
-    Backend, ClosureRoute, Completion, Grounder, PreparedInput, Session, SolveConfig,
-};
+use zetesis_algebra::Cancellation;
+use zetesis_solve::{Backend, Completion, Session, SolveConfig, prepare_formula_execution};
 use zetesis_themelios::{
-    FormulaPurpose, ProgramRelationalOptions, observation, prepare_program_relational, symbols,
+    FormulaPurpose, ProgramFormulaOptions, observation, prepare_program_formula_with, symbols,
 };
 
 const ATOM_EXPORT_BYTES: u128 = 4096;
@@ -758,25 +716,22 @@ pub(super) fn enumerate(
     program: Arc&lt;Program&gt;,
 ) -&gt; Result&lt;BTreeMap&lt;AnswerSet, Vec&lt;Symbol&gt;&gt;, Box&lt;dyn std::error::Error&gt;&gt; {
     let cancellation = Cancellation::default();
-    let prepared = prepare_program_relational(
+    let prepared = prepare_program_formula_with(
         program,
-        ProgramRelationalOptions {
+        ProgramFormulaOptions {
             purpose: FormulaPurpose::AnswerSets,
             cancellation: Some(cancellation.clone()),
-            ..ProgramRelationalOptions::default()
+            ..ProgramFormulaOptions::default()
         },
     )?;
-    let mut session = Session::enumerate(
-        PreparedInput::relational(&amp;prepared),
-        SolveConfig {
-            backend: Backend::Cpu,
-            grounder: Grounder::Lazy,
-            models: 0,
-            ..SolveConfig::default()
-        },
-        cancellation.clone(),
-    )?;
-    let observations = prepared.metadata().observations();
+    let config = SolveConfig {
+        backend: Backend::Cpu,
+        models: 0,
+        ..SolveConfig::default()
+    };
+    let execution = prepare_formula_execution(prepared, &amp;config, None)?;
+    let mut session = Session::enumerate(execution.input(), config, cancellation.clone())?;
+    let observations = execution.metadata().observations();
     let limits = observation::Limits::default();
     let mut answers = BTreeMap::new();
     for answer in session.by_ref() {
@@ -798,12 +753,6 @@ pub(super) fn enumerate(
     if outcome.completion() != Some(Completion::Exhausted) {
         return Err(format!("enumeration unfinished: {:?}", outcome.search_state()).into());
     }
-    if !matches!(
-        outcome.closure_execution().map(|execution| execution.route),
-        Some(ClosureRoute::Lazy(_))
-    ) {
-        return Err("the session did not use lazy closure".into());
-    }
     Ok(answers)
 }
 }
@@ -812,74 +761,13 @@ pub(super) fn enumerate(
 <pre><code class="language-sh">cargo run --locked -p zetesis --example book-relational-program-macro
 cargo run --locked -p zetesis --example book-relational-program
 </code></pre>
-<h3 id="borrow-the-strict-relational-input"><a class="header" href="#borrow-the-strict-relational-input">Borrow the strict relational input</a></h3>
-<p><code>zetesis_themelios::admit_program(&amp;program, ProgramAdmissionOptions)</code> borrows a
-canonical <code>zetesis::Program</code> and compiles the strict relational (S0) profile.
-The facade and the adapter’s <code>logical</code> reexport expose the same upstream
-themelios type, so callers can construct or raise the program with its native APIs. Admission
-uses the same rule compiler and strong-negation coherence operation as <code>admit</code>,
-without rendering or parsing the program.</p>
-<p>This door accepts parameterless base-part rules, relational variables and closed
-data values, default negation, equality/disequality tests and unbounded
-single-atom choices. Equality does not introduce a variable absent from positive
-relational bindings. Unary negation retains the shared compiler’s checked
-closed-operand evaluation; general arithmetic terms, generators, aggregates and
-directives remain outside this door; use
-<a href="#prepare-a-logical-formula-program"><code>prepare_program_formula</code></a> for the general
-formula profile.</p>
-<p><code>ProgramAdmissionOptions</code> bounds cumulative logical nodes and UTF-8 name/string
-bytes, nesting depth including symbol interiors, and canonical body elements
-per rule. Its <code>core_limits</code> separately governs native admission; <code>max_templates</code>
-counts templates and fact occurrences together, and <code>max_domain_values</code> bounds
-their combined domain.
-The borrowed traversal checks each rule before compilation, uses an iterative
-cursor over term and symbol interiors, and returns a typed <code>ProgramLimit</code> on
-refusal. S0 admission borrows statement evidence and does not traverse or count
-its provenance. These ceilings govern admission of an existing value; they do not
-account for its earlier construction or represent a process-memory limit.
-Source admission retains its checks on original bytes and authored syntax,
-including restrictions erased by canonicalization and body occurrences before
-set collection. Those checks cannot be recovered from a logical program.</p>
-<p>The returned <code>AdmittedProgram::program()</code> supplies the native program for
-<code>PreparedInput::program</code>. <code>template_statements()</code> borrows the original statement
-carriers in native template order; <code>fact_statements()</code> borrows them in native
-fact-occurrence order. Generated coherence constraints retain both introducing
-statements, whether their signed signatures came from facts or templates.
-<code>ProgramAdmissionFailure</code> similarly borrows the actual
-statement or part associated with a refusal and invents no source coordinate.
-<code>into_program()</code> releases this evidence borrow and returns the independently
-owned native program. Admission itself performs no grounding or answer search.</p>
-<p>All four relational doors (<code>admit</code>, <code>admit_extended</code>, <code>admit_program</code> and
-<code>prepare_program_relational</code>) use the same fact classification: an empty-body
-rule with a positive atom head and closed arguments becomes a fact occurrence.
-Strong negation remains part of the predicate’s identity. Choices and other
-rules remain templates. <code>Program::rules()</code> traverses both streams in their
-original normalized order; <code>Program::is_empty()</code> checks both. Use <code>templates()</code>
-only when the operation concerns templates, such as indexing variable joins.</p>
-<p>Evidence accessors stay parallel to their own streams:</p>
-<div class="table-wrapper">
-<table>
-<thead>
-<tr><th>Owner</th><th>Template evidence</th><th>Fact-occurrence evidence</th></tr>
-</thead>
-<tbody>
-<tr><td><code>Admitted</code>, <code>AdmittedBundle</code></td><td><code>template_origins()</code></td><td><code>fact_origins()</code></td></tr>
-<tr><td><code>PreparedRelational</code></td><td><code>template_sites()</code></td><td><code>fact_sites()</code></td></tr>
-<tr><td><code>AdmittedProgram</code></td><td><code>template_statements()</code></td><td><code>fact_statements()</code></td></tr>
-</tbody>
-</table>
-</div>
-<p>A fact-specific native refusal exposes <code>AdmissionError::fact_index()</code>; each door
-maps it through its fact evidence. <code>template_index()</code> applies only to templates.
-The strict typed door’s rule-count pre-check runs before classifying the next
-statement: it reports no native index and retains the original statement subject.
-Direct native callers pass <code>Program::new(templates, facts, limits)</code>, using
-<code>FactTables::default()</code> when they have no explicit facts. Native admission does
-not reclassify caller-supplied templates.</p>
+<h3 id="admit-a-canonical-program-in-one-call"><a class="header" href="#admit-a-canonical-program-in-one-call">Admit a canonical program in one call</a></h3>
+<p><code>admit_program_formula</code> prepares and grounds a canonical program in one call
+and returns an owner that <code>PreparedInput::formula</code> lends to a session.</p>
 <p>These examples construct <code>p :- not q.</code> and <code>q :- not p.</code> and print their two
 canonical answer sets, <code>{p}</code> and <code>{q}</code>. The macro keeps the rules in ASP form:</p>
 <pre class="playground"><code class="language-rust edition2024"><span class="boring">extern crate zetesis;
-</span><span class="boring">extern crate zetesis_cpu;
+</span><span class="boring">extern crate zetesis_algebra;
 </span><span class="boring">extern crate zetesis_solve;
 </span><span class="boring">extern crate zetesis_themelios;
 </span>use zetesis::{Program, program};
@@ -899,22 +787,28 @@ fn main() -&gt; Result&lt;(), Box&lt;dyn std::error::Error&gt;&gt; {
 }
 <span class="boring">mod execution {
 </span><span class="boring">// Shared preparation and enumeration for the two construction examples.
-</span><span class="boring">use std::collections::BTreeSet;
+</span><span class="boring">use std::{collections::BTreeSet, sync::Arc};
 </span><span class="boring">use zetesis::program::{AnswerSet, Program};
-</span><span class="boring">use zetesis_cpu::Cancellation;
+</span><span class="boring">use zetesis_algebra::Cancellation;
 </span><span class="boring">use zetesis_solve::{Backend, Completion, PreparedInput, Session, SolveConfig};
-</span><span class="boring">use zetesis_themelios::{ProgramAdmissionOptions, admit_program, symbols};
+</span><span class="boring">use zetesis_themelios::{
+</span><span class="boring">    ExpansionLimits, FormulaLimits, ProgramAdmissionOptions, admit_program_formula, symbols,
+</span><span class="boring">};
 </span><span class="boring">
 </span><span class="boring">const ATOM_EXPORT_BYTES: u128 = 4096;
 </span><span class="boring">
 </span><span class="boring">pub(super) fn enumerate(
 </span><span class="boring">    program: &amp;Program,
 </span><span class="boring">) -&gt; Result&lt;BTreeSet&lt;AnswerSet&gt;, Box&lt;dyn std::error::Error&gt;&gt; {
-</span><span class="boring">    let admitted = admit_program(program, ProgramAdmissionOptions::default())
-</span><span class="boring">        .map_err(|failure| failure.kind)?;
+</span><span class="boring">    let admitted = admit_program_formula(
+</span><span class="boring">        Arc::new(program.clone()),
+</span><span class="boring">        ProgramAdmissionOptions::default(),
+</span><span class="boring">        ExpansionLimits::default(),
+</span><span class="boring">        FormulaLimits::default(),
+</span><span class="boring">    )?;
 </span><span class="boring">    let cancellation = Cancellation::default();
 </span><span class="boring">    let mut session = Session::enumerate(
-</span><span class="boring">        PreparedInput::program(admitted.program()),
+</span><span class="boring">        PreparedInput::formula(&amp;admitted),
 </span><span class="boring">        SolveConfig {
 </span><span class="boring">            backend: Backend::Cpu,
 </span><span class="boring">            models: 0,
@@ -945,7 +839,7 @@ fn main() -&gt; Result&lt;(), Box&lt;dyn std::error::Error&gt;&gt; {
 </span><span class="boring">}</span></code></pre>
 <p>The constructors compose the same rules from atoms and negated bodies:</p>
 <pre class="playground"><code class="language-rust edition2024"><span class="boring">extern crate zetesis;
-</span><span class="boring">extern crate zetesis_cpu;
+</span><span class="boring">extern crate zetesis_algebra;
 </span><span class="boring">extern crate zetesis_solve;
 </span><span class="boring">extern crate zetesis_themelios;
 </span>use zetesis::program::{Atom, Name, Program, Rule, construct::not};
@@ -967,22 +861,28 @@ fn main() -&gt; Result&lt;(), Box&lt;dyn std::error::Error&gt;&gt; {
 }
 <span class="boring">mod execution {
 </span><span class="boring">// Shared preparation and enumeration for the two construction examples.
-</span><span class="boring">use std::collections::BTreeSet;
+</span><span class="boring">use std::{collections::BTreeSet, sync::Arc};
 </span><span class="boring">use zetesis::program::{AnswerSet, Program};
-</span><span class="boring">use zetesis_cpu::Cancellation;
+</span><span class="boring">use zetesis_algebra::Cancellation;
 </span><span class="boring">use zetesis_solve::{Backend, Completion, PreparedInput, Session, SolveConfig};
-</span><span class="boring">use zetesis_themelios::{ProgramAdmissionOptions, admit_program, symbols};
+</span><span class="boring">use zetesis_themelios::{
+</span><span class="boring">    ExpansionLimits, FormulaLimits, ProgramAdmissionOptions, admit_program_formula, symbols,
+</span><span class="boring">};
 </span><span class="boring">
 </span><span class="boring">const ATOM_EXPORT_BYTES: u128 = 4096;
 </span><span class="boring">
 </span><span class="boring">pub(super) fn enumerate(
 </span><span class="boring">    program: &amp;Program,
 </span><span class="boring">) -&gt; Result&lt;BTreeSet&lt;AnswerSet&gt;, Box&lt;dyn std::error::Error&gt;&gt; {
-</span><span class="boring">    let admitted = admit_program(program, ProgramAdmissionOptions::default())
-</span><span class="boring">        .map_err(|failure| failure.kind)?;
+</span><span class="boring">    let admitted = admit_program_formula(
+</span><span class="boring">        Arc::new(program.clone()),
+</span><span class="boring">        ProgramAdmissionOptions::default(),
+</span><span class="boring">        ExpansionLimits::default(),
+</span><span class="boring">        FormulaLimits::default(),
+</span><span class="boring">    )?;
 </span><span class="boring">    let cancellation = Cancellation::default();
 </span><span class="boring">    let mut session = Session::enumerate(
-</span><span class="boring">        PreparedInput::program(admitted.program()),
+</span><span class="boring">        PreparedInput::formula(&amp;admitted),
 </span><span class="boring">        SolveConfig {
 </span><span class="boring">            backend: Backend::Cpu,
 </span><span class="boring">            models: 0,
@@ -1019,26 +919,32 @@ exhausted search; an unfinished outcome is an error.</p>
 <pre class="playground"><code class="language-rust edition2024"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
 </span><span class="boring">extern crate zetesis;
-</span><span class="boring">extern crate zetesis_cpu;
+</span><span class="boring">extern crate zetesis_algebra;
 </span><span class="boring">extern crate zetesis_solve;
 </span><span class="boring">extern crate zetesis_themelios;
 </span>mod execution {
-use std::collections::BTreeSet;
+use std::{collections::BTreeSet, sync::Arc};
 use zetesis::program::{AnswerSet, Program};
-use zetesis_cpu::Cancellation;
+use zetesis_algebra::Cancellation;
 use zetesis_solve::{Backend, Completion, PreparedInput, Session, SolveConfig};
-use zetesis_themelios::{ProgramAdmissionOptions, admit_program, symbols};
+use zetesis_themelios::{
+    ExpansionLimits, FormulaLimits, ProgramAdmissionOptions, admit_program_formula, symbols,
+};
 
 const ATOM_EXPORT_BYTES: u128 = 4096;
 
 pub(super) fn enumerate(
     program: &amp;Program,
 ) -&gt; Result&lt;BTreeSet&lt;AnswerSet&gt;, Box&lt;dyn std::error::Error&gt;&gt; {
-    let admitted = admit_program(program, ProgramAdmissionOptions::default())
-        .map_err(|failure| failure.kind)?;
+    let admitted = admit_program_formula(
+        Arc::new(program.clone()),
+        ProgramAdmissionOptions::default(),
+        ExpansionLimits::default(),
+        FormulaLimits::default(),
+    )?;
     let cancellation = Cancellation::default();
     let mut session = Session::enumerate(
-        PreparedInput::program(admitted.program()),
+        PreparedInput::formula(&amp;admitted),
         SolveConfig {
             backend: Backend::Cpu,
             models: 0,
@@ -1124,12 +1030,12 @@ of the Rust source classifier or reconstruction implementation.</p>
 complete <code>WorldView</code> through the ordinary session API. Its four interpretations
 include precisely the receipts entailed by their chosen seeds.</p>
 <pre class="playground"><code class="language-rust edition2024"><span class="boring">extern crate zetesis_core;
-</span><span class="boring">extern crate zetesis_cpu;
+</span><span class="boring">extern crate zetesis_algebra;
 </span><span class="boring">extern crate zetesis_solve;
 </span><span class="boring">extern crate zetesis_themelios;
 </span>use std::{collections::BTreeSet, num::NonZeroUsize};
+use zetesis_algebra::Cancellation;
 use zetesis_core::{Atom, Model, Predicate, Value};
-use zetesis_cpu::Cancellation;
 use zetesis_solve::{
     Backend, Completion, Grounder, PreparedInput, Session, SolveConfig, WorldViewLimits,
 };
@@ -1208,9 +1114,18 @@ catalog and, when any constraint is streamed, the closed canonical base with the
 possible-support relations those constraints read; discovery and order indexes
 and every other relation are released at admission. Closing is charged as
 formula work, and its transient peak is admitted against <code>max_support_bytes</code>. Producers and constraints with aggregates,
-projected atoms or conditional scopes remain in <code>core_theory()</code>. Ordinary
-atom/scalar integrity constraints retain their prepared templates instead of
-complete formula DAGs. This schedule requires indexed joins. Objective programs
+projected atoms or conditional scopes remain in <code>core_theory()</code>. A certified
+complete family of pairwise exclusions also becomes a compact native constraint
+in that core. Each other ordinary atom/scalar integrity constraint is grounded
+into the core as well when its instances fit the share
+<code>FormulaLimits::max_retained_constraint_nodes</code> grants and the theory ceilings
+still hold them; the rest retain their prepared templates instead of complete
+formula DAGs. The ordinary resource policy grants the theory’s node share, so
+only what eager grounding could not hold is streamed. <code>FormulaLimits::default()</code>
+grants none, and every eligible constraint is then streamed.
+<code>streamed_templates()</code>, <code>streamed_instances()</code>, <code>retained_templates()</code> and
+<code>retained_instances()</code> report the division. This schedule requires
+indexed joins. Objective programs
 are prepared by the same operation as eager grounding; solving checks the
 original constraints before scoring an answer. The existing <code>ground()</code> methods
 remain eager.</p>
@@ -1328,9 +1243,10 @@ mapping once consequence checking needs it. The existing source, scalar and
 support ceilings still apply;
 they are not a single aggregate live-memory or RSS bound. Core atoms, nodes and
 roots retain the formula-theory ceilings, including coherence and unsupported
-atom guards. <code>streamed_templates()</code> counts lowered templates, including pool
-alternatives, and <code>streamed_instances()</code> counts scalar-selected instances visited
-during admission; neither is a retained instance store.</p>
+atom guards. <code>streamed_templates()</code> counts the surviving streamed templates,
+including pool alternatives, and <code>streamed_instances()</code> counts their
+scalar-selected instances visited during admission. Fully replaced native
+constraints contribute to neither count; neither is a retained instance store.</p>
 <p><code>checker(limits)</code> gives each check its own work and substitution limits, plus a
 byte allowance for structural capture-delta capacity growth within each join:
 the first check’s allowance also
@@ -1362,71 +1278,29 @@ steps. <code>Relation::query_attempt_with</code> supplies this composition bound
 relation enforces its own limits, then asks the enclosing operation for each
 work permit. A refusal retains the accepted prefix and runs no later step. It
 uses the same equality resolver as locally metered <code>query_attempt</code>.</p>
-<h2 id="reuse-original-input-across-profiles"><a class="header" href="#reuse-original-input-across-profiles">Reuse original input across profiles</a></h2>
+<h2 id="retain-original-parsed-input"><a class="header" href="#retain-original-parsed-input">Retain original parsed input</a></h2>
 <p><code>ParsedSource</code> owns original bytes, their successful parse and fixed
-<code>AdmissionOptions</code>. Its consuming profile operations retain that owner on
-failure. This is useful when relational admission identifies a construct that
-needs the finite formula profile:</p>
+<code>AdmissionOptions</code>. Formula preparation consumes that owner and retains it on
+failure. Successful parsing alone establishes neither admissibility nor an
+answer set.</p>
 <pre class="playground"><code class="language-rust edition2024"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
 </span><span class="boring">extern crate zetesis_themelios;
 </span>use zetesis_themelios::{AdmissionOptions, ExpansionLimits, FormulaLimits, ParsedSource};
 
 let source = ParsedSource::new("1{a;b}1.".into(), AdmissionOptions::default())?;
-let failure = source.admit_extended(ExpansionLimits::default()).unwrap_err();
-assert!(failure.error().needs_formula_admission());
-let prepared = failure.into_source()
-    .prepare_formula(ExpansionLimits::default(), FormulaLimits::default())?;
+let prepared = source.prepare_formula(ExpansionLimits::default(), FormulaLimits::default())?;
 let admitted = prepared.ground()?;
 assert_eq!(admitted.atoms().len(), 2);
 <span class="boring">Ok::&lt;(), Box&lt;dyn std::error::Error&gt;&gt;(())
 </span><span class="boring">}</span></code></pre>
-<p>The example’s known bounded choice requires formula admission. General callers
-must inspect <code>needs_formula_admission()</code> before choosing that alternative;
-undefined arithmetic, syntax and resource refusals are not permissions to retry.
-<code>SourceFailure::error()</code> exposes the unchanged typed refusal, and <code>into_parts()</code>
-recovers both it and the parsed owner. The String-taking convenience functions
-preserve their existing result and error types.</p>
-<p>For the same choice through one library operation, use
-<code>ParsedSource::admit_automatic_with_cancellation</code>. Its <code>AutomaticAdmission</code>
-result names the accepted profile; <code>AutomaticAdmissionFailure</code> preserves the
-selected refusal and exposes <code>interruption()</code> for cancellation and deadlines.
-The library switches profiles only for <code>needs_formula_admission()</code>, preserving
-input and resource refusals. For example:</p>
-<pre class="playground"><code class="language-rust edition2024"><span class="boring">#![allow(unused)]
-</span><span class="boring">fn main() {
-</span><span class="boring">extern crate zetesis_themelios;
-</span><span class="boring">extern crate zetesis_cpu;
-</span>use zetesis_cpu::Cancellation;
-use zetesis_themelios::{
-    AdmissionOptions, AutomaticAdmission, ExpansionLimits, FormulaLimits, ParsedSource,
-};
-let source = ParsedSource::new("1{a;b}1.".into(), AdmissionOptions::default())?;
-let admitted = source.admit_automatic_with_cancellation(
-    ExpansionLimits::default(), FormulaLimits::default(), &amp;Cancellation::default(),
-)?;
-let AutomaticAdmission::Formula(prepared) = admitted else {
-    panic!("the bounded choice requires the formula profile");
-};
-assert_eq!(prepared.ground()?.atoms().len(), 2);
-<span class="boring">Ok::&lt;(), Box&lt;dyn std::error::Error&gt;&gt;(())
-</span><span class="boring">}</span></code></pre>
-<p><code>admit_bundle_automatic_with_cancellation</code> makes the same choice for an original
-<code>SourceBundle</code>. The CLI uses these operations when its configuration permits
-formula execution, retaining its policy refusal where an extended refusal first
-requires formulas. Explicit closure and countermodel requests retain their
-selected profiles.</p>
-<p>The automatic source doors retain O(source bytes + syntax nodes) input storage
-and never clone the entire stdin buffer or reparse it on retry. When extended
-compilation reaches a formula-eligible refusal after the complete source checks,
-one shared traversal records both profile verdicts and one occurrence raise
-supplies both attempts. The handoff is used only when all formula profile
-verdicts passed; earlier refusals use the ordinary formula checks. Formula
-metadata refusals and objective checks keep their original order. Both attempts
-retain the same control token and independent per-attempt expansion allowances;
-the removed inspections and raising carried no expansion charges. Deferred
-formula materialization consumes its preparation’s remaining budget. Library
-domain analysis stays an explicit <code>with_domain_analysis</code> opt-in.</p>
+<p><code>SourceFailure::error()</code> exposes the typed preparation refusal, and
+<code>into_parts()</code> recovers both it and the parsed owner. Recovering the owner
+neither clones the input nor reparses it. A caller may explicitly prepare it
+again with different resource controls; a refusal does not silently select a
+different compiler. Each attempt performs its own checked raising and
+normalization. Deferred materialization consumes its preparation’s remaining
+allowances. Domain analysis remains an explicit <code>with_domain_analysis</code> opt-in.</p>
 <p>Configure eager support storage through <code>FormulaLimits::max_support_bytes</code>
 before preparation. The default is 128 MiB for the support authority’s canonical
 payload, identity indexes and current prefix, plus relation metadata, postings,
@@ -1882,9 +1756,9 @@ resource refusal instead of treating failed preparation as inconsistency. The
 last two source cases distinguish an empty program’s one empty answer from the
 empty family of an inconsistent program containing the constraint <code>:-.</code>.</p>
 <pre class="playground"><code class="language-rust edition2024"><span class="boring">extern crate zetesis_solve;
-</span><span class="boring">extern crate zetesis_cpu;
+</span><span class="boring">extern crate zetesis_algebra;
 </span><span class="boring">extern crate zetesis_themelios;
-</span>use zetesis_cpu::Cancellation;
+</span>use zetesis_algebra::Cancellation;
 use zetesis_solve::{Backend, PreparedInput, SolveConfig, WorldView, WorldViewLimits};
 use zetesis_themelios::{
     AdmissionOptions, AnalysisBasis, ExpansionLimits, FormulaFailure, FormulaLimits,
@@ -1997,6 +1871,11 @@ the completed projection domain separately from theory roots. Authored
 <code>project_selection()</code> metadata is a declaration plan; the admitted owner’s
 <code>projection()</code> supplies the fixed typed domain for
 <a href="sessions.html#projected-enumeration">projected enumeration</a>.</p>
+<p>A coherence constraint rules out a pair such as <code>p(2)</code> and <code>-p(2)</code>. Its evidence
+names the first materialized occurrence of each ground atom, which can be in a
+rule head or body. If both occurrences belong to the same original statement,
+that site appears once. This is evidence for the concrete pair, not a complete
+list of its producers or the first occurrence of each predicate signature.</p>
 <p>The example checks that emitted root evidence retains the source identity
 supplied in <code>AdmissionOptions</code>. It leaves syntax traversal to themelios’s API
 documentation. For counted entry identity, pool expansion, tuple activity and
@@ -2049,8 +1928,8 @@ validation still runs after an earlier false filter.</p>
 <h2 id="migrating-from-source-only-apis"><a class="header" href="#migrating-from-source-only-apis">Migrating from source-only APIs</a></h2>
 <p>Canonical programs need not have source text. The APIs below therefore distinguish
 logical statement identity from optional parsed evidence. These changes require
-updates to Rust consumers of <code>v0.2.0</code>; the source-only relational owners keep their
-existing source accessors.</p>
+updates to Rust consumers of <code>v0.2.0</code>. The former relational admission owners
+have been removed; use the formula preparation doors described above.</p>
 <p><code>PreparedFormula::source()</code> and <code>AdmittedFormula::source()</code> now return
 <code>Option&lt;&amp;Source&gt;</code>. Previously, a consumer could write:</p>
 <pre><code class="language-text">println!("{:?}", input.source().id());
@@ -2086,7 +1965,7 @@ Do not transfer IDs between programs or invent locations for constructed input.<
 <p>Update exhaustive failure matches: <code>FormulaFailure</code> adds <code>Program</code> and <code>Logical</code>
 and removes <code>ChoiceSource</code>; <code>ExpansionFailure</code> adds <code>Interrupted</code>. A typed-input
 formula failure can wrap its cause while retaining the original program. Use
-<code>cause()</code> for the underlying failure and <code>subject()</code> for its original statement,
+<code>cause()</code> for the underlying failure and <code>original()</code> for its original statement,
 part or program. Resource refusals remain distinct from cancellation and deadlines.</p>
 <p>The public themelios types also use a newer shared dependency revision. Prefer
 <code>zetesis</code>’s reexports, or align a direct themelios dependency with the workspace

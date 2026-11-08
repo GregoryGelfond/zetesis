@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"enum":["Backend","GpuApi"],"fn":["default_threads","parse_memory","parse_threads"],"struct":["BackendParser","ParseBackendError"]};
+window.SIDEBAR_ITEMS = {"enum":["Backend","BatchComputeTime","ComputeTimingStatus","GpuApi"],"fn":["default_threads","parse_memory","parse_threads"],"mod":["residual_evidence"],"struct":["BackendParser","ComputeTiming","ParseBackendError"]};

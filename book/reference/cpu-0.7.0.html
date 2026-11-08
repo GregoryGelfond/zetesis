@@ -1,0 +1,435 @@
+<!DOCTYPE HTML>
+<html lang="en" class="light sidebar-visible" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>0.7.0 CPU comparisons - The zetesis Book</title>
+
+
+        <!-- Custom HTML head -->
+
+        <meta name="description" content="Answer-set semantics, the Rust solver libraries, and the Lean proof library.">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="../favicon-de23e50b.svg">
+        <link rel="shortcut icon" href="../favicon-8114d1fc.png">
+        <link rel="stylesheet" href="../css/variables-8adf115d.css">
+        <link rel="stylesheet" href="../css/general-e96d0476.css">
+        <link rel="stylesheet" href="../css/chrome-d279d366.css">
+        <link rel="stylesheet" href="../css/print-9e4910d8.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="../fonts/fonts-9644e21d.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" id="mdbook-highlight-css" href="../highlight-493f70e1.css">
+        <link rel="stylesheet" id="mdbook-tomorrow-night-css" href="../tomorrow-night-4c0ae647.css">
+        <link rel="stylesheet" id="mdbook-ayu-highlight-css" href="../ayu-highlight-3fdfc3ac.css">
+
+        <!-- Custom theme stylesheets -->
+
+
+        <!-- Provide site root and default themes to javascript -->
+        <script>
+            const path_to_root = "../";
+            const default_light_theme = "light";
+            const default_dark_theme = "navy";
+            window.path_to_searchindex_js = "../searchindex-8dfd52fd.js";
+        </script>
+        <!-- Start loading toc.js asap -->
+        <script src="../toc-25cd24fd.js"></script>
+    </head>
+    <body>
+    <div id="mdbook-help-container">
+        <div id="mdbook-help-popup">
+            <h2 class="mdbook-help-title">Keyboard shortcuts</h2>
+            <div>
+                <p>Press <kbd>←</kbd> or <kbd>→</kbd> to navigate between chapters</p>
+                <p>Press <kbd>S</kbd> or <kbd>/</kbd> to search in the book</p>
+                <p>Press <kbd>?</kbd> to show this help</p>
+                <p>Press <kbd>Esc</kbd> to hide this help</p>
+            </div>
+        </div>
+    </div>
+    <div id="mdbook-body-container">
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                let theme = localStorage.getItem('mdbook-theme');
+                let sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            const default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? default_dark_theme : default_light_theme;
+            let theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            const html = document.documentElement;
+            html.classList.remove('light')
+            html.classList.add(theme);
+            html.classList.add("js");
+        </script>
+
+        <input type="checkbox" id="mdbook-sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            let sidebar = null;
+            const sidebar_toggle = document.getElementById("mdbook-sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+                sidebar_toggle.checked = false;
+            }
+            if (sidebar === 'visible') {
+                sidebar_toggle.checked = true;
+            } else {
+                html.classList.remove('sidebar-visible');
+            }
+        </script>
+
+        <nav id="mdbook-sidebar" class="sidebar" aria-label="Table of contents">
+            <!-- populated by js -->
+            <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
+            <noscript>
+                <iframe class="sidebar-iframe-outer" src="../toc.html"></iframe>
+            </noscript>
+            <div id="mdbook-sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <div id="mdbook-page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                <div id="mdbook-menu-bar-hover-placeholder"></div>
+                <div id="mdbook-menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="mdbook-sidebar-toggle" class="icon-button" for="mdbook-sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="mdbook-sidebar">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M0 96C0 78.3 14.3 64 32 64H416c17.7 0 32 14.3 32 32s-14.3 32-32 32H32C14.3 128 0 113.7 0 96zM0 256c0-17.7 14.3-32 32-32H416c17.7 0 32 14.3 32 32s-14.3 32-32 32H32c-17.7 0-32-14.3-32-32zM448 416c0 17.7-14.3 32-32 32H32c-17.7 0-32-14.3-32-32s14.3-32 32-32H416c17.7 0 32 14.3 32 32z"/></svg></span>
+                        </label>
+                        <button id="mdbook-theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="mdbook-theme-list">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 576 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M371.3 367.1c27.3-3.9 51.9-19.4 67.2-42.9L600.2 74.1c12.6-19.5 9.4-45.3-7.6-61.2S549.7-4.4 531.1 9.6L294.4 187.2c-24 18-38.2 46.1-38.4 76.1L371.3 367.1zm-19.6 25.4l-116-104.4C175.9 290.3 128 339.6 128 400c0 3.9 .2 7.8 .6 11.6c1.8 17.5-10.2 36.4-27.8 36.4H96c-17.7 0-32 14.3-32 32s14.3 32 32 32H240c61.9 0 112-50.1 112-112c0-2.5-.1-5-.2-7.5z"/></svg></span>
+                        </button>
+                        <ul id="mdbook-theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-default_theme">Auto</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-ayu">Ayu</button></li>
+                        </ul>
+                        <button id="mdbook-search-toggle" class="icon-button" type="button" title="Search (`/`)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="/ s" aria-controls="mdbook-searchbar">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M416 208c0 45.9-14.9 88.3-40 122.7L502.6 457.4c12.5 12.5 12.5 32.8 0 45.3s-32.8 12.5-45.3 0L330.7 376c-34.4 25.2-76.8 40-122.7 40C93.1 416 0 322.9 0 208S93.1 0 208 0S416 93.1 416 208zM208 352c79.5 0 144-64.5 144-144s-64.5-144-144-144S64 128.5 64 208s64.5 144 144 144z"/></svg></span>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">The zetesis Book</h1>
+
+                    <div class="right-buttons">
+                        <a href="../print.html" title="Print this book" aria-label="Print this book">
+                            <span class=fa-svg id="print-button"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M128 0C92.7 0 64 28.7 64 64v96h64V64H354.7L384 93.3V160h64V93.3c0-17-6.7-33.3-18.7-45.3L400 18.7C388 6.7 371.7 0 354.7 0H128zM384 352v32 64H128V384 368 352H384zm64 32h32c17.7 0 32-14.3 32-32V256c0-35.3-28.7-64-64-64H64c-35.3 0-64 28.7-64 64v96c0 17.7 14.3 32 32 32H64v64c0 35.3 28.7 64 64 64H384c35.3 0 64-28.7 64-64V384zm-16-88c-13.3 0-24-10.7-24-24s10.7-24 24-24s24 10.7 24 24s-10.7 24-24 24z"/></svg></span>
+                        </a>
+                        <a href="https://github.com/GregoryGelfond/zetesis" title="Git repository" aria-label="Git repository">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 496 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M165.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6zm-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3zm44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9zM244.8 8C106.1 8 0 113.3 0 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C428.2 457.8 496 362.9 496 252 496 113.3 383.5 8 244.8 8zM97.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1zm-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7zm32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1zm-11.4-14.7c-1.6 1-1.6 3.6 0 5.9 1.6 2.3 4.3 3.3 5.6 2.3 1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2z"/></svg></span>
+                        </a>
+                        <a href="https://github.com/GregoryGelfond/zetesis/edit/main/docs/book/reference/cpu-0.7.0.md" title="Suggest an edit" aria-label="Suggest an edit" rel="edit">
+                            <span class=fa-svg id="git-edit-button"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M421.7 220.3l-11.3 11.3-22.6 22.6-205 205c-6.6 6.6-14.8 11.5-23.8 14.1L30.8 511c-8.4 2.5-17.5 .2-23.7-6.1S-1.5 489.7 1 481.2L38.7 353.1c2.6-9 7.5-17.2 14.1-23.8l205-205 22.6-22.6 11.3-11.3 33.9 33.9 62.1 62.1 33.9 33.9zM96 353.9l-9.3 9.3c-.9 .9-1.6 2.1-2 3.4l-25.3 86 86-25.3c1.3-.4 2.5-1.1 3.4-2l9.3-9.3H112c-8.8 0-16-7.2-16-16V353.9zM453.3 19.3l39.4 39.4c25 25 25 65.5 0 90.5l-14.5 14.5-22.6 22.6-11.3 11.3-33.9-33.9-62.1-62.1L314.3 67.7l11.3-11.3 22.6-22.6 14.5-14.5c25-25 65.5-25 90.5 0z"/></svg></span>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="mdbook-search-wrapper" class="hidden">
+                    <form id="mdbook-searchbar-outer" class="searchbar-outer">
+                        <div class="search-wrapper">
+                            <input type="search" id="mdbook-searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="mdbook-searchresults-outer" aria-describedby="searchresults-header">
+                            <div class="spinner-wrapper">
+                                <span class=fa-svg id="fa-spin"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M304 48c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zm0 416c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zM48 304c26.5 0 48-21.5 48-48s-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48zm464-48c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zM142.9 437c18.7-18.7 18.7-49.1 0-67.9s-49.1-18.7-67.9 0s-18.7 49.1 0 67.9s49.1 18.7 67.9 0zm0-294.2c18.7-18.7 18.7-49.1 0-67.9S93.7 56.2 75 75s-18.7 49.1 0 67.9s49.1 18.7 67.9 0zM369.1 437c18.7 18.7 49.1 18.7 67.9 0s18.7-49.1 0-67.9s-49.1-18.7-67.9 0s-18.7 49.1 0 67.9z"/></svg></span>
+                            </div>
+                        </div>
+                    </form>
+                    <div id="mdbook-searchresults-outer" class="searchresults-outer hidden">
+                        <div id="mdbook-searchresults-header" class="searchresults-header"></div>
+                        <ul id="mdbook-searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('mdbook-sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('mdbook-sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#mdbook-sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="mdbook-content" class="content">
+                    <main>
+                        <h1 id="cpu-comparisons-for-the-070-candidate"><a class="header" href="#cpu-comparisons-for-the-070-candidate">CPU comparisons for the 0.7.0 candidate</a></h1>
+<!-- A dated record: its commands keep the spellings of the binaries it records. -->
+<p>On 7 November 2026 we compared the 0.7.0 candidate with clingo on CPU. All <strong>299 distinct inputs</strong> have a recorded disposition. <strong>286</strong> yielded complete paired timings. Zetesis had the lower median on <strong>200</strong>, clingo on <strong>86</strong> and the medians were equal on <strong>0</strong>. With the 3% band, that gives <strong>200 zetesis wins, 11 close and 75 clingo wins</strong>. The remaining <strong>13</strong> have incomplete comparisons.</p>
+<p>The original schedule had 304 positions. Five repeat inputs from the corpus occur in the scalability or series panels. Each has one vote in its original corpus position. The evidence retains every scheduled observation, including repeated selections and any later recovery of an arithmetic case interrupted solely by the campaign scheduling deadline. The <a href="observations/cpu-0.7.0-process.tsv">per-case table</a> gives the measured outcomes by solver. The <a href="observations/cpu-0.7.0-process.json">receipt</a> records source identities, effective edits, report hashes, timings and memory observations.</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Panel</th><th style="text-align: right">Distinct</th><th style="text-align: right">Comparable</th><th style="text-align: right">zetesis wins</th><th style="text-align: right">Close</th><th style="text-align: right">clingo wins</th><th style="text-align: right">Incomplete</th></tr>
+</thead>
+<tbody>
+<tr><td>Regular corpus</td><td style="text-align: right">95</td><td style="text-align: right">95</td><td style="text-align: right">87</td><td style="text-align: right">7</td><td style="text-align: right">1</td><td style="text-align: right">0</td></tr>
+<tr><td>Larger quantified programs</td><td style="text-align: right">5</td><td style="text-align: right">5</td><td style="text-align: right">0</td><td style="text-align: right">0</td><td style="text-align: right">5</td><td style="text-align: right">0</td></tr>
+<tr><td>Public examples</td><td style="text-align: right">12</td><td style="text-align: right">12</td><td style="text-align: right">5</td><td style="text-align: right">1</td><td style="text-align: right">6</td><td style="text-align: right">0</td></tr>
+<tr><td>USA and queens n12</td><td style="text-align: right">2</td><td style="text-align: right">2</td><td style="text-align: right">1</td><td style="text-align: right">0</td><td style="text-align: right">1</td><td style="text-align: right">0</td></tr>
+<tr><td>Family Crossing variants</td><td style="text-align: right">2</td><td style="text-align: right">2</td><td style="text-align: right">1</td><td style="text-align: right">0</td><td style="text-align: right">1</td><td style="text-align: right">0</td></tr>
+<tr><td>Family Crossing components</td><td style="text-align: right">2</td><td style="text-align: right">2</td><td style="text-align: right">1</td><td style="text-align: right">0</td><td style="text-align: right">1</td><td style="text-align: right">0</td></tr>
+<tr><td>Scalability</td><td style="text-align: right">18</td><td style="text-align: right">18</td><td style="text-align: right">13</td><td style="text-align: right">0</td><td style="text-align: right">5</td><td style="text-align: right">0</td></tr>
+<tr><td>Reported programs</td><td style="text-align: right">3</td><td style="text-align: right">3</td><td style="text-align: right">1</td><td style="text-align: right">0</td><td style="text-align: right">2</td><td style="text-align: right">0</td></tr>
+<tr><td>Root examples</td><td style="text-align: right">6</td><td style="text-align: right">6</td><td style="text-align: right">6</td><td style="text-align: right">0</td><td style="text-align: right">0</td><td style="text-align: right">0</td></tr>
+<tr><td>Series</td><td style="text-align: right">20</td><td style="text-align: right">20</td><td style="text-align: right">12</td><td style="text-align: right">0</td><td style="text-align: right">8</td><td style="text-align: right">0</td></tr>
+<tr><td>Quantified programs and their cores</td><td style="text-align: right">18</td><td style="text-align: right">18</td><td style="text-align: right">9</td><td style="text-align: right">0</td><td style="text-align: right">9</td><td style="text-align: right">0</td></tr>
+<tr><td>Amended and generated inputs</td><td style="text-align: right">65</td><td style="text-align: right">65</td><td style="text-align: right">32</td><td style="text-align: right">2</td><td style="text-align: right">31</td><td style="text-align: right">0</td></tr>
+<tr><td>Arithmetic controls</td><td style="text-align: right">51</td><td style="text-align: right">38</td><td style="text-align: right">32</td><td style="text-align: right">1</td><td style="text-align: right">5</td><td style="text-align: right">13</td></tr>
+<tr><td><strong>Total</strong></td><td style="text-align: right">299</td><td style="text-align: right">286</td><td style="text-align: right">200</td><td style="text-align: right">11</td><td style="text-align: right">75</td><td style="text-align: right">13</td></tr>
+</tbody>
+</table>
+</div>
+<p>Across the 51 arithmetic inputs, both solvers completed qualification on <strong>38</strong>, only zetesis on <strong>13</strong>, only clingo on <strong>0</strong>, and neither on <strong>0</strong>. Zetesis proved UNSAT on <strong>13</strong> inputs where the other solver did not finish qualification. On <code>tseitin-p101-odd</code>, zetesis proved UNSAT in 23.07 ms in its qualification run. Clingo reached the 600 s limit. Zetesis recorded the contradiction in its root parity check.</p>
+<p>Both solvers proved the corresponding p47 inputs unsatisfiable. Their three-run medians were 13.05 ms versus 27.43 s on the direct encoding and 12.49 ms versus 55.51 s on the chain encoding. On the 59-input chain the medians were 14.04 ms for zetesis and 358.76 s for clingo. The root cardinality check proved the 11-hole capacity instance inconsistent. Its medians were 6.44 ms versus 482.29 s. On the 82-vertex parity graph with 190 additional three-literal clauses, both solvers enumerated 12 answers. Zetesis took 364.42 s and clingo took 42.63 ms.</p>
+<p>The solvers’ families were cross-checked against each other on 38 arithmetic inputs. A one-sided UNSAT result means the solver exited normally, reported an exhaustive search with zero models, and agreed with the input’s expected outcome. The other solver supplied no confirming family. A solver that finished qualification in the original window retains that result when a recovery supplies timings. Each incomplete row in the README identifies the solver that hit a deadline or did not run. Timing comparisons require all twelve scheduled observations.</p>
+<p>The full schedule includes 40 recovery positions and 4,128 process slots. Only inputs that passed all twelve observations, including paired complete counts and costs, receive a timing vote. For those inputs combined, the sum of case medians was 384.558 s for zetesis and 1,265.999 s for clingo. The sum weights each input by elapsed time. The win column weights each comparable input once. A zetesis/clingo ratio below 0.97 favors zetesis, and a ratio above 1.03 favors clingo. Both boundary values count as close. Scores use unrounded nanoseconds.</p>
+<h2 id="examples-optima-and-size"><a class="header" href="#examples-optima-and-size">Examples, optima and size</a></h2>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Input</th><th style="text-align: right">Answers</th><th style="text-align: right">Optimal cost</th><th style="text-align: right">zetesis (ms)</th><th style="text-align: right">clingo (ms)</th></tr>
+</thead>
+<tbody>
+<tr><td>Mastermind, original wide 68</td><td style="text-align: right">45,832</td><td style="text-align: right">—</td><td style="text-align: right">1,126.39</td><td style="text-align: right">22,601.73</td></tr>
+<tr><td>Mastermind, scalability 8 colors</td><td style="text-align: right">45,832</td><td style="text-align: right">—</td><td style="text-align: right">256.90</td><td style="text-align: right">199.10</td></tr>
+<tr><td>Mastermind, scalability 6 colors</td><td style="text-align: right">6,080</td><td style="text-align: right">—</td><td style="text-align: right">39.90</td><td style="text-align: right">34.05</td></tr>
+<tr><td>Mastermind, scalability 5 colors</td><td style="text-align: right">976</td><td style="text-align: right">—</td><td style="text-align: right">12.40</td><td style="text-align: right">10.84</td></tr>
+<tr><td>Mastermind, nested</td><td style="text-align: right">1</td><td style="text-align: right">—</td><td style="text-align: right">18.53</td><td style="text-align: right">9.23</td></tr>
+<tr><td>Poker</td><td style="text-align: right">36</td><td style="text-align: right">—</td><td style="text-align: right">468.43</td><td style="text-align: right">107.25</td></tr>
+<tr><td>USA SP1</td><td style="text-align: right">32</td><td style="text-align: right">[4]</td><td style="text-align: right">1,726.26</td><td style="text-align: right">496.23</td></tr>
+<tr><td>Family Crossing, integrated</td><td style="text-align: right">8</td><td style="text-align: right">[29]</td><td style="text-align: right">5,065.80</td><td style="text-align: right">894.05</td></tr>
+<tr><td>Family Crossing, vanilla B</td><td style="text-align: right">8</td><td style="text-align: right">[7, 29]</td><td style="text-align: right">743.91</td><td style="text-align: right">11,414.40</td></tr>
+<tr><td>Family Crossing, observation A</td><td style="text-align: right">1</td><td style="text-align: right">—</td><td style="text-align: right">195.56</td><td style="text-align: right">15.38</td></tr>
+<tr><td>Two-QBF parity 20</td><td style="text-align: right">1</td><td style="text-align: right">—</td><td style="text-align: right">313.64</td><td style="text-align: right">28.94</td></tr>
+<tr><td>Two-QBF parity 24</td><td style="text-align: right">1</td><td style="text-align: right">—</td><td style="text-align: right">461.02</td><td style="text-align: right">50.15</td></tr>
+<tr><td>Two-QBF parity 28</td><td style="text-align: right">1</td><td style="text-align: right">—</td><td style="text-align: right">658.25</td><td style="text-align: right">215.87</td></tr>
+<tr><td>Two-QBF pigeonhole 7</td><td style="text-align: right">1</td><td style="text-align: right">—</td><td style="text-align: right">438.88</td><td style="text-align: right">25.97</td></tr>
+<tr><td>Two-QBF pigeonhole 8</td><td style="text-align: right">1</td><td style="text-align: right">—</td><td style="text-align: right">1,059.40</td><td style="text-align: right">81.61</td></tr>
+<tr><td>Prime sieve 300</td><td style="text-align: right">1</td><td style="text-align: right">—</td><td style="text-align: right">7.74</td><td style="text-align: right">9.21</td></tr>
+<tr><td>Subset sum 30</td><td style="text-align: right">296</td><td style="text-align: right">—</td><td style="text-align: right">6.24</td><td style="text-align: right">7.72</td></tr>
+<tr><td>Reported <code>s_crossing.lp</code></td><td style="text-align: right">4</td><td style="text-align: right">—</td><td style="text-align: right">621.41</td><td style="text-align: right">26.84</td></tr>
+<tr><td>Reported <code>sudoku_simple.lp</code></td><td style="text-align: right">1</td><td style="text-align: right">—</td><td style="text-align: right">88.47</td><td style="text-align: right">1,874.19</td></tr>
+<tr><td>Reported <code>elias_pr_simp.lp</code></td><td style="text-align: right">1</td><td style="text-align: right">—</td><td style="text-align: right">199.01</td><td style="text-align: right">79.61</td></tr>
+<tr><td>Tseitin parity, p47</td><td style="text-align: right">0</td><td style="text-align: right">—</td><td style="text-align: right">13.05</td><td style="text-align: right">27,428.05</td></tr>
+<tr><td>Parity chain, p47</td><td style="text-align: right">0</td><td style="text-align: right">—</td><td style="text-align: right">12.49</td><td style="text-align: right">55,512.35</td></tr>
+<tr><td>Parity chain, p59</td><td style="text-align: right">0</td><td style="text-align: right">—</td><td style="text-align: right">14.04</td><td style="text-align: right">358,759.61</td></tr>
+<tr><td>Pigeonhole clauses, 11 holes</td><td style="text-align: right">0</td><td style="text-align: right">—</td><td style="text-align: right">6.44</td><td style="text-align: right">482,292.78</td></tr>
+<tr><td>Mixed parity and clauses, p41/c190</td><td style="text-align: right">12</td><td style="text-align: right">—</td><td style="text-align: right">364,423.83</td><td style="text-align: right">42.63</td></tr>
+</tbody>
+</table>
+</div>
+<p>Clingo took 20.1 times as long on original wide Mastermind and 15.3 times
+as long on Family Crossing vanilla B. Clingo led by a factor of 5.7 on
+integrated Family Crossing and was faster on all five larger quantified inputs.
+In the standalone component panel the domain returned UNSAT, and EEC returned
+one answer. They are separate component checks.</p>
+<h2 id="what-was-measured"><a class="header" href="#what-was-measured">What was measured</a></h2>
+<p>The source commit was <code>878f08509852654a27e3cb6158e746c9d39a1a1d</code> (tree
+<code>d37a7b6d8cf33c2d13ccdc5513ce6ae80deb31ca</code>). It used the release profile
+with fat LTO and one codegen unit, Rust 1.97.1 on an Apple M4 Pro. The
+GPU-capable build of zetesis ran with the CPU backend, 14 workers, automatic
+grounding and automatic checking. Clingo 5.8.2 used one worker in every
+phase. Admission required AC power and one- and five-minute loads below four.</p>
+<p>Each input scheduled a qualification, a warmup, three timed fresh processes
+and a separate RSS sample per solver. Process time starts before spawning the
+child and ends after reaping it. It includes input, grounding, solving and
+captured JSON, with statistics enabled for zetesis. Each process had the same
+600-second outer limit. Qualification compared complete selected answer sets,
+including multiplicities and all final optimal ties and costs. The native
+reports also matched full atoms across repetitions. Some quantified references
+show only projected atoms; their cross-solver checks use that displayed family.</p>
+<p>The <a href="cpu-corpus-final-20261014.html">0.6.0 one- and fourteen-worker corpus timings</a>
+and <a href="worker-scaling.html">earlier CPU and Metal measurements</a> identify their own
+sources, methods and results.</p>
+<h2 id="earlier-single-worker-instruction-comparison"><a class="header" href="#earlier-single-worker-instruction-comparison">Earlier single-worker instruction comparison</a></h2>
+<p>A separate study compared zetesis at <code>878f08509</code> to the integrated baseline
+<code>440525ee917a2a51b15ba394c35bc105b1c11824</code> using the original compiler
+profile. It measured retired instructions on one CPU worker against the maximum
+of five baseline readings per selection. Of the 95 regular inputs, <strong>93</strong>
+exceeded that maximum. The median per-case difference was <strong>+5.26%</strong>. Complete
+integrated Family Crossing was <strong>+3.36%</strong>, pigeonhole 8’s <code>programs/php-8</code>
+was <strong>+126.28%</strong>, and <code>programs/xorchain-20</code> was <strong>−99.73%</strong>. All 113 complete
+answer families matched their historical references. The additional one-answer
+Family Crossing probe returned a member of the eight proved optima at cost 29.</p>
+<p>Gregory accepted the per-case exceptions for 0.7.0 and retained the migration
+for its shared algebra. The <a href="observations/cpu-0.7.0-instructions.csv">114 instruction observations</a>
+record both the baseline ranges and candidate readings.</p>
+<h2 id="reproduce-the-cpu-panels"><a class="header" href="#reproduce-the-cpu-panels">Reproduce the CPU panels</a></h2>
+<p>Start with the measured commit and build the workspace’s release binaries in
+one invocation. Use an absolute path to clingo 5.8.2.</p>
+<pre><code class="language-sh">cargo build --locked --release --all-features -p zetesis-cli -p zetesis-bench
+ROOT=$(pwd -P)
+NATIVE="$ROOT/target/release/zetesis"
+BENCH="$ROOT/target/release/zetesis-bench"
+CLINGO=$(command -v clingo)
+OUT=$(mktemp -d)
+MANIFESTS="$ROOT/docs/book/reference/observations/cpu-0.7.0-manifests"
+run_panel() {
+  label=$1
+  seconds=$2
+  shift 2
+  "$BENCH" run "$ROOT/examples/correctness" "$@" \
+    --zetesis "$NATIVE" --clingo "$CLINGO" --native-interface solve \
+    --backend cpu --grounder auto --oracle auto --threads 14 --clingo-threads 1 \
+    --warmups 1 --repetitions 3 --memory-runs 1 --timeout-seconds 600 \
+    --campaign-seconds "$seconds" --sample-bytes 134217728 --answer-bytes 134217728 \
+    --native-report-bytes 134217728 --native-atoms 4194304 --native-value-nodes 8388608 \
+    --capture-bytes 2147483648 --report-bytes 4294967296 \
+    --report "$OUT/$label.json" --json --color never &gt; "$OUT/$label.summary.json"
+}
+run_panel corpus95 7200 --suite corpus
+run_panel scalability21 7200 --suite scalability --examples "$ROOT/examples" --include-einstein
+</code></pre>
+<p>The measurement used the same 0.7.0 examples and validation trees as the
+recorded inputs. The observation manifests first appear with this report.
+Point <code>MANIFESTS</code> to that directory when running an older checkout. The
+<a href="observations/cpu-0.7.0-manifests/public-supplement.json">public supplement</a>
+selects files from the measured examples directory, including Poker’s driver
+and original Mastermind’s includes. The
+<a href="observations/cpu-0.7.0-manifests/family-components.json">standalone components</a>
+selects the two tracked Family Crossing components. Their manifests resolve
+their input roots relative to the manifest location. Supply the measured
+examples tree at those roots.</p>
+<pre><code class="language-sh">run_panel public-supplement 7200 --workloads "$MANIFESTS/public-supplement.json"
+run_panel family-components 7200 --workloads "$MANIFESTS/family-components.json"
+</code></pre>
+<p>The remaining manifests have root <code>.</code>. Copy each manifest beside its input
+files, retaining its relative entry names and exact SHA-256 digests.</p>
+<ul>
+<li><a href="observations/cpu-0.7.0-manifests/sigma-larger5.json">Larger quantified inputs</a>.
+For <code>parity20.lp</code>, <code>parity24.lp</code> and <code>parity28.lp</code>, copy
+<code>examples/scalability/two-qbf-parity/two_qbf_parity.lp</code>, changing only
+<code>#const n = 6.</code> to the named size. For <code>pigeonhole7.lp</code> and
+<code>pigeonhole8.lp</code>, copy <code>examples/scalability/two-qbf-pigeonhole/two_qbf_pigeonhole.lp</code>,
+changing only <code>#const holes = 4.</code> to 7 or 8.</li>
+<li><a href="observations/cpu-0.7.0-manifests/usa-plus-queens.json">USA and queens</a>.
+This panel requires an external <code>usa/usaSP1.lp</code> matching the manifest.
+Copy <code>examples/scalability/n-queens.lp</code> to <code>queens-n12.lp</code> and change
+<code>#const n = 8.</code> to 12.</li>
+<li><a href="observations/cpu-0.7.0-manifests/family-variants.json">Family Crossing variants</a>.
+These require the external vanilla B and observation A entry files matching
+the manifest. Copy the two included components unchanged from
+<code>examples/family-crossing/</code> into the same directory.</li>
+</ul>
+<p>For example, with the corresponding input directories in <code>SIGMA</code>, <code>USA</code>
+and <code>FAMILY</code>, run the three external selections as follows.</p>
+<pre><code class="language-sh">run_panel sigma-larger5 900 --workloads "$SIGMA/sigma-larger5.json"
+run_panel usa-plus-queens 7200 --workloads "$USA/usa-plus-queens.json"
+run_panel family-variants 7200 --workloads "$FAMILY/family-variants.json"
+</code></pre>
+<p>The <a href="observations/cpu-0.7.0-manifests/reported-workloads.json">reported programs</a>,
+<a href="observations/cpu-0.7.0-manifests/inner-heavy18.json">quantified programs and cores</a> and
+<a href="observations/cpu-0.7.0-manifests/ar51.json">arithmetic programs</a> use external
+input files. Copy each manifest beside its listed sources and match their verified
+hashes and relative names. The <a href="observations/cpu-0.7.0-manifests/root6.json">six root examples</a>
+are tracked under <code>examples/</code>. Use the same <code>run_panel</code> settings, with the
+respective input directories in <code>REPORTED</code>, <code>INNER</code> and <code>AR</code>.</p>
+<pre><code class="language-sh">run_panel reported-workloads 7200 --workloads "$REPORTED/reported-workloads.json"
+run_panel root6 7200 --workloads "$MANIFESTS/root6.json"
+run_panel series22 7200 --suite series
+run_panel inner-heavy18 7200 --workloads "$INNER/inner-heavy18.json"
+run_panel ar51 7200 --workloads "$AR/ar51.json"
+</code></pre>
+<p>The 65 amended and generated workloads used the maintained Rust performance
+matrix directly. The receipt lists each case’s expected contract. Recreate the
+ordered inputs with the <code>Workload</code> constructors using the listed base file and exact byte edits or the generator family, size
+and content digest. Submit the sequence with
+<code>zetesis_validation::performance::matrix::run_workloads_with_invocation</code>
+and the <code>Solve</code> invocation. The six generated cases
+come from the <code>monotone-choices</code> and <code>redundant-transitivity</code> families.
+Each selection uses the existing validation workload and matrix APIs. The
+typed invocation recorded in the receipt identifies the measured local
+driver by its source and executable SHA-256. It used the same solver paths, one warmup, three timed runs, one RSS
+run, reference policy, byte limits and child deadline as the CLI campaigns.</p>
+<p>The arithmetic panel allows one recovery for each input whose original pair
+lacked the required measurements solely because the schedule reached its deadline.
+An already-comparable result or a genuine solver timeout is ineligible. Copy
+the unchanged matching case into its own manifest at the same root and run
+the same solver pair, limits and phases. The public receipt retains both
+records and identifies which one represents the input in the score.</p>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="../reference/performance.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
+                            </a>
+
+                            <a rel="next prefetch" href="../reference/cpu-corpus-final-20261014.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
+                            </a>
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="../reference/performance.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
+                    </a>
+
+                    <a rel="next prefetch" href="../reference/cpu-corpus-final-20261014.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
+                    </a>
+            </nav>
+
+        </div>
+
+        <template id=fa-eye><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 576 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M288 32c-80.8 0-145.5 36.8-192.6 80.6C48.6 156 17.3 208 2.5 243.7c-3.3 7.9-3.3 16.7 0 24.6C17.3 304 48.6 356 95.4 399.4C142.5 443.2 207.2 480 288 480s145.5-36.8 192.6-80.6c46.8-43.5 78.1-95.4 93-131.1c3.3-7.9 3.3-16.7 0-24.6c-14.9-35.7-46.2-87.7-93-131.1C433.5 68.8 368.8 32 288 32zM432 256c0 79.5-64.5 144-144 144s-144-64.5-144-144s64.5-144 144-144s144 64.5 144 144zM288 192c0 35.3-28.7 64-64 64c-11.5 0-22.3-3-31.6-8.4c-.2 2.8-.4 5.5-.4 8.4c0 53 43 96 96 96s96-43 96-96s-43-96-96-96c-2.8 0-5.6 .1-8.4 .4c5.3 9.3 8.4 20.1 8.4 31.6z"/></svg></span></template>
+        <template id=fa-eye-slash><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M38.8 5.1C28.4-3.1 13.3-1.2 5.1 9.2S-1.2 34.7 9.2 42.9l592 464c10.4 8.2 25.5 6.3 33.7-4.1s6.3-25.5-4.1-33.7L525.6 386.7c39.6-40.6 66.4-86.1 79.9-118.4c3.3-7.9 3.3-16.7 0-24.6c-14.9-35.7-46.2-87.7-93-131.1C465.5 68.8 400.8 32 320 32c-68.2 0-125 26.3-169.3 60.8L38.8 5.1zM223.1 149.5C248.6 126.2 282.7 112 320 112c79.5 0 144 64.5 144 144c0 24.9-6.3 48.3-17.4 68.7L408 294.5c5.2-11.8 8-24.8 8-38.5c0-53-43-96-96-96c-2.8 0-5.6 .1-8.4 .4c5.3 9.3 8.4 20.1 8.4 31.6c0 10.2-2.4 19.8-6.6 28.3l-90.3-70.8zm223.1 298L373 389.9c-16.4 6.5-34.3 10.1-53 10.1c-79.5 0-144-64.5-144-144c0-6.9 .5-13.6 1.4-20.2L83.1 161.5C60.3 191.2 44 220.8 34.5 243.7c-3.3 7.9-3.3 16.7 0 24.6c14.9 35.7 46.2 87.7 93 131.1C174.5 443.2 239.2 480 320 480c47.8 0 89.9-12.9 126.2-32.5z"/></svg></span></template>
+        <template id=fa-copy><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M502.6 70.63l-61.25-61.25C435.4 3.371 427.2 0 418.7 0H255.1c-35.35 0-64 28.66-64 64l.0195 256C192 355.4 220.7 384 256 384h192c35.2 0 64-28.8 64-64V93.25C512 84.77 508.6 76.63 502.6 70.63zM464 320c0 8.836-7.164 16-16 16H255.1c-8.838 0-16-7.164-16-16L239.1 64.13c0-8.836 7.164-16 16-16h128L384 96c0 17.67 14.33 32 32 32h47.1V320zM272 448c0 8.836-7.164 16-16 16H63.1c-8.838 0-16-7.164-16-16L47.98 192.1c0-8.836 7.164-16 16-16H160V128H63.99c-35.35 0-64 28.65-64 64l.0098 256C.002 483.3 28.66 512 64 512h192c35.2 0 64-28.8 64-64v-32h-47.1L272 448z"/></svg></span></template>
+        <template id=fa-play><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 384 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M73 39c-14.8-9.1-33.4-9.4-48.5-.9S0 62.6 0 80V432c0 17.4 9.4 33.4 24.5 41.9s33.7 8.1 48.5-.9L361 297c14.3-8.7 23-24.2 23-41s-8.7-32.2-23-41L73 39z"/></svg></span></template>
+        <template id=fa-clock-rotate-left><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M75 75L41 41C25.9 25.9 0 36.6 0 57.9V168c0 13.3 10.7 24 24 24H134.1c21.4 0 32.1-25.9 17-41l-30.8-30.8C155 85.5 203 64 256 64c106 0 192 86 192 192s-86 192-192 192c-40.8 0-78.6-12.7-109.7-34.4c-14.5-10.1-34.4-6.6-44.6 7.9s-6.6 34.4 7.9 44.6C151.2 495 201.7 512 256 512c141.4 0 256-114.6 256-256S397.4 0 256 0C185.3 0 121.3 28.7 75 75zm181 53c-13.3 0-24 10.7-24 24V256c0 6.4 2.5 12.5 7 17l72 72c9.4 9.4 24.6 9.4 33.9 0s9.4-24.6 0-33.9l-65-65V152c0-13.3-10.7-24-24-24z"/></svg></span></template>
+
+
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+
+        <script src="../elasticlunr-ef4e11c1.min.js"></script>
+        <script src="../mark-09e88c2c.min.js"></script>
+        <script src="../searcher-09f2665d.js"></script>
+
+        <script src="../clipboard-1626706a.min.js"></script>
+        <script src="../highlight-abc7f01d.js"></script>
+        <script src="../book-609e4cb8.js"></script>
+
+        <!-- Custom JS scripts -->
+
+
+
+    </div>
+    </body>
+</html>

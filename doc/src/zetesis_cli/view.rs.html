@@ -12,7 +12,7 @@
 <a href=#12 id=12 data-nosnippet>12</a><span class="kw">pub use </span>human::HumanRenderer;
 <a href=#13 id=13 data-nosnippet>13</a><span class="kw">pub use </span>json::JsonRenderer;
 <a href=#14 id=14 data-nosnippet>14</a>
-<a href=#15 id=15 data-nosnippet>15</a><span class="kw">use </span>zetesis_cpu::Cancellation;
+<a href=#15 id=15 data-nosnippet>15</a><span class="kw">use </span>zetesis_algebra::Cancellation;
 <a href=#16 id=16 data-nosnippet>16</a><span class="kw">use </span>zetesis_themelios::observation::{Limits, ModelView};
 <a href=#17 id=17 data-nosnippet>17</a>
 <a href=#18 id=18 data-nosnippet>18</a><span class="kw">use crate</span>::{Publication, PublicationFailure, PublicationStop, RunError, SemanticOutcome};
@@ -168,78 +168,69 @@
 <a href=#168 id=168 data-nosnippet>168</a>            <span class="prelude-val">Err</span>(failure) =&gt; failure.phase_timings.as_deref(),
 <a href=#169 id=169 data-nosnippet>169</a>        }
 <a href=#170 id=170 data-nosnippet>170</a>    }
-<a href=#171 id=171 data-nosnippet>171</a>
-<a href=#172 id=172 data-nosnippet>172</a>    <span class="doccomment">/// Relational source expansion accounting, when that admission route ran.
-<a href=#173 id=173 data-nosnippet>173</a>    </span><span class="attr">#[must_use]
-<a href=#174 id=174 data-nosnippet>174</a>    </span><span class="kw">pub fn </span>expansion(<span class="self">self</span>) -&gt; <span class="prelude-ty">Option</span>&lt;zetesis_themelios::ExpansionUsage&gt; {
-<a href=#175 id=175 data-nosnippet>175</a>        <span class="kw">match </span><span class="self">self</span>.result {
-<a href=#176 id=176 data-nosnippet>176</a>            <span class="prelude-val">Ok</span>(progress) =&gt; progress.expansion,
-<a href=#177 id=177 data-nosnippet>177</a>            <span class="prelude-val">Err</span>(failure) =&gt; failure.partial_report.as_ref().and_then(|p| p.expansion),
-<a href=#178 id=178 data-nosnippet>178</a>        }
-<a href=#179 id=179 data-nosnippet>179</a>    }
-<a href=#180 id=180 data-nosnippet>180</a>}
-<a href=#181 id=181 data-nosnippet>181</a>
-<a href=#182 id=182 data-nosnippet>182</a><span class="doccomment">/// A replaceable view over the controller's streaming answer publication.
-<a href=#183 id=183 data-nosnippet>183</a>///
-<a href=#184 id=184 data-nosnippet>184</a>/// The renderer owns its sink and any bounded encoding state. It receives one
-<a href=#185 id=185 data-nosnippet>185</a>/// answer at a time; no `WorldView` collection or parsing of human output is
-<a href=#186 id=186 data-nosnippet>186</a>/// required. The controller alone acknowledges successful callbacks. Returning
-<a href=#187 id=187 data-nosnippet>187</a>/// an error after a partial write does not acknowledge that answer. Resource and
-<a href=#188 id=188 data-nosnippet>188</a>/// writer errors remain typed failures; cooperative control errors retain the
-<a href=#189 id=189 data-nosnippet>189</a>/// existing publication-stop classification separately from semantic coverage.
-<a href=#190 id=190 data-nosnippet>190</a>///
-<a href=#191 id=191 data-nosnippet>191</a>/// Renderer work and retained copies are the implementer's responsibility.
-<a href=#192 id=192 data-nosnippet>192</a>/// Built-in renderers preflight bounded complete records before external writes.
-<a href=#193 id=193 data-nosnippet>193</a>/// Successful callbacks mean sink acceptance, not durable storage or semantic
-<a href=#194 id=194 data-nosnippet>194</a>/// verification by the renderer. Terminal callbacks may run after cancellation
-<a href=#195 id=195 data-nosnippet>195</a>/// so that retained evidence can still be reported.
-<a href=#196 id=196 data-nosnippet>196</a></span><span class="kw">pub trait </span>AnswerRenderer {
-<a href=#197 id=197 data-nosnippet>197</a>    <span class="doccomment">/// Request coarse host stages for this view, independently of detailed
-<a href=#198 id=198 data-nosnippet>198</a>    /// statistics. The controller fixes this preference when publication starts.
-<a href=#199 id=199 data-nosnippet>199</a>    </span><span class="kw">fn </span>needs_stage_timings(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; bool {
-<a href=#200 id=200 data-nosnippet>200</a>        <span class="bool-val">false
-<a href=#201 id=201 data-nosnippet>201</a>    </span>}
-<a href=#202 id=202 data-nosnippet>202</a>
-<a href=#203 id=203 data-nosnippet>203</a>    <span class="doccomment">/// Start one document before source admission or prepared execution.
-<a href=#204 id=204 data-nosnippet>204</a>    ///
-<a href=#205 id=205 data-nosnippet>205</a>    /// # Errors
-<a href=#206 id=206 data-nosnippet>206</a>    /// Return a typed encoding or external-output failure.
-<a href=#207 id=207 data-nosnippet>207</a>    </span><span class="kw">fn </span>begin(<span class="kw-2">&amp;mut </span><span class="self">self</span>) -&gt; <span class="prelude-ty">Result</span>&lt;(), RunError&gt; {
-<a href=#208 id=208 data-nosnippet>208</a>        <span class="prelude-val">Ok</span>(())
-<a href=#209 id=209 data-nosnippet>209</a>    }
-<a href=#210 id=210 data-nosnippet>210</a>
-<a href=#211 id=211 data-nosnippet>211</a>    <span class="doccomment">/// Present configuration when an execution backend is selected.
-<a href=#212 id=212 data-nosnippet>212</a>    ///
-<a href=#213 id=213 data-nosnippet>213</a>    /// Preparation may call this again with the effective configuration.
-<a href=#214 id=214 data-nosnippet>214</a>    /// The default emits nothing, preserving machine-readable documents and
-<a href=#215 id=215 data-nosnippet>215</a>    /// custom views that do not present setup metadata.
-<a href=#216 id=216 data-nosnippet>216</a>    ///
-<a href=#217 id=217 data-nosnippet>217</a>    /// # Errors
-<a href=#218 id=218 data-nosnippet>218</a>    /// Return a typed rendering or writer failure; execution then stops before
-<a href=#219 id=219 data-nosnippet>219</a>    /// its next step, preserving any preceding semantic and publication evidence.
-<a href=#220 id=220 data-nosnippet>220</a>    </span><span class="kw">fn </span>configuration(<span class="kw-2">&amp;mut </span><span class="self">self</span>, _view: ConfigurationView&lt;<span class="lifetime">'_</span>&gt;) -&gt; <span class="prelude-ty">Result</span>&lt;(), RunError&gt; {
-<a href=#221 id=221 data-nosnippet>221</a>        <span class="prelude-val">Ok</span>(())
-<a href=#222 id=222 data-nosnippet>222</a>    }
-<a href=#223 id=223 data-nosnippet>223</a>
-<a href=#224 id=224 data-nosnippet>224</a>    <span class="doccomment">/// Select when the terminal view is delivered; no bytes are inspected.
-<a href=#225 id=225 data-nosnippet>225</a>    /// The controller snapshots this choice once after `begin` succeeds.
-<a href=#226 id=226 data-nosnippet>226</a>    </span><span class="kw">fn </span>summary_stage(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; SummaryStage {
-<a href=#227 id=227 data-nosnippet>227</a>        SummaryStage::Finalized
-<a href=#228 id=228 data-nosnippet>228</a>    }
-<a href=#229 id=229 data-nosnippet>229</a>
-<a href=#230 id=230 data-nosnippet>230</a>    <span class="doccomment">/// Accept one complete answer record.
+<a href=#171 id=171 data-nosnippet>171</a>}
+<a href=#172 id=172 data-nosnippet>172</a>
+<a href=#173 id=173 data-nosnippet>173</a><span class="doccomment">/// A replaceable view over the controller's streaming answer publication.
+<a href=#174 id=174 data-nosnippet>174</a>///
+<a href=#175 id=175 data-nosnippet>175</a>/// The renderer owns its sink and any bounded encoding state. It receives one
+<a href=#176 id=176 data-nosnippet>176</a>/// answer at a time; no `WorldView` collection or parsing of human output is
+<a href=#177 id=177 data-nosnippet>177</a>/// required. The controller alone acknowledges successful callbacks. Returning
+<a href=#178 id=178 data-nosnippet>178</a>/// an error after a partial write does not acknowledge that answer. Resource and
+<a href=#179 id=179 data-nosnippet>179</a>/// writer errors remain typed failures; cooperative control errors retain the
+<a href=#180 id=180 data-nosnippet>180</a>/// existing publication-stop classification separately from semantic coverage.
+<a href=#181 id=181 data-nosnippet>181</a>///
+<a href=#182 id=182 data-nosnippet>182</a>/// Renderer work and retained copies are the implementer's responsibility.
+<a href=#183 id=183 data-nosnippet>183</a>/// Built-in renderers preflight bounded complete records before external writes.
+<a href=#184 id=184 data-nosnippet>184</a>/// Successful callbacks mean sink acceptance, not durable storage or semantic
+<a href=#185 id=185 data-nosnippet>185</a>/// verification by the renderer. Terminal callbacks may run after cancellation
+<a href=#186 id=186 data-nosnippet>186</a>/// so that retained evidence can still be reported.
+<a href=#187 id=187 data-nosnippet>187</a></span><span class="kw">pub trait </span>AnswerRenderer {
+<a href=#188 id=188 data-nosnippet>188</a>    <span class="doccomment">/// Request coarse host stages for this view, independently of detailed
+<a href=#189 id=189 data-nosnippet>189</a>    /// statistics. The controller fixes this preference when publication starts.
+<a href=#190 id=190 data-nosnippet>190</a>    </span><span class="kw">fn </span>needs_stage_timings(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; bool {
+<a href=#191 id=191 data-nosnippet>191</a>        <span class="bool-val">false
+<a href=#192 id=192 data-nosnippet>192</a>    </span>}
+<a href=#193 id=193 data-nosnippet>193</a>
+<a href=#194 id=194 data-nosnippet>194</a>    <span class="doccomment">/// Start one document before source admission or prepared execution.
+<a href=#195 id=195 data-nosnippet>195</a>    ///
+<a href=#196 id=196 data-nosnippet>196</a>    /// # Errors
+<a href=#197 id=197 data-nosnippet>197</a>    /// Return a typed encoding or external-output failure.
+<a href=#198 id=198 data-nosnippet>198</a>    </span><span class="kw">fn </span>begin(<span class="kw-2">&amp;mut </span><span class="self">self</span>) -&gt; <span class="prelude-ty">Result</span>&lt;(), RunError&gt; {
+<a href=#199 id=199 data-nosnippet>199</a>        <span class="prelude-val">Ok</span>(())
+<a href=#200 id=200 data-nosnippet>200</a>    }
+<a href=#201 id=201 data-nosnippet>201</a>
+<a href=#202 id=202 data-nosnippet>202</a>    <span class="doccomment">/// Present configuration when an execution backend is selected.
+<a href=#203 id=203 data-nosnippet>203</a>    ///
+<a href=#204 id=204 data-nosnippet>204</a>    /// Preparation may call this again with the effective configuration.
+<a href=#205 id=205 data-nosnippet>205</a>    /// The default emits nothing, preserving machine-readable documents and
+<a href=#206 id=206 data-nosnippet>206</a>    /// custom views that do not present setup metadata.
+<a href=#207 id=207 data-nosnippet>207</a>    ///
+<a href=#208 id=208 data-nosnippet>208</a>    /// # Errors
+<a href=#209 id=209 data-nosnippet>209</a>    /// Return a typed rendering or writer failure; execution then stops before
+<a href=#210 id=210 data-nosnippet>210</a>    /// its next step, preserving any preceding semantic and publication evidence.
+<a href=#211 id=211 data-nosnippet>211</a>    </span><span class="kw">fn </span>configuration(<span class="kw-2">&amp;mut </span><span class="self">self</span>, _view: ConfigurationView&lt;<span class="lifetime">'_</span>&gt;) -&gt; <span class="prelude-ty">Result</span>&lt;(), RunError&gt; {
+<a href=#212 id=212 data-nosnippet>212</a>        <span class="prelude-val">Ok</span>(())
+<a href=#213 id=213 data-nosnippet>213</a>    }
+<a href=#214 id=214 data-nosnippet>214</a>
+<a href=#215 id=215 data-nosnippet>215</a>    <span class="doccomment">/// Select when the terminal view is delivered; no bytes are inspected.
+<a href=#216 id=216 data-nosnippet>216</a>    /// The controller snapshots this choice once after `begin` succeeds.
+<a href=#217 id=217 data-nosnippet>217</a>    </span><span class="kw">fn </span>summary_stage(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; SummaryStage {
+<a href=#218 id=218 data-nosnippet>218</a>        SummaryStage::Finalized
+<a href=#219 id=219 data-nosnippet>219</a>    }
+<a href=#220 id=220 data-nosnippet>220</a>
+<a href=#221 id=221 data-nosnippet>221</a>    <span class="doccomment">/// Accept one complete answer record.
+<a href=#222 id=222 data-nosnippet>222</a>    ///
+<a href=#223 id=223 data-nosnippet>223</a>    /// # Errors
+<a href=#224 id=224 data-nosnippet>224</a>    /// A refusal acknowledges no record, even if a writer accepted a prefix.
+<a href=#225 id=225 data-nosnippet>225</a>    </span><span class="kw">fn </span>answer(<span class="kw-2">&amp;mut </span><span class="self">self</span>, view: AnswerView&lt;<span class="lifetime">'_</span>&gt;, cancellation: <span class="kw-2">&amp;</span>Cancellation)
+<a href=#226 id=226 data-nosnippet>226</a>    -&gt; <span class="prelude-ty">Result</span>&lt;(), RunError&gt;;
+<a href=#227 id=227 data-nosnippet>227</a>
+<a href=#228 id=228 data-nosnippet>228</a>    <span class="doccomment">/// Render the terminal view at the declared stage, at most once.
+<a href=#229 id=229 data-nosnippet>229</a>    /// `SearchFinished` is not reached when source or execution fails;
+<a href=#230 id=230 data-nosnippet>230</a>    /// `Finalized` also receives those failures after reporting is attempted.
 <a href=#231 id=231 data-nosnippet>231</a>    ///
 <a href=#232 id=232 data-nosnippet>232</a>    /// # Errors
-<a href=#233 id=233 data-nosnippet>233</a>    /// A refusal acknowledges no record, even if a writer accepted a prefix.
-<a href=#234 id=234 data-nosnippet>234</a>    </span><span class="kw">fn </span>answer(<span class="kw-2">&amp;mut </span><span class="self">self</span>, view: AnswerView&lt;<span class="lifetime">'_</span>&gt;, cancellation: <span class="kw-2">&amp;</span>Cancellation)
-<a href=#235 id=235 data-nosnippet>235</a>    -&gt; <span class="prelude-ty">Result</span>&lt;(), RunError&gt;;
-<a href=#236 id=236 data-nosnippet>236</a>
-<a href=#237 id=237 data-nosnippet>237</a>    <span class="doccomment">/// Render the terminal view at the declared stage, at most once.
-<a href=#238 id=238 data-nosnippet>238</a>    /// `SearchFinished` is not reached when source or execution fails;
-<a href=#239 id=239 data-nosnippet>239</a>    /// `Finalized` also receives those failures after reporting is attempted.
-<a href=#240 id=240 data-nosnippet>240</a>    ///
-<a href=#241 id=241 data-nosnippet>241</a>    /// # Errors
-<a href=#242 id=242 data-nosnippet>242</a>    /// A reporting failure preserves any preceding execution or writer failure.
-<a href=#243 id=243 data-nosnippet>243</a>    </span><span class="kw">fn </span>finish(<span class="kw-2">&amp;mut </span><span class="self">self</span>, view: PublicationView&lt;<span class="lifetime">'_</span>&gt;) -&gt; <span class="prelude-ty">Result</span>&lt;SummaryDelivery, RunError&gt;;
-<a href=#244 id=244 data-nosnippet>244</a>}
+<a href=#233 id=233 data-nosnippet>233</a>    /// A reporting failure preserves any preceding execution or writer failure.
+<a href=#234 id=234 data-nosnippet>234</a>    </span><span class="kw">fn </span>finish(<span class="kw-2">&amp;mut </span><span class="self">self</span>, view: PublicationView&lt;<span class="lifetime">'_</span>&gt;) -&gt; <span class="prelude-ty">Result</span>&lt;SummaryDelivery, RunError&gt;;
+<a href=#235 id=235 data-nosnippet>235</a>}
 </code></pre></div></section></main></body></html>

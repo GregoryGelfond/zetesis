@@ -2,11 +2,11 @@
 
 // ANCHOR: example
 use std::{io, num::NonZeroUsize};
+use zetesis_algebra::Cancellation;
 use zetesis_cli::{
     AnswerRenderer, AnswerView, Backend, Completion, PreparedInput, PublicationConfig,
     PublicationView, RunError, SummaryDelivery, publish_prepared,
 };
-use zetesis_cpu::Cancellation;
 use zetesis_themelios::{AdmissionOptions, ExpansionLimits, FormulaLimits, admit_formula};
 
 #[derive(Default)]

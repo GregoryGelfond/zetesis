@@ -2,9 +2,9 @@
 <a href=#2 id=2 data-nosnippet>2</a>
 <a href=#3 id=3 data-nosnippet>3</a></span><span class="kw">use </span>std::cmp::Ordering;
 <a href=#4 id=4 data-nosnippet>4</a>
-<a href=#5 id=5 data-nosnippet>5</a><span class="kw">use </span>zetesis_core::catalog::TermRef;
-<a href=#6 id=6 data-nosnippet>6</a><span class="kw">use </span>zetesis_core::{Value <span class="kw">as </span>Term, ValueNodeRef};
-<a href=#7 id=7 data-nosnippet>7</a><span class="kw">use </span>zetesis_cpu::Cancellation;
+<a href=#5 id=5 data-nosnippet>5</a><span class="kw">use </span>zetesis_algebra::Cancellation;
+<a href=#6 id=6 data-nosnippet>6</a><span class="kw">use </span>zetesis_core::catalog::TermRef;
+<a href=#7 id=7 data-nosnippet>7</a><span class="kw">use </span>zetesis_core::{Value <span class="kw">as </span>Term, ValueNodeRef};
 <a href=#8 id=8 data-nosnippet>8</a>
 <a href=#9 id=9 data-nosnippet>9</a><span class="kw">use super</span>::{Bound, Error, ErrorKind, Function, Group, GroupRef, Phase, Statistics, Work, add};
 <a href=#10 id=10 data-nosnippet>10</a><span class="kw">use crate</span>::{AggregateComparison, AggregateExtremum};
@@ -162,163 +162,159 @@
 <a href=#162 id=162 data-nosnippet>162</a>        limits: ReductionLimits,
 <a href=#163 id=163 data-nosnippet>163</a>        cancellation: <span class="kw-2">&amp;</span>Cancellation,
 <a href=#164 id=164 data-nosnippet>164</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;Reduction&lt;<span class="lifetime">'a</span>&gt;, Error&gt; {
-<a href=#165 id=165 data-nosnippet>165</a>        <span class="kw">let </span><span class="kw-2">mut </span>work = Work {
-<a href=#166 id=166 data-nosnippet>166</a>            maximum: limits.max_work,
-<a href=#167 id=167 data-nosnippet>167</a>            cancellation,
-<a href=#168 id=168 data-nosnippet>168</a>            statistics: Statistics::default(),
-<a href=#169 id=169 data-nosnippet>169</a>        };
-<a href=#170 id=170 data-nosnippet>170</a>        <span class="kw">let </span>result = <span class="self">self</span>.reduce_checked(original, frozen, <span class="kw-2">&amp;mut </span>work);
-<a href=#171 id=171 data-nosnippet>171</a>        result
-<a href=#172 id=172 data-nosnippet>172</a>            .map(|(original, frozen)| Reduction {
-<a href=#173 id=173 data-nosnippet>173</a>                original,
-<a href=#174 id=174 data-nosnippet>174</a>                frozen,
-<a href=#175 id=175 data-nosnippet>175</a>                statistics: work.statistics,
-<a href=#176 id=176 data-nosnippet>176</a>            })
-<a href=#177 id=177 data-nosnippet>177</a>            .map_err(|kind| work.failure(kind))
-<a href=#178 id=178 data-nosnippet>178</a>    }
-<a href=#179 id=179 data-nosnippet>179</a>
-<a href=#180 id=180 data-nosnippet>180</a>    <span class="kw">fn </span>reduce_checked(
-<a href=#181 id=181 data-nosnippet>181</a>        <span class="self">self</span>,
-<a href=#182 id=182 data-nosnippet>182</a>        original: <span class="kw-2">&amp;</span>[bool],
-<a href=#183 id=183 data-nosnippet>183</a>        frozen: <span class="prelude-ty">Option</span>&lt;<span class="kw-2">&amp;</span>[bool]&gt;,
-<a href=#184 id=184 data-nosnippet>184</a>        work: <span class="kw-2">&amp;mut </span>Work&lt;<span class="lifetime">'_</span>&gt;,
-<a href=#185 id=185 data-nosnippet>185</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;(Evaluation&lt;<span class="lifetime">'a</span>&gt;, <span class="prelude-ty">Option</span>&lt;Evaluation&lt;<span class="lifetime">'a</span>&gt;&gt;), ErrorKind&gt; {
-<a href=#186 id=186 data-nosnippet>186</a>        work.poll()<span class="question-mark">?</span>;
-<a href=#187 id=187 data-nosnippet>187</a>        <span class="self">self</span>.mask_length(original, Phase::Original)<span class="question-mark">?</span>;
-<a href=#188 id=188 data-nosnippet>188</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(frozen) = frozen {
-<a href=#189 id=189 data-nosnippet>189</a>            <span class="self">self</span>.mask_length(frozen, Phase::Frozen)<span class="question-mark">?</span>;
-<a href=#190 id=190 data-nosnippet>190</a>        }
-<a href=#191 id=191 data-nosnippet>191</a>        <span class="kw">let </span>original = <span class="self">self</span>.evaluate(original, work)<span class="question-mark">?</span>;
-<a href=#192 id=192 data-nosnippet>192</a>        <span class="kw">let </span>frozen = frozen.map(|mask| <span class="self">self</span>.evaluate(mask, work)).transpose()<span class="question-mark">?</span>;
-<a href=#193 id=193 data-nosnippet>193</a>        work.poll()<span class="question-mark">?</span>;
-<a href=#194 id=194 data-nosnippet>194</a>        <span class="prelude-val">Ok</span>((original, frozen))
-<a href=#195 id=195 data-nosnippet>195</a>    }
-<a href=#196 id=196 data-nosnippet>196</a>
-<a href=#197 id=197 data-nosnippet>197</a>    <span class="kw">fn </span>mask_length(<span class="kw-2">&amp;</span><span class="self">self</span>, mask: <span class="kw-2">&amp;</span>[bool], phase: Phase) -&gt; <span class="prelude-ty">Result</span>&lt;(), ErrorKind&gt; {
-<a href=#198 id=198 data-nosnippet>198</a>        <span class="kw">if </span>mask.len() != <span class="self">self</span>.data.tuples.len() {
-<a href=#199 id=199 data-nosnippet>199</a>            <span class="kw">return </span><span class="prelude-val">Err</span>(ErrorKind::Mask {
-<a href=#200 id=200 data-nosnippet>200</a>                phase,
-<a href=#201 id=201 data-nosnippet>201</a>                expected: <span class="self">self</span>.data.tuples.len(),
-<a href=#202 id=202 data-nosnippet>202</a>                actual: mask.len(),
-<a href=#203 id=203 data-nosnippet>203</a>            });
-<a href=#204 id=204 data-nosnippet>204</a>        }
-<a href=#205 id=205 data-nosnippet>205</a>        <span class="prelude-val">Ok</span>(())
-<a href=#206 id=206 data-nosnippet>206</a>    }
-<a href=#207 id=207 data-nosnippet>207</a>
-<a href=#208 id=208 data-nosnippet>208</a>    <span class="kw">fn </span>evaluate(<span class="kw-2">&amp;</span><span class="self">self</span>, mask: <span class="kw-2">&amp;</span>[bool], work: <span class="kw-2">&amp;mut </span>Work&lt;<span class="lifetime">'_</span>&gt;) -&gt; <span class="prelude-ty">Result</span>&lt;Evaluation&lt;<span class="lifetime">'a</span>&gt;, ErrorKind&gt; {
-<a href=#209 id=209 data-nosnippet>209</a>        <span class="kw">let </span>(value, cost) = <span class="kw">match </span><span class="self">self</span>.function() {
-<a href=#210 id=210 data-nosnippet>210</a>            Function::Count =&gt; (Value::Integer(<span class="self">self</span>.numeric(mask, work, |<span class="kw">_</span>| <span class="prelude-val">Some</span>(<span class="number">1</span>))<span class="question-mark">?</span>), <span class="number">1</span>),
-<a href=#211 id=211 data-nosnippet>211</a>            Function::Sum =&gt; (Value::Integer(<span class="self">self</span>.numeric(mask, work, number)<span class="question-mark">?</span>), <span class="number">1</span>),
-<a href=#212 id=212 data-nosnippet>212</a>            Function::SumPlus =&gt; (
-<a href=#213 id=213 data-nosnippet>213</a>                Value::Integer(<span class="self">self</span>.numeric(mask, work, positive_number)<span class="question-mark">?</span>),
-<a href=#214 id=214 data-nosnippet>214</a>                <span class="number">1</span>,
-<a href=#215 id=215 data-nosnippet>215</a>            ),
-<a href=#216 id=216 data-nosnippet>216</a>            Function::Min =&gt; <span class="self">self</span>.extremum(AggregateExtremum::Min, mask, work)<span class="question-mark">?</span>,
-<a href=#217 id=217 data-nosnippet>217</a>            Function::Max =&gt; <span class="self">self</span>.extremum(AggregateExtremum::Max, mask, work)<span class="question-mark">?</span>,
-<a href=#218 id=218 data-nosnippet>218</a>        };
-<a href=#219 id=219 data-nosnippet>219</a>        <span class="kw">let </span><span class="kw-2">mut </span>holds = <span class="bool-val">true</span>;
-<a href=#220 id=220 data-nosnippet>220</a>        <span class="kw">for </span>index <span class="kw">in </span><span class="number">0</span>..<span class="self">self</span>.data.guards.len() {
-<a href=#221 id=221 data-nosnippet>221</a>            work.charge(<span class="number">1</span>)<span class="question-mark">?</span>;
-<a href=#222 id=222 data-nosnippet>222</a>            work.charge(add(cost, <span class="self">self</span>.data.guard_costs[index])<span class="question-mark">?</span>)<span class="question-mark">?</span>;
-<a href=#223 id=223 data-nosnippet>223</a>            <span class="kw">let </span>guard = <span class="self">self</span>.guard(index).expect(<span class="string">"admitted guard extent"</span>);
-<a href=#224 id=224 data-nosnippet>224</a>            <span class="kw">let </span>bound = <span class="kw">match </span>guard.bound {
-<a href=#225 id=225 data-nosnippet>225</a>                Bound::Integer(value) =&gt; Value::Integer(value),
-<a href=#226 id=226 data-nosnippet>226</a>                Bound::Term(value) =&gt; term(value),
-<a href=#227 id=227 data-nosnippet>227</a>            };
-<a href=#228 id=228 data-nosnippet>228</a>            holds &amp;= comparison(guard.comparison, compare(value, bound, work)<span class="question-mark">?</span>);
-<a href=#229 id=229 data-nosnippet>229</a>        }
-<a href=#230 id=230 data-nosnippet>230</a>        <span class="prelude-val">Ok</span>(Evaluation { value, holds })
-<a href=#231 id=231 data-nosnippet>231</a>    }
-<a href=#232 id=232 data-nosnippet>232</a>
-<a href=#233 id=233 data-nosnippet>233</a>    <span class="kw">fn </span>numeric(
-<a href=#234 id=234 data-nosnippet>234</a>        <span class="kw-2">&amp;</span><span class="self">self</span>,
-<a href=#235 id=235 data-nosnippet>235</a>        mask: <span class="kw-2">&amp;</span>[bool],
-<a href=#236 id=236 data-nosnippet>236</a>        work: <span class="kw-2">&amp;mut </span>Work&lt;<span class="lifetime">'_</span>&gt;,
-<a href=#237 id=237 data-nosnippet>237</a>        contribution: <span class="kw">impl </span>Fn(<span class="prelude-ty">Option</span>&lt;TermRef&lt;<span class="lifetime">'_</span>&gt;&gt;) -&gt; <span class="prelude-ty">Option</span>&lt;i128&gt;,
-<a href=#238 id=238 data-nosnippet>238</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;i128, ErrorKind&gt; {
-<a href=#239 id=239 data-nosnippet>239</a>        <span class="kw">let </span><span class="kw-2">mut </span>total = <span class="number">0_i128</span>;
-<a href=#240 id=240 data-nosnippet>240</a>        <span class="kw">for </span>(tuple, selected) <span class="kw">in </span><span class="self">self</span>.tuples().iter().zip(mask) {
+<a href=#165 id=165 data-nosnippet>165</a>        <span class="kw">let </span><span class="kw-2">mut </span>work = Work::new(limits.max_work, cancellation);
+<a href=#166 id=166 data-nosnippet>166</a>        <span class="kw">let </span>result = <span class="self">self</span>.reduce_checked(original, frozen, <span class="kw-2">&amp;mut </span>work);
+<a href=#167 id=167 data-nosnippet>167</a>        result
+<a href=#168 id=168 data-nosnippet>168</a>            .map(|(original, frozen)| Reduction {
+<a href=#169 id=169 data-nosnippet>169</a>                original,
+<a href=#170 id=170 data-nosnippet>170</a>                frozen,
+<a href=#171 id=171 data-nosnippet>171</a>                statistics: work.statistics(),
+<a href=#172 id=172 data-nosnippet>172</a>            })
+<a href=#173 id=173 data-nosnippet>173</a>            .map_err(|kind| work.failure(kind))
+<a href=#174 id=174 data-nosnippet>174</a>    }
+<a href=#175 id=175 data-nosnippet>175</a>
+<a href=#176 id=176 data-nosnippet>176</a>    <span class="kw">fn </span>reduce_checked(
+<a href=#177 id=177 data-nosnippet>177</a>        <span class="self">self</span>,
+<a href=#178 id=178 data-nosnippet>178</a>        original: <span class="kw-2">&amp;</span>[bool],
+<a href=#179 id=179 data-nosnippet>179</a>        frozen: <span class="prelude-ty">Option</span>&lt;<span class="kw-2">&amp;</span>[bool]&gt;,
+<a href=#180 id=180 data-nosnippet>180</a>        work: <span class="kw-2">&amp;mut </span>Work&lt;<span class="lifetime">'_</span>&gt;,
+<a href=#181 id=181 data-nosnippet>181</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;(Evaluation&lt;<span class="lifetime">'a</span>&gt;, <span class="prelude-ty">Option</span>&lt;Evaluation&lt;<span class="lifetime">'a</span>&gt;&gt;), ErrorKind&gt; {
+<a href=#182 id=182 data-nosnippet>182</a>        work.poll()<span class="question-mark">?</span>;
+<a href=#183 id=183 data-nosnippet>183</a>        <span class="self">self</span>.mask_length(original, Phase::Original)<span class="question-mark">?</span>;
+<a href=#184 id=184 data-nosnippet>184</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(frozen) = frozen {
+<a href=#185 id=185 data-nosnippet>185</a>            <span class="self">self</span>.mask_length(frozen, Phase::Frozen)<span class="question-mark">?</span>;
+<a href=#186 id=186 data-nosnippet>186</a>        }
+<a href=#187 id=187 data-nosnippet>187</a>        <span class="kw">let </span>original = <span class="self">self</span>.evaluate(original, work)<span class="question-mark">?</span>;
+<a href=#188 id=188 data-nosnippet>188</a>        <span class="kw">let </span>frozen = frozen.map(|mask| <span class="self">self</span>.evaluate(mask, work)).transpose()<span class="question-mark">?</span>;
+<a href=#189 id=189 data-nosnippet>189</a>        work.poll()<span class="question-mark">?</span>;
+<a href=#190 id=190 data-nosnippet>190</a>        <span class="prelude-val">Ok</span>((original, frozen))
+<a href=#191 id=191 data-nosnippet>191</a>    }
+<a href=#192 id=192 data-nosnippet>192</a>
+<a href=#193 id=193 data-nosnippet>193</a>    <span class="kw">fn </span>mask_length(<span class="kw-2">&amp;</span><span class="self">self</span>, mask: <span class="kw-2">&amp;</span>[bool], phase: Phase) -&gt; <span class="prelude-ty">Result</span>&lt;(), ErrorKind&gt; {
+<a href=#194 id=194 data-nosnippet>194</a>        <span class="kw">if </span>mask.len() != <span class="self">self</span>.data.tuples.len() {
+<a href=#195 id=195 data-nosnippet>195</a>            <span class="kw">return </span><span class="prelude-val">Err</span>(ErrorKind::Mask {
+<a href=#196 id=196 data-nosnippet>196</a>                phase,
+<a href=#197 id=197 data-nosnippet>197</a>                expected: <span class="self">self</span>.data.tuples.len(),
+<a href=#198 id=198 data-nosnippet>198</a>                actual: mask.len(),
+<a href=#199 id=199 data-nosnippet>199</a>            });
+<a href=#200 id=200 data-nosnippet>200</a>        }
+<a href=#201 id=201 data-nosnippet>201</a>        <span class="prelude-val">Ok</span>(())
+<a href=#202 id=202 data-nosnippet>202</a>    }
+<a href=#203 id=203 data-nosnippet>203</a>
+<a href=#204 id=204 data-nosnippet>204</a>    <span class="kw">fn </span>evaluate(<span class="kw-2">&amp;</span><span class="self">self</span>, mask: <span class="kw-2">&amp;</span>[bool], work: <span class="kw-2">&amp;mut </span>Work&lt;<span class="lifetime">'_</span>&gt;) -&gt; <span class="prelude-ty">Result</span>&lt;Evaluation&lt;<span class="lifetime">'a</span>&gt;, ErrorKind&gt; {
+<a href=#205 id=205 data-nosnippet>205</a>        <span class="kw">let </span>(value, cost) = <span class="kw">match </span><span class="self">self</span>.function() {
+<a href=#206 id=206 data-nosnippet>206</a>            Function::Count =&gt; (Value::Integer(<span class="self">self</span>.numeric(mask, work, |<span class="kw">_</span>| <span class="prelude-val">Some</span>(<span class="number">1</span>))<span class="question-mark">?</span>), <span class="number">1</span>),
+<a href=#207 id=207 data-nosnippet>207</a>            Function::Sum =&gt; (Value::Integer(<span class="self">self</span>.numeric(mask, work, number)<span class="question-mark">?</span>), <span class="number">1</span>),
+<a href=#208 id=208 data-nosnippet>208</a>            Function::SumPlus =&gt; (
+<a href=#209 id=209 data-nosnippet>209</a>                Value::Integer(<span class="self">self</span>.numeric(mask, work, positive_number)<span class="question-mark">?</span>),
+<a href=#210 id=210 data-nosnippet>210</a>                <span class="number">1</span>,
+<a href=#211 id=211 data-nosnippet>211</a>            ),
+<a href=#212 id=212 data-nosnippet>212</a>            Function::Min =&gt; <span class="self">self</span>.extremum(AggregateExtremum::Min, mask, work)<span class="question-mark">?</span>,
+<a href=#213 id=213 data-nosnippet>213</a>            Function::Max =&gt; <span class="self">self</span>.extremum(AggregateExtremum::Max, mask, work)<span class="question-mark">?</span>,
+<a href=#214 id=214 data-nosnippet>214</a>        };
+<a href=#215 id=215 data-nosnippet>215</a>        <span class="kw">let </span><span class="kw-2">mut </span>holds = <span class="bool-val">true</span>;
+<a href=#216 id=216 data-nosnippet>216</a>        <span class="kw">for </span>index <span class="kw">in </span><span class="number">0</span>..<span class="self">self</span>.data.guards.len() {
+<a href=#217 id=217 data-nosnippet>217</a>            work.charge(<span class="number">1</span>)<span class="question-mark">?</span>;
+<a href=#218 id=218 data-nosnippet>218</a>            work.charge(add(cost, <span class="self">self</span>.data.guard_costs[index])<span class="question-mark">?</span>)<span class="question-mark">?</span>;
+<a href=#219 id=219 data-nosnippet>219</a>            <span class="kw">let </span>guard = <span class="self">self</span>.guard(index).expect(<span class="string">"admitted guard extent"</span>);
+<a href=#220 id=220 data-nosnippet>220</a>            <span class="kw">let </span>bound = <span class="kw">match </span>guard.bound {
+<a href=#221 id=221 data-nosnippet>221</a>                Bound::Integer(value) =&gt; Value::Integer(value),
+<a href=#222 id=222 data-nosnippet>222</a>                Bound::Term(value) =&gt; term(value),
+<a href=#223 id=223 data-nosnippet>223</a>            };
+<a href=#224 id=224 data-nosnippet>224</a>            holds &amp;= comparison(guard.comparison, compare(value, bound, work)<span class="question-mark">?</span>);
+<a href=#225 id=225 data-nosnippet>225</a>        }
+<a href=#226 id=226 data-nosnippet>226</a>        <span class="prelude-val">Ok</span>(Evaluation { value, holds })
+<a href=#227 id=227 data-nosnippet>227</a>    }
+<a href=#228 id=228 data-nosnippet>228</a>
+<a href=#229 id=229 data-nosnippet>229</a>    <span class="kw">fn </span>numeric(
+<a href=#230 id=230 data-nosnippet>230</a>        <span class="kw-2">&amp;</span><span class="self">self</span>,
+<a href=#231 id=231 data-nosnippet>231</a>        mask: <span class="kw-2">&amp;</span>[bool],
+<a href=#232 id=232 data-nosnippet>232</a>        work: <span class="kw-2">&amp;mut </span>Work&lt;<span class="lifetime">'_</span>&gt;,
+<a href=#233 id=233 data-nosnippet>233</a>        contribution: <span class="kw">impl </span>Fn(<span class="prelude-ty">Option</span>&lt;TermRef&lt;<span class="lifetime">'_</span>&gt;&gt;) -&gt; <span class="prelude-ty">Option</span>&lt;i128&gt;,
+<a href=#234 id=234 data-nosnippet>234</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;i128, ErrorKind&gt; {
+<a href=#235 id=235 data-nosnippet>235</a>        <span class="kw">let </span><span class="kw-2">mut </span>total = <span class="number">0_i128</span>;
+<a href=#236 id=236 data-nosnippet>236</a>        <span class="kw">for </span>(tuple, selected) <span class="kw">in </span><span class="self">self</span>.tuples().iter().zip(mask) {
+<a href=#237 id=237 data-nosnippet>237</a>            work.charge(<span class="number">1</span>)<span class="question-mark">?</span>;
+<a href=#238 id=238 data-nosnippet>238</a>            <span class="kw">if </span>!selected {
+<a href=#239 id=239 data-nosnippet>239</a>                <span class="kw">continue</span>;
+<a href=#240 id=240 data-nosnippet>240</a>            }
 <a href=#241 id=241 data-nosnippet>241</a>            work.charge(<span class="number">1</span>)<span class="question-mark">?</span>;
-<a href=#242 id=242 data-nosnippet>242</a>            <span class="kw">if </span>!selected {
-<a href=#243 id=243 data-nosnippet>243</a>                <span class="kw">continue</span>;
+<a href=#242 id=242 data-nosnippet>242</a>            <span class="kw">if let </span><span class="prelude-val">Some</span>(value) = contribution(tuple.key.first()) {
+<a href=#243 id=243 data-nosnippet>243</a>                total = total.checked_add(value).ok_or(ErrorKind::Overflow)<span class="question-mark">?</span>;
 <a href=#244 id=244 data-nosnippet>244</a>            }
-<a href=#245 id=245 data-nosnippet>245</a>            work.charge(<span class="number">1</span>)<span class="question-mark">?</span>;
-<a href=#246 id=246 data-nosnippet>246</a>            <span class="kw">if let </span><span class="prelude-val">Some</span>(value) = contribution(tuple.key.first()) {
-<a href=#247 id=247 data-nosnippet>247</a>                total = total.checked_add(value).ok_or(ErrorKind::Overflow)<span class="question-mark">?</span>;
-<a href=#248 id=248 data-nosnippet>248</a>            }
-<a href=#249 id=249 data-nosnippet>249</a>        }
-<a href=#250 id=250 data-nosnippet>250</a>        <span class="prelude-val">Ok</span>(total)
-<a href=#251 id=251 data-nosnippet>251</a>    }
-<a href=#252 id=252 data-nosnippet>252</a>
-<a href=#253 id=253 data-nosnippet>253</a>    <span class="kw">fn </span>extremum(
-<a href=#254 id=254 data-nosnippet>254</a>        <span class="kw-2">&amp;</span><span class="self">self</span>,
-<a href=#255 id=255 data-nosnippet>255</a>        kind: AggregateExtremum,
-<a href=#256 id=256 data-nosnippet>256</a>        mask: <span class="kw-2">&amp;</span>[bool],
-<a href=#257 id=257 data-nosnippet>257</a>        work: <span class="kw-2">&amp;mut </span>Work&lt;<span class="lifetime">'_</span>&gt;,
-<a href=#258 id=258 data-nosnippet>258</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;(Value&lt;<span class="lifetime">'a</span>&gt;, u64), ErrorKind&gt; {
-<a href=#259 id=259 data-nosnippet>259</a>        <span class="kw">let </span><span class="kw-2">mut </span>value = <span class="kw">match </span>kind {
-<a href=#260 id=260 data-nosnippet>260</a>            AggregateExtremum::Min =&gt; Value::Term((<span class="kw-2">&amp;</span>Term::Supremum).into()),
-<a href=#261 id=261 data-nosnippet>261</a>            AggregateExtremum::Max =&gt; Value::Term((<span class="kw-2">&amp;</span>Term::Infimum).into()),
-<a href=#262 id=262 data-nosnippet>262</a>        };
-<a href=#263 id=263 data-nosnippet>263</a>        <span class="kw">let </span><span class="kw-2">mut </span>cost = <span class="number">1</span>;
-<a href=#264 id=264 data-nosnippet>264</a>        <span class="kw">for </span>((tuple, selected), tuple_cost) <span class="kw">in
-<a href=#265 id=265 data-nosnippet>265</a>            </span><span class="self">self</span>.tuples().iter().zip(mask).zip(<span class="kw-2">&amp;</span><span class="self">self</span>.data.first_costs)
-<a href=#266 id=266 data-nosnippet>266</a>        {
-<a href=#267 id=267 data-nosnippet>267</a>            work.charge(<span class="number">1</span>)<span class="question-mark">?</span>;
-<a href=#268 id=268 data-nosnippet>268</a>            <span class="kw">if </span>!selected {
-<a href=#269 id=269 data-nosnippet>269</a>                <span class="kw">continue</span>;
-<a href=#270 id=270 data-nosnippet>270</a>            }
-<a href=#271 id=271 data-nosnippet>271</a>            <span class="kw">let </span><span class="prelude-val">Some</span>(first) = tuple.key.first() <span class="kw">else </span>{
-<a href=#272 id=272 data-nosnippet>272</a>                <span class="kw">continue</span>;
-<a href=#273 id=273 data-nosnippet>273</a>            };
-<a href=#274 id=274 data-nosnippet>274</a>            work.charge(add(cost, <span class="kw-2">*</span>tuple_cost)<span class="question-mark">?</span>)<span class="question-mark">?</span>;
-<a href=#275 id=275 data-nosnippet>275</a>            <span class="kw">let </span>candidate = term(first);
-<a href=#276 id=276 data-nosnippet>276</a>            <span class="kw">let </span>order = compare(candidate, value, work)<span class="question-mark">?</span>;
-<a href=#277 id=277 data-nosnippet>277</a>            <span class="kw">let </span>replace = <span class="kw">match </span>kind {
-<a href=#278 id=278 data-nosnippet>278</a>                AggregateExtremum::Min =&gt; order.is_lt(),
-<a href=#279 id=279 data-nosnippet>279</a>                AggregateExtremum::Max =&gt; order.is_gt(),
-<a href=#280 id=280 data-nosnippet>280</a>            };
-<a href=#281 id=281 data-nosnippet>281</a>            <span class="kw">if </span>replace {
-<a href=#282 id=282 data-nosnippet>282</a>                value = candidate;
-<a href=#283 id=283 data-nosnippet>283</a>                cost = <span class="kw-2">*</span>tuple_cost;
-<a href=#284 id=284 data-nosnippet>284</a>            }
-<a href=#285 id=285 data-nosnippet>285</a>        }
-<a href=#286 id=286 data-nosnippet>286</a>        <span class="prelude-val">Ok</span>((value, cost))
-<a href=#287 id=287 data-nosnippet>287</a>    }
-<a href=#288 id=288 data-nosnippet>288</a>}
-<a href=#289 id=289 data-nosnippet>289</a>
-<a href=#290 id=290 data-nosnippet>290</a><span class="kw">fn </span>compare(left: Value&lt;<span class="lifetime">'_</span>&gt;, right: Value&lt;<span class="lifetime">'_</span>&gt;, work: <span class="kw-2">&amp;mut </span>Work&lt;<span class="lifetime">'_</span>&gt;) -&gt; <span class="prelude-ty">Result</span>&lt;Ordering, ErrorKind&gt; {
-<a href=#291 id=291 data-nosnippet>291</a>    <span class="kw">if let </span>(Value::Term(left), Value::Term(right)) = (left, right) {
-<a href=#292 id=292 data-nosnippet>292</a>        left.compare_terms_with(right, || work.charge(<span class="number">1</span>))
-<a href=#293 id=293 data-nosnippet>293</a>    } <span class="kw">else </span>{
-<a href=#294 id=294 data-nosnippet>294</a>        work.charge(<span class="number">1</span>)<span class="question-mark">?</span>;
-<a href=#295 id=295 data-nosnippet>295</a>        <span class="prelude-val">Ok</span>(left.compare(right))
-<a href=#296 id=296 data-nosnippet>296</a>    }
-<a href=#297 id=297 data-nosnippet>297</a>}
-<a href=#298 id=298 data-nosnippet>298</a><span class="kw">fn </span>term(value: TermRef&lt;<span class="lifetime">'_</span>&gt;) -&gt; Value&lt;<span class="lifetime">'_</span>&gt; {
-<a href=#299 id=299 data-nosnippet>299</a>    <span class="kw">match </span>value.descriptor() {
-<a href=#300 id=300 data-nosnippet>300</a>        ValueNodeRef::Number(value) =&gt; Value::Integer(i128::from(value)),
-<a href=#301 id=301 data-nosnippet>301</a>        <span class="kw">_ </span>=&gt; Value::Term(value),
-<a href=#302 id=302 data-nosnippet>302</a>    }
-<a href=#303 id=303 data-nosnippet>303</a>}
-<a href=#304 id=304 data-nosnippet>304</a><span class="kw">fn </span>number(value: <span class="prelude-ty">Option</span>&lt;TermRef&lt;<span class="lifetime">'_</span>&gt;&gt;) -&gt; <span class="prelude-ty">Option</span>&lt;i128&gt; {
-<a href=#305 id=305 data-nosnippet>305</a>    <span class="kw">match </span>value.map(TermRef::descriptor) {
-<a href=#306 id=306 data-nosnippet>306</a>        <span class="prelude-val">Some</span>(ValueNodeRef::Number(value)) =&gt; <span class="prelude-val">Some</span>(i128::from(value)),
-<a href=#307 id=307 data-nosnippet>307</a>        <span class="kw">_ </span>=&gt; <span class="prelude-val">None</span>,
-<a href=#308 id=308 data-nosnippet>308</a>    }
-<a href=#309 id=309 data-nosnippet>309</a>}
-<a href=#310 id=310 data-nosnippet>310</a><span class="kw">fn </span>positive_number(value: <span class="prelude-ty">Option</span>&lt;TermRef&lt;<span class="lifetime">'_</span>&gt;&gt;) -&gt; <span class="prelude-ty">Option</span>&lt;i128&gt; {
-<a href=#311 id=311 data-nosnippet>311</a>    number(value).filter(|value| <span class="kw-2">*</span>value &gt; <span class="number">0</span>)
-<a href=#312 id=312 data-nosnippet>312</a>}
-<a href=#313 id=313 data-nosnippet>313</a>
-<a href=#314 id=314 data-nosnippet>314</a><span class="kw">fn </span>comparison(comparison: AggregateComparison, order: Ordering) -&gt; bool {
-<a href=#315 id=315 data-nosnippet>315</a>    <span class="kw">match </span>comparison {
-<a href=#316 id=316 data-nosnippet>316</a>        AggregateComparison::Eq =&gt; order.is_eq(),
-<a href=#317 id=317 data-nosnippet>317</a>        AggregateComparison::Ne =&gt; !order.is_eq(),
-<a href=#318 id=318 data-nosnippet>318</a>        AggregateComparison::Lt =&gt; order.is_lt(),
-<a href=#319 id=319 data-nosnippet>319</a>        AggregateComparison::Le =&gt; !order.is_gt(),
-<a href=#320 id=320 data-nosnippet>320</a>        AggregateComparison::Gt =&gt; order.is_gt(),
-<a href=#321 id=321 data-nosnippet>321</a>        AggregateComparison::Ge =&gt; !order.is_lt(),
-<a href=#322 id=322 data-nosnippet>322</a>    }
-<a href=#323 id=323 data-nosnippet>323</a>}
+<a href=#245 id=245 data-nosnippet>245</a>        }
+<a href=#246 id=246 data-nosnippet>246</a>        <span class="prelude-val">Ok</span>(total)
+<a href=#247 id=247 data-nosnippet>247</a>    }
+<a href=#248 id=248 data-nosnippet>248</a>
+<a href=#249 id=249 data-nosnippet>249</a>    <span class="kw">fn </span>extremum(
+<a href=#250 id=250 data-nosnippet>250</a>        <span class="kw-2">&amp;</span><span class="self">self</span>,
+<a href=#251 id=251 data-nosnippet>251</a>        kind: AggregateExtremum,
+<a href=#252 id=252 data-nosnippet>252</a>        mask: <span class="kw-2">&amp;</span>[bool],
+<a href=#253 id=253 data-nosnippet>253</a>        work: <span class="kw-2">&amp;mut </span>Work&lt;<span class="lifetime">'_</span>&gt;,
+<a href=#254 id=254 data-nosnippet>254</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;(Value&lt;<span class="lifetime">'a</span>&gt;, u64), ErrorKind&gt; {
+<a href=#255 id=255 data-nosnippet>255</a>        <span class="kw">let </span><span class="kw-2">mut </span>value = <span class="kw">match </span>kind {
+<a href=#256 id=256 data-nosnippet>256</a>            AggregateExtremum::Min =&gt; Value::Term((<span class="kw-2">&amp;</span>Term::Supremum).into()),
+<a href=#257 id=257 data-nosnippet>257</a>            AggregateExtremum::Max =&gt; Value::Term((<span class="kw-2">&amp;</span>Term::Infimum).into()),
+<a href=#258 id=258 data-nosnippet>258</a>        };
+<a href=#259 id=259 data-nosnippet>259</a>        <span class="kw">let </span><span class="kw-2">mut </span>cost = <span class="number">1</span>;
+<a href=#260 id=260 data-nosnippet>260</a>        <span class="kw">for </span>((tuple, selected), tuple_cost) <span class="kw">in
+<a href=#261 id=261 data-nosnippet>261</a>            </span><span class="self">self</span>.tuples().iter().zip(mask).zip(<span class="kw-2">&amp;</span><span class="self">self</span>.data.first_costs)
+<a href=#262 id=262 data-nosnippet>262</a>        {
+<a href=#263 id=263 data-nosnippet>263</a>            work.charge(<span class="number">1</span>)<span class="question-mark">?</span>;
+<a href=#264 id=264 data-nosnippet>264</a>            <span class="kw">if </span>!selected {
+<a href=#265 id=265 data-nosnippet>265</a>                <span class="kw">continue</span>;
+<a href=#266 id=266 data-nosnippet>266</a>            }
+<a href=#267 id=267 data-nosnippet>267</a>            <span class="kw">let </span><span class="prelude-val">Some</span>(first) = tuple.key.first() <span class="kw">else </span>{
+<a href=#268 id=268 data-nosnippet>268</a>                <span class="kw">continue</span>;
+<a href=#269 id=269 data-nosnippet>269</a>            };
+<a href=#270 id=270 data-nosnippet>270</a>            work.charge(add(cost, <span class="kw-2">*</span>tuple_cost)<span class="question-mark">?</span>)<span class="question-mark">?</span>;
+<a href=#271 id=271 data-nosnippet>271</a>            <span class="kw">let </span>candidate = term(first);
+<a href=#272 id=272 data-nosnippet>272</a>            <span class="kw">let </span>order = compare(candidate, value, work)<span class="question-mark">?</span>;
+<a href=#273 id=273 data-nosnippet>273</a>            <span class="kw">let </span>replace = <span class="kw">match </span>kind {
+<a href=#274 id=274 data-nosnippet>274</a>                AggregateExtremum::Min =&gt; order.is_lt(),
+<a href=#275 id=275 data-nosnippet>275</a>                AggregateExtremum::Max =&gt; order.is_gt(),
+<a href=#276 id=276 data-nosnippet>276</a>            };
+<a href=#277 id=277 data-nosnippet>277</a>            <span class="kw">if </span>replace {
+<a href=#278 id=278 data-nosnippet>278</a>                value = candidate;
+<a href=#279 id=279 data-nosnippet>279</a>                cost = <span class="kw-2">*</span>tuple_cost;
+<a href=#280 id=280 data-nosnippet>280</a>            }
+<a href=#281 id=281 data-nosnippet>281</a>        }
+<a href=#282 id=282 data-nosnippet>282</a>        <span class="prelude-val">Ok</span>((value, cost))
+<a href=#283 id=283 data-nosnippet>283</a>    }
+<a href=#284 id=284 data-nosnippet>284</a>}
+<a href=#285 id=285 data-nosnippet>285</a>
+<a href=#286 id=286 data-nosnippet>286</a><span class="kw">fn </span>compare(left: Value&lt;<span class="lifetime">'_</span>&gt;, right: Value&lt;<span class="lifetime">'_</span>&gt;, work: <span class="kw-2">&amp;mut </span>Work&lt;<span class="lifetime">'_</span>&gt;) -&gt; <span class="prelude-ty">Result</span>&lt;Ordering, ErrorKind&gt; {
+<a href=#287 id=287 data-nosnippet>287</a>    <span class="kw">if let </span>(Value::Term(left), Value::Term(right)) = (left, right) {
+<a href=#288 id=288 data-nosnippet>288</a>        left.compare_terms_with(right, || work.charge(<span class="number">1</span>))
+<a href=#289 id=289 data-nosnippet>289</a>    } <span class="kw">else </span>{
+<a href=#290 id=290 data-nosnippet>290</a>        work.charge(<span class="number">1</span>)<span class="question-mark">?</span>;
+<a href=#291 id=291 data-nosnippet>291</a>        <span class="prelude-val">Ok</span>(left.compare(right))
+<a href=#292 id=292 data-nosnippet>292</a>    }
+<a href=#293 id=293 data-nosnippet>293</a>}
+<a href=#294 id=294 data-nosnippet>294</a><span class="kw">fn </span>term(value: TermRef&lt;<span class="lifetime">'_</span>&gt;) -&gt; Value&lt;<span class="lifetime">'_</span>&gt; {
+<a href=#295 id=295 data-nosnippet>295</a>    <span class="kw">match </span>value.descriptor() {
+<a href=#296 id=296 data-nosnippet>296</a>        ValueNodeRef::Number(value) =&gt; Value::Integer(i128::from(value)),
+<a href=#297 id=297 data-nosnippet>297</a>        <span class="kw">_ </span>=&gt; Value::Term(value),
+<a href=#298 id=298 data-nosnippet>298</a>    }
+<a href=#299 id=299 data-nosnippet>299</a>}
+<a href=#300 id=300 data-nosnippet>300</a><span class="kw">fn </span>number(value: <span class="prelude-ty">Option</span>&lt;TermRef&lt;<span class="lifetime">'_</span>&gt;&gt;) -&gt; <span class="prelude-ty">Option</span>&lt;i128&gt; {
+<a href=#301 id=301 data-nosnippet>301</a>    <span class="kw">match </span>value.map(TermRef::descriptor) {
+<a href=#302 id=302 data-nosnippet>302</a>        <span class="prelude-val">Some</span>(ValueNodeRef::Number(value)) =&gt; <span class="prelude-val">Some</span>(i128::from(value)),
+<a href=#303 id=303 data-nosnippet>303</a>        <span class="kw">_ </span>=&gt; <span class="prelude-val">None</span>,
+<a href=#304 id=304 data-nosnippet>304</a>    }
+<a href=#305 id=305 data-nosnippet>305</a>}
+<a href=#306 id=306 data-nosnippet>306</a><span class="kw">fn </span>positive_number(value: <span class="prelude-ty">Option</span>&lt;TermRef&lt;<span class="lifetime">'_</span>&gt;&gt;) -&gt; <span class="prelude-ty">Option</span>&lt;i128&gt; {
+<a href=#307 id=307 data-nosnippet>307</a>    number(value).filter(|value| <span class="kw-2">*</span>value &gt; <span class="number">0</span>)
+<a href=#308 id=308 data-nosnippet>308</a>}
+<a href=#309 id=309 data-nosnippet>309</a>
+<a href=#310 id=310 data-nosnippet>310</a><span class="kw">fn </span>comparison(comparison: AggregateComparison, order: Ordering) -&gt; bool {
+<a href=#311 id=311 data-nosnippet>311</a>    <span class="kw">match </span>comparison {
+<a href=#312 id=312 data-nosnippet>312</a>        AggregateComparison::Eq =&gt; order.is_eq(),
+<a href=#313 id=313 data-nosnippet>313</a>        AggregateComparison::Ne =&gt; !order.is_eq(),
+<a href=#314 id=314 data-nosnippet>314</a>        AggregateComparison::Lt =&gt; order.is_lt(),
+<a href=#315 id=315 data-nosnippet>315</a>        AggregateComparison::Le =&gt; !order.is_gt(),
+<a href=#316 id=316 data-nosnippet>316</a>        AggregateComparison::Gt =&gt; order.is_gt(),
+<a href=#317 id=317 data-nosnippet>317</a>        AggregateComparison::Ge =&gt; !order.is_lt(),
+<a href=#318 id=318 data-nosnippet>318</a>    }
+<a href=#319 id=319 data-nosnippet>319</a>}
 </code></pre></div></section></main></body></html>

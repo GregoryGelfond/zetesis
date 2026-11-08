@@ -1,347 +1,1005 @@
-<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `crates/zetesis-wgpu/src/formula/device.rs`."><title>device.rs - source</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2"href="../../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../../static.files/rustdoc-17e0aaed.css"><meta name="rustdoc-vars" data-root-path="../../../" data-static-root-path="../../../static.files/" data-current-crate="zetesis_wgpu" data-themes="" data-resource-suffix="" data-rustdoc-version="1.97.1 (8bab26f4f 2026-07-14)" data-channel="1.97.1" data-search-js="search-fd9372ac.js" data-stringdex-js="stringdex-2da4960a.js" data-settings-js="settings-170eb4bf.js" ><script src="../../../static.files/storage-41dd4d93.js"></script><script defer src="../../../static.files/src-script-813739b1.js"></script><script defer src="../../../src-files.js"></script><script defer src="../../../static.files/main-fcd733ba.js"></script><noscript><link rel="stylesheet" href="../../../static.files/noscript-f7c3ffd8.css"></noscript><link rel="alternate icon" type="image/png" href="../../../static.files/favicon-32x32-eab170b8.png"><link rel="icon" type="image/svg+xml" href="../../../static.files/favicon-044be391.svg"></head><body class="rustdoc src"><a class="skip-main-content" href="#main-content">Skip to main content</a><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"><div class="src-sidebar-title"><h2>Files</h2></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><section id="main-content" class="content" tabindex="-1"><div class="main-heading"><h1><div class="sub-heading">zetesis_wgpu/formula/</div>device.rs</h1><rustdoc-toolbar></rustdoc-toolbar></div><div class="example-wrap digits-3"><pre class="rust"><code><a href=#1 id=1 data-nosnippet>1</a><span class="doccomment">//! Device ownership and health for the separate finite-formula profile.
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `crates/zetesis-wgpu/src/formula/device.rs`."><title>device.rs - source</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2"href="../../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../../static.files/rustdoc-17e0aaed.css"><meta name="rustdoc-vars" data-root-path="../../../" data-static-root-path="../../../static.files/" data-current-crate="zetesis_wgpu" data-themes="" data-resource-suffix="" data-rustdoc-version="1.97.1 (8bab26f4f 2026-07-14)" data-channel="1.97.1" data-search-js="search-fd9372ac.js" data-stringdex-js="stringdex-2da4960a.js" data-settings-js="settings-170eb4bf.js" ><script src="../../../static.files/storage-41dd4d93.js"></script><script defer src="../../../static.files/src-script-813739b1.js"></script><script defer src="../../../src-files.js"></script><script defer src="../../../static.files/main-fcd733ba.js"></script><noscript><link rel="stylesheet" href="../../../static.files/noscript-f7c3ffd8.css"></noscript><link rel="alternate icon" type="image/png" href="../../../static.files/favicon-32x32-eab170b8.png"><link rel="icon" type="image/svg+xml" href="../../../static.files/favicon-044be391.svg"></head><body class="rustdoc src"><a class="skip-main-content" href="#main-content">Skip to main content</a><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"><div class="src-sidebar-title"><h2>Files</h2></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><section id="main-content" class="content" tabindex="-1"><div class="main-heading"><h1><div class="sub-heading">zetesis_wgpu/formula/</div>device.rs</h1><rustdoc-toolbar></rustdoc-toolbar></div><div class="example-wrap digits-4"><pre class="rust"><code><a href=#1 id=1 data-nosnippet>1</a><span class="doccomment">//! Device ownership and health for the separate finite-formula profile.
 <a href=#2 id=2 data-nosnippet>2</a>
-<a href=#3 id=3 data-nosnippet>3</a></span><span class="kw">use </span><span class="kw">super</span>::packing::Plan;
+<a href=#3 id=3 data-nosnippet>3</a></span><span class="kw">use </span><span class="kw">super</span>::packing::{<span class="self">self</span>, Plan};
 <a href=#4 id=4 data-nosnippet>4</a><span class="kw">use </span><span class="kw">super</span>::preparation::{Preparation, PreparedGraph};
 <a href=#5 id=5 data-nosnippet>5</a><span class="kw">use </span><span class="kw">super</span>::transport::Resident;
 <a href=#6 id=6 data-nosnippet>6</a><span class="kw">use super</span>::{FormulaBatchStats, FormulaCheck, FormulaLimits, GateProjection, GpuFormulaProfile};
-<a href=#7 id=7 data-nosnippet>7</a><span class="kw">use </span><span class="kw">crate</span>::runtime::ErrorScopes;
-<a href=#8 id=8 data-nosnippet>8</a><span class="kw">use crate</span>::{GpuError, GpuErrorKind, GpuInfo, GpuOptions, GpuSelection};
-<a href=#9 id=9 data-nosnippet>9</a><span class="kw">use </span>zetesis_cpu::Cancellation;
-<a href=#10 id=10 data-nosnippet>10</a><span class="kw">use </span>zetesis_ferraris::{Interpretation, Theory};
-<a href=#11 id=11 data-nosnippet>11</a>
-<a href=#12 id=12 data-nosnippet>12</a><span class="doccomment">/// GPU original-truth evaluation and sound frozen-query propagation.
-<a href=#13 id=13 data-nosnippet>13</a>///
-<a href=#14 id=14 data-nosnippet>14</a>/// This is a partial reduct primitive; exact residual search remains necessary. No source grounding, objective
-<a href=#15 id=15 data-nosnippet>15</a>/// scoring, candidate enumeration or CPU oracle fallback occurs here.
-<a href=#16 id=16 data-nosnippet>16</a></span><span class="kw">pub struct </span>GpuFormulaOracle {
-<a href=#17 id=17 data-nosnippet>17</a>    profile: GpuFormulaProfile,
-<a href=#18 id=18 data-nosnippet>18</a>    resident: <span class="prelude-ty">Option</span>&lt;Resident&gt;,
-<a href=#19 id=19 data-nosnippet>19</a>    epoch: u32,
-<a href=#20 id=20 data-nosnippet>20</a>    last: <span class="prelude-ty">Option</span>&lt;FormulaBatchStats&gt;,
-<a href=#21 id=21 data-nosnippet>21</a>    last_submission_candidates: <span class="prelude-ty">Option</span>&lt;usize&gt;,
-<a href=#22 id=22 data-nosnippet>22</a>}
-<a href=#23 id=23 data-nosnippet>23</a>
-<a href=#24 id=24 data-nosnippet>24</a><span class="kw">struct </span>PreparedCall {
-<a href=#25 id=25 data-nosnippet>25</a>    fresh: <span class="prelude-ty">Option</span>&lt;PreparedGraph&gt;,
-<a href=#26 id=26 data-nosnippet>26</a>    plan: Plan,
-<a href=#27 id=27 data-nosnippet>27</a>    seeds: Vec&lt;u32&gt;,
-<a href=#28 id=28 data-nosnippet>28</a>    stats: FormulaBatchStats,
-<a href=#29 id=29 data-nosnippet>29</a>}
-<a href=#30 id=30 data-nosnippet>30</a><span class="kw">impl </span>GpuFormulaOracle {
-<a href=#31 id=31 data-nosnippet>31</a>    <span class="doccomment">/// Select a native adapter and create this profile's separate device/pipeline.
-<a href=#32 id=32 data-nosnippet>32</a>    ///
-<a href=#33 id=33 data-nosnippet>33</a>    /// # Errors
-<a href=#34 id=34 data-nosnippet>34</a>    /// Returns typed adapter, capacity, allocation, validation or device failure.
-<a href=#35 id=35 data-nosnippet>35</a>    /// Selection follows the hard API and physical-device policy.
-<a href=#36 id=36 data-nosnippet>36</a>    </span><span class="kw">pub fn </span>new_selected(options: GpuOptions, selection: GpuSelection) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="self">Self</span>, GpuError&gt; {
-<a href=#37 id=37 data-nosnippet>37</a>        <span class="self">Self</span>::new_selected_with_projection(options, selection, GateProjection::default())
-<a href=#38 id=38 data-nosnippet>38</a>    }
-<a href=#39 id=39 data-nosnippet>39</a>
-<a href=#40 id=40 data-nosnippet>40</a>    <span class="doccomment">/// Create an independently owned native device/pipeline for this projection.
-<a href=#41 id=41 data-nosnippet>41</a>    ///
-<a href=#42 id=42 data-nosnippet>42</a>    /// Uses the same hard API and physical-device selection policy as
-<a href=#43 id=43 data-nosnippet>43</a>    /// [`Self::new_selected`]. Construction does not ground, enumerate, or alter
-<a href=#44 id=44 data-nosnippet>44</a>    /// a theory. Enumerated source is borrowed; Bitwise assembles one fixed-size
-<a href=#45 id=45 data-nosnippet>45</a>    /// shader with a fallible reservation, then transfers it to shader creation.
-<a href=#46 id=46 data-nosnippet>46</a>    /// Device/pipeline costs depend on the driver and are outside dispatch limits.
-<a href=#47 id=47 data-nosnippet>47</a>    ///
-<a href=#48 id=48 data-nosnippet>48</a>    /// # Errors
-<a href=#49 id=49 data-nosnippet>49</a>    /// Returns typed adapter, capacity, allocation, validation or device failure.
-<a href=#50 id=50 data-nosnippet>50</a>    </span><span class="kw">pub fn </span>new_selected_with_projection(
-<a href=#51 id=51 data-nosnippet>51</a>        options: GpuOptions,
-<a href=#52 id=52 data-nosnippet>52</a>        selection: GpuSelection,
-<a href=#53 id=53 data-nosnippet>53</a>        projection: GateProjection,
-<a href=#54 id=54 data-nosnippet>54</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="self">Self</span>, GpuError&gt; {
-<a href=#55 id=55 data-nosnippet>55</a>        <span class="prelude-val">Ok</span>(<span class="self">Self</span>::with_profile(
-<a href=#56 id=56 data-nosnippet>56</a>            GpuFormulaProfile::new_selected_with_projection(options, selection, projection)<span class="question-mark">?</span>,
-<a href=#57 id=57 data-nosnippet>57</a>        ))
-<a href=#58 id=58 data-nosnippet>58</a>    }
-<a href=#59 id=59 data-nosnippet>59</a>
-<a href=#60 id=60 data-nosnippet>60</a>    <span class="doccomment">/// Compile this primitive on an existing device context.
-<a href=#61 id=61 data-nosnippet>61</a>    ///
-<a href=#62 id=62 data-nosnippet>62</a>    /// Prepared subjects belong to this primitive; device health and execution
-<a href=#63 id=63 data-nosnippet>63</a>    /// serialization are shared with all primitives using the context.
-<a href=#64 id=64 data-nosnippet>64</a>    ///
-<a href=#65 id=65 data-nosnippet>65</a>    /// # Errors
-<a href=#66 id=66 data-nosnippet>66</a>    /// Refuses an active or invalidated context, unsupported granted limits,
-<a href=#67 id=67 data-nosnippet>67</a>    /// allocation and shader validation failure. No adapter selection occurs.
-<a href=#68 id=68 data-nosnippet>68</a>    </span><span class="kw">pub fn </span>from_context(context: <span class="kw-2">&amp;</span><span class="kw">crate</span>::GpuContext) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="self">Self</span>, GpuError&gt; {
-<a href=#69 id=69 data-nosnippet>69</a>        <span class="self">Self</span>::from_context_with_projection(context, GateProjection::default())
-<a href=#70 id=70 data-nosnippet>70</a>    }
-<a href=#71 id=71 data-nosnippet>71</a>
-<a href=#72 id=72 data-nosnippet>72</a>    <span class="doccomment">/// Compile the selected implementation on an existing shared context.
-<a href=#73 id=73 data-nosnippet>73</a>    ///
-<a href=#74 id=74 data-nosnippet>74</a>    /// # Errors
-<a href=#75 id=75 data-nosnippet>75</a>    /// Reports the same context, capability and compilation failures as
-<a href=#76 id=76 data-nosnippet>76</a>    /// [`Self::from_context`].
-<a href=#77 id=77 data-nosnippet>77</a>    </span><span class="kw">pub fn </span>from_context_with_projection(
-<a href=#78 id=78 data-nosnippet>78</a>        context: <span class="kw-2">&amp;</span><span class="kw">crate</span>::GpuContext,
-<a href=#79 id=79 data-nosnippet>79</a>        projection: GateProjection,
-<a href=#80 id=80 data-nosnippet>80</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="self">Self</span>, GpuError&gt; {
-<a href=#81 id=81 data-nosnippet>81</a>        <span class="prelude-val">Ok</span>(<span class="self">Self</span>::with_profile(
-<a href=#82 id=82 data-nosnippet>82</a>            GpuFormulaProfile::from_context_with_projection(context, projection)<span class="question-mark">?</span>,
-<a href=#83 id=83 data-nosnippet>83</a>        ))
-<a href=#84 id=84 data-nosnippet>84</a>    }
-<a href=#85 id=85 data-nosnippet>85</a>
-<a href=#86 id=86 data-nosnippet>86</a>    <span class="doccomment">/// Start fresh oracle state using a caller-owned compiled profile.
-<a href=#87 id=87 data-nosnippet>87</a>    ///
-<a href=#88 id=88 data-nosnippet>88</a>    /// Acquires the context's nonblocking lease, checks shared health and granted
-<a href=#89 id=89 data-nosnippet>89</a>    /// formula capabilities, then retains the exact compilation. No shader
-<a href=#90 id=90 data-nosnippet>90</a>    /// assembly, pipeline compilation, theory upload or dispatch occurs. Fresh
-<a href=#91 id=91 data-nosnippet>91</a>    /// residency, epoch and batch accounting are independent of every other
-<a href=#92 id=92 data-nosnippet>92</a>    /// oracle; this operation has fixed cost and retains one shared owner.
-<a href=#93 id=93 data-nosnippet>93</a>    ///
-<a href=#94 id=94 data-nosnippet>94</a>    /// # Errors
-<a href=#95 id=95 data-nosnippet>95</a>    /// Refuses Busy before device health, then unsupported granted capabilities.
-<a href=#96 id=96 data-nosnippet>96</a>    /// No adapter policy is selected here; callers requiring a policy first use
-<a href=#97 id=97 data-nosnippet>97</a>    /// [`crate::GpuContext::check_selection`]. A refusal never creates an oracle.
-<a href=#98 id=98 data-nosnippet>98</a>    </span><span class="kw">pub fn </span>from_profile(profile: <span class="kw-2">&amp;</span>GpuFormulaProfile) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="self">Self</span>, GpuError&gt; {
-<a href=#99 id=99 data-nosnippet>99</a>        <span class="kw">let </span>context = profile.context();
-<a href=#100 id=100 data-nosnippet>100</a>        <span class="kw">let </span>_lease = context.lease()<span class="question-mark">?</span>;
-<a href=#101 id=101 data-nosnippet>101</a>        context.check_health()<span class="question-mark">?</span>;
-<a href=#102 id=102 data-nosnippet>102</a>        <span class="kw">super</span>::profile::check_limits(context.limits())<span class="question-mark">?</span>;
-<a href=#103 id=103 data-nosnippet>103</a>        <span class="prelude-val">Ok</span>(<span class="self">Self</span>::with_profile(profile.clone()))
-<a href=#104 id=104 data-nosnippet>104</a>    }
-<a href=#105 id=105 data-nosnippet>105</a>
-<a href=#106 id=106 data-nosnippet>106</a>    <span class="doccomment">/// Exact compiled pipeline owner retained by this oracle.
-<a href=#107 id=107 data-nosnippet>107</a>    </span><span class="attr">#[must_use]
-<a href=#108 id=108 data-nosnippet>108</a>    </span><span class="kw">pub const fn </span>compiled_profile(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="kw-2">&amp;</span>GpuFormulaProfile {
-<a href=#109 id=109 data-nosnippet>109</a>        <span class="kw-2">&amp;</span><span class="self">self</span>.profile
-<a href=#110 id=110 data-nosnippet>110</a>    }
-<a href=#111 id=111 data-nosnippet>111</a>
-<a href=#112 id=112 data-nosnippet>112</a>    <span class="doccomment">/// Exact device context retained by this primitive.
-<a href=#113 id=113 data-nosnippet>113</a>    </span><span class="attr">#[must_use]
-<a href=#114 id=114 data-nosnippet>114</a>    </span><span class="kw">pub fn </span>context(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="kw-2">&amp;</span><span class="kw">crate</span>::GpuContext {
-<a href=#115 id=115 data-nosnippet>115</a>        <span class="self">self</span>.profile.context()
-<a href=#116 id=116 data-nosnippet>116</a>    }
-<a href=#117 id=117 data-nosnippet>117</a>
-<a href=#118 id=118 data-nosnippet>118</a>    <span class="kw">fn </span>with_profile(profile: GpuFormulaProfile) -&gt; <span class="self">Self </span>{
-<a href=#119 id=119 data-nosnippet>119</a>        <span class="self">Self </span>{
-<a href=#120 id=120 data-nosnippet>120</a>            profile,
-<a href=#121 id=121 data-nosnippet>121</a>            resident: <span class="prelude-val">None</span>,
-<a href=#122 id=122 data-nosnippet>122</a>            epoch: <span class="number">0</span>,
-<a href=#123 id=123 data-nosnippet>123</a>            last: <span class="prelude-val">None</span>,
-<a href=#124 id=124 data-nosnippet>124</a>            last_submission_candidates: <span class="prelude-val">None</span>,
-<a href=#125 id=125 data-nosnippet>125</a>        }
-<a href=#126 id=126 data-nosnippet>126</a>    }
-<a href=#127 id=127 data-nosnippet>127</a>
-<a href=#128 id=128 data-nosnippet>128</a>    <span class="doccomment">/// Selected gate implementation; constant-time observation without I/O.
-<a href=#129 id=129 data-nosnippet>129</a>    </span><span class="attr">#[must_use]
-<a href=#130 id=130 data-nosnippet>130</a>    </span><span class="kw">pub const fn </span>projection(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; GateProjection {
-<a href=#131 id=131 data-nosnippet>131</a>        <span class="self">self</span>.profile.projection()
-<a href=#132 id=132 data-nosnippet>132</a>    }
-<a href=#133 id=133 data-nosnippet>133</a>    <span class="doccomment">/// Identity of the actual selected native adapter.
-<a href=#134 id=134 data-nosnippet>134</a>    </span><span class="attr">#[must_use]
-<a href=#135 id=135 data-nosnippet>135</a>    </span><span class="kw">pub fn </span>info(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="kw-2">&amp;</span>GpuInfo {
-<a href=#136 id=136 data-nosnippet>136</a>        <span class="self">self</span>.profile.runtime.context.info()
-<a href=#137 id=137 data-nosnippet>137</a>    }
-<a href=#138 id=138 data-nosnippet>138</a>    <span class="doccomment">/// Last successful nonempty batch's allocation/reuse accounting. Every new
-<a href=#139 id=139 data-nosnippet>139</a>    /// call clears it, including an empty or refused call.
-<a href=#140 id=140 data-nosnippet>140</a>    </span><span class="attr">#[must_use]
-<a href=#141 id=141 data-nosnippet>141</a>    </span><span class="kw">pub fn </span>last_batch_stats(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="prelude-ty">Option</span>&lt;<span class="kw-2">&amp;</span>FormulaBatchStats&gt; {
-<a href=#142 id=142 data-nosnippet>142</a>        <span class="self">self</span>.last.as_ref()
-<a href=#143 id=143 data-nosnippet>143</a>    }
-<a href=#144 id=144 data-nosnippet>144</a>    <span class="doccomment">/// Candidate count from this oracle's most recent call, if it reached queue
-<a href=#145 id=145 data-nosnippet>145</a>    /// submission, even if the result was interrupted or could not decode.
-<a href=#146 id=146 data-nosnippet>146</a>    /// Every new call clears this receipt, including empty and pre-stopped calls.
-<a href=#147 id=147 data-nosnippet>147</a>    /// It certifies submission only, not completed shader work or candidate checks.
-<a href=#148 id=148 data-nosnippet>148</a>    </span><span class="attr">#[must_use]
-<a href=#149 id=149 data-nosnippet>149</a>    </span><span class="kw">pub const fn </span>last_submission_candidates(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="prelude-ty">Option</span>&lt;usize&gt; {
-<a href=#150 id=150 data-nosnippet>150</a>        <span class="self">self</span>.last_submission_candidates
-<a href=#151 id=151 data-nosnippet>151</a>    }
-<a href=#152 id=152 data-nosnippet>152</a>    <span class="doccomment">/// Release authored resident handles. This neither cancels GPU work nor
-<a href=#153 id=153 data-nosnippet>153</a>    /// repairs an invalidated device; driver retirement can occur later.
-<a href=#154 id=154 data-nosnippet>154</a>    /// Clears the last batch and submission receipts.
-<a href=#155 id=155 data-nosnippet>155</a>    </span><span class="kw">pub fn </span>clear_residency(<span class="kw-2">&amp;mut </span><span class="self">self</span>) {
-<a href=#156 id=156 data-nosnippet>156</a>        <span class="self">self</span>.resident = <span class="prelude-val">None</span>;
-<a href=#157 id=157 data-nosnippet>157</a>        <span class="self">self</span>.last = <span class="prelude-val">None</span>;
-<a href=#158 id=158 data-nosnippet>158</a>        <span class="self">self</span>.last_submission_candidates = <span class="prelude-val">None</span>;
+<a href=#7 id=7 data-nosnippet>7</a><span class="kw">use </span><span class="kw">crate</span>::runtime::{ErrorScopes, Observation, Scopes};
+<a href=#8 id=8 data-nosnippet>8</a><span class="kw">use </span><span class="kw">crate</span>::timing::{BatchTiming, ComputeTimer};
+<a href=#9 id=9 data-nosnippet>9</a><span class="kw">use crate</span>::{CheckedSlate, GpuError, GpuErrorKind, GpuInfo, GpuOptions, GpuSelection};
+<a href=#10 id=10 data-nosnippet>10</a><span class="kw">use </span>std::time::{Duration, Instant};
+<a href=#11 id=11 data-nosnippet>11</a><span class="kw">use </span>zetesis_algebra::Cancellation;
+<a href=#12 id=12 data-nosnippet>12</a><span class="kw">use </span>zetesis_backend::{BatchComputeTime, ComputeTimingStatus};
+<a href=#13 id=13 data-nosnippet>13</a><span class="kw">use </span>zetesis_ferraris::{Interpretation, SlateId, SlateRef, Theory};
+<a href=#14 id=14 data-nosnippet>14</a>
+<a href=#15 id=15 data-nosnippet>15</a><span class="doccomment">/// GPU original-truth evaluation and sound frozen-query propagation.
+<a href=#16 id=16 data-nosnippet>16</a>///
+<a href=#17 id=17 data-nosnippet>17</a>/// The immutable transport retains native threshold and extremum-cut rows as
+<a href=#18 id=18 data-nosnippet>18</a>/// shared condition/value columns. Portable u32 limbs preserve all admitted
+<a href=#19 id=19 data-nosnippet>19</a>/// weights and bounds without optional device integer capabilities. Original
+<a href=#20 id=20 data-nosnippet>20</a>/// truth is exact; frozen numeric projection uses conservative linear bounds,
+<a href=#21 id=21 data-nosnippet>21</a>/// which can leave more residual work than expanded Boolean formulas.
+<a href=#22 id=22 data-nosnippet>22</a>///
+<a href=#23 id=23 data-nosnippet>23</a>/// This is a partial reduct primitive; exact residual search remains necessary.
+<a href=#24 id=24 data-nosnippet>24</a>/// A residual carries the semantic atom region retained by the completed device sweeps. No source grounding, objective scoring, candidate
+<a href=#25 id=25 data-nosnippet>25</a>/// enumeration or CPU oracle fallback occurs here.
+<a href=#26 id=26 data-nosnippet>26</a></span><span class="kw">pub struct </span>GpuFormulaOracle {
+<a href=#27 id=27 data-nosnippet>27</a>    profile: GpuFormulaProfile,
+<a href=#28 id=28 data-nosnippet>28</a>    resident: <span class="prelude-ty">Option</span>&lt;Resident&gt;,
+<a href=#29 id=29 data-nosnippet>29</a>    candidates: <span class="kw">crate</span>::candidates::Staging,
+<a href=#30 id=30 data-nosnippet>30</a>    epoch: u32,
+<a href=#31 id=31 data-nosnippet>31</a>    last: <span class="prelude-ty">Option</span>&lt;FormulaBatchStats&gt;,
+<a href=#32 id=32 data-nosnippet>32</a>    last_submission_candidates: <span class="prelude-ty">Option</span>&lt;usize&gt;,
+<a href=#33 id=33 data-nosnippet>33</a>    <span class="comment">// Timestamp storage and pair ledger, from the first timed batch until the
+<a href=#34 id=34 data-nosnippet>34</a>    // residency is cleared; transports and theories come and go beneath it.
+<a href=#35 id=35 data-nosnippet>35</a>    </span>timer: <span class="prelude-ty">Option</span>&lt;ComputeTimer&gt;,
+<a href=#36 id=36 data-nosnippet>36</a>    reported: <span class="prelude-ty">Option</span>&lt;BatchComputeTime&gt;,
+<a href=#37 id=37 data-nosnippet>37</a>}
+<a href=#38 id=38 data-nosnippet>38</a>
+<a href=#39 id=39 data-nosnippet>39</a><span class="kw">struct </span>PreparedCall {
+<a href=#40 id=40 data-nosnippet>40</a>    fresh: <span class="prelude-ty">Option</span>&lt;PreparedGraph&gt;,
+<a href=#41 id=41 data-nosnippet>41</a>    <span class="doccomment">/// The batch's plan, which carries the epoch it commits when submitted.
+<a href=#42 id=42 data-nosnippet>42</a>    </span>plan: Plan,
+<a href=#43 id=43 data-nosnippet>43</a>    stats: FormulaBatchStats,
+<a href=#44 id=44 data-nosnippet>44</a>    output: packing::Output,
+<a href=#45 id=45 data-nosnippet>45</a>}
+<a href=#46 id=46 data-nosnippet>46</a><span class="kw">impl </span>GpuFormulaOracle {
+<a href=#47 id=47 data-nosnippet>47</a>    <span class="doccomment">/// The runtime this oracle submits through, for tests of settled reads.
+<a href=#48 id=48 data-nosnippet>48</a>    </span><span class="attr">#[cfg(test)]
+<a href=#49 id=49 data-nosnippet>49</a>    </span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>runtime(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="kw-2">&amp;</span><span class="kw">crate</span>::runtime::Runtime {
+<a href=#50 id=50 data-nosnippet>50</a>        <span class="kw-2">&amp;</span><span class="self">self</span>.profile.runtime
+<a href=#51 id=51 data-nosnippet>51</a>    }
+<a href=#52 id=52 data-nosnippet>52</a>}
+<a href=#53 id=53 data-nosnippet>53</a>
+<a href=#54 id=54 data-nosnippet>54</a><span class="kw">impl </span>GpuFormulaOracle {
+<a href=#55 id=55 data-nosnippet>55</a>    <span class="doccomment">/// Select a native adapter and create this oracle's separate device and
+<a href=#56 id=56 data-nosnippet>56</a>    /// kernel, whose pipelines are compiled as [`GpuFormulaProfile`] documents.
+<a href=#57 id=57 data-nosnippet>57</a>    ///
+<a href=#58 id=58 data-nosnippet>58</a>    /// # Errors
+<a href=#59 id=59 data-nosnippet>59</a>    /// Returns typed adapter, capacity, allocation, validation or device failure.
+<a href=#60 id=60 data-nosnippet>60</a>    /// Selection follows the hard API and physical-device policy.
+<a href=#61 id=61 data-nosnippet>61</a>    </span><span class="kw">pub fn </span>new_selected(options: GpuOptions, selection: GpuSelection) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="self">Self</span>, GpuError&gt; {
+<a href=#62 id=62 data-nosnippet>62</a>        <span class="self">Self</span>::new_selected_with_projection(options, selection, GateProjection::default())
+<a href=#63 id=63 data-nosnippet>63</a>    }
+<a href=#64 id=64 data-nosnippet>64</a>
+<a href=#65 id=65 data-nosnippet>65</a>    <span class="doccomment">/// Select a native device and request optional compute-pass timestamps.
+<a href=#66 id=66 data-nosnippet>66</a>    ///
+<a href=#67 id=67 data-nosnippet>67</a>    /// Keeps the same profile-specific adapter eligibility as [`Self::new_selected`].
+<a href=#68 id=68 data-nosnippet>68</a>    /// Unsupported timing is reported by [`crate::GpuContext::compute_timing`];
+<a href=#69 id=69 data-nosnippet>69</a>    /// it does not prevent solving.
+<a href=#70 id=70 data-nosnippet>70</a>    ///
+<a href=#71 id=71 data-nosnippet>71</a>    /// # Errors
+<a href=#72 id=72 data-nosnippet>72</a>    /// Returns the same typed construction failures as [`Self::new_selected`].
+<a href=#73 id=73 data-nosnippet>73</a>    </span><span class="kw">pub fn </span>new_selected_with_timing(
+<a href=#74 id=74 data-nosnippet>74</a>        options: GpuOptions,
+<a href=#75 id=75 data-nosnippet>75</a>        selection: GpuSelection,
+<a href=#76 id=76 data-nosnippet>76</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="self">Self</span>, GpuError&gt; {
+<a href=#77 id=77 data-nosnippet>77</a>        <span class="prelude-val">Ok</span>(<span class="self">Self</span>::with_profile(
+<a href=#78 id=78 data-nosnippet>78</a>            GpuFormulaProfile::new_selected_with_timing(options, selection)<span class="question-mark">?</span>,
+<a href=#79 id=79 data-nosnippet>79</a>        ))
+<a href=#80 id=80 data-nosnippet>80</a>    }
+<a href=#81 id=81 data-nosnippet>81</a>
+<a href=#82 id=82 data-nosnippet>82</a>    <span class="doccomment">/// Construct on the device `source` provides: as [`Self::new_selected`]
+<a href=#83 id=83 data-nosnippet>83</a>    /// does for a selected or discovered source, requesting compute-pass
+<a href=#84 id=84 data-nosnippet>84</a>    /// timestamps as [`Self::new_selected_with_timing`] does when its `timing`
+<a href=#85 id=85 data-nosnippet>85</a>    /// is set, and as [`Self::from_context`] does for a context.
+<a href=#86 id=86 data-nosnippet>86</a>    ///
+<a href=#87 id=87 data-nosnippet>87</a>    /// # Errors
+<a href=#88 id=88 data-nosnippet>88</a>    /// The typed failures of the constructor matching `source`, at the same step.
+<a href=#89 id=89 data-nosnippet>89</a>    </span><span class="kw">pub fn </span>from_source(source: <span class="kw">crate</span>::GpuDeviceSource&lt;<span class="lifetime">'_</span>&gt;) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="self">Self</span>, GpuError&gt; {
+<a href=#90 id=90 data-nosnippet>90</a>        <span class="prelude-val">Ok</span>(<span class="self">Self</span>::with_profile(GpuFormulaProfile::from_source(source)<span class="question-mark">?</span>))
+<a href=#91 id=91 data-nosnippet>91</a>    }
+<a href=#92 id=92 data-nosnippet>92</a>
+<a href=#93 id=93 data-nosnippet>93</a>    <span class="doccomment">/// Create an independently owned native device and kernel for this projection.
+<a href=#94 id=94 data-nosnippet>94</a>    ///
+<a href=#95 id=95 data-nosnippet>95</a>    /// Uses the same hard API and physical-device selection policy as
+<a href=#96 id=96 data-nosnippet>96</a>    /// [`Self::new_selected`]. Construction does not ground, enumerate, or alter
+<a href=#97 id=97 data-nosnippet>97</a>    /// a theory. Enumerated source is borrowed; Bitwise assembles one fixed-size
+<a href=#98 id=98 data-nosnippet>98</a>    /// shader with a fallible reservation, then transfers it to shader creation.
+<a href=#99 id=99 data-nosnippet>99</a>    /// Device and compilation costs depend on the driver and are outside dispatch
+<a href=#100 id=100 data-nosnippet>100</a>    /// limits.
+<a href=#101 id=101 data-nosnippet>101</a>    ///
+<a href=#102 id=102 data-nosnippet>102</a>    /// # Errors
+<a href=#103 id=103 data-nosnippet>103</a>    /// Returns typed adapter, capacity, allocation, validation or device failure.
+<a href=#104 id=104 data-nosnippet>104</a>    </span><span class="kw">pub fn </span>new_selected_with_projection(
+<a href=#105 id=105 data-nosnippet>105</a>        options: GpuOptions,
+<a href=#106 id=106 data-nosnippet>106</a>        selection: GpuSelection,
+<a href=#107 id=107 data-nosnippet>107</a>        projection: GateProjection,
+<a href=#108 id=108 data-nosnippet>108</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="self">Self</span>, GpuError&gt; {
+<a href=#109 id=109 data-nosnippet>109</a>        <span class="prelude-val">Ok</span>(<span class="self">Self</span>::with_profile(
+<a href=#110 id=110 data-nosnippet>110</a>            GpuFormulaProfile::new_selected_with_projection(options, selection, projection)<span class="question-mark">?</span>,
+<a href=#111 id=111 data-nosnippet>111</a>        ))
+<a href=#112 id=112 data-nosnippet>112</a>    }
+<a href=#113 id=113 data-nosnippet>113</a>
+<a href=#114 id=114 data-nosnippet>114</a>    <span class="doccomment">/// Compile this primitive's shader on an existing device context; its
+<a href=#115 id=115 data-nosnippet>115</a>    /// pipelines are compiled as [`GpuFormulaProfile`] documents.
+<a href=#116 id=116 data-nosnippet>116</a>    ///
+<a href=#117 id=117 data-nosnippet>117</a>    /// Prepared subjects belong to this primitive; device health and execution
+<a href=#118 id=118 data-nosnippet>118</a>    /// serialization are shared with all primitives using the context.
+<a href=#119 id=119 data-nosnippet>119</a>    ///
+<a href=#120 id=120 data-nosnippet>120</a>    /// # Errors
+<a href=#121 id=121 data-nosnippet>121</a>    /// Refuses an active or invalidated context, unsupported granted limits,
+<a href=#122 id=122 data-nosnippet>122</a>    /// allocation and shader validation failure. No adapter selection occurs.
+<a href=#123 id=123 data-nosnippet>123</a>    </span><span class="kw">pub fn </span>from_context(context: <span class="kw-2">&amp;</span><span class="kw">crate</span>::GpuContext) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="self">Self</span>, GpuError&gt; {
+<a href=#124 id=124 data-nosnippet>124</a>        <span class="self">Self</span>::from_context_with_projection(context, GateProjection::default())
+<a href=#125 id=125 data-nosnippet>125</a>    }
+<a href=#126 id=126 data-nosnippet>126</a>
+<a href=#127 id=127 data-nosnippet>127</a>    <span class="doccomment">/// Compile the selected implementation's shader on an existing shared context.
+<a href=#128 id=128 data-nosnippet>128</a>    ///
+<a href=#129 id=129 data-nosnippet>129</a>    /// # Errors
+<a href=#130 id=130 data-nosnippet>130</a>    /// Reports the same context, capability and compilation failures as
+<a href=#131 id=131 data-nosnippet>131</a>    /// [`Self::from_context`].
+<a href=#132 id=132 data-nosnippet>132</a>    </span><span class="kw">pub fn </span>from_context_with_projection(
+<a href=#133 id=133 data-nosnippet>133</a>        context: <span class="kw-2">&amp;</span><span class="kw">crate</span>::GpuContext,
+<a href=#134 id=134 data-nosnippet>134</a>        projection: GateProjection,
+<a href=#135 id=135 data-nosnippet>135</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="self">Self</span>, GpuError&gt; {
+<a href=#136 id=136 data-nosnippet>136</a>        <span class="prelude-val">Ok</span>(<span class="self">Self</span>::with_profile(
+<a href=#137 id=137 data-nosnippet>137</a>            GpuFormulaProfile::from_context_with_projection(context, projection)<span class="question-mark">?</span>,
+<a href=#138 id=138 data-nosnippet>138</a>        ))
+<a href=#139 id=139 data-nosnippet>139</a>    }
+<a href=#140 id=140 data-nosnippet>140</a>
+<a href=#141 id=141 data-nosnippet>141</a>    <span class="doccomment">/// Start fresh oracle state using a caller-owned profile.
+<a href=#142 id=142 data-nosnippet>142</a>    ///
+<a href=#143 id=143 data-nosnippet>143</a>    /// Acquires the context's nonblocking lease, checks shared health and granted
+<a href=#144 id=144 data-nosnippet>144</a>    /// formula capabilities, then retains the exact compilation. No shader
+<a href=#145 id=145 data-nosnippet>145</a>    /// assembly, pipeline compilation, theory upload or dispatch occurs. Fresh
+<a href=#146 id=146 data-nosnippet>146</a>    /// residency, epoch and batch accounting are independent of every other
+<a href=#147 id=147 data-nosnippet>147</a>    /// oracle; this operation has fixed cost and retains one shared owner.
+<a href=#148 id=148 data-nosnippet>148</a>    ///
+<a href=#149 id=149 data-nosnippet>149</a>    /// # Errors
+<a href=#150 id=150 data-nosnippet>150</a>    /// Refuses Busy before device health, then unsupported granted capabilities.
+<a href=#151 id=151 data-nosnippet>151</a>    /// No adapter policy is selected here; callers requiring a policy first use
+<a href=#152 id=152 data-nosnippet>152</a>    /// [`crate::GpuContext::check_selection`]. A refusal never creates an oracle.
+<a href=#153 id=153 data-nosnippet>153</a>    </span><span class="kw">pub fn </span>from_profile(profile: <span class="kw-2">&amp;</span>GpuFormulaProfile) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="self">Self</span>, GpuError&gt; {
+<a href=#154 id=154 data-nosnippet>154</a>        <span class="kw">let </span>context = profile.context();
+<a href=#155 id=155 data-nosnippet>155</a>        <span class="kw">let </span>_lease = context.lease()<span class="question-mark">?</span>;
+<a href=#156 id=156 data-nosnippet>156</a>        context.check_health()<span class="question-mark">?</span>;
+<a href=#157 id=157 data-nosnippet>157</a>        <span class="kw">super</span>::profile::check_limits(context.limits())<span class="question-mark">?</span>;
+<a href=#158 id=158 data-nosnippet>158</a>        <span class="prelude-val">Ok</span>(<span class="self">Self</span>::with_profile(profile.clone()))
 <a href=#159 id=159 data-nosnippet>159</a>    }
-<a href=#160 id=160 data-nosnippet>160</a>    <span class="doccomment">/// Evaluate original roots, freeze M, and cooperatively narrow the proper-
-<a href=#161 id=161 data-nosnippet>161</a>    /// subset query. Results retain input order and no partial batch is returned.
-<a href=#162 id=162 data-nosnippet>162</a>    /// Clones of one Theory reuse its graph; independent equal theories do not.
-<a href=#163 id=163 data-nosnippet>163</a>    /// Exact candidate-count transport is replaced when that count changes.
-<a href=#164 id=164 data-nosnippet>164</a>    /// A cold subject is prepared in O(nodes + edges + roots + levels) host work, outside
-<a href=#165 id=165 data-nosnippet>165</a>    /// the per-candidate device-work limit. One buffer retains fixed headers and
-<a href=#166 id=166 data-nosnippet>166</a>    /// complete native operand rows; no binary expansion or per-candidate graph
-<a href=#167 id=167 data-nosnippet>167</a>    /// copy is made. Its upload buffers are released after
-<a href=#168 id=168 data-nosnippet>168</a>    /// device copies are created. Pure chains retain serial truth; other DAGs
-<a href=#169 id=169 data-nosnippet>169</a>    /// distribute independent nodes by dependency level. Narrow levels can incur
-<a href=#170 id=170 data-nosnippet>170</a>    /// synchronization cost without useful parallelism; no crossover is assumed.
-<a href=#171 id=171 data-nosnippet>171</a>    ///
-<a href=#172 id=172 data-nosnippet>172</a>    /// # Errors
-<a href=#173 id=173 data-nosnippet>173</a>    /// Refuses foreign interpretations, insufficient setup/work/storage limits,
-<a href=#174 id=174 data-nosnippet>174</a>    /// u32 address overflow, allocation, device/poll, validation or readback
-<a href=#175 id=175 data-nosnippet>175</a>    /// failures. Execution/readback failures invalidate the entire context.
-<a href=#176 id=176 data-nosnippet>176</a>    /// Minimum shape, input and Busy refusals preserve residency. Later cold
-<a href=#177 id=177 data-nosnippet>177</a>    /// preparation refusal releases the old resident handles and leaves a
-<a href=#178 id=178 data-nosnippet>178</a>    /// healthy, cold context without advancing its epoch. Driver retirement is
-<a href=#179 id=179 data-nosnippet>179</a>    /// excluded from authored byte limits. A propagation limit is an explicit
-<a href=#180 id=180 data-nosnippet>180</a>    /// residual, never a proof of stability.
-<a href=#181 id=181 data-nosnippet>181</a>    </span><span class="kw">pub fn </span>propagate_batch(
-<a href=#182 id=182 data-nosnippet>182</a>        <span class="kw-2">&amp;mut </span><span class="self">self</span>,
-<a href=#183 id=183 data-nosnippet>183</a>        theory: <span class="kw-2">&amp;</span>Theory,
-<a href=#184 id=184 data-nosnippet>184</a>        candidates: <span class="kw-2">&amp;</span>[Interpretation],
-<a href=#185 id=185 data-nosnippet>185</a>        limits: FormulaLimits,
-<a href=#186 id=186 data-nosnippet>186</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;Vec&lt;FormulaCheck&gt;, GpuError&gt; {
-<a href=#187 id=187 data-nosnippet>187</a>        <span class="self">self</span>.propagate_batch_with_cancellation(theory, candidates, limits, <span class="kw-2">&amp;</span>Cancellation::default())
-<a href=#188 id=188 data-nosnippet>188</a>    }
-<a href=#189 id=189 data-nosnippet>189</a>
-<a href=#190 id=190 data-nosnippet>190</a>    <span class="doccomment">/// Propagate with cooperative caller cancellation and deadline observation.
-<a href=#191 id=191 data-nosnippet>191</a>    /// Busy admission precedes control; control precedes device health, including
-<a href=#192 id=192 data-nosnippet>192</a>    /// empty batches. Further polls follow host packing and bracket waits of at
-<a href=#193 id=193 data-nosnippet>193</a>    /// most 50 ms. Host work, driver calls and scope drains are not preempted.
-<a href=#194 id=194 data-nosnippet>194</a>    ///
-<a href=#195 id=195 data-nosnippet>195</a>    /// # Errors
-<a href=#196 id=196 data-nosnippet>196</a>    /// Preserves [`Self::propagate_batch`]'s failures. An interruption returns its
-<a href=#197 id=197 data-nosnippet>197</a>    /// exact stop and no partial checks. Pre-submission control refusal leaves
-<a href=#198 id=198 data-nosnippet>198</a>    /// health reusable; an interrupted submitted operation invalidates it.
-<a href=#199 id=199 data-nosnippet>199</a>    /// Scope/device faults retain priority. This is not a hard wall-clock deadline.
-<a href=#200 id=200 data-nosnippet>200</a>    </span><span class="kw">pub fn </span>propagate_batch_with_cancellation(
-<a href=#201 id=201 data-nosnippet>201</a>        <span class="kw-2">&amp;mut </span><span class="self">self</span>,
-<a href=#202 id=202 data-nosnippet>202</a>        theory: <span class="kw-2">&amp;</span>Theory,
-<a href=#203 id=203 data-nosnippet>203</a>        candidates: <span class="kw-2">&amp;</span>[Interpretation],
-<a href=#204 id=204 data-nosnippet>204</a>        limits: FormulaLimits,
-<a href=#205 id=205 data-nosnippet>205</a>        cancellation: <span class="kw-2">&amp;</span>Cancellation,
-<a href=#206 id=206 data-nosnippet>206</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;Vec&lt;FormulaCheck&gt;, GpuError&gt; {
-<a href=#207 id=207 data-nosnippet>207</a>        <span class="self">self</span>.last = <span class="prelude-val">None</span>;
-<a href=#208 id=208 data-nosnippet>208</a>        <span class="self">self</span>.last_submission_candidates = <span class="prelude-val">None</span>;
-<a href=#209 id=209 data-nosnippet>209</a>        <span class="kw">let </span>context = <span class="self">self</span>.profile.runtime.context.clone();
-<a href=#210 id=210 data-nosnippet>210</a>        <span class="kw">let </span>_lease = context.lease()<span class="question-mark">?</span>;
-<a href=#211 id=211 data-nosnippet>211</a>        cancellation.poll().map_err(GpuError::interrupted)<span class="question-mark">?</span>;
-<a href=#212 id=212 data-nosnippet>212</a>        <span class="self">self</span>.profile.runtime.check_health()<span class="question-mark">?</span>;
-<a href=#213 id=213 data-nosnippet>213</a>        <span class="kw">if </span>candidates.is_empty() {
-<a href=#214 id=214 data-nosnippet>214</a>            <span class="kw">return </span><span class="prelude-val">Ok</span>(Vec::new());
-<a href=#215 id=215 data-nosnippet>215</a>        }
-<a href=#216 id=216 data-nosnippet>216</a>        <span class="kw">let </span>epoch = <span class="self">self</span>.epoch.checked_add(<span class="number">1</span>).ok_or_else(|| {
-<a href=#217 id=217 data-nosnippet>217</a>            GpuError::new(GpuErrorKind::Capacity, <span class="string">"formula epoch counter exhausted"</span>)
-<a href=#218 id=218 data-nosnippet>218</a>        })<span class="question-mark">?</span>;
-<a href=#219 id=219 data-nosnippet>219</a>        <span class="kw">let </span>PreparedCall {
-<a href=#220 id=220 data-nosnippet>220</a>            fresh,
-<a href=#221 id=221 data-nosnippet>221</a>            plan,
-<a href=#222 id=222 data-nosnippet>222</a>            seeds,
-<a href=#223 id=223 data-nosnippet>223</a>            stats,
-<a href=#224 id=224 data-nosnippet>224</a>        } = <span class="self">self</span>.prepare(theory, candidates, limits, cancellation, epoch)<span class="question-mark">?</span>;
-<a href=#225 id=225 data-nosnippet>225</a>        cancellation.poll().map_err(GpuError::interrupted)<span class="question-mark">?</span>;
-<a href=#226 id=226 data-nosnippet>226</a>        <span class="kw">let </span>scopes = ErrorScopes::new(<span class="self">self</span>.profile.runtime.device());
-<a href=#227 id=227 data-nosnippet>227</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(prepared) = fresh {
-<a href=#228 id=228 data-nosnippet>228</a>            <span class="self">self</span>.resident = <span class="prelude-val">Some</span>(Resident::new(<span class="self">self</span>.profile.runtime.device(), prepared));
-<a href=#229 id=229 data-nosnippet>229</a>        }
-<a href=#230 id=230 data-nosnippet>230</a>        <span class="self">self</span>.epoch = epoch;
-<a href=#231 id=231 data-nosnippet>231</a>        <span class="kw">let </span>outcome = <span class="self">self
-<a href=#232 id=232 data-nosnippet>232</a>            </span>.resident
-<a href=#233 id=233 data-nosnippet>233</a>            .as_mut()
-<a href=#234 id=234 data-nosnippet>234</a>            .ok_or_else(|| GpuError::new(GpuErrorKind::Device, <span class="string">"missing resident formula"</span>))
-<a href=#235 id=235 data-nosnippet>235</a>            .and_then(|resident| {
-<a href=#236 id=236 data-nosnippet>236</a>                resident.dispatch(
-<a href=#237 id=237 data-nosnippet>237</a>                    <span class="kw-2">&amp;</span><span class="self">self</span>.profile.runtime,
-<a href=#238 id=238 data-nosnippet>238</a>                    <span class="kw-2">&amp;</span>seeds,
-<a href=#239 id=239 data-nosnippet>239</a>                    <span class="kw-2">&amp;</span>plan,
-<a href=#240 id=240 data-nosnippet>240</a>                    limits.timeout,
-<a href=#241 id=241 data-nosnippet>241</a>                    cancellation,
-<a href=#242 id=242 data-nosnippet>242</a>                    <span class="kw-2">&amp;mut </span><span class="self">self</span>.last_submission_candidates,
-<a href=#243 id=243 data-nosnippet>243</a>                )
-<a href=#244 id=244 data-nosnippet>244</a>            });
-<a href=#245 id=245 data-nosnippet>245</a>        <span class="kw">let </span>result = <span class="self">self</span>.profile.runtime.complete(scopes, outcome);
-<a href=#246 id=246 data-nosnippet>246</a>        <span class="kw">if </span>result.is_ok() {
-<a href=#247 id=247 data-nosnippet>247</a>            <span class="self">self</span>.last = <span class="prelude-val">Some</span>(stats);
-<a href=#248 id=248 data-nosnippet>248</a>        }
-<a href=#249 id=249 data-nosnippet>249</a>        result
-<a href=#250 id=250 data-nosnippet>250</a>    }
-<a href=#251 id=251 data-nosnippet>251</a>
-<a href=#252 id=252 data-nosnippet>252</a>    <span class="comment">// All cold staging is owned and admitted before device effects. Minimum
-<a href=#253 id=253 data-nosnippet>253</a>    // shape/identity refusals preserve residency; later cold failures leave a
-<a href=#254 id=254 data-nosnippet>254</a>    // healthy context without a resident subject or a committed epoch.
-<a href=#255 id=255 data-nosnippet>255</a>    </span><span class="kw">fn </span>prepare(
-<a href=#256 id=256 data-nosnippet>256</a>        <span class="kw-2">&amp;mut </span><span class="self">self</span>,
-<a href=#257 id=257 data-nosnippet>257</a>        theory: <span class="kw-2">&amp;</span>Theory,
-<a href=#258 id=258 data-nosnippet>258</a>        candidates: <span class="kw-2">&amp;</span>[Interpretation],
-<a href=#259 id=259 data-nosnippet>259</a>        limits: FormulaLimits,
-<a href=#260 id=260 data-nosnippet>260</a>        cancellation: <span class="kw-2">&amp;</span>Cancellation,
-<a href=#261 id=261 data-nosnippet>261</a>        epoch: u32,
-<a href=#262 id=262 data-nosnippet>262</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;PreparedCall, GpuError&gt; {
-<a href=#263 id=263 data-nosnippet>263</a>        <span class="kw">let </span>(fresh, plan) = <span class="kw">if </span><span class="self">self
-<a href=#264 id=264 data-nosnippet>264</a>            </span>.resident
-<a href=#265 id=265 data-nosnippet>265</a>            .as_ref()
-<a href=#266 id=266 data-nosnippet>266</a>            .is_some_and(|resident| resident.graph.shape.theory.same_instance(theory))
-<a href=#267 id=267 data-nosnippet>267</a>        {
-<a href=#268 id=268 data-nosnippet>268</a>            <span class="kw">let </span>resident = <span class="self">self</span>.resident.as_ref().ok_or_else(|| {
-<a href=#269 id=269 data-nosnippet>269</a>                GpuError::new(GpuErrorKind::Device, <span class="string">"missing admitted formula resident"</span>)
-<a href=#270 id=270 data-nosnippet>270</a>            })<span class="question-mark">?</span>;
-<a href=#271 id=271 data-nosnippet>271</a>            <span class="kw">let </span>plan = Plan::new(
-<a href=#272 id=272 data-nosnippet>272</a>                <span class="kw-2">&amp;</span>resident.graph,
-<a href=#273 id=273 data-nosnippet>273</a>                candidates.len(),
-<a href=#274 id=274 data-nosnippet>274</a>                limits,
-<a href=#275 id=275 data-nosnippet>275</a>                <span class="self">self</span>.profile.runtime.limits(),
-<a href=#276 id=276 data-nosnippet>276</a>                <span class="bool-val">false</span>,
-<a href=#277 id=277 data-nosnippet>277</a>                epoch,
-<a href=#278 id=278 data-nosnippet>278</a>            )<span class="question-mark">?</span>;
-<a href=#279 id=279 data-nosnippet>279</a>            identities(theory, candidates)<span class="question-mark">?</span>;
-<a href=#280 id=280 data-nosnippet>280</a>            (<span class="prelude-val">None</span>, plan)
-<a href=#281 id=281 data-nosnippet>281</a>        } <span class="kw">else </span>{
-<a href=#282 id=282 data-nosnippet>282</a>            <span class="kw">let </span>preparation = Preparation::with_control(
-<a href=#283 id=283 data-nosnippet>283</a>                theory,
-<a href=#284 id=284 data-nosnippet>284</a>                candidates.len(),
-<a href=#285 id=285 data-nosnippet>285</a>                limits,
-<a href=#286 id=286 data-nosnippet>286</a>                <span class="self">self</span>.profile.runtime.limits(),
-<a href=#287 id=287 data-nosnippet>287</a>                epoch,
-<a href=#288 id=288 data-nosnippet>288</a>                cancellation,
-<a href=#289 id=289 data-nosnippet>289</a>            )<span class="question-mark">?</span>;
-<a href=#290 id=290 data-nosnippet>290</a>            identities(theory, candidates)<span class="question-mark">?</span>;
-<a href=#291 id=291 data-nosnippet>291</a>            <span class="self">self</span>.resident = <span class="prelude-val">None</span>;
-<a href=#292 id=292 data-nosnippet>292</a>            <span class="kw">let </span>(prepared, plan) =
-<a href=#293 id=293 data-nosnippet>293</a>                preparation.finish(<span class="self">self</span>.profile.runtime.limits(), cancellation)<span class="question-mark">?</span>;
-<a href=#294 id=294 data-nosnippet>294</a>            (<span class="prelude-val">Some</span>(prepared), plan)
-<a href=#295 id=295 data-nosnippet>295</a>        };
-<a href=#296 id=296 data-nosnippet>296</a>        <span class="kw">let </span>graph = fresh
-<a href=#297 id=297 data-nosnippet>297</a>            .as_ref()
-<a href=#298 id=298 data-nosnippet>298</a>            .map(|prepared| <span class="kw-2">&amp;</span>prepared.graph)
-<a href=#299 id=299 data-nosnippet>299</a>            .or_else(|| <span class="self">self</span>.resident.as_ref().map(|resident| <span class="kw-2">&amp;</span>resident.graph))
-<a href=#300 id=300 data-nosnippet>300</a>            .ok_or_else(|| GpuError::new(GpuErrorKind::Device, <span class="string">"missing formula graph"</span>))<span class="question-mark">?</span>;
-<a href=#301 id=301 data-nosnippet>301</a>        <span class="kw">let </span>stats = FormulaBatchStats {
-<a href=#302 id=302 data-nosnippet>302</a>            theory_uploaded: fresh.is_some(),
-<a href=#303 id=303 data-nosnippet>303</a>            transport_allocated: fresh.is_some()
-<a href=#304 id=304 data-nosnippet>304</a>                || <span class="self">self
-<a href=#305 id=305 data-nosnippet>305</a>                    </span>.resident
-<a href=#306 id=306 data-nosnippet>306</a>                    .as_ref()
-<a href=#307 id=307 data-nosnippet>307</a>                    .is_none_or(|resident| !resident.matches(<span class="kw-2">&amp;</span>plan)),
-<a href=#308 id=308 data-nosnippet>308</a>            resident_theory_bytes: graph.schedule.bytes,
-<a href=#309 id=309 data-nosnippet>309</a>            resident_transport_bytes: plan.transport,
-<a href=#310 id=310 data-nosnippet>310</a>            accounted_bytes: plan.accounted,
-<a href=#311 id=311 data-nosnippet>311</a>        };
-<a href=#312 id=312 data-nosnippet>312</a>        <span class="kw">if </span>stats.transport_allocated
-<a href=#313 id=313 data-nosnippet>313</a>            &amp;&amp; <span class="kw">let </span><span class="prelude-val">Some</span>(resident) = <span class="self">self</span>.resident.as_mut()
-<a href=#314 id=314 data-nosnippet>314</a>        {
-<a href=#315 id=315 data-nosnippet>315</a>            resident.transport = <span class="prelude-val">None</span>;
-<a href=#316 id=316 data-nosnippet>316</a>        }
-<a href=#317 id=317 data-nosnippet>317</a>        <span class="kw">let </span>graph = fresh
-<a href=#318 id=318 data-nosnippet>318</a>            .as_ref()
-<a href=#319 id=319 data-nosnippet>319</a>            .map(|prepared| <span class="kw-2">&amp;</span>prepared.graph)
-<a href=#320 id=320 data-nosnippet>320</a>            .or_else(|| <span class="self">self</span>.resident.as_ref().map(|resident| <span class="kw-2">&amp;</span>resident.graph))
-<a href=#321 id=321 data-nosnippet>321</a>            .ok_or_else(|| GpuError::new(GpuErrorKind::Device, <span class="string">"missing formula packing graph"</span>))<span class="question-mark">?</span>;
-<a href=#322 id=322 data-nosnippet>322</a>        <span class="kw">let </span>seeds = plan.pack(graph, candidates, cancellation)<span class="question-mark">?</span>;
-<a href=#323 id=323 data-nosnippet>323</a>        <span class="prelude-val">Ok</span>(PreparedCall {
-<a href=#324 id=324 data-nosnippet>324</a>            fresh,
-<a href=#325 id=325 data-nosnippet>325</a>            plan,
-<a href=#326 id=326 data-nosnippet>326</a>            seeds,
-<a href=#327 id=327 data-nosnippet>327</a>            stats,
-<a href=#328 id=328 data-nosnippet>328</a>        })
-<a href=#329 id=329 data-nosnippet>329</a>    }
-<a href=#330 id=330 data-nosnippet>330</a>}
-<a href=#331 id=331 data-nosnippet>331</a>
-<a href=#332 id=332 data-nosnippet>332</a><span class="kw">fn </span>identities(theory: <span class="kw-2">&amp;</span>Theory, candidates: <span class="kw-2">&amp;</span>[Interpretation]) -&gt; <span class="prelude-ty">Result</span>&lt;(), GpuError&gt; {
-<a href=#333 id=333 data-nosnippet>333</a>    <span class="kw">if </span>candidates
-<a href=#334 id=334 data-nosnippet>334</a>        .iter()
-<a href=#335 id=335 data-nosnippet>335</a>        .any(|candidate| !theory.same_instance(candidate.theory()))
-<a href=#336 id=336 data-nosnippet>336</a>    {
-<a href=#337 id=337 data-nosnippet>337</a>        <span class="kw">return </span><span class="prelude-val">Err</span>(GpuError::new(
-<a href=#338 id=338 data-nosnippet>338</a>            GpuErrorKind::Seed,
-<a href=#339 id=339 data-nosnippet>339</a>            <span class="string">"candidate belongs to another Theory"</span>,
-<a href=#340 id=340 data-nosnippet>340</a>        ));
-<a href=#341 id=341 data-nosnippet>341</a>    }
-<a href=#342 id=342 data-nosnippet>342</a>    <span class="prelude-val">Ok</span>(())
-<a href=#343 id=343 data-nosnippet>343</a>}
-<a href=#344 id=344 data-nosnippet>344</a>
-<a href=#345 id=345 data-nosnippet>345</a><span class="attr">#[cfg(test)]
-<a href=#346 id=346 data-nosnippet>346</a></span><span class="kw">mod </span>tests;
+<a href=#160 id=160 data-nosnippet>160</a>
+<a href=#161 id=161 data-nosnippet>161</a>    <span class="doccomment">/// Exact profile retained by this oracle: the owner of its shader and
+<a href=#162 id=162 data-nosnippet>162</a>    /// pipelines.
+<a href=#163 id=163 data-nosnippet>163</a>    </span><span class="attr">#[must_use]
+<a href=#164 id=164 data-nosnippet>164</a>    </span><span class="kw">pub const fn </span>compiled_profile(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="kw-2">&amp;</span>GpuFormulaProfile {
+<a href=#165 id=165 data-nosnippet>165</a>        <span class="kw-2">&amp;</span><span class="self">self</span>.profile
+<a href=#166 id=166 data-nosnippet>166</a>    }
+<a href=#167 id=167 data-nosnippet>167</a>
+<a href=#168 id=168 data-nosnippet>168</a>    <span class="doccomment">/// Exact device context retained by this primitive.
+<a href=#169 id=169 data-nosnippet>169</a>    </span><span class="attr">#[must_use]
+<a href=#170 id=170 data-nosnippet>170</a>    </span><span class="kw">pub fn </span>context(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="kw-2">&amp;</span><span class="kw">crate</span>::GpuContext {
+<a href=#171 id=171 data-nosnippet>171</a>        <span class="self">self</span>.profile.context()
+<a href=#172 id=172 data-nosnippet>172</a>    }
+<a href=#173 id=173 data-nosnippet>173</a>
+<a href=#174 id=174 data-nosnippet>174</a>    <span class="kw">fn </span>with_profile(profile: GpuFormulaProfile) -&gt; <span class="self">Self </span>{
+<a href=#175 id=175 data-nosnippet>175</a>        <span class="self">Self </span>{
+<a href=#176 id=176 data-nosnippet>176</a>            profile,
+<a href=#177 id=177 data-nosnippet>177</a>            resident: <span class="prelude-val">None</span>,
+<a href=#178 id=178 data-nosnippet>178</a>            candidates: <span class="kw">crate</span>::candidates::Staging::default(),
+<a href=#179 id=179 data-nosnippet>179</a>            epoch: <span class="number">0</span>,
+<a href=#180 id=180 data-nosnippet>180</a>            last: <span class="prelude-val">None</span>,
+<a href=#181 id=181 data-nosnippet>181</a>            last_submission_candidates: <span class="prelude-val">None</span>,
+<a href=#182 id=182 data-nosnippet>182</a>            timer: <span class="prelude-val">None</span>,
+<a href=#183 id=183 data-nosnippet>183</a>            reported: <span class="prelude-val">None</span>,
+<a href=#184 id=184 data-nosnippet>184</a>        }
+<a href=#185 id=185 data-nosnippet>185</a>    }
+<a href=#186 id=186 data-nosnippet>186</a>
+<a href=#187 id=187 data-nosnippet>187</a>    <span class="doccomment">/// Selected gate implementation; constant-time observation without I/O.
+<a href=#188 id=188 data-nosnippet>188</a>    </span><span class="attr">#[must_use]
+<a href=#189 id=189 data-nosnippet>189</a>    </span><span class="kw">pub const fn </span>projection(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; GateProjection {
+<a href=#190 id=190 data-nosnippet>190</a>        <span class="self">self</span>.profile.projection()
+<a href=#191 id=191 data-nosnippet>191</a>    }
+<a href=#192 id=192 data-nosnippet>192</a>    <span class="doccomment">/// Identity of the actual selected native adapter.
+<a href=#193 id=193 data-nosnippet>193</a>    </span><span class="attr">#[must_use]
+<a href=#194 id=194 data-nosnippet>194</a>    </span><span class="kw">pub fn </span>info(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="kw-2">&amp;</span>GpuInfo {
+<a href=#195 id=195 data-nosnippet>195</a>        <span class="self">self</span>.profile.runtime.context.info()
+<a href=#196 id=196 data-nosnippet>196</a>    }
+<a href=#197 id=197 data-nosnippet>197</a>    <span class="doccomment">/// Last successful nonempty batch's allocation/reuse accounting. Every new
+<a href=#198 id=198 data-nosnippet>198</a>    /// call clears it, including an empty or refused call.
+<a href=#199 id=199 data-nosnippet>199</a>    </span><span class="attr">#[must_use]
+<a href=#200 id=200 data-nosnippet>200</a>    </span><span class="kw">pub fn </span>last_batch_stats(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="prelude-ty">Option</span>&lt;<span class="kw-2">&amp;</span>FormulaBatchStats&gt; {
+<a href=#201 id=201 data-nosnippet>201</a>        <span class="self">self</span>.last.as_ref()
+<a href=#202 id=202 data-nosnippet>202</a>    }
+<a href=#203 id=203 data-nosnippet>203</a>    <span class="doccomment">/// Resident formula buffers, actual host seed capacity and owned timer
+<a href=#204 id=204 data-nosnippet>204</a>    /// storage after a submission. The returned checks own their own regions.
+<a href=#205 id=205 data-nosnippet>205</a>    ///
+<a href=#206 id=206 data-nosnippet>206</a>    /// # Errors
+<a href=#207 id=207 data-nosnippet>207</a>    /// Returns a capacity error if the sum is outside the byte counter.
+<a href=#208 id=208 data-nosnippet>208</a>    </span><span class="kw">pub fn </span>retained_batch_bytes(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="prelude-ty">Result</span>&lt;u64, GpuError&gt; {
+<a href=#209 id=209 data-nosnippet>209</a>        <span class="kw">let </span>device = <span class="self">self
+<a href=#210 id=210 data-nosnippet>210</a>            </span>.resident
+<a href=#211 id=211 data-nosnippet>211</a>            .as_ref()
+<a href=#212 id=212 data-nosnippet>212</a>            .map_or(<span class="prelude-val">Ok</span>(<span class="number">0</span>), Resident::retained_bytes)<span class="question-mark">?</span>;
+<a href=#213 id=213 data-nosnippet>213</a>        <span class="kw">let </span>seeds = <span class="self">self</span>.candidates.retained_bytes()<span class="question-mark">?</span>;
+<a href=#214 id=214 data-nosnippet>214</a>        <span class="kw">let </span>timer = <span class="kw">if </span><span class="self">self</span>.timer.is_some() {
+<a href=#215 id=215 data-nosnippet>215</a>            <span class="kw">crate</span>::timing::OVERHEAD_BYTES - <span class="kw">crate</span>::timing::READBACK_BYTES
+<a href=#216 id=216 data-nosnippet>216</a>        } <span class="kw">else </span>{
+<a href=#217 id=217 data-nosnippet>217</a>            <span class="number">0
+<a href=#218 id=218 data-nosnippet>218</a>        </span>};
+<a href=#219 id=219 data-nosnippet>219</a>        device
+<a href=#220 id=220 data-nosnippet>220</a>            .checked_add(seeds)
+<a href=#221 id=221 data-nosnippet>221</a>            .and_then(|bytes| bytes.checked_add(timer))
+<a href=#222 id=222 data-nosnippet>222</a>            .ok_or_else(|| packing::capacity(<span class="string">"retained formula batch exceeds u64"</span>))
+<a href=#223 id=223 data-nosnippet>223</a>    }
+<a href=#224 id=224 data-nosnippet>224</a>    <span class="doccomment">/// Candidate count from this oracle's most recent call, if it reached queue
+<a href=#225 id=225 data-nosnippet>225</a>    /// submission, even if the result was interrupted or could not decode.
+<a href=#226 id=226 data-nosnippet>226</a>    /// Every new call clears this receipt, including empty and pre-stopped calls.
+<a href=#227 id=227 data-nosnippet>227</a>    /// It certifies submission only, not completed shader work or candidate checks.
+<a href=#228 id=228 data-nosnippet>228</a>    </span><span class="attr">#[must_use]
+<a href=#229 id=229 data-nosnippet>229</a>    </span><span class="kw">pub const fn </span>last_submission_candidates(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="prelude-ty">Option</span>&lt;usize&gt; {
+<a href=#230 id=230 data-nosnippet>230</a>        <span class="self">self</span>.last_submission_candidates
+<a href=#231 id=231 data-nosnippet>231</a>    }
+<a href=#232 id=232 data-nosnippet>232</a>    <span class="doccomment">/// The compute-pass time of the batch this oracle's latest call consumed.
+<a href=#233 id=233 data-nosnippet>233</a>    ///
+<a href=#234 id=234 data-nosnippet>234</a>    /// Under enabled timing, a submitting call that completes reports the batch
+<a href=#235 id=235 data-nosnippet>235</a>    /// completed by the previous submitting call, from that batch's own interval;
+<a href=#236 id=236 data-nosnippet>236</a>    /// its own batch's interval is read by the next submitting call or by
+<a href=#237 id=237 data-nosnippet>237</a>    /// [`Self::flush_compute_time`]. A call that fails after submission reports
+<a href=#238 id=238 data-nosnippet>238</a>    /// the previous batch unavailable, abandons its own and retires the timer, so
+<a href=#239 id=239 data-nosnippet>239</a>    /// the next timed batch starts a fresh one. The flush reports the batch it
+<a href=#240 id=240 data-nosnippet>240</a>    /// resolved, and [`Self::clear_residency`] reports a discarded unresolved
+<a href=#241 id=241 data-nosnippet>241</a>    /// batch unavailable. Under unsupported timing each completing call
+<a href=#242 id=242 data-nosnippet>242</a>    /// reports its own batch unavailable; disabled timing reports nothing.
+<a href=#243 id=243 data-nosnippet>243</a>    /// `None` when the latest call consumed no batch: every call clears it at its
+<a href=#244 id=244 data-nosnippet>244</a>    /// start, including empty and refused calls. A measured duration is never
+<a href=#245 id=245 data-nosnippet>245</a>    /// zero and excludes host preparation, transfers and waits.
+<a href=#246 id=246 data-nosnippet>246</a>    </span><span class="attr">#[must_use]
+<a href=#247 id=247 data-nosnippet>247</a>    </span><span class="kw">pub const fn </span>reported_compute_time(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="prelude-ty">Option</span>&lt;BatchComputeTime&gt; {
+<a href=#248 id=248 data-nosnippet>248</a>        <span class="self">self</span>.reported
+<a href=#249 id=249 data-nosnippet>249</a>    }
+<a href=#250 id=250 data-nosnippet>250</a>    <span class="doccomment">/// Whether a completed batch still waits for its interval to be resolved by
+<a href=#251 id=251 data-nosnippet>251</a>    /// the next submitting call or by [`Self::flush_compute_time`].
+<a href=#252 id=252 data-nosnippet>252</a>    </span><span class="attr">#[must_use]
+<a href=#253 id=253 data-nosnippet>253</a>    </span><span class="kw">pub fn </span>compute_time_unresolved(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; bool {
+<a href=#254 id=254 data-nosnippet>254</a>        <span class="self">self</span>.timer.as_ref().is_some_and(ComputeTimer::unresolved)
+<a href=#255 id=255 data-nosnippet>255</a>    }
+<a href=#256 id=256 data-nosnippet>256</a>    <span class="doccomment">/// Resolve the unresolved batch's interval with one resolve-only submission.
+<a href=#257 id=257 data-nosnippet>257</a>    ///
+<a href=#258 id=258 data-nosnippet>258</a>    /// Returns at once, with no report, when no batch is unresolved. Otherwise a
+<a href=#259 id=259 data-nosnippet>259</a>    /// zero `timeout` is refused; the context lease is taken, and `Busy` submits
+<a href=#260 id=260 data-nosnippet>260</a>    /// nothing; `cancellation` and context health are then checked once, and a
+<a href=#261 id=261 data-nosnippet>261</a>    /// stop or an unhealthy context submits nothing. Each refusal leaves the
+<a href=#262 id=262 data-nosnippet>262</a>    /// batch unresolved and a healthy context reusable. The flush then waits at most
+<a href=#263 id=263 data-nosnippet>263</a>    /// `timeout` for its submission, polling no control. On observed completion
+<a href=#264 id=264 data-nosnippet>264</a>    /// the batch is reported, measured or unavailable, and the context stays
+<a href=#265 id=265 data-nosnippet>265</a>    /// reusable. A timeout or a mapping, device or scope failure reports it
+<a href=#266 id=266 data-nosnippet>266</a>    /// unavailable, retires the timer and invalidates the context, as for any
+<a href=#267 id=267 data-nosnippet>267</a>    /// submission whose completion is unknown or faulted. The flush allocates nothing and
+<a href=#268 id=268 data-nosnippet>268</a>    /// downloads 16 bytes; batch statistics and submission receipts exclude it.
+<a href=#269 id=269 data-nosnippet>269</a>    ///
+<a href=#270 id=270 data-nosnippet>270</a>    /// # Errors
+<a href=#271 id=271 data-nosnippet>271</a>    /// Returns the refusals and failures above.
+<a href=#272 id=272 data-nosnippet>272</a>    </span><span class="kw">pub fn </span>flush_compute_time(
+<a href=#273 id=273 data-nosnippet>273</a>        <span class="kw-2">&amp;mut </span><span class="self">self</span>,
+<a href=#274 id=274 data-nosnippet>274</a>        timeout: Duration,
+<a href=#275 id=275 data-nosnippet>275</a>        cancellation: <span class="kw-2">&amp;</span>Cancellation,
+<a href=#276 id=276 data-nosnippet>276</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;(), GpuError&gt; {
+<a href=#277 id=277 data-nosnippet>277</a>        <span class="self">self</span>.reported = <span class="prelude-val">None</span>;
+<a href=#278 id=278 data-nosnippet>278</a>        <span class="kw">let </span><span class="prelude-val">Some</span>(timer) = <span class="self">self</span>.timer.as_mut().filter(|timer| timer.unresolved()) <span class="kw">else </span>{
+<a href=#279 id=279 data-nosnippet>279</a>            <span class="kw">return </span><span class="prelude-val">Ok</span>(());
+<a href=#280 id=280 data-nosnippet>280</a>        };
+<a href=#281 id=281 data-nosnippet>281</a>        <span class="kw">crate</span>::runtime::positive_timeout(timeout)<span class="question-mark">?</span>;
+<a href=#282 id=282 data-nosnippet>282</a>        <span class="kw">let </span>runtime = <span class="kw-2">&amp;</span><span class="self">self</span>.profile.runtime;
+<a href=#283 id=283 data-nosnippet>283</a>        <span class="kw">let </span>_lease = runtime.context.lease()<span class="question-mark">?</span>;
+<a href=#284 id=284 data-nosnippet>284</a>        cancellation.poll().map_err(GpuError::interrupted)<span class="question-mark">?</span>;
+<a href=#285 id=285 data-nosnippet>285</a>        runtime.check_health()<span class="question-mark">?</span>;
+<a href=#286 id=286 data-nosnippet>286</a>        <span class="kw">let </span>scopes = ErrorScopes::new(runtime.device());
+<a href=#287 id=287 data-nosnippet>287</a>        <span class="kw">let </span>completion = timer.flush(runtime.device(), runtime.queue(), timeout);
+<a href=#288 id=288 data-nosnippet>288</a>        <span class="kw">match </span>runtime.complete(scopes, <span class="prelude-val">Ok</span>(completion)) {
+<a href=#289 id=289 data-nosnippet>289</a>            <span class="prelude-val">Ok</span>(tail) =&gt; {
+<a href=#290 id=290 data-nosnippet>290</a>                <span class="self">self</span>.reported = timer.flushed(tail, runtime.queue().get_timestamp_period());
+<a href=#291 id=291 data-nosnippet>291</a>                <span class="prelude-val">Ok</span>(())
+<a href=#292 id=292 data-nosnippet>292</a>            }
+<a href=#293 id=293 data-nosnippet>293</a>            <span class="prelude-val">Err</span>(error) =&gt; {
+<a href=#294 id=294 data-nosnippet>294</a>                <span class="self">self</span>.reported = <span class="kw">crate</span>::timing::retire(<span class="kw-2">&amp;mut </span><span class="self">self</span>.timer);
+<a href=#295 id=295 data-nosnippet>295</a>                <span class="prelude-val">Err</span>(error)
+<a href=#296 id=296 data-nosnippet>296</a>            }
+<a href=#297 id=297 data-nosnippet>297</a>        }
+<a href=#298 id=298 data-nosnippet>298</a>    }
+<a href=#299 id=299 data-nosnippet>299</a>    <span class="doccomment">/// Release authored resident handles and the compute timer. This neither
+<a href=#300 id=300 data-nosnippet>300</a>    /// cancels GPU work nor repairs an invalidated device; driver retirement can
+<a href=#301 id=301 data-nosnippet>301</a>    /// occur later. Clears the last batch and submission receipts. A batch still
+<a href=#302 id=302 data-nosnippet>302</a>    /// unresolved is reported unavailable, since it can never be resolved; the
+<a href=#303 id=303 data-nosnippet>303</a>    /// next timed batch starts a fresh timer.
+<a href=#304 id=304 data-nosnippet>304</a>    </span><span class="kw">pub fn </span>clear_residency(<span class="kw-2">&amp;mut </span><span class="self">self</span>) {
+<a href=#305 id=305 data-nosnippet>305</a>        <span class="self">self</span>.resident = <span class="prelude-val">None</span>;
+<a href=#306 id=306 data-nosnippet>306</a>        <span class="self">self</span>.candidates.release();
+<a href=#307 id=307 data-nosnippet>307</a>        <span class="self">self</span>.last = <span class="prelude-val">None</span>;
+<a href=#308 id=308 data-nosnippet>308</a>        <span class="self">self</span>.last_submission_candidates = <span class="prelude-val">None</span>;
+<a href=#309 id=309 data-nosnippet>309</a>        <span class="self">self</span>.reported = <span class="kw">crate</span>::timing::retire(<span class="kw-2">&amp;mut </span><span class="self">self</span>.timer);
+<a href=#310 id=310 data-nosnippet>310</a>    }
+<a href=#311 id=311 data-nosnippet>311</a>    <span class="doccomment">/// Evaluate original roots, freeze M, and cooperatively narrow the proper-
+<a href=#312 id=312 data-nosnippet>312</a>    /// subset query. Results retain input order and no partial batch is returned.
+<a href=#313 id=313 data-nosnippet>313</a>    /// Clones of one Theory reuse its graph; independent equal theories do not.
+<a href=#314 id=314 data-nosnippet>314</a>    /// Exact candidate-count transport is replaced when that count changes.
+<a href=#315 id=315 data-nosnippet>315</a>    /// Host candidate words reuse initialized scratch for the same subject/count;
+<a href=#316 id=316 data-nosnippet>316</a>    /// replacement releases the old scratch before cold preparation. Actual
+<a href=#317 id=317 data-nosnippet>317</a>    /// capacity is charged on every call, and a smaller allowance can replace an
+<a href=#318 id=318 data-nosnippet>318</a>    /// oversized optional allocation. Explicit clearing releases this scratch too.
+<a href=#319 id=319 data-nosnippet>319</a>    /// A cold subject is prepared in O(nodes + edges + roots + levels) host work, outside
+<a href=#320 id=320 data-nosnippet>320</a>    /// the per-candidate device-work limit. One buffer retains fixed headers and
+<a href=#321 id=321 data-nosnippet>321</a>    /// complete native operand rows; no binary expansion or per-candidate graph
+<a href=#322 id=322 data-nosnippet>322</a>    /// copy is made. Its upload buffers are released after
+<a href=#323 id=323 data-nosnippet>323</a>    /// device copies are created. Pure chains retain serial truth; other DAGs
+<a href=#324 id=324 data-nosnippet>324</a>    /// distribute independent nodes by dependency level. Narrow levels can incur
+<a href=#325 id=325 data-nosnippet>325</a>    /// synchronization cost without useful parallelism; no crossover is assumed.
+<a href=#326 id=326 data-nosnippet>326</a>    ///
+<a href=#327 id=327 data-nosnippet>327</a>    /// # Errors
+<a href=#328 id=328 data-nosnippet>328</a>    /// Refuses foreign interpretations, insufficient setup/work/storage limits,
+<a href=#329 id=329 data-nosnippet>329</a>    /// u32 address overflow, allocation, device/poll, validation or readback
+<a href=#330 id=330 data-nosnippet>330</a>    /// failures. Execution/readback failures invalidate the entire context.
+<a href=#331 id=331 data-nosnippet>331</a>    /// Minimum shape, input and Busy refusals preserve residency. Later cold
+<a href=#332 id=332 data-nosnippet>332</a>    /// preparation refusal releases the old resident handles and leaves a
+<a href=#333 id=333 data-nosnippet>333</a>    /// healthy, cold context without advancing its epoch. Driver retirement is
+<a href=#334 id=334 data-nosnippet>334</a>    /// excluded from authored byte limits. A propagation limit is an explicit
+<a href=#335 id=335 data-nosnippet>335</a>    /// residual, never a proof of stability. Under fitted sizing, the first call
+<a href=#336 id=336 data-nosnippet>336</a>    /// that dispatches a size compiles its pipeline. A failure to compile it is
+<a href=#337 id=337 data-nosnippet>337</a>    /// reported before any dispatch and invalidates the context; the size stays
+<a href=#338 id=338 data-nosnippet>338</a>    /// uncompiled, and no theory stays resident, because only a freshly
+<a href=#339 id=339 data-nosnippet>339</a>    /// prepared theory can need a size first and its cold preparation released
+<a href=#340 id=340 data-nosnippet>340</a>    /// the previous one.
+<a href=#341 id=341 data-nosnippet>341</a>    </span><span class="kw">pub fn </span>propagate_batch(
+<a href=#342 id=342 data-nosnippet>342</a>        <span class="kw-2">&amp;mut </span><span class="self">self</span>,
+<a href=#343 id=343 data-nosnippet>343</a>        theory: <span class="kw-2">&amp;</span>Theory,
+<a href=#344 id=344 data-nosnippet>344</a>        candidates: <span class="kw-2">&amp;</span>[Interpretation],
+<a href=#345 id=345 data-nosnippet>345</a>        limits: FormulaLimits,
+<a href=#346 id=346 data-nosnippet>346</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;Vec&lt;FormulaCheck&gt;, GpuError&gt; {
+<a href=#347 id=347 data-nosnippet>347</a>        <span class="self">self</span>.propagate_batch_with_cancellation(theory, candidates, limits, <span class="kw-2">&amp;</span>Cancellation::default())
+<a href=#348 id=348 data-nosnippet>348</a>    }
+<a href=#349 id=349 data-nosnippet>349</a>
+<a href=#350 id=350 data-nosnippet>350</a>    <span class="doccomment">/// Propagate with cooperative caller cancellation and deadline observation.
+<a href=#351 id=351 data-nosnippet>351</a>    /// Busy admission precedes control; control precedes device health, including
+<a href=#352 id=352 data-nosnippet>352</a>    /// empty batches. Further polls follow host packing and bracket waits of at
+<a href=#353 id=353 data-nosnippet>353</a>    /// most 50 ms. Host work, driver calls and scope drains are not preempted.
+<a href=#354 id=354 data-nosnippet>354</a>    ///
+<a href=#355 id=355 data-nosnippet>355</a>    /// # Errors
+<a href=#356 id=356 data-nosnippet>356</a>    /// Preserves [`Self::propagate_batch`]'s failures. An interruption returns its
+<a href=#357 id=357 data-nosnippet>357</a>    /// exact stop and no partial checks. Pre-submission control refusal leaves
+<a href=#358 id=358 data-nosnippet>358</a>    /// health reusable; an interrupted submitted operation invalidates it.
+<a href=#359 id=359 data-nosnippet>359</a>    /// Scope/device faults retain priority. This is not a hard wall-clock deadline.
+<a href=#360 id=360 data-nosnippet>360</a>    </span><span class="kw">pub fn </span>propagate_batch_with_cancellation(
+<a href=#361 id=361 data-nosnippet>361</a>        <span class="kw-2">&amp;mut </span><span class="self">self</span>,
+<a href=#362 id=362 data-nosnippet>362</a>        theory: <span class="kw-2">&amp;</span>Theory,
+<a href=#363 id=363 data-nosnippet>363</a>        candidates: <span class="kw-2">&amp;</span>[Interpretation],
+<a href=#364 id=364 data-nosnippet>364</a>        limits: FormulaLimits,
+<a href=#365 id=365 data-nosnippet>365</a>        cancellation: <span class="kw-2">&amp;</span>Cancellation,
+<a href=#366 id=366 data-nosnippet>366</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;Vec&lt;FormulaCheck&gt;, GpuError&gt; {
+<a href=#367 id=367 data-nosnippet>367</a>        <span class="self">self</span>.propagate(
+<a href=#368 id=368 data-nosnippet>368</a>            theory,
+<a href=#369 id=369 data-nosnippet>369</a>            candidates,
+<a href=#370 id=370 data-nosnippet>370</a>            limits,
+<a href=#371 id=371 data-nosnippet>371</a>            cancellation,
+<a href=#372 id=372 data-nosnippet>372</a>            <span class="kw">crate</span>::candidates::BatchSize::Exact(candidates.len()),
+<a href=#373 id=373 data-nosnippet>373</a>        )
+<a href=#374 id=374 data-nosnippet>374</a>    }
+<a href=#375 id=375 data-nosnippet>375</a>
+<a href=#376 id=376 data-nosnippet>376</a>    <span class="doccomment">/// Check the largest nonempty prefix admitted by the prepared device layout.
+<a href=#377 id=377 data-nosnippet>377</a>    ///
+<a href=#378 id=378 data-nosnippet>378</a>    /// The prefix is bounded by both the supplied slice and `max_candidates`.
+<a href=#379 id=379 data-nosnippet>379</a>    /// Cold graph packing occurs once; admission then selects a count using the
+<a href=#380 id=380 data-nosnippet>380</a>    /// same storage, address and work checks as the exact batch operation. The
+<a href=#381 id=381 data-nosnippet>381</a>    /// receipt borrows exactly the checked prefix and retains input order.
+<a href=#382 id=382 data-nosnippet>382</a>    /// An empty slice still observes control and context health before returning.
+<a href=#383 id=383 data-nosnippet>383</a>    /// No completed prefix is returned after an interrupted or failed operation.
+<a href=#384 id=384 data-nosnippet>384</a>    ///
+<a href=#385 id=385 data-nosnippet>385</a>    /// # Errors
+<a href=#386 id=386 data-nosnippet>386</a>    /// Preserves [`Self::propagate_batch_with_cancellation`]'s typed failures.
+<a href=#387 id=387 data-nosnippet>387</a>    /// If one candidate cannot fit, returns that refusal without dispatch. Only
+<a href=#388 id=388 data-nosnippet>388</a>    /// capacity limits reduce the selected count; allocation and device failures
+<a href=#389 id=389 data-nosnippet>389</a>    /// do not select a fallback. The chosen schedule is not changed to enlarge
+<a href=#390 id=390 data-nosnippet>390</a>    /// the prefix. Subsequent calls may reuse the prepared subject.
+<a href=#391 id=391 data-nosnippet>391</a>    </span><span class="kw">pub fn </span>propagate_prefix_with_cancellation&lt;<span class="lifetime">'a</span>&gt;(
+<a href=#392 id=392 data-nosnippet>392</a>        <span class="kw-2">&amp;mut </span><span class="self">self</span>,
+<a href=#393 id=393 data-nosnippet>393</a>        theory: <span class="kw-2">&amp;</span><span class="lifetime">'a </span>Theory,
+<a href=#394 id=394 data-nosnippet>394</a>        candidates: <span class="kw-2">&amp;</span><span class="lifetime">'a </span>[Interpretation],
+<a href=#395 id=395 data-nosnippet>395</a>        limits: FormulaLimits,
+<a href=#396 id=396 data-nosnippet>396</a>        cancellation: <span class="kw-2">&amp;</span>Cancellation,
+<a href=#397 id=397 data-nosnippet>397</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="kw">crate</span>::CheckedBatch&lt;<span class="lifetime">'a</span>, FormulaCheck&gt;, GpuError&gt; {
+<a href=#398 id=398 data-nosnippet>398</a>        <span class="kw">let </span>checks = <span class="self">self</span>.propagate(
+<a href=#399 id=399 data-nosnippet>399</a>            theory,
+<a href=#400 id=400 data-nosnippet>400</a>            candidates,
+<a href=#401 id=401 data-nosnippet>401</a>            limits,
+<a href=#402 id=402 data-nosnippet>402</a>            cancellation,
+<a href=#403 id=403 data-nosnippet>403</a>            <span class="kw">crate</span>::candidates::BatchSize::Prefix(candidates.len()),
+<a href=#404 id=404 data-nosnippet>404</a>        )<span class="question-mark">?</span>;
+<a href=#405 id=405 data-nosnippet>405</a>        <span class="prelude-val">Ok</span>(<span class="kw">crate</span>::CheckedBatch::new(
+<a href=#406 id=406 data-nosnippet>406</a>            theory,
+<a href=#407 id=407 data-nosnippet>407</a>            <span class="kw-2">&amp;</span>candidates[..checks.len()],
+<a href=#408 id=408 data-nosnippet>408</a>            checks,
+<a href=#409 id=409 data-nosnippet>409</a>        ))
+<a href=#410 id=410 data-nosnippet>410</a>    }
+<a href=#411 id=411 data-nosnippet>411</a>
+<a href=#412 id=412 data-nosnippet>412</a>    <span class="doccomment">/// Prepare the next submission of `slate`: admit the largest nonempty
+<a href=#413 id=413 data-nosnippet>413</a>    /// prefix of its candidates from `offset` on, as
+<a href=#414 id=414 data-nosnippet>414</a>    /// [`Self::propagate_prefix_with_cancellation`] admits a prefix, pack it
+<a href=#415 id=415 data-nosnippet>415</a>    /// into this oracle's reused upload storage, and plan it at the next epoch.
+<a href=#416 id=416 data-nosnippet>416</a>    /// Nothing is submitted, and the epoch is committed only by the check.
+<a href=#417 id=417 data-nosnippet>417</a>    ///
+<a href=#418 id=418 data-nosnippet>418</a>    /// The returned submission holds this oracle's mutable borrow until a
+<a href=#419 id=419 data-nosnippet>419</a>    /// check consumes it, so no other operation on the oracle, and no second
+<a href=#420 id=420 data-nosnippet>420</a>    /// preparation, can run between the plan and its check. Dropping it submits
+<a href=#421 id=421 data-nosnippet>421</a>    /// nothing and releases the borrow; any retained state its preparation
+<a href=#422 id=422 data-nosnippet>422</a>    /// replaced stays released, and the next check prepares again. That can be
+<a href=#423 id=423 data-nosnippet>423</a>    /// the host staging, the resident graph on a fresh admission, and the
+<a href=#424 id=424 data-nosnippet>424</a>    /// transport when the preparation allocates one. The context's lease is
+<a href=#425 id=425 data-nosnippet>425</a>    /// taken by the check, not here; this polls control and context health
+<a href=#426 id=426 data-nosnippet>426</a>    /// before preparing.
+<a href=#427 id=427 data-nosnippet>427</a>    ///
+<a href=#428 id=428 data-nosnippet>428</a>    /// # Errors
+<a href=#429 id=429 data-nosnippet>429</a>    /// Refuses an offset that leaves no candidate, and every refusal and
+<a href=#430 id=430 data-nosnippet>430</a>    /// failure of [`Self::propagate_prefix_with_cancellation`]'s preparation,
+<a href=#431 id=431 data-nosnippet>431</a>    /// with its rules for residency.
+<a href=#432 id=432 data-nosnippet>432</a>    </span><span class="kw">pub fn </span>prepare&lt;<span class="lifetime">'o</span>&gt;(
+<a href=#433 id=433 data-nosnippet>433</a>        <span class="kw-2">&amp;</span><span class="lifetime">'o </span><span class="kw-2">mut </span><span class="self">self</span>,
+<a href=#434 id=434 data-nosnippet>434</a>        slate: SlateRef&lt;<span class="lifetime">'_</span>&gt;,
+<a href=#435 id=435 data-nosnippet>435</a>        offset: usize,
+<a href=#436 id=436 data-nosnippet>436</a>        limits: FormulaLimits,
+<a href=#437 id=437 data-nosnippet>437</a>        cancellation: <span class="kw-2">&amp;</span>Cancellation,
+<a href=#438 id=438 data-nosnippet>438</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;PreparedFormulaSubmission&lt;<span class="lifetime">'o</span>&gt;, GpuError&gt; {
+<a href=#439 id=439 data-nosnippet>439</a>        <span class="self">self</span>.last = <span class="prelude-val">None</span>;
+<a href=#440 id=440 data-nosnippet>440</a>        <span class="self">self</span>.last_submission_candidates = <span class="prelude-val">None</span>;
+<a href=#441 id=441 data-nosnippet>441</a>        <span class="self">self</span>.reported = <span class="prelude-val">None</span>;
+<a href=#442 id=442 data-nosnippet>442</a>        <span class="kw">let </span>candidates = slate
+<a href=#443 id=443 data-nosnippet>443</a>            .candidates()
+<a href=#444 id=444 data-nosnippet>444</a>            .get(offset..)
+<a href=#445 id=445 data-nosnippet>445</a>            .filter(|rest| !rest.is_empty())
+<a href=#446 id=446 data-nosnippet>446</a>            .ok_or_else(|| {
+<a href=#447 id=447 data-nosnippet>447</a>                GpuError::new(
+<a href=#448 id=448 data-nosnippet>448</a>                    GpuErrorKind::Capacity,
+<a href=#449 id=449 data-nosnippet>449</a>                    <span class="string">"no candidate of the slate remains at the offset"</span>,
+<a href=#450 id=450 data-nosnippet>450</a>                )
+<a href=#451 id=451 data-nosnippet>451</a>            })<span class="question-mark">?</span>;
+<a href=#452 id=452 data-nosnippet>452</a>        cancellation.poll().map_err(GpuError::interrupted)<span class="question-mark">?</span>;
+<a href=#453 id=453 data-nosnippet>453</a>        <span class="self">self</span>.profile.runtime.check_health()<span class="question-mark">?</span>;
+<a href=#454 id=454 data-nosnippet>454</a>        <span class="kw">let </span>call = <span class="self">self</span>.prepare_epoch(
+<a href=#455 id=455 data-nosnippet>455</a>            slate.theory(),
+<a href=#456 id=456 data-nosnippet>456</a>            candidates,
+<a href=#457 id=457 data-nosnippet>457</a>            limits,
+<a href=#458 id=458 data-nosnippet>458</a>            cancellation,
+<a href=#459 id=459 data-nosnippet>459</a>            <span class="kw">crate</span>::candidates::BatchSize::Prefix(candidates.len()),
+<a href=#460 id=460 data-nosnippet>460</a>        )<span class="question-mark">?</span>;
+<a href=#461 id=461 data-nosnippet>461</a>        cancellation.poll().map_err(GpuError::interrupted)<span class="question-mark">?</span>;
+<a href=#462 id=462 data-nosnippet>462</a>        <span class="prelude-val">Ok</span>(PreparedFormulaSubmission {
+<a href=#463 id=463 data-nosnippet>463</a>            count: call.plan.worlds <span class="kw">as </span>usize,
+<a href=#464 id=464 data-nosnippet>464</a>            oracle: <span class="self">self</span>,
+<a href=#465 id=465 data-nosnippet>465</a>            call,
+<a href=#466 id=466 data-nosnippet>466</a>            theory: slate.theory().clone(),
+<a href=#467 id=467 data-nosnippet>467</a>            slate: slate.id(),
+<a href=#468 id=468 data-nosnippet>468</a>            offset,
+<a href=#469 id=469 data-nosnippet>469</a>            timeout: limits.timeout,
+<a href=#470 id=470 data-nosnippet>470</a>        })
+<a href=#471 id=471 data-nosnippet>471</a>    }
+<a href=#472 id=472 data-nosnippet>472</a>
+<a href=#473 id=473 data-nosnippet>473</a>    <span class="kw">fn </span>propagate(
+<a href=#474 id=474 data-nosnippet>474</a>        <span class="kw-2">&amp;mut </span><span class="self">self</span>,
+<a href=#475 id=475 data-nosnippet>475</a>        theory: <span class="kw-2">&amp;</span>Theory,
+<a href=#476 id=476 data-nosnippet>476</a>        candidates: <span class="kw-2">&amp;</span>[Interpretation],
+<a href=#477 id=477 data-nosnippet>477</a>        limits: FormulaLimits,
+<a href=#478 id=478 data-nosnippet>478</a>        cancellation: <span class="kw-2">&amp;</span>Cancellation,
+<a href=#479 id=479 data-nosnippet>479</a>        size: <span class="kw">crate</span>::candidates::BatchSize,
+<a href=#480 id=480 data-nosnippet>480</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;Vec&lt;FormulaCheck&gt;, GpuError&gt; {
+<a href=#481 id=481 data-nosnippet>481</a>        <span class="self">self</span>.last = <span class="prelude-val">None</span>;
+<a href=#482 id=482 data-nosnippet>482</a>        <span class="self">self</span>.last_submission_candidates = <span class="prelude-val">None</span>;
+<a href=#483 id=483 data-nosnippet>483</a>        <span class="self">self</span>.reported = <span class="prelude-val">None</span>;
+<a href=#484 id=484 data-nosnippet>484</a>        <span class="kw">let </span>context = <span class="self">self</span>.profile.runtime.context.clone();
+<a href=#485 id=485 data-nosnippet>485</a>        <span class="kw">let </span>_lease = context.lease()<span class="question-mark">?</span>;
+<a href=#486 id=486 data-nosnippet>486</a>        cancellation.poll().map_err(GpuError::interrupted)<span class="question-mark">?</span>;
+<a href=#487 id=487 data-nosnippet>487</a>        <span class="self">self</span>.profile.runtime.check_health()<span class="question-mark">?</span>;
+<a href=#488 id=488 data-nosnippet>488</a>        <span class="kw">if </span>candidates.is_empty() {
+<a href=#489 id=489 data-nosnippet>489</a>            <span class="kw">return </span><span class="prelude-val">Ok</span>(Vec::new());
+<a href=#490 id=490 data-nosnippet>490</a>        }
+<a href=#491 id=491 data-nosnippet>491</a>        <span class="kw">let </span>call = <span class="self">self</span>.prepare_epoch(theory, candidates, limits, cancellation, size)<span class="question-mark">?</span>;
+<a href=#492 id=492 data-nosnippet>492</a>        cancellation.poll().map_err(GpuError::interrupted)<span class="question-mark">?</span>;
+<a href=#493 id=493 data-nosnippet>493</a>        <span class="self">self</span>.run(call, limits.timeout, cancellation, <span class="prelude-val">None</span>)
+<a href=#494 id=494 data-nosnippet>494</a>            .map(|(checks, <span class="kw">_</span>)| checks)
+<a href=#495 id=495 data-nosnippet>495</a>    }
+<a href=#496 id=496 data-nosnippet>496</a>
+<a href=#497 id=497 data-nosnippet>497</a>    <span class="doccomment">/// Prepare a batch at the next epoch, which it commits only when it is
+<a href=#498 id=498 data-nosnippet>498</a>    /// submitted.
+<a href=#499 id=499 data-nosnippet>499</a>    </span><span class="kw">fn </span>prepare_epoch(
+<a href=#500 id=500 data-nosnippet>500</a>        <span class="kw-2">&amp;mut </span><span class="self">self</span>,
+<a href=#501 id=501 data-nosnippet>501</a>        theory: <span class="kw-2">&amp;</span>Theory,
+<a href=#502 id=502 data-nosnippet>502</a>        candidates: <span class="kw-2">&amp;</span>[Interpretation],
+<a href=#503 id=503 data-nosnippet>503</a>        limits: FormulaLimits,
+<a href=#504 id=504 data-nosnippet>504</a>        cancellation: <span class="kw-2">&amp;</span>Cancellation,
+<a href=#505 id=505 data-nosnippet>505</a>        size: <span class="kw">crate</span>::candidates::BatchSize,
+<a href=#506 id=506 data-nosnippet>506</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;PreparedCall, GpuError&gt; {
+<a href=#507 id=507 data-nosnippet>507</a>        <span class="kw">let </span>epoch = <span class="self">self</span>.epoch.checked_add(<span class="number">1</span>).ok_or_else(|| {
+<a href=#508 id=508 data-nosnippet>508</a>            GpuError::new(GpuErrorKind::Capacity, <span class="string">"formula epoch counter exhausted"</span>)
+<a href=#509 id=509 data-nosnippet>509</a>        })<span class="question-mark">?</span>;
+<a href=#510 id=510 data-nosnippet>510</a>        <span class="self">self</span>.prepare_call(theory, candidates, limits, cancellation, epoch, size)
+<a href=#511 id=511 data-nosnippet>511</a>    }
+<a href=#512 id=512 data-nosnippet>512</a>
+<a href=#513 id=513 data-nosnippet>513</a>    <span class="doccomment">/// Run a prepared batch under the caller's lease: compile its pipeline at
+<a href=#514 id=514 data-nosnippet>514</a>    /// first need, install a fresh graph, submit, run `during` while the
+<a href=#515 id=515 data-nosnippet>515</a>    /// submission is in flight, finish and settle.
+<a href=#516 id=516 data-nosnippet>516</a>    ///
+<a href=#517 id=517 data-nosnippet>517</a>    /// Without `during`, the error scopes close after the readback and the
+<a href=#518 id=518 data-nosnippet>518</a>    /// wait polls the control, as every synchronous query does. With it, they
+<a href=#519 id=519 data-nosnippet>519</a>    /// close right after the submission, so they capture none of `during`'s
+<a href=#520 id=520 data-nosnippet>520</a>    /// device calls; a submission that fails before it is made runs no
+<a href=#521 id=521 data-nosnippet>521</a>    /// `during`. When the control has fired by the time `during` returns, the
+<a href=#522 id=522 data-nosnippet>522</a>    /// finish observes the submission's completion without polling the
+<a href=#523 id=523 data-nosnippet>523</a>    /// control, within the batch's timeout, and reports the stop without
+<a href=#524 id=524 data-nosnippet>524</a>    /// decoding: a completed, released readback leaves the context reusable.
+<a href=#525 id=525 data-nosnippet>525</a>    /// Beside the checks it returns the finish's wait after `during`: from
+<a href=#526 id=526 data-nosnippet>526</a>    /// `during`'s return to the observed completion, before mapping and
+<a href=#527 id=527 data-nosnippet>527</a>    /// decoding; absent without `during`.
+<a href=#528 id=528 data-nosnippet>528</a>    </span><span class="kw">fn </span>run(
+<a href=#529 id=529 data-nosnippet>529</a>        <span class="kw-2">&amp;mut </span><span class="self">self</span>,
+<a href=#530 id=530 data-nosnippet>530</a>        call: PreparedCall,
+<a href=#531 id=531 data-nosnippet>531</a>        timeout: Duration,
+<a href=#532 id=532 data-nosnippet>532</a>        cancellation: <span class="kw-2">&amp;</span>Cancellation,
+<a href=#533 id=533 data-nosnippet>533</a>        during: <span class="prelude-ty">Option</span>&lt;<span class="kw-2">&amp;mut </span><span class="kw">dyn </span>FnMut()&gt;,
+<a href=#534 id=534 data-nosnippet>534</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;(Vec&lt;FormulaCheck&gt;, <span class="prelude-ty">Option</span>&lt;Duration&gt;), GpuError&gt; {
+<a href=#535 id=535 data-nosnippet>535</a>        <span class="kw">let </span>PreparedCall {
+<a href=#536 id=536 data-nosnippet>536</a>            fresh,
+<a href=#537 id=537 data-nosnippet>537</a>            plan,
+<a href=#538 id=538 data-nosnippet>538</a>            stats,
+<a href=#539 id=539 data-nosnippet>539</a>            output,
+<a href=#540 id=540 data-nosnippet>540</a>        } = call;
+<a href=#541 id=541 data-nosnippet>541</a>        <span class="comment">// The dispatched size's pipeline is compiled at first need, before this
+<a href=#542 id=542 data-nosnippet>542</a>        // call's scopes and before the fresh graph becomes resident. Only a
+<a href=#543 id=543 data-nosnippet>543</a>        // freshly prepared graph can need a size first, and its preparation has
+<a href=#544 id=544 data-nosnippet>544</a>        // released any previous resident, so a refusal leaves none, as a
+<a href=#545 id=545 data-nosnippet>545</a>        // cold-preparation failure does.
+<a href=#546 id=546 data-nosnippet>546</a>        </span><span class="kw">let </span>workgroup_size = fresh
+<a href=#547 id=547 data-nosnippet>547</a>            .as_ref()
+<a href=#548 id=548 data-nosnippet>548</a>            .map(|prepared| prepared.graph.workgroup_size)
+<a href=#549 id=549 data-nosnippet>549</a>            .or_else(|| {
+<a href=#550 id=550 data-nosnippet>550</a>                <span class="self">self</span>.resident
+<a href=#551 id=551 data-nosnippet>551</a>                    .as_ref()
+<a href=#552 id=552 data-nosnippet>552</a>                    .map(|resident| resident.graph.workgroup_size)
+<a href=#553 id=553 data-nosnippet>553</a>            })
+<a href=#554 id=554 data-nosnippet>554</a>            .ok_or_else(|| GpuError::new(GpuErrorKind::Device, <span class="string">"missing resident formula"</span>))<span class="question-mark">?</span>;
+<a href=#555 id=555 data-nosnippet>555</a>        <span class="self">self</span>.profile
+<a href=#556 id=556 data-nosnippet>556</a>            .runtime
+<a href=#557 id=557 data-nosnippet>557</a>            .ensure_pipeline(workgroup_size, <span class="kw">crate</span>::runtime::Variant::Full)<span class="question-mark">?</span>;
+<a href=#558 id=558 data-nosnippet>558</a>        <span class="kw">let </span>scopes = ErrorScopes::new(<span class="self">self</span>.profile.runtime.device());
+<a href=#559 id=559 data-nosnippet>559</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(prepared) = fresh {
+<a href=#560 id=560 data-nosnippet>560</a>            <span class="self">self</span>.resident = <span class="prelude-val">Some</span>(Resident::new(<span class="self">self</span>.profile.runtime.device(), prepared));
+<a href=#561 id=561 data-nosnippet>561</a>        }
+<a href=#562 id=562 data-nosnippet>562</a>        <span class="kw">let </span>status = <span class="self">self</span>.profile.runtime.context.compute_timing();
+<a href=#563 id=563 data-nosnippet>563</a>        <span class="kw">if </span>status == ComputeTimingStatus::Enabled &amp;&amp; <span class="self">self</span>.timer.is_none() {
+<a href=#564 id=564 data-nosnippet>564</a>            <span class="self">self</span>.timer = <span class="prelude-val">Some</span>(ComputeTimer::new(<span class="self">self</span>.profile.runtime.device()));
+<a href=#565 id=565 data-nosnippet>565</a>        }
+<a href=#566 id=566 data-nosnippet>566</a>        <span class="self">self</span>.epoch = plan.epoch;
+<a href=#567 id=567 data-nosnippet>567</a>        <span class="kw">let </span>runtime = <span class="kw-2">&amp;</span><span class="self">self</span>.profile.runtime;
+<a href=#568 id=568 data-nosnippet>568</a>        <span class="kw">let </span><span class="kw-2">mut </span>scopes = Scopes::Open(scopes);
+<a href=#569 id=569 data-nosnippet>569</a>        <span class="kw">let </span>submitted = <span class="self">self
+<a href=#570 id=570 data-nosnippet>570</a>            </span>.resident
+<a href=#571 id=571 data-nosnippet>571</a>            .as_mut()
+<a href=#572 id=572 data-nosnippet>572</a>            .ok_or_else(|| GpuError::new(GpuErrorKind::Device, <span class="string">"missing resident formula"</span>))
+<a href=#573 id=573 data-nosnippet>573</a>            .and_then(|resident| {
+<a href=#574 id=574 data-nosnippet>574</a>                resident.submit(runtime, <span class="self">self</span>.candidates.words(), <span class="kw-2">&amp;</span>plan, <span class="self">self</span>.timer.as_ref())
+<a href=#575 id=575 data-nosnippet>575</a>            });
+<a href=#576 id=576 data-nosnippet>576</a>        <span class="kw">let </span><span class="kw-2">mut </span>finish_wait = <span class="prelude-val">None</span>;
+<a href=#577 id=577 data-nosnippet>577</a>        <span class="kw">let </span>(completion, timing) = <span class="kw">match </span>submitted {
+<a href=#578 id=578 data-nosnippet>578</a>            <span class="prelude-val">Err</span>(error) =&gt; (<span class="prelude-val">Err</span>(error), BatchTiming::default()),
+<a href=#579 id=579 data-nosnippet>579</a>            <span class="prelude-val">Ok</span>(submitted) =&gt; {
+<a href=#580 id=580 data-nosnippet>580</a>                <span class="self">self</span>.last_submission_candidates = <span class="prelude-val">Some</span>(submitted.candidates);
+<a href=#581 id=581 data-nosnippet>581</a>                <span class="kw">let </span><span class="kw-2">mut </span>during_ended = <span class="prelude-val">None</span>;
+<a href=#582 id=582 data-nosnippet>582</a>                <span class="kw">let </span>observation = <span class="kw">match </span>during {
+<a href=#583 id=583 data-nosnippet>583</a>                    <span class="prelude-val">None </span>=&gt; Observation::Polled,
+<a href=#584 id=584 data-nosnippet>584</a>                    <span class="prelude-val">Some</span>(during) =&gt; {
+<a href=#585 id=585 data-nosnippet>585</a>                        scopes.settle();
+<a href=#586 id=586 data-nosnippet>586</a>                        during();
+<a href=#587 id=587 data-nosnippet>587</a>                        during_ended = <span class="prelude-val">Some</span>(Instant::now());
+<a href=#588 id=588 data-nosnippet>588</a>                        cancellation.poll().map_or_else(
+<a href=#589 id=589 data-nosnippet>589</a>                            |stop| Observation::AfterStop(GpuError::interrupted(stop)),
+<a href=#590 id=590 data-nosnippet>590</a>                            |()| Observation::Polled,
+<a href=#591 id=591 data-nosnippet>591</a>                        )
+<a href=#592 id=592 data-nosnippet>592</a>                    }
+<a href=#593 id=593 data-nosnippet>593</a>                };
+<a href=#594 id=594 data-nosnippet>594</a>                <span class="kw">match </span><span class="self">self
+<a href=#595 id=595 data-nosnippet>595</a>                    </span>.resident
+<a href=#596 id=596 data-nosnippet>596</a>                    .as_ref()
+<a href=#597 id=597 data-nosnippet>597</a>                    .ok_or_else(|| GpuError::new(GpuErrorKind::Device, <span class="string">"missing resident formula"</span>))
+<a href=#598 id=598 data-nosnippet>598</a>                    .and_then(|resident| {
+<a href=#599 id=599 data-nosnippet>599</a>                        resident.finish(
+<a href=#600 id=600 data-nosnippet>600</a>                            runtime,
+<a href=#601 id=601 data-nosnippet>601</a>                            submitted,
+<a href=#602 id=602 data-nosnippet>602</a>                            packing::Readback {
+<a href=#603 id=603 data-nosnippet>603</a>                                plan: <span class="kw-2">&amp;</span>plan,
+<a href=#604 id=604 data-nosnippet>604</a>                                seeds: <span class="self">self</span>.candidates.words(),
+<a href=#605 id=605 data-nosnippet>605</a>                                output,
+<a href=#606 id=606 data-nosnippet>606</a>                            },
+<a href=#607 id=607 data-nosnippet>607</a>                            observation,
+<a href=#608 id=608 data-nosnippet>608</a>                            timeout,
+<a href=#609 id=609 data-nosnippet>609</a>                            cancellation,
+<a href=#610 id=610 data-nosnippet>610</a>                        )
+<a href=#611 id=611 data-nosnippet>611</a>                    }) {
+<a href=#612 id=612 data-nosnippet>612</a>                    <span class="prelude-val">Ok</span>(dispatched) =&gt; {
+<a href=#613 id=613 data-nosnippet>613</a>                        finish_wait = during_ended
+<a href=#614 id=614 data-nosnippet>614</a>                            .and_then(|ended| dispatched.completion.window_since(ended));
+<a href=#615 id=615 data-nosnippet>615</a>                        (<span class="prelude-val">Ok</span>(dispatched.completion), dispatched.timing)
+<a href=#616 id=616 data-nosnippet>616</a>                    }
+<a href=#617 id=617 data-nosnippet>617</a>                    <span class="prelude-val">Err</span>(error) =&gt; (<span class="prelude-val">Err</span>(error), BatchTiming::default()),
+<a href=#618 id=618 data-nosnippet>618</a>                }
+<a href=#619 id=619 data-nosnippet>619</a>            }
+<a href=#620 id=620 data-nosnippet>620</a>        };
+<a href=#621 id=621 data-nosnippet>621</a>        <span class="kw">let </span>outcome = runtime.complete_scopes(scopes, completion);
+<a href=#622 id=622 data-nosnippet>622</a>        <span class="kw">if </span><span class="self">self</span>.last_submission_candidates.is_some() {
+<a href=#623 id=623 data-nosnippet>623</a>            <span class="self">self</span>.reported = <span class="kw">crate</span>::timing::settle_call(
+<a href=#624 id=624 data-nosnippet>624</a>                status,
+<a href=#625 id=625 data-nosnippet>625</a>                <span class="kw-2">&amp;mut </span><span class="self">self</span>.timer,
+<a href=#626 id=626 data-nosnippet>626</a>                outcome.is_ok(),
+<a href=#627 id=627 data-nosnippet>627</a>                <span class="kw-2">&amp;</span>timing,
+<a href=#628 id=628 data-nosnippet>628</a>                <span class="self">self</span>.profile.runtime.queue().get_timestamp_period(),
+<a href=#629 id=629 data-nosnippet>629</a>            );
+<a href=#630 id=630 data-nosnippet>630</a>        }
+<a href=#631 id=631 data-nosnippet>631</a>        <span class="kw">let </span>checks = outcome<span class="question-mark">?</span>;
+<a href=#632 id=632 data-nosnippet>632</a>        <span class="self">self</span>.last = <span class="prelude-val">Some</span>(stats);
+<a href=#633 id=633 data-nosnippet>633</a>        <span class="prelude-val">Ok</span>((checks, finish_wait))
+<a href=#634 id=634 data-nosnippet>634</a>    }
+<a href=#635 id=635 data-nosnippet>635</a>
+<a href=#636 id=636 data-nosnippet>636</a>    <span class="comment">// All cold staging is owned and admitted before device effects. Minimum
+<a href=#637 id=637 data-nosnippet>637</a>    // shape/identity refusals preserve residency; later cold failures leave a
+<a href=#638 id=638 data-nosnippet>638</a>    // healthy context without a resident subject or a committed epoch.
+<a href=#639 id=639 data-nosnippet>639</a>    </span><span class="kw">fn </span>prepare_call(
+<a href=#640 id=640 data-nosnippet>640</a>        <span class="kw-2">&amp;mut </span><span class="self">self</span>,
+<a href=#641 id=641 data-nosnippet>641</a>        theory: <span class="kw-2">&amp;</span>Theory,
+<a href=#642 id=642 data-nosnippet>642</a>        candidates: <span class="kw-2">&amp;</span>[Interpretation],
+<a href=#643 id=643 data-nosnippet>643</a>        <span class="kw-2">mut </span>limits: FormulaLimits,
+<a href=#644 id=644 data-nosnippet>644</a>        cancellation: <span class="kw-2">&amp;</span>Cancellation,
+<a href=#645 id=645 data-nosnippet>645</a>        epoch: u32,
+<a href=#646 id=646 data-nosnippet>646</a>        size: <span class="kw">crate</span>::candidates::BatchSize,
+<a href=#647 id=647 data-nosnippet>647</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;PreparedCall, GpuError&gt; {
+<a href=#648 id=648 data-nosnippet>648</a>        <span class="kw">let </span>timed =
+<a href=#649 id=649 data-nosnippet>649</a>            <span class="self">self</span>.context().compute_timing() == zetesis_backend::ComputeTimingStatus::Enabled;
+<a href=#650 id=650 data-nosnippet>650</a>        <span class="kw">let </span>timing_bytes = <span class="kw">if </span>timed {
+<a href=#651 id=651 data-nosnippet>651</a>            <span class="kw">crate</span>::timing::OVERHEAD_BYTES
+<a href=#652 id=652 data-nosnippet>652</a>        } <span class="kw">else </span>{
+<a href=#653 id=653 data-nosnippet>653</a>            <span class="number">0
+<a href=#654 id=654 data-nosnippet>654</a>        </span>};
+<a href=#655 id=655 data-nosnippet>655</a>        limits.max_batch_bytes = limits
+<a href=#656 id=656 data-nosnippet>656</a>            .max_batch_bytes
+<a href=#657 id=657 data-nosnippet>657</a>            .checked_sub(timing_bytes)
+<a href=#658 id=658 data-nosnippet>658</a>            .ok_or_else(|| {
+<a href=#659 id=659 data-nosnippet>659</a>                GpuError::new(
+<a href=#660 id=660 data-nosnippet>660</a>                    GpuErrorKind::Capacity,
+<a href=#661 id=661 data-nosnippet>661</a>                    <span class="string">"formula timestamp storage exceeds the batch byte allowance"</span>,
+<a href=#662 id=662 data-nosnippet>662</a>                )
+<a href=#663 id=663 data-nosnippet>663</a>            })<span class="question-mark">?</span>;
+<a href=#664 id=664 data-nosnippet>664</a>        <span class="comment">// Old scratch must not coexist with a cold graph's temporary directory.
+<a href=#665 id=665 data-nosnippet>665</a>        // Releasing it does not change the resident device subject on refusal.
+<a href=#666 id=666 data-nosnippet>666</a>        </span><span class="kw">if </span><span class="self">self</span>.resident.as_ref().is_none_or(|resident| {
+<a href=#667 id=667 data-nosnippet>667</a>            !resident.graph.shape.theory.same_instance(theory)
+<a href=#668 id=668 data-nosnippet>668</a>                || (size.is_exact() &amp;&amp; !resident.matches_count(candidates.len()))
+<a href=#669 id=669 data-nosnippet>669</a>        }) {
+<a href=#670 id=670 data-nosnippet>670</a>            <span class="self">self</span>.candidates.release();
+<a href=#671 id=671 data-nosnippet>671</a>        }
+<a href=#672 id=672 data-nosnippet>672</a>        <span class="kw">let </span>retained = <span class="self">self</span>.retained_plan(theory, size, limits, epoch, timed, cancellation)<span class="question-mark">?</span>;
+<a href=#673 id=673 data-nosnippet>673</a>        <span class="kw">let </span>(fresh, plan) = <span class="kw">if let </span><span class="prelude-val">Some</span>(plan) = retained {
+<a href=#674 id=674 data-nosnippet>674</a>            identities(theory, candidates)<span class="question-mark">?</span>;
+<a href=#675 id=675 data-nosnippet>675</a>            (<span class="prelude-val">None</span>, plan)
+<a href=#676 id=676 data-nosnippet>676</a>        } <span class="kw">else </span>{
+<a href=#677 id=677 data-nosnippet>677</a>            <span class="self">self</span>.candidates.release();
+<a href=#678 id=678 data-nosnippet>678</a>            <span class="kw">let </span>preparation = Preparation::with_control(
+<a href=#679 id=679 data-nosnippet>679</a>                theory,
+<a href=#680 id=680 data-nosnippet>680</a>                size.initial(),
+<a href=#681 id=681 data-nosnippet>681</a>                limits,
+<a href=#682 id=682 data-nosnippet>682</a>                <span class="self">self</span>.profile.runtime.limits(),
+<a href=#683 id=683 data-nosnippet>683</a>                epoch,
+<a href=#684 id=684 data-nosnippet>684</a>                cancellation,
+<a href=#685 id=685 data-nosnippet>685</a>            )<span class="question-mark">?
+<a href=#686 id=686 data-nosnippet>686</a>            </span>.with_propagation(<span class="self">self</span>.profile.kernel_options().propagation)
+<a href=#687 id=687 data-nosnippet>687</a>            .with_workgroup_sizing(<span class="self">self</span>.profile.kernel_options().workgroup_sizing);
+<a href=#688 id=688 data-nosnippet>688</a>            identities(theory, candidates)<span class="question-mark">?</span>;
+<a href=#689 id=689 data-nosnippet>689</a>            <span class="self">self</span>.resident = <span class="prelude-val">None</span>;
+<a href=#690 id=690 data-nosnippet>690</a>            <span class="kw">let </span>(prepared, exact) =
+<a href=#691 id=691 data-nosnippet>691</a>                preparation.finish(<span class="self">self</span>.profile.runtime.limits(), cancellation)<span class="question-mark">?</span>;
+<a href=#692 id=692 data-nosnippet>692</a>            <span class="kw">let </span>plan = <span class="kw">if </span>size.is_exact() {
+<a href=#693 id=693 data-nosnippet>693</a>                exact
+<a href=#694 id=694 data-nosnippet>694</a>            } <span class="kw">else </span>{
+<a href=#695 id=695 data-nosnippet>695</a>                size.select(limits.max_candidates, cancellation, |count| {
+<a href=#696 id=696 data-nosnippet>696</a>                    <span class="kw">let </span>plan =
+<a href=#697 id=697 data-nosnippet>697</a>                        prepared.plan(count, limits, <span class="self">self</span>.profile.runtime.limits(), epoch)<span class="question-mark">?</span>;
+<a href=#698 id=698 data-nosnippet>698</a>                    <span class="kw">crate</span>::timing::readback_size(
+<a href=#699 id=699 data-nosnippet>699</a>                        plan.results,
+<a href=#700 id=700 data-nosnippet>700</a>                        timed,
+<a href=#701 id=701 data-nosnippet>701</a>                        <span class="self">self</span>.profile.runtime.limits().max_buffer_size,
+<a href=#702 id=702 data-nosnippet>702</a>                    )<span class="question-mark">?</span>;
+<a href=#703 id=703 data-nosnippet>703</a>                    <span class="prelude-val">Ok</span>(plan)
+<a href=#704 id=704 data-nosnippet>704</a>                })<span class="question-mark">?
+<a href=#705 id=705 data-nosnippet>705</a>            </span>};
+<a href=#706 id=706 data-nosnippet>706</a>            (<span class="prelude-val">Some</span>(prepared), plan)
+<a href=#707 id=707 data-nosnippet>707</a>        };
+<a href=#708 id=708 data-nosnippet>708</a>        <span class="kw">crate</span>::timing::readback_size(
+<a href=#709 id=709 data-nosnippet>709</a>            plan.results,
+<a href=#710 id=710 data-nosnippet>710</a>            timed,
+<a href=#711 id=711 data-nosnippet>711</a>            <span class="self">self</span>.profile.runtime.limits().max_buffer_size,
+<a href=#712 id=712 data-nosnippet>712</a>        )<span class="question-mark">?</span>;
+<a href=#713 id=713 data-nosnippet>713</a>        <span class="self">self</span>.stage_candidates(fresh, plan, candidates, limits, timing_bytes, cancellation)
+<a href=#714 id=714 data-nosnippet>714</a>    }
+<a href=#715 id=715 data-nosnippet>715</a>
+<a href=#716 id=716 data-nosnippet>716</a>    <span class="kw">fn </span>stage_candidates(
+<a href=#717 id=717 data-nosnippet>717</a>        <span class="kw-2">&amp;mut </span><span class="self">self</span>,
+<a href=#718 id=718 data-nosnippet>718</a>        fresh: <span class="prelude-ty">Option</span>&lt;PreparedGraph&gt;,
+<a href=#719 id=719 data-nosnippet>719</a>        <span class="kw-2">mut </span>plan: Plan,
+<a href=#720 id=720 data-nosnippet>720</a>        candidates: <span class="kw-2">&amp;</span>[Interpretation],
+<a href=#721 id=721 data-nosnippet>721</a>        limits: FormulaLimits,
+<a href=#722 id=722 data-nosnippet>722</a>        timing_bytes: u64,
+<a href=#723 id=723 data-nosnippet>723</a>        cancellation: <span class="kw-2">&amp;</span>Cancellation,
+<a href=#724 id=724 data-nosnippet>724</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;PreparedCall, GpuError&gt; {
+<a href=#725 id=725 data-nosnippet>725</a>        <span class="kw">let </span>graph = fresh
+<a href=#726 id=726 data-nosnippet>726</a>            .as_ref()
+<a href=#727 id=727 data-nosnippet>727</a>            .map(|prepared| <span class="kw-2">&amp;</span>prepared.graph)
+<a href=#728 id=728 data-nosnippet>728</a>            .or_else(|| <span class="self">self</span>.resident.as_ref().map(|resident| <span class="kw-2">&amp;</span>resident.graph))
+<a href=#729 id=729 data-nosnippet>729</a>            .ok_or_else(|| GpuError::new(GpuErrorKind::Device, <span class="string">"missing formula graph"</span>))<span class="question-mark">?</span>;
+<a href=#730 id=730 data-nosnippet>730</a>        <span class="kw">let </span><span class="kw-2">mut </span>stats = FormulaBatchStats {
+<a href=#731 id=731 data-nosnippet>731</a>            propagation: graph.schedule.propagation(),
+<a href=#732 id=732 data-nosnippet>732</a>            theory_uploaded: fresh.is_some(),
+<a href=#733 id=733 data-nosnippet>733</a>            transport_allocated: fresh.is_some()
+<a href=#734 id=734 data-nosnippet>734</a>                || <span class="self">self
+<a href=#735 id=735 data-nosnippet>735</a>                    </span>.resident
+<a href=#736 id=736 data-nosnippet>736</a>                    .as_ref()
+<a href=#737 id=737 data-nosnippet>737</a>                    .is_none_or(|resident| !resident.matches(<span class="kw-2">&amp;</span>plan)),
+<a href=#738 id=738 data-nosnippet>738</a>            resident_theory_bytes: graph.schedule.bytes,
+<a href=#739 id=739 data-nosnippet>739</a>            <span class="comment">// The timer is the oracle's; only the readback tail is transport.
+<a href=#740 id=740 data-nosnippet>740</a>            </span>resident_transport_bytes: plan.transport
+<a href=#741 id=741 data-nosnippet>741</a>                + <span class="kw">if </span>timing_bytes == <span class="number">0 </span>{
+<a href=#742 id=742 data-nosnippet>742</a>                    <span class="number">0
+<a href=#743 id=743 data-nosnippet>743</a>                </span>} <span class="kw">else </span>{
+<a href=#744 id=744 data-nosnippet>744</a>                    <span class="kw">crate</span>::timing::READBACK_BYTES
+<a href=#745 id=745 data-nosnippet>745</a>                },
+<a href=#746 id=746 data-nosnippet>746</a>            accounted_bytes: plan.accounted + timing_bytes,
+<a href=#747 id=747 data-nosnippet>747</a>            workgroup_size: graph.workgroup_size.invocations(),
+<a href=#748 id=748 data-nosnippet>748</a>        };
+<a href=#749 id=749 data-nosnippet>749</a>        <span class="kw">if </span>stats.transport_allocated {
+<a href=#750 id=750 data-nosnippet>750</a>            <span class="self">self</span>.candidates.release();
+<a href=#751 id=751 data-nosnippet>751</a>            <span class="kw">if let </span><span class="prelude-val">Some</span>(resident) = <span class="self">self</span>.resident.as_mut() {
+<a href=#752 id=752 data-nosnippet>752</a>                resident.transport = <span class="prelude-val">None</span>;
+<a href=#753 id=753 data-nosnippet>753</a>            }
+<a href=#754 id=754 data-nosnippet>754</a>        }
+<a href=#755 id=755 data-nosnippet>755</a>        <span class="kw">let </span>graph = fresh
+<a href=#756 id=756 data-nosnippet>756</a>            .as_ref()
+<a href=#757 id=757 data-nosnippet>757</a>            .map(|prepared| <span class="kw-2">&amp;</span>prepared.graph)
+<a href=#758 id=758 data-nosnippet>758</a>            .or_else(|| <span class="self">self</span>.resident.as_ref().map(|resident| <span class="kw-2">&amp;</span>resident.graph))
+<a href=#759 id=759 data-nosnippet>759</a>            .ok_or_else(|| GpuError::new(GpuErrorKind::Device, <span class="string">"missing formula packing graph"</span>))<span class="question-mark">?</span>;
+<a href=#760 id=760 data-nosnippet>760</a>        plan.accounted = plan.pack(
+<a href=#761 id=761 data-nosnippet>761</a>            graph,
+<a href=#762 id=762 data-nosnippet>762</a>            <span class="kw-2">&amp;</span>candidates[..plan.worlds <span class="kw">as </span>usize],
+<a href=#763 id=763 data-nosnippet>763</a>            <span class="kw-2">&amp;mut </span><span class="self">self</span>.candidates,
+<a href=#764 id=764 data-nosnippet>764</a>            limits.max_batch_bytes,
+<a href=#765 id=765 data-nosnippet>765</a>            cancellation,
+<a href=#766 id=766 data-nosnippet>766</a>        )<span class="question-mark">?</span>;
+<a href=#767 id=767 data-nosnippet>767</a>        <span class="kw">let </span>output = packing::Output::reserve(<span class="kw-2">&amp;</span>plan)<span class="question-mark">?</span>;
+<a href=#768 id=768 data-nosnippet>768</a>        stats.accounted_bytes = output.accounted + timing_bytes;
+<a href=#769 id=769 data-nosnippet>769</a>        <span class="prelude-val">Ok</span>(PreparedCall {
+<a href=#770 id=770 data-nosnippet>770</a>            fresh,
+<a href=#771 id=771 data-nosnippet>771</a>            plan,
+<a href=#772 id=772 data-nosnippet>772</a>            stats,
+<a href=#773 id=773 data-nosnippet>773</a>            output,
+<a href=#774 id=774 data-nosnippet>774</a>        })
+<a href=#775 id=775 data-nosnippet>775</a>    }
+<a href=#776 id=776 data-nosnippet>776</a>
+<a href=#777 id=777 data-nosnippet>777</a>    <span class="comment">// Optional indexing must not turn a smaller caller allowance into a new
+<a href=#778 id=778 data-nosnippet>778</a>    // mandatory representation. A capacity refusal re-enters cold admission;
+<a href=#779 id=779 data-nosnippet>779</a>    // only after its minimum and identities pass is the old resident retired.
+<a href=#780 id=780 data-nosnippet>780</a>    </span><span class="kw">fn </span>retained_plan(
+<a href=#781 id=781 data-nosnippet>781</a>        <span class="kw-2">&amp;</span><span class="self">self</span>,
+<a href=#782 id=782 data-nosnippet>782</a>        theory: <span class="kw-2">&amp;</span>Theory,
+<a href=#783 id=783 data-nosnippet>783</a>        size: <span class="kw">crate</span>::candidates::BatchSize,
+<a href=#784 id=784 data-nosnippet>784</a>        limits: FormulaLimits,
+<a href=#785 id=785 data-nosnippet>785</a>        epoch: u32,
+<a href=#786 id=786 data-nosnippet>786</a>        timed: bool,
+<a href=#787 id=787 data-nosnippet>787</a>        cancellation: <span class="kw-2">&amp;</span>Cancellation,
+<a href=#788 id=788 data-nosnippet>788</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="prelude-ty">Option</span>&lt;Plan&gt;, GpuError&gt; {
+<a href=#789 id=789 data-nosnippet>789</a>        <span class="kw">let </span><span class="prelude-val">Some</span>(resident) = <span class="self">self
+<a href=#790 id=790 data-nosnippet>790</a>            </span>.resident
+<a href=#791 id=791 data-nosnippet>791</a>            .as_ref()
+<a href=#792 id=792 data-nosnippet>792</a>            .filter(|resident| resident.graph.shape.theory.same_instance(theory))
+<a href=#793 id=793 data-nosnippet>793</a>        <span class="kw">else </span>{
+<a href=#794 id=794 data-nosnippet>794</a>            <span class="kw">return </span><span class="prelude-val">Ok</span>(<span class="prelude-val">None</span>);
+<a href=#795 id=795 data-nosnippet>795</a>        };
+<a href=#796 id=796 data-nosnippet>796</a>        <span class="kw">match </span>size.select(limits.max_candidates, cancellation, |count| {
+<a href=#797 id=797 data-nosnippet>797</a>            <span class="kw">let </span>plan = Plan::new(
+<a href=#798 id=798 data-nosnippet>798</a>                <span class="kw-2">&amp;</span>resident.graph,
+<a href=#799 id=799 data-nosnippet>799</a>                count,
+<a href=#800 id=800 data-nosnippet>800</a>                limits,
+<a href=#801 id=801 data-nosnippet>801</a>                <span class="self">self</span>.profile.runtime.limits(),
+<a href=#802 id=802 data-nosnippet>802</a>                <span class="bool-val">false</span>,
+<a href=#803 id=803 data-nosnippet>803</a>                epoch,
+<a href=#804 id=804 data-nosnippet>804</a>            )<span class="question-mark">?</span>;
+<a href=#805 id=805 data-nosnippet>805</a>            <span class="kw">crate</span>::timing::readback_size(
+<a href=#806 id=806 data-nosnippet>806</a>                plan.results,
+<a href=#807 id=807 data-nosnippet>807</a>                timed,
+<a href=#808 id=808 data-nosnippet>808</a>                <span class="self">self</span>.profile.runtime.limits().max_buffer_size,
+<a href=#809 id=809 data-nosnippet>809</a>            )<span class="question-mark">?</span>;
+<a href=#810 id=810 data-nosnippet>810</a>            <span class="prelude-val">Ok</span>(plan)
+<a href=#811 id=811 data-nosnippet>811</a>        }) {
+<a href=#812 id=812 data-nosnippet>812</a>            <span class="prelude-val">Ok</span>(plan) =&gt; <span class="prelude-val">Ok</span>(<span class="prelude-val">Some</span>(plan)),
+<a href=#813 id=813 data-nosnippet>813</a>            <span class="prelude-val">Err</span>(error)
+<a href=#814 id=814 data-nosnippet>814</a>                <span class="kw">if </span>resident.graph.schedule.incidence.is_some()
+<a href=#815 id=815 data-nosnippet>815</a>                    &amp;&amp; error.kind() == GpuErrorKind::Capacity =&gt;
+<a href=#816 id=816 data-nosnippet>816</a>            {
+<a href=#817 id=817 data-nosnippet>817</a>                <span class="prelude-val">Ok</span>(<span class="prelude-val">None</span>)
+<a href=#818 id=818 data-nosnippet>818</a>            }
+<a href=#819 id=819 data-nosnippet>819</a>            <span class="prelude-val">Err</span>(error) =&gt; <span class="prelude-val">Err</span>(error),
+<a href=#820 id=820 data-nosnippet>820</a>        }
+<a href=#821 id=821 data-nosnippet>821</a>    }
+<a href=#822 id=822 data-nosnippet>822</a>}
+<a href=#823 id=823 data-nosnippet>823</a>
+<a href=#824 id=824 data-nosnippet>824</a><span class="doccomment">/// One submission of a slate that a [`GpuFormulaOracle`] admitted, packed and
+<a href=#825 id=825 data-nosnippet>825</a>/// planned but has not submitted ([`GpuFormulaOracle::prepare`]).
+<a href=#826 id=826 data-nosnippet>826</a>///
+<a href=#827 id=827 data-nosnippet>827</a>/// It holds its oracle's mutable borrow until [`Self::check`] or
+<a href=#828 id=828 data-nosnippet>828</a>/// [`Self::check_overlapping`] consumes it, so what is resident and the epoch
+<a href=#829 id=829 data-nosnippet>829</a>/// are those its check runs on. It carries copies of its slate's identity, its
+<a href=#830 id=830 data-nosnippet>830</a>/// offset and its count, and no borrow of the slate's candidates, so the
+<a href=#831 id=831 data-nosnippet>831</a>/// slate's stream can be borrowed again while it runs. A second preparation
+<a href=#832 id=832 data-nosnippet>832</a>/// cannot begin while one exists:
+<a href=#833 id=833 data-nosnippet>833</a>///
+<a href=#834 id=834 data-nosnippet>834</a>/// ```compile_fail,E0499
+<a href=#835 id=835 data-nosnippet>835</a>/// # use zetesis_wgpu::{FormulaLimits, GpuFormulaOracle};
+<a href=#836 id=836 data-nosnippet>836</a>/// # fn second(oracle: &amp;mut GpuFormulaOracle, slate: zetesis_ferraris::SlateRef&lt;'_&gt;,
+<a href=#837 id=837 data-nosnippet>837</a>/// #     control: &amp;zetesis_algebra::Cancellation) {
+<a href=#838 id=838 data-nosnippet>838</a>/// let first = oracle.prepare(slate, 0, FormulaLimits::default(), control);
+<a href=#839 id=839 data-nosnippet>839</a>/// let second = oracle.prepare(slate, 0, FormulaLimits::default(), control);
+<a href=#840 id=840 data-nosnippet>840</a>/// drop((first, second));
+<a href=#841 id=841 data-nosnippet>841</a>/// # }
+<a href=#842 id=842 data-nosnippet>842</a>/// ```
+<a href=#843 id=843 data-nosnippet>843</a>///
+<a href=#844 id=844 data-nosnippet>844</a>/// Nor can any other operation on the oracle run between a preparation and its
+<a href=#845 id=845 data-nosnippet>845</a>/// check:
+<a href=#846 id=846 data-nosnippet>846</a>///
+<a href=#847 id=847 data-nosnippet>847</a>/// ```compile_fail,E0499
+<a href=#848 id=848 data-nosnippet>848</a>/// # use zetesis_wgpu::{FormulaLimits, GpuFormulaOracle};
+<a href=#849 id=849 data-nosnippet>849</a>/// # fn between(oracle: &amp;mut GpuFormulaOracle, slate: zetesis_ferraris::SlateRef&lt;'_&gt;,
+<a href=#850 id=850 data-nosnippet>850</a>/// #     control: &amp;zetesis_algebra::Cancellation) {
+<a href=#851 id=851 data-nosnippet>851</a>/// let prepared = oracle.prepare(slate, 0, FormulaLimits::default(), control).unwrap();
+<a href=#852 id=852 data-nosnippet>852</a>/// oracle.clear_residency();
+<a href=#853 id=853 data-nosnippet>853</a>/// let _ = prepared.check(control);
+<a href=#854 id=854 data-nosnippet>854</a>/// # }
+<a href=#855 id=855 data-nosnippet>855</a>/// ```
+<a href=#856 id=856 data-nosnippet>856</a>///
+<a href=#857 id=857 data-nosnippet>857</a>/// And a prepared submission is checked only by its own oracle: the oracle has
+<a href=#858 id=858 data-nosnippet>858</a>/// no public operation that takes a prepared submission, so one prepared
+<a href=#859 id=859 data-nosnippet>859</a>/// elsewhere has nowhere to go.
+<a href=#860 id=860 data-nosnippet>860</a>///
+<a href=#861 id=861 data-nosnippet>861</a>/// ```compile_fail,E0624
+<a href=#862 id=862 data-nosnippet>862</a>/// # use zetesis_wgpu::{FormulaLimits, GpuFormulaOracle};
+<a href=#863 id=863 data-nosnippet>863</a>/// # fn elsewhere(one: &amp;mut GpuFormulaOracle, other: &amp;mut GpuFormulaOracle,
+<a href=#864 id=864 data-nosnippet>864</a>/// #     slate: zetesis_ferraris::SlateRef&lt;'_&gt;, control: &amp;zetesis_algebra::Cancellation) {
+<a href=#865 id=865 data-nosnippet>865</a>/// let prepared = one.prepare(slate, 0, FormulaLimits::default(), control).unwrap();
+<a href=#866 id=866 data-nosnippet>866</a>/// let _ = other.propagate(prepared, control);
+<a href=#867 id=867 data-nosnippet>867</a>/// # }
+<a href=#868 id=868 data-nosnippet>868</a>/// ```
+<a href=#869 id=869 data-nosnippet>869</a>///
+<a href=#870 id=870 data-nosnippet>870</a>/// One after the other, they compile:
+<a href=#871 id=871 data-nosnippet>871</a>///
+<a href=#872 id=872 data-nosnippet>872</a>/// ```no_run
+<a href=#873 id=873 data-nosnippet>873</a>/// # use zetesis_wgpu::{FormulaLimits, GpuFormulaOracle};
+<a href=#874 id=874 data-nosnippet>874</a>/// # fn in_order(oracle: &amp;mut GpuFormulaOracle, slate: zetesis_ferraris::SlateRef&lt;'_&gt;,
+<a href=#875 id=875 data-nosnippet>875</a>/// #     control: &amp;zetesis_algebra::Cancellation) {
+<a href=#876 id=876 data-nosnippet>876</a>/// let first = oracle.prepare(slate, 0, FormulaLimits::default(), control).unwrap();
+<a href=#877 id=877 data-nosnippet>877</a>/// let _ = first.check(control);
+<a href=#878 id=878 data-nosnippet>878</a>/// let second = oracle.prepare(slate, 0, FormulaLimits::default(), control).unwrap();
+<a href=#879 id=879 data-nosnippet>879</a>/// let (_, during) = second.check_overlapping(control, || 1);
+<a href=#880 id=880 data-nosnippet>880</a>/// assert_eq!(during, Some(1));
+<a href=#881 id=881 data-nosnippet>881</a>/// # }
+<a href=#882 id=882 data-nosnippet>882</a>/// ```
+<a href=#883 id=883 data-nosnippet>883</a></span><span class="attr">#[must_use = <span class="string">"a prepared submission submits nothing until it is checked"</span>]
+<a href=#884 id=884 data-nosnippet>884</a></span><span class="kw">pub struct </span>PreparedFormulaSubmission&lt;<span class="lifetime">'o</span>&gt; {
+<a href=#885 id=885 data-nosnippet>885</a>    oracle: <span class="kw-2">&amp;</span><span class="lifetime">'o </span><span class="kw-2">mut </span>GpuFormulaOracle,
+<a href=#886 id=886 data-nosnippet>886</a>    call: PreparedCall,
+<a href=#887 id=887 data-nosnippet>887</a>    theory: Theory,
+<a href=#888 id=888 data-nosnippet>888</a>    slate: SlateId,
+<a href=#889 id=889 data-nosnippet>889</a>    offset: usize,
+<a href=#890 id=890 data-nosnippet>890</a>    count: usize,
+<a href=#891 id=891 data-nosnippet>891</a>    timeout: Duration,
+<a href=#892 id=892 data-nosnippet>892</a>}
+<a href=#893 id=893 data-nosnippet>893</a>
+<a href=#894 id=894 data-nosnippet>894</a><span class="kw">impl </span>PreparedFormulaSubmission&lt;<span class="lifetime">'_</span>&gt; {
+<a href=#895 id=895 data-nosnippet>895</a>    <span class="doccomment">/// Peak bytes admitted for this prepared dispatch, including output
+<a href=#896 id=896 data-nosnippet>896</a>    /// capacity and timing storage. Use this while admitting overlapping work.
+<a href=#897 id=897 data-nosnippet>897</a>    </span><span class="attr">#[must_use]
+<a href=#898 id=898 data-nosnippet>898</a>    </span><span class="kw">pub const fn </span>accounted_bytes(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; u64 {
+<a href=#899 id=899 data-nosnippet>899</a>        <span class="self">self</span>.call.stats.accounted_bytes
+<a href=#900 id=900 data-nosnippet>900</a>    }
+<a href=#901 id=901 data-nosnippet>901</a>
+<a href=#902 id=902 data-nosnippet>902</a>    <span class="doccomment">/// The identity of the slate this submission belongs to.
+<a href=#903 id=903 data-nosnippet>903</a>    </span><span class="attr">#[must_use]
+<a href=#904 id=904 data-nosnippet>904</a>    </span><span class="kw">pub const fn </span>slate(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; SlateId {
+<a href=#905 id=905 data-nosnippet>905</a>        <span class="self">self</span>.slate
+<a href=#906 id=906 data-nosnippet>906</a>    }
+<a href=#907 id=907 data-nosnippet>907</a>
+<a href=#908 id=908 data-nosnippet>908</a>    <span class="doccomment">/// The position of the submission's first candidate in its slate.
+<a href=#909 id=909 data-nosnippet>909</a>    </span><span class="attr">#[must_use]
+<a href=#910 id=910 data-nosnippet>910</a>    </span><span class="kw">pub const fn </span>offset(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; usize {
+<a href=#911 id=911 data-nosnippet>911</a>        <span class="self">self</span>.offset
+<a href=#912 id=912 data-nosnippet>912</a>    }
+<a href=#913 id=913 data-nosnippet>913</a>
+<a href=#914 id=914 data-nosnippet>914</a>    <span class="doccomment">/// The candidates the submission admitted: at least one, and at most the
+<a href=#915 id=915 data-nosnippet>915</a>    /// rest of the slate from its offset.
+<a href=#916 id=916 data-nosnippet>916</a>    </span><span class="attr">#[must_use]
+<a href=#917 id=917 data-nosnippet>917</a>    </span><span class="kw">pub const fn </span>count(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; usize {
+<a href=#918 id=918 data-nosnippet>918</a>        <span class="self">self</span>.count
+<a href=#919 id=919 data-nosnippet>919</a>    }
+<a href=#920 id=920 data-nosnippet>920</a>
+<a href=#921 id=921 data-nosnippet>921</a>    <span class="doccomment">/// Submit the prepared batch and wait for it, as
+<a href=#922 id=922 data-nosnippet>922</a>    /// [`GpuFormulaOracle::propagate_prefix_with_cancellation`] checks a
+<a href=#923 id=923 data-nosnippet>923</a>    /// prefix: the context's lease is taken, control and health are polled,
+<a href=#924 id=924 data-nosnippet>924</a>    /// and the wait polls control between waits of at most 50 ms.
+<a href=#925 id=925 data-nosnippet>925</a>    ///
+<a href=#926 id=926 data-nosnippet>926</a>    /// # Errors
+<a href=#927 id=927 data-nosnippet>927</a>    /// Has [`GpuFormulaOracle::propagate_prefix_with_cancellation`]'s typed
+<a href=#928 id=928 data-nosnippet>928</a>    /// failures after preparation, with its rules for context reuse; `Busy`
+<a href=#929 id=929 data-nosnippet>929</a>    /// contention submits nothing.
+<a href=#930 id=930 data-nosnippet>930</a>    </span><span class="kw">pub fn </span>check(
+<a href=#931 id=931 data-nosnippet>931</a>        <span class="self">self</span>,
+<a href=#932 id=932 data-nosnippet>932</a>        cancellation: <span class="kw-2">&amp;</span>Cancellation,
+<a href=#933 id=933 data-nosnippet>933</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;CheckedSlate&lt;FormulaCheck&gt;, GpuError&gt; {
+<a href=#934 id=934 data-nosnippet>934</a>        <span class="self">self</span>.run(cancellation, <span class="prelude-val">None</span>)
+<a href=#935 id=935 data-nosnippet>935</a>    }
+<a href=#936 id=936 data-nosnippet>936</a>
+<a href=#937 id=937 data-nosnippet>937</a>    <span class="doccomment">/// Submit the prepared batch, run `during` while the device checks it,
+<a href=#938 id=938 data-nosnippet>938</a>    /// then finish: wait for the submission, map, decode and settle it. One
+<a href=#939 id=939 data-nosnippet>939</a>    /// submission is in flight while `during` runs, and none when this
+<a href=#940 id=940 data-nosnippet>940</a>    /// returns; nothing this returns names the submission.
+<a href=#941 id=941 data-nosnippet>941</a>    ///
+<a href=#942 id=942 data-nosnippet>942</a>    /// The context's lease is held from before the submission to the finish,
+<a href=#943 id=943 data-nosnippet>943</a>    /// including `during`, so another operation on the shared context is
+<a href=#944 id=944 data-nosnippet>944</a>    /// refused with `Busy` meanwhile, and an operation on the same context
+<a href=#945 id=945 data-nosnippet>945</a>    /// inside `during` is refused too. The error scopes close right after the
+<a href=#946 id=946 data-nosnippet>946</a>    /// submission, before `during`. When the control has fired by the time
+<a href=#947 id=947 data-nosnippet>947</a>    /// `during` returns, the finish observes the submission's completion
+<a href=#948 id=948 data-nosnippet>948</a>    /// without polling the control, within the batch's timeout, so a completed
+<a href=#949 id=949 data-nosnippet>949</a>    /// and released readback leaves the context reusable, and the stop is
+<a href=#950 id=950 data-nosnippet>950</a>    /// reported without decoding. A panic in `during` unwinds through this
+<a href=#951 id=951 data-nosnippet>951</a>    /// operation and invalidates the context, since its submission's
+<a href=#952 id=952 data-nosnippet>952</a>    /// completion is then unobserved.
+<a href=#953 id=953 data-nosnippet>953</a>    ///
+<a href=#954 id=954 data-nosnippet>954</a>    /// Returns the check's outcome and `during`'s result. A successful
+<a href=#955 id=955 data-nosnippet>955</a>    /// outcome's receipt carries the finish's wait after `during`
+<a href=#956 id=956 data-nosnippet>956</a>    /// ([`CheckedSlate::finish_wait`]). The result is absent only when the
+<a href=#957 id=957 data-nosnippet>957</a>    /// check failed before submitting, in which case `during` did not run.
+<a href=#958 id=958 data-nosnippet>958</a>    </span><span class="kw">pub fn </span>check_overlapping&lt;R&gt;(
+<a href=#959 id=959 data-nosnippet>959</a>        <span class="self">self</span>,
+<a href=#960 id=960 data-nosnippet>960</a>        cancellation: <span class="kw-2">&amp;</span>Cancellation,
+<a href=#961 id=961 data-nosnippet>961</a>        during: <span class="kw">impl </span>FnOnce() -&gt; R,
+<a href=#962 id=962 data-nosnippet>962</a>    ) -&gt; (<span class="prelude-ty">Result</span>&lt;CheckedSlate&lt;FormulaCheck&gt;, GpuError&gt;, <span class="prelude-ty">Option</span>&lt;R&gt;) {
+<a href=#963 id=963 data-nosnippet>963</a>        <span class="kw">crate</span>::runtime::overlapping(during, |run| <span class="self">self</span>.run(cancellation, <span class="prelude-val">Some</span>(run)))
+<a href=#964 id=964 data-nosnippet>964</a>    }
+<a href=#965 id=965 data-nosnippet>965</a>
+<a href=#966 id=966 data-nosnippet>966</a>    <span class="kw">fn </span>run(
+<a href=#967 id=967 data-nosnippet>967</a>        <span class="self">self</span>,
+<a href=#968 id=968 data-nosnippet>968</a>        cancellation: <span class="kw-2">&amp;</span>Cancellation,
+<a href=#969 id=969 data-nosnippet>969</a>        during: <span class="prelude-ty">Option</span>&lt;<span class="kw-2">&amp;mut </span><span class="kw">dyn </span>FnMut()&gt;,
+<a href=#970 id=970 data-nosnippet>970</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;CheckedSlate&lt;FormulaCheck&gt;, GpuError&gt; {
+<a href=#971 id=971 data-nosnippet>971</a>        <span class="kw">let </span><span class="self">Self </span>{
+<a href=#972 id=972 data-nosnippet>972</a>            oracle,
+<a href=#973 id=973 data-nosnippet>973</a>            call,
+<a href=#974 id=974 data-nosnippet>974</a>            theory,
+<a href=#975 id=975 data-nosnippet>975</a>            slate,
+<a href=#976 id=976 data-nosnippet>976</a>            offset,
+<a href=#977 id=977 data-nosnippet>977</a>            count,
+<a href=#978 id=978 data-nosnippet>978</a>            timeout,
+<a href=#979 id=979 data-nosnippet>979</a>        } = <span class="self">self</span>;
+<a href=#980 id=980 data-nosnippet>980</a>        <span class="kw">let </span>context = oracle.profile.runtime.context.clone();
+<a href=#981 id=981 data-nosnippet>981</a>        <span class="kw">let </span>(checks, finish_wait) = context.lease().and_then(|_lease| {
+<a href=#982 id=982 data-nosnippet>982</a>            cancellation.poll().map_err(GpuError::interrupted)<span class="question-mark">?</span>;
+<a href=#983 id=983 data-nosnippet>983</a>            oracle.profile.runtime.check_health()<span class="question-mark">?</span>;
+<a href=#984 id=984 data-nosnippet>984</a>            oracle.run(call, timeout, cancellation, during)
+<a href=#985 id=985 data-nosnippet>985</a>        })<span class="question-mark">?</span>;
+<a href=#986 id=986 data-nosnippet>986</a>        <span class="prelude-val">Ok</span>(CheckedSlate::new(theory, slate, offset, count, checks).with_finish_wait(finish_wait))
+<a href=#987 id=987 data-nosnippet>987</a>    }
+<a href=#988 id=988 data-nosnippet>988</a>}
+<a href=#989 id=989 data-nosnippet>989</a>
+<a href=#990 id=990 data-nosnippet>990</a><span class="kw">fn </span>identities(theory: <span class="kw-2">&amp;</span>Theory, candidates: <span class="kw-2">&amp;</span>[Interpretation]) -&gt; <span class="prelude-ty">Result</span>&lt;(), GpuError&gt; {
+<a href=#991 id=991 data-nosnippet>991</a>    <span class="kw">if </span>candidates
+<a href=#992 id=992 data-nosnippet>992</a>        .iter()
+<a href=#993 id=993 data-nosnippet>993</a>        .any(|candidate| !theory.same_instance(candidate.theory()))
+<a href=#994 id=994 data-nosnippet>994</a>    {
+<a href=#995 id=995 data-nosnippet>995</a>        <span class="kw">return </span><span class="prelude-val">Err</span>(GpuError::new(
+<a href=#996 id=996 data-nosnippet>996</a>            GpuErrorKind::Seed,
+<a href=#997 id=997 data-nosnippet>997</a>            <span class="string">"candidate belongs to another Theory"</span>,
+<a href=#998 id=998 data-nosnippet>998</a>        ));
+<a href=#999 id=999 data-nosnippet>999</a>    }
+<a href=#1000 id=1000 data-nosnippet>1000</a>    <span class="prelude-val">Ok</span>(())
+<a href=#1001 id=1001 data-nosnippet>1001</a>}
+<a href=#1002 id=1002 data-nosnippet>1002</a>
+<a href=#1003 id=1003 data-nosnippet>1003</a><span class="attr">#[cfg(test)]
+<a href=#1004 id=1004 data-nosnippet>1004</a></span><span class="kw">mod </span>tests;
 </code></pre></div></section></main></body></html>

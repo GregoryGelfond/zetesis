@@ -35,10 +35,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-fbb9e008.js";
+            window.path_to_searchindex_js = "../searchindex-8dfd52fd.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-5c747b16.js"></script>
+        <script src="../toc-25cd24fd.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -195,10 +195,10 @@ forbidden, so its complete family contains two answers: build with test, and
 deploy with test. Each full interpretation also contains the three <code>task</code>
 facts. <code>#show run/1</code> changes only the displayed channel, not those typed answers.</p>
 <h2 id="set-up-a-rust-application"><a class="header" href="#set-up-a-rust-application">Set up a Rust application</a></h2>
-<p>The packages are not published on crates.io. These examples require zetesis
-0.6.0. Use paths in a pinned local checkout of that version. From the directory
-containing your <code>zetesis</code> checkout, record its revision and create a sibling
-application:</p>
+<p>The packages are not published on crates.io. These examples use this checkout’s
+library APIs, including the <code>zetesis-algebra</code> owner introduced after 0.6.0.
+Use paths in one pinned local checkout. From the directory containing your
+<code>zetesis</code> checkout, record its revision and create a sibling application:</p>
 <pre><code class="language-sh">git -C zetesis rev-parse HEAD
 rustup toolchain install 1.97.1 --profile minimal
 cargo new answer-set-app
@@ -214,7 +214,7 @@ direct parser dependency is needed.</p>
 <pre><code class="language-toml">[dependencies]
 zetesis-solve = { path = "../zetesis/crates/zetesis-solve", default-features = false }
 zetesis-themelios = { path = "../zetesis/crates/zetesis-themelios" }
-zetesis-cpu = { path = "../zetesis/crates/zetesis-cpu" }
+zetesis-algebra = { path = "../zetesis/crates/zetesis-algebra" }
 </code></pre>
 <p>This selects a CPU-only solver build. Without <code>default-features = false</code>, GPU
 support is compiled but a GPU is not selected automatically. Cargo feature
@@ -224,14 +224,14 @@ Keep the application’s generated <code>Cargo.lock</code> to pin its resolved d
 <p>Put this code in <code>src/main.rs</code> and run <code>cargo run</code>. The book includes the actual
 maintained example below; there is no separate abbreviated implementation.</p>
 <pre class="playground"><code class="language-rust edition2024"><span class="boring">extern crate zetesis_solve;
-</span><span class="boring">extern crate zetesis_cpu;
+</span><span class="boring">extern crate zetesis_algebra;
 </span><span class="boring">extern crate zetesis_themelios;
 </span>use std::{
     error::Error,
     io::{self, Write},
     num::NonZeroUsize,
 };
-use zetesis_cpu::Cancellation;
+use zetesis_algebra::Cancellation;
 use zetesis_solve::{Backend, Completion, Grounder, PreparedInput, Session, SolveConfig};
 use zetesis_themelios::{
     AdmissionOptions, ExpansionLimits, FormulaLimits, OutputSelection, observation, prepare_formula,

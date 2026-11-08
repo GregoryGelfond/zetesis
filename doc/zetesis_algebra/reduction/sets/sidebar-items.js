@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["intersection","ordered_union","union"],"struct":["Intersection","OrderedUnion"]};

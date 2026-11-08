@@ -35,10 +35,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-fbb9e008.js";
+            window.path_to_searchindex_js = "../searchindex-8dfd52fd.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-5c747b16.js"></script>
+        <script src="../toc-25cd24fd.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -201,36 +201,27 @@ through <code>WorldView</code>. Run its assertions with:</p>
 <pre><code class="language-sh">cargo run --locked -p zetesis-solve --no-default-features --example book-session
 </code></pre>
 <h2 id="from-source-to-admitted-solver-input"><a class="header" href="#from-source-to-admitted-solver-input">From source to admitted solver input</a></h2>
-<p>The Rust example passes source text to <code>zetesis_themelios::admit</code>, zetesis’s
-normal-profile admission operation. Internally, themelios supplies lossless
-parsing and the logical program representation. Zetesis checks its supported
-profile and creates an admitted owner, preserving source metadata. For these
-normal rules it can retain relational templates without requiring a complete
-ground-rule graph.
-Admission establishes a well-formed input for a particular execution profile.
-It does not establish satisfiability.</p>
-<p>A constructed logical program can enter the same compiler without source text:
-<code>admit_program</code> handles the relational profile, and <code>prepare_program_formula</code>
-handles general formulas. Both preserve the original statement identity. See
-<a href="../rust/source.html">program preparation</a> for their limits and checked examples.</p>
-<pre><code class="language-text">original source
-      │ themelios parsing and logical Program
+<p>The Rust example calls <code>zetesis_themelios::admit_formula</code>. themelios supplies
+lossless parsing and the canonical logical program; zetesis prepares and grounds
+that program while preserving original statements and source metadata.
+Admission establishes well-formed input, not satisfiability.</p>
+<p>Constructed logical programs enter the same compiler through
+<code>prepare_program_formula</code>, without rendering or reparsing. Preparation exposes
+both eager and hybrid grounding. See <a href="../rust/source.html">program preparation</a>
+for their limits and checked examples.</p>
+<pre><code class="language-text">source or canonical logical Program
+      │ preparation and grounding
       ▼
-admitted templates ── candidate generation ──► candidate
-      │                                         │
-      └──────── original program + frozen gates ┘
+original formula theory ── candidate generation ──► candidate
+      │                                               │
+      └──────── satisfaction and frozen reduct ───────┘
                               │
+                 no proper-subset reduct model
                               ▼
-                  positive reduct consequences
-                              │
-                   closure and constraints
-                              │
-                   candidate agreement
-                              ▼
-                   verified answer set
+                     verified answer set
                               │ complete enumeration
                               ▼
-                  complete answer-set family
+                    complete answer-set family
 </code></pre>
 <p>These are semantic stages, not necessarily separately allocated intermediate
 objects. A fused operation still owes every connecting invariant.</p>
@@ -256,14 +247,10 @@ argument for <code>{b}</code> is symmetric.</p>
 <p>The last row is why classical satisfaction cannot replace reduct checking.
 Equally, copying the candidate into the initial positive closure would make the
 test unsound: it would give assumed atoms the status of derived consequences.</p>
-<p>The relational implementation can guess only the atoms needed to decide frozen
-gates. It derives the remaining atoms and checks that the result’s gate
-projection agrees with the seed. Here both <code>a</code> and <code>b</code> are gate atoms, so seeds
-and full candidates happen to have the same carrier.</p>
-<p>The session example also constructs <code>Seed::new</code> for <code>{a}</code> and calls
-<code>zetesis_cpu::check</code> directly. A seed fixes gate truth; it carries no membership
-claim. The completed <code>Check</code> accepts it only after closure, constraints and gate
-agreement. The <a href="../lean/normal-rules.html">checked Lean consumer</a> applies the
+<p>The session example also constructs a theory-bound interpretation for <code>{a}</code>
+and calls <code>zetesis_stable::check</code>. A candidate carries no membership claim.
+The completed check accepts it only after original satisfaction and reduct
+minimality. The <a href="../lean/normal-rules.html">checked Lean consumer</a> applies the
 normal-rule/Ferraris bridge to the corresponding mathematical program.</p>
 <h2 id="a-finite-closure-algorithm"><a class="header" href="#a-finite-closure-algorithm">A finite closure algorithm</a></h2>
 <p>For a fixed seed, the normal positive reduct has a least consequence set. This
@@ -298,28 +285,30 @@ atom/value payload and indexes bounded separately from join scratch space. This
 bound excludes parsing, candidate generation and output. Covering <code>G</code> independent gate atoms can require
 <code>2^G</code> candidate seeds even if one check is cheap. Indexes change actual join work;
 these bounds establish neither a speedup nor a process-memory bound.</p>
-<p>The independent scalar evaluator preserves this reference through a delta
-schedule. It first completes bootstrap, including facts and zero-positive
-constraints. Later rounds select a binding by its first new positive row;
-previously published heads and retained constraint triggers account for old
-bindings. The final no-change round and this completed history together establish
-closure. It need not revisit every old binding. Canonical and delta-view
-preparation also consume work, so the reference scan estimate above is not a
-measured scalar work count. Shared-world source traversal retains complete
-round scans. The <a href="../lean/theorems.html">delta-round laws</a> and
-<a href="grounding.html">grounding contracts</a> make these distinct schedules explicit.</p>
-<p>The concrete contracts are
-<a href="https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-cpu/src/oracle.rs"><code>check</code> and its scalar round evaluator</a>
-and the <a href="../lean/theorems.html">source-coverage laws</a>. The
+<p>This closure computation is the definition that zetesis’s laws state for normal
+programs. Its executable form was the relational closure route, removed in 0.7.0.
+Ordinary formula membership uses the Ferraris translation, and
+<code>NormalFerraris.answer_set_iff</code> proves that the two definitions agree on normal
+programs. A certified acyclic normal source can instead be evaluated in dependency
+order and published by an automatic CPU session through <code>PreparedInput::source</code>,
+without materializing formulas. That route checks every original constraint before
+publication; its source certificate does not make arbitrary candidates answer sets.
+The <a href="../lean/theorems.html">delta-round</a> and
+<a href="../lean/theorems.html">source-coverage laws</a> that stated the removed route’s
+incremental schedule remain as statements. The
 <a href="grounding-comparison.html#follow-a-candidate-dependent-join">reachability example</a>
 shows why candidate-dependent joins can perform different work for different
 seeds.</p>
 <h2 id="where-the-machine-enters"><a class="header" href="#where-the-machine-enters">Where the machine enters</a></h2>
-<p>CPU execution can perform source joins directly, or use an explicitly compiled
-ground graph. Independent candidate checks can run in an owned Rayon pool.
-Lazy GPU rounds share source instances across candidates while keeping each
-candidate’s frozen gates and derived truth separate. CPU or GPU scheduling does
-not change which interpretations qualify as answer sets.</p>
+<p><code>zetesis-algebra</code> is the dependency-free execution foundation: <code>region::Region</code>
+represents candidate regions, <code>walk::Walk</code> covers them, and <code>words</code> supplies the
+shared packed operations. The generic frontier lives under <code>walk::frontier</code>;
+semantic source tables live with their relations in <code>zetesis_core::table</code>.
+These primitives do not decide answer-set membership.</p>
+<p>CPU and GPU execution share the admitted formula representation. Independent
+candidate checks may run concurrently; each retains its own interpretation and
+frozen reduct. Hybrid execution additionally checks retained source constraints
+before accepting an original answer. Scheduling does not change membership.</p>
 <p>For a general formula reduct, such as the disjunction <code>a | b.</code>, there need not
 be one least model. zetesis instead asks whether a proper subset of the
 candidate satisfies its frozen reduct. The <a href="semantics.html">next chapter</a> makes
@@ -335,8 +324,8 @@ states the exact grammar and reduct argument. This primitive does not itself
 enumerate or publish the ordinary session’s <code>AnswerSet</code> values.</p>
 <p>To follow the actual entry points, see the
 <a href="../rust/sessions.html">writer-free session example</a>,
-<a href="https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/lib.rs"><code>zetesis_themelios::admit</code></a>,
-<a href="https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-cpu/src/oracle.rs"><code>zetesis_cpu::check</code></a>,
+<a href="https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/lib.rs"><code>zetesis_themelios::admit_formula</code></a>,
+<a href="https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-stable/src/reduct.rs">the reduct’s membership queries</a>,
 and the <a href="../rust/reducts.html">finite formula API</a>.</p>
 
                     </main>

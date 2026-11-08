@@ -19,7 +19,7 @@
 <a href=#19 id=19 data-nosnippet>19</a><span class="kw">use </span><span class="kw">crate</span>::program_limits::{Budget, Limits};
 <a href=#20 id=20 data-nosnippet>20</a><span class="kw">use crate</span>::{
 <a href=#21 id=21 data-nosnippet>21</a>    CompilationFailure, ProfileFeature, ProgramAdmissionFailure, ProgramAdmissionOptions,
-<a href=#22 id=22 data-nosnippet>22</a>    ProgramFailureKind, ProgramSubject,
+<a href=#22 id=22 data-nosnippet>22</a>    ProgramFailureKind, ProgramOriginal,
 <a href=#23 id=23 data-nosnippet>23</a>};
 <a href=#24 id=24 data-nosnippet>24</a>
 <a href=#25 id=25 data-nosnippet>25</a><span class="kw">type </span>Check = <span class="prelude-ty">Result</span>&lt;(), ProgramFailureKind&gt;;
@@ -41,7 +41,7 @@
 <a href=#41 id=41 data-nosnippet>41</a>    <span class="kw">for </span>part <span class="kw">in </span>program.parts() {
 <a href=#42 id=42 data-nosnippet>42</a>        <span class="kw">if </span>part.key().name.as_str() != <span class="string">"base" </span>|| !part.key().formals.is_empty() {
 <a href=#43 id=43 data-nosnippet>43</a>            <span class="kw">return </span><span class="prelude-val">Err</span>(ProgramAdmissionFailure {
-<a href=#44 id=44 data-nosnippet>44</a>                subject: ProgramSubject::Part(part.key()),
+<a href=#44 id=44 data-nosnippet>44</a>                original: ProgramOriginal::Part(part.key()),
 <a href=#45 id=45 data-nosnippet>45</a>                kind: unsupported(ProfileFeature::ProgramPart),
 <a href=#46 id=46 data-nosnippet>46</a>            });
 <a href=#47 id=47 data-nosnippet>47</a>        }
@@ -50,7 +50,7 @@
 <a href=#50 id=50 data-nosnippet>50</a>                .provenance(carrier, <span class="number">1</span>)
 <a href=#51 id=51 data-nosnippet>51</a>                .and_then(|()| checker.statement(carrier.get(), <span class="number">1</span>))
 <a href=#52 id=52 data-nosnippet>52</a>                .map_err(|kind| ProgramAdmissionFailure {
-<a href=#53 id=53 data-nosnippet>53</a>                    subject: ProgramSubject::Statement(carrier),
+<a href=#53 id=53 data-nosnippet>53</a>                    original: ProgramOriginal::Statement(carrier),
 <a href=#54 id=54 data-nosnippet>54</a>                    kind,
 <a href=#55 id=55 data-nosnippet>55</a>                })<span class="question-mark">?</span>;
 <a href=#56 id=56 data-nosnippet>56</a>        }

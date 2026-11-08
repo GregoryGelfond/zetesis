@@ -5,7 +5,7 @@
 <a href=#5 id=5 data-nosnippet>5</a>    TightProducerKind, TightResource, bytes, filled, reserve,
 <a href=#6 id=6 data-nosnippet>6</a>};
 <a href=#7 id=7 data-nosnippet>7</a><span class="kw">use crate</span>::{ExtremumCut, NodeView, Theory, Threshold};
-<a href=#8 id=8 data-nosnippet>8</a><span class="kw">use </span>zetesis_cpu::{Cancellation, Meter, Stop};
+<a href=#8 id=8 data-nosnippet>8</a><span class="kw">use </span>zetesis_algebra::{Cancellation, Meter, Stop};
 <a href=#9 id=9 data-nosnippet>9</a>
 <a href=#10 id=10 data-nosnippet>10</a><span class="attr">#[derive(Clone, Copy, PartialEq, Eq)]
 <a href=#11 id=11 data-nosnippet>11</a></span><span class="kw">enum </span>Body {
@@ -99,7 +99,7 @@
 <a href=#99 id=99 data-nosnippet>99</a>    classes: <span class="kw-2">&amp;mut </span>Vec&lt;Body&gt;,
 <a href=#100 id=100 data-nosnippet>100</a>    meter: <span class="kw-2">&amp;mut </span>Meter&lt;<span class="lifetime">'_</span>&gt;,
 <a href=#101 id=101 data-nosnippet>101</a>) -&gt; <span class="prelude-ty">Result</span>&lt;(), TightError&gt; {
-<a href=#102 id=102 data-nosnippet>102</a>    meter.tick()<span class="question-mark">?</span>;
+<a href=#102 id=102 data-nosnippet>102</a>    Tick::tick(meter)<span class="question-mark">?</span>;
 <a href=#103 id=103 data-nosnippet>103</a>    <span class="kw">let </span>class = classify_node(theory, index, classes, meter)<span class="question-mark">?</span>;
 <a href=#104 id=104 data-nosnippet>104</a>    classes.push(class);
 <a href=#105 id=105 data-nosnippet>105</a>    <span class="prelude-val">Ok</span>(())
@@ -121,7 +121,7 @@
 <a href=#121 id=121 data-nosnippet>121</a>        NodeView::Atom(<span class="kw">_</span>) =&gt; <span class="prelude-val">Ok</span>(Body::Positive),
 <a href=#122 id=122 data-nosnippet>122</a>        NodeView::False =&gt; <span class="prelude-val">Ok</span>(Body::Frozen),
 <a href=#123 id=123 data-nosnippet>123</a>        NodeView::Implies(<span class="kw">_</span>, consequent) =&gt; {
-<a href=#124 id=124 data-nosnippet>124</a>            meter.tick()<span class="question-mark">?</span>;
+<a href=#124 id=124 data-nosnippet>124</a>            Tick::tick(meter)<span class="question-mark">?</span>;
 <a href=#125 id=125 data-nosnippet>125</a>            <span class="kw">let </span>node = theory
 <a href=#126 id=126 data-nosnippet>126</a>                .view()
 <a href=#127 id=127 data-nosnippet>127</a>                .node(consequent)
@@ -150,7 +150,7 @@
 <a href=#150 id=150 data-nosnippet>150</a>    }
 <a href=#151 id=151 data-nosnippet>151</a>    <span class="kw">let </span><span class="kw-2">mut </span>class = Body::Frozen;
 <a href=#152 id=152 data-nosnippet>152</a>    <span class="kw">for </span>(<span class="kw-2">&amp;</span>child, <span class="kw-2">&amp;</span>rank) <span class="kw">in </span>cut.row.conditions.iter().zip(cut.row.ranks) {
-<a href=#153 id=153 data-nosnippet>153</a>        meter.tick()<span class="question-mark">?</span>;
+<a href=#153 id=153 data-nosnippet>153</a>        Tick::tick(meter)<span class="question-mark">?</span>;
 <a href=#154 id=154 data-nosnippet>154</a>        <span class="kw">if </span>cut.qualifies(rank) {
 <a href=#155 id=155 data-nosnippet>155</a>            class = <span class="kw">match </span>(class, classes[child]) {
 <a href=#156 id=156 data-nosnippet>156</a>                (Body::Opaque, <span class="kw">_</span>) | (<span class="kw">_</span>, Body::Opaque) =&gt; Body::Opaque,
@@ -170,7 +170,7 @@
 <a href=#170 id=170 data-nosnippet>170</a>    <span class="kw">let </span><span class="kw-2">mut </span>total = <span class="number">0_i128</span>;
 <a href=#171 id=171 data-nosnippet>171</a>    <span class="kw">let </span><span class="kw-2">mut </span>class = Body::Frozen;
 <a href=#172 id=172 data-nosnippet>172</a>    <span class="kw">for </span>(<span class="kw-2">&amp;</span>child, <span class="kw-2">&amp;</span>weight) <span class="kw">in </span>threshold.conditions.iter().zip(threshold.weights) {
-<a href=#173 id=173 data-nosnippet>173</a>        meter.tick()<span class="question-mark">?</span>;
+<a href=#173 id=173 data-nosnippet>173</a>        Tick::tick(meter)<span class="question-mark">?</span>;
 <a href=#174 id=174 data-nosnippet>174</a>        total = total
 <a href=#175 id=175 data-nosnippet>175</a>            .checked_add(i128::from(weight))
 <a href=#176 id=176 data-nosnippet>176</a>            .ok_or(Stop::InvalidProgram)<span class="question-mark">?</span>;
@@ -196,7 +196,7 @@
 <a href=#196 id=196 data-nosnippet>196</a>) -&gt; <span class="prelude-ty">Result</span>&lt;Body, TightError&gt; {
 <a href=#197 id=197 data-nosnippet>197</a>    <span class="kw">let </span><span class="kw-2">mut </span>class = Body::Frozen;
 <a href=#198 id=198 data-nosnippet>198</a>    <span class="kw">for </span><span class="kw-2">&amp;</span>child <span class="kw">in </span>operands {
-<a href=#199 id=199 data-nosnippet>199</a>        meter.tick()<span class="question-mark">?</span>;
+<a href=#199 id=199 data-nosnippet>199</a>        Tick::tick(meter)<span class="question-mark">?</span>;
 <a href=#200 id=200 data-nosnippet>200</a>        class = <span class="kw">match </span>(class, classes[child]) {
 <a href=#201 id=201 data-nosnippet>201</a>            (Body::Opaque, <span class="kw">_</span>) | (<span class="kw">_</span>, Body::Opaque) =&gt; Body::Opaque,
 <a href=#202 id=202 data-nosnippet>202</a>            (Body::Frozen, Body::Frozen) =&gt; Body::Frozen,
@@ -255,7 +255,7 @@
 <a href=#255 id=255 data-nosnippet>255</a>) -&gt; <span class="prelude-ty">Result</span>&lt;Vec&lt;TightProducer&gt;, TightError&gt; {
 <a href=#256 id=256 data-nosnippet>256</a>    <span class="kw">let </span><span class="kw-2">mut </span>count = <span class="number">0usize</span>;
 <a href=#257 id=257 data-nosnippet>257</a>    <span class="kw">for </span><span class="kw-2">&amp;</span>root <span class="kw">in </span>theory.roots() {
-<a href=#258 id=258 data-nosnippet>258</a>        meter.tick()<span class="question-mark">?</span>;
+<a href=#258 id=258 data-nosnippet>258</a>        Tick::tick(meter)<span class="question-mark">?</span>;
 <a href=#259 id=259 data-nosnippet>259</a>        <span class="kw">if </span>producer(theory, root, classes)<span class="question-mark">?</span>.is_some() {
 <a href=#260 id=260 data-nosnippet>260</a>            <span class="kw">if </span>count == limits.max_producers {
 <a href=#261 id=261 data-nosnippet>261</a>                <span class="kw">return </span><span class="prelude-val">Err</span>(TightError::Limit(TightResource::Producers));
@@ -270,7 +270,7 @@
 <a href=#270 id=270 data-nosnippet>270</a>    )<span class="question-mark">?</span>;
 <a href=#271 id=271 data-nosnippet>271</a>    <span class="kw">let </span><span class="kw-2">mut </span>producers = reserve(count)<span class="question-mark">?</span>;
 <a href=#272 id=272 data-nosnippet>272</a>    <span class="kw">for </span><span class="kw-2">&amp;</span>root <span class="kw">in </span>theory.roots() {
-<a href=#273 id=273 data-nosnippet>273</a>        meter.tick()<span class="question-mark">?</span>;
+<a href=#273 id=273 data-nosnippet>273</a>        Tick::tick(meter)<span class="question-mark">?</span>;
 <a href=#274 id=274 data-nosnippet>274</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(producer) = producer(theory, root, classes)<span class="question-mark">? </span>{
 <a href=#275 id=275 data-nosnippet>275</a>            producers.push(producer);
 <a href=#276 id=276 data-nosnippet>276</a>        }
@@ -287,7 +287,7 @@
 <a href=#287 id=287 data-nosnippet>287</a>) -&gt; <span class="prelude-ty">Result</span>&lt;(), TightError&gt; {
 <a href=#288 id=288 data-nosnippet>288</a>    <span class="kw">let </span>offset = theory.atom_count();
 <a href=#289 id=289 data-nosnippet>289</a>    <span class="kw">for </span>index <span class="kw">in </span><span class="number">0</span>..theory.view().len() {
-<a href=#290 id=290 data-nosnippet>290</a>        meter.tick()<span class="question-mark">?</span>;
+<a href=#290 id=290 data-nosnippet>290</a>        Tick::tick(meter)<span class="question-mark">?</span>;
 <a href=#291 id=291 data-nosnippet>291</a>        <span class="kw">match </span>theory
 <a href=#292 id=292 data-nosnippet>292</a>            .view()
 <a href=#293 id=293 data-nosnippet>293</a>            .node(index)
@@ -300,7 +300,7 @@
 <a href=#300 id=300 data-nosnippet>300</a>                <span class="comment">// Duplicate operands contribute duplicate edges and matching
 <a href=#301 id=301 data-nosnippet>301</a>                // indegrees. Neither is silently deduplicated on its own.
 <a href=#302 id=302 data-nosnippet>302</a>                </span><span class="kw">for </span><span class="kw-2">&amp;</span>child <span class="kw">in </span>operands {
-<a href=#303 id=303 data-nosnippet>303</a>                    meter.tick()<span class="question-mark">?</span>;
+<a href=#303 id=303 data-nosnippet>303</a>                    Tick::tick(meter)<span class="question-mark">?</span>;
 <a href=#304 id=304 data-nosnippet>304</a>                    <span class="kw">if </span>classes[child] == Body::Positive {
 <a href=#305 id=305 data-nosnippet>305</a>                        visit(offset + child, offset + index, <span class="bool-val">false</span>)<span class="question-mark">?</span>;
 <a href=#306 id=306 data-nosnippet>306</a>                    }
@@ -308,7 +308,7 @@
 <a href=#308 id=308 data-nosnippet>308</a>            }
 <a href=#309 id=309 data-nosnippet>309</a>            NodeView::Threshold(threshold) <span class="kw">if </span>classes[index] == Body::Positive =&gt; {
 <a href=#310 id=310 data-nosnippet>310</a>                <span class="kw">for </span>(<span class="kw-2">&amp;</span>child, <span class="kw-2">&amp;</span>weight) <span class="kw">in </span>threshold.conditions.iter().zip(threshold.weights) {
-<a href=#311 id=311 data-nosnippet>311</a>                    meter.tick()<span class="question-mark">?</span>;
+<a href=#311 id=311 data-nosnippet>311</a>                    Tick::tick(meter)<span class="question-mark">?</span>;
 <a href=#312 id=312 data-nosnippet>312</a>                    <span class="kw">if </span>weight != <span class="number">0 </span>&amp;&amp; classes[child] == Body::Positive {
 <a href=#313 id=313 data-nosnippet>313</a>                        visit(offset + child, offset + index, <span class="bool-val">false</span>)<span class="question-mark">?</span>;
 <a href=#314 id=314 data-nosnippet>314</a>                    }
@@ -316,7 +316,7 @@
 <a href=#316 id=316 data-nosnippet>316</a>            }
 <a href=#317 id=317 data-nosnippet>317</a>            NodeView::ExtremumCut(cut) <span class="kw">if </span>classes[index] == Body::Positive =&gt; {
 <a href=#318 id=318 data-nosnippet>318</a>                <span class="kw">for </span>(<span class="kw-2">&amp;</span>child, <span class="kw-2">&amp;</span>rank) <span class="kw">in </span>cut.row.conditions.iter().zip(cut.row.ranks) {
-<a href=#319 id=319 data-nosnippet>319</a>                    meter.tick()<span class="question-mark">?</span>;
+<a href=#319 id=319 data-nosnippet>319</a>                    Tick::tick(meter)<span class="question-mark">?</span>;
 <a href=#320 id=320 data-nosnippet>320</a>                    <span class="kw">if </span>cut.qualifies(rank) &amp;&amp; classes[child] == Body::Positive {
 <a href=#321 id=321 data-nosnippet>321</a>                        visit(offset + child, offset + index, <span class="bool-val">false</span>)<span class="question-mark">?</span>;
 <a href=#322 id=322 data-nosnippet>322</a>                    }
@@ -326,7 +326,7 @@
 <a href=#326 id=326 data-nosnippet>326</a>        }
 <a href=#327 id=327 data-nosnippet>327</a>    }
 <a href=#328 id=328 data-nosnippet>328</a>    <span class="kw">for </span>producer <span class="kw">in </span>producers {
-<a href=#329 id=329 data-nosnippet>329</a>        meter.tick()<span class="question-mark">?</span>;
+<a href=#329 id=329 data-nosnippet>329</a>        Tick::tick(meter)<span class="question-mark">?</span>;
 <a href=#330 id=330 data-nosnippet>330</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(body) = producer.body
 <a href=#331 id=331 data-nosnippet>331</a>            &amp;&amp; classes[body] == Body::Positive
 <a href=#332 id=332 data-nosnippet>332</a>        {
@@ -430,19 +430,19 @@
 <a href=#430 id=430 data-nosnippet>430</a>        },
 <a href=#431 id=431 data-nosnippet>431</a>    )<span class="question-mark">?</span>;
 <a href=#432 id=432 data-nosnippet>432</a>    <span class="kw">for </span>(index, <span class="kw-2">&amp;</span>degree) <span class="kw">in </span>indegrees.iter().enumerate() {
-<a href=#433 id=433 data-nosnippet>433</a>        meter.tick()<span class="question-mark">?</span>;
+<a href=#433 id=433 data-nosnippet>433</a>        Tick::tick(meter)<span class="question-mark">?</span>;
 <a href=#434 id=434 data-nosnippet>434</a>        <span class="kw">if </span>degree == <span class="number">0 </span>{
 <a href=#435 id=435 data-nosnippet>435</a>            queue.push(index);
 <a href=#436 id=436 data-nosnippet>436</a>        }
 <a href=#437 id=437 data-nosnippet>437</a>    }
 <a href=#438 id=438 data-nosnippet>438</a>    <span class="kw">let </span><span class="kw-2">mut </span>cursor = <span class="number">0</span>;
 <a href=#439 id=439 data-nosnippet>439</a>    <span class="kw">while </span>cursor &lt; queue.len() {
-<a href=#440 id=440 data-nosnippet>440</a>        meter.tick()<span class="question-mark">?</span>;
+<a href=#440 id=440 data-nosnippet>440</a>        Tick::tick(meter)<span class="question-mark">?</span>;
 <a href=#441 id=441 data-nosnippet>441</a>        <span class="kw">let </span>source = queue[cursor];
 <a href=#442 id=442 data-nosnippet>442</a>        cursor += <span class="number">1</span>;
 <a href=#443 id=443 data-nosnippet>443</a>        <span class="kw">let </span><span class="kw-2">mut </span>edge_index = links[source];
 <a href=#444 id=444 data-nosnippet>444</a>        <span class="kw">while </span>edge_index != END {
-<a href=#445 id=445 data-nosnippet>445</a>            meter.tick()<span class="question-mark">?</span>;
+<a href=#445 id=445 data-nosnippet>445</a>            Tick::tick(meter)<span class="question-mark">?</span>;
 <a href=#446 id=446 data-nosnippet>446</a>            <span class="kw">let </span>edge = edges[edge_index];
 <a href=#447 id=447 data-nosnippet>447</a>            rank[edge.target] = rank[edge.target].max(rank[source] + usize::from(edge.strict));
 <a href=#448 id=448 data-nosnippet>448</a>            indegrees[edge.target] -= <span class="number">1</span>;
@@ -454,14 +454,14 @@
 <a href=#454 id=454 data-nosnippet>454</a>    }
 <a href=#455 id=455 data-nosnippet>455</a>    <span class="kw">if </span>queue.len() != vertices {
 <a href=#456 id=456 data-nosnippet>456</a>        <span class="kw">for </span>(atom, degree) <span class="kw">in </span>indegrees[..theory.atom_count()].iter().enumerate() {
-<a href=#457 id=457 data-nosnippet>457</a>            meter.tick()<span class="question-mark">?</span>;
+<a href=#457 id=457 data-nosnippet>457</a>            Tick::tick(meter)<span class="question-mark">?</span>;
 <a href=#458 id=458 data-nosnippet>458</a>            <span class="kw">if </span><span class="kw-2">*</span>degree != <span class="number">0 </span>{
 <a href=#459 id=459 data-nosnippet>459</a>                <span class="kw">return </span><span class="prelude-val">Err</span>(TightError::PositiveCycle { atom });
 <a href=#460 id=460 data-nosnippet>460</a>            }
 <a href=#461 id=461 data-nosnippet>461</a>        }
 <a href=#462 id=462 data-nosnippet>462</a>        <span class="comment">// Formula edges are topological, so a remaining cycle necessarily
 <a href=#463 id=463 data-nosnippet>463</a>        // passes through an atom. Keep a typed failure if that invariant fails.
-<a href=#464 id=464 data-nosnippet>464</a>        </span><span class="kw">return </span><span class="prelude-val">Err</span>(zetesis_cpu::Stop::InvalidProgram.into());
+<a href=#464 id=464 data-nosnippet>464</a>        </span><span class="kw">return </span><span class="prelude-val">Err</span>(zetesis_algebra::Stop::InvalidProgram.into());
 <a href=#465 id=465 data-nosnippet>465</a>    }
 <a href=#466 id=466 data-nosnippet>466</a>    <span class="kw">let </span><span class="kw-2">mut </span>atoms = reserve(theory.atom_count())<span class="question-mark">?</span>;
 <a href=#467 id=467 data-nosnippet>467</a>    atoms.extend_from_slice(<span class="kw-2">&amp;</span>rank[..theory.atom_count()]);
@@ -480,14 +480,14 @@
 <a href=#480 id=480 data-nosnippet>480</a>        <span class="kw">return </span><span class="prelude-val">Err</span>(TightError::RankShape);
 <a href=#481 id=481 data-nosnippet>481</a>    }
 <a href=#482 id=482 data-nosnippet>482</a>    <span class="kw">for </span><span class="kw-2">&amp;</span>rank <span class="kw">in </span>ranks {
-<a href=#483 id=483 data-nosnippet>483</a>        meter.tick()<span class="question-mark">?</span>;
+<a href=#483 id=483 data-nosnippet>483</a>        Tick::tick(meter)<span class="question-mark">?</span>;
 <a href=#484 id=484 data-nosnippet>484</a>        <span class="kw">if </span>rank &gt;= ranks.len() {
 <a href=#485 id=485 data-nosnippet>485</a>            <span class="kw">return </span><span class="prelude-val">Err</span>(TightError::RankShape);
 <a href=#486 id=486 data-nosnippet>486</a>        }
 <a href=#487 id=487 data-nosnippet>487</a>    }
 <a href=#488 id=488 data-nosnippet>488</a>    <span class="kw">let </span><span class="kw-2">mut </span>maximum = reserve::&lt;usize&gt;(theory.nodes().len())<span class="question-mark">?</span>;
 <a href=#489 id=489 data-nosnippet>489</a>    <span class="kw">for </span>(index, <span class="kw-2">&amp;</span>class) <span class="kw">in </span>classes.iter().enumerate() {
-<a href=#490 id=490 data-nosnippet>490</a>        meter.tick()<span class="question-mark">?</span>;
+<a href=#490 id=490 data-nosnippet>490</a>        Tick::tick(meter)<span class="question-mark">?</span>;
 <a href=#491 id=491 data-nosnippet>491</a>        maximum.push(
 <a href=#492 id=492 data-nosnippet>492</a>            <span class="kw">match </span>theory
 <a href=#493 id=493 data-nosnippet>493</a>                .view()
@@ -501,7 +501,7 @@
 <a href=#501 id=501 data-nosnippet>501</a>                NodeView::Threshold(threshold) <span class="kw">if </span>class == Body::Positive =&gt; {
 <a href=#502 id=502 data-nosnippet>502</a>                    <span class="kw">let </span><span class="kw-2">mut </span>value = <span class="number">0</span>;
 <a href=#503 id=503 data-nosnippet>503</a>                    <span class="kw">for </span>(<span class="kw-2">&amp;</span>child, <span class="kw-2">&amp;</span>weight) <span class="kw">in </span>threshold.conditions.iter().zip(threshold.weights) {
-<a href=#504 id=504 data-nosnippet>504</a>                        meter.tick()<span class="question-mark">?</span>;
+<a href=#504 id=504 data-nosnippet>504</a>                        Tick::tick(meter)<span class="question-mark">?</span>;
 <a href=#505 id=505 data-nosnippet>505</a>                        <span class="kw">if </span>weight != <span class="number">0 </span>&amp;&amp; classes[child] == Body::Positive {
 <a href=#506 id=506 data-nosnippet>506</a>                            value = value.max(maximum[child]);
 <a href=#507 id=507 data-nosnippet>507</a>                        }
@@ -511,7 +511,7 @@
 <a href=#511 id=511 data-nosnippet>511</a>                NodeView::ExtremumCut(cut) <span class="kw">if </span>class == Body::Positive =&gt; {
 <a href=#512 id=512 data-nosnippet>512</a>                    <span class="kw">let </span><span class="kw-2">mut </span>value = <span class="number">0</span>;
 <a href=#513 id=513 data-nosnippet>513</a>                    <span class="kw">for </span>(<span class="kw-2">&amp;</span>child, <span class="kw-2">&amp;</span>rank) <span class="kw">in </span>cut.row.conditions.iter().zip(cut.row.ranks) {
-<a href=#514 id=514 data-nosnippet>514</a>                        meter.tick()<span class="question-mark">?</span>;
+<a href=#514 id=514 data-nosnippet>514</a>                        Tick::tick(meter)<span class="question-mark">?</span>;
 <a href=#515 id=515 data-nosnippet>515</a>                        <span class="kw">if </span>cut.qualifies(rank) &amp;&amp; classes[child] == Body::Positive {
 <a href=#516 id=516 data-nosnippet>516</a>                            value = value.max(maximum[child]);
 <a href=#517 id=517 data-nosnippet>517</a>                        }
@@ -523,7 +523,7 @@
 <a href=#523 id=523 data-nosnippet>523</a>        );
 <a href=#524 id=524 data-nosnippet>524</a>    }
 <a href=#525 id=525 data-nosnippet>525</a>    <span class="kw">for </span>producer <span class="kw">in </span>producers {
-<a href=#526 id=526 data-nosnippet>526</a>        meter.tick()<span class="question-mark">?</span>;
+<a href=#526 id=526 data-nosnippet>526</a>        Tick::tick(meter)<span class="question-mark">?</span>;
 <a href=#527 id=527 data-nosnippet>527</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(body) = producer.body
 <a href=#528 id=528 data-nosnippet>528</a>            &amp;&amp; classes[body] == Body::Positive
 <a href=#529 id=529 data-nosnippet>529</a>            &amp;&amp; maximum[body] &gt;= ranks[producer.head]
@@ -543,7 +543,7 @@
 <a href=#543 id=543 data-nosnippet>543</a>) -&gt; <span class="prelude-ty">Result</span>&lt;usize, TightError&gt; {
 <a href=#544 id=544 data-nosnippet>544</a>    <span class="kw">let </span><span class="kw-2">mut </span>value = <span class="number">0</span>;
 <a href=#545 id=545 data-nosnippet>545</a>    <span class="kw">for </span><span class="kw-2">&amp;</span>child <span class="kw">in </span>operands {
-<a href=#546 id=546 data-nosnippet>546</a>        meter.tick()<span class="question-mark">?</span>;
+<a href=#546 id=546 data-nosnippet>546</a>        Tick::tick(meter)<span class="question-mark">?</span>;
 <a href=#547 id=547 data-nosnippet>547</a>        value = value.max(maximum[child]);
 <a href=#548 id=548 data-nosnippet>548</a>    }
 <a href=#549 id=549 data-nosnippet>549</a>    <span class="prelude-val">Ok</span>(value)

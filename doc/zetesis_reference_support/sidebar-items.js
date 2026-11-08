@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["admit","canonical","exhaustive","formula","hybrid","normal","normal_answer_sets","prepare","prepared"],"mod":["resource_limits"],"struct":["BundleFixture"]};
+window.SIDEBAR_ITEMS = {"fn":["admit","canonical","exhaustive","exhaustive_bundle_models","exhaustive_models","formula","hybrid","prepare","prepared"],"mod":["resource_limits"],"struct":["BundleFixture"]};

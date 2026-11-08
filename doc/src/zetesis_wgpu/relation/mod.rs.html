@@ -15,8 +15,8 @@
 <a href=#15 id=15 data-nosnippet>15</a>    mem::{size_of, size_of_val},
 <a href=#16 id=16 data-nosnippet>16</a>    time::Duration,
 <a href=#17 id=17 data-nosnippet>17</a>};
-<a href=#18 id=18 data-nosnippet>18</a><span class="kw">use </span>zetesis_core::relation::{<span class="self">self</span>, Relation, Selection};
-<a href=#19 id=19 data-nosnippet>19</a><span class="kw">use </span>zetesis_cpu::{Cancellation, Stop};
+<a href=#18 id=18 data-nosnippet>18</a><span class="kw">use </span>zetesis_algebra::{Cancellation, Stop, words::Words};
+<a href=#19 id=19 data-nosnippet>19</a><span class="kw">use </span>zetesis_core::relation::{<span class="self">self</span>, Relation, Selection};
 <a href=#20 id=20 data-nosnippet>20</a>
 <a href=#21 id=21 data-nosnippet>21</a><span class="kw">use crate</span>::{GpuError, GpuErrorKind};
 <a href=#22 id=22 data-nosnippet>22</a><span class="kw">pub use </span>device::{GpuRelationExecutor, PreparedGpuRelation};
@@ -113,7 +113,7 @@
 <a href=#113 id=113 data-nosnippet>113</a>    relation: <span class="kw-2">&amp;</span><span class="lifetime">'owner </span>Relation&lt;<span class="lifetime">'source</span>&gt;,
 <a href=#114 id=114 data-nosnippet>114</a>    queries: usize,
 <a href=#115 id=115 data-nosnippet>115</a>    words_per_query: usize,
-<a href=#116 id=116 data-nosnippet>116</a>    words: Vec&lt;u32&gt;,
+<a href=#116 id=116 data-nosnippet>116</a>    words: Words&lt;u32&gt;,
 <a href=#117 id=117 data-nosnippet>117</a>}
 <a href=#118 id=118 data-nosnippet>118</a>
 <a href=#119 id=119 data-nosnippet>119</a><span class="kw">impl</span>&lt;<span class="lifetime">'owner</span>, <span class="lifetime">'source</span>&gt; RelationGpuMasks&lt;<span class="lifetime">'owner</span>, <span class="lifetime">'source</span>&gt; {
