@@ -48,6 +48,7 @@
 # Performance and testing
 
 - [Performance results](reference/performance.md)
+  - [0.7.0 CPU comparisons](reference/cpu-0.7.0.md)
   - [Final 0.6.0 CPU check](reference/cpu-corpus-final-20261014.md)
   - [CPU corpus comparison, 14 October 2026](reference/cpu-corpus-20261014.md)
   - [CPU corpus comparison, 10 October 2026](reference/cpu-corpus-20261010.md)

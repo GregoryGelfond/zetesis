@@ -54,6 +54,8 @@ fat LTO    d54b261b40dc78bf30130379ac589e811bd59d5e048503d77ae722eb0ea5cf25
 
 ## Recorded comparisons
 
+The [0.7.0 CPU comparison](cpu-0.7.0.md) records outcomes for all 299 distinct inputs at 14 zetesis workers and one clingo worker. Among 286 comparable cases the 3% band gave 200 zetesis wins, 11 close and 75 clingo wins. The per-case record includes the quantified inputs, Family Crossing, USA, both large Mastermind encodings, Poker and arithmetic.
+
 The [final 0.6.0 CPU check](cpu-corpus-final-20261014.md) records all 94 cases at
 one and fourteen threads. At fourteen, summed process time is 520.523 ms against
 clingo’s 803.673 ms, with 16 wins, 65 close cases and 13 losses under a 3% band.

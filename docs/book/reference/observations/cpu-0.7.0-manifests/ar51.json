@@ -1,0 +1,1077 @@
+{
+  "schema_version": 1,
+  "root": ".",
+  "cases": [
+    {
+      "contract": {
+        "cost": null,
+        "family": "all",
+        "model_count": 0,
+        "notes": [
+          "Private AR acceptance input tseitin-p17-odd. UNSAT by odd total charge; p is prime and p mod 3 = 2. Original contract retained separately in workload provenance; this materialized contract does not claim an executed reference qualification."
+        ],
+        "required_symbols": [],
+        "satisfiability": "unsat",
+        "witnesses": []
+      },
+      "entry": "materialized/tseitin-p17-odd/program.lp",
+      "files": [
+        {
+          "includes": [],
+          "path": "materialized/tseitin-p17-odd/program.lp",
+          "sha256": "fc509d0027294bda5c680490afb93e6faf78a43cf16893099c67f6c39e4d968c"
+        }
+      ]
+    },
+    {
+      "contract": {
+        "cost": null,
+        "family": "all",
+        "model_count": 0,
+        "notes": [
+          "Private AR acceptance input chain-p17-odd. UNSAT by equality of the two permuted exclusive-or chains; p is prime and p mod 3 = 2. Original contract retained separately in workload provenance; this materialized contract does not claim an executed reference qualification."
+        ],
+        "required_symbols": [],
+        "satisfiability": "unsat",
+        "witnesses": []
+      },
+      "entry": "materialized/chain-p17-odd/program.lp",
+      "files": [
+        {
+          "includes": [],
+          "path": "materialized/chain-p17-odd/program.lp",
+          "sha256": "ef10ab65fdbc6460511fe2527f3d426bb5086c680cd84004d29966b37c3ede19"
+        }
+      ]
+    },
+    {
+      "contract": {
+        "cost": null,
+        "family": "all",
+        "model_count": 0,
+        "notes": [
+          "Private AR acceptance input tseitin-p29-odd. UNSAT by odd total charge; p is prime and p mod 3 = 2. Original contract retained separately in workload provenance; this materialized contract does not claim an executed reference qualification."
+        ],
+        "required_symbols": [],
+        "satisfiability": "unsat",
+        "witnesses": []
+      },
+      "entry": "materialized/tseitin-p29-odd/program.lp",
+      "files": [
+        {
+          "includes": [],
+          "path": "materialized/tseitin-p29-odd/program.lp",
+          "sha256": "9d46a181f2490829628f2da5e03b67af6e089dbc0aaa4a5fb645444d25f2d375"
+        }
+      ]
+    },
+    {
+      "contract": {
+        "cost": null,
+        "family": "all",
+        "model_count": 0,
+        "notes": [
+          "Private AR acceptance input chain-p29-odd. UNSAT by equality of the two permuted exclusive-or chains; p is prime and p mod 3 = 2. Original contract retained separately in workload provenance; this materialized contract does not claim an executed reference qualification."
+        ],
+        "required_symbols": [],
+        "satisfiability": "unsat",
+        "witnesses": []
+      },
+      "entry": "materialized/chain-p29-odd/program.lp",
+      "files": [
+        {
+          "includes": [],
+          "path": "materialized/chain-p29-odd/program.lp",
+          "sha256": "1a832c1a2d1bd042114bd1e98967cf3b4b9c06eadc9c851cb80a2ebe44024e3b"
+        }
+      ]
+    },
+    {
+      "contract": {
+        "cost": null,
+        "family": "all",
+        "model_count": 0,
+        "notes": [
+          "Private AR acceptance input tseitin-p41-odd. UNSAT by odd total charge; p is prime and p mod 3 = 2. Original contract retained separately in workload provenance; this materialized contract does not claim an executed reference qualification."
+        ],
+        "required_symbols": [],
+        "satisfiability": "unsat",
+        "witnesses": []
+      },
+      "entry": "materialized/tseitin-p41-odd/program.lp",
+      "files": [
+        {
+          "includes": [],
+          "path": "materialized/tseitin-p41-odd/program.lp",
+          "sha256": "40491c17f591770e1431d2dbc5cf88effff262e335b0118dfad4ea56c3784429"
+        }
+      ]
+    },
+    {
+      "contract": {
+        "cost": null,
+        "family": "all",
+        "model_count": 0,
+        "notes": [
+          "Private AR acceptance input chain-p41-odd. UNSAT by equality of the two permuted exclusive-or chains; p is prime and p mod 3 = 2. Original contract retained separately in workload provenance; this materialized contract does not claim an executed reference qualification."
+        ],
+        "required_symbols": [],
+        "satisfiability": "unsat",
+        "witnesses": []
+      },
+      "entry": "materialized/chain-p41-odd/program.lp",
+      "files": [
+        {
+          "includes": [],
+          "path": "materialized/chain-p41-odd/program.lp",
+          "sha256": "292d1e36e041622944e05a5230ba83faf36e83a877826bbf39b934c3cedf7d2a"
+        }
+      ]
+    },
+    {
+      "contract": {
+        "cost": null,
+        "family": "all",
+        "model_count": 0,
+        "notes": [
+          "Private AR acceptance input tseitin-p47-odd. UNSAT by odd total charge; p is prime and p mod 3 = 2. Original contract retained separately in workload provenance; this materialized contract does not claim an executed reference qualification."
+        ],
+        "required_symbols": [],
+        "satisfiability": "unsat",
+        "witnesses": []
+      },
+      "entry": "materialized/tseitin-p47-odd/program.lp",
+      "files": [
+        {
+          "includes": [],
+          "path": "materialized/tseitin-p47-odd/program.lp",
+          "sha256": "b13b034779c83c0b4f3370201412c2f9a3d5efe8ad397600ca3e33d3cd8a1f72"
+        }
+      ]
+    },
+    {
+      "contract": {
+        "cost": null,
+        "family": "all",
+        "model_count": 0,
+        "notes": [
+          "Private AR acceptance input chain-p47-odd. UNSAT by equality of the two permuted exclusive-or chains; p is prime and p mod 3 = 2. Original contract retained separately in workload provenance; this materialized contract does not claim an executed reference qualification."
+        ],
+        "required_symbols": [],
+        "satisfiability": "unsat",
+        "witnesses": []
+      },
+      "entry": "materialized/chain-p47-odd/program.lp",
+      "files": [
+        {
+          "includes": [],
+          "path": "materialized/chain-p47-odd/program.lp",
+          "sha256": "cfd4f8e6329026d1e58ffc31d52fbad8013c6f7512b686a6285afe49ed9f2c6c"
+        }
+      ]
+    },
+    {
+      "contract": {
+        "cost": null,
+        "family": "all",
+        "model_count": 0,
+        "notes": [
+          "Private AR acceptance input tseitin-p53-odd. UNSAT by odd total charge; p is prime and p mod 3 = 2. Original contract retained separately in workload provenance; this materialized contract does not claim an executed reference qualification."
+        ],
+        "required_symbols": [],
+        "satisfiability": "unsat",
+        "witnesses": []
+      },
+      "entry": "materialized/tseitin-p53-odd/program.lp",
+      "files": [
+        {
+          "includes": [],
+          "path": "materialized/tseitin-p53-odd/program.lp",
+          "sha256": "71fdf75a60bdd802e92b890000d57a41e1ad9b22df25e13672bf9c8433d7ef71"
+        }
+      ]
+    },
+    {
+      "contract": {
+        "cost": null,
+        "family": "all",
+        "model_count": 0,
+        "notes": [
+          "Private AR acceptance input chain-p53-odd. UNSAT by equality of the two permuted exclusive-or chains; p is prime and p mod 3 = 2. Original contract retained separately in workload provenance; this materialized contract does not claim an executed reference qualification."
+        ],
+        "required_symbols": [],
+        "satisfiability": "unsat",
+        "witnesses": []
+      },
+      "entry": "materialized/chain-p53-odd/program.lp",
+      "files": [
+        {
+          "includes": [],
+          "path": "materialized/chain-p53-odd/program.lp",
+          "sha256": "1e2e736e3e8110d14b3295e11bb3e4f2736b5d7ebfdb25f256843ff5c1478c64"
+        }
+      ]
+    },
+    {
+      "contract": {
+        "cost": null,
+        "family": "all",
+        "model_count": 0,
+        "notes": [
+          "Private AR acceptance input tseitin-p59-odd. UNSAT by odd total charge; p is prime and p mod 3 = 2. Original contract retained separately in workload provenance; this materialized contract does not claim an executed reference qualification."
+        ],
+        "required_symbols": [],
+        "satisfiability": "unsat",
+        "witnesses": []
+      },
+      "entry": "materialized/tseitin-p59-odd/program.lp",
+      "files": [
+        {
+          "includes": [],
+          "path": "materialized/tseitin-p59-odd/program.lp",
+          "sha256": "1a1bb0b6239cfd4c2001d6768778e639a281ae288c6e7a7800bbf59f5032b341"
+        }
+      ]
+    },
+    {
+      "contract": {
+        "cost": null,
+        "family": "all",
+        "model_count": 0,
+        "notes": [
+          "Private AR acceptance input chain-p59-odd. UNSAT by equality of the two permuted exclusive-or chains; p is prime and p mod 3 = 2. Original contract retained separately in workload provenance; this materialized contract does not claim an executed reference qualification."
+        ],
+        "required_symbols": [],
+        "satisfiability": "unsat",
+        "witnesses": []
+      },
+      "entry": "materialized/chain-p59-odd/program.lp",
+      "files": [
+        {
+          "includes": [],
+          "path": "materialized/chain-p59-odd/program.lp",
+          "sha256": "0253ab107e84616d9f537144988edbecd1a6d95fb37349f780e52d4c63bdf278"
+        }
+      ]
+    },
+    {
+      "contract": {
+        "cost": null,
+        "family": "all",
+        "model_count": 0,
+        "notes": [
+          "Private AR acceptance input tseitin-p71-odd. UNSAT by odd total charge; p is prime and p mod 3 = 2. Original contract retained separately in workload provenance; this materialized contract does not claim an executed reference qualification."
+        ],
+        "required_symbols": [],
+        "satisfiability": "unsat",
+        "witnesses": []
+      },
+      "entry": "materialized/tseitin-p71-odd/program.lp",
+      "files": [
+        {
+          "includes": [],
+          "path": "materialized/tseitin-p71-odd/program.lp",
+          "sha256": "fbb37b8edb7bf571ab31cbe0307d931b1d72085d9b3a04fc36f46070119099e9"
+        }
+      ]
+    },
+    {
+      "contract": {
+        "cost": null,
+        "family": "all",
+        "model_count": 0,
+        "notes": [
+          "Private AR acceptance input chain-p71-odd. UNSAT by equality of the two permuted exclusive-or chains; p is prime and p mod 3 = 2. Original contract retained separately in workload provenance; this materialized contract does not claim an executed reference qualification."
+        ],
+        "required_symbols": [],
+        "satisfiability": "unsat",
+        "witnesses": []
+      },
+      "entry": "materialized/chain-p71-odd/program.lp",
+      "files": [
+        {
+          "includes": [],
+          "path": "materialized/chain-p71-odd/program.lp",
+          "sha256": "34e371873866a87a92f3ea2836abcf5ea273ccd4dec7e35849532f096b10bd32"
+        }
+      ]
+    },
+    {
+      "contract": {
+        "cost": null,
+        "family": "all",
+        "model_count": 0,
+        "notes": [
+          "Private AR acceptance input tseitin-p83-odd. UNSAT by odd total charge; p is prime and p mod 3 = 2. Original contract retained separately in workload provenance; this materialized contract does not claim an executed reference qualification."
+        ],
+        "required_symbols": [],
+        "satisfiability": "unsat",
+        "witnesses": []
+      },
+      "entry": "materialized/tseitin-p83-odd/program.lp",
+      "files": [
+        {
+          "includes": [],
+          "path": "materialized/tseitin-p83-odd/program.lp",
+          "sha256": "59f3a8cef1a31a4612cf3f21b0a9fd9aef3a1ff87e248b197c8e1c6c5dbaecc4"
+        }
+      ]
+    },
+    {
+      "contract": {
+        "cost": null,
+        "family": "all",
+        "model_count": 0,
+        "notes": [
+          "Private AR acceptance input chain-p83-odd. UNSAT by equality of the two permuted exclusive-or chains; p is prime and p mod 3 = 2. Original contract retained separately in workload provenance; this materialized contract does not claim an executed reference qualification."
+        ],
+        "required_symbols": [],
+        "satisfiability": "unsat",
+        "witnesses": []
+      },
+      "entry": "materialized/chain-p83-odd/program.lp",
+      "files": [
+        {
+          "includes": [],
+          "path": "materialized/chain-p83-odd/program.lp",
+          "sha256": "e3363977bfcf65f2fff8798a6a902f9d38b671ac4313e3989ac45fc36fa4c71f"
+        }
+      ]
+    },
+    {
+      "contract": {
+        "cost": null,
+        "family": "all",
+        "model_count": 0,
+        "notes": [
+          "Private AR acceptance input tseitin-p89-odd. UNSAT by odd total charge; p is prime and p mod 3 = 2. Original contract retained separately in workload provenance; this materialized contract does not claim an executed reference qualification."
+        ],
+        "required_symbols": [],
+        "satisfiability": "unsat",
+        "witnesses": []
+      },
+      "entry": "materialized/tseitin-p89-odd/program.lp",
+      "files": [
+        {
+          "includes": [],
+          "path": "materialized/tseitin-p89-odd/program.lp",
+          "sha256": "5b62b37c7d95f5395656eb4db396f5dec0895bcffc44a0ea9116d4bc84f5a545"
+        }
+      ]
+    },
+    {
+      "contract": {
+        "cost": null,
+        "family": "all",
+        "model_count": 0,
+        "notes": [
+          "Private AR acceptance input chain-p89-odd. UNSAT by equality of the two permuted exclusive-or chains; p is prime and p mod 3 = 2. Original contract retained separately in workload provenance; this materialized contract does not claim an executed reference qualification."
+        ],
+        "required_symbols": [],
+        "satisfiability": "unsat",
+        "witnesses": []
+      },
+      "entry": "materialized/chain-p89-odd/program.lp",
+      "files": [
+        {
+          "includes": [],
+          "path": "materialized/chain-p89-odd/program.lp",
+          "sha256": "58dd15ed62bd2bf989d56ebc1c81c18d160baac3c8d4246868887251becb5d68"
+        }
+      ]
+    },
+    {
+      "contract": {
+        "cost": null,
+        "family": "all",
+        "model_count": 0,
+        "notes": [
+          "Private AR acceptance input tseitin-p101-odd. UNSAT by odd total charge; p is prime and p mod 3 = 2. Original contract retained separately in workload provenance; this materialized contract does not claim an executed reference qualification."
+        ],
+        "required_symbols": [],
+        "satisfiability": "unsat",
+        "witnesses": []
+      },
+      "entry": "materialized/tseitin-p101-odd/program.lp",
+      "files": [
+        {
+          "includes": [],
+          "path": "materialized/tseitin-p101-odd/program.lp",
+          "sha256": "478cac52266a8e59bd6d06672ca4de60db4537a2abdcef9801f901a150c4b156"
+        }
+      ]
+    },
+    {
+      "contract": {
+        "cost": null,
+        "family": "all",
+        "model_count": 0,
+        "notes": [
+          "Private AR acceptance input chain-p101-odd. UNSAT by equality of the two permuted exclusive-or chains; p is prime and p mod 3 = 2. Original contract retained separately in workload provenance; this materialized contract does not claim an executed reference qualification."
+        ],
+        "required_symbols": [],
+        "satisfiability": "unsat",
+        "witnesses": []
+      },
+      "entry": "materialized/chain-p101-odd/program.lp",
+      "files": [
+        {
+          "includes": [],
+          "path": "materialized/chain-p101-odd/program.lp",
+          "sha256": "b0264d29532449b09423bb8a11a062338cb2cee3c80799aeb3b288593503eed4"
+        }
+      ]
+    },
+    {
+      "contract": {
+        "cost": null,
+        "family": "all",
+        "model_count": 0,
+        "notes": [
+          "Private AR acceptance input pigeon-clauses-h8-extra1. UNSAT by h+1 pigeons into h holes. Original contract retained separately in workload provenance; this materialized contract does not claim an executed reference qualification."
+        ],
+        "required_symbols": [],
+        "satisfiability": "unsat",
+        "witnesses": []
+      },
+      "entry": "materialized/pigeon-clauses-h8-extra1/program.lp",
+      "files": [
+        {
+          "includes": [],
+          "path": "materialized/pigeon-clauses-h8-extra1/program.lp",
+          "sha256": "ac8bd89437b6b74756e3fa76ca5d56e3a71502411368f2e3aa71c30e2e73a199"
+        }
+      ]
+    },
+    {
+      "contract": {
+        "cost": null,
+        "family": "all",
+        "model_count": 0,
+        "notes": [
+          "Private AR acceptance input pigeon-clauses-h9-extra1. UNSAT by h+1 pigeons into h holes. Original contract retained separately in workload provenance; this materialized contract does not claim an executed reference qualification."
+        ],
+        "required_symbols": [],
+        "satisfiability": "unsat",
+        "witnesses": []
+      },
+      "entry": "materialized/pigeon-clauses-h9-extra1/program.lp",
+      "files": [
+        {
+          "includes": [],
+          "path": "materialized/pigeon-clauses-h9-extra1/program.lp",
+          "sha256": "4d3e6e1ebd197464b723bf571fa2658c1fe5788afed88a6ea7fb3f9269682522"
+        }
+      ]
+    },
+    {
+      "contract": {
+        "cost": null,
+        "family": "all",
+        "model_count": 0,
+        "notes": [
+          "Private AR acceptance input pigeon-clauses-h10-extra1. UNSAT by h+1 pigeons into h holes. Original contract retained separately in workload provenance; this materialized contract does not claim an executed reference qualification."
+        ],
+        "required_symbols": [],
+        "satisfiability": "unsat",
+        "witnesses": []
+      },
+      "entry": "materialized/pigeon-clauses-h10-extra1/program.lp",
+      "files": [
+        {
+          "includes": [],
+          "path": "materialized/pigeon-clauses-h10-extra1/program.lp",
+          "sha256": "d7566bd95bb5c2fb1e36afbb901291221130257115c55cb986385103ec1b95e3"
+        }
+      ]
+    },
+    {
+      "contract": {
+        "cost": null,
+        "family": "all",
+        "model_count": 0,
+        "notes": [
+          "Private AR acceptance input pigeon-clauses-h11-extra1. UNSAT by h+1 pigeons into h holes. Original contract retained separately in workload provenance; this materialized contract does not claim an executed reference qualification."
+        ],
+        "required_symbols": [],
+        "satisfiability": "unsat",
+        "witnesses": []
+      },
+      "entry": "materialized/pigeon-clauses-h11-extra1/program.lp",
+      "files": [
+        {
+          "includes": [],
+          "path": "materialized/pigeon-clauses-h11-extra1/program.lp",
+          "sha256": "cc67d5e39b55c9b595fdde5612f1b449ed77695e8cd3f3d9e65f1a9a2e7e8ffa"
+        }
+      ]
+    },
+    {
+      "contract": {
+        "cost": null,
+        "family": "all",
+        "model_count": 0,
+        "notes": [
+          "Private AR acceptance input pigeon-clauses-h12-extra1. UNSAT by h+1 pigeons into h holes. Original contract retained separately in workload provenance; this materialized contract does not claim an executed reference qualification."
+        ],
+        "required_symbols": [],
+        "satisfiability": "unsat",
+        "witnesses": []
+      },
+      "entry": "materialized/pigeon-clauses-h12-extra1/program.lp",
+      "files": [
+        {
+          "includes": [],
+          "path": "materialized/pigeon-clauses-h12-extra1/program.lp",
+          "sha256": "81011b530752683cb1f9f99ded57837ca7502f12ff55e1a254d04999da4f3c2b"
+        }
+      ]
+    },
+    {
+      "contract": {
+        "cost": null,
+        "family": "all",
+        "model_count": 0,
+        "notes": [
+          "Private AR acceptance input pigeon-choice-h8. UNSAT by h+1 pigeons into h holes; separate choice encoding. Original contract retained separately in workload provenance; this materialized contract does not claim an executed reference qualification."
+        ],
+        "required_symbols": [],
+        "satisfiability": "unsat",
+        "witnesses": []
+      },
+      "entry": "materialized/pigeon-choice-h8/program.lp",
+      "files": [
+        {
+          "includes": [],
+          "path": "materialized/pigeon-choice-h8/program.lp",
+          "sha256": "d619e0e6ff2ec4b5fb4ab1e0897961b7348aebea4165dee48244894a86eb495a"
+        }
+      ]
+    },
+    {
+      "contract": {
+        "cost": null,
+        "family": "all",
+        "model_count": 0,
+        "notes": [
+          "Private AR acceptance input pigeon-choice-h9. UNSAT by h+1 pigeons into h holes; separate choice encoding. Original contract retained separately in workload provenance; this materialized contract does not claim an executed reference qualification."
+        ],
+        "required_symbols": [],
+        "satisfiability": "unsat",
+        "witnesses": []
+      },
+      "entry": "materialized/pigeon-choice-h9/program.lp",
+      "files": [
+        {
+          "includes": [],
+          "path": "materialized/pigeon-choice-h9/program.lp",
+          "sha256": "603e34ed7e97fcb8f62c3c808584671e480c4c5451a497f7a2e1ef5c4d7a90cc"
+        }
+      ]
+    },
+    {
+      "contract": {
+        "cost": null,
+        "family": "all",
+        "model_count": 0,
+        "notes": [
+          "Private AR acceptance input pigeon-choice-h10. UNSAT by h+1 pigeons into h holes; separate choice encoding. Original contract retained separately in workload provenance; this materialized contract does not claim an executed reference qualification."
+        ],
+        "required_symbols": [],
+        "satisfiability": "unsat",
+        "witnesses": []
+      },
+      "entry": "materialized/pigeon-choice-h10/program.lp",
+      "files": [
+        {
+          "includes": [],
+          "path": "materialized/pigeon-choice-h10/program.lp",
+          "sha256": "bd454a9e08d1d84d0c044628f562ee8a9bb12b0b6aa36898f173631c76f59c7e"
+        }
+      ]
+    },
+    {
+      "contract": {
+        "cost": null,
+        "family": "all",
+        "model_count": 0,
+        "notes": [
+          "Private AR acceptance input pigeon-choice-h11. UNSAT by h+1 pigeons into h holes; separate choice encoding. Original contract retained separately in workload provenance; this materialized contract does not claim an executed reference qualification."
+        ],
+        "required_symbols": [],
+        "satisfiability": "unsat",
+        "witnesses": []
+      },
+      "entry": "materialized/pigeon-choice-h11/program.lp",
+      "files": [
+        {
+          "includes": [],
+          "path": "materialized/pigeon-choice-h11/program.lp",
+          "sha256": "e46ac5ec99560ddf586d246811afac5ecf858e8dfaa9016a405c4dd455aab98c"
+        }
+      ]
+    },
+    {
+      "contract": {
+        "cost": null,
+        "family": "all",
+        "model_count": 0,
+        "notes": [
+          "Private AR acceptance input pigeon-choice-h12. UNSAT by h+1 pigeons into h holes; separate choice encoding. Original contract retained separately in workload provenance; this materialized contract does not claim an executed reference qualification."
+        ],
+        "required_symbols": [],
+        "satisfiability": "unsat",
+        "witnesses": []
+      },
+      "entry": "materialized/pigeon-choice-h12/program.lp",
+      "files": [
+        {
+          "includes": [],
+          "path": "materialized/pigeon-choice-h12/program.lp",
+          "sha256": "1a4ac64f9ae327e0bcaabae409788412703e08aafb179ee69fbb30c184c40500"
+        }
+      ]
+    },
+    {
+      "contract": {
+        "cost": null,
+        "family": "all",
+        "model_count": 19,
+        "notes": [
+          "Private AR acceptance input mixed-p11-c40. Count recorded in the maintained README; full family still requires current oracle comparison. Original contract retained separately in workload provenance; this materialized contract does not claim an executed reference qualification."
+        ],
+        "required_symbols": [],
+        "satisfiability": "sat",
+        "witnesses": []
+      },
+      "entry": "materialized/mixed-p11-c40/program.lp",
+      "files": [
+        {
+          "includes": [],
+          "path": "materialized/mixed-p11-c40/program.lp",
+          "sha256": "7b9e5f6ed28cc9e26cca315d2a52f25666079d97138446a52580ded911d5fa21"
+        }
+      ]
+    },
+    {
+      "contract": {
+        "cost": null,
+        "family": "all",
+        "model_count": 86,
+        "notes": [
+          "Private AR acceptance input mixed-p17-c70. Count recorded in the maintained README; full family still requires current oracle comparison. Original contract retained separately in workload provenance; this materialized contract does not claim an executed reference qualification."
+        ],
+        "required_symbols": [],
+        "satisfiability": "sat",
+        "witnesses": []
+      },
+      "entry": "materialized/mixed-p17-c70/program.lp",
+      "files": [
+        {
+          "includes": [],
+          "path": "materialized/mixed-p17-c70/program.lp",
+          "sha256": "a060ba782bcb90d65ade5cb410006abbd28403c80c39fec0c520426d2cdff3c6"
+        }
+      ]
+    },
+    {
+      "contract": {
+        "cost": null,
+        "family": "all",
+        "model_count": 24,
+        "notes": [
+          "Private AR acceptance input mixed-p29-c130. Count recorded in the maintained README; full family still requires current oracle comparison. Original contract retained separately in workload provenance; this materialized contract does not claim an executed reference qualification."
+        ],
+        "required_symbols": [],
+        "satisfiability": "sat",
+        "witnesses": []
+      },
+      "entry": "materialized/mixed-p29-c130/program.lp",
+      "files": [
+        {
+          "includes": [],
+          "path": "materialized/mixed-p29-c130/program.lp",
+          "sha256": "03f65346e0c7a8f5c5eea8373a885508095066d06d005ca49525830b88d96eb6"
+        }
+      ]
+    },
+    {
+      "contract": {
+        "cost": null,
+        "family": "all",
+        "model_count": 12,
+        "notes": [
+          "Private AR acceptance input mixed-p41-c190. Count recorded in the maintained README; full family still requires current oracle comparison. Original contract retained separately in workload provenance; this materialized contract does not claim an executed reference qualification."
+        ],
+        "required_symbols": [],
+        "satisfiability": "sat",
+        "witnesses": []
+      },
+      "entry": "materialized/mixed-p41-c190/program.lp",
+      "files": [
+        {
+          "includes": [],
+          "path": "materialized/mixed-p41-c190/program.lp",
+          "sha256": "1869c11793d0d1d1e0c7f0f010c32f9e8f382120a4f3563a7cfdcfd80537f049"
+        }
+      ]
+    },
+    {
+      "contract": {
+        "cost": null,
+        "family": "all",
+        "model_count": 64,
+        "notes": [
+          "Private AR acceptance input tseitin-p5-even. 2^(p+1) even subgraphs of the connected cubic graph. Original contract retained separately in workload provenance; this materialized contract does not claim an executed reference qualification."
+        ],
+        "required_symbols": [],
+        "satisfiability": "sat",
+        "witnesses": []
+      },
+      "entry": "materialized/tseitin-p5-even/program.lp",
+      "files": [
+        {
+          "includes": [],
+          "path": "materialized/tseitin-p5-even/program.lp",
+          "sha256": "65c7bee1dab804f2a2f4b66272fd49bcd976f2cb4e627875f29858f3015794f3"
+        }
+      ]
+    },
+    {
+      "contract": {
+        "cost": null,
+        "family": "all",
+        "model_count": 32,
+        "notes": [
+          "Private AR acceptance input chain-p5-even. One extension for each of the 2^p input assignments. Original contract retained separately in workload provenance; this materialized contract does not claim an executed reference qualification."
+        ],
+        "required_symbols": [],
+        "satisfiability": "sat",
+        "witnesses": []
+      },
+      "entry": "materialized/chain-p5-even/program.lp",
+      "files": [
+        {
+          "includes": [],
+          "path": "materialized/chain-p5-even/program.lp",
+          "sha256": "89754c7c1e9a962966eb7e607faff071437ae7ba87779a9022d52fd3b4cf7679"
+        }
+      ]
+    },
+    {
+      "contract": {
+        "cost": null,
+        "family": "all",
+        "model_count": 24,
+        "notes": [
+          "Private AR acceptance input pigeon-clauses-h4-extra0. Exactly h! one-to-one placements. Original contract retained separately in workload provenance; this materialized contract does not claim an executed reference qualification."
+        ],
+        "required_symbols": [],
+        "satisfiability": "sat",
+        "witnesses": []
+      },
+      "entry": "materialized/pigeon-clauses-h4-extra0/program.lp",
+      "files": [
+        {
+          "includes": [],
+          "path": "materialized/pigeon-clauses-h4-extra0/program.lp",
+          "sha256": "83b8f1422e7ddebdbfce788be580ed245c73afc9e7f0bae6e95bf950f02dd71c"
+        }
+      ]
+    },
+    {
+      "contract": {
+        "cost": null,
+        "family": "all",
+        "model_count": 120,
+        "notes": [
+          "Private AR acceptance input pigeon-clauses-h5-extra0. Exactly h! one-to-one placements. Original contract retained separately in workload provenance; this materialized contract does not claim an executed reference qualification."
+        ],
+        "required_symbols": [],
+        "satisfiability": "sat",
+        "witnesses": []
+      },
+      "entry": "materialized/pigeon-clauses-h5-extra0/program.lp",
+      "files": [
+        {
+          "includes": [],
+          "path": "materialized/pigeon-clauses-h5-extra0/program.lp",
+          "sha256": "23337ae5724345e246625e6882483d3f6191d0029c9e498b4b6a70c40ed3246d"
+        }
+      ]
+    },
+    {
+      "contract": {
+        "cost": null,
+        "family": "all",
+        "model_count": 720,
+        "notes": [
+          "Private AR acceptance input pigeon-clauses-h6-extra0. Exactly h! one-to-one placements. Original contract retained separately in workload provenance; this materialized contract does not claim an executed reference qualification."
+        ],
+        "required_symbols": [],
+        "satisfiability": "sat",
+        "witnesses": []
+      },
+      "entry": "materialized/pigeon-clauses-h6-extra0/program.lp",
+      "files": [
+        {
+          "includes": [],
+          "path": "materialized/pigeon-clauses-h6-extra0/program.lp",
+          "sha256": "cfe15dfd0c599e04d6d548b265089439de56b50fc00312f22d211f4eb5b28231"
+        }
+      ]
+    },
+    {
+      "entry": "ground-door/tseitin-20.lp",
+      "contract": {
+        "satisfiability": "unsat",
+        "family": "all",
+        "model_count": 0,
+        "cost": null,
+        "witnesses": [],
+        "required_symbols": [],
+        "notes": [
+          "Complete archived one-worker clingo UNSAT capture authenticated by the private integrated measurement selection packet; each new campaign requires fresh reference qualification."
+        ]
+      },
+      "files": [
+        {
+          "path": "ground-door/tseitin-20.lp",
+          "sha256": "94373a8b3aa60ff6ac2dfab9a40dac5ff1d60a0741fe5c07773e5be923c80734",
+          "includes": []
+        }
+      ]
+    },
+    {
+      "entry": "ground-door/xorchain-12.lp",
+      "contract": {
+        "satisfiability": "unsat",
+        "family": "all",
+        "model_count": 0,
+        "cost": null,
+        "witnesses": [],
+        "required_symbols": [],
+        "notes": [
+          "Complete archived one-worker clingo UNSAT capture authenticated by the private integrated measurement selection packet; each new campaign requires fresh reference qualification."
+        ]
+      },
+      "files": [
+        {
+          "path": "ground-door/xorchain-12.lp",
+          "sha256": "b93ccb3d67766032e81ede91f9539fd30c0ebb4805b9fdda62d5d66a1146931a",
+          "includes": []
+        }
+      ]
+    },
+    {
+      "entry": "ground-door/door-sizes/tseitin-30.lp",
+      "contract": {
+        "satisfiability": "unsat",
+        "family": "all",
+        "model_count": 0,
+        "cost": null,
+        "witnesses": [],
+        "required_symbols": [],
+        "notes": [
+          "Complete archived one-worker clingo UNSAT capture authenticated by the private integrated measurement selection packet; each new campaign requires fresh reference qualification."
+        ]
+      },
+      "files": [
+        {
+          "path": "ground-door/door-sizes/tseitin-30.lp",
+          "sha256": "43c417dfc7063268b5169741f801495cf375f8f10a70322b24448b5f97edcda8",
+          "includes": []
+        }
+      ]
+    },
+    {
+      "entry": "ground-door/door-sizes/tseitin-40.lp",
+      "contract": {
+        "satisfiability": "unsat",
+        "family": "all",
+        "model_count": 0,
+        "cost": null,
+        "witnesses": [],
+        "required_symbols": [],
+        "notes": [
+          "Complete archived one-worker clingo UNSAT capture authenticated by the private integrated measurement selection packet; each new campaign requires fresh reference qualification."
+        ]
+      },
+      "files": [
+        {
+          "path": "ground-door/door-sizes/tseitin-40.lp",
+          "sha256": "2d8433300a64d8c6f4e9df78bbd166da47c75af506c5c4c99852690f3254aa62",
+          "includes": []
+        }
+      ]
+    },
+    {
+      "entry": "ground-door/door-sizes/tseitin-50.lp",
+      "contract": {
+        "satisfiability": "unsat",
+        "family": "all",
+        "model_count": 0,
+        "cost": null,
+        "witnesses": [],
+        "required_symbols": [],
+        "notes": [
+          "Complete archived one-worker clingo UNSAT capture authenticated by the private integrated measurement selection packet; each new campaign requires fresh reference qualification."
+        ]
+      },
+      "files": [
+        {
+          "path": "ground-door/door-sizes/tseitin-50.lp",
+          "sha256": "1f40507e58658c8c3e5d7d31603fcbed97899f33017eff7434d307c7acd0f06b",
+          "includes": []
+        }
+      ]
+    },
+    {
+      "entry": "ground-door/door-sizes/tseitin-60.lp",
+      "contract": {
+        "satisfiability": "unsat",
+        "family": "all",
+        "model_count": 0,
+        "cost": null,
+        "witnesses": [],
+        "required_symbols": [],
+        "notes": [
+          "Complete archived one-worker clingo UNSAT capture authenticated by the private integrated measurement selection packet; each new campaign requires fresh reference qualification."
+        ]
+      },
+      "files": [
+        {
+          "path": "ground-door/door-sizes/tseitin-60.lp",
+          "sha256": "a642252cfcc336b684f9d9004fd49de25c5aac93b027c56cf31f2f7cb27ac58e",
+          "includes": []
+        }
+      ]
+    },
+    {
+      "entry": "ground-door/door-sizes/tseitin-80.lp",
+      "contract": {
+        "satisfiability": "unsat",
+        "family": "all",
+        "model_count": 0,
+        "cost": null,
+        "witnesses": [],
+        "required_symbols": [],
+        "notes": [
+          "Complete archived one-worker clingo UNSAT capture authenticated by the private integrated measurement selection packet; each new campaign requires fresh reference qualification."
+        ]
+      },
+      "files": [
+        {
+          "path": "ground-door/door-sizes/tseitin-80.lp",
+          "sha256": "6a2335f6b28ad78a3c4ed6cac0cb6004138e6559aad1e7baff546c0de4622167",
+          "includes": []
+        }
+      ]
+    },
+    {
+      "entry": "ground-door/door-sizes/xorchain-16.lp",
+      "contract": {
+        "satisfiability": "unsat",
+        "family": "all",
+        "model_count": 0,
+        "cost": null,
+        "witnesses": [],
+        "required_symbols": [],
+        "notes": [
+          "Complete archived one-worker clingo UNSAT capture authenticated by the private integrated measurement selection packet; each new campaign requires fresh reference qualification."
+        ]
+      },
+      "files": [
+        {
+          "path": "ground-door/door-sizes/xorchain-16.lp",
+          "sha256": "cfe680c6c531838c22c3f984208ef69b827707a46739b682b829255f6ec11e99",
+          "includes": []
+        }
+      ]
+    },
+    {
+      "entry": "ground-door/door-sizes/xorchain-20.lp",
+      "contract": {
+        "satisfiability": "unsat",
+        "family": "all",
+        "model_count": 0,
+        "cost": null,
+        "witnesses": [],
+        "required_symbols": [],
+        "notes": [
+          "Complete archived one-worker clingo UNSAT capture authenticated by the private integrated measurement selection packet; each new campaign requires fresh reference qualification."
+        ]
+      },
+      "files": [
+        {
+          "path": "ground-door/door-sizes/xorchain-20.lp",
+          "sha256": "f482d32040a662f87d2648611a6961acad2eef547228476f8b53412cf469f2d3",
+          "includes": []
+        }
+      ]
+    },
+    {
+      "entry": "ground-door/door-sizes/xorchain-24.lp",
+      "contract": {
+        "satisfiability": "unsat",
+        "family": "all",
+        "model_count": 0,
+        "cost": null,
+        "witnesses": [],
+        "required_symbols": [],
+        "notes": [
+          "Complete archived one-worker clingo UNSAT capture authenticated by the private integrated measurement selection packet; each new campaign requires fresh reference qualification."
+        ]
+      },
+      "files": [
+        {
+          "path": "ground-door/door-sizes/xorchain-24.lp",
+          "sha256": "990489490db183faea2510fa741f09df5b89e0a5635db53da486f1ed3f28edaa",
+          "includes": []
+        }
+      ]
+    },
+    {
+      "entry": "ground-door/door-sizes/xorchain-32.lp",
+      "contract": {
+        "satisfiability": "unsat",
+        "family": "all",
+        "model_count": 0,
+        "cost": null,
+        "witnesses": [],
+        "required_symbols": [],
+        "notes": [
+          "Complete archived one-worker clingo UNSAT capture authenticated by the private integrated measurement selection packet; each new campaign requires fresh reference qualification."
+        ]
+      },
+      "files": [
+        {
+          "path": "ground-door/door-sizes/xorchain-32.lp",
+          "sha256": "955089c77151c5de889636ce7ead13adc8157a1a7748d108927dbef45b53bc49",
+          "includes": []
+        }
+      ]
+    },
+    {
+      "entry": "ground-door/door-sizes/xorchain-40.lp",
+      "contract": {
+        "satisfiability": "unsat",
+        "family": "all",
+        "model_count": 0,
+        "cost": null,
+        "witnesses": [],
+        "required_symbols": [],
+        "notes": [
+          "Complete archived one-worker clingo UNSAT capture authenticated by the private integrated measurement selection packet; each new campaign requires fresh reference qualification."
+        ]
+      },
+      "files": [
+        {
+          "path": "ground-door/door-sizes/xorchain-40.lp",
+          "sha256": "10ff8889a6d8ea8414ef893803f11d3caa484b1ed5e53b83d1fb2681a5df32aa",
+          "includes": []
+        }
+      ]
+    }
+  ]
+}

@@ -6,6 +6,11 @@ Records made before the clause search's removal can name it, as a `clauses`
 arm or a `--search clauses` command; the solver no longer has it, and those
 records describe the executables they measured.
 
+The [0.7.0 CPU comparison](../cpu-0.7.0.md) retains its
+[measurement receipt](cpu-0.7.0-process.json) and
+[per-case table](cpu-0.7.0-process.tsv) for the full 299-input inventory. The [single-worker instruction record](cpu-0.7.0-instructions.csv)
+compares the same candidate source with an earlier zetesis baseline.
+
 The [final 0.6.0 CPU check](../cpu-corpus-final-20261014.md) retains
 [all timed observations](cpu-corpus-final-20261014.json) and the
 [complete table](cpu-corpus-final-20261014.tsv), separately from the earlier
