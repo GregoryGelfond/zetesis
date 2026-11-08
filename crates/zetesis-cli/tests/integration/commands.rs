@@ -311,40 +311,66 @@ fn default_execution_ignores_device_transport_limits() {
 #[cfg(feature = "gpu")]
 #[test]
 fn explicit_gpu_refusal_cannot_publish_a_cpu_model() {
+    use zetesis_wgpu::{GpuErrorKind, GpuOptions, GpuSelection, discover_adapters};
+
     let mut models = Vec::new();
-    let mut diagnostics = Vec::new();
     let mut config = zetesis_cli::PublicationConfig::from(&options(&[
         "--backend",
         "gpu",
         "--grounder",
         "eager",
     ]));
-    // No device batch fits a zero allowance, so the requested device route
-    // cannot run a batch. It must stop as a resource interruption, never fall
-    // back to the CPU and publish what the CPU found.
+    // Device selection precedes the first batch. Determine which refusal the
+    // host should reach independently of the publication result.
+    let selection = discover_adapters().and_then(|adapters| {
+        GpuSelection::default()
+            .chosen(&adapters, GpuOptions::default())
+            .map(|_| ())
+    });
     config.solve.max_batch_bytes = 0;
-    let report = crate::support::prepared::formula(
+    let result = crate::support::prepared::human(
         "a.",
         &config,
-        &mut zetesis_cli::HumanRenderer::new(
-            &mut models,
-            zetesis_cli::ColorMode::Never,
-            config.observations.max_output_bytes,
-        ),
-        &mut diagnostics,
+        &mut models,
+        &mut Vec::new(),
         &Cancellation::default(),
-    )
-    .unwrap();
-    assert_eq!(report.completion, Completion::Interrupted);
-    assert!(report.interruption.is_some());
-    assert_eq!(report.models, 0);
+    );
     let text = String::from_utf8_lossy(&models);
     assert!(!text.contains("Answer:"), "{text}");
     assert!(!text.contains("Backend: CPU"), "{text}");
-    // The stop is reported as incomplete, never as a satisfiability claim.
-    assert!(
-        text.contains("INCOMPLETE: pending candidate byte limit reached"),
-        "{text}"
-    );
     assert!(!text.contains("SATISFIABLE"), "{text}");
+    match selection {
+        Ok(()) => {
+            let report = result.unwrap();
+            assert_eq!(report.completion, Completion::Interrupted);
+            assert_eq!(
+                report.interruption,
+                Some(zetesis_solve::Interruption::Countermodel(
+                    zetesis_stable::Incomplete::PendingBytes
+                ))
+            );
+            assert_eq!(report.models, 0);
+            assert!(
+                text.contains("INCOMPLETE: pending candidate byte limit reached"),
+                "{text}"
+            );
+        }
+        Err(expected) => {
+            assert!(
+                matches!(
+                    expected.kind(),
+                    GpuErrorKind::AdapterUnavailable
+                        | GpuErrorKind::AdapterRefused
+                        | GpuErrorKind::Capacity
+                ),
+                "unexpected inventory error: {expected}"
+            );
+            let failure = result.unwrap_err();
+            let RunError::Gpu(error) = failure.cause.as_ref() else {
+                panic!("expected a GPU selection failure, got {failure}");
+            };
+            assert_eq!(error.kind(), expected.kind());
+            assert!(failure.partial_report.is_none());
+        }
+    }
 }
