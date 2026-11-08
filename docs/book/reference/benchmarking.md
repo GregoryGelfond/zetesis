@@ -96,7 +96,7 @@ The ordinary `corpus` suite composes the pinned 94-case correctness catalog
 with `family-crossing/integrated.lp` from the enclosing examples directory.
 Family Crossing is one regular case in campaign totals and scorecards. Its
 three original source files and include spellings are preserved byte for byte;
-[its manifest](../../../examples/family-crossing/manifest.json) seals the graph
+[its manifest](https://github.com/GregoryGelfond/zetesis/blob/main/examples/family-crossing/manifest.json) seals the graph
 and records complete optimal enumeration: all eight final ties at cost 29.
 Fresh clingo qualification must corroborate this expectation in each campaign,
 followed by the ordinary full native-model and selected-output comparisons.

@@ -757,7 +757,7 @@ nested scopes retain their existing traversal. Family evidence never enables
 numeric probes: it retains every false row. Direct-source exact activity,
 retained emission, hybrid capture and model checks also keep their previous
 traversal, though their support completion can use the support-round route above.
-The [numeric-domain design](../../design/numeric-argument-domains.md) states the
+The [numeric-domain design](https://github.com/GregoryGelfond/zetesis/blob/main/docs/design/numeric-argument-domains.md) states the
 failure inventory and deferred coverage.
 `numeric_index_builds` counts published certificates, `numeric_index_declines`
 counts cached data declines, `numeric_index_extensions` counts kept certificates
@@ -1579,7 +1579,7 @@ removes one `atom_lookups` and one `node_lookups` operation. Added witness,
 cache and inverse storage is leased; pushes, undo, initialization, lookup and
 stores consume their actual work. An explicit work or support-byte bound can
 therefore stop at a different point. An identity memo remains staged after
-measurement; see [body-atom identity](../../design/body-atom-identity.md).
+measurement; see [body-atom identity](https://github.com/GregoryGelfond/zetesis/blob/main/docs/design/body-atom-identity.md).
 
 These source operations run on the host for both CPU and GPU backends. Device
 membership checks consume their resulting formula graph and candidate stream;
