@@ -23,7 +23,7 @@ use zetesis_presentation::{ColorMode, Layout, TrackedWriter};
 
 pub use compare::{CompareOptions, compare};
 pub use process::entry;
-pub use run::{FormulaJoins, Grounder, NativeInterface, Oracle, RunOptions, Search, Suite};
+pub use run::{FormulaJoins, Grounder, NativeInterface, Oracle, RunOptions, Suite};
 
 /// The `zetesis-bench` command line.
 #[derive(Debug, Parser)]

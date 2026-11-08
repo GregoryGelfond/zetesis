@@ -1,25 +1,18 @@
-//! Device-independent relational vocabulary for zetesis.
+//! Device-independent canonical vocabulary and storage for zetesis.
 //!
-//! Programs are immutable admitted templates and explicit facts. A [`Seed`] is an
-//! exact sparse true set bound to one program instance; absent tuples are its false
-//! complement.
-//! [`GroundProgram::compile`] is explicitly eager. Admission, seed construction,
-//! and carrier-iterator creation never invoke it. See the
-//! [library map](https://github.com/GregoryGelfond/zetesis/blob/main/docs/book/rust/libraries.md)
-//! and [grounding architecture](https://github.com/GregoryGelfond/zetesis/blob/main/docs/book/architecture/grounding.md).
+//! Typed values, signed atoms, borrowed template components, and exact models
+//! share canonical storage without imposing rule semantics or enumerating a
+//! symbolic carrier. Semantic owners validate their own admission policies.
+//! See the
+//! [library map](https://github.com/GregoryGelfond/zetesis/blob/main/docs/book/rust/libraries.md).
 //!
 //! ```
-//! use zetesis_core::{AdmissionLimits, Atom, AtomPattern, FactTables, GroundProgram,
-//!     Predicate, Program, Seed, StaticLimits, Template};
+//! use zetesis_core::{Atom, Model, Predicate, Value};
 //!
-//! let signature = Predicate::new("selected", 0)?;
-//! let selected = AtomPattern::new(signature.clone(), vec![])?;
-//! // The normalized singleton choice `{selected}.` uses a true candidate gate.
-//! let choice = Template::new(Some(selected.clone()), vec![], vec![selected], vec![], vec![]);
-//! let program = Program::new(vec![choice], FactTables::default(), AdmissionLimits::default())?;
-//! let seed = Seed::new(&program, [Atom::new(signature, vec![])?])?;
-//! let graph = GroundProgram::compile(&program, StaticLimits::default())?;
-//! assert_eq!(graph.seed_words(&seed)?, vec![1]);
+//! let selected = Atom::new(Predicate::new("selected", 1)?, vec![Value::Number(7)])?;
+//! let model = Model::new([selected.clone(), selected.clone()])?;
+//! assert_eq!(model.atoms().len(), 1);
+//! assert!(model.contains(&selected));
 //! # Ok::<(), Box<dyn std::error::Error>>(())
 //! ```
 #![forbid(unsafe_code)]
@@ -31,11 +24,11 @@ mod term_hash;
 mod template;
 mod atom_key;
 mod argument_unification;
-mod program;
-mod candidate;
+mod admission;
 mod model;
 pub mod catalog;
 pub mod retention;
+pub mod table;
 mod identity;
 mod ordered_index;
 mod atom_lookup;
@@ -44,37 +37,23 @@ mod word_mix;
 #[cfg(test)]
 mod test_support;
 pub use catalog::interner as atom_interner;
-mod carrier;
-mod ground;
 pub mod relation;
 
+pub use admission::AdmissionLimits;
 pub use argument_unification::{UnificationError, UnificationFailure};
 pub use atom_key::{AtomKey, BindingView};
 pub use atom_lookup::{
     AtomIndex, AtomIndexError, AtomLookup, AtomRow, AtomRows, CatalogIndex, PredicateLookup,
 };
-pub use candidate::{
-    GateAtom, GateAtomError, GateAtoms, GateIndex, GateIndexError, GateIndexFailure, Seed,
-    SeedAtom, SeedAtoms, SeedError, SeedSelection, SeedSelectionError, SeedView,
-};
-pub use carrier::{AtomIter, CarrierAtom, CarrierError, CarrierFailure};
-pub use ground::{
-    AtomId, GroundProgram, GroundRule, StaticError, StaticFailure, StaticLimits, WordError,
-};
 pub use model::{
     AtomCatalog, Interpretation, Model, ModelAtoms, ModelError, ModelFailure, ModelIter,
     ModelOrder, ModelPublication, ModelPublicationFailure,
 };
-pub use program::{
-    AdmissionError, AdmissionLimits, AdmissionOrigin, AdmissionResource, Domain, DomainPositions,
-    FactIter, FactOccurrences, FactRef, FactRelation, FactSegment, FactTables, FilterRef, Filters,
-    PatternRef, PatternTerms, Patterns, Predicates, Program, RuleRef, Rules, TemplateRef,
-    TemplateTerm, Templates,
-};
 pub use template::{
-    AtomPattern, Filter, InstantiationError, Template, TemplateCatalog, TemplateCatalogBuilder,
-    TemplateCatalogFailure, TemplateCatalogSelection, TemplateComponents, TemplateComponentsRef,
-    TemplateRow, Term,
+    AtomPattern, Filter, FilterRef, Filters, InstantiationError, PatternRef, PatternTerms,
+    Patterns, Template, TemplateCatalog, TemplateCatalogBuilder, TemplateCatalogFailure,
+    TemplateCatalogSelection, TemplateComponents, TemplateComponentsRef, TemplateRow, TemplateTerm,
+    Term,
 };
 pub use value::{Atom, ConstructionError, Predicate, Sign, Value};
 pub use word_mix::mix_word;

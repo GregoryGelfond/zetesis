@@ -36,6 +36,9 @@ This is a mathematical pair fold and finite-order argument. It does not verify
 that Rust assigns ranks correctly, stores one authoritative row, caches one
 completed measure per pass, preserves row identity or frozen gates, propagates
 partial information, handles fixed-width arithmetic or charges its operations.
-Physical Boolean lowering and native device reduction are separate execution
-questions. Neither successful kernel checking nor the absence of new axioms
-would establish those implementation correspondences.
+Ordinary GPU formula transport now retains native cut nodes and shared rank
+columns. Original evaluation uses the witness/endpoint characterization above;
+frozen propagation applies the original truth gate first. Wire offsets,
+fixed-width comparison, atomic observations and residual completion remain
+separate executable obligations. Neither successful kernel checking nor the
+absence of new axioms establishes those implementation correspondences.

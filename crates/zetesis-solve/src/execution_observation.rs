@@ -1,16 +1,36 @@
 //! Borrowed execution facts, distinct from answer-set evidence and presentation.
 
-use crate::{Grounder, Oracle, SearchMethod, SolveError, SourceBatching};
+use crate::{Grounder, Oracle, SolveError};
 use std::{error::Error, num::NonZeroUsize};
 use zetesis_themelios::objective_bound::ObjectiveBoundError;
 
-/// The integrity constraints a hybrid base streams.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+/// How a hybrid base divides its eligible integrity constraints: the templates
+/// it streams and checks during search, and those it grounded in its core
+/// because their instances fit the formula's share.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct StreamedConstraints {
-    /// Lowered constraint templates, not a count of original declarations.
+    /// Lowered constraint templates streamed, not a count of original declarations.
     pub templates: usize,
-    /// Possible instances visited during complete source admission.
+    /// Possible instances of the streamed templates, visited during complete
+    /// source admission.
     pub instances: u64,
+    /// Eligible templates grounded in the core instead of streamed.
+    pub retained_templates: usize,
+    /// Instances of the grounded templates.
+    pub retained_instances: u64,
+}
+
+impl StreamedConstraints {
+    /// The division a streamed core records.
+    #[must_use]
+    pub fn of(core: &zetesis_themelios::StreamedCore) -> Self {
+        Self {
+            templates: core.streamed_templates(),
+            instances: core.streamed_instances(),
+            retained_templates: core.retained_templates(),
+            retained_instances: core.retained_instances(),
+        }
+    }
 }
 
 /// One observation at an execution boundary of the current solve.
@@ -38,40 +58,14 @@ pub enum ExecutionObservation<'a> {
         /// A hybrid base's streamed constraints; absent for an eager base.
         streamed: Option<StreamedConstraints>,
     },
-    /// The complete producer core is retained; eligible source constraints are
-    /// checked on the host before any original-program answer is accepted.
+    /// The complete producer core is retained; eligible source constraints that
+    /// did not fit in it are checked on the host before any original-program
+    /// answer is accepted.
     HybridGrounding {
         /// Requested schedule; effective execution combines eager and lazy work.
         requested: Grounder,
-        /// Lowered constraint templates, not a count of original declarations.
-        streamed_templates: usize,
-        /// Possible instances visited during complete source admission.
-        streamed_instances: u64,
-    },
-    /// An admitted static relational representation is available.
-    StaticGrounding {
-        /// Requested materialization policy.
-        requested: Grounder,
-        /// Admitted atom count.
-        atoms: usize,
-        /// Admitted ground rule count.
-        rules: usize,
-        /// Configured lowering limits; a device can impose a smaller atom ceiling.
-        limits: zetesis_core::StaticLimits,
-    },
-    /// Host source joins will supply CPU reduct closure.
-    LazyGrounding {
-        /// Requested materialization policy.
-        requested: Grounder,
-    },
-    /// CPU closure executor was prepared.
-    CpuClosure {
-        /// Effective materialization; always Eager or Lazy.
-        grounder: Grounder,
-        /// Source round policy.
-        batching: SourceBatching,
-        /// Requested worker population.
-        workers: NonZeroUsize,
+        /// The constraints streamed, and those grounded in the core.
+        streamed: StreamedConstraints,
     },
     /// CPU formula membership execution was selected.
     CpuFormula {
@@ -79,8 +73,6 @@ pub enum ExecutionObservation<'a> {
         oracle: Oracle,
         /// Requested materialization policy.
         grounder: Grounder,
-        /// How candidates are proposed and the reduct queried.
-        search: SearchMethod,
     },
     /// Up to `workers` threads walk the region tree at once and decide its
     /// leaves. The walk begins on the calling thread and starts them once it
@@ -103,20 +95,6 @@ pub enum ExecutionObservation<'a> {
         /// Logical scratch ceiling, not process RSS.
         max_scratch_bytes: u64,
     },
-    /// Host source joins will supply device consequence rounds.
-    #[cfg(feature = "gpu")]
-    LazyDeviceGrounding {
-        /// Requested materialization policy.
-        requested: Grounder,
-    },
-    /// Device closure execution was prepared.
-    #[cfg(feature = "gpu")]
-    DeviceClosure {
-        /// Observed adapter, borrowed from this executor.
-        adapter: zetesis_wgpu::AdapterMetadata<'a>,
-        /// Static atom/rule counts, or absence for lazy source rounds.
-        static_counts: Option<(usize, usize)>,
-    },
     /// A device propagator is ready; exact CPU residual completion is requested.
     #[cfg(feature = "gpu")]
     DeviceFormula {
@@ -127,9 +105,9 @@ pub enum ExecutionObservation<'a> {
         projection: zetesis_wgpu::GateProjection,
         /// Requested materialization policy.
         grounder: Grounder,
-        /// How candidates are proposed and the reduct queried.
-        search: SearchMethod,
-        /// Candidate batch ceiling.
+        /// Configured candidate batch size: a fixed ceiling, or the adaptive
+        /// policy's initial and reset slate size, according to
+        /// [`crate::SolveConfig::gpu_batching`].
         batch_size: NonZeroUsize,
         /// Requested CPU completion population.
         completion_workers: NonZeroUsize,
@@ -142,9 +120,9 @@ pub enum ExecutionObservation<'a> {
         adapter: zetesis_wgpu::AdapterMetadata<'a>,
         /// Requested materialization policy.
         grounder: Grounder,
-        /// Candidate proposal method; membership uses the tight certificate.
-        search: SearchMethod,
-        /// Candidate batch ceiling.
+        /// Configured candidate batch size: a fixed ceiling, or the adaptive
+        /// policy's initial and reset slate size, according to
+        /// [`crate::SolveConfig::gpu_batching`].
         batch_size: NonZeroUsize,
     },
     /// Formula search is about to be prepared over this admitted population.
@@ -174,7 +152,7 @@ pub enum ExecutionObservation<'a> {
     /// Complete original stratified normal theory determines at most one answer.
     StratifiedMembership,
     /// General reduct checking remains after an optional certificate refusal.
-    GeneralMembership(zetesis_sat::CertificateError),
+    GeneralMembership(zetesis_stable::CertificateError),
     /// Optional objective-plan preparation was refused; exact search remains.
     ObjectiveUnavailable(ObjectiveBoundError),
     /// Required-choice strengthening declined; the exact objective plan remains usable.
@@ -184,13 +162,23 @@ pub enum ExecutionObservation<'a> {
     /// A bound failed the original-theory ownership check.
     ObjectiveTheoryMismatch,
     /// Candidate restriction was refused; prior restrictions remain sound.
-    ObjectiveRestrictionStopped(zetesis_sat::Incomplete),
+    ObjectiveRestrictionStopped(zetesis_stable::Incomplete),
+    /// A search under strict bounds proved its optimum, and a second pass over
+    /// the same theory, bounded to cost at most that optimum, now enumerates
+    /// the optimum's ties.
+    ObjectiveTiePass {
+        /// The proved optimum's priority/cost pairs.
+        costs: &'a [(i32, i64)],
+    },
     /// A dominance bound was installed after retaining a verified incumbent.
     ObjectiveBound {
         /// Cumulative installed restriction count.
         restrictions: u64,
         /// Incumbent priority/cost pairs.
         costs: &'a [(i32, i64)],
+        /// The bound keeps only cost strictly less than the incumbent's;
+        /// otherwise cost at most the incumbent's.
+        strict: bool,
         /// Cumulative charged construction work.
         work: u64,
     },

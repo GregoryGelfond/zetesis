@@ -3,7 +3,7 @@
 use std::{convert::Infallible, num::NonZeroUsize};
 use zetesis_reference_support::prepared;
 
-use zetesis_cpu::{Cancellation, Stop};
+use zetesis_algebra::{Cancellation, Stop};
 
 use crate::{
     Backend, Completion, ExecutionObservation, ExecutionObserver, Grounder, Interruption,
@@ -72,7 +72,7 @@ fn source_session_preserves_the_complete_original_answer() {
     assert_eq!(outcome.completion(), Some(Completion::Exhausted));
     assert!(outcome.source_evaluation().is_some());
     assert!(outcome.countermodel_statistics().is_none());
-    assert!(outcome.subject().unwrap().same_instance(answer.subject()));
+    assert!(outcome.original().unwrap().same_instance(answer.original()));
 }
 
 #[test]
@@ -120,7 +120,7 @@ fn sessions_reuse_the_same_certified_source_subject() {
     let mut second = Session::new(owner.input(), config(), Cancellation::default()).unwrap();
     let a = first.next().unwrap().unwrap();
     let b = second.next().unwrap().unwrap();
-    assert!(a.subject().same_instance(b.subject()));
+    assert!(a.original().same_instance(b.original()));
     assert_eq!(a.interpretation(), b.interpretation());
     assert_eq!(
         first.outcome().unwrap().source_evaluation(),

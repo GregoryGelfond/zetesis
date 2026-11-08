@@ -7,7 +7,6 @@ use zetesis_cli::{Completion, Interruption, OptimizationStop, RunError};
 use zetesis_core::{Atom, Predicate, Value};
 use zetesis_solve::AnswerSelection;
 use zetesis_themelios::observation::{ErrorKind, Resource};
-use zetesis_themelios::{AdmissionFailure, ExpansionFailure, ProfileFeature};
 use zetesis_validation::answers;
 
 const NUMERIC_SHOW_NEGATION: &str = "p(1). #show -X:p(X).";
@@ -45,8 +44,6 @@ fn conditional_choices_preserve_the_complete_supported_family() {
             "cpu",
             "--oracle",
             "countermodel",
-            "--search",
-            "clauses",
             "--grounder",
             "eager",
             "--json",
@@ -56,10 +53,6 @@ fn conditional_choices_preserve_the_complete_supported_family() {
     assert_eq!(report.completion, Completion::Exhausted);
     assert_eq!(report.models, 27);
     let statistics = report.countermodel_statistics.unwrap();
-    assert_eq!(
-        statistics.support.unwrap().status,
-        zetesis_sat::SupportStatus::Applied
-    );
     assert_eq!(statistics.candidates, 27);
     assert_eq!(statistics.countermodel_queries, 27);
     assert_eq!(statistics.countermodels, 0);
@@ -91,8 +84,6 @@ fn mixed_choice_support_matches_complete_original_references() {
                 "cpu",
                 "--oracle",
                 "countermodel",
-                "--search",
-                "clauses",
                 "--grounder",
                 "eager",
             ],
@@ -101,10 +92,6 @@ fn mixed_choice_support_matches_complete_original_references() {
         assert_eq!(report.completion, Completion::Exhausted);
         assert_eq!(report.models, 27);
         let statistics = report.countermodel_statistics.unwrap();
-        assert_eq!(
-            statistics.support.unwrap().status,
-            zetesis_sat::SupportStatus::Applied
-        );
         assert_eq!(statistics.candidates, 27);
         let reference = clingo_report::complete(source, AnswerSelection::All);
         let actual = displays(&output)
@@ -140,24 +127,10 @@ fn displays(output: &str) -> Vec<Vec<&str>> {
 }
 
 #[test]
-fn coherence_is_enforced_by_closure_and_frozen_reduct_routes() {
+fn coherence_is_enforced_by_the_frozen_reduct_routes() {
     for arguments in [
-        vec![
-            "--backend",
-            "cpu",
-            "--oracle",
-            "closure",
-            "--grounder",
-            "lazy",
-        ],
-        vec![
-            "--backend",
-            "cpu",
-            "--oracle",
-            "closure",
-            "--grounder",
-            "eager",
-        ],
+        vec!["--backend", "cpu", "--grounder", "lazy"],
+        vec!["--backend", "cpu", "--grounder", "eager"],
         vec!["--backend", "cpu", "--oracle", "countermodel"],
     ] {
         let (report, output, _) = solve("p:-not -p. -p:-not p.", &arguments);
@@ -290,24 +263,6 @@ fn numeric_show_negation_preserves_the_full_answer() {
         assert_eq!(report.unwrap().completion, Completion::Exhausted);
         assert_eq!(displays(&output), vec![vec!["-1", "p(1)"]]);
     }
-}
-
-#[test]
-fn closure_preserves_its_term_output_boundary() {
-    let (result, output, _) = solve(
-        NUMERIC_SHOW_NEGATION,
-        &["--backend", "cpu", "--oracle", "closure"],
-    );
-    assert!(matches!(
-        result,
-        Err(RunError::Expansion(ExpansionFailure::Admission(
-            AdmissionFailure::Profile {
-                feature: ProfileFeature::ShowTerm,
-                ..
-            }
-        )))
-    ));
-    assert!(!output.contains("Answer:"));
 }
 
 #[test]

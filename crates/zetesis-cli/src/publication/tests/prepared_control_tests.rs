@@ -1,7 +1,7 @@
-//! Cancellation after admission must retain the already established subject.
+//! Cancellation after admission must retain the already established original input.
 
 use clap::Parser;
-use zetesis_cpu::Cancellation;
+use zetesis_algebra::Cancellation;
 use zetesis_reference_support::formula;
 
 #[test]
@@ -12,8 +12,11 @@ fn stopped_formula_adapter_retains_admitted_subject() {
     let options = crate::Options::try_parse_from(["zetesis", "--backend", "cpu"]).unwrap();
     let progress = super::solve(
         crate::PreparedInput::formula(&admitted),
-        None,
         &crate::PublicationConfig::from(&options),
+        crate::publication::RunResources {
+            execution: &crate::ExecutionResources::default(),
+            evidence_request: None,
+        },
         &mut crate::HumanRenderer::new(
             std::io::sink(),
             crate::ColorMode::Never,
@@ -25,7 +28,7 @@ fn stopped_formula_adapter_retains_admitted_subject() {
     )
     .unwrap();
     let semantic = progress.semantic().unwrap();
-    let crate::Subject::Theory(theory) = semantic.subject().unwrap() else {
+    let crate::Original::Theory(theory) = semantic.original().unwrap() else {
         panic!("original theory")
     };
     assert!(theory.same_instance(admitted.theory()));
@@ -34,11 +37,9 @@ fn stopped_formula_adapter_retains_admitted_subject() {
     assert_eq!(
         semantic.interruption(),
         Some(crate::Interruption::Preparation(
-            zetesis_cpu::Stop::Cancelled
+            zetesis_algebra::Stop::Cancelled
         ))
     );
     assert!(semantic.countermodel_statistics().is_none());
     assert!(semantic.formula_execution().is_none());
-    assert!(semantic.lazy_execution().is_none());
-    assert!(semantic.shared_execution().is_none());
 }

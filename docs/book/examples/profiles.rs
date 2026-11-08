@@ -1,7 +1,7 @@
 //! Reuse an immutable compiled primitive while collecting independent families.
 
 // ANCHOR: example
-use zetesis_cpu::Cancellation;
+use zetesis_algebra::Cancellation;
 use zetesis_solve::{
     Backend, ExecutionResources, Grounder, Oracle, PreparedInput, Session, SolveConfig,
     WorldViewLimits,

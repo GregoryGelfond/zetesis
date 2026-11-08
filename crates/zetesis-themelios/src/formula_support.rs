@@ -8,20 +8,21 @@ pub(crate) mod testing;
 pub(crate) use context::{Context, GroundingWork};
 pub(crate) mod components;
 mod publication;
+mod scalar_selection;
 mod selection;
 pub(crate) mod sort;
 mod storage;
 pub(crate) use computation::Computation;
 pub(crate) use publication::Publication;
-pub(crate) use selection::SourceSelection;
+pub(crate) use selection::{SourceBatch, SourceSelection};
 pub(crate) use storage::{
     StorageLease, growth_capacity, growth_target, reserve, reserve_exact, reserve_exact_scoped,
 };
 mod accounting;
+mod expression_keys;
 mod generated;
 mod heads;
 mod integer_comparisons;
-mod expression_keys;
 pub(crate) use heads::RowHead;
 mod observation;
 mod term_selection;
@@ -60,6 +61,7 @@ pub(crate) use order::comparison_depth;
 #[cfg(test)]
 mod postings;
 mod prepared;
+pub(crate) mod component_plan;
 mod probe_selection;
 mod producers;
 mod projections;
@@ -90,6 +92,7 @@ use crate::{ExpansionFailure, FormulaFailure, FormulaLimits, FormulaResource};
 use rows::{Advance, Frame, Ownership, Staged};
 
 pub(crate) use accounting::{Accounting, AccountingBaseline};
+pub(crate) use component_plan::{ComponentPlans, ComponentScope};
 pub(crate) use evaluation::{Evaluation, Failures};
 pub(crate) use prepared::PreparedRule;
 pub(crate) use producers::AcyclicPlan;
@@ -345,7 +348,7 @@ pub(crate) struct Counters {
     observed: Work,
 }
 impl Counters {
-    pub(crate) fn cancellation(&self) -> Option<&zetesis_cpu::Cancellation> {
+    pub(crate) fn cancellation(&self) -> Option<&zetesis_algebra::Cancellation> {
         self.control
             .as_ref()
             .and_then(accounting::AccountControl::cancellation)
@@ -525,22 +528,36 @@ fn check_work(
     limits: &FormulaLimits,
     location: ProgramSite,
 ) -> Result<(), FormulaFailure> {
-    let observed = u128::from(work).saturating_add(amount);
-    let refused = observed > u128::from(limits.max_work);
+    let admission = zetesis_algebra::Meter::check_receipt(work, amount, limits.max_work);
     if let Some(control) = control {
-        let observation = if refused {
+        let observation = if admission.is_err() {
             control.observe()
         } else {
             control.observe_charge(work, u64::try_from(amount).expect("admitted work fits u64"))
         };
         observation.map_err(|reason| interrupted(reason, location))?;
     }
-    ceiling(
-        FormulaResource::Work,
+    admission
+        .map(|_| ())
+        .map_err(|error| work_failure(error, limits.max_work, location))
+}
+
+/// Preserve the source account's saturated attempted-demand diagnostic.
+fn work_failure(
+    error: zetesis_algebra::MeterWorkError,
+    limit: u64,
+    location: ProgramSite,
+) -> FormulaFailure {
+    let (observed, limit) = match error {
+        zetesis_algebra::MeterWorkError::Limit { observed, limit } => (observed, limit),
+        zetesis_algebra::MeterWorkError::Overflow => (u128::MAX, u128::from(limit)),
+    };
+    FormulaFailure::Limit {
+        resource: FormulaResource::Work,
         observed,
-        u128::from(limits.max_work),
+        limit,
         location,
-    )
+    }
 }
 
 /// A charge's count: record the local pending receipt, then count `amount`.
@@ -559,7 +576,7 @@ fn count_work(
 /// The failure of a charge stopped by cancellation or a deadline.
 #[cold]
 #[inline(never)]
-fn interrupted(reason: zetesis_cpu::Stop, location: ProgramSite) -> FormulaFailure {
+fn interrupted(reason: zetesis_algebra::Stop, location: ProgramSite) -> FormulaFailure {
     FormulaFailure::Interrupted { reason, location }
 }
 
@@ -613,6 +630,8 @@ fn complete(
     #[cfg(test)]
     postings::begin_support();
     let mut rounds = 0_u64;
+    // Rows are only appended, so each round extends the kept certificates.
+    let mut retained = queries::Retained::default();
     loop {
         ceiling(
             FormulaResource::SupportRounds,
@@ -635,54 +654,51 @@ fn complete(
                 // posting would have selected its original producer. Thus this
                 // admitted round is unchanged without a new relation snapshot.
                 return finish(
-                    catalog,
-                    producers,
+                    (catalog, producers, retained),
                     GroundingWork::new(limits, counters, fallback),
                 );
             }
             counters.work(limits, fallback)?;
             counters.record(Event::SupportSnapshotPreparation);
             let (relations, mut delta) = catalog.split(limits, counters, fallback)?;
-            let support = Support::indexed(&relations, limits, counters, fallback)?;
+            let kept = std::mem::take(&mut retained);
+            let support = Support::indexed_retaining(&relations, kept, limits, counters, fallback)?;
             counters.observe_work(Event::SupportProductionWork, |counters| {
-                while let Some(index) = selected {
+                while let Some((index, deferred)) = next_producer(
+                    selected,
+                    &mut facts,
+                    (&producers, &mut delta, &support),
+                    (limits, counters, fallback),
+                )? {
                     if let Some(facts) = &mut facts {
                         facts.before_rule(index, &mut delta, &support, limits, counters)?;
                     }
                     let rule = &prepared.rules_without_facts()[index];
                     counters.work(limits, rule.location)?;
                     counters.record(Event::SupportProducerVisit);
-                    let mut variants =
-                        producers.variants(index, rule, &support, rounds == 1, limits, counters)?;
-                    let mut computation = Computation::new(&mut delta, &support);
-                    let guards = match domains {
-                        Some(domains) => support.domain_guards(
-                            rule,
-                            domains.for_rule(index, rule)?,
-                            &computation,
-                            limits,
-                            counters,
-                        )?,
-                        None => None,
+                    let mut variants = if deferred {
+                        counters.record(Event::SupportRichTraversal);
+                        delta::traversal(rule, &support, true)
+                    } else {
+                        producers.variants(index, rule, &support, rounds == 1, limits, counters)?
                     };
-                    derive_variants(
-                        rule,
+                    let round = (&mut delta, &support, domains);
+                    produce(
+                        (index, rule),
                         &mut variants,
-                        guards.as_ref(),
-                        &support,
+                        round,
                         budget,
-                        Context::new(&mut computation, limits, counters, rule.location),
+                        (limits, counters),
                     )?;
-                    selected = schedule.next(limits, counters, fallback)?;
-                }
-                if let Some(facts) = facts {
-                    facts.finish(&mut delta, &support, limits, counters)?;
+                    if !deferred {
+                        selected = schedule.next(limits, counters, fallback)?;
+                    }
                 }
                 Ok::<_, FormulaFailure>(())
             })?;
             // No join remains live. Release its query descriptor before the
             // pending selection borrows the catalog's semantic ordering index.
-            drop(support);
+            retained = support.into_retained(fallback)?;
             advance_round(
                 &mut delta,
                 producers.plan_mut(),
@@ -690,14 +706,84 @@ fn complete(
             )?
         };
         if !changed {
+            // An unchanged round decides every component no deferred producer
+            // still feeds, so the earliest waiting producer was traversed.
+            debug_assert!(
+                !producers.pending(),
+                "a deferred producer was not traversed"
+            );
             return finish(
-                catalog,
-                producers,
+                (catalog, producers, retained),
                 GroundingWork::new(limits, counters, fallback),
             );
         }
         catalog.publish(limits, counters, fallback)?;
     }
+}
+
+/// The round's next producer: the schedule's, then, once it is exhausted and
+/// the facts are in, each deferred rich producer whose read components reached
+/// their fixed point, flagged so its caller traverses it in full.
+fn next_producer<'source>(
+    selected: Option<usize>,
+    facts: &mut Option<facts::FirstRound<'_>>,
+    (producers, delta, support): (
+        &producers::Producers<'_>,
+        &mut SupportAppend<'source>,
+        &Support<'source>,
+    ),
+    (limits, counters, location): (&FormulaLimits, &mut Counters, ProgramSite),
+) -> Result<Option<(usize, bool)>, FormulaFailure> {
+    if let Some(index) = selected {
+        return Ok(Some((index, false)));
+    }
+    if let Some(facts) = facts.take() {
+        facts.finish(delta, support, limits, counters)?;
+    }
+    let ready = match producers.take_ready() {
+        Some(index) => Some(index),
+        None if producers.mark_ready(delta, limits, counters, location)? => producers.take_ready(),
+        None => None,
+    };
+    Ok(ready.map(|index| (index, true)))
+}
+
+/// Derive one producer's variants into this round's pending atoms, under the
+/// rule's domain guards and static totality when the analysis supplies them.
+fn produce<'source>(
+    (index, rule): (usize, &'source crate::formula_ir::RuleIr),
+    variants: &mut delta::Variants<'_, '_>,
+    (delta, support, domains): (
+        &mut SupportAppend<'source>,
+        &Support<'source>,
+        Option<&crate::formula_domains::Domains<'_>>,
+    ),
+    budget: &mut Budget,
+    (limits, counters): (&FormulaLimits, &mut Counters),
+) -> Result<(), FormulaFailure> {
+    let mut computation = Computation::new(delta, support);
+    let candidates = domains
+        .map(|domains| domains.for_rule(index, rule))
+        .transpose()?
+        .flatten();
+    let totality = domains
+        .map(|domains| domains.total_body(index, rule))
+        .transpose()?
+        .flatten();
+    let guards = match candidates {
+        Some(candidates) => {
+            support.domain_guards(rule, candidates, &computation, limits, counters)?
+        }
+        None => None,
+    };
+    derive_variants(
+        rule,
+        variants,
+        (guards.as_ref(), totality),
+        support,
+        budget,
+        Context::new(&mut computation, limits, counters, rule.location),
+    )
 }
 
 /// Prepare the next wake set only after the complete pending population has its
@@ -728,10 +814,14 @@ fn advance_round(
     Ok(true)
 }
 
-/// The fixed point drops its scheduling metadata before final publication.
+/// The fixed point drops its scheduling metadata and the certificates its
+/// rounds kept before final publication.
 fn finish(
-    mut catalog: SupportCatalog,
-    producers: producers::Producers<'_>,
+    (mut catalog, producers, retained): (
+        SupportCatalog,
+        producers::Producers<'_>,
+        queries::Retained,
+    ),
     work: GroundingWork<'_>,
 ) -> Result<CompletedCatalog, FormulaFailure> {
     let GroundingWork {
@@ -740,6 +830,7 @@ fn finish(
         location,
     } = work;
     drop(producers);
+    drop(retained);
     catalog.release_preparation();
     catalog.publish(limits, counters, location)?;
     Ok(CompletedCatalog {
@@ -752,7 +843,10 @@ fn finish(
 fn derive_variants<'source>(
     rule: &'source crate::formula_ir::RuleIr,
     variants: &mut delta::Variants<'_, '_>,
-    guards: Option<&queries::Guards<'_, 'source>>,
+    (guards, totality): (
+        Option<&queries::Guards<'_, 'source>>,
+        Option<&crate::formula_domains::numeric_ir::TotalBody<'_>>,
+    ),
     support: &Support<'source>,
     budget: &mut Budget,
     context: Context<'_, &mut Computation<'_, '_>>,
@@ -781,6 +875,9 @@ fn derive_variants<'source>(
                 Context::new(computation, limits, counters, rule.location),
             )?;
             outer.select_round_multiples(rule, computation, limits, counters)?;
+            if let Some(totality) = totality {
+                outer.select_static_total_body(rule, totality, limits, counters)?;
+            }
             derive_rule(
                 rule,
                 &mut outer,
@@ -803,6 +900,9 @@ fn derive_variants<'source>(
             Context::new(computation, limits, counters, rule.location),
         )?;
         let total = outer.select_round_multiples(rule, computation, limits, counters)?;
+        if let Some(totality) = totality {
+            outer.select_static_total_body(rule, totality, limits, counters)?;
+        }
         derive_rule(
             rule,
             &mut outer,
@@ -837,6 +937,7 @@ fn derive_rule<'source>(
 ) -> Result<(), FormulaFailure> {
     // Every cursor belongs to this immutable round, including each first-new
     // variant. Family-evidence and external-check cursors never enter here.
+    outer.select_scalar_body(rule, computation, limits, counters)?;
     outer.select_numeric_probes(rule, limits, counters)?;
     if witnesses::derive(rule, outer, computation, limits, budget, counters)? {
         return Ok(());
@@ -1086,6 +1187,7 @@ enum Traversal {
 /// borrow a necessary positive-row filter; it never supplies family evidence.
 pub(crate) struct Join<'a, 'source> {
     bindings: Option<&'a crate::formula_assignment_plan::Plan>,
+    scalar_selection: scalar_selection::Preparation,
     literals: Ir<'a, 'source, [LiteralIr]>,
     generated: bool,
     /// The certificate of the last completed row, taken by its consumer.
@@ -1441,6 +1543,129 @@ impl<'a, 'source> Join<'a, 'source> {
         Ok(join)
     }
 
+    /// A completed all-producer analysis can certify scalar totality before
+    /// support completion. It permits prefix filtering in this rule's delta
+    /// cursor, including delta variants, without computed-domain authority or
+    /// source-family evidence.
+    fn select_static_total_body(
+        &mut self,
+        rule: &crate::formula_ir::RuleIr,
+        totality: &crate::formula_domains::numeric_ir::TotalBody<'_>,
+        limits: &FormulaLimits,
+        counters: &mut Counters,
+    ) -> Result<(), FormulaFailure> {
+        counters.work(limits, rule.location)?;
+        if self.source_evidence
+            || !totality.belongs_to(rule)
+            || !std::ptr::eq(self.literals.get(), rule.body.as_slice())
+        {
+            return Err(FormulaFailure::SupportRelation {
+                error: zetesis_core::relation::Failure::Owner,
+                location: rule.location,
+            });
+        }
+        self.coverage = Coverage::Selected;
+        Ok(())
+    }
+
+    /// A full-column proof is local to this immutable support snapshot. It
+    /// permits selected support production but never exports family evidence.
+    fn select_scalar_body(
+        &mut self,
+        rule: &'a crate::formula_ir::RuleIr,
+        computation: &mut Computation<'_, '_>,
+        limits: &FormulaLimits,
+        counters: &mut Counters,
+    ) -> Result<(), FormulaFailure> {
+        if !self.generated || self.certified_total || self.source_evidence {
+            return Ok(());
+        }
+        counters.charge_work(rule.body.len() as u128, limits, rule.location)?;
+        if !rule.body.iter().any(|literal| {
+            matches!(literal, LiteralIr::Bind { target, .. } if *target < rule.body_variables)
+        }) {
+            return Ok(());
+        }
+        if self.projections.total_body(
+            rule,
+            self.support,
+            &mut self.evaluation,
+            Context::new(computation, limits, counters, rule.location),
+        )? {
+            self.certified_total = true;
+            self.coverage = Coverage::Selected;
+        }
+        self.evaluation.clear_zero_divisor();
+        Ok(())
+    }
+
+    /// Install the selected view once, before any row or probe exists. Reorder
+    /// the same source occurrences; delta ownership remains by original index.
+    fn prepare_scalar_comparisons(
+        &mut self,
+        computation: &Computation<'_, '_>,
+        limits: &FormulaLimits,
+        budget: &mut Budget,
+        counters: &mut Counters,
+        location: ProgramSite,
+    ) -> Result<(), FormulaFailure> {
+        if !self.scalar_selection.is_pending()
+            || !self.certified_total
+            || !self.generated
+            || self.source_evidence
+        {
+            return Ok(());
+        }
+        self.scalar_selection = scalar_selection::Preparation::Unavailable;
+        let Some(view) = crate::formula_binding_plan::expanded::View::prepare(
+            self.literals.get(),
+            self.head_slots.start,
+            Context::new(computation, limits, counters, location),
+        )?
+        else {
+            return Ok(());
+        };
+        let domains = scalar_selection::Domains::prepare(
+            &self.plan.patterns,
+            self.head_slots.start,
+            self.support,
+            Context::new(computation, limits, counters, location),
+        )?;
+        let prefix = Binding::new(computation, limits, counters, location)?;
+        let mut admit =
+            |capacity| computation.preparation_capacity(capacity, limits, counters, location);
+        let plan = order::Plan::with_comparisons(
+            self.literals.get(),
+            &prefix,
+            self.values.len(),
+            (
+                order::SourceRows {
+                    relations: self.support,
+                    pivot: self.delta,
+                },
+                Some(&view),
+            ),
+            budget,
+            location,
+            Some(&mut admit),
+        )?;
+        let previous = self.lease.bytes();
+        self.plan = JoinPlan::Owned(plan);
+        self.scalar_selection = scalar_selection::Preparation::Ready {
+            comparisons: view,
+            domains,
+        };
+        self.lease.observe(self.storage_bytes(), location)?;
+        computation.storage_observed(
+            &self.lease,
+            previous,
+            self.storage_header(),
+            limits,
+            counters,
+            location,
+        )
+    }
+
     /// After support completion and source-family validation, cover the full
     /// positive column domains before ordinary comparisons may select rows.
     /// Hybrid capture performs this same attempt with append-capable terms
@@ -1454,7 +1679,9 @@ impl<'a, 'source> Join<'a, 'source> {
         limits: &FormulaLimits,
         counters: &mut Counters,
     ) -> Result<bool, FormulaFailure> {
-        if (self.coverage != Coverage::Complete && !projections::needs_totality(&rule.body))
+        if (self.coverage != Coverage::Complete
+            && !projections::needs_totality(&rule.body)
+            && !self.generated)
             || self.source_evidence
             || self.delta.is_some()
         {
@@ -1500,11 +1727,7 @@ impl<'a, 'source> Join<'a, 'source> {
         counters: &mut Counters,
     ) -> Result<bool, FormulaFailure> {
         counters.work(limits, rule.location)?;
-        if self.source_evidence
-            || self.delta.is_some()
-            || !matches!(rule.head, HeadIr::Normal(_))
-            || rule.variables != rule.body_variables
-        {
+        if self.source_evidence || self.delta.is_some() || !matches!(rule.head, HeadIr::Normal(_)) {
             return Ok(false);
         }
         if !std::ptr::eq(self.literals.get(), rule.body.as_slice()) {
@@ -1514,7 +1737,7 @@ impl<'a, 'source> Join<'a, 'source> {
             });
         }
         if !projections::supports_column_totality(rule, limits, counters)?
-            || !keys::covered(
+            || !keys::covered_family(
                 rule,
                 &self.plan,
                 &mut Context::new(&*computation, limits, counters, rule.location),
@@ -1522,7 +1745,7 @@ impl<'a, 'source> Join<'a, 'source> {
         {
             return Ok(false);
         }
-        let total = self.projections.total_body(
+        let total = self.projections.total_family(
             rule,
             self.support,
             &mut self.evaluation,
@@ -1635,6 +1858,11 @@ impl<'a, 'source> Join<'a, 'source> {
         Ok(join)
     }
 
+    /// Build a component cursor with fixed head values and unrelated slots excluded.
+    /// `used` lists the component's variable slots in sorted, duplicate-free order.
+    /// Every bound fixed slot is copied, even if this component does not read it.
+    /// This execution state certifies neither body truth nor arithmetic totality
+    /// across the complete head carrier.
     pub(super) fn component(
         literals: &'a [LiteralIr],
         variables: usize,
@@ -1661,18 +1889,50 @@ impl<'a, 'source> Join<'a, 'source> {
             budget,
             Context::new(computation, limits, counters, location),
         )?;
-        for slot in 0..fixed.len().min(join.values.len()) {
+        join.fix_component(
+            fixed,
+            used,
+            None,
+            Context::new(computation, limits, counters, location),
+        )?;
+        join.decide(computation, limits, budget, counters, location)?;
+        Ok(join)
+    }
+
+    fn fix_component(
+        &mut self,
+        fixed: &Binding<'_>,
+        used: &[usize],
+        expected: Option<&[bool]>,
+        context: Context<'_, &Computation<'_, '_>>,
+    ) -> Result<(), FormulaFailure> {
+        let Context {
+            computation: _,
+            work,
+        } = context;
+        let GroundingWork {
+            limits,
+            counters,
+            location,
+        } = work;
+        for slot in 0..fixed.len().min(self.values.len()) {
             counters.work(limits, location)?;
-            if let Some(value) = fixed
+            let value = fixed
                 .slots()
                 .key(slot)
-                .map_err(|error| crate::formula_binding::assignment(error, location))?
-            {
-                join.values.set(slot, &value, limits, counters, location)?;
+                .map_err(|error| crate::formula_binding::assignment(error, location))?;
+            if expected.is_some_and(|expected| expected[slot] != value.is_some()) {
+                return Err(FormulaFailure::SupportRelation {
+                    error: zetesis_core::relation::Failure::Owner,
+                    location,
+                });
+            }
+            if let Some(value) = value {
+                self.values.set(slot, &value, limits, counters, location)?;
             }
         }
         let mut used_cursor = 0;
-        for (variable, slot) in join.slots.iter_mut().enumerate() {
+        for (variable, slot) in self.slots.iter_mut().enumerate() {
             counters.work(limits, location)?;
             while used.get(used_cursor).is_some_and(|&used| used < variable) {
                 counters.work(limits, location)?;
@@ -1682,8 +1942,7 @@ impl<'a, 'source> Join<'a, 'source> {
                 *slot = Slot::Excluded;
             }
         }
-        join.decide(computation, limits, budget, counters, location)?;
-        Ok(join)
+        Ok(())
     }
     #[cfg_attr(test, track_caller)]
     pub(crate) fn local(
@@ -1860,6 +2119,7 @@ impl<'a, 'source> Join<'a, 'source> {
         values.extend_scope(variables, computation, limits, counters, location)?;
         let mut join = Self {
             bindings: None,
+            scalar_selection: scalar_selection::Preparation::Pending,
             literals: Ir::Temporary(literals),
             generated: literals
                 .iter()
@@ -1955,6 +2215,7 @@ impl<'a, 'source> Join<'a, 'source> {
             - size_of::<Binding>()
             - size_of::<Evaluation>()
             - self.projections.leased_header()
+            - self.scalar_selection.leased_header()
             - self
                 .structural_query
                 .as_ref()
@@ -2581,6 +2842,7 @@ impl<'a, 'source> Join<'a, 'source> {
                     location,
                 },
         } = context;
+        self.prepare_scalar_comparisons(computation, limits, budget, counters, location)?;
         self.resume(limits, counters, location)?;
         self.comparisons = Comparisons::Deferred;
         if self.traversal == Traversal::Finished {
@@ -2996,33 +3258,55 @@ impl<'a, 'source> Join<'a, 'source> {
         if self.coverage == Coverage::Complete {
             return Ok(true);
         }
+        if !self.scalar_selection.permits(
+            self.literals.get(),
+            &self.values,
+            Context::new(&*computation, limits, counters, location),
+        )? {
+            self.verdicts[self.depth] = false;
+            return Ok(false);
+        }
         let depth = self.depth;
         let mut passes = depth == 0 || self.verdicts[depth - 1];
         for index in self.plan.decisions.decided_at(depth) {
-            let comparison =
-                comparison(&self.literals[index]).expect("a decided literal is a comparison");
-            let decided = integer_comparisons::decide(
-                comparison,
-                &self.values,
-                Context::new(&*computation, limits, counters, location),
-            )?;
-            let ([left, right], relation) = comparison.operands();
-            let compared = if let Some(holds) = decided {
-                Ok(holds)
-            } else if self.certified_total {
-                self.projections.compare(
-                    index,
-                    ([left, right], relation),
+            let compared = if let Some(operands) = self
+                .scalar_selection
+                .comparisons()
+                .and_then(|view| view.operands(index))
+            {
+                // The selected operands have their own DAG. Original unary
+                // projection descriptors name generated slots and cannot serve it.
+                self.evaluation.source_comparison(
+                    operands,
                     &self.values,
-                    &mut self.evaluation,
                     Context::new(computation, limits, counters, location),
                 )
             } else {
-                self.evaluation.source_comparison(
-                    ([left, right], relation),
+                let comparison =
+                    comparison(&self.literals[index]).expect("a decided literal is a comparison");
+                let decided = integer_comparisons::decide(
+                    comparison,
                     &self.values,
-                    Context::new(computation, limits, counters, location),
-                )
+                    Context::new(&*computation, limits, counters, location),
+                )?;
+                let ([left, right], relation) = comparison.operands();
+                if let Some(holds) = decided {
+                    Ok(holds)
+                } else if self.certified_total {
+                    self.projections.compare(
+                        index,
+                        ([left, right], relation),
+                        &self.values,
+                        &mut self.evaluation,
+                        Context::new(computation, limits, counters, location),
+                    )
+                } else {
+                    self.evaluation.source_comparison(
+                        ([left, right], relation),
+                        &self.values,
+                        Context::new(computation, limits, counters, location),
+                    )
+                }
             };
             match compared {
                 Ok(false) if self.certified_total => {

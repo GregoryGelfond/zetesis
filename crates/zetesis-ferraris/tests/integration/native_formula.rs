@@ -1,6 +1,6 @@
 //! Native groups retain one graph across original, frozen and specialized reads.
 
-use zetesis_cpu::{Cancellation, Stop};
+use zetesis_algebra::{Cancellation, Stop};
 use zetesis_ferraris::{
     AdmissionLimits, EvaluationError, EvaluationLimits, EvaluationWorkspace, FormulaParts,
     FrozenReduct, Interpretation, Limits, Node, OperandSpan, PositivePlan, PositivePlanLimits,
@@ -111,7 +111,8 @@ fn every_partial_operand_scan_returns_its_work_without_truth() {
         AdmissionLimits::default(),
     )
     .unwrap();
-    let candidate = world(&theory, 0);
+    // No decisive operand: the whole occurrence row remains necessary.
+    let candidate = world(&theory, 1);
     let complete_work = u64::try_from(2 + width + 1).unwrap();
     let mut workspace = EvaluationWorkspace::default();
     for max_work in 0..=complete_work {
@@ -125,13 +126,33 @@ fn every_partial_operand_scan_returns_its_work_without_truth() {
         );
         assert_eq!(attempt.work, max_work);
         if max_work == complete_work {
-            assert!(!attempt.result.unwrap().is_model());
+            assert!(attempt.result.unwrap().is_model());
         } else {
             assert_eq!(
                 attempt.result.unwrap_err(),
                 EvaluationError::Stopped(Stop::WorkLimit)
             );
         }
+    }
+}
+
+#[test]
+fn decisive_prefixes_preserve_complete_node_truth() {
+    let theory = shared(129, 4);
+    let candidate = world(&theory, 0);
+    let cancellation = Cancellation::default();
+    let mut workspace = EvaluationWorkspace::default();
+    let attempt = workspace.evaluate(&candidate, EvaluationLimits::default(), &cancellation);
+    // Eight nodes, one conjunct, one disjunct, two implication pairs,
+    // two final disjuncts, and one root. No numeric rows exist.
+    assert_eq!(attempt.work, 17);
+    let truth = attempt.result.unwrap();
+    assert!(!truth.is_model());
+    for index in 0..theory.nodes().len() {
+        assert_eq!(
+            truth.node_truth(index),
+            Some(eval(theory.view(), index, 0, None))
+        );
     }
 }
 
@@ -232,15 +253,16 @@ fn native_frozen_narrowing_keeps_every_reduct_model_in_each_region() {
                         digits /= 3;
                     }
                     let before = region.clone();
-                    let (result, _) = narrower
+                    let result = narrower
                         .narrow_frozen_known(
                             FrozenSubject::new(&theory, truth.truth()),
                             &mut region,
-                            &mut narrower.knowledge(),
+                            &mut narrower.frozen_knowledge(),
                             &mut NarrowingScratch::default(),
                             RegionLimits::default(),
                             &cancellation,
                         )
+                        .result
                         .unwrap();
                     for tested in 0..4 {
                         let inside = (0..2).all(|atom| {
@@ -306,15 +328,16 @@ fn frozen_negation_keeps_masked_atom_decisions_free() {
                 2 => assert!(region.cut(0)),
                 _ => {}
             }
-            let (result, _) = narrower
+            let result = narrower
                 .narrow_frozen_known(
                     FrozenSubject::new(&theory, truth.truth()),
                     &mut region,
-                    &mut narrower.knowledge(),
+                    &mut narrower.frozen_knowledge(),
                     &mut NarrowingScratch::default(),
                     RegionLimits::default(),
                     &cancellation,
                 )
+                .result
                 .unwrap();
             assert!(
                 matches!(result, Narrowing::Fixed { .. }),
@@ -348,15 +371,16 @@ fn frozen_atom_root_stays_false_when_its_atom_is_held() {
     let mut region = Region::all_open(1);
     assert!(region.hold(0));
     assert!(!eval(theory.view(), 1, 1, Some(0)));
-    let (result, _) = narrower
+    let result = narrower
         .narrow_frozen_known(
             FrozenSubject::new(&theory, truth.truth()),
             &mut region,
-            &mut narrower.knowledge(),
+            &mut narrower.frozen_knowledge(),
             &mut NarrowingScratch::default(),
             RegionLimits::default(),
             &cancellation,
         )
+        .result
         .unwrap();
     assert!(matches!(result, Narrowing::Refuted));
 }

@@ -383,9 +383,16 @@ pub(super) fn run(
     )?
     .write(output, layout)
     .map_err(Error::Io)?;
+    if let Some(evidence) = summary.residual_evidence {
+        residual_evidence(evidence, layout, output)?;
+    }
     let rows = run_rows(summary);
     table(
-        "Corpus benchmark — successful timed populations",
+        if summary.residual_evidence.is_some() {
+            "Untimed answer qualification"
+        } else {
+            "Corpus benchmark — successful timed populations"
+        },
         &[
             "Workload",
             "Producer",
@@ -466,5 +473,83 @@ const fn qualification(qualification: Qualification) -> &'static str {
         Qualification::Clingo => "clingo",
         Qualification::Contract => "recorded contract",
         Qualification::NeedsClingo => "needs clingo",
+    }
+}
+
+fn residual_evidence(
+    evidence: &zetesis_validation::performance::matrix::ResidualEvidence,
+    layout: Layout,
+    output: &mut impl io::Write,
+) -> Result<(), Error> {
+    use zetesis_validation::performance::matrix::{ArtifactOutcome, ProfileEvidence};
+    let rows = evidence
+        .pools
+        .iter()
+        .enumerate()
+        .map(|(profile, pool)| match pool {
+            ProfileEvidence::Complete { measurements } => {
+                let all = &measurements.groups.all;
+                Row::new([
+                    (profile + 1).to_string(),
+                    measurements.runs.to_string(),
+                    sample_rank(&all.residuals, all.residuals.median),
+                    sample_rank(&all.depth, all.depth.p90),
+                    sample_rank(&all.width, all.width.median),
+                    sample_rank(&all.batch_ns, all.batch_ns.median),
+                    "complete".into(),
+                ])
+            }
+            ProfileEvidence::Unavailable { detail } => Row::new([
+                (profile + 1).to_string(),
+                "—".into(),
+                "—".into(),
+                "—".into(),
+                "—".into(),
+                "—".into(),
+                detail.clone(),
+            ]),
+        })
+        .collect();
+    table(
+        &format!("GPU residual evidence — {}", evidence.cohort),
+        &[
+            "Profile",
+            "Runs",
+            "Median worlds/batch",
+            "Query depth p90",
+            "Median width",
+            "Median host ns/batch",
+            "Coverage",
+        ],
+        rows,
+    )?
+    .write(&mut *output, layout)
+    .map_err(Error::Io)?;
+    for member in &evidence.members {
+        let failure = match &member.artifact {
+            ArtifactOutcome::Retained { .. } => continue,
+            ArtifactOutcome::Unattempted => "slot did not reach evidence collection",
+            ArtifactOutcome::Unavailable { detail } => detail,
+        };
+        writeln!(
+            output,
+            "Case {}, profile {}: {failure}",
+            member.case + 1,
+            member.profile + 1
+        )
+        .map_err(Error::Io)?;
+    }
+    Ok(())
+}
+
+fn sample_rank(
+    metric: &zetesis_validation::performance::matrix::ResidualSampleMetric,
+    rank: Option<u128>,
+) -> String {
+    use zetesis_validation::performance::matrix::ResidualQuantiles;
+    match (rank, metric.quantiles) {
+        (Some(n), ResidualQuantiles::Exact) => n.to_string(),
+        (Some(n), ResidualQuantiles::Estimated) => format!("{n} (estimated)"),
+        _ => "—".into(),
     }
 }

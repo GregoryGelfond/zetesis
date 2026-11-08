@@ -40,7 +40,6 @@ use unit_writer::{UnitBuffer, UnitWriter};
 
 pub(crate) enum Label {
     Source,
-    Oracle,
     Comparisons,
     Grounding,
     Backend,
@@ -49,7 +48,6 @@ impl Label {
     const fn text(self) -> &'static str {
         match self {
             Self::Source => "Source",
-            Self::Oracle => "Oracle",
             Self::Comparisons => "Comparisons",
             Self::Grounding => "Grounding",
             Self::Backend => "Backend",
@@ -138,35 +136,26 @@ impl<W: Write> Diagnostics<W> {
     }
 
     /// Report which formula is checked and which original-source obligations remain.
-    fn cpu_formula(
-        &mut self,
-        oracle: crate::Oracle,
-        grounder: crate::Grounder,
-        search: crate::SearchMethod,
-    ) -> io::Result<()> {
+    fn cpu_formula(&mut self, oracle: crate::Oracle, grounder: crate::Grounder) -> io::Result<()> {
         let oracle = if oracle == crate::Oracle::Auto {
             "Ferraris reduct membership"
         } else {
             "Ferraris reduct countermodel"
         };
         if self.core == Some(Core::TerminalDefinitions) {
-            self.metadata(Label::Backend, format_args!("cpu; base oracle: {oracle}; search: {}; base grounding: eager; original answer reconstruction: host", search.label()))
+            self.metadata(Label::Backend, format_args!("cpu; base oracle: {oracle}; base grounding: eager; original answer reconstruction: host"))
         } else if self.core == Some(Core::HybridTerminalDefinitions) {
-            self.metadata(Label::Backend, format_args!("cpu; base core oracle: {oracle}; search: {}; base grounding: hybrid (eager producer core); original answer reconstruction: host", search.label()))
+            self.metadata(Label::Backend, format_args!("cpu; base core oracle: {oracle}; base grounding: hybrid (eager producer core); original answer reconstruction: host"))
         } else if self.core == Some(Core::Constraints) {
             self.metadata(
                 Label::Backend,
-                format_args!(
-                    "cpu; retained-core oracle: {oracle}; search: {}; core grounding: eager",
-                    search.label()
-                ),
+                format_args!("cpu; retained-core oracle: {oracle}; core grounding: eager"),
             )
         } else {
             self.metadata(
                 Label::Backend,
                 format_args!(
-                    "cpu; oracle: {oracle}; search: {}; grounder: eager (requested {})",
-                    search.label(),
+                    "cpu; oracle: {oracle}; grounder: eager (requested {})",
                     grounder.label()
                 ),
             )
@@ -231,33 +220,21 @@ impl<W: Write> crate::ExecutionObserver for Diagnostics<W> {
         match observation {
             Event::SourceEvaluation => self.metadata(Label::Backend,
                 format_args!("cpu (dependency-ordered source evaluation; constraints checked before publication)")),
-            Event::StaticGrounding { requested, atoms, rules, limits } => self.metadata(
-                Label::Grounding,
-                format_args!("requested={}, effective=eager (static atoms={atoms}, rules={rules}; lowering caps atoms={}, rules={}, substitutions={})", requested.label(), limits.max_atoms, limits.max_ground_rules, limits.max_substitutions),
-            ),
-            Event::LazyGrounding { requested } => self.metadata(Label::Grounding,
-                format_args!("requested={}, effective=lazy (source joins; no complete ground-rule store)", requested.label())),
             Event::TerminalDefinitions { requested, base: zetesis_themelios::BaseKind::Eager, deferred_templates, .. } => {
                 self.core = Some(Core::TerminalDefinitions);
                 self.metadata(Label::Grounding, format_args!("requested={}, effective=eager_base_terminal_definitions (eager base; {deferred_templates} terminal definitions reconstructed on the host before each original answer)", requested.label()))
             }
             Event::TerminalDefinitions { requested, base: zetesis_themelios::BaseKind::Hybrid, deferred_templates, streamed } => {
                 self.core = Some(Core::HybridTerminalDefinitions);
-                let (templates, instances) = streamed.map_or((0, 0), |streamed| (streamed.templates, streamed.instances));
-                self.metadata(Label::Grounding, format_args!("requested={}, effective=hybrid_base_terminal_definitions (hybrid base: eager producer core, streamed constraints: {templates} templates, {instances} admitted instances; {deferred_templates} terminal definitions reconstructed on the host after each base answer is accepted)", requested.label()))
+                let streamed = streamed.unwrap_or_default();
+                self.metadata(Label::Grounding, format_args!("requested={}, effective=hybrid_base_terminal_definitions (hybrid base: eager producer core, {}; {deferred_templates} terminal definitions reconstructed on the host after each base answer is accepted)", requested.label(), StreamedDivision(streamed)))
             }
-            Event::HybridGrounding { requested, streamed_templates, streamed_instances } => {
+            Event::HybridGrounding { requested, streamed } => {
                 self.core = Some(Core::Constraints);
                 self.metadata(Label::Grounding,
-                    format_args!("requested={}, effective=hybrid (eager retained core; streamed constraints: {streamed_templates} templates, {streamed_instances} admitted instances)", requested.label()))
+                    format_args!("requested={}, effective=hybrid (eager retained core; {})", requested.label(), StreamedDivision(streamed)))
             }
-            Event::CpuClosure { grounder: crate::Grounder::Eager, workers, .. } => self.metadata(
-                Label::Backend, format_args!("cpu (eager static closure scans, {workers} workers)")),
-            Event::CpuClosure { batching: crate::SourceBatching::Independent, workers, .. } => self.metadata(
-                Label::Backend, format_args!("cpu (lazy source joins, {workers} workers)")),
-            Event::CpuClosure { batching, workers, .. } => self.metadata(Label::Backend,
-                format_args!("cpu (shared {} source rounds, {workers} workers; collective source and per-world evaluation budgets)", batching.label())),
-            Event::CpuFormula { oracle, grounder, search } => self.cpu_formula(oracle, grounder, search),
+            Event::CpuFormula { oracle, grounder } => self.cpu_formula(oracle, grounder),
             Event::ParallelRegions { workers } => writeln!(self,
                 "Parallel regions: up to {workers} workers, started once the walk outlasts their start; models arrive in the scalar walk's order until then, and in the schedule's order after"),
             Event::ParallelProposals { workers } => writeln!(self,
@@ -265,24 +242,16 @@ impl<W: Write> crate::ExecutionObserver for Diagnostics<W> {
             Event::ExactCompletion { workers, max_scratch_bytes } => writeln!(self,
                 "Exact completion: requested workers={workers}; bounded logical scratch bytes={max_scratch_bytes}"),
             #[cfg(feature = "gpu")]
-            Event::LazyDeviceGrounding { requested } => self.metadata(Label::Grounding,
-                format_args!("requested={}, effective=lazy (host source joins; per-world device consequences; no complete ground-rule store)", requested.label())),
-            #[cfg(feature = "gpu")]
-            Event::DeviceClosure { adapter, static_counts } => match static_counts {
-                None => self.metadata(Label::Backend, format_args!("gpu ({}, {}; vendor=0x{:04x}; lazy immutable reduct rounds)", adapter.name, adapter.backend, adapter.vendor_id)),
-                Some((atoms, rules)) => self.metadata(Label::Backend, format_args!("gpu ({}, {}; vendor=0x{:04x}; static atoms={atoms}, rules={rules})", adapter.name, adapter.backend, adapter.vendor_id)),
-            },
-            #[cfg(feature = "gpu")]
-            Event::DeviceFormula { adapter, grounder, search, batch_size, completion_workers, .. } => {
+            Event::DeviceFormula { adapter, grounder, batch_size, completion_workers, .. } => {
                 let (scope, host) = self.device_formula_scope();
                 self.metadata(Label::Backend,
-                    format_args!("hybrid GPU propagation + exact CPU residual search ({}, {}; vendor=0x{:04x}); oracle: Ferraris reduct countermodel; search: {}; {scope}: eager (requested {}); batch={batch_size}; CPU completion requested workers={completion_workers}{host}", adapter.name, adapter.backend, adapter.vendor_id, search.label(), grounder.label()))
+                    format_args!("hybrid GPU propagation + exact CPU residual search ({}, {}; vendor=0x{:04x}); oracle: Ferraris reduct countermodel; {scope}: eager (requested {}); batch={batch_size}; CPU completion requested workers={completion_workers}{host}", adapter.name, adapter.backend, adapter.vendor_id, grounder.label()))
             },
             #[cfg(feature = "gpu")]
-            Event::DeviceTight { adapter, grounder, search, batch_size } => {
+            Event::DeviceTight { adapter, grounder, batch_size } => {
                 let (scope, host) = self.device_formula_scope();
                 self.metadata(Label::Backend,
-                    format_args!("GPU tight support ({}, {}; vendor=0x{:04x}); oracle: Ferraris ranked support; search: {}; {scope}: eager (requested {}); batch={batch_size}{host}", adapter.name, adapter.backend, adapter.vendor_id, search.label(), grounder.label()))
+                    format_args!("GPU tight support ({}, {}; vendor=0x{:04x}); oracle: Ferraris ranked support; {scope}: eager (requested {}); batch={batch_size}{host}", adapter.name, adapter.backend, adapter.vendor_id, grounder.label()))
             },
             Event::Formula { atoms, nodes, operands, roots, keyed_constraints } if self.core == Some(Core::TerminalDefinitions) => writeln!(self,
                 "Base formula: {atoms} atoms, {nodes} nodes, {roots} roots; {operands} operand occurrences; {keyed_constraints} constraints asked by key; terminal definitions reconstructed separately"),
@@ -313,8 +282,26 @@ impl<W: Write> crate::ExecutionObserver for Diagnostics<W> {
             Event::ObjectiveBoundStopped(error) => writeln!(self, "Objective pruning stopped: {error}; exact search continues"),
             Event::ObjectiveTheoryMismatch => writeln!(self, "Objective pruning stopped: original theory mismatch; exact search continues"),
             Event::ObjectiveRestrictionStopped(error) => writeln!(self, "Objective pruning stopped: {error}; exact search continues"),
-            Event::ObjectiveBound { restrictions, costs, work } => writeln!(self, "Objective pruning: bound {restrictions}; cost <= {costs:?}; construction work {work}"),
+            Event::ObjectiveBound { restrictions, costs, strict, work } => writeln!(self, "Objective pruning: bound {restrictions}; cost {} {costs:?}; construction work {work}", if strict { "<" } else { "<=" }),
+            Event::ObjectiveTiePass { costs } => writeln!(self, "Objective ties: optimum {costs:?} proved; a second pass enumerates its ties"),
         }
+    }
+}
+
+/// How a hybrid base divided its eligible constraints, as one clause.
+struct StreamedDivision(zetesis_solve::StreamedConstraints);
+impl fmt::Display for StreamedDivision {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let zetesis_solve::StreamedConstraints {
+            templates,
+            instances,
+            retained_templates,
+            retained_instances,
+        } = self.0;
+        write!(
+            f,
+            "streamed constraints: {templates} templates, {instances} admitted instances; grounded in the core: {retained_templates} templates, {retained_instances} instances"
+        )
     }
 }
 

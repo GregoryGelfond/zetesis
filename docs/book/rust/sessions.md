@@ -1,7 +1,7 @@
 # Embedding an ordinary solve
 
 A `Session` owns solving state and borrows a coherent admitted input.
-`SolveConfig` selects execution policy and limits; `zetesis_cpu::Cancellation`
+`SolveConfig` selects execution policy and limits; `zetesis_algebra::Cancellation`
 carries shared cancellation and an optional deadline. The session accepts these
 values without argument parsing, standard streams or answer rendering. This
 example enumerates the guided tour's complete family:
@@ -9,14 +9,15 @@ example enumerates the guided tour's complete family:
 ```rust
 # extern crate zetesis_solve;
 # extern crate zetesis_core;
-# extern crate zetesis_cpu;
+# extern crate zetesis_algebra;
+# extern crate zetesis_ferraris;
+# extern crate zetesis_stable;
 # extern crate zetesis_themelios;
 {{#include ../examples/session.rs:example}}
 ```
 
-`admit` is the strict normal-profile door used by this example. Use
-`admit_extended` for its supported scalar extensions, or `admit_formula` for the
-broader finite formula profile. These are explicit library choices. The ordinary
+`admit_formula`, the finite formula profile's door, is the explicit library choice
+this example makes. The ordinary
 source driver provides automatic profile selection; `Session` receives an
 already prepared representation and does not retry admission itself.
 
@@ -30,7 +31,7 @@ The original `ground()` doors still construct theories for arbitrary formula
 and reduct queries.
 
 An `AcyclicSource` is evaluated once. Sessions reuse its checked interpretation
-and original subject, while applying their own cancellation and model-publication
+and original input, while applying their own cancellation and model-publication
 allowances. `SemanticOutcome::source_evaluation()` reports preparation work;
 it is not search work repeated by each session. Preparation time belongs to the
 grounding phase. A successfully published sole answer establishes exhaustion
@@ -81,7 +82,7 @@ checking available. Cancellation and allocation failures interrupt the run.
 ## Pulling and stopping
 
 `Session` is a fused iterator of `Result<AnswerSet, SolveFailure>`. Each
-privately constructed `AnswerSet` retains its original `Subject`, complete interpretation and optional
+privately constructed `AnswerSet` retains its `Original`, complete interpretation and optional
 fully evaluated score. Hidden atoms remain present even when `#show` would omit
 them from human output. `SessionModel` remains a compatibility alias. These are
 completed membership results under the selected implementation, not Lean proof
@@ -117,8 +118,11 @@ For `Session::new` with an objective, the search phase ends before retained incu
 Exhausted search establishes optimum ties; an interrupted phase may yield
 unproved incumbents. A score alone is not an optimum certificate. Use the
 outcome's `optimum_proved()` and interruption information to distinguish proved
-ties from an interrupted incumbent. Yielded tie limits also affect how much of
-the selected family a consumer receives.
+ties from an interrupted incumbent. Under `OptimumSearch::StrictWithTiePass`, a
+stop of the tie pass, after the strict search exhausted, keeps the optimum
+proved: `optimum_proved()` holds while the interrupted family is incomplete.
+Yielded tie limits also affect how much of the selected family a consumer
+receives.
 
 ## Prepared independent CPU execution
 
@@ -168,9 +172,9 @@ original ground theory itself.
 
 `PositivePlan` admits positive atomic-head producers, including recursive ones,
 and arbitrary constraints. It computes their least consequences once, then
-checks original roots through the first failure. Clause search restricts candidates
-to that interpretation, or excludes them all when a constraint fails. Region search
-uses a singleton cursor, checking accumulated restrictions before publication.
+checks original roots through the first failure. The region search then proposes
+that interpretation alone, through a singleton cursor that checks accumulated
+restrictions before publication, or none when a constraint fails.
 A failed constraint leaves no answer
 set; it does not necessarily rule out larger classical models. `TightPlan`
 instead establishes its own acyclicity and supportedness conditions. Neither
@@ -217,11 +221,14 @@ owner before enumeration. Theories without a complete tight certificate continue
 through general device propagation, as does explicit `Oracle::Countermodel`.
 A positive program may itself qualify for tight checking; positivity alone does
 not select the general route. Device failures are returned
-without CPU replacement. Tight device work counts a complete original-truth and
-support scan; `gpu_formula_rounds` only limits the general propagator.
+without CPU replacement. Tight device work reserves a complete original-truth
+and support scan, with an additional allowance when retained truth enables
+change detection. Insufficient optional work retains complete evaluation;
+`gpu_formula_rounds` only limits the general propagator.
 
 `completion_workers` bounds unresolved queries. Complete tight device results
-use scalar original validation and batch commit, preserving the configured
+establish original satisfaction on the device and use scalar batch commit,
+preserving the configured
 scratch limit without creating residual worker threads. Their completion receipt
 reports the selected scalar executor and zero effective residual workers.
 
@@ -241,34 +248,56 @@ before such a start failure.
 Class-shape or optional-capacity refusals retain general checking. Cancellation,
 exhausted shared work and allocation failure remain explicit interruptions.
 `ExecutionObservation::PositiveMembership`, `StratifiedMembership` and
-`TightMembership` report the selected plan; the search statistics retain attempted construction, restrictions
-and checking work. Use `Oracle::Countermodel` to select the general comparison
+`TightMembership` report the selected plan; the search statistics retain attempted construction and
+checking work. Use `Oracle::Countermodel` to select the general comparison
 path explicitly. Automatic device execution uses tight checking when its exact
 certificate is available; other theories retain general device checking.
 
-General completion under the clauses method lazily constructs one
-`PreparedReduct` for the exact original theory; under the default regions
-method the proper-subset query is a region tree over the original formulas and
-no encoding is built. Subsequent candidates supply membership and authenticated original-truth
-parameters, rather than rebuilding the encoding. Scalar checking reuses one
-workspace; Rayon workers borrow the shared encoding with disjoint query state.
-A workspace retains a complete watch index and completed unconditional unit
-consequences only for the exact prepared owner. Before each subset search, it
-clears candidate-dependent assignments and decisions, then supplies fresh
-candidate parameters. An interrupted unconditional propagation is recomputed;
-a candidate conflict never becomes an unconditional refutation. Workers reuse
-these results within a completion batch; the coordinator retains the encoding
-across batches. Returned countermodels
-still undergo independent frozen-reduct validation. Candidate restrictions do
-not replace this original owner.
+General completion walks the proper-subset query as a region tree over the
+original formulas and builds no encoding. Each query recomputes the candidate's
+original truth into its workspace and reuses only that workspace's capacity.
+Scalar checking reuses one workspace; Rayon workers own disjoint workspaces and
+read the enumeration's one original index. Returned countermodels still undergo
+independent frozen-reduct validation. Candidate restrictions do not replace the
+original theory.
 
-`SolveConfig::max_reduct_bytes` bounds cold preparation and each query's named
-storage separately. `max_completion_scratch_bytes` bounds the shared prepared
-owner plus simultaneous completion workspaces and results. That setting also
-supplies a separate allowance for optional class preparation and checking; it is
-not a combined process-memory ceiling. Preparation work is charged once to the
-session search budget and reported in `SolvePhase::ReductPreparation`.
-Reuse preserves consumed work and pending-candidate accounting after a refusal.
+A checker can supply a subregion of the frozen query through
+`StableModels::begin_regional_pass`. A validated proper countermodel refutes
+the candidate. When the supplied region contains no witness, the caller must
+also establish that the region covered every possible proper witness before
+publishing a whole-candidate decision through `RegionalPass::finish`.
+
+To measure this work, call `CompletionExecutor::observe_next_regional_pass`
+with an attempt identifier and optional storage allowance before beginning the
+pass. Use `take_regional_observations` after it returns, including on a typed
+stop. The receipt identifies the slate and attempt. Its original slot order
+distinguishes CPU-certified, unentered, stopped and completed residuals.
+Each entered query reports charged work (including witness validation),
+visited regions and attempted and published splits. A stopped query retains
+the prefix it performed. A retry receives its own attempt identifier.
+
+The slate's width is its largest level after summing visits at each depth
+across workers. The host duration sums the measured query intervals, which
+can overlap. A pass with no queries has zero visits and zero width when its
+slot records are available. An entirely terminal slate requires no
+observation allocation. Insufficient optional storage can leave slot records
+or depth measurements unavailable while the same queries continue under
+their original limits. Disabled timing yields no host duration. Taking and
+dropping the receipt releases its retained slot storage.
+
+A formula session shares the rows its candidate walks learn through one
+`zetesis_stable::LearnedStore`, created for each solve call and handed to the
+session's candidate stream and membership execution. The rows only prune
+candidate regions; see [semantics](../architecture/semantics.md) for what a row
+says and when walks exchange rows. `SolveConfig::share_learned_rows`, on by
+default, turns sharing off for measurement, with identical answer sets.
+
+`SolveConfig::max_reduct_bytes` bounds each query's retained workspace.
+`max_completion_scratch_bytes` bounds completion's ordered results and its
+workers' workspaces. That setting also supplies a separate allowance for
+optional class preparation and checking; it is not a combined process-memory
+ceiling. Reuse preserves consumed work and pending-candidate accounting after a
+refusal.
 
 ## Hybrid formula sessions
 
@@ -292,8 +321,9 @@ search for a better answer; `AnswerSelection::All` instead limits accepted
 answers in enumeration order.
 
 Preparation still completes possible support, arithmetic admission and the atom
-catalog. Eligible instances are visited during admission, but their full
-constraint DAGs are not stored. The original eager doors remain available.
+catalog. Eligible instances are visited during admission. A template's full
+constraint DAG is stored in the core only when its instances fit the share
+`FormulaLimits::max_retained_constraint_nodes` grants; the others are streamed. The original eager doors remain available.
 [Source preparation](source.md#stream-ordinary-constraints) details eligibility,
 identity and retained-memory bounds.
 
@@ -311,7 +341,7 @@ using one source allowance for the entire closure. It does not change proper-sub
 queries of the frozen reduct. The ordinary formula enumerator obtains surviving
 core answers, then
 checks the streamed constraints before returning an `AnswerSet` of the original
-`Subject::Hybrid`. A violation rejects that core answer. A completed check permits
+`Original::Hybrid`. A violation rejects that core answer. A completed check permits
 publication; an interrupted or failed check remains pending and establishes
 neither acceptance nor exhaustion. With `AnswerSelection::All`, a positive model
 limit counts accepted original-program answers. With `Optimal`, it caps retained
@@ -326,7 +356,7 @@ source checking. Each returned answer chooses a q-prefix followed by a p-suffix:
 ```rust
 # extern crate zetesis_solve;
 # extern crate zetesis_core;
-# extern crate zetesis_cpu;
+# extern crate zetesis_algebra;
 # extern crate zetesis_themelios;
 {{#include ../examples/hybrid.rs:example}}
 ```
@@ -353,22 +383,26 @@ region scans and preparation can cost more than the avoided membership work,
 so the schedule still needs workload-specific measurement.
 
 Serial candidate traversal retains one source checker across answer pulls.
-Joined candidate production retains one per active producer slot across device
-batches, with at most the configured worker count of slots.
+Joined candidate production retains one per producer across slates, with at
+most the configured worker count of producers.
 The checker belongs to the exact source owner, has exclusive access to its
-scratch and can move between executor threads. `zetesis_sat::RegionFilterWorker`
-therefore requires `Send`; the callback is never invoked concurrently on one
-checker. Completion or stop releases this scratch while retaining statistics
-and pending candidate receipts. Each callback's teardown is isolated; a panic
-is reported as `Incomplete::WorkerPanicked` when no earlier failure takes
-precedence. While candidate production remains open, a retryable batch-checker
-failure retains the serial source checker and the pending candidates; it does
-not repeat source preparation. Separate singleton checks still prepare per
-operation. These preparation counts do not measure allocations or device kernel
-time.
+scratch and can move between executor threads; it is never used concurrently.
+The region search runs this check itself, as
+`zetesis_stable::StreamedConstraints` over the admitted program's streamed core:
+no caller code refutes a region or decides an atom. Completion or stop releases
+this scratch while retaining statistics and pending candidate receipts. Each
+checker's teardown is isolated; a panic is reported as
+`Incomplete::WorkerPanicked` when no earlier failure takes precedence. While
+candidate production remains open, a retryable batch-checker failure retains the
+serial source checker and the pending candidates; it does not repeat source
+preparation. Separate singleton checks still prepare per operation. These
+preparation counts do not measure allocations or device kernel time.
 
 `SemanticOutcome::hybrid_execution()` reports consumed `core_answers`,
 `accepted`, `rejected`, `pending` and cumulative constraint-check statistics.
+Its `streamed` field, a `zetesis_solve::StreamedConstraints`, counts the constraint templates
+and instances streamed and those grounded in the core;
+`ExecutionObservation::HybridGrounding` carries the same division.
 Their invariant is `core_answers = accepted + rejected + pending`. Core answers
 still buffered by the inner enumerator are excluded. Search statistics and
 device batch receipts describe the retained core. A device-checked core
@@ -392,7 +426,7 @@ session starts new search and check budgets.
 `WorldView::collect(input, config, limits, cancellation)` owns a fresh unrestricted
 session and returns its complete original answer-set family only after
 exhaustion. Use `models: 0`; a positive model limit is honored and can prevent
-completion. Every member retains its full interpretation and original subject.
+completion. Every member retains its full interpretation and original input.
 Objectives annotate the members with scores without removing nonoptimal answers.
 
 The [source preparation example](source.md) checks the distinct empty-program
@@ -418,12 +452,12 @@ retained space can still be exponential in program size.
 [Retained interpretations](models.md) explains catalog ownership, logical model
 identity and the distinction between shared payload and selected true atoms.
 
-`WorldViewFailure` preserves the checked prefix, original subject, typed cause
+`WorldViewFailure` preserves the checked prefix, original input, typed cause
 and available semantic outcome. Search interruption, scoring failure and
 collection limits cannot produce a complete value. A model whose score or
 storage admission failed can remain in verified accounting without appearing in
 the retained prefix. No partial result is treated as a smaller program.
-`into_parts()` transfers the original cause, subject, answers and outcome into
+`into_parts()` transfers the original cause, original input, answers and outcome into
 `WorldViewFailureParts` without cloning. `into_answer_sets()` remains the explicit
 choice to keep only the answers and discard the other failure evidence.
 
@@ -431,6 +465,80 @@ These are the native collection guarantees. The streaming `Session` remains the
 surface for partial observations. [`zetesis::Solver`](agent.md) connects native
 execution to the canonical agent and query contracts; their nonempty snapshots
 remain distinct from the native, possibly empty complete family.
+
+## Deciding questions over the world view
+
+Some questions about a program's world view need neither its whole family nor
+its retention. An unstarted `SessionBuilder` answers five of them by folding
+answer sets as they arrive. A literal is an atom, or a strongly negated atom
+when its predicate carries the negative sign.
+
+| Method | Question | Decided early by | Witnesses |
+| --- | --- | --- | --- |
+| `known(&literal)` | Does the literal hold in every answer set? | An answer set without it: `false` | One |
+| `possible(&literal)` | Does it hold in some answer set? | An answer set with it: `true` | One |
+| `cautious()` | Which atoms hold in every answer set? | An empty intersection | None |
+| `brave()` | Which atoms hold in some answer set? | Nothing; only exhaustion decides | None |
+| `answer(&literal)` | Is the literal `Yes`, `No` or `Unknown` over the world view? | Answer sets that refute both `Yes` and `No`: `Unknown` | At most two |
+
+Each question is a commutative monoid's fold over the answer sets, so its value
+does not depend on the order in which they arrive. Some monoids have an
+absorbing value that no further answer set changes: an answer set without the
+literal makes `known` false whatever follows. When the fold reaches it, the
+session stops and the verdict is `WorldViewVerdict::Decided`, with the answer
+sets that drove the fold there. Cautious consequences name no witnesses, since
+any number of answer sets can empty an intersection. The union's absorbing value
+is every atom, which a session does not bound, so brave consequences are decided
+only by exhaustion.
+
+The request is the one `collect` runs, full answer identities and
+`AnswerSelection::All`, except that a requested model count is cleared where
+`collect` would refuse the incomplete family it stops at. A projection, an
+objective's default selection of its optimal ties or a positive `config.models`
+therefore never narrows the folded family. Without absorption a value is known
+only under `collect`'s exhaustion predicate, unrestricted search exhausted, and
+the verdict is `WorldViewVerdict::Complete`. An exhausted empty family is
+`WorldViewVerdict::Inconsistent` and carries no value: the fold's identity would
+claim, for example, that every atom is cautious. A session that stops before
+absorption or exhaustion, by cancellation, a deadline or a search or objective
+limit, returns a `WorldViewDecisionFailure` whose cause is
+`WorldViewDecisionError::NotExhausted`, with the original input and the session's
+outcome. A partial fold establishes nothing. Setup and execution failures keep
+their typed `SolveFailure`.
+
+`answer` follows the Gelfond–Kahl reading of the
+[agent's queries](agent.md#queries-yes-no-and-unknown): within one answer set a
+literal is true if present, false if its strong contrary (`Atom::contrary`) is
+present, and unknown otherwise. The answer is `QueryAnswer::Yes` when the
+literal is true in every answer set, `No` when it is false in every one, and
+`Unknown` otherwise. One answer set in which the literal is unknown refutes both
+`Yes` and `No`, so it decides `Unknown` by itself; otherwise one answer set
+where the literal is not true and another where it is not false do. The tests
+check the native answer against the agent's on complete families.
+
+Work is the enumeration up to the deciding answer set, or to exhaustion.
+`known`, `possible` and `answer` add one or two logarithmic membership tests per
+answer set, `cautious` one per atom still in the intersection, and `brave` a
+merge of each answer set into the union. The fold retains its accumulator and at
+most two answer sets, never the family, so `WorldViewLimits` does not apply.
+A `WorldViewDecision` is a fact about the world view, not a `WorldView`: it
+neither retains nor proves the complete family. `Zetesis.AxisFolds` proves the
+order independence and early decision for the reductions these methods fold;
+that the Rust accumulators compute them is checked by tests, not by the proofs.
+
+```rust
+# extern crate zetesis_solve;
+# extern crate zetesis_core;
+# extern crate zetesis_algebra;
+# extern crate zetesis_themelios;
+{{#include ../examples/world-view-questions.rs:example}}
+```
+
+Run it from the checkout root with:
+
+```sh
+cargo run --locked -p zetesis-solve --no-default-features --example book-world-view-questions
+```
 
 ## Reuse and identity
 
@@ -488,7 +596,7 @@ not erase the full interpretations or merge their projection keys.
 
 ```rust
 # extern crate zetesis_solve;
-# extern crate zetesis_cpu;
+# extern crate zetesis_algebra;
 # extern crate zetesis_themelios;
 {{#include ../examples/projected-answers.rs:example}}
 ```
@@ -577,21 +685,21 @@ path: its retained evidence includes earlier incumbent counts, but that path
 does not deliver the remaining models. Neither behavior discards the original
 failure reason in favor of a later cleanup stop.
 
-`PreparedInput::program` borrows a native `zetesis_core::Program` without source
-metadata. It reaches the same relational session as a source-admitted program,
-including lazy execution; it does not first compile a complete ground graph.
-`PreparedInput::relational` borrows the native program and its display metadata
-from one [prepared canonical owner](source.md#admit-an-existing-logical-program).
+`PreparedInput::formula` borrows a complete admitted formula and its metadata.
+`PreparedInput::hybrid` borrows a prepared hybrid owner, retaining its materialized
+core and streamed constraints. Both preserve the original program through the
+[shared preparation boundary](source.md#prepare-a-logical-formula-program).
 
 An execution observer receives typed, borrowed facts about preparation and
-execution choices. It need not parse diagnostics. This example constructs the
-fact `ready.` through the native library and retains only its selected grounding
+execution choices. It need not parse diagnostics. This example admits the
+fact `ready.` through the formula library and retains only its selected grounding
 mode:
 
 ```rust
 # extern crate zetesis_solve;
 # extern crate zetesis_core;
-# extern crate zetesis_cpu;
+# extern crate zetesis_algebra;
+# extern crate zetesis_themelios;
 {{#include ../examples/observations.rs:example}}
 ```
 
@@ -611,7 +719,7 @@ An observer error stops the relevant operation and is retained separately from
 device errors. Some formula
 initialization failures are retained in a session and delivered by its first
 pull. After a failed pull, later pulls return `None`; the failure retains the
-original cause and any established semantic evidence. `SolveFailure::subject`
+original cause and any established semantic evidence. `SolveFailure::original`
 can identify a prepared input even when setup failed before a search outcome
 existed.
 
@@ -630,7 +738,8 @@ its compilation without attempting device discovery.
 ```rust,no_run
 # extern crate zetesis_solve;
 # extern crate zetesis_core;
-# extern crate zetesis_cpu;
+# extern crate zetesis_algebra;
+# extern crate zetesis_themelios;
 # extern crate zetesis_wgpu;
 {{#include ../examples/resources.rs:example}}
 ```
@@ -638,13 +747,26 @@ its compilation without attempting device discovery.
 Resources retain device infrastructure, not programs, candidates, prepared
 formula graphs, worker pools or incumbents. Context-only resources create fresh
 primitive pipelines. `ExecutionResources::with_formula_profile(&profile)` also
-retains an exact compiled `GpuFormulaProfile`; repeated general formula sessions reuse
-that compilation while creating fresh subject preparation, residency and epochs.
+retains an exact `GpuFormulaProfile`; repeated general formula sessions share its
+shader and compiled pipelines while creating fresh input preparation, residency
+and epochs.
 When tight support is selected, its distinct kernel compiles on the profile's
 exact context; the general formula pipeline is not used for support checking.
 The profile includes its exact context and gate projection. It cannot be paired
 with a different device through an independent field. The builder clones shared
 handles, so the original variables need not outlive the session.
+
+`ExecutionResources::discovering(&config)` retains no device: for a GPU
+configuration it begins that backend's adapter enumeration on a background
+thread, which the command line does after validating its configuration and
+before reading its sources. The session's primitive selects over the
+adapter enumeration as it would over its own, with its own capability check, then
+requests its own device, so adapter choice and errors are those of selection when
+the enumeration began and timestamp requests are unchanged. The enumeration is a
+snapshot: an adapter added since is not seen, and one removed since fails its
+device request, so keep such resources only until the session they serve. The
+adapter enumeration serves one primitive, and dropping the resources before one
+takes it waits for it to finish. A CPU configuration starts nothing.
 
 Resource ownership does not choose an execution policy. `Backend::Cpu` ignores
 a supplied context. `Backend::Gpu(None)` requests the platform's native API;
@@ -653,33 +775,35 @@ request the named API. A GPU request uses the supplied adapter only if it matche
 that API and the hardware-GPU requirement. A mismatch is refused; the session
 does not discover a replacement device.
 
-Operations sharing a context are serialized through nonblocking leases. A busy
-context refuses the overlapping operation; no hidden queue is created. Device
+Operations sharing a context are serialized through nonblocking leases; an
+overlapping check is one operation, whose lease also spans the production it
+runs while its submission is in flight. A busy context refuses the overlapping
+operation; no hidden queue is created. Device
 invalidation affects its other clients, while input and observer refusals do
 not invalidate it. Sessions retain separate work budgets and semantic evidence.
 Per-primitive allocation limits do not impose a combined context or process
 memory ceiling. See the [ownership contract](../architecture/ownership.md#device-resource-scope).
 
-The following example reuses one compiled formula profile for complete
+The following example reuses one formula profile for complete
 collections over distinct source owners. Collection includes nonoptimal answers
 and their scores. It requires an accessible physical GPU.
 
 ```rust,no_run
 # extern crate zetesis_solve;
-# extern crate zetesis_cpu;
+# extern crate zetesis_algebra;
 # extern crate zetesis_themelios;
 # extern crate zetesis_wgpu;
 {{#include ../examples/profiles.rs:example}}
 ```
 
-### Retain the original subject
+### Retain the original input
 
-`AnswerSet::subject()` retains the checked `Program`, `Theory`, original
+`AnswerSet::original()` retains the checked `Program`, `Theory`, original
 `HybridFormula` or `TerminalFormula`. Hybrid and terminal-definition answers
 retain their full source owners, not merely their core or base theories.
-`Subject::same_instance` distinguishes shared owners from independently admitted but
+`Original::same_instance` distinguishes shared owners from independently admitted but
 structurally equal inputs. `into_interpretation()` explicitly discards the
-subject association for raw-model interoperability; use it only when your own
+original association for raw-model interoperability; use it only when your own
 boundary can maintain the required context.
 
 The example uses a tiny family to show streaming and bounded complete collection.

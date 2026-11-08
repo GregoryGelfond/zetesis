@@ -76,6 +76,7 @@ fn fixture(native: bool) -> (ObjectivePlan, crate::RequiredChoices) {
     )
     .unwrap();
     let plan = ObjectivePlan {
+        identity: zetesis_objective::PlanIdentity::fresh(),
         original,
         objectives,
         nodes: nodes.into_parts(),
@@ -170,16 +171,52 @@ fn complete_cost_and_optimum_parity_keeps_duplicate_composite_witness_proofs() {
     assert_eq!(all_costs[0], all_costs[1]);
 }
 
+/// The strict bound keeps exactly the models strictly cheaper than its
+/// incumbent, with the exact fold alone and with the choice strengthening: a
+/// model at the incumbent's own cost, which the non-strict bound keeps, fails.
+#[test]
+fn a_strict_bound_keeps_only_models_strictly_cheaper_than_its_incumbent() {
+    for native in [false, true] {
+        let (mut plan, required) = fixture(native);
+        for prepared in [false, true] {
+            if prepared {
+                plan.prepare_choice_bounds(
+                    &required,
+                    ObjectivePlanLimits::default(),
+                    u128::MAX,
+                    &Cancellation::default(),
+                )
+                .unwrap();
+            }
+            let masks: Vec<_> = (0..8)
+                .filter(|&mask| holds(plan.original(), mask))
+                .collect();
+            let scores: Vec<_> = masks.iter().map(|&mask| score(&plan, mask)).collect();
+            for incumbent in &scores {
+                let strict = plan
+                    .strict_bound(
+                        incumbent,
+                        ObjectiveBoundLimits::default(),
+                        &Cancellation::default(),
+                    )
+                    .unwrap();
+                assert!(strict.choice_failure().is_none());
+                for (&mask, score) in masks.iter().zip(&scores) {
+                    assert_eq!(
+                        holds(strict.theory(), mask),
+                        score.compare_costs(incumbent) == Ordering::Less
+                    );
+                }
+            }
+        }
+    }
+}
+
 #[test]
 fn witness_cursor_charges_each_physical_occurrence_once() {
     let (plan, _) = fixture(true);
     let cancellation = Cancellation::default();
-    let mut work = Work {
-        limits: ObjectivePlanLimits::default(),
-        cancellation: &cancellation,
-        template: None,
-        statistics: ObjectiveBoundStatistics::default(),
-    };
+    let mut work = Work::new(ObjectivePlanLimits::default(), &cancellation);
     let mut memory = Storage {
         bytes: 0,
         limit: u128::MAX,
@@ -193,7 +230,7 @@ fn witness_cursor_charges_each_physical_occurrence_once() {
             )
         })
         .unwrap();
-    let start = work.statistics.work;
+    let start = work.meter.charged();
     let mut cursor = 0;
     let mut children = Vec::new();
     while let Some(child) = graph
@@ -204,8 +241,23 @@ fn witness_cursor_charges_each_physical_occurrence_once() {
     }
     assert_eq!(children, [3, 1, 3]);
     assert_eq!(cursor, 4);
-    assert_eq!(work.statistics.work - start, 4);
-    work.limits.max_work = work.statistics.work + 2;
+    assert_eq!(work.meter.charged() - start, 4);
+    let prefix = work.statistics();
+    let mut work = Work {
+        template: work.template,
+        bindings: prefix.bindings,
+        keys: prefix.keys,
+        key_bytes: prefix.key_bytes,
+        nodes: prefix.nodes,
+        ..Work::new(
+            ObjectivePlanLimits {
+                max_work: prefix.work + 2,
+                ..work.limits
+            },
+            &cancellation,
+        )
+    };
+    work.account(prefix.work).unwrap();
     let mut cursor = 0;
     assert!(
         graph
@@ -240,12 +292,7 @@ fn assumed_cut_forces_only_a_unique_distinct_composite_witness() {
         ([1, 3, 1], ExtremumCutRule::Prefix(0), None),
         ([3, 1, 3], ExtremumCutRule::Suffix(2), Some(3)),
     ] {
-        let mut work = Work {
-            limits: ObjectivePlanLimits::default(),
-            cancellation: &cancellation,
-            template: None,
-            statistics: ObjectiveBoundStatistics::default(),
-        };
+        let mut work = Work::new(ObjectivePlanLimits::default(), &cancellation);
         let cut = ExtremumCut {
             row: ExtremumRow {
                 conditions: &[3, 0, 3],
@@ -283,12 +330,7 @@ fn endpoint_truth_never_requires_a_qualifying_child() {
     transaction.commit();
     plan.nodes = nodes.into_parts();
     let cancellation = Cancellation::default();
-    let mut work = Work {
-        limits: ObjectivePlanLimits::default(),
-        cancellation: &cancellation,
-        template: None,
-        statistics: ObjectiveBoundStatistics::default(),
-    };
+    let mut work = Work::new(ObjectivePlanLimits::default(), &cancellation);
     let mut memory = Storage {
         bytes: 0,
         limit: u128::MAX,
@@ -334,12 +376,7 @@ fn true_native_activation_transports_a_unique_composite_child() {
         plan.original =
             Theory::new(3, original.into_parts(), vec![], AdmissionLimits::default()).unwrap();
         let cancellation = Cancellation::default();
-        let mut work = Work {
-            limits: ObjectivePlanLimits::default(),
-            cancellation: &cancellation,
-            template: None,
-            statistics: ObjectiveBoundStatistics::default(),
-        };
+        let mut work = Work::new(ObjectivePlanLimits::default(), &cancellation);
         let mut memory = Storage {
             bytes: 0,
             limit: u128::MAX,

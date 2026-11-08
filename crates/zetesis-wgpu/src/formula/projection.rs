@@ -7,8 +7,8 @@ use std::borrow::Cow;
 ///
 /// Both implementations use the same three atomic observations and intersections,
 /// including physical-slot aliases and observations taken at different instants.
-/// Native groups use the shared operand reduction, which preserves satisfying
-/// completions without claiming exact projection of racing aliased observations.
+/// Native Boolean and numeric groups use shared operand reductions, preserving
+/// satisfying completions without claiming exact projection of racing aliased observations.
 /// Both policies retain the frozen query, work bounds and result protocol.
 /// Selecting an alternative establishes no physical qualification or speedup.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -41,7 +41,15 @@ impl GateProjection {
     // A fixed-size, fallible reservation precedes construction. No user text or
     // repeated replacement occurs; both variants therefore share the scaffold.
     pub(super) fn shader(self) -> Result<Cow<'static, str>, GpuError> {
-        const BASELINE: &str = include_str!("../formula.wgsl");
+        const BASELINE: &str = concat!(
+            include_str!("../formula.wgsl"),
+            include_str!("../words.wgsl"),
+            include_str!("../formula_graph/truth.wgsl"),
+            include_str!("../formula_graph/numeric.wgsl"),
+            include_str!("numeric.wgsl"),
+            include_str!("subset.wgsl"),
+            include_str!("../reduction.wgsl")
+        );
         match self {
             Self::Enumerated => Ok(Cow::Borrowed(BASELINE)),
             Self::Bitwise => {
@@ -57,23 +65,7 @@ impl GateProjection {
                     .split_once("fn finish(")
                     .ok_or_else(invalid)?;
                 let parts = [prefix, include_str!("bitwise.wgsl"), "fn finish(", suffix];
-                let capacity = parts
-                    .iter()
-                    .try_fold(0usize, |total, part| total.checked_add(part.len()))
-                    .ok_or_else(|| {
-                        GpuError::new(
-                            GpuErrorKind::Capacity,
-                            "formula shader source length overflow",
-                        )
-                    })?;
-                let mut source = String::new();
-                source
-                    .try_reserve_exact(capacity)
-                    .map_err(|error| GpuError::new(GpuErrorKind::Allocation, error.to_string()))?;
-                for part in parts {
-                    source.push_str(part);
-                }
-                Ok(Cow::Owned(source))
+                crate::kernel::assemble(&parts, "formula shader source length overflow")
             }
         }
     }

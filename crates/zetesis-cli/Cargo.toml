@@ -16,9 +16,9 @@ zetesis-telemetry.workspace = true
 rayon.workspace = true
 zetesis-core.workspace = true
 zetesis-themelios.workspace = true
-zetesis-cpu.workspace = true
+zetesis-algebra.workspace = true
 zetesis-ferraris.workspace = true
-zetesis-sat.workspace = true
+zetesis-stable.workspace = true
 zetesis-objective.workspace = true
 zetesis-wgpu = { workspace = true, optional = true }
 clap.workspace = true

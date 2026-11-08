@@ -1,9 +1,15 @@
 //! Fixture integrity is portable; complete clingo contract checks are opt-in.
+mod algebraic_classes;
+mod shifted_sum;
+mod strategic_companies;
+mod two_qbf;
+mod two_qbf_cores;
 use std::collections::BTreeSet;
 use zetesis_test_support::repository::examples as root;
 use zetesis_validation::{
     examples,
     performance::{
+        bundles,
         matrix::{Workload, WorkloadLimits},
         scalability,
     },
@@ -237,4 +243,295 @@ fn default_authored_families_satisfy_their_contracts() {
             answers.model_count()
         );
     }
+}
+
+fn poker() -> Workload {
+    let mut workloads = bundles::load(
+        &root().join("scalability/poker/manifest.json"),
+        WorkloadLimits::default(),
+    )
+    .unwrap();
+    assert_eq!(workloads.len(), 1);
+    workloads.pop().unwrap()
+}
+
+#[test]
+fn poker_bundle_preserves_its_reviewed_include_graph() {
+    let workload = poker();
+    assert!(workload.is_bundle());
+    assert_eq!(workload.entry(), "draw_poker_tests.lp");
+    let record = serde_json::to_value(&workload).unwrap();
+    assert_eq!(
+        record["bundle"]["manifest"]["sha256"],
+        "0384bacc2a0cc947165f72b769fb72404612b577dd39f50266e439850373837c"
+    );
+    assert_eq!(record["bundle"]["files"].as_array().unwrap().len(), 2);
+    assert_eq!(
+        record["bundle"]["files"][0]["includes"],
+        serde_json::json!([{ "spelling": "draw_poker.lp", "target": "draw_poker.lp" }])
+    );
+}
+
+#[test]
+fn poker_contract_lists_every_nonroyal_straight_flush() {
+    let workload = poker();
+    let contract = workload.contract().unwrap();
+    let expected = ["clubs", "diamonds", "hearts", "spades"]
+        .into_iter()
+        .flat_map(|suit| {
+            (1_u8..=9).map(move |low| {
+                let mut display = (low..=low + 4)
+                    .map(|rank| {
+                        let value = if rank == 1 { 14 } else { rank };
+                        format!("hand(hero,{value},{suit})")
+                    })
+                    .collect::<BTreeSet<_>>();
+                display.insert(format!("top_hand(hero,9,{low},{},na)", low + 4));
+                display
+            })
+        })
+        .collect::<BTreeSet<_>>();
+    let recorded = contract
+        .witnesses()
+        .iter()
+        .map(|witness| witness.iter().cloned().collect::<BTreeSet<_>>())
+        .collect::<BTreeSet<_>>();
+    assert_eq!(expected.len(), 36);
+    assert_eq!(recorded, expected);
+    assert_eq!(contract.witnesses().len(), 36);
+    assert!(
+        contract
+            .witnesses()
+            .iter()
+            .all(|witness| witness.len() == 6)
+    );
+    assert_eq!(contract.model_count(), Some(36));
+    assert_eq!(contract.family(), examples::Family::All);
+    assert_eq!(contract.satisfiability(), examples::Satisfiability::Sat);
+    assert_eq!(contract.cost(), None);
+}
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+#[test]
+#[ignore = "requires clingo: poker has exactly the recorded 36 displayed answers"]
+fn poker_complete_family_satisfies_its_contract() {
+    use std::time::Duration;
+    use zetesis_clingo_support as oracle;
+    let workload = poker();
+    let run = oracle::run_in(
+        &root().join("scalability/poker"),
+        ["--models=0", "--outf=2", workload.entry()],
+        &oracle::DECIDED,
+        oracle::Limits {
+            timeout: Duration::from_mins(1),
+            max_output_bytes: 8 * 1024 * 1024,
+        },
+    );
+    let answers = oracle::answers(&run);
+    workload.contract().unwrap().check(&answers).unwrap();
+}
+
+fn family_crossing() -> Workload {
+    let mut workloads = bundles::load(
+        &root().join("family-crossing/manifest.json"),
+        WorkloadLimits::default(),
+    )
+    .unwrap();
+    assert_eq!(workloads.len(), 1);
+    workloads.pop().unwrap()
+}
+
+#[test]
+fn maintained_corpus_appends_family_to_the_original_catalog() {
+    let catalog = examples::load(&root().join("correctness"), examples::Limits::default()).unwrap();
+    let workloads = zetesis_validation::performance::corpus::workloads(
+        &catalog,
+        &root(),
+        WorkloadLimits::default(),
+    )
+    .unwrap();
+    assert_eq!(catalog.cases().len(), 94);
+    assert_eq!(workloads.len(), 95);
+    for (workload, case) in workloads[..94].iter().zip(catalog.cases()) {
+        assert_eq!(workload.entry(), case.path());
+        assert_eq!(workload.contract(), Some(case.contract()));
+        assert_eq!(
+            serde_json::to_value(workload).unwrap()["manifest_sha256"],
+            examples::MANIFEST_SHA256
+        );
+    }
+    assert_eq!(workloads[94].entry(), "family-crossing/integrated.lp");
+    assert_eq!(workloads[94].identity(), family_crossing().identity());
+    assert_eq!(
+        workloads
+            .iter()
+            .map(Workload::identity)
+            .collect::<BTreeSet<_>>()
+            .len(),
+        95
+    );
+}
+
+#[test]
+fn family_bundle_preserves_every_original_source_and_include() {
+    let workload = family_crossing();
+    assert!(workload.is_bundle());
+    assert!(!workload.is_amended());
+    let record = serde_json::to_value(&workload).unwrap();
+    assert!(record.get("manifest_sha256").is_none());
+    assert_eq!(
+        record["bundle"]["manifest"]["sha256"],
+        "92a39c82c8bebb5f17323db9e61084f2b713628b574690bcc0312147395d3f26"
+    );
+    assert_eq!(
+        record["bundle"]["files"],
+        serde_json::json!([
+            {
+                "path": "family-crossing/integrated.lp",
+                "sha256": "ddd36744c2138067f5d37dd9679e2e02427eb4eb80af5c63549bac7660703b29",
+                "includes": [{
+                    "spelling": "family_crossing_complete_domain.lp",
+                    "target": "family-crossing/family_crossing_complete_domain.lp"
+                }]
+            },
+            {
+                "path": "family-crossing/family_crossing_complete_domain.lp",
+                "sha256": "2903ff0b8134ad5b99df68fe7cc0ac6ad387f44f160d16a199c037a5c59241da",
+                "includes": [{
+                    "spelling": "eec_htp_integration_v5.lp",
+                    "target": "family-crossing/eec_htp_integration_v5.lp"
+                }]
+            },
+            {
+                "path": "family-crossing/eec_htp_integration_v5.lp",
+                "sha256": "1d0f52af6de50c7d0bb64abb3b61203c351c582b29222fccacb71bac53c727ed",
+                "includes": []
+            }
+        ])
+    );
+    for source in record["sources"].as_array().unwrap() {
+        assert_eq!(source["base_sha256"], source["derived_sha256"]);
+        assert_eq!(source["edits"], serde_json::json!([]));
+    }
+}
+
+#[test]
+fn family_contract_requires_eight_optimal_ties_at_cost_29() {
+    let workload = family_crossing();
+    let contract = workload.contract().unwrap();
+    assert_eq!(contract.satisfiability(), examples::Satisfiability::Sat);
+    assert_eq!(contract.family(), examples::Family::Optimal);
+    assert_eq!(contract.model_count(), Some(8));
+    assert_eq!(contract.cost(), Some([29].as_slice()));
+}
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+#[test]
+#[ignore = "requires clingo: Family Crossing has eight complete optimum ties at cost 29"]
+fn family_complete_optimal_family_satisfies_its_contract() {
+    use std::time::Duration;
+    use zetesis_clingo_support as oracle;
+    let workload = family_crossing();
+    let run = oracle::run_in(
+        &root(),
+        [
+            "--models=0",
+            "--opt-mode=optN",
+            "--outf=2",
+            workload.entry(),
+        ],
+        &oracle::DECIDED,
+        oracle::Limits {
+            timeout: Duration::from_mins(2),
+            max_output_bytes: 32 * 1024 * 1024,
+        },
+    );
+    workload
+        .contract()
+        .unwrap()
+        .check(&oracle::answers(&run))
+        .unwrap();
+}
+
+fn wide_mastermind() -> Workload {
+    let mut workloads = bundles::load(
+        &root().join("wide-mastermind/manifest.json"),
+        WorkloadLimits::default(),
+    )
+    .unwrap();
+    assert_eq!(workloads.len(), 1);
+    workloads.pop().unwrap()
+}
+
+#[test]
+fn wide_mastermind_bundle_preserves_every_original_source_and_include() {
+    let workload = wide_mastermind();
+    assert!(workload.is_bundle());
+    assert!(!workload.is_amended());
+    let record = serde_json::to_value(&workload).unwrap();
+    assert!(record.get("manifest_sha256").is_none());
+    assert_eq!(
+        record["bundle"]["manifest"]["sha256"],
+        "f259b629f0fda2ee2a02996ec163c84f1d23fe165738c8261eaa94e7cc4f378e"
+    );
+    assert_eq!(
+        record["bundle"]["files"],
+        serde_json::json!([
+            {
+                "path": "wide-mastermind/68/mm-68-examples.lp",
+                "sha256": "7d201478242b35de73ed5e671388738eeffebb108044fc297bf513e302b93000",
+                "includes": [
+                    {"spelling": "mm-68.lp", "target": "wide-mastermind/68/mm-68.lp"},
+                    {"spelling": "../mm-base.lp", "target": "wide-mastermind/mm-base.lp"}
+                ]
+            },
+            {
+                "path": "wide-mastermind/68/mm-68.lp",
+                "sha256": "2ec0d379cfcced3ff156c4ca87dbb4bf3ccaef5aeba9c50ad04fc7e621a66a43",
+                "includes": []
+            },
+            {
+                "path": "wide-mastermind/mm-base.lp",
+                "sha256": "176a1598c9f946d1952195cdabe752088f65575a45d8fafd5d16b385f1aafa52",
+                "includes": []
+            }
+        ])
+    );
+    for source in record["sources"].as_array().unwrap() {
+        assert_eq!(source["base_sha256"], source["derived_sha256"]);
+        assert_eq!(source["edits"], serde_json::json!([]));
+    }
+}
+
+#[test]
+fn wide_mastermind_contract_requires_all_45832_consistent_codes() {
+    let workload = wide_mastermind();
+    let contract = workload.contract().unwrap();
+    assert_eq!(contract.satisfiability(), examples::Satisfiability::Sat);
+    assert_eq!(contract.family(), examples::Family::All);
+    assert_eq!(contract.model_count(), Some(45_832));
+    assert_eq!(contract.cost(), None);
+}
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+#[test]
+#[ignore = "requires clingo: wide Mastermind has 45,832 codes consistent with its scored guess"]
+fn wide_mastermind_complete_family_satisfies_its_contract() {
+    use std::time::Duration;
+    use zetesis_clingo_support as oracle;
+    let workload = wide_mastermind();
+    let run = oracle::run_in(
+        &root(),
+        ["--models=0", "--outf=2", workload.entry()],
+        &oracle::DECIDED,
+        oracle::Limits {
+            timeout: Duration::from_mins(2),
+            max_output_bytes: 32 * 1024 * 1024,
+        },
+    );
+    workload
+        .contract()
+        .unwrap()
+        .check(&oracle::answers(&run))
+        .unwrap();
 }

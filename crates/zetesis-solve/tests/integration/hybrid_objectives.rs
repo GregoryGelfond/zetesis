@@ -4,15 +4,17 @@ use crate::support::models::ScoredFamily as Family;
 use std::{convert::Infallible, num::NonZeroUsize};
 use zetesis_reference_support::{formula, hybrid};
 
-use zetesis_cpu::Cancellation;
+use zetesis_algebra::Cancellation;
 use zetesis_solve::{
     AnswerSelection, Backend, Completion, ExecutionObservation, ExecutionObserver, Grounder,
-    Interruption, OptimizationStop, PreparedInput, SearchMethod, SemanticOutcome, Session,
-    SolveConfig,
+    Interruption, OptimizationStop, PreparedInput, SemanticOutcome, Session, SolveConfig,
 };
 use zetesis_test_support::programs::model;
 use zetesis_themelios::AdmittedFormula;
 
+// The constraints of `PRIORITIES` and `FALLBACK` are written `:- a, not not b.`
+// so that the core proposes {a,b} and the stream rejects it: pair capture would
+// move `:- a, b.` into the core, which would then never propose it.
 const PRIORITIES: &str = include_str!("../fixtures/hybrid-objectives/priorities.lp");
 const FALLBACK: &str = include_str!("../fixtures/hybrid-objectives/fallback.lp");
 const REQUIRED: &str = include_str!("../fixtures/hybrid-objectives/required.lp");
@@ -57,15 +59,8 @@ fn capture(
 }
 
 fn routes() -> impl Iterator<Item = SolveConfig> {
-    [
-        (SearchMethod::Clauses, 1),
-        (SearchMethod::Regions, 1),
-        (SearchMethod::Regions, 4),
-    ]
-    .into_iter()
-    .flat_map(|(search, workers)| {
+    [1, 4].into_iter().flat_map(|workers| {
         [0, 1_000_000].map(|max_objective_bound_work| SolveConfig {
-            search,
             workers: NonZeroUsize::new(workers).unwrap(),
             max_objective_bound_work,
             ..config()
@@ -77,6 +72,7 @@ fn routes() -> impl Iterator<Item = SolveConfig> {
 fn lazy_objectives_preserve_complete_scored_answers() {
     let original = eager(PRIORITIES);
     let owner = hybrid(PRIORITIES);
+    assert_eq!(owner.streamed_templates(), 1);
     let (expected, _) = capture(
         PreparedInput::formula(&original),
         SolveConfig {
@@ -160,7 +156,13 @@ fn requested_optimal_models_limit_delivery() {
             outcome.incumbent().unwrap().score.costs(),
             [(2, 0), (1, -3)]
         );
-        assert_eq!(outcome.incumbent().unwrap().tied_models, 2);
+        // Unbounded, the search meets both ties; the default's strict bound
+        // at the optimum prunes the other, which it then does not count.
+        let best = outcome.incumbent().unwrap();
+        assert_eq!(best.ties_pruned, config.max_objective_bound_work != 0);
+        if !best.ties_pruned {
+            assert_eq!(best.tied_models, 2);
+        }
         assert_eq!(outcome.retained_models(), 1);
     }
 }
@@ -171,7 +173,6 @@ fn requested_all_models_count_accepted_answers() {
     let (answers, outcome) = capture(
         PreparedInput::hybrid(&owner),
         SolveConfig {
-            search: SearchMethod::Clauses,
             models: 1,
             ..config()
         },
@@ -246,24 +247,29 @@ fn lazy_objectives_preserve_admitted_presence() {
 }
 
 #[test]
-fn rejected_core_exhaustion_proves_original_inconsistency() {
+fn filtered_core_exhaustion_proves_original_inconsistency() {
     let owner = hybrid(INCONSISTENT);
     let (answers, outcome) = capture(
         PreparedInput::hybrid(&owner),
-        SolveConfig {
-            search: SearchMethod::Clauses,
-            ..config()
-        },
+        config(),
         AnswerSelection::Optimal,
     );
     assert!(answers.is_empty());
     assert!(outcome.unsatisfiable());
     assert_eq!(outcome.scored_models(), 0);
     assert!(outcome.incumbent().is_none());
+    // The region filter refutes both choices before either is a core answer.
     let receipt = outcome.hybrid_execution().unwrap();
-    assert_eq!(receipt.core_answers, 2);
-    assert_eq!(receipt.rejected, 2);
-    assert_eq!(receipt.pending, 0);
+    assert_eq!(
+        (receipt.core_answers, receipt.rejected, receipt.pending),
+        (0, 0, 0)
+    );
+    let filter = outcome
+        .countermodel_statistics()
+        .unwrap()
+        .region_filter
+        .unwrap();
+    assert!(filter.refuted > 0);
 }
 
 #[test]
@@ -354,12 +360,12 @@ fn refused_preparation_preserves_lazy_scored_answers() {
         );
     }
     // The possible relation has two keys; each original answer has at most
-    // one. Rejected core {a,b} must never enter the fallback evaluator.
+    // one. {a,b} must never enter the fallback evaluator: the region filter's
+    // source consequences exclude it before it is a core answer.
     let mut observations = PlanRefusals::default();
     let mut session = Session::builder(
         PreparedInput::hybrid(&owner),
         SolveConfig {
-            search: SearchMethod::Clauses,
             max_objective_keys: 1,
             ..config()
         },
@@ -385,5 +391,11 @@ fn refused_preparation_preserves_lazy_scored_answers() {
     let outcome = session.outcome().unwrap();
     assert_eq!(outcome.completion(), Some(Completion::Exhausted));
     assert_eq!(outcome.scored_models(), 3);
-    assert_eq!(outcome.hybrid_execution().unwrap().rejected, 1);
+    assert_eq!(outcome.hybrid_execution().unwrap().rejected, 0);
+    let filter = outcome
+        .countermodel_statistics()
+        .unwrap()
+        .region_filter
+        .unwrap();
+    assert!(filter.checks > 0);
 }

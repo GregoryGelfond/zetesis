@@ -1,7 +1,7 @@
 //! Legacy option selection at the edge of the shared renderer contract.
 
 use std::io::Write;
-use zetesis_cpu::Cancellation;
+use zetesis_algebra::Cancellation;
 
 use crate::{
     AnswerRenderer, AnswerView, ConfigurationView, CountRenderer, HumanRenderer, JsonRenderer,

@@ -78,6 +78,7 @@ fn with_pivot_rows(
             region: &region,
         },
         mode: ConsequenceMode::Pivot(pivot),
+        delta: None,
     };
     let plan = PreparedRule::new(
         rule,
@@ -359,7 +360,7 @@ fn pivot_evidence_retains_cancellation() {
                     Context::new(computation, limits, &mut counters, rule.location)
                 ),
                 Err(FormulaFailure::Interrupted {
-                    reason: zetesis_cpu::Stop::Cancelled,
+                    reason: zetesis_algebra::Stop::Cancelled,
                     ..
                 })
             ));

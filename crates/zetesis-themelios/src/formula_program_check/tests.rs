@@ -1,7 +1,7 @@
 use super::check;
 use crate::{
     AdmissionOptions, CompilationFailure, ParsedSource, ProfileFeature, ProgramAdmissionOptions,
-    ProgramFailureKind, ProgramResource, ProgramSubject,
+    ProgramFailureKind, ProgramOriginal, ProgramResource,
 };
 use themelios_program::program::{Arguments, Atom, Program, Rule, Script, Statement};
 use themelios_program::provenance::{Origin, Provenance, TransformTag, WithProvenance};
@@ -19,7 +19,7 @@ fn program(text: &str) -> Program {
 fn limit(program: &Program, options: ProgramAdmissionOptions, resource: ProgramResource) {
     let error = check(program, options).unwrap_err();
     assert!(matches!(error.kind, ProgramFailureKind::Limit(found) if found.resource == resource));
-    let ProgramSubject::Statement(statement) = error.subject else {
+    let ProgramOriginal::Statement(statement) = error.original else {
         panic!("expected original statement");
     };
     assert!(
@@ -181,15 +181,17 @@ fn unsupported_shells_retain_the_actual_statement() {
         error.kind,
         ProgramFailureKind::Compilation(CompilationFailure::Profile(ProfileFeature::Statement))
     ));
-    assert!(matches!(error.subject, ProgramSubject::Statement(statement)
-        if std::ptr::eq(statement, program.statements().next().unwrap())));
+    assert!(
+        matches!(error.original, ProgramOriginal::Statement(statement)
+        if std::ptr::eq(statement, program.statements().next().unwrap()))
+    );
 }
 
 #[test]
 fn unsupported_parts_retain_the_actual_key() {
     let program = program("#program step(t). p(t).");
     let error = check(&program, ProgramAdmissionOptions::default()).unwrap_err();
-    assert!(matches!(error.subject, ProgramSubject::Part(key) if key.name.as_str() == "step"));
+    assert!(matches!(error.original, ProgramOriginal::Part(key) if key.name.as_str() == "step"));
 }
 
 #[test]

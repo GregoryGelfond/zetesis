@@ -7,7 +7,7 @@ use super::{
 };
 use crate::{GpuError, GpuErrorKind};
 use std::cmp::Ordering;
-use zetesis_cpu::Cancellation;
+use zetesis_algebra::Cancellation;
 use zetesis_ferraris::native_aggregate::{Eligibility, Function};
 
 pub(super) struct Plan {

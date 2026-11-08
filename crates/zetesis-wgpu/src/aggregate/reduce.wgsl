@@ -1,4 +1,10 @@
 // One workgroup owns an occurrence. No floating point or optional subgroup ops.
+// Every workgroup location an invocation reads was written earlier in its
+// workgroup, by the same invocation or by another ordered before the read by a
+// barrier or uniform load, and every workgroup array index is within its array.
+// The pipeline keeps WebGPU's zero-fill of workgroup memory, which this rule
+// makes unobservable; CONTRIBUTING ("Carry the semantic contract into Lean and
+// Rust") records the fill's status and what removing it requires.
 struct Dimensions { tuples: u32, guards: u32, worlds: u32, function: u32, stride: u32, epoch: u32, work: u32, reserved: u32 }
 @group(0) @binding(0) var<uniform> dimensions: Dimensions;
 @group(0) @binding(1) var<storage, read> contributions: array<u32>;
@@ -14,6 +20,11 @@ const LT: u32 = 2u;
 const LE: u32 = 3u;
 const GT: u32 = 4u;
 const GE: u32 = 5u;
+// One element per lane: each of the 64 invocations writes its own element
+// before the first barrier, and each round of the tree, separated by a
+// barrier, reads [lane] and [lane + distance] for lane < distance <= 32, so
+// every index stays below 64. Invocation 0 reads element 0 after the last
+// round's barrier.
 var<workgroup> original_values: array<i32, 64>;
 var<workgroup> frozen_values: array<i32, 64>;
 var<workgroup> original_present: array<u32, 64>;
@@ -66,9 +77,9 @@ fn reduce(@builtin(workgroup_id) group: vec3<u32>, @builtin(local_invocation_ind
     for (var tuple = lane; tuple < dimensions.tuples; tuple += 64u) {
         let value = bitcast<i32>(contributions[tuple * 2u]);
         let present = contributions[tuple * 2u + 1u];
-        let bit = 1u << (tuple % 32u);
-        let original = (masks[row + 1u + tuple / 32u] & bit) != 0u;
-        let frozen = (masks[row + 1u + mask_words + tuple / 32u] & bit) != 0u;
+        let bit = packed_bit(tuple);
+        let original = (masks[row + 1u + bit.word] & bit.mask) != 0u;
+        let frozen = (masks[row + 1u + mask_words + bit.word] & bit.mask) != 0u;
         if original && present != 0u { ov = combine(ov, value, op, present); op = 1u; }
         if frozen && present != 0u { fv = combine(fv, value, fp, present); fp = 1u; }
     }

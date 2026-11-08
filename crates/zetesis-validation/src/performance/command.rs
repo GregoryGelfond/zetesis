@@ -1,12 +1,12 @@
 //! Reusable campaign selection for application commands.
 //!
 //! Command adapters resolve paths and map arguments to the existing typed plan.
-//! This module owns the maintained series expansion; measurement, qualification,
-//! resource limits and report publication remain the matrix library's contracts.
+//! This module owns maintained corpus and series expansion; measurement,
+//! qualification, resource limits and publication remain the matrix contracts.
 
-use super::{Error, matrix, series};
+use super::{Error, corpus, matrix, series};
 
-/// Run a matrix, expanding the maintained generated/constant series when selected.
+/// Run a matrix, expanding the maintained corpus or generated/constant series.
 ///
 /// Limits are used exactly as supplied. A caller choosing the maintained series
 /// can explicitly apply [`series::limits`] and [`series::native_answers`] before
@@ -42,11 +42,28 @@ pub fn run_with_cancellation(
     invocation: matrix::NativeInvocation,
     cancelled: &std::sync::atomic::AtomicBool,
 ) -> Result<matrix::Report, Error> {
-    if request.plan.suite() == matrix::Suite::Series {
+    if request.plan.suite() == matrix::Suite::Corpus {
+        let catalog =
+            crate::examples::load(request.corpus, request.limits.corpus).map_err(Error::Corpus)?;
+        let root = catalog.root().parent().ok_or(Error::Configuration(
+            "the correctness catalog has no enclosing examples directory",
+        ))?;
+        let workloads = corpus::workloads(
+            &catalog,
+            root,
+            matrix::WorkloadLimits {
+                source_bytes: request.limits.corpus.source_bytes,
+                total_source_bytes: request.limits.corpus.total_source_bytes,
+                metadata_bytes: request.limits.corpus.manifest_bytes,
+                amendments: 0,
+            },
+        )?;
+        matrix::run_selected_workloads_with_cancellation(request, &workloads, invocation, cancelled)
+    } else if request.plan.suite() == matrix::Suite::Series {
         let corpus =
             crate::examples::load(request.corpus, request.limits.corpus).map_err(Error::Corpus)?;
         let workloads = series::workloads(&corpus, matrix::WorkloadLimits::default())?;
-        matrix::run_series_with_cancellation(request, &workloads, invocation, cancelled)
+        matrix::run_selected_workloads_with_cancellation(request, &workloads, invocation, cancelled)
     } else {
         matrix::run_with_cancellation(request, invocation, cancelled)
     }

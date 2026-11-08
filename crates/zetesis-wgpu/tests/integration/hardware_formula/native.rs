@@ -4,6 +4,11 @@ use super::*;
 use zetesis_ferraris::{ExtremumCutRule, ExtremumRow, FormulaNodes, FormulaParts};
 
 pub(super) fn qualify(oracle: &mut GpuFormulaOracle) {
+    qualify_full_width(oracle);
+    qualify_carry_and_borrow(oracle);
+    qualify_settled_rows(oracle);
+    qualify_threshold_guard_families(oracle);
+    qualify_shared_interval(oracle);
     for bound in -1..=8 {
         let mut nodes = FormulaNodes::new(
             FormulaParts::new(
@@ -62,8 +67,131 @@ pub(super) fn qualify(oracle: &mut GpuFormulaOracle) {
     ] {
         qualify_ordinal(oracle, rule, false);
     }
-    for rule in [ExtremumCutRule::Prefix(3), ExtremumCutRule::Suffix(3)] {
-        qualify_ordinal(oracle, rule, true);
+    for bound in 0..=5 {
+        for rule in [
+            ExtremumCutRule::Prefix(bound),
+            ExtremumCutRule::Suffix(bound),
+        ] {
+            qualify_ordinal(oracle, rule, true);
+        }
+    }
+    qualify_wide_ordinals(oracle);
+}
+
+// Upper sums cross the u32/u64 boundaries. Removing either contribution during
+// backward forcing borrows across them; both atoms remain true in every model.
+fn qualify_carry_and_borrow(oracle: &mut GpuFormulaOracle) {
+    for weight in [u64::from(u32::MAX), u64::MAX] {
+        qualify_carry_and_borrow_at(oracle, weight);
+    }
+}
+
+fn qualify_carry_and_borrow_at(oracle: &mut GpuFormulaOracle, weight: u64) {
+    let mut nodes =
+        FormulaNodes::new(FormulaParts::new(vec![Node::atom(0), Node::atom(1)], vec![]).unwrap());
+    let mut transaction = nodes.transaction();
+    let root = transaction
+        .push(
+            NodeView::Threshold(zetesis_ferraris::Threshold {
+                conditions: &[0, 1],
+                weights: &[weight, 1],
+                bound: i128::from(weight) + 1,
+            }),
+            usize::MAX,
+            usize::MAX,
+        )
+        .unwrap();
+    transaction.commit();
+    let theory = Theory::new(
+        2,
+        nodes.into_parts(),
+        vec![root],
+        zetesis_ferraris::AdmissionLimits::default(),
+    )
+    .unwrap();
+    compare_native(oracle, &theory);
+    let both = Interpretation::new(&theory, [0, 1]).unwrap();
+    let result = oracle
+        .propagate_batch(&theory, &[both], FormulaLimits::default())
+        .unwrap();
+    assert_eq!(result[0].verdict(), &FormulaVerdict::NoProperSubset);
+}
+
+// The same result must survive both entailed rows and rows still requiring a
+// backward transfer. One round makes an accidental skip of all forcing visible.
+fn qualify_settled_rows(oracle: &mut GpuFormulaOracle) {
+    for cut in [
+        None,
+        Some(ExtremumCutRule::Prefix(1)),
+        Some(ExtremumCutRule::Suffix(2)),
+    ] {
+        for settled in [false, true] {
+            let mut nodes = FormulaNodes::new(
+                FormulaParts::new(vec![Node::atom(0), Node::atom(1), Node::atom(2)], vec![])
+                    .unwrap(),
+            );
+            let mut transaction = nodes.transaction();
+            let row = if let Some(rule) = cut {
+                let ranks = match rule {
+                    ExtremumCutRule::Prefix(_) => [0, 0, 1, 2],
+                    ExtremumCutRule::Suffix(_) => [2, 2, 1, 0],
+                };
+                transaction
+                    .push_extremum_cut_family_range(
+                        ExtremumRow {
+                            conditions: &[0, 0, 1, 2],
+                            ranks: &ranks,
+                            rank_count: 3,
+                        },
+                        &[rule],
+                        usize::MAX,
+                        usize::MAX,
+                    )
+                    .unwrap()
+                    .start
+            } else {
+                transaction
+                    .push_threshold_family(
+                        &[0, 0, 1, 2],
+                        &[1, 1, 1, 1],
+                        &[4],
+                        usize::MAX,
+                        usize::MAX,
+                    )
+                    .unwrap()[0]
+            };
+            transaction.commit();
+            let mut roots = vec![row];
+            if settled {
+                roots.extend([0, 1, 2]);
+            } else if cut.is_some() {
+                // Only atom 0 qualifies, through two occurrences of one slot.
+                roots.extend([1, 2]);
+            }
+            let theory = Theory::new(
+                3,
+                nodes.into_parts(),
+                roots,
+                zetesis_ferraris::AdmissionLimits::default(),
+            )
+            .unwrap();
+            compare_native(oracle, &theory);
+            let candidate = Interpretation::new(&theory, [0, 1, 2]).unwrap();
+            let results = oracle
+                .propagate_batch(
+                    &theory,
+                    &[candidate],
+                    FormulaLimits {
+                        max_rounds: 1,
+                        ..FormulaLimits::default()
+                    },
+                )
+                .unwrap();
+            assert!(matches!(
+                results[0].verdict(),
+                FormulaVerdict::NoProperSubset
+            ));
+        }
     }
 }
 
@@ -87,6 +215,31 @@ fn compare_native(oracle: &mut GpuFormulaOracle, theory: &Theory) {
             );
             if matches!(result.verdict(), FormulaVerdict::NoProperSubset) {
                 assert!(expected.accepted());
+            }
+            // Every independently checked proper-subset witness must remain
+            // represented in the device's semantic root.
+            if !matches!(expected.verdict(), Verdict::NotModel { .. }) {
+                let frozen =
+                    FrozenReduct::new(candidate, Limits::default(), &Cancellation::default())
+                        .unwrap();
+                for tested in &inputs {
+                    if tested.atoms().all(|atom| candidate.contains(atom))
+                        && tested.atoms().count() < candidate.atoms().count()
+                        && frozen
+                            .is_satisfied_by(tested, Limits::default(), &Cancellation::default())
+                            .unwrap()
+                    {
+                        let FormulaVerdict::Residual(_, root) = result.verdict() else {
+                            panic!("a proper frozen witness requires residual completion");
+                        };
+                        assert_eq!(root.len(), theory.atom_count());
+                        for atom in 0..root.len() {
+                            if let Some(value) = root.decision(atom) {
+                                assert_eq!(value, tested.contains(atom));
+                            }
+                        }
+                    }
+                }
             }
         }
     }
@@ -134,4 +287,252 @@ fn qualify_ordinal(oracle: &mut GpuFormulaOracle, rule: ExtremumCutRule, empty: 
     )
     .unwrap();
     compare_native(oracle, &theory);
+}
+
+fn qualify_full_width(oracle: &mut GpuFormulaOracle) {
+    for bound in [
+        i128::MIN,
+        0,
+        1,
+        1i128 << 32,
+        i128::from(u64::MAX),
+        i128::from(u64::MAX) + 1,
+        i128::from(u64::MAX) * 2,
+        i128::MAX,
+    ] {
+        let mut nodes = FormulaNodes::new(
+            FormulaParts::new(vec![Node::atom(0), Node::atom(0), Node::atom(1)], vec![]).unwrap(),
+        );
+        let mut tx = nodes.transaction();
+        let root = tx
+            .push(
+                NodeView::Threshold(zetesis_ferraris::Threshold {
+                    conditions: &[0, 1, 2, 2],
+                    weights: &[u64::MAX, u64::MAX, 1, 0],
+                    bound,
+                }),
+                usize::MAX,
+                usize::MAX,
+            )
+            .unwrap();
+        tx.commit();
+        let theory = Theory::new(
+            2,
+            nodes.into_parts(),
+            vec![root],
+            zetesis_ferraris::AdmissionLimits::default(),
+        )
+        .unwrap();
+        compare_native(oracle, &theory);
+    }
+}
+
+fn qualify_wide_ordinals(oracle: &mut GpuFormulaOracle) {
+    let cases = [0, 1, 1u64 << 32, (1u64 << 32) + 1, u64::MAX - 1, u64::MAX]
+        .map(|bound| (bound, u64::MAX, [0, 1u64 << 32, u64::MAX - 1]))
+        .into_iter()
+        .chain([
+            (1, 1u64 << 32, [0, u64::from(u32::MAX), 1]),
+            (1, (1u64 << 32) + 1, [0, 1u64 << 32, 1]),
+        ]);
+    for (bound, rank_count, ranks) in cases {
+        for rule in [
+            ExtremumCutRule::Prefix(bound),
+            ExtremumCutRule::Suffix(bound),
+        ] {
+            let mut nodes = FormulaNodes::new(
+                FormulaParts::new(
+                    vec![Node::atom(0), Node::atom(0), Node::atom(1), Node::falsum()],
+                    vec![],
+                )
+                .unwrap(),
+            );
+            let mut tx = nodes.transaction();
+            let cut = tx
+                .push_extremum_cut_family_range(
+                    ExtremumRow {
+                        conditions: &[0, 1, 2],
+                        ranks: &ranks,
+                        rank_count,
+                    },
+                    &[rule],
+                    usize::MAX,
+                    usize::MAX,
+                )
+                .unwrap()
+                .start;
+            // Both a direct guard and its negation exercise the M-false frozen
+            // boundary under a true original root, with aliased semantic atoms.
+            let negated = tx
+                .push(NodeView::Implies(cut, 3), usize::MAX, usize::MAX)
+                .unwrap();
+            let root = tx
+                .push(NodeView::Or(&[cut, negated]), usize::MAX, usize::MAX)
+                .unwrap();
+            tx.commit();
+            let theory = Theory::new(
+                2,
+                nodes.into_parts(),
+                vec![root],
+                zetesis_ferraris::AdmissionLimits::default(),
+            )
+            .unwrap();
+            compare_native(oracle, &theory);
+        }
+    }
+}
+
+// One shared carrier must produce both kinds of guard without overwriting its
+// followers. Some candidates make only one cut true; each original-false cut
+// retains its own reduct gate even though its row also serves a true guard.
+pub(super) fn qualify_shared_ordinals(oracle: &mut GpuFormulaOracle) {
+    let mut nodes = FormulaNodes::new(
+        FormulaParts::new(
+            vec![
+                Node::atom(0),
+                Node::atom(0),
+                Node::atom(1),
+                Node::falsum(),
+                Node::implies(0, 3),
+            ],
+            vec![],
+        )
+        .unwrap(),
+    );
+    let mut tx = nodes.transaction();
+    let family = tx
+        .push_extremum_cut_family_range(
+            ExtremumRow {
+                conditions: &[0, 1, 2, 4],
+                ranks: &[0, 1u64 << 32, u64::MAX - 1, 7],
+                rank_count: u64::MAX,
+            },
+            &[
+                ExtremumCutRule::Prefix(0),
+                ExtremumCutRule::Suffix(u64::MAX),
+                ExtremumCutRule::Prefix(1),
+                ExtremumCutRule::Suffix(u64::MAX - 1),
+                ExtremumCutRule::Prefix(u64::MAX),
+                ExtremumCutRule::Suffix(0),
+            ],
+            usize::MAX,
+            usize::MAX,
+        )
+        .unwrap();
+    let mut roots = Vec::new();
+    for guard in [family.start + 2, family.start + 3] {
+        let negated = tx
+            .push(NodeView::Implies(guard, 3), usize::MAX, usize::MAX)
+            .unwrap();
+        roots.push(
+            tx.push(NodeView::Or(&[guard, negated]), usize::MAX, usize::MAX)
+                .unwrap(),
+        );
+    }
+    tx.commit();
+    // An unused third atom supplies proper-subset witnesses for candidates
+    // containing it; the shared-cut test must preserve residual completion too.
+    let theory = Theory::new(
+        3,
+        nodes.into_parts(),
+        roots,
+        zetesis_ferraris::AdmissionLimits::default(),
+    )
+    .unwrap();
+    compare_native(oracle, &theory);
+}
+
+// The host characterization establishes the corresponding CPU frozen closure.
+// This assertion detects the missing cross-guard deduction: the old local
+// threshold transfers reached a fixed-point residual on the same candidate.
+fn qualify_threshold_guard_families(oracle: &mut GpuFormulaOracle) {
+    for weight in [1, u64::MAX] {
+        for order in [&[1, 2][..], &[2, 1], &[4, 1, 2]] {
+            let theory = crate::formula::frozen_guards::theory(weight, order);
+            compare_native(oracle, &theory);
+            let candidate = Interpretation::new(&theory, [0, 1, 2]).unwrap();
+            let result = oracle
+                .propagate_batch(&theory, &[candidate], FormulaLimits::default())
+                .unwrap();
+            assert_eq!(result[0].verdict(), &FormulaVerdict::NoProperSubset);
+            assert_eq!(
+                oracle.last_batch_stats().unwrap().propagation,
+                super::requested_groups(oracle, &theory)
+            );
+        }
+    }
+}
+
+// The lower requirement must force b before strict-subset pruning can cut a.
+// The final witness then gives the same row a true lower and false upper guard.
+fn qualify_shared_interval(oracle: &mut GpuFormulaOracle) {
+    let mut nodes =
+        FormulaNodes::new(FormulaParts::new((0..3).map(Node::atom).collect(), vec![]).unwrap());
+    let mut transaction = nodes.transaction();
+    let guards = transaction
+        .push_threshold_family(
+            &[0, 0, 1, 2],
+            &[1, 1, 4, 1],
+            &[7, 4],
+            usize::MAX,
+            usize::MAX,
+        )
+        .unwrap();
+    let implication = transaction
+        .push(NodeView::Implies(guards[0], 0), usize::MAX, usize::MAX)
+        .unwrap();
+    transaction.commit();
+    let theory = Theory::new(
+        3,
+        nodes.into_parts(),
+        vec![2, guards[1], implication],
+        zetesis_ferraris::AdmissionLimits::default(),
+    )
+    .unwrap();
+    let descriptors = [guards[0], guards[1]].map(|guard| {
+        theory.parts().thresholds()[theory.nodes()[guard].threshold_descriptor().unwrap()]
+    });
+    assert_eq!(descriptors[0].row, descriptors[1].row);
+    assert_eq!([descriptors[0].bound, descriptors[1].bound], [7, 4]);
+    let control = Cancellation::default();
+    let candidate = Interpretation::new(&theory, [0, 1, 2]).unwrap();
+    let mut workspace = zetesis_ferraris::EvaluationWorkspace::default();
+    let evaluated = workspace
+        .evaluate(
+            &candidate,
+            zetesis_ferraris::EvaluationLimits::default(),
+            &control,
+        )
+        .result
+        .unwrap();
+    assert!(evaluated.is_model());
+    for &guard in &guards {
+        assert_eq!(evaluated.node_truth(guard), Some(true));
+    }
+    let family: Vec<Vec<_>> = candidates(&theory)
+        .iter()
+        .filter(|tested| {
+            check(&theory, tested, Limits::default(), &control)
+                .unwrap()
+                .accepted()
+        })
+        .map(|tested| tested.atoms().collect())
+        .collect();
+    assert_eq!(family, vec![vec![1, 2]]);
+    compare_native(oracle, &theory);
+    let results = oracle
+        .propagate_batch(&theory, &[candidate], FormulaLimits::default())
+        .unwrap();
+    let root = residual_root(&results[0], ResidualReason::FixedPoint);
+    assert_eq!(root.held().collect::<Vec<_>>(), [1, 2]);
+    assert!(root.is_cut(0));
+    assert_eq!(root.open().count(), 0);
+    assert_eq!(
+        oracle.last_batch_stats().unwrap().propagation,
+        super::requested_groups(oracle, &theory)
+    );
+    // These are device-returned decisions, before any CPU completion. They
+    // detect a skipped shared-row forcing pass: b and a would remain open.
+    // Opposite guard requirements arise only after the last atom is decided;
+    // this does not claim both forcing predicates visited an undecided slot.
 }

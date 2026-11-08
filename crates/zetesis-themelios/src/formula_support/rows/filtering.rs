@@ -604,7 +604,7 @@ fn filter_failure_retains_the_completed_prefix() {
 fn filter_cancellation_stops_before_binding() {
     let mut fixture = Fixture::from_atoms([atom("p", &[7])], location());
     let rule = rule(vec![pattern(&mut fixture, "p", &[0])], 1);
-    let cancellation = zetesis_cpu::Cancellation::default();
+    let cancellation = zetesis_algebra::Cancellation::default();
     let calls = Cell::new(0);
     let selection = Select(|_: zetesis_core::relation::Row<'_, '_>| {
         calls.set(calls.get() + 1);
@@ -637,7 +637,7 @@ fn filter_cancellation_stops_before_binding() {
             )
             .map(|row| row.is_some());
         assert!(matches!(result, Err(FormulaFailure::Interrupted {
-            reason: zetesis_cpu::Stop::Cancelled,
+            reason: zetesis_algebra::Stop::Cancelled,
             location: actual,
         }) if actual == location()));
         assert_eq!(calls.get(), 1);

@@ -369,8 +369,8 @@ fn a_case_selection_joins_the_plan() {
 }
 
 #[test]
-fn the_scalability_suite_defaults_to_indexed_region_search() {
-    use zetesis_validation::selected::{FormulaJoins, SearchMethod};
+fn the_scalability_suite_defaults_to_indexed_joins() {
+    use zetesis_validation::selected::FormulaJoins;
     let BenchCommand::Run(options) = command(&["run", "--suite", "scalability"]) else {
         panic!("expected run")
     };
@@ -379,26 +379,18 @@ fn the_scalability_suite_defaults_to_indexed_region_search() {
         plan.profiles()[0].formula_joins,
         Some(FormulaJoins::Indexed)
     );
-    assert_eq!(plan.profiles()[0].search, Some(SearchMethod::Regions));
 }
 
 #[test]
-fn explicit_search_and_joins_replace_the_suite_defaults() {
-    use zetesis_validation::selected::{FormulaJoins, SearchMethod};
-    let BenchCommand::Run(options) = command(&[
-        "run",
-        "--suite",
-        "scalability",
-        "--formula-joins",
-        "table",
-        "--search",
-        "clauses",
-    ]) else {
+fn explicit_joins_replace_the_suite_default() {
+    use zetesis_validation::selected::FormulaJoins;
+    let BenchCommand::Run(options) =
+        command(&["run", "--suite", "scalability", "--formula-joins", "table"])
+    else {
         panic!("expected run")
     };
     let plan = options.plan().unwrap();
     assert_eq!(plan.profiles()[0].formula_joins, Some(FormulaJoins::Table));
-    assert_eq!(plan.profiles()[0].search, Some(SearchMethod::Clauses));
 }
 
 #[test]

@@ -1,8 +1,7 @@
 # zetesis-ferraris
 
-A native exact kernel for **finite propositional formula reducts**. The Horn
-oracle in `zetesis-cpu` computes a least closure. A general reduct may have
-incomparable minimal models; this kernel checks proper subsets instead.
+A native exact kernel for **finite propositional formula reducts**. A general
+reduct may have incomparable minimal models; this kernel checks proper subsets.
 
 The input is a bounded, immutable DAG of atoms, falsum, conjunction, disjunction,
 implication, nonnegative weighted thresholds and ordinal min/max cuts, plus asserted roots.
@@ -53,9 +52,10 @@ weighted counters; a queued value cannot advance a counter twice.
 
 Complete storage copies, selection and remapping preserve numeric columns and
 shared rows. Logical occurrence counts charge each threshold reference, while
-retained bytes count shared storage once. Backend transport uses one checked
-Boolean expansion with explicit physical capacity and work bounds. That expansion
-does not replace the original semantic theory.
+retained bytes count shared storage once. The GPU formula and tight checkers
+retain these rows and share the candidate's weight reduction across their bounds.
+Clause transport uses a checked Boolean expansion with explicit capacity and work
+bounds; it does not replace the original semantic theory.
 
 The common source compiler uses native thresholds for nonnegative count and sum
 guards, including choice bounds. Signed sums retain the full subset translation.
@@ -87,9 +87,11 @@ records whether any row anchor lies in a chain's same-kind cone, so discovery
 from a chain without one returns at once. Expanded discovery
 retains only proposals that can tighten a row's bounds, then authenticates their
 exact witness relationship before transport.
-GPU and clause
-transport still lower cuts to Boolean formulas; native CPU reduction does not
-establish native device reduction. The [manual's aggregate account](../../docs/book/architecture/alignment.md)
+GPU formula and tight checking retain ordinal rows and compute both extrema once
+per shared row for original satisfaction. Each cut keeps its own frozen truth.
+Clause transport still lowers cuts to Boolean formulas; physical device
+qualification remains separate from representation support.
+The [manual's aggregate account](../../docs/book/architecture/alignment.md)
 describes the storage, propagation and proof boundaries.
 
 ## Reusing original satisfaction work
@@ -103,7 +105,9 @@ successful evaluation can report a nonmodel. It does not establish an answer set
 
 The workspace retains capacity across candidates and independently admitted
 theories, recomputing all values on every call. Work counts node and operand
-visits, root tests, and numeric scratch initialization and resets. Each shared
+visits, root tests, and numeric scratch initialization and resets. Conjunctions
+stop reading operands at the first false value, and disjunctions at the first
+true value; all DAG nodes still receive their own truth. Each shared
 weighted or ordinal row is reduced once per pass. One 16-byte measure slot holds
 either its checked sum or its minimum and maximum ranks, with packed validity
 bits; the admitted row domain determines the reading. Bytes include the header
@@ -198,14 +202,13 @@ See [support API](src/support.rs) and [complete small-family controls](tests/int
 
 ## Narrowing regions by the theory's readings
 
-A `Region` (`zetesis_cpu::regions`) holds some atoms in every candidate, cuts
+A `Region` (`zetesis_algebra::region`) holds some atoms in every candidate, cuts
 some from every candidate and leaves the rest open; here it decides over the
 theory's atoms. Under a region every node of the DAG has
 two readings: *sure* when every candidate of the region satisfies it and
 *impossible* when none does. A held atom is sure, a cut atom impossible, and
-the connectives combine the readings as the closure route's definite and
-possible gates do; the knowledge the narrowing closes means them, a node
-known to hold being sure and one known to fail impossible.
+the connectives combine those readings. The narrowed knowledge records them:
+a node known to hold is sure, and one known to fail is impossible.
 `Narrower::narrow_known` closes the knowledge to a fixed point: every root
 and every decided atom is known, a node learns
 from its operands and teaches its operands what its own knowledge leaves
@@ -226,15 +229,38 @@ Threshold-row events follow stricter bounds; coalesced witness notices track
 changes in unresolved possibilities. Original-only residual-sum checks use their
 own dirty queue after mandatory propagation settles, so arithmetic notifications
 neither reorder bound transport nor rescan a row during intermediate waves.
+Residual divisibility can refute a region or determine a condition by excluding
+one of its values. Complementary gcds share prefix/suffix reductions over the
+same grouped nonunit row, when requirements constrain both ends. A small open
+coefficient and a small positive gcd of its complement can establish that these
+lattice tests would yield no deduction, avoiding their preparation. This does
+not establish an attainable sum. New decisions return through ordinary
+propagation before the next arithmetic check; this does not replace answer-set
+membership.
+When lattice reasoning leaves the row unchanged, a bounded packed reduction can
+also exclude an interval containing no subset sum of its open nonnegative
+contributions. Correlated conditions only reduce the possible selections, so an
+intersection does not establish a model. The mask and optional work are bounded
+by the grouped row's payload; declining loses only this pruning. Allocation and
+global interruption remain typed failures. The reduction reuses the same
+packed shift-and-union kernel as source assignment sums. Its
+`union_shifted_until_hit` operation checks translated bits during insertion and
+can stop at the first interval witness; that partial mask is discarded. Absence
+requires complete processing. Worker scratch retains capacity without carrying
+truth into another region.
 A `Narrower` indexes the theory once
 and narrows any region of it, the root from knowledge of nothing and a child
 from its parent's knowledge. The index
 reads each maximal tree of one connective, a clause or a body, as one node
 over its operands, a *chain*, when its inner nodes have that one parent and
-are not roots. Per chain, the closure keeps one exact neutral-operand count
+are not roots. Per chain, the closure keeps one neutral-operand count
 and one packed witness bit: failing operands and a holding witness for a
 disjunction, holding operands and a failing witness for a conjunction.
 These record processed events; a node's truth bit can precede its event.
+The neutral count is exact until a processed witness settles the chain. Later
+operand events still visit that parent but omit redundant counter updates and
+witness notices. The original node events, other parents, support wakeups and
+split ranking remain active.
 The closure applies the n-ary rules, a disjunction sure
 with one operand and impossible with all, forcing its one open operand when
 sure, and the duals for a conjunction (`FormulaChains`). Propagating a new
@@ -262,8 +288,9 @@ region's next split, which the traversal honours: an open atom heading one of th
 subject's atomic choice roots (`ChoiceHeads`, when the subject carries them) before
 any other, then the open atom with the most parents still unknown, ties to the
 lowest; without a preference the traversal splits the highest open atom. The traversal that splits regions and
-covers the tree is `zetesis_cpu::regions::Traversal`, shared with the closure
-route; `zetesis-sat` uses it with this narrowing to propose candidates.
+covers the tree is `zetesis_algebra::walk::Walk`; `zetesis-stable` uses it
+with original-theory narrowing for candidate generation and frozen-reduct
+narrowing for proper-subset queries.
 
 Carried knowledge requires the same narrower, theory, producer set and frozen
 truth, and a region contained in the ancestor for which that knowledge was
@@ -272,6 +299,16 @@ cannot be reused. The packed `Region` API replaces the old `decisions()`
 history with `decided()`'s ascending `(atom, value)` pairs, and `split` consumes
 its parent. `snapshot_decided` copies only the available destination prefix;
 the narrower supplies all `region.len().div_ceil(64)` words.
+
+With complete producers, possible-foundedness additionally excludes unseeded
+positive cycles. Below inherited completed knowledge, its first invalidated pass
+can recompute affected cyclic heads using every incoming producer body and safe
+unaffected seeds. The exact original owner authorizes only immutable preparation;
+worker membership and queues carry no ancestor body truth or extra per-region
+state. Full replay remains the fallback, and incomplete attempts return typed
+failures. See the [execution contract](../../docs/book/architecture/execution.md)
+and [proof boundary](../../docs/book/lean/correspondence.md) for the complete-result,
+resource and correspondence obligations.
 
 Every narrowing entry point takes what it reads, an `OriginalSubject` (the
 theory and, when the support cut applies, its producers) or a `FrozenSubject`
@@ -305,7 +342,7 @@ atom. The latter includes every parent occurrence of every node carrying that
 atom; distinct nodes contribute separately even when they share a parent.
 The smallest suitable width is selected once: `u16`, then `u32`, if narrower
 than `usize`, otherwise `usize`. Checked additions and decrements preserve the
-exact count; width never changes while propagating. Large theories can therefore
+live counter meanings; width never changes while propagating. Large theories can therefore
 use narrow cells when their individual counts fit. This adds no theory-size
 admission cap and does not narrow cumulative work statistics. Knowledge clones
 retain independent arrays, with unchanged original/frozen ownership requirements.
@@ -327,8 +364,9 @@ All count reads and updates retain the same charged propagation operations;
 storage initialization and copying remain outside that work receipt. Existing
 knowledge allocation behavior remains infallible.
 
-The processed-event representation preserves the two-count rules: the neutral
-count is exact and the witness is equivalent to a positive absorbing count.
+The processed-event representation preserves the two-count rules until an
+absorbing operand has been processed. Its witness then settles the chain, so
+later notifications leave the now-irrelevant neutral count unchanged.
 Chain formation coalesces repeated identical node leaves, while distinct nodes
 denoting the same atom remain separate operand events. Frozen-mask exclusion,
 contradiction stopping, ordered unit scans and split ranking are unchanged.
@@ -347,7 +385,7 @@ cargo test -p zetesis-ferraris --lib \
 ```
 
 The `traversal_copies_only_live_knowledge_arrays` test wraps actual
-`Traversal` state clones at 64, 512 and 4,096 atoms. Each fixture leaves eight
+`Walk` state clones at 64, 512 and 4,096 atoms. Each fixture leaves eight
 atoms free, visits all 256 complete candidates and compares native and selected
 counter widths. The receipt counts completed `Knowledge::clone` calls,
 initialized array representation bytes and the returned clones' nonempty
@@ -363,7 +401,7 @@ cargo test -p zetesis-ferraris --lib \
 This structural receipt excludes inline headers, region masks, shared indexes,
 measurement storage and allocator bookkeeping. It is neither an allocator-call
 trace nor a timing, RSS or memory-bus measurement. It covers the sequential
-`Traversal` fixture, not application-wide clone traffic or parallel workers'
+`Walk` fixture, not application-wide clone traffic or parallel workers'
 active and queued frontier. Those require separate observations; the retained
 bytes reported by a queued frontier do not include active worker state.
 
@@ -477,8 +515,8 @@ the connectives, numeric rows, producer bodies and root positions that read it;
 for every atom, its atom nodes; for every row, its guards. A `TightWorkspace`
 that completed a check under such a plan keeps that evaluation and updates it for
 the next candidate of the same theory: it re-evaluates, in ascending node order,
-exactly the nodes with an input whose value changed, withdraws the measures of
-rows whose conditions changed, and maintains support counts and the
+exactly the nodes with an input whose value changed, adjusts weighted sums by
+the changed contributions, withdraws changed extrema, and maintains support counts and the
 unsupported-atom and false-root sets. Readers have larger indices than what they
 read, so every re-evaluation reads final inputs and each node is re-evaluated at
 most once; each summary is a count over its inputs and moves with each changed
@@ -489,12 +527,18 @@ before its evaluation begins changes nothing. `TightPlan::check_work_bound`
 bounds a check by either route. The mechanism comments in
 [the workspace](src/tight/evaluate.rs) carry the full argument.
 
+Each numeric reader records its row and occurrence in two 31-bit fields of the
+existing eight-byte entry. Repeated conditions keep separate weights; updates
+read them from the authoritative row. If the numeric columns exceed that optional
+index's representation, checking retains complete evaluation. The theory itself
+has no new admission restriction, and reader storage does not grow.
+
 `proofs/Zetesis/TightPlans.lean` proves the formula-level satisfaction/support
 characterization for this grammar, including original choices in both branch
 orders. It does not prove the Rust extractor, rank implementation or missing
 lazy source coverage. `proofs/Zetesis/TightEvaluation.lean` proves that
 re-evaluating exactly the nodes whose inputs changed yields the new candidate's
-node truth (`updated_values_exact`); the worklist, the index, row re-reduction
+node truth (`updated_values_exact`); the worklist, the index, numeric updates
 and the maintained summaries are Rust obligations, checked by a differential
 property against complete evaluation. Tests compare finite trees and their materialized reducts,
 validate rank/root/identity/resource boundaries, and exercise the ordinary

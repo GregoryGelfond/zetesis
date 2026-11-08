@@ -18,20 +18,6 @@ pub(super) struct Evaluation {
     pub(super) range: Option<Range>,
 }
 
-#[derive(Clone, Copy)]
-struct Value {
-    range: Option<Range>,
-    literal: bool,
-}
-impl Value {
-    fn computed(range: Option<Range>) -> Self {
-        Self {
-            range,
-            literal: false,
-        }
-    }
-}
-
 fn slot(bound: Bound) -> Option<Range> {
     if bound.integrality != Integrality::Integer {
         return None;
@@ -42,20 +28,24 @@ fn slot(bound: Bound) -> Option<Range> {
     }
 }
 
-fn binary(operator: BinaryOp, left: Value, right: Value) -> Option<Range> {
-    // Literal factors/divisors are syntactic constants, not merely slots whose
-    // current bound happens to be a singleton. Mod uses the interval-divisor
-    // law and Range's zero/MIN/-1 guards; variable Div remains outside scope.
-    let covered = match operator {
-        BinaryOp::Add | BinaryOp::Sub | BinaryOp::Mod => true,
-        BinaryOp::Mul => left.literal || right.literal,
-        BinaryOp::Div => right.literal,
-        BinaryOp::Pow | BinaryOp::BitAnd | BinaryOp::BitOr | BinaryOp::BitXor => false,
-    };
+fn binary(operator: BinaryOp, left: Option<Range>, right: Option<Range>) -> Option<Range> {
+    // Every child has already been certified over the complete-binding domains.
+    // Range checks all operand pairs, including zero/MIN/-1 and intermediate
+    // overflow. A power additionally needs one nonnegative exponent throughout
+    // its domain; its syntax need not be a literal.
+    let covered = matches!(
+        operator,
+        BinaryOp::Add
+            | BinaryOp::Sub
+            | BinaryOp::Mul
+            | BinaryOp::Div
+            | BinaryOp::Mod
+            | BinaryOp::Pow
+    );
     if !covered {
         return None;
     }
-    left.range?.binary(operator, right.range?)
+    left?.binary(operator, right?)
 }
 
 fn expression<R: Values, C: Copy>(
@@ -64,7 +54,7 @@ fn expression<R: Values, C: Copy>(
     domains: &[Bound],
 ) -> Result<Option<Range>, Error<R::Error>> {
     let mut pending = Vec::new();
-    let mut values: Vec<Value> = Vec::new();
+    let mut values: Vec<Option<Range>> = Vec::new();
     pending.try_reserve(1)?;
     pending.push((root, false));
     while let Some((id, ready)) = pending.pop() {
@@ -86,41 +76,36 @@ fn expression<R: Values, C: Copy>(
             }
         }
         let value = match node {
-            Expression::Constant(id) => Value {
-                range: input
-                    .constants
-                    .get(id.0)
-                    .ok_or(Error::InvalidInput)?
-                    .number
-                    .map(Range::point),
-                literal: true,
-            },
-            Expression::Slot(id) => {
-                Value::computed(slot(*domains.get(id).ok_or(Error::InvalidInput)?))
-            }
-            Expression::Unknown { .. } => Value::computed(None),
+            Expression::Constant(id) => input
+                .constants
+                .get(id.0)
+                .ok_or(Error::InvalidInput)?
+                .number
+                .map(Range::point),
+            Expression::Slot(id) => slot(*domains.get(id).ok_or(Error::InvalidInput)?),
+            Expression::Unknown { .. } => None,
             Expression::Unary(operator, _) => {
                 let child = values.pop().ok_or(Error::InvalidInput)?;
-                Value::computed(if operator == UnaryOp::Negate {
-                    child.range.and_then(|range| range.unary(operator))
+                if operator == UnaryOp::Negate {
+                    child.and_then(|range| range.unary(operator))
                 } else {
                     None
-                })
+                }
             }
-            Expression::Absolute(_) => {
-                values.pop().ok_or(Error::InvalidInput)?;
-                Value::computed(None)
-            }
+            Expression::Absolute(_) => values
+                .pop()
+                .ok_or(Error::InvalidInput)?
+                .and_then(Range::absolute),
             Expression::Binary(operator, _, _) => {
                 let right = values.pop().ok_or(Error::InvalidInput)?;
                 let left = values.pop().ok_or(Error::InvalidInput)?;
-                Value::computed(binary(operator, left, right))
+                binary(operator, left, right)
             }
         };
         values.try_reserve(1)?;
         values.push(value);
     }
-    Ok(values.pop().ok_or(Error::InvalidInput)?.range)
+    values.pop().ok_or(Error::InvalidInput)
 }
 
 pub(super) fn queries<R: Values, C: Copy>(

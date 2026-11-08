@@ -1,20 +1,18 @@
 //! Finite source-to-Ferraris admission preserves support, scopes, and evidence.
 
-use crate::support::atom_models::answer_sets;
 use crate::support::atom_models::{self, Models};
 use crate::support::objective_boundaries;
 use zetesis_reference_support::{BundleFixture, admit, formula, resource_limits};
 
 use std::collections::BTreeSet;
 
+use zetesis_algebra::Cancellation;
 use zetesis_clingo_support as oracle;
-use zetesis_cpu::Cancellation;
 use zetesis_ferraris::Theory;
-use zetesis_sat::{Limits, StableModels};
+use zetesis_stable::{Limits, StableModels};
 use zetesis_themelios::{
-    AdmissionFailure, AdmissionOptions, BundleAdmissionOptions, ExpansionFailure, ExpansionLimits,
-    FormulaFailure, FormulaLimits, FormulaResource, ProfileFeature, admit_bundle_formula,
-    admit_extended,
+    AdmissionFailure, BundleAdmissionOptions, ExpansionFailure, ExpansionLimits, FormulaFailure,
+    FormulaLimits, FormulaResource, ProfileFeature, admit_bundle_formula,
 };
 
 fn models(theory: &Theory, atoms: zetesis_core::catalog::Atoms<'_>) -> Models {
@@ -128,24 +126,43 @@ fn bound_arithmetic_comparisons_are_tests_and_unbound_inequalities_remain_unsafe
 }
 
 #[test]
-fn existing_scalar_fact_and_normal_rule_profile_keeps_its_models() {
-    for source in [
-        "",
-        "a :- not b. b :- not a.",
-        "{a}. b :- not not a.",
-        "#const n=base+1. #const base=2. d(1..n). {q(X)} :- d(X).",
-        "p(3..1).",
-        "p((1;2),a;3,b).",
-        r#"p("a b"). {q(X)} :- p(X)."#,
+fn scalar_fact_and_normal_rule_models_match_explicit_families() {
+    for (source, wanted) in [
+        ("", vec![vec![]]),
+        ("a :- not b. b :- not a.", vec![vec!["a"], vec!["b"]]),
+        ("{a}. b :- not not a.", vec![vec![], vec!["a", "b"]]),
+        ("p(3..1).", vec![vec![]]),
+        ("p((1;2),a;3,b).", vec![vec!["p(1,a)", "p(2,a)", "p(3,b)"]]),
+        (
+            r#"p("a b"). {q(X)} :- p(X)."#,
+            vec![vec![r#"p("a b")"#], vec![r#"p("a b")"#, r#"q("a b")"#]],
+        ),
     ] {
-        let plain = admit_extended(
-            source.to_owned(),
-            AdmissionOptions::default(),
-            ExpansionLimits::default(),
-        )
-        .expect("existing extended profile");
-        assert_eq!(native(source), answer_sets(plain.program()), "{source}");
+        let wanted: Models = wanted
+            .iter()
+            .map(|atoms| atoms.iter().map(|atom| atom_models::atom(atom)).collect())
+            .collect();
+        assert_eq!(native(source), wanted, "{source}");
     }
+    let wanted: Models = (0..8)
+        .map(|mask| {
+            let mut atoms = BTreeSet::from([
+                atom_models::atom("d(1)"),
+                atom_models::atom("d(2)"),
+                atom_models::atom("d(3)"),
+            ]);
+            for position in 0..3 {
+                if mask & (1 << position) != 0 {
+                    atoms.insert(atom_models::atom(&format!("q({})", position + 1)));
+                }
+            }
+            atoms
+        })
+        .collect();
+    assert_eq!(
+        native("#const n=base+1. #const base=2. d(1..n). {q(X)} :- d(X)."),
+        wanted
+    );
 }
 
 #[test]
@@ -167,18 +184,6 @@ fn closed_comparison_chains_supply_local_bindings() {
     // Closed comparison chains now supply a finite local binding, while the
     // complete original guard is retained. This is an admitted source upgrade.
     assert_eq!(native("a :- 1<X<3."), expected(&["a."]));
-}
-
-#[test]
-fn extended_profile_refuses_bounded_choices() {
-    assert!(
-        admit_extended(
-            "1{a;b}1.".to_owned(),
-            AdmissionOptions::default(),
-            ExpansionLimits::default()
-        )
-        .is_err()
-    );
 }
 
 #[test]

@@ -2,16 +2,19 @@
 
 use zetesis_reference_support::BundleFixture;
 use zetesis_themelios::{
-    AdmittedBundle, BundleAdmissionFailure, BundleAdmissionOptions, ExpansionLimits,
-    admit_bundle_extended,
+    AdmittedFormulaBundle, BundleAdmissionOptions, ExpansionLimits, FormulaBundleFailure,
+    FormulaLimits, admit_bundle_formula,
 };
 
 /// `fixture`'s bundle admitted under the default options and expansion
 /// limits.
-pub(crate) fn admit(fixture: &BundleFixture) -> Result<AdmittedBundle, BundleAdmissionFailure> {
-    admit_bundle_extended(
+pub(crate) fn admit(
+    fixture: &BundleFixture,
+) -> Result<AdmittedFormulaBundle, FormulaBundleFailure> {
+    admit_bundle_formula(
         fixture.bundle(),
         BundleAdmissionOptions::default(),
         ExpansionLimits::default(),
+        FormulaLimits::default(),
     )
 }

@@ -8,7 +8,7 @@ use super::{
 };
 use crate::numeric_evaluation::NumericRowScratch;
 use crate::{Interpretation, NodeView, Theory};
-use zetesis_cpu::{Cancellation, Meter, Stop};
+use zetesis_algebra::{Cancellation, Meter, Stop, words::Words};
 
 #[cfg(test)]
 mod incremental_tests;
@@ -16,6 +16,8 @@ mod incremental_tests;
 mod tests;
 #[cfg(test)]
 mod update_tests;
+#[cfg(test)]
+mod weighted_update_tests;
 
 impl TightPlan {
     /// Check original satisfaction and every present atom's producer support.
@@ -65,7 +67,8 @@ impl TightPlan {
 /// are its atom's membership for an atom node, the truth of its row's
 /// conditions for a numeric guard, and its operands' truth otherwise. The update
 /// re-evaluates, in ascending node order, exactly the nodes with an input whose
-/// value changed, keeps the measures of rows none of whose conditions changed,
+/// value changed, adjusts sums by each changed contribution and invalidates
+/// changed extrema (all other row measures survive),
 /// and maintains a four-byte support count per atom and the unsupported-atom and
 /// false-root sets, so its verdict and witness are those of a complete
 /// evaluation of the new candidate. A candidate that differs in more atoms than
@@ -80,7 +83,7 @@ impl TightPlan {
 #[derive(Debug, Default)]
 pub struct TightWorkspace {
     values: Vec<u8>,
-    supported: Vec<u32>,
+    supported: Words<u32>,
     numeric: NumericRowScratch,
     retained: Retained,
 }
@@ -108,23 +111,23 @@ struct Retained {
     /// theory's identity exact for as long as the evaluation is kept.
     theory: Option<Theory>,
     /// Packed words of the evaluated candidate.
-    candidate: Vec<u64>,
+    candidate: Words<u64>,
     /// Whether the support counts and the two sets summarize node truth.
     summarized: bool,
     /// For each atom, its producers that are bodyless or have a true body.
     support: Vec<SupportCount>,
     /// Present atoms without support, and how many.
-    missing: Vec<u64>,
+    missing: Words<u64>,
     missing_count: usize,
     /// Original root positions whose node is false, and how many.
-    false_roots: Vec<u64>,
+    false_roots: Words<u64>,
     false_root_count: usize,
     /// Update scratch: candidate words that changed, nodes awaiting
     /// re-evaluation in ascending order, and their queued marks. The heap and the
     /// marks are empty between completed updates.
     changed: Vec<usize>,
     pending: BinaryHeap<Reverse<usize>>,
-    queued: Vec<u64>,
+    queued: Words<u64>,
 }
 
 impl Retained {
@@ -277,13 +280,14 @@ impl TightWorkspace {
             if let Some(root) = false_root(&plan.theory, &self.values, meter)? {
                 (TightVerdict::NotModel { root }, logical_bytes)
             } else {
-                self.supported.clear();
+                self.supported.storage_mut().clear();
                 let words = plan.theory.atom_count().div_ceil(32);
                 self.supported
+                    .storage_mut()
                     .try_reserve_exact(words)
                     .map_err(|_| Stop::Allocation)?;
                 let logical_bytes = self.admit(plan, limits.max_bytes)?;
-                self.supported.resize(words, 0);
+                self.supported.storage_mut().resize(words, 0);
                 mark_support(&plan.producers, &self.values, &mut self.supported, meter)?;
                 let verdict = match unsupported_atom(candidate, &self.supported, meter)? {
                     Some(unsupported_atom) => TightVerdict::Residual { unsupported_atom },
@@ -341,23 +345,23 @@ impl TightWorkspace {
         self.retained.summarized = false;
         self.retained.pending.clear();
         self.retained.changed.clear();
-        self.retained.candidate.clear();
-        self.retained.queued.clear();
+        self.retained.candidate.storage_mut().clear();
+        self.retained.queued.storage_mut().clear();
         let more = (words.saturating_sub(self.retained.candidate.capacity())
             + marks.saturating_sub(self.retained.queued.capacity())) as u128
             * size_of::<u64>() as u128;
         self.grow(plan, limits.max_bytes, more, |retained| {
-            retained.candidate.try_reserve_exact(words)?;
-            retained.queued.try_reserve_exact(marks)
+            retained.candidate.storage_mut().try_reserve_exact(words)?;
+            retained.queued.storage_mut().try_reserve_exact(marks)
         })?;
         let retained = &mut self.retained;
         for &word in &candidate.words {
-            meter.tick()?;
-            retained.candidate.push(word);
+            Tick::tick(meter)?;
+            retained.candidate.storage_mut().push(word);
         }
         for _ in 0..marks {
-            meter.tick()?;
-            retained.queued.push(0);
+            Tick::tick(meter)?;
+            retained.queued.storage_mut().push(0);
         }
         self.admit(plan, limits.max_bytes)
     }
@@ -373,8 +377,8 @@ impl TightWorkspace {
         let atoms = plan.theory.atom_count();
         let roots = plan.theory.roots();
         self.retained.support.clear();
-        self.retained.missing.clear();
-        self.retained.false_roots.clear();
+        self.retained.missing.storage_mut().clear();
+        self.retained.false_roots.storage_mut().clear();
         let more = atoms.saturating_sub(self.retained.support.capacity()) as u128
             * size_of::<SupportCount>() as u128
             + (atoms
@@ -387,17 +391,24 @@ impl TightWorkspace {
                 * size_of::<u64>() as u128;
         self.grow(plan, limits.max_bytes, more, |retained| {
             retained.support.try_reserve_exact(atoms)?;
-            retained.missing.try_reserve_exact(atoms.div_ceil(64))?;
+            retained
+                .missing
+                .storage_mut()
+                .try_reserve_exact(atoms.div_ceil(64))?;
             retained
                 .false_roots
+                .storage_mut()
                 .try_reserve_exact(roots.len().div_ceil(64))
         })?;
         let retained = &mut self.retained;
         retained.support.resize(atoms, 0);
-        retained.missing.resize(atoms.div_ceil(64), 0);
-        retained.false_roots.resize(roots.len().div_ceil(64), 0);
+        retained.missing.storage_mut().resize(atoms.div_ceil(64), 0);
+        retained
+            .false_roots
+            .storage_mut()
+            .resize(roots.len().div_ceil(64), 0);
         for producer in &plan.producers {
-            meter.tick()?;
+            Tick::tick(meter)?;
             if producer.body.is_none_or(|body| self.values[body] != 0) {
                 let count = &mut retained.support[producer.head];
                 *count = count.checked_add(1).ok_or(Stop::InvalidProgram)?;
@@ -405,21 +416,19 @@ impl TightWorkspace {
         }
         retained.false_root_count = 0;
         for (position, &root) in roots.iter().enumerate() {
-            meter.tick()?;
+            Tick::tick(meter)?;
             if self.values[root] == 0 {
-                retained.false_roots[position / 64] |= 1 << (position % 64);
+                retained.false_roots.insert(position);
                 retained.false_root_count += 1;
             }
         }
         retained.missing_count = 0;
         for (word, &present) in retained.candidate.iter().enumerate() {
-            meter.tick()?;
-            let mut remaining = present;
-            while remaining != 0 {
-                let atom = word * 64 + remaining.trailing_zeros() as usize;
-                remaining &= remaining - 1;
+            Tick::tick(meter)?;
+            for bit in Words::<u64>::bits(present) {
+                let atom = word * 64 + bit;
                 if retained.support[atom] == 0 {
-                    retained.missing[word] |= 1 << (atom % 64);
+                    retained.missing.insert(atom);
                     retained.missing_count += 1;
                 }
             }
@@ -448,10 +457,10 @@ impl TightWorkspace {
         let mut changed_atoms = 0_usize;
         self.retained.changed.clear();
         for (word, &present) in candidate.words.iter().enumerate() {
-            meter.tick()?;
+            Tick::tick(meter)?;
             let changed = self.retained.candidate[word] ^ present;
             if changed != 0 {
-                changed_atoms += changed.count_ones() as usize;
+                changed_atoms += Words::<u64>::popcount(changed) as usize;
                 if changed_atoms > threshold {
                     return Ok(None);
                 }
@@ -472,18 +481,17 @@ impl TightWorkspace {
         }
         // Second pass: apply the changed words.
         for position in 0..self.retained.changed.len() {
-            meter.tick()?;
+            Tick::tick(meter)?;
             let index = self.retained.changed[position];
             let present = candidate.words[index];
-            let mut changed = self.retained.candidate[index] ^ present;
+            let changed = self.retained.candidate[index] ^ present;
             self.retained.candidate[index] = present;
-            while changed != 0 {
-                meter.tick()?;
-                let atom = index * 64 + changed.trailing_zeros() as usize;
-                changed &= changed - 1;
-                self.presence(atom, present & (1 << (atom % 64)) != 0);
+            let mut changed = Words::<u64>::bits(changed);
+            while let Some(bit) = changed.next_with(|| Tick::tick(meter))? {
+                let atom = index * 64 + bit;
+                self.presence(atom, present & (1 << bit) != 0);
                 for &node in readers.atom_nodes(atom) {
-                    meter.tick()?;
+                    Tick::tick(meter)?;
                     self.queue(node, plan, limits)?;
                 }
             }
@@ -491,13 +499,13 @@ impl TightWorkspace {
         // Invariant: every node below the least queued node holds its truth under
         // the new candidate, and a node is queued exactly when one of its inputs
         // changed: an atom node's membership, a condition of a guard's row (the
-        // row is withdrawn then, before any of its guards is re-evaluated), or an
+        // sum is adjusted or the extremum withdrawn before any guard runs), or an
         // operand's truth. A reader has a larger index than everything it reads,
         // so ascending pops re-evaluate each node from final inputs, and a popped
         // node is never queued again: each is re-evaluated at most once.
         while let Some(Reverse(node)) = self.retained.pending.pop() {
-            meter.tick()?;
-            self.retained.queued[node / 64] &= !(1 << (node % 64));
+            Tick::tick(meter)?;
+            self.retained.queued.remove(node);
             let truth = evaluate_node(
                 &plan.theory,
                 node,
@@ -511,14 +519,16 @@ impl TightWorkspace {
             }
             self.values[node] = u8::from(truth);
             for &reader in readers.of(node) {
-                meter.tick()?;
+                Tick::tick(meter)?;
                 let index = reader.index();
                 match reader.kind() {
                     ReaderKind::Node => self.queue(index, plan, limits)?,
                     ReaderKind::Row => {
-                        self.numeric.invalidate(index)?;
-                        for &guard in readers.guards(index) {
-                            meter.tick()?;
+                        let (row, occurrence) = reader.row_occurrence();
+                        self.numeric
+                            .change_condition(&plan.theory, row, occurrence, truth)?;
+                        for &guard in readers.guards(row) {
+                            Tick::tick(meter)?;
                             self.queue(guard, plan, limits)?;
                         }
                     }
@@ -559,8 +569,8 @@ impl TightWorkspace {
         plan: &TightPlan,
         limits: TightCheckLimits,
     ) -> Result<(), TightError> {
-        let bit = 1_u64 << (node % 64);
-        if self.retained.queued[node / 64] & bit != 0 {
+        let (word, bit) = Words::<u64>::locate(node);
+        if self.retained.queued[word] & bit != 0 {
             return Ok(());
         }
         if self.retained.pending.len() == self.retained.pending.capacity() {
@@ -572,7 +582,7 @@ impl TightWorkspace {
                 |retained| retained.pending.try_reserve_exact(additional),
             )?;
         }
-        self.retained.queued[node / 64] |= bit;
+        self.retained.queued[word] |= bit;
         self.retained.pending.push(Reverse(node));
         Ok(())
     }
@@ -580,14 +590,14 @@ impl TightWorkspace {
     /// An atom's membership changed; its support count did not.
     fn presence(&mut self, atom: usize, present: bool) {
         let retained = &mut self.retained;
-        let bit = 1_u64 << (atom % 64);
+        let (word, bit) = Words::<u64>::locate(atom);
         if present {
             if retained.support[atom] == 0 {
-                retained.missing[atom / 64] |= bit;
+                retained.missing[word] |= bit;
                 retained.missing_count += 1;
             }
-        } else if retained.missing[atom / 64] & bit != 0 {
-            retained.missing[atom / 64] &= !bit;
+        } else if retained.missing[word] & bit != 0 {
+            retained.missing[word] &= !bit;
             retained.missing_count -= 1;
         }
     }
@@ -599,21 +609,21 @@ impl TightWorkspace {
     /// producer, so it is at least one.
     fn support(&mut self, head: usize, holds: bool) -> Result<(), TightError> {
         let retained = &mut self.retained;
-        let bit = 1_u64 << (head % 64);
-        let present = retained.candidate[head / 64] & bit != 0;
+        let (word, bit) = Words::<u64>::locate(head);
+        let present = retained.candidate[word] & bit != 0;
         if holds {
             let count = retained.support[head]
                 .checked_add(1)
                 .ok_or(Stop::InvalidProgram)?;
             retained.support[head] = count;
             if count == 1 && present {
-                retained.missing[head / 64] &= !bit;
+                retained.missing[word] &= !bit;
                 retained.missing_count -= 1;
             }
         } else {
             retained.support[head] -= 1;
             if retained.support[head] == 0 && present {
-                retained.missing[head / 64] |= bit;
+                retained.missing[word] |= bit;
                 retained.missing_count += 1;
             }
         }
@@ -623,12 +633,12 @@ impl TightWorkspace {
     /// An original root position changed truth.
     fn root(&mut self, position: usize, holds: bool) {
         let retained = &mut self.retained;
-        let bit = 1_u64 << (position % 64);
+        let (word, bit) = Words::<u64>::locate(position);
         if holds {
-            retained.false_roots[position / 64] &= !bit;
+            retained.false_roots[word] &= !bit;
             retained.false_root_count -= 1;
         } else {
-            retained.false_roots[position / 64] |= bit;
+            retained.false_roots[word] |= bit;
             retained.false_root_count += 1;
         }
     }
@@ -670,22 +680,22 @@ macro_rules! node_truth {
             NodeView::Or(operands) => evaluate_operands(operands, $values, false, $meter)?,
             NodeView::Threshold(threshold) => {
                 $numeric.threshold::<TightError>($theory, $index, threshold, |child| {
-                    $meter.tick()?;
+                    Tick::tick($meter)?;
                     Ok($values[child] != 0)
                 })?
             }
             NodeView::ExtremumCut(cut) => {
                 cut.rule.holds(
                     $numeric.extremum::<TightError>($theory, $index, cut, |child| {
-                        $meter.tick()?;
+                        Tick::tick($meter)?;
                         Ok($values[child] != 0)
                     })?,
                 )
             }
             NodeView::Implies(a, b) => {
-                $meter.tick()?;
+                Tick::tick($meter)?;
                 let left = $values[a];
-                $meter.tick()?;
+                Tick::tick($meter)?;
                 let right = $values[b];
                 left == 0 || right != 0
             }
@@ -705,10 +715,10 @@ fn evaluate_truth(
     numeric: &mut NumericRowScratch,
     meter: &mut Meter<'_>,
 ) -> Result<(), TightError> {
-    numeric.reset(theory, || meter.tick())?;
+    numeric.reset(theory, || Tick::tick(meter))?;
     let view = theory.view();
     for index in 0..view.len() {
-        meter.tick()?;
+        Tick::tick(meter)?;
         let truth = node_truth!(theory, view, index, candidate, values, numeric, meter);
         values.push(u8::from(truth));
     }
@@ -740,7 +750,7 @@ fn false_root(
     meter: &mut Meter<'_>,
 ) -> Result<Option<usize>, TightError> {
     for &root in theory.roots() {
-        meter.tick()?;
+        Tick::tick(meter)?;
         if values[root] == 0 {
             return Ok(Some(root));
         }
@@ -757,10 +767,11 @@ fn mark_support(
     supported: &mut [u32],
     meter: &mut Meter<'_>,
 ) -> Result<(), TightError> {
+    let mut supported = Words::<u32, _>::new(supported);
     for producer in producers {
-        meter.tick()?;
+        Tick::tick(meter)?;
         if producer.body.is_none_or(|body| values[body] != 0) {
-            supported[producer.head / 32] |= 1 << (producer.head % 32);
+            supported.insert(producer.head);
         }
     }
     Ok(())
@@ -774,15 +785,16 @@ fn unsupported_atom(
     supported: &[u32],
     meter: &mut Meter<'_>,
 ) -> Result<Option<usize>, TightError> {
+    let supported = Words::<u32, _>::new(supported);
     let mut present = candidate.words32();
     for (word, &support) in supported.iter().enumerate() {
-        meter.tick()?;
+        Tick::tick(meter)?;
         let missing = present
             .next()
             .expect("support and candidate cover the same admitted atom universe")
             & !support;
         if missing != 0 {
-            return Ok(Some(word * 32 + missing.trailing_zeros() as usize));
+            return Ok(Some(word * 32 + Words::<u32>::first_bit(missing)));
         }
     }
     Ok(None)
@@ -796,13 +808,9 @@ pub(super) fn large_change(atoms: usize) -> usize {
 
 /// The least set position of a packed set, one charged operation per word read.
 fn first_set(words: &[u64], meter: &mut Meter<'_>) -> Result<usize, TightError> {
-    for (index, &word) in words.iter().enumerate() {
-        meter.tick()?;
-        if word != 0 {
-            return Ok(index * 64 + word.trailing_zeros() as usize);
-        }
-    }
-    Err(Stop::InvalidProgram.into())
+    Words::<u64, _>::new(words)
+        .next_from_with(0, || Tick::tick(meter))?
+        .ok_or_else(|| Stop::InvalidProgram.into())
 }
 
 #[inline]
@@ -812,14 +820,8 @@ fn evaluate_operands(
     conjunction: bool,
     meter: &mut Meter<'_>,
 ) -> Result<bool, TightError> {
-    for &child in operands {
-        meter.tick()?;
-        let truth = values[child] != 0;
-        // A false conjunct or true disjunct determines this node, irrespective
-        // of the remaining operands. Other DAG nodes still get their own truth.
-        if truth != conjunction {
-            return Ok(truth);
-        }
-    }
-    Ok(conjunction)
+    crate::operand_evaluation::reduce(operands, conjunction, |child| {
+        Tick::tick(meter)?;
+        Ok(values[child] != 0)
+    })
 }

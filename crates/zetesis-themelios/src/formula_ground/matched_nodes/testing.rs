@@ -1,4 +1,4 @@
-//! The scoped reference changes ordinary emission/capture only. The existing
+//! The scoped reference changes body emission/capture, including components. The
 //! producer algorithm and its accounting remain independently controllable.
 use std::cell::{Cell, RefCell};
 

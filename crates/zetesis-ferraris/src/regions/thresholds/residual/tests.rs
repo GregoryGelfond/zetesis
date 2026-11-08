@@ -1,13 +1,13 @@
 //! Residual arithmetic preserves compatible models and consumes only closed sums.
 
-use crate::regions::{Closure, NarrowingStatistics, Step, Width, Work};
+use crate::regions::{Closure, Meter, NarrowingStatistics, Step, Width};
 use crate::test_support::{Allowance, close};
 use crate::{
     AdmissionLimits, EvaluationLimits, EvaluationWorkspace, FormulaNodes, FormulaParts,
     FrozenSubject, Interpretation, Limits, Narrower, Narrowing, NarrowingScratch, Node, NodeView,
     OriginalSubject, Region, RegionLimits, Theory, models,
 };
-use zetesis_cpu::{Cancellation, Stop};
+use zetesis_algebra::{Cancellation, Stop};
 
 use super::{gcd, misses};
 
@@ -73,8 +73,8 @@ fn grouped_divisibility_refutes_beyond_intervals() {
         &mut scratch,
     );
     assert_eq!(result.0, Narrowing::Refuted);
-    assert_eq!(scratch.threshold_rows.capacity(), 0);
-    assert!(scratch.residual_rows.capacity() >= 1);
+    assert_eq!(scratch.common.threshold_rows.capacity(), 0);
+    assert!(scratch.common.residual_rows.capacity() >= 1);
 }
 
 #[test]
@@ -101,36 +101,45 @@ fn completed_residue_reuses_its_last_interval_check() {
     // tick, eight coefficient reads and one distinct progression test suffice;
     // equal gcd operands need no Euclidean remainder step. Rechecking that
     // final progression would exhaust this allowance rather than refute.
-    let mut work = Work::new(10);
-    let closure = Closure {
+    let mut work = Meter::local(10);
+    let closure = Closure::<_, zetesis_algebra::AnswerSetsSought> {
         known: known.borrow(),
-        lists: &mut NarrowingScratch::default(),
+        lists: &mut crate::regions::CommonScratch::default(),
+        learning: &mut crate::regions::LearningScratch::default(),
     };
-    assert!((0..8).all(
-        |condition| !crate::regions::bit(closure.known.sure, condition)
-            && !crate::regions::bit(closure.known.never, condition)
-    ));
-    let outcome = closure.threshold_residual(&index, 0, &mut work);
+    assert!(
+        (0..8).all(|condition| !closure.known.sure.contains(condition)
+            && !closure.known.never.contains(condition))
+    );
+    let outcome = closure
+        .threshold_residual_check(&index, 0, &mut work)
+        .map_err(zetesis_algebra::Failure::into_stop);
     assert!(matches!(outcome, Ok(Step::Contradiction)));
-    assert_eq!(work.spent, 10);
+    assert_eq!(work.charged(), 10);
 }
 
 #[test]
 fn condition_changes_recheck_inherited_residues() {
-    let theory = residual();
+    let terms: Vec<_> = [(0, 1), (1, 1)]
+        .into_iter()
+        .chain((2..=33).map(|atom| (atom, 6)))
+        .chain((34..=65).map(|atom| (atom, 10)))
+        .collect();
+    let theory = interval(66, &terms, [17, 18]);
     let index = Narrower::new(&theory);
     let mut scratch = NarrowingScratch::default();
     let mut parent = index.knowledge();
-    let mut root = Region::all_open(65);
+    let mut root = Region::all_open(66);
     assert_ne!(
         close(&theory, &index, &mut root, &mut parent, &mut scratch).0,
         Narrowing::Refuted
     );
-    assert!((0..65).all(|atom| root.is_open(atom)));
-    // Cutting the weight 1 changes no guard truth, but every remaining sum is
-    // even. A requirement-only notification policy misses this contradiction.
+    assert!((0..66).all(|atom| root.is_open(atom)));
+    // Two unit conditions admit either parity. Cutting one and deciding the
+    // other changes no guard truth, but cutting both leaves only even sums.
     for value in [false, true, false] {
         let mut child = root.clone();
+        assert!(child.cut(1));
         if value {
             assert!(child.hold(0));
         } else {
@@ -154,30 +163,35 @@ fn condition_changes_recheck_inherited_residues() {
 
 #[test]
 fn gcd_one_does_not_claim_attainability() {
-    let terms = [(0, 6), (1, 10), (2, 15), (3, 15)];
-    let theory = interval(4, &terms, [17, 18]);
+    let terms = [(0, 6), (1, 10), (2, 15), (3, 7)];
+    let theory = interval(4, &terms, [18, 19]);
     let index = Narrower::new(&theory);
-    let mut region = Region::all_open(4);
-    assert_ne!(
-        close(
-            &theory,
-            &index,
-            &mut region,
-            &mut index.knowledge(),
-            &mut NarrowingScratch::default()
-        )
-        .0,
-        Narrowing::Refuted,
-    );
-    assert!((0..4).all(|atom| region.is_open(atom)));
-    // No subset makes 17, but gcd alone cannot establish this hole.
+    let mut knowledge = index.knowledge();
+    let Width::Compact16(known) = &mut knowledge.width else {
+        unreachable!()
+    };
+    // Neither interval nor single-coefficient propagation decides a condition.
+    // Isolate the lattice check: a later possible-sum reduction may refute.
+    known.thresholds[0].lower = 18;
+    known.thresholds[0].upper = Some(19);
+    assert!(matches!(
+        Closure::<_, zetesis_algebra::AnswerSetsSought> {
+            known: known.borrow(),
+            lists: &mut crate::regions::CommonScratch::default(),
+            learning: &mut crate::regions::LearningScratch::default(),
+        }
+        .threshold_residual(&index, 0, &mut Meter::local(u64::MAX))
+        .map_err(zetesis_algebra::Failure::into_stop),
+        Ok(Step::Unchanged)
+    ));
+    // No subset makes 18; every complement gcd is one, so this hole remains.
     assert!((0..16).all(|mask| {
         terms
             .iter()
             .filter(|&&(atom, _)| mask & (1 << atom) != 0)
             .map(|&(_, weight)| weight)
             .sum::<u64>()
-            != 17
+            != 18
     }));
 }
 
@@ -361,7 +375,9 @@ fn gcd_refinement_preserves_interval_intersections() {
     // large base also checks the overflow-safe distance representation.
     for divisor in 1..=16 {
         for weight in 1..=16 {
-            let refined = gcd(divisor, weight, &mut Work::new(u64::MAX)).unwrap();
+            let refined = gcd(divisor, weight, &mut Meter::local(u64::MAX))
+                .map_err(zetesis_algebra::Failure::into_stop)
+                .unwrap();
             for base in [0, 7, i128::MAX - 64] {
                 for offset in 0..=16 {
                     for width in 0..=4 {
@@ -377,7 +393,7 @@ fn gcd_refinement_preserves_interval_intersections() {
     }
 }
 
-fn closed_residual_work(theory: &Theory, region: &mut Region) -> u64 {
+fn closed_refutation_work(theory: &Theory, region: &mut Region) -> u64 {
     let index = Narrower::new(theory);
     assert_eq!(index.thresholds.rows.len(), 1);
     let mut knowledge = index.knowledge();
@@ -395,25 +411,32 @@ fn closed_residual_work(theory: &Theory, region: &mut Region) -> u64 {
     let Width::Compact16(known) = &mut knowledge.width else {
         panic!("the small residual fixture uses compact counters");
     };
-    let mut work = Work::new(u64::MAX);
-    let result = Closure {
+    let mut work = Meter::local(u64::MAX);
+    let result = Closure::<_, zetesis_algebra::AnswerSetsSought> {
         known: known.borrow(),
-        lists: &mut NarrowingScratch::default(),
+        lists: &mut crate::regions::CommonScratch::default(),
+        learning: &mut crate::regions::LearningScratch::default(),
     }
-    .threshold_residual(&index, 0, &mut work)
+    .threshold_residual_check(&index, 0, &mut work)
+    .map_err(zetesis_algebra::Failure::into_stop)
     .unwrap();
     assert!(result == Step::Unchanged);
-    work.spent
+    work.charged()
 }
 
 #[test]
 fn unit_coefficient_ends_residual_scan() {
-    let theory = residual();
-    let mut region = Region::all_open(65);
-    // One row tick and one term read suffice. Reading from the large end
-    // instead visits every undecided coefficient before finding the unit.
-    assert_eq!(closed_residual_work(&theory, &mut region), 2);
-    assert!((0..65).all(|atom| region.is_open(atom)));
+    let terms: Vec<_> = [(0, 1), (1, 1)]
+        .into_iter()
+        .chain((2..10).map(|atom| (atom, 6)))
+        .chain((10..18).map(|atom| (atom, 10)))
+        .collect();
+    let theory = interval(18, &terms, [17, 18]);
+    let mut region = Region::all_open(18);
+    // Two unit coefficients leave no useful complement deduction. The retained
+    // whole-row refutation primitive still needs only its row and first term.
+    assert_eq!(closed_refutation_work(&theory, &mut region), 2);
+    assert!((0..18).all(|atom| region.is_open(atom)));
 }
 
 #[test]
@@ -425,7 +448,7 @@ fn intersecting_residue_ends_scan_before_remaining_terms() {
     // 10 after the 6s gives gcd 2 and admits 17 = 1 + 16; the remaining 10s
     // cannot invalidate that lattice point. Each term read costs a tick, so a
     // receipt smaller than the row proves that the whole row was not scanned.
-    assert!(closed_residual_work(&theory, &mut region) < 65);
+    assert!(closed_refutation_work(&theory, &mut region) < 65);
     assert!(region.is_held(0));
     assert!((1..65).all(|atom| region.is_open(atom)));
 }
@@ -433,13 +456,19 @@ fn intersecting_residue_ends_scan_before_remaining_terms() {
 #[test]
 fn euclidean_steps_preserve_work_refusal() {
     for maximum in 0..3 {
-        let mut work = Work::new(maximum);
-        assert_eq!(gcd(8, 5, &mut work), Err(Stop::WorkLimit));
-        assert_eq!(work.spent, maximum);
+        let mut work = Meter::local(maximum);
+        assert_eq!(
+            gcd(8, 5, &mut work).map_err(zetesis_algebra::Failure::into_stop),
+            Err(Stop::WorkLimit)
+        );
+        assert_eq!(work.charged(), maximum);
     }
-    let mut work = Work::new(4);
-    assert_eq!(gcd(8, 5, &mut work), Ok(1));
-    assert_eq!(work.spent, 4);
+    let mut work = Meter::local(4);
+    assert_eq!(
+        gcd(8, 5, &mut work).map_err(zetesis_algebra::Failure::into_stop),
+        Ok(1)
+    );
+    assert_eq!(work.charged(), 4);
 }
 
 #[test]
@@ -460,56 +489,71 @@ fn unit_rows_do_not_allocate_residual_queue() {
         .0,
         Narrowing::Refuted
     );
-    assert_eq!(scratch.threshold_rows.capacity(), 0);
-    assert_eq!(scratch.pending_thresholds.capacity(), 0);
-    assert_eq!(scratch.pending_residuals.capacity(), 0);
-    assert_eq!(scratch.residual_rows.capacity(), 0);
+    assert_eq!(scratch.common.threshold_rows.capacity(), 0);
+    assert_eq!(scratch.common.pending_thresholds.capacity(), 0);
+    assert_eq!(scratch.common.pending_residuals.capacity(), 0);
+    assert_eq!(scratch.common.residual_rows.capacity(), 0);
+    assert_eq!(scratch.common.residual_suffix.capacity(), 0);
+    assert_eq!(scratch.common.possible_sums.capacity(), 0);
 }
 
 #[test]
 fn arithmetic_notifications_preserve_transport_order() {
     let mut scratch = NarrowingScratch::default();
-    scratch.prepare_thresholds(130).unwrap();
-    scratch.prepare_residuals(130).unwrap();
+    scratch.common.prepare_thresholds(130).unwrap();
+    scratch.common.prepare_residuals(130).unwrap();
     for row in [0, 63, 64, 129] {
-        scratch.queue_residual(row);
-        scratch.queue_residual(row);
+        scratch.common.queue_residual(row);
+        scratch.common.queue_residual(row);
     }
-    scratch.queue_threshold(129);
-    scratch.queue_threshold(63);
-    scratch.queue_residual(63);
+    scratch.common.queue_threshold(129);
+    scratch.common.queue_threshold(63);
+    scratch.common.queue_residual(63);
     // The earlier residual insertion must not move mandatory row 63 behind 129.
-    assert_eq!(scratch.next_threshold(), Some(63));
-    assert_eq!(scratch.next_threshold(), Some(129));
-    assert_eq!(scratch.next_threshold(), None);
+    assert_eq!(scratch.common.next_threshold(), Some(63));
+    assert_eq!(scratch.common.next_threshold(), Some(129));
+    assert_eq!(scratch.common.next_threshold(), None);
     for row in [129, 64, 63, 0] {
-        assert_eq!(scratch.next_residual(), Some(row));
+        assert_eq!(scratch.common.next_residual(), Some(row));
     }
-    assert_eq!(scratch.next_residual(), None);
-    assert!(scratch.pending_thresholds.iter().all(|&word| word == 0));
-    assert!(scratch.pending_residuals.iter().all(|&word| word == 0));
+    assert_eq!(scratch.common.next_residual(), None);
+    assert!(
+        scratch
+            .common
+            .pending_thresholds
+            .iter()
+            .all(|&word| word == 0)
+    );
+    assert!(
+        scratch
+            .common
+            .pending_residuals
+            .iter()
+            .all(|&word| word == 0)
+    );
     let retained = scratch.retained_bytes();
-    scratch.queue_threshold(64);
-    scratch.queue_residual(64);
-    scratch.prepare(0);
-    assert_eq!(scratch.next_threshold(), None);
-    assert_eq!(scratch.next_residual(), None);
-    scratch.queue_residual(64);
-    assert_eq!(scratch.next_residual(), Some(64));
+    scratch.common.queue_threshold(64);
+    scratch.common.queue_residual(64);
+    scratch.common.prepare(0);
+    assert_eq!(scratch.common.next_threshold(), None);
+    assert_eq!(scratch.common.next_residual(), None);
+    scratch.common.queue_residual(64);
+    assert_eq!(scratch.common.next_residual(), Some(64));
     assert_eq!(scratch.retained_bytes(), retained);
 }
 
 #[test]
 fn row_queue_receipt_includes_both_worklists() {
     let mut scratch = NarrowingScratch::default();
-    scratch.prepare_thresholds(130).unwrap();
-    scratch.prepare_residuals(130).unwrap();
-    assert!(scratch.pending_residuals.capacity() >= 3);
-    assert!(scratch.residual_rows.capacity() >= 130);
-    let entries = (scratch.threshold_rows.capacity() + scratch.residual_rows.capacity()) as u128
+    scratch.common.prepare_thresholds(130).unwrap();
+    scratch.common.prepare_residuals(130).unwrap();
+    assert!(scratch.common.pending_residuals.capacity() >= 3);
+    assert!(scratch.common.residual_rows.capacity() >= 130);
+    let entries = (scratch.common.threshold_rows.capacity()
+        + scratch.common.residual_rows.capacity()) as u128
         * size_of::<usize>() as u128;
-    let flags = (scratch.pending_thresholds.capacity() + scratch.pending_residuals.capacity())
-        as u128
+    let flags = (scratch.common.pending_thresholds.capacity()
+        + scratch.common.pending_residuals.capacity()) as u128
         * size_of::<u64>() as u128;
     assert_eq!(scratch.retained_bytes(), entries + flags);
 }
@@ -528,17 +572,17 @@ fn stopped_residual_closures_do_not_poison_reuse() {
     );
     for failure in [Stop::WorkLimit, Stop::Cancelled, Stop::Deadline] {
         for limit in 0..completed.1.work {
-            let attempt = index.narrow_known_reserved(
+            let attempt = crate::test_support::stop_narrowing(&index.narrow_known_reserved(
                 OriginalSubject::new(&theory, None),
                 &mut Region::all_open(8),
                 &mut index.knowledge(),
                 &mut scratch,
                 &Cancellation::default(),
-                &mut Allowance {
+                &mut zetesis_algebra::Meter::reserved(&mut Allowance {
                     remaining: limit,
                     failure,
-                },
-            );
+                }),
+            ));
             assert_eq!(attempt.result, Err(failure));
             assert_eq!(attempt.statistics.work, limit);
             let actual = close(
@@ -550,10 +594,22 @@ fn stopped_residual_closures_do_not_poison_reuse() {
             );
             assert_eq!(actual.0, completed.0);
             assert_eq!(actual.1.work, completed.1.work);
-            assert!(scratch.threshold_rows.is_empty());
-            assert!(scratch.residual_rows.is_empty());
-            assert!(scratch.pending_thresholds.iter().all(|&word| word == 0));
-            assert!(scratch.pending_residuals.iter().all(|&word| word == 0));
+            assert!(scratch.common.threshold_rows.is_empty());
+            assert!(scratch.common.residual_rows.is_empty());
+            assert!(
+                scratch
+                    .common
+                    .pending_thresholds
+                    .iter()
+                    .all(|&word| word == 0)
+            );
+            assert!(
+                scratch
+                    .common
+                    .pending_residuals
+                    .iter()
+                    .all(|&word| word == 0)
+            );
         }
     }
 }
@@ -568,19 +624,18 @@ fn pre_cancelled_residual_check_mutates_nothing() {
     let mut region = Region::all_open(8);
     let original = region.clone();
     assert_eq!(
-        index
-            .narrow_known_reserved(
-                OriginalSubject::new(&theory, None),
-                &mut region,
-                &mut index.knowledge(),
-                &mut scratch,
-                &cancellation,
-                &mut Allowance {
-                    remaining: u64::MAX,
-                    failure: Stop::WorkLimit
-                },
-            )
-            .result,
+        crate::test_support::stop_narrowing(&index.narrow_known_reserved(
+            OriginalSubject::new(&theory, None),
+            &mut region,
+            &mut index.knowledge(),
+            &mut scratch,
+            &cancellation,
+            &mut zetesis_algebra::Meter::reserved(&mut Allowance {
+                remaining: u64::MAX,
+                failure: Stop::WorkLimit
+            }),
+        ))
+        .result,
         Err(Stop::Cancelled)
     );
     assert_eq!(region, original);
@@ -609,19 +664,26 @@ fn frozen_subjects_do_not_run_residual_checks() {
                 .narrow_frozen_known(
                     FrozenSubject::new(&theory, &truth),
                     &mut partial(code, 4),
-                    &mut index.knowledge(),
+                    &mut index.frozen_knowledge(),
                     &mut scratch,
                     RegionLimits::default(),
                     &cancellation,
                 )
+                .result
                 .unwrap();
-            assert_eq!(scratch.threshold_rows.capacity(), 0);
-            assert_eq!(scratch.pending_thresholds.capacity(), 0);
-            assert_eq!(scratch.pending_residuals.capacity(), 0);
-            assert_eq!(scratch.residual_rows.capacity(), 0);
+            assert_eq!(scratch.common.threshold_rows.capacity(), 0);
+            assert_eq!(scratch.common.pending_thresholds.capacity(), 0);
+            assert_eq!(scratch.common.pending_residuals.capacity(), 0);
+            assert_eq!(scratch.common.residual_rows.capacity(), 0);
+            assert_eq!(scratch.common.residual_suffix.capacity(), 0);
+            assert_eq!(scratch.common.possible_sums.capacity(), 0);
         }
     }
 }
 
 mod eligibility;
 mod phase;
+
+mod forcing;
+
+mod reuse;

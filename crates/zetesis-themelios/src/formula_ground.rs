@@ -11,10 +11,12 @@ pub(crate) mod atoms;
 mod cache;
 mod canonical_suffix;
 mod extremum_guards;
-mod metadata;
+mod fixed_facts;
 mod matched_nodes;
+mod metadata;
 use matched_nodes::MatchedNodes;
 mod nodes;
+mod pairwise_exclusions;
 mod producer;
 mod projection;
 mod rejected;
@@ -26,9 +28,9 @@ pub(crate) use retained::{RetainedGrounding, ground_retained};
 #[cfg(test)]
 mod assignment_families;
 #[cfg(test)]
-mod fact_declines;
-#[cfg(test)]
 mod constants;
+#[cfg(test)]
+mod fact_declines;
 
 use crate::formula_support::Ir;
 use crate::formula_support::family::Warnings;
@@ -208,6 +210,7 @@ fn ground_with_schedule(
         admission,
         origins,
         count_plan,
+        retained_constraints,
     } = emission;
     let theory = profile.phase(GroundingPhase::TheoryValidation, None, || {
         admission
@@ -238,6 +241,7 @@ fn ground_with_schedule(
             key_analysis,
             comparison_forms,
             expansion,
+            retained_constraints,
         },
         constraints,
         retained,
@@ -312,9 +316,8 @@ fn instantiate(
                 )?
             };
             drop(domains);
-            // Streaming keeps constraints alone, and a fact is never one.
-            let keep = schedule.keep(prepared.rules_without_facts());
-            pending.publish(catalog, limits, location, keep, counters)
+            let publication_work = GroundingWork::new(limits, counters, location);
+            pending.publish(catalog, &mut prepared, schedule, publication_work)
         },
     )?;
     let PublishedEmission {
@@ -429,6 +432,72 @@ struct PendingEmission {
     emission: Emission<formula_support::SourceSelection>,
     warnings: Warnings,
     streamed_instances: u64,
+    materialized_constraints: Option<Buffer<usize>>,
+}
+
+/// Only exact original rule positions cross from capture into source retention.
+/// This private disposition is consumed before publication/accounting handoff.
+#[derive(Default)]
+struct Streaming {
+    instances: u64,
+    /// Original positions of templates the core now holds, ascending.
+    materialized: Option<Buffer<usize>>,
+    /// Original positions and instance counts of captured templates that are
+    /// still streamed, ascending; retention may yet move them into the core.
+    streamed: Option<Buffer<(usize, u64)>>,
+}
+
+enum Captured {
+    Streamed(u64),
+    Materialized,
+}
+
+/// An upper bound on what instances of one streamable integrity constraint add
+/// to the formula as `Builder::rule` emits them. Per instance, each atom
+/// literal adds at most its atom node, its default negations and the
+/// conjunction node joining it to the body; the instance adds the implication
+/// to falsum and one root carrying the rule's origins. Its other literals are
+/// scalar conditions, decided by the join, and add no node. Interning and
+/// simplification only lower the actual growth.
+#[derive(Clone, Copy)]
+struct InstanceBound {
+    nodes: u128,
+    occurrences: u128,
+    roots: u128,
+    origins: u128,
+}
+
+impl InstanceBound {
+    fn of(rule: &RuleIr) -> Self {
+        let mut bound = Self {
+            nodes: 1,
+            occurrences: 2,
+            roots: 1,
+            origins: rule.origins.len() as u128,
+        };
+        for literal in &rule.body {
+            let negations = match literal {
+                LiteralIr::Atom(DefaultNegation::None, _) | LiteralIr::PatternAtom(_) => 0,
+                LiteralIr::Atom(DefaultNegation::Not, _) => 1,
+                LiteralIr::Atom(DefaultNegation::NotNot, _) => 2,
+                _ => continue,
+            };
+            // Each negation and the conjunction are binary nodes.
+            bound.nodes += 2 + negations;
+            bound.occurrences += 2 + 2 * negations;
+        }
+        bound
+    }
+
+    fn times(self, instances: u64) -> Self {
+        let instances = u128::from(instances);
+        Self {
+            nodes: self.nodes.saturating_mul(instances),
+            occurrences: self.occurrences.saturating_mul(instances),
+            roots: self.roots.saturating_mul(instances),
+            origins: self.origins.saturating_mul(instances),
+        }
+    }
 }
 
 fn emit<'source>(
@@ -499,17 +568,21 @@ fn emit<'source>(
             location,
         )?;
         builder.initialize(location)?;
+        builder.collect_fixed_facts(prepared.items())?;
         Ok::<_, FormulaFailure>(builder)
     })?;
-    let streamed_instances =
+    let mut streaming =
         builder.instantiate_items(prepared.items(), domains, support, profile, schedule)?;
-    let emission = builder.finish(profile, location)?;
+    builder.complete(profile)?;
+    builder.retain_fitting(prepared.items(), support, profile, &mut streaming)?;
+    let emission = builder.seal(location)?;
     Ok(PendingEmission {
         projection,
         objectives,
         emission,
         warnings,
-        streamed_instances,
+        streamed_instances: streaming.instances,
+        materialized_constraints: streaming.materialized,
     })
 }
 
@@ -527,24 +600,75 @@ struct PublishedEmission {
 }
 
 impl PendingEmission {
+    /// Compact the original rule vector only after every complete source
+    /// traversal and source borrow has ended. Fact blocks and retained rules
+    /// keep their original payloads, sites and relative order; no IR is copied.
+    fn retire_materialized(
+        &mut self,
+        prepared: &mut crate::formula_ir::Prepared,
+        limits: &FormulaLimits,
+        counters: &mut Counters,
+        location: ProgramSite,
+    ) -> Result<(), FormulaFailure> {
+        let Some(materialized) = self.materialized_constraints.take() else {
+            return Ok(());
+        };
+        // The existing in-place item/rule compaction performs one item visit,
+        // at most one two-cell rule swap and one slot write per retained rule.
+        counters.charge_work(
+            prepared.items().len() as u128 + 3 * prepared.rules_without_facts().len() as u128 + 1,
+            limits,
+            location,
+        )?;
+        let mut index = 0;
+        let mut removed = 0;
+        prepared.retain_rules_without_facts(|_| {
+            let keep = materialized.slice().get(removed) != Some(&index);
+            index += 1;
+            if !keep {
+                removed += 1;
+            }
+            keep
+        });
+        debug_assert_eq!(
+            removed,
+            materialized.len(),
+            "original ordered rule positions"
+        );
+        Ok(())
+    }
+
     /// Publish the emission. A retained schedule keeps the catalog open for
     /// reconstruction; a stream of constraints closes it, keeping the relations
     /// they read, before this account ends; otherwise it is released.
     fn publish(
-        self,
+        mut self,
         mut catalog: formula_support::CompletedCatalog,
-        limits: &FormulaLimits,
-        location: ProgramSite,
-        keep: Keep<'_>,
-        counters: &mut Counters,
+        prepared: &mut crate::formula_ir::Prepared,
+        schedule: Schedule<'_>,
+        work: GroundingWork<'_>,
     ) -> Result<PublishedEmission, FormulaFailure> {
+        let GroundingWork {
+            limits,
+            counters,
+            location,
+        } = work;
+        // All source/domain borrows have ended. Retire complete replacements
+        // before deciding which original constraints the schedule must retain.
+        self.retire_materialized(prepared, limits, counters, location)?;
+        let keep = schedule.keep(prepared.rules_without_facts());
         let Self {
             projection,
             objectives,
             emission,
             warnings,
             streamed_instances,
+            materialized_constraints,
         } = self;
+        debug_assert!(
+            materialized_constraints.is_none(),
+            "dispositions retired before publication"
+        );
         let mut publication = formula_support::Publication::new(&mut catalog, counters, location)?;
         let projection = projection.publish(&mut publication, limits, counters, location)?;
         let Emission {
@@ -552,6 +676,7 @@ impl PendingEmission {
             admission,
             origins,
             count_plan,
+            retained_constraints,
         } = emission;
         let atoms = publication.atoms(atoms, limits, counters, location)?;
         let (objectives, objective_origins) =
@@ -561,6 +686,7 @@ impl PendingEmission {
             admission,
             origins,
             count_plan,
+            retained_constraints,
         };
         let mut streamed = None;
         let mut open = None;
@@ -609,6 +735,7 @@ struct Emission<A = AtomCatalog> {
     admission: zetesis_ferraris::TheoryAdmission,
     origins: Vec<Vec<ProgramSite>>,
     count_plan: Option<crate::formula_count_plan::Collector>,
+    retained_constraints: crate::formula::RetainedConstraints,
 }
 
 pub(super) struct Builder<'a, 'terms, 'source> {
@@ -619,6 +746,7 @@ pub(super) struct Builder<'a, 'terms, 'source> {
     catalog: atoms::Catalog,
     terms: TermTable,
     aggregate_atoms: formula_support::SourceSelection,
+    fixed_facts: Option<formula_support::SourceSelection>,
     metadata: metadata::Metadata,
     nodes: FormulaNodes,
     node_indices: nodes::Index,
@@ -630,6 +758,8 @@ pub(super) struct Builder<'a, 'terms, 'source> {
     cached_elements: usize,
     cached_roots: usize,
     count_plan: Option<crate::formula_count_plan::Collector>,
+    /// Streamable templates this builder grounded in the core.
+    retained_constraints: crate::formula::RetainedConstraints,
 }
 
 #[derive(Clone, Copy)]
@@ -682,8 +812,8 @@ impl<'source> Builder<'_, '_, 'source> {
         support: &Support<'source>,
         profile: &Profile<'_>,
         schedule: Schedule<'_>,
-    ) -> Result<u64, FormulaFailure> {
-        let mut streamed_instances = 0;
+    ) -> Result<Streaming, FormulaFailure> {
+        let mut streaming = Streaming::default();
         for item in items.iter() {
             match item {
                 crate::formula_facts::Item::Rule(index, rule) => profile.phase(
@@ -693,7 +823,19 @@ impl<'source> Builder<'_, '_, 'source> {
                         if matches!(schedule, Schedule::Hybrid | Schedule::HybridRetained)
                             && crate::formula_hybrid::eligible(rule)
                         {
-                            self.capture_constraint(rule, support, &mut streamed_instances)
+                            match self.capture_constraint(rule, support)? {
+                                Captured::Streamed(instances) => {
+                                    streaming.instances += instances;
+                                    self.record(
+                                        &mut streaming.streamed,
+                                        (index, instances),
+                                        rule.location,
+                                    )
+                                }
+                                Captured::Materialized => {
+                                    self.record(&mut streaming.materialized, index, rule.location)
+                                }
+                            }
                         } else {
                             self.instantiate_rule(rule, index, domains, support, schedule)
                         }
@@ -707,7 +849,7 @@ impl<'source> Builder<'_, '_, 'source> {
                 )?,
             }
         }
-        Ok(streamed_instances)
+        Ok(streaming)
     }
 
     /// Emit each fact row as `Builder::normal` emits a fact rule's one passing
@@ -737,15 +879,16 @@ impl<'source> Builder<'_, '_, 'source> {
         Ok(())
     }
 
-    /// Retain every atom identity a streamed instance can read, without its
-    /// conjunction/implication DAG. Existing completion then emits coherence
+    /// Retain every atom identity a streamed instance can read. A complete
+    /// certified pair template emits native constraints; other templates retain
+    /// no conjunction/implication DAG. Existing completion then emits coherence
     /// and support guards, including falsity for atoms with no producer.
     fn capture_constraint(
         &mut self,
         rule: &'source RuleIr,
         support: &Support<'source>,
-        instances: &mut u64,
-    ) -> Result<(), FormulaFailure> {
+    ) -> Result<Captured, FormulaFailure> {
+        let mut instances = 0;
         let mut join = Join::rule(
             Ir::Source(rule),
             support,
@@ -759,6 +902,7 @@ impl<'source> Builder<'_, '_, 'source> {
         // include rows excluded by another argument of this source pattern.
         join.select_total_body(rule, self.computation, self.limits, self.counters)?;
         self.retain_matched_rows(&mut join, rule.location)?;
+        let mut exclusions = pairwise_exclusions::Pending::for_capture(self, rule)?;
         let mut matched = None;
         while let Some(row) = join.next_matched_row(
             self.budget,
@@ -776,8 +920,17 @@ impl<'source> Builder<'_, '_, 'source> {
                 continue;
             }
             // Every retained count is bounded by the charged substitution cap.
-            *instances += 1;
-            let view = self.matched_view(&mut matched, row.witnesses.as_ref(), rule)?;
+            instances += 1;
+            let view = self.matched_view(
+                &mut matched,
+                row.witnesses.as_ref(),
+                rule.body.len(),
+                rule.location,
+            )?;
+            if let Some(exclusions) = &mut exclusions {
+                exclusions.row(self, rule, &row.values, matched.as_mut().zip(view))?;
+                continue;
+            }
             for (index, literal) in rule.body.iter().enumerate() {
                 let pattern = match literal {
                     LiteralIr::Atom(_, pattern) => pattern,
@@ -793,7 +946,175 @@ impl<'source> Builder<'_, '_, 'source> {
                 }
             }
         }
+        if let Some(exclusions) = exclusions
+            && exclusions.finish_capture(self, rule)?
+        {
+            return Ok(Captured::Materialized);
+        }
+        Ok(Captured::Streamed(instances))
+    }
+
+    /// Append to a disposition buffer, creating it at its first entry.
+    fn record<T>(
+        &mut self,
+        buffer: &mut Option<Buffer<T>>,
+        value: T,
+        location: ProgramSite,
+    ) -> Result<(), FormulaFailure> {
+        let buffer = match buffer {
+            Some(buffer) => buffer,
+            None => buffer.insert(Buffer::new(
+                self.computation,
+                self.limits,
+                self.counters,
+                location,
+            )?),
+        };
+        buffer.push(
+            value,
+            self.computation,
+            self.limits,
+            self.counters,
+            location,
+        )
+    }
+
+    /// Move into the formula every captured template whose instances fit, in
+    /// program order, and leave the rest streamed. This runs once the producer
+    /// core and its completion are built, so a retained template takes only
+    /// room the rest of the program left, and it adds no atom: capture retained
+    /// every atom its instances read, and completion has guarded them. A
+    /// template fits when an upper bound on what its instances add stays within
+    /// what remains of `max_retained_constraint_nodes` and of the theory's own
+    /// ceilings, so retention never ends in a refusal. A template that does not
+    /// fit stays streamed; a later, smaller one may still fit.
+    fn retain_fitting(
+        &mut self,
+        items: &'source crate::formula_facts::Items,
+        support: &Support<'source>,
+        profile: &Profile<'_>,
+        streaming: &mut Streaming,
+    ) -> Result<(), FormulaFailure> {
+        // No share grants nothing, not even a template without instances.
+        if self.limits.max_retained_constraint_nodes == 0 {
+            return Ok(());
+        }
+        let Some(streamed) = streaming.streamed.take() else {
+            return Ok(());
+        };
+        let mut share = self.limits.max_retained_constraint_nodes as u128;
+        let mut positions = None;
+        for &(index, instances) in streamed.slice() {
+            let rule = &items.rules()[index];
+            let bound = InstanceBound::of(rule).times(instances);
+            if bound.nodes > share || !self.holds(bound) {
+                continue;
+            }
+            share -= bound.nodes;
+            profile.phase(
+                GroundingPhase::RuleInstantiation,
+                Some(rule.location),
+                || self.retain_template(rule, support),
+            )?;
+            self.retained_constraints.templates += 1;
+            self.retained_constraints.instances += instances;
+            streaming.instances -= instances;
+            self.record(&mut positions, index, rule.location)?;
+        }
+        if let Some(positions) = positions {
+            streaming.materialized = Some(match streaming.materialized.take() {
+                Some(captured) => self.merge(&captured, &positions)?,
+                None => positions,
+            });
+        }
         Ok(())
+    }
+
+    /// Whether the theory's ceilings still hold `bound`'s nodes, operand
+    /// occurrences, roots and origin locations.
+    fn holds(&self, bound: InstanceBound) -> bool {
+        let nodes = self.nodes.view().len() as u128 + bound.nodes;
+        let occurrences = self.nodes.parts().occurrences() as u128 + bound.occurrences;
+        let roots = self.roots.len() as u128 + bound.roots;
+        let origins = self.origin_count as u128 + bound.origins;
+        nodes <= self.node_bound().1 as u128
+            && occurrences <= self.operand_bound().1 as u128
+            && roots <= self.limits.theory.max_roots as u128
+            && origins <= self.limits.max_origin_locations as u128
+    }
+
+    /// Instantiate a captured template as eager grounding instantiates a
+    /// constraint, over the join capture took: the same rows name the same atoms.
+    fn retain_template(
+        &mut self,
+        rule: &'source RuleIr,
+        support: &Support<'source>,
+    ) -> Result<(), FormulaFailure> {
+        let atoms = self.catalog.len();
+        let mut join = Join::rule(
+            Ir::Source(rule),
+            support,
+            self.computation,
+            self.limits,
+            self.budget,
+            self.counters,
+        )?;
+        join.select_total_body(rule, self.computation, self.limits, self.counters)?;
+        self.retain_matched_rows(&mut join, rule.location)?;
+        let mut matched = None;
+        while let Some(row) = join.next_matched_row(
+            self.budget,
+            Context::new(self.computation, self.limits, self.counters, rule.location),
+        )? {
+            // Capture already validated every failing row.
+            if !row.passes {
+                continue;
+            }
+            let view = self.matched_view(
+                &mut matched,
+                row.witnesses.as_ref(),
+                rule.body.len(),
+                rule.location,
+            )?;
+            self.rule(rule, &row.values, support, matched.as_mut().zip(view))?;
+        }
+        debug_assert_eq!(self.catalog.len(), atoms, "capture retained every atom");
+        Ok(())
+    }
+
+    /// Merge two ascending position buffers into one ascending buffer.
+    fn merge(
+        &mut self,
+        first: &Buffer<usize>,
+        second: &Buffer<usize>,
+    ) -> Result<Buffer<usize>, FormulaFailure> {
+        let location = ProgramSite::program();
+        let mut merged = Buffer::new(self.computation, self.limits, self.counters, location)?;
+        merged.reserve(
+            first.len() + second.len(),
+            self.computation,
+            self.limits,
+            self.counters,
+            location,
+        )?;
+        let (mut left, mut right) = (
+            first.slice().iter().peekable(),
+            second.slice().iter().peekable(),
+        );
+        while let Some(&position) = match (left.peek(), right.peek()) {
+            (Some(&&a), Some(&&b)) if b < a => right.next(),
+            (Some(_), _) => left.next(),
+            (None, _) => right.next(),
+        } {
+            merged.push(
+                position,
+                self.computation,
+                self.limits,
+                self.counters,
+                location,
+            )?;
+        }
+        Ok(merged)
     }
 
     fn instantiate_rule(
@@ -807,10 +1128,14 @@ impl<'source> Builder<'_, '_, 'source> {
         if crate::formula_factor::rule(self, rule, support)? {
             return Ok(());
         }
-        let guards = if let Some(domains) = domains {
+        let candidates = domains
+            .map(|domains| domains.for_rule(index, rule))
+            .transpose()?
+            .flatten();
+        let guards = if let Some(candidates) = candidates {
             support.domain_guards(
                 rule,
-                domains.for_rule(index, rule)?,
+                candidates,
                 self.computation,
                 self.limits,
                 self.counters,
@@ -839,22 +1164,35 @@ impl<'source> Builder<'_, '_, 'source> {
         }
         outer.select_range_multiples(rule, self.computation, self.limits, self.counters)?;
         self.retain_matched_rows(&mut outer, rule.location)?;
+        let mut exclusions = pairwise_exclusions::Pending::for_rule(self, rule)?;
         let mut matched = None;
         while let Some(row) = outer.next_matched_row(
             self.budget,
             Context::new(self.computation, self.limits, self.counters, rule.location),
         )? {
             if row.passes {
-                let view = self.matched_view(&mut matched, row.witnesses.as_ref(), rule)?;
-                self.rule(rule, &row.values, support, matched.as_mut().zip(view))?;
+                let view = self.matched_view(
+                    &mut matched,
+                    row.witnesses.as_ref(),
+                    rule.body.len(),
+                    rule.location,
+                )?;
+                if let Some(exclusions) = &mut exclusions {
+                    exclusions.row(self, rule, &row.values, matched.as_mut().zip(view))?;
+                } else {
+                    self.rule(rule, &row.values, support, matched.as_mut().zip(view))?;
+                }
             } else {
                 self.validate_body(&rule.body, &row.values, support, rule.location)?;
             }
         }
+        if let Some(exclusions) = exclusions {
+            exclusions.finish(self, rule)?;
+        }
         Ok(())
     }
 
-    fn retain_matched_rows(
+    pub(super) fn retain_matched_rows(
         &mut self,
         join: &mut Join<'_, '_>,
         location: ProgramSite,
@@ -877,19 +1215,15 @@ impl<'source> Builder<'_, '_, 'source> {
         &mut self,
         nodes: &mut Option<MatchedNodes>,
         view: Option<&'view formula_support::witnesses::WitnessRow<'row, 'source>>,
-        rule: &RuleIr,
+        literals: usize,
+        location: ProgramSite,
     ) -> Result<Option<&'view formula_support::witnesses::WitnessRow<'row, 'source>>, FormulaFailure>
     {
         let Some(view) = view.filter(|view| !view.rows.is_empty()) else {
             return Ok(None);
         };
         if nodes.is_none() {
-            *nodes = Some(MatchedNodes::for_body(
-                view,
-                rule.body.len(),
-                self,
-                rule.location,
-            )?);
+            *nodes = Some(MatchedNodes::for_body(view, literals, self, location)?);
         }
         Ok(Some(view))
     }
@@ -915,6 +1249,7 @@ impl<'source> Builder<'_, '_, 'source> {
             catalog,
             terms,
             aggregate_atoms,
+            fixed_facts: None,
             metadata: metadata::Metadata::default(),
             nodes: FormulaNodes::default(),
             node_indices: nodes::Index::default(),
@@ -927,6 +1262,7 @@ impl<'source> Builder<'_, '_, 'source> {
             cached_roots: 0,
             count_plan,
             purpose,
+            retained_constraints: crate::formula::RetainedConstraints::default(),
         })
     }
     fn node_bound(&self) -> (FormulaResource, usize) {
@@ -970,18 +1306,22 @@ impl<'source> Builder<'_, '_, 'source> {
             ),
         }
     }
-    /// Complete the semantic additions before discarding construction indexes.
-    /// Moving the emitted vectors preserves IDs, root order and source origins;
-    /// cumulative budgets are never released with the discarded scratch.
-    fn finish(
-        mut self,
-        profile: &Profile<'_>,
-        location: ProgramSite,
-    ) -> Result<Emission<formula_support::SourceSelection>, FormulaFailure> {
+    /// Complete the semantic additions over the finished atom catalog: the
+    /// coherence of opposite atoms and every atom's support guards.
+    fn complete(&mut self, profile: &Profile<'_>) -> Result<(), FormulaFailure> {
         profile.phase(GroundingPhase::Coherence, None, || self.coherence())?;
         profile.phase(GroundingPhase::SupportGuards, None, || {
             self.support_guards()
-        })?;
+        })
+    }
+
+    /// Discard the construction indexes once every semantic addition is made.
+    /// Moving the emitted vectors preserves IDs, root order and source origins;
+    /// cumulative budgets are never released with the discarded scratch.
+    fn seal(
+        self,
+        location: ProgramSite,
+    ) -> Result<Emission<formula_support::SourceSelection>, FormulaFailure> {
         // Preserve the sole owner's topology evidence. This consuming attempt
         // fixes the remaining scans before charging them; raw input still takes
         // the full route. Final atom bounds and roots are never inferred here.
@@ -995,6 +1335,7 @@ impl<'source> Builder<'_, '_, 'source> {
             admission,
             origins: self.origins,
             count_plan: self.count_plan,
+            retained_constraints: self.retained_constraints,
         })
     }
 
@@ -1327,6 +1668,29 @@ impl<'source> Builder<'_, '_, 'source> {
         )
     }
 
+    /// Name a selected component row through the ordinary body implementation.
+    /// The node owner belongs to this literal slice and this cursor alone;
+    /// rejected rows must be skipped before calling. Borrowed positive rows
+    /// establish atom identities, not the truth of their body literals.
+    pub(super) fn body_from_row(
+        &mut self,
+        literals: &[LiteralIr],
+        row: &formula_support::witnesses::MatchedBinding<'_, 'source>,
+        nodes: &mut Option<MatchedNodes>,
+        support: &Support<'source>,
+        location: ProgramSite,
+    ) -> Result<usize, FormulaFailure> {
+        debug_assert!(row.passes);
+        let view = self.matched_view(nodes, row.witnesses.as_ref(), literals.len(), location)?;
+        self.body_matched(
+            literals.iter().map(Ir::Temporary),
+            &row.values,
+            location,
+            support,
+            nodes.as_mut().zip(view),
+        )
+    }
+
     pub(super) fn body_ir<'literal>(
         &mut self,
         literals: impl IntoIterator<Item = Ir<'literal, 'source, LiteralIr>>,
@@ -1360,7 +1724,9 @@ impl<'source> Builder<'_, '_, 'source> {
                     Some(node) => node,
                     None => self.atom(*pattern, assignment, location)?,
                 };
-                if *negation != DefaultNegation::None {
+                if *negation == DefaultNegation::None {
+                    atom = self.fixed_body_atom(atom, location)?;
+                } else {
                     atom = self.neg(atom, location)?;
                 }
                 if *negation == DefaultNegation::NotNot {
@@ -1372,6 +1738,7 @@ impl<'source> Builder<'_, '_, 'source> {
                     Some(node) => node,
                     None => self.atom(pattern.atom, assignment, location)?,
                 };
+                let atom = self.fixed_body_atom(atom, location)?;
                 result = self.and(result, atom, location)?;
             } else if let LiteralIr::Aggregate(_) = literal {
                 let aggregate = self.aggregate(

@@ -1,7 +1,7 @@
 //! Fixed keys select full members of the independently completed original family.
 
 use std::collections::BTreeSet;
-use zetesis_cpu::Cancellation;
+use zetesis_algebra::Cancellation;
 use zetesis_reference_support::formula;
 use zetesis_solve::{
     AnswerSelection, Backend, Completion, ExecutionResources, GpuApi, PreparedInput,

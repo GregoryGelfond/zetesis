@@ -63,6 +63,9 @@ impl<T> Buffer<T> {
         Ok(self)
     }
 
+    pub(crate) fn pop(&mut self) -> Option<T> {
+        self.values.pop()
+    }
     pub(crate) fn clear(&mut self) {
         self.values.clear();
     }
@@ -101,6 +104,30 @@ impl<T: Copy> Buffer<T> {
             additional,
             &mut self.lease,
             size_of::<Self>(),
+            Context::new(computation, limits, counters, location),
+        )?;
+        counters.charge_work(additional as u128 + 1, limits, location)?;
+        self.values.resize(len, value);
+        Ok(())
+    }
+
+    /// Grow an embedded buffer. Its enclosing cell already counts the header,
+    /// so, as after [`Buffer::embedded`], the lease holds payload capacity only.
+    pub(super) fn resize_embedded(
+        &mut self,
+        len: usize,
+        value: T,
+        computation: &Computation<'_, '_>,
+        limits: &FormulaLimits,
+        counters: &mut Counters,
+        location: ProgramSite,
+    ) -> Result<(), FormulaFailure> {
+        let additional = len.saturating_sub(self.values.len());
+        reserve(
+            &mut self.values,
+            additional,
+            &mut self.lease,
+            0,
             Context::new(computation, limits, counters, location),
         )?;
         counters.charge_work(additional as u128 + 1, limits, location)?;

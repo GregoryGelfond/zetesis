@@ -5,6 +5,7 @@ use std::mem::size_of;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 use crate::ProgramSite;
+use zetesis_algebra::words::Words;
 use zetesis_core::atom_interner::{self, AtomAppender, AtomInterner};
 use zetesis_core::catalog::{AtomRef, Atoms, CatalogRead, PredicateRef, TermRef};
 use zetesis_core::relation::{Catalog, CatalogFailure, Failure, Limits, Relation, Resource, Row};
@@ -52,7 +53,7 @@ pub(crate) struct SupportCatalog {
     scope: SourceScope,
     rows: Vec<CatalogRows>,
     pending: Vec<usize>,
-    supported: Vec<u64>,
+    supported: Words<u64>,
     // Shared only by a borrowed admission round. Relaxed accounting carries no
     // publication synchronization; completed snapshots omit this observation.
     // An atomic reference also preserves movable prepared checker state.
@@ -73,7 +74,7 @@ impl Default for SupportCatalog {
             scope: SourceScope::new(),
             rows: Vec::new(),
             pending: Vec::new(),
-            supported: Vec::new(),
+            supported: Words::new(Vec::new()),
             growth: AtomicUsize::new(0),
             demand: None,
             entries: 0,

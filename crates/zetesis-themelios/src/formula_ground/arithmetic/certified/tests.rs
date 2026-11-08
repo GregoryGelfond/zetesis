@@ -11,8 +11,8 @@ use crate::grounding_observer::Profile;
 use crate::test_support::Observer;
 use crate::{ExpansionFailure, FormulaResource, GroundingPhase, GroundingWork};
 use themelios_program::program::DefaultNegation;
+use zetesis_algebra::{Cancellation, Stop};
 use zetesis_core::ValueLimits;
-use zetesis_cpu::{Cancellation, Stop};
 
 mod accounting;
 

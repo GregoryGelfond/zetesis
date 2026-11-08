@@ -1,16 +1,15 @@
 //! Opt-in stderr statistics preserve answer records and truthful completion.
 
-use std::fmt::Write as _;
 use std::io;
 use std::path::PathBuf;
 
 use crate::support::human::before_timing;
 use crate::support::options::serial;
 use clap::Parser;
+use zetesis_algebra::Cancellation;
 use zetesis_cli::{
     Completion, Options, Report, RunError, run_bundle_with_diagnostics, run_with_diagnostics,
 };
-use zetesis_cpu::Cancellation;
 use zetesis_test_support::io::BoundedWriter;
 use zetesis_themelios::{BundleLimits, SourceBundle};
 
@@ -57,39 +56,8 @@ fn statistics_report_memory_derived_storage() {
     }
 }
 
-#[test]
-fn statistics_explain_candidate_restriction_units() {
-    let (_, _, text) = solve(
-        "{a}. {b}. :- a,b.",
-        &options(&["--stats", "--grounder", "lazy"]),
-    );
-    assert!(
-        text.contains("conjunctions=1; skipped impossible intervals=1;"),
-        "{text}"
-    );
-    assert!(text.contains("peak copied payload bytes="), "{text}");
-    assert!(text.contains("allocator/index overhead excluded"), "{text}");
-}
-
-#[test]
-fn statistics_identify_necessary_disjunctive_support_under_clauses() {
-    let (_, _, text) = solve(
-        "a | b.",
-        &options(&["--stats", "--oracle", "countermodel", "--search", "clauses"]),
-    );
-    assert!(
-        text.contains("necessary disjunctive support: status=Applied;"),
-        "{text}"
-    );
-    assert!(text.contains("(included in search work)"), "{text}");
-    assert!(!text.contains("candidate regions:"), "{text}");
-}
-
 fn regions_statistics() -> String {
-    let (_, _, text) = solve(
-        "a | b.",
-        &options(&["--stats", "--oracle", "countermodel", "--search", "regions"]),
-    );
+    let (_, _, text) = solve("a | b.", &options(&["--stats", "--oracle", "countermodel"]));
     text
 }
 
@@ -97,7 +65,7 @@ fn regions_statistics() -> String {
 fn statistics_report_the_regions_the_search_visited() {
     let text = regions_statistics();
     assert!(
-        text.contains("oracle=countermodel; grounder=auto; search=regions"),
+        text.contains("  requested: backend=cpu; oracle=countermodel; grounder=auto\n"),
         "{text}"
     );
     assert!(text.contains("candidate regions: visited="), "{text}");
@@ -106,26 +74,25 @@ fn statistics_report_the_regions_the_search_visited() {
 
 #[test]
 fn statistics_report_the_parallel_walks_workers_under_its_regions() {
-    let mut configured = options(&["--stats", "--oracle", "countermodel", "--search", "regions"]);
+    let mut configured = options(&["--stats", "--oracle", "countermodel"]);
     configured.workers = std::num::NonZeroUsize::new(2).unwrap();
     let (report, _, text) = solve("a | b.", &configured);
-    let workers = report
-        .countermodel_statistics
-        .unwrap()
-        .regions
-        .unwrap()
-        .workers
-        .unwrap();
+    let regions = report.countermodel_statistics.unwrap().regions.unwrap();
+    assert_eq!(
+        regions.counts.leaves, 2,
+        "both candidate leaves were visited"
+    );
+    let workers = regions.workers.unwrap();
     let delay = workers.engagement_delay.unwrap().as_nanos();
     // Under the default delay the host's clock decides whether so small a
     // walk engages; the line follows the state it took.
     let line = match workers.engagement {
-        zetesis_sat::RegionWalkEngagement::Unengaged { elapsed, walking } => format!(
+        zetesis_stable::RegionWalkEngagement::Unengaged { elapsed, walking } => format!(
             "    workers: configured=2; engagement_delay_ns={delay}; engagement=unengaged; elapsed_ns={}; walking_ns={}\n",
             elapsed.as_nanos(),
             walking.as_nanos()
         ),
-        zetesis_sat::RegionWalkEngagement::Engaged {
+        zetesis_stable::RegionWalkEngagement::Engaged {
             after,
             walking,
             launched,
@@ -138,8 +105,27 @@ fn statistics_report_the_parallel_walks_workers_under_its_regions() {
         ),
         other => panic!("a walk that returned models has begun: {other:?}"),
     };
+    let division = workers.query_division;
+    let line = format!(
+        "{line}    query division: division=when idle; published={}; served={}; stolen={}; servers={}; peak served={}\n",
+        division.published,
+        division.served,
+        division.stolen,
+        division.servers,
+        division.peak_served,
+    );
+    let generator = regions.generator_order;
+    let generator_line = format!(
+        "  candidate generator order: status={}; preparation work={}; peak bytes={}; retained bytes={} (work included in reading work)\n",
+        generator.status.label(),
+        generator.work,
+        generator.peak_bytes,
+        generator.retained_bytes,
+    );
     assert!(
-        text.contains(&format!("(included in search work)\n{line}")),
+        text.contains(&format!(
+            "(included in search work)\n{generator_line}{line}"
+        )),
         "{text}"
     );
 }
@@ -157,7 +143,7 @@ fn statistics_report_the_support_cut_in_place_of_the_disjunctive_certificate() {
 #[test]
 fn requested_statistics_use_accepted_policy_spelling() {
     for backend in ["cpu"] {
-        for oracle in ["auto", "closure", "countermodel"] {
+        for oracle in ["auto", "countermodel"] {
             let mut configured = Options::try_parse_from([
                 "zetesis",
                 "--stats",
@@ -203,12 +189,17 @@ fn statistics_flag_is_opt_in_and_preserves_each_supported_cpu_answer_path() {
         (
             "p.",
             vec!["--grounder", "lazy"],
-            "oracle=closure; grounder=lazy",
+            "oracle=positive-consequences; grounder=hybrid",
+        ),
+        (
+            "p.",
+            vec!["--grounder", "eager"],
+            "oracle=positive-consequences; grounder=eager",
         ),
         (
             "{p}.",
             vec!["--grounder", "eager"],
-            "oracle=closure; grounder=eager",
+            "oracle=tight-support; grounder=eager",
         ),
         ("a | b.", vec![], "oracle=countermodel; grounder=eager"),
         (
@@ -239,14 +230,16 @@ fn statistics_flag_is_opt_in_and_preserves_each_supported_cpu_answer_path() {
             .unwrap();
         let milliseconds: f64 = timing.split_whitespace().nth(3).unwrap().parse().unwrap();
         assert!(milliseconds.is_finite() && milliseconds >= 0.0);
+        // Every path is a formula route, so each reports the regions its walk
+        // visited.
+        assert!(report.countermodel_statistics.is_some());
+        assert!(
+            diagnostics.contains("candidate regions: visited="),
+            "{diagnostics}"
+        );
         if source.contains("#maximize") {
             assert!(diagnostics.contains("objective: optimal; costs(priority,value)=[(0, -3)]"));
             assert!(diagnostics.contains("candidate restrictions="));
-        } else if report.countermodel_statistics.is_none() {
-            assert!(
-                diagnostics.contains("independent closure: checks completed="),
-                "{diagnostics}"
-            );
         }
     }
 }
@@ -269,7 +262,8 @@ fn cancellation_and_source_refusal_have_unavailable_execution_not_zero_work() {
     assert!(report.countermodel_statistics.is_none());
     let text = String::from_utf8(diagnostics).unwrap();
     assert!(text.contains("effective execution: unavailable (stopped before execution counters)"));
-    assert!(text.contains("oracle work: unavailable"));
+    // No search ran, so no search work is stated, not even zero.
+    assert!(!text.contains("Reduct search:"), "{text}");
     let mut diagnostics = Vec::new();
     let mut output = Vec::new();
     let error = run_with_diagnostics(
@@ -293,8 +287,66 @@ fn automatic_execution_reports_cpu() {
     let mut options = Options::try_parse_from(["zetesis", "--stats", "--workers", "1"]).unwrap();
     options.statistics_view = zetesis_cli::StatisticsView::Records;
     let (_, _, text) = solve("p.", &options);
-    assert!(text.contains("backend=cpu; oracle=closure; grounder=lazy"));
+    assert!(
+        text.contains("effective execution: backend=cpu; operation=direct source evaluation"),
+        "{text}"
+    );
     assert!(!text.contains("backend=untracked"));
+}
+
+#[test]
+fn source_json_is_accepted_by_canonical_telemetry() {
+    use zetesis_validation::{
+        performance::matrix::{DeviceWork, Observation, Procedure},
+        selected::{Grounder, NativeExecution},
+    };
+
+    let request = NativeExecution {
+        grounder: Grounder::Auto,
+        ..NativeExecution::default()
+    };
+    let configured = options(&["--json", "--stats", "--grounder", "auto"]);
+    for (source, models) in [
+        ("a. b :- a.", 1),
+        ("a. :- a.", 0),
+        (
+            include_str!("../../../../examples/scalability/prime-sieve.lp"),
+            1,
+        ),
+    ] {
+        let (report, output, diagnostics) = solve(source, &configured);
+        assert_eq!(report.completion, Completion::Exhausted);
+        assert_eq!(report.models, models);
+        let receipt = report.source_evaluation.unwrap();
+        let document: serde_json::Value = serde_json::from_slice(&output).unwrap();
+        let stats = &document["statistics"];
+        for field in [
+            "execution",
+            "hybrid_execution",
+            "terminal_execution",
+            "search",
+        ] {
+            assert_eq!(stats.get(field), Some(&serde_json::Value::Null), "{field}");
+        }
+        for field in [
+            "lazy_execution",
+            "shared_execution",
+            "closure_execution",
+            "query_execution",
+            "candidate_restrictions",
+        ] {
+            assert!(stats.get(field).is_none(), "{field}");
+        }
+        // Observe the actual bytes' parsed document and diagnostics without
+        // inserting fields or replacing the producer's measurements.
+        let observed =
+            Observation::from_statistics(&document, diagnostics.as_bytes(), request).unwrap();
+        assert_eq!(observed.execution.procedure, Procedure::AcyclicSource);
+        assert!(matches!(observed.execution.device, DeviceWork::Cpu));
+        let decoded = observed.source_evaluation.unwrap();
+        assert_eq!(decoded.work, receipt.work);
+        assert_eq!(decoded.substitutions, receipt.substitutions);
+    }
 }
 
 #[test]
@@ -363,93 +415,22 @@ fn statistics_writer_failure_is_a_typed_error_with_the_exact_written_prefix() {
 }
 
 #[test]
-fn statistics_print_expansion_usage_beside_its_ceilings() {
-    let configured = options(&["--stats"]);
-    let limits =
-        zetesis_solve::Resources::new(configured.memory, configured.workers).expansion_limits();
-    let (report, _, text) = solve("p(1..3). q(X) :- p(X).", &configured);
-    let usage = report.expansion.unwrap();
-    assert!(usage.term_work > 0);
+fn the_storage_line_states_both_device_batch_ceilings() {
+    // A 2 GiB allowance: a thirty-second for device batches, a sixteenth for
+    // the tight support batch.
+    let (_, _, text) = solve("{a}.", &options(&["--stats", "--memory", "2147483648"]));
     assert!(
-        text.contains(&format!(
-            "expansion used: term work={} of {}; templates={} of {}; values={} of {};",
-            usage.term_work,
-            limits.max_term_work,
-            usage.templates,
-            limits.max_templates,
-            usage.values,
-            limits.max_values
-        )),
+        text.contains("; batch bytes=67108864; tight batch bytes=134217728\n"),
         "{text}"
-    );
-    // The formula route admits through its own budgets and reports no usage.
-    let (formula, _, text) = solve("a | b.", &options(&["--stats"]));
-    assert!(formula.expansion.is_none());
-    assert!(!text.contains("expansion used:"), "{text}");
-}
-
-#[test]
-fn the_closure_limits_line_states_the_derived_allowance() {
-    let mut eight = options(&["--stats", "--memory", "2147483648"]);
-    eight.workers = std::num::NonZeroUsize::new(8).unwrap();
-    let (_, _, text) = solve("{a}.", &eight);
-    assert!(
-        text.contains("closure bytes/worker=67108864; closure bytes/collective=536870912;"),
-        "{text}"
-    );
-    eight.memory /= 2;
-    let (_, _, text) = solve("{a}.", &eight);
-    assert!(
-        text.contains("closure bytes/worker=33554432; closure bytes/collective=268435456;"),
-        "{text}"
-    );
-}
-
-#[test]
-fn the_counter_runs_between_the_program_closures() {
-    // Eight nodes, one bad, so the gate predicates blocked/1 and reach/1 have
-    // sixteen symbolic atoms. The first pass finds blocked(4) and reach(1)
-    // necessary and seven blocked atoms underivable; the second, reading
-    // those decisions, finds every other reachable node necessary and
-    // reach(4) underivable; the third changes nothing. One seed remains of
-    // the 65,536 the symbolic carrier offered.
-    let mut source = String::from("node(1..8). bad(3). ");
-    for node in 1..8 {
-        write!(
-            source,
-            "e({node},{}). next({node},{}). ",
-            node + 1,
-            node + 1
-        )
-        .unwrap();
-    }
-    for node in 1..7 {
-        write!(source, "e({node},{}). ", node + 2).unwrap();
-    }
-    source.push_str(
-        "blocked(Y) :- bad(X), next(X,Y). reach(1). reach(Y) :- reach(X), e(X,Y), not blocked(Y). :- not reach(8).",
-    );
-    let (report, _, diagnostics) = solve(&source, &options(&["--stats"]));
-    assert_eq!(report.models, 1);
-    assert_eq!(report.checked, 1, "{diagnostics}");
-    assert!(
-        diagnostics.contains("carrier narrowing: passes=3; cut gate atoms=8; held gate atoms=8"),
-        "{diagnostics}"
-    );
-    // The root is decided, so it is the one region and its one seed.
-    assert!(
-        diagnostics.contains(
-            "carrier regions: visited=1; refuted=0; leaves=1; counted=0; narrowing passes=0"
-        ),
-        "{diagnostics}"
     );
 }
 
 #[test]
 fn the_regions_of_independent_pairs_are_the_answers() {
     // Deciding out(i) decides in(i), and two adjacent in atoms are refuted
-    // by the edge constraint in the region's lower closure: the regions'
-    // leaves are the thirteen independent sets of the path, each checked once.
+    // by the edge constraint when a region's narrowing reads it: the
+    // regions' leaves are the thirteen independent sets of the path, each
+    // checked once.
     let (report, _, diagnostics) = solve(
         "node(1..5). edge(1,2). edge(2,3). edge(3,4). edge(4,5). \
          in(X) :- node(X), not out(X). out(X) :- node(X), not in(X). :- edge(X,Y), in(X), in(Y).",
@@ -458,27 +439,67 @@ fn the_regions_of_independent_pairs_are_the_answers() {
     assert_eq!(report.models, 13);
     assert_eq!(report.checked, 13, "{diagnostics}");
     assert!(
-        diagnostics.contains("carrier regions: visited=")
-            && diagnostics.contains("; leaves=13; counted=0;"),
+        diagnostics.contains("candidate regions: visited=") && diagnostics.contains("; leaves=13;"),
         "{diagnostics}"
     );
 }
 
 #[test]
-fn a_root_refuted_program_states_the_constraint_once() {
-    // The root's narrowing refutes every seed: the carrier receipt says a
-    // definite constraint fired, the execution line says no route ran, and
-    // the unavailable oracle work is said once.
+fn arithmetic_root_refutation_reports_no_visited_region() {
+    // Checked preparation absorbs before traversal or membership setup.
     let (report, _, text) = solve("{a}. p. :- p.", &options(&["--stats"]));
     assert_eq!(report.models, 0);
-    assert_eq!(text.matches("definite constraint").count(), 1, "{text}");
+    assert_eq!(report.completion, Completion::Exhausted);
+    let statistics = report.countermodel_statistics.unwrap();
+    let regions = statistics.regions.unwrap();
     assert_eq!(
-        text.matches("oracle work: unavailable").count(),
+        regions.parity.status,
+        zetesis_ferraris::PreparationStatus::Prepared
+    );
+    assert!(regions.parity.root_refuted);
+    assert_eq!(regions.counts.regions, 0);
+    assert_eq!(regions.counts.refuted, 0);
+    assert_eq!(statistics.candidates, 0);
+    assert_eq!(statistics.countermodel_queries, 0);
+    assert_eq!(statistics.search.decisions, 0);
+    assert_eq!(
+        text.matches("candidate regions: visited=0; refuted=0; leaves=0;")
+            .count(),
         1,
         "{text}"
     );
     assert!(
-        text.contains("effective execution: none needed; the root narrowing refuted every seed\n"),
+        text.contains("candidate parity: status=prepared;"),
         "{text}"
     );
+    assert!(text.contains("root refuted=true;"), "{text}");
+    assert!(text.contains(" 0 classical candidates,"), "{text}");
+}
+
+#[test]
+fn a_walk_root_refutation_reports_one_refuted_region() {
+    // Choices keep all nine atoms in the grounded positive constraint.
+    // Separate constraints force them true: arithmetic seeds those units, but
+    // the nine-atom constraint is refuted only by the first narrowing call.
+    let (report, _, text) = solve(
+        "{p(1..9)}. :- not p(X), X=1..9. :- p(1),p(2),p(3),p(4),p(5),p(6),p(7),p(8),p(9). {a}.",
+        &options(&["--stats"]),
+    );
+    assert_eq!(report.models, 0);
+    assert_eq!(report.completion, Completion::Exhausted);
+    let statistics = report.countermodel_statistics.unwrap();
+    let regions = statistics.regions.unwrap();
+    assert!(!regions.parity.root_refuted);
+    assert!(!regions.cardinality.root_refuted);
+    assert_eq!(regions.counts.regions, 1);
+    assert_eq!(regions.counts.refuted, 1);
+    assert_eq!(statistics.candidates, 0);
+    assert_eq!(statistics.countermodel_queries, 0);
+    assert_eq!(
+        text.matches("candidate regions: visited=1; refuted=1; leaves=0;")
+            .count(),
+        1,
+        "{text}"
+    );
+    assert!(text.contains(" 0 classical candidates,"), "{text}");
 }

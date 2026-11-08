@@ -12,8 +12,8 @@
 use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
 
+use zetesis_algebra::Cancellation;
 use zetesis_core::{Model, ValueLimits};
-use zetesis_cpu::Cancellation;
 
 use super::{FactBlock, Item};
 use crate::formula_ir::testing::with_facts_as_rules;
@@ -36,12 +36,14 @@ struct Observed {
     adaptive: String,
 }
 
-/// The expansion receipt of full grounding, and the evidence of the fact rows
-/// the arena holds.
+/// The expansion receipt of full grounding, the evidence of the fact rows the
+/// arena holds, and the work a deferred program's admission charged before its
+/// first reconstruction call.
 #[derive(Debug, Default)]
 struct Receipts {
     origins: Option<u128>,
     evidence: u128,
+    admission: Option<u64>,
 }
 
 fn bundle(path: &Path) -> SourceBundle {
@@ -82,7 +84,9 @@ fn grounded(admitted: &crate::AdmittedFormulaBundle) -> String {
     )
 }
 
-fn reconstructed(owner: &crate::TerminalFormula) -> String {
+/// A deferred program's partition and one reconstruction, rendered, with the
+/// work its admission charged before the reconstruction call.
+fn reconstructed(owner: &crate::TerminalFormula) -> (String, Option<u64>) {
     let mut rendered = format!(
         "deferred {}\nbase atoms {}\nbase theory {:?}\n",
         owner.deferred_templates(),
@@ -94,22 +98,65 @@ fn reconstructed(owner: &crate::TerminalFormula) -> String {
         0..owner.base_atom_catalog().atoms().len(),
     )
     .unwrap();
-    match owner
-        .reconstruction()
-        .map_err(|error| error.to_string())
-        .and_then(|mut cursor| {
-            cursor
-                .reconstruct(&all, &Cancellation::default())
-                .map_err(|error| error.to_string())
-        }) {
+    let mut cursor = match owner.reconstruction() {
+        Ok(cursor) => cursor,
+        Err(error) => {
+            write!(rendered, "refused {error}").unwrap();
+            return (rendered, None);
+        }
+    };
+    let result = cursor.reconstruct(&all, &Cancellation::default());
+    let admission = cursor.statistics().admission;
+    match result {
         Ok(model) => {
             for atom in model.atoms() {
                 write!(rendered, "{:?};", atom.to_atom(ValueLimits::default())).unwrap();
             }
         }
-        Err(error) => write!(rendered, "refused {error}").unwrap(),
+        Err(error) => rendered.push_str(&reconstruction_refused(error, admission)),
     }
-    rendered
+    (rendered, Some(admission.work))
+}
+
+/// A reconstruction refusal's text. A call reports a work or substitution
+/// refusal against its own allowance, the headroom admission left, and fact
+/// blocks and fact rules charge admission differently by design; so the
+/// refusal is restated against the formula ceiling by adding back admission's
+/// charge, and then compared as [`refused`] compares a grounding refusal.
+fn reconstruction_refused(
+    error: crate::ReconstructionError,
+    admission: crate::ReconstructionCharges,
+) -> String {
+    let failure = match error {
+        crate::ReconstructionError::Source(failure)
+        | crate::ReconstructionError::Model(zetesis_core::ModelFailure::Stopped(failure)) => {
+            failure
+        }
+        other => return format!("refused {other}"),
+    };
+    let ceiling = match *failure {
+        crate::FormulaFailure::Limit {
+            resource:
+                resource @ (crate::FormulaResource::Work | crate::FormulaResource::Substitutions),
+            limit,
+            observed,
+            location,
+        } => {
+            let charged = u128::from(if resource == crate::FormulaResource::Work {
+                admission.work
+            } else {
+                admission.substitutions
+            });
+            crate::FormulaFailure::Limit {
+                resource,
+                limit: limit.saturating_add(charged),
+                observed: observed.saturating_add(charged),
+                location,
+            }
+        }
+        other => other,
+    };
+    refused(&ceiling)
 }
 
 /// A refusal's text. A work ceiling's crossing amount is the work charged up
@@ -172,7 +219,11 @@ fn observe(path: &Path) -> (Observed, Receipts) {
         Ok(prepared) => match prepared.ground_adaptive() {
             Err(failure) => refused(failure.error()),
             Ok(FormulaMaterialization::Complete(admitted)) => grounded(&admitted),
-            Ok(FormulaMaterialization::Terminal(owner)) => reconstructed(&owner),
+            Ok(FormulaMaterialization::Terminal(owner)) => {
+                let (rendered, admission) = reconstructed(&owner);
+                receipts.admission = admission;
+                rendered
+            }
         },
     };
     (observed, receipts)
@@ -204,6 +255,12 @@ fn agree(path: &Path) -> u128 {
     assert_eq!(actual.adaptive, reference.adaptive, "{}", path.display());
     if let (Some(rule), Some(arena)) = (rule_receipts.origins, receipts.origins) {
         assert_eq!(rule - arena, receipts.evidence, "{}", path.display());
+    }
+    // A fact block admits its predicate and each column value once, and its
+    // rows take no producer visit or join attempt, so it never charges more
+    // admission work than the fact rules it replaces.
+    if let (Some(rule), Some(arena)) = (rule_receipts.admission, receipts.admission) {
+        assert!(arena <= rule, "{}: {arena} > {rule}", path.display());
     }
     receipts.evidence
 }
@@ -492,4 +549,108 @@ fn a_refused_fact_keeps_its_typed_failure_and_site() {
         assert_eq!(refusal(source, options, &limits), reference, "{source}");
         assert!(reference.1.is_some(), "{source}");
     }
+}
+
+/// Adaptive grounding of a deferring `source` under `limits`: its admission's
+/// work, the first reconstruction call's outcome and that call's allowance.
+fn first_reconstruction(
+    source: &str,
+    limits: &FormulaLimits,
+) -> (u64, Result<u64, crate::ReconstructionError>, u64) {
+    let prepared = crate::prepare_formula(
+        source.into(),
+        crate::AdmissionOptions::default(),
+        ExpansionLimits::default(),
+        *limits,
+    )
+    .unwrap();
+    let Ok(FormulaMaterialization::Terminal(owner)) = prepared.ground_adaptive() else {
+        panic!("{source} defers its terminal definitions");
+    };
+    let all = Model::from_positions(
+        owner.base_atom_catalog(),
+        0..owner.base_atom_catalog().atoms().len(),
+    )
+    .unwrap();
+    let mut cursor = owner.reconstruction().unwrap();
+    let outcome = cursor.reconstruct(&all, &Cancellation::default());
+    let statistics = cursor.statistics();
+    (
+        statistics.admission.work,
+        outcome.map(|_| statistics.latest.work),
+        statistics.allowance.work,
+    )
+}
+
+/// The limit a reconstruction reports for a work refusal.
+fn reported_work_limit(error: &crate::ReconstructionError) -> u128 {
+    match error {
+        crate::ReconstructionError::Source(failure) => match **failure {
+            crate::FormulaFailure::Limit {
+                resource: crate::FormulaResource::Work,
+                limit,
+                ..
+            } => limit,
+            ref other => panic!("not a work refusal: {other}"),
+        },
+        other => panic!("not a work refusal: {other}"),
+    }
+}
+
+#[test]
+fn reconstruction_refusals_agree_against_the_formula_ceiling() {
+    // Forty fact rows: the arena admits their predicate once and takes no
+    // producer visit or join attempt for them, so its admission charges less
+    // work than the rule form's; the deferred definition's reconstruction
+    // derives 1,600 atoms on either path.
+    let source = "p(1..40). q(X, Y) :- p(X), p(Y).";
+    let (rule_admission, rule_call, _) =
+        with_facts_as_rules(|| first_reconstruction(source, &FormulaLimits::default()));
+    let (arena_admission, arena_call, _) = first_reconstruction(source, &FormulaLimits::default());
+    let saved = rule_admission - arena_admission;
+    assert!(saved > 0, "the arena charges less admission work");
+    assert!(rule_call.unwrap() > 0);
+    assert!(
+        arena_call.unwrap() > saved,
+        "the call needs more than the arena saved"
+    );
+
+    // Under a ceiling the rule form's admission exactly reaches, its call has
+    // no allowance and the arena's has exactly the work it saved: both refuse.
+    let limits = FormulaLimits {
+        max_work: rule_admission,
+        ..FormulaLimits::default()
+    };
+    let (rule_admitted, rule_refusal, rule_allowance) =
+        with_facts_as_rules(|| first_reconstruction(source, &limits));
+    let (arena_admitted, arena_refusal, arena_allowance) = first_reconstruction(source, &limits);
+    assert_eq!(
+        (rule_admitted, arena_admitted),
+        (rule_admission, arena_admission)
+    );
+    assert_eq!((rule_allowance, arena_allowance), (0, saved));
+    let (rule_refusal, arena_refusal) = (rule_refusal.unwrap_err(), arena_refusal.unwrap_err());
+
+    // Each reports its own allowance as the limit, so the two differ by exactly
+    // the admission work the arena saved; restated against the ceiling they
+    // are the same refusal.
+    assert_eq!(
+        reported_work_limit(&rule_refusal),
+        u128::from(rule_allowance)
+    );
+    assert_eq!(
+        reported_work_limit(&arena_refusal),
+        u128::from(arena_allowance)
+    );
+    let charges = |work| crate::ReconstructionCharges {
+        work,
+        substitutions: 0,
+    };
+    let rule_text = reconstruction_refused(rule_refusal, charges(rule_admission));
+    let arena_text = reconstruction_refused(arena_refusal, charges(arena_admission));
+    assert_eq!(arena_text, rule_text);
+    assert_eq!(
+        rule_text,
+        format!("refused formula work limit {rule_admission} exceeded")
+    );
 }

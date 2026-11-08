@@ -13,6 +13,21 @@ pub(super) fn observe(
     stderr: &[u8],
     request: NativeExecution,
 ) -> Result<Observation, String> {
+    observe_with_source(document, stderr, request, None)
+}
+
+pub(super) fn observe_with_source(
+    document: &Value,
+    stderr: &[u8],
+    request: NativeExecution,
+    source: Option<&[u8]>,
+) -> Result<Observation, String> {
+    let mut observation = route(document, stderr, request)?;
+    super::handovers::attach(&mut observation.execution.device, document, source)?;
+    Ok(observation)
+}
+
+fn route(document: &Value, stderr: &[u8], request: NativeExecution) -> Result<Observation, String> {
     let timing = super::super::timing::parse_any(stderr)?;
     let statistics = &document["statistics"];
     measured_statistics(statistics, &timing)?;
@@ -134,6 +149,8 @@ fn measured_statistics(
 
 fn procedure(effective: &str, request: Oracle) -> Result<Procedure, String> {
     let procedure = match field(effective, "oracle")? {
+        // Reported by binaries built before the closure route was removed,
+        // which a comparison can still measure.
         "closure" => Procedure::Closure,
         "countermodel" => Procedure::Countermodel,
         "tight-support" => Procedure::TightSupport,
@@ -143,7 +160,6 @@ fn procedure(effective: &str, request: Oracle) -> Result<Procedure, String> {
     };
     let matches_request = match request {
         Oracle::Auto => true,
-        Oracle::Closure => procedure == Procedure::Closure,
         Oracle::Countermodel => procedure == Procedure::Countermodel,
     };
     if !matches_request {
@@ -204,9 +220,10 @@ fn device(
     procedure: Procedure,
     adapter: Option<&str>,
 ) -> Result<DeviceWork, String> {
-    let lazy_stats = statistics
-        .get("lazy_execution")
-        .ok_or("missing lazy activity field")?;
+    // Only the closure route's lazy GPU oracle filled this record. Binaries
+    // built before that route was removed report it, null elsewhere; current
+    // binaries omit it, which reads as the same absence of lazy activity.
+    let lazy_stats = statistics.get("lazy_execution").unwrap_or(&Value::Null);
     let formula_stats = statistics
         .get("execution")
         .ok_or("missing formula activity field")?;
@@ -310,6 +327,7 @@ fn formula(value: &Value, api: GpuApi, adapter: Option<&str>) -> Result<DeviceWo
         work: activity.work,
         cpu_residuals: activity.residuals,
         gpu_residuals: residual_reasons(value, activity.residuals)?,
+        gpu_residual_handovers: None,
         peak_accounted_bytes: activity.peak_bytes,
     })
 }
@@ -404,15 +422,19 @@ fn tight(value: &Value, api: GpuApi, adapter: Option<&str>) -> Result<DeviceWork
     {
         return Err("tight support counters or limits contradict the reported primitive".into());
     }
-    // One immutable plan performs the same complete scan in every candidate.
-    // With no decoded candidate, submitted work remains a scheduling receipt;
-    // it must not be relabelled as completed work or propagation sweeps.
-    if activity.candidates > 0
-        && (activity.work % activity.candidates != 0
-            || u128::from(scheduled_work) * u128::from(activity.candidates)
-                != u128::from(activity.work) * u128::from(submitted_candidates))
+    // Each decoded batch contributes its dispatched plan's work allowance.
+    // Cold and retained-truth plans may charge differently, so their sum need
+    // not be divisible by the candidate count. Undecoded submissions retain
+    // separate receipts, bounded by their own candidate population.
+    let undecoded_batches = submitted_batches - activity.batches;
+    let undecoded_candidates = submitted_candidates - activity.candidates;
+    let undecoded_work = scheduled_work - activity.work;
+    if (undecoded_batches == 0) != (undecoded_candidates == 0)
+        || undecoded_batches > undecoded_candidates
+        || u128::from(undecoded_work)
+            > u128::from(undecoded_candidates) * u128::from(work_per_candidate_limit)
     {
-        return Err("tight support scan work disagrees across candidate counts".into());
+        return Err("tight support submitted and decoded receipts disagree".into());
     }
     Ok(DeviceWork::TightSupport {
         batches: activity.batches,

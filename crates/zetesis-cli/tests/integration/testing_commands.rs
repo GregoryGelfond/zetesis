@@ -149,15 +149,19 @@ fn cpu_backend_checks_the_complete_known_families() {
 }
 
 #[test]
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 fn failed_backend_attempts_remain_published_nonpasses() {
-    // One captured byte cannot establish this executable's full answer protocol.
-    let executable = env!("CARGO_BIN_EXE_zetesis");
+    // Test capture failure with an uninstrumented producer. Killing a real
+    // solver here can interrupt its exit-time coverage write.
+    let directory = tempfile::tempdir().unwrap();
+    let executable = directory.path().join("producer");
+    zetesis_test_support::scripts::executable(&executable, "printf xx\nexec /bin/sleep 3");
     let command = command(&[
         "zetesis",
         "test",
         "backend",
         "--zetesis",
-        executable,
+        executable.to_str().unwrap(),
         "--json",
         "--capture-bytes",
         "1",
@@ -169,13 +173,21 @@ fn failed_backend_attempts_remain_published_nonpasses() {
     );
     let report: serde_json::Value = serde_json::from_slice(&output).unwrap();
     assert_eq!(report["passed"], false);
-    assert!(
-        report["cases"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .all(|case| case["selected"].is_null())
-    );
+    let cases = report["cases"].as_array().unwrap();
+    assert_eq!(cases.len(), 3);
+    for case in cases {
+        assert_eq!(case["decision"], "reference_failed");
+        let reference = &case["reference"];
+        assert_eq!(reference["decision"], "capture_limit");
+        let capture = &reference["capture"];
+        assert_eq!(capture["stop"], "output_limit");
+        assert_eq!(capture["stdout"], serde_json::json!([b'x']));
+        assert_eq!(capture["stderr"], serde_json::json!([]));
+        assert!(capture["failure"].is_null());
+        assert!(capture["cleanup_failure"].is_null());
+        assert!(reference["cleanup"].is_null());
+        assert!(case["selected"].is_null());
+    }
 }
 
 #[test]

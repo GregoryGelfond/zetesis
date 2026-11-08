@@ -1,4 +1,4 @@
-use zetesis_cpu::Cancellation;
+use zetesis_algebra::Cancellation;
 
 use super::{
     AggregateBuild, AggregateComparison, AggregateElement, AggregateError, AggregateErrorKind,

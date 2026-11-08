@@ -1,0 +1,692 @@
+//! Original region constraints compose with candidate coverage, never reduct queries.
+
+use std::collections::BTreeSet;
+use std::sync::atomic::Ordering;
+
+use crate::{BatchError, Cancellation, Incomplete};
+use zetesis_ferraris::{Node, TightPlanLimits};
+
+use super::support::{Condition, Filter, ROUTES, Route, batch, choices, residual};
+use zetesis_theory_support::theories::theory;
+
+#[test]
+fn absent_filter_has_no_receipt() {
+    for route in ROUTES {
+        let mut search = route.search(&choices(1), Cancellation::default());
+        assert!(search.statistics().region_filter.is_none());
+        assert_eq!(route.collect(&mut search).len(), 2);
+        assert!(search.statistics().region_filter.is_none());
+    }
+}
+
+#[test]
+fn filter_reads_original_narrowing_before_membership() {
+    let subject = theory(1, vec![Node::atom(0)], vec![0]);
+    for route in ROUTES {
+        let mut search = route.search(&subject, Cancellation::default());
+        search.enable_phase_timing();
+        search
+            .set_region_filter(Filter::new(&subject, Condition::ForbidHeld(0)))
+            .unwrap();
+        assert!(route.collect(&mut search).is_empty(), "{route:?}");
+        let receipt = search.statistics();
+        assert_eq!(receipt.candidates, 0);
+        assert_eq!(receipt.search.decisions, 0);
+        assert_eq!(receipt.countermodel_queries, 0);
+        let filtered = receipt.region_filter.unwrap();
+        assert_eq!(filtered.preparations, 1);
+        assert_eq!(filtered.checks, 1);
+        assert_eq!(filtered.refuted, 1);
+        assert_eq!(filtered.failed, 0);
+        assert_eq!(receipt.phase_timings.unwrap().original_validation.calls, 1);
+    }
+}
+
+#[test]
+fn partial_region_refutations_preserve_the_answer_family() {
+    let subject = choices(3);
+    let expected: BTreeSet<Vec<usize>> = (0..8)
+        .filter(|mask| mask & 3 != 3)
+        .map(|mask| (0..3).filter(|atom| mask & (1 << atom) != 0).collect())
+        .collect();
+    for route in ROUTES {
+        let mut search = route.search(&subject, Cancellation::default());
+        search
+            .set_region_filter(Filter::new(&subject, Condition::ForbidPair(0, 1)))
+            .unwrap();
+        assert_eq!(route.collect(&mut search), expected, "{route:?}");
+        assert!(search.statistics().region_filter.unwrap().refuted > 0);
+    }
+}
+
+#[test]
+fn scalar_pulls_reuse_one_source_checker() {
+    let subject = choices(5);
+    let expected =
+        Route::Scalar.collect(&mut Route::Scalar.search(&subject, Cancellation::default()));
+    let filter = Filter::new(&subject, Condition::Pass);
+    let mut search = Route::Scalar.search(&subject, Cancellation::default());
+    search.set_region_filter(filter.clone()).unwrap();
+    let mut answers = BTreeSet::new();
+    for answer in search.by_ref() {
+        assert!(answers.insert(answer.unwrap().atoms().collect()));
+        assert_eq!(filter.live.load(Ordering::SeqCst), 1);
+    }
+    assert!(search.exhausted());
+    assert_eq!(answers, expected);
+    let receipt = search.statistics().region_filter.unwrap();
+    assert_eq!(receipt.preparations, 1);
+    assert!(receipt.checks > u64::try_from(answers.len()).unwrap());
+    assert_eq!(filter.live.load(Ordering::SeqCst), 0);
+}
+
+#[test]
+fn scalar_exhaustion_reports_checker_teardown_failure() {
+    let subject = choices(1);
+    let filter = Filter::new(&subject, Condition::PanicOnDrop { fail_check: false });
+    let mut search = Route::Scalar.search(&subject, Cancellation::default());
+    search.set_region_filter(filter.clone()).unwrap();
+    let mut answers = BTreeSet::new();
+    for _ in 0..2 {
+        assert!(answers.insert(search.next().unwrap().unwrap().atoms().collect::<Vec<_>>()));
+    }
+    assert_eq!(answers, BTreeSet::from([vec![], vec![0]]));
+    assert!(matches!(
+        search.next(),
+        Some(Err(Incomplete::WorkerPanicked))
+    ));
+    assert_eq!(filter.live.load(Ordering::SeqCst), 0);
+    assert_eq!(search.statistics().region_filter.unwrap().preparations, 1);
+    assert!(!search.exhausted());
+    assert!(search.next().is_none());
+}
+
+#[test]
+fn scalar_stop_reports_checker_teardown_failure() {
+    let subject = choices(1);
+    let filter = Filter::new(&subject, Condition::PanicOnDrop { fail_check: false });
+    let mut search = Route::Scalar.search(&subject, Cancellation::default());
+    search.set_region_filter(filter.clone()).unwrap();
+    search.next().unwrap().unwrap();
+    let receipt = search.statistics();
+    assert!(matches!(search.stop(), Err(Incomplete::WorkerPanicked)));
+    assert_eq!(filter.live.load(Ordering::SeqCst), 0);
+    assert_eq!(search.statistics(), receipt);
+    assert!(!search.exhausted());
+    search.stop().unwrap();
+}
+
+#[test]
+fn scalar_drop_contains_checker_teardown_failure() {
+    let subject = choices(1);
+    let filter = Filter::new(&subject, Condition::PanicOnDrop { fail_check: false });
+    let mut search = Route::Scalar.search(&subject, Cancellation::default());
+    search.set_region_filter(filter.clone()).unwrap();
+    search.next().unwrap().unwrap();
+    assert_eq!(filter.live.load(Ordering::SeqCst), 1);
+    assert!(std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| drop(search))).is_ok());
+    assert_eq!(filter.live.load(Ordering::SeqCst), 0);
+}
+
+#[test]
+fn source_failure_precedes_checker_teardown_failure() {
+    let subject = choices(1);
+    let filter = Filter::new(&subject, Condition::PanicOnDrop { fail_check: true });
+    let mut search = Route::Scalar.search(&subject, Cancellation::default());
+    search.set_region_filter(filter.clone()).unwrap();
+    assert!(matches!(search.next(), Some(Err(Incomplete::RegionFilter))));
+    assert_eq!(filter.live.load(Ordering::SeqCst), 0);
+    let receipt = search.statistics().region_filter.unwrap();
+    assert_eq!(receipt.preparations, 1);
+    assert_eq!(receipt.checks, 1);
+    assert_eq!(receipt.failed, 1);
+    assert!(!search.exhausted());
+    assert!(search.next().is_none());
+}
+
+#[test]
+fn producer_checkers_are_reused_across_batches() {
+    let subject = choices(5);
+    let expected =
+        Route::Scalar.collect(&mut Route::Scalar.search(&subject, Cancellation::default()));
+    let filter = Filter::new(&subject, Condition::Pass);
+    let mut search = Route::Producers.search(&subject, Cancellation::default());
+    search.set_region_filter(filter.clone()).unwrap();
+    let mut answers = BTreeSet::new();
+    let mut rounds = 0;
+    while !search.exhausted() {
+        for answer in search.next_batch(batch(1), residual).unwrap() {
+            assert!(answers.insert(answer.atoms().collect()));
+        }
+        rounds += 1;
+    }
+    assert_eq!(answers, expected);
+    let receipt = search.statistics().region_filter.unwrap();
+    assert!(rounds > 4, "the four slots served several joined rounds");
+    assert!((1..=4).contains(&receipt.preparations));
+    assert!(receipt.checks > receipt.preparations);
+    assert_eq!(filter.live.load(Ordering::SeqCst), 0);
+}
+
+#[test]
+fn retained_checkers_move_with_the_stream() {
+    let subject = choices(4);
+    let expected =
+        Route::Scalar.collect(&mut Route::Scalar.search(&subject, Cancellation::default()));
+    for route in [Route::Scalar, Route::Producers] {
+        let filter = Filter::new(&subject, Condition::Pass);
+        let mut search = route.search(&subject, Cancellation::default());
+        search.set_region_filter(filter.clone()).unwrap();
+        let first = search.next_batch(batch(1), residual).unwrap();
+        assert_eq!(first.len(), 1);
+        assert!(filter.live.load(Ordering::SeqCst) > 0);
+        let mut answers = std::thread::spawn(move || route.collect(&mut search))
+            .join()
+            .unwrap();
+        assert!(answers.insert(first[0].atoms().collect()));
+        assert_eq!(answers, expected, "{route:?}");
+        assert_eq!(filter.live.load(Ordering::SeqCst), 0);
+    }
+}
+
+#[test]
+fn retained_checkers_belong_to_their_enumeration() {
+    let subject = choices(3);
+    for route in [Route::Scalar, Route::Producers] {
+        let filter = Filter::new(&subject, Condition::Pass);
+        let mut first = route.search(&subject, Cancellation::default());
+        first.set_region_filter(filter.clone()).unwrap();
+        assert_eq!(first.next_batch(batch(1), residual).unwrap().len(), 1);
+        let live = filter.live.load(Ordering::SeqCst);
+        assert!(live > 0);
+
+        // Equal coordinates do not confer the original theory's identity. A
+        // second stream authenticates its own checker even with a shared factory.
+        let other = choices(3);
+        let mut second = route.search(&other, Cancellation::default());
+        second.set_region_filter(filter.clone()).unwrap();
+        assert!(matches!(
+            second.next_batch(batch(1), residual),
+            Err(BatchError::Search(Incomplete::WrongTheory))
+        ));
+        assert_eq!(filter.live.load(Ordering::SeqCst), live);
+        assert!(!second.exhausted());
+        first.stop().unwrap();
+        assert_eq!(filter.live.load(Ordering::SeqCst), 0);
+    }
+}
+
+#[test]
+fn cancellation_releases_retained_checkers() {
+    let subject = choices(4);
+    for route in [Route::Scalar, Route::Producers] {
+        let cancellation = Cancellation::default();
+        let filter = Filter::new(&subject, Condition::Pass);
+        let mut search = route.search(&subject, cancellation.clone());
+        search.set_region_filter(filter.clone()).unwrap();
+        assert_eq!(search.next_batch(batch(1), residual).unwrap().len(), 1);
+        assert!(filter.live.load(Ordering::SeqCst) > 0);
+        let receipt = search.statistics();
+        cancellation.cancel();
+        assert!(matches!(
+            search.next_batch(batch(1), residual),
+            Err(BatchError::Search(Incomplete::Cancelled))
+        ));
+        assert_eq!(filter.live.load(Ordering::SeqCst), 0);
+        assert_eq!(search.statistics(), receipt);
+        assert!(!search.exhausted());
+        assert!(search.next().is_none());
+    }
+}
+
+#[test]
+fn coordinator_pulls_reuse_one_source_checker() {
+    // A walk that never engages steps every region on the calling thread, so
+    // its coordinator prepares the checker once and retains it across pulls.
+    let subject = choices(5);
+    let expected =
+        Route::Scalar.collect(&mut Route::Scalar.search(&subject, Cancellation::default()));
+    let filter = Filter::new(&subject, Condition::Pass);
+    let mut search = Route::Coordinator.search(&subject, Cancellation::default());
+    search.set_region_filter(filter.clone()).unwrap();
+    let mut answers = BTreeSet::new();
+    for answer in search.by_ref() {
+        assert!(answers.insert(answer.unwrap().atoms().collect()));
+        assert_eq!(filter.live.load(Ordering::SeqCst), 1);
+    }
+    assert!(search.exhausted());
+    assert_eq!(answers, expected);
+    let receipt = search.statistics().region_filter.unwrap();
+    assert_eq!(receipt.preparations, 1);
+    assert!(receipt.checks > u64::try_from(answers.len()).unwrap());
+    assert_eq!(filter.live.load(Ordering::SeqCst), 0);
+}
+
+#[test]
+fn coordinator_checkers_move_with_the_stream() {
+    let subject = choices(4);
+    let expected =
+        Route::Scalar.collect(&mut Route::Scalar.search(&subject, Cancellation::default()));
+    let filter = Filter::new(&subject, Condition::Pass);
+    let mut search = Route::Coordinator.search(&subject, Cancellation::default());
+    search.set_region_filter(filter.clone()).unwrap();
+    let first: Vec<usize> = search.next().unwrap().unwrap().atoms().collect();
+    assert_eq!(filter.live.load(Ordering::SeqCst), 1);
+    let mut answers = std::thread::spawn(move || Route::Coordinator.collect(&mut search))
+        .join()
+        .unwrap();
+    assert!(answers.insert(first));
+    assert_eq!(answers, expected);
+    assert_eq!(filter.live.load(Ordering::SeqCst), 0);
+}
+
+#[test]
+fn coordinator_checkers_belong_to_their_enumeration() {
+    let subject = choices(3);
+    let filter = Filter::new(&subject, Condition::Pass);
+    let mut first = Route::Coordinator.search(&subject, Cancellation::default());
+    first.set_region_filter(filter.clone()).unwrap();
+    assert!(first.next().unwrap().is_ok());
+    assert_eq!(filter.live.load(Ordering::SeqCst), 1);
+    // Equal coordinates do not confer the original theory's identity.
+    let other = choices(3);
+    let mut second = Route::Coordinator.search(&other, Cancellation::default());
+    second.set_region_filter(filter.clone()).unwrap();
+    assert!(matches!(second.next(), Some(Err(Incomplete::WrongTheory))));
+    assert_eq!(filter.live.load(Ordering::SeqCst), 1);
+    assert!(!second.exhausted());
+    first.stop().unwrap();
+    assert_eq!(filter.live.load(Ordering::SeqCst), 0);
+}
+
+#[test]
+fn cancellation_releases_the_coordinators_checker() {
+    let subject = choices(4);
+    let cancellation = Cancellation::default();
+    let filter = Filter::new(&subject, Condition::Pass);
+    let mut search = Route::Coordinator.search(&subject, cancellation.clone());
+    search.set_region_filter(filter.clone()).unwrap();
+    assert!(search.next().unwrap().is_ok());
+    assert_eq!(filter.live.load(Ordering::SeqCst), 1);
+    let receipt = search.statistics();
+    cancellation.cancel();
+    assert!(matches!(search.next(), Some(Err(Incomplete::Cancelled))));
+    assert_eq!(filter.live.load(Ordering::SeqCst), 0);
+    // The cancelled pull stepped nothing, so the walk's record is unchanged.
+    assert_eq!(search.statistics(), receipt);
+    assert!(!search.exhausted());
+    assert!(search.next().is_none());
+}
+
+#[test]
+fn coordinator_exhaustion_reports_checker_teardown_failure() {
+    let subject = choices(1);
+    let filter = Filter::new(&subject, Condition::PanicOnDrop { fail_check: false });
+    let mut search = Route::Coordinator.search(&subject, Cancellation::default());
+    search.set_region_filter(filter.clone()).unwrap();
+    let mut answers = BTreeSet::new();
+    for _ in 0..2 {
+        assert!(answers.insert(search.next().unwrap().unwrap().atoms().collect::<Vec<_>>()));
+    }
+    assert_eq!(answers, BTreeSet::from([vec![], vec![0]]));
+    // The walk ends at the coordinator, whose failed release is a stop, never
+    // exhaustion.
+    assert!(matches!(
+        search.next(),
+        Some(Err(Incomplete::WorkerPanicked))
+    ));
+    assert_eq!(filter.live.load(Ordering::SeqCst), 0);
+    assert_eq!(search.statistics().region_filter.unwrap().preparations, 1);
+    assert!(!search.exhausted());
+    assert!(search.next().is_none());
+}
+
+#[test]
+fn coordinator_stop_reports_checker_teardown_failure() {
+    let subject = choices(1);
+    let filter = Filter::new(&subject, Condition::PanicOnDrop { fail_check: false });
+    let mut search = Route::Coordinator.search(&subject, Cancellation::default());
+    search.set_region_filter(filter.clone()).unwrap();
+    search.next().unwrap().unwrap();
+    let receipt = search.statistics();
+    assert!(matches!(search.stop(), Err(Incomplete::WorkerPanicked)));
+    assert_eq!(filter.live.load(Ordering::SeqCst), 0);
+    assert_eq!(search.statistics(), receipt);
+    assert!(!search.exhausted());
+    // A second teardown changes nothing and reports the same stop.
+    assert!(matches!(search.stop(), Err(Incomplete::WorkerPanicked)));
+}
+
+#[test]
+fn coordinator_drop_contains_checker_teardown_failure() {
+    let subject = choices(1);
+    let filter = Filter::new(&subject, Condition::PanicOnDrop { fail_check: false });
+    let mut search = Route::Coordinator.search(&subject, Cancellation::default());
+    search.set_region_filter(filter.clone()).unwrap();
+    search.next().unwrap().unwrap();
+    assert_eq!(filter.live.load(Ordering::SeqCst), 1);
+    assert!(std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| drop(search))).is_ok());
+    assert_eq!(filter.live.load(Ordering::SeqCst), 0);
+}
+
+#[test]
+fn coordinator_source_failure_precedes_checker_teardown_failure() {
+    let subject = choices(1);
+    let filter = Filter::new(&subject, Condition::PanicOnDrop { fail_check: true });
+    let mut search = Route::Coordinator.search(&subject, Cancellation::default());
+    search.set_region_filter(filter.clone()).unwrap();
+    assert!(matches!(search.next(), Some(Err(Incomplete::RegionFilter))));
+    assert_eq!(filter.live.load(Ordering::SeqCst), 0);
+    let receipt = search.statistics().region_filter.unwrap();
+    assert_eq!(receipt.preparations, 1);
+    assert_eq!(receipt.checks, 1);
+    assert_eq!(receipt.failed, 1);
+    assert!(!search.exhausted());
+    assert!(search.next().is_none());
+}
+
+#[test]
+fn checker_retry_retains_source_preparation() {
+    let subject = choices(4);
+    for route in [Route::Scalar, Route::Producers] {
+        let filter = Filter::new(&subject, Condition::Pass);
+        let mut search = route.search(&subject, Cancellation::default());
+        search.set_region_filter(filter.clone()).unwrap();
+        assert!(matches!(
+            search.next_batch(batch(1), |_, _| Err::<Vec<_>, _>("retry")),
+            Err(BatchError::Checker("retry"))
+        ));
+        assert!(filter.live.load(Ordering::SeqCst) > 0);
+        assert_eq!(search.batch_statistics().pending, 1);
+        let prepared = search.statistics().region_filter.unwrap().preparations;
+        assert_eq!(search.next_batch(batch(1), residual).unwrap().len(), 1);
+        assert_eq!(
+            search.statistics().region_filter.unwrap().preparations,
+            prepared
+        );
+        search.stop().unwrap();
+        assert_eq!(filter.live.load(Ordering::SeqCst), 0);
+    }
+}
+
+#[test]
+fn terminal_batch_misuse_releases_retained_checkers() {
+    let subject = choices(4);
+    for route in [Route::Scalar, Route::Producers] {
+        let filter = Filter::new(&subject, Condition::Pass);
+        let mut search = route.search(&subject, Cancellation::default());
+        search.set_region_filter(filter.clone()).unwrap();
+        assert!(matches!(
+            search.next_batch(batch(1), |_, _| Err::<Vec<_>, _>("retry")),
+            Err(BatchError::Checker("retry"))
+        ));
+        let receipt = search.batch_statistics();
+        assert!(filter.live.load(Ordering::SeqCst) > 0);
+        assert!(matches!(search.next(), Some(Err(Incomplete::PendingBatch))));
+        assert_eq!(filter.live.load(Ordering::SeqCst), 0);
+        assert_eq!(search.batch_statistics(), receipt);
+        assert!(!search.exhausted());
+    }
+}
+
+#[test]
+fn original_filter_never_excludes_reduct_countermodels() {
+    // a <- b; b <- a. Requiring a removes the empty original answer, but
+    // must not remove the empty frozen-reduct witness against {a,b}.
+    let subject = theory(
+        2,
+        vec![
+            Node::atom(0),
+            Node::atom(1),
+            Node::implies(0, 1),
+            Node::implies(1, 0),
+            // The asserted conjunction preserves both roots while selecting
+            // general membership, beyond optional positive certificates.
+            Node::and_pair([2, 3]),
+        ],
+        vec![4],
+    );
+    for route in ROUTES {
+        let mut search = route.search(&subject, Cancellation::default());
+        search
+            .set_region_filter(Filter::new(&subject, Condition::Require(0)))
+            .unwrap();
+        assert!(route.collect(&mut search).is_empty(), "{route:?}");
+        let receipt = search.statistics();
+        assert!(
+            receipt.candidates > 0,
+            "the nonminimal original model was checked"
+        );
+        assert!(
+            receipt.countermodels > 0,
+            "its empty reduct witness survived"
+        );
+    }
+}
+
+#[test]
+fn failed_filter_preparation_never_establishes_exhaustion() {
+    let subject = choices(2);
+    for route in ROUTES {
+        let mut search = route.search(&subject, Cancellation::default());
+        search
+            .set_region_filter(Filter::new(&subject, Condition::FailPreparation))
+            .unwrap();
+        assert!(matches!(search.next(), Some(Err(Incomplete::RegionFilter))));
+        let _ = search.stop();
+        assert!(!search.exhausted());
+        assert!(search.next().is_none());
+        let filtered = search.statistics().region_filter.unwrap();
+        assert!(filtered.preparations > 0);
+        assert_eq!(filtered.failed, filtered.preparations);
+        assert_eq!(filtered.checks, 0);
+    }
+}
+
+#[test]
+fn failed_filter_preparation_is_timed() {
+    let subject = choices(2);
+    for route in ROUTES {
+        let mut search = route.search(&subject, Cancellation::default());
+        search.enable_phase_timing();
+        search
+            .set_region_filter(Filter::new(&subject, Condition::FailPreparation))
+            .unwrap();
+        assert!(matches!(search.next(), Some(Err(Incomplete::RegionFilter))));
+        let _ = search.stop();
+        let receipt = search.statistics();
+        let prepared = receipt.region_filter.unwrap().preparations;
+        assert!(prepared > 0);
+        assert_eq!(
+            receipt.phase_timings.unwrap().original_validation.calls,
+            prepared
+        );
+    }
+}
+
+#[test]
+fn failed_region_check_retains_its_attempt_receipt() {
+    let subject = choices(2);
+    for route in ROUTES {
+        let mut search = route.search(&subject, Cancellation::default());
+        search.enable_phase_timing();
+        let filter = Filter::new(&subject, Condition::FailCheck);
+        search.set_region_filter(filter.clone()).unwrap();
+        assert!(matches!(search.next(), Some(Err(Incomplete::RegionFilter))));
+        assert_eq!(filter.live.load(Ordering::SeqCst), 0);
+        let _ = search.stop();
+        assert!(!search.exhausted());
+        let receipt = search.statistics();
+        let filtered = receipt.region_filter.unwrap();
+        assert_eq!(filtered.checks, 1);
+        assert_eq!(filtered.failed, 1);
+        assert_eq!(filtered.refuted, 0);
+        assert_eq!(receipt.phase_timings.unwrap().original_validation.calls, 1);
+        assert!(receipt.regions.unwrap().counts.work > 0);
+    }
+}
+
+#[test]
+fn filter_configuration_requires_an_unstarted_stream() {
+    let subject = choices(2);
+    for route in ROUTES {
+        let mut search = route.search(&subject, Cancellation::default());
+        assert!(search.next().unwrap().is_ok());
+        assert!(matches!(
+            search.set_region_filter(Filter::new(&subject, Condition::Pass)),
+            Err(Incomplete::LateRegionFilter),
+        ));
+        search.stop().unwrap();
+    }
+}
+
+#[test]
+fn a_configured_filter_cannot_be_replaced() {
+    let subject = choices(1);
+    for route in ROUTES {
+        let mut search = route.search(&subject, Cancellation::default());
+        search
+            .set_region_filter(Filter::new(&subject, Condition::Pass))
+            .unwrap();
+        assert!(matches!(
+            search.set_region_filter(Filter::new(&subject, Condition::Require(0))),
+            Err(Incomplete::RegionFilterAlreadySet),
+        ));
+        assert_eq!(route.collect(&mut search).len(), 2);
+    }
+}
+
+#[test]
+fn certificate_preparation_keeps_filter_installation_open() {
+    let subject = choices(2);
+    for route in ROUTES {
+        let mut search = route.search(&subject, Cancellation::default());
+        assert!(
+            search
+                .enable_certified_checking(TightPlanLimits::default())
+                .unwrap()
+        );
+        search
+            .set_region_filter(Filter::new(&subject, Condition::Require(0)))
+            .unwrap();
+        assert_eq!(
+            route.collect(&mut search),
+            BTreeSet::from([vec![0], vec![0, 1]])
+        );
+    }
+}
+
+#[test]
+fn explicit_stop_joins_borrowed_checkers_without_cancelling() {
+    for route in ROUTES {
+        let subject = choices(10);
+        let cancellation = Cancellation::default();
+        let filter = Filter::new(&subject, Condition::Pass);
+        let mut search = route.search(&subject, cancellation.clone());
+        search.set_region_filter(filter.clone()).unwrap();
+        assert!(search.next().unwrap().is_ok());
+        search.stop().unwrap();
+        assert_eq!(filter.live.load(Ordering::SeqCst), 0);
+        assert!(cancellation.poll().is_ok());
+        assert!(!search.exhausted());
+        assert!(search.next().is_none());
+        let joined = search.statistics();
+        assert!(joined.region_filter.unwrap().checks > 0);
+        assert_eq!(joined.stable_models, 1, "queued answers were not delivered");
+        search.stop().unwrap();
+        assert_eq!(search.statistics(), joined);
+    }
+}
+
+#[test]
+fn stopping_complete_search_preserves_exhaustion() {
+    for route in ROUTES {
+        let mut search = route.search(&choices(1), Cancellation::default());
+        assert_eq!(route.collect(&mut search).len(), 2);
+        let complete = search.statistics();
+        search.stop().unwrap();
+        assert!(search.exhausted());
+        assert_eq!(search.statistics(), complete);
+    }
+}
+
+#[test]
+fn stopping_unstarted_workers_preserves_certificate_work() {
+    let subject = choices(2);
+    let mut search = Route::Native.search(&subject, Cancellation::default());
+    let construction = search.statistics().search.work;
+    assert!(
+        search
+            .enable_certified_checking(TightPlanLimits::default())
+            .unwrap()
+    );
+    let prepared = search.statistics();
+    assert!(prepared.search.work > construction);
+    search.stop().unwrap();
+    assert_eq!(search.statistics(), prepared);
+    assert!(!search.exhausted());
+}
+
+#[test]
+fn filter_subject_authentication_precedes_region_checks() {
+    let subject = choices(1);
+    let other = choices(1);
+    assert!(!subject.same_instance(&other));
+    for route in ROUTES {
+        let mut search = route.search(&subject, Cancellation::default());
+        search
+            .set_region_filter(Filter::new(&other, Condition::Pass))
+            .unwrap();
+        assert!(matches!(search.next(), Some(Err(Incomplete::WrongTheory))));
+        let _ = search.stop();
+        assert_eq!(search.statistics().region_filter.unwrap().checks, 0);
+        assert!(!search.exhausted());
+    }
+}
+
+#[test]
+fn cancellation_inside_a_filter_stops_without_exhaustion() {
+    let subject = choices(2);
+    for route in ROUTES {
+        let mut search = route.search(&subject, Cancellation::default());
+        search
+            .set_region_filter(Filter::new(&subject, Condition::Cancel))
+            .unwrap();
+        assert!(matches!(search.next(), Some(Err(Incomplete::Cancelled))));
+        let _ = search.stop();
+        assert!(!search.exhausted());
+        assert_eq!(search.statistics().candidates, 0);
+        assert_eq!(search.statistics().region_filter.unwrap().checks, 1);
+    }
+}
+
+#[test]
+fn core_refutation_never_prepares_an_external_checker() {
+    let subject = theory(0, vec![Node::falsum()], vec![0]);
+    for route in ROUTES {
+        let mut search = route.search(&subject, Cancellation::default());
+        search
+            .set_region_filter(Filter::new(&subject, Condition::FailPreparation))
+            .unwrap();
+        assert!(route.collect(&mut search).is_empty());
+        assert_eq!(
+            search.statistics().region_filter.unwrap(),
+            crate::RegionFilterStatistics::default()
+        );
+    }
+}
+
+#[test]
+fn empty_final_pull_never_prepares_an_external_checker() {
+    let subject = theory(1, vec![Node::atom(0)], vec![0]);
+    for route in ROUTES {
+        let mut search = route.search(&subject, Cancellation::default());
+        search
+            .set_region_filter(Filter::new(&subject, Condition::Pass))
+            .unwrap();
+        assert!(search.next().unwrap().is_ok());
+        assert!(search.next().is_none());
+        assert!(search.exhausted());
+        assert_eq!(search.statistics().region_filter.unwrap().preparations, 1);
+    }
+}

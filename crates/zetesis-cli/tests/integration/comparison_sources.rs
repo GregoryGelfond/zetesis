@@ -4,8 +4,8 @@ use std::collections::BTreeSet;
 
 use clap::Parser;
 use serde_json::Value;
+use zetesis_algebra::Cancellation;
 use zetesis_cli::{Completion, Options, run_detailed_with_diagnostics};
-use zetesis_cpu::Cancellation;
 
 #[test]
 fn automatic_and_explicit_reduct_routes_preserve_complete_comparison_models() {

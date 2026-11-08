@@ -7,7 +7,7 @@ use crate::{
     ExtremumRow, FormulaNodes, FormulaParts, FrozenReduct, Limits, Node, NodeView, Theory,
     Threshold, TightCheckLimits, TightPlan, TightPlanLimits, TightVerdict, TightWorkspace,
 };
-use zetesis_cpu::{Cancellation, Stop};
+use zetesis_algebra::{Cancellation, Stop};
 
 fn weighted(bounds: &[i128], checked: bool) -> Theory {
     let mut nodes = FormulaNodes::default();
@@ -88,7 +88,7 @@ fn weighted_read_failures_do_not_publish_cached_measures() {
         reads, 3,
         "zero weight remains a charged callback occurrence"
     );
-    assert_eq!(scratch.valid, [0]);
+    assert_eq!(&scratch.valid[..], [0]);
     reads = 0;
     assert!(
         scratch
@@ -104,6 +104,46 @@ fn weighted_read_failures_do_not_publish_cached_measures() {
             .threshold(&theory, 3, threshold(&theory, 3), |_| {
                 Err(Stop::Cancelled)
             })
+            .unwrap()
+    );
+}
+
+#[test]
+fn changing_an_unmeasured_sum_does_not_publish_it() {
+    let theory = weighted(&[3], false);
+    let mut scratch = NumericRowScratch::default();
+    scratch.reserve(&theory).unwrap();
+    scratch.reset(&theory, || Ok::<_, Stop>(())).unwrap();
+    scratch.change_condition(&theory, 0, 0, true).unwrap();
+    scratch.change_condition(&theory, 0, 1, true).unwrap();
+    assert_eq!(&scratch.valid[..], [0]);
+    let mut reads = 0;
+    assert!(
+        scratch
+            .threshold(&theory, 2, threshold(&theory, 2), |_| {
+                reads += 1;
+                Ok::<_, Stop>(true)
+            })
+            .unwrap()
+    );
+    assert_eq!(reads, 3);
+    // The two repeated occurrences must both leave the sum; the zero-weight
+    // occurrence is still present and has its own authoritative position.
+    for occurrence in 0..3 {
+        scratch
+            .change_condition(&theory, 0, occurrence, false)
+            .unwrap();
+    }
+    assert!(
+        !scratch
+            .threshold(
+                &theory,
+                2,
+                threshold(&theory, 2),
+                |_| -> Result<bool, Stop> {
+                    panic!("a completed sum update must not rescan its row")
+                }
+            )
             .unwrap()
     );
 }

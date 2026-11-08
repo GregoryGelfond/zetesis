@@ -11,7 +11,7 @@ use crate::{
     Node, NodeView, Theory, TightCheckLimits, TightError, TightPlan, TightPlanLimits,
     TightResource, TightVerdict,
 };
-use zetesis_cpu::{Cancellation, Stop};
+use zetesis_algebra::{Cancellation, Stop};
 
 /// `atoms` atomic choices, a constraint over a chain of conjunctions forbidding
 /// all of them together, and one forbidding the first two together.
@@ -652,4 +652,42 @@ fn an_update_refuses_a_support_count_past_u32() {
     let after = workspace.check(&plan, &raised, TightCheckLimits::default(), &cancellation);
     assert!(after.result.is_ok());
     assert_route(&plan, &raised, after.work, false);
+}
+
+#[test]
+fn incremental_updates_reuse_their_packed_summary_allocations() {
+    let theory = choices(200);
+    let plan = prepared(&theory);
+    let cancellation = Cancellation::default();
+    let mut workspace = warmed(&plan, &theory);
+    let holdings = |workspace: &TightWorkspace| {
+        [
+            &workspace.retained.candidate,
+            &workspace.retained.missing,
+            &workspace.retained.false_roots,
+            &workspace.retained.queued,
+        ]
+        .map(|words| (words.as_ptr(), words.len(), words.capacity()))
+    };
+    let initial = holdings(&workspace);
+    for atoms in [vec![2, 3, 64], vec![2, 3, 128], vec![2, 3, 199], vec![2, 3]] {
+        let candidate = world(&theory, atoms);
+        let complete = plan
+            .check_accounted(&candidate, TightCheckLimits::default(), &cancellation)
+            .result
+            .unwrap();
+        let updated = workspace
+            .check(
+                &plan,
+                &candidate,
+                TightCheckLimits::default(),
+                &cancellation,
+            )
+            .result
+            .unwrap();
+        assert_eq!(updated.verdict, complete.verdict);
+        assert_route(&plan, &candidate, updated.work, true);
+        assert_eq!(holdings(&workspace), initial);
+        assert!(workspace.retained.queued.iter().all(|word| *word == 0));
+    }
 }

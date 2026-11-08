@@ -1,7 +1,7 @@
 //! Native formula session capture for the membership routes' tests.
 
+use zetesis_algebra::Cancellation;
 use zetesis_core::Model;
-use zetesis_cpu::Cancellation;
 use zetesis_objective::Score;
 pub(super) use zetesis_reference_support::formula as admitted;
 use zetesis_themelios::AdmittedFormula;
@@ -42,7 +42,6 @@ pub(super) fn input(owner: &AdmittedFormula) -> super::Input<'_> {
     super::Input {
         theory: owner.theory(),
         atoms: owner.atom_catalog(),
-        gate_atoms: 0,
         keyed_constraints: 0,
         key_analysis: zetesis_themelios::KeyAnalysis::Complete,
         objectives: owner.objectives(),
@@ -102,9 +101,9 @@ pub(super) fn run_consuming(
     let outcome = session.outcome(&phases);
     assert!(
         outcome
-            .subject()
+            .original()
             .unwrap()
-            .same_instance(&crate::Subject::Theory(owner.theory().clone()))
+            .same_instance(&crate::Original::Theory(owner.theory().clone()))
     );
     Capture {
         answers,

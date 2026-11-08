@@ -82,7 +82,7 @@ pub fn run(request: &Request) -> Result<Report, Error> {
 /// handlers are installed. The flag must remain set once requested.
 ///
 /// # Errors
-/// Returns the same preparation errors as [`run`].
+/// Returns the same preparation errors as [`run()`].
 pub fn run_with_cancellation(
     request: &Request,
     cancelled: &std::sync::atomic::AtomicBool,

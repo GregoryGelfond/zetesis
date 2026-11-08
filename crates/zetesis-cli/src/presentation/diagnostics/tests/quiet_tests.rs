@@ -1,7 +1,7 @@
 //! Quiet execution suppresses information, never a diagnostic or its I/O failure.
 
 use crate::presentation::{Diagnostics, Label};
-use crate::{ColorMode, ExecutionObservation, ExecutionObserver, Grounder, Oracle, SearchMethod};
+use crate::{ColorMode, ExecutionObservation, ExecutionObserver, Grounder, Oracle};
 use zetesis_test_support::io::BoundedWriter;
 
 #[test]
@@ -18,13 +18,13 @@ fn quiet_information_never_touches_the_writer() {
         .observe(ExecutionObservation::CpuFormula {
             oracle: Oracle::Auto,
             grounder: Grounder::Auto,
-            search: SearchMethod::Regions,
         })
         .unwrap();
     diagnostics
         .observe(ExecutionObservation::ObjectiveBound {
             restrictions: 1,
             costs: &[(0, 7)],
+            strict: true,
             work: 8,
         })
         .unwrap();
@@ -57,14 +57,10 @@ fn quiet_diagnostics_preserve_objective_refusals() {
             "Objective pruning stopped: original theory mismatch; exact search continues\n",
         ),
         (
-            ExecutionObservation::ObjectiveRestrictionStopped(zetesis_sat::Incomplete::Admission(
-                zetesis_sat::AdmissionError::Limit {
-                    resource: zetesis_sat::Resource::Variables,
-                    observed: 3,
-                    limit: 2,
-                },
-            )),
-            "Objective pruning stopped: SAT Variables count 3 exceeds 2; exact search continues\n",
+            ExecutionObservation::ObjectiveRestrictionStopped(
+                zetesis_stable::Incomplete::WorkLimit,
+            ),
+            "Objective pruning stopped: SAT work limit reached; exact search continues\n",
         ),
     ] {
         let mut output = Vec::new();

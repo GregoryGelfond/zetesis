@@ -1,4 +1,4 @@
-use super::{Buffer, frontier_statistics};
+use super::{Buffer, frontier_statistics, region_statistics};
 
 #[test]
 fn unobserved_frontier_is_absent() {
@@ -10,7 +10,7 @@ fn unobserved_frontier_is_absent() {
 #[test]
 fn frontier_bytes_preserve_wide_accounting() {
     let bytes = u128::from(u64::MAX) + 1;
-    let statistics = zetesis_sat::RegionFrontierStatistics {
+    let statistics = zetesis_stable::RegionFrontierStatistics {
         regions: 0,
         capacity: 8,
         retained_bytes: bytes,
@@ -32,8 +32,35 @@ fn frontier_bytes_preserve_wide_accounting() {
 
 #[test]
 fn frontier_record_respects_the_output_limit() {
-    let statistics = zetesis_sat::RegionFrontierStatistics::default();
+    let statistics = zetesis_stable::RegionFrontierStatistics::default();
     let mut output = Buffer::new(4);
     assert!(frontier_statistics(&mut output, Some(statistics)).is_err());
     assert!(output.bytes.len() <= 4);
+}
+
+#[test]
+fn region_statistics_name_the_producers_frontier_order() {
+    for (order, spelling) in [
+        (zetesis_stable::FrontierOrder::PerProducer, "per_producer"),
+        (zetesis_stable::FrontierOrder::Shared, "shared"),
+    ] {
+        let mut statistics = zetesis_stable::RegionSearchStatistics::default();
+        statistics.frontier_order = Some(order);
+        let mut output = Buffer::new(4096);
+        region_statistics(&mut output, Some(&statistics)).unwrap();
+        let actual = String::from_utf8(output.bytes).unwrap();
+        assert!(
+            actual.contains(&format!("\"frontier_order\":\"{spelling}\"")),
+            "{actual}"
+        );
+    }
+}
+
+#[test]
+fn routes_without_producers_report_no_frontier_order() {
+    let statistics = zetesis_stable::RegionSearchStatistics::default();
+    let mut output = Buffer::new(4096);
+    region_statistics(&mut output, Some(&statistics)).unwrap();
+    let actual = String::from_utf8(output.bytes).unwrap();
+    assert!(actual.contains("\"frontier_order\":null"), "{actual}");
 }

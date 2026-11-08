@@ -10,7 +10,7 @@ publish = false
 [dependencies]
 zetesis-backend.workspace = true
 zetesis-core.workspace = true
-zetesis-cpu.workspace = true
+zetesis-algebra.workspace = true
 zetesis-ferraris.workspace = true
 wgpu.workspace = true
 bytemuck.workspace = true
@@ -26,8 +26,10 @@ wgpu = { workspace = true, features = ["vulkan"] }
 
 [dev-dependencies]
 # The shader validator paired with this wgpu release. Hardware-independent
-# validation checks the authored WGSL even when no adapter is available.
-naga = { version = "=30.0.1", features = ["wgsl-in"] }
+# validation checks the authored WGSL even when no adapter is available, and
+# its SPIR-V writer, already in the lockfile for the Vulkan backend, checks that
+# every kernel translates as that backend translates it.
+naga = { version = "=30.0.1", features = ["wgsl-in", "spv-out"] }
 zetesis-test-support.workspace = true
 zetesis-theory-support.workspace = true
 

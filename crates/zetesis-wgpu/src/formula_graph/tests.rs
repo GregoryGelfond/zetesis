@@ -1,5 +1,34 @@
+mod shared_rows;
+
 use super::*;
 use zetesis_ferraris::{AdmissionLimits, FormulaParts, Node, OperandSpan};
+
+/// The same packed reader must load the host's candidate buffer for each
+/// route. Both modules already contain other read-only u32 arrays.
+pub(crate) fn assert_candidate_word_binding(
+    module: &naga::Module,
+    info: &naga::valid::ModuleInfo,
+    candidate_binding: u32,
+) {
+    let (reader, _) = module
+        .functions
+        .iter()
+        .find(|(_, f)| f.name.as_deref() == Some("candidate_contains"))
+        .expect("shared candidate reader");
+    let mut reads = Vec::new();
+    for (handle, global) in module.global_variables.iter() {
+        let usage = info[reader][handle];
+        if !usage.is_empty() {
+            assert_eq!(usage, naga::valid::GlobalUse::READ);
+            let binding = global
+                .binding
+                .expect("candidate reader loads bound storage");
+            reads.push((binding.group, binding.binding));
+        }
+    }
+    reads.sort_unstable();
+    assert_eq!(reads, [(0, 0), (0, candidate_binding)]);
+}
 
 fn theory() -> Theory {
     Theory::new(
@@ -45,12 +74,8 @@ fn logical_rows_omit_unused_cells_and_preserve_overlap_occurrences() {
     let theory = theory();
     let shape = Shape::new(&theory, &wgpu::Limits::default()).unwrap();
     assert_eq!((shape.edges, shape.wide_words, shape.bytes), (6, 6, 88));
-    let mut packed = Vec::new();
-    let mut tail = 0;
-    for index in 0..theory.view().len() {
-        packed.extend(header(theory.view().node(index).unwrap(), &mut tail).unwrap());
-    }
-    append_operands(&theory, &mut packed, &Cancellation::default()).unwrap();
+    let mut packed = Vec::with_capacity(usize::try_from(shape.bytes / 4).unwrap());
+    pack(&theory, &shape.rows, &mut packed, &Cancellation::default()).unwrap();
     assert_eq!(&packed[8..16], &[5, 0, 3, 0, 6, 3, 3, 0]);
     assert_eq!(&packed[16..], &[0, 1, 0, 1, 0, 2]);
     assert_eq!(packed.len() as u64 * 4, shape.bytes);
@@ -76,10 +101,17 @@ fn cancelled_operand_packing_returns_a_typed_interruption() {
     let cancellation = Cancellation::default();
     cancellation.cancel();
     assert_eq!(
-        append_operands(&theory(), &mut Vec::new(), &cancellation)
-            .unwrap_err()
-            .interruption(),
-        Some(zetesis_cpu::Stop::Cancelled)
+        pack(
+            &theory(),
+            &Shape::new(&theory(), &wgpu::Limits::default())
+                .unwrap()
+                .rows,
+            &mut Vec::new(),
+            &cancellation
+        )
+        .unwrap_err()
+        .interruption(),
+        Some(zetesis_algebra::Stop::Cancelled)
     );
 }
 
@@ -143,6 +175,8 @@ fn physical_truth(words: &[u32], count: u32, atoms: usize, frozen: Option<&[bool
                     row.iter().any(|&child| values[child as usize])
                 }
             }
+            7..=9 => numeric_truth(words, count, node, &values),
+            10 => true,
             _ => panic!("unknown physical operation"),
         };
         values.push(value && frozen.is_none_or(|mask| mask[index]));
@@ -158,9 +192,7 @@ fn native_transport_preserves_original_and_arbitrary_frozen_truth() {
         let theory = native_theory(bound);
         let shape = Shape::new(&theory, &wgpu::Limits::default()).unwrap();
         let mut words = Vec::with_capacity(usize::try_from(shape.bytes).unwrap() / 4);
-        let mut map = Vec::with_capacity(shape.map);
-        let mut scratch = Vec::with_capacity(shape.scratch);
-        pack(&theory, &mut words, &mut map, &mut scratch, &cancellation).unwrap();
+        pack(&theory, &shape.rows, &mut words, &cancellation).unwrap();
         assert_eq!(words.len() as u64 * 4, shape.bytes);
         let interpretation = |mask| {
             Interpretation::new(&theory, (0..2).filter(|atom| mask & (1 << atom) != 0)).unwrap()
@@ -173,19 +205,14 @@ fn native_transport_preserves_original_and_arbitrary_frozen_truth() {
                 .evaluate(&candidate, EvaluationLimits::default(), &cancellation)
                 .result
                 .unwrap();
-            for (index, &physical) in map.iter().enumerate() {
-                assert_eq!(
-                    original[physical as usize],
-                    truth.node_truth(index).unwrap()
-                );
+            assert_eq!(original.len(), theory.view().len());
+            for (index, &value) in original.iter().enumerate() {
+                assert_eq!(value, truth.node_truth(index).unwrap());
             }
             for tested in 0..4 {
                 // Every interpretation is tested, including those outside M.
                 let reduct = physical_truth(&words, shape.nodes, tested, Some(&original));
-                let actual = theory
-                    .roots()
-                    .iter()
-                    .all(|&root| reduct[map[root] as usize]);
+                let actual = theory.roots().iter().all(|&root| reduct[root]);
                 let expected = zetesis_ferraris::models_reduct(
                     &theory,
                     &candidate,
@@ -204,7 +231,7 @@ fn native_transport_preserves_original_and_arbitrary_frozen_truth() {
 fn native_physical_shape_refuses_device_storage_before_packing() {
     let theory = native_theory(3);
     let shape = Shape::new(&theory, &wgpu::Limits::default()).unwrap();
-    assert!(shape.nodes as usize > theory.view().len());
+    assert_eq!(shape.nodes as usize, theory.view().len());
     let device = wgpu::Limits {
         max_storage_buffer_binding_size: shape.bytes - 1,
         ..wgpu::Limits::default()
@@ -220,11 +247,16 @@ fn native_shape_scan_preserves_cancellation() {
     let cancellation = Cancellation::default();
     cancellation.cancel();
     assert_eq!(
-        Shape::with_control(&native_theory(2), &wgpu::Limits::default(), &cancellation)
-            .err()
-            .unwrap()
-            .interruption(),
-        Some(zetesis_cpu::Stop::Cancelled)
+        Shape::with_control(
+            &native_theory(2),
+            &wgpu::Limits::default(),
+            u64::MAX,
+            &cancellation
+        )
+        .err()
+        .unwrap()
+        .interruption(),
+        Some(zetesis_algebra::Stop::Cancelled)
     );
 }
 
@@ -271,7 +303,7 @@ fn ordinal_theory() -> Theory {
             usize::MAX,
         )
         .unwrap();
-    // Exercise a wide tail referencing translated cuts as well as ordinary nodes.
+    // Exercise a wide tail referencing native cuts as well as ordinary nodes.
     transaction
         .push(
             NodeView::Or(&[root, cuts.start, cuts.end - 1]),
@@ -295,16 +327,10 @@ fn ordinal_transport_preserves_original_and_arbitrary_frozen_truth() {
     let cancellation = Cancellation::default();
     let theory = ordinal_theory();
     let shape = Shape::new(&theory, &wgpu::Limits::default()).unwrap();
-    assert_eq!(shape.scratch, 0);
-    assert_eq!(shape.map, theory.view().len());
-    assert_eq!(shape.temporary_bytes, u64::try_from(shape.map).unwrap() * 4);
+    assert_eq!(shape.nodes as usize, theory.view().len());
     let mut words = Vec::with_capacity(usize::try_from(shape.bytes).unwrap() / 4);
-    let mut map = Vec::with_capacity(shape.map);
-    let mut scratch = Vec::new();
-    pack(&theory, &mut words, &mut map, &mut scratch, &cancellation).unwrap();
+    pack(&theory, &shape.rows, &mut words, &cancellation).unwrap();
     assert_eq!(words.len() as u64 * 4, shape.bytes);
-    assert!(scratch.is_empty());
-    assert!(map.windows(2).all(|pair| pair[0] < pair[1]));
     let interpretation =
         |mask| Interpretation::new(&theory, (0..2).filter(|atom| mask & (1 << atom) != 0)).unwrap();
     for candidate_mask in 0..4 {
@@ -315,30 +341,22 @@ fn ordinal_transport_preserves_original_and_arbitrary_frozen_truth() {
             .evaluate(&candidate, EvaluationLimits::default(), &cancellation)
             .result
             .unwrap();
-        for (index, &physical) in map.iter().enumerate() {
-            assert_eq!(
-                original[physical as usize],
-                truth.node_truth(index).unwrap()
-            );
+        assert_eq!(original.len(), theory.view().len());
+        for (index, &value) in original.iter().enumerate() {
+            assert_eq!(value, truth.node_truth(index).unwrap());
         }
         for tested in 0..4 {
             let reduct = physical_truth(&words, shape.nodes, tested, Some(&original));
-            for (index, &physical) in map.iter().enumerate() {
+            for index in 0..theory.view().len() {
                 if let NodeView::ExtremumCut(cut) = theory.view().node(index).unwrap() {
                     let measure = cut
                         .row
-                        .reduce(|child| Ok::<_, zetesis_cpu::Stop>(reduct[map[child] as usize]))
+                        .reduce(|child| Ok::<_, zetesis_algebra::Stop>(reduct[child]))
                         .unwrap();
-                    assert_eq!(
-                        reduct[physical as usize],
-                        original[physical as usize] && cut.rule.holds(measure)
-                    );
+                    assert_eq!(reduct[index], original[index] && cut.rule.holds(measure));
                 }
             }
-            let actual = theory
-                .roots()
-                .iter()
-                .all(|&root| reduct[map[root] as usize]);
+            let actual = theory.roots().iter().all(|&root| reduct[root]);
             let expected = zetesis_ferraris::models_reduct(
                 &theory,
                 &candidate,
@@ -375,21 +393,13 @@ fn ordinal_packing_rejects_unadmitted_output_capacity() {
     let theory = ordinal_theory();
     let shape = Shape::new(&theory, &wgpu::Limits::default()).unwrap();
     let mut words = Vec::new();
-    let mut map = Vec::with_capacity(shape.map);
     assert_eq!(
-        pack(
-            &theory,
-            &mut words,
-            &mut map,
-            &mut Vec::new(),
-            &Cancellation::default()
-        )
-        .unwrap_err()
-        .kind(),
+        pack(&theory, &shape.rows, &mut words, &Cancellation::default())
+            .unwrap_err()
+            .kind(),
         GpuErrorKind::Capacity
     );
     assert!(words.is_empty());
-    assert!(map.is_empty());
 }
 
 #[test]
@@ -399,25 +409,326 @@ fn ordinal_shape_scan_and_packing_preserve_cancellation() {
     let cancellation = Cancellation::default();
     cancellation.cancel();
     assert_eq!(
-        Shape::with_control(&theory, &wgpu::Limits::default(), &cancellation)
+        Shape::with_control(&theory, &wgpu::Limits::default(), u64::MAX, &cancellation)
             .err()
             .unwrap()
             .interruption(),
-        Some(zetesis_cpu::Stop::Cancelled)
+        Some(zetesis_algebra::Stop::Cancelled)
     );
     let mut words = Vec::with_capacity(usize::try_from(shape.bytes).unwrap() / 4);
-    let mut map = Vec::with_capacity(shape.map);
     assert_eq!(
-        pack(
-            &theory,
-            &mut words,
-            &mut map,
-            &mut Vec::new(),
-            &cancellation
-        )
-        .unwrap_err()
-        .interruption(),
-        Some(zetesis_cpu::Stop::Cancelled)
+        pack(&theory, &shape.rows, &mut words, &cancellation)
+            .unwrap_err()
+            .interruption(),
+        Some(zetesis_algebra::Stop::Cancelled)
     );
     assert!(words.is_empty());
+}
+
+// A mathematical reading of the wire, independent of the shader's limb
+// arithmetic and domain propagation. Frozen evaluation supplies reduced truth.
+fn numeric_truth(words: &[u32], count: u32, node: &[u32], values: &[bool]) -> bool {
+    let descriptor = count as usize * 4 + node[1] as usize;
+    let length = node[2] as usize;
+    let row = count as usize * 4 + words[descriptor] as usize + 3;
+    let integer = |start: usize, limbs: usize| {
+        (0..limbs).fold(0u128, |value, limb| {
+            value | (u128::from(words[start + limb]) << (32 * limb))
+        })
+    };
+    let value = |index: usize| {
+        let low = u64::from(words[row + length + index]);
+        if words[row - 1] == 1 {
+            low
+        } else {
+            low | (u64::from(words[row + 2 * length + index]) << 32)
+        }
+    };
+    if node[0] == 7 {
+        let sum: u128 = (0..length)
+            .filter(|&i| values[words[row + i] as usize])
+            .map(|i| u128::from(value(i)))
+            .sum();
+        return sum >= integer(descriptor + 1, 4);
+    }
+    let bound = integer(descriptor + 1, 2);
+    let carrier = integer(descriptor + 3, 2);
+    let mut minimum = carrier - 1;
+    let mut maximum = 0;
+    for i in 0..length {
+        if values[words[row + i] as usize] {
+            minimum = minimum.min(u128::from(value(i)));
+            maximum = maximum.max(u128::from(value(i)));
+        }
+    }
+    if node[0] == 8 {
+        minimum < bound
+    } else {
+        maximum >= bound
+    }
+}
+
+#[test]
+fn shared_threshold_rows_keep_one_transported_column_set() {
+    use zetesis_ferraris::FormulaNodes;
+    let mut nodes =
+        FormulaNodes::new(FormulaParts::new(vec![Node::atom(0), Node::atom(1)], vec![]).unwrap());
+    let mut tx = nodes.transaction();
+    let roots = tx
+        .push_threshold_family(
+            &[0, 1, 0],
+            &[1, u64::MAX, 0],
+            &[1, 2, i128::from(u64::MAX)],
+            usize::MAX,
+            usize::MAX,
+        )
+        .unwrap();
+    tx.commit();
+    let theory = Theory::new(2, nodes.into_parts(), roots, AdmissionLimits::default()).unwrap();
+    let shape = Shape::new(&theory, &wgpu::Limits::default()).unwrap();
+    assert_eq!(shape.nodes, 5);
+    assert_eq!(shape.wide_words, 3 * 5 + 3 + 3 * 3 + 3);
+    let mut words = Vec::with_capacity(usize::try_from(shape.bytes).unwrap() / 4);
+    pack(&theory, &shape.rows, &mut words, &Cancellation::default()).unwrap();
+    let offsets: Vec<_> = theory
+        .roots()
+        .iter()
+        .map(|&root| words[shape.nodes as usize * 4 + words[root * 4 + 1] as usize])
+        .collect();
+    assert_eq!(offsets, vec![15, 15, 15]);
+}
+
+#[test]
+fn full_width_thresholds_preserve_frozen_truth_with_aliased_atoms() {
+    use zetesis_ferraris::{FormulaNodes, Interpretation, Limits, NodeView, Threshold};
+    let cancellation = Cancellation::default();
+    for bound in [
+        i128::MIN,
+        -1,
+        0,
+        1,
+        1i128 << 32,
+        i128::from(u64::MAX),
+        i128::from(u64::MAX) + 1,
+        i128::from(u64::MAX) * 2,
+        i128::MAX,
+    ] {
+        let mut nodes = FormulaNodes::new(
+            FormulaParts::new(vec![Node::atom(0), Node::atom(0), Node::atom(1)], vec![]).unwrap(),
+        );
+        let mut tx = nodes.transaction();
+        let root = tx
+            .push(
+                NodeView::Threshold(Threshold {
+                    conditions: &[0, 1, 2, 2],
+                    weights: &[u64::MAX, u64::MAX, 1, 0],
+                    bound,
+                }),
+                usize::MAX,
+                usize::MAX,
+            )
+            .unwrap();
+        tx.commit();
+        let theory = Theory::new(
+            2,
+            nodes.into_parts(),
+            vec![root],
+            AdmissionLimits::default(),
+        )
+        .unwrap();
+        let shape = Shape::new(&theory, &wgpu::Limits::default()).unwrap();
+        let mut words = Vec::with_capacity(usize::try_from(shape.bytes).unwrap() / 4);
+        pack(&theory, &shape.rows, &mut words, &cancellation).unwrap();
+        let interpretation = |mask| {
+            Interpretation::new(&theory, (0..2).filter(|atom| mask & (1 << atom) != 0)).unwrap()
+        };
+        for candidate in 0..4 {
+            let frozen = physical_truth(&words, shape.nodes, candidate, None);
+            for tested in 0..4 {
+                let actual = physical_truth(&words, shape.nodes, tested, Some(&frozen))[root];
+                let expected = zetesis_ferraris::models_reduct(
+                    &theory,
+                    &interpretation(candidate),
+                    &interpretation(tested),
+                    Limits::default(),
+                    &cancellation,
+                )
+                .unwrap();
+                assert_eq!(actual, expected, "bound={bound}, M={candidate}, J={tested}");
+            }
+        }
+    }
+}
+
+#[test]
+fn constant_numeric_guards_omit_rows_and_directory_storage() {
+    use zetesis_ferraris::{ExtremumRow, FormulaNodes};
+    let mut nodes = FormulaNodes::new(FormulaParts::new(vec![Node::atom(0)], vec![]).unwrap());
+    let mut tx = nodes.transaction();
+    let mut roots = tx
+        .push_threshold_family(
+            &[0, 0],
+            &[1, 2],
+            &[i128::MIN, 0, 4, i128::MAX],
+            usize::MAX,
+            usize::MAX,
+        )
+        .unwrap();
+    let cuts = tx
+        .push_extremum_cut_family_range(
+            ExtremumRow {
+                conditions: &[0, 0],
+                ranks: &[1, 1],
+                rank_count: 4,
+            },
+            &[
+                ExtremumCutRule::Prefix(0),
+                ExtremumCutRule::Prefix(4),
+                ExtremumCutRule::Suffix(0),
+                ExtremumCutRule::Suffix(4),
+                ExtremumCutRule::Prefix(1),
+                ExtremumCutRule::Suffix(2),
+            ],
+            usize::MAX,
+            usize::MAX,
+        )
+        .unwrap();
+    roots.extend(cuts);
+    tx.commit();
+    let theory = Theory::new(1, nodes.into_parts(), roots, AdmissionLimits::default()).unwrap();
+    let shape = Shape::with_control(
+        &theory,
+        &wgpu::Limits::default(),
+        0,
+        &Cancellation::default(),
+    )
+    .unwrap();
+    assert_eq!(
+        (
+            shape.wide_words,
+            shape.edges,
+            shape.numeric_work,
+            shape.rows.bytes().unwrap()
+        ),
+        (0, 0, 0, 0)
+    );
+    let mut words = Vec::with_capacity(usize::try_from(shape.bytes).unwrap() / 4);
+    pack(&theory, &shape.rows, &mut words, &Cancellation::default()).unwrap();
+    let tags: Vec<_> = theory
+        .roots()
+        .iter()
+        .map(|&index| words[index * 4])
+        .collect();
+    assert_eq!(tags, vec![10, 10, 0, 0, 0, 10, 10, 0, 0, 0]);
+}
+
+#[test]
+fn numeric_directory_reservation_obeys_staging_allowance() {
+    let theory = native_theory(2);
+    let device = wgpu::Limits::default();
+    let error = Shape::with_control(&theory, &device, 0, &Cancellation::default())
+        .err()
+        .unwrap();
+    assert_eq!(error.kind(), GpuErrorKind::Capacity);
+    assert!(error.to_string().contains("numeric directory"));
+    let mut shape = Shape::with_control(&theory, &device, 1024, &Cancellation::default()).unwrap();
+    assert!(shape.rows.bytes().unwrap() > 0);
+    shape.rows.release();
+    assert_eq!(shape.rows.bytes().unwrap(), 0);
+}
+
+#[test]
+fn a_serial_schedule_has_no_level_widths() {
+    let packed = [7, 9];
+    assert_eq!(
+        dependency::level_widths(&packed, 2, 0)
+            .unwrap()
+            .collect::<Vec<_>>(),
+        Vec::<u32>::new()
+    );
+}
+
+#[test]
+fn level_widths_are_offset_differences() {
+    // Two root IDs, then the starts of three levels and the node count.
+    let packed = [7, 9, 0, 3, 3, 7, 4, 5, 6];
+    assert_eq!(
+        dependency::level_widths(&packed, 2, 3)
+            .unwrap()
+            .collect::<Vec<_>>(),
+        [3, 0, 4]
+    );
+}
+
+#[test]
+fn level_offsets_beyond_the_schedule_are_refused() {
+    let packed = [7, 9, 0, 3];
+    assert_eq!(
+        dependency::level_widths(&packed, 2, 3)
+            .err()
+            .map(|error| error.kind()),
+        Some(GpuErrorKind::Capacity)
+    );
+}
+
+#[test]
+fn decreasing_level_offsets_are_refused() {
+    let packed = [7, 9, 0, 5, 3, 7];
+    assert_eq!(
+        dependency::level_widths(&packed, 2, 3)
+            .err()
+            .map(|error| error.kind()),
+        Some(GpuErrorKind::Capacity)
+    );
+}
+
+/// The largest loop bound the formula and tight kernels admit.
+const STRIDED_END: u32 = u32::MAX - crate::kernel::MAX_FORMULA_STRIDE;
+
+#[test]
+fn schedule_words_end_within_the_stride_headroom() {
+    // Roots, then the starts of three levels and the node count, then 8 nodes.
+    let roots = STRIDED_END - (3 + 1 + 8);
+    assert_eq!(dependency::root_words(8, roots, 3).unwrap(), STRIDED_END);
+    assert_eq!(
+        dependency::root_words(8, roots + 1, 3)
+            .err()
+            .map(|error| error.kind()),
+        Some(GpuErrorKind::Capacity)
+    );
+}
+
+#[test]
+fn incidence_directories_end_within_the_stride_headroom() {
+    // One binary gate over one variable: the variable's start, a closing
+    // offset and three entries (two operands and the gate) take five words.
+    let gate = [2, 0, 0, 0];
+    let layout = |offset| incidence::Layout::new(&gate, 1, 1, offset, &Cancellation::default());
+    let at = layout(STRIDED_END - 5).unwrap().unwrap();
+    assert_eq!(at.offset + at.words, STRIDED_END);
+    assert_eq!(
+        layout(STRIDED_END - 4).err().map(|error| error.kind()),
+        Some(GpuErrorKind::Capacity)
+    );
+}
+
+#[test]
+fn group_maps_end_within_the_stride_headroom() {
+    // One empty group over one variable: a three-word directory, then a map
+    // word per node and a closing word.
+    let group = [5, 0, 0, 0];
+    let grouped = |offset| {
+        incidence::Layout::new(&group, 1, 1, offset, &Cancellation::default())
+            .and_then(|layout| layout.unwrap().with_groups())
+    };
+    let at = grouped(STRIDED_END - 5).unwrap();
+    assert_eq!(at.offset + at.words, STRIDED_END);
+    // The directory alone still fits; only the map crosses the headroom.
+    assert!(
+        incidence::Layout::new(&group, 1, 1, STRIDED_END - 4, &Cancellation::default()).is_ok()
+    );
+    assert_eq!(
+        grouped(STRIDED_END - 4).err().map(|error| error.kind()),
+        Some(GpuErrorKind::Capacity)
+    );
 }

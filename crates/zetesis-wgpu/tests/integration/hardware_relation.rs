@@ -3,13 +3,13 @@
 
 use crate::support::physical;
 
+use zetesis_algebra::{Cancellation, Stop};
 use zetesis_backend::GpuApi;
 use zetesis_core::{
     Atom, Predicate, Sign, Value, ValueLimits, ValueNode,
     atom_interner::{AtomInterner, Limits as AtomLimits},
     relation::{Catalog, Limits, Relation},
 };
-use zetesis_cpu::{Cancellation, Stop};
 use zetesis_wgpu::{
     GpuOptions, GpuRelationExecutor, GpuSelection, RelationGpuActivity, RelationGpuError,
     RelationGpuLimits,

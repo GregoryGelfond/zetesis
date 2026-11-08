@@ -3,9 +3,11 @@
 use std::cmp::Ordering;
 use std::fmt;
 
+use zetesis_algebra::Cancellation;
+use zetesis_algebra::reduction::Minimum;
+use zetesis_algebra::reduction::{CheckedSum, Reduction as _};
 use zetesis_core::Model;
 use zetesis_core::retention::{ModelRetention, RetentionError};
-use zetesis_cpu::Cancellation;
 use zetesis_ferraris::Interpretation;
 use zetesis_objective::{ObjectiveProgram, Score};
 use zetesis_themelios::objective_bound::ObjectivePlan;
@@ -18,8 +20,16 @@ pub struct Optimization {
     /// Best retained cost, at descending priorities. A storage interruption may
     /// preserve an earlier model even after a better score was evaluated.
     pub score: Score,
-    /// Number of full stable models found with this cost, including hidden ties.
+    /// Number of full stable models found with this cost, including hidden
+    /// ties. After exhaustion it counts every model at this cost unless
+    /// [`Self::ties_pruned`].
     pub tied_models: u64,
+    /// A strict bound at this cost pruned its other ties, as the default
+    /// [`crate::OptimumSearch`] does for a request of one answer. Then
+    /// [`Self::tied_models`] counts only the models at this cost that the
+    /// search met, at least one, and exhaustion proves this cost optimal
+    /// without establishing how many models share it.
+    pub ties_pruned: bool,
     /// Number of stable models whose objective was completely evaluated.
     pub scored_models: u64,
     /// Cumulative charged objective preparation and evaluation work.
@@ -54,6 +64,32 @@ impl From<RetentionError> for OptimizationStop {
             RetentionError::Overflow => Self::Overflow,
             RetentionError::Allocation => Self::Allocation,
         }
+    }
+}
+
+/// Borrowed cost value, distinct from the stored Score's structural equality.
+/// Missing priorities denote zero and objective presence does not affect rank.
+/// Comparison borrows the original slots; it never normalizes or copies them.
+#[derive(Clone, Copy, Debug)]
+struct ScoreValue<'a>(&'a Score);
+
+impl PartialEq for ScoreValue<'_> {
+    fn eq(&self, other: &Self) -> bool {
+        self.cmp(other) == Ordering::Equal
+    }
+}
+
+impl Eq for ScoreValue<'_> {}
+
+impl PartialOrd for ScoreValue<'_> {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for ScoreValue<'_> {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.0.compare_costs(other.0)
     }
 }
 
@@ -128,9 +164,8 @@ impl Incumbents {
                 }
             }
         };
-        self.scored = self
-            .scored
-            .checked_add(1)
+        self.scored = CheckedSum
+            .combine(Some(self.scored), Some(1))
             .ok_or(Interruption::Incumbent(OptimizationStop::Overflow))?;
         if let Some(best) = &mut self.best {
             best.scored_models = self.scored;
@@ -147,14 +182,14 @@ impl Incumbents {
         prepared: Option<(&ObjectivePlan, &Interpretation)>,
     ) -> Result<bool, Interruption> {
         let score = self.evaluate(program, &model, options, cancellation, prepared)?;
-        let order = self
-            .best
-            .as_ref()
-            .map_or(Ordering::Less, |best| score.compare_costs(&best.score));
-        if order == Ordering::Less {
+        let minimum = Minimum::new().step(
+            self.best.as_ref().map(|best| ScoreValue(&best.score)),
+            ScoreValue(&score),
+        );
+        if minimum.incoming == Ordering::Less {
             // The score is retained once for this entire tied family. Admission
             // of its full replacement precedes dropping any previous incumbent.
-            let score_bytes = score_payload_bytes(Some(&score))
+            let score_bytes = score_payload_bytes(Some(minimum.value.0))
                 .map_err(OptimizationStop::from)
                 .map_err(Interruption::Incumbent)?;
             self.retain(model, score_bytes, options, true)
@@ -162,19 +197,19 @@ impl Incumbents {
             self.best = Some(Optimization {
                 score,
                 tied_models: 1,
+                ties_pruned: false,
                 scored_models: self.scored,
                 work: self.work,
             });
             return Ok(true);
         }
-        if order == Ordering::Equal {
+        if minimum.incoming == Ordering::Equal {
             let best = self
                 .best
                 .as_mut()
                 .expect("first score establishes an incumbent");
-            best.tied_models = best
-                .tied_models
-                .checked_add(1)
+            best.tied_models = CheckedSum
+                .combine(Some(best.tied_models), Some(1))
                 .ok_or(Interruption::Incumbent(OptimizationStop::Overflow))?;
             if options.models == 0 || self.models.len() < options.models {
                 self.retain(model, 0, options, false)
@@ -230,6 +265,24 @@ impl Incumbents {
         self.models.push(model);
         self.atoms = atoms;
         Ok(())
+    }
+
+    /// Begin a tie pass at the proved optimum, and return how many retained
+    /// models it will meet again, which it must not retain twice. The
+    /// optimum's count restarts at them: the pass meets every optimal model,
+    /// those counted earlier without being retained included, and counts each
+    /// of the others once.
+    pub(crate) fn begin_tie_pass(&mut self) -> usize {
+        let retained = self.models.len();
+        if let Some(best) = self.best.as_mut() {
+            best.tied_models = u64::try_from(retained).unwrap_or(u64::MAX);
+        }
+        retained
+    }
+
+    /// Whether `model` is among the first `count` retained models.
+    pub(crate) fn holds_among(&self, count: usize, model: &Model) -> bool {
+        self.models[..count.min(self.models.len())].contains(model)
     }
 
     pub(crate) fn metadata(&self) -> Option<&Optimization> {

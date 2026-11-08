@@ -4,15 +4,31 @@
 //! integration with host buffers and dispatch.
 
 fn module() -> naga::Module {
-    let module = naga::front::wgsl::parse_str(include_str!("../../src/formula.wgsl"))
-        .expect("production WGSL parses");
-    naga::valid::Validator::new(
+    let module = naga::front::wgsl::parse_str(concat!(
+        include_str!("../../src/formula.wgsl"),
+        include_str!("../../src/words.wgsl"),
+        include_str!("../../src/formula_graph/truth.wgsl"),
+        include_str!("../../src/formula_graph/numeric.wgsl"),
+        include_str!("../../src/formula/numeric.wgsl"),
+        include_str!("../../src/formula/subset.wgsl"),
+        include_str!("../../src/reduction.wgsl")
+    ))
+    .expect("production WGSL parses");
+    let info = naga::valid::Validator::new(
         naga::valid::ValidationFlags::all(),
         naga::valid::Capabilities::empty(),
     )
     .validate(&module)
     .expect("production WGSL validates");
-    module
+    naga::back::pipeline_constants::process_overrides(
+        &module,
+        &info,
+        None,
+        &naga::back::PipelineConstants::default(),
+    )
+    .expect("default width resolves")
+    .0
+    .into_owned()
 }
 
 #[test]
@@ -45,7 +61,7 @@ fn formula_preserves_the_declared_bindings() {
             ("params", 0, 0, AddressSpace::Uniform),
             ("nodes", 0, 1, read),
             ("roots", 0, 2, read),
-            ("seeds", 0, 3, read),
+            ("candidates", 0, 3, read),
             ("frozen", 0, 4, write),
             ("domains", 0, 5, write),
             ("results", 0, 6, write),
@@ -64,20 +80,24 @@ fn formula_parameters_keep_the_packed_word_layout() {
     let naga::TypeInner::Struct { members, span } = &parameters.inner else {
         panic!("parameters are a uniform structure");
     };
-    assert_eq!(*span, 48);
+    assert_eq!(*span, 64);
     let fields = [
         "atoms",
         "nodes",
         "roots",
         "variables",
         "words",
-        "worlds",
+        "incidence",
         "max_rounds",
         "max_work",
         "setup_work",
         "sweep_work",
         "epoch",
         "levels",
+        "group_map",
+        "padding0",
+        "padding1",
+        "padding2",
     ];
     assert_eq!(members.len(), fields.len());
     for (index, (member, name)) in members.iter().zip(fields).enumerate() {

@@ -3,13 +3,13 @@
 //! Admission, interpretations, and verdict/work assertions are outside timers.
 //! Unlike `frozen_reduct`, these fixtures call the exhaustive reference checker:
 //! failed original satisfaction, the first empty countermodel, and stable
-//! fact theories requiring every proper subset. This is not ordinary region or
-//! clause search, and its measurements do not describe those solver routes.
+//! fact theories requiring every proper subset. This is not the region search,
+//! and its measurements do not describe that solver route.
 
 use std::hint::black_box;
 
 use criterion::{BenchmarkId, Criterion, Throughput};
-use zetesis_cpu::Cancellation;
+use zetesis_algebra::Cancellation;
 use zetesis_ferraris::{
     AdmissionLimits, Check, Interpretation, Limits, Node, Statistics, Theory, Verdict, check,
 };

@@ -8,8 +8,8 @@ use zetesis_test_support::repository;
 #[test]
 fn every_queens_variant_accepts_the_same_board_parameter() {
     use clap::Parser;
+    use zetesis_algebra::Cancellation;
     use zetesis_cli::{Completion, Options, run_with_diagnostics};
-    use zetesis_cpu::Cancellation;
 
     let options = Options::try_parse_from([
         "zetesis",

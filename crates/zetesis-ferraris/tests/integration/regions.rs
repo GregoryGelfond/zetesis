@@ -5,7 +5,7 @@
 
 use std::collections::BTreeSet;
 
-use zetesis_cpu::{Cancellation, Stop};
+use zetesis_algebra::{Cancellation, Stop};
 use zetesis_ferraris::{
     Interpretation, Limits, Narrower, Narrowing, NarrowingStatistics, Node, Producers, Region,
     RegionLimits, Theory, check, producers,
@@ -25,14 +25,15 @@ fn narrow_fresh(
 ) -> Result<(Narrowing, NarrowingStatistics), Stop> {
     let narrower = Narrower::new(theory);
     let mut knowledge = narrower.knowledge();
-    narrower.narrow_known(
+    let attempt = narrower.narrow_known(
         zetesis_ferraris::OriginalSubject::new(theory, producers),
         region,
         &mut knowledge,
         &mut zetesis_ferraris::NarrowingScratch::default(),
         limits,
         cancellation,
-    )
+    );
+    attempt.result.map(|outcome| (outcome, attempt.statistics))
 }
 
 /// The stable models of a small theory, as masks over its atoms.
@@ -624,15 +625,16 @@ fn a_frozen_mask_on_a_chain_node_reads_as_its_operands_masks() {
         for atom in (0..3).filter(|atom| !candidate.contains(atom)) {
             subsets.cut(atom);
         }
-        let (narrowing, _) = narrower
+        let narrowing = narrower
             .narrow_frozen_known(
                 zetesis_ferraris::FrozenSubject::new(&t, truth),
                 &mut subsets,
-                &mut narrower.knowledge(),
+                &mut narrower.frozen_knowledge(),
                 &mut zetesis_ferraris::NarrowingScratch::default(),
                 RegionLimits::default(),
                 &Cancellation::default(),
             )
+            .result
             .unwrap();
         assert!(matches!(narrowing, Narrowing::Fixed { changed: true }));
         assert!(subsets.is_held(forced), "candidate {candidate:?}");
@@ -670,7 +672,7 @@ fn carried_knowledge_narrows_every_region_as_a_fresh_narrowing_does() {
         let mut leaves = 0;
         while let Some((mut carried, mut knowledge)) = stack.pop() {
             let mut fresh = carried.clone();
-            let (from_fresh, _) = narrower
+            let from_fresh = narrower
                 .narrow_known(
                     zetesis_ferraris::OriginalSubject::new(&t, producers),
                     &mut fresh,
@@ -679,8 +681,9 @@ fn carried_knowledge_narrows_every_region_as_a_fresh_narrowing_does() {
                     RegionLimits::default(),
                     &Cancellation::default(),
                 )
+                .result
                 .unwrap();
-            let (from_carried, _) = narrower
+            let from_carried = narrower
                 .narrow_known(
                     zetesis_ferraris::OriginalSubject::new(&t, producers),
                     &mut carried,
@@ -689,6 +692,7 @@ fn carried_knowledge_narrows_every_region_as_a_fresh_narrowing_does() {
                     RegionLimits::default(),
                     &Cancellation::default(),
                 )
+                .result
                 .unwrap();
             assert_eq!(
                 matches!(from_fresh, Narrowing::Refuted),
@@ -742,18 +746,21 @@ fn an_implication_from_an_atom_to_itself_is_one_parent_of_the_atom() {
     let narrower = Narrower::new(&t);
     let mut knowledge = narrower.knowledge();
     let mut region = Region::all_open(1);
-    let (narrowing, _) = narrower
-        .narrow_known(
-            zetesis_ferraris::OriginalSubject::new(&t, None),
-            &mut region,
-            &mut knowledge,
-            &mut zetesis_ferraris::NarrowingScratch::default(),
-            RegionLimits::default(),
-            &Cancellation::default(),
-        )
-        .unwrap();
+    let attempt = narrower.narrow_known(
+        zetesis_ferraris::OriginalSubject::new(&t, None),
+        &mut region,
+        &mut knowledge,
+        &mut zetesis_ferraris::NarrowingScratch::default(),
+        RegionLimits::default(),
+        &Cancellation::default(),
+    );
+    let narrowing = attempt.result.unwrap();
     assert!(matches!(narrowing, Narrowing::Fixed { changed: false }));
-    assert_eq!(region.split_atom(), Some(0));
+    let mut entry = zetesis_algebra::region::Entry::new(region, ());
+    if let Some(atom) = attempt.preferred {
+        entry.prefer(atom);
+    }
+    assert_eq!(entry.split_atom(), Some(0));
 }
 
 #[test]

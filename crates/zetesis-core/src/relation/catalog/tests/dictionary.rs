@@ -3,7 +3,7 @@
 use super::*;
 use crate::catalog::{DerivedTerms, Limits as TermLimits};
 use crate::relation::{DictionaryIndex, QueryFailure, Work, dictionary::Probe};
-use crate::{AdmissionLimits, AtomPattern, Program, Template, Term};
+use crate::{AtomPattern, Template, Term};
 
 fn lookup(relation: &Relation<'_>, value: TermRef<'_>) -> (Option<u32>, u128) {
     let attempt = relation.query_attempt(&[(0, value)], Limits::default());
@@ -142,14 +142,15 @@ fn independent_tuple_writers_share_term_translation() {
         ],
     )
     .unwrap();
-    let program = Program::new(
-        vec![Template::new(Some(pattern), vec![], vec![], vec![], vec![])],
-        crate::FactTables::default(),
-        AdmissionLimits::default(),
-    )
-    .unwrap();
-    let mut left = AtomInterner::for_program(&program, 1 << 20).unwrap();
-    let mut right = AtomInterner::for_program(&program, 1 << 20).unwrap();
+    let catalog = crate::test_support::template_catalog(&[Template::new(
+        Some(pattern),
+        vec![],
+        vec![],
+        vec![],
+        vec![],
+    )]);
+    let mut left = AtomInterner::for_template_catalog(&catalog, 1 << 20).unwrap();
+    let mut right = AtomInterner::for_template_catalog(&catalog, 1 << 20).unwrap();
     let declared = left
         .declare_predicate_with(&Predicate::new("pair", 2).unwrap(), atom_limits(), || {
             Ok::<_, ()>(())

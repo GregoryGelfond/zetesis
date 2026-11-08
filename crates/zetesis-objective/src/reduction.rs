@@ -1,8 +1,8 @@
 //! Numeric reduction after a caller has established unique-key eligibility.
 
 use crate::evaluate::{Work, final_cost};
-use crate::{Error, Limits, ObjectiveProgram, Score, Statistics, Stop};
-use zetesis_cpu::Cancellation;
+use crate::{Error, Limits, ObjectiveProgram, Score, Stop};
+use zetesis_algebra::Cancellation;
 
 /// A complete numeric score and its actual reduction work. No contribution
 /// tuples are retained, and this value establishes no model membership.
@@ -47,15 +47,13 @@ pub fn reduce_costs<I: IntoIterator<Item = Option<i32>>>(
     max_work: u64,
     cancellation: &Cancellation,
 ) -> Result<CostReduction, Error> {
-    let mut work = Work {
-        limits: Limits {
+    let mut work = Work::new(
+        Limits {
             max_work,
             ..Limits::default()
         },
         cancellation,
-        statistics: Statistics::default(),
-        template: None,
-    };
+    );
     work.tick()?;
     let mut costs = work.reserve(program.priorities().len())?;
     for &priority in program.priorities() {
@@ -85,6 +83,6 @@ pub fn reduce_costs<I: IntoIterator<Item = Option<i32>>>(
             present: program.is_present(),
             costs,
         },
-        work: work.statistics.work,
+        work: work.statistics().work,
     })
 }

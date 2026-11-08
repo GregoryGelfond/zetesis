@@ -138,6 +138,9 @@ fn correlated_overflow_declines_batching() {
     assert!(prepared.incremental.is_none());
 }
 
+/// Streamed, the corpus queens encodings' diagonal arithmetic is scanned
+/// incrementally. By default their diagonal families leave the stream
+/// altogether (`corpus_queens_streams_no_template`).
 #[test]
 fn queens_arithmetic_uses_incremental_scanning() {
     let corpus = zetesis_test_support::repository::correctness().join("standalone/n-queens");
@@ -169,7 +172,7 @@ fn queens_arithmetic_uses_incremental_scanning() {
 }
 
 #[test]
-fn keyed_send_keeps_generated_binding_scans() {
+fn keyed_send_certifies_generated_binding_scans() {
     let path =
         zetesis_test_support::repository::correctness().join("standalone/send-money/send-money.lp");
     let source = std::fs::read_to_string(path).unwrap();
@@ -180,8 +183,8 @@ fn keyed_send_keeps_generated_binding_scans() {
     let _ = pass(&mut checker, &region, ConstraintRegionPass::First);
     let prepared = checker.prepared.as_ref().unwrap();
     // The exact-one key rewrite replaces each written carry equation by
-    // demanded atoms. Their computed arguments are generated bindings, which
-    // the complete-column arithmetic certificate deliberately does not cover.
+    // demanded atoms. Their generated arguments now receive the same
+    // complete-column arithmetic certificate as direct carry expressions.
     assert!(
         prepared
             .source
@@ -200,8 +203,15 @@ fn keyed_send_keeps_generated_binding_scans() {
                 })
             })
     );
-    assert_eq!(prepared.incremental_eligible, Some(false));
-    assert!(prepared.incremental.is_none());
+    assert_eq!(prepared.incremental_eligible, Some(true));
+    assert!(prepared.incremental.is_some());
+    assert!(
+        prepared
+            .plans
+            .iter()
+            .flatten()
+            .any(crate::formula_hybrid::PreparedRule::has_totality_certificate)
+    );
 }
 
 #[test]
@@ -279,5 +289,18 @@ fn zero_containing_hulls_keep_the_original_scan() {
         let prepared = checker.prepared.as_ref().unwrap();
         assert_eq!(prepared.incremental_eligible, Some(false));
         assert!(prepared.incremental.is_none());
+    }
+}
+
+/// By default the corpus queens encodings stream no constraint: every component
+/// of each diagonal family is complete, so the family moves into the core.
+#[test]
+fn corpus_queens_streams_no_template() {
+    let corpus = zetesis_test_support::repository::correctness().join("standalone/n-queens");
+    for name in ["variant-01.lp", "variant-02.lp", "variant-03.lp"] {
+        let source = std::fs::read_to_string(corpus.join(name)).unwrap();
+        let owner = crate::test_support::hybrid(&source);
+        assert_eq!(owner.streamed_templates(), 0, "{name}");
+        assert_eq!(owner.streamed_instances(), 0, "{name}");
     }
 }

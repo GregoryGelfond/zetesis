@@ -1,7 +1,7 @@
 //! Effective execution facts remain separate from requested policy and utilization.
 
 use super::*;
-use crate::{Grounder, Oracle, SearchMethod, SourceBatching};
+use crate::{Grounder, Oracle};
 
 fn workers() -> NonZeroUsize {
     NonZeroUsize::new(14).unwrap()
@@ -11,39 +11,21 @@ fn formula() -> ExecutionObservation<'static> {
     ExecutionObservation::CpuFormula {
         oracle: Oracle::Auto,
         grounder: Grounder::Auto,
-        search: SearchMethod::Regions,
-    }
-}
-
-#[test]
-fn closure_configuration_reports_effective_grounding() {
-    for (grounder, expected) in [
-        (Grounder::Eager, GroundingDisplay::Eager),
-        (Grounder::Lazy, GroundingDisplay::Lazy),
-    ] {
-        let mut state = Configuration::new(workers());
-        let view = state
-            .observe(&ExecutionObservation::CpuClosure {
-                grounder,
-                batching: SourceBatching::Independent,
-                workers: workers(),
-            })
-            .unwrap();
-        assert_eq!(view.grounding, expected);
-        assert_eq!(view.backend, BackendView::Cpu);
     }
 }
 
 #[test]
 fn configuration_retains_the_configured_worker_budget() {
     let mut state = Configuration::new(workers());
-    let view = state
-        .observe(&ExecutionObservation::CpuClosure {
-            grounder: Grounder::Lazy,
-            batching: SourceBatching::Independent,
-            workers: NonZeroUsize::MIN,
-        })
-        .unwrap();
+    // An observed utilization does not replace the configured capacity.
+    assert!(
+        state
+            .observe(&ExecutionObservation::ParallelProposals {
+                workers: NonZeroUsize::MIN,
+            })
+            .is_none()
+    );
+    let view = state.observe(&formula()).unwrap();
     assert_eq!(view.workers, workers());
 }
 
@@ -54,8 +36,11 @@ fn formula_configuration_preserves_composite_grounding() {
         (
             Some(ExecutionObservation::HybridGrounding {
                 requested: Grounder::Auto,
-                streamed_templates: 2,
-                streamed_instances: 8,
+                streamed: zetesis_solve::StreamedConstraints {
+                    templates: 2,
+                    instances: 8,
+                    ..Default::default()
+                },
             }),
             GroundingDisplay::Hybrid,
         ),
@@ -77,28 +62,6 @@ fn formula_configuration_preserves_composite_grounding() {
         assert_eq!(view.grounding, expected);
         assert_eq!(view.backend, BackendView::Cpu);
     }
-}
-
-#[test]
-fn source_events_wait_for_backend_selection() {
-    let mut state = Configuration::new(workers());
-    for event in [
-        ExecutionObservation::LazyGrounding {
-            requested: Grounder::Auto,
-        },
-        ExecutionObservation::StaticGrounding {
-            requested: Grounder::Auto,
-            atoms: 4,
-            rules: 3,
-            limits: zetesis_core::StaticLimits::default(),
-        },
-    ] {
-        assert!(state.observe(&event).is_none());
-    }
-    assert_eq!(
-        state.observe(&formula()).unwrap().grounding,
-        GroundingDisplay::Eager
-    );
 }
 
 #[cfg(feature = "gpu")]
@@ -128,7 +91,6 @@ mod device {
                     adapter: adapter(&name),
                     projection: zetesis_wgpu::GateProjection::Enumerated,
                     grounder: Grounder::Auto,
-                    search: SearchMethod::Regions,
                     batch_size: NonZeroUsize::new(32).unwrap(),
                     completion_workers: NonZeroUsize::new(2).unwrap(),
                 },
@@ -138,7 +100,6 @@ mod device {
                 ExecutionObservation::DeviceTight {
                     adapter: adapter(&name),
                     grounder: Grounder::Auto,
-                    search: SearchMethod::Regions,
                     batch_size: NonZeroUsize::new(32).unwrap(),
                 },
                 false,
@@ -163,19 +124,16 @@ mod device {
     #[test]
     fn backend_promotion_reports_the_new_configuration() {
         let mut state = Configuration::new(workers());
-        let first = state
-            .observe(&ExecutionObservation::CpuClosure {
-                grounder: Grounder::Lazy,
-                batching: SourceBatching::Independent,
-                workers: workers(),
-            })
-            .unwrap();
+        let first = state.observe(&formula()).unwrap();
         assert_eq!(first.backend, BackendView::Cpu);
-        assert_eq!(first.grounding, GroundingDisplay::Lazy);
+        assert_eq!(first.grounding, GroundingDisplay::Eager);
         let promoted = state
-            .observe(&ExecutionObservation::DeviceClosure {
+            .observe(&ExecutionObservation::DeviceFormula {
                 adapter: adapter("promoted adapter"),
-                static_counts: Some((4, 3)),
+                projection: zetesis_wgpu::GateProjection::Enumerated,
+                grounder: Grounder::Auto,
+                batch_size: NonZeroUsize::new(32).unwrap(),
+                completion_workers: NonZeroUsize::new(2).unwrap(),
             })
             .unwrap();
         assert_eq!(
@@ -183,28 +141,9 @@ mod device {
             BackendView::Gpu {
                 adapter: "promoted adapter",
                 api: "Metal",
-                cpu_completion: false,
+                cpu_completion: true,
             }
         );
         assert_eq!(promoted.grounding, GroundingDisplay::Eager);
-    }
-
-    #[test]
-    fn source_device_closure_reports_lazy_grounding() {
-        let mut state = Configuration::new(workers());
-        assert!(
-            state
-                .observe(&ExecutionObservation::LazyDeviceGrounding {
-                    requested: Grounder::Lazy,
-                })
-                .is_none()
-        );
-        let view = state
-            .observe(&ExecutionObservation::DeviceClosure {
-                adapter: adapter("lazy adapter"),
-                static_counts: None,
-            })
-            .unwrap();
-        assert_eq!(view.grounding, GroundingDisplay::Lazy);
     }
 }

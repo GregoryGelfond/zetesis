@@ -2,21 +2,53 @@
 //! phases; only finalized buffers and Graph can cross into device residency.
 
 use super::FormulaLimits;
-use super::packing::{Graph, Plan, Schedule, Shape, address, capacity, vector};
+use super::packing::{Graph, Plan, Schedule, Shape, capacity, vector};
+use crate::formula_graph::dependency;
+#[cfg(test)]
+use crate::formula_graph::dependency::insert_position;
 use crate::{GpuError, GpuErrorKind};
-use zetesis_cpu::Cancellation;
+use zetesis_algebra::Cancellation;
 use zetesis_ferraris::Theory;
 
 pub(super) struct Preparation {
     shape: Shape,
     minimum: Plan,
     limits: FormulaLimits,
+    propagation: crate::GpuPropagation,
+    workgroup_sizing: crate::GpuWorkgroupSizing,
 }
 
 pub(super) struct PreparedGraph {
     pub(super) graph: Graph,
     pub(super) nodes: Vec<u32>,
     pub(super) roots: Vec<u32>,
+}
+
+impl PreparedGraph {
+    // Reuse the packed graph and its actual upload capacities when selecting a
+    // larger prefix. No depth calculation or graph packing is repeated.
+    pub(super) fn plan(
+        &self,
+        worlds: usize,
+        limits: FormulaLimits,
+        device: &wgpu::Limits,
+        epoch: u32,
+    ) -> Result<Plan, GpuError> {
+        let mut plan = Plan::new(&self.graph, worlds, limits, device, true, epoch)?;
+        plan.staging(
+            self.graph.shape.node_bytes,
+            retained_bytes(&self.nodes)?,
+            0,
+            limits.max_batch_bytes,
+        )?;
+        plan.staging(
+            self.graph.schedule.root_bytes,
+            0,
+            retained_bytes(&self.roots)?,
+            limits.max_batch_bytes,
+        )?;
+        Ok(plan)
+    }
 }
 
 impl Preparation {
@@ -46,14 +78,27 @@ impl Preparation {
         epoch: u32,
         cancellation: &Cancellation,
     ) -> Result<Self, GpuError> {
-        let shape = Shape::with_control(theory, device, cancellation)?;
+        let shape = Shape::with_control(theory, device, limits.max_batch_bytes, cancellation)?;
         let serial = Schedule::new(&shape, 0, device)?;
         let minimum = Plan::layout(&shape, &serial, worlds, limits, device, true, epoch)?;
         Ok(Self {
             shape,
             minimum,
             limits,
+            propagation: crate::GpuPropagation::Dense,
+            workgroup_sizing: crate::GpuWorkgroupSizing::default(),
         })
+    }
+
+    pub(super) fn with_propagation(mut self, propagation: crate::GpuPropagation) -> Self {
+        self.propagation = propagation;
+        self
+    }
+
+    /// The sizing whose dispatched workgroup size the finished graph records.
+    pub(super) fn with_workgroup_sizing(mut self, sizing: crate::GpuWorkgroupSizing) -> Self {
+        self.workgroup_sizing = sizing;
+        self
     }
 
     pub(super) fn finish(
@@ -81,33 +126,118 @@ impl Preparation {
             0,
             self.limits.max_batch_bytes,
         )?;
-        let mut map = vector(self.shape.map)?;
-        let mut scratch = vector(self.shape.scratch)?;
-        let temporary_bytes = retained_bytes(&map)?
-            .checked_add(retained_bytes(&scratch)?)
-            .ok_or_else(|| capacity("formula lowering capacity overflows"))?;
-        self.minimum.staging(
-            self.shape.temporary_bytes,
-            temporary_bytes,
-            0,
-            self.limits.max_batch_bytes,
-        )?;
         crate::formula_graph::pack(
             &self.shape.theory,
+            &self.shape.rows,
             &mut nodes,
-            &mut map,
-            &mut scratch,
             cancellation,
         )?;
-        let depth_count = pack_depths(&self.shape, &mut nodes, cancellation)?;
-        // A pure chain has no independent node work. This structural choice is
-        // not a measured crossover policy for other skinny/unbalanced DAGs.
-        let levels = if depth_count == self.shape.nodes {
-            0
-        } else {
-            depth_count
-        };
-        let schedule = Schedule::new(&self.shape, levels, device)?;
+        self.shape.rows.release();
+        let depth_count = dependency::label_depths(
+            self.shape.nodes,
+            self.shape.wide_words,
+            &mut nodes,
+            cancellation,
+        )?;
+        let levels = dependency::parallel_levels(self.shape.nodes, depth_count);
+        let (schedule, plan, mut roots) =
+            self.schedule(levels, &nodes, device, cancellation, &mut reserve)?;
+        dependency::pack(
+            &self.shape.theory,
+            self.shape.nodes,
+            schedule.levels,
+            &nodes,
+            &mut roots,
+            cancellation,
+        )?;
+        finalize_outputs(&self.shape, &mut nodes, cancellation)?;
+        if let Some(incidence) = &schedule.incidence {
+            incidence.pack(&nodes, self.shape.nodes, &mut roots, cancellation)?;
+        }
+        let workgroup_size = crate::kernel::dispatch_size(
+            self.workgroup_sizing,
+            dependency::level_widths(&roots, self.shape.roots, schedule.levels)?,
+            device,
+        );
+        poll(cancellation)?;
+        Ok((
+            PreparedGraph {
+                graph: Graph {
+                    shape: self.shape,
+                    schedule,
+                    workgroup_size,
+                },
+                nodes,
+                roots,
+            },
+            plan,
+        ))
+    }
+
+    fn schedule(
+        &self,
+        levels: u32,
+        nodes: &Vec<u32>,
+        device: &wgpu::Limits,
+        cancellation: &Cancellation,
+        reserve: &mut impl FnMut(usize) -> Result<Vec<u32>, GpuError>,
+    ) -> Result<(Schedule, Plan, Vec<u32>), GpuError> {
+        poll(cancellation)?;
+        let node_capacity = retained_bytes(nodes)?;
+        if self.propagation != crate::GpuPropagation::Dense {
+            for groups in [true, false] {
+                if groups && self.propagation != crate::GpuPropagation::IncrementalGroups {
+                    continue;
+                }
+                let indexed = (|| {
+                    let schedule = Schedule::new(&self.shape, levels, device)?;
+                    let offset = u32::try_from(schedule.root_bytes / 4)
+                        .map_err(|_| capacity("formula incidence offset exceeds u32"))?;
+                    let Some(mut incidence) = crate::formula_graph::incidence::Layout::new(
+                        nodes,
+                        self.shape.nodes,
+                        self.shape.variables,
+                        offset,
+                        cancellation,
+                    )?
+                    else {
+                        return Ok(None);
+                    };
+                    if groups {
+                        incidence = incidence.with_groups()?;
+                    }
+                    let schedule = schedule.with_incidence(incidence, device)?;
+                    self.reserve_schedule(schedule, node_capacity, device, reserve)
+                        .map(Some)
+                })();
+                match indexed {
+                    Ok(Some(prepared)) => return Ok(prepared),
+                    Ok(None) => break,
+                    Err(error)
+                        if matches!(
+                            error.kind(),
+                            GpuErrorKind::Capacity | GpuErrorKind::Allocation
+                        ) => {}
+                    Err(error) => return Err(error),
+                }
+            }
+        }
+        poll(cancellation)?;
+        self.reserve_schedule(
+            Schedule::new(&self.shape, levels, device)?,
+            node_capacity,
+            device,
+            reserve,
+        )
+    }
+
+    fn reserve_schedule(
+        &self,
+        schedule: Schedule,
+        node_capacity: u64,
+        device: &wgpu::Limits,
+        reserve: &mut impl FnMut(usize) -> Result<Vec<u32>, GpuError>,
+    ) -> Result<(Schedule, Plan, Vec<u32>), GpuError> {
         let mut plan = Plan::layout(
             &self.shape,
             &schedule,
@@ -123,41 +253,14 @@ impl Preparation {
             0,
             self.limits.max_batch_bytes,
         )?;
-        plan.staging(
-            self.shape.temporary_bytes,
-            temporary_bytes,
-            0,
-            self.limits.max_batch_bytes,
-        )?;
-        poll(cancellation)?;
-        let mut roots = reserve_words(&mut reserve, schedule.root_bytes)?;
+        let roots = reserve_words(reserve, schedule.root_bytes)?;
         plan.staging(
             schedule.root_bytes,
             0,
             retained_bytes(&roots)?,
             self.limits.max_batch_bytes,
         )?;
-        pack_schedule(
-            &self.shape,
-            &schedule,
-            &nodes,
-            &map,
-            &mut roots,
-            cancellation,
-        )?;
-        finalize_outputs(&self.shape, &mut nodes, cancellation)?;
-        poll(cancellation)?;
-        Ok((
-            PreparedGraph {
-                graph: Graph {
-                    shape: self.shape,
-                    schedule,
-                },
-                nodes,
-                roots,
-            },
-            plan,
-        ))
+        Ok((schedule, plan, roots))
     }
 }
 
@@ -186,119 +289,6 @@ fn reserve_words(
         ));
     }
     Ok(words)
-}
-
-fn pack_depths(
-    shape: &Shape,
-    nodes: &mut [u32],
-    cancellation: &Cancellation,
-) -> Result<u32, GpuError> {
-    let expected = (shape.nodes as usize * 4 + shape.wide_words as usize).max(4);
-    if nodes.len() != expected {
-        return Err(capacity("physical formula packing coverage differs"));
-    }
-    let mut levels = 0;
-    for index in 0..shape.nodes as usize {
-        poll(cancellation)?;
-        let start = index * 4;
-        let header = [nodes[start], nodes[start + 1], nodes[start + 2]];
-        let child_depth = |child: u32| -> Result<u32, GpuError> {
-            if child as usize >= index {
-                return Err(capacity("formula depth child is not a prior node"));
-            }
-            Ok(nodes[child as usize * 4 + 3])
-        };
-        let depth = match header[0] {
-            0 | 1 => 0,
-            2..=4 => child_depth(header[1])?
-                .max(child_depth(header[2])?)
-                .checked_add(1)
-                .ok_or_else(|| capacity("formula dependency depth overflows"))?,
-            5 | 6 => {
-                let mut depth = 0_u32;
-                for offset in 0..header[2] as usize {
-                    poll(cancellation)?;
-                    let child = nodes[shape.nodes as usize * 4 + header[1] as usize + offset];
-                    depth = depth.max(child_depth(child)?);
-                }
-                depth
-                    .checked_add(1)
-                    .ok_or_else(|| capacity("formula dependency depth overflows"))?
-            }
-            _ => return Err(capacity("invalid physical formula operation")),
-        };
-        levels = levels.max(
-            depth
-                .checked_add(1)
-                .ok_or_else(|| capacity("formula levels overflow"))?,
-        );
-        nodes[start + 3] = depth;
-    }
-    Ok(levels)
-}
-
-fn pack_schedule(
-    shape: &Shape,
-    schedule: &Schedule,
-    nodes: &[u32],
-    map: &[u32],
-    roots: &mut Vec<u32>,
-    cancellation: &Cancellation,
-) -> Result<(), GpuError> {
-    poll(cancellation)?;
-    roots.resize(
-        usize::try_from(schedule.root_bytes / 4)
-            .map_err(|_| capacity("formula roots exceed host"))?,
-        0,
-    );
-    for (index, root) in shape.theory.roots().iter().enumerate() {
-        poll(cancellation)?;
-        roots[index] = crate::formula_graph::translated(map, *root)?;
-    }
-    if schedule.levels == 0 {
-        return Ok(());
-    }
-    let prefix = shape.roots as usize;
-    let levels = schedule.levels as usize;
-    let order = prefix + levels + 1;
-    // The offset segment changes from counts to prefix ends, then to starts.
-    for node in nodes.chunks_exact(4).take(shape.nodes as usize) {
-        poll(cancellation)?;
-        let count = roots
-            .get_mut(prefix + node[3] as usize + 1)
-            .filter(|_| node[3] < schedule.levels)
-            .ok_or_else(|| capacity("formula depth exceeds schedule"))?;
-        *count = count
-            .checked_add(1)
-            .ok_or_else(|| capacity("formula level count overflows"))?;
-    }
-    for level in 1..=levels {
-        poll(cancellation)?;
-        roots[prefix + level] = roots[prefix + level]
-            .checked_add(roots[prefix + level - 1])
-            .ok_or_else(|| capacity("formula level prefix overflows"))?;
-    }
-    if roots[prefix + levels] != shape.nodes {
-        return Err(capacity("formula level coverage differs"));
-    }
-    for index in (0..shape.nodes as usize).rev() {
-        poll(cancellation)?;
-        let end = &mut roots[prefix + nodes[index * 4 + 3] as usize + 1];
-        let position = insert_position(end, shape.nodes)?;
-        roots[order + position] = address(index)?;
-    }
-    roots[prefix..order].rotate_left(1);
-    roots[order - 1] = shape.nodes;
-    Ok(())
-}
-
-fn insert_position(end: &mut u32, nodes: u32) -> Result<usize, GpuError> {
-    let position = end
-        .checked_sub(1)
-        .filter(|position| *position < nodes)
-        .ok_or_else(|| capacity("formula level insertion exceeds its node prefix"))?;
-    *end = position;
-    Ok(position as usize)
 }
 
 fn finalize_outputs(

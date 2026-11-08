@@ -2,8 +2,8 @@
 use crate::support::prepared;
 use crate::support::runs::detailed as cli_solve;
 use clap::Parser;
+use zetesis_algebra::Cancellation;
 use zetesis_cli::{Completion, Options, Oracle, RunFailure, SolvePhase, StatisticsView};
-use zetesis_cpu::Cancellation;
 
 fn options(oracle: Oracle) -> Options {
     let mut o =
@@ -21,9 +21,9 @@ fn options(oracle: Oracle) -> Options {
             .unwrap();
     o.statistics_view = StatisticsView::Records;
     o.oracle = oracle;
-    // The batched completion protocol these tests exercise is the clause
-    // method's.
-    o.search = zetesis_cli::SearchMethod::Clauses;
+    // One region walker, whose candidates completion checks in batches: the
+    // protocol these tests exercise.
+    o.workers = std::num::NonZeroUsize::MIN;
     o
 }
 fn config(oracle: Oracle, workers: usize) -> zetesis_cli::PublicationConfig {

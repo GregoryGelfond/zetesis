@@ -13,13 +13,12 @@ use crate::catalog::ReadError;
 pub(super) struct IndexedRows {
     pub(super) payload: Arc<RowBase>,
     pub(super) index: Index,
-    source_owner: Arc<Owner>,
 }
 
 impl IndexedRows {
     /// The atom scope of the writer whose rows these are.
-    pub(super) const fn source_owner(&self) -> &Arc<Owner> {
-        &self.source_owner
+    pub(super) fn source_owner(&self) -> &Arc<Owner> {
+        &self.payload.source_owner
     }
 }
 
@@ -53,7 +52,7 @@ impl Closed {
     /// sharing deduction. This invariant excludes descendant and sibling scopes.
     pub(crate) fn prior_metadata(&self, prior: &Snapshot) -> Result<u128, ReadError> {
         let vocabulary = &prior.data.vocabulary;
-        if !Arc::ptr_eq(&prior.atom_owner, &self.rows.source_owner)
+        if !Arc::ptr_eq(&prior.atom_owner, self.rows.source_owner())
             || !Arc::ptr_eq(&vocabulary.owner, &self.vocabulary.data.owner)
         {
             return Err(ReadError::ForeignCatalog);
@@ -137,11 +136,11 @@ impl Store {
             segments: self.sealed,
             atoms: plan.atoms,
             bytes: plan.row_bytes,
+            source_owner: self.atom_owner,
         });
         let rows = Arc::new(IndexedRows {
             payload,
             index: self.atoms,
-            source_owner: self.atom_owner,
         });
         let bytes = vocabulary.retained_bytes()
             + plan.row_bytes

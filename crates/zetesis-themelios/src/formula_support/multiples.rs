@@ -351,6 +351,103 @@ impl<'a, 'source> Join<'a, 'source> {
             None => Ok(Some(ordinary)),
         }
     }
+
+    /// Intersect a selected scalar range with an already-certified multiples
+    /// domain before constructing the range union. Equality/table probes keep
+    /// their priority. The caller has already declined a bound-column posting.
+    pub(super) fn multiples_range_probe(
+        &self,
+        source: &'source RelationRows<'source>,
+        variable: usize,
+        cut: (Relation, i32),
+        context: &mut Context<'_, &Computation<'_, '_>>,
+    ) -> Result<Option<Probe<'a, 'source>>, FormulaFailure> {
+        let Some(mut prepared) = self
+            .multiples
+            .filter(|prepared| prepared.depth == self.depth && prepared.dividend == variable)
+        else {
+            return Ok(None);
+        };
+        if self.source_evidence {
+            return Ok(None);
+        }
+        tick(context)?;
+        if !prepared.source.same_occurrences(source.atoms) {
+            return Err(FormulaFailure::SupportRelation {
+                error: zetesis_core::relation::Failure::Owner,
+                location: context.work.location,
+            });
+        }
+        if self
+            .values
+            .is_bound(prepared.dividend, context.work.location)?
+        {
+            return Ok(None);
+        }
+        let divisor = match prepared.divisor {
+            Divisor::Constant(value) => value,
+            Divisor::Variable(slot) => {
+                tick(context)?;
+                let value =
+                    self.values
+                        .read(slot, context.computation.read(), context.work.location)?;
+                let ValueNodeRef::Number(value) = value.descriptor() else {
+                    return Ok(None);
+                };
+                if value <= 0 {
+                    return Ok(None);
+                }
+                value
+            }
+        };
+        tick(context)?;
+        let Some(bounds) = intersect_range(prepared.bounds, cut) else {
+            return Ok(Some(Probe::Indexed(delta::Rows::Interval(0..0))));
+        };
+        prepared.bounds = bounds;
+        let pattern = self.plan.patterns[self.depth];
+        let interval = delta::interval(
+            self.delta,
+            pattern.source,
+            source.old_rows(),
+            source.row_count(),
+        );
+        prepared
+            .posting(
+                source,
+                divisor,
+                interval.len(),
+                Some(&interval),
+                self.support,
+                Context::new(
+                    context.computation,
+                    context.work.limits,
+                    context.work.counters,
+                    context.work.location,
+                ),
+            )
+            .map(|rows| rows.map(Probe::Owned))
+    }
+}
+
+/// Intersection is widened before strict endpoints move. Source bounds are
+/// positive i32 values, so every nonempty result stays in that same domain.
+fn intersect_range(bounds: (i32, i32), (relation, wanted): (Relation, i32)) -> Option<(i32, i32)> {
+    let (low, high) = (i64::from(bounds.0), i64::from(bounds.1));
+    let wanted = i64::from(wanted);
+    let (low, high) = match relation {
+        Relation::Lt => (low, high.min(wanted - 1)),
+        Relation::Le => (low, high.min(wanted)),
+        Relation::Gt => (low.max(wanted + 1), high),
+        Relation::Ge => (low.max(wanted), high),
+        _ => unreachable!("range probe uses an ordering comparison"),
+    };
+    (low <= high).then(|| {
+        (
+            i32::try_from(low).expect("source lower bound"),
+            i32::try_from(high).expect("source upper bound"),
+        )
+    })
 }
 
 impl Prepared<'_> {

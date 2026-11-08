@@ -13,8 +13,8 @@
 //! anchor of that cone, so a chain whose cone holds none returns at once,
 //! without reading its cone or postings.
 //!
-//! A shared associative DAG can hide an intermediate cut such as [C,b,d]
-//! inside ((C or b) or d). Opaque and fully unfolded minima do not identify
+//! A shared associative DAG can hide an intermediate cut such as `[C,b,d]`
+//! inside `((C or b) or d)`. Opaque and fully unfolded minima do not identify
 //! every such cut. For a nested Boolean event, walk its same-kind cone and
 //! filter its distinct node IDs against the existing row anchors. For a native
 //! event, follow the anchor's existing immediate parent edges through same-kind
@@ -42,14 +42,18 @@
 //! Frozen subjects skip this bridge: these are original-subject consequences,
 //! never an assumption about arbitrary frozen-reduct interpretations.
 
+use zetesis_algebra::{Failure, Quota};
+
+use zetesis_algebra::words::Words;
+
 use std::cmp::Ordering;
 use std::num::NonZeroUsize;
 
-use zetesis_cpu::Stop;
+use zetesis_algebra::Stop;
 
-use crate::regions::{Chain, Closure, Count, Narrower, Step, Work, bit, chain_position};
+use crate::regions::{Chain, Closure, Count, Meter, Narrower, Step, bit, chain_position};
 
-use super::{Adjacency, Row, State, Thresholds, reserve};
+use super::{Adjacency, Row, State, reserve};
 
 #[cfg(test)]
 mod anchors_tests;
@@ -70,7 +74,7 @@ pub(super) struct Connectives {
     by_chain: Vec<(usize, usize)>,
     /// One bit per chain: set when its same-kind cone, the nodes an expanded
     /// discovery walk collects, contains a row anchor.
-    anchored_cones: Vec<u64>,
+    anchored_cones: Words<u64>,
 }
 
 impl Connectives {
@@ -102,7 +106,7 @@ impl Connectives {
         let row_postings = Adjacency::build(
             anchors.len(),
             rows.iter().enumerate().filter_map(|(row, data)| {
-                unit_first(data).map(|first| {
+                data.unit_first().map(|first| {
                     let anchor = anchors.binary_search(&first).expect("prepared row anchor");
                     (anchor, row)
                 })
@@ -123,7 +127,11 @@ impl Connectives {
     }
 
     /// Find a processed chain's one anchor, charging each reverse-index probe.
-    fn rows(&self, chain: usize, work: &mut Work<'_>) -> Result<&[usize], Stop> {
+    fn rows<Q: Quota + ?Sized>(
+        &self,
+        chain: usize,
+        work: &mut Meter<'_, Q>,
+    ) -> Result<&[usize], Failure<Q::Error>> {
         let Some(position) = find(&self.by_chain, chain, |&(chain, _)| chain, work)? else {
             return Ok(&[]);
         };
@@ -133,11 +141,15 @@ impl Connectives {
     /// Whether the chain's same-kind cone contains any row anchor. When it
     /// does not, neither discovery from this chain can reach a row.
     fn anchored_cone(&self, chain: usize) -> bool {
-        bit(&self.anchored_cones, chain)
+        self.anchored_cones.contains(chain)
     }
 
     /// A cone node is only a discovery key, not proof of a row relation.
-    fn rows_at(&self, node: usize, work: &mut Work<'_>) -> Result<&[usize], Stop> {
+    fn rows_at<Q: Quota + ?Sized>(
+        &self,
+        node: usize,
+        work: &mut Meter<'_, Q>,
+    ) -> Result<&[usize], Failure<Q::Error>> {
         let Some(anchor) = find(&self.anchors, node, |&condition| condition, work)? else {
             return Ok(&[]);
         };
@@ -145,7 +157,11 @@ impl Connectives {
     }
 
     /// Find a native row's anchor, charging each immutable key probe.
-    fn chains(&self, first: usize, work: &mut Work<'_>) -> Result<&[usize], Stop> {
+    fn chains<Q: Quota + ?Sized>(
+        &self,
+        first: usize,
+        work: &mut Meter<'_, Q>,
+    ) -> Result<&[usize], Failure<Q::Error>> {
         let Some(anchor) = find(&self.anchors, first, |&condition| condition, work)? else {
             return Ok(&[]);
         };
@@ -167,9 +183,9 @@ fn anchored_cones(
     chain_of: &[Option<NonZeroUsize>],
     extrema: &crate::regions::extrema::Extrema,
     anchors: &[usize],
-) -> Result<Vec<u64>, Stop> {
-    let mut marks = reserve(chains.len().div_ceil(64))?;
-    marks.resize(chains.len().div_ceil(64), 0);
+) -> Result<Words<u64>, Stop> {
+    let mut marks = Words::<u64>::new(reserve(chains.len().div_ceil(64))?);
+    marks.storage_mut().resize(chains.len().div_ceil(64), 0);
     for &link in chain_of.iter().flatten() {
         let chain = chain_position(link);
         let source = &chains[chain];
@@ -177,13 +193,13 @@ fn anchored_cones(
             || source.leaves(extrema).iter().any(|&leaf| {
                 match chain_of.get(leaf).copied().flatten().map(chain_position) {
                     Some(inner) if chains[inner].disjunction == source.disjunction => {
-                        bit(&marks, inner)
+                        marks.contains(inner)
                     }
                     _ => anchors.binary_search(&leaf).is_ok(),
                 }
             });
         if reaches {
-            marks[chain / 64] |= 1u64 << (chain % 64);
+            marks.insert(chain);
         }
     }
     Ok(marks)
@@ -192,9 +208,9 @@ fn anchored_cones(
 /// Allocate only after finding a native unit row. Sorting and deduplication
 /// retain one key per distinct anchor; the allocation is bounded by unit rows.
 fn anchor_keys(rows: &[Row]) -> Result<Vec<usize>, Stop> {
-    let count = rows.iter().filter(|row| unit_first(row).is_some()).count();
+    let count = rows.iter().filter(|row| row.unit_first().is_some()).count();
     let mut anchors = reserve(count)?;
-    anchors.extend(rows.iter().filter_map(unit_first));
+    anchors.extend(rows.iter().filter_map(Row::unit_first));
     anchors.sort_unstable();
     anchors.dedup();
     Ok(anchors)
@@ -222,12 +238,12 @@ fn chain_anchors(
 }
 
 /// A shrinking binary-search interval; charge before reading each candidate.
-fn find<T>(
+fn find<T, Q: Quota + ?Sized>(
     values: &[T],
     wanted: usize,
     key: impl Fn(&T) -> usize,
-    work: &mut Work<'_>,
-) -> Result<Option<usize>, Stop> {
+    work: &mut Meter<'_, Q>,
+) -> Result<Option<usize>, Failure<Q::Error>> {
     let mut start = 0;
     let mut end = values.len();
     while start < end {
@@ -242,22 +258,15 @@ fn find<T>(
     Ok(None)
 }
 
-fn unit_first(row: &Row) -> Option<usize> {
-    let &(first, 1) = row.terms.first()? else {
-        return None;
-    };
-    Some(first)
-}
-
 /// Authenticate the shorter canonical row without reordering borrowed leaves.
 /// Distinct leaves at or below the prefix's last condition must all belong to
 /// the prefix, and their count must equal its length. Thus no earlier condition
 /// is missing or replaced by an unrelated leaf. Larger leaves are extensions.
-fn exact_prefix(
+fn exact_prefix<Q: Quota + ?Sized>(
     terms: &[(usize, i128)],
     leaves: &[usize],
-    work: &mut Work<'_>,
-) -> Result<bool, Stop> {
+    work: &mut Meter<'_, Q>,
+) -> Result<bool, Failure<Q::Error>> {
     let prefix = &terms[..terms.len().min(leaves.len())];
     let Some(&(last, _)) = prefix.last() else {
         return Ok(false);
@@ -277,7 +286,11 @@ fn exact_prefix(
 
 /// The candidate interval shrinks on every comparison. Each actual term read
 /// consumes work, including the comparison that finds or rejects membership.
-fn contains(terms: &[(usize, i128)], leaf: usize, work: &mut Work<'_>) -> Result<bool, Stop> {
+fn contains<Q: Quota + ?Sized>(
+    terms: &[(usize, i128)],
+    leaf: usize,
+    work: &mut Meter<'_, Q>,
+) -> Result<bool, Failure<Q::Error>> {
     Ok(find(terms, leaf, |&(condition, _)| condition, work)?.is_some())
 }
 
@@ -292,11 +305,11 @@ fn contains(terms: &[(usize, i128)], leaf: usize, work: &mut Work<'_>) -> Result
 /// This is a metered read of existing geometry, not a retained reachability
 /// index. It allocates nothing and leaves coverage/containment authentication
 /// unchanged. An interrupted applicability query changes no logical state.
-fn needs_ancestor_discovery(
+fn needs_ancestor_discovery<Q: Quota + ?Sized>(
     index: &Narrower,
     anchor: usize,
-    work: &mut Work<'_>,
-) -> Result<bool, Stop> {
+    work: &mut Meter<'_, Q>,
+) -> Result<bool, Failure<Q::Error>> {
     if index.witness_chains.is_empty() {
         return Ok(false);
     }
@@ -331,24 +344,17 @@ fn useful_bound(state: &State, value: bool, bound: i128) -> bool {
     }
 }
 
-impl Thresholds {
-    pub(super) fn has_requirement_links(&self, row: usize) -> bool {
-        !self.related(row).is_empty()
-            || (self.connectives.is_some() && unit_first(&self.rows[row]).is_some())
-    }
-}
-
-impl<C: Count> Closure<'_, C> {
+impl<W: Count, C: crate::regions::ReadingClass> Closure<'_, W, C> {
     /// A processed true Boolean prefix supplies a lower bound to its native
     /// extension; a false Boolean extension supplies an exclusive upper bound
     /// to its native prefix. Each candidate is authenticated before transport.
-    pub(in crate::regions) fn threshold_connective(
+    pub(in crate::regions) fn threshold_connective<Q: Quota + ?Sized>(
         &mut self,
         index: &Narrower,
         chain: usize,
         value: bool,
-        work: &mut Work<'_>,
-    ) -> Result<Step, Stop> {
+        work: &mut Meter<'_, Q>,
+    ) -> Result<Step, Failure<Q::Error>> {
         let source = &index.chains[chain];
         if value != source.disjunction {
             // teach_chain already forced every leaf of a true And or false Or.
@@ -458,13 +464,17 @@ impl<C: Count> Closure<'_, C> {
     /// Compose native-prefix transport with Boolean endpoints discovered for
     /// the same dirty requirement. Both consume original row state and stop at
     /// the first contradiction, without charging the remaining neighbours.
-    pub(in crate::regions) fn threshold_requirements(
+    pub(in crate::regions) fn threshold_requirements<Q: Quota + ?Sized>(
         &mut self,
         index: &Narrower,
         row: usize,
-        work: &mut Work<'_>,
-    ) -> Result<Step, Stop> {
+        work: &mut Meter<'_, Q>,
+    ) -> Result<Step, Failure<Q::Error>> {
         let mut step = self.threshold_prefixes(index, row, work)?;
+        if step == Step::Contradiction {
+            return Ok(step);
+        }
+        step = step.join(self.threshold_capacity(index, row, work)?);
         if step == Step::Contradiction {
             return Ok(step);
         }
@@ -472,7 +482,7 @@ impl<C: Count> Closure<'_, C> {
             return Ok(step);
         };
         let data = &index.thresholds.rows[row];
-        let Some(first) = unit_first(data) else {
+        let Some(first) = data.unit_first() else {
             return Ok(step);
         };
         let source = self.known.thresholds[row];
@@ -520,10 +530,11 @@ impl<C: Count> Closure<'_, C> {
             work.tick()?;
             let chain = &index.chains[chain_index];
             // Keep the cheap truth and bound filters before any cone walk.
-            let sure = chain.disjunction && source.lower >= 1 && !bit(self.known.sure, chain.root);
+            let sure =
+                chain.disjunction && source.lower >= 1 && !self.known.sure.contains(chain.root);
             let never = !chain.disjunction
                 && source.upper.is_some_and(|upper| upper <= length as i128)
-                && !bit(self.known.never, chain.root);
+                && !self.known.never.contains(chain.root);
             if !(sure || never) {
                 continue;
             }

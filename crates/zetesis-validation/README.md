@@ -180,7 +180,10 @@ invocations outside that timed population; it has no command, and its engine,
 are different protocols, not interchangeable timing populations.
 
 `--suite queens` selects the maintained queens encodings;
-`--suite corpus` selects the full clean collection. The profile axes
+`--suite corpus` selects the 94-case correctness catalog and the unchanged
+integrated Family Crossing bundle. Family Crossing is included in the same
+95-case totals and requires fresh clingo qualification. Library consumers use
+`performance::corpus::workloads` to prepare that selection. The profile axes
 (`--compare-backends`, `--compare-grounders`, `--compare-threads`) select
 execution cells. Requested eager/lazy and CPU/GPU policies are recorded
 alongside actual routes; unsupported combinations remain failures. Native and
@@ -213,8 +216,9 @@ Check both semantic qualification and sample scope before comparing timings.
 The matrix accepts the actual closure, countermodel, tight-support and positive-
 consequences procedures. Certified positive consequences require eager CPU
 formula execution and remain distinct from an explicitly requested closure or
-countermodel procedure. Phase schema 3 adds cold `reduct_preparation`; exact
-schema-1 and schema-2 records remain readable with their original phase sets.
+countermodel procedure. Phase schema 3 adds cold `reduct_preparation`, and
+schema 6 removes it with the clause search that entered it; exact records of
+every earlier schema remain readable with their original phase sets.
 Unknown versions or phase/procedure names and contradictory typed/text views are
 refused. A missing phase is not retroactively supplied to an older observation.
 
@@ -222,6 +226,13 @@ refused. A missing phase is not retroactively supplied to an older observation.
 matrix runner for separately retained, caller-bounded JSON and stderr. It checks
 telemetry consistency only; callers still establish process completion and full
 answer-family qualification. It performs no solving or process invocation.
+
+Tight-support work totals sum the dispatched plans' allowances. Cold and
+retained-truth batches can charge differently; the total is not a fixed cost
+per candidate or a count of executed shader instructions. Submitted and decoded
+receipts remain distinct: each population respects the per-candidate ceiling,
+and when all submissions are decoded their work totals must agree. Older
+constant-charge records remain readable without a schema change.
 
 Host phase timings and process wall time are separate. Lazy grounding is
 interleaved with solving; a missing duration stays unavailable. Logical payload,
@@ -307,7 +318,8 @@ Prime sieve at n=30/100/300 and subset sum at n=12/20/30 extend this unchanged
 fourteen-workload prefix to twenty workloads. They exercise positive divisibility
 joins and complete weighted-choice families (15/64/296 subsets), respectively.
 `--include-einstein` adds the unchanged riddle as a twenty-first workload. The
-separate 94-case corpus is unchanged. Sudoku's reviewed source digest and
+separate correctness catalog remains unchanged at 94 cases; the ordinary
+benchmark corpus adds Family Crossing as its 95th case. Sudoku's reviewed source digest and
 exact 81-digit display contract live in `scalability::sudoku`, also used by the
 ordinary CLI correctness test. Its eight givens per row make it a grounding and
 language workload, not a difficult search instance. The examples root is
@@ -375,7 +387,8 @@ A cell that did not pass is listed by its
 decisions, never averaged. The reports may differ in the search method
 alone, which a profile spells as `search`, or as `candidates` in a report
 written before that field, with `region_workers` beside it in one
-campaign's reports. The comparison also scores each report against
+campaign's reports; reports written since the clause search's removal
+request none. The comparison also scores each report against
 the reference solver: a scoreboard per report and profile lists the cells
 where both passed, counts the wins, the cells whose native median lies below
 the reference's, and gives every compared cell, fastest ratio first, with

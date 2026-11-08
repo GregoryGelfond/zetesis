@@ -3,8 +3,7 @@
 Bounded GPU primitives for grounding and answer-set checking. CPU and GPU
 operations share the same reduct obligations; device scheduling does not establish a different
 semantics. The [execution chapter](../../docs/book/architecture/execution.md)
-explains their place in ordinary solving, and the
-[parallel library guide](../../docs/book/rust/parallel.md) describes composition.
+explains their place in ordinary solving.
 
 ## Choose an operation
 
@@ -20,8 +19,10 @@ explains their place in ordinary solving, and the
 On an explicit GPU backend, ordinary formula sessions with automatic membership
 policy select `GpuTightOracle` when complete tight preparation succeeds. Other
 formulas use `GpuFormulaOracle` with exact CPU completion of residual queries;
-explicit countermodel policy also retains that general route. Native aggregate
-and relation operations remain explicit library capabilities.
+explicit countermodel policy also retains that general route. Both formula
+checkers retain native threshold and ordinal min/max rows with shared numeric
+columns. The separate eligibility-mask aggregate and relation operations remain
+explicit library capabilities.
 
 Construct an oracle with `GpuOptions` and an explicit `GpuSelection` where
 reproducibility requires a particular backend. Selection distinguishes physical
@@ -32,16 +33,28 @@ Selection checks each eligible adapter against the requested primitive's
 advertised limits before applying the deterministic ranking, then checks the
 created device's granted limits. The lazy shader requires no workgroup scratch;
 its admission is independent of the static shader's scratch requirement.
-Discovery's `supports_static_oracle` report continues to describe only the static
+Discovery's `supports_formula_oracle` report continues to describe only the static
 profile. A bare `GpuContext` requires compute support and the chosen identity
 policy; a primitive built on that context checks its own granted limits.
 
 `GpuContext` lets distinct primitives retain prepared subjects on one device.
 Standalone `new` and `new_selected` constructors create independent contexts;
 `from_context` shares device resources and their failure boundary.
-`GpuFormulaProfile` additionally retains a compiled formula pipeline on its exact
-context; `GpuFormulaOracle::from_profile` shares that compilation while starting
-fresh theory residency, transport, epochs and statistics. Overlapping operations
+The solve-path primitives also take a `GpuDeviceSource` through `from_source`:
+an independent selection, an existing context, or a `GpuDiscovery`, the adapter
+enumeration an independent constructor performs, begun earlier on a background
+thread and creating no device. A primitive constructed from a discovery selects
+over that adapter enumeration as `new_selected` does, with its own capability
+check and typed errors, then requests its own device. The enumeration is a
+snapshot of the adapters present when the discovery began: an adapter added
+since is not seen, and one removed since fails its device request, so a caller
+keeps a discovery only for as long as it would wait to construct. A discovery
+serves one primitive, and dropping it waits for its thread.
+`GpuFormulaProfile` additionally retains a validated formula shader on its exact
+context and the pipeline of each workgroup size compiled for it, a fitted size
+by the first check that dispatches it; `GpuFormulaOracle::from_profile` shares
+those pipelines while starting fresh theory residency, transport, epochs and
+statistics. Overlapping operations
 return `Busy` without waiting. Primitive byte ceilings retain their local scope. See
 [execution ownership](../../docs/book/architecture/ownership.md) and the
 [ordinary session example](../../docs/book/rust/sessions.md#share-execution-resources).
@@ -57,20 +70,32 @@ Frozen truth still has one value per original node. This removes four requested
 domain bytes per leaf per candidate (subject to the required empty-buffer
 padding), without changing original satisfaction or the frozen query.
 
-All 64 lanes scan distinct semantic-atom positions for the strict-subset
-condition. Their counts and last eligible positions are merged before a zero
-count refutes the query or a unique eligible atom is required to be false.
-Auxiliary nodes never witness strict removal. This uses 24 bytes of workgroup
-storage; a sweep reserves `9*nodes+atoms+65` policy work units, including 64
-summary merges and one application. These units are not GPU instruction counts.
+All of a workgroup's invocations scan distinct semantic-atom positions for the
+strict-subset condition. Their counts and last eligible positions are merged
+before a zero count refutes the query or a unique eligible atom is required to be
+false. Auxiliary nodes never witness strict removal. This uses 24 bytes of
+workgroup storage; a sweep reserves `9*nodes+2*edges+atoms+65+levels` policy work
+units, including a constant 65 for one strict-subset reduction, merging the
+invocations' summaries and applying one projection, whatever the workgroup size,
+and the dependency-level walk. These units are not GPU instruction counts.
 Original truth is evaluated before propagation. A cold graph groups original
-node IDs by dependency level; nodes in a level run in parallel and a barrier
-precedes dependent reads. Pure chains retain serial evaluation because they
+node IDs by dependency level; both formula and tight checkers reuse this layout.
+Nodes in a level run in parallel and a barrier precedes dependent reads. General
+propagation starts by visiting levels in reverse to carry root requirements toward
+operands, then alternates with forward visits to carry deductions back toward
+roots. Both directions use the same frozen gates and atomic domain intersections.
+Pure chains retain serial evaluation because they
 contain no independent node work. Other narrow levels may still pay more in
-synchronization than they gain in parallel work. Setup charges
-`2*nodes+atoms+roots+levels` policy units, with zero level units on the serial path.
+synchronization than they gain in parallel work. Setup reserves
+`2*nodes + edges + atoms + roots + levels` for the formula and
+`atoms + 2*ceil(atoms/32)` for the result masks. A terminal result uses only
+the mask stores from the second allowance. The serial path uses zero level
+units. Both setup and sweeps add the numeric-row allowances in `FormulaLimits`.
 
-Preparation uses O(nodes + roots + levels) host work. Temporary depth words in
+Preparation uses O(nodes + source_edges + roots + levels + g log g) host work. Source edges
+include numeric occurrences examined before constant folding; g counts variable
+numeric guards. A bounded, fallibly allocated row
+directory shares transported columns and is released after packing. Temporary depth words in
 the node upload buffer become dense output positions before any upload; one
 root buffer contains original roots, level offsets and ordered node IDs. Actual
 retained capacities of both staging vectors are admitted together with device
@@ -80,9 +105,111 @@ fresh upload. No incomplete graph, new epoch or submission is published. Driver
 retirement, allocator bookkeeping and the existing requested seed/result host
 allowance are separate from these measured staging capacities.
 
-`FormulaVerdict::Residual` requires the exact host completion path. Candidate
-ordering, original theory identity and the frozen candidate are preserved across
-that boundary. Device results cannot silently change the subject being checked.
+Tight support checking has three routes: complete evaluation, dense reuse of a
+retained evaluation, and an update. Successive batches of one theory and count
+may update each slot's retained evaluation. A readers index, appended to the
+producer buffer once per theory, names for every node the connectives and
+numeric-row owners reading it, the heads of the producers whose body it is and
+the root positions holding it. An update counts a slot's changed atoms, takes
+dense reuse beyond `max(atoms / 8, 64)`, and otherwise re-evaluates, level by
+level, only the nodes the change reaches, maintaining per-head support counts
+and the false-root and unsupported sets. The route engages only for a schedule
+whose dense evaluation takes at least `GpuTightOracle::UPDATE_ENGAGEMENT_STRIDES`
+workgroup strides per dependency level, decided once per resident theory and
+workgroup size; narrower schedules report `NarrowSchedule` and keep the dense
+routes. On an engaged schedule a runtime guard compares each batch's slowest
+update critical path, its costliest invocation per phase by one cost table,
+with dense evaluation's least path by the same table, and after a batch whose
+slowest update costs more declines the route for 1, 2, 4 and up to 32 batches,
+which report `GuardDeclined`; the guard changes no verdict. A batch runs the
+kernel with the update route only when the route is allowed. Every other batch
+runs its dense twin, compiled without the route, which binds no state and leaves
+a state the batch admitted allocated. Each slot's state counts in the
+batch's byte allowance; `TightGpuLimits::min_update_candidates` keeps it from
+shrinking a prefix below the caller's floor, and zero declines the route. Batch
+statistics report the slots per route, the route's availability and the guard's
+two paths.
+
+`GpuKernelOptions` keeps physical choices below the semantic interface. Formula
+and tight profiles choose their cooperating invocations through
+`GpuWorkgroupSizing`. By default each retained theory dispatches the size its
+dependency schedule fits: 64, 128 or 256 within the granted limits, and 64 for
+serial schedules and levels of at most 64 nodes. `Fixed` selects 32, 64, 128 or
+256 for controlled comparisons. Creating a kernel checks the base size against
+the context's granted limits and validates its shader. A fixed size is compiled
+then, through a WGSL pipeline constant; a fitted size is compiled by the first
+check that dispatches it, so a solve compiles only the size it uses. A
+compilation failure fails construction or that check, before any dispatch, and
+invalidates the context. Batch statistics report the size
+dispatched. Supported subgroup
+instructions combine strict-subset summaries before their workgroup-wide merge;
+no subgroup width is assumed. The portable alternative uses the same integer
+reduction and barriers. This changes neither the frozen candidate nor the
+meaning of a residual. Optional instructions can be disabled for comparisons.
+
+General formula profiles can explicitly select the experimental
+`GpuPropagation::ChangedDependencies`; `Dense` remains the default. An immutable
+directory maps each physical domain slot to gates that read it as an operand or
+output. Atom aliases therefore share wakeups. Every gate is eligible in the first
+sweep; later sweeps visit active bits directly, without walking inactive nodes or
+dependency levels. Lanes own disjoint bitmap words; a private seen mask limits
+each gate to one visit per sweep. Reloading a word can pick up newly active gates
+not yet visited. Each narrowing, including strict-subset forcing, marks both the
+current and next candidate-local bitsets, so wakes after a visit or a word's
+completion survive into the next sweep. The next-generation bitset is reset only
+at uniform sweep boundaries. Original truth retains its dependency schedule;
+frozen transfers retain their sound atomic intersections and boundary barriers.
+An original-false composite still cannot constrain its children.
+
+The directory adds host preparation and retained device storage; each candidate
+adds two bitsets of `ceil(nodes/32)` words. Admission includes these capacities
+with the complete batch, and work receipts retain the dense allowance plus
+conservative initialization, lookup and wakeup costs. Skipped transfers do not
+earn a smaller reported work charge. If optional storage or its work allowance
+cannot be admitted, preparation selects dense execution on the same device. A
+smaller allowance for an indexed resident can trigger fresh dense preparation;
+it need not preserve that residency. Batch statistics report the selected route.
+Tight checking has no frozen propagation and accepts only `Dense`.
+
+`GpuPropagation::IncrementalGroups` additionally retains two permission counts
+per native AND/OR group. Counts start after frozen domains and roots are set,
+then each uniquely removed domain bit updates every operand occurrence through
+the same incidence directory before publishing its wake. Counts can temporarily
+lag domain intersections, so they relax output possibilities rather than removing
+valid completions. A required unique witness still uses a distinct physical-slot
+scan; repeated atom occurrences are not distinct witnesses. Original-false groups
+remain disabled.
+
+The optional map adds one shared word per node and a group-count word; each
+candidate adds two words per group. The general uniform is padded to 64 bytes.
+No groups means no optional map, candidate counters or extra work. Initialization
+and notification costs are conservatively added to the existing dense receipt;
+skipped scans do not earn a refund. If the complete memory/work envelope cannot
+admit these counters, preparation reports `ChangedDependencies` with scanned
+groups, or its `Dense` fallback. The requested profile remains unchanged. These
+routes are independently selectable for comparison, not promises of fewer
+residual queries or faster execution.
+
+The refinement obligation is to preserve every compatible proper-subset reduct
+model while ensuring changed domains cannot lose their dependent transfers.
+Tests exercise that boundary; existing Lean laws do not establish this shader
+scheduler's correspondence. Exact host completion of residuals remains required.
+
+A residual carries its reason and an owned region over the semantic atoms of
+one candidate. The device writes two mask words for each group of 32 atoms.
+One mask identifies atoms forced true and the other identifies atoms forced
+false. The readback binds both to the submitted candidate and checks their
+shape, polarity and padding. A dispatch reserves one classification per atom
+and two stores per word for this projection. Terminal results skip the
+classification and write zero masks.
+
+The host starts the same candidate's frozen-reduct query in that region, with
+fresh knowledge and an ordinary first narrowing. This also applies when a
+round or work limit stops the device before a fixed point. A proper-subset
+witness refutes the candidate after validation. If the regional search
+exhausts, the checked device coverage justifies using its result for the
+whole candidate. A caller supplying its own region learns only whether that
+region contains a witness.
 
 The static operation receives a complete ground program; `check_batch` performs
 no lazy tuple discovery. Lazy execution instead admits bounded source instances
@@ -168,6 +295,23 @@ the error kind alone cannot justify reuse. Resident buffers may still be dropped
 by their primitive after a failed call, independently of shared context health.
 
 ## Native numeric aggregates
+
+Ordinary formula checking retains nonnegative thresholds and ordinal min/max
+cuts directly. Each original node keeps its ID; guards share condition and
+value columns. A complete-row bound certifies whether arithmetic fits
+in 32, 64 or 128 bits; no candidate-dependent sample justifies narrowing.
+Certified 32-bit rows store one value column; other rows store the two limbs
+of each u64 contribution. Guard bounds and arithmetic retain four u32 limbs
+for the full admitted weighted-sum range. Supported
+integer-64 instructions operate on two limbs for full-width values or one for
+certified 64-bit values; the portable implementation retains exact carry and
+borrow operations. Ordinal certificates include the empty-minimum sentinel.
+Constants omit unused rows. Original
+truth is exact; frozen propagation uses conservative linear reductions with
+explicit CPU completion of residuals. This path does not require optional GPU
+integer features or supplied host eligibility masks.
+
+The following separate operation reduces already-prepared eligibility masks.
 
 Native aggregate admission requires already OR-coalesced complete tuple keys
 and refuses duplicates. `AggregateGpuPlan` accepts an owned native `Group` or a

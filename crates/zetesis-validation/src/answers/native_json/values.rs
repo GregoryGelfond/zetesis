@@ -40,10 +40,13 @@ pub(super) fn sign(value: &Json) -> Result<Sign, Error> {
 
 pub(super) fn value(value: &Json, limits: Limits, nodes: &mut usize) -> Result<Value, Error> {
     let raw = array(value, "native value nodes")?;
-    *nodes = nodes
-        .checked_add(raw.len())
-        .ok_or_else(|| invalid(Issue::CountOverflow, "native value node count"))?;
-    check(Resource::ValueNodes, limits.max_value_nodes, *nodes)?;
+    super::record_attempt(
+        nodes,
+        raw.len(),
+        limits.max_value_nodes,
+        Resource::ValueNodes,
+        "native value node count",
+    )?;
     // Check the per-value node ceiling before allocating its owned flat sequence.
     if raw.len() > limits.value.max_nodes {
         return Err(Error::Value(zetesis_core::ValueError::Limit {

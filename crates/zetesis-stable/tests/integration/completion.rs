@@ -1,0 +1,619 @@
+//! Joined parallel membership shares one solve budget and preserves ordered coverage.
+
+use std::collections::BTreeSet;
+use std::convert::Infallible;
+use std::num::NonZeroUsize;
+
+use crate::support::batching::{batch, residual};
+use crate::support::choice_theories::three_choices_falsum_first;
+use zetesis_ferraris::{Interpretation, Node, Theory};
+use zetesis_stable::{
+    BatchError, BatchVerdict, Cancellation, CompletionExecutor, Incomplete, Limits, SearchLimits,
+    StableModels,
+};
+use zetesis_theory_support::theories::theory;
+
+fn executor(workers: usize) -> CompletionExecutor {
+    CompletionExecutor::new(NonZeroUsize::new(workers).unwrap()).unwrap()
+}
+
+/// The ordered result storage of a batch of `candidates`: the scratch that a
+/// certificate-only completion holds, with no query workspace.
+fn result_bytes(theory: &Theory, candidates: usize) -> u64 {
+    let mut search = StableModels::new(theory, Limits::default(), Cancellation::default()).unwrap();
+    let mut pool = executor(1);
+    let models = search
+        .next_batch_with_completion(batch(candidates), &mut pool, |_, rows| {
+            Ok::<_, Infallible>(vec![BatchVerdict::NoProperSubset; rows.len()])
+        })
+        .unwrap();
+    assert_eq!(models.len(), candidates);
+    let statistics = pool.last_statistics().unwrap();
+    assert_eq!((statistics.effective_workers, statistics.residuals), (0, 0));
+    assert_eq!(
+        statistics.requested_scratch_bytes,
+        statistics.peak_scratch_bytes
+    );
+    statistics.peak_scratch_bytes
+}
+
+/// The admitted workers and measured scratch peak of a residual batch of
+/// `candidates` under `workers`: its result storage and each admitted
+/// worker's fresh query workspace.
+fn residual_scratch(theory: &Theory, candidates: usize, workers: usize) -> (usize, u64) {
+    let mut search = StableModels::new(theory, Limits::default(), Cancellation::default()).unwrap();
+    let mut pool = executor(workers);
+    search
+        .next_batch_with_completion(batch(candidates), &mut pool, residual)
+        .unwrap();
+    let statistics = pool.last_statistics().unwrap();
+    assert!(statistics.peak_scratch_bytes > statistics.requested_scratch_bytes);
+    (statistics.effective_workers, statistics.peak_scratch_bytes)
+}
+
+fn atoms(models: Vec<Interpretation>) -> Vec<Vec<usize>> {
+    models
+        .into_iter()
+        .map(|model| model.atoms().collect())
+        .collect()
+}
+
+fn collect(
+    t: &Theory,
+    count: usize,
+    executor: &mut CompletionExecutor,
+) -> (Vec<Vec<usize>>, zetesis_stable::Statistics) {
+    let mut search = StableModels::new(t, Limits::default(), Cancellation::default()).unwrap();
+    let mut result = Vec::new();
+    while !search.exhausted() {
+        result.extend(atoms(
+            search
+                .next_batch_with_completion(batch(count), executor, residual)
+                .unwrap(),
+        ));
+        assert_eq!(search.batch_statistics().pending, 0);
+    }
+    assert_eq!(
+        search.statistics().candidates,
+        search.batch_statistics().committed
+    );
+    (result, search.statistics())
+}
+
+// Compare the semantic receipts across routes; the operational counters of
+// joined workers are compared where a test fixes the chunk schedule.
+fn assert_same_family_accounting(
+    actual: &(Vec<Vec<usize>>, zetesis_stable::Statistics),
+    reference: &(Vec<Vec<usize>>, zetesis_stable::Statistics),
+) {
+    assert_eq!(actual.0, reference.0);
+    let (actual, reference) = (&actual.1, &reference.1);
+    assert_eq!(
+        (
+            actual.candidate_restrictions,
+            actual.candidates,
+            actual.countermodel_queries,
+            actual.countermodels,
+            actual.stable_models
+        ),
+        (
+            reference.candidate_restrictions,
+            reference.candidates,
+            reference.countermodel_queries,
+            reference.countermodels,
+            reference.stable_models
+        ),
+    );
+    assert_eq!(actual.certified, reference.certified);
+    assert_eq!(actual.reduct.original_work, reference.reduct.original_work);
+    // These fixtures admit the same shape, so retained capacity must agree too.
+    assert_eq!(
+        actual.reduct.peak_workspace_bytes,
+        reference.reduct.peak_workspace_bytes
+    );
+}
+
+#[test]
+fn parallel_completion_matches_reference_and_scalar_order_across_reused_theories_and_batches() {
+    let mut parallel = executor(3);
+    assert_eq!(parallel.workers(), 3);
+    assert_eq!(parallel.last_statistics(), None);
+    let mut scalar = CompletionExecutor::default();
+    assert_eq!(scalar.workers(), 1);
+    for left in 0..3 {
+        for right in 0..3 {
+            for connective in [
+                Node::and_pair([left, right]),
+                Node::or_pair([left, right]),
+                Node::implies(left, right),
+            ] {
+                for roots in [vec![], vec![3], vec![4], vec![3, 4]] {
+                    let t = theory(
+                        2,
+                        vec![
+                            Node::atom(0),
+                            Node::atom(1),
+                            Node::falsum(),
+                            connective,
+                            Node::implies(3, 2),
+                        ],
+                        roots,
+                    );
+                    let expected: BTreeSet<Vec<_>> = (0..4)
+                        .filter_map(|mask| {
+                            let candidate = Interpretation::new(
+                                &t,
+                                (0..2).filter(|atom| mask & (1 << atom) != 0),
+                            )
+                            .unwrap();
+                            zetesis_ferraris::check(
+                                &t,
+                                &candidate,
+                                zetesis_ferraris::Limits::default(),
+                                &Cancellation::default(),
+                            )
+                            .unwrap()
+                            .accepted()
+                            .then(|| candidate.atoms().collect())
+                        })
+                        .collect();
+                    let actual = collect(&t, 3, &mut parallel);
+                    assert_same_family_accounting(&actual, &collect(&t, 3, &mut scalar));
+                    assert_eq!(actual.0.into_iter().collect::<BTreeSet<_>>(), expected);
+                }
+            }
+        }
+    }
+    for t in [
+        three_choices_falsum_first(),
+        theory(0, vec![], vec![]),
+        theory(0, vec![Node::falsum()], vec![0]),
+    ] {
+        for count in [1, 3, 8, 32] {
+            assert_same_family_accounting(
+                &collect(&t, count, &mut parallel),
+                &collect(&t, count, &mut scalar),
+            );
+        }
+    }
+}
+
+fn partial(limits: Limits, executor: &mut CompletionExecutor) -> StableModels {
+    let mut search = StableModels::new(
+        &three_choices_falsum_first(),
+        limits,
+        Cancellation::default(),
+    )
+    .unwrap();
+    let result = search.next_batch_with_completion(batch(3), executor, |_, candidates| {
+        assert_eq!(candidates.len(), 3);
+        Err::<Vec<BatchVerdict>, _>("retain proposals before completion")
+    });
+    assert!(matches!(result, Err(BatchError::Checker(_))));
+    search
+}
+
+#[test]
+fn shared_work_ceiling_includes_residual_workers() {
+    // Measure the same four-worker, three-candidate prestate that each limited
+    // replay uses.
+    let mut parallel = executor(4);
+    let mut complete = partial(Limits::default(), &mut parallel);
+    let proposed = complete.statistics().search;
+    assert_eq!(
+        complete
+            .next_batch_with_completion(batch(3), &mut parallel, residual)
+            .unwrap()
+            .len(),
+        3
+    );
+    let finished = complete.statistics().search;
+    assert!(finished.work > proposed.work);
+    let progress = parallel.last_statistics().unwrap();
+    assert_eq!((progress.workers, progress.effective_workers), (4, 3));
+    let residual_work = finished.work - proposed.work;
+    for repeat in 0..8 {
+        for extra in [0, 1, residual_work / 2, residual_work - 1, residual_work] {
+            let ceiling = proposed.work + extra;
+            let limits = Limits {
+                search: SearchLimits {
+                    max_work: ceiling,
+                    ..SearchLimits::default()
+                },
+                ..Limits::default()
+            };
+            let mut search = partial(limits, &mut parallel);
+            let result = search.next_batch_with_completion(batch(3), &mut parallel, residual);
+            assert_eq!(
+                search.statistics().search.work,
+                ceiling,
+                "repeat {repeat}, extra {extra}"
+            );
+            if ceiling == finished.work {
+                assert_eq!(result.unwrap().len(), 3);
+                assert_eq!(search.statistics().search, finished);
+                assert_eq!(search.batch_statistics().pending, 0);
+            } else {
+                assert!(matches!(
+                    result,
+                    Err(BatchError::Search(Incomplete::WorkLimit))
+                ));
+                assert_eq!(search.batch_statistics().pending, 3);
+                assert_eq!(search.batch_statistics().committed, 0);
+                assert_eq!(search.statistics().stable_models, 0);
+                assert!(!search.exhausted());
+                let progress = parallel.last_statistics().unwrap();
+                assert_eq!(progress.candidates, 3);
+                assert_eq!(progress.completed + progress.failed, 3);
+                assert!(progress.failed > 0);
+            }
+        }
+    }
+}
+
+/// a <- b.  b <- a.  a | b | c.  once for each copy, over three atoms each.
+fn positive_cycles(copies: usize) -> Theory {
+    let mut nodes = Vec::new();
+    let mut roots = Vec::new();
+    for copy in 0..copies {
+        let base = nodes.len();
+        nodes.extend([
+            Node::atom(3 * copy),
+            Node::atom(3 * copy + 1),
+            Node::atom(3 * copy + 2),
+            Node::implies(base + 1, base),
+            Node::implies(base, base + 1),
+            Node::or_pair([base, base + 1]),
+            Node::or_pair([base + 5, base + 2]),
+        ]);
+        roots.extend([base + 3, base + 4, base + 6]);
+    }
+    theory(3 * copies, nodes, roots)
+}
+
+#[test]
+fn shared_decision_ceiling_includes_proposals_and_residuals() {
+    let mut scalar = executor(1);
+    let mut parallel = executor(4);
+    // Independent positive cycles under disjunctions: the walk splits to
+    // propose, and minimality of a cycle's atoms needs proper-subset branching.
+    // Find a measured batch with reduct decisions before testing its shared
+    // decision cap.
+    let t = positive_cycles(3);
+    let mut measured = StableModels::new(&t, Limits::default(), Cancellation::default()).unwrap();
+    let _ = measured.next_batch(batch(16), |_, _| Err::<Vec<BatchVerdict>, _>("measure"));
+    let proposed_decisions = measured.statistics().search.decisions;
+    let proposals = measured.batch_statistics().pending;
+    let first = atoms(
+        measured
+            .next_batch_with_completion(batch(16), &mut scalar, residual)
+            .unwrap(),
+    );
+    let total = measured.statistics().search.decisions;
+    assert!(total > proposed_decisions);
+    for ceiling in [proposed_decisions, total - 1, total] {
+        let limits = Limits {
+            search: SearchLimits {
+                max_decisions: ceiling,
+                ..SearchLimits::default()
+            },
+            ..Limits::default()
+        };
+        let mut search = StableModels::new(&t, limits, Cancellation::default()).unwrap();
+        let result = search.next_batch_with_completion(batch(16), &mut parallel, residual);
+        assert_eq!(search.statistics().search.decisions, ceiling);
+        if ceiling == total {
+            assert_eq!(atoms(result.unwrap()), first);
+        } else {
+            assert!(matches!(
+                result,
+                Err(BatchError::Search(Incomplete::DecisionLimit))
+            ));
+            assert_eq!(search.batch_statistics().pending, proposals);
+            assert_eq!(search.statistics().stable_models, 0);
+        }
+    }
+}
+
+#[test]
+fn checker_retry_restriction_and_failed_certificate_preserve_the_owned_batch() {
+    let mut pool = executor(3);
+    let mut search = partial(Limits::default(), &mut pool);
+    assert_eq!(pool.last_statistics(), None);
+    let original = search.theory().clone();
+    let restriction = theory(3, vec![Node::falsum()], vec![0]);
+    search.restrict_candidates(&restriction).unwrap();
+    let result = search.next_batch_with_completion(batch(3), &mut pool, |theory, candidates| {
+        assert!(theory.same_instance(&original));
+        for candidate in candidates {
+            assert!(
+                zetesis_ferraris::check(
+                    theory,
+                    candidate,
+                    zetesis_ferraris::Limits::default(),
+                    &Cancellation::default()
+                )
+                .unwrap()
+                .accepted()
+            );
+        }
+        Ok::<_, Infallible>(vec![
+            BatchVerdict::NoProperSubset,
+            BatchVerdict::NotModel,
+            BatchVerdict::Residual,
+        ])
+    });
+    assert!(matches!(
+        result,
+        Err(BatchError::Search(Incomplete::InvalidWitness))
+    ));
+    assert_eq!(search.batch_statistics().pending, 3);
+    assert_eq!(search.batch_statistics().committed, 0);
+    assert_eq!(search.statistics().stable_models, 0);
+    let progress = pool.last_statistics().unwrap();
+    assert_eq!(progress.completed, 2);
+    assert_eq!(progress.failed, 1);
+    assert!(!search.exhausted());
+    assert!(matches!(
+        search.next_batch_with_completion(batch(3), &mut pool, residual),
+        Err(BatchError::Search(Incomplete::ClosedEnumerator))
+    ));
+
+    let mut retry = partial(Limits::default(), &mut pool);
+    retry.restrict_candidates(&restriction).unwrap();
+    assert_eq!(
+        retry
+            .next_batch_with_completion(batch(3), &mut pool, residual)
+            .unwrap()
+            .len(),
+        3
+    );
+    assert!(
+        retry
+            .next_batch_with_completion(batch(3), &mut pool, residual)
+            .unwrap()
+            .is_empty()
+    );
+    assert!(retry.exhausted());
+}
+
+#[test]
+fn cancellation_before_workspace_admission_keeps_pending_candidates() {
+    let cancellation = Cancellation::default();
+    let mut search = StableModels::new(
+        &three_choices_falsum_first(),
+        Limits::default(),
+        cancellation.clone(),
+    )
+    .unwrap();
+    let mut pool = executor(4);
+    let result = search.next_batch_with_completion(batch(3), &mut pool, |theory, candidates| {
+        cancellation.cancel();
+        residual(theory, candidates)
+    });
+    assert!(matches!(
+        result,
+        Err(BatchError::Search(Incomplete::Cancelled))
+    ));
+    assert_eq!(search.batch_statistics().pending, 3);
+    assert_eq!(search.statistics().stable_models, 0);
+    assert_eq!(pool.last_statistics().unwrap().candidates, 0);
+    assert_eq!(pool.last_statistics().unwrap().failed, 0);
+    assert_eq!(pool.last_statistics().unwrap().completed, 0);
+    // The same pool is reusable after the caller's cancelled solve.
+    assert_eq!(
+        collect(&three_choices_falsum_first(), 3, &mut pool).0.len(),
+        8
+    );
+}
+
+#[test]
+fn opt_in_worker_sums_do_not_replace_scalar_search_wall_intervals() {
+    for workers in [1, 3] {
+        let mut pool = executor(workers);
+        let mut search = StableModels::new(
+            &three_choices_falsum_first(),
+            Limits::default(),
+            Cancellation::default(),
+        )
+        .unwrap();
+        search.enable_phase_timing();
+        search
+            .next_batch_with_completion(batch(3), &mut pool, residual)
+            .unwrap();
+        let progress = pool.last_statistics().unwrap();
+        assert!(progress.elapsed.is_some());
+        assert_eq!(progress.residuals, 3);
+        let timing = search.statistics().phase_timings.unwrap();
+        if workers == 1 {
+            assert_eq!(progress.worker_original_validation, None);
+            assert_eq!(progress.worker_reduct, None);
+            assert_eq!(timing.original_validation.calls, 6);
+            assert_eq!(timing.reduct.calls, 3);
+        } else {
+            assert_eq!(progress.worker_original_validation.unwrap().calls, 3);
+            assert_eq!(progress.worker_reduct.unwrap().calls, 3);
+            assert_eq!(timing.original_validation.calls, 3);
+            assert_eq!(timing.reduct.calls, 0);
+        }
+        collect(&three_choices_falsum_first(), 3, &mut pool);
+        assert_eq!(pool.last_statistics().unwrap().elapsed, None);
+        assert_eq!(pool.last_statistics().unwrap().worker_reduct, None);
+    }
+}
+
+#[test]
+fn scratch_admission_precedes_results_and_is_retryable_without_new_proposals() {
+    let t = three_choices_falsum_first();
+    let results = result_bytes(&t, 3);
+    for workers in [1, 2, 4] {
+        let mut search = StableModels::new(&t, Limits::default(), Cancellation::default()).unwrap();
+        let mut refused =
+            CompletionExecutor::with_scratch_limit(NonZeroUsize::new(workers).unwrap(), 0).unwrap();
+        assert_eq!(refused.scratch_limit(), 0);
+        let first = search.next_batch_with_completion(batch(3), &mut refused, residual);
+        assert!(matches!(
+            first,
+            Err(BatchError::Limits(Incomplete::CompletionScratch))
+        ));
+        assert_eq!(search.batch_statistics().pending, 3);
+        assert_eq!(search.batch_statistics().committed, 0);
+        assert_eq!(refused.last_statistics().unwrap().candidates, 0);
+        assert_eq!(refused.last_statistics().unwrap().peak_scratch_bytes, 0);
+        let before = search.statistics();
+        let mut results_only =
+            CompletionExecutor::with_scratch_limit(NonZeroUsize::new(workers).unwrap(), results)
+                .unwrap();
+        assert!(matches!(
+            search.next_batch_with_completion(batch(3), &mut results_only, residual),
+            Err(BatchError::Limits(Incomplete::CompletionScratch))
+        ));
+        assert_eq!(search.statistics(), before);
+        let (effective, peak) = residual_scratch(&t, 3, workers);
+        let mut admitted =
+            CompletionExecutor::with_scratch_limit(NonZeroUsize::new(workers).unwrap(), peak)
+                .unwrap();
+        let found = search
+            .next_batch_with_completion(batch(3), &mut admitted, residual)
+            .unwrap();
+        assert_eq!(found.len(), 3);
+        assert_eq!(search.statistics().candidates, before.candidates);
+        let progress = admitted.last_statistics().unwrap();
+        assert_eq!(
+            (progress.workers, progress.effective_workers),
+            (workers, effective)
+        );
+        assert_eq!(progress.peak_scratch_bytes, peak);
+        assert_eq!(
+            (progress.residual_completed, progress.residual_failed),
+            (3, 0)
+        );
+        assert_eq!(search.batch_statistics().pending, 0);
+    }
+}
+
+#[test]
+fn a_scratch_refusal_is_retryable_at_the_exact_measured_peak() {
+    let theory = three_choices_falsum_first();
+    let (_, actual) = residual_scratch(&theory, 3, 1);
+    let mut search =
+        StableModels::new(&theory, Limits::default(), Cancellation::default()).unwrap();
+    let _ = search.next_batch(batch(3), |_, _| {
+        Err::<Vec<BatchVerdict>, _>("retain proposals")
+    });
+    let before = search.statistics();
+    let mut refused =
+        CompletionExecutor::with_scratch_limit(NonZeroUsize::new(1).unwrap(), actual - 1).unwrap();
+    assert!(matches!(
+        search.next_batch_with_completion(batch(3), &mut refused, residual),
+        Err(BatchError::Limits(Incomplete::CompletionScratch))
+    ));
+    let progress = refused.last_statistics().unwrap();
+    assert_eq!(
+        (progress.candidates, progress.completed, progress.failed),
+        (0, 0, 0)
+    );
+    assert_eq!(search.statistics(), before);
+    assert_eq!(search.batch_statistics().pending, 3);
+    let mut exact =
+        CompletionExecutor::with_scratch_limit(NonZeroUsize::new(1).unwrap(), actual).unwrap();
+    assert_eq!(
+        search
+            .next_batch_with_completion(batch(3), &mut exact, residual)
+            .unwrap()
+            .len(),
+        3
+    );
+    assert_eq!(exact.last_statistics().unwrap().peak_scratch_bytes, actual);
+    assert_eq!(search.statistics().candidates, before.candidates);
+    assert_eq!(search.batch_statistics().pending, 0);
+}
+
+#[test]
+fn fixed_scratch_envelopes_release_between_irregular_calls() {
+    let t = three_choices_falsum_first();
+    for workers in [1, 2, 4] {
+        let (_, ceiling) = residual_scratch(&t, 3, workers);
+        let mut pool =
+            CompletionExecutor::with_scratch_limit(NonZeroUsize::new(workers).unwrap(), ceiling)
+                .unwrap();
+        let reference = collect(&t, 3, &mut executor(1));
+        let mut previous = None;
+        for _ in 0..2 {
+            let actual = collect(&t, 3, &mut pool);
+            assert_same_family_accounting(&actual, &reference);
+            if let Some(previous) = &previous {
+                // Same worker/byte envelope and batch sequence: retain the
+                // exact work and decision receipt.
+                assert_eq!(&actual, previous);
+            }
+            previous = Some(actual);
+            let progress = pool.last_statistics().unwrap();
+            assert!(progress.peak_scratch_bytes <= ceiling);
+            assert!(progress.effective_workers <= workers);
+        }
+    }
+}
+
+#[test]
+fn certificate_only_completion_needs_result_storage_but_no_query_workspace() {
+    let t = three_choices_falsum_first();
+    let results = result_bytes(&t, 3);
+    for workers in [1, 2, 4] {
+        let mut search = StableModels::new(&t, Limits::default(), Cancellation::default()).unwrap();
+        let mut pool =
+            CompletionExecutor::with_scratch_limit(NonZeroUsize::new(workers).unwrap(), results)
+                .unwrap();
+        let models = search
+            .next_batch_with_completion(batch(3), &mut pool, |_, candidates| {
+                Ok::<_, Infallible>(vec![BatchVerdict::NoProperSubset; candidates.len()])
+            })
+            .unwrap();
+        assert_eq!(models.len(), 3);
+        let statistics = pool.last_statistics().unwrap();
+        assert_eq!((statistics.effective_workers, statistics.residuals), (0, 0));
+        assert_eq!(statistics.peak_scratch_bytes, results);
+        assert_eq!(statistics.completed, 3);
+        assert_eq!(search.statistics().countermodel_queries, 0);
+    }
+}
+
+#[test]
+fn parallel_failure_joins_all_residual_slots_and_accounts_each() {
+    let t = three_choices_falsum_first();
+    let mut probe = StableModels::new(&t, Limits::default(), Cancellation::default()).unwrap();
+    let _ = probe.next_batch(batch(3), |_, _| {
+        Err::<Vec<BatchVerdict>, _>("retain proposals")
+    });
+    // The proposals fit this ceiling exactly; no residual query does.
+    let mut limits = Limits::default();
+    limits.search.max_work = probe.statistics().search.work;
+    let mut search = StableModels::new(&t, limits, Cancellation::default()).unwrap();
+    let mut pool = executor(4);
+    let result = search.next_batch_with_completion(batch(3), &mut pool, residual);
+    assert!(matches!(
+        result,
+        Err(BatchError::Search(Incomplete::WorkLimit))
+    ));
+    let progress = pool.last_statistics().unwrap();
+    assert_eq!(
+        (
+            progress.effective_workers,
+            progress.candidates,
+            progress.failed
+        ),
+        (3, 3, 3)
+    );
+    assert_eq!(
+        (progress.residual_completed, progress.residual_failed),
+        (0, 3)
+    );
+    assert_eq!(
+        (
+            search.batch_statistics().pending,
+            search.batch_statistics().committed
+        ),
+        (3, 0)
+    );
+    assert_eq!(collect(&t, 3, &mut pool), collect(&t, 3, &mut executor(1)));
+}

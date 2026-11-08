@@ -48,11 +48,6 @@ impl fmt::Display for ReadError {
 impl std::error::Error for ReadError {}
 
 impl<'a> CatalogRead<'a> {
-    /// The resolver of a storage read the crate already holds.
-    pub(crate) fn of(read: storage::Read<'a>) -> Self {
-        Self(read)
-    }
-
     pub(crate) fn storage(self) -> storage::Read<'a> {
         self.0
     }

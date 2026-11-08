@@ -21,7 +21,7 @@ mod marking;
 use std::hint::black_box;
 
 use criterion::{BatchSize, BenchmarkId, Criterion, Throughput};
-use zetesis_cpu::Cancellation;
+use zetesis_algebra::Cancellation;
 use zetesis_ferraris::{
     AdmissionError, AdmissionLimits, AggregateFamilyLimits, FormulaNodes, FormulaParts, Narrower,
     Narrowing, NarrowingScratch, Node, NodeView, OriginalSubject, Region, RegionLimits, Theory,
@@ -264,7 +264,7 @@ fn verify_narrower(theory: &Theory, conjunction: bool) {
             assert!(region.cut(atom));
         }
     }
-    let (result, _) = narrower
+    let result = narrower
         .narrow_known(
             OriginalSubject::new(theory, None),
             &mut region,
@@ -273,6 +273,7 @@ fn verify_narrower(theory: &Theory, conjunction: bool) {
             RegionLimits::default(),
             &Cancellation::default(),
         )
+        .result
         .unwrap();
     assert_eq!(result, Narrowing::Fixed { changed: true });
     assert_eq!(

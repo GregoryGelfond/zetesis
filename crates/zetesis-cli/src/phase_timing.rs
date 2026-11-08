@@ -2,8 +2,8 @@
 
 use crate::{PhaseTimings, SolvePhase};
 use std::io::{self, Write};
-use zetesis_sat::PhaseMeasurement;
 pub(crate) use zetesis_solve::SolveMeasurements as Recorder;
+use zetesis_stable::PhaseMeasurement;
 
 pub(crate) fn recorder(stats: bool, renderer: &impl crate::AnswerRenderer) -> Recorder {
     if !stats && renderer.needs_stage_timings() {
@@ -16,7 +16,7 @@ pub(crate) fn recorder(stats: bool, renderer: &impl crate::AnswerRenderer) -> Re
 pub(crate) fn write(sink: &mut impl Write, timings: &PhaseTimings) -> io::Result<()> {
     writeln!(
         sink,
-        "Phase timings: clock=host-monotonic; scope=driver; failed_attempts=included; schema=5"
+        "Phase timings: clock=host-monotonic; scope=driver; failed_attempts=included; schema=7"
     )?;
     writeln!(
         sink,

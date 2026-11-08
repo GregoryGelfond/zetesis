@@ -7,17 +7,14 @@ fn source(work: u64, substitutions: u64) -> (Value, String, NativeExecution) {
     let statistics = &mut document["statistics"];
     for name in [
         "execution",
-        "lazy_execution",
-        "shared_execution",
-        "closure_execution",
-        "query_execution",
         "hybrid_execution",
         "terminal_execution",
         "search",
-        "candidate_restrictions",
     ] {
         statistics[name] = Value::Null;
     }
+    // The common legacy fixture has this key; current CLI source output does not.
+    statistics.as_object_mut().unwrap().remove("lazy_execution");
     statistics["objective_work"] = json!(0);
     statistics["source_evaluation"] = json!({
         "scope":"source_admission", "work":work, "substitutions":substitutions,
@@ -103,10 +100,6 @@ fn source_cannot_satisfy_an_explicit_execution_request() {
             ..request
         },
         NativeExecution {
-            oracle: Oracle::Closure,
-            ..request
-        },
-        NativeExecution {
             oracle: Oracle::Countermodel,
             ..request
         },
@@ -165,6 +158,53 @@ fn source_requires_agreeing_unique_operation_metadata() {
 }
 
 #[test]
+fn source_accepts_absent_or_null_legacy_activity() {
+    let (document, text, request) = source(17, 23);
+    let fields = [
+        "lazy_execution",
+        "shared_execution",
+        "closure_execution",
+        "query_execution",
+        "candidate_restrictions",
+    ];
+    assert!(
+        fields
+            .iter()
+            .all(|field| document["statistics"].get(field).is_none())
+    );
+    assert!(observe(&document, text.as_bytes(), request).is_ok());
+    let mut all_null = document.clone();
+    for field in fields {
+        let mut one_null = document.clone();
+        one_null["statistics"][field] = Value::Null;
+        assert!(
+            observe(&one_null, text.as_bytes(), request).is_ok(),
+            "{field}"
+        );
+        all_null["statistics"][field] = Value::Null;
+    }
+    assert!(observe(&all_null, text.as_bytes(), request).is_ok());
+}
+
+#[test]
+fn source_requires_current_activity_absence_receipts() {
+    let (document, text, request) = source(17, 23);
+    for field in [
+        "execution",
+        "hybrid_execution",
+        "terminal_execution",
+        "search",
+    ] {
+        let mut missing = document.clone();
+        missing["statistics"].as_object_mut().unwrap().remove(field);
+        assert!(
+            observe(&missing, text.as_bytes(), request).is_err(),
+            "{field}"
+        );
+    }
+}
+
+#[test]
 fn source_refuses_competing_activity_receipts() {
     let (document, text, request) = source(17, 23);
     for field in [
@@ -178,12 +218,14 @@ fn source_refuses_competing_activity_receipts() {
         "search",
         "candidate_restrictions",
     ] {
-        let mut changed = document.clone();
-        changed["statistics"][field] = json!({});
-        assert!(
-            observe(&changed, text.as_bytes(), request).is_err(),
-            "{field}"
-        );
+        for value in [json!({}), json!([]), json!(false), json!(0), json!("")] {
+            let mut changed = document.clone();
+            changed["statistics"][field] = value;
+            assert!(
+                observe(&changed, text.as_bytes(), request).is_err(),
+                "{field}"
+            );
+        }
     }
     let mut changed = document;
     changed["statistics"]["objective_work"] = json!(1);

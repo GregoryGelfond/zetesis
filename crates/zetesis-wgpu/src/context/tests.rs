@@ -1,5 +1,43 @@
 use super::*;
 
+#[test]
+fn only_supported_kernel_features_are_requested() {
+    for supported in [
+        wgpu::Features::empty(),
+        wgpu::Features::SUBGROUP,
+        wgpu::Features::SHADER_INT64,
+    ] {
+        assert_eq!(requested_features(supported, false), supported);
+    }
+    let supported =
+        wgpu::Features::SUBGROUP | wgpu::Features::TIMESTAMP_QUERY | wgpu::Features::SHADER_F16;
+    assert_eq!(
+        requested_features(supported, false),
+        wgpu::Features::SUBGROUP
+    );
+    assert_eq!(
+        requested_features(supported, true),
+        wgpu::Features::SUBGROUP | wgpu::Features::TIMESTAMP_QUERY
+    );
+}
+
+#[test]
+fn timestamps_require_an_explicit_supported_request() {
+    use zetesis_backend::ComputeTimingStatus;
+    assert_eq!(
+        timing_status(false, wgpu::Features::TIMESTAMP_QUERY),
+        ComputeTimingStatus::NotRequested
+    );
+    assert_eq!(
+        timing_status(true, wgpu::Features::empty()),
+        ComputeTimingStatus::Unsupported
+    );
+    assert_eq!(
+        timing_status(true, wgpu::Features::TIMESTAMP_QUERY),
+        ComputeTimingStatus::Enabled
+    );
+}
+
 fn state() -> (mpsc::SyncSender<String>, Faults) {
     let (sender, receiver) = mpsc::sync_channel(1);
     (
@@ -98,7 +136,7 @@ fn cancellation_never_hides_a_scope_failure() {
     let error = faults
         .complete::<()>(
             Err(error(GpuErrorKind::Validation, "scope")),
-            Err(GpuError::interrupted(zetesis_cpu::Stop::Cancelled)),
+            Err(GpuError::interrupted(zetesis_algebra::Stop::Cancelled)),
             Effects::MayBeLive,
         )
         .unwrap_err();
@@ -113,7 +151,7 @@ fn cancellation_never_hides_a_device_fault() {
     let error = faults
         .complete::<()>(
             Ok(()),
-            Err(GpuError::interrupted(zetesis_cpu::Stop::Cancelled)),
+            Err(GpuError::interrupted(zetesis_algebra::Stop::Cancelled)),
             Effects::MayBeLive,
         )
         .unwrap_err();
@@ -127,11 +165,11 @@ fn cancellation_survives_successful_scope_completion() {
     let error = faults
         .complete::<()>(
             Ok(()),
-            Err(GpuError::interrupted(zetesis_cpu::Stop::Cancelled)),
+            Err(GpuError::interrupted(zetesis_algebra::Stop::Cancelled)),
             Effects::MayBeLive,
         )
         .unwrap_err();
-    assert_eq!(error.interruption, Some(zetesis_cpu::Stop::Cancelled));
+    assert_eq!(error.interruption, Some(zetesis_algebra::Stop::Cancelled));
     assert!(faults.invalidated);
 }
 
@@ -142,7 +180,10 @@ fn only_released_interruption_preserves_context_health() {
         Effects::SubmittedAndReleased,
         Effects::MayBeLive,
     ] {
-        for stop in [zetesis_cpu::Stop::Cancelled, zetesis_cpu::Stop::Deadline] {
+        for stop in [
+            zetesis_algebra::Stop::Cancelled,
+            zetesis_algebra::Stop::Deadline,
+        ] {
             for scope_failed in [false, true] {
                 for device_failed in [false, true] {
                     let (sender, mut faults) = state();
@@ -179,7 +220,7 @@ fn released_completion_does_not_exempt_other_failures() {
             error(GpuErrorKind::Allocation, "allocation"),
             error(GpuErrorKind::Capacity, "unexpected copy shape"),
             error(GpuErrorKind::Readback, "unexpected output"),
-            GpuError::interrupted(zetesis_cpu::Stop::WorkLimit),
+            GpuError::interrupted(zetesis_algebra::Stop::WorkLimit),
         ] {
             let (_, mut faults) = state();
             let expected = failure.clone();

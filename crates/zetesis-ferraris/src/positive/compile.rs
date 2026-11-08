@@ -2,8 +2,9 @@
 
 use std::mem::size_of;
 
-use zetesis_cpu::Stop;
+use zetesis_algebra::Stop;
 
+pub(super) use super::activation::{Edge, State};
 use super::{Budget, PositiveError, PositivePlan, propagate, validation};
 use crate::{ExtremumCut, Interpretation, NodeView, Theory, Threshold};
 
@@ -30,23 +31,6 @@ impl Kind {
             Self::Unsupported | Self::False | Self::True => State::Inactive,
         }
     }
-}
-
-/// A vertex awaits its remaining incidences or has been queued exactly once.
-/// Inactive truth constants are activated explicitly during seeding; false and
-/// unsupported nodes remain inactive.
-#[derive(Clone, Copy, PartialEq, Eq)]
-pub(super) enum State {
-    Inactive,
-    Awaiting(usize),
-    Weighted(i128),
-    True,
-}
-
-#[derive(Clone, Copy)]
-pub(super) struct Edge {
-    pub target: usize,
-    pub weight: u64,
 }
 
 pub(super) struct Graph {
@@ -130,7 +114,7 @@ pub(super) fn build(
     drop(graph);
     let least = Interpretation {
         theory: theory.clone(),
-        words,
+        words: words.into(),
     };
     let failed = validation::complete(&least, budget)?;
     Ok((least, failed))

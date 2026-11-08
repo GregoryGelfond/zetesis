@@ -2,9 +2,9 @@
 
 use std::cmp::Ordering;
 
+use zetesis_algebra::Cancellation;
 use zetesis_core::catalog::TermRef;
 use zetesis_core::{Value as Term, ValueNodeRef};
-use zetesis_cpu::Cancellation;
 
 use super::{Bound, Error, ErrorKind, Function, Group, GroupRef, Phase, Statistics, Work, add};
 use crate::{AggregateComparison, AggregateExtremum};
@@ -162,17 +162,13 @@ impl<'a> GroupRef<'a> {
         limits: ReductionLimits,
         cancellation: &Cancellation,
     ) -> Result<Reduction<'a>, Error> {
-        let mut work = Work {
-            maximum: limits.max_work,
-            cancellation,
-            statistics: Statistics::default(),
-        };
+        let mut work = Work::new(limits.max_work, cancellation);
         let result = self.reduce_checked(original, frozen, &mut work);
         result
             .map(|(original, frozen)| Reduction {
                 original,
                 frozen,
-                statistics: work.statistics,
+                statistics: work.statistics(),
             })
             .map_err(|kind| work.failure(kind))
     }

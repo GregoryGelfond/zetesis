@@ -3,8 +3,8 @@ use super::{
     RelationGpuMasks, RelationGpuStats, SHADER, capacity, packing, poll,
 };
 use crate::{GpuError, GpuErrorKind, GpuInfo, GpuOptions, GpuSelection, runtime};
+use zetesis_algebra::Cancellation;
 use zetesis_core::relation::{Failure, Query, Relation};
-use zetesis_cpu::Cancellation;
 
 // Poll before each additional 4 KiB of packed payload writes.
 const PACK_CONTROL_BYTES: usize = 4096;
@@ -28,8 +28,14 @@ impl GpuRelationExecutor {
         options: GpuOptions,
         selection: GpuSelection,
     ) -> Result<Self, RelationGpuError> {
-        let runtime =
-            pollster::block_on(runtime::Runtime::new(options, selection, Self::profile()))?;
+        let runtime = pollster::block_on(runtime::Runtime::open(
+            crate::GpuDeviceSource::Selected {
+                options,
+                selection,
+                timing: false,
+            },
+            Self::profile(),
+        ))?;
         Ok(Self::with_runtime(runtime))
     }
 
@@ -42,7 +48,10 @@ impl GpuRelationExecutor {
     /// Refuses an active or invalidated context, unsupported granted limits,
     /// allocation and shader validation failure. No adapter selection occurs.
     pub fn from_context(context: &crate::GpuContext) -> Result<Self, RelationGpuError> {
-        let runtime = pollster::block_on(runtime::Runtime::from_context(context, Self::profile()))?;
+        let runtime = pollster::block_on(runtime::Runtime::open(
+            crate::GpuDeviceSource::Context(context),
+            Self::profile(),
+        ))?;
         Ok(Self::with_runtime(runtime))
     }
 
@@ -63,6 +72,8 @@ impl GpuRelationExecutor {
             pipeline_label: "zetesis relation row tiles",
             shader: SHADER.into(),
             entry_point: "select_rows",
+            dense_entry_point: None,
+            kernel: crate::kernel::Kernel::Fixed,
             validate_limits: adapter_limits,
         }
     }
@@ -227,15 +238,16 @@ impl<'owner, 'source> PreparedGpuRelation<'_, 'owner, 'source> {
                 relation: self.relation,
                 queries: queries.len(),
                 words_per_query: plan.words as usize,
-                words: Vec::new(),
+                words: Vec::new().into(),
             });
         }
         let packed = plan.pack(queries, cancellation, limits.max_bytes)?;
         poll(cancellation)?;
         self.executor.epoch = epoch;
         let runtime = &mut self.executor.runtime;
+        let pipeline = runtime.static_pipeline()?;
         let scopes = runtime::ErrorScopes::new(runtime.device());
-        let transport = Transport::new(runtime, &self.columns, &plan, &packed);
+        let transport = Transport::new(runtime, pipeline, &self.columns, &plan, &packed);
         self.activity.uploaded_bytes = PARAM_BYTES + plan.query_bytes + plan.equality_bytes;
         let outcome = poll(cancellation).map(|()| {
             let submission = runtime::submit(
@@ -244,12 +256,14 @@ impl<'owner, 'source> PreparedGpuRelation<'_, 'owner, 'source> {
                 &runtime::Dispatch {
                     command_label: "zetesis relation commands",
                     pass_label: "zetesis relation row tiles",
-                    pipeline: &runtime.pipeline,
+                    pipeline,
                     group: &transport.group,
                     workgroups: plan.workgroups,
                     result: &transport.result,
                     readback: &transport.readback,
                     result_bytes: plan.result_bytes,
+                    clear_result: false,
+                    timing: None,
                 },
             );
             self.activity.submissions = 1;
@@ -260,7 +274,7 @@ impl<'owner, 'source> PreparedGpuRelation<'_, 'owner, 'source> {
             runtime::read_polled(
                 runtime.device(),
                 &transport.readback,
-                submission,
+                submission.index,
                 limits.timeout,
                 || poll(cancellation),
                 |words| plan.decode(self.relation, queries, words, packed.masks, cancellation),
@@ -284,6 +298,7 @@ struct Transport {
 impl Transport {
     fn new(
         runtime: &runtime::Runtime,
+        pipeline: &wgpu::ComputePipeline,
         columns: &wgpu::Buffer,
         plan: &packing::Plan,
         packed: &packing::Packed,
@@ -321,7 +336,7 @@ impl Transport {
         );
         let group = device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("zetesis relation bindings"),
-            layout: &runtime.pipeline.get_bind_group_layout(0),
+            layout: &pipeline.get_bind_group_layout(0),
             entries: &[
                 runtime::entry(0, &params),
                 runtime::entry(1, columns),

@@ -3,9 +3,16 @@
 use super::FormulaCheck;
 use super::packing::{self, Graph, PARAM_BYTES, Plan};
 use super::preparation::PreparedGraph;
-use crate::runtime::{self, Dispatch, buffer, entry, initialized};
+use crate::runtime::{self, Dispatch, Observation, Variant, buffer, entry, initialized};
 use crate::{GpuError, GpuErrorKind};
 use std::time::Duration;
+
+/// A submitted batch. Its logical checks are published only after shared scope
+/// settlement; its readback tail and host window are for the oracle's timer.
+pub(super) struct Dispatched {
+    pub(super) completion: runtime::Completion<Vec<FormulaCheck>>,
+    pub(super) timing: crate::timing::BatchTiming,
+}
 
 pub(super) struct Resident {
     pub(super) graph: Graph,
@@ -32,25 +39,36 @@ impl Resident {
             transport: None,
         }
     }
+    pub(super) fn retained_bytes(&self) -> Result<u64, GpuError> {
+        self.graph
+            .schedule
+            .bytes
+            .checked_add(self.transport.as_ref().map_or(0, |t| t.bytes))
+            .ok_or_else(|| packing::capacity("retained formula buffers exceed u64"))
+    }
     pub(super) fn matches(&self, plan: &Plan) -> bool {
+        self.matches_count(plan.worlds as usize)
+    }
+    pub(super) fn matches_count(&self, count: usize) -> bool {
         self.transport
             .as_ref()
-            .is_some_and(|transport| transport.worlds == plan.worlds)
+            .is_some_and(|transport| transport.worlds as usize == count)
     }
-    pub(super) fn dispatch(
+    /// Write and submit the batch, and request its readback's mapping. The
+    /// submission is in flight when this returns; [`Self::finish`] waits for
+    /// it. An error leaves nothing in flight.
+    pub(super) fn submit(
         &mut self,
         runtime: &runtime::Runtime,
         seeds: &[u32],
         plan: &Plan,
-        timeout: Duration,
-        cancellation: &zetesis_cpu::Cancellation,
-        submitted_candidates: &mut Option<usize>,
-    ) -> Result<runtime::Completion<Vec<FormulaCheck>>, GpuError> {
+        timer: Option<&crate::timing::ComputeTimer>,
+    ) -> Result<Submitted, GpuError> {
         let device = runtime.device();
         let queue = runtime.queue();
-        let pipeline = &runtime.pipeline;
+        let pipeline = runtime.pipeline_for(self.graph.workgroup_size, Variant::Full)?;
         if self.transport.is_none() {
-            self.transport = Some(Transport::new(device, pipeline, self, plan));
+            self.transport = Some(Transport::new(device, pipeline, self, plan)?);
         }
         let transport = self
             .transport
@@ -74,26 +92,71 @@ impl Resident {
                 result: &transport.results,
                 readback: &transport.readback,
                 result_bytes: plan.results,
+                clear_result: false,
+                timing: timer,
             },
         );
-        *submitted_candidates = Some(plan.worlds as usize);
-        Ok(runtime::read_polled(
-            device,
+        Ok(Submitted {
+            pending: runtime::request_read(&transport.readback, submission.index),
+            at: submission.at,
+            candidates: plan.worlds as usize,
+        })
+    }
+
+    /// Wait for the submitted batch, observing the control as `observation`
+    /// says, then decode its readback. The transport is the one `submit` used:
+    /// nothing replaces it within one check.
+    pub(super) fn finish(
+        &self,
+        runtime: &runtime::Runtime,
+        submitted: Submitted,
+        readback: packing::Readback<'_>,
+        observation: Observation,
+        timeout: Duration,
+        cancellation: &zetesis_algebra::Cancellation,
+    ) -> Result<Dispatched, GpuError> {
+        let transport = self
+            .transport
+            .as_ref()
+            .ok_or_else(|| GpuError::new(GpuErrorKind::Device, "missing formula transport"))?;
+        let mut timing = crate::timing::BatchTiming::default();
+        let completion = runtime::finish_pending(
+            runtime.device(),
             &transport.readback,
-            submission,
+            submitted.pending,
             timeout,
+            observation,
             || cancellation.poll().map_err(GpuError::interrupted),
-            |words| packing::decode(words, plan),
-        ))
+            |words| {
+                let (words, tail) = crate::timing::split_readback(words, transport.timed)?;
+                let checks = readback.decode(words, cancellation)?;
+                timing.tail = tail;
+                Ok(checks)
+            },
+        );
+        timing.window = completion.window_since(submitted.at);
+        Ok(Dispatched { completion, timing })
     }
 }
+
+/// A submitted batch awaiting its finish: its pending readback, the host
+/// instant just before its submission, and the candidates it submitted,
+/// whether or not its readback decodes.
+pub(super) struct Submitted {
+    pending: runtime::PendingRead,
+    at: std::time::Instant,
+    pub(super) candidates: usize,
+}
 pub(super) struct Transport {
+    bytes: u64,
     worlds: u32,
     params: wgpu::Buffer,
     seeds: wgpu::Buffer,
     results: wgpu::Buffer,
     readback: wgpu::Buffer,
     group: wgpu::BindGroup,
+    // The readback carries a timestamp tail after the logical results.
+    timed: bool,
 }
 impl Transport {
     fn new(
@@ -101,7 +164,10 @@ impl Transport {
         pipeline: &wgpu::ComputePipeline,
         resident: &Resident,
         plan: &Plan,
-    ) -> Self {
+    ) -> Result<Self, GpuError> {
+        let timed = device.features().contains(wgpu::Features::TIMESTAMP_QUERY);
+        let readback_bytes =
+            crate::timing::readback_size(plan.results, timed, device.limits().max_buffer_size)?;
         let params = buffer(
             device,
             "formula parameters",
@@ -135,7 +201,7 @@ impl Transport {
         let readback = buffer(
             device,
             "formula readback",
-            plan.results,
+            readback_bytes,
             wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
         );
         let group = device.create_bind_group(&wgpu::BindGroupDescriptor {
@@ -151,13 +217,18 @@ impl Transport {
                 entry(6, &results),
             ],
         });
-        Self {
+        Ok(Self {
+            bytes: plan
+                .transport
+                .checked_add(readback_bytes - plan.results)
+                .ok_or_else(|| packing::capacity("formula transport size exceeds u64"))?,
             worlds: plan.worlds,
             params,
             seeds,
             results,
             readback,
             group,
-        }
+            timed,
+        })
     }
 }

@@ -5,29 +5,26 @@ use std::collections::BTreeSet;
 use std::fs;
 use std::path::Path;
 
-use crate::support::atom_models::{self, Models, answer_sets};
+use crate::support::atom_models::{self, Models, answer_sets, bundle_answer_sets};
 use crate::support::bundle_fixtures;
-use serde_json::Value as Json;
 use themelios_base::source::SourceId;
 use zetesis_clingo_support as oracle;
 use zetesis_reference_support::{BundleFixture, resource_limits};
-use zetesis_test_support::repository;
 use zetesis_themelios::{
-    AdmissionFailure, AdmissionOptions, BundleAdmissionError, BundleAdmissionOptions, BundleLimits,
-    ExpansionFailure, ExpansionLimits, ExpansionResource, InputLimit, SourceBundle, admit,
-    admit_bundle_extended,
+    AdmissionFailure, BundleAdmissionError, BundleAdmissionOptions, ExpansionFailure,
+    ExpansionLimits, ExpansionResource, FormulaFailure, FormulaLimits, InputLimit,
+    admit_bundle_formula,
 };
 
 fn explicit(source: &str) -> Models {
     answer_sets(
-        admit(source.to_owned(), AdmissionOptions::default())
-            .expect("explicit S0 fixture")
-            .program(),
+        &zetesis_reference_support::admit(source, &FormulaLimits::default())
+            .expect("explicit fixture"),
     )
 }
 
 #[test]
-fn global_forward_constants_and_nested_includes_produce_native_templates() {
+fn global_forward_constants_and_nested_includes_preserve_models() {
     let fixture = BundleFixture::new();
     fixture.write(
         "entry.lp",
@@ -41,7 +38,7 @@ fn global_forward_constants_and_nested_includes_produce_native_templates() {
     let admitted = bundle_fixtures::admit(&fixture).expect("global scalar definitions");
     assert_eq!(admitted.bundle().sources().len(), 3);
     assert_eq!(
-        answer_sets(admitted.program()),
+        bundle_answer_sets(&admitted),
         explicit("d(1). d(2). d(3). {pick(X)} :- d(X). :- pick(1),pick(3).")
     );
 }
@@ -55,14 +52,11 @@ fn base_sections_preserve_included_rules() {
     );
     fixture.write("child.lp", "#program base. q :- p. #program base().");
     let admitted = bundle_fixtures::admit(&fixture).unwrap();
-    assert_eq!(answer_sets(admitted.program()), explicit("p. q. r."));
-    for origins in admitted
-        .template_origins()
-        .iter()
-        .chain(admitted.fact_origins())
-    {
+    assert_eq!(bundle_answer_sets(&admitted), explicit("p. q. r."));
+    for origins in admitted.formula_origins() {
         assert!(!origins.is_empty());
-        for location in origins {
+        for site in origins {
+            let location = site.location().unwrap();
             let text = admitted
                 .bundle()
                 .get(location.source)
@@ -84,7 +78,7 @@ fn base_sections_preserve_global_metadata() {
     );
     fixture.write("child.lp", "#program base. #const n=2. #defined d/1.");
     let admitted = bundle_fixtures::admit(&fixture).unwrap();
-    assert_eq!(answer_sets(admitted.program()), explicit("p(2)."));
+    assert_eq!(bundle_answer_sets(&admitted), explicit("p(2)."));
     assert_eq!(admitted.metadata().directives().len(), 2);
 }
 
@@ -98,11 +92,7 @@ fn rule_variables_remain_local_across_files_and_positive_cycles() {
     fixture.write("left.lp", "p(X) :- left(X). cycle(X) :- loop(X).");
     fixture.write("right.lp", "q(X) :- right(X). loop(X) :- cycle(X).");
     assert_eq!(
-        answer_sets(
-            bundle_fixtures::admit(&fixture)
-                .expect("local rule scopes")
-                .program()
-        ),
+        bundle_answer_sets(&bundle_fixtures::admit(&fixture).expect("local rule scopes")),
         explicit("left(1). right(2). p(1). q(2).")
     );
 }
@@ -115,17 +105,31 @@ fn merged_cross_file_rules_retain_both_original_source_locations() {
         "% unchanged\r\n#include \"child.lp\".\r\np(1..2).",
     );
     fixture.write("child.lp", "p(1..2).\n");
-    let admitted = bundle_fixtures::admit(&fixture).expect("merged rule evidence");
-    assert_eq!(admitted.program().facts().len(), 2);
-    assert!(admitted.program().templates().is_empty());
-    for locations in admitted.fact_origins() {
+    let (admitted, roots) = crate::support::root_emission::bundle(
+        zetesis_themelios::prepare_bundle_formula(
+            fixture.bundle(),
+            BundleAdmissionOptions::default(),
+            ExpansionLimits::default(),
+            FormulaLimits::default(),
+        )
+        .unwrap(),
+    );
+    assert_eq!(admitted.atoms().len(), 2);
+    let authored = roots.indices(zetesis_themelios::GroundingPhase::RuleInstantiation);
+    assert_eq!(authored.len(), 2);
+    for index in authored {
+        let locations = &admitted.formula_origins()[index];
         assert_eq!(locations.len(), 2);
-        let identities: BTreeSet<_> = locations.iter().map(|location| location.source).collect();
+        let identities: BTreeSet<_> = locations
+            .iter()
+            .map(|site| site.location().unwrap().source)
+            .collect();
         assert_eq!(
             identities,
             BTreeSet::from([SourceId::new(0), SourceId::new(1)])
         );
-        for location in locations {
+        for site in locations {
+            let location = site.location().unwrap();
             let source = admitted
                 .bundle()
                 .get(location.source)
@@ -148,7 +152,7 @@ fn repeated_identical_include_paths_are_not_duplicate_definitions() {
     fixture.write("shared.lp", "#const n=2. p(n).");
     let admitted = bundle_fixtures::admit(&fixture).expect("same lexical path included once");
     assert_eq!(admitted.bundle().sources()[0].includes().len(), 2);
-    assert_eq!(answer_sets(admitted.program()), explicit("p(2). q(2)."));
+    assert_eq!(bundle_answer_sets(&admitted), explicit("p(2). q(2)."));
 }
 
 #[test]
@@ -169,7 +173,10 @@ fn lexical_aliases_preserve_the_native_refusal_contract() {
         2,
         "loader still preserves the canonical graph"
     );
-    match error.error() {
+    let FormulaFailure::Include(include) = error.error() else {
+        panic!("include identity failure");
+    };
+    match include.as_ref() {
         BundleAdmissionError::IncludeAlias {
             first,
             repeated,
@@ -195,7 +202,7 @@ fn redirected_include_paths_refuse_instead_of_guessing_relative_scopes() {
         bundle_fixtures::admit(&fixture)
             .expect_err("redirected include")
             .error(),
-        BundleAdmissionError::IncludeRedirection { .. }
+        FormulaFailure::Include(error) if matches!(error.as_ref(), BundleAdmissionError::IncludeRedirection { .. })
     ));
 }
 
@@ -206,10 +213,8 @@ fn cross_file_constant_duplicates_and_cycles_keep_their_source_catalog() {
     fixture.write("child.lp", "#const n=2.");
     let error = bundle_fixtures::admit(&fixture).expect_err("global duplicate");
     match error.error() {
-        BundleAdmissionError::Expansion(ExpansionFailure::DuplicateConstant {
-            first,
-            duplicate,
-            ..
+        FormulaFailure::Expansion(ExpansionFailure::DuplicateConstant {
+            first, duplicate, ..
         }) => assert_ne!(
             first.location().unwrap().source,
             duplicate.location().unwrap().source
@@ -221,25 +226,20 @@ fn cross_file_constant_duplicates_and_cycles_keep_their_source_catalog() {
     let error = bundle_fixtures::admit(&fixture).expect_err("global cycle");
     assert!(matches!(
         error.error(),
-        BundleAdmissionError::Expansion(ExpansionFailure::ConstantCycle { .. })
+        FormulaFailure::Expansion(ExpansionFailure::ConstantCycle { .. })
     ));
-    assert_eq!(error.into_bundle().sources().len(), 2);
+    assert_eq!(error.bundle().sources().len(), 2);
 }
 
 #[test]
 fn unsupported_directives_and_child_raiser_failures_do_not_return_partial_programs() {
     let fixture = BundleFixture::new();
     fixture.write("entry.lp", "p. #include \"child.lp\".");
-    for child in [
-        "#program base(x). q.",
-        "#program step(t). q(t).",
-        "#show p.",
-        "{p;q}.",
-    ] {
+    for child in ["#program base(x). q.", "#program step(t). q(t)."] {
         fixture.write("child.lp", child);
         let error = bundle_fixtures::admit(&fixture).expect_err("unsupported original child");
         assert!(
-            matches!(error.error(), BundleAdmissionError::Expansion(ExpansionFailure::Admission(AdmissionFailure::Profile { location, .. })) if location.location().unwrap().source == SourceId::new(1))
+            matches!(error.error(), FormulaFailure::Expansion(ExpansionFailure::Admission(AdmissionFailure::Profile { location, .. })) if location.location().unwrap().source == SourceId::new(1))
         );
         assert_eq!(error.bundle().sources()[1].source().text(), child);
     }
@@ -248,7 +248,7 @@ fn unsupported_directives_and_child_raiser_failures_do_not_return_partial_progra
         bundle_fixtures::admit(&fixture)
             .expect_err("child numeric raising")
             .error(),
-        BundleAdmissionError::Expansion(ExpansionFailure::Admission(AdmissionFailure::Raise(_)))
+        FormulaFailure::Expansion(ExpansionFailure::Admission(AdmissionFailure::Raise(_)))
     ));
 }
 
@@ -267,17 +267,27 @@ fn syntax_and_constant_budgets_are_cumulative_across_original_sources() {
         InputLimit::SyntaxNodes,
         u64::try_from(total_nodes - 1).unwrap(),
     );
-    let error = admit_bundle_extended(bundle, options, ExpansionLimits::default())
-        .expect_err("cumulative node budget");
+    let error = admit_bundle_formula(
+        bundle,
+        options,
+        ExpansionLimits::default(),
+        FormulaLimits::default(),
+    )
+    .expect_err("cumulative node budget");
     assert!(
-        matches!(error.error(), BundleAdmissionError::Expansion(ExpansionFailure::Admission(AdmissionFailure::Limit { resource: InputLimit::SyntaxNodes, limit, observed, location })) if *limit == total_nodes - 1 && *observed == total_nodes && location.location().unwrap().source == SourceId::new(1))
+        matches!(error.error(), FormulaFailure::Expansion(ExpansionFailure::Admission(AdmissionFailure::Limit { resource: InputLimit::SyntaxNodes, limit, observed, location })) if *limit == total_nodes - 1 && *observed == total_nodes && location.location().unwrap().source == SourceId::new(1))
     );
     let limits = resource_limits::expansion(ExpansionResource::Constants, 1);
     assert!(matches!(
-        admit_bundle_extended(fixture.bundle(), BundleAdmissionOptions::default(), limits)
-            .expect_err("global definitions budget")
-            .error(),
-        BundleAdmissionError::Expansion(ExpansionFailure::Limit {
+        admit_bundle_formula(
+            fixture.bundle(),
+            BundleAdmissionOptions::default(),
+            limits,
+            FormulaLimits::default()
+        )
+        .expect_err("global definitions budget")
+        .error(),
+        FormulaFailure::Expansion(ExpansionFailure::Limit {
             resource: ExpansionResource::Constants,
             observed: 2,
             ..
@@ -292,10 +302,15 @@ fn expansion_and_provenance_budgets_remain_global_across_files() {
     fixture.write("child.lp", "q(1..2).");
     let limits = resource_limits::expansion(ExpansionResource::Templates, 3);
     assert!(matches!(
-        admit_bundle_extended(fixture.bundle(), BundleAdmissionOptions::default(), limits)
-            .expect_err("global emitted templates")
-            .error(),
-        BundleAdmissionError::Expansion(ExpansionFailure::Limit {
+        admit_bundle_formula(
+            fixture.bundle(),
+            BundleAdmissionOptions::default(),
+            limits,
+            FormulaLimits::default()
+        )
+        .expect_err("global emitted templates")
+        .error(),
+        FormulaFailure::Expansion(ExpansionFailure::Limit {
             resource: ExpansionResource::Templates,
             observed: 4,
             ..
@@ -304,54 +319,20 @@ fn expansion_and_provenance_budgets_remain_global_across_files() {
     fixture.write("child.lp", "p(1..2).");
     let limits = resource_limits::expansion(ExpansionResource::Origins, 3);
     assert!(matches!(
-        admit_bundle_extended(fixture.bundle(), BundleAdmissionOptions::default(), limits)
-            .expect_err("global provenance copies")
-            .error(),
-        BundleAdmissionError::Expansion(ExpansionFailure::Limit {
+        admit_bundle_formula(
+            fixture.bundle(),
+            BundleAdmissionOptions::default(),
+            limits,
+            FormulaLimits::default()
+        )
+        .expect_err("global provenance copies")
+        .error(),
+        FormulaFailure::Expansion(ExpansionFailure::Limit {
             resource: ExpansionResource::Origins,
             observed: 4,
             ..
         })
     ));
-}
-
-#[test]
-fn correctness_bundles_report_semantic_refusal_after_include_admission() {
-    let manifest: Json = serde_json::from_str(include_str!(
-        "../../../../examples/correctness/manifest.json"
-    ))
-    .expect("correctness manifest");
-    let root = repository::correctness();
-    let cases = manifest["cases"].as_array().expect("required case entries");
-    assert_eq!(cases.len(), 94);
-    let mut features = std::collections::BTreeMap::<String, usize>::new();
-    for case in cases {
-        let path = case["path"].as_str().expect("entry path");
-        let bundle = SourceBundle::load(root.join(path), BundleLimits::default())
-            .expect("correctness include graph");
-        let error = admit_bundle_extended(
-            bundle,
-            BundleAdmissionOptions::default(),
-            ExpansionLimits::default(),
-        )
-        .expect_err("the correctness programs remain outside this semantic slice");
-        match error.error() {
-            BundleAdmissionError::Expansion(ExpansionFailure::Admission(
-                AdmissionFailure::Profile { feature, location },
-            )) => {
-                assert!(
-                    error
-                        .bundle()
-                        .get(location.location().unwrap().source)
-                        .is_some(),
-                    "refusal source: {path}"
-                );
-                *features.entry(format!("{feature:?}")).or_default() += 1;
-            }
-            other => panic!("unexpected semantic boundary for {path}: {other}"),
-        }
-    }
-    eprintln!("Correctness bundle semantic refusals: {features:?}");
 }
 
 fn external(directory: &Path) -> Models {
@@ -366,7 +347,7 @@ fn external(directory: &Path) -> Models {
 
 fn compare(fixture: &BundleFixture) {
     let input = bundle_fixtures::admit(fixture).expect("supported original bundle");
-    assert_eq!(answer_sets(input.program()), external(fixture.directory()));
+    assert_eq!(bundle_answer_sets(&input), external(fixture.directory()));
 }
 
 #[test]

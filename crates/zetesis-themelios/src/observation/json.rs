@@ -19,9 +19,11 @@ use zetesis_core::{
 
 pub use super::view::{ViewError as Error, ViewLimits as Limits};
 
-/// Version of the model-record representation: a record refers to its atoms
-/// by index into the document's [`AtomTable`] and spells only the new ones.
-pub const RECORD_SCHEMA_VERSION: u32 = 2;
+/// Version of the JSON document. Since schema 2 a record refers to its atoms
+/// by index into the document's [`AtomTable`] and spells only the new ones;
+/// schema 3 keeps those records and drops the statistics of the removed clause
+/// search and closure route.
+pub const RECORD_SCHEMA_VERSION: u32 = 3;
 
 /// The atoms a document has spelled, in the order it spelled them. A record
 /// encoded against the table spells the atoms it adds and refers to all of
@@ -29,8 +31,8 @@ pub const RECORD_SCHEMA_VERSION: u32 = 2;
 /// bounded by a ceiling on distinct atoms; every entry owns a copy of its
 /// atom, made once when the document spells it, so the table retains no
 /// answer's model or catalog. Structural equality decides an atom's index; a
-/// canonical atom found once is afterwards answered by its owner-scoped
-/// identity while anything outside the table still holds its owner.
+/// canonical atom found once is afterwards answered by its row-scoped identity
+/// while anything outside the table still holds its scope.
 #[derive(Debug)]
 pub struct AtomTable {
     /// Placed by the crate's fixed word hash. The program's author spells
@@ -42,14 +44,17 @@ pub struct AtomTable {
     /// every atom of every model on the way out (the observations record).
     indices: HashMap<Entry, usize, std::hash::BuildHasherDefault<crate::word_hash::WordHasher>>,
     /// Indices of canonical atoms already found or entered by the record
-    /// encoder, by owner-scoped identity, so a repeated atom costs an identity
+    /// encoder, by row-scoped identity, so a repeated atom costs an identity
     /// hash rather than a structural one. Only the encoder's lookup records
-    /// identities. Each record begins by dropping the owners nothing outside
+    /// identities. Each record begins by dropping the scopes nothing outside
     /// the cache holds any longer: no atom of theirs can be presented again.
-    /// Interleaved workers' live owners keep their identities across records,
-    /// and runs whose every answer has its own owner, such as reconstructed
-    /// terminal definitions, keep only the owners of answers still alive, so
-    /// the map's linear owner scan does not grow with the number of records.
+    /// Interleaved workers' live owners keep their identities across records.
+    /// Runs whose every answer has its own owner, such as reconstructed
+    /// terminal definitions, share one scope for the rows the answers inherit
+    /// from their closed base, so those atoms are answered by identity from
+    /// one answer to the next; each answer's own rows keep its owner, and only
+    /// the owners of answers still alive stay, so the map's linear owner scan
+    /// does not grow with the number of records.
     identities: AtomIdentityMap<usize>,
     /// Owners the cache held after its last prune. A prune walks every owner,
     /// so it runs only once the owners have doubled since: amortized constant
@@ -158,9 +163,8 @@ impl AtomTable {
     /// `0..len` in model order, without indexing them.
     pub(super) fn defer(&mut self, model: &Model) -> Result<(), Error> {
         debug_assert!(self.is_empty(), "only the first record is deferred");
-        if model.atoms().len() > self.max_atoms {
-            return Err(Error::Table);
-        }
+        zetesis_algebra::Meter::check_count(model.atoms().len(), 0, self.max_atoms)
+            .map_err(|_| Error::Table)?;
         self.deferred = Some(model.clone());
         Ok(())
     }
@@ -206,9 +210,7 @@ impl AtomTable {
     pub(super) fn enter(&mut self, atom: AtomRef<'_>) -> Result<usize, Error> {
         self.flush()?;
         let index = self.indices.len();
-        if index >= self.max_atoms {
-            return Err(Error::Table);
-        }
+        zetesis_algebra::Meter::check_count(index, 1, self.max_atoms).map_err(|_| Error::Table)?;
         self.indices.try_reserve(1).map_err(|_| Error::Allocation)?;
         self.indices.insert(Entry::copy(atom)?, index);
         let _ = self.identities.insert(atom, index);
@@ -305,7 +307,7 @@ mod tests {
     use hashbrown::HashMap;
     use std::convert::Infallible;
     use std::hash::BuildHasherDefault;
-    use zetesis_core::catalog::interner::{AtomInterner, Limits};
+    use zetesis_core::catalog::interner::{AtomInterner, ClosedCatalog, Limits};
     use zetesis_core::{AtomCatalog, Model, Sign};
     use zetesis_test_support::programs::signed_numbered as atom;
 
@@ -533,6 +535,90 @@ mod tests {
         let other = other.atoms().at(0).unwrap();
         assert_eq!(table.index(other).unwrap(), Some(0));
         assert_eq!(table.identities.get(other), None);
+    }
+
+    /// A closed base whose rows are `q(0)` to `q(4)` and `p(0)`, and its source
+    /// writer's model selecting `q(0)`, as a base answer does.
+    fn closed_base() -> (ClosedCatalog, Model) {
+        let limits = Limits::for_atoms(32, 1 << 20);
+        let mut source = AtomInterner::new();
+        for atom in
+            (0..5)
+                .map(|n| atom("q", Sign::Positive, &[n]))
+                .chain([atom("p", Sign::Positive, &[0])])
+        {
+            source
+                .entry_atom_with(&atom, limits, || Ok::<_, Infallible>(()))
+                .unwrap()
+                .insert_with(limits, || Ok::<_, Infallible>(()))
+                .unwrap();
+        }
+        let catalog = source
+            .publish_selection_with(&[0], limits, || Ok::<_, Infallible>(()))
+            .unwrap();
+        let model = Model::from_positions(&catalog, [0]).unwrap();
+        let base = source
+            .into_closed_with(limits, || Ok::<_, Infallible>(()))
+            .unwrap();
+        (base, model)
+    }
+
+    /// An answer published from its own descendant of `base`, as a
+    /// reconstructed answer is: the base answer's `q(0)`, a base row, and its
+    /// own `p(n)`, a row the descendant appends.
+    fn descendant_answer(base: &ClosedCatalog, model: &Model, n: i32) -> Model {
+        let limits = Limits::for_atoms(32, 1 << 20);
+        let mut writer = AtomInterner::for_closed_catalog(base, usize::MAX).unwrap();
+        writer
+            .discover_model_with(base, model, limits, || Ok::<_, Infallible>(()))
+            .unwrap();
+        writer
+            .entry_atom_with(&atom("p", Sign::Positive, &[n]), limits, || {
+                Ok::<_, Infallible>(())
+            })
+            .unwrap()
+            .insert_with(limits, || Ok::<_, Infallible>(()))
+            .unwrap();
+        let catalog = writer
+            .into_ordered_catalog_with(limits, || Ok::<_, Infallible>(()))
+            .unwrap();
+        Model::from_positions(&catalog, 0..2).unwrap()
+    }
+
+    #[test]
+    fn a_reconstructed_answers_base_atoms_are_answered_by_identity() {
+        // Each answer has its own atom owner, and each is dropped once
+        // encoded; the base row `q(0)` keeps one identity across them.
+        let (base, model) = closed_base();
+        let mut table = super::AtomTable::new(16);
+        for n in 1..3 {
+            record(&mut table, &descendant_answer(&base, &model, n));
+        }
+        let answer = descendant_answer(&base, &model, 3);
+        table.begin_record();
+        let q = answer.atoms().at(1).unwrap();
+        assert_eq!(q.predicate().name(), "q");
+        assert!(table.identities.get(q).is_some());
+        assert_eq!(table.identities.get(q), table.index(q).unwrap());
+    }
+
+    #[test]
+    fn indices_match_a_structural_numbering_across_descendants() {
+        let (base, model) = closed_base();
+        let mut table = super::AtomTable::new(16);
+        let mut reference: std::collections::HashMap<String, usize> =
+            std::collections::HashMap::new();
+        for n in 1..5 {
+            let indices = record(&mut table, &descendant_answer(&base, &model, n));
+            // Model order is canonical: `p(n)` precedes `q(0)`.
+            for (spelled, index) in [format!("p({n})"), "q(0)".to_owned()]
+                .into_iter()
+                .zip(indices)
+            {
+                let next = reference.len();
+                assert_eq!(*reference.entry(spelled).or_insert(next), index);
+            }
+        }
     }
 
     /// The table places the atoms by the crate's fixed word hash, the

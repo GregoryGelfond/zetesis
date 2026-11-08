@@ -1,5 +1,9 @@
 //! Established semantic evidence, independent of external publication.
 
+use std::convert::Infallible;
+
+use zetesis_algebra::reduction::Verdict;
+
 use crate::{Completion, Interruption, Optimization, SearchState};
 
 /// The answer family requested by a semantic session, independently of whether
@@ -22,23 +26,23 @@ pub enum AnswerSelection {
 #[derive(Clone, Debug)]
 pub struct SemanticOutcome {
     pub(crate) projection: Option<crate::ProjectionStatistics>,
-    pub(crate) subject: Option<crate::Subject>,
+    pub(crate) original: Option<crate::Original>,
     pub(crate) selection: Option<AnswerSelection>,
     pub(crate) verified: u64,
     pub(crate) scored: u64,
     pub(crate) retained: usize,
     pub(crate) search_state: Option<SearchState>,
+    /// The search that bounds an optimum exhausted before a later pass
+    /// stopped: a strict search, whose exhaustion proved that no model is
+    /// cheaper than the incumbent, was followed by a tie pass enumerating the
+    /// optimum's ties. A stop of that pass leaves the family incomplete, not
+    /// the optimum unproved.
+    pub(crate) optimum_established: bool,
     pub(crate) optimization: Option<Optimization>,
     pub(crate) objective_work: u64,
     pub(crate) checked: u64,
-    pub(crate) gate_atoms: usize,
-    pub(crate) candidate_statistics: Option<zetesis_cpu::CandidateStatistics>,
-    pub(crate) countermodel_statistics: Option<zetesis_sat::Statistics>,
+    pub(crate) countermodel_statistics: Option<zetesis_stable::Statistics>,
     pub(crate) formula_execution: Option<crate::FormulaExecutionStatistics>,
-    pub(crate) lazy_execution: Option<crate::LazyExecutionStatistics>,
-    pub(crate) shared_execution: Option<crate::SharedExecutionStatistics>,
-    pub(crate) closure_execution: Option<crate::ClosureExecutionStatistics>,
-    pub(crate) query_execution: Option<crate::QueryExecutionObservation>,
     pub(crate) hybrid_execution: Option<crate::HybridExecutionStatistics>,
     pub(crate) terminal_execution: Option<crate::TerminalExecutionStatistics>,
     pub(crate) source_evaluation: Option<zetesis_themelios::SourceEvaluationStatistics>,
@@ -54,23 +58,18 @@ impl SemanticOutcome {
     pub const fn interrupted_before_start(interruption: Interruption) -> Self {
         Self {
             projection: None,
-            subject: None,
+            original: None,
             selection: None,
             verified: 0,
             scored: 0,
             retained: 0,
             search_state: Some(SearchState::Interrupted(interruption)),
+            optimum_established: false,
             optimization: None,
             objective_work: 0,
             checked: 0,
-            gate_atoms: 0,
-            candidate_statistics: None,
             countermodel_statistics: None,
             formula_execution: None,
-            lazy_execution: None,
-            shared_execution: None,
-            closure_execution: None,
-            query_execution: None,
             hybrid_execution: None,
             terminal_execution: None,
             source_evaluation: None,
@@ -93,11 +92,11 @@ impl SemanticOutcome {
         self.projection.as_ref()
     }
 
-    /// Original immutable semantic subject, before any candidate restrictions.
+    /// Original immutable semantic input, before any candidate restrictions.
     /// Absent only for a control stop before source admission established an input.
     #[must_use]
-    pub const fn subject(&self) -> Option<&crate::Subject> {
-        self.subject.as_ref()
+    pub const fn original(&self) -> Option<&crate::Original> {
+        self.original.as_ref()
     }
 
     /// Closure result/control records consumed, formula candidates proposed, or
@@ -108,26 +107,13 @@ impl SemanticOutcome {
         self.checked
     }
 
-    /// Gate tuples retained by closure enumeration; formula routes return zero.
-    #[must_use]
-    pub const fn discovered_gate_atoms(&self) -> usize {
-        self.gate_atoms
-    }
-
-    /// Source candidate restriction accounting, including incomplete preparation.
-    /// Absent for formula input or an interruption before closure construction.
-    #[must_use]
-    pub const fn candidate_statistics(&self) -> Option<zetesis_cpu::CandidateStatistics> {
-        self.candidate_statistics
-    }
-
     /// Formula candidate/reduct accounting, when that stream was initialized.
     /// For hybrid or terminal-definition input this describes the retained base.
     /// Its stable-model count does not include subsequent source-constraint
     /// checking or full-answer reconstruction; use
     /// [`Self::verified_models`] for original-program membership.
     #[must_use]
-    pub const fn countermodel_statistics(&self) -> Option<&zetesis_sat::Statistics> {
+    pub const fn countermodel_statistics(&self) -> Option<&zetesis_stable::Statistics> {
         self.countermodel_statistics.as_ref()
     }
 
@@ -140,7 +126,7 @@ impl SemanticOutcome {
 
     /// Base answers consumed by terminal-definition reconstruction, including
     /// interrupted attempts. Only completed reconstruction establishes a full
-    /// answer of the original subject; buffered base answers do not.
+    /// answer of the original input; buffered base answers do not.
     #[must_use]
     pub const fn terminal_execution(&self) -> Option<&crate::TerminalExecutionStatistics> {
         self.terminal_execution.as_ref()
@@ -173,29 +159,7 @@ impl SemanticOutcome {
     pub const fn formula_execution(&self) -> Option<&crate::FormulaExecutionStatistics> {
         self.formula_execution.as_ref()
     }
-    /// Lazy device accounting, including completed but unconsumed results.
-    #[must_use]
-    pub const fn lazy_execution(&self) -> Option<&crate::LazyExecutionStatistics> {
-        self.lazy_execution.as_ref()
-    }
-    /// Shared CPU accounting, including complete but unconsumed checks.
-    #[must_use]
-    pub const fn shared_execution(&self) -> Option<&crate::SharedExecutionStatistics> {
-        self.shared_execution.as_ref()
-    }
-    /// Independent CPU closure counters summed over completed checks, lazy or
-    /// eager. Absent for the shared, device and formula routes.
-    #[must_use]
-    pub const fn closure_execution(&self) -> Option<&crate::ClosureExecutionStatistics> {
-        self.closure_execution.as_ref()
-    }
-    /// Prepared independent CPU ownership receipts, including a snapshot fault
-    /// retained independently of already checked models. Absent for other routes.
-    #[must_use]
-    pub const fn query_execution(&self) -> Option<&crate::QueryExecutionObservation> {
-        self.query_execution.as_ref()
-    }
-    /// Completed exact stable-model memberships of the original subject,
+    /// Completed exact stable-model memberships of the original input,
     /// including still-queued results. A terminal-definition input counts only
     /// completed full reconstruction, never queued or consumed base answers.
     #[must_use]
@@ -206,21 +170,40 @@ impl SemanticOutcome {
     /// Exact size of the requested full answer-set family after exhaustion.
     /// Optimal selection counts every optimal tie, including unretained ties;
     /// all-answer selection counts full identities, even with projection.
-    /// Incomplete or absent coverage returns None, never a partial total.
+    /// Incomplete or absent coverage returns None, never a partial total, and
+    /// so does a search whose strict bound pruned the optimum's ties
+    /// ([`Optimization::ties_pruned`]).
     /// Engine counters are checked or bounded by checked candidate counts.
     #[must_use]
     pub const fn complete_answer_count(&self) -> Option<u64> {
-        if !matches!(self.search_state, Some(SearchState::Exhausted)) {
-            return None;
+        match self.count_verdict() {
+            Verdict::Complete(count) => Some(count),
+            Verdict::Empty => Some(0),
+            Verdict::Undecided(()) => None,
+            Verdict::Absorbed { witnesses, .. } => match witnesses {},
         }
-        match self.selection {
-            Some(AnswerSelection::All) => Some(self.verified),
+    }
+
+    /// Count the selected family only after its existing coverage checks.
+    /// Exact counting has no early absorption; interruption evidence stays here.
+    const fn count_verdict(&self) -> Verdict<u64, Infallible, ()> {
+        if !matches!(self.search_state, Some(SearchState::Exhausted)) {
+            return Verdict::Undecided(());
+        }
+        let count = match self.selection {
+            Some(AnswerSelection::All) => self.verified,
             Some(AnswerSelection::Optimal) => match &self.optimization {
-                Some(best) => Some(best.tied_models),
-                None if self.verified == 0 => Some(0),
-                None => None,
+                Some(best) if best.ties_pruned => return Verdict::Undecided(()),
+                Some(best) => best.tied_models,
+                None if self.verified == 0 => 0,
+                None => return Verdict::Undecided(()),
             },
-            None => None,
+            None => return Verdict::Undecided(()),
+        };
+        if count == 0 {
+            Verdict::Empty
+        } else {
+            Verdict::Complete(count)
         }
     }
 
@@ -279,11 +262,49 @@ impl SemanticOutcome {
     }
 
     /// Complete relevant search established the retained incumbent's optimum.
+    /// Under [`crate::OptimumSearch::StrictWithTiePass`] that search is the
+    /// strict one: once it has exhausted, a stop of the tie pass that follows
+    /// it leaves the optimum proved and the optimal family incomplete, so
+    /// [`Self::complete_answer_count`] stays absent. A stop before it, or an
+    /// unclassified failure, proves no optimum.
     #[must_use]
     pub const fn optimum_proved(&self) -> bool {
-        matches!(self.selection, Some(AnswerSelection::Optimal))
-            && matches!(self.search_state, Some(SearchState::Exhausted))
-            && self.optimization.is_some()
+        match self.minimum_verdict() {
+            Verdict::Complete(_) => true,
+            Verdict::Empty | Verdict::Undecided(()) => false,
+            Verdict::Absorbed { witnesses, .. } => match witnesses {},
+        }
+    }
+
+    /// Classify the retained minimum under its original completion evidence.
+    /// The score is borrowed, not promoted into a new optimum certificate.
+    /// Complete cost evidence can precede completion of the optimum's ties;
+    /// the typed stop and family receipt remain in this `SemanticOutcome`.
+    const fn minimum_verdict(&self) -> Verdict<&zetesis_objective::Score, Infallible, ()> {
+        if !matches!(self.selection, Some(AnswerSelection::Optimal)) {
+            return Verdict::Undecided(());
+        }
+        let Some(best) = &self.optimization else {
+            return if matches!(self.search_state, Some(SearchState::Exhausted))
+                && self.verified == 0
+            {
+                Verdict::Empty
+            } else {
+                Verdict::Undecided(())
+            };
+        };
+        let complete = match self.search_state {
+            Some(SearchState::Exhausted) => true,
+            Some(SearchState::Interrupted(_) | SearchState::PendingInterruption(_)) => {
+                self.optimum_established
+            }
+            Some(SearchState::RequestedModels) | None => false,
+        };
+        if complete {
+            Verdict::Complete(&best.score)
+        } else {
+            Verdict::Undecided(())
+        }
     }
 
     /// Complete search found no stable model, independently of output delivery.
@@ -300,7 +321,7 @@ mod count_tests {
     #[test]
     fn complete_count_needs_exhaustion_and_a_selected_family() {
         let mut outcome = SemanticOutcome::interrupted_before_start(Interruption::Preparation(
-            zetesis_cpu::Stop::Cancelled,
+            zetesis_algebra::Stop::Cancelled,
         ));
         outcome.verified = 7;
         outcome.selection = Some(AnswerSelection::All);
@@ -313,10 +334,58 @@ mod count_tests {
         assert_eq!(outcome.complete_answer_count(), None);
     }
 
+    const fn count_from_const_context(outcome: &SemanticOutcome) -> Option<u64> {
+        outcome.complete_answer_count()
+    }
+
+    #[test]
+    fn complete_counts_ignore_retention_and_keep_all_optimal_ties() {
+        let mut outcome = SemanticOutcome::interrupted_before_start(Interruption::Preparation(
+            zetesis_algebra::Stop::Cancelled,
+        ));
+        outcome.selection = Some(AnswerSelection::All);
+        outcome.search_state = Some(SearchState::Exhausted);
+        outcome.verified = 23;
+        outcome.retained = 1;
+        assert_eq!(count_from_const_context(&outcome), Some(23));
+        outcome.selection = Some(AnswerSelection::Optimal);
+        outcome.optimization = Some(crate::Optimization {
+            score: zetesis_objective::Score::from_costs(vec![(0, 1)]).unwrap(),
+            tied_models: 11,
+            ties_pruned: false,
+            scored_models: 23,
+            work: 0,
+        });
+        assert_eq!(count_from_const_context(&outcome), Some(11));
+        outcome.optimization.as_mut().unwrap().ties_pruned = true;
+        assert_eq!(count_from_const_context(&outcome), None);
+        outcome.optimization.as_mut().unwrap().ties_pruned = false;
+        outcome.optimum_established = true;
+        outcome.search_state = Some(SearchState::RequestedModels);
+        assert_eq!(count_from_const_context(&outcome), None);
+    }
+
+    #[test]
+    fn complete_count_preserves_the_full_counter_boundary() {
+        let mut outcome = SemanticOutcome::interrupted_before_start(Interruption::Preparation(
+            zetesis_algebra::Stop::Cancelled,
+        ));
+        outcome.selection = Some(AnswerSelection::All);
+        outcome.search_state = Some(SearchState::Exhausted);
+        assert!(matches!(outcome.count_verdict(), super::Verdict::Empty));
+        assert_eq!(count_from_const_context(&outcome), Some(0));
+        outcome.verified = u64::MAX;
+        assert!(matches!(
+            outcome.count_verdict(),
+            super::Verdict::Complete(u64::MAX)
+        ));
+        assert_eq!(count_from_const_context(&outcome), Some(u64::MAX));
+    }
+
     #[test]
     fn an_absent_incumbent_only_counts_as_zero_for_empty_complete_search() {
         let mut outcome = SemanticOutcome::interrupted_before_start(Interruption::Preparation(
-            zetesis_cpu::Stop::Cancelled,
+            zetesis_algebra::Stop::Cancelled,
         ));
         outcome.selection = Some(AnswerSelection::Optimal);
         outcome.search_state = Some(SearchState::Exhausted);
@@ -325,3 +394,6 @@ mod count_tests {
         assert_eq!(outcome.complete_answer_count(), None);
     }
 }
+
+#[cfg(test)]
+mod minimum_tests;

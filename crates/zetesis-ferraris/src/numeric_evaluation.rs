@@ -3,16 +3,18 @@
 //! One 16-byte slot holds either an `i128` sum or two `u64` extrema. The immutable
 //! `NumericRow` domain determines its interpretation; the slot is never a second
 //! row authority. Byte conversions are safe Rust, with no union or casts.
-//! One invariant governs reads: a row whose validity bit is set holds its exact
-//! measure under the node truth its owner currently holds. A complete original
+//! One invariant governs guard reads: a row whose validity bit is set holds its
+//! exact measure under the node truth its owner currently holds. A complete original
 //! or frozen evaluation pass clears every bit first and sets each as it reduces
-//! the row. An update of a retained tight evaluation clears the bit of every row
-//! with a changed condition before any of its guards is re-evaluated, since a
-//! row's conditions precede its guards; every surviving bit is therefore still
-//! exact.
+//! the row. A retained tight evaluation adjusts a valid sum once per changed
+//! occurrence and withdraws a changed extremum. All conditions precede every
+//! guard, so a guard sees the final updated sum or reduces an invalid row.
+//! Applying one changed node's incidence list is indivisible with respect to
+//! guard evaluation, including when that list repeats the same numeric row.
+//! Interrupted updates withdraw their owning evaluation before any later read.
 
 use crate::{ExtremaMeasure, ExtremumCut, NumericDomain, Theory, Threshold};
-use zetesis_cpu::Stop;
+use zetesis_algebra::{Stop, words::Words};
 
 /// Capacity survives passes; valid bits survive only into an update of the
 /// evaluation that published them, under the invariant the module states.
@@ -21,7 +23,7 @@ use zetesis_cpu::Stop;
 #[derive(Debug, Default)]
 pub(crate) struct NumericRowScratch {
     measures: Vec<Measure>,
-    valid: Vec<u64>,
+    valid: Words<u64>,
 }
 
 impl NumericRowScratch {
@@ -86,9 +88,11 @@ impl NumericRowScratch {
         let observed = observe(self.retained_bytes());
         reserved?;
         observed?;
+        let additional = rows.div_ceil(64).saturating_sub(self.valid.len());
         let reserved = self
             .valid
-            .try_reserve_exact(rows.div_ceil(64).saturating_sub(self.valid.len()))
+            .storage_mut()
+            .try_reserve_exact(additional)
             .map_err(|_| Stop::Allocation);
         let observed = observe(self.retained_bytes());
         reserved?;
@@ -107,13 +111,13 @@ impl NumericRowScratch {
     ) -> Result<(), E> {
         let rows = Self::rows(theory);
         let words = rows.div_ceil(64);
-        self.valid.clear();
+        self.valid.storage_mut().clear();
         if self.measures.capacity() < rows || self.valid.capacity() < words {
             return Err(Stop::InvalidProgram.into());
         }
         for _ in 0..words {
             tick()?;
-            self.valid.push(0);
+            self.valid.storage_mut().push(0);
         }
         while self.measures.len() < rows {
             tick()?;
@@ -182,13 +186,55 @@ impl NumericRowScratch {
             .map(Measure::extrema)
     }
 
-    /// Withdraw one row's measure, so that its next guard reduces it again. An
-    /// update of a retained evaluation withdraws exactly the rows whose
-    /// conditions changed; every other row keeps a measure equal to its
-    /// reduction under the current candidate.
-    pub(crate) fn invalidate(&mut self, row: usize) -> Result<(), Stop> {
+    /// Apply one changed condition occurrence. The caller owns the same theory
+    /// and visits each occurrence once after its truth changes; `selected` is
+    /// its new truth. Row identity and weight come only from the authoritative
+    /// columns. Repeated conditions remain distinct contributions, including
+    /// zero weights. The caller charges the reader visit before this operation.
+    ///
+    /// A valid sum is adjusted exactly; an ordinal measure is withdrawn. An
+    /// invalid measure stays invalid, so the next guard performs a full read.
+    /// No guard may run until every earlier changed condition has been handled.
+    pub(crate) fn change_condition(
+        &mut self,
+        theory: &Theory,
+        row: usize,
+        occurrence: usize,
+        selected: bool,
+    ) -> Result<(), Stop> {
+        let descriptor = theory.parts().rows().get(row).ok_or(Stop::InvalidProgram)?;
+        if occurrence >= descriptor.length {
+            return Err(Stop::InvalidProgram);
+        }
         let word = self.valid.get_mut(row / 64).ok_or(Stop::InvalidProgram)?;
-        *word &= !(1_u64 << (row % 64));
+        let bit = Words::<u64>::locate(row).1;
+        if *word & bit == 0 {
+            return Ok(());
+        }
+        if descriptor.domain != NumericDomain::Weights {
+            *word &= !bit;
+            return Ok(());
+        }
+        let position = descriptor
+            .start
+            .checked_add(occurrence)
+            .ok_or(Stop::InvalidProgram)?;
+        let weight = i128::from(
+            *theory
+                .parts()
+                .numeric_values()
+                .get(position)
+                .ok_or(Stop::InvalidProgram)?,
+        );
+        let measure = self.measures.get_mut(row).ok_or(Stop::InvalidProgram)?;
+        let sum = measure.selected_sum();
+        let updated = if selected {
+            sum.checked_add(weight)
+        } else {
+            sum.checked_sub(weight).filter(|&value| value >= 0)
+        }
+        .ok_or(Stop::InvalidProgram)?;
+        *measure = Measure::sum(updated);
         Ok(())
     }
 
@@ -205,7 +251,7 @@ impl NumericRowScratch {
         reduce: impl FnOnce() -> Result<Measure, E>,
     ) -> Result<Measure, E> {
         let word = self.valid.get_mut(row / 64).ok_or(Stop::InvalidProgram)?;
-        let bit = 1_u64 << (row % 64);
+        let bit = Words::<u64>::locate(row).1;
         let measure = self.measures.get_mut(row).ok_or(Stop::InvalidProgram)?;
         if *word & bit == 0 {
             let completed = reduce()?;

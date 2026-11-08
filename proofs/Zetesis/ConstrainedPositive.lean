@@ -118,4 +118,52 @@ theorem failed_constraints_no_stable (P : Theory A) (bodies : List (Formula A))
   rintro ⟨M, stable⟩
   exact failed ((positive_stable_iff P bodies admitted M).mp stable).2.2
 
+/-- A candidate-specific positive presentation of the frozen reduct decides
+membership by least consequences. The original theory need not be positive:
+the premise concerns its reduct at this one original model, and must cover
+every interpretation below that model. It is not enough to present only some
+roots or to use the candidate as an initial closure seed.
+
+First, the candidate models the positive presentation, so its least consequences
+lie below the candidate and satisfy the presentation's constraints. They therefore
+model the original frozen reduct. Stability forces equality. Conversely, a reduct
+model below that least set is producer-closed and must contain the least set.
+Recognizing this presentation and computing its least fixed point in Rust remain
+separate obligations. -/
+theorem stable_iff_frozen_least (T P : Theory A) (M : Atoms A)
+    (original : Models M T)
+    (admitted : ∀ F ∈ P, PositiveTheory.Admitted F)
+    (presentation : ∀ J, Sub J M →
+      (Models J (ReductTheory M T) ↔ Models J P)) :
+    Stable M T ↔ M = PositiveTheory.Least P := by
+  have candidateModels : Models M P :=
+    (presentation M (fun _ present => present)).mp
+      ((models_reduct_self M T).mpr original)
+  have candidateParts :=
+    (PositiveTheory.models_iff_closed_constraints P M admitted).mp candidateModels
+  have contained : Sub (PositiveTheory.Least P) M :=
+    PositiveTheory.least_sub_closed candidateParts.1
+  have leastModels : Models (PositiveTheory.Least P) P :=
+    (PositiveTheory.models_iff_closed_constraints P (PositiveTheory.Least P) admitted).mpr
+      ⟨PositiveTheory.least_closed P admitted,
+        PositiveTheory.constraints_downward P admitted contained candidateParts.2⟩
+  have leastReduct : Models (PositiveTheory.Least P) (ReductTheory M T) :=
+    (presentation (PositiveTheory.Least P) contained).mpr leastModels
+  constructor
+  · intro stable
+    have reverse : Sub M (PositiveTheory.Least P) := by
+      apply Classical.byContradiction
+      intro absent
+      exact stable.2 ⟨PositiveTheory.Least P, ⟨contained, absent⟩, leastReduct⟩
+    exact atoms_ext (fun atom => ⟨reverse atom, contained atom⟩)
+  · intro equality
+    refine ⟨original, ?_⟩
+    rintro ⟨J, ⟨subset, proper⟩, reduced⟩
+    have closed : PositiveTheory.Closed J P :=
+      ((PositiveTheory.models_iff_closed_constraints P J admitted).mp
+        ((presentation J subset).mp reduced)).1
+    have containsLeast : Sub (PositiveTheory.Least P) J :=
+      PositiveTheory.least_sub_closed closed
+    exact proper (equality ▸ containsLeast)
+
 end Zetesis.ConstrainedPositive

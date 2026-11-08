@@ -3,16 +3,19 @@
 
 use std::num::NonZeroUsize;
 
+use zetesis_algebra::Cancellation;
 use zetesis_core::Model;
-use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{Interpretation, Theory};
-use zetesis_sat::{BatchStatistics, BatchVerdict, Incomplete, StableModels, Statistics};
+use zetesis_stable::{
+    BatchStatistics, BatchVerdict, FrontierOrder, Incomplete, StableModels, Statistics,
+};
 
 use super::test_harness::{Record, admitted, run, run_consuming};
 use crate::formula_execution::{Failure, FormulaExecutionStatistics, MembershipExecution};
 use crate::formula_queue::BatchQueue;
 use crate::{
-    Backend, Completion, Interruption, Oracle, PreparedInput, Session, SolveConfig, SolveError,
+    Backend, Completion, GpuBatching, Interruption, Oracle, PreparedInput, Session, SolveConfig,
+    SolveError,
 };
 
 /// How the native test route answers each candidate of a batch.
@@ -49,9 +52,50 @@ struct NativeBatch {
     queue: BatchQueue,
     snapshots: Vec<(BatchStatistics, Statistics, usize)>,
     proposed: Vec<Vec<Vec<usize>>>,
+    /// Each selection of a slate: the candidate bound's generation and the
+    /// proposals the slate received, zero for the session's last selection,
+    /// which finds the stream run out and calls no checker.
+    selections: Vec<(u64, usize)>,
+    /// The queue is the production GPU formula queue, which keeps round
+    /// statistics.
+    #[cfg(feature = "gpu")]
+    joint: bool,
     stop: Option<Incomplete>,
     answers: Answers,
     fault: Fault,
+}
+
+impl NativeBatch {
+    /// The production GPU formula queue under `config`'s batching policy. The
+    /// reference checker decides every candidate, establishing the original
+    /// satisfaction the joint protocol requires of its checker.
+    #[cfg(feature = "gpu")]
+    fn joint(config: &SolveConfig) -> Self {
+        Self {
+            queue: BatchQueue::for_joint_oracle(config).unwrap(),
+            joint: true,
+            answers: Answers::Decided,
+            ..Self::default()
+        }
+    }
+}
+
+/// The independent residual harness (no policy) and, with GPU support, the
+/// production GPU formula queue under each batching policy.
+fn harnesses(config: SolveConfig) -> Vec<(Option<GpuBatching>, SolveConfig, NativeBatch)> {
+    #[cfg(feature = "gpu")]
+    let joint = [GpuBatching::Fixed, GpuBatching::Adaptive].map(|policy| {
+        let config = SolveConfig {
+            gpu_batching: policy,
+            ..config
+        };
+        (Some(policy), config, NativeBatch::joint(&config))
+    });
+    #[cfg(not(feature = "gpu"))]
+    let joint = [];
+    std::iter::once((None, config, NativeBatch::default()))
+        .chain(joint)
+        .collect()
 }
 
 /// The reference checker's reduct verdict for one original model.
@@ -82,6 +126,12 @@ impl MembershipExecution for NativeBatch {
         cancellation: &Cancellation,
         _: &crate::phase_timing::Recorder,
     ) -> Option<Result<Interpretation, Failure>> {
+        // Bounds change only while the session scores returned models, so the
+        // generation now is the one at any selection this pull makes, which
+        // it makes exactly when no verified model is queued.
+        let generation = models.bound_generation();
+        let selects = self.queue.len() == 0 && !models.exhausted();
+        let checked = self.proposed.len();
         let result = self.queue.next(models, options, cancellation, |batch| {
             let theory = batch.theory();
             let candidates = batch.candidates();
@@ -95,15 +145,15 @@ impl MembershipExecution for NativeBatch {
                 return Err(Failure::Search(stop));
             }
             if self.fault == Fault::Work {
-                let limits = zetesis_sat::Limits {
-                    search: zetesis_sat::SearchLimits {
+                let limits = zetesis_stable::Limits {
+                    search: zetesis_stable::SearchLimits {
                         max_work: 0,
                         ..Default::default()
                     },
                     ..Default::default()
                 };
-                if let zetesis_sat::Check::Inconclusive(error) =
-                    zetesis_sat::check(theory, &candidates[0], limits, cancellation)
+                if let zetesis_stable::Check::Inconclusive(error) =
+                    zetesis_stable::check(theory, &candidates[0], limits, cancellation)
                 {
                     return Err(Failure::Search(error));
                 }
@@ -142,11 +192,22 @@ impl MembershipExecution for NativeBatch {
             models.statistics(),
             self.queue.len(),
         ));
+        if selects {
+            let proposed = self.proposed[checked..].first().map_or(0, Vec::len);
+            self.selections.push((generation, proposed));
+        }
         result
     }
 
     fn statistics(&self, _: &StableModels) -> Option<FormulaExecutionStatistics> {
-        // Actual native batches have no physical adapter, GPU work or upload counters.
+        // Actual native batches have no physical adapter, GPU work or upload
+        // counters; the production GPU formula queue still keeps its rounds.
+        #[cfg(feature = "gpu")]
+        if self.joint {
+            let mut statistics = FormulaExecutionStatistics::default();
+            crate::formula_execution::record_slates(&self.queue, &mut statistics);
+            return Some(statistics);
+        }
         None
     }
 }
@@ -160,6 +221,209 @@ fn config() -> SolveConfig {
         batch_size: NonZeroUsize::new(3).unwrap(),
         ..Default::default()
     }
+}
+
+/// `config` with a GPU backend value, region search and four workers, which
+/// selects the parallel region producers; the injected native execution
+/// answers membership, so no device is constructed.
+fn producing(config: SolveConfig) -> SolveConfig {
+    SolveConfig {
+        backend: Backend::Gpu(None),
+        workers: NonZeroUsize::new(4).unwrap(),
+        ..config
+    }
+}
+
+/// The session ran the parallel region producers: only they keep frontier
+/// receipts, which the walker and the scalar walk leave absent.
+fn assert_produced(execution: &NativeBatch) {
+    let (_, search, _) = execution.snapshots.last().unwrap();
+    assert!(
+        search
+            .regions
+            .is_some_and(|regions| regions.frontier.is_some()),
+        "the parallel region producers did not run"
+    );
+}
+
+/// The order the producers took regions in, from the last snapshot.
+fn frontier_order(execution: &NativeBatch) -> Option<FrontierOrder> {
+    let (_, search, _) = execution.snapshots.last().unwrap();
+    search.regions.and_then(|regions| regions.frontier_order)
+}
+
+/// The scalar session's complete records for `owner`, sorted.
+fn scalar_records(owner: &zetesis_themelios::AdmittedFormula) -> Vec<Record> {
+    let mut scalar = Session::new(
+        PreparedInput::formula(owner),
+        config(),
+        Cancellation::default(),
+    )
+    .unwrap();
+    let mut expected: Vec<Record> = scalar
+        .by_ref()
+        .map(|answer| {
+            let answer = answer.unwrap();
+            (
+                answer.interpretation().clone(),
+                answer.score().map(|score| score.costs().to_vec()),
+            )
+        })
+        .collect();
+    expected.sort();
+    expected
+}
+
+#[test]
+fn producer_batches_preserve_complete_full_answers() {
+    for source in [
+        "",
+        "a | b.",
+        "{a;b;c}. p:-p.",
+        "1 {a;b;c} 1. #show.",
+        "{p;-p}. #show x.",
+        "{a;b}. #show a:a. #minimize{1,a:a;1,b:b}.",
+        "{a;b;c;d;e}.",
+    ] {
+        let owner = admitted(source);
+        let expected = scalar_records(&owner);
+        for (_, config, mut execution) in harnesses(producing(config())) {
+            let actual = run(&owner, &config, &Cancellation::default(), &mut execution);
+            assert!(actual.error.is_none(), "{source}: {:?}", actual.error);
+            assert_eq!(actual.outcome.completion(), Some(Completion::Exhausted));
+            assert_eq!(actual.records(), expected, "{source}");
+            let (batch, search, queued) = execution.snapshots.last().unwrap();
+            assert_eq!((batch.pending, *queued), (0, 0));
+            assert_eq!(batch.committed, search.candidates);
+            assert_produced(&execution);
+        }
+    }
+}
+
+#[test]
+fn root_refutation_absorbs_before_parallel_production() {
+    // A constant-true constraint is now authenticated during arithmetic
+    // preparation. It must settle without starting the producer frontier.
+    let owner = admitted(":-.");
+    let expected = scalar_records(&owner);
+    assert!(expected.is_empty());
+    for (_, config, mut execution) in harnesses(producing(config())) {
+        let actual = run(&owner, &config, &Cancellation::default(), &mut execution);
+        assert!(actual.error.is_none());
+        assert_eq!(actual.outcome.completion(), Some(Completion::Exhausted));
+        assert_eq!(actual.records(), expected);
+        let (batch, search, queued) = execution.snapshots.last().unwrap();
+        assert_eq!((batch.pending, batch.committed, *queued), (0, 0, 0));
+        assert_eq!(search.candidates, 0);
+        assert_eq!(search.countermodel_queries, 0);
+        let regions = search.regions.unwrap();
+        assert!(regions.parity.root_refuted);
+        assert_eq!(regions.counts.regions, 0);
+        assert!(regions.frontier.is_none());
+        assert!(execution.proposed.is_empty());
+    }
+}
+
+#[test]
+fn producer_objective_bounds_preserve_optimal_ties() {
+    let owner = admitted("1 {a;b;c} 1. #minimize{1,a:a;1,b:b;2,c:c}. #show.");
+    let expected = scalar_records(&owner);
+    for (_, config, mut execution) in harnesses(producing(config())) {
+        let capture = run(&owner, &config, &Cancellation::default(), &mut execution);
+        assert!(capture.error.is_none());
+        assert_eq!(capture.outcome.completion(), Some(Completion::Exhausted));
+        let optimum = capture.outcome.incumbent().unwrap();
+        assert_eq!(optimum.tied_models, 2);
+        assert_eq!(optimum.score.costs(), [(0, 1)]);
+        assert_eq!(capture.records(), expected);
+        assert!(capture.outcome.optimum_proved());
+        assert_produced(&execution);
+    }
+}
+
+#[test]
+fn optimizing_producer_sessions_share_one_frontier() {
+    let owner = admitted("1 {a;b;c} 1. #minimize{1,a:a;1,b:b;2,c:c}. #show.");
+    for (_, config, mut execution) in harnesses(producing(config())) {
+        let capture = run(&owner, &config, &Cancellation::default(), &mut execution);
+        assert!(capture.error.is_none());
+        assert_eq!(frontier_order(&execution), Some(FrontierOrder::Shared));
+    }
+}
+
+#[test]
+fn enumerating_producer_sessions_keep_a_deque_per_producer() {
+    let owner = admitted("{a;b;c}.");
+    for (_, config, mut execution) in harnesses(producing(config())) {
+        let capture = run(&owner, &config, &Cancellation::default(), &mut execution);
+        assert!(capture.error.is_none());
+        assert_eq!(frontier_order(&execution), Some(FrontierOrder::PerProducer));
+    }
+}
+
+#[test]
+fn producer_proposal_limit_delivers_the_committed_prefix() {
+    let owner = admitted("{a;b;c}.");
+    let mut execution = NativeBatch::default();
+    let capture = run(
+        &owner,
+        &SolveConfig {
+            max_candidates: 2,
+            ..producing(config())
+        },
+        &Cancellation::default(),
+        &mut execution,
+    );
+    assert!(capture.error.is_none());
+    assert_eq!(
+        capture.outcome.interruption(),
+        Some(Interruption::Countermodel(Incomplete::CandidateLimit))
+    );
+    assert_eq!(capture.answers.len(), 2);
+    let mut expected: Vec<Record> = execution
+        .proposed
+        .iter()
+        .flatten()
+        .map(|candidate| {
+            (
+                Model::from_positions(owner.atom_catalog(), candidate.iter().copied()).unwrap(),
+                None,
+            )
+        })
+        .collect();
+    expected.sort();
+    assert_eq!(capture.records(), expected);
+    assert_produced(&execution);
+}
+
+#[test]
+fn producer_cancellation_preserves_unconsumed_verified_answers() {
+    let owner = admitted("{a;b;c}. #show x.");
+    let cancellation = Cancellation::default();
+    let mut execution = NativeBatch::default();
+    let capture = run_consuming(
+        &owner,
+        &producing(config()),
+        &cancellation,
+        &mut execution,
+        |_| cancellation.cancel(),
+    );
+    assert!(capture.error.is_none());
+    assert_eq!(
+        capture.outcome.interruption(),
+        Some(Interruption::Countermodel(Incomplete::Cancelled))
+    );
+    assert_eq!(capture.answers.len(), 1);
+    // The published answer is one of the proposals the session committed.
+    let first = &capture.answers[0].0;
+    assert!(execution.proposed.iter().flatten().any(|candidate| {
+        Model::from_positions(owner.atom_catalog(), candidate.iter().copied()).unwrap() == *first
+    }));
+    assert_eq!(
+        capture.outcome.verified_models(),
+        capture.outcome.candidate_progress()
+    );
+    assert_produced(&execution);
 }
 
 #[test]
@@ -192,18 +456,28 @@ fn native_batches_preserve_complete_full_answers() {
             })
             .collect();
         expected.sort();
-        let mut execution = NativeBatch::default();
-        let actual = run(&owner, &config, &Cancellation::default(), &mut execution);
-        assert!(actual.error.is_none(), "{source}: {:?}", actual.error);
-        assert_eq!(actual.outcome.completion(), Some(Completion::Exhausted));
-        assert_eq!(actual.records(), expected, "{source}");
-        let (batch, search, queued) = execution.snapshots.last().unwrap();
-        assert_eq!((batch.pending, *queued), (0, 0));
-        assert_eq!(batch.committed, search.candidates);
-        assert_eq!(batch.residuals, search.candidates);
-        assert_eq!(batch.propagated, 0);
-        assert!(execution.proposed.iter().all(|batch| batch.len() <= 3));
-        assert!(actual.outcome.formula_execution().is_none());
+        for (policy, config, mut execution) in harnesses(config) {
+            let actual = run(&owner, &config, &Cancellation::default(), &mut execution);
+            assert!(actual.error.is_none(), "{source}: {:?}", actual.error);
+            assert_eq!(actual.outcome.completion(), Some(Completion::Exhausted));
+            assert_eq!(actual.records(), expected, "{source}");
+            let (batch, search, queued) = execution.snapshots.last().unwrap();
+            assert_eq!((batch.pending, *queued), (0, 0));
+            assert_eq!(batch.committed, search.candidates);
+            if policy.is_none() {
+                assert_eq!(batch.residuals, search.candidates);
+                assert_eq!(batch.propagated, 0);
+                assert!(actual.outcome.formula_execution().is_none());
+            } else {
+                assert_eq!(batch.propagated, search.candidates);
+                assert_eq!(batch.residuals, 0);
+            }
+            if policy == Some(GpuBatching::Adaptive) {
+                assert_adaptive_schedule(&execution.selections, 3);
+            } else {
+                assert!(execution.proposed.iter().all(|batch| batch.len() <= 3));
+            }
+        }
     }
 }
 
@@ -284,10 +558,19 @@ fn cancellation_preserves_unconsumed_verified_answers() {
         Some(Interruption::Countermodel(Incomplete::Cancelled))
     );
     assert_eq!(capture.answers.len(), 1);
-    assert!(capture.answers[0].0.atoms().is_empty());
+    assert_eq!(execution.proposed.len(), 1);
+    let proposed = &execution.proposed[0];
+    assert_eq!(proposed.len(), 3);
+    // Publication consumes the first verified proposal's full interpretation;
+    // the source's empty display projection cannot replace that identity.
+    let first = Model::from_positions(owner.atom_catalog(), proposed[0].iter().copied()).unwrap();
+    assert_eq!(capture.answers[0].0, first);
     assert_eq!(capture.outcome.verified_models(), 3);
+    assert_eq!(capture.outcome.candidate_progress(), 3);
     assert_eq!(execution.queue.len(), 2);
-    assert_eq!(execution.snapshots.last().unwrap().0.pending, 0);
+    let batch = execution.snapshots.last().unwrap().0;
+    assert_eq!(batch.committed, 3);
+    assert_eq!(batch.pending, 0);
 }
 
 #[test]
@@ -315,20 +598,21 @@ fn objective_bounds_preserve_queued_optimal_ties() {
         if !enabled {
             config.max_objective_bound_work = 0;
         }
-        let mut execution = NativeBatch::default();
-        let capture = run(&owner, &config, &Cancellation::default(), &mut execution);
-        assert!(capture.error.is_none());
-        assert_eq!(capture.outcome.completion(), Some(Completion::Exhausted));
-        let optimum = capture.outcome.incumbent().unwrap();
-        assert_eq!(optimum.tied_models, 2);
-        assert_eq!(optimum.score.costs(), [(0, 1)]);
-        assert_eq!(capture.records(), expected);
-        assert_eq!(optimum.scored_models, 3);
-        assert!(capture.outcome.optimum_proved());
-        if enabled {
-            assert!(execution.snapshots.iter().any(|(_, statistics, queued)| {
-                statistics.candidate_restrictions > 0 && *queued > 0
-            }));
+        for (_, config, mut execution) in harnesses(config) {
+            let capture = run(&owner, &config, &Cancellation::default(), &mut execution);
+            assert!(capture.error.is_none());
+            assert_eq!(capture.outcome.completion(), Some(Completion::Exhausted));
+            let optimum = capture.outcome.incumbent().unwrap();
+            assert_eq!(optimum.tied_models, 2);
+            assert_eq!(optimum.score.costs(), [(0, 1)]);
+            assert_eq!(capture.records(), expected);
+            assert_eq!(optimum.scored_models, 3);
+            assert!(capture.outcome.optimum_proved());
+            if enabled {
+                assert!(execution.snapshots.iter().any(|(_, statistics, queued)| {
+                    statistics.candidate_restrictions > 0 && *queued > 0
+                }));
+            }
         }
     }
 }
@@ -487,4 +771,95 @@ fn mixed_decisions_and_residuals_share_one_commit() {
         ),
         (4, 1, 3, 0)
     );
+}
+
+/// Check recorded selections against the adaptive rule with no memory or
+/// device bound: after a slate whose answers moved the bound a slate requests
+/// the batch size, after a filled quiet slate twice that slate's request, and
+/// otherwise the same request. Each slate receives its request unless the
+/// stream runs out, after which no selection receives a proposal.
+fn assert_adaptive_schedule(selections: &[(u64, usize)], batch_size: usize) {
+    let mut requested = batch_size;
+    for (index, &(generation, proposed)) in selections.iter().enumerate() {
+        if let Some(&(previous_generation, previous)) = index.checked_sub(1).map(|i| &selections[i])
+        {
+            requested = if generation != previous_generation {
+                batch_size
+            } else if previous == requested {
+                2 * requested
+            } else {
+                requested
+            };
+        }
+        let ran_out = selections[index + 1..].iter().all(|&(_, later)| later == 0);
+        assert!(
+            proposed == requested || (proposed < requested && ran_out),
+            "selection {index} of {selections:?}"
+        );
+    }
+}
+
+/// A program whose answers keep improving its objective under a fresh bound.
+#[cfg(feature = "gpu")]
+const IMPROVING: &str = "{a;b;c;d;e;f}. #minimize{1,a:a;2,b:b;4,c:c;8,d:d;16,e:e;32,f:f}.";
+
+#[cfg(feature = "gpu")]
+fn adaptive(batch_size: usize) -> SolveConfig {
+    SolveConfig {
+        gpu_batching: GpuBatching::Adaptive,
+        batch_size: NonZeroUsize::new(batch_size).unwrap(),
+        ..config()
+    }
+}
+
+#[cfg(feature = "gpu")]
+#[test]
+fn the_slate_after_a_tightening_slate_has_the_batch_size() {
+    let owner = admitted(IMPROVING);
+    let config = adaptive(2);
+    let mut execution = NativeBatch::joint(&config);
+    let capture = run(&owner, &config, &Cancellation::default(), &mut execution);
+    assert!(capture.error.is_none());
+    assert_eq!(capture.outcome.completion(), Some(Completion::Exhausted));
+    let selections = &execution.selections;
+    let mut tightened = 0;
+    for slate in 1..selections.len() {
+        // A generation that moved between two selections was installed while
+        // the earlier slate's answers were scored. The session's last
+        // selection counts too: it follows the last non-empty slate.
+        let ((before, _), (after, proposed)) = (selections[slate - 1], selections[slate]);
+        if after != before {
+            tightened += 1;
+            // Fewer only when the stream runs out in that slate, so that no
+            // later selection receives a proposal.
+            assert!(proposed == 2 || selections[slate + 1..].iter().all(|&(_, later)| later == 0));
+        }
+    }
+    assert!(tightened >= 1);
+    let statistics = capture.outcome.formula_execution().unwrap();
+    assert_eq!(statistics.gpu_slate_resets, tightened);
+    let nonempty = selections.iter().filter(|&&(_, proposed)| proposed > 0);
+    assert_eq!(
+        statistics.gpu_slates,
+        u64::try_from(nonempty.count()).unwrap()
+    );
+}
+
+#[cfg(feature = "gpu")]
+#[test]
+fn a_quiet_filled_slate_doubles_the_next_slate() {
+    let owner = admitted("{a;b;c;d;e}.");
+    let config = adaptive(2);
+    let mut execution = NativeBatch::joint(&config);
+    let capture = run(&owner, &config, &Cancellation::default(), &mut execution);
+    assert!(capture.error.is_none());
+    assert_eq!(capture.outcome.completion(), Some(Completion::Exhausted));
+    assert_eq!(capture.answers.len(), 32);
+    let slates: Vec<_> = execution.proposed.iter().map(Vec::len).collect();
+    assert_eq!(slates, [2, 4, 8, 16, 2]);
+    let statistics = capture.outcome.formula_execution().unwrap();
+    assert_eq!(statistics.gpu_slate_resets, 0);
+    assert_eq!(statistics.gpu_slates, 5);
+    // The last slate requests 32 but receives the remaining 2.
+    assert_eq!(statistics.gpu_largest_slate, Some(16));
 }

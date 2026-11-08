@@ -13,14 +13,14 @@ use std::mem::size_of;
 
 use super::{Tick, TightError, TightProducer, filled};
 use crate::{NodeView, Theory};
-use zetesis_cpu::{Meter, Stop};
+use zetesis_algebra::{Meter, Stop, words::Words};
 
 /// What a reader is: the kind of the reading object.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) enum ReaderKind {
     /// A conjunction, disjunction or implication reading the node as an operand.
     Node,
-    /// A numeric row reading the node as a condition; its guards read the row.
+    /// One numeric-row occurrence reading the node; its guards read the row.
     Row,
     /// A producer whose body is the node.
     Producer,
@@ -28,12 +28,39 @@ pub(super) enum ReaderKind {
     Root,
 }
 
-/// One reader, packed as its kind in the top two bits over its index.
+/// One reader, packed as its kind in the top two bits over its index. A row
+/// reader divides the remaining bits equally between row and occurrence IDs.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) struct Reader(u64);
 
 impl Reader {
     const SHIFT: u32 = u64::BITS - 2;
+    const ROW_SHIFT: u32 = Self::SHIFT / 2;
+    const ROW_MASK: u64 = (1 << Self::ROW_SHIFT) - 1;
+
+    /// Optional index admission uses lengths, so the last possible index is
+    /// one smaller. The condition-column length bounds every admitted row's
+    /// extent, even for overlapping spans and unused rows at raw ingress.
+    pub(super) fn rows_fit(rows: usize, conditions: usize) -> bool {
+        rows as u128 <= 1_u128 << Self::ROW_SHIFT && conditions as u128 <= 1_u128 << Self::ROW_SHIFT
+    }
+
+    fn row(row: usize, occurrence: usize) -> Result<Self, TightError> {
+        let row = u64::try_from(row).map_err(|_| Stop::InvalidProgram)?;
+        let occurrence = u64::try_from(occurrence).map_err(|_| Stop::InvalidProgram)?;
+        if row > Self::ROW_MASK || occurrence > Self::ROW_MASK {
+            return Err(Stop::InvalidProgram.into());
+        }
+        Ok(Self(1 << Self::SHIFT | row << Self::ROW_SHIFT | occurrence))
+    }
+
+    /// The row and position within it, under this reader's `Row` tag.
+    pub(super) fn row_occurrence(self) -> (usize, usize) {
+        (
+            usize::try_from((self.0 >> Self::ROW_SHIFT) & Self::ROW_MASK).unwrap_or(usize::MAX),
+            usize::try_from(self.0 & Self::ROW_MASK).unwrap_or(usize::MAX),
+        )
+    }
 
     fn new(kind: ReaderKind, index: usize) -> Result<Self, TightError> {
         let index = u64::try_from(index).map_err(|_| Stop::InvalidProgram)?;
@@ -63,6 +90,9 @@ impl Reader {
         usize::try_from(self.0 & ((1 << Self::SHIFT) - 1)).unwrap_or(usize::MAX)
     }
 }
+
+#[cfg(test)]
+mod tests;
 
 /// Ordered lists over one entry vector, one per slot: list `s` is
 /// `entries[offsets[s]..offsets[s + 1]]`. A slot is a node, an atom or a numeric
@@ -220,16 +250,16 @@ fn incidences(
     mut emit: impl FnMut(Incidence) -> Result<(), TightError>,
 ) -> Result<(), TightError> {
     let view = theory.view();
-    let mut seen = filled(theory.parts().rows().len().div_ceil(64), 0_u64)?;
+    let mut seen = Words::new(filled(theory.parts().rows().len().div_ceil(64), 0_u64)?);
     for index in 0..view.len() {
-        meter.tick()?;
+        Tick::tick(meter)?;
         let node = view.node(index).map_err(|_| Stop::InvalidProgram)?;
         match node {
             NodeView::Atom(atom) => emit(Incidence::AtomNode(atom, index))?,
             NodeView::False => {}
             NodeView::And(operands) | NodeView::Or(operands) => {
                 for &operand in operands {
-                    meter.tick()?;
+                    Tick::tick(meter)?;
                     emit(Incidence::Reader(
                         operand,
                         Reader::new(ReaderKind::Node, index)?,
@@ -238,7 +268,7 @@ fn incidences(
             }
             NodeView::Implies(antecedent, consequent) => {
                 for operand in [antecedent, consequent] {
-                    meter.tick()?;
+                    Tick::tick(meter)?;
                     emit(Incidence::Reader(
                         operand,
                         Reader::new(ReaderKind::Node, index)?,
@@ -249,12 +279,9 @@ fn incidences(
                 let row = numeric_row(theory, index)?;
                 emit(Incidence::Guard(row, index))?;
                 if first(&mut seen, row)? {
-                    for &condition in threshold.conditions {
-                        meter.tick()?;
-                        emit(Incidence::Reader(
-                            condition,
-                            Reader::new(ReaderKind::Row, row)?,
-                        ))?;
+                    for (position, &condition) in threshold.conditions.iter().enumerate() {
+                        Tick::tick(meter)?;
+                        emit(Incidence::Reader(condition, Reader::row(row, position)?))?;
                     }
                 }
             }
@@ -262,19 +289,16 @@ fn incidences(
                 let row = numeric_row(theory, index)?;
                 emit(Incidence::Guard(row, index))?;
                 if first(&mut seen, row)? {
-                    for &condition in cut.row.conditions {
-                        meter.tick()?;
-                        emit(Incidence::Reader(
-                            condition,
-                            Reader::new(ReaderKind::Row, row)?,
-                        ))?;
+                    for (position, &condition) in cut.row.conditions.iter().enumerate() {
+                        Tick::tick(meter)?;
+                        emit(Incidence::Reader(condition, Reader::row(row, position)?))?;
                     }
                 }
             }
         }
     }
     for (index, producer) in producers.iter().enumerate() {
-        meter.tick()?;
+        Tick::tick(meter)?;
         if let Some(body) = producer.body {
             emit(Incidence::Reader(
                 body,
@@ -283,7 +307,7 @@ fn incidences(
         }
     }
     for (position, &root) in theory.roots().iter().enumerate() {
-        meter.tick()?;
+        Tick::tick(meter)?;
         emit(Incidence::Reader(
             root,
             Reader::new(ReaderKind::Root, position)?,
@@ -314,11 +338,10 @@ pub(super) fn numeric_row(theory: &Theory, node: usize) -> Result<usize, TightEr
 }
 
 /// Mark `row` seen, reporting whether this was its first sighting.
-fn first(seen: &mut [u64], row: usize) -> Result<bool, TightError> {
-    let word = seen.get_mut(row / 64).ok_or(Stop::InvalidProgram)?;
-    let bit = 1_u64 << (row % 64);
-    let fresh = *word & bit == 0;
-    *word |= bit;
+fn first(seen: &mut Words<u64>, row: usize) -> Result<bool, TightError> {
+    // The checked view preserves invalid-row refusal before bit-mask creation.
+    let fresh = !seen.get_bit(row).ok_or(Stop::InvalidProgram)?;
+    seen.insert(row);
     Ok(fresh)
 }
 

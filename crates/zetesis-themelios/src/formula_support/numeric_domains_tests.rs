@@ -19,6 +19,276 @@ impl GroundingObserver for Observer {
 }
 use crate::grounding_observer::{Profile, Work};
 
+const STATIC_TOTALITY: &str =
+    include_str!("../../tests/fixtures/numeric-domains/static-totality.lp");
+const TOTAL_OPERATIONS: &str =
+    include_str!("../../tests/fixtures/numeric-domains/static-totality-operations.lp");
+
+fn total_bodies(source: &str) -> usize {
+    total_bodies_with_limits(source, DomainLimits::default())
+}
+
+fn total_bodies_with_limits(source: &str, domains: DomainLimits) -> usize {
+    let preparation = testing::prepare(source);
+    let limits = preparation.limits;
+    let location = preparation.location;
+    let mut counters = Counters::resume(preparation.accounting, Work::default());
+    let mut catalog = preparation.catalog;
+    let (relations, mut append) = catalog.split(&limits, &mut counters, location).unwrap();
+    let support = Support::indexed(&relations, &limits, &counters, location).unwrap();
+    let mut computation = Computation::new(&mut append, &support);
+    let domains = crate::formula_domains::analyze(
+        &preparation.program,
+        Some(domains),
+        &Profile::new(None),
+        Context::new(&mut computation, &limits, &mut counters, location),
+    )
+    .unwrap();
+    preparation
+        .program
+        .rules_without_facts()
+        .iter()
+        .enumerate()
+        .filter(|(index, rule)| {
+            domains
+                .as_ref()
+                .is_some_and(|domains| domains.total_body(*index, rule).unwrap().is_some())
+        })
+        .count()
+}
+
+#[test]
+fn static_totality_is_available_without_diagnostics() {
+    assert_eq!(total_bodies(STATIC_TOTALITY), 1);
+}
+
+#[test]
+fn bounded_operations_certify_real_source_bodies() {
+    // Every rule contains division, so ordinary support traversal would retain
+    // complete-family coverage without this all-producer certificate.
+    assert_eq!(total_bodies(TOTAL_OPERATIONS), 4);
+}
+
+fn surviving_rows(
+    join: &mut super::Join<'_, '_>,
+    computation: &mut Computation<'_, '_>,
+    limits: &crate::FormulaLimits,
+    counters: &mut Counters,
+    location: crate::ProgramSite,
+) -> (Vec<Vec<String>>, usize) {
+    let mut rows = Vec::new();
+    let mut offered = 0;
+    let mut budget = testing::budget();
+    while let Some(row) = join
+        .next_row(computation, limits, &mut budget, counters, location)
+        .unwrap()
+    {
+        offered += 1;
+        if row.passes {
+            rows.push(
+                (0..row.values.len())
+                    .map(|slot| {
+                        row.values
+                            .read(slot, computation.read(), location)
+                            .unwrap()
+                            .to_string()
+                    })
+                    .collect(),
+            );
+        }
+    }
+    (rows, offered)
+}
+
+#[test]
+fn bounded_operations_select_the_same_surviving_rows() {
+    // Source preparation admits compact facts; completed support publishes
+    // their tuples for the real cursor, as well as the possible heads.
+    testing::with_completed_source(
+        TOTAL_OPERATIONS,
+        |program, support, computation, counters| {
+            let limits = crate::FormulaLimits::default();
+            let rules = program.rules_without_facts();
+            assert_eq!(rules.len(), 4);
+            let domains = crate::formula_domains::analyze(
+                program,
+                Some(DomainLimits::default()),
+                &Profile::new(None),
+                Context::new(&mut *computation, &limits, counters, rules[0].location),
+            )
+            .unwrap()
+            .unwrap();
+            for (index, rule) in rules.iter().enumerate() {
+                let totality = domains.total_body(index, rule).unwrap().unwrap();
+                let mut collect = |selected| {
+                    let mut join = super::Join::variant_rule(
+                        rule,
+                        super::delta::Variant::Full,
+                        support,
+                        None,
+                        &mut testing::budget(),
+                        Context::new(&*computation, &limits, counters, rule.location),
+                    )
+                    .unwrap();
+                    assert!(join.coverage == super::Coverage::Complete);
+                    if selected {
+                        join.select_static_total_body(rule, totality, &limits, counters)
+                            .unwrap();
+                        assert!(join.coverage == super::Coverage::Selected);
+                    }
+                    surviving_rows(&mut join, computation, &limits, counters, rule.location)
+                };
+                let (complete, complete_rows) = collect(false);
+                let (selected, selected_rows) = collect(true);
+                assert_eq!(complete.len(), 2, "rule {index}");
+                assert_eq!(selected, complete, "rule {index}");
+                assert!(selected_rows < complete_rows, "rule {index}");
+            }
+        },
+    );
+}
+
+#[test]
+fn choice_producers_prevent_an_unsound_nonzero_certificate() {
+    assert_eq!(
+        total_bodies(include_str!(
+            "../../tests/fixtures/numeric-domains/static-totality-choice-zero.lp"
+        )),
+        0
+    );
+}
+
+#[test]
+fn disjunctive_producers_prevent_an_unsound_nonzero_certificate() {
+    assert_eq!(
+        total_bodies(include_str!(
+            "../../tests/fixtures/numeric-domains/static-totality-disjunction-zero.lp"
+        )),
+        0
+    );
+}
+
+#[test]
+fn mixed_argument_values_decline_static_totality() {
+    assert_eq!(
+        total_bodies(include_str!(
+            "../../tests/fixtures/numeric-domains/static-totality-mixed.lp"
+        )),
+        0
+    );
+}
+
+#[test]
+fn an_independent_overflow_declines_static_totality() {
+    assert_eq!(
+        total_bodies(include_str!(
+            "../../tests/fixtures/numeric-domains/static-totality-overflow.lp"
+        )),
+        0
+    );
+}
+
+#[test]
+fn exceptional_signed_remainder_declines_static_totality() {
+    assert_eq!(
+        total_bodies(include_str!(
+            "../../tests/fixtures/numeric-domains/static-totality-minimum.lp"
+        )),
+        0
+    );
+}
+
+#[test]
+fn an_empty_binding_scope_grants_no_static_totality() {
+    assert_eq!(
+        total_bodies(include_str!(
+            "../../tests/fixtures/numeric-domains/static-totality-empty.lp"
+        )),
+        0
+    );
+}
+
+#[test]
+fn stopped_analysis_grants_no_static_totality() {
+    assert_eq!(
+        total_bodies_with_limits(
+            STATIC_TOTALITY,
+            DomainLimits {
+                max_work: 1,
+                ..DomainLimits::default()
+            }
+        ),
+        0
+    );
+}
+
+#[test]
+fn complete_binding_totality_does_not_type_every_prefix() {
+    assert_eq!(
+        total_bodies(include_str!(
+            "../../tests/fixtures/numeric-domains/static-totality-prefix.lp"
+        )),
+        1
+    );
+}
+
+#[test]
+fn static_selection_keeps_its_exact_source_authority() {
+    let preparation = testing::prepare(STATIC_TOTALITY);
+    let foreign = testing::prepare(STATIC_TOTALITY);
+    let limits = preparation.limits;
+    let location = preparation.location;
+    let mut counters = Counters::resume(preparation.accounting, Work::default());
+    let mut catalog = preparation.catalog;
+    let (relations, mut append) = catalog.split(&limits, &mut counters, location).unwrap();
+    let support = Support::indexed(&relations, &limits, &counters, location).unwrap();
+    let mut computation = Computation::new(&mut append, &support);
+    let domains = crate::formula_domains::analyze(
+        &preparation.program,
+        Some(DomainLimits::default()),
+        &Profile::new(None),
+        Context::new(&mut computation, &limits, &mut counters, location),
+    )
+    .unwrap()
+    .unwrap();
+    let (index, rule) = preparation
+        .program
+        .rules_without_facts()
+        .iter()
+        .enumerate()
+        .find(|(index, rule)| domains.total_body(*index, rule).unwrap().is_some())
+        .unwrap();
+    let totality = domains.total_body(index, rule).unwrap().unwrap();
+    assert!(
+        domains
+            .total_body(index, &foreign.program.rules_without_facts()[index])
+            .is_err()
+    );
+    let mut join = super::Join::variant_rule(
+        rule,
+        super::delta::Variant::Full,
+        &support,
+        None,
+        &mut testing::budget(),
+        Context::new(&computation, &limits, &mut counters, rule.location),
+    )
+    .unwrap();
+    assert!(join.coverage == super::Coverage::Complete);
+    join.select_static_total_body(rule, totality, &limits, &mut counters)
+        .unwrap();
+    assert!(join.coverage == super::Coverage::Selected);
+    assert!(
+        !join.certified_total,
+        "static totality grants no computed-key authority"
+    );
+    join.evidence();
+    assert!(join.coverage == super::Coverage::Complete);
+    assert!(
+        join.select_static_total_body(rule, totality, &limits, &mut counters)
+            .is_err()
+    );
+}
+
 fn leaves_full_program_lazy(source: &str, guards_expected: bool) {
     let preparation = testing::prepare(source);
     assert!(!preparation.program.analyzed.is_materialized());

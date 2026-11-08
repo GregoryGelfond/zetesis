@@ -3,14 +3,14 @@ use std::mem::size_of;
 use super::{Counters, Knowledge, Known, KnownMut, Width};
 
 /// The compact-width closure state the test theories' knowledge uses.
-fn compact(knowledge: &Knowledge) -> &Known<u16> {
+fn compact<C: zetesis_algebra::Class>(knowledge: &Knowledge<C>) -> &Known<u16> {
     match &knowledge.width {
         Width::Compact16(known) => known,
         Width::Compact32(_) | Width::Native(_) => panic!("the test theories use compact counters"),
     }
 }
 
-fn compact_mut(knowledge: &mut Knowledge) -> KnownMut<'_, u16> {
+fn compact_mut<C: zetesis_algebra::Class>(knowledge: &mut Knowledge<C>) -> KnownMut<'_, u16> {
     match &mut knowledge.width {
         Width::Compact16(known) => known.borrow(),
         Width::Compact32(_) | Width::Native(_) => panic!("the test theories use compact counters"),
@@ -28,9 +28,13 @@ mod counters;
 mod implications;
 mod masks;
 mod metering;
+mod typed_meter;
 mod preference;
+mod producer_owner;
 mod rechecks;
 mod scratch;
+mod secondary_preference;
+mod settled;
 mod units;
 
 /// A held root forces a chain of implications `a0 → a1 → … → a{n-1}`, so the
@@ -127,7 +131,7 @@ fn compact_support_keeps_original_producer_occurrences() {
     let extracted = super::producers(
         &theory,
         super::RegionLimits::default(),
-        &zetesis_cpu::Cancellation::default(),
+        &zetesis_algebra::Cancellation::default(),
     )
     .unwrap();
     let producers = extracted.producers.unwrap();
@@ -174,7 +178,7 @@ fn compact_adjacency_uses_less_retained_storage() {
     let extracted = super::producers(
         &theory,
         super::RegionLimits::default(),
-        &zetesis_cpu::Cancellation::default(),
+        &zetesis_algebra::Cancellation::default(),
     )
     .unwrap();
     let producers = extracted.producers.unwrap();
@@ -224,7 +228,8 @@ fn compact_adjacency_uses_less_retained_storage() {
 #[test]
 fn retained_bytes_counts_all_masks() {
     // 130 atoms give three-word atom masks, and two chains one witness word.
-    let knowledge = Knowledge {
+    let knowledge = Knowledge::<zetesis_algebra::AnswerSetsSought> {
+        class: std::marker::PhantomData,
         width: Width::Compact16(Known::empty(5, 2, Counters::zeros(130))),
     };
     let k = compact(&knowledge);
@@ -240,10 +245,10 @@ fn retained_bytes_counts_all_masks() {
 
 fn propagated_decisions_are_seen(frozen: bool) {
     use crate::{
-        AdmissionLimits, EvaluationLimits, EvaluationWorkspace, Interpretation, Narrower,
-        Narrowing, Node, Region, RegionLimits, Theory,
+        AdmissionLimits, EvaluationLimits, EvaluationWorkspace, Interpretation, Narrower, Node,
+        Region, Theory,
     };
-    use zetesis_cpu::Cancellation;
+    use zetesis_algebra::Cancellation;
 
     let mut nodes: Vec<_> = (0..130).map(Node::atom).collect();
     nodes.extend([Node::or_pair([63, 64]), Node::implies(64, 129)]);
@@ -264,7 +269,6 @@ fn propagated_decisions_are_seen(frozen: bool) {
         .unwrap();
     assert!(evaluation.is_model());
     let narrower = Narrower::new(&theory);
-    let mut knowledge = narrower.knowledge();
     let mut region = Region::all_open(130);
     if frozen {
         for atom in (0..130).filter(|atom| !candidate_atoms.contains(atom)) {
@@ -273,47 +277,61 @@ fn propagated_decisions_are_seen(frozen: bool) {
     }
     assert!(region.hold(0));
     assert!(region.cut(128));
-    let mut scratch = crate::NarrowingScratch::default();
-    let mut close = |region: &mut Region, knowledge: &mut Knowledge| {
-        if frozen {
-            narrower.narrow_frozen_known(
-                crate::FrozenSubject::new(&theory, evaluation.truth()),
-                region,
-                knowledge,
-                &mut scratch,
-                RegionLimits::default(),
-                &cancellation,
-            )
-        } else {
-            narrower.narrow_known(
-                crate::OriginalSubject::new(&theory, None),
-                region,
-                knowledge,
-                &mut scratch,
-                RegionLimits::default(),
-                &cancellation,
-            )
-        }
-        .unwrap()
-        .0
-    };
-    assert_eq!(
-        close(&mut region, &mut knowledge),
-        Narrowing::Fixed { changed: false }
-    );
-    let (mut child, _) = region.split(63);
-    assert_eq!(
-        close(&mut child, &mut knowledge),
-        Narrowing::Fixed { changed: true }
-    );
-    // The final snapshot must include newly propagated 64 and 129, not just
-    // the decisions supplied before this closure. Repeat propagation counts
-    // alone cannot detect a stale snapshot because learning is idempotent.
     let expected = if frozen {
         [u64::MAX, u64::MAX, 3]
     } else {
         [1 | (1 << 63), 1, 3]
     };
+    if frozen {
+        propagated_with_context(
+            super::Context::from(crate::FrozenSubject::new(&theory, evaluation.truth())),
+            &narrower,
+            region,
+            expected,
+        );
+    } else {
+        propagated_with_context(
+            super::Context::from(crate::OriginalSubject::new(&theory, None)),
+            &narrower,
+            region,
+            expected,
+        );
+    }
+}
+
+fn propagated_with_context<C: super::ReadingClass>(
+    context: super::Context<'_, C>,
+    narrower: &crate::Narrower,
+    mut region: crate::Region,
+    expected: [u64; 3],
+) {
+    let mut knowledge = narrower.class_knowledge::<C>();
+    let mut scratch = crate::NarrowingScratch::default();
+    let mut close = |region: &mut crate::Region, knowledge: &mut Knowledge<C>| {
+        narrow_context(
+            narrower,
+            context,
+            region,
+            knowledge,
+            &mut scratch,
+            crate::RegionLimits::default(),
+            &zetesis_algebra::Cancellation::default(),
+        )
+        .result
+        .unwrap()
+    };
+    assert_eq!(
+        close(&mut region, &mut knowledge),
+        crate::Narrowing::Fixed { changed: false }
+    );
+    let (mut child, _) = region.split(63);
+    assert_eq!(
+        close(&mut child, &mut knowledge),
+        crate::Narrowing::Fixed { changed: true }
+    );
+    // The final snapshot must include newly propagated 64 and 129, not just
+    // the decisions supplied before this closure. Repeat propagation counts
+    // alone cannot detect a stale snapshot because learning is idempotent.
     assert_eq!(*compact_mut(&mut knowledge).seen, expected);
 }
 
@@ -341,3 +359,25 @@ pub(super) fn partial_region(mut code: usize) -> crate::Region {
     }
     region
 }
+
+/// Exercise the one actual closure driver with an already typed test context.
+fn narrow_context<C: super::ReadingClass>(
+    index: &super::Narrower,
+    context: super::Context<'_, C>,
+    region: &mut crate::Region,
+    knowledge: &mut Knowledge<C>,
+    scratch: &mut crate::NarrowingScratch,
+    limits: crate::RegionLimits,
+    cancellation: &zetesis_algebra::Cancellation,
+) -> crate::NarrowingAttempt {
+    crate::test_support::stop_narrowing(&index.narrow_with(
+        (context, super::SplitSelection::Choose),
+        region,
+        knowledge,
+        scratch,
+        &mut zetesis_algebra::Meter::local(limits.max_work),
+        cancellation,
+    ))
+}
+
+mod class_index;

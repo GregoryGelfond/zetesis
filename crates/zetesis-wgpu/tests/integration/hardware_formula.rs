@@ -1,19 +1,23 @@
 //! Explicit physical API qualification of the partial frozen-query primitive.
 //! No adapter absence or residual query is replaced by a CPU GPU-result claim.
 
+mod agreement;
+mod handover;
 mod native;
 
 use crate::support::physical;
 
+use zetesis_algebra::Cancellation;
+use zetesis_algebra::region::Region;
 use zetesis_backend::GpuApi;
-use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{
-    FrozenReduct, Interpretation, Limits, Node, NodeView, Theory, Verdict, check,
+    FrozenReduct, Interpretation, Limits, Node, NodeView, SlateId, SlateRef, Theory, Verdict, check,
 };
 use zetesis_theory_support::theories::theory;
 use zetesis_wgpu::{
-    FormulaLimits, FormulaVerdict, GateProjection, GpuErrorKind, GpuFormulaOracle, GpuOptions,
-    GpuSelection, ResidualReason,
+    FormulaCheck, FormulaLimits, FormulaVerdict, GateProjection, GpuErrorKind, GpuFormulaOracle,
+    GpuFormulaProfile, GpuKernelOptions, GpuOptions, GpuPropagation, GpuSelection,
+    GpuWorkgroupSize, GpuWorkgroupSizing, ResidualReason,
 };
 
 fn oracle(backend: GpuApi, projection: GateProjection) -> GpuFormulaOracle {
@@ -41,7 +45,7 @@ fn candidates(theory: &Theory) -> Vec<Interpretation> {
         .collect()
 }
 
-fn setup_work(theory: &Theory) -> u32 {
+fn scheduled_levels(theory: &Theory) -> usize {
     // Independent dependency depths over the original nodes; no production
     // schedule or packed output positions are consulted for this work receipt.
     let mut depths = Vec::<usize>::new();
@@ -58,15 +62,112 @@ fn setup_work(theory: &Theory) -> u32 {
         });
     }
     let levels = depths.iter().max().map_or(0, |depth| depth + 1);
-    let barriers = if levels == depths.len() { 0 } else { levels };
+    if levels == depths.len() { 0 } else { levels }
+}
+
+fn setup_work(theory: &Theory) -> u32 {
     u32::try_from(
-        2 * depths.len()
+        2 * theory.view().len()
             + theory.parts().occurrences()
             + theory.atom_count()
             + theory.roots().len()
-            + barriers,
+            + scheduled_levels(theory),
     )
     .unwrap()
+}
+
+// Every submitted world must fit the atom scan and both logical mask columns.
+// Empty-atom worlds have no column words.
+fn reserved_setup(theory: &Theory, setup: u32) -> u32 {
+    let atoms = u32::try_from(theory.atom_count()).unwrap();
+    setup + atoms + 2 * atoms.div_ceil(32)
+}
+
+// Both terminal verdicts write zeros in the mask columns. Only residuals read
+// every semantic atom domain to construct the returned geometry.
+fn returned_work(theory: &Theory, setup: u32, sweep: u32, result: &FormulaCheck) -> u32 {
+    let atoms = u32::try_from(theory.atom_count()).unwrap();
+    let read_domains = match result.verdict() {
+        FormulaVerdict::NotModel | FormulaVerdict::NoProperSubset => 0,
+        FormulaVerdict::Residual(_, _) => atoms,
+    };
+    setup + result.statistics().rounds * sweep + read_domains + 2 * atoms.div_ceil(32)
+}
+
+fn residual_root(result: &FormulaCheck, expected: ResidualReason) -> &Region {
+    let FormulaVerdict::Residual(actual, root) = result.verdict() else {
+        panic!(
+            "expected a residual with reason {expected:?}, got {:?}",
+            result.verdict()
+        );
+    };
+    assert_eq!(*actual, expected);
+    root
+}
+
+fn sweep_work(theory: &Theory) -> u32 {
+    u32::try_from(
+        9 * theory.nodes().len()
+            + 2 * theory.parts().occurrences()
+            + theory.atom_count()
+            + 65
+            + scheduled_levels(theory),
+    )
+    .unwrap()
+}
+
+fn propagation_work(theory: &Theory, propagation: GpuPropagation) -> (u32, u32) {
+    let mut setup = setup_work(theory);
+    let mut sweep = sweep_work(theory);
+    if propagation != GpuPropagation::Dense {
+        let mut variables = theory.atom_count();
+        let mut incidences = 0;
+        let mut groups = 0;
+        let mut group_edges = 0;
+        for index in 0..theory.view().len() {
+            match theory.view().node(index).unwrap() {
+                NodeView::Atom(_) => {}
+                NodeView::False => variables += 1,
+                NodeView::Implies(..) => {
+                    variables += 1;
+                    incidences += 3;
+                }
+                NodeView::And(children) | NodeView::Or(children) => {
+                    variables += 1;
+                    incidences += children.len() + 1;
+                    if children.len() > 2 {
+                        groups += 1;
+                        group_edges += children.len();
+                    }
+                }
+                _ => panic!("work-receipt helper requires Boolean fixtures"),
+            }
+        }
+        let nodes = theory.view().len();
+        let words = nodes.div_ceil(32);
+        setup += u32::try_from(2 * words).unwrap();
+        sweep += u32::try_from(words + nodes + 4 * variables + 6 * incidences).unwrap();
+        if propagation == GpuPropagation::IncrementalGroups {
+            assert!(groups != 0, "selected counters require a group");
+            setup += u32::try_from(4 * nodes + 6 * group_edges + 3 * groups).unwrap();
+            sweep += u32::try_from(14 * incidences + 4 * nodes).unwrap();
+        }
+    }
+    (setup, sweep)
+}
+
+fn requested_groups(oracle: &GpuFormulaOracle, theory: &Theory) -> GpuPropagation {
+    let requested = oracle.compiled_profile().kernel_options().propagation;
+    if requested == GpuPropagation::IncrementalGroups
+        && !(0..theory.view().len()).any(|index| {
+            matches!(theory.view().node(index).unwrap(),
+            NodeView::And(children) | NodeView::Or(children) if children.len() > 2)
+        })
+    {
+        GpuPropagation::ChangedDependencies
+    } else {
+        requested
+    }
 }
 
 fn compare(oracle: &mut GpuFormulaOracle, theory: &Theory) -> (usize, usize) {
@@ -98,20 +199,17 @@ fn compare(oracle: &mut GpuFormulaOracle, theory: &Theory) -> (usize, usize) {
                 assert!(cpu.accepted());
                 refutations += 1;
             }
-            FormulaVerdict::Residual(_) => {
+            FormulaVerdict::Residual(_, root) => {
+                handover::check_coverage(candidate, root, &inputs, cpu.accepted());
                 assert!(!matches!(cpu.verdict(), Verdict::NotModel { .. }));
                 residuals += 1;
             }
             FormulaVerdict::NotModel => {}
         }
-        let setup = setup_work(theory);
-        let sweep = u32::try_from(
-            9 * theory.nodes().len() + 2 * theory.parts().occurrences() + theory.atom_count() + 65,
-        )
-        .unwrap();
+        let (setup, sweep) = propagation_work(theory, cold.propagation);
         assert_eq!(
             result.statistics().work,
-            setup + result.statistics().rounds * sweep
+            returned_work(theory, setup, sweep, result)
         );
     }
     let reversed: Vec<_> = inputs.into_iter().rev().collect();
@@ -142,6 +240,67 @@ fn metal_formula_queries_preserve_exact_frozen_semantics_and_residency() {
     for projection in GateProjection::ALL {
         qualify_frozen_queries(GpuApi::Metal, projection);
     }
+}
+
+#[test]
+#[ignore = "requires Metal: an overlapped formula query matches the sequential query"]
+fn metal_formula_overlapped_query_matches_sequential_query() {
+    for projection in GateProjection::ALL {
+        qualify_overlapped(GpuApi::Metal, projection);
+    }
+}
+
+#[test]
+#[ignore = "requires Vulkan: an overlapped formula query matches the sequential query"]
+fn vulkan_formula_overlapped_query_matches_sequential_query() {
+    for projection in GateProjection::ALL {
+        qualify_overlapped(GpuApi::Vulkan, projection);
+    }
+}
+
+/// Every frozen fixture's exhaustive candidates, checked as one slate by
+/// overlapping queries in prefix order, give the verdicts a synchronous query
+/// gives on a second oracle of the same projection. Each overlapping query's
+/// production returns its offset, so the comparison isolates the schedule.
+fn qualify_overlapped(backend: GpuApi, projection: GateProjection) {
+    let mut synchronous = oracle(backend, projection);
+    let mut overlapped = oracle(backend, projection);
+    let control = Cancellation::default();
+    let mut compared = 0;
+    for theory in frozen_theories() {
+        let inputs = candidates(&theory);
+        let expected = synchronous
+            .propagate_batch(&theory, &inputs, FormulaLimits::default())
+            .unwrap();
+        let slate = SlateId::first(&theory).unwrap();
+        let view = SlateRef::new(slate, &theory, &inputs).unwrap();
+        let mut checks = Vec::new();
+        while checks.len() < inputs.len() {
+            let prepared = overlapped
+                .prepare(view, checks.len(), FormulaLimits::default(), &control)
+                .unwrap();
+            let offset = prepared.offset();
+            let (checked, produced) = prepared.check_overlapping(&control, || offset);
+            assert_eq!(produced, Some(offset));
+            checks.extend(
+                checked
+                    .unwrap()
+                    .into_checks(&theory, slate, offset)
+                    .unwrap(),
+            );
+        }
+        assert!(
+            expected
+                .iter()
+                .map(FormulaCheck::verdict)
+                .eq(checks.iter().map(FormulaCheck::verdict))
+        );
+        compared += inputs.len();
+    }
+    println!(
+        "formula overlapped queries projection={} candidates={compared}",
+        projection.label()
+    );
 }
 
 fn frozen_theories() -> Vec<Theory> {
@@ -269,8 +428,347 @@ fn qualify_frozen_queries(backend: GpuApi, projection: GateProjection) {
     }
     assert!(totals.0 > 0 && totals.1 > 0);
     println!("completed refutations={} residuals={}", totals.0, totals.1);
-    qualify_subset_strides(&mut oracle);
-    native::qualify(&mut oracle);
+    qualify_root_propagation(&mut oracle);
+    qualify_kernel_options(&mut oracle);
+    handover::check_subset_cut(&mut oracle);
+}
+
+fn qualify_kernel_options(oracle: &mut GpuFormulaOracle) {
+    let context = oracle.context().clone();
+    println!("formula granted features={:?}", context.features());
+    for workgroup_sizing in [
+        GpuWorkgroupSizing::Fixed(GpuWorkgroupSize::Threads32),
+        GpuWorkgroupSizing::Fixed(GpuWorkgroupSize::Threads64),
+        GpuWorkgroupSizing::Fixed(GpuWorkgroupSize::Threads128),
+        GpuWorkgroupSizing::Fixed(GpuWorkgroupSize::Threads256),
+        GpuWorkgroupSizing::Fitted,
+    ] {
+        for optional_features in [false, true] {
+            for propagation in [
+                GpuPropagation::Dense,
+                GpuPropagation::ChangedDependencies,
+                GpuPropagation::IncrementalGroups,
+            ] {
+                let options = GpuKernelOptions {
+                    workgroup_sizing,
+                    optional_features,
+                    propagation,
+                };
+                let profile = GpuFormulaProfile::from_context_with_kernel(
+                    &context,
+                    oracle.projection(),
+                    options,
+                )
+                .unwrap();
+                assert!(profile.context().same_instance(&context));
+                assert_eq!(profile.kernel_options(), options);
+                let mut configured = GpuFormulaOracle::from_profile(&profile).unwrap();
+                assert!(configured.context().same_instance(&context));
+                assert_eq!(configured.compiled_profile().kernel_options(), options);
+                println!("formula qualified options={options:?}");
+                qualify_subset_strides(&mut configured);
+                if propagation == GpuPropagation::Dense {
+                    qualify_bidirectional_propagation(&mut configured);
+                } else {
+                    qualify_active_frontier(&mut configured);
+                }
+                for theory in scheduled_theories() {
+                    compare(&mut configured, &theory);
+                    let stats = configured.last_batch_stats().unwrap();
+                    assert_eq!(stats.propagation, requested_groups(&configured, &theory));
+                    match workgroup_sizing.fixed() {
+                        Some(size) => assert_eq!(stats.workgroup_size, size.invocations()),
+                        None => assert!(matches!(stats.workgroup_size, 64 | 128 | 256)),
+                    }
+                }
+                qualify_size_boundaries(&mut configured, workgroup_sizing);
+                native::qualify(&mut configured);
+                native::qualify_shared_ordinals(&mut configured);
+                if propagation != GpuPropagation::Dense {
+                    for theory in frozen_theories() {
+                        compare(&mut configured, &theory);
+                        if (0..theory.view().len()).any(|index| {
+                            matches!(theory.view().node(index).unwrap(),
+                            NodeView::And(children) | NodeView::Or(children) if children.len() > 2)
+                        }) {
+                            assert_eq!(
+                                configured.last_batch_stats().unwrap().propagation,
+                                requested_groups(&configured, &theory)
+                            );
+                        }
+                    }
+                    qualify_next_generation(&mut configured);
+                    qualify_incidence_fallback(&mut configured);
+                    if propagation == GpuPropagation::IncrementalGroups {
+                        qualify_group_fallback(&mut configured);
+                    }
+                }
+            }
+        }
+    }
+    agreement::qualify(&context, oracle.projection());
+}
+
+/// Gate and root counts one below, at and one above the sizes 64, 128 and 256,
+/// each with the size the fitted policy selects for that many gates on one
+/// dependency level over two atom leaves (level widths 2 and the count).
+const LEVEL_BOUNDARIES: [(usize, u32); 9] = [
+    (63, 64),
+    (64, 64),
+    (65, 128),
+    (127, 128),
+    (128, 128),
+    (129, 256),
+    (255, 256),
+    (256, 256),
+    (257, 256),
+];
+
+/// Atom counts one below, at and one above 128 and 256, then the atom counts
+/// whose candidates span that many 32-bit words.
+const ATOM_BOUNDARIES: [usize; 12] = [
+    127,
+    128,
+    129,
+    255,
+    256,
+    257,
+    32 * 127,
+    32 * 128,
+    32 * 129,
+    32 * 255,
+    32 * 256,
+    32 * 257,
+];
+
+// Each boundary fixture is decided exactly under `sizing`, which dispatches the
+// fixed size or the size the fitted policy selects for the fixture's schedule;
+// a single-node fixture has a serial schedule, which keeps 64. `count` separate
+// roots `0 -> 1` are not interned, so each is its own gate and root.
+fn qualify_size_boundaries(oracle: &mut GpuFormulaOracle, sizing: GpuWorkgroupSizing) {
+    let limits = oracle.context().limits();
+    assert!(
+        limits
+            .max_compute_invocations_per_workgroup
+            .min(limits.max_compute_workgroup_size_x)
+            >= 256,
+        "the fitted expectations assume a device granting 256 invocations"
+    );
+    let dispatched = |oracle: &GpuFormulaOracle| oracle.last_batch_stats().unwrap().workgroup_size;
+    let expected = |fitted: u32| sizing.fixed().map_or(fitted, GpuWorkgroupSize::invocations);
+    for (count, fitted) in LEVEL_BOUNDARIES {
+        let mut nodes = vec![Node::atom(0), Node::atom(1)];
+        nodes.extend(std::iter::repeat_n(Node::implies(0, 1), count));
+        compare(oracle, &theory(2, nodes, (2..count + 2).collect()));
+        assert_eq!(dispatched(oracle), expected(fitted), "{count} gates");
+    }
+    for atoms in ATOM_BOUNDARIES {
+        let graph = theory(atoms, vec![Node::atom(atoms - 1)], vec![0]);
+        let inputs = [
+            Interpretation::new(&graph, []).unwrap(),
+            Interpretation::new(&graph, [atoms - 1]).unwrap(),
+        ];
+        let results = oracle
+            .propagate_batch(&graph, &inputs, FormulaLimits::default())
+            .unwrap();
+        assert_eq!(results[0].verdict(), &FormulaVerdict::NotModel);
+        assert_eq!(results[1].verdict(), &FormulaVerdict::NoProperSubset);
+        assert_eq!(dispatched(oracle), expected(64), "{atoms} atoms");
+    }
+}
+
+fn qualify_next_generation(oracle: &mut GpuFormulaOracle) {
+    let graph = theory(
+        2,
+        vec![
+            Node::atom(0),
+            Node::atom(1),
+            Node::and_pair([0, 0]),
+            Node::or_pair([1, 1]),
+            Node::implies(0, 3),
+        ],
+        vec![2, 4],
+    );
+    let candidate = Interpretation::new(&graph, [0, 1]).unwrap();
+    assert!(
+        check(
+            &graph,
+            &candidate,
+            Limits::default(),
+            &Cancellation::default()
+        )
+        .unwrap()
+        .accepted()
+    );
+    // In the first descending word visit, the implication precedes the
+    // conjunction that forces a. Its current bit stays set but the local seen
+    // mask prevents a second visit. Strict subset then forces b false. The next
+    // generation must revisit the implication/or(b,b) and find the conflict.
+    // N=5, E=6, A=2, R=2, L=3 gives dense setup23/sweep127.
+    // W=1, V=5, I=9 adds setup2 and sweep(1+5+20+54)=80.
+    for rounds in [1, 2] {
+        let work = reserved_setup(&graph, 25) + rounds * 207;
+        let checks = oracle
+            .propagate_batch(
+                &graph,
+                std::slice::from_ref(&candidate),
+                FormulaLimits {
+                    max_rounds: rounds,
+                    max_work_per_candidate: work,
+                    ..Default::default()
+                },
+            )
+            .unwrap();
+        assert_eq!(
+            oracle.last_batch_stats().unwrap().propagation,
+            GpuPropagation::ChangedDependencies
+        );
+        if rounds == 1 {
+            let root = residual_root(&checks[0], ResidualReason::RoundLimit);
+            assert_eq!(root.len(), 2);
+            assert_eq!(root.decision(0), Some(true));
+            assert_eq!(root.decision(1), Some(false));
+        } else {
+            assert_eq!(checks[0].verdict(), &FormulaVerdict::NoProperSubset);
+        }
+        assert_eq!(checks[0].statistics().rounds, rounds);
+        assert_eq!(
+            checks[0].statistics().work,
+            returned_work(&graph, 25, 207, &checks[0])
+        );
+    }
+}
+
+fn qualify_active_frontier(oracle: &mut GpuFormulaOracle) {
+    // Exact word ends and partial final words, with repeated physical children.
+    // Every upward pass can advance through its local word. Cross-word races
+    // may defer the next word, but its wake must survive into the next pass.
+    for links in [29, 30, 61, 62, 125, 126] {
+        let mut nodes = vec![Node::atom(0), Node::atom(1)];
+        let mut prior = 0;
+        for _ in 0..links {
+            nodes.push(Node::and_pair([prior, prior]));
+            prior = nodes.len() - 1;
+        }
+        nodes.push(Node::implies(prior, 1));
+        let root = nodes.len() - 1;
+        let graph = theory(2, nodes, vec![0, root]);
+        let candidate = Interpretation::new(&graph, [0, 1]).unwrap();
+        assert!(
+            check(
+                &graph,
+                &candidate,
+                Limits::default(),
+                &Cancellation::default()
+            )
+            .unwrap()
+            .accepted()
+        );
+        let (setup, sweep) = propagation_work(&graph, GpuPropagation::ChangedDependencies);
+        let rounds = u32::try_from(2 * graph.nodes().len().div_ceil(32) + 2).unwrap();
+        let checks = oracle
+            .propagate_batch(
+                &graph,
+                &[candidate],
+                FormulaLimits {
+                    max_rounds: rounds,
+                    max_work_per_candidate: reserved_setup(&graph, setup) + rounds * sweep,
+                    ..Default::default()
+                },
+            )
+            .unwrap();
+        assert_eq!(
+            oracle.last_batch_stats().unwrap().propagation,
+            GpuPropagation::ChangedDependencies
+        );
+        assert_eq!(checks[0].verdict(), &FormulaVerdict::NoProperSubset);
+        assert!(checks[0].statistics().rounds <= rounds);
+        assert_eq!(
+            checks[0].statistics().work,
+            returned_work(&graph, setup, sweep, &checks[0])
+        );
+    }
+}
+
+fn qualify_incidence_fallback(oracle: &mut GpuFormulaOracle) {
+    let requested = oracle.compiled_profile().kernel_options().propagation;
+    let theory = theory(
+        2,
+        vec![Node::atom(0), Node::atom(1), Node::and_pair([0, 1])],
+        vec![2],
+    );
+    let inputs = candidates(&theory);
+    oracle
+        .propagate_batch(&theory, &inputs, FormulaLimits::default())
+        .unwrap();
+    assert_eq!(
+        oracle.last_batch_stats().unwrap().propagation,
+        GpuPropagation::ChangedDependencies
+    );
+    // Tighten mandatory work below indexed setup but exactly to dense setup.
+    // The owned indexed graph must retire without converting refusal into proof.
+    let results = oracle
+        .propagate_batch(
+            &theory,
+            &inputs,
+            FormulaLimits {
+                max_work_per_candidate: reserved_setup(&theory, setup_work(&theory)),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+    assert_eq!(
+        oracle.last_batch_stats().unwrap().propagation,
+        GpuPropagation::Dense
+    );
+    for result in &results[..3] {
+        assert_eq!(result.verdict(), &FormulaVerdict::NotModel);
+    }
+    let root = residual_root(&results[3], ResidualReason::WorkLimit);
+    assert_eq!(root.len(), 2);
+    assert!(root.is_open(0) && root.is_open(1));
+    assert_eq!(
+        oracle.compiled_profile().kernel_options().propagation,
+        requested
+    );
+}
+
+fn qualify_group_fallback(oracle: &mut GpuFormulaOracle) {
+    let theory = crate::formula::wide::theories().remove(0);
+    compare(oracle, &theory);
+    assert_eq!(
+        oracle.last_batch_stats().unwrap().propagation,
+        GpuPropagation::IncrementalGroups
+    );
+    let active_setup = propagation_work(&theory, GpuPropagation::ChangedDependencies).0;
+    let results = oracle
+        .propagate_batch(
+            &theory,
+            &candidates(&theory),
+            FormulaLimits {
+                max_work_per_candidate: reserved_setup(&theory, active_setup),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+    assert_eq!(
+        oracle.last_batch_stats().unwrap().propagation,
+        GpuPropagation::ChangedDependencies
+    );
+    assert!(results.iter().any(|result| matches!(
+        result.verdict(),
+        FormulaVerdict::Residual(ResidualReason::WorkLimit, _)
+    )));
+    assert!(results.iter().all(|result| matches!(
+        result.verdict(),
+        FormulaVerdict::NotModel | FormulaVerdict::Residual(ResidualReason::WorkLimit, _)
+    )));
+    oracle.clear_residency();
+    compare(oracle, &theory);
+    assert_eq!(
+        oracle.last_batch_stats().unwrap().propagation,
+        GpuPropagation::IncrementalGroups
+    );
 }
 
 fn scheduled_theories() -> [Theory; 2] {
@@ -295,6 +793,128 @@ fn scheduled_theories() -> [Theory; 2] {
             vec![3],
         ),
     ]
+}
+
+fn qualify_root_propagation(oracle: &mut GpuFormulaOracle) {
+    let mut chain = vec![Node::atom(0)];
+    chain.extend((1..128).map(|index| Node::and_pair([index - 1, index - 1])));
+    let chain = theory(1, chain, vec![127]);
+
+    // Each of the eight layers spans more than one lane stride. A true root
+    // requires both semantic atoms, despite shared and repeated child slots.
+    let mut nodes = vec![Node::atom(0), Node::atom(1)];
+    let mut prior = vec![0, 1];
+    for _ in 0..8 {
+        let start = nodes.len();
+        for index in 0..65 {
+            nodes.push(Node::and_pair([
+                prior[index % prior.len()],
+                prior[(index + 1) % prior.len()],
+            ]));
+        }
+        prior = (start..nodes.len()).collect();
+    }
+    let root = nodes.len() - 1;
+    let layered = theory(2, nodes, vec![root]);
+    for graph in [chain, layered] {
+        let candidate = Interpretation::new(&graph, 0..graph.atom_count()).unwrap();
+        assert!(
+            check(
+                &graph,
+                &candidate,
+                Limits::default(),
+                &Cancellation::default()
+            )
+            .unwrap()
+            .accepted()
+        );
+        let setup = setup_work(&graph);
+        let sweep = sweep_work(&graph);
+        let work = reserved_setup(&graph, setup) + sweep;
+        let results = oracle
+            .propagate_batch(
+                &graph,
+                &[candidate],
+                FormulaLimits {
+                    max_rounds: 1,
+                    max_work_per_candidate: work,
+                    ..FormulaLimits::default()
+                },
+            )
+            .unwrap();
+        assert_eq!(results[0].verdict(), &FormulaVerdict::NoProperSubset);
+        assert_eq!(results[0].statistics().rounds, 1);
+        assert_eq!(
+            results[0].statistics().work,
+            returned_work(&graph, setup, sweep, &results[0])
+        );
+    }
+}
+
+fn qualify_bidirectional_propagation(oracle: &mut GpuFormulaOracle) {
+    let mut nodes = vec![Node::atom(0), Node::atom(1)];
+    let mut prior = 0;
+    for _ in 0..128 {
+        nodes.push(Node::and_pair([prior, prior]));
+        prior = nodes.len() - 1;
+    }
+    nodes.push(Node::implies(prior, 1));
+    let root = nodes.len() - 1;
+    let graph = theory(2, nodes, vec![0, root]);
+    let candidate = Interpretation::new(&graph, [0, 1]).unwrap();
+    assert!(
+        check(
+            &graph,
+            &candidate,
+            Limits::default(),
+            &Cancellation::default()
+        )
+        .unwrap()
+        .accepted()
+    );
+    // a and (C -> b), where C is a long chain of repeated conjunctions of a.
+    // The downward sweep settles only the first conjunction; strict subset
+    // requires b false. The upward sweep carries a through C and refutes that
+    // requirement. Reverse-only sweeps would advance one chain link at a time.
+    let propagation = oracle.compiled_profile().kernel_options().propagation;
+    let (setup, sweep) = propagation_work(&graph, propagation);
+    let reserved = reserved_setup(&graph, setup);
+    for (rounds, work, residual, completed_rounds) in [
+        (1, reserved + sweep, Some(ResidualReason::RoundLimit), 1),
+        (
+            2,
+            reserved + 2 * sweep - 1,
+            Some(ResidualReason::WorkLimit),
+            1,
+        ),
+        (2, reserved + 2 * sweep, None, 2),
+    ] {
+        let checks = oracle
+            .propagate_batch(
+                &graph,
+                std::slice::from_ref(&candidate),
+                FormulaLimits {
+                    max_rounds: rounds,
+                    max_work_per_candidate: work,
+                    ..Default::default()
+                },
+            )
+            .unwrap();
+        assert_eq!(oracle.last_batch_stats().unwrap().propagation, propagation);
+        if let Some(reason) = residual {
+            let root = residual_root(&checks[0], reason);
+            assert_eq!(root.len(), 2);
+            assert_eq!(root.decision(0), Some(true));
+            assert_eq!(root.decision(1), Some(false));
+        } else {
+            assert_eq!(checks[0].verdict(), &FormulaVerdict::NoProperSubset);
+        }
+        assert_eq!(checks[0].statistics().rounds, completed_rounds);
+        assert_eq!(
+            checks[0].statistics().work,
+            returned_work(&graph, setup, sweep, &checks[0])
+        );
+    }
 }
 
 fn qualify_subset_strides(oracle: &mut GpuFormulaOracle) {
@@ -333,21 +953,19 @@ fn qualify_subset_strides(oracle: &mut GpuFormulaOracle) {
         }
         // Authored constants: 133 nodes, 131 atoms, 131-|available| facts.
         // Setup visits nodes twice, atoms once, roots once and one level. Each sweep
-        // reserves 9 per node, one per atom, 64 summaries and one application.
+        // reserves 9 per node, one per atom, one dependency level and the constant
+        // 65 of one strict-subset reduction, whatever the workgroup size.
         let setup = 529 - u32::try_from(available.len()).unwrap();
-        let sweep = 1393;
-        let expected = match available.len() {
-            0 => FormulaVerdict::NoProperSubset,
-            1 => FormulaVerdict::Residual(ResidualReason::RoundLimit),
-            _ => FormulaVerdict::Residual(ResidualReason::FixedPoint),
+        let sweep = 1394;
+        let reserved = reserved_setup(&graph, setup);
+        let after_sweep = match available.len() {
+            0 => None,
+            1 => Some(ResidualReason::RoundLimit),
+            _ => Some(ResidualReason::FixedPoint),
         };
-        for (work, verdict, rounds) in [
-            (
-                setup + sweep - 1,
-                FormulaVerdict::Residual(ResidualReason::WorkLimit),
-                0,
-            ),
-            (setup + sweep, expected, 1),
+        for (work, residual, rounds) in [
+            (reserved + sweep - 1, Some(ResidualReason::WorkLimit), 0),
+            (reserved + sweep, after_sweep, 1),
         ] {
             let results = oracle
                 .propagate_batch(
@@ -360,9 +978,31 @@ fn qualify_subset_strides(oracle: &mut GpuFormulaOracle) {
                     },
                 )
                 .unwrap();
-            assert_eq!(results[0].verdict(), verdict, "available={available:?}");
+            if let Some(reason) = residual {
+                let root = residual_root(&results[0], reason);
+                assert_eq!(root.len(), 131);
+                for atom in 0..131 {
+                    let decision = if !available.contains(&atom) {
+                        Some(true)
+                    } else if rounds == 1 && available.len() == 1 {
+                        Some(false)
+                    } else {
+                        None
+                    };
+                    assert_eq!(
+                        root.decision(atom),
+                        decision,
+                        "atom={atom}, available={available:?}"
+                    );
+                }
+            } else {
+                assert_eq!(results[0].verdict(), &FormulaVerdict::NoProperSubset);
+            }
             assert_eq!(results[0].statistics().rounds, rounds);
-            assert_eq!(results[0].statistics().work, setup + rounds * sweep);
+            assert_eq!(
+                results[0].statistics().work,
+                returned_work(&graph, setup, sweep, &results[0])
+            );
         }
     }
     println!("strict-subset strides=3 final-stride=3 zero/unique/multiple=8 exact/below=16");
@@ -378,6 +1018,7 @@ fn metal_formula_limits_resize_identity_and_word_boundaries_remain_explicit() {
 
 fn qualify_resources(backend: GpuApi, projection: GateProjection) {
     let mut oracle = oracle(backend, projection);
+    qualify_prefixes(&mut oracle);
     let graph = theory(1, vec![Node::atom(0)], vec![0]);
     let inputs = candidates(&graph);
     for (limits, expected) in [
@@ -390,22 +1031,26 @@ fn qualify_resources(backend: GpuApi, projection: GateProjection) {
         ),
         (
             FormulaLimits {
-                max_work_per_candidate: 4,
+                max_work_per_candidate: reserved_setup(&graph, 4),
                 ..FormulaLimits::default()
             },
             ResidualReason::WorkLimit,
         ),
     ] {
         let results = oracle.propagate_batch(&graph, &inputs, limits).unwrap();
-        assert_eq!(results[0].verdict(), FormulaVerdict::NotModel);
-        assert_eq!(results[1].verdict(), FormulaVerdict::Residual(expected));
+        assert_eq!(results[0].verdict(), &FormulaVerdict::NotModel);
+        // The asserted root is a semantic atom and is held during setup.
+        let root = residual_root(&results[1], expected);
+        assert_eq!(root.len(), 1);
+        assert_eq!(root.decision(0), Some(true));
         assert_eq!(results[1].statistics().rounds, 0);
-        assert_eq!(results[1].statistics().work, 4);
+        assert_eq!(results[1].statistics().work, 7);
+        assert_eq!(results[0].statistics().work, 6);
     }
     let full = oracle
         .propagate_batch(&graph, &inputs, FormulaLimits::default())
         .unwrap();
-    assert_eq!(full[1].verdict(), FormulaVerdict::NoProperSubset);
+    assert_eq!(full[1].verdict(), &FormulaVerdict::NoProperSubset);
     let hot = *oracle.last_batch_stats().unwrap();
     assert_zero_wait_preserves_residency(&mut oracle, &graph, &inputs, &full);
     for (bytes, succeeds) in [
@@ -454,7 +1099,7 @@ fn qualify_resources(backend: GpuApi, projection: GateProjection) {
         let result = oracle
             .propagate_batch(&graph, &[candidate], FormulaLimits::default())
             .unwrap();
-        assert_eq!(result[0].verdict(), FormulaVerdict::NoProperSubset);
+        assert_eq!(result[0].verdict(), &FormulaVerdict::NoProperSubset);
     }
     assert!(
         oracle
@@ -539,4 +1184,92 @@ fn vulkan_formula_resource_boundaries_remain_explicit() {
     for projection in GateProjection::ALL {
         qualify_resources(GpuApi::Vulkan, projection);
     }
+}
+
+fn qualify_prefixes(oracle: &mut GpuFormulaOracle) {
+    let graph = theory(
+        2,
+        vec![Node::atom(0), Node::atom(1), Node::implies(0, 1)],
+        vec![2],
+    );
+    let mut input = candidates(&graph);
+    input.push(input[1].clone());
+    let exact = oracle
+        .propagate_batch(&graph, &input, FormulaLimits::default())
+        .unwrap();
+    oracle.clear_residency();
+    oracle
+        .propagate_batch(&graph, &input[..2], FormulaLimits::default())
+        .unwrap();
+    let cold_bytes = oracle.last_batch_stats().unwrap().accounted_bytes;
+    oracle.clear_residency();
+    let first = oracle
+        .propagate_prefix_with_cancellation(
+            &graph,
+            &input,
+            FormulaLimits {
+                max_batch_bytes: cold_bytes,
+                ..Default::default()
+            },
+            &Cancellation::default(),
+        )
+        .unwrap();
+    assert_eq!(first.checks(), &exact[..2]);
+    assert!(std::ptr::eq(first.candidates(), &raw const input[..2]));
+    assert!(oracle.last_batch_stats().unwrap().theory_uploaded);
+    assert_eq!(oracle.last_submission_candidates(), Some(2));
+    let mut completed = first.checks().to_vec();
+    while completed.len() < input.len() {
+        let suffix = &input[completed.len()..];
+        let next = oracle
+            .propagate_prefix_with_cancellation(
+                &graph,
+                suffix,
+                FormulaLimits {
+                    max_candidates: 2,
+                    max_batch_bytes: cold_bytes,
+                    ..Default::default()
+                },
+                &Cancellation::default(),
+            )
+            .unwrap();
+        assert_eq!(next.checks().len(), suffix.len().min(2));
+        assert!(std::ptr::eq(
+            next.candidates(),
+            &raw const suffix[..next.checks().len()]
+        ));
+        assert!(!oracle.last_batch_stats().unwrap().theory_uploaded);
+        completed.extend_from_slice(next.checks());
+    }
+    assert_eq!(completed, exact);
+    let one_bytes = oracle.last_batch_stats().unwrap().accounted_bytes;
+    let error = oracle
+        .propagate_prefix_with_cancellation(
+            &graph,
+            &input,
+            FormulaLimits {
+                max_batch_bytes: one_bytes - 1,
+                ..Default::default()
+            },
+            &Cancellation::default(),
+        )
+        .err()
+        .unwrap();
+    assert_eq!(error.kind(), GpuErrorKind::Capacity);
+    assert_eq!(oracle.last_submission_candidates(), None);
+    assert!(oracle.last_batch_stats().is_none());
+    let empty = oracle
+        .propagate_prefix_with_cancellation(
+            &graph,
+            &[],
+            FormulaLimits {
+                max_candidates: 0,
+                max_batch_bytes: 0,
+                ..Default::default()
+            },
+            &Cancellation::default(),
+        )
+        .unwrap();
+    assert!(empty.checks().is_empty());
+    assert_eq!(oracle.last_submission_candidates(), None);
 }

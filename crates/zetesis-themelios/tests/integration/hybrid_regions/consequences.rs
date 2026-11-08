@@ -3,6 +3,11 @@ use zetesis_themelios::{
     ConstraintChecker, ConstraintConsequence, ConstraintRegionPass, FormulaFailure, FormulaResource,
 };
 
+// These fixtures stream their constraints. Pair capture moves a positive pair
+// family into the core when every component is complete, two-atom components
+// included, so the pair fixtures here form incomplete components, as a star
+// does.
+
 fn apply(region: &mut Region, consequence: ConstraintConsequence) -> usize {
     match consequence {
         ConstraintConsequence::Hold { atom, .. } => {
@@ -39,7 +44,7 @@ fn consequences_preserve_every_satisfying_completion() {
     let mut forced = 0;
     let mut refuted = 0;
     for source in [
-        include_str!("../../fixtures/streamed-consequences/two-positive.lp"),
+        include_str!("../../fixtures/streamed-consequences/two-row-gated-units.lp"),
         include_str!("../../fixtures/streamed-consequences/positive-negative.lp"),
         include_str!("../../fixtures/streamed-consequences/double-negative-negative.lp"),
         include_str!("../../fixtures/streamed-consequences/two-negative.lp"),
@@ -51,6 +56,7 @@ fn consequences_preserve_every_satisfying_completion() {
         include_str!("../../fixtures/streamed-consequences/empty-constraint.lp"),
     ] {
         let owner = hybrid(source);
+        assert!(owner.streamed_templates() > 0, "{source}");
         let count = owner.atom_catalog().atoms().len();
         assert!(count <= 5, "finite exhaustive fixture");
         let mut regions = owner.checker(ConstraintCheckLimits::default()).unwrap();
@@ -109,17 +115,31 @@ fn consequences_preserve_every_satisfying_completion() {
 
 #[test]
 fn same_predicate_pivots_follow_original_occurrences() {
+    // The rows pair p(1) as X with p(2) and with p(3) as Y.
     let owner = hybrid(include_str!(
         "../../fixtures/streamed-consequences/two-row-ordered-pair.lp"
     ));
+    let atom = |value| {
+        owner
+            .atom_catalog()
+            .atoms()
+            .iter()
+            .position(|atom| atom.values().at(0).unwrap() == zetesis_core::Value::Number(value))
+            .unwrap()
+    };
     let mut checker = owner.checker(ConstraintCheckLimits::default()).unwrap();
-    for held in 0..2 {
-        let mut region = Region::all_open(2);
-        assert!(region.hold(held));
+    for held in [2, 3] {
+        let mut region = Region::all_open(3);
+        assert!(region.hold(atom(held)));
         assert!(
-            matches!(first(&owner, &mut checker, &region), ConstraintConsequence::Cut { atom, .. } if atom == 1 - held)
+            matches!(first(&owner, &mut checker, &region), ConstraintConsequence::Cut { atom: cut, .. } if cut == atom(1))
         );
     }
+    let mut region = Region::all_open(3);
+    assert!(region.hold(atom(1)));
+    assert!(
+        matches!(first(&owner, &mut checker, &region), ConstraintConsequence::Cut { atom: cut, .. } if cut == atom(2) || cut == atom(3))
+    );
 }
 
 #[test]
@@ -127,9 +147,10 @@ fn multiple_open_occurrences_may_decline() {
     for source in [
         include_str!("../../fixtures/streamed-consequences/opposite-alias.lp"),
         include_str!("../../fixtures/streamed-consequences/one-row-alias.lp"),
-        include_str!("../../fixtures/streamed-consequences/two-positive.lp"),
+        include_str!("../../fixtures/streamed-consequences/two-row-gated-units.lp"),
     ] {
         let owner = hybrid(source);
+        assert!(owner.streamed_templates() > 0, "{source}");
         let mut checker = owner.checker(ConstraintCheckLimits::default()).unwrap();
         let region = Region::all_open(owner.atom_catalog().atoms().len());
         assert_eq!(
@@ -156,16 +177,22 @@ fn normalized_duplicate_literals_still_force() {
 #[test]
 fn no_consequence_does_not_certify_model_satisfaction() {
     let owner = hybrid(include_str!(
-        "../../fixtures/streamed-consequences/two-positive.lp"
+        "../../fixtures/streamed-consequences/two-row-gated-units.lp"
     ));
+    assert_eq!(owner.streamed_templates(), 1);
+    let count = owner.atom_catalog().atoms().len();
     let mut checker = owner.checker(ConstraintCheckLimits::default()).unwrap();
     assert_eq!(
-        first(&owner, &mut checker, &Region::all_open(2)),
+        first(&owner, &mut checker, &Region::all_open(count)),
         ConstraintConsequence::NoConsequence
     );
+    // Every atom held violates both rows.
     assert!(matches!(
         checker
-            .check(&completion(&owner, 3), &Cancellation::default())
+            .check(
+                &completion(&owner, (1 << count) - 1),
+                &Cancellation::default()
+            )
             .unwrap(),
         ConstraintVerdict::Violated { .. }
     ));
@@ -256,10 +283,11 @@ fn continuation_shares_the_scalar_allowance() {
 #[test]
 fn continuation_requires_an_unfinished_closure() {
     let owner = hybrid(include_str!(
-        "../../fixtures/streamed-consequences/two-positive.lp"
+        "../../fixtures/streamed-consequences/two-row-gated-units.lp"
     ));
+    assert_eq!(owner.streamed_templates(), 1);
     let mut checker = owner.checker(ConstraintCheckLimits::default()).unwrap();
-    let region = Region::all_open(2);
+    let region = Region::all_open(owner.atom_catalog().atoms().len());
     let before = checker.statistics();
     assert!(matches!(
         checker
@@ -487,7 +515,7 @@ fn narrowed_pivots_use_the_complete_scalar_filter() {
     let mut region = Region::all_open(owner.atom_catalog().atoms().len());
     assert!(region.hold(q));
     let ConstraintConsequence::Cut { atom, .. } = first(&owner, &mut checker, &region) else {
-        panic!("one p row matches held q(1)");
+        panic!("one p row matches a held q(1, Z)");
     };
     let atom = owner.atom_catalog().atoms().at(atom).unwrap();
     assert_eq!(atom.predicate().name(), "p");

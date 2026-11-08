@@ -1,11 +1,11 @@
 //! Actual solve outcomes remain unchanged by optional attempted host timing.
 
 use crate::support::options::serial_with_statistics;
+use zetesis_algebra::Cancellation;
 use zetesis_cli::{
     Completion, Options, PhaseTimings, Report, RunError, SolvePhase, StatisticsView,
     run_with_diagnostics,
 };
-use zetesis_cpu::Cancellation;
 
 fn options(arguments: &[&str], statistics: bool) -> Options {
     let mut options = serial_with_statistics(arguments, statistics);
@@ -46,11 +46,17 @@ fn entered(timing: &PhaseTimings, phase: SolvePhase) {
 }
 
 #[test]
-fn optional_timing_preserves_complete_closure_and_formula_results() {
-    for (source, arguments, formula, objective) in [
+fn optional_timing_preserves_complete_results() {
+    // `validation` says whether candidates are validated against the original
+    // theory, and `reduct` whether exact reduct membership runs. The hybrid
+    // route validates its core answers against the original constraints; the
+    // eager tight program's class certificate decides membership with
+    // neither phase; the countermodel oracle enters both.
+    for (source, arguments, validation, reduct, objective) in [
         (
             "p:-not q. q:-not p.",
             vec!["--grounder", "lazy"],
+            true,
             false,
             false,
         ),
@@ -59,16 +65,19 @@ fn optional_timing_preserves_complete_closure_and_formula_results() {
             vec!["--grounder", "eager"],
             false,
             false,
+            false,
         ),
         (
             "a|b. a:-b. b:-a.",
             vec!["--oracle", "countermodel"],
+            true,
             true,
             false,
         ),
         (
             "1{p(1);p(2)}1. {hidden}. #minimize{X:p(X)}. #show. #show seen(X):p(X).",
             vec!["--oracle", "countermodel"],
+            true,
             true,
             true,
         ),
@@ -81,7 +90,6 @@ fn optional_timing_preserves_complete_closure_and_formula_results() {
         assert_eq!(measured.models, plain.models);
         assert_eq!(measured.checked, plain.checked);
         assert_eq!(measured.interruption, plain.interruption);
-        assert_eq!(measured.discovered_gate_atoms, plain.discovered_gate_atoms);
         assert!(measured.formula_execution.is_none());
         assert!(plain.formula_execution.is_none());
         assert_eq!(
@@ -105,15 +113,17 @@ fn optional_timing_preserves_complete_closure_and_formula_results() {
             entered(&timing, phase);
         }
         assert!(timing.get(SolvePhase::GpuHostOracle).is_none());
-        for phase in [
-            SolvePhase::OriginalValidation,
-            SolvePhase::ExactReductMembership,
-        ] {
-            assert_eq!(timing.get(phase).is_some(), formula);
-        }
+        // Every route here is a formula route, which validates each candidate
+        // against the original theory.
         assert_eq!(
-            timing.get(SolvePhase::ClosureMembership).is_some(),
-            !formula
+            timing.get(SolvePhase::OriginalValidation).is_some(),
+            validation,
+            "{source}"
+        );
+        assert_eq!(
+            timing.get(SolvePhase::ExactReductMembership).is_some(),
+            reduct,
+            "{source}"
         );
         assert_eq!(
             timing.get(SolvePhase::ObjectiveScoringRetention).is_some(),
@@ -232,7 +242,7 @@ fn already_loaded_original_bundle_receives_driver_phases_on_both_oracles() {
     let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("tests/fixtures/correctness/excerpts/shortest-path-reachable.lp");
     let source = std::fs::read_to_string(&path).unwrap();
-    for oracle in ["closure", "countermodel"] {
+    for oracle in ["auto", "countermodel"] {
         let options = options(&["--oracle", oracle], true);
         // Loading is deliberately outside the driver API and its timer.
         let bundle = zetesis_themelios::SourceBundle::load(
@@ -260,10 +270,9 @@ fn already_loaded_original_bundle_receives_driver_phases_on_both_oracles() {
         assert_eq!(report.checked, direct.checked);
         let timing = report.phase_timings.unwrap();
         entered(&timing, SolvePhase::AdmissionMaterialization);
-        // Bundles arrive parsed. Closure admission is one call; formula
-        // preparation and consuming its owner for grounding are two calls.
-        // The string door also counts its parse separately for closure.
-        let bundle_calls = if oracle == "closure" { 1 } else { 2 };
+        // Bundles arrive parsed. Formula preparation and consuming its owner
+        // for grounding are two calls.
+        let bundle_calls = 2;
         assert_eq!(
             timing
                 .get(SolvePhase::AdmissionMaterialization)

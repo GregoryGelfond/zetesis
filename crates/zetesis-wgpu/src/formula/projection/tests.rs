@@ -1,19 +1,29 @@
 //! The assembled production sources retain the independently checked interface.
 
 use super::GateProjection;
+use crate::kernel::Kernel;
+use crate::{GpuKernelOptions, GpuWorkgroupSize};
 use std::borrow::Cow;
 
 #[test]
 fn default_shader_remains_the_borrowed_baseline() {
     assert!(
         matches!(GateProjection::Enumerated.shader().unwrap(), Cow::Borrowed(source)
-        if source == include_str!("../../formula.wgsl"))
+        if source == concat!(include_str!("../../formula.wgsl"), include_str!("../../words.wgsl"), include_str!("../../formula_graph/truth.wgsl"), include_str!("../../formula_graph/numeric.wgsl"), include_str!("../numeric.wgsl"), include_str!("../subset.wgsl"), include_str!("../../reduction.wgsl")))
     );
 }
 
 #[test]
 fn bitwise_transfer_preserves_the_shader_scaffold() {
-    let baseline = include_str!("../../formula.wgsl");
+    let baseline = concat!(
+        include_str!("../../formula.wgsl"),
+        include_str!("../../words.wgsl"),
+        include_str!("../../formula_graph/truth.wgsl"),
+        include_str!("../../formula_graph/numeric.wgsl"),
+        include_str!("../numeric.wgsl"),
+        include_str!("../subset.wgsl"),
+        include_str!("../../reduction.wgsl")
+    );
     let (prefix, transfer) = baseline.split_once("fn gate(").unwrap();
     let suffix = &transfer[transfer.find("fn finish(").unwrap()..];
     let assembled = GateProjection::Bitwise.shader().unwrap();
@@ -31,12 +41,20 @@ fn projection_variants_preserve_the_device_interface() {
     for projection in GateProjection::ALL {
         let source = projection.shader().unwrap();
         let module = naga::front::wgsl::parse_str(&source).expect("WGSL parses");
-        naga::valid::Validator::new(
+        let info = naga::valid::Validator::new(
             naga::valid::ValidationFlags::all(),
             naga::valid::Capabilities::empty(),
         )
         .validate(&module)
         .expect("portable shader validation");
+        crate::formula_graph::assert_candidate_word_binding(&module, &info, 3);
+        let (module, _) = naga::back::pipeline_constants::process_overrides(
+            &module,
+            &info,
+            None,
+            &naga::back::PipelineConstants::default(),
+        )
+        .unwrap();
         assert_eq!(module.entry_points.len(), 1);
         assert_eq!(module.entry_points[0].workgroup_size, [64, 1, 1]);
         let mut workgroup_bytes = 0;
@@ -65,4 +83,99 @@ fn projection_variants_preserve_the_device_interface() {
         interfaces.push((bindings, entries));
     }
     assert_eq!(interfaces[0], interfaces[1]);
+}
+
+#[test]
+fn optional_instructions_require_granted_features() {
+    for projection in GateProjection::ALL {
+        for features in [
+            wgpu::Features::empty(),
+            wgpu::Features::SUBGROUP,
+            wgpu::Features::SHADER_INT64,
+            wgpu::Features::SUBGROUP | wgpu::Features::SHADER_INT64,
+        ] {
+            let source = Kernel::Formula(GpuKernelOptions::default())
+                .source(projection.shader().unwrap(), features)
+                .unwrap();
+            let module = naga::front::wgsl::parse_str(&source)
+                .unwrap_or_else(|error| panic!("{}", error.emit_to_string(&source)));
+            let mut capabilities = naga::valid::Capabilities::empty();
+            if features.contains(wgpu::Features::SUBGROUP) {
+                capabilities |= naga::valid::Capabilities::SUBGROUP;
+            }
+            if features.contains(wgpu::Features::SHADER_INT64) {
+                capabilities |= naga::valid::Capabilities::SHADER_INT64;
+            }
+            let info =
+                naga::valid::Validator::new(naga::valid::ValidationFlags::all(), capabilities)
+                    .validate(&module)
+                    .unwrap();
+            for size in GpuWorkgroupSize::ALL {
+                let constants = [("WORKGROUP_SIZE".to_owned(), f64::from(size.invocations()))]
+                    .into_iter()
+                    .collect();
+                let (compiled, _) = naga::back::pipeline_constants::process_overrides(
+                    &module, &info, None, &constants,
+                )
+                .unwrap();
+                assert_eq!(
+                    compiled.entry_points[0].workgroup_size,
+                    [size.invocations(), 1, 1]
+                );
+            }
+            if !features.is_empty() {
+                assert!(
+                    naga::valid::Validator::new(
+                        naga::valid::ValidationFlags::all(),
+                        naga::valid::Capabilities::empty(),
+                    )
+                    .validate(&module)
+                    .is_err()
+                );
+            }
+        }
+    }
+}
+
+#[test]
+fn portable_selection_ignores_optional_device_features() {
+    let kernel = Kernel::Formula(GpuKernelOptions {
+        optional_features: false,
+        ..Default::default()
+    });
+    let source = kernel
+        .source(
+            GateProjection::Enumerated.shader().unwrap(),
+            wgpu::Features::all(),
+        )
+        .unwrap();
+    assert!(matches!(source, Cow::Borrowed(_)));
+}
+
+#[test]
+fn formula_source_owns_only_projection_or_feature_assembly() {
+    for projection in GateProjection::ALL {
+        for optional_features in [false, true] {
+            let kernel = Kernel::Formula(GpuKernelOptions {
+                optional_features,
+                ..Default::default()
+            });
+            for granted in [
+                wgpu::Features::empty(),
+                wgpu::Features::SUBGROUP,
+                wgpu::Features::SHADER_INT64,
+                wgpu::Features::SUBGROUP | wgpu::Features::SHADER_INT64,
+            ] {
+                let source = kernel
+                    .source(projection.shader().unwrap(), granted)
+                    .unwrap();
+                assert_eq!(
+                    matches!(source, Cow::Owned(_)),
+                    projection == GateProjection::Bitwise
+                        || (optional_features && !granted.is_empty()),
+                    "{projection:?}, {optional_features}, {granted:?}"
+                );
+            }
+        }
+    }
 }

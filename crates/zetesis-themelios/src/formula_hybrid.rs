@@ -16,8 +16,8 @@ use std::{
 };
 use themelios_base::source::Source;
 use themelios_program::program::{DefaultNegation, Program};
+use zetesis_algebra::{Cancellation, Stop, region::Region};
 use zetesis_core::{AtomCatalog, AtomIndexError, AtomLookup, CatalogIndex, Model};
-use zetesis_cpu::{Cancellation, Stop, regions::Region};
 use zetesis_ferraris::Theory;
 
 use crate::expansion::Budget;
@@ -74,8 +74,9 @@ struct Core {
 /// A materialized producer core with the integrity constraints streamed over it:
 /// its stable models are proposals, and only those satisfying the streamed
 /// constraints are answer sets of the program this core was admitted for (a
-/// hybrid owner's whole program, or a terminal owner's base). Checkers and
-/// candidate-region filters run over it. Cloning shares all retained storage.
+/// hybrid owner's whole program, or a terminal owner's base). Its checkers run
+/// over it, on candidate regions and on core answers. Cloning shares all
+/// retained storage.
 #[derive(Clone)]
 pub struct StreamedCore(Arc<Core>);
 impl fmt::Debug for StreamedCore {
@@ -140,8 +141,9 @@ impl HybridFormula {
         Arc::ptr_eq(&self.0, &other.0)
     }
 
-    /// Retained producers, ineligible constraints, coherence and support guards.
-    /// This is the core theory, not the complete original program.
+    /// Retained producers, materialized constraints, coherence and support guards.
+    /// Materialization includes whole certified pair-exclusion templates; other
+    /// eligible constraints remain streamed. This is the original program's core.
     #[must_use]
     pub fn core_theory(&self) -> &Theory {
         &self.0.core.0.compiled.theory
@@ -258,7 +260,7 @@ impl HybridFormula {
         &self.0.core.0.compiled.expansion
     }
 
-    /// Retained lowered constraint templates. Pool alternatives count separately.
+    /// As [`StreamedCore::streamed_templates`].
     #[must_use]
     pub fn streamed_templates(&self) -> usize {
         self.0.core.streamed_templates()
@@ -268,6 +270,18 @@ impl HybridFormula {
     #[must_use]
     pub fn streamed_instances(&self) -> u64 {
         self.0.core.streamed_instances()
+    }
+
+    /// As [`StreamedCore::retained_templates`].
+    #[must_use]
+    pub fn retained_templates(&self) -> usize {
+        self.0.core.retained_templates()
+    }
+
+    /// As [`StreamedCore::retained_instances`].
+    #[must_use]
+    pub fn retained_instances(&self) -> u64 {
+        self.0.core.retained_instances()
     }
 
     /// As [`StreamedCore::checker`].
@@ -398,7 +412,8 @@ impl StreamedCore {
         self.0.compiled.key_analysis
     }
 
-    /// Retained lowered constraint templates. Pool alternatives count separately.
+    /// Lowered constraint templates streamed over the core. Pool alternatives
+    /// count separately.
     #[must_use]
     pub fn streamed_templates(&self) -> usize {
         self.0
@@ -414,6 +429,21 @@ impl StreamedCore {
             .constraints
             .as_ref()
             .map_or(0, |constraints| constraints.instances)
+    }
+
+    /// Eligible constraint templates instantiated in the core instead of
+    /// streamed, because their instances fit the share
+    /// [`crate::FormulaLimits::max_retained_constraint_nodes`] grants; the core
+    /// checks them as formula nodes.
+    #[must_use]
+    pub fn retained_templates(&self) -> usize {
+        self.0.compiled.retained_constraints.templates
+    }
+
+    /// Instances of the retained templates, as counted during admission.
+    #[must_use]
+    pub fn retained_instances(&self) -> u64 {
+        self.0.compiled.retained_constraints.instances
     }
 
     /// Prepare one independent cumulative checker over the completed support.
@@ -1390,8 +1420,8 @@ mod tests {
             checker
                 .consequence_region(
                     owner.core_theory(),
-                    &zetesis_cpu::regions::Region::all_open(1),
-                    &zetesis_cpu::Cancellation::default(),
+                    &zetesis_algebra::region::Region::all_open(1),
+                    &zetesis_algebra::Cancellation::default(),
                     crate::ConstraintRegionPass::First,
                 )
                 .unwrap(),
@@ -1405,14 +1435,14 @@ mod tests {
         let mut checker = owner
             .checker(crate::ConstraintCheckLimits::default())
             .unwrap();
-        let region = zetesis_cpu::regions::Region::all_open(owner.atom_catalog().atoms().len());
+        let region = zetesis_algebra::region::Region::all_open(owner.atom_catalog().atoms().len());
         for _ in 0..2 {
             assert_eq!(
                 checker
                     .check_region(
                         owner.core_theory(),
                         &region,
-                        &zetesis_cpu::Cancellation::default()
+                        &zetesis_algebra::Cancellation::default()
                     )
                     .unwrap(),
                 crate::ConstraintRegionVerdict::NotRefuted

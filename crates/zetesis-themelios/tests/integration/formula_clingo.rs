@@ -14,9 +14,9 @@ use zetesis_reference_support::admit;
 
 use crate::support::atom_models::{self, Models, atom};
 use serde_json::Value as Json;
+use zetesis_algebra::Cancellation;
 use zetesis_clingo_support as oracle;
 use zetesis_core::{Atom, ValueLimits};
-use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{Interpretation, Limits, check};
 use zetesis_themelios::{AdmittedFormula, FormulaLimits};
 

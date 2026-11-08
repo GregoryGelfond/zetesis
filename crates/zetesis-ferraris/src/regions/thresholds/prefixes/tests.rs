@@ -1,7 +1,7 @@
 //! Prefix discovery, original bound transport and isolation from frozen closure.
 
 use crate::test_support::{Allowance, close};
-use zetesis_cpu::{Cancellation, Stop};
+use zetesis_algebra::{Cancellation, Stop};
 
 use crate::regions::{Known, NarrowingStatistics, Width};
 use crate::{
@@ -129,7 +129,7 @@ fn gap_theory(positive: bool) -> Theory {
     .unwrap()
 }
 
-fn snapshot(knowledge: &Knowledge) -> (Vec<u64>, Vec<State>) {
+fn snapshot<C: zetesis_algebra::Class>(knowledge: &Knowledge<C>) -> (Vec<u64>, Vec<State>) {
     fn read<C>(known: &Known<C>) -> (Vec<u64>, Vec<State>) {
         (
             known
@@ -297,11 +297,13 @@ fn inherited_bounds_are_closed_and_branch_local() {
 fn assert_pending_rows(scratch: &NarrowingScratch, rows: usize) {
     for row in 0..rows {
         let queued = scratch
+            .common
             .threshold_rows
             .iter()
             .filter(|&&pending| pending == row)
             .count();
         let pending = scratch
+            .common
             .pending_thresholds
             .get(row / 64)
             .is_some_and(|word| word & (1_u64 << (row % 64)) != 0);
@@ -325,17 +327,17 @@ fn every_refused_prefix_discards_scratch_authority() {
     let mut scratch = NarrowingScratch::default();
     for failure in [Stop::WorkLimit, Stop::Cancelled, Stop::Deadline] {
         for ceiling in 0..completed.1.work {
-            let attempt = index.narrow_known_reserved(
+            let attempt = crate::test_support::stop_narrowing(&index.narrow_known_reserved(
                 OriginalSubject::new(&theory, None),
                 &mut Region::all_open(6),
                 &mut index.knowledge(),
                 &mut scratch,
                 &Cancellation::default(),
-                &mut Allowance {
+                &mut zetesis_algebra::Meter::reserved(&mut Allowance {
                     remaining: ceiling,
                     failure,
-                },
-            );
+                }),
+            ));
             assert_eq!(attempt.result, Err(failure));
             assert_eq!(attempt.statistics.work, ceiling);
             assert_pending_rows(&scratch, index.thresholds.rows.len());
@@ -346,10 +348,22 @@ fn every_refused_prefix_discards_scratch_authority() {
             assert_eq!(receipt(actual.1), receipt(completed.1));
             assert_eq!(region, expected_region);
             assert_eq!(snapshot(&knowledge), snapshot(&expected));
-            assert!(scratch.threshold_rows.is_empty());
-            assert!(scratch.residual_rows.is_empty());
-            assert!(scratch.pending_thresholds.iter().all(|&word| word == 0));
-            assert!(scratch.pending_residuals.iter().all(|&word| word == 0));
+            assert!(scratch.common.threshold_rows.is_empty());
+            assert!(scratch.common.residual_rows.is_empty());
+            assert!(
+                scratch
+                    .common
+                    .pending_thresholds
+                    .iter()
+                    .all(|&word| word == 0)
+            );
+            assert!(
+                scratch
+                    .common
+                    .pending_residuals
+                    .iter()
+                    .all(|&word| word == 0)
+            );
         }
     }
 }
@@ -382,23 +396,22 @@ fn frozen_closure_never_consumes_prefix_relations() {
                 let mut region = Region::all_open(6);
                 decide_shared(&mut region, code);
                 let mut baseline_region = region.clone();
-                let mut knowledge = index.knowledge();
-                let mut baseline = without.knowledge();
+                let mut knowledge = index.frozen_knowledge();
+                let mut baseline = without.frozen_knowledge();
                 let mut scratch = NarrowingScratch::default();
                 let run = |index: &Narrower,
                            region: &mut Region,
-                           knowledge: &mut Knowledge,
+                           knowledge: &mut Knowledge<zetesis_algebra::Countermodels>,
                            scratch: &mut NarrowingScratch| {
-                    index
-                        .narrow_frozen_known(
-                            FrozenSubject::new(&theory, &truth),
-                            region,
-                            knowledge,
-                            scratch,
-                            RegionLimits::default(),
-                            &Cancellation::default(),
-                        )
-                        .unwrap()
+                    let attempt = index.narrow_frozen_known(
+                        FrozenSubject::new(&theory, &truth),
+                        region,
+                        knowledge,
+                        scratch,
+                        RegionLimits::default(),
+                        &Cancellation::default(),
+                    );
+                    (attempt.result.unwrap(), attempt.statistics)
                 };
                 let actual = run(&index, &mut region, &mut knowledge, &mut scratch);
                 let expected = run(
@@ -411,8 +424,8 @@ fn frozen_closure_never_consumes_prefix_relations() {
                 assert_eq!(receipt(actual.1), receipt(expected.1));
                 assert_eq!(region, baseline_region);
                 assert_eq!(snapshot(&knowledge), snapshot(&baseline));
-                assert_eq!(scratch.threshold_rows.capacity(), 0);
-                assert_eq!(scratch.pending_thresholds.capacity(), 0);
+                assert_eq!(scratch.common.threshold_rows.capacity(), 0);
+                assert_eq!(scratch.common.pending_thresholds.capacity(), 0);
             }
         }
     }

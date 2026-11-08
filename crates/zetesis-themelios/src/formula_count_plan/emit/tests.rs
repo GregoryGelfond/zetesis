@@ -1,15 +1,14 @@
 use super::*;
-use crate::formula_count_plan::{CountPlanLimits, CountPlanResource, CountPlanStatistics};
-use zetesis_cpu::Cancellation;
+use crate::formula_count_plan::{CountPlanLimits, CountPlanResource};
+use zetesis_algebra::Cancellation;
 use zetesis_ferraris::AdmissionLimits;
 
 fn work() -> Work {
-    Work {
-        limits: CountPlanLimits::default(),
-        cancellation: Cancellation::default(),
-        statistics: CountPlanStatistics::default(),
-        location: ProgramSite::program(),
-    }
+    Work::new(
+        CountPlanLimits::default(),
+        Cancellation::default(),
+        ProgramSite::program(),
+    )
 }
 
 fn original() -> Theory {
@@ -40,7 +39,7 @@ fn prefix_copy_charges_shared_rows_once() {
         + (source.rows().len() + source.thresholds().len())
             * (size_of::<bool>() + size_of::<Option<usize>>());
     assert_eq!(
-        u128::from(work.statistics.storage_bytes),
+        u128::from(work.statistics().storage_bytes),
         copied.parts().payload_bytes() + maps as u128
     );
 }
@@ -51,7 +50,7 @@ fn prefix_copy_refuses_unfunded_numeric_payload() {
     let mut measured = work();
     prefix::copy(&original, 4, &mut measured).unwrap();
     let mut bounded = work();
-    bounded.limits.max_bytes = measured.statistics.storage_bytes - 1;
+    bounded.limits.max_bytes = measured.statistics().storage_bytes - 1;
     assert_eq!(
         prefix::copy(&original, 4, &mut bounded).unwrap_err(),
         Fault::Limit(CountPlanResource::Bytes)
@@ -78,7 +77,7 @@ fn count_payload_is_independent_of_numeric_bound() {
         };
         assert_eq!(threshold.conditions.len(), 100);
         assert_eq!(threshold.bound, bound as i128);
-        amounts.push(work.statistics.storage_bytes);
+        amounts.push(work.statistics().storage_bytes);
     }
     assert_eq!(amounts[0], amounts[1]);
 }

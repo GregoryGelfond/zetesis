@@ -78,6 +78,7 @@ fn guard_work_refusals_preserve_admitted_prefixes() {
     let computation = queries.computation(rule.location).unwrap();
     let domain = analysis
         .for_rule(prepared.rules_without_facts().len() - 1, rule)
+        .unwrap()
         .unwrap();
     let base = support.live.get();
     let observer = Observer::default();
@@ -172,6 +173,7 @@ fn guard_storage_admission_is_inclusive() {
     let computation = queries.computation(rule.location).unwrap();
     let domain = analysis
         .for_rule(prepared.rules_without_facts().len() - 1, rule)
+        .unwrap()
         .unwrap();
     let base = support.live.get();
     let observer = Observer::default();
@@ -305,7 +307,7 @@ fn domain_guards_refuse_a_foreign_query_owner() {
     let guard = support
         .domain_guards(
             rule,
-            analysis.for_rule(index, rule).unwrap(),
+            analysis.for_rule(index, rule).unwrap().unwrap(),
             &computation,
             &limits,
             &mut counters,
@@ -413,6 +415,7 @@ fn with_candidates(
         &program,
         domains
             .for_rule(program.rules_without_facts().len() - 1, rule)
+            .unwrap()
             .unwrap(),
         queries.support(),
         &computation,

@@ -2,8 +2,8 @@
 
 use crate::support::observation_reference;
 
+use zetesis_algebra::Cancellation;
 use zetesis_core::{Atom, Model, Predicate, Value};
-use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{Interpretation, check};
 use zetesis_reference_support::{admit, formula, resource_limits};
 use zetesis_themelios::observation::{
@@ -507,7 +507,7 @@ fn assert_cancelled(source: &str) {
         .unwrap_err();
     assert!(matches!(
         error.kind(),
-        ErrorKind::Stopped(zetesis_cpu::Stop::Cancelled)
+        ErrorKind::Stopped(zetesis_algebra::Stop::Cancelled)
     ));
 }
 

@@ -83,18 +83,28 @@ fn receipt_statistics(value: &Value) -> Result<SourceEvaluationStatistics, Strin
 fn activity(statistics: &Value, timing: &Diagnostics) -> Result<(), String> {
     for field in [
         "execution",
-        "lazy_execution",
-        "shared_execution",
-        "closure_execution",
-        "query_execution",
         "hybrid_execution",
         "terminal_execution",
         "search",
-        "candidate_restrictions",
     ] {
         if statistics.get(field) != Some(&Value::Null) {
             return Err(format!(
                 "source evaluation has conflicting or missing {field} evidence"
+            ));
+        }
+    }
+    // These top-level fields belong to earlier execution views. Current
+    // producers omit them; a retained non-null receipt still contradicts this route.
+    for field in [
+        "lazy_execution",
+        "shared_execution",
+        "closure_execution",
+        "query_execution",
+        "candidate_restrictions",
+    ] {
+        if statistics.get(field).is_some_and(|value| !value.is_null()) {
+            return Err(format!(
+                "source evaluation has conflicting {field} evidence"
             ));
         }
     }

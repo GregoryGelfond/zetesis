@@ -2,6 +2,12 @@
 // arithmetic, term-order or candidate-membership interpretation. The first
 // two words per column are its absolute payload word offset and cell width.
 // Host-checked widths are 8, 16 or 32; each column starts at a word boundary.
+// Every workgroup location an invocation reads was written earlier in its
+// workgroup, by the same invocation or by another ordered before the read by a
+// barrier or uniform load, and every workgroup array index is within its array.
+// The pipeline keeps WebGPU's zero-fill of workgroup memory, which this rule
+// makes unobservable; CONTRIBUTING ("Carry the semantic contract into Lean and
+// Rust") records the fill's status and what removing it requires.
 struct Dimensions {
     rows: u32, columns: u32, queries: u32, words: u32,
     epoch: u32, tiles: u32, reserved1: u32, reserved2: u32,
@@ -18,6 +24,9 @@ const ROWS_PER_GROUP: u32 = 64u;
 const BITS_PER_WORD: u32 = 32u;
 const RECEIPT_WORDS: u32 = 5u;
 const RECEIPT_MARKER: u32 = 0x434f4c32u;
+// One element per lane: every invocation, tail lanes included, writes its own
+// element before the barrier, after which the lanes at 0 and 32 read the 32
+// elements from their own, so every index stays below ROWS_PER_GROUP.
 var<workgroup> matches: array<u32, ROWS_PER_GROUP>;
 
 @compute @workgroup_size(ROWS_PER_GROUP)

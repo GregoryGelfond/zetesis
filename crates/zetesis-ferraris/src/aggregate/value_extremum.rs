@@ -6,8 +6,8 @@ pub use family::{
     append_value_extremum_family_refs,
 };
 
+use zetesis_algebra::Cancellation;
 use zetesis_core::{Value, catalog::TermRef};
-use zetesis_cpu::Cancellation;
 
 use super::extremum::comparison_root;
 use super::lower::{Destination, transaction, validate_prefix};

@@ -1,6 +1,8 @@
 use std::fmt;
 use std::sync::Arc;
 
+use zetesis_algebra::{Meter, words::Words};
+
 mod copying;
 mod numeric;
 
@@ -8,6 +10,8 @@ mod numeric;
 mod extremum_tests;
 #[cfg(test)]
 mod threshold_tests;
+#[cfg(test)]
+mod words_tests;
 
 use crate::ExtremumCut;
 use numeric::NumericStorage;
@@ -611,9 +615,9 @@ impl<'a> FormulaTransaction<'a> {
             .occurrences
             .checked_add(added_edges)
             .ok_or(AdmissionError::Limit)?;
-        if node_count > max_nodes
-            || arena_count > max_operands
-            || occurrences > max_operands
+        if Meter::check_count(node_count, 0, max_nodes).is_err()
+            || Meter::check_count(arena_count, 0, max_operands).is_err()
+            || Meter::check_count(occurrences, 0, max_operands).is_err()
             || !self.parts.numeric.within_limits(max_nodes, max_operands)
         {
             return Err(AdmissionError::Limit);
@@ -933,6 +937,13 @@ impl Theory {
     pub fn same_instance(&self, other: &Self) -> bool {
         Arc::ptr_eq(&self.0, &other.0)
     }
+
+    /// The instance's address, which clones share. Only instances alive
+    /// together have distinct keys; a slate identity keeps it beside a stream
+    /// number that is never reused.
+    pub(crate) fn instance_key(&self) -> usize {
+        Arc::as_ptr(&self.0).addr()
+    }
 }
 
 fn admit(
@@ -965,10 +976,10 @@ fn admit_dimensions(
     roots: &[usize],
     limits: AdmissionLimits,
 ) -> Result<(usize, bool), AdmissionError> {
-    if atoms > limits.max_atoms
-        || parts.nodes.len() > limits.max_nodes
-        || roots.len() > limits.max_roots
-        || parts.operands.len() > limits.max_operands
+    if Meter::check_count(atoms, 0, limits.max_atoms).is_err()
+        || Meter::check_count(parts.nodes.len(), 0, limits.max_nodes).is_err()
+        || Meter::check_count(roots.len(), 0, limits.max_roots).is_err()
+        || Meter::check_count(parts.operands.len(), 0, limits.max_operands).is_err()
         || !parts
             .numeric
             .within_limits(limits.max_nodes, limits.max_operands)
@@ -977,9 +988,7 @@ fn admit_dimensions(
         return Err(AdmissionError::Limit);
     }
     let (occurrences, numeric_nodes) = count_shape(&parts.nodes, &parts.numeric)?;
-    if occurrences > limits.max_operands {
-        return Err(AdmissionError::Limit);
-    }
+    Meter::check_count(occurrences, 0, limits.max_operands).map_err(|_| AdmissionError::Limit)?;
     Ok((occurrences, numeric_nodes))
 }
 
@@ -1108,7 +1117,7 @@ fn insert_atoms(
         if atom >= atom_count {
             return Err(AdmissionError::Atom);
         }
-        words[atom / 64] |= 1 << (atom % 64);
+        Words::<u64, _>::new(&mut *words).insert(atom);
     }
     Ok(())
 }
@@ -1119,7 +1128,7 @@ fn insert_atoms(
 #[derive(Clone, Debug)]
 pub struct Interpretation {
     pub(crate) theory: Theory,
-    pub(crate) words: Vec<u64>,
+    pub(crate) words: Words<u64>,
 }
 impl Interpretation {
     /// Construct an interpretation, coalescing repeated atom indices.
@@ -1144,7 +1153,7 @@ impl Interpretation {
         insert_atoms(theory.atom_count(), iterator, &mut words)?;
         Ok(Self {
             theory: theory.clone(),
-            words,
+            words: words.into(),
         })
     }
 
@@ -1166,7 +1175,7 @@ impl Interpretation {
         words.extend_from_slice(&self.words);
         Ok(Self {
             theory: self.theory.clone(),
-            words,
+            words: words.into(),
         })
     }
 
@@ -1179,7 +1188,7 @@ impl Interpretation {
     /// Constant-time membership; an out-of-universe index is false.
     #[must_use]
     pub fn contains(&self, atom: usize) -> bool {
-        atom < self.theory.atom_count() && self.words[atom / 64] & (1 << (atom % 64)) != 0
+        atom < self.theory.atom_count() && self.words.contains(atom)
     }
 
     /// Atom indices in ascending order, without materializing a second carrier.
@@ -1187,17 +1196,7 @@ impl Interpretation {
     /// packed words and S selected atoms in O(ceil(U/64) + S) time, with constant
     /// auxiliary space. Each nonzero word loses its least set bit at each step.
     pub fn atoms(&self) -> impl Iterator<Item = usize> + '_ {
-        self.words.iter().enumerate().flat_map(|(index, &word)| {
-            let mut remaining = word;
-            std::iter::from_fn(move || {
-                if remaining == 0 {
-                    return None;
-                }
-                let bit = remaining.trailing_zeros() as usize;
-                remaining &= remaining - 1;
-                Some(index * 64 + bit)
-            })
-        })
+        self.words.positions()
     }
 
     /// Borrow membership as ascending low-bit-first 32-bit words.
@@ -1244,9 +1243,7 @@ impl Iterator for InterpretationWords<'_> {
         if self.next == self.end {
             return None;
         }
-        let word = self.interpretation.words[self.next / 2];
-        let bytes = (word >> ((self.next % 2) * 32)).to_le_bytes();
-        let half = u32::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]);
+        let half = self.interpretation.words.half32(self.next);
         self.next += 1;
         Some(half)
     }
@@ -1792,7 +1789,7 @@ mod tests {
                 &[],
                 &[],
                 crate::AggregateFamilyLimits::default(),
-                &zetesis_cpu::Cancellation::default(),
+                &zetesis_algebra::Cancellation::default(),
             )
             .unwrap();
         assert_eq!(transaction.validation_frontier(), 3);
@@ -1806,7 +1803,7 @@ mod tests {
                 &[],
                 &[],
                 crate::AggregateFamilyLimits::default(),
-                &zetesis_cpu::Cancellation::default(),
+                &zetesis_algebra::Cancellation::default(),
             )
             .unwrap_err();
         assert_eq!(
@@ -1891,7 +1888,7 @@ mod tests {
                 &[],
                 &[],
                 crate::AggregateFamilyLimits::default(),
-                &zetesis_cpu::Cancellation::default(),
+                &zetesis_algebra::Cancellation::default(),
             )
             .unwrap_err();
         assert_eq!(
@@ -1966,7 +1963,7 @@ mod tests {
                         bound: 1,
                     }],
                     limits,
-                    &zetesis_cpu::Cancellation::default(),
+                    &zetesis_algebra::Cancellation::default(),
                 )
                 .unwrap();
             if let Some(work) = allowance {

@@ -53,6 +53,48 @@ motivated adding these two classical problems. The programs and comments here
 were independently authored from their mathematical specifications; no upstream
 source was copied.
 
+The contributed [draw-poker workload](poker/README.md) complements these
+parametric cases. Its included-source bundle records all 36 nonroyal straight
+flushes and runs through the existing explicit workload matrix, with fresh clingo
+qualification. It is selected separately and does not change either default
+suite population.
+
+The [shifted-weight subset-sum workload](shifted-subset-sum/README.md) adds a
+complete unsatisfiable sum and nearby unique-answer controls. It uses the same
+explicit workload matrix and fresh clingo qualification without changing either
+default population.
+
+The [2QBF workload](two-qbf/README.md) is the corpus's first disjunctive program.
+Its saturation encoding makes every membership check run the proper-subset query
+over a candidate's frozen reduct, and its constants choose the formula and its
+size. It uses the same explicit workload matrix and fresh clingo qualification
+without changing either default population.
+
+The [strategic-companies workload](strategic-companies/README.md) enumerates the
+minimal covering, control-closed sets of a generated holding with the standard
+disjunctive encoding, whose control rules run through disjunctively chosen
+companies. Its constants choose the holding and its size, and it is selected and
+qualified like the 2QBF workload.
+
+The [parity](two-qbf-parity/README.md), [Tseitin](two-qbf-tseitin/README.md)
+and [pigeonhole](two-qbf-pigeonhole/README.md) 2QBF workloads put a hard
+unsatisfiable core on the universal side, so one candidate's proper-subset query
+carries the solve. Their constants choose the core and its size, and they are
+selected and qualified like the 2QBF workload.
+
+The [Tseitin parity](parity-tseitin/README.md), [parity chain](parity-chain/README.md),
+[pigeonhole clauses](pigeonhole-clauses/README.md) and [mixed parity](parity-mixed/README.md)
+workloads state constraints with algebraic structure in candidate generation:
+parity rows, linear equations over GF(2), and families of counts. Resolution,
+and so a solver that learns clauses, needs exponentially many steps to refute the
+unsatisfiable ones as they grow; elimination and counting refute them in
+polynomial time. `pigeonhole.lp` above states the pigeonhole principle with a
+choice bound, and the 2QBF parity, Tseitin and pigeonhole workloads put the same
+shapes inside the membership check. The mixed workload adds random clauses to
+satisfiable parity constraints, so search remains. Their constants choose each
+instance and its size, and they are selected and qualified like the 2QBF
+workload.
+
 ## Run an example
 
 From the repository root, using the installed solver:

@@ -142,11 +142,13 @@ fn selected_roots_count_once_without_selecting_children_or_neighbors() {
                 .unwrap()
         );
         let bytes = set.retained_bytes();
+        let allocation = (set.words.as_ptr(), set.words.capacity());
         assert!(
             !set.insert_with(&key(&store, ids[index]), bytes, SUCCESS)
                 .unwrap()
         );
         assert_eq!(set.retained_bytes(), bytes);
+        assert_eq!((set.words.as_ptr(), set.words.capacity()), allocation);
     }
     assert_eq!(set.len(), 3);
     for (index, id) in ids.into_iter().enumerate() {
@@ -531,3 +533,19 @@ fn slot_equality_does_not_certify_a_reader_prefix() {
 }
 
 mod copies;
+
+#[test]
+fn term_set_keeps_its_original_record_layout() {
+    use std::mem::{align_of, offset_of, size_of};
+
+    struct Original {
+        scope: storage::VocabularyScope,
+        words: Vec<u64>,
+        count: usize,
+    }
+    assert_eq!(size_of::<TermSet>(), size_of::<Original>());
+    assert_eq!(align_of::<TermSet>(), align_of::<Original>());
+    assert_eq!(offset_of!(TermSet, scope), offset_of!(Original, scope));
+    assert_eq!(offset_of!(TermSet, words), offset_of!(Original, words));
+    assert_eq!(offset_of!(TermSet, count), offset_of!(Original, count));
+}

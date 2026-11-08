@@ -1,7 +1,7 @@
 //! Source restrictions on candidate regions and complete answer checking.
 //!
 //! The retained core uses the ordinary formula session. Its answers
-//! become answers of the original subject only after all streamed constraints
+//! become answers of the original input only after all streamed constraints
 //! are satisfied. Only those complete original answers enter scoring, incumbent
 //! retention and objective-bound feedback. The retained formula core uses the
 //! selected backend;
@@ -11,8 +11,9 @@
 //! instance coverage and completed admission remain separate prerequisites.
 
 use std::sync::Arc;
+use zetesis_algebra::Cancellation;
+use zetesis_algebra::reduction::{CheckedSum, Reduction as _};
 use zetesis_core::Model;
-use zetesis_cpu::Cancellation;
 use zetesis_objective::Score;
 use zetesis_themelios::{ConstraintAllowance, ConstraintChecker, ConstraintVerdict, StreamedCore};
 
@@ -40,26 +41,28 @@ pub struct HybridExecutionStatistics {
     /// Cumulative source checking work, including region checks, preparation and
     /// interrupted attempts. Live worker counters become final after joining.
     pub constraints: zetesis_themelios::ConstraintCheckStatistics,
+    /// The eligible constraints streamed, and those grounded in the core.
+    pub streamed: crate::StreamedConstraints,
 }
 
 #[cfg(test)]
 mod tests;
 
-/// A streamed core and the subject its outcomes report: the hybrid owner, or
+/// A streamed core and the original input its outcomes report: the hybrid owner, or
 /// the terminal owner whose base the core is.
 pub(crate) struct HybridInput<'a> {
     pub(crate) core: &'a StreamedCore,
-    pub(crate) subject: crate::Subject,
+    pub(crate) original: crate::Original,
 }
 
 pub(crate) struct HybridSession<'a> {
-    /// The subject an outcome reports: the hybrid owner, or the terminal owner
+    /// The original input an outcome reports: the hybrid owner, or the terminal owner
     /// whose base this core is.
-    subject: crate::Subject,
+    original: crate::Original,
     core: FormulaSession<'a, Execution>,
     checker: ConstraintChecker<'a>,
     allowance: ConstraintAllowance,
-    regions: Option<Arc<crate::hybrid_regions::Constraints>>,
+    regions: Option<Arc<zetesis_stable::StreamedConstraints>>,
     statistics: HybridExecutionStatistics,
     final_outcome: Option<SemanticOutcome>,
 }
@@ -73,9 +76,8 @@ fn accept(
     cancellation: &Cancellation,
     phases: &Recorder,
 ) -> Result<bool, SolveError> {
-    let count = statistics
-        .core_answers
-        .checked_add(1)
+    let count = CheckedSum
+        .combine(Some(statistics.core_answers), Some(1))
         .ok_or(SolveError::HybridStatisticsOverflow)?;
     statistics.core_answers = count;
     statistics.pending = 1;
@@ -98,6 +100,16 @@ fn accept(
 }
 
 impl<'a> HybridSession<'a> {
+    #[cfg(feature = "gpu")]
+    pub(crate) fn formula_core(&self) -> &FormulaSession<'a, Execution> {
+        &self.core
+    }
+
+    #[cfg(feature = "gpu")]
+    pub(crate) fn formula_core_mut(&mut self) -> &mut FormulaSession<'a, Execution> {
+        &mut self.core
+    }
+
     /// A hybrid owner's session: the route is recorded as lazy grounding and
     /// observed as hybrid grounding before the core session starts. A terminal
     /// owner's hybrid base is observed by its terminal session instead.
@@ -113,8 +125,7 @@ impl<'a> HybridSession<'a> {
         phases.lazy_grounding();
         observations.record(crate::ExecutionObservation::HybridGrounding {
             requested: config.grounder,
-            streamed_templates: input.core.streamed_templates(),
-            streamed_instances: input.core.streamed_instances(),
+            streamed: crate::StreamedConstraints::of(input.core),
         })?;
         Self::new(
             input,
@@ -138,13 +149,16 @@ impl<'a> HybridSession<'a> {
     ) -> Result<Self, SolveError> {
         let HybridInput {
             core: owner,
-            subject,
+            original,
         } = input;
         let allowance = ConstraintAllowance::new(config.constraints);
         let checker = owner
             .checker_with_allowance(&allowance, cancellation)
             .map_err(SolveError::Constraint)?;
-        let statistics = HybridExecutionStatistics::default();
+        let statistics = HybridExecutionStatistics {
+            streamed: crate::StreamedConstraints::of(owner),
+            ..HybridExecutionStatistics::default()
+        };
         let core_config = SolveConfig {
             grounder: crate::Grounder::Eager,
             ..*config
@@ -152,7 +166,6 @@ impl<'a> HybridSession<'a> {
         let input = crate::countermodel::Input {
             theory: owner.core_theory(),
             atoms: owner.atom_catalog(),
-            gate_atoms: 0,
             keyed_constraints: owner.keyed_constraints(),
             key_analysis: owner.key_analysis(),
             objectives: owner.objectives(),
@@ -171,18 +184,16 @@ impl<'a> HybridSession<'a> {
             phases,
             selection,
         )?;
-        let regions = (owner.streamed_templates() != 0
-            && config.search == crate::SearchMethod::Regions)
-            .then(|| {
-                let regions = Arc::new(crate::hybrid_regions::Constraints::new(
-                    owner.clone(),
-                    allowance.clone(),
-                ));
-                core.set_region_filter(regions.clone(), phases);
-                regions
-            });
+        let regions = (owner.streamed_templates() != 0).then(|| {
+            let regions = Arc::new(zetesis_stable::StreamedConstraints::new(
+                owner.clone(),
+                allowance.clone(),
+            ));
+            core.set_streamed_constraints(regions.clone(), phases);
+            regions
+        });
         Ok(Self {
-            subject,
+            original,
             core,
             checker,
             allowance,
@@ -234,7 +245,7 @@ impl<'a> HybridSession<'a> {
 
     fn snapshot(&self, phases: &Recorder) -> SemanticOutcome {
         let mut outcome = self.core.outcome(phases);
-        outcome.subject = Some(self.subject.clone());
+        outcome.original = Some(self.original.clone());
         outcome.verified = self.statistics.accepted;
         // Core exhaustion cannot establish completion of an unfinished source check.
         outcome.search_state = None;
@@ -266,7 +277,7 @@ impl<'a> HybridSession<'a> {
         let source_state = matches!(
             state,
             Some(SearchState::Interrupted(Interruption::Countermodel(
-                zetesis_sat::Incomplete::RegionFilter
+                zetesis_stable::Incomplete::RegionFilter
             )))
         );
         // A source marker still needs its precise recorded cause. Any other
@@ -274,7 +285,7 @@ impl<'a> HybridSession<'a> {
         // taking the slot above still settles the source's retained receipt.
         if !matches!(state, Some(SearchState::Interrupted(_))) || source_state {
             error = error.or_else(|| source_failure.map(SolveError::Constraint));
-            if (stopped == Err(zetesis_sat::Incomplete::RegionFilter) || source_state)
+            if (stopped == Err(zetesis_stable::Incomplete::RegionFilter) || source_state)
                 && error.is_none()
             {
                 error = Some(SolveError::ConstraintFailureMissing);

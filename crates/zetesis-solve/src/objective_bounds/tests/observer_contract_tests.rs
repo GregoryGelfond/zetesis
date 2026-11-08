@@ -3,12 +3,11 @@
 use std::collections::BTreeSet;
 use std::io;
 
-use super::by_clauses;
+use zetesis_algebra::Cancellation;
 use zetesis_core::Model;
-use zetesis_cpu::Cancellation;
 use zetesis_ferraris::Interpretation;
 use zetesis_reference_support::formula as admitted;
-use zetesis_sat::{Limits, StableModels};
+use zetesis_stable::{Limits, StableModels};
 
 use super::{Bounds, Preparation};
 use crate::countermodel::Input;
@@ -19,7 +18,7 @@ fn attempt(
     foreign: bool,
     observer: &mut impl ExecutionObserver,
 ) -> (Result<(), SolveError>, StableModels) {
-    let planned = admitted("{a;b}. #minimize{1,a:a;1,b:b}.");
+    let planned = admitted(super::HEAVY_OBJECTIVE);
     let different = foreign.then(|| admitted("{x;y}."));
     let original = different.as_ref().unwrap_or(&planned);
     let options = SolveConfig::default();
@@ -46,12 +45,11 @@ fn attempt(
         Input {
             theory: planned.theory(),
             atoms: planned.atom_catalog(),
-            gate_atoms: 0,
             keyed_constraints: 0,
             key_analysis: zetesis_themelios::KeyAnalysis::Complete,
             objectives: planned.objectives(),
             required_choices: planned.required_choices(),
-            certificate_order: zetesis_sat::CertificateOrder::TightFirst,
+            certificate_order: zetesis_stable::CertificateOrder::TightFirst,
         },
         &options,
         &Cancellation::default(),
@@ -61,11 +59,12 @@ fn attempt(
         .unwrap();
     let mut bounds = Bounds::new(&options);
     assert!(preparation.plan().is_some());
-    let mut limits = Limits::default();
-    if !foreign {
-        limits.admission.max_variables = original.atoms().len();
-    }
-    let mut models = by_clauses(original.theory(), limits, Cancellation::default()).unwrap();
+    let limits = if foreign {
+        Limits::default()
+    } else {
+        super::exact_search_limits(original.theory())
+    };
+    let mut models = StableModels::new(original.theory(), limits, Cancellation::default()).unwrap();
     let result = bounds.improve(
         preparation.plan(),
         score.score(),
@@ -115,10 +114,7 @@ impl ExecutionObserver for RefuseObservation {
             assert!(matches!(
                 observation,
                 ExecutionObservation::ObjectiveRestrictionStopped(
-                    zetesis_sat::Incomplete::Admission(zetesis_sat::AdmissionError::Limit {
-                        resource: zetesis_sat::Resource::Variables,
-                        ..
-                    })
+                    zetesis_stable::Incomplete::WorkLimit
                 )
             ));
         }

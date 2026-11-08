@@ -67,8 +67,9 @@ pub(super) fn capture(
             "positive formula search work was not reported".into(),
         ));
     }
-    let observation = Observation::from_statistics(
+    let observation = Observation::from_capture(
         &document,
+        capture.stdout(),
         capture.stderr(),
         selected::NativeExecution {
             backend,

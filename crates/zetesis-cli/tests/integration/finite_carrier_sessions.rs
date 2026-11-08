@@ -5,12 +5,11 @@ use crate::support::finite_carrier_sources as sources;
 use std::num::NonZeroUsize;
 
 use clap::Parser;
+use zetesis_algebra::Cancellation;
 use zetesis_cli::{
-    Backend, Completion, Options, Oracle, PreparedInput, SearchMethod, Session, SolveConfig,
-    run_with_diagnostics,
+    Backend, Completion, Options, Oracle, PreparedInput, Session, SolveConfig, run_with_diagnostics,
 };
 use zetesis_clingo_support as oracle;
-use zetesis_cpu::Cancellation;
 use zetesis_reference_support as reference;
 use zetesis_test_support::records::Records;
 use zetesis_themelios::FormulaLimits;
@@ -139,11 +138,10 @@ fn sessions_preserve_scored_answer_families() {
         for (workers, batch) in [(1, 1), (4, 3)] {
             let config = SolveConfig {
                 backend: Backend::Cpu,
-                // The batched completion and its accounting belong to the clause search.
-                search: SearchMethod::Clauses,
+                // One region walker; a completion pool checks its candidates in batches.
                 oracle: Oracle::Countermodel,
                 models: 0,
-                workers: NonZeroUsize::new(workers).unwrap(),
+                workers: NonZeroUsize::MIN,
                 completion_workers: NonZeroUsize::new(workers).unwrap(),
                 batch_size: NonZeroUsize::new(batch).unwrap(),
                 ..SolveConfig::default()

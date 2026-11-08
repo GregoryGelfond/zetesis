@@ -8,27 +8,24 @@
 
 use crate::ExecutionObserver;
 use crate::execution_observation::{ExecutionSink, Ignore, Observer};
-use std::sync::Arc;
 
-use zetesis_core::{GroundProgram, Model, Program};
-use zetesis_cpu::Cancellation;
+use zetesis_algebra::Cancellation;
+use zetesis_core::Model;
 use zetesis_ferraris::Theory;
 use zetesis_objective::Score;
-use zetesis_themelios::{
-    Admitted, AdmittedBundle, AdmittedFormula, AdmittedFormulaBundle, SourceMetadata,
-};
+use zetesis_themelios::{AdmittedFormula, AdmittedFormulaBundle, SourceMetadata};
 
-use crate::closure_session::ClosureSession;
 use crate::formula_execution::Execution;
+mod residual_evidence;
+
 use crate::formula_session::FormulaSession;
 use crate::hybrid_session::HybridSession;
 use crate::phase_timing::Recorder;
 use crate::source_session::SourceSession;
 use crate::terminal_session::TerminalSession;
 use crate::{
-    AnswerSelection, ExecutionResources, Grounder, Interruption, Oracle, PhaseTimings,
-    SemanticOutcome, SolveConfig, SolveError, SolveFailure, WorldView, WorldViewFailure,
-    WorldViewLimits,
+    AnswerSelection, ExecutionResources, Grounder, Interruption, PhaseTimings, SemanticOutcome,
+    SolveConfig, SolveError, SolveFailure, WorldView, WorldViewFailure, WorldViewLimits,
 };
 
 /// The complete semantic representation supplied to an ordinary session.
@@ -36,26 +33,20 @@ use crate::{
 pub enum PreparedProfile {
     /// A complete source program certified for dependency-ordered evaluation.
     AcyclicSource,
-    /// Finite relational normal program; closure execution chooses lazy or eager.
-    Relational,
     /// Coherently indexed finite formulas and their objective/observation programs.
     Formula,
     /// Complete producer theory with admitted constraints checked from source.
     Hybrid,
     /// A checked base theory plus terminal definitions of the original source.
     TerminalDefinitions,
-    /// A complete ground graph retaining its original relational program identity.
-    Ground,
 }
 
 #[derive(Clone, Copy)]
 enum Prepared<'a> {
     Source(&'a zetesis_themelios::AcyclicSource),
-    Relational(&'a Program),
     Formula(crate::countermodel::Input<'a>),
     Hybrid(&'a zetesis_themelios::HybridFormula),
     TerminalDefinitions(&'a zetesis_themelios::TerminalFormula),
-    Ground(&'a Arc<GroundProgram>),
 }
 
 /// A coherent borrowed owner, never an independently supplied theory/atom table.
@@ -87,10 +78,10 @@ impl<'a> PreparedInput<'a> {
     /// definitions. Each verified base answer is reconstructed before a full
     /// answer can be published. An eager base runs under automatic grounding;
     /// a hybrid base (from lazy materialization) runs under automatic or lazy
-    /// grounding, on the CPU backend only, its constraints checked before
-    /// reconstruction. An eager request never acquires terminal meaning. Explicit projection and
-    /// objectives are outside this profile. No admission or execution occurs in
-    /// this borrow.
+    /// grounding with the selected backend. Its streamed constraints are checked
+    /// on the host before reconstruction. An eager request never acquires
+    /// terminal meaning. Explicit projection and objectives are outside this
+    /// profile. No admission or execution occurs in this borrow.
     #[must_use]
     pub fn terminal(owner: &'a zetesis_themelios::TerminalFormula) -> Self {
         Self {
@@ -101,9 +92,10 @@ impl<'a> PreparedInput<'a> {
     }
 
     /// Borrow a coherent producer theory and its admitted streamed constraints.
-    /// No grounding or solving occurs here. The CPU backend supports lazy and
-    /// automatic grounding. Objectives are scored only after complete original
-    /// constraint acceptance. Device checking is outside this hybrid profile.
+    /// No grounding or solving occurs here. Lazy and automatic grounding use the
+    /// selected backend for the producer core. Streamed constraints are checked
+    /// on the host; objectives are scored only after complete original constraint
+    /// acceptance.
     #[must_use]
     pub fn hybrid(owner: &'a zetesis_themelios::HybridFormula) -> Self {
         Self {
@@ -113,48 +105,6 @@ impl<'a> PreparedInput<'a> {
         }
     }
 
-    /// Reuse an admitted native relational program without source metadata.
-    /// This borrows the program directly: it performs no parsing, carrier
-    /// expansion or grounding. Lazy and eager execution use the same relational
-    /// session branch as source-admitted programs.
-    #[must_use]
-    pub const fn program(program: &'a Program) -> Self {
-        Self {
-            input: Prepared::Relational(program),
-            metadata: None,
-            projection: None,
-        }
-    }
-    /// Borrow a canonical relational preparation with its original display
-    /// metadata. The owner keeps the program and metadata together; this borrow
-    /// performs no parsing, expansion or grounding. Lazy and eager sessions use
-    /// the same admitted relational program.
-    #[must_use]
-    pub fn relational(owner: &'a zetesis_themelios::PreparedRelational) -> Self {
-        Self {
-            input: Prepared::Relational(owner.program()),
-            metadata: Some(owner.metadata()),
-            projection: None,
-        }
-    }
-    /// Reuse an admitted normal program and its source metadata.
-    #[must_use]
-    pub fn admitted(owner: &'a Admitted) -> Self {
-        Self {
-            input: Prepared::Relational(owner.program()),
-            metadata: Some(owner.metadata()),
-            projection: None,
-        }
-    }
-    /// Reuse an admitted original-source bundle without loading its files again.
-    #[must_use]
-    pub fn bundle(owner: &'a AdmittedBundle) -> Self {
-        Self {
-            input: Prepared::Relational(owner.program()),
-            metadata: Some(owner.metadata()),
-            projection: None,
-        }
-    }
     /// Reuse a formula owner, preserving its exact atom indexing and objectives.
     #[must_use]
     pub fn formula(owner: &'a AdmittedFormula) -> Self {
@@ -164,7 +114,6 @@ impl<'a> PreparedInput<'a> {
                 atoms: owner.atom_catalog(),
                 objectives: owner.objectives(),
                 required_choices: owner.required_choices(),
-                gate_atoms: 0,
                 keyed_constraints: owner.keyed_constraints(),
                 key_analysis: owner.key_analysis(),
                 certificate_order: crate::countermodel::certificate_order(
@@ -185,7 +134,6 @@ impl<'a> PreparedInput<'a> {
                 atoms: owner.atom_catalog(),
                 objectives: owner.objectives(),
                 required_choices: owner.required_choices(),
-                gate_atoms: 0,
                 keyed_constraints: owner.keyed_constraints(),
                 key_analysis: owner.key_analysis(),
                 certificate_order: crate::countermodel::certificate_order(
@@ -197,27 +145,14 @@ impl<'a> PreparedInput<'a> {
             projection: Some(owner.projection()),
         }
     }
-    /// Reuse the supplied complete graph. Auto chooses eager execution; explicit
-    /// lazy or countermodel requests are refused. No second graph is compiled.
-    /// Ground-only models have no source-derived observation metadata.
-    #[must_use]
-    pub const fn ground(owner: &'a Arc<GroundProgram>) -> Self {
-        Self {
-            input: Prepared::Ground(owner),
-            metadata: None,
-            projection: None,
-        }
-    }
     /// Representation used for strategy compatibility checks.
     #[must_use]
     pub const fn profile(self) -> PreparedProfile {
         match self.input {
             Prepared::Source(_) => PreparedProfile::AcyclicSource,
-            Prepared::Relational(_) => PreparedProfile::Relational,
             Prepared::Formula(_) => PreparedProfile::Formula,
             Prepared::Hybrid(_) => PreparedProfile::Hybrid,
             Prepared::TerminalDefinitions(_) => PreparedProfile::TerminalDefinitions,
-            Prepared::Ground(_) => PreparedProfile::Ground,
         }
     }
     /// Validated source views, when the prepared owner retained them.
@@ -232,14 +167,12 @@ impl<'a> PreparedInput<'a> {
     pub const fn projection(self) -> Option<&'a zetesis_themelios::PreparedProjection> {
         self.projection
     }
-    pub(crate) fn subject(self) -> Subject {
+    pub(crate) fn original(self) -> Original {
         match self.input {
-            Prepared::Source(owner) => Subject::Source(owner.clone()),
-            Prepared::Relational(program) => Subject::Program(program.clone()),
-            Prepared::Formula(input) => Subject::Theory(input.theory.clone()),
-            Prepared::Hybrid(owner) => Subject::Hybrid(owner.clone()),
-            Prepared::TerminalDefinitions(owner) => Subject::TerminalDefinitions(owner.clone()),
-            Prepared::Ground(ground) => Subject::Program(ground.program().clone()),
+            Prepared::Source(owner) => Original::Source(owner.clone()),
+            Prepared::Formula(input) => Original::Theory(input.theory.clone()),
+            Prepared::Hybrid(owner) => Original::Hybrid(owner.clone()),
+            Prepared::TerminalDefinitions(owner) => Original::TerminalDefinitions(owner.clone()),
         }
     }
     fn selection(self, requested: AnswerSelection) -> AnswerSelection {
@@ -249,7 +182,7 @@ impl<'a> PreparedInput<'a> {
             _ => AnswerSelection::All,
         }
     }
-    fn configure(self, mut config: SolveConfig) -> Result<SolveConfig, SolveError> {
+    fn configure(self, config: SolveConfig) -> Result<SolveConfig, SolveError> {
         if matches!(self.input, Prepared::Hybrid(_)) {
             config.validate_hybrid()?;
             return Ok(config);
@@ -273,24 +206,11 @@ impl<'a> PreparedInput<'a> {
             })?;
             return Ok(config);
         }
-        if !matches!(self.input, Prepared::Relational(_))
-            && config.source_batching != crate::SourceBatching::Independent
-        {
-            return Err(SolveError::UnsupportedSourceBatching);
-        }
         let compatible = match self.input {
             Prepared::Source(_) => crate::grounding::source_compatible(&config),
-            Prepared::Relational(_) => config.oracle != Oracle::Countermodel,
-            Prepared::Formula(_) => {
-                config.oracle != Oracle::Closure && config.grounder != Grounder::Lazy
-            }
-            Prepared::TerminalDefinitions(_) => {
-                config.oracle != Oracle::Closure && config.grounder == Grounder::Auto
-            }
+            Prepared::Formula(_) => config.grounder != Grounder::Lazy,
+            Prepared::TerminalDefinitions(_) => config.grounder == Grounder::Auto,
             Prepared::Hybrid(_) => unreachable!("hybrid policy validated above"),
-            Prepared::Ground(_) => {
-                config.oracle != Oracle::Countermodel && config.grounder != Grounder::Lazy
-            }
         };
         if !compatible {
             return Err(SolveError::PreparedInput {
@@ -299,40 +219,33 @@ impl<'a> PreparedInput<'a> {
                 grounder: config.grounder,
             });
         }
-        if matches!(self.input, Prepared::Ground(_)) {
-            config.grounder = Grounder::Eager;
-        }
-        crate::engine::validate_combination(&config)?;
         Ok(config)
     }
 }
 
-/// Immutable identity of the original semantic subject checked by a session.
+/// Immutable identity of the original semantic input checked by a session.
 /// Handles are cheap shared owners. Equality of printed atoms is not identity;
 /// use the contained program/theory's `same_instance` method.
 #[derive(Clone, Debug)]
-pub enum Subject {
+pub enum Original {
     /// Original source with a complete dependency-order certificate. No formula
     /// theory is substituted for the source or its arbitrary reduct queries.
     Source(zetesis_themelios::AcyclicSource),
-    /// Original finite relational program, also retained by a ground graph.
-    Program(Program),
     /// Original indexed finite formula theory, before candidate restrictions.
     Theory(Theory),
     /// Original producer core together with its admitted source constraints.
     Hybrid(zetesis_themelios::HybridFormula),
     /// Original source with a checked base/terminal-definition correspondence.
-    /// The contained base theory alone is not this semantic subject.
+    /// The contained base theory alone is not this semantic input.
     TerminalDefinitions(zetesis_themelios::TerminalFormula),
 }
-impl Subject {
+impl Original {
     /// Whether both handles retain the same original immutable semantic instance.
     /// Structural equality of independently admitted programs is insufficient.
     #[must_use]
     pub fn same_instance(&self, other: &Self) -> bool {
         match (self, other) {
             (Self::Source(left), Self::Source(right)) => left.same_instance(right),
-            (Self::Program(left), Self::Program(right)) => left.same_instance(right),
             (Self::Theory(left), Self::Theory(right)) => left.same_instance(right),
             (Self::Hybrid(left), Self::Hybrid(right)) => left.same_instance(right),
             (Self::TerminalDefinitions(left), Self::TerminalDefinitions(right)) => {
@@ -344,31 +257,31 @@ impl Subject {
 }
 
 /// A full stable interpretation produced by the session's membership engine.
-/// Private construction preserves its subject association after detachment.
+/// Private construction preserves its association with the original input after detachment.
 /// This is semantic evidence, independently of display selection or publication.
 /// It records completed membership under the selected implementation, not a Lean
-/// proof or enumeration coverage. Cloning shares the subject, atom catalog and
+/// proof or enumeration coverage. Cloning shares the original input, atom catalog and
 /// selected interpretation; the optional score's cost vector is cloned. Retained
 /// interpretations keep the entire shared catalog alive, including unselected atoms.
 ///
 /// ```compile_fail
-/// use zetesis_solve::{AnswerSet, Subject};
+/// use zetesis_solve::{AnswerSet, Original};
 /// use zetesis_core::Model;
-/// fn forge(subject: Subject, interpretation: Model) -> AnswerSet {
-///     AnswerSet { subject, interpretation, score: None }
+/// fn forge(original: Original, interpretation: Model) -> AnswerSet {
+///     AnswerSet { original, interpretation, score: None }
 /// }
 /// ```
 #[derive(Clone, Debug)]
 pub struct AnswerSet {
-    subject: Subject,
+    original: Original,
     interpretation: Model,
     score: Option<Score>,
 }
 impl AnswerSet {
-    /// Original immutable subject used by the membership engine.
+    /// Original immutable input used by the membership engine.
     #[must_use]
-    pub const fn subject(&self) -> &Subject {
-        &self.subject
+    pub const fn original(&self) -> &Original {
+        &self.original
     }
     /// Complete interpretation, including atoms hidden by source observations.
     #[must_use]
@@ -382,7 +295,7 @@ impl AnswerSet {
     pub const fn score(&self) -> Option<&Score> {
         self.score.as_ref()
     }
-    /// Discard the subject association explicitly for raw-model interoperability.
+    /// Discard the association with the original input explicitly for raw-model interoperability.
     #[must_use]
     pub fn into_interpretation(self) -> Model {
         self.interpretation
@@ -394,7 +307,6 @@ pub type SessionModel = AnswerSet;
 
 enum State<'a> {
     Source(Box<SourceSession<'a>>),
-    Closure(Box<ClosureSession<'a>>),
     Formula(Box<FormulaSession<'a, Execution>>),
     Hybrid(Box<HybridSession<'a>>),
     TerminalDefinitions(Box<TerminalSession<'a>>),
@@ -423,7 +335,9 @@ impl<'a> SessionBuilder<'a> {
     /// At start, this clears projection and replaces the model limit using the
     /// final answer selection, regardless of builder call order. Ordinary answers
     /// stream until exhaustion, while optimization retains at most one model
-    /// and counts all ties with the existing checked incumbent counter. All
+    /// and counts all ties with the existing checked incumbent counter, in one
+    /// [`crate::OptimumSearch::Inclusive`] pass whatever the configured
+    /// policy, since a strict bound would prune the ties it counts. All
     /// resource and control limits still apply. Drain the session and read
     /// [`SemanticOutcome::complete_answer_count`] from its outcome; a stopped
     /// session has no total. A projection request is ignored in counting mode.
@@ -448,6 +362,13 @@ impl<'a> SessionBuilder<'a> {
 
     pub(crate) const fn full_identity(mut self) -> Self {
         self.projection = None;
+        self
+    }
+
+    /// Clear a requested model count, so the stream runs until it is exhausted
+    /// or stopped. A world-view fold needs every answer set it has not decided.
+    pub(crate) const fn every_answer(mut self) -> Self {
+        self.config.models = 0;
         self
     }
     /// Choose the answer family. The default is optimal ties when an objective
@@ -486,7 +407,7 @@ impl<'a> SessionBuilder<'a> {
     /// # Errors
     /// Preserves [`WorldView::collect`]'s typed setup, execution, incomplete
     /// coverage and storage failures, including the checked prefix and original
-    /// subject. Supplied device failures retain their ordinary session boundary.
+    /// input. Supplied device failures retain their ordinary session boundary.
     pub fn collect(self, limits: WorldViewLimits) -> Result<WorldView, WorldViewFailure> {
         WorldView::collect_request(self, limits, &mut Ignore)
     }
@@ -547,8 +468,8 @@ impl<'a> SessionBuilder<'a> {
         self.start_with(&mut Observer(observer))
     }
 
-    pub(crate) fn subject(&self) -> Subject {
-        self.input.subject()
+    pub(crate) fn original(&self) -> Original {
+        self.input.original()
     }
 
     pub(crate) fn start_with(
@@ -563,7 +484,10 @@ impl<'a> SessionBuilder<'a> {
             self.projection = None;
             self.config.models = match selection {
                 AnswerSelection::All => 0,
-                AnswerSelection::Optimal => 1,
+                AnswerSelection::Optimal => {
+                    self.config.optimum_search = crate::OptimumSearch::Inclusive;
+                    1
+                }
             };
         }
         let projected_limit = self.config.models;
@@ -583,7 +507,7 @@ impl<'a> SessionBuilder<'a> {
             .transpose()
             .map_err(|error| {
                 let mut failure = SolveFailure::from(SolveError::Projection(error));
-                failure.subject = Some(self.input.subject());
+                failure.original = Some(self.input.original());
                 failure.phase_timings = phases.snapshot().map(Box::new);
                 failure
             })?;
@@ -605,14 +529,14 @@ impl<'a> SessionBuilder<'a> {
                 config,
                 cancellation: self.cancellation,
                 phases,
-                subject: self.input.subject(),
+                original: self.input.original(),
                 projection,
                 projected_limit,
                 projection_done: false,
             }),
             Err(error) => {
                 let mut failure = SolveFailure::from(error);
-                failure.subject = Some(self.input.subject());
+                failure.original = Some(self.input.original());
                 failure.phase_timings = phases.snapshot().map(Box::new);
                 Err(failure)
             }
@@ -636,12 +560,19 @@ impl<'a> SessionBuilder<'a> {
 ///
 /// ```
 /// use zetesis_solve::{Backend, PreparedInput, Session, SolveConfig};
-/// use zetesis_cpu::Cancellation;
-/// use zetesis_themelios::{admit, AdmissionOptions};
+/// use zetesis_algebra::Cancellation;
+/// use zetesis_themelios::{
+///     AdmissionOptions, ExpansionLimits, FormulaLimits, admit_formula,
+/// };
 ///
-/// let admitted = admit("a.".into(), AdmissionOptions::default())?;
+/// let admitted = admit_formula(
+///     "a.".into(),
+///     AdmissionOptions::default(),
+///     ExpansionLimits::default(),
+///     FormulaLimits::default(),
+/// )?;
 /// let config = SolveConfig { backend: Backend::Cpu, models: 0, ..Default::default() };
-/// let mut session = Session::new(PreparedInput::admitted(&admitted), config, Cancellation::default())?;
+/// let mut session = Session::new(PreparedInput::formula(&admitted), config, Cancellation::default())?;
 /// let model = session.next().unwrap()?;
 /// assert_eq!(model.interpretation().atoms().len(), 1);
 /// assert!(session.next().is_none());
@@ -653,7 +584,7 @@ pub struct Session<'a> {
     config: SolveConfig,
     cancellation: Cancellation,
     phases: crate::SolveMeasurements,
-    subject: Subject,
+    original: Original,
     projection: Option<crate::projection::Projection<'a>>,
     projected_limit: usize,
     projection_done: bool,
@@ -730,7 +661,7 @@ impl<'a> Session<'a> {
     /// session the observer may also serve. No event queue is retained.
     ///
     /// # Errors
-    /// Execution-setup failures return immediately, retaining the known subject.
+    /// Execution-setup failures return immediately, retaining the known original input.
     /// Formula initialization owns its terminal failure: an observer failure at
     /// formula, certificate or objective setup stops further initialization and
     /// is returned by the first pull. No later callback runs for that failure.
@@ -780,23 +711,18 @@ impl<'a> Session<'a> {
             return Ok((
                 State::Stopped(Box::new(SemanticOutcome {
                     projection: None,
-                    subject: Some(input.subject()),
+                    original: Some(input.original()),
                     selection: Some(selection),
                     verified: 0,
                     scored: 0,
                     retained: 0,
                     search_state: Some(crate::SearchState::Interrupted(interruption)),
+                    optimum_established: false,
                     optimization: None,
                     objective_work: 0,
                     checked: 0,
-                    gate_atoms: 0,
-                    candidate_statistics: None,
                     countermodel_statistics: None,
                     formula_execution: None,
-                    lazy_execution: None,
-                    shared_execution: None,
-                    closure_execution: None,
-                    query_execution: None,
                     hybrid_execution: None,
                     terminal_execution: None,
                     source_evaluation: None,
@@ -809,26 +735,6 @@ impl<'a> Session<'a> {
             Prepared::Source(owner) => {
                 State::Source(Box::new(SourceSession::new(owner, observations)?))
             }
-            Prepared::Relational(program) => {
-                State::Closure(Box::new(ClosureSession::with_resources(
-                    program,
-                    None,
-                    &config,
-                    resources,
-                    observations,
-                    cancellation,
-                    phases,
-                )?))
-            }
-            Prepared::Ground(ground) => State::Closure(Box::new(ClosureSession::with_resources(
-                ground.program(),
-                Some(Arc::clone(ground)),
-                &config,
-                resources,
-                observations,
-                cancellation,
-                phases,
-            )?)),
             Prepared::Formula(input) => State::Formula(Box::new(FormulaSession::with_resources(
                 input,
                 &config,
@@ -841,7 +747,7 @@ impl<'a> Session<'a> {
             Prepared::Hybrid(owner) => State::Hybrid(Box::new(HybridSession::observed(
                 crate::hybrid_session::HybridInput {
                     core: owner.core(),
-                    subject: crate::Subject::Hybrid(owner.clone()),
+                    original: crate::Original::Hybrid(owner.clone()),
                 },
                 &config,
                 resources,
@@ -867,30 +773,15 @@ impl<'a> Session<'a> {
     /// optimized outcome can be available while retained ties await delivery.
     #[must_use]
     pub fn outcome(&self) -> Option<SemanticOutcome> {
-        if self.projection_done {
-            return Some(self.progress());
-        }
-        let mut outcome = match &self.state {
-            State::Source(state) => state.finished().then(|| state.outcome()),
-            State::Closure(state) => state.terminal().then(|| state.outcome()),
-            State::Formula(state) => state
-                .finished()
-                .then(|| state.outcome(self.phases.recorder())),
-            State::Hybrid(state) => state
-                .finished()
-                .then(|| state.outcome(self.phases.recorder())),
-            State::TerminalDefinitions(state) => state
-                .finished()
-                .then(|| state.outcome(self.phases.recorder())),
-            State::Stopped(outcome) => Some((**outcome).clone()),
-        };
-        if let Some(outcome) = &mut outcome {
-            outcome.projection = self
-                .projection
-                .as_ref()
-                .map(crate::projection::Projection::statistics);
-        }
-        outcome
+        let finished = self.projection_done
+            || match &self.state {
+                State::Source(state) => state.finished(),
+                State::Formula(state) => state.finished(),
+                State::Hybrid(state) => state.finished(),
+                State::TerminalDefinitions(state) => state.finished(),
+                State::Stopped(_) => true,
+            };
+        finished.then(|| self.progress())
     }
     /// End an unfinished session and retain its settled evidence. Native workers
     /// are joined without cancelling the caller's token. Coverage stays unavailable
@@ -912,7 +803,7 @@ impl<'a> Session<'a> {
                 let _ = state.conclude(previous, phases);
             }
             State::TerminalDefinitions(state) => state.stop(phases),
-            State::Closure(_) | State::Stopped(_) => {}
+            State::Stopped(_) => {}
         }
         self.progress()
     }
@@ -923,15 +814,47 @@ impl<'a> Session<'a> {
     pub fn phase_timings(&self) -> Option<PhaseTimings> {
         self.phases.snapshot()
     }
+    /// Enrich only the snapshot returned to the caller. Inner formula,
+    /// streamed and reconstructed outcomes can cache and clone one another;
+    /// none of those caches needs its own copy of the terminal sample groups.
+    #[cfg(feature = "gpu")]
+    fn report_samples(&self, outcome: &mut SemanticOutcome) {
+        if let Some(stats) = outcome
+            .formula_execution
+            .as_mut()
+            .and_then(|execution| execution.gpu_residual_handovers.as_mut())
+        {
+            match &self.state {
+                State::Formula(formula) => formula.observe_samples(stats),
+                State::Hybrid(hybrid) => hybrid.formula_core().observe_samples(stats),
+                State::TerminalDefinitions(terminal) => {
+                    terminal.formula_core().observe_samples(stats);
+                }
+                State::Source(_) | State::Stopped(_) => {}
+            }
+        }
+    }
+
     /// Current checked evidence, including results buffered before delivery.
     ///
     /// A snapshot does not stop search. Missing completion remains absent; only
     /// the recorded coverage determines whether enumeration is complete.
     #[must_use]
     pub fn progress(&self) -> SemanticOutcome {
+        let outcome = self.current_evidence();
+        #[cfg(feature = "gpu")]
+        {
+            let mut outcome = outcome;
+            self.report_samples(&mut outcome);
+            outcome
+        }
+        #[cfg(not(feature = "gpu"))]
+        outcome
+    }
+
+    fn current_evidence(&self) -> SemanticOutcome {
         let mut outcome = match &self.state {
             State::Source(state) => state.outcome(),
-            State::Closure(state) => state.outcome(),
             State::Formula(state) => state.outcome(self.phases.recorder()),
             State::Hybrid(state) => state.outcome(self.phases.recorder()),
             State::TerminalDefinitions(state) => state.outcome(self.phases.recorder()),
@@ -997,7 +920,7 @@ impl<'a> Session<'a> {
                         Err(error) => {
                             self.projection_done = true;
                             let mut failure = SolveFailure::from(SolveError::Projection(error));
-                            failure.subject = Some(self.subject.clone());
+                            failure.original = Some(self.original.clone());
                             failure.semantic = Some(Box::new(self.progress()));
                             failure.phase_timings = self.phase_timings().map(Box::new);
                             return Some(Err(failure));
@@ -1011,7 +934,7 @@ impl<'a> Session<'a> {
                 None => {
                     self.projection_done = true;
                     let complete =
-                        self.progress().completion() == Some(crate::Completion::Exhausted);
+                        self.current_evidence().completion() == Some(crate::Completion::Exhausted);
                     self.projection
                         .as_mut()
                         .expect("projected stream")
@@ -1031,9 +954,6 @@ impl<'a> Session<'a> {
             State::Source(state) => {
                 state.next(&self.config, &self.cancellation, self.phases.recorder())
             }
-            State::Closure(state) => state
-                .next(&self.config, &self.cancellation, self.phases.recorder())
-                .map(|result| result.map(|model| (model, None))),
             State::Formula(state) => state.next(
                 &self.config,
                 observations,
@@ -1057,7 +977,7 @@ impl<'a> Session<'a> {
         drop(solving);
         next.map(|result| match result {
             Ok((interpretation, score)) => Ok(AnswerSet {
-                subject: self.subject.clone(),
+                original: self.original.clone(),
                 interpretation,
                 score,
             }),

@@ -39,6 +39,7 @@ fn graph(certificate: &TightPlan, support: TightSupport) -> Graph {
         Packing {
             device: &wgpu::Limits::default(),
             support,
+            workgroup_sizing: crate::GpuWorkgroupSizing::Fixed(crate::GpuWorkgroupSize::Threads64),
         },
     )
     .unwrap()
@@ -179,7 +180,10 @@ fn grouped_indices_obey_device_storage_limits() {
             &certificate,
             Packing {
                 device: &device,
-                support: TightSupport::Atomic
+                support: TightSupport::Atomic,
+                workgroup_sizing: crate::GpuWorkgroupSizing::Fixed(
+                    crate::GpuWorkgroupSize::Threads64
+                ),
             }
         )
         .is_ok()
@@ -189,7 +193,10 @@ fn grouped_indices_obey_device_storage_limits() {
             &certificate,
             Packing {
                 device: &device,
-                support: TightSupport::Grouped
+                support: TightSupport::Grouped,
+                workgroup_sizing: crate::GpuWorkgroupSizing::Fixed(
+                    crate::GpuWorkgroupSize::Threads64
+                ),
             }
         )
         .err()
@@ -207,11 +214,11 @@ fn cancelled_group_packing_has_no_partial_output() {
     cancellation.cancel();
     assert_eq!(
         grouped
-            .pack_producers(&certificate, &[], &cancellation)
+            .pack_producers(&certificate, &cancellation)
             .err()
             .unwrap()
             .interruption,
-        Some(zetesis_cpu::Stop::Cancelled)
+        Some(zetesis_algebra::Stop::Cancelled)
     );
 }
 
@@ -253,7 +260,19 @@ fn readback_requires_the_selected_support_policy() {
             1,
         )
         .unwrap();
-        let record = |marker| [1, 0, STATUS_STABLE, 0, plan.work, marker];
+        let record = |marker| {
+            [
+                1,
+                0,
+                STATUS_STABLE,
+                0,
+                plan.work,
+                marker,
+                ROUTE_COMPLETE,
+                0,
+                0,
+            ]
+        };
         assert_eq!(
             decode(
                 &record(marker),
@@ -262,7 +281,8 @@ fn readback_requires_the_selected_support_policy() {
                 &[1],
                 &Cancellation::default()
             )
-            .unwrap()[0]
+            .unwrap()
+            .checks[0]
                 .verdict(),
             TightVerdict::Stable
         );

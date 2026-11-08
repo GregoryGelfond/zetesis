@@ -21,7 +21,19 @@
 //! reserve the root `child-rss.json` artifact path, checked on the copied filesystem.
 
 mod config;
+mod evidence;
+pub use evidence::{ArtifactOutcome, ProfileEvidence, ResidualEvidence, ResidualEvidenceMember};
+mod handovers;
+mod residual_samples;
+pub use handovers::{
+    ResidualHandoverAttempt, ResidualHandoverByReason, ResidualHandoverStatistics,
+    ResidualReasonSearch, ResidualSearchStatistics,
+};
 mod invocation;
+pub use residual_samples::{
+    ResidualQuantiles, ResidualRunSamples, ResidualSampleGroup, ResidualSampleGroups,
+    ResidualSampleMetric, ResidualSamplePopulation,
+};
 mod native_family;
 mod outcome;
 mod record;
@@ -95,6 +107,8 @@ pub struct Report {
     metadata: Vec<serialization::MatrixCapture>,
     samples: Vec<Sample>,
     total_capture_bytes: usize,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    residual_evidence: Option<ResidualEvidence>,
     faults: Vec<Fault>,
     unresolved_children: Vec<u32>,
     #[serde(skip)]
@@ -128,6 +142,10 @@ impl Report {
     pub fn passed(&self) -> bool {
         let owed = 2 + usize::from(self.plan.reference_policy.reference().is_some());
         self.accounted()
+            && self
+                .residual_evidence
+                .as_ref()
+                .is_none_or(ResidualEvidence::passed)
             && self.samples.iter().all(|s| s.decision == Decision::Pass)
             && self.metadata.len() == owed
             && self.metadata.iter().all(|c| c.0.complete(false))
@@ -199,10 +217,16 @@ impl Report {
     pub fn unresolved_children(&self) -> &[u32] {
         &self.unresolved_children
     }
-    /// Raw retained capture bytes, excluding JSON serialization and allocator overhead.
+    /// Retained child output plus any verified supplementary artifacts. Report formatting
+    /// and allocator overhead are accounted separately.
     #[must_use]
     pub const fn total_capture_bytes(&self) -> usize {
         self.total_capture_bytes
+    }
+    /// Per-slot retained artifacts and profile pools for a requested cohort.
+    #[must_use]
+    pub const fn residual_evidence(&self) -> Option<&ResidualEvidence> {
+        self.residual_evidence.as_ref()
     }
     /// Publish evidence without replacing inputs, executables or existing files.
     /// The destination parent must remain exclusively controlled by the caller.
@@ -216,6 +240,9 @@ impl Report {
             accounted: bool,
             report: &'a Report,
         }
+        if let Some(evidence) = &self.residual_evidence {
+            evidence.recheck().map_err(Error::Boundary)?;
+        }
         publication::write(
             &Published {
                 passed: self.passed(),
@@ -225,7 +252,11 @@ impl Report {
             &self.destination,
             self.limits.max_report_bytes,
         )
-        .map_err(Error::Boundary)
+        .map_err(Error::Boundary)?;
+        if let Some(evidence) = &self.residual_evidence {
+            evidence.published();
+        }
+        Ok(())
     }
 }
 /// Seal the verified source/include closure and binaries, then run the bounded
@@ -267,10 +298,10 @@ mod fixtures;
 ///
 /// The sealed executable must support the selected interface. Both interfaces
 /// request the same machine answers and statistics; all qualification, bounds
-/// and failure retention are shared with [`run`].
+/// and failure retention are shared with [`run()`].
 ///
 /// # Errors
-/// Returns the same pre-launch failures as [`run`].
+/// Returns the same pre-launch failures as [`run()`].
 pub fn run_with_invocation(
     request: &Request<'_>,
     invocation: NativeInvocation,
@@ -330,13 +361,13 @@ pub fn run_workloads_with_cancellation(
     run::campaign(request, Some(workloads), invocation, cancelled)
 }
 
-/// Expand a selection over the maintained series' workload entries before
+/// Expand a selection over the maintained suite's workload entries before
 /// invoking the explicit-workload runner. One entry can name several amended
 /// cells; every match keeps its identity and its order within that entry.
 /// Only this command-owned expansion consumes a selection: the public
 /// explicit-workload operations still refuse one. The returned report records
 /// both the original request and the actual expanded population.
-pub(super) fn run_series_with_cancellation(
+pub(super) fn run_selected_workloads_with_cancellation(
     request: &Request<'_>,
     workloads: &[Workload],
     invocation: NativeInvocation,
@@ -356,7 +387,7 @@ pub(super) fn run_series_with_cancellation(
         );
         if selected.len() == previous {
             return Err(Error::Configuration(
-                "a selected case is not a workload of the series",
+                "a selected case is not a workload of the selected suite",
             ));
         }
     }

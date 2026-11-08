@@ -14,7 +14,12 @@
 //! would follow the same plan over the same rows and derive only heads already
 //! supported. Facts have no producer slot: a fact block enters support in the
 //! first round, and its rows wake a reading rich producer in the second.
+//!
+//! A rich producer whose reads all lie in dependency components before its
+//! heads' is instead traversed once, when those components reach their fixed
+//! point ([`components`]).
 
+mod components;
 #[cfg(test)]
 mod tests;
 
@@ -41,6 +46,8 @@ pub(in crate::formula_support) struct Registration<'source> {
     producers: Vec<Producer>,
     inputs: Vec<usize>,
     reads: Vec<Occurrence>,
+    /// The component schedule, when some rich producer can wait for its reads.
+    schedule: Option<Box<components::Schedule<'source>>>,
     bytes: usize,
 }
 
@@ -138,8 +145,63 @@ impl<'source> Registration<'source> {
             producers,
             inputs,
             reads,
+            schedule: None,
             bytes: memory.bytes,
         })
+    }
+
+    /// Schedule by dependency component every rich producer whose reads all
+    /// precede its heads. Its vectors are admitted beside the registration's
+    /// own bytes and `external`, and counted with them.
+    pub(in crate::formula_support) fn schedule(
+        &mut self,
+        prepared: &'source crate::formula_ir::Prepared,
+        view: TemplateComponentsRef<'_>,
+        external: u128,
+        (limits, counters, location): (&FormulaLimits, &mut Counters, ProgramSite),
+    ) -> Result<(), FormulaFailure> {
+        let mut memory = Memory::new(0, external + self.bytes as u128, limits, counters, location);
+        memory.add(0)?;
+        let schedule = components::Schedule::prepare(
+            self,
+            prepared,
+            view,
+            &mut memory,
+            (limits, counters, location),
+        )?;
+        // Without a deferred producer every vector was scratch and is gone.
+        if let Some(schedule) = schedule {
+            memory.add(size_of::<components::Schedule<'_>>())?;
+            self.schedule = Some(Box::new(schedule));
+            self.bytes += memory.bytes;
+        }
+        Ok(())
+    }
+
+    /// See [`components::Schedule::mark_ready`].
+    pub(in crate::formula_support) fn mark_ready(
+        &self,
+        delta: &super::super::relations::SupportAppend<'_>,
+        limits: &FormulaLimits,
+        counters: &mut Counters,
+        location: ProgramSite,
+    ) -> Result<bool, FormulaFailure> {
+        match &self.schedule {
+            Some(schedule) => schedule.mark_ready(delta, limits, counters, location),
+            None => Ok(false),
+        }
+    }
+
+    /// See [`components::Schedule::take_ready`].
+    pub(in crate::formula_support) fn take_ready(&self) -> Option<usize> {
+        self.schedule.as_ref()?.take_ready()
+    }
+
+    /// See [`components::Schedule::pending`].
+    pub(in crate::formula_support) fn pending(&self) -> bool {
+        self.schedule
+            .as_ref()
+            .is_some_and(|schedule| schedule.pending())
     }
 
     pub(in crate::formula_support) fn rules(&self) -> &'source [RuleIr] {
@@ -179,6 +241,21 @@ impl<'source> Registration<'source> {
                 &self.inputs[inputs.clone()],
                 first,
             )),
+            Producer::Rich(_)
+                if let Some(state) = self
+                    .schedule
+                    .as_ref()
+                    .and_then(|schedule| schedule.state(index)) =>
+            {
+                // A deferred producer is traversed only by the component
+                // schedule, after its round's other producers.
+                counters.record(if state == components::State::Traversed {
+                    Event::SupportUnchangedVisit
+                } else {
+                    Event::SupportDeferredVisit
+                });
+                Ok(delta::traversal(rule, support, false))
+            }
             Producer::Rich(reads) => {
                 let traversed = first
                     || every_round_traversed()
@@ -211,10 +288,15 @@ fn classify(
 ) -> Result<Kind, FormulaFailure> {
     match &rule.head {
         HeadIr::Normal(None) => return Ok(Kind::Constraint),
-        HeadIr::Normal(Some(_)) => {}
-        HeadIr::Disjunction(_) | HeadIr::Choice(_) | HeadIr::ConditionalDisjunction { .. } => {
-            return Ok(Kind::Rich);
-        }
+        HeadIr::Normal(Some(_)) | HeadIr::Disjunction(_) => {}
+        // A choice element's condition is a join of its own: its rows can grow
+        // after a body binding was derived.
+        HeadIr::Choice(choice)
+            if choice
+                .elements
+                .iter()
+                .all(|element| element.condition.is_empty()) => {}
+        HeadIr::Choice(_) | HeadIr::ConditionalDisjunction { .. } => return Ok(Kind::Rich),
     }
     let mut inputs = 0;
     for literal in &rule.body {

@@ -3,7 +3,7 @@ use crate::{
     EvaluationError, EvaluationLimits, EvaluationWorkspace, FrozenReduct, Interpretation, NodeView,
     Theory,
 };
-use zetesis_cpu::{Cancellation, ChargeError, Meter, Stop};
+use zetesis_algebra::{Cancellation, ChargeError, Meter, Stop};
 
 /// Per-call bounds for exact finite checking. Exceeding a bound is incomplete,
 /// never a proof of stability or nonminimality.
@@ -180,25 +180,18 @@ fn evaluate_node(
     }
 }
 
-/// Read every operand, including duplicates and operands after the result is
-/// decided. A failed tick leaves the enclosing node unpublished in the output.
+/// Read the decisive operand prefix. A failed tick leaves the enclosing node
+/// unpublished; every DAG node still receives its own complete truth value.
 fn evaluate_operands(
     operands: &[usize],
     values: &[bool],
     conjunction: bool,
     work: &mut Work<'_, '_>,
 ) -> Result<bool, Stop> {
-    let mut value = conjunction;
-    for &operand in operands {
+    crate::operand_evaluation::reduce(operands, conjunction, |operand| {
         work.tick()?;
-        let child = values[operand];
-        value = if conjunction {
-            value & child
-        } else {
-            value | child
-        };
-    }
-    Ok(value)
+        Ok(values[operand])
+    })
 }
 
 pub(super) fn failed_root(
@@ -440,7 +433,7 @@ fn exhaustive_check(
     words.resize(candidate.words.len(), 0);
     let mut subset = Interpretation {
         theory: theory.clone(),
-        words,
+        words: words.into(),
     };
     let mut values = reserve(theory.nodes().len())?;
     let verdict = if find_countermodel(
@@ -466,7 +459,7 @@ fn exhaustive_check(
 mod tests {
     use super::{Limits, Statistics, Work, advance_subset, reserve, select_atoms};
     use crate::{AdmissionLimits, Interpretation, Theory};
-    use zetesis_cpu::{Cancellation, Stop};
+    use zetesis_algebra::{Cancellation, Stop};
 
     /// Run `test` on work whose meter has admitted seven operations, between
     /// metered boundaries, under a limit `allowance` operations further, with

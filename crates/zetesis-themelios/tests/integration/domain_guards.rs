@@ -642,7 +642,7 @@ fn objective_observations_preserve_scored_answers() {
                         &model,
                         input.metadata().output(),
                         zetesis_themelios::observation::Limits::default(),
-                        &zetesis_cpu::Cancellation::default(),
+                        &zetesis_algebra::Cancellation::default(),
                     )
                     .unwrap();
                 let mut shown: Vec<_> = rendered.text().split_whitespace().collect();

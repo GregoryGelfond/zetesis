@@ -110,8 +110,10 @@ which can test arbitrary interpretations.
 The proof permits unused atoms and does not require every atom to occur in a
 rule. It does require one shared atom universe. It does not prove conversion
 from source symbols to dense IDs, concrete source coverage and filter discharge,
-Rust DAG construction, allocation behavior or WGSL evaluation. The additional
-support guards of `from_ground_program_supported` also need their own argument.
+Rust DAG construction, allocation behavior or WGSL evaluation. The independent
+normal-rule property test constructs this translation directly and compares
+formula membership against a least-reduct calculation over the original rules;
+the removed relational ground-program translators are no longer runtime APIs.
 The bridge covers normalized single-head rules and constraints, including true
 choice gates; it does not translate every source disjunction or aggregate into
 that fragment.

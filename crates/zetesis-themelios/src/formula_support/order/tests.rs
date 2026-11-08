@@ -380,3 +380,5 @@ fn comparison_readiness_refuses_unpaid_variable_scans() {
         ));
     }
 }
+
+mod remainder;

@@ -29,17 +29,17 @@ pub struct CompletionAccounting {
     /// Residual slots whose local exact check failed.
     pub residual_failed: u64,
     /// Coordinator batch wall intervals, present only with phase timing enabled.
-    pub wall: Option<zetesis_sat::PhaseMeasurement>,
+    pub wall: Option<zetesis_stable::PhaseMeasurement>,
     /// Summed worker original-validation intervals; workers may overlap.
-    pub worker_original: Option<zetesis_sat::PhaseMeasurement>,
+    pub worker_original: Option<zetesis_stable::PhaseMeasurement>,
     /// Summed worker reduct intervals; workers may overlap.
-    pub worker_reduct: Option<zetesis_sat::PhaseMeasurement>,
+    pub worker_reduct: Option<zetesis_stable::PhaseMeasurement>,
     /// A diagnostic counter saturated; never changes committed semantic results.
     pub overflowed: bool,
 }
 
 impl CompletionAccounting {
-    pub(crate) fn record(&mut self, progress: zetesis_sat::CompletionStatistics) {
+    pub(crate) fn record(&mut self, progress: zetesis_stable::CompletionStatistics) {
         if let Some(elapsed) = progress.elapsed {
             self.wall.get_or_insert_default().record(elapsed);
         }
@@ -75,8 +75,8 @@ impl CompletionAccounting {
 }
 
 fn merge(
-    target: &mut Option<zetesis_sat::PhaseMeasurement>,
-    source: Option<zetesis_sat::PhaseMeasurement>,
+    target: &mut Option<zetesis_stable::PhaseMeasurement>,
+    source: Option<zetesis_stable::PhaseMeasurement>,
 ) {
     if let Some(source) = source {
         let target = target.get_or_insert_default();
@@ -98,7 +98,7 @@ mod tests {
     use std::time::Duration;
 
     use super::CompletionAccounting;
-    use zetesis_sat::{CompletionStatistics, PhaseMeasurement};
+    use zetesis_stable::{CompletionStatistics, PhaseMeasurement};
 
     #[test]
     fn diagnostic_saturation_does_not_discard_completed_accounting_or_wrap() {

@@ -1,15 +1,15 @@
 use std::cmp::Ordering;
 use std::collections::BTreeMap;
 
+use zetesis_algebra::Cancellation;
 use zetesis_core::catalog::{AtomRef, Atoms, TermRef};
 use zetesis_core::{AtomIndex, AtomIndexError, AtomRows, PatternRef, TemplateTerm, ValueNodeRef};
-use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{AggregateElement, FormulaNodes, NodeView, Theory};
 use zetesis_objective::{Condition, ConditionNode, ObjectiveProgram, ObjectiveTemplateRef};
 
 use super::{
     ObjectiveBoundError, ObjectiveBoundErrorKind as Kind, ObjectiveBoundResource as Resource,
-    ObjectiveBoundStatistics, ObjectivePlan, ObjectivePlanLimits, Work,
+    ObjectivePlan, ObjectivePlanLimits, Work,
 };
 
 struct Key<'a> {
@@ -33,12 +33,7 @@ pub(super) fn compile(
     limits: ObjectivePlanLimits,
     cancellation: &Cancellation,
 ) -> Result<ObjectivePlan, ObjectiveBoundError> {
-    let mut work = Work {
-        cancellation,
-        limits,
-        template: None,
-        statistics: ObjectiveBoundStatistics::default(),
-    };
+    let mut work = Work::new(limits, cancellation);
     work.tick()?;
     if atoms.len() != original.atom_count() {
         return Err(work.error(Kind::AtomCatalog));
@@ -89,12 +84,13 @@ pub(super) fn compile(
         });
     }
     Ok(ObjectivePlan {
+        identity: zetesis_objective::PlanIdentity::fresh(),
         original: original.clone(),
         objectives: objectives.clone(),
         nodes: compiler.nodes.into_parts(),
         levels,
         choices: None,
-        statistics: compiler.work.statistics,
+        statistics: compiler.work.statistics(),
     })
 }
 
@@ -345,10 +341,10 @@ fn active<'a>(
     chosen: &[usize],
 ) -> Result<(), ObjectiveBoundError> {
     work.tick()?;
-    if work.statistics.bindings >= work.limits.max_bindings {
+    if work.bindings >= work.limits.max_bindings {
         return Err(work.limit(Resource::Bindings));
     }
-    work.statistics.bindings += 1;
+    work.bindings += 1;
     for index in 0..template.filters().len() {
         work.tick()?;
         let filter = template.filters().at(index).expect("bounded filter index");
@@ -448,7 +444,6 @@ fn contribute<'a>(
             .ok_or_else(|| work.error(Kind::Overflow))?;
     }
     let bytes = work
-        .statistics
         .key_bytes
         .checked_add(bytes)
         .ok_or_else(|| work.error(Kind::Overflow))?;
@@ -461,7 +456,7 @@ fn contribute<'a>(
     keys.try_reserve(1)
         .map_err(|_| work.error(Kind::Allocation))?;
     keys.insert(low, key);
-    work.statistics.keys = keys.len();
-    work.statistics.key_bytes = bytes;
+    work.keys = keys.len();
+    work.key_bytes = bytes;
     Ok(())
 }

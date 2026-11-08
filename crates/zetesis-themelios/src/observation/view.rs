@@ -3,9 +3,9 @@
 use std::fmt;
 
 use themelios_program::symbol::{Sign as SymbolSign, Symbol};
+use zetesis_algebra::{Cancellation, Meter, MeterBytes, Stop};
 use zetesis_core::catalog::{AtomRef, TermRef};
 use zetesis_core::{Model, Sign, ValueNodeRef};
-use zetesis_cpu::{Cancellation, Stop};
 use zetesis_objective::Score;
 
 use super::json::AtomTable;
@@ -478,9 +478,8 @@ impl<'a> Buffer<'a> {
     fn step(&mut self, count: u128) -> Result<(), ViewError> {
         self.cancellation.poll().map_err(ViewError::Stopped)?;
         let work = u128::from(self.work) + count;
-        if work > u128::from(self.limits.max_work) {
-            return Err(ViewError::Work);
-        }
+        Meter::check_wide_receipt(work, 0, u128::from(self.limits.max_work))
+            .map_err(|_| ViewError::Work)?;
         self.work = u64::try_from(work).expect("checked u64 work ceiling");
         Ok(())
     }
@@ -521,9 +520,8 @@ impl<'a> Buffer<'a> {
             .len()
             .checked_add(text.len())
             .ok_or(ViewError::Bytes)?;
-        if needed > self.limits.max_bytes {
-            return Err(ViewError::Bytes);
-        }
+        MeterBytes::check(needed as u128, self.limits.max_bytes as u128)
+            .map_err(|_| ViewError::Bytes)?;
         if needed > self.text.capacity() {
             let capacity = needed
                 .max(self.text.capacity().saturating_mul(2))
@@ -612,9 +610,8 @@ impl<'a> Buffer<'a> {
         }
     }
     fn value(&mut self, value: TermRef<'_>) -> Result<(), ViewError> {
-        if value.depth() > self.limits.max_depth {
-            return Err(ViewError::Depth);
-        }
+        Meter::check_count(value.depth(), 0, self.limits.max_depth)
+            .map_err(|_| ViewError::Depth)?;
         self.text("[")?;
         let mut nodes = value.nodes();
         let mut first = true;
@@ -639,9 +636,8 @@ impl<'a> Buffer<'a> {
         // contains exactly the preceding nodes. Each iteration encodes one unvisited
         // node of the finite Symbol tree, or returns a typed refusal.
         loop {
-            if frames.len() >= self.limits.max_depth {
-                return Err(ViewError::Depth);
-            }
+            Meter::check_count(frames.len(), 1, self.limits.max_depth)
+                .map_err(|_| ViewError::Depth)?;
             let children = match current {
                 Symbol::Infimum => {
                     self.leaf("infimum", None, None)?;
@@ -704,3 +700,6 @@ impl<'a> Buffer<'a> {
         }
     }
 }
+
+#[cfg(test)]
+mod tests;

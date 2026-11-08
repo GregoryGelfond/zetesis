@@ -4,8 +4,8 @@ use std::collections::BTreeSet;
 use std::fmt::Write as _;
 
 use clap::Parser;
+use zetesis_algebra::Cancellation;
 use zetesis_cli::{Completion, Interruption, Options, Report, run_with_diagnostics};
-use zetesis_cpu::Cancellation;
 
 fn solve(
     source: &str,
@@ -135,15 +135,13 @@ fn cancellation_precedes_eager_materialization() {
     let (report, _, _) = solve("invalid source never admitted", &[], &cancellation);
     assert_eq!(
         report.interruption,
-        Some(Interruption::Preparation(zetesis_cpu::Stop::Cancelled))
+        Some(Interruption::Preparation(zetesis_algebra::Stop::Cancelled))
     );
     assert_eq!(report.completion, Completion::Interrupted);
     assert_eq!(report.models, 0);
     assert_eq!(report.checked, 0);
     assert!(report.countermodel_statistics.is_none());
     assert!(report.formula_execution.is_none());
-    assert!(report.lazy_execution.is_none());
-    assert!(report.shared_execution.is_none());
 }
 
 fn queens(size: usize) -> String {

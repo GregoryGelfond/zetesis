@@ -13,8 +13,6 @@ acceptance criterion.
 | clingo ordinary grounding | Selected source parts are instantiated and simplified into ground input for solving | Grounding of those selected parts in their parameter/incremental context |
 | zetesis eager formula | Possible support is completed and a finite atom catalog, shared formula DAG, objectives and observations are constructed | Source lowering and every relevant original formula/metadata obligation |
 | zetesis hybrid formula | Complete support, arithmetic admission and producer-core materialization precede source-constraint checks against core answers | Core membership and every streamed constraint before acceptance or scoring; complete enumeration, or exhaustive optimal search under sound objective bounds |
-| zetesis eager relational | A bounded complete graph is compiled explicitly from relational templates | The retained ground instances and graph identity |
-| zetesis lazy relational | Templates remain available; source joins generate instances during frozen-gate positive inference | Final closure coverage and constraints, plus separately complete candidate enumeration |
 
 These routes do not have equal language coverage. The
 [language reference](../reference/language.md) identifies the current profiles.
@@ -24,16 +22,22 @@ those checks complete. Core membership uses the selected CPU or GPU executor;
 source joins and constraint checks run on the host. Table joins remain unsupported in this profile. General
 demand-driven formula producers are not implemented.
 
-![Grounding selected program parts produces retained solver input; lazy relational checking composes source joins with world-specific reduct rounds.](grounding-comparison.svg)
 
 Three operations must remain distinct. **Source instantiation** produces bound
 rule instances. **Candidate generation** proposes interpretations, or gate seeds
 whose closures will supply interpretations. **Positive inference** derives atoms
-under a frozen seed. Lazy relational checking composes instantiation with
-inference; it does not identify a proposed atom with a derived atom or eliminate
-the candidate generator's coverage obligation.
+under a frozen seed. The reference composition below keeps instantiation and inference apart; it does
+not identify a proposed atom with a derived atom or eliminate the candidate
+generator's coverage obligation.
 
 ## Read grounding as a composition
+
+This section and the next state the composition that the source-coverage and
+gate-projection laws prove. The relational closure route that executed it directly
+was removed in 0.7.0. The composition remains a mathematical account of that
+schedule, not the implementation selected by `--grounder lazy`. The current
+hybrid route materializes producers and streams eligible constraints, as the
+table above shows.
 
 The following notation emphasizes the [exact transforms](alignment.md), not a
 particular loop nest. `∘` denotes composition, read from right to left. `Map`
@@ -59,9 +63,9 @@ scheduling and evolving grounding domains. Simplification can change the
 representation emitted to the solver. Completion concerns the selected parts
 and context, not every part that an incremental application might later request.
 zetesis's eager paths have the same broad materialization boundary while
-retaining their own relational or formula representations.
+retaining their own formula representation.
 
-For zetesis's admitted lazy relational profile, the source operation is:
+For the former relational closure profile, the source operation was:
 
 ```text
 Offer_t(X) = Instantiate_t ∘ Filter_t ∘ Bind_t (X)
@@ -109,9 +113,8 @@ neither a proof of truth in any one world nor permission to mix their seeds.
 Precisely, an instance is enabled when its positive antecedents are a subset of
 `X[w]`, its true-gate atoms are a subset of `S[w]`, and its false-gate atoms are
 disjoint from `S[w]`. If `G_P` is the admitted program's gate carrier, then
-`GateProjection(X) = X ∩ G_P`. The separate
-[`Candidates`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-cpu/src/candidates.rs)
-generator owes complete coverage of the relevant seeds over that carrier.
+`GateProjection(X) = X ∩ G_P`. The closure route's separate `Candidates` generator, removed with that route,
+owed complete coverage of the relevant seeds over that carrier.
 
 All chunks in one round read the same snapshots. Chunk results can be reduced
 with associative union and disjunction; their new heads become source witnesses
@@ -120,8 +123,8 @@ positive truth grows under fixed gates. A successful no-growth round must have e
 source scan and all required evaluations. Only then do sound derivation from
 empty, closure, constraint checking and seed agreement establish acceptance.
 An interrupted round supplies progress, not a negative answer or a completed
-check. The current shared implementation returns no completed candidate checks
-if that batch's required work stops.
+check. The former shared implementation returned no completed candidate checks
+if that batch's required work stopped.
 
 This exposes two kinds of parallel work: common source instances can be reused
 across worlds, and enabled instances can contribute through independent truth
@@ -130,13 +133,11 @@ round depends on the prior round's completed consequences. World-membership
 masks may narrow offered bindings while preserving every world's enabled ones;
 they change source work, not the formula above or candidate coverage.
 
-The implementation connects at
-[`source::scan`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-cpu/src/oracle/source.rs),
-[`lazy::check_with_source`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-cpu/src/lazy.rs),
-the [shared Rayon evaluator](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-cpu/src/lazy/shared.rs)
-and the [wgpu evaluator](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-wgpu/src/lazy.rs).
-The source scan and round coordinator run on the host; the injected evaluator
-executes the per-world positive/gate tests and head/constraint reductions.
+The implementation connected at the closure route's `source::scan`,
+`lazy::check_with_source`, shared Rayon evaluator and wgpu evaluator, all removed
+with that route.
+The source scan and round coordinator ran on the host; the injected evaluator
+executed the per-world positive/gate tests and head/constraint reductions.
 The composition is meaningful without claiming that source joins run on the GPU.
 
 [`LazyRounds.lean`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/LazyRounds.lean)
@@ -152,18 +153,15 @@ refinement remain outside those theorems' established correspondence.
 ```
 
 One answer set contains `blocked` and the two edge facts. The other contains
-`start(1)`, `reach(1)`, `reach(2)`, `reach(3)` and the edge facts. In a lazy check
-whose seed selects `blocked`, no `start` or `reach` consequence is derived, so
+`start(1)`, `reach(1)`, `reach(2)`, `reach(3)` and the edge facts. In the relational
+schedule above, when the seed selects `blocked`, no `start` or `reach` consequence is derived, so
 the positive reachability joins have no matching rows. A seed selecting
 `start(1)` enables those consequences over successive rounds.
 
-The check begins with an empty derived interpretation, not with all seed atoms
-asserted as facts. The independent scalar evaluator combines complete bootstrap
-with later first-new row selections and completed consequence/constraint history.
-Its final no-growth round establishes closure through that history. Shared-world
-source traversal above retains complete round scans. In either schedule,
-constraints and agreement with the seed still have to hold. This example
-explains a work schedule. It does not, by itself, establish a speedup or a memory reduction.
+That check begins with an empty derived interpretation, not with all seed atoms
+asserted as facts. A complete no-growth round establishes closure; constraints
+and agreement with the seed still have to hold. This explains the mathematical
+schedule, not a speedup, a memory reduction or the route of a current command.
 
 From the repository root, compare the complete answer families directly:
 
@@ -173,8 +171,9 @@ zetesis examples/lazy-reachability.lp --grounder lazy --backend cpu --models 0 -
 clingo examples/lazy-reachability.lp 0
 ```
 
-Answer order is immaterial. Both families above must be present, with all edge
-facts retained. On an accessible Metal device, the second command can instead
+Answer order is immaterial. Both answer sets above must be present, with all edge
+facts retained. The lazy command exercises the current hybrid formula route,
+not the former relational closure schedule. On an accessible Metal device, it can instead
 use `--backend metal`; inspect its statistics to confirm the executed route.
 This tiny example tests meaning and routing, not throughput. For broader
 reproduction, the [validation guide](../reference/validation.md) links maintained
@@ -198,7 +197,7 @@ and [instantiation](https://github.com/potassco/clingo/blob/a99ffb2a58293c68b28f
 clingo also supports grounding selected parameterized program parts over several
 application steps. Cleanup can use a solver's top-level assignment to simplify
 grounding domains before later steps. That feedback differs from zetesis's
-candidate-specific source rounds. It is inaccurate to describe ordinary clingo
+former candidate-specific source rounds. It is inaccurate to describe ordinary clingo
 grounding as necessarily materializing every future step at startup; its
 [pinned control API](https://github.com/potassco/clingo/blob/a99ffb2a58293c68b28fcc283a1d1c9ccad900fe/libclingo/clingo.h)
 defines the separate operations.
@@ -211,48 +210,28 @@ an upper bound on producible atoms, not truth in an answer set. Negative
 conditions and correlated aggregate choices remain in the formulas checked
 under the original and frozen interpretations.
 
-The lazy source scanner retains relation indexes, join frames and bounded
-instances rather than a complete ground-rule vector. Shared rounds may scan
-the union of candidate worlds; individual-world checks prevent cross-world
-combinations from becoming facts. Optional membership masks prune only prefixes
-with no witness in the current snapshots. The shared CPU CLI exposes union and
-world-mask policies through `--source-batching union|worlds`. Ordinary lazy GPU
-execution uses union scanning; its world-mask policy is an explicit library
-choice.
+Hybrid grounding retains the complete producer core and the source plans for
+eligible constraints. Each core answer must pass those constraints before
+scoring or publication. When preparation also defers terminal definitions,
+host reconstruction follows the base constraint checks and precedes publication
+of the full answer. The [hybrid constraint schedule](grounding.md#eager-and-lazy-execution)
+describes that boundary and its retained state.
 
-Candidate coverage is a separate potential cost. Without optional narrowing,
-`Candidates` begins with an empty seed without expanding the carrier. Ordinary
-sessions first attempt complete lower/upper closures. A completed upper bound
-supplies potentially present gate atoms directly; lower-bound atoms are held,
-and only the remainder becomes open candidate coordinates. Canonical positions
-are computed in the original carrier without enumerating its excluded tuples.
-This is justified by coverage of every answer set, not by assuming that possible
-atoms hold. If narrowing stops, the existing conservative fallback remains.
-
-Below the completed root, each region reads its bounds from those retained atom
-owners and its held/cut/open decisions. It does not rebuild owned lower and upper
-atom sets. Both closures read the same pre-pass bounds; only their completed
-results can change decisions. A lower constraint or inconsistent bounds refutes
-the region. An upper-only constraint cannot do so. The
+Candidate coverage remains a separate cost. Formula regions retain held, cut
+and open atom decisions; sound subjects can narrow them before splitting.
+Possible support alone does not establish truth in an answer set. Membership
+still requires the original theory and its frozen reduct. The
 [representation correspondence](../lean/correspondence.md#ownership-and-execution-correspondence)
-separates this borrowed view from the semantic narrowing law.
-
-The predicate/domain carrier can still contain many combinations, and seed
-enumeration can remain exponential in the number of open gate atoms. A small
-demanded catalog during one check does not establish that other choices are
-irrelevant. This relational root-indexing operation is separate from the formula
-profile's [hybrid constraint schedule](grounding.md#eager-and-lazy-execution).
+separates the represented state from its semantic laws.
 
 ## Hardware, memory, and comparisons
 
-Parsing, source ownership and source joins run on the host. In the relational
-lazy device path, Metal computes per-world positive consequences and frozen-gate
-tests from bounded source chunks; it is not replaying a CPU-completed closure.
+Parsing, source ownership and source joins run on the host.
 The formula GPU path checks a retained theory: the complete eager theory or the
 producer core of hybrid grounding. Tight cores use complete support checking;
 general cores retain exact CPU completion of unresolved device results. Hybrid
 answers then pass every streamed constraint on the host before scoring or
-publication. Neither path is full GPU grounding.
+publication. This is not full GPU grounding.
 
 Avoiding a rule vector can save storage. Repeated joins, masks, demanded
 catalogs, concurrent workspaces and transfers also cost memory and time. A useful

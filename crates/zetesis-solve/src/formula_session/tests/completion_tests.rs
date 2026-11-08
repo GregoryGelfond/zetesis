@@ -6,12 +6,12 @@ use crate::formula_execution::{Execution, Failure, MembershipExecution};
 use crate::phase_timing::Recorder;
 use crate::{
     AnswerSelection, Backend, Completion, FormulaExecutionStatistics, Interruption, Oracle,
-    SearchMethod, SearchState, SolveConfig, SolveError,
+    SearchState, SolveConfig, SolveError,
 };
-use zetesis_cpu::Cancellation;
+use zetesis_algebra::Cancellation;
 use zetesis_ferraris::Interpretation;
 use zetesis_reference_support::formula;
-use zetesis_sat::{Incomplete, StableModels};
+use zetesis_stable::{Incomplete, StableModels};
 
 /// One native answer followed by an execution stop outside the iterator.
 /// This exercises session finalization independently of native error cleanup.
@@ -53,7 +53,6 @@ fn terminal_outcomes_settle_workers_before_caching_receipts() {
         let config = SolveConfig {
             backend: Backend::Cpu,
             oracle: Oracle::Countermodel,
-            search: SearchMethod::Regions,
             workers: std::num::NonZeroUsize::new(2).unwrap(),
             models,
             ..SolveConfig::default()
@@ -66,10 +65,9 @@ fn terminal_outcomes_settle_workers_before_caching_receipts() {
                 atoms: owner.atom_catalog(),
                 objectives: owner.objectives(),
                 required_choices: owner.required_choices(),
-                gate_atoms: 0,
                 keyed_constraints: 0,
                 key_analysis: zetesis_themelios::KeyAnalysis::Complete,
-                certificate_order: zetesis_sat::CertificateOrder::TightFirst,
+                certificate_order: zetesis_stable::CertificateOrder::TightFirst,
             },
             StopAfterAnswer {
                 delivered: false,

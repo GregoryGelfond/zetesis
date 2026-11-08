@@ -7,7 +7,9 @@ use crate::{
     NarrowingScratch, Node, NodeView, OriginalSubject, Region, RegionLimits, Theory, models,
     models_reduct,
 };
-use zetesis_cpu::{Cancellation, Stop};
+use zetesis_algebra::{Cancellation, Stop};
+
+mod order;
 
 fn owner(atoms: usize) -> FormulaNodes {
     FormulaNodes::new(FormulaParts::new((0..atoms).map(Node::atom).collect(), vec![]).unwrap())
@@ -44,7 +46,6 @@ fn finish(owner: FormulaNodes, atoms: usize, roots: Vec<usize>) -> Theory {
 fn close(theory: &Theory, region: &mut Region, original: Option<usize>) -> Narrowing {
     let index = Narrower::new(theory);
     let cancellation = Cancellation::default();
-    let mut known = index.knowledge();
     let mut scratch = NarrowingScratch::default();
     if let Some(mask) = original {
         let candidate = Interpretation::new(
@@ -59,25 +60,25 @@ fn close(theory: &Theory, region: &mut Region, original: Option<usize>) -> Narro
             .narrow_frozen_known(
                 FrozenSubject::new(theory, truth.truth()),
                 region,
-                &mut known,
+                &mut index.frozen_knowledge(),
                 &mut scratch,
                 RegionLimits::default(),
                 &cancellation,
             )
+            .result
             .unwrap()
-            .0
     } else {
         index
             .narrow_known(
                 OriginalSubject::new(theory, None),
                 region,
-                &mut known,
+                &mut index.knowledge(),
                 &mut scratch,
                 RegionLimits::default(),
                 &cancellation,
             )
+            .result
             .unwrap()
-            .0
     }
 }
 
@@ -350,7 +351,7 @@ fn failed_native_closure_reuses_only_clean_scratch() {
         RegionLimits { max_work: 0 },
         &cancellation,
     );
-    assert_eq!(result, Err(Stop::WorkLimit));
+    assert_eq!(result.result, Err(Stop::WorkLimit));
     let mut region = Region::all_open(3);
     index
         .narrow_known(
@@ -361,6 +362,7 @@ fn failed_native_closure_reuses_only_clean_scratch() {
             RegionLimits::default(),
             &cancellation,
         )
+        .result
         .unwrap();
     assert_eq!(region.decision(0), Some(true));
 }

@@ -1,7 +1,7 @@
 //! Signed normalization precedes global tuple identity and checked accumulation.
 use crate::support::programs::program;
+use zetesis_algebra::Cancellation;
 use zetesis_core::{AtomPattern, Model, Term, Value};
-use zetesis_cpu::Cancellation;
 use zetesis_objective::{ErrorKind, Limits, ObjectiveTemplate, Stop, WeightPolarity, evaluate};
 use zetesis_test_support::programs::{atom, number, pattern};
 

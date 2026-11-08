@@ -55,21 +55,20 @@ different types of value.
 
 | ASP operation | Execution interpretation | Where to read the implementation |
 | --- | --- | --- |
-| Instantiate a rule body | Join positive witnesses, agree on repeated variables, filter scalar conditions, project an instance | [`source::scan`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-cpu/src/oracle/source.rs); [source preparation](grounding.md) |
-| Determine the normal reduct | Evaluate positive/negative gates against one immutable seed | [`check_static`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-cpu/src/static_oracle.rs) |
-| Derive positive consequences | Test enabled bodies, union their heads, repeat until closed | [`check_static`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-cpu/src/static_oracle.rs); [lazy batches](../rust/parallel.md) |
+| Instantiate a rule body | Join positive witnesses, agree on repeated variables, filter scalar conditions, project an instance | [support fixpoint](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/formula_support.rs); [source preparation](grounding.md) |
+| Determine the normal reduct | Evaluate positive/negative gates against one immutable seed | [frozen reduct](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-ferraris/src/reduct.rs) |
+| Derive positive consequences | Test enabled bodies, union their heads, repeat until closed | [positive consequences](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-ferraris/src/positive.rs) |
 | Reconstruct terminal positive definitions | Join true rows from a verified base answer, project heads, union with that answer | [`TerminalReconstruction`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/formula_terminal/reconstruct.rs); [applicability and extension law](grounding.md#terminal-definition-analysis) |
 | Test formula satisfaction | Evaluate an acyclic formula graph; require every asserted root | [`models`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-ferraris/src/oracle.rs) |
 | Compute least consequences of positive atomic-head formulas | Propagate newly true atom/body vertices through sparse incidences; check original constraints on the completed interpretation | [`PositivePlan`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-ferraris/src/positive.rs) |
 | Construct and reuse a formula reduct | Freeze candidate truth at every graph node; mask candidate-false nodes during later queries | [`FrozenReduct`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-ferraris/src/reduct.rs) |
-| Reuse reduct structure across candidates | Under the clauses method, compile one parameterized graph and refresh authenticated candidate truth and membership inputs; under the regions method, read the original graph under each candidate's mask | [`PreparedReduct`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-sat/src/prepared_reduct.rs); [`ReductQuery`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-sat/src/ferraris/regions.rs) |
-| Establish subset minimality | Search for a proper-subset reduct model; propagate Boolean domains and exactly complete unresolved queries | [`zetesis-sat`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-sat/README.md); [`GpuFormulaOracle`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-wgpu/README.md) |
+| Reuse reduct structure across candidates | Read the original graph under each candidate's mask | [`ReductQuery`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-stable/src/ferraris/regions.rs) |
+| Establish subset minimality | Search for a proper-subset reduct model; propagate Boolean domains and exactly complete unresolved queries | [`zetesis-stable`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-stable/README.md); [`GpuFormulaOracle`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-wgpu/README.md) |
 | Evaluate an aggregate | Coalesce complete tuple identities, combine eligibility, then reduce count/sum/extrema and compare the bound | [Source formula lowering](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/formula_ground.rs); [native aggregate operations](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-wgpu/README.md#native-numeric-aggregates) |
 | Score an answer | Resolve correlated objective fields, retain model-relative eligibility, coalesce complete contribution keys, then sum by priority | [Objective specialization](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/formula_ground/objectives.rs); [cost evaluation](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-objective/src/evaluate.rs) |
-| Check several proposals | Share program data while keeping each interpretation, reduct and verdict separate | [`BatchOracle`](../rust/parallel.md); [commit boundaries](execution.md#immutable-rounds-and-commit-boundaries) |
+| Check several proposals | Share program data while keeping each interpretation, reduct and verdict separate | [commit boundaries](execution.md#immutable-rounds-and-commit-boundaries) |
 
-These are capability mappings. Ordinary relational solving supports lazy source
-rounds, Rayon and GPU closure. Automatic formula admission can defer terminal
+These are capability mappings. Automatic formula admission can defer terminal
 positive definitions, joining true rows after base membership to reconstruct each
 full original answer. Other rules remain eager; explicit lazy execution can
 compose core answer enumeration with streamed
@@ -77,9 +76,21 @@ constraint satisfaction on the host. Formula solving combines host candidate pro
 backend. Explicit GPU execution with automatic membership policy uses complete
 tight certificates when available; other formulas use GPU propagation and exact
 host completion.
-With multiple workers, joined Rayon rounds produce bounded candidate batches
-before device checking. Device-native aggregate reduction remains an explicit
-library capability; ordinary GPU formula execution still uses Boolean lowering.
+With multiple workers, joined Rayon producers fill bounded candidate slates
+before device checking. Ordinary GPU formula execution retains native threshold
+and ordinal min/max rows. The separate `GpuAggregateOracle` remains an explicit
+library capability over supplied eligibility masks; ordinary solving does not
+route through that interface.
+
+Both membership checkers reuse initialized host candidate-upload storage while
+the theory owner and batch size stay unchanged. The existing owner-checked
+exporter still writes every candidate word, preserving order and repetitions.
+Actual retained capacity counts against each batch's allowance; a smaller
+allowance can replace an oversized optional buffer. Subject or batch-size changes
+release old scratch before cold preparation. Tight result decoding retains those
+same words until it has checked any unsupported-atom witness. This removes
+repeated host allocation and zero filling, without changing device uploads or
+the checking algorithm.
 
 ## Positive inference is a composition with a fixed point
 
@@ -236,11 +247,11 @@ ParametricNode(J, Implies(left,right), R) = frozen[node]
 ```
 
 This is another realization of the same reduct relation, with the subset
-premise made explicit. Under the clauses method `PreparedReduct` encodes it
-with candidate membership parameters and a strict-subset condition; under the
-regions method `ReductQuery` walks the candidate's subsets as a region tree
-with the same mask. Each query receives original truth
-through a subject-bound `FormulaEvaluation`, resets its search state, and
+premise made explicit. `ReductQuery` walks the candidate's subsets as a region
+tree under the same mask; the removed clause search encoded it, as
+`PreparedReduct`, with candidate membership parameters and a strict-subset
+condition. Each query receives original truth through a subject-bound
+`FormulaEvaluation`, reuses no knowledge from another candidate, and
 independently validates any returned countermodel. The
 [parametric correspondence](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/guide/parametric-reduct.md) explains
 why the missing explicit And/Or masks are valid under the stated premise.
@@ -274,7 +285,12 @@ weights by predecessor truth, reduce them in checked `i128`, then compare the
 bound. A family of bounds shares its condition and weight columns. The frozen
 reading retains the original threshold truth gate. Admitted whole-theory CPU
 passes reduce a shared weighted row once, then compare each bound separately;
-GPU transport expands the row's guards into its Boolean device format.
+GPU transport preserves each guard and shares the authoritative row's condition
+and value columns. During original-truth evaluation, its earliest nonconstant
+guard reduces the row once and writes the truth of every live guard. Followers
+do not overwrite those values. All guards share the same predecessor level, so
+the existing barrier publishes their truth before any parent reads it. Portable
+integer limbs retain the admitted numeric range.
 The common source compiler uses this representation for nonnegative count and
 sum guards, including choice bounds. Shared counters propagate their necessary
 consequences. Signed sums retain their existing exact translation.
@@ -300,9 +316,18 @@ the theory owner. Each frozen guard also retains its own original-truth gate. An
 scratch when no numeric node is present. Fresh initialization, resets, physical
 row reads and actual retained capacities remain charged. Candidate propagation borrows prefixes of sorted distinct-condition columns and uses the
 existing connective counters. The authoritative row still retains every tuple
-occurrence. GPU transport currently lowers cuts to Boolean device formulas;
-this is not a native device min/max reduction and may require work proportional
-to the row width times its guard count.
+occurrence. GPU transport retains the same ordinal cuts. Its original-truth
+consumer reduces both extrema once per shared row; its frozen consumer still
+propagates each guard's necessary consequences separately. Original-false guards
+retain their own frozen gate. Constant endpoints and impossible cuts omit unused
+row transport. Cold preparation summarizes each referenced row once, releases
+that summary after packing, and charges the retained owner and guard-ID columns.
+If all guards are constant, it releases the directory immediately and uses the
+allocation-free classifier during packing.
+Under an insufficient staging allowance, an allocation-free scan can still
+admit a graph whose numeric guards are all constant; a live row retains the typed
+capacity refusal. This compatibility path trades repeated scans for zero row
+staging. The per-guard propagation work allowance remains conservative.
 The [ordinal laws](../lean/correspondence.md#ordinal-extrema) describe the
 semantic contract. Runtime refinement and application speed remain separate
 obligations.

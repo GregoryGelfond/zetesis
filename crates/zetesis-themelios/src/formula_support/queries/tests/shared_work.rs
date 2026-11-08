@@ -2,7 +2,7 @@
 
 use super::*;
 use crate::{ConstraintAllowance, ConstraintCheckLimits};
-use zetesis_cpu::Cancellation;
+use zetesis_algebra::Cancellation;
 
 fn select(
     support: &Support<'_>,

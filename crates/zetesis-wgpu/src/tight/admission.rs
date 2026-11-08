@@ -1,9 +1,9 @@
 //! Decide identity, complete-scan bounds and cache replacement before effects.
 
-use super::packing::{Graph, PARAM_BYTES, Packing, Plan};
+use super::packing::{Graph, PARAM_BYTES, Packed, Packing, Plan};
 use super::{TightGpuBatchStats, TightGpuLimits, poll};
 use crate::{GpuError, GpuErrorKind};
-use zetesis_cpu::Cancellation;
+use zetesis_algebra::Cancellation;
 use zetesis_ferraris::{Interpretation, TightPlan};
 
 pub(super) struct Admission {
@@ -32,7 +32,12 @@ impl Admission {
             if cached.is_some_and(|(graph, _)| graph.theory.same_instance(certificate.theory())) {
                 None
             } else {
-                Some(Graph::with_control(certificate, packing, cancellation)?)
+                Some(Graph::with_control(
+                    certificate,
+                    packing,
+                    limits.max_batch_bytes,
+                    cancellation,
+                )?)
             };
         let graph = fresh
             .as_ref()
@@ -55,22 +60,55 @@ impl Admission {
                 ));
             }
         }
-        let stats = TightGpuBatchStats {
-            theory_uploaded: fresh.is_some(),
-            transport_allocated: fresh.is_some()
-                || cached.is_none_or(|(_, shape_matches)| !shape_matches),
-            resident_theory_bytes: graph.bytes,
-            resident_transport_bytes: plan.transport,
-            accounted_bytes: plan.accounted,
-            candidates: u64::from(plan.worlds),
-            work: u64::from(plan.worlds) * u64::from(plan.work),
-            dispatches: 1,
-            uploaded_bytes: PARAM_BYTES
-                + plan.seeds
-                + if fresh.is_some() { graph.bytes } else { 0 },
-            downloaded_bytes: plan.results,
-        };
+        let stats = batch_stats(
+            graph,
+            &plan,
+            fresh.is_some(),
+            cached.is_none_or(|(_, matches)| !matches),
+        );
         Ok(Self { fresh, plan, stats })
+    }
+    pub(super) fn pack(
+        &mut self,
+        certificate: &TightPlan,
+        limits: TightGpuLimits,
+        device: &wgpu::Limits,
+        cancellation: &Cancellation,
+    ) -> Result<Option<Packed>, GpuError> {
+        let Some(graph) = self.fresh.as_mut() else {
+            return Ok(None);
+        };
+        let packed = graph.prepare(certificate, limits, device, &mut self.plan, cancellation)?;
+        self.stats = batch_stats(graph, &self.plan, true, true);
+        Ok(Some(packed))
+    }
+}
+
+pub(super) fn batch_stats(
+    graph: &Graph,
+    plan: &Plan,
+    fresh: bool,
+    transport_allocated: bool,
+) -> TightGpuBatchStats {
+    TightGpuBatchStats {
+        theory_uploaded: fresh,
+        transport_allocated: fresh || transport_allocated,
+        resident_theory_bytes: graph.bytes,
+        resident_transport_bytes: plan.transport,
+        accounted_bytes: plan.accounted,
+        candidates: u64::from(plan.worlds),
+        work: u64::from(plan.worlds) * u64::from(plan.work),
+        dispatches: 1,
+        truth_levels: plan.levels,
+        workgroup_size: graph.workgroup_size.invocations(),
+        original_truth_reused: plan.original_truth_reused,
+        routes: super::TightGpuRoutes::default(),
+        nodes_evaluated: 0,
+        update_critical_path: 0,
+        dense_critical_path: graph.dense_path,
+        updates: super::TightGpuUpdates::Pending,
+        uploaded_bytes: PARAM_BYTES + plan.seeds + if fresh { graph.bytes } else { 0 },
+        downloaded_bytes: plan.results,
     }
 }
 

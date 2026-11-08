@@ -46,7 +46,6 @@ fn scalability_tests_have_only_qualification_positions() {
             .all(|profile| profile.backend == selected::Backend::Cpu
                 && profile.grounder == selected::Grounder::Eager
                 && profile.formula_joins == Some(selected::FormulaJoins::Indexed)
-                && profile.search == Some(selected::SearchMethod::Regions)
                 && profile.memory_bytes == Some(300_000_000))
     );
 }
@@ -362,8 +361,8 @@ mod campaigns {
             evidence["report"]["plan"]["profiles"][0]["memory_bytes"],
             384 * 1024
         );
-        // The maintained wide Mastermind case is colors=8. Other cases may
-        // complete within this allowance; their controlled reference is not an
+        // The authored scalability Mastermind case here is colors=8. Other cases
+        // may complete within this allowance; their controlled reference is not an
         // answer oracle. This proposition concerns a real, retained refusal.
         let workload = &evidence["report"]["workloads"][8];
         assert_eq!(workload["entry"], "scalability/mastermind.lp");

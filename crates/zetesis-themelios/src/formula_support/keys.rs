@@ -24,12 +24,33 @@ pub(super) fn covered(
     covered_with_range(rule, plan, None, context)
 }
 
+/// Every deterministic generated key reads only previously covered slots.
+/// This establishes input availability, not arithmetic or constructor totality;
+/// the family's separate totality proof must succeed before omitting its scan.
+pub(super) fn covered_family(
+    rule: &RuleIr,
+    plan: &order::Plan<'_>,
+    context: &mut Context<'_, &Computation<'_, '_>>,
+) -> Result<bool, FormulaFailure> {
+    covered_inputs(rule, plan, None, true, context)
+}
+
 /// A single authenticated range binder may supply a slot absent from every
 /// positive pattern. All other key slots still require the complete join.
 pub(super) fn covered_with_range(
     rule: &RuleIr,
     plan: &order::Plan<'_>,
     generated: Option<usize>,
+    context: &mut Context<'_, &Computation<'_, '_>>,
+) -> Result<bool, FormulaFailure> {
+    covered_inputs(rule, plan, generated, false, context)
+}
+
+fn covered_inputs(
+    rule: &RuleIr,
+    plan: &order::Plan<'_>,
+    generated: Option<usize>,
+    bindings: bool,
     context: &mut Context<'_, &Computation<'_, '_>>,
 ) -> Result<bool, FormulaFailure> {
     let mut bound = Buffer::new(
@@ -39,7 +60,11 @@ pub(super) fn covered_with_range(
         context.work.location,
     )?;
     bound.resize(
-        rule.body_variables,
+        if bindings {
+            rule.variables
+        } else {
+            rule.body_variables
+        },
         false,
         context.computation,
         context.work.limits,
@@ -71,6 +96,9 @@ pub(super) fn covered_with_range(
         };
         *entry = true;
     }
+    if bindings && !cover_generated_keys(rule, &mut bound, context)? {
+        return Ok(false);
+    }
     let HeadIr::Normal(head) = &rule.head else {
         return Ok(false);
     };
@@ -101,6 +129,39 @@ pub(super) fn covered_with_range(
                 return Ok(false);
             }
         }
+    }
+    Ok(true)
+}
+
+/// Each assignment extends the covered keys only after all its inputs are covered.
+fn cover_generated_keys(
+    rule: &RuleIr,
+    bound: &mut Buffer<bool>,
+    context: &mut Context<'_, &Computation<'_, '_>>,
+) -> Result<bool, FormulaFailure> {
+    for literal in &rule.body {
+        tick(context)?;
+        let LiteralIr::Bind { target, value } = literal else {
+            continue;
+        };
+        context.work.counters.charge_work(
+            value.nodes.len() as u128,
+            context.work.limits,
+            context.work.location,
+        )?;
+        if value
+            .inputs()
+            .any(|slot| !bound.slice().get(slot).copied().unwrap_or(false))
+        {
+            return Ok(false);
+        }
+        let Some(entry) = bound.slice_mut().get_mut(*target) else {
+            return Ok(false);
+        };
+        if *entry {
+            return Ok(false);
+        }
+        *entry = true;
     }
     Ok(true)
 }

@@ -1,0 +1,225 @@
+use std::fmt;
+
+use zetesis_algebra::{Refusal, Stop};
+
+/// Why no logical decision is available. Every variant leaves coverage open.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Incomplete {
+    /// Shared cancellation was observed.
+    Cancelled,
+    /// The absolute deadline expired.
+    Deadline,
+    /// Charged SAT work reached its inclusive ceiling.
+    WorkLimit,
+    /// Starting another decision would exceed the ceiling.
+    DecisionLimit,
+    /// Checking another classical candidate would exceed the ceiling.
+    CandidateLimit,
+    /// Pending candidate storage would exceed the caller's byte ceiling.
+    PendingBytes,
+    /// Concurrent completion workspaces and ordered results exceed logical scratch.
+    CompletionScratch,
+    /// A proper-subset query's named workspace storage exceeds its explicit
+    /// byte ceiling.
+    ReductStorage {
+        /// Required named vector/map capacity, excluding shared source payload.
+        required: u128,
+        /// Inclusive ceiling for this query workspace.
+        limit: u128,
+    },
+    /// Additional native-extrema narrowing index capacity exceeds its owner allowance.
+    /// Legacy Boolean index capacity and transient construction peak are excluded.
+    NativeNarrowingStorage {
+        /// Actual retained capacity, or a guaranteed lower bound before construction.
+        required: u128,
+        /// Inclusive allowance for this prepared index owner.
+        limit: u128,
+    },
+    /// A retained batch exceeds the current call's candidate ceiling.
+    BatchCandidateLimit,
+    /// Scalar iteration cannot discard an outstanding candidate batch.
+    PendingBatch,
+    /// Fallible storage reservation failed.
+    Allocation,
+    /// A candidate belongs to a different admitted theory instance.
+    WrongTheory,
+    /// A candidate-only restriction declares a different semantic atom count.
+    RestrictionUniverse {
+        /// Original semantic atom count.
+        expected: usize,
+        /// Restriction's declared atom count.
+        actual: usize,
+    },
+    /// A fused iterator cannot restart after exhaustion or terminal failure.
+    ClosedEnumerator,
+    /// A certificate cannot be configured after candidate generation has begun.
+    LateCertificate,
+    /// The streamed constraints' region check stopped. Its typed receipt is
+    /// retained by [`crate::StreamedConstraints::take_failure`]; this never
+    /// means exhaustion.
+    RegionFilter,
+    /// A region check returned a decision for an atom that is not open.
+    InvalidRegionConsequence,
+    /// Streamed constraints cannot be installed after candidate traversal began.
+    LateRegionFilter,
+    /// Candidate bounds cannot be declared after candidate traversal began:
+    /// the producers' frontier order is fixed for the whole stream.
+    LateCandidateBounds,
+    /// A candidate bound came from another objective plan than the active
+    /// bound's; scores of different plans are not comparable.
+    CandidateBoundPlan,
+    /// A candidate bound's score does not strictly improve on the active
+    /// bound's, so it could readmit candidates that bound pruned.
+    CandidateBoundNotImproving,
+    /// Installed streamed constraints cannot be replaced.
+    RegionFilterAlreadySet,
+    /// A learned-row store cannot be installed after candidate traversal
+    /// began.
+    LateLearnedStore,
+    /// An installed learned-row store cannot be replaced.
+    LearnedStoreAlreadySet,
+    /// Optional candidate certification stopped without establishing membership.
+    Certificate(crate::CertificateError),
+    /// A mandatory arithmetic source read failed; the exact source fault is retained.
+    ArithmeticSource(zetesis_ferraris::AdmissionError),
+    /// Independent formula evaluation stopped without validating a witness.
+    Verification(Stop),
+    /// An internal SAT witness failed independent semantic validation.
+    InvalidWitness,
+    /// A worker unwound before it could account for its remaining search.
+    WorkerPanicked,
+    /// An accounting counter cannot be incremented without overflow.
+    CounterOverflow,
+}
+impl Refusal for Incomplete {
+    fn is_resource_refusal(&self) -> bool {
+        match self {
+            Self::WorkLimit
+            | Self::DecisionLimit
+            | Self::CandidateLimit
+            | Self::PendingBytes
+            | Self::CompletionScratch
+            | Self::ReductStorage { .. }
+            | Self::NativeNarrowingStorage { .. }
+            | Self::BatchCandidateLimit
+            | Self::Allocation => true,
+            Self::Verification(stop) => stop.is_resource_refusal(),
+            Self::ArithmeticSource(error) => error.is_resource_refusal(),
+            Self::Certificate(error) => match error {
+                crate::CertificateError::Tight(error) => error.is_resource_refusal(),
+                crate::CertificateError::Positive(error) => error.is_resource_refusal(),
+                crate::CertificateError::Stratified(error) => error.is_resource_refusal(),
+                crate::CertificateError::Evaluation(error) => error.is_resource_refusal(),
+            },
+            Self::Cancelled
+            | Self::Deadline
+            | Self::PendingBatch
+            | Self::WrongTheory
+            | Self::RestrictionUniverse { .. }
+            | Self::ClosedEnumerator
+            | Self::LateCertificate
+            | Self::RegionFilter
+            | Self::InvalidRegionConsequence
+            | Self::LateRegionFilter
+            | Self::LateCandidateBounds
+            | Self::CandidateBoundPlan
+            | Self::CandidateBoundNotImproving
+            | Self::RegionFilterAlreadySet
+            | Self::LateLearnedStore
+            | Self::LearnedStoreAlreadySet
+            | Self::InvalidWitness
+            | Self::WorkerPanicked
+            | Self::CounterOverflow => false,
+        }
+    }
+
+    fn from_stop(stop: Stop) -> Self {
+        Self::from(stop)
+    }
+}
+
+impl From<Stop> for Incomplete {
+    fn from(error: Stop) -> Self {
+        match error {
+            Stop::Cancelled => Self::Cancelled,
+            Stop::Deadline => Self::Deadline,
+            Stop::Allocation => Self::Allocation,
+            Stop::WrongProgram => Self::WrongTheory,
+            _ => Self::Verification(error),
+        }
+    }
+}
+impl fmt::Display for Incomplete {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Cancelled => f.write_str("SAT operation cancelled"),
+            Self::Deadline => f.write_str("SAT operation deadline expired"),
+            Self::WorkLimit => f.write_str("SAT work limit reached"),
+            Self::DecisionLimit => f.write_str("SAT decision limit reached"),
+            Self::CandidateLimit => f.write_str("stable candidate limit reached"),
+            Self::CompletionScratch => f.write_str("completion logical scratch byte limit reached"),
+            Self::ReductStorage { required, limit } => write!(
+                f,
+                "reduct query storage requires {required} bytes; limit is {limit}"
+            ),
+            Self::NativeNarrowingStorage { required, limit } => write!(
+                f,
+                "native aggregate search index needs {required} bytes; limit is {limit}"
+            ),
+            Self::PendingBytes => f.write_str("pending candidate byte limit reached"),
+            Self::BatchCandidateLimit => f.write_str("pending batch candidate limit reached"),
+            Self::PendingBatch => f.write_str("an unresolved candidate batch remains"),
+            Self::Allocation => f.write_str("SAT storage reservation failed"),
+            Self::WrongTheory => f.write_str("candidate belongs to a different theory"),
+            Self::RestrictionUniverse { expected, actual } => write!(
+                f,
+                "candidate restriction declares {actual} atoms; expected {expected}"
+            ),
+            Self::ClosedEnumerator => f.write_str("candidate enumeration is already closed"),
+            Self::LateCertificate => {
+                f.write_str("certificate configuration requires an unstarted candidate stream")
+            }
+            Self::RegionFilter => {
+                f.write_str("candidate-region filter failed; inspect its receipt")
+            }
+            Self::InvalidRegionConsequence => {
+                f.write_str("candidate-region consequence does not decide an open atom")
+            }
+            Self::LateRegionFilter => {
+                f.write_str("candidate-region filtering requires an unstarted stream")
+            }
+            Self::LateCandidateBounds => {
+                f.write_str("declaring candidate bounds requires an unstarted stream")
+            }
+            Self::CandidateBoundPlan => {
+                f.write_str("a candidate bound must come from the active bound's objective plan")
+            }
+            Self::CandidateBoundNotImproving => {
+                f.write_str("a candidate bound's score must strictly improve on the active bound's")
+            }
+            Self::RegionFilterAlreadySet => {
+                f.write_str("candidate-region filter is already installed")
+            }
+            Self::LateLearnedStore => {
+                f.write_str("sharing learned rows requires an unstarted stream")
+            }
+            Self::LearnedStoreAlreadySet => f.write_str("a learned-row store is already installed"),
+            Self::Certificate(error) => write!(f, "certified membership: {error}"),
+            Self::ArithmeticSource(error) => write!(f, "arithmetic source: {error}"),
+            Self::Verification(error) => write!(f, "independent verification: {error}"),
+            Self::InvalidWitness => f.write_str("SAT witness failed independent verification"),
+            Self::WorkerPanicked => f.write_str("SAT worker panicked before completing its search"),
+            Self::CounterOverflow => f.write_str("SAT accounting counter overflow"),
+        }
+    }
+}
+impl std::error::Error for Incomplete {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Self::ArithmeticSource(error) => Some(error),
+            Self::Verification(error) => Some(error),
+            Self::Certificate(error) => Some(error),
+            _ => None,
+        }
+    }
+}

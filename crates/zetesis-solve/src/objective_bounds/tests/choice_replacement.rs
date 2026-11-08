@@ -7,11 +7,11 @@ use std::collections::BTreeSet;
 use super::Bounds;
 use crate::execution_observation::Observer;
 use crate::{ExecutionObservation, ExecutionObserver, SolveConfig};
-use zetesis_cpu::Cancellation;
+use zetesis_algebra::Cancellation;
 use zetesis_ferraris::{Interpretation, Theory};
 use zetesis_objective::Score;
 use zetesis_reference_support::formula;
-use zetesis_sat::{Limits, SearchMethod, StableModels};
+use zetesis_stable::{Limits, StableModels};
 use zetesis_themelios::AdmittedFormula;
 use zetesis_themelios::objective_bound::{
     ObjectiveBoundErrorKind, ObjectiveBoundLimits, ObjectiveBoundResource, ObjectivePlan,
@@ -70,7 +70,7 @@ fn prepared(owner: &AdmittedFormula) -> Prepared {
     let later = named(owner, "a");
     for incumbent in [&earlier, &later] {
         assert!(
-            zetesis_sat::check(owner.theory(), incumbent, Limits::default(), &cancellation)
+            zetesis_stable::check(owner.theory(), incumbent, Limits::default(), &cancellation)
                 .accepted()
         );
     }
@@ -152,68 +152,57 @@ fn exact_fallback_after_strengthening_retains_optima() {
         named(&owner, "a").atoms().collect::<Vec<_>>(),
         named(&owner, "c").atoms().collect::<Vec<_>>(),
     ]);
-    for method in [SearchMethod::Regions, SearchMethod::Clauses] {
-        let options = SolveConfig {
-            max_objective_bound_work: prepared.work,
-            models: 0,
-            ..Default::default()
-        };
-        let cancellation = Cancellation::default();
-        let mut models = StableModels::with_method(
-            owner.theory(),
-            method,
-            Limits::default(),
-            cancellation.clone(),
+    let options = SolveConfig {
+        max_objective_bound_work: prepared.work,
+        models: 0,
+        ..Default::default()
+    };
+    let cancellation = Cancellation::default();
+    let mut models =
+        StableModels::new(owner.theory(), Limits::default(), cancellation.clone()).unwrap();
+    let mut bounds = Bounds::new(&options);
+    let mut observations = Observations::default();
+    bounds
+        .improve(
+            Some(&prepared.plan),
+            &prepared.earlier,
+            &mut models,
+            &options,
+            &mut Observer(&mut observations),
+            &cancellation,
         )
         .unwrap();
-        let mut bounds = Bounds::new(&options);
-        let mut observations = Observations::default();
-        bounds
-            .improve(
-                Some(&prepared.plan),
-                &prepared.earlier,
-                &mut models,
-                &options,
-                &mut Observer(&mut observations),
-                &cancellation,
-            )
-            .unwrap();
-        assert_eq!(observations.installed, 1);
-        assert!(observations.refusals.is_empty());
-        let first = models.next().unwrap().unwrap();
-        let mut answers = BTreeSet::new();
-        retain_optimal(&prepared, &first, &mut answers);
+    assert_eq!(observations.installed, 1);
+    assert!(observations.refusals.is_empty());
+    let first = models.next().unwrap().unwrap();
+    let mut answers = BTreeSet::new();
+    retain_optimal(&prepared, &first, &mut answers);
 
-        // The remaining allowance admits exact construction but no optional
-        // strengthening. Replacing the live bound must retain prior decisions
-        // without treating them as knowledge about the replacement DAG.
-        bounds
-            .improve(
-                Some(&prepared.plan),
-                &prepared.later,
-                &mut models,
-                &options,
-                &mut Observer(&mut observations),
-                &cancellation,
-            )
-            .unwrap();
-        assert!(bounds.enabled);
-        assert_eq!(bounds.work, options.max_objective_bound_work);
-        assert_eq!(observations.installed, 2);
-        assert_eq!(
-            observations.refusals,
-            [ObjectiveBoundErrorKind::Limit(ObjectiveBoundResource::Work)]
-        );
-        for candidate in models.by_ref() {
-            retain_optimal(&prepared, &candidate.unwrap(), &mut answers);
-        }
-        assert!(models.exhausted());
-        assert!(models.theory().same_instance(owner.theory()));
-        assert_eq!(models.statistics().candidate_restrictions, 2);
-        assert_eq!(answers, expected);
-        assert_eq!(
-            models.statistics().candidate_queries == 0,
-            method == SearchMethod::Regions
-        );
+    // The remaining allowance admits exact construction but no optional
+    // strengthening. Replacing the live bound must retain prior decisions
+    // without treating them as knowledge about the replacement DAG.
+    bounds
+        .improve(
+            Some(&prepared.plan),
+            &prepared.later,
+            &mut models,
+            &options,
+            &mut Observer(&mut observations),
+            &cancellation,
+        )
+        .unwrap();
+    assert!(bounds.enabled);
+    assert_eq!(bounds.work, options.max_objective_bound_work);
+    assert_eq!(observations.installed, 2);
+    assert_eq!(
+        observations.refusals,
+        [ObjectiveBoundErrorKind::Limit(ObjectiveBoundResource::Work)]
+    );
+    for candidate in models.by_ref() {
+        retain_optimal(&prepared, &candidate.unwrap(), &mut answers);
     }
+    assert!(models.exhausted());
+    assert!(models.theory().same_instance(owner.theory()));
+    assert_eq!(models.statistics().candidate_restrictions, 2);
+    assert_eq!(answers, expected);
 }

@@ -2,7 +2,6 @@
 
 This crate admits original ASP source and canonical themelios programs into
 zetesis. Source admission preserves authored text, identities and locations;
-typed relational admission borrows the original logical statements. General
 formula preparation retains the original canonical program in an `Arc` and
 uses the same compiler as source preparation. These boundaries return checked
 logical objects for other libraries to use. Admission does not invoke
@@ -23,25 +22,16 @@ cargo doc --locked -p zetesis-themelios --no-deps --open
 
 | Entry point | Result and intended use |
 |---|---|
-| `ParsedSource` | One owned parse with consuming admission attempts; eligible retries retain the original source and parse. |
-| `admit` | Relational templates for the strict normal-rule profile. |
-| `admit_program` | The same relational compiler over a borrowed canonical `logical::program::Program`, with logical structure limits and original statement evidence. |
-| `admit_extended`, `admit_bundle_extended` | Relational templates with bounded scalar expansion and source metadata, with the expansion charges each admission accepted under its `ExpansionLimits`. Suitable input for lazy relational solving. |
+| `ParsedSource` | One owned parse with consuming formula preparation; a refused attempt returns the original source and parse. |
 | `prepare_formula`, `prepare_bundle_formula` | An owned preparation that separates source preparation from formula materialization. |
 | `prepare_program_formula` | The same general formula preparation from `Arc<logical::program::Program>`, with bounded logical inspection and retained original statement identity. |
 | `admit_program_formula` | Compose typed formula preparation and eager grounding into one `AdmittedFormula`. |
 | `admit_formula`, `admit_bundle_formula` | A complete finite Ferraris theory, dense original-atom mapping, lifted objectives and source metadata. Composes preparation and grounding. Expansion is charged under the same `ExpansionLimits`; the admitted owner retains its usage. |
 
-The strict profile contains normal rules, constraints, singleton unconditioned
-choices, closed logical values, positive/default-negated atoms and
-equality/disequality. Extended admission adds acyclic constants, checked ground
-arithmetic, finite fact pools/intervals, signature or empty `#show`, `#defined`
-and original source bundles. Formula admission provides the broader profile below.
-The typed `admit_program` door accepts the strict relational profile.
-`prepare_program_formula` admits the general formula profile from a canonical
-program without rendering or reparsing it. See the
+Source and canonical programs use the same formula compiler.
+`prepare_program_formula` accepts a canonical program without rendering or
+reparsing it. See the
 [typed formula guide](../../docs/book/rust/source.md#prepare-a-logical-formula-program)
-and [relational example](../../docs/book/rust/source.md#admit-an-existing-logical-program)
 for ownership, limits and session composition.
 
 A prepared formula exposes its original program, optional source evidence and
@@ -59,21 +49,21 @@ The typed door shares the supplied `Arc` rather than cloning the entire input.
 That retention has a memory cost: it is separate from named support-storage
 ceilings and is not an RSS limit. `ProgramSite` keeps a statement ID and optional
 real location; the ID refers to `original_program()` even for constructed input.
-Typed formula failures retain the same original owner, and `subject()` resolves
+Typed formula failures retain the same original owner, and `original()` resolves
 the offending statement or part. Source and parser checks still run on authored
 text before canonicalization. Formula owners expose source bytes through an
 optional `source()`; logical input returns `None`, even when its provenance has
-parsed coordinates. S0 typed admission instead borrows its original statements
-and does not count their provenance in its structural limits.
+parsed coordinates.
 
-These program entry points compose with zetesis's current session APIs. A
-themelios-solve backend adapter remains separate integration work.
+These entry points compose with zetesis's session APIs and the
+`zetesis-engine` implementation of the themelios-solve backend interface.
 
 An explicit `ground_hybrid()` instead returns an immutable shared `HybridFormula`.
-It completes original support and arithmetic admission, materializes producers
-and richer constraints, and retains ordinary atom/scalar integrity constraints
-for repeat checking. Indexed joins are required. `core_theory()` is only the
-producer core. A solve session combines its membership result with complete
+It completes original support and arithmetic admission, materializes producers,
+richer constraints and certified complete pairwise exclusions, and retains other
+ordinary atom/scalar integrity constraints for repeat checking. Indexed joins
+are required. `core_theory()` contains that materialized portion. A solve session
+combines its membership result with complete
 streamed constraint satisfaction before scoring or returning an answer of the
 original program. Objectives retain the ordinary scoring and optimal-tie rules.
 
@@ -85,13 +75,11 @@ these and the separate checker limits do not claim an aggregate live-memory or
 RSS bound. See [hybrid source ownership](../../docs/book/rust/source.md#stream-ordinary-constraints)
 for the completion, identity, costs and current capability boundaries.
 
-These APIs deliberately remain distinct. A caller may use
-`ExpansionFailure::needs_formula_admission()` to recognize an eligible retry
-through the richer boundary. Syntax errors, undefined arithmetic, overflow and
-exhausted limits are failures, not reasons to retry with weaker checks.
-The command-line adapter makes this selection automatically.
-For an owned retry without copying or reparsing the original input, use
-`ParsedSource` as shown in the [source-admission example](../../docs/book/rust/source.md).
+Preparation and materialization expose separate failure boundaries. Syntax
+errors, undefined arithmetic, overflow and exhausted limits retain their typed
+causes. `ParsedSource` recovers the owned parse after a refused preparation;
+retrying with different resource allowances does not require reparsing.
+See the [source-admission example](../../docs/book/rust/source.md).
 
 The pre-1.0 Rust API removes the retired `ProfileFeature` variants
 `StrongNegation`, `ObjectiveNegativeDependency`, `ObjectiveDisjunctionDependency`,
@@ -108,8 +96,8 @@ upper bound on possible atoms; it never substitutes for truth in an answer set.
 A final unchanged support round is required. Default negation, recursive
 eligibility and aggregate equalities remain in the original formulas and reduct.
 
-This is eager formula grounding. It is distinct from the candidate-specific
-source joins used by relational lazy execution.
+Eager grounding materializes the complete theory. Hybrid grounding shares
+support preparation and streams eligible constraints as described above.
 
 Possible atoms share one canonical source authority. Per-predicate membership
 maps and bound-column postings persist across growth rounds. Immutable snapshots

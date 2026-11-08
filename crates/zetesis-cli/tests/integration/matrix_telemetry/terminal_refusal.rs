@@ -2,11 +2,11 @@
 
 use clap::Parser;
 use serde_json::Value;
+use zetesis_algebra::Cancellation;
 use zetesis_cli::{
     Completion, JsonRenderer, Options, PublicationConfig, PublicationOutcome, PublicationReport,
     Report, RunError, RunFailure, publish_prepared,
 };
-use zetesis_cpu::Cancellation;
 use zetesis_themelios::{FormulaFailure, FormulaResource, ReconstructionError};
 use zetesis_validation::answers::{self, native_json};
 
@@ -21,8 +21,6 @@ fn capture(work: Option<u64>, models: &str) -> (Result<Report, RunFailure>, Vec<
         "cpu",
         "--grounder",
         "auto",
-        "--search",
-        "regions",
         "--workers",
         "1",
         "--models",

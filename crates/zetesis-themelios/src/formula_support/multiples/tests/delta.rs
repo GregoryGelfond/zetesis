@@ -390,3 +390,5 @@ fn failed_snapshot_proofs_keep_independent_overflow() {
 
 mod accounting;
 mod round;
+
+mod ranges;

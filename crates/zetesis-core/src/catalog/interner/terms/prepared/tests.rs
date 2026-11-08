@@ -213,21 +213,16 @@ fn prepared_owner_is_stricter_than_shared_vocabulary() {
         vec![crate::Term::Constant(Value::Number(7))],
     )
     .unwrap();
-    let program = crate::Program::new(
-        vec![crate::Template::new(
-            Some(pattern),
-            vec![],
-            vec![],
-            vec![],
-            vec![],
-        )],
-        crate::FactTables::default(),
-        crate::AdmissionLimits::default(),
-    )
-    .unwrap();
-    let mut first = AtomInterner::for_program(&program, 1 << 22).unwrap();
-    let mut second = AtomInterner::for_program(&program, 1 << 22).unwrap();
-    let pattern = program.templates().at(0).unwrap().head().unwrap();
+    let catalog = crate::test_support::template_catalog(&[crate::Template::new(
+        Some(pattern),
+        vec![],
+        vec![],
+        vec![],
+        vec![],
+    )]);
+    let mut first = AtomInterner::for_template_catalog(&catalog, 1 << 22).unwrap();
+    let mut second = AtomInterner::for_template_catalog(&catalog, 1 << 22).unwrap();
+    let pattern = catalog.at(0).unwrap().patterns().at(0).unwrap();
     let prepared = first
         .appender()
         .prepare_pattern_with(pattern, TermLimits::default(), limits(), PERMIT)
@@ -487,22 +482,17 @@ fn every_preparation_stop_preserves_the_owner() {
 #[test]
 fn prepared_empty_patterns_authenticate_assignments() {
     let pattern = crate::AtomPattern::new(Predicate::new("empty", 0).unwrap(), vec![]).unwrap();
-    let program = crate::Program::new(
-        vec![crate::Template::new(
-            Some(pattern),
-            vec![],
-            vec![],
-            vec![],
-            vec![],
-        )],
-        crate::FactTables::default(),
-        crate::AdmissionLimits::default(),
-    )
-    .unwrap();
-    let mut owner = AtomInterner::for_program(&program, 1 << 22).unwrap();
+    let catalog = crate::test_support::template_catalog(&[crate::Template::new(
+        Some(pattern),
+        vec![],
+        vec![],
+        vec![],
+        vec![],
+    )]);
+    let mut owner = AtomInterner::for_template_catalog(&catalog, 1 << 22).unwrap();
     let foreign = AtomInterner::new();
     let values = foreign.read().assignment();
-    let pattern = program.templates().at(0).unwrap().head().unwrap();
+    let pattern = catalog.at(0).unwrap().patterns().at(0).unwrap();
     let prepared = owner
         .appender()
         .prepare_pattern_with(pattern, TermLimits::default(), limits(), PERMIT)

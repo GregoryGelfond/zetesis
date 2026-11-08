@@ -54,6 +54,7 @@ fn assert_row(output: &str, expected: &str) {
 
 fn summary<'a>(cases: &'a [String], profiles: &'a [NativeExecution]) -> matrix::Summary<'a> {
     matrix::Summary {
+        residual_evidence: None,
         schema: 1,
         format: "zetesis_benchmark_summary",
         passed: false,
@@ -422,6 +423,7 @@ fn amended_workloads_have_distinct_human_labels() {
         .collect();
     let cases = vec![entry.to_owned(); 2];
     let summary = matrix::Summary {
+        residual_evidence: None,
         schema: 1,
         format: "zetesis_benchmark_summary",
         passed: false,

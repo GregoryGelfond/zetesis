@@ -5,20 +5,23 @@
 //! multiplicity. Immutable term/guard orders let each propagation cursor advance
 //! only once along a region branch, independently of pending truth bits.
 //! Residual divisibility has a separate coalesced original-row event: each scan
-//! reads closed condition knowledge and may refute without adding any bound.
+//! reads closed condition knowledge and may refute or force conditions. New
+//! decisions return through ordinary events before another arithmetic scan.
 
 use std::collections::HashMap;
 
 use crate::{NodeView, Theory, Threshold};
-use zetesis_cpu::Stop;
+use zetesis_algebra::Stop;
 
 use super::adjacency::Adjacency;
 
+mod capacity;
 mod connectives;
 #[cfg(test)]
 mod frozen_tests;
 #[cfg(test)]
 mod incremental_tests;
+mod possible_sums;
 mod prefixes;
 mod propagate;
 mod residual;
@@ -35,6 +38,7 @@ pub(super) struct Thresholds {
     connectives: Option<connectives::Connectives>,
     /// A non-unit grouped coefficient can expose residual divisibility.
     residuals: bool,
+    capacity: Option<capacity::Capacity>,
 }
 
 #[derive(Clone, Debug)]
@@ -105,6 +109,15 @@ impl Row {
 
     fn has_nonunit_coefficient(&self) -> bool {
         self.terms.first().is_some_and(|&(_, weight)| weight > 1)
+    }
+
+    /// Least condition of a nonempty unit row. Descending positive weights
+    /// make the first coefficient sufficient to recognize the whole row.
+    fn unit_first(&self) -> Option<usize> {
+        let &(first, 1) = self.terms.first()? else {
+            return None;
+        };
+        Some(first)
     }
 
     fn state(&self) -> State {
@@ -203,6 +216,14 @@ impl Thresholds {
                     .map(|(index, edge)| (edge.condition, index)),
             )?)
         };
+        let capacity = capacity::Capacity::prepare(
+            theory,
+            &rows,
+            by_condition.as_ref(),
+            &incidences,
+            chains,
+            extrema,
+        )?;
         let relations = prefixes::prepare(&rows)?;
         let connectives = connectives::Connectives::prepare(
             &rows,
@@ -219,6 +240,7 @@ impl Thresholds {
             relations,
             connectives,
             residuals,
+            capacity,
         })
     }
 
@@ -234,11 +256,25 @@ impl Thresholds {
     }
 
     pub(super) fn has_relations(&self) -> bool {
-        self.relations.is_some() || self.connectives.is_some()
+        self.relations.is_some() || self.connectives.is_some() || self.capacity.is_some()
+    }
+
+    pub(super) fn has_requirement_links(&self, row: usize) -> bool {
+        self.capacity
+            .as_ref()
+            .is_some_and(|capacity| capacity.has_row(row))
+            || !self.related(row).is_empty()
+            || (self.connectives.is_some() && self.rows[row].unit_first().is_some())
     }
 
     pub(super) fn has_residuals(&self) -> bool {
         self.residuals
+    }
+
+    pub(super) fn capacity_storage_bytes(&self) -> u128 {
+        self.capacity
+            .as_ref()
+            .map_or(0, capacity::Capacity::retained_bytes)
     }
 
     fn related(&self, row: usize) -> &[usize] {
@@ -279,7 +315,7 @@ fn reserve<T>(length: usize) -> Result<Vec<T>, Stop> {
 mod tests {
     use crate::{AdmissionLimits, FormulaNodes, FormulaParts, Node, NodeView, Theory};
     use crate::{Narrower, Narrowing, NarrowingScratch, OriginalSubject, Region, RegionLimits};
-    use zetesis_cpu::Cancellation;
+    use zetesis_algebra::Cancellation;
 
     fn theory(conditions: &[usize], weights: &[u64], bounds: &[i128], negative: bool) -> Theory {
         let mut nodes =
@@ -317,8 +353,8 @@ mod tests {
                 RegionLimits::default(),
                 &Cancellation::default(),
             )
+            .result
             .unwrap()
-            .0
     }
 
     #[test]

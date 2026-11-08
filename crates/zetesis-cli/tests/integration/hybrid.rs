@@ -7,15 +7,23 @@ use std::io;
 
 use clap::Parser;
 use serde_json::Value as Json;
+use zetesis_algebra::Cancellation;
 use zetesis_cli::{
     Completion, Grounder, Options, PublicationOutcome, RunError, SolveConfig, StatisticsView,
     run_bundle_finalized_with_diagnostics, run_finalized_with_diagnostics,
 };
-use zetesis_cpu::Cancellation;
 use zetesis_themelios::{FormulaFailure, HybridFeature};
 use zetesis_validation::answers::native_json;
 
 const SOURCE: &str = "a|b. {hidden}. :- b. #show a/0.";
+
+/// SOURCE with its constraint widened over 40,000 pairs of `d/1` facts. Lazy
+/// grounding keeps a constraint in the formula while the formula's share of the
+/// memory allowance holds it; under a 4 MiB allowance this one does not fit, so
+/// it is streamed. The facts make it equivalent to `:- b.`, so the answers are
+/// SOURCE's.
+const STREAMED: &str = "a|b. {hidden}. d(1..200). :- b, d(X), d(Y). #show a/0.";
+const STREAMING: [&str; 4] = ["--grounder", "lazy", "--memory", "4MiB"];
 
 fn options(extra: &[&str]) -> Options {
     Options::try_parse_from(
@@ -69,18 +77,30 @@ fn explicit_lazy_formula_preserves_hidden_full_answers() {
 
 #[test]
 fn hybrid_projection_selects_only_original_answers() {
-    let source = "a|b. {c}. :-a,c. #project c/0. #show c/0.";
+    // Under lazy grounding the constraint is checked as a stream, whose
+    // excluded {a,c} projects as {b,c} does. Its 40,000 instances over `d/1`
+    // do not fit a 4 MiB allowance's formula share, so it is streamed, and the
+    // facts make it `:-a,not not c.`. The double negation keeps it a stream:
+    // pair capture would move a positive body into the core.
+    let source = "a|b. {c}. d(1..200). :-a,not not c,d(X),d(Y). #project c/0. #show c/0.";
     let atom = |name| serde_json::json!({"predicate":name,"sign":"positive","arguments":[]});
     let original = [vec![atom("a")], vec![atom("b")], vec![atom("b"), atom("c")]];
-    for grounder in ["eager", "lazy"] {
-        let (outcome, output, _) = solve(source, &options(&["--grounder", grounder]));
+    for arguments in [&["--grounder", "eager"][..], &STREAMING] {
+        let lazy = arguments == STREAMING;
+        let (outcome, output, _) = solve(source, &options(arguments));
         // Projected publication is not the full-family decoder's input contract.
         let document: Json = serde_json::from_slice(&output).unwrap();
-        let selected: Vec<_> = document["models"]
+        // The `d/1` facts belong to every answer; compare the rest.
+        let selected: Vec<Vec<Json>> = document["models"]
             .as_array()
             .unwrap()
             .iter()
-            .map(|record| spelled(&document, record))
+            .map(|record| {
+                spelled(&document, record)
+                    .into_iter()
+                    .filter(|atom| atom["predicate"] != "d")
+                    .collect()
+            })
             .collect();
         assert_eq!(selected.len(), 2);
         assert!(selected.iter().all(|answer| original.contains(answer)));
@@ -94,6 +114,10 @@ fn hybrid_projection_selects_only_original_answers() {
         assert_eq!(document["outcome"]["projection"]["complete"], true);
         assert_eq!(outcome.semantic().verified_models(), 3);
         assert_eq!(outcome.semantic().completion(), Some(Completion::Exhausted));
+        if lazy {
+            let streamed = outcome.semantic().hybrid_execution().unwrap().constraints;
+            assert!(streamed.substitutions > 0);
+        }
     }
 }
 
@@ -134,20 +158,13 @@ fn hybrid_bounded_choices_keep_their_complete_family() {
 }
 
 #[test]
-fn ordinary_relational_lazy_keeps_its_closure_route() {
-    let (outcome, output, _) = solve("a:-not b. b:-not a.", &options(&["--grounder", "lazy"]));
-    assert!(outcome.semantic().hybrid_execution().is_none());
-    assert!(outcome.semantic().closure_execution().is_some());
-    assert_eq!(
-        family(&output),
-        vec![vec!["a".to_owned()], vec!["b".to_owned()]]
-    );
-}
-
-#[test]
 fn json_distinguishes_core_models_from_original_membership() {
-    let (outcome, output, _) = solve(SOURCE, &options(&["--grounder", "lazy"]));
+    let (outcome, output, _) = solve(STREAMED, &options(&STREAMING));
     let stats = outcome.semantic().hybrid_execution().unwrap();
+    assert_eq!(
+        (stats.streamed.templates, stats.streamed.retained_templates),
+        (1, 0)
+    );
     assert_eq!(
         (
             stats.core_answers,
@@ -180,6 +197,11 @@ fn json_distinguishes_core_models_from_original_membership() {
         document["statistics"]["hybrid_execution"]["rejected"],
         stats.rejected
     );
+    let streamed = &document["statistics"]["hybrid_execution"]["streamed"];
+    assert_eq!(streamed["templates"], 1);
+    assert_eq!(streamed["instances"], 40_000);
+    assert_eq!(streamed["retained_templates"], 0);
+    assert_eq!(streamed["retained_instances"], 0);
     assert_eq!(document["outcome"]["verified_models"], stats.accepted);
     assert!(stats.constraints.work > 0);
     assert_eq!(
@@ -187,6 +209,30 @@ fn json_distinguishes_core_models_from_original_membership() {
         stats.constraints.work
     );
     assert!(!output.contains(&0x1b));
+}
+
+#[test]
+fn lazy_grounding_grounds_a_fitting_constraint_in_the_core() {
+    // The ordinary allowance's formula share holds `:- b.`'s one instance, so
+    // lazy grounding grounds it with the core and streams nothing.
+    let mut config = options(&["--grounder", "lazy"]);
+    config.statistics_view = StatisticsView::Human;
+    let (outcome, output, diagnostics) = solve(SOURCE, &config);
+    let streamed = outcome.semantic().hybrid_execution().unwrap().streamed;
+    assert_eq!(
+        (
+            streamed.templates,
+            streamed.instances,
+            streamed.retained_templates,
+            streamed.retained_instances
+        ),
+        (0, 0, 1, 1)
+    );
+    assert!(
+        diagnostics.contains("CPU hybrid formula; eager core, no streamed constraints"),
+        "{diagnostics}"
+    );
+    assert_eq!(family(&output), expected());
 }
 
 #[test]
@@ -212,6 +258,8 @@ fn human_statistics_name_the_hybrid_scope() {
     let (_, _, diagnostics) = solve(SOURCE, &config);
     for text in [
         "CPU hybrid formula",
+        "Streamed constraint templates",
+        "Grounded constraint templates",
         "Core answers checked",
         "Constraint checks accepted",
         "Constraint checks rejected",

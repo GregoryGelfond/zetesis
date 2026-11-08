@@ -12,11 +12,13 @@
 //! the logical N+occurrence indexing receipt. The constructor has no independent
 //! cancellation contract.
 
+use zetesis_algebra::{Failure, Quota};
+
 use std::ops::Range;
 
-use zetesis_cpu::Stop;
+use zetesis_algebra::{Stop, words::Words};
 
-use super::{Closure, Count, Narrower, Step, Work, bit, push, reserve};
+use super::{Closure, Count, Meter, Narrower, Step, push, reserve};
 use crate::regions::{flag_words, witnesses};
 
 type Signature = (usize, usize, usize, usize);
@@ -31,10 +33,13 @@ pub(in crate::regions) struct EqualWitnesses {
 
 impl EqualWitnesses {
     pub(in crate::regions) fn prepare(index: &Narrower) -> Result<Self, Stop> {
-        Self::prepare_with_work(index, &mut Work::new(u64::MAX))
+        Self::prepare_with_work(index, &mut Meter::local(u64::MAX)).map_err(Failure::into_stop)
     }
 
-    fn prepare_with_work(index: &Narrower, work: &mut Work<'_>) -> Result<Self, Stop> {
+    fn prepare_with_work<Q: Quota + ?Sized>(
+        index: &Narrower,
+        work: &mut Meter<'_, Q>,
+    ) -> Result<Self, Failure<Q::Error>> {
         if index.extrema.cuts.is_empty() {
             return Ok(Self::default());
         }
@@ -73,13 +78,13 @@ impl EqualWitnesses {
     /// Partition a candidate bucket in place. The first unclassified chain is
     /// the next representative; only complete equalities move into its class.
     /// No relation is published when a comparison or reservation refuses.
-    fn append_bucket(
+    fn append_bucket<Q: Quota + ?Sized>(
         &mut self,
         index: &Narrower,
         entries: &mut [Entry],
         scratch: &mut Equality,
-        work: &mut Work<'_>,
-    ) -> Result<(), Stop> {
+        work: &mut Meter<'_, Q>,
+    ) -> Result<(), Failure<Q::Error>> {
         let mut start = 0;
         while start < entries.len() {
             work.tick()?;
@@ -120,7 +125,11 @@ impl EqualWitnesses {
             + self.by_chain.capacity() as u128 * size_of::<(usize, usize)>() as u128
     }
 
-    fn members(&self, chain: usize, work: &mut Work<'_>) -> Result<&[usize], Stop> {
+    fn members<Q: Quota + ?Sized>(
+        &self,
+        chain: usize,
+        work: &mut Meter<'_, Q>,
+    ) -> Result<&[usize], Failure<Q::Error>> {
         let mut start = 0;
         let mut end = self.by_chain.len();
         while start < end {
@@ -139,7 +148,11 @@ impl EqualWitnesses {
     }
 }
 
-fn has_ordinal(index: &Narrower, entries: &[Entry], work: &mut Work<'_>) -> Result<bool, Stop> {
+fn has_ordinal<Q: Quota + ?Sized>(
+    index: &Narrower,
+    entries: &[Entry],
+    work: &mut Meter<'_, Q>,
+) -> Result<bool, Failure<Q::Error>> {
     for &(_, chain) in entries {
         work.tick()?;
         if index.chains[chain].ordinal() {
@@ -155,11 +168,15 @@ fn has_ordinal(index: &Narrower, entries: &[Entry], work: &mut Work<'_>) -> Resu
 struct Equality {
     walker: witnesses::Scratch,
     reference: Vec<usize>,
-    membership: Vec<u64>,
+    membership: Words<u64>,
 }
 
 impl Equality {
-    fn signatures(&mut self, index: &Narrower, work: &mut Work<'_>) -> Result<Vec<Entry>, Stop> {
+    fn signatures<Q: Quota + ?Sized>(
+        &mut self,
+        index: &Narrower,
+        work: &mut Meter<'_, Q>,
+    ) -> Result<Vec<Entry>, Failure<Q::Error>> {
         let mut entries = Vec::new();
         for (chain, data) in index.chains.iter().enumerate() {
             work.tick()?;
@@ -184,22 +201,24 @@ impl Equality {
     /// Distinct leaf cardinality plus complete membership establishes equality.
     /// Each set bit prepays cleanup, including a refused comparison. Cleanup
     /// changes no logical state and leaves the next authentication independent.
-    fn equal(
+    fn equal<Q: Quota + ?Sized>(
         &mut self,
         index: &Narrower,
         left: usize,
         right: usize,
-        work: &mut Work<'_>,
-    ) -> Result<bool, Stop> {
+        work: &mut Meter<'_, Q>,
+    ) -> Result<bool, Failure<Q::Error>> {
         self.reference.clear();
         let result = (|| {
             let words = flag_words(index.parents.len());
+            let additional = words.saturating_sub(self.membership.len());
             self.membership
-                .try_reserve(words.saturating_sub(self.membership.len()))
+                .storage_mut()
+                .try_reserve(additional)
                 .map_err(|_| Stop::Allocation)?;
             while self.membership.len() < words {
                 work.tick()?;
-                self.membership.push(0);
+                self.membership.storage_mut().push(0);
             }
             let leaves = self.walker.read(index, left, None, work)?;
             self.reference
@@ -208,7 +227,7 @@ impl Equality {
             for &leaf in leaves {
                 work.tick()?;
                 work.tick()?;
-                self.membership[leaf / 64] |= 1u64 << (leaf % 64);
+                self.membership.insert(leaf);
                 self.reference.push(leaf);
             }
             let leaves = self.walker.read(index, right, None, work)?;
@@ -217,35 +236,35 @@ impl Equality {
             }
             for &leaf in leaves {
                 work.tick()?;
-                if self.membership[leaf / 64] & (1u64 << (leaf % 64)) == 0 {
+                if !self.membership.contains(leaf) {
                     return Ok(false);
                 }
             }
             Ok(true)
         })();
         for &leaf in &self.reference {
-            self.membership[leaf / 64] &= !(1u64 << (leaf % 64));
+            self.membership.remove(leaf);
         }
         result
     }
 }
 
-impl<C: Count> Closure<'_, C> {
+impl<W: Count, C: crate::regions::ReadingClass> Closure<'_, W, C> {
     /// Exact class membership was established once against this admitted owner.
     /// A masked node never contributes a requirement to the common operation;
     /// every target still receives its own original-truth gate.
-    pub(in crate::regions) fn equal_extremum_witnesses(
+    pub(in crate::regions) fn equal_extremum_witnesses<Q: Quota + ?Sized>(
         &mut self,
         index: &Narrower,
         chain: usize,
         frozen: Option<&[bool]>,
-        work: &mut Work<'_>,
-    ) -> Result<Step, Stop> {
+        work: &mut Meter<'_, Q>,
+    ) -> Result<Step, Failure<Q::Error>> {
         let source = &index.chains[chain];
         if !source.disjunction || frozen.is_some_and(|truth| !truth[source.root]) {
             return Ok(Step::Unchanged);
         }
-        let value = bit(self.known.sure, source.root);
+        let value = self.known.sure.contains(source.root);
         let mut step = Step::Unchanged;
         for &target in index.equal_extrema.members(chain, work)? {
             work.tick()?;
@@ -254,9 +273,9 @@ impl<C: Count> Closure<'_, C> {
                 continue;
             }
             let already = if value {
-                bit(self.known.sure, root)
+                self.known.sure.contains(root)
             } else {
-                bit(self.known.never, root)
+                self.known.never.contains(root)
             };
             if !already {
                 step = step.join(if value {

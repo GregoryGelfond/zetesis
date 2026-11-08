@@ -1,5 +1,8 @@
 //! Separate vocabulary and atom scopes with exact immutable-prefix extents.
-//! Shared closed vocabularies justify term IDs, never another writer's atom IDs.
+//! Shared closed vocabularies justify term IDs, never another writer's atom IDs,
+//! with one exception: a closed catalog's shared rows justify the IDs below its
+//! count, which every descendant reads in the same rows. They are the row scope
+//! an identity map keys by (`Read::row_owner`), not an atom scope.
 
 use std::sync::Arc;
 
@@ -86,9 +89,32 @@ impl<'a> Read<'a> {
             Self::Closed(closed) => Some(closed.rows.source_owner()),
         }
     }
-    /// The atom owner's address, as `AtomScope::key` gives it.
-    pub(crate) fn atom_owner_key(self) -> Option<usize> {
-        self.atom_owner().map(|owner| Arc::as_ptr(owner).addr())
+    /// The row scope of `id`, the owner whose rows name it: for a row of a
+    /// shared closed base, the base's source writer, whichever descendant,
+    /// snapshot or closed read presents it; otherwise this read's atom owner.
+    /// Every reader of a base row resolves its ID in the same immutable rows,
+    /// so this scope and the ID identify one atom wherever it appears. The rows
+    /// a descendant appends, at IDs from the base's count on, keep its own
+    /// fresh owner.
+    fn row_owner(self, id: AtomId) -> Option<&'a Arc<Owner>> {
+        let base = match self {
+            Self::Snapshot(snapshot) => snapshot.data.base.as_deref(),
+            Self::Writer(store) => store.base.as_ref().map(|rows| &*rows.payload),
+            Self::Frozen(_) => return None,
+            Self::Closed(closed) => return Some(closed.rows.source_owner()),
+        };
+        match base {
+            Some(base) if (id.0 as usize) < base.atoms => Some(&base.source_owner),
+            _ => self.atom_owner(),
+        }
+    }
+    /// The row scope's address (`row_owner`), as `AtomScope::key` gives it.
+    pub(crate) fn row_owner_key(self, id: AtomId) -> Option<usize> {
+        self.row_owner(id).map(|owner| Arc::as_ptr(owner).addr())
+    }
+    /// A handle on the row scope (`row_owner`).
+    pub(crate) fn row_scope(self, id: AtomId) -> Option<AtomScope> {
+        self.row_owner(id).map(|owner| AtomScope(Arc::clone(owner)))
     }
     pub(crate) fn atom_scope(self) -> Option<AtomScope> {
         self.atom_owner().map(|owner| AtomScope(Arc::clone(owner)))
@@ -152,11 +178,6 @@ impl<'a> Read<'a> {
     }
     pub(crate) fn contains_term(self, id: TermId) -> bool {
         (id.0 as usize) < self.counts().terms
-    }
-    /// The terms this read resolves, so that the terms below it are exactly
-    /// the identifiers `0..term_count()`.
-    pub(crate) fn term_count(self) -> usize {
-        self.counts().terms
     }
     pub(crate) fn contains_text(self, id: TextId) -> bool {
         (id.0 as usize) < self.counts().texts

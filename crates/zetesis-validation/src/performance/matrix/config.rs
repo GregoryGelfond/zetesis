@@ -4,16 +4,16 @@ use std::path::Path;
 
 use serde::Serialize;
 
-use super::super::{Error, Phase};
+use super::super::{Error, MAX_CASES, Phase};
 use crate::selected::NativeExecution;
-
-pub(super) const MAX_CASES: usize = 94;
 
 /// Maintained source populations, including independently sealed authored inputs.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Suite {
-    /// All 94 sealed runnable cases, in manifest order.
+    /// The maintained corpus, expanded by [`super::super::command::run`] to
+    /// 94 catalog cases and Family Crossing. A direct low-level matrix run
+    /// visits only the catalog, as it does for other unexpanded suites.
     Corpus,
     /// Established SEND, queens02 and task-allocation cases.
     Baseline,
@@ -103,6 +103,9 @@ pub struct Plan {
     /// whole suite when absent.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(super) selection: Option<Vec<String>>,
+    /// The caller-declared fixture family of a dedicated residual sample campaign.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(super) residual_cohort: Option<String>,
 }
 impl Plan {
     /// Construct up to eight profiles, on any backend. Each worker count is bounded
@@ -130,6 +133,7 @@ impl Plan {
             repetitions,
             memory_runs: 0,
             selection: None,
+            residual_cohort: None,
         })
     }
 
@@ -153,7 +157,34 @@ impl Plan {
             repetitions: 0,
             memory_runs: 0,
             selection: None,
+            residual_cohort: None,
         })
+    }
+    /// Qualify one family of GPU inputs and request committed residual samples
+    /// from each native child. There are no timing or memory rounds. A pool
+    /// includes every selected case for one profile, or remains unavailable.
+    ///
+    /// # Errors
+    /// Requires a qualification-only GPU plan and a nonempty ASCII family name
+    /// of up to 64 letters, digits, underscores or hyphens.
+    pub fn with_residual_evidence(mut self, cohort: String) -> Result<Self, Error> {
+        if self.repetitions != 0 || self.profiles.iter().any(|p| !p.backend.is_gpu()) {
+            return Err(Error::Configuration(
+                "residual evidence requires a GPU qualification plan",
+            ));
+        }
+        if cohort.is_empty()
+            || cohort.len() > 64
+            || !cohort
+                .bytes()
+                .all(|b| b.is_ascii_alphanumeric() || b == b'_' || b == b'-')
+        {
+            return Err(Error::Configuration(
+                "invalid residual evidence cohort name",
+            ));
+        }
+        self.residual_cohort = Some(cohort);
+        Ok(self)
     }
     /// Request zero through 41 memory rounds per producer and case: each a
     /// separate invocation through a fresh helper that reports the child's
@@ -175,10 +206,10 @@ impl Plan {
     pub const fn memory_runs(&self) -> usize {
         self.memory_runs
     }
-    /// Run exactly `paths`, one through 94 distinct relative entry paths of
+    /// Run exactly `paths`, one through 95 distinct relative entry paths of
     /// the plan's suite, in the order given, instead of the whole suite.
     /// The ordinary matrix runner selects corpus cases. When
-    /// [`super::super::command::run`] expands the series, paths name workload
+    /// [`super::super::command::run`] expands the corpus or series, paths name workload
     /// entries, including generated paths, and one entry can select several
     /// amended cells. An unknown path is refused before launching anything.
     ///
@@ -210,14 +241,14 @@ impl Plan {
     /// without compacting refused cells. The memory rounds follow the timed rounds.
     ///
     /// # Errors
-    /// Refuses a case count outside the sealed corpus maximum.
+    /// Refuses a case count outside the finite campaign maximum.
     pub fn slots(
         &self,
         cases: usize,
         reference: Option<ReferencePolicy>,
     ) -> Result<Vec<Slot>, Error> {
         if !(1..=MAX_CASES).contains(&cases) {
-            return Err(Error::Configuration("matrix cases must be 1..=94"));
+            return Err(Error::Configuration("matrix cases must be 1..=95"));
         }
         let width = self.profiles.len() + 1;
         let mut slots = Vec::with_capacity(

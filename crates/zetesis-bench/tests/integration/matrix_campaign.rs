@@ -914,7 +914,7 @@ fn series_selection_refuses_unknown_entries_before_launch() {
     assert!(matches!(
         performance::command::run(&request, matrix::NativeInvocation::Solve),
         Err(performance::Error::Configuration(
-            "a selected case is not a workload of the series"
+            "a selected case is not a workload of the selected suite"
         ))
     ));
     assert!(!fixture.native.with_extension("launched").exists());
@@ -1151,4 +1151,86 @@ fn later_workload_shadow_prevents_every_child_launch() {
     assert!(report.metadata().next().is_none());
     assert_eq!(report.samples().len(), 8);
     assert!(report.samples().iter().all(|sample| sample.decision() == Decision::NotAttempted && sample.capture().is_none()));
+}
+
+#[test]
+fn corpus_command_counts_family_in_the_regular_scorecard() {
+    let fixture = Fixture::new();
+    let report = performance::command::run_with_cancellation(
+        &fixture.request(Suite::Corpus),
+        matrix::NativeInvocation::Solve,
+        &std::sync::atomic::AtomicBool::new(true),
+    )
+    .unwrap();
+    assert_eq!(report.cases().len(), 95);
+    assert_eq!(report.cases()[94], "family-crossing/integrated.lp");
+    assert!(report.workloads().unwrap()[94].is_bundle());
+    assert!(report.accounted());
+    assert_eq!(report.samples().len(), 380);
+    assert!(report.samples().iter().all(|sample| {
+        sample.decision() == Decision::NotAttempted && sample.capture().is_none()
+    }));
+    let summary = report.summary();
+    assert_eq!(summary.cases.len(), 95);
+    assert_eq!(summary.cells.len(), 190);
+    assert_eq!(
+        summary.cells.iter().filter(|cell| cell.case == 94).count(),
+        2
+    );
+}
+
+#[test]
+fn corpus_selection_keeps_family_in_requested_order() {
+    let fixture = Fixture::new();
+    let selected = [
+        "family-crossing/integrated.lp",
+        "standalone/send-money/send-money.lp",
+    ];
+    let mut request = fixture.request(Suite::Corpus);
+    request.plan = request
+        .plan
+        .with_cases(selected.map(str::to_owned).to_vec())
+        .unwrap();
+    let report = performance::command::run_with_cancellation(
+        &request,
+        matrix::NativeInvocation::Solve,
+        &std::sync::atomic::AtomicBool::new(true),
+    )
+    .unwrap();
+    assert_eq!(report.cases(), selected);
+    assert_eq!(report.plan().selection().unwrap(), selected);
+    assert!(report.workloads().unwrap()[0].is_bundle());
+    assert!(!report.workloads().unwrap()[1].is_bundle());
+    assert_eq!(report.samples().len(), 8);
+}
+
+#[test]
+fn corpus_command_preserves_the_callers_case_ceiling() {
+    let fixture = Fixture::new();
+    let mut request = fixture.request(Suite::Corpus);
+    request.limits.corpus.cases = 94;
+    assert!(matches!(
+        performance::command::run(&request, matrix::NativeInvocation::Solve),
+        Err(performance::Error::Configuration(
+            "explicit workload population must fit 1..=95"
+        ))
+    ));
+    assert!(!fixture.report.exists());
+}
+
+#[test]
+fn corpus_command_requires_fresh_reference_for_family() {
+    let fixture = Fixture::new();
+    let script = "#!/bin/sh\n: > \"$0.launched\"\nexit 99\n";
+    fs::write(&fixture.native, script).unwrap();
+    let mut request = fixture.request(Suite::Corpus);
+    request.reference = None;
+    assert!(matches!(
+        performance::command::run(&request, matrix::NativeInvocation::Solve),
+        Err(performance::Error::Configuration(
+            "external bundles require fresh reference qualification"
+        ))
+    ));
+    assert!(!fixture.native.with_extension("launched").exists());
+    assert!(!fixture.report.exists());
 }

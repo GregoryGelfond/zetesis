@@ -1,8 +1,8 @@
 //! Direct original/frozen aggregate evaluation against existing exact lowering.
 
 use crate::support::aggregate_theories::COMPARISONS;
+use zetesis_algebra::Cancellation;
 use zetesis_core::{Sign, Value as Term, ValueLimits, ValueNode};
-use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{
     AdmissionLimits, AggregateComparison as Comparison, AggregateElement, AggregateExtremum,
     AggregateLimits, Theory, ValueExtremumElement, append_aggregate, append_value_extremum_refs,

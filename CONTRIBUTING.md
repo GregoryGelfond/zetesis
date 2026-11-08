@@ -136,14 +136,60 @@ State an optimization's applicability and preservation law before its physical
 schedule. A class certificate may justify a specialized check; candidate
 restrictions never replace the original theory whose stable models are sought.
 
-New solving algorithms must compose reduct operations from reusable joins,
-maps, masks, reductions and fixed-point computations. Do not introduce DPLL/CDNL
-or migrate candidate generation or reduct checking to a SAT/CDNL architecture.
-The existing optional clauses route is documented as an existing implementation;
-its presence is not a design precedent for new work. Semantic planning precedes
-physical scheduling: a checked class certificate has the same original-theory
-meaning on CPU and GPU. State the actual host/device work and completion
-requirements separately from the requested backend.
+New solving algorithms, for candidate generation and membership alike, must
+compose reduct operations from reusable joins, maps, masks, reductions and
+fixed-point computations. Do not migrate candidate generation or reduct checking
+to a SAT/CDNL architecture; the reduct alone decides membership. Candidate
+generation may learn from conflicts, such as a region that narrows to empty or a
+rejected candidate, when what it learns is a sound consequence of the program,
+is represented and applied with those same primitives, and never enters a
+membership certificate. Semantic planning precedes physical scheduling: a
+checked class certificate has the same original-theory meaning on CPU and GPU.
+State the actual host/device work and completion requirements separately from
+the requested backend.
+
+GPU kernels read only workgroup memory they have written. Every workgroup
+location an invocation reads was written earlier in that workgroup, by the same
+invocation or by another invocation ordered before the read by a barrier or a
+uniform load. Every index into a workgroup array is within the array: the bounds
+policy wgpu compiles with replaces an out-of-range index with some in-range one,
+possibly a location nothing wrote. Pipelines keep WebGPU's zero-fill of
+workgroup memory (`ZERO_FILL_WORKGROUP_MEMORY` in the wgpu runtime), which this
+rule makes unobservable. For the formula and tight kernels that is a measured
+decision, taken at commit c7c5feb7 on an Apple M4 Pro GPU under Metal: removing
+the fill gained no material kernel time on the formula kernel, measured on
+Family Crossing (`examples/family-crossing/integrated.lp`), or on the tight
+kernel, measured on the original wide Mastermind program
+(`examples/wide-mastermind/68/mm-68-examples.lp`, not
+`examples/scalability/mastermind.lp`), each under eager and lazy grounding and
+beside the corpus cases that dispatch it. At the measured allowance
+(`--memory 24GiB`), the wide Mastermind runs took both of the tight kernel's
+paths: the eager runs its declined route while their batches grew and then its
+update route, and the lazy runs its declined route; a later measurement confirms
+each path from its runs' statistics. The least-model oracle, aggregate and
+relation kernels, which no measured workload dispatched, keep the fill
+undecided. The decision covers each kernel as it stood at that commit: once a
+kernel's code changes, beyond its comments, its decision is open again, which
+obliges nothing while the kernel keeps the fill. The rule stays in force with
+the fill on: a kernel whose result depended on the fill would rely on an
+initialization its code does not state, and the rule is what lets the fill be
+removed from a kernel without a new argument. The fill is removed from a kernel
+only where a kernel-time gain, measured on that kernel at the commit that
+removes the fill, repays it, and only once, at that commit, the kernel is
+reviewed against this rule again and its physical comparison also passes with
+every workgroup location first set to all zeros and to all ones, with identical
+result records. The formula kernel's round and work counts are excluded from
+that comparison, since they vary between runs of one input with the order of
+its atomic narrowing; a read before write that changed only those counts would
+go undetected, within the round and work limits whose residuals the host
+completes exactly. Without the fill an unwritten location would hold whatever
+the memory last held, which can be another program's data. Review every change
+to a kernel with workgroup memory against this rule, not only new kernels,
+workgroup variables and indices: moving, removing or conditioning a write, a
+barrier or a uniform load can break it too. Beside each workgroup variable's
+declaration, state who writes it and what orders that write before its reads,
+and restate the rule in the kernel's header; the physical tests' CPU
+comparisons are evidence for it, not proof.
 
 Separate three obligations: semantic laws, executable representation/refinement,
 and measured backend behavior. Existing Lean laws do not certify Rust, shaders,
@@ -268,12 +314,14 @@ Their checks remain separate from the workspace coverage population. Run
 clingo comparisons, `scripts/check.sh coverage` for both independent 91% line
 coverage floors, and `scripts/check.sh proofs` when proof sources or records change.
 Local `scripts/check.sh coverage --metal`, or `coverage --vulkan` on a Vulkan
-host, adds that backend's 63 exact physical tests within workspace coverage: static constructor and complete closure/reference checks,
-native aggregate reduction, lazy transport
-and source closure, typed relation masks, tight and formula
-oracles, shared-context composition and failure handling, and ordinary
-lazy/formula CLI paths, complete-world-view collection and caller-owned session
-resources with exact executor context and compiled-profile identity, and combined
+host, adds the backend's reviewed physical tests to workspace coverage:
+native aggregate reduction, typed relation masks, tight and formula
+oracles and their overlapping checks, shared-context composition, compute-pass
+timestamp attribution and failure handling, ordinary formula CLI paths,
+complete-world-view collection and caller-owned session
+resources with exact executor context and compiled-profile identity, first-need
+compilation of fitted workgroup sizes and adapter selection over a prefetched
+enumeration, and combined
 head, objective and output contracts over complete answer-set families. The
 session group also checks complete terminal-definition reconstruction over
 device-verified base answers, automatic tight membership on the device, general
@@ -287,8 +335,8 @@ probes and GPU candidates against complete CPU/device answer families.
 Every target group must report its
 expected named passing tests. `scripts/check.sh hardware` qualifies the host's
 own device backend without instrumentation, Metal on macOS and Vulkan
-elsewhere, or the one named by `--metal` or `--vulkan`: the same fourteen groups
-of 63 exact tests, each backend's reviewed selection, checking complete CPU/device
+elsewhere, or the one named by `--metal` or `--vulkan`: the same eleven groups
+of 59 exact tests, each backend's reviewed selection, checking complete CPU/device
 answer families and explicit failure boundaries; a change to a device route is qualified on
 every backend the hosts at hand expose, and the record says which. The
 portable report is retained separately; the CPU-only profile independently

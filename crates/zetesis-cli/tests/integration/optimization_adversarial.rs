@@ -1,8 +1,8 @@
 //! Retention failures and partial evaluation cannot forge an optimum or erase
 //! accounting for stable models already checked by the reduct oracle.
 
+use zetesis_algebra::Cancellation;
 use zetesis_cli::{Completion, Interruption, OptimizationStop, PublicationConfig, Report};
-use zetesis_cpu::Cancellation;
 
 /// One worker: the exact charges these tests compare are the scalar walk's,
 /// whose first leaf is the same on every run.
@@ -33,9 +33,11 @@ fn assert_incomplete(report: &Report, output: &str) {
 
 #[test]
 fn failed_improving_replacement_preserves_a_valid_incumbent_and_full_score_count() {
-    let source = "{a}. #minimize {-1@0,k:a}.";
+    // The sole choice is visited held-first: {a} costs 1 and fits the cap.
+    // Its cut branch derives {b,c}, whose better cost cannot be retained.
+    let source = "{a}. b :- not a. c :- not a. #minimize {1@0,k:a}.";
     let mut limited = options();
-    limited.solve.max_optimal_atoms = 0;
+    limited.solve.max_optimal_atoms = 1;
     let (report, output) = solve(source, &limited);
     assert_incomplete(&report, &output);
     assert!(matches!(
@@ -43,17 +45,23 @@ fn failed_improving_replacement_preserves_a_valid_incumbent_and_full_score_count
         Some(Interruption::Incumbent(OptimizationStop::Atoms))
     ));
     assert_eq!(report.models, 1);
-    assert!(output.contains("\nAnswer: 1\n\nOptimization: 0\n"));
-    let retained = report.optimization.expect("previous valid empty incumbent");
-    assert_eq!(retained.score.costs(), &[(0, 0)]);
+    assert!(output.contains("\nAnswer: 1\na\nOptimization: 1\n"));
+    let retained = report
+        .optimization
+        .expect("previous valid one-atom incumbent");
+    assert_eq!(retained.score.costs(), &[(0, 1)]);
     assert_eq!(
         retained.scored_models, 2,
         "failed retention follows scoring"
     );
     assert_eq!(retained.tied_models, 1);
-    let (complete, _) = solve(source, &options());
+    let (complete, complete_output) = solve(source, &options());
+    assert_eq!(complete.completion, Completion::Exhausted);
+    assert_eq!(complete.models, 1);
+    assert!(complete_output.contains("\nAnswer: 1\nb c\nOptimization: 0\n"));
     let optimum = complete.optimization.expect("complete optimum");
-    assert_eq!(optimum.score.costs(), &[(0, -1)]);
+    assert_eq!(optimum.score.costs(), &[(0, 0)]);
+    assert_eq!(optimum.scored_models, 2);
     assert_eq!(
         retained.work, optimum.work,
         "both verified models were scored"
@@ -81,6 +89,24 @@ fn a_fully_scored_tie_counts_even_when_its_retention_exceeds_the_limit() {
 
 #[test]
 fn display_limits_discard_extra_ties_but_do_not_stop_optimality_search() {
+    // The inclusive schedule meets every tie of one requested answer; the
+    // default's strict bound prunes them instead (the next proposition).
+    let mut limited = options();
+    limited.solve.models = 1;
+    limited.solve.max_optimal_models = 1;
+    limited.solve.optimum_search = zetesis_cli::OptimumSearch::Inclusive;
+    let (report, output) = solve("{a}. {b}. #show. #minimize {0@0,k:a}.", &limited);
+    assert_eq!(report.completion, Completion::Exhausted);
+    assert_eq!(report.models, 1);
+    let optimum = report.optimization.expect("verified optimum");
+    assert_eq!(optimum.scored_models, 4);
+    assert_eq!(optimum.tied_models, 4);
+    assert_eq!(output.matches("Answer:").count(), 1);
+    assert!(output.contains("OPTIMUM FOUND"));
+}
+
+#[test]
+fn a_strict_bound_prunes_the_ties_a_display_limit_would_discard() {
     let mut limited = options();
     limited.solve.models = 1;
     limited.solve.max_optimal_models = 1;
@@ -88,8 +114,11 @@ fn display_limits_discard_extra_ties_but_do_not_stop_optimality_search() {
     assert_eq!(report.completion, Completion::Exhausted);
     assert_eq!(report.models, 1);
     let optimum = report.optimization.expect("verified optimum");
-    assert_eq!(optimum.scored_models, 4);
-    assert_eq!(optimum.tied_models, 4);
+    // One serial walk meets the optimum first; its strict bound refutes the
+    // other three answers, which it neither scores nor counts.
+    assert_eq!(optimum.scored_models, 1);
+    assert_eq!(optimum.tied_models, 1);
+    assert!(optimum.ties_pruned);
     assert_eq!(output.matches("Answer:").count(), 1);
     assert!(output.contains("OPTIMUM FOUND"));
 }

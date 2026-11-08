@@ -7,8 +7,8 @@ use crate::{
     ConstraintCheckCause, ConstraintCheckFailure, FormulaFailure, FormulaLimits, FormulaResource,
     ProgramSite, ReconstructionError,
 };
+use zetesis_algebra::{Cancellation, Stop};
 use zetesis_core::{AtomIndexError, ModelError, ModelFailure};
-use zetesis_cpu::{Cancellation, Stop};
 
 fn run<T, E: StopPrecedence>(
     account: &mut Accounting,
@@ -27,6 +27,84 @@ fn refusal(site: ProgramSite) -> FormulaFailure {
 }
 
 #[test]
+fn control_handoff_reuses_the_workspace() {
+    let allowance = crate::ConstraintAllowance::new(crate::ConstraintCheckLimits::default());
+    let mut account = Accounting::with_allowance(allowance.clone());
+    account.work = 7;
+    account.substitutions = 1;
+    let pending = account.allowance.as_mut().unwrap();
+    pending.work(7);
+    pending.substitution();
+    let mut lease = account.workspace.lease();
+    lease.observe(32, location()).unwrap();
+
+    let mut active = account.take_for_control();
+    // Both handles identify the existing workspace. The placeholder owns no
+    // charge history, so its retirement cannot publish or duplicate receipts.
+    assert!(active.workspace.owns(&lease));
+    assert!(account.workspace.owns(&lease));
+    assert_eq!((account.work, account.substitutions), (0, 0));
+    assert!(account.allowance.is_none());
+    assert!(account.generated_values.is_none());
+    drop(account);
+    assert_eq!(allowance.statistics().work, 0);
+    assert_eq!(allowance.statistics().substitutions, 0);
+    assert_eq!(active.workspace.bytes(), 32);
+    assert_eq!((active.work, active.substitutions), (7, 1));
+    active.settle();
+    assert_eq!(allowance.statistics().work, 7);
+    assert_eq!(allowance.statistics().substitutions, 1);
+    active.settle();
+    assert_eq!(allowance.statistics().work, 7);
+    assert_eq!(allowance.statistics().substitutions, 1);
+    drop(lease);
+    assert_eq!(active.workspace.bytes(), 0);
+}
+
+#[test]
+fn refused_control_restores_live_workspace_and_charges() {
+    let allowance = crate::ConstraintAllowance::new(crate::ConstraintCheckLimits::default());
+    let mut account = Accounting::with_allowance(allowance.clone());
+    let mut lease = account.workspace.lease();
+    lease.observe(32, location()).unwrap();
+    let limits = FormulaLimits {
+        max_work: 3,
+        ..Default::default()
+    };
+    let result = run(&mut account, &Cancellation::default(), |counters| {
+        assert!(counters.accounting.workspace.owns(&lease));
+        counters.charge_work(2, &limits, location())?;
+        counters.substitution(&limits, location())?;
+        counters.charge_work(2, &limits, location())
+    });
+    assert!(matches!(
+        result,
+        Err(FormulaFailure::Limit {
+            resource: FormulaResource::Work,
+            observed: 4,
+            limit: 3,
+            ..
+        })
+    ));
+    assert!(account.workspace.owns(&lease));
+    assert_eq!(account.workspace.bytes(), 32);
+    assert_eq!((account.work, account.substitutions), (2, 1));
+    assert_eq!(allowance.statistics().work, 2);
+    assert_eq!(allowance.statistics().substitutions, 1);
+
+    run(&mut account, &Cancellation::default(), |counters| {
+        assert!(counters.accounting.workspace.owns(&lease));
+        counters.work(&limits, location())
+    })
+    .unwrap();
+    assert_eq!((account.work, account.substitutions), (3, 1));
+    assert_eq!(allowance.statistics().work, 3);
+    assert_eq!(allowance.statistics().substitutions, 1);
+    drop(lease);
+    assert_eq!(account.workspace.bytes(), 0);
+}
+
+#[test]
 fn charged_ranges_observe_the_boundary_and_preserve_counts() {
     for initial in [0, 1, 7, 255, 256, 257] {
         for amount in [0_u64, 1, 255, 256, 257, 1024] {
@@ -42,7 +120,7 @@ fn charged_ranges_observe_the_boundary_and_preserve_counts() {
             assert_eq!(account.work, initial + amount);
             assert_eq!(
                 OBSERVATIONS.get(),
-                2 + u64::from(zetesis_cpu::poll_due(initial, amount))
+                2 + u64::from(zetesis_algebra::poll_due(initial, amount))
             );
         }
     }
@@ -302,16 +380,33 @@ fn nonresource_failures_keep_their_original_meaning() {
 fn settled_unwind_restores_the_shared_receipt() {
     let allowance = crate::ConstraintAllowance::new(crate::ConstraintCheckLimits::default());
     let mut account = Accounting::with_allowance(allowance.clone());
+    let mut lease = account.workspace.lease();
+    lease.observe(32, location()).unwrap();
     let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         let _: Result<(), FormulaFailure> =
             run(&mut account, &Cancellation::default(), |counters| {
+                assert!(counters.accounting.workspace.owns(&lease));
                 counters.charge_work(257, &FormulaLimits::default(), location())?;
+                counters.substitution(&FormulaLimits::default(), location())?;
                 panic!("after accepted work");
             });
     }));
     assert!(result.is_err());
-    assert_eq!(account.work, 257);
+    assert!(account.workspace.owns(&lease));
+    assert_eq!(account.workspace.bytes(), 32);
+    assert_eq!((account.work, account.substitutions), (257, 1));
     assert_eq!(allowance.statistics().work, 257);
+    assert_eq!(allowance.statistics().substitutions, 1);
+    run(&mut account, &Cancellation::default(), |counters| {
+        assert!(counters.accounting.workspace.owns(&lease));
+        counters.work(&FormulaLimits::default(), location())
+    })
+    .unwrap();
+    assert_eq!(account.work, 258);
+    assert_eq!(allowance.statistics().work, 258);
+    assert_eq!(allowance.statistics().substitutions, 1);
+    drop(lease);
+    assert_eq!(account.workspace.bytes(), 0);
 }
 
 #[cfg(debug_assertions)]
@@ -363,11 +458,11 @@ fn terminal_baseline_tail_refusal_is_settled() {
     assert_eq!(account.work, 7);
 }
 
-fn table_failure(error: zetesis_cpu::table::MeteredFailure<FormulaFailure>) -> FormulaFailure {
+fn table_failure(error: zetesis_core::table::MeteredFailure<FormulaFailure>) -> FormulaFailure {
     match error.cause {
-        zetesis_cpu::table::MeteredCause::Stopped(error) => error,
-        zetesis_cpu::table::MeteredCause::Table(cause) => FormulaFailure::SupportTable {
-            error: zetesis_cpu::table::Failure {
+        zetesis_core::table::MeteredCause::Stopped(error) => error,
+        zetesis_core::table::MeteredCause::Table(cause) => FormulaFailure::SupportTable {
+            error: zetesis_core::table::Failure {
                 cause,
                 work: error.work,
                 peak_bytes: error.peak_bytes,
@@ -379,8 +474,8 @@ fn table_failure(error: zetesis_cpu::table::MeteredFailure<FormulaFailure>) -> F
 
 #[test]
 fn table_zero_callbacks_do_not_observe_grounding_control() {
+    use zetesis_core::table::{Limits, Table};
     use zetesis_core::{Atom, Predicate, Value, relation};
-    use zetesis_cpu::table::{Limits, Table};
     let predicate = Predicate::new("p", 1).unwrap();
     let atoms: Vec<_> = (0..300)
         .map(|n| Atom::new(predicate.clone(), vec![Value::Number(n)]).unwrap())
@@ -402,7 +497,7 @@ fn table_zero_callbacks_do_not_observe_grounding_control() {
             } else {
                 positive += 1;
             }
-            due += u64::from(zetesis_cpu::poll_due(
+            due += u64::from(zetesis_algebra::poll_due(
                 counters.accounting.work,
                 amount as u64,
             ));
@@ -419,8 +514,8 @@ fn table_zero_callbacks_do_not_observe_grounding_control() {
 
 #[test]
 fn table_capacity_refusal_under_pending_stop_settles_at_exit() {
+    use zetesis_core::table::{Cause, Limits, MeteredCause, Table};
     use zetesis_core::{Predicate, relation};
-    use zetesis_cpu::table::{Cause, Limits, MeteredCause, Table};
     let predicate = Predicate::new("p", 0).unwrap();
     let relation =
         relation::Relation::from_atoms(&predicate, &[], relation::Limits::default()).unwrap();
@@ -538,8 +633,8 @@ fn nested_formula_resource_families_settle_at_their_own_site() {
             location: site,
         },
         FormulaFailure::SupportTable {
-            error: zetesis_cpu::table::Failure {
-                cause: zetesis_cpu::table::Cause::Allocation,
+            error: zetesis_core::table::Failure {
+                cause: zetesis_core::table::Cause::Allocation,
                 work: 7,
                 peak_bytes: 0,
             },
@@ -550,9 +645,10 @@ fn nested_formula_resource_families_settle_at_their_own_site() {
             location: site,
         },
         FormulaFailure::Logical {
-            error: crate::ProgramFailureKind::Core(zetesis_core::AdmissionError::Canonical {
-                error: catalog::Error::Allocation,
-                origin: zetesis_core::AdmissionOrigin::Program,
+            error: crate::ProgramFailureKind::Limit(crate::ProgramLimit {
+                resource: crate::ProgramResource::Nodes,
+                limit: 0,
+                observed: 1,
             }),
             part: None,
             location: site,
@@ -611,8 +707,8 @@ fn nested_formula_shape_families_survive_a_pending_stop() {
             location: site,
         },
         FormulaFailure::SupportTable {
-            error: zetesis_cpu::table::Failure {
-                cause: zetesis_cpu::table::Cause::Scope,
+            error: zetesis_core::table::Failure {
+                cause: zetesis_core::table::Cause::Scope,
                 work: 0,
                 peak_bytes: 0,
             },
@@ -623,13 +719,9 @@ fn nested_formula_shape_families_survive_a_pending_stop() {
             location: site,
         },
         FormulaFailure::Logical {
-            error: crate::ProgramFailureKind::Core(
-                zetesis_core::AdmissionError::NonDenseVariable {
-                    template: 0,
-                    expected: 0,
-                    actual: 2,
-                },
-            ),
+            error: crate::ProgramFailureKind::Compilation(crate::CompilationFailure::Profile(
+                crate::ProfileFeature::Statement,
+            )),
             part: None,
             location: site,
         },
@@ -683,4 +775,111 @@ fn checker_failure_settlement_preserves_its_receipt() {
         matches!(error.cause, ConstraintCheckCause::Source(error) if error.site() == Some(ProgramSite::program()))
     );
     assert_eq!(account.work, 7);
+}
+
+#[test]
+fn preflight_does_not_publish_unperformed_work() {
+    let allowance = crate::ConstraintAllowance::new(crate::ConstraintCheckLimits::default());
+    let mut account = Accounting::with_allowance(allowance.clone());
+    let limits = FormulaLimits {
+        max_work: 7,
+        ..Default::default()
+    };
+    OBSERVATIONS.set(0);
+    run(&mut account, &Cancellation::default(), |counters| {
+        counters.check_work(7, &limits, location())?;
+        assert_eq!(counters.accounting.work, 0);
+        assert_eq!(allowance.statistics().work, 0);
+        let observed = OBSERVATIONS.get();
+        counters.count_work(3);
+        assert_eq!(counters.accounting.work, 3);
+        assert_eq!(allowance.statistics().work, 0);
+        assert_eq!(OBSERVATIONS.get(), observed);
+        Ok::<_, FormulaFailure>(())
+    })
+    .unwrap();
+    assert_eq!(account.work, 3);
+    assert_eq!(allowance.statistics().work, 3);
+    assert_eq!(OBSERVATIONS.get(), 3);
+}
+
+#[test]
+fn source_work_refusals_preserve_saturated_demand() {
+    let limits = FormulaLimits {
+        max_work: u64::MAX,
+        ..Default::default()
+    };
+    for absorb in [false, true] {
+        let mut account = Accounting {
+            work: 1,
+            ..Default::default()
+        };
+        let result = run(&mut account, &Cancellation::default(), |counters| {
+            if absorb {
+                counters.absorb(u128::MAX, &limits, location())
+            } else {
+                counters.charge_work(u128::MAX, &limits, location())
+            }
+        });
+        assert!(matches!(
+            result,
+            Err(FormulaFailure::Limit {
+                resource: FormulaResource::Work,
+                observed: u128::MAX,
+                limit,
+                location: site,
+            }) if limit == u128::from(u64::MAX) && site == location()
+        ));
+        assert_eq!(account.work, 1);
+    }
+}
+
+#[test]
+fn preflight_stop_precedes_saturated_work_refusal() {
+    let cancellation = Cancellation::default();
+    let mut account = Accounting {
+        work: 1,
+        ..Default::default()
+    };
+    let result = run(&mut account, &cancellation, |counters| {
+        cancellation.cancel();
+        counters.check_work(u128::MAX, &FormulaLimits::default(), location())
+    });
+    assert!(matches!(
+        result,
+        Err(FormulaFailure::Interrupted {
+            reason: Stop::Cancelled,
+            location: site,
+        }) if site == location()
+    ));
+    assert_eq!(account.work, 1);
+}
+
+#[test]
+fn refused_absorption_neither_polls_nor_publishes() {
+    let cancellation = Cancellation::default();
+    let allowance = crate::ConstraintAllowance::new(crate::ConstraintCheckLimits::default());
+    let mut account = Accounting::with_allowance(allowance.clone());
+    account.work = 1;
+    run(&mut account, &cancellation, |counters| {
+        cancellation.cancel();
+        let observed = OBSERVATIONS.get();
+        let result = counters.absorb(u128::MAX, &FormulaLimits::default(), location());
+        assert!(matches!(
+            result,
+            Err(FormulaFailure::Limit {
+                resource: FormulaResource::Work,
+                observed: u128::MAX,
+                location: site,
+                ..
+            }) if site == location()
+        ));
+        assert_eq!(OBSERVATIONS.get(), observed);
+        assert_eq!(counters.accounting.work, 1);
+        assert_eq!(allowance.statistics().work, 0);
+        result
+    })
+    .unwrap_err();
+    assert_eq!(account.work, 1);
+    assert_eq!(allowance.statistics().work, 0);
 }

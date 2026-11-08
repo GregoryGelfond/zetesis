@@ -1,7 +1,7 @@
 //! Predicate-local traversal preserves the whole-model observation relation.
 
+use zetesis_algebra::Cancellation;
 use zetesis_core::{Model, Sign};
-use zetesis_cpu::Cancellation;
 use zetesis_reference_support::formula;
 use zetesis_test_support::programs::signed_numbered as atom;
 use zetesis_themelios::AdmittedFormula;

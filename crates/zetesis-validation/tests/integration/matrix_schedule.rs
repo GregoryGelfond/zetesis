@@ -37,9 +37,9 @@ fn plan(repetitions: usize) -> Plan {
 #[test]
 fn every_profile_occupies_every_timed_position() {
     let slots = plan(20)
-        .slots(94, Some(ReferencePolicy::AllPhases))
+        .slots(95, Some(ReferencePolicy::AllPhases))
         .unwrap();
-    for case in 0..94 {
+    for case in 0..95 {
         let timed: Vec<_> = slots
             .iter()
             .filter(|s| s.case == case && s.phase == Phase::Timed)
@@ -199,7 +199,7 @@ fn matrix_population_has_finite_construction_bounds() {
     };
     assert!(Plan::new(Suite::Queens, vec![too_many_workers], workers, 0, 1).is_err());
     assert!(plan(1).slots(0, None).is_err());
-    assert!(plan(1).slots(95, None).is_err());
+    assert!(plan(1).slots(96, None).is_err());
 }
 
 #[test]
@@ -260,4 +260,16 @@ fn qualification_and_measurement_share_profile_bounds() {
         assert!(Plan::qualification(Suite::Scalability, profiles.clone(), reference).is_err());
         assert!(Plan::new(Suite::Scalability, profiles, reference, 0, 1).is_err());
     }
+}
+
+#[test]
+fn case_selections_admit_95_entries_and_refuse_96() {
+    let paths: Vec<_> = (0..95).map(|index| format!("case-{index}.lp")).collect();
+    assert_eq!(
+        plan(1).with_cases(paths.clone()).unwrap().selection(),
+        Some(paths.as_slice())
+    );
+    let mut too_many = paths;
+    too_many.push("case-95.lp".to_owned());
+    assert!(plan(1).with_cases(too_many).is_err());
 }

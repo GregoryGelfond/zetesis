@@ -1,10 +1,10 @@
-//! Relational admission from the canonical logical program, without source text.
+//! Logical-program admission limits and typed refusal subjects.
 
 use std::fmt;
 
-use themelios_program::program::{PartKey, Program as LogicalProgram, Statement};
+use themelios_program::program::{PartKey, Statement};
 use themelios_program::provenance::WithProvenance;
-use zetesis_core::{AdmissionError, AdmissionLimits, ConstructionError, Program};
+use zetesis_core::{AdmissionLimits, ConstructionError};
 
 use crate::{AdmissionFailure, ProfileFeature};
 
@@ -13,11 +13,10 @@ pub use crate::program_limits::{Limit as ProgramLimit, Resource as ProgramResour
 /// Limits for an already constructed logical program. Source-byte and syntax
 /// limits belong to source admission; these bounds inspect canonical structure.
 ///
-/// [`admit_program`] visits relational rule structure without copying or counting
-/// its borrowed provenance. [`crate::prepare_program_formula`] also visits
-/// admitted directives, nested conditions, provenance entries and annotations
-/// before normalization can copy them. Neither operation accounts for the
-/// caller's earlier program construction, allocator overhead or process RSS.
+/// [`crate::prepare_program_formula`] visits admitted directives, nested
+/// conditions, provenance entries and annotations before normalization can copy
+/// them. It does not account for the caller's earlier program construction,
+/// allocator overhead or process RSS.
 #[derive(Clone, Copy, Debug)]
 pub struct ProgramAdmissionOptions {
     /// Cumulative visited logical nodes, including closed symbol interiors.
@@ -30,8 +29,7 @@ pub struct ProgramAdmissionOptions {
     /// Total UTF-8 bytes in visited logical names and strings. Formula preparation
     /// additionally counts annotation text and transformation tags.
     pub max_text_bytes: usize,
-    /// Native template admission limits, also used for formula template,
-    /// variable, arity and value ceilings.
+    /// Formula template, variable, arity and value ceilings.
     pub core_limits: AdmissionLimits,
 }
 
@@ -50,7 +48,7 @@ impl Default for ProgramAdmissionOptions {
 /// A compilation cause without an invented source coordinate.
 #[derive(Debug)]
 pub enum CompilationFailure {
-    /// A construct outside the strict relational profile.
+    /// A construct outside the requested admission profile.
     Profile(ProfileFeature),
     /// An invalid native predicate, atom or closed value.
     Construction(ConstructionError),
@@ -69,7 +67,7 @@ impl CompilationFailure {
 impl fmt::Display for CompilationFailure {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::Profile(feature) => write!(f, "relational admission does not support {feature}"),
+            Self::Profile(feature) => write!(f, "program admission does not support {feature}"),
             Self::Construction(error) => error.fmt(f),
         }
     }
@@ -87,7 +85,7 @@ impl std::error::Error for CompilationFailure {
 /// The logical object associated with a refusal. A constructed statement need
 /// not have a parsed location; its actual identity remains available here.
 #[derive(Clone, Copy, Debug)]
-pub enum ProgramSubject<'a> {
+pub enum ProgramOriginal<'a> {
     /// A whole-program validation failure.
     Program,
     /// A named or parameterized part excluded by this single-shot profile.
@@ -103,8 +101,6 @@ pub enum ProgramFailureKind {
     Limit(ProgramLimit),
     /// A statement cannot be compiled by the requested admission profile.
     Compilation(CompilationFailure),
-    /// The independently checked native program failed admission.
-    Core(AdmissionError),
 }
 
 impl fmt::Display for ProgramFailureKind {
@@ -112,7 +108,6 @@ impl fmt::Display for ProgramFailureKind {
         match self {
             Self::Limit(error) => error.fmt(f),
             Self::Compilation(error) => error.fmt(f),
-            Self::Core(error) => error.fmt(f),
         }
     }
 }
@@ -122,7 +117,6 @@ impl std::error::Error for ProgramFailureKind {
         match self {
             Self::Limit(error) => Some(error),
             Self::Compilation(error) => Some(error),
-            Self::Core(error) => Some(error),
         }
     }
 }
@@ -132,7 +126,7 @@ impl std::error::Error for ProgramFailureKind {
 #[derive(Debug)]
 pub struct ProgramAdmissionFailure<'a> {
     /// The input object responsible for the refusal.
-    pub subject: ProgramSubject<'a>,
+    pub original: ProgramOriginal<'a>,
     /// The typed cause.
     pub kind: ProgramFailureKind,
 }
@@ -146,143 +140,5 @@ impl fmt::Display for ProgramAdmissionFailure<'_> {
 impl std::error::Error for ProgramAdmissionFailure<'_> {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         Some(&self.kind)
-    }
-}
-
-/// Checked relational rules and their original logical statements.
-/// Compilation does not copy the caller's program. Consuming `into_program`
-/// releases the provenance borrow and leaves an independently owned native value.
-#[derive(Debug)]
-pub struct AdmittedProgram<'a> {
-    program: Program,
-    statements: Vec<Vec<&'a WithProvenance<Statement>>>,
-    fact_statements: Vec<Vec<&'a WithProvenance<Statement>>>,
-}
-
-impl<'a> AdmittedProgram<'a> {
-    /// The same canonical relational representation used by source admission.
-    #[must_use]
-    pub fn program(&self) -> &Program {
-        &self.program
-    }
-
-    /// Original statements in native template order. A generated strong-negation
-    /// coherence constraint names both statements that introduced its signatures.
-    #[must_use]
-    pub fn template_statements(&self) -> &[Vec<&'a WithProvenance<Statement>>] {
-        &self.statements
-    }
-
-    /// Original statements parallel to native fact occurrences. Repeated
-    /// occurrences retain their evidence even when their atom is shared.
-    #[must_use]
-    pub fn fact_statements(&self) -> &[Vec<&'a WithProvenance<Statement>>] {
-        &self.fact_statements
-    }
-
-    /// Release the input borrow while retaining the checked native program.
-    #[must_use]
-    pub fn into_program(self) -> Program {
-        self.program
-    }
-}
-
-/// Compile a canonical logical program under the strict relational (S0) profile.
-///
-/// This is the typed counterpart of [`crate::admit`]. It accepts base-part rules
-/// with scalar relational joins,
-/// default negation, equality/disequality filters and unbounded single-atom
-/// choices. Use [`crate::prepare_program_formula`] for the general formula
-/// profile, including arithmetic generators, aggregates and directives.
-/// No rendering, parsing, grounding or answer enumeration occurs here.
-///
-/// The compiler and strong-negation coherence operation are shared with source
-/// admission. Source admission additionally checks authored syntax before
-/// canonicalization; those source checks are not replaced by this operation.
-/// Logical traversal is bounded and iterative. Retained input evidence consists
-/// of borrowed statement references; the native program owns its canonical data.
-///
-/// # Errors
-/// Returns a typed limit, capability, construction or native admission failure,
-/// naming the caller's actual statement or part when applicable.
-pub fn admit_program(
-    source: &LogicalProgram,
-    options: ProgramAdmissionOptions,
-) -> Result<AdmittedProgram<'_>, ProgramAdmissionFailure<'_>> {
-    let mut budget = crate::program_limits::Budget::new(crate::program_limits::Limits {
-        nodes: options.max_nodes,
-        depth: options.max_depth,
-        body_elements: options.max_body_elements,
-        text_bytes: options.max_text_bytes,
-    });
-    let mut compiled = crate::compile::Compiled::default();
-    for part in source.parts() {
-        if part.key().name.as_str() != "base" || !part.key().formals.is_empty() {
-            return Err(ProgramAdmissionFailure {
-                subject: ProgramSubject::Part(part.key()),
-                kind: ProgramFailureKind::Compilation(CompilationFailure::Profile(
-                    ProfileFeature::ProgramPart,
-                )),
-            });
-        }
-        for carrier in part.statements() {
-            let subject = ProgramSubject::Statement(carrier);
-            if compiled.len() >= options.core_limits.max_templates {
-                let resource = zetesis_core::AdmissionResource::Templates;
-                let limit = options.core_limits.max_templates;
-                let actual = compiled.len().saturating_add(1);
-                // This boundary refuses before traversing or classifying the
-                // next statement. Its source identity is known; its native
-                // template/fact position is deliberately not invented.
-                let error = AdmissionError::LimitExceeded {
-                    resource,
-                    limit,
-                    actual,
-                    template: None,
-                };
-                return Err(core_failure(error, Some(carrier)));
-            }
-            if let Statement::Rule(rule) = carrier.get() {
-                budget
-                    .check_rule(rule)
-                    .map_err(|error| ProgramAdmissionFailure {
-                        subject,
-                        kind: ProgramFailureKind::Limit(error),
-                    })?;
-            }
-            let rule = crate::compile::checked_statement(carrier.get()).map_err(|error| {
-                ProgramAdmissionFailure {
-                    subject,
-                    kind: ProgramFailureKind::Compilation(error),
-                }
-            })?;
-            compiled
-                .push(rule, vec![carrier])
-                .map_err(|error| core_failure(error, Some(carrier)))?;
-        }
-    }
-    crate::coherence::append_with(
-        &mut compiled,
-        options.core_limits,
-        |_, _, _| Ok(()),
-        |error, origins| core_failure(error, origins.first().copied()),
-    )?;
-    let compiled = compiled.admit(options.core_limits, |error, origins| {
-        core_failure(error, origins.first().copied())
-    })?;
-    Ok(AdmittedProgram {
-        program: compiled.program,
-        statements: compiled.template_origins,
-        fact_statements: compiled.fact_origins,
-    })
-}
-
-fn core_failure(
-    error: AdmissionError,
-    statement: Option<&WithProvenance<Statement>>,
-) -> ProgramAdmissionFailure<'_> {
-    ProgramAdmissionFailure {
-        subject: statement.map_or(ProgramSubject::Program, ProgramSubject::Statement),
-        kind: ProgramFailureKind::Core(error),
     }
 }

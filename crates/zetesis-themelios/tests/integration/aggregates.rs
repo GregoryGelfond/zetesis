@@ -3,14 +3,11 @@
 use std::collections::BTreeSet;
 
 use crate::support::atom_models::Models;
-use zetesis_cpu::Cancellation;
+use zetesis_algebra::Cancellation;
 use zetesis_reference_support::{admit, formula, resource_limits};
-use zetesis_sat::{Limits, StableModels};
+use zetesis_stable::{Limits, StableModels};
 use zetesis_test_support::repository;
-use zetesis_themelios::{
-    AdmissionOptions, AdmittedFormula, ExpansionLimits, FormulaFailure, FormulaLimits,
-    FormulaResource, admit_extended,
-};
+use zetesis_themelios::{AdmittedFormula, FormulaFailure, FormulaLimits, FormulaResource};
 
 fn models(input: &AdmittedFormula) -> Models {
     let mut search = StableModels::new(input.theory(), Limits::default(), Cancellation::default())
@@ -52,14 +49,6 @@ fn arbitrary_choice_bounds_are_constraints_and_retain_conditional_support() {
     assert_eq!(
         native("n(2). N{a;b;c}N :- n(N)."),
         expected(&["n(2).a.b.", "n(2).a.c.", "n(2).b.c."])
-    );
-    assert!(
-        admit_extended(
-            "2{a;b}2.".to_owned(),
-            AdmissionOptions::default(),
-            ExpansionLimits::default()
-        )
-        .is_err()
     );
 }
 

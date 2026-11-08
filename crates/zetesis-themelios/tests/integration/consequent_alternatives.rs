@@ -1012,7 +1012,7 @@ proptest::proptest! {
 #[test]
 fn conjunction_matches_bounded_completion() {
     use std::num::NonZeroUsize;
-    use zetesis_sat::{
+    use zetesis_stable::{
         BatchLimits, BatchVerdict, Cancellation, CompletionExecutor, Limits, StableModels,
     };
     let case = corpus_case();

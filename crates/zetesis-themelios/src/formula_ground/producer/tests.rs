@@ -6,8 +6,8 @@ use crate::formula_ground::{Builder, Purpose, ground, ground_retained};
 use crate::formula_support::testing;
 use crate::test_support::compiled_atoms;
 use crate::{ExpansionLimits, FormulaFailure, FormulaLimits, FormulaResource, ProgramSite};
+use zetesis_algebra::{Cancellation, Stop};
 use zetesis_core::{Atom, Value, ValueLimits};
-use zetesis_cpu::{Cancellation, Stop};
 use zetesis_ferraris::{Interpretation, Limits, NodeView, models, models_reduct};
 use zetesis_test_support::programs::atom;
 

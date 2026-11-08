@@ -28,6 +28,136 @@ fn preparation(theory: &Theory, limits: FormulaLimits) -> Result<Preparation, Gp
     Preparation::new(theory, 2, limits, &wgpu::Limits::default(), 1)
 }
 
+// The original setup receipt plus one classification per semantic atom and
+// one output word per polarity for each 32 atoms. The fixtures supply their
+// own atom counts, independently of the plan's computed receipt.
+const fn setup_with_projection(original: u32, atoms: u32) -> u32 {
+    original + atoms + 2 * atoms.div_ceil(32)
+}
+
+#[test]
+fn incidence_keeps_aliases_outputs_and_exact_receipts() {
+    let theory = fixture();
+    let (prepared, plan) = preparation(&theory, FormulaLimits::default())
+        .unwrap()
+        .with_propagation(crate::GpuPropagation::ChangedDependencies)
+        .finish(&wgpu::Limits::default(), &Cancellation::default())
+        .unwrap();
+    let incidence = prepared.graph.schedule.incidence.as_ref().unwrap();
+    assert_eq!(incidence.offset, 15);
+    assert_eq!(
+        &prepared.roots[15..],
+        &[
+            0, 3, 5, 7, 9, 10, 11, 12, 1, 1, 7, 3, 7, 1, 3, 3, 5, 5, 5, 7,
+        ]
+    );
+    assert_eq!(
+        (plan.setup, plan.sweep),
+        (setup_with_projection(34, 2), 268)
+    );
+    assert_eq!(plan.domains, 2 * 9 * 4);
+    assert_eq!(plan.params(&prepared.graph)[5], 15);
+    let candidates =
+        [0, 1].map(|atom| zetesis_ferraris::Interpretation::new(&theory, [atom]).unwrap());
+    let control = Cancellation::default();
+    let mut seeds = crate::candidates::Staging::default();
+    plan.pack(
+        &prepared.graph,
+        &candidates,
+        &mut seeds,
+        plan.max_batch_bytes,
+        &control,
+    )
+    .unwrap();
+    assert_eq!(seeds.words(), [0b01, 0b10]);
+    let row = [
+        plan.epoch,
+        0,
+        2,
+        1,
+        // Both terminal mask words are written, but the two semantic atom
+        // domains were not scanned after the one completed sweep.
+        plan.setup + plan.sweep - 2,
+        super::super::packing::MAGIC,
+        0, // Terminal rows carry neither a held nor a cut mask.
+        0,
+    ];
+    let mut words = row.to_vec();
+    let mut second = row;
+    second[1] = 1;
+    words.extend(second);
+    assert!(super::super::packing::decode(&words, &plan, seeds.words(), &control).is_ok());
+    words[4] -= 1;
+    assert_eq!(
+        super::super::packing::decode(&words, &plan, seeds.words(), &control)
+            .unwrap_err()
+            .kind(),
+        GpuErrorKind::Readback
+    );
+}
+
+#[test]
+fn optional_incidence_preserves_dense_admission() {
+    let device = wgpu::Limits::default();
+    let (_, dense) = preparation(&fixture(), FormulaLimits::default())
+        .unwrap()
+        .finish(&device, &Cancellation::default())
+        .unwrap();
+    for limits in [
+        FormulaLimits {
+            max_batch_bytes: dense.accounted,
+            ..Default::default()
+        },
+        FormulaLimits {
+            max_work_per_candidate: dense.setup,
+            ..Default::default()
+        },
+    ] {
+        let (prepared, plan) = preparation(&fixture(), limits)
+            .unwrap()
+            .with_propagation(crate::GpuPropagation::ChangedDependencies)
+            .finish(&device, &Cancellation::default())
+            .unwrap();
+        assert_eq!(
+            prepared.graph.schedule.propagation(),
+            crate::GpuPropagation::Dense
+        );
+        assert_eq!(
+            (plan.setup, plan.sweep, plan.domains),
+            (dense.setup, dense.sweep, dense.domains)
+        );
+    }
+}
+
+#[test]
+fn optional_incidence_allocation_failure_keeps_dense() {
+    let mut calls = 0;
+    let (prepared, _) = preparation(&fixture(), FormulaLimits::default())
+        .unwrap()
+        .with_propagation(crate::GpuPropagation::ChangedDependencies)
+        .finish_with(
+            &wgpu::Limits::default(),
+            &Cancellation::default(),
+            |length| {
+                calls += 1;
+                if calls == 2 {
+                    Err(GpuError::new(
+                        GpuErrorKind::Allocation,
+                        "optional reservation failed",
+                    ))
+                } else {
+                    vector(length)
+                }
+            },
+        )
+        .unwrap();
+    assert_eq!(calls, 3);
+    assert_eq!(
+        prepared.graph.schedule.propagation(),
+        crate::GpuPropagation::Dense
+    );
+}
+
 #[test]
 fn shared_interleaved_nodes_have_literal_stable_levels() {
     let (prepared, plan) = preparation(&fixture(), FormulaLimits::default())
@@ -41,8 +171,9 @@ fn shared_interleaved_nodes_have_literal_stable_levels() {
     );
     let outputs: Vec<_> = prepared.nodes.chunks_exact(4).map(|node| node[3]).collect();
     assert_eq!(outputs, [0, 2, 1, 3, 4, 5, 0, 6]);
-    assert_eq!(plan.setup, 32); // 2*8 nodes + 8 edges + 2 atoms + 2 roots + 4 levels.
-    assert_eq!(plan.sweep, 155); // 9*8 + 2*8 edges + 2 + 64 + 1.
+    // Original: 2*8 nodes + 8 edges + 2 atoms + 2 roots + 4 levels.
+    assert_eq!(plan.setup, setup_with_projection(32, 2));
+    assert_eq!(plan.sweep, 159); // 9*8 + 2*8 edges + 2 + 64 + 1 + 4 levels.
 }
 
 #[test]
@@ -62,7 +193,7 @@ fn pure_chains_keep_serial_truth() {
         .unwrap();
     assert_eq!(prepared.graph.schedule.levels, 0);
     assert_eq!(prepared.roots, [127]);
-    assert_eq!(plan.setup, 512);
+    assert_eq!(plan.setup, setup_with_projection(512, 1));
 }
 
 #[test]
@@ -105,14 +236,25 @@ fn zero_roots_still_cover_every_duplicate_leaf() {
 #[test]
 fn retained_upload_capacities_are_admitted_in_the_cold_peak() {
     for below in [0, 1] {
-        // Fixed graph: node128 + roots60; two-world transport272. Staging uses
-        // real u32 vectors with deliberate slack, observed before admission.
+        // Node and root buffers total 188 bytes. Both two-world output buffers
+        // add a held/cut u32 pair per world to the previous 288-byte transport.
+        // Host staging below has deliberate, independently observed vector slack.
         let nodes = vector::<u32>(32 + 17).unwrap();
         let roots = vector::<u32>(15 + 19).unwrap();
         let pointers = (nodes.as_ptr(), roots.as_ptr());
         let staging = retained_bytes(&nodes).unwrap() + retained_bytes(&roots).unwrap();
-        let exact =
-            188 + 272 + 48 + 8 + 2 * size_of::<super::super::FormulaCheck>() as u64 + staging;
+        let transport = 288 + 2 * 2 * 8;
+        // Two possible residual roots each own two u64 mask words. Only one
+        // root and temporary word-vector header coexist during materialization.
+        let root_storage =
+            2 * 16 + (size_of::<zetesis_algebra::region::Region>() + size_of::<Vec<u64>>()) as u64;
+        let exact = 188
+            + transport
+            + 64
+            + 8
+            + 2 * size_of::<super::super::FormulaCheck>() as u64
+            + root_storage
+            + staging;
         let mut allocations = [nodes, roots].into_iter();
         let result = preparation(
             &fixture(),
@@ -176,7 +318,7 @@ fn interruption_after_either_reservation_publishes_no_graph() {
             });
         assert_eq!(
             result.err().unwrap().interruption(),
-            Some(zetesis_cpu::Stop::Cancelled)
+            Some(zetesis_algebra::Stop::Cancelled)
         );
         assert_eq!(calls, stop_at + 1);
     }
@@ -208,8 +350,10 @@ fn checked_schedule_offsets_refuse_overflow_and_underflow() {
 
 #[test]
 fn level_setup_is_admitted_after_the_minimum_serial_envelope() {
-    // Minimum setup28 succeeds; the actual four-level setup requires32.
-    for (work, accepted) in [(31, false), (32, true)] {
+    // The minimum serial setup is 28 and the four-level schedule adds 4,
+    // before the common two-atom projection.
+    let full = setup_with_projection(32, 2);
+    for (work, accepted) in [(full - 1, false), (full, true)] {
         let result = preparation(
             &fixture(),
             FormulaLimits {
@@ -276,8 +420,9 @@ fn native_depth_visits_every_operand_and_keeps_one_header() {
     assert_eq!(packed.graph.schedule.levels, 4);
     assert_eq!(&packed.nodes[16..], &[5, 0, 3, 4, 0, 1, 3]);
     assert_eq!(packed.roots, [4, 0, 2, 3, 4, 5, 0, 1, 2, 3, 4]);
-    assert_eq!((plan.setup, plan.sweep), (24, 126));
-    for (ceiling, accepted) in [(23, false), (24, true)] {
+    let required = setup_with_projection(24, 2);
+    assert_eq!((plan.setup, plan.sweep), (required, 130));
+    for (ceiling, accepted) in [(required - 1, false), (required, true)] {
         let result = Preparation::new(
             &theory,
             1,
@@ -341,4 +486,309 @@ fn native_tail_is_charged_in_actual_cold_staging() {
         .and_then(|preparation| preparation.finish(&device, &Cancellation::default()));
         assert_eq!(result.is_ok(), accepted);
     }
+}
+
+#[test]
+fn constant_graph_admission_is_monotone_in_batch_bytes() {
+    use zetesis_ferraris::{FormulaParts, NumericDomain, NumericRow, ThresholdDescriptor};
+    // Distinct empty rows maximize directory cost without transporting numeric
+    // columns. A smaller allowance used to choose the zero-directory path while
+    // a larger one admitted the directory, then failed the combined envelope.
+    let count = 128;
+    let parts = FormulaParts::from_numeric_raw(
+        (0..count).map(Node::threshold).collect(),
+        vec![],
+        vec![],
+        vec![],
+        (0..count)
+            .map(|_| NumericRow {
+                start: 0,
+                length: 0,
+                domain: NumericDomain::Weights,
+            })
+            .collect(),
+        (0..count)
+            .map(|row| ThresholdDescriptor { row, bound: 1 })
+            .collect(),
+        vec![],
+    )
+    .unwrap();
+    let theory = Theory::new(0, parts, vec![], AdmissionLimits::default()).unwrap();
+    let device = wgpu::Limits::default();
+    let mut admitted = false;
+    for max_batch_bytes in (0..=32_768).step_by(256) {
+        let result = Preparation::new(
+            &theory,
+            1,
+            FormulaLimits {
+                max_batch_bytes,
+                ..FormulaLimits::default()
+            },
+            &device,
+            1,
+        )
+        .and_then(|preparation| preparation.finish(&device, &Cancellation::default()));
+        match result {
+            Ok((prepared, plan)) => {
+                admitted = true;
+                assert_eq!(prepared.graph.shape.rows.bytes().unwrap(), 0);
+                assert!(plan.accounted <= max_batch_bytes);
+            }
+            Err(error) => {
+                assert!(
+                    !admitted,
+                    "admission regressed at {max_batch_bytes} bytes: {error}"
+                );
+                assert_eq!(error.kind(), GpuErrorKind::Capacity);
+            }
+        }
+    }
+    assert!(admitted, "the complete preparation envelope was exercised");
+}
+
+#[test]
+fn threshold_inputs_and_outputs_wake_shared_owner() {
+    use zetesis_ferraris::{FormulaNodes, FormulaParts, NodeView};
+    let mut nodes = FormulaNodes::new(
+        FormulaParts::new(
+            vec![Node::atom(0), Node::atom(1), Node::atom(2), Node::falsum()],
+            vec![],
+        )
+        .unwrap(),
+    );
+    let mut transaction = nodes.transaction();
+    let guards = transaction
+        .push_threshold_family(&[0, 1, 2, 3], &[1; 4], &[1, 2], usize::MAX, usize::MAX)
+        .unwrap();
+    let mut roots = vec![guards[1]];
+    for atom in 0..3 {
+        roots.push(
+            transaction
+                .push(NodeView::Implies(guards[0], atom), usize::MAX, usize::MAX)
+                .unwrap(),
+        );
+    }
+    transaction.commit();
+    let theory = Theory::new(3, nodes.into_parts(), roots, AdmissionLimits::default()).unwrap();
+    let device = wgpu::Limits::default();
+    let (_, dense) = preparation(&theory, FormulaLimits::default())
+        .unwrap()
+        .finish(&device, &Cancellation::default())
+        .unwrap();
+    let (prepared, dirty) = preparation(&theory, FormulaLimits::default())
+        .unwrap()
+        .with_propagation(crate::GpuPropagation::ChangedDependencies)
+        .finish(&device, &Cancellation::default())
+        .unwrap();
+    assert_eq!(
+        (dense.setup, dense.sweep),
+        (setup_with_projection(490, 3), 772)
+    );
+    assert_eq!(
+        (dirty.setup, dirty.sweep),
+        (setup_with_projection(492, 3), 938)
+    );
+    let incidence = prepared.graph.schedule.incidence.as_ref().unwrap();
+    let offset = incidence.offset as usize;
+    let slot = prepared.nodes[guards[1] * 4 + 3] as usize;
+    let start = prepared.roots[offset + slot] as usize;
+    let end = prepared.roots[offset + slot + 1] as usize;
+    let order = offset + prepared.graph.shape.variables as usize + 1;
+    let mut targets = prepared.roots[order + start..order + end].to_vec();
+    targets.sort_unstable();
+    assert_eq!(
+        targets,
+        [
+            u32::try_from(guards[0]).unwrap(),
+            u32::try_from(guards[1]).unwrap()
+        ]
+    );
+    // Every row condition already has an ordinary incidence to each guard,
+    // including the designated owner. This remains true for the false child;
+    // original truth does not remove a physical dependency from the index.
+    for condition in 0..4 {
+        let slot = prepared.nodes[condition * 4 + 3] as usize;
+        let start = prepared.roots[offset + slot] as usize;
+        let end = prepared.roots[offset + slot + 1] as usize;
+        let targets = &prepared.roots[order + start..order + end];
+        assert!(targets.contains(&u32::try_from(guards[0]).unwrap()));
+    }
+}
+
+fn grouped_fixture() -> Theory {
+    use zetesis_ferraris::{FormulaParts, OperandSpan};
+    Theory::new(
+        2,
+        FormulaParts::new(
+            vec![
+                Node::atom(0),
+                Node::atom(0),
+                Node::atom(1),
+                Node::and_span(OperandSpan {
+                    start: 0,
+                    length: 3,
+                }),
+                Node::or_span(OperandSpan {
+                    start: 3,
+                    length: 4,
+                }),
+                Node::implies(3, 4),
+            ],
+            vec![0, 1, 2, 0, 1, 2, 3],
+        )
+        .unwrap(),
+        vec![5],
+        AdmissionLimits::default(),
+    )
+    .unwrap()
+}
+
+#[test]
+fn group_state_preserves_occurrences_and_exact_layout() {
+    let (prepared, plan) = preparation(&grouped_fixture(), FormulaLimits::default())
+        .unwrap()
+        .with_propagation(crate::GpuPropagation::IncrementalGroups)
+        .finish(&wgpu::Limits::default(), &Cancellation::default())
+        .unwrap();
+    let incidence = prepared.graph.schedule.incidence.as_ref().unwrap();
+    assert_eq!(
+        prepared.graph.schedule.propagation(),
+        crate::GpuPropagation::IncrementalGroups
+    );
+    assert_eq!(incidence.group_map, 30);
+    assert_eq!(
+        &prepared.roots[30..],
+        &[2, u32::MAX, u32::MAX, u32::MAX, 0, 1, u32::MAX]
+    );
+    // The shared atom slot appears twice in each group; its removed bit must
+    // notify both occurrences, not just one gate ID.
+    let offset = incidence.offset as usize;
+    let order = offset + prepared.graph.shape.variables as usize + 1;
+    let begin = prepared.roots[offset] as usize;
+    let end = prepared.roots[offset + 1] as usize;
+    assert_eq!(&prepared.roots[order + begin..order + end], &[3, 3, 4, 4]);
+    assert_eq!(plan.params(&prepared.graph)[12], 30);
+    assert_eq!(
+        (plan.setup, plan.sweep, plan.domains),
+        (setup_with_projection(102, 2), 434, 88)
+    );
+}
+
+#[test]
+fn group_state_falls_back_to_scans_within_the_active_envelope() {
+    let theory = grouped_fixture();
+    let device = wgpu::Limits::default();
+    let (active, expected) = preparation(&theory, FormulaLimits::default())
+        .unwrap()
+        .with_propagation(crate::GpuPropagation::ChangedDependencies)
+        .finish(&device, &Cancellation::default())
+        .unwrap();
+    for limits in [
+        FormulaLimits {
+            max_batch_bytes: expected.accounted,
+            ..Default::default()
+        },
+        FormulaLimits {
+            max_work_per_candidate: expected.setup,
+            ..Default::default()
+        },
+    ] {
+        let (prepared, plan) = preparation(&theory, limits)
+            .unwrap()
+            .with_propagation(crate::GpuPropagation::IncrementalGroups)
+            .finish(&device, &Cancellation::default())
+            .unwrap();
+        assert_eq!(
+            prepared.graph.schedule.propagation(),
+            crate::GpuPropagation::ChangedDependencies
+        );
+        assert_eq!(prepared.roots, active.roots);
+        assert_eq!(
+            (plan.setup, plan.sweep, plan.domains),
+            (expected.setup, expected.sweep, expected.domains)
+        );
+    }
+}
+
+#[test]
+fn group_state_allocation_failure_retains_active_scans() {
+    let mut calls = 0;
+    let (prepared, _) = preparation(&grouped_fixture(), FormulaLimits::default())
+        .unwrap()
+        .with_propagation(crate::GpuPropagation::IncrementalGroups)
+        .finish_with(
+            &wgpu::Limits::default(),
+            &Cancellation::default(),
+            |length| {
+                calls += 1;
+                if calls == 2 {
+                    Err(GpuError::new(
+                        GpuErrorKind::Allocation,
+                        "optional group map refused",
+                    ))
+                } else {
+                    vector(length)
+                }
+            },
+        )
+        .unwrap();
+    assert_eq!(calls, 3);
+    assert_eq!(
+        prepared.graph.schedule.propagation(),
+        crate::GpuPropagation::ChangedDependencies
+    );
+}
+
+#[test]
+fn absent_groups_add_no_directory_state_or_work() {
+    let device = wgpu::Limits::default();
+    let build = |propagation| {
+        preparation(&fixture(), FormulaLimits::default())
+            .unwrap()
+            .with_propagation(propagation)
+            .finish(&device, &Cancellation::default())
+            .unwrap()
+    };
+    let (active, expected) = build(crate::GpuPropagation::ChangedDependencies);
+    let (prepared, plan) = build(crate::GpuPropagation::IncrementalGroups);
+    assert_eq!(
+        prepared.graph.schedule.propagation(),
+        crate::GpuPropagation::ChangedDependencies
+    );
+    assert_eq!(prepared.roots, active.roots);
+    assert_eq!(
+        (plan.setup, plan.sweep, plan.domains, plan.accounted),
+        (
+            expected.setup,
+            expected.sweep,
+            expected.domains,
+            expected.accounted
+        )
+    );
+}
+
+#[test]
+fn group_state_is_included_in_each_candidate_prefix() {
+    let device = wgpu::Limits::default();
+    let (prepared, _) = preparation(&grouped_fixture(), FormulaLimits::default())
+        .unwrap()
+        .with_propagation(crate::GpuPropagation::IncrementalGroups)
+        .finish(&device, &Cancellation::default())
+        .unwrap();
+    let graph = &prepared.graph;
+    let one = Plan::new(graph, 1, FormulaLimits::default(), &device, false, 1).unwrap();
+    let two = Plan::new(graph, 2, FormulaLimits::default(), &device, false, 1).unwrap();
+    assert_eq!(two.domains - one.domains, 44);
+    let limits = FormulaLimits {
+        max_batch_bytes: one.accounted,
+        ..Default::default()
+    };
+    assert!(Plan::new(graph, 1, limits, &device, false, 1).is_ok());
+    assert_eq!(
+        Plan::new(graph, 2, limits, &device, false, 1)
+            .err()
+            .unwrap()
+            .kind(),
+        GpuErrorKind::Capacity
+    );
 }

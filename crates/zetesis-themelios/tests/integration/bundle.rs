@@ -6,9 +6,7 @@ use std::path::{Path, PathBuf};
 use themelios_base::source::{SourceId, Sources, check_sources_laws};
 use zetesis_reference_support::resource_limits;
 use zetesis_test_support::repository;
-use zetesis_themelios::{
-    AdmissionOptions, BundleError, BundleLimits, BundleResource, BundleSource, SourceBundle, admit,
-};
+use zetesis_themelios::{BundleError, BundleLimits, BundleResource, BundleSource, SourceBundle};
 
 // The loader's own tests write raw bytes and inspect every load's error, which
 // the shared bundle fixture's text sources and loading entry do not provide.
@@ -260,7 +258,7 @@ fn includes_are_read_from_ast_and_their_paths_use_dialect_decoding() {
 }
 
 #[test]
-fn richer_parsing_does_not_claim_s0_admission_or_library_resolution() {
+fn richer_parsing_preserves_source_and_refuses_library_resolution() {
     let fixture = Fixture::new();
     let richer = "#const n=1. p :- #count{1:q} > 0.";
     fixture.write("richer.lp", richer);
@@ -268,7 +266,6 @@ fn richer_parsing_does_not_claim_s0_admission_or_library_resolution() {
         .load("richer.lp")
         .expect("syntax is supported by themelios");
     assert_eq!(bundle.sources()[0].source().text(), richer);
-    assert!(admit(richer.to_owned(), AdmissionOptions::default()).is_err());
     fixture.write("library.lp", "#include <incmode>.");
     assert!(
         matches!(fixture.load("library.lp"), Err(BundleError::LibraryInclude { name, .. }) if name == "incmode")

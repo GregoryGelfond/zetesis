@@ -1,20 +1,22 @@
 //! Located API failures retain source evidence, and observations preserve typed values.
 
-use crate::support::admission;
+use crate::support::{admission, atom_models::bundle_answer_sets};
+use std::collections::BTreeSet;
 use std::error::Error as _;
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
+use zetesis_test_support::programs::nullary;
 
 use themelios_base::source::{FromBytesRefusal, SourceId};
+use zetesis_algebra::Cancellation;
 use zetesis_core::{Atom, AtomPattern, ConstructionError, Model, Predicate, Value};
-use zetesis_cpu::Cancellation;
 use zetesis_reference_support::resource_limits;
+use zetesis_themelios::logical::term::{EvalError, Variable};
 use zetesis_themelios::{
     AdmissionFailure, AdmissionOptions, BundleAdmissionError, BundleAdmissionOptions, BundleError,
-    BundleLimits, ExpansionFailure, ExpansionLimits, FormulaFailure, FormulaLimits, InputLimit,
-    SourceBundle, admit, admit_bundle_extended, admit_bundle_formula, admit_extended,
-    admit_formula, observation,
+    BundleLimits, ExpansionFailure, ExpansionLimits, ExpansionResource, FormulaFailure,
+    FormulaLimits, InputLimit, SourceBundle, admit_bundle_formula, admit_formula, observation,
 };
 
 const SOURCE: SourceId = SourceId::new(73);
@@ -59,7 +61,16 @@ fn input_quota_diagnostics_preserve_observed_count_source_and_typed_boundary() {
             source_id: SOURCE,
             ..resource_limits::admission(expected, u64::try_from(bound).unwrap())
         };
-        let error = admit(source.to_owned(), options).unwrap_err();
+        let error = admit_formula(
+            source.to_owned(),
+            options,
+            ExpansionLimits::default(),
+            FormulaLimits::default(),
+        )
+        .unwrap_err();
+        let FormulaFailure::Expansion(ExpansionFailure::Admission(error)) = error else {
+            panic!("expected original input ceiling");
+        };
         located(&error, source);
         let AdmissionFailure::Limit {
             resource,
@@ -108,42 +119,67 @@ fn input_quota_diagnostics_preserve_observed_count_source_and_typed_boundary() {
     ));
     located(admission, source);
     assert_eq!(error.diagnostics()[0].primary().location.source, SOURCE);
-    assert!(admit(source.to_owned(), options()).is_ok());
+    assert!(formula(source, &FormulaLimits::default()).is_ok());
 }
 
 #[test]
-fn real_s0_refusals_explain_the_feature_without_discarding_the_source() {
-    for (source, phrase) in [
-        ("p | q.", "head"),
-        ("1 {p}.", "bounded choice"),
-        ("{p;q}.", "other than one element"),
-        ("{p:q}.", "conditional choice"),
-        ("p :- q:r.", "body element"),
-        ("p :- 1=1=1.", "comparison chain"),
-        ("p :- 1<2.", "comparison relation"),
-        ("p(f(X)):-q(X).", "non-scalar"),
-        ("p :- #true.", "Boolean"),
-    ] {
-        let error = admit(source.to_owned(), options()).unwrap_err();
-        located(&error, source);
-        assert!(error.to_string().contains(phrase), "{source}: {error}");
-        assert!(error.source().is_none());
-    }
+fn source_raise_and_safety_refusals_keep_original_evidence() {
     let source = "p(2147483648).";
-    let error = admit(source.to_owned(), options()).unwrap_err();
+    let failure = formula(source, &FormulaLimits::default()).unwrap_err();
+    let FormulaFailure::Expansion(ExpansionFailure::Admission(error)) = &failure else {
+        panic!("expected original raising refusal: {failure}");
+    };
     assert!(matches!(error, AdmissionFailure::Raise(_)));
     assert!(error.to_string().contains("source raising"));
-    located(&error, source);
+    located(error, source);
     let source = "p(X).";
-    let error = admit(source.to_owned(), options()).unwrap_err();
+    let error = formula(source, &FormulaLimits::default()).unwrap_err();
+    // Fact expansion reports the named variable before formula safety runs.
+    let FormulaFailure::Expansion(expansion) = &error else {
+        panic!("expected fact expansion refusal: {error}");
+    };
+    let ExpansionFailure::Evaluation {
+        error: evaluation,
+        location,
+    } = expansion
+    else {
+        panic!("expected checked scalar refusal: {expansion}");
+    };
     assert!(
-        error
-            .source()
-            .unwrap()
-            .downcast_ref::<zetesis_core::AdmissionError>()
-            .is_some()
+        matches!(evaluation, EvalError::NotGround { variable: Variable::Named(name) }
+        if name.as_str() == "X")
     );
-    located(&error, source);
+    assert_eq!(location.statement_id().unwrap().index(), 0);
+    let location = location.location().unwrap();
+    assert_eq!(location.source, SOURCE);
+    assert_eq!(location.span.start().get(), 0);
+    assert_eq!(
+        usize::try_from(location.span.end().get()).unwrap(),
+        source.len()
+    );
+    let expansion_cause = error
+        .source()
+        .unwrap()
+        .downcast_ref::<ExpansionFailure>()
+        .unwrap();
+    assert!(std::ptr::eq(expansion_cause, expansion));
+    let evaluation_cause = expansion
+        .source()
+        .unwrap()
+        .downcast_ref::<EvalError>()
+        .unwrap();
+    assert!(std::ptr::eq(evaluation_cause, evaluation));
+    assert!(!error.to_string().is_empty());
+    assert_eq!(error.interruption(), None);
+    let diagnostics = error.diagnostics();
+    assert!(!diagnostics.is_empty());
+    for diagnostic in diagnostics {
+        assert_eq!(diagnostic.primary().location.source, SOURCE);
+        assert!(
+            usize::try_from(diagnostic.primary().location.span.end().get()).unwrap()
+                <= source.len()
+        );
+    }
 }
 
 #[test]
@@ -176,7 +212,7 @@ fn extremum_diagnostics_explain_the_retained_guard() {
 }
 
 #[test]
-fn core_shape_and_program_limits_remain_actionable_through_source_admission() {
+fn core_shape_and_template_limits_remain_actionable_through_formula_admission() {
     let empty = Predicate::new("", 0).unwrap_err();
     assert_eq!(empty, ConstructionError::EmptyPredicateName);
     assert!(empty.to_string().contains("empty"));
@@ -191,25 +227,43 @@ fn core_shape_and_program_limits_remain_actionable_through_source_admission() {
     assert!(arity.to_string().contains('2') && arity.to_string().contains('0'));
     let limits = AdmissionOptions {
         source_id: SOURCE,
-        ..resource_limits::admission_core(zetesis_core::AdmissionResource::Templates, 1)
+        core_limits: zetesis_core::AdmissionLimits {
+            max_templates: 1,
+            ..Default::default()
+        },
+        ..AdmissionOptions::default()
     };
     let source = "p. q.";
-    let error = admit(source.to_owned(), limits).unwrap_err();
+    let error = admit_formula(
+        source.to_owned(),
+        limits,
+        ExpansionLimits::default(),
+        FormulaLimits::default(),
+    )
+    .unwrap_err();
     let cause = error
         .source()
         .unwrap()
-        .downcast_ref::<zetesis_core::AdmissionError>()
+        .downcast_ref::<ExpansionFailure>()
         .unwrap();
+    assert!(matches!(cause, ExpansionFailure::Limit {
+        resource: ExpansionResource::Templates, limit: 1, observed: 2, location,
+    } if location.location().unwrap().source == SOURCE));
     assert!(cause.to_string().contains("Templates"), "{cause}");
     assert_eq!(error.to_string(), cause.to_string());
-    located(&error, source);
+    assert!(!error.diagnostics().is_empty());
+    for diagnostic in error.diagnostics() {
+        assert_eq!(diagnostic.primary().location.source, SOURCE);
+        assert!(
+            usize::try_from(diagnostic.primary().location.span.end().get()).unwrap()
+                <= source.len()
+        );
+    }
+    let admitted = formula(source, &FormulaLimits::default()).unwrap();
+    assert_eq!(admitted.atoms().len(), 2);
     assert_eq!(
-        admit(source.to_owned(), options())
-            .unwrap()
-            .program()
-            .facts()
-            .len(),
-        2
+        crate::support::atom_models::answer_sets(&admitted),
+        [BTreeSet::from([nullary("p"), nullary("q")])].into()
     );
 }
 
@@ -219,8 +273,10 @@ fn constant_refusals_retain_duplicate_or_policy_locations_and_evaluation_causes(
         "#const n=1. #const n=2. p(n).",
         "#const n=2. [default] p(n).",
     ] {
-        let error =
-            admit_extended(source.to_owned(), options(), ExpansionLimits::default()).unwrap_err();
+        let failure = formula(source, &FormulaLimits::default()).unwrap_err();
+        let FormulaFailure::Expansion(error) = failure else {
+            panic!("expected original constant expansion refusal");
+        };
         assert!(matches!(
             error,
             ExpansionFailure::DuplicateConstant { .. } | ExpansionFailure::ConstantPolicy { .. }
@@ -236,8 +292,10 @@ fn constant_refusals_retain_duplicate_or_policy_locations_and_evaluation_causes(
         );
     }
     let source = "#const n=1/0. p(n).";
-    let error =
-        admit_extended(source.to_owned(), options(), ExpansionLimits::default()).unwrap_err();
+    let failure = formula(source, &FormulaLimits::default()).unwrap_err();
+    let FormulaFailure::Expansion(error) = failure else {
+        panic!("expected original constant evaluation refusal");
+    };
     assert!(matches!(error, ExpansionFailure::Evaluation { .. }));
     assert!(error.source().is_some());
     assert!(!error.to_string().is_empty());
@@ -247,14 +305,7 @@ fn constant_refusals_retain_duplicate_or_policy_locations_and_evaluation_causes(
             .iter()
             .all(|diagnostic| diagnostic.primary().location.source == SOURCE)
     );
-    assert!(
-        admit_extended(
-            "#const n=1. p(n).".to_owned(),
-            options(),
-            ExpansionLimits::default()
-        )
-        .is_ok()
-    );
+    assert!(formula("#const n=1. p(n).", &FormulaLimits::default()).is_ok());
 }
 
 #[test]
@@ -410,23 +461,29 @@ fn cycle_and_library_refusals_keep_the_closing_source_and_name() {
 }
 
 #[test]
-fn bundled_admission_keeps_the_catalog_after_failure_and_moves_program_identity_on_success() {
+fn bundled_formula_admission_retains_failed_sources_and_moved_owner_identity() {
     let fixture = Fixture::new();
     let child = fixture.write("child.lp", "#const n=2. q(n).");
     let root = fixture.write("root.lp", format!("#const n=1.\n{}", include(&child)));
     let bundle = SourceBundle::load(&root, BundleLimits::default()).unwrap();
     assert_eq!(bundle.sources()[0].loaded_path(), root);
-    let failure = admit_bundle_extended(
+    let original_bytes = bundle.sources()[0].source().text().as_ptr();
+    let failure = admit_bundle_formula(
         bundle,
         BundleAdmissionOptions::default(),
         ExpansionLimits::default(),
+        FormulaLimits::default(),
     )
     .unwrap_err();
     let cause = failure
         .source()
         .unwrap()
-        .downcast_ref::<BundleAdmissionError>()
+        .downcast_ref::<FormulaFailure>()
         .unwrap();
+    assert!(matches!(
+        cause,
+        FormulaFailure::Expansion(ExpansionFailure::DuplicateConstant { .. })
+    ));
     assert!(
         cause
             .source()
@@ -436,30 +493,41 @@ fn bundled_admission_keeps_the_catalog_after_failure_and_moves_program_identity_
     );
     assert_eq!(failure.to_string(), cause.to_string());
     assert!(failure.to_string().contains('n'));
+    assert!(!failure.diagnostics().is_empty());
     for diagnostic in failure.diagnostics() {
-        assert!(
-            failure
-                .bundle()
-                .get(diagnostic.primary().location.source)
-                .is_some()
-        );
+        let location = diagnostic.primary().location;
+        let source = failure.bundle().get(location.source).unwrap().source();
+        assert!(source.slice(location.span).is_ok());
     }
-    let bundle = failure.into_bundle();
-    assert_eq!(bundle.sources().len(), 2);
+    assert_eq!(failure.bundle().sources().len(), 2);
+    assert_eq!(
+        failure.bundle().sources()[0].source().text().as_ptr(),
+        original_bytes
+    );
     fs::write(&child, "q.").unwrap();
     fs::write(&root, format!("p.\n{}", include(&child))).unwrap();
-    let admitted = admit_bundle_extended(
+    // Filesystem edits cannot rewrite the immutable failed source graph.
+    assert_eq!(
+        failure.bundle().sources()[1].source().text(),
+        "#const n=2. q(n)."
+    );
+    let admitted = admit_bundle_formula(
         SourceBundle::load(&root, BundleLimits::default()).unwrap(),
         BundleAdmissionOptions::default(),
         ExpansionLimits::default(),
+        FormulaLimits::default(),
     )
     .unwrap();
-    let identity = admitted.program().clone();
-    let program = admitted.into_program();
-    assert!(program.same_instance(&identity));
-    assert_eq!(program.facts().len(), 2);
-    assert!(program.templates().is_empty());
+    let identity = std::ptr::from_ref(admitted.original_program());
+    let retained = admitted;
     fixture.close();
+    assert!(std::ptr::eq(retained.original_program(), identity));
+    assert_eq!(retained.bundle().sources().len(), 2);
+    assert_eq!(retained.atoms().len(), 2);
+    assert_eq!(
+        bundle_answer_sets(&retained),
+        [BTreeSet::from([nullary("p"), nullary("q")])].into()
+    );
 }
 
 #[test]
@@ -514,19 +582,23 @@ fn a_redirected_include_has_both_lexical_and_canonical_diagnostic_evidence() {
     let alias = fixture.path("alias.lp");
     std::os::unix::fs::symlink(&actual, &alias).unwrap();
     let root = fixture.write("root.lp", include(&alias));
-    let failure = admit_bundle_extended(
+    let failure = admit_bundle_formula(
         SourceBundle::load(root, BundleLimits::default()).unwrap(),
         BundleAdmissionOptions::default(),
         ExpansionLimits::default(),
+        FormulaLimits::default(),
     )
     .unwrap_err();
+    let FormulaFailure::Include(cause) = failure.error() else {
+        panic!("expected original include identity refusal");
+    };
     assert!(matches!(
-        failure.error(),
+        cause.as_ref(),
         BundleAdmissionError::IncludeRedirection { .. }
     ));
     let text = failure.to_string();
     assert!(text.contains("alias.lp") && text.contains("actual.lp"));
-    assert!(failure.error().source().is_none());
+    assert!(cause.source().is_none());
     assert_eq!(
         failure.diagnostics()[0].primary().location.source,
         SourceId::new(0)

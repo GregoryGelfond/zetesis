@@ -8,7 +8,7 @@ use crate::{
     AdmissionError, AggregateComparison, AggregateElement, AggregateErrorKind, FormulaNodes,
     NodeView,
 };
-use zetesis_cpu::{Cancellation, Refusal, Stop};
+use zetesis_algebra::{Cancellation, Refusal, Stop};
 
 /// Run `test` on an emitter whose meter has admitted seven operations, which is
 /// not a metered boundary; with `stop`, a stop is requested once it has. The

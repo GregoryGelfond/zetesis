@@ -1,7 +1,7 @@
 //! Public reconstruction owns selected truth independently of canonical storage.
 
+use zetesis_algebra::{Cancellation, Stop};
 use zetesis_core::{Atom, Model, Predicate, Value};
-use zetesis_cpu::{Cancellation, Stop};
 use zetesis_reference_support::{prepared, resource_limits};
 use zetesis_themelios::{
     AdmissionOptions, ExpansionLimits, FormulaLimits, FormulaMaterialization, FormulaResource,

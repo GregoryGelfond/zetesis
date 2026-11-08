@@ -4,9 +4,9 @@ use super::*;
 use std::error::Error as _;
 
 fn collection_refusal(limits: WorldViewLimits) -> WorldViewFailure {
-    let owner = normal("a. b.");
+    let owner = formula("a. b.");
     WorldView::collect(
-        PreparedInput::admitted(&owner),
+        PreparedInput::formula(&owner),
         config(),
         limits,
         Cancellation::default(),
@@ -28,7 +28,12 @@ fn collection_chain(failure: &WorldViewFailure, message: &str) {
     let outcome = failure.outcome().unwrap();
     assert_eq!(outcome.verified_models(), 1);
     assert!(!outcome.unsatisfiable());
-    assert!(outcome.subject().unwrap().same_instance(failure.subject()));
+    assert!(
+        outcome
+            .original()
+            .unwrap()
+            .same_instance(failure.original())
+    );
 }
 
 #[test]
@@ -84,7 +89,7 @@ fn search_refusal_transfers_the_original_checked_prefix() {
     assert_eq!(outcome.verified_models(), 1);
     assert_eq!(outcome.completion(), Some(Completion::Interrupted));
     assert_eq!(failure.answer_sets().len(), 1);
-    let subject = failure.subject().clone();
+    let original = failure.original().clone();
     let original_answer = failure.answer_sets().as_ptr();
     let original_catalog = failure.answer_sets()[0].interpretation().catalog().clone();
     let expected = names(&failure.answer_sets()[0]);
@@ -100,7 +105,7 @@ fn search_refusal_transfers_the_original_checked_prefix() {
             .same_owner(&original_catalog)
     );
     assert_eq!(names(&answers[0]), expected);
-    assert!(answers[0].subject().same_instance(&subject));
+    assert!(answers[0].original().same_instance(&original));
 }
 
 #[test]
@@ -138,7 +143,7 @@ fn observer_refusal_chain_retains_the_external_error() {
 #[test]
 fn decomposition_transfers_the_original_typed_cause() {
     let (failure, _, _) = observer_failure(Refusal::Execution);
-    let subject = failure.subject().clone();
+    let original = failure.original().clone();
     let WorldViewError::Solve(solve) = failure.cause() else {
         panic!("expected an owned solve failure");
     };
@@ -153,7 +158,7 @@ fn decomposition_transfers_the_original_typed_cause() {
     );
     let zetesis_solve::WorldViewFailureParts {
         cause,
-        subject: transferred_subject,
+        original: transferred_original,
         answer_sets,
         outcome,
     } = failure.into_parts();
@@ -169,8 +174,8 @@ fn decomposition_transfers_the_original_typed_cause() {
         .unwrap();
     assert!(std::ptr::eq(external, original_error));
     assert_eq!(external.kind(), io::ErrorKind::ConnectionAborted);
-    assert!(transferred_subject.same_instance(&subject));
-    assert!(solve.subject().unwrap().same_instance(&subject));
+    assert!(transferred_original.same_instance(&original));
+    assert!(solve.original().unwrap().same_instance(&original));
     assert!(answer_sets.is_empty());
     assert!(outcome.is_none());
 }
@@ -188,7 +193,7 @@ fn decomposition_transfers_the_original_collection_evidence() {
         Cancellation::default(),
     )
     .unwrap_err();
-    let subject = failure.subject().clone();
+    let original = failure.original().clone();
     assert_eq!(failure.answer_sets().len(), 1);
     let original_answer = std::ptr::from_ref(&failure.answer_sets()[0]);
     let original_outcome = std::ptr::from_ref(failure.outcome().unwrap());
@@ -196,14 +201,33 @@ fn decomposition_transfers_the_original_collection_evidence() {
     let parts = failure.into_parts();
     drop(owner);
     assert!(matches!(parts.cause, WorldViewError::NotExhausted));
-    assert!(parts.subject.same_instance(&subject));
+    assert!(parts.original.same_instance(&original));
     assert_eq!(parts.answer_sets.len(), 1);
     assert!(std::ptr::eq(parts.answer_sets.as_ptr(), original_answer));
     assert_eq!(names(&parts.answer_sets[0]), expected);
-    assert!(parts.answer_sets[0].subject().same_instance(&subject));
+    assert!(parts.answer_sets[0].original().same_instance(&original));
     let outcome = parts.outcome.unwrap();
     assert!(std::ptr::eq(outcome.as_ref(), original_outcome));
-    assert!(outcome.subject().unwrap().same_instance(&subject));
+    assert!(outcome.original().unwrap().same_instance(&original));
     assert_eq!(outcome.verified_models(), 1);
     assert_eq!(outcome.completion(), Some(Completion::Interrupted));
+}
+
+#[test]
+fn count_refusals_precede_retained_payload_admission() {
+    let answer_refusal = collection_refusal(WorldViewLimits {
+        max_answer_sets: 0,
+        max_atoms: 0,
+        max_bytes: 0,
+    });
+    assert!(matches!(answer_refusal.cause(), WorldViewError::AnswerSets));
+    collection_chain(&answer_refusal, "world-view answer-set limit reached");
+
+    let atom_refusal = collection_refusal(WorldViewLimits {
+        max_answer_sets: 1,
+        max_atoms: 0,
+        max_bytes: 0,
+    });
+    assert!(matches!(atom_refusal.cause(), WorldViewError::Atoms));
+    collection_chain(&atom_refusal, "world-view atom limit reached");
 }

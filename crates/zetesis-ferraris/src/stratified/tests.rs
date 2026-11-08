@@ -510,7 +510,7 @@ fn final_evaluation_cannot_certify_an_invalid_closure() {
                 cancellation: &cancellation,
                 meter,
                 statistics: &mut statistics,
-                current_bytes: 0,
+                bytes: MeterBytes::new(),
             },
         )
     });
@@ -565,7 +565,7 @@ fn a_requested_stop_precedes_the_work_limit_between_boundaries() {
                         cancellation: &cancellation,
                         meter,
                         statistics: &mut statistics,
-                        current_bytes: 0,
+                        bytes: MeterBytes::new(),
                     }
                     .tick(),
                 )
@@ -588,14 +588,30 @@ fn a_requested_stop_precedes_the_work_limit_between_boundaries() {
 fn a_ceiling_refusal_settles_to_a_requested_stop() {
     let refused = |stop: bool| {
         let cancellation = Cancellation::default();
-        cancellation
-            .metered(u64::MAX, |_| {
+        let mut statistics = StratifiedPlanStatistics {
+            dependencies: 1,
+            ..StratifiedPlanStatistics::default()
+        };
+        let result = cancellation
+            .metered(u64::MAX, |meter| {
                 if stop {
                     cancellation.cancel();
                 }
-                Budget::ceiling(StratifiedResource::Dependencies, 2, 1)
+                Budget {
+                    limits: StratifiedPlanLimits {
+                        max_dependencies: 1,
+                        ..StratifiedPlanLimits::default()
+                    },
+                    cancellation: &cancellation,
+                    meter,
+                    statistics: &mut statistics,
+                    bytes: MeterBytes::new(),
+                }
+                .dependency()
             })
-            .result
+            .result;
+        assert_eq!(statistics.dependencies, 1);
+        result
     };
     assert_eq!(
         refused(false),
@@ -613,7 +629,7 @@ fn a_ceiling_refusal_settles_to_a_requested_stop() {
 
 #[test]
 fn plan_errors_classify_resource_refusals() {
-    use zetesis_cpu::Refusal;
+    use zetesis_algebra::Refusal;
     for refusal in [
         StratifiedError::Limit {
             resource: StratifiedResource::Bytes,
@@ -634,4 +650,92 @@ fn plan_errors_classify_resource_refusals() {
     ] {
         assert!(!shape.is_resource_refusal(), "{shape:?}");
     }
+}
+
+#[test]
+fn byte_reservation_preserves_the_named_refusal() {
+    let cancellation = Cancellation::default();
+    let limits = StratifiedPlanLimits {
+        max_bytes: 7,
+        ..StratifiedPlanLimits::default()
+    };
+    let mut statistics = StratifiedPlanStatistics::default();
+    let metered = cancellation.metered(limits.max_work, |meter| {
+        let mut budget = Budget {
+            limits,
+            cancellation: &cancellation,
+            meter,
+            statistics: &mut statistics,
+            bytes: MeterBytes::new(),
+        };
+        budget.observe_bytes(4)?;
+        budget.reserve::<u8>(4)
+    });
+    assert_eq!(
+        metered.result,
+        Err(StratifiedError::Limit {
+            resource: StratifiedResource::Bytes,
+            observed: 8,
+            limit: 7,
+        })
+    );
+    assert_eq!(metered.charged, 0);
+    assert_eq!(statistics.peak_bytes, 4);
+    assert_eq!(statistics.retained_bytes, 0);
+}
+
+#[test]
+fn byte_reservation_polls_before_its_ceiling_check() {
+    let cancellation = Cancellation::default();
+    let limits = StratifiedPlanLimits {
+        max_bytes: 0,
+        ..StratifiedPlanLimits::default()
+    };
+    let mut statistics = StratifiedPlanStatistics::default();
+    let metered = cancellation.metered(limits.max_work, |meter| {
+        let mut budget = Budget {
+            limits,
+            cancellation: &cancellation,
+            meter,
+            statistics: &mut statistics,
+            bytes: MeterBytes::new(),
+        };
+        cancellation.cancel();
+        // Inspect before the enclosing settlement: an exit poll cannot make
+        // a misplaced reservation poll satisfy this assertion.
+        assert_eq!(
+            budget.reserve::<u8>(1),
+            Err(StratifiedError::Stopped(Stop::Cancelled))
+        );
+        Ok::<_, StratifiedError>(())
+    });
+    assert_eq!(metered.result, Ok(()));
+    assert_eq!(metered.charged, 0);
+    assert_eq!(statistics.peak_bytes, 0);
+}
+
+#[test]
+fn dependency_count_keeps_its_machine_boundary_without_polling() {
+    let cancellation = Cancellation::default();
+    cancellation.cancel();
+    let mut meter = Meter::local(0);
+    let mut statistics = StratifiedPlanStatistics {
+        dependencies: usize::MAX - 1,
+        ..StratifiedPlanStatistics::default()
+    };
+    let mut budget = Budget {
+        limits: StratifiedPlanLimits {
+            max_dependencies: usize::MAX,
+            ..StratifiedPlanLimits::default()
+        },
+        cancellation: &cancellation,
+        meter: &mut meter,
+        statistics: &mut statistics,
+        bytes: MeterBytes::new(),
+    };
+    assert_eq!(budget.dependency(), Ok(()));
+    assert_eq!(budget.statistics.dependencies, usize::MAX);
+    assert_eq!(budget.dependency(), Err(StratifiedError::Overflow));
+    assert_eq!(budget.statistics.dependencies, usize::MAX);
+    assert_eq!(budget.meter.charged(), 0);
 }

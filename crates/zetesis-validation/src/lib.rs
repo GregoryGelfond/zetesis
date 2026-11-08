@@ -12,6 +12,7 @@ mod stage;
 pub mod examples;
 pub mod performance;
 pub mod process;
+pub mod residual_evidence;
 pub mod selected;
 
 /// Canonical native atoms and closed values used by structured report views.

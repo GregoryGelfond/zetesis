@@ -4,11 +4,11 @@ use std::io;
 use zetesis_reference_support::BundleFixture;
 
 use clap::Parser;
+use zetesis_algebra::Cancellation;
 use zetesis_cli::{
     ColorMode, Completion, Grounder, Options, Oracle, RunError, run_bundle_with_diagnostics,
     run_finalized_with_diagnostics, run_with_diagnostics,
 };
-use zetesis_cpu::Cancellation;
 use zetesis_test_support::fixtures::ZERO_DIVISOR as SOURCE;
 use zetesis_test_support::io::BoundedWriter;
 

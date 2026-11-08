@@ -78,7 +78,7 @@ contains an optional `StatementId` in that owner's canonical statement order
 and an optional real `Location`; a constructed statement needs no source span.
 Emitted roots, objectives, warnings and delayed work retain these sites. Typed
 formula failures retain the original owner and expose `site()`,
-`original_program()` and `subject()`. Observation errors expose `site()` for
+`original_program()` and `original()`. Observation errors expose `site()` for
 resolution through the formula owner. IDs belong to that original program and
 cannot be transferred between owners. Formula owners' `source()` is optional:
 it returns `Some` for single-source input and `None` for this door, even if a
@@ -102,7 +102,7 @@ as ASP:
 
 ```rust
 # extern crate zetesis;
-# extern crate zetesis_cpu;
+# extern crate zetesis_algebra;
 # extern crate zetesis_solve;
 # extern crate zetesis_themelios;
 {{#include ../examples/formula-program-macro.rs:example}}
@@ -115,7 +115,7 @@ The constructors expose the choice elements and bounds for composition in Rust:
 
 ```rust
 # extern crate zetesis;
-# extern crate zetesis_cpu;
+# extern crate zetesis_algebra;
 # extern crate zetesis_solve;
 # extern crate zetesis_themelios;
 {{#include ../examples/formula-program.rs:example}}
@@ -131,7 +131,7 @@ are the full answer sets.
 
 ```rust
 # extern crate zetesis;
-# extern crate zetesis_cpu;
+# extern crate zetesis_algebra;
 # extern crate zetesis_solve;
 # extern crate zetesis_themelios;
 mod execution {
@@ -179,44 +179,23 @@ run protocol.
 
 ## Admit an existing logical program
 
-For an owned relational input with display metadata, use
-`prepare_program_relational(Arc<Program>, ProgramRelationalOptions)` and lend
-its result through `PreparedInput::relational`. The same admitted program can
-run with `Grounder::Lazy` or `Grounder::Eager`. Preparation admits finite facts
-into the native fact store and compiles the remaining templates; lazy execution still performs variable joins during
-candidate checking. This reuses the extended relational compiler, including
-scalar constants, finite fact expansion and signed coherence.
-
-The owner retains the original program, template and fact statement identities,
-and compiled `#show` queries together. `template_sites()` follows the native
-`templates()` sequence; `fact_sites()` follows `facts()`, including duplicate
-occurrences and every row of an expanded family. `FormulaPurpose::AnswerSets` has the same
-meaning here as in formula preparation: objectives and `#project` are excluded
-before evaluation, while structural input limits still apply. Preparation shares
-one expansion allowance and optional cancellation token across normalization and
-observation preparation. Pass that token to the session to preserve the same
-deadline through solving.
-
-`prepare_program_automatic(program, ProgramFormulaOptions)` makes the extended-to-formula
-choice in the library when that choice is wanted. Its `AutomaticAdmission` result
-retains the accepted owner and original `Arc`; its failure names the selected
-profile. Both attempts use the supplied admission, expansion, declaration-purpose
-and cancellation settings, and both derive observation and metadata-storage
-limits from `options.formula`. Formula domain analysis remains opt-in. The engine
-uses this entry only for its existing lazy-grounder relational-first policy.
-
-This relational profile remains narrower than the formula profile. General
-disjunction, bounded choices and aggregates are explicit refusals; preparation
-does not silently switch them to eager or hybrid execution. Existing Lean closure
-laws apply to the admitted normal program, but do not yet prove this Rust input
-conversion.
+A canonical logical program, built with the themelios macro or constructors or
+raised from parsed source, is prepared through the formula profile.
+`prepare_program_formula_with(program, ProgramFormulaOptions)` prepares it for
+execution, and `admit_program_formula` composes that preparation with eager
+grounding, as [above](#prepare-a-logical-formula-program).
+`FormulaPurpose::AnswerSets` excludes objectives and `#project` before evaluation,
+while structural input limits still apply. Preparation shares one expansion
+allowance and optional cancellation token across normalization and observation
+preparation; pass that token to the session to keep the same deadline through
+solving.
 
 These examples construct one optional selection with conditional display terms.
 The macro writes the choice and `#show` directives directly:
 
 ```rust
 # extern crate zetesis;
-# extern crate zetesis_cpu;
+# extern crate zetesis_algebra;
 # extern crate zetesis_solve;
 # extern crate zetesis_themelios;
 {{#include ../examples/relational-program-macro.rs:example}}
@@ -229,7 +208,7 @@ The corresponding constructors keep each statement available for composition:
 
 ```rust
 # extern crate zetesis;
-# extern crate zetesis_cpu;
+# extern crate zetesis_algebra;
 # extern crate zetesis_solve;
 # extern crate zetesis_themelios;
 {{#include ../examples/relational-program.rs:example}}
@@ -239,14 +218,14 @@ The corresponding constructors keep each statement available for composition:
 ```
 
 Both use the following native preparation and enumeration function. The same
-cancellation token covers preparation, lazy solving and observation. It returns
-full atoms separately from the conditional `#show` terms and checks both
-exhaustion and the actual closure route. The complete results are an empty
-answer with no shown terms, and `{chosen(1)}` with the shown term `1`.
+cancellation token covers preparation, solving and observation. It returns full
+atoms separately from the conditional `#show` terms and checks exhaustion. The
+complete results are an empty answer with no shown terms, and `{chosen(1)}` with
+the shown term `1`.
 
 ```rust
 # extern crate zetesis;
-# extern crate zetesis_cpu;
+# extern crate zetesis_algebra;
 # extern crate zetesis_solve;
 # extern crate zetesis_themelios;
 mod execution {
@@ -261,78 +240,17 @@ cargo run --locked -p zetesis --example book-relational-program-macro
 cargo run --locked -p zetesis --example book-relational-program
 ```
 
-### Borrow the strict relational input
+### Admit a canonical program in one call
 
-`zetesis_themelios::admit_program(&program, ProgramAdmissionOptions)` borrows a
-canonical `zetesis::Program` and compiles the strict relational (S0) profile.
-The facade and the adapter's `logical` reexport expose the same upstream
-themelios type, so callers can construct or raise the program with its native APIs. Admission
-uses the same rule compiler and strong-negation coherence operation as `admit`,
-without rendering or parsing the program.
-
-This door accepts parameterless base-part rules, relational variables and closed
-data values, default negation, equality/disequality tests and unbounded
-single-atom choices. Equality does not introduce a variable absent from positive
-relational bindings. Unary negation retains the shared compiler's checked
-closed-operand evaluation; general arithmetic terms, generators, aggregates and
-directives remain outside this door; use
-[`prepare_program_formula`](#prepare-a-logical-formula-program) for the general
-formula profile.
-
-`ProgramAdmissionOptions` bounds cumulative logical nodes and UTF-8 name/string
-bytes, nesting depth including symbol interiors, and canonical body elements
-per rule. Its `core_limits` separately governs native admission; `max_templates`
-counts templates and fact occurrences together, and `max_domain_values` bounds
-their combined domain.
-The borrowed traversal checks each rule before compilation, uses an iterative
-cursor over term and symbol interiors, and returns a typed `ProgramLimit` on
-refusal. S0 admission borrows statement evidence and does not traverse or count
-its provenance. These ceilings govern admission of an existing value; they do not
-account for its earlier construction or represent a process-memory limit.
-Source admission retains its checks on original bytes and authored syntax,
-including restrictions erased by canonicalization and body occurrences before
-set collection. Those checks cannot be recovered from a logical program.
-
-The returned `AdmittedProgram::program()` supplies the native program for
-`PreparedInput::program`. `template_statements()` borrows the original statement
-carriers in native template order; `fact_statements()` borrows them in native
-fact-occurrence order. Generated coherence constraints retain both introducing
-statements, whether their signed signatures came from facts or templates.
-`ProgramAdmissionFailure` similarly borrows the actual
-statement or part associated with a refusal and invents no source coordinate.
-`into_program()` releases this evidence borrow and returns the independently
-owned native program. Admission itself performs no grounding or answer search.
-
-All four relational doors (`admit`, `admit_extended`, `admit_program` and
-`prepare_program_relational`) use the same fact classification: an empty-body
-rule with a positive atom head and closed arguments becomes a fact occurrence.
-Strong negation remains part of the predicate's identity. Choices and other
-rules remain templates. `Program::rules()` traverses both streams in their
-original normalized order; `Program::is_empty()` checks both. Use `templates()`
-only when the operation concerns templates, such as indexing variable joins.
-
-Evidence accessors stay parallel to their own streams:
-
-| Owner | Template evidence | Fact-occurrence evidence |
-| --- | --- | --- |
-| `Admitted`, `AdmittedBundle` | `template_origins()` | `fact_origins()` |
-| `PreparedRelational` | `template_sites()` | `fact_sites()` |
-| `AdmittedProgram` | `template_statements()` | `fact_statements()` |
-
-A fact-specific native refusal exposes `AdmissionError::fact_index()`; each door
-maps it through its fact evidence. `template_index()` applies only to templates.
-The strict typed door's rule-count pre-check runs before classifying the next
-statement: it reports no native index and retains the original statement subject.
-Direct native callers pass `Program::new(templates, facts, limits)`, using
-`FactTables::default()` when they have no explicit facts. Native admission does
-not reclassify caller-supplied templates.
+`admit_program_formula` prepares and grounds a canonical program in one call
+and returns an owner that `PreparedInput::formula` lends to a session.
 
 These examples construct `p :- not q.` and `q :- not p.` and print their two
 canonical answer sets, `{p}` and `{q}`. The macro keeps the rules in ASP form:
 
 ```rust
 # extern crate zetesis;
-# extern crate zetesis_cpu;
+# extern crate zetesis_algebra;
 # extern crate zetesis_solve;
 # extern crate zetesis_themelios;
 {{#include ../examples/program-macro.rs:example}}
@@ -345,7 +263,7 @@ The constructors compose the same rules from atoms and negated bodies:
 
 ```rust
 # extern crate zetesis;
-# extern crate zetesis_cpu;
+# extern crate zetesis_algebra;
 # extern crate zetesis_solve;
 # extern crate zetesis_themelios;
 {{#include ../examples/program.rs:example}}
@@ -362,7 +280,7 @@ exhausted search; an unfinished outcome is an error.
 
 ```rust
 # extern crate zetesis;
-# extern crate zetesis_cpu;
+# extern crate zetesis_algebra;
 # extern crate zetesis_solve;
 # extern crate zetesis_themelios;
 mod execution {
@@ -439,7 +357,7 @@ include precisely the receipts entailed by their chosen seeds.
 
 ```rust
 # extern crate zetesis_core;
-# extern crate zetesis_cpu;
+# extern crate zetesis_algebra;
 # extern crate zetesis_solve;
 # extern crate zetesis_themelios;
 {{#include ../examples/terminal.rs:example}}
@@ -459,9 +377,18 @@ catalog and, when any constraint is streamed, the closed canonical base with the
 possible-support relations those constraints read; discovery and order indexes
 and every other relation are released at admission. Closing is charged as
 formula work, and its transient peak is admitted against `max_support_bytes`. Producers and constraints with aggregates,
-projected atoms or conditional scopes remain in `core_theory()`. Ordinary
-atom/scalar integrity constraints retain their prepared templates instead of
-complete formula DAGs. This schedule requires indexed joins. Objective programs
+projected atoms or conditional scopes remain in `core_theory()`. A certified
+complete family of pairwise exclusions also becomes a compact native constraint
+in that core. Each other ordinary atom/scalar integrity constraint is grounded
+into the core as well when its instances fit the share
+`FormulaLimits::max_retained_constraint_nodes` grants and the theory ceilings
+still hold them; the rest retain their prepared templates instead of complete
+formula DAGs. The ordinary resource policy grants the theory's node share, so
+only what eager grounding could not hold is streamed. `FormulaLimits::default()`
+grants none, and every eligible constraint is then streamed.
+`streamed_templates()`, `streamed_instances()`, `retained_templates()` and
+`retained_instances()` report the division. This schedule requires
+indexed joins. Objective programs
 are prepared by the same operation as eager grounding; solving checks the
 original constraints before scoring an answer. The existing `ground()` methods
 remain eager.
@@ -587,9 +514,10 @@ mapping once consequence checking needs it. The existing source, scalar and
 support ceilings still apply;
 they are not a single aggregate live-memory or RSS bound. Core atoms, nodes and
 roots retain the formula-theory ceilings, including coherence and unsupported
-atom guards. `streamed_templates()` counts lowered templates, including pool
-alternatives, and `streamed_instances()` counts scalar-selected instances visited
-during admission; neither is a retained instance store.
+atom guards. `streamed_templates()` counts the surviving streamed templates,
+including pool alternatives, and `streamed_instances()` counts their
+scalar-selected instances visited during admission. Fully replaced native
+constraints contribute to neither count; neither is a retained instance store.
 
 `checker(limits)` gives each check its own work and substitution limits, plus a
 byte allowance for structural capture-delta capacity growth within each join:
@@ -624,76 +552,31 @@ relation enforces its own limits, then asks the enclosing operation for each
 work permit. A refusal retains the accepted prefix and runs no later step. It
 uses the same equality resolver as locally metered `query_attempt`.
 
-## Reuse original input across profiles
+## Retain original parsed input
 
 `ParsedSource` owns original bytes, their successful parse and fixed
-`AdmissionOptions`. Its consuming profile operations retain that owner on
-failure. This is useful when relational admission identifies a construct that
-needs the finite formula profile:
+`AdmissionOptions`. Formula preparation consumes that owner and retains it on
+failure. Successful parsing alone establishes neither admissibility nor an
+answer set.
 
 ```rust
 # extern crate zetesis_themelios;
 use zetesis_themelios::{AdmissionOptions, ExpansionLimits, FormulaLimits, ParsedSource};
 
 let source = ParsedSource::new("1{a;b}1.".into(), AdmissionOptions::default())?;
-let failure = source.admit_extended(ExpansionLimits::default()).unwrap_err();
-assert!(failure.error().needs_formula_admission());
-let prepared = failure.into_source()
-    .prepare_formula(ExpansionLimits::default(), FormulaLimits::default())?;
+let prepared = source.prepare_formula(ExpansionLimits::default(), FormulaLimits::default())?;
 let admitted = prepared.ground()?;
 assert_eq!(admitted.atoms().len(), 2);
 # Ok::<(), Box<dyn std::error::Error>>(())
 ```
 
-The example's known bounded choice requires formula admission. General callers
-must inspect `needs_formula_admission()` before choosing that alternative;
-undefined arithmetic, syntax and resource refusals are not permissions to retry.
-`SourceFailure::error()` exposes the unchanged typed refusal, and `into_parts()`
-recovers both it and the parsed owner. The String-taking convenience functions
-preserve their existing result and error types.
-
-For the same choice through one library operation, use
-`ParsedSource::admit_automatic_with_cancellation`. Its `AutomaticAdmission`
-result names the accepted profile; `AutomaticAdmissionFailure` preserves the
-selected refusal and exposes `interruption()` for cancellation and deadlines.
-The library switches profiles only for `needs_formula_admission()`, preserving
-input and resource refusals. For example:
-
-```rust
-# extern crate zetesis_themelios;
-# extern crate zetesis_cpu;
-use zetesis_cpu::Cancellation;
-use zetesis_themelios::{
-    AdmissionOptions, AutomaticAdmission, ExpansionLimits, FormulaLimits, ParsedSource,
-};
-let source = ParsedSource::new("1{a;b}1.".into(), AdmissionOptions::default())?;
-let admitted = source.admit_automatic_with_cancellation(
-    ExpansionLimits::default(), FormulaLimits::default(), &Cancellation::default(),
-)?;
-let AutomaticAdmission::Formula(prepared) = admitted else {
-    panic!("the bounded choice requires the formula profile");
-};
-assert_eq!(prepared.ground()?.atoms().len(), 2);
-# Ok::<(), Box<dyn std::error::Error>>(())
-```
-
-`admit_bundle_automatic_with_cancellation` makes the same choice for an original
-`SourceBundle`. The CLI uses these operations when its configuration permits
-formula execution, retaining its policy refusal where an extended refusal first
-requires formulas. Explicit closure and countermodel requests retain their
-selected profiles.
-
-The automatic source doors retain O(source bytes + syntax nodes) input storage
-and never clone the entire stdin buffer or reparse it on retry. When extended
-compilation reaches a formula-eligible refusal after the complete source checks,
-one shared traversal records both profile verdicts and one occurrence raise
-supplies both attempts. The handoff is used only when all formula profile
-verdicts passed; earlier refusals use the ordinary formula checks. Formula
-metadata refusals and objective checks keep their original order. Both attempts
-retain the same control token and independent per-attempt expansion allowances;
-the removed inspections and raising carried no expansion charges. Deferred
-formula materialization consumes its preparation's remaining budget. Library
-domain analysis stays an explicit `with_domain_analysis` opt-in.
+`SourceFailure::error()` exposes the typed preparation refusal, and
+`into_parts()` recovers both it and the parsed owner. Recovering the owner
+neither clones the input nor reparses it. A caller may explicitly prepare it
+again with different resource controls; a refusal does not silently select a
+different compiler. Each attempt performs its own checked raising and
+normalization. Deferred materialization consumes its preparation's remaining
+allowances. Domain analysis remains an explicit `with_domain_analysis` opt-in.
 
 Configure eager support storage through `FormulaLimits::max_support_bytes`
 before preparation. The default is 128 MiB for the support authority's canonical
@@ -1051,7 +934,7 @@ empty family of an inconsistent program containing the constraint `:-.`.
 
 ```rust
 # extern crate zetesis_solve;
-# extern crate zetesis_cpu;
+# extern crate zetesis_algebra;
 # extern crate zetesis_themelios;
 {{#include ../examples/source.rs:example}}
 ```
@@ -1074,6 +957,12 @@ the completed projection domain separately from theory roots. Authored
 `project_selection()` metadata is a declaration plan; the admitted owner's
 `projection()` supplies the fixed typed domain for
 [projected enumeration](sessions.md#projected-enumeration).
+
+A coherence constraint rules out a pair such as `p(2)` and `-p(2)`. Its evidence
+names the first materialized occurrence of each ground atom, which can be in a
+rule head or body. If both occurrences belong to the same original statement,
+that site appears once. This is evidence for the concrete pair, not a complete
+list of its producers or the first occurrence of each predicate signature.
 
 The example checks that emitted root evidence retains the source identity
 supplied in `AdmissionOptions`. It leaves syntax traversal to themelios's API
@@ -1138,8 +1027,8 @@ validation still runs after an earlier false filter.
 
 Canonical programs need not have source text. The APIs below therefore distinguish
 logical statement identity from optional parsed evidence. These changes require
-updates to Rust consumers of `v0.2.0`; the source-only relational owners keep their
-existing source accessors.
+updates to Rust consumers of `v0.2.0`. The former relational admission owners
+have been removed; use the formula preparation doors described above.
 
 `PreparedFormula::source()` and `AdmittedFormula::source()` now return
 `Option<&Source>`. Previously, a consumer could write:
@@ -1176,7 +1065,7 @@ Do not transfer IDs between programs or invent locations for constructed input.
 Update exhaustive failure matches: `FormulaFailure` adds `Program` and `Logical`
 and removes `ChoiceSource`; `ExpansionFailure` adds `Interrupted`. A typed-input
 formula failure can wrap its cause while retaining the original program. Use
-`cause()` for the underlying failure and `subject()` for its original statement,
+`cause()` for the underlying failure and `original()` for its original statement,
 part or program. Resource refusals remain distinct from cancellation and deadlines.
 
 The public themelios types also use a newer shared dependency revision. Prefer

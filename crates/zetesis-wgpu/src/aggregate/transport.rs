@@ -11,7 +11,7 @@ use crate::{
     runtime::{self, Runtime},
 };
 use std::{sync::Arc, time::Duration};
-use zetesis_cpu::Cancellation;
+use zetesis_algebra::Cancellation;
 
 pub(super) struct Resident {
     pub(super) numeric: Arc<Numeric>,
@@ -67,9 +67,10 @@ impl Resident {
             .checked_add(PARAM_BYTES)
             .and_then(|bytes| bytes.checked_add(plan.masks))
             .ok_or_else(|| capacity("aggregate upload accounting overflow"))?;
-        let transport = self
-            .transport
-            .get_or_insert_with(|| Transport::new(runtime, &self.tuples, &self.guards, plan));
+        let pipeline = runtime.static_pipeline()?;
+        let transport = self.transport.get_or_insert_with(|| {
+            Transport::new(runtime, pipeline, &self.tuples, &self.guards, plan)
+        });
         poll(cancellation)?;
         runtime.queue().write_buffer(
             &transport.params,
@@ -86,12 +87,14 @@ impl Resident {
             &runtime::Dispatch {
                 command_label: "aggregate batch",
                 pass_label: "original and frozen reductions",
-                pipeline: &runtime.pipeline,
+                pipeline,
                 group: &transport.group,
                 workgroups: [plan.worlds, 1, 1],
                 result: &transport.output,
                 readback: &transport.readback,
                 result_bytes: plan.results,
+                clear_result: false,
+                timing: None,
             },
         );
         activity.submissions = 1;
@@ -100,7 +103,7 @@ impl Resident {
         let result = runtime::read_polled(
             runtime.device(),
             &transport.readback,
-            submission,
+            submission.index,
             timeout,
             || poll(cancellation),
             |words| packing::decode(words, &self.numeric, plan, masks, cancellation),
@@ -124,7 +127,13 @@ pub(super) struct Transport {
     group: wgpu::BindGroup,
 }
 impl Transport {
-    fn new(runtime: &Runtime, tuples: &wgpu::Buffer, guards: &wgpu::Buffer, plan: &Plan) -> Self {
+    fn new(
+        runtime: &Runtime,
+        pipeline: &wgpu::ComputePipeline,
+        tuples: &wgpu::Buffer,
+        guards: &wgpu::Buffer,
+        plan: &Plan,
+    ) -> Self {
         let params = runtime::buffer(
             runtime.device(),
             "aggregate dimensions",
@@ -153,7 +162,7 @@ impl Transport {
             .device()
             .create_bind_group(&wgpu::BindGroupDescriptor {
                 label: Some("numeric aggregate batch"),
-                layout: &runtime.pipeline.get_bind_group_layout(0),
+                layout: &pipeline.get_bind_group_layout(0),
                 entries: &[
                     runtime::entry(0, &params),
                     runtime::entry(1, tuples),

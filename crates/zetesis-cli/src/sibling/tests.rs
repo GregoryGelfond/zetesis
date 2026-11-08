@@ -5,7 +5,9 @@
 //! for the sibling, which exits with [`STAND_IN_STATUS`]. A test that reached
 //! exec by mistake would end the harness with that status and fail the run.
 
-use super::{hand_off, hand_off_from, names_one_directory, opens_device, prepared, sibling};
+use super::{
+    LIBEXEC, hand_off, hand_off_from, names_one_directory, opens_device, prepared, sibling,
+};
 use crate::{Invocation, RunError};
 use std::ffi::OsString;
 use std::io::{ErrorKind, Write};
@@ -144,7 +146,10 @@ fn failure(front: std::io::Result<PathBuf>) -> (Option<PathBuf>, ErrorKind, Stri
     let invocation = Invocation::try_parse_from(&arguments).unwrap();
     let error = hand_off_from(&invocation, &arguments, || front, "0.5.0-0").unwrap();
     let message = error.to_string();
-    let RunError::GpuExecutableUnavailable { path, error: cause } = error else {
+    let RunError::GpuExecutableUnavailable {
+        path, error: cause, ..
+    } = error
+    else {
         panic!("{error:?}");
     };
     (path, cause.kind(), message)
@@ -178,7 +183,9 @@ fn a_cpu_invocation_resolves_no_executable() {
 }
 
 #[test]
-fn a_missing_sibling_names_its_path_and_the_remedy() {
+fn a_front_without_its_install_directory_is_not_an_installed_copy() {
+    // Like the build output where an install leaves its front: reinstalling
+    // leaves this copy as it is, so the installed copy is named instead.
     let directory = tempfile::tempdir().unwrap();
     let front = directory.path().join("zetesis");
     let (path, kind, message) = failure(Ok(front));
@@ -189,7 +196,19 @@ fn a_missing_sibling_names_its_path_and_the_remedy() {
         message.contains(&expected.display().to_string()),
         "{message}"
     );
+    assert!(message.contains("not an installed copy"), "{message}");
+    assert!(!message.contains("rerun"), "{message}");
+}
+
+#[test]
+fn a_missing_sibling_of_an_install_names_the_reinstall_remedy() {
+    let directory = tempfile::tempdir().unwrap();
+    let front = directory.path().join("zetesis");
+    std::fs::create_dir(directory.path().join(LIBEXEC)).unwrap();
+    let (_, kind, message) = failure(Ok(front));
+    assert_eq!(kind, ErrorKind::NotFound);
     assert!(message.contains("rerun scripts/install.sh"), "{message}");
+    assert!(!message.contains("not an installed copy"), "{message}");
 }
 
 #[test]
@@ -226,6 +245,7 @@ fn another_failure_names_its_reason_without_the_remedy() {
     // Reinstalling cannot repair an exhausted or failing system.
     let error = RunError::GpuExecutableUnavailable {
         path: Some("zetesis-libexec/0/zetesis".into()),
+        installed: true,
         error: ErrorKind::OutOfMemory.into(),
     };
     assert!(!error.to_string().contains("rerun"));

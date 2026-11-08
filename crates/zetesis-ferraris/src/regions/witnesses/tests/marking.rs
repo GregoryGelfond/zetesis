@@ -1,9 +1,9 @@
 //! Membership-only cone scans retain traversal receipts without result storage.
 
-use super::super::{Scratch, Work, chain_position, expands};
+use super::super::{Meter, Scratch, chain_position, expands};
 use super::*;
 use crate::test_support::Allowance;
-use zetesis_cpu::Stop;
+use zetesis_algebra::Stop;
 
 fn dag(disjunction: bool, depth: usize) -> (Theory, Vec<usize>) {
     let mut nodes =
@@ -52,21 +52,30 @@ fn marking_keeps_the_complete_receipt_without_collecting_nodes() {
             assert!(expands(&index, chain));
             let expected: Vec<_> = roots.iter().rev().copied().chain([0, 1]).collect();
             let mut collected = warmed(&index);
-            let mut collected_work = Work::new(u64::MAX);
-            collected.cone(&index, chain, &mut collected_work).unwrap();
+            let mut collected_work = Meter::local(u64::MAX);
+            collected
+                .cone(&index, chain, &mut collected_work)
+                .map_err(zetesis_algebra::Failure::into_stop)
+                .unwrap();
             assert_eq!(collected.prepared(), expected);
-            assert_eq!(collected_work.spent, u64::try_from(4 * depth + 1).unwrap());
+            assert_eq!(
+                collected_work.charged(),
+                u64::try_from(4 * depth + 1).unwrap()
+            );
             for fresh in [false, true] {
                 let mut marked = if fresh {
                     Scratch::default()
                 } else {
                     warmed(&index)
                 };
-                let mut work = Work::new(u64::MAX);
-                marked.mark_cone(&index, chain, &mut work).unwrap();
+                let mut work = Meter::local(u64::MAX);
+                marked
+                    .mark_cone(&index, chain, &mut work)
+                    .map_err(zetesis_algebra::Failure::into_stop)
+                    .unwrap();
                 assert_marks(&marked, &index, &expected);
                 let initialization = if fresh { index.parents.len() as u64 } else { 0 };
-                assert_eq!(work.spent, collected_work.spent + initialization);
+                assert_eq!(work.charged(), collected_work.charged() + initialization);
                 assert_eq!(marked.leaves.capacity(), 0);
                 assert!(marked.prepared().is_empty());
                 let bytes = marked.seen.capacity() * size_of::<u32>()
@@ -88,18 +97,22 @@ fn every_refused_mark_prefix_matches_collection_and_retries() {
     for limit in 0..maximum {
         let mut marked = Scratch::default();
         let mut collected = Scratch::default();
-        let mut mark_work = Work::new(limit);
-        let mut collect_work = Work::new(limit);
+        let mut mark_work = Meter::local(limit);
+        let mut collect_work = Meter::local(limit);
         assert_eq!(
-            marked.mark_cone(&index, chain, &mut mark_work),
+            marked
+                .mark_cone(&index, chain, &mut mark_work)
+                .map_err(zetesis_algebra::Failure::into_stop),
             Err(Stop::WorkLimit)
         );
         assert_eq!(
-            collected.cone(&index, chain, &mut collect_work),
+            collected
+                .cone(&index, chain, &mut collect_work)
+                .map_err(zetesis_algebra::Failure::into_stop),
             Err(Stop::WorkLimit)
         );
-        assert_eq!(mark_work.spent, limit);
-        assert_eq!(mark_work.spent, collect_work.spent);
+        assert_eq!(mark_work.charged(), limit);
+        assert_eq!(mark_work.charged(), collect_work.charged());
         assert_eq!(marked.generation, collected.generation);
         assert_eq!(marked.seen, collected.seen);
         let cursors = |scratch: &Scratch| {
@@ -111,7 +124,8 @@ fn every_refused_mark_prefix_matches_collection_and_retries() {
         };
         assert_eq!(cursors(&marked), cursors(&collected));
         marked
-            .mark_cone(&index, chain, &mut Work::new(u64::MAX))
+            .mark_cone(&index, chain, &mut Meter::local(u64::MAX))
+            .map_err(zetesis_algebra::Failure::into_stop)
             .unwrap();
         assert_marks(&marked, &index, &expected);
         assert_eq!(marked.leaves.capacity(), 0);
@@ -130,16 +144,19 @@ fn cancelled_marking_prefixes_retry_with_fresh_membership() {
             remaining: allowed,
             failure: Stop::Cancelled,
         };
-        let mut work = Work::reserved(&mut quota);
+        let mut work = Meter::reserved(&mut quota);
         assert_eq!(
-            scratch.mark_cone(&index, chain, &mut work),
+            scratch
+                .mark_cone(&index, chain, &mut work)
+                .map_err(zetesis_algebra::Failure::into_stop),
             Err(Stop::Cancelled)
         );
-        assert_eq!(work.spent, allowed);
+        assert_eq!(work.charged(), allowed);
         work.refund();
         assert_eq!(quota.remaining, 0);
         scratch
-            .mark_cone(&index, chain, &mut Work::new(u64::MAX))
+            .mark_cone(&index, chain, &mut Meter::local(u64::MAX))
+            .map_err(zetesis_algebra::Failure::into_stop)
             .unwrap();
         assert_marks(&scratch, &index, &expected);
         assert_eq!(scratch.leaves.capacity(), 0);
@@ -155,15 +172,19 @@ fn marking_discards_prior_membership_and_collected_results() {
     for rollover in [false, true] {
         let mut scratch = warmed(&index);
         scratch
-            .cone(&index, outer, &mut Work::new(u64::MAX))
+            .cone(&index, outer, &mut Meter::local(u64::MAX))
+            .map_err(zetesis_algebra::Failure::into_stop)
             .unwrap();
         let capacity = scratch.leaves.capacity();
         assert!(capacity > 0);
         if rollover {
             scratch.generation = u32::MAX;
         }
-        let mut work = Work::new(u64::MAX);
-        scratch.mark_cone(&index, inner, &mut work).unwrap();
+        let mut work = Meter::local(u64::MAX);
+        scratch
+            .mark_cone(&index, inner, &mut work)
+            .map_err(zetesis_algebra::Failure::into_stop)
+            .unwrap();
         assert_marks(&scratch, &index, &[roots[0], 0, 1]);
         assert!(scratch.prepared().is_empty());
         assert_eq!(scratch.leaves.capacity(), capacity);
@@ -172,6 +193,6 @@ fn marking_discards_prior_membership_and_collected_results() {
         } else {
             0
         };
-        assert_eq!(work.spent, 5 + reset);
+        assert_eq!(work.charged(), 5 + reset);
     }
 }

@@ -228,3 +228,29 @@ fn frozen_publications_preserve_the_shared_vocabulary() {
     }
     assert_sequence(&owner, &owner.committed, &(0..12).collect::<Vec<_>>());
 }
+
+#[test]
+fn frozen_owner_admission_includes_its_metadata_at_the_exact_limit() {
+    let mut vocabulary = Store::new(usize::MAX);
+    vocabulary
+        .import_value(&Value::Number(7), TermLimits::default())
+        .unwrap();
+    let base = vocabulary
+        .freeze_vocabulary_with(0, || Ok::<_, Infallible>(()))
+        .unwrap();
+    let measured = AtomInterner::with_vocabulary(base.clone(), usize::MAX).unwrap();
+    let required = usize::try_from(measured.storage_bytes()).unwrap();
+    assert!(required as u128 > measured.store.current_bytes());
+
+    let exact = AtomInterner::with_vocabulary(base.clone(), required).unwrap();
+    assert_eq!(exact.storage_bytes(), required as u128);
+    assert!(storage::Read::from(&exact.snapshot).same_vocabulary(storage::Read::from(&base)));
+    assert_eq!(exact.snapshot.term_count(), 1);
+    assert!(exact.committed().is_empty());
+
+    assert!(matches!(
+        AtomInterner::with_vocabulary(base, required - 1),
+        Err(storage::Fault::Storage { required: observed, limit })
+            if observed == required as u128 && limit == required - 1
+    ));
+}

@@ -3,8 +3,8 @@
 use std::time::Instant;
 
 use proptest::prelude::*;
+use zetesis_algebra::{Cancellation, Stop};
 use zetesis_core::Value as Term;
-use zetesis_cpu::{Cancellation, Stop};
 use zetesis_ferraris::{
     AdmissionLimits, AggregateComparison as Comparison, Interpretation, Node, Theory,
     native_aggregate::{

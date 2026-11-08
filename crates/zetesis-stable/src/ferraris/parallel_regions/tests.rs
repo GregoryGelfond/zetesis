@@ -1,0 +1,350 @@
+//! Fault injection at the production worker accounting and failure boundaries.
+
+use super::*;
+use zetesis_algebra::region::Narrowing;
+
+/// Test-only observation of actual joined candidate workers.
+pub(super) fn record_candidate_worker(report: &WorkerReport) {
+    engagement_tests::record_candidate_worker(report);
+}
+
+/// Install the eligible outer inspections for tests of their work and ownership.
+fn with_region_checks(
+    (mut search, index): (ParallelRegions, Arc<IndexedTheory>),
+) -> (ParallelRegions, Arc<IndexedTheory>) {
+    search.enable_region_checks();
+    (search, index)
+}
+
+impl ParallelRegions {
+    pub(in crate::ferraris) fn enable_region_checks(&mut self) {
+        assert!(matches!(self.record, WalkRecord::NotBegun));
+        Arc::get_mut(&mut self.shared)
+            .expect("the unbegun walk exclusively owns its shared state")
+            .parts
+            .enable_region_checks(&self.statistics);
+    }
+}
+
+/// The original index the enumeration would build and hand the workers.
+fn original(theory: &Theory) -> Arc<IndexedTheory> {
+    let mut owner = super::super::OriginalIndex::new(theory, u64::MAX);
+    Arc::clone(
+        owner
+            .ensure(&crate::Cancellation::default(), |_| Ok(()))
+            .unwrap(),
+    )
+}
+
+#[test]
+fn shared_narrowing_never_executes_an_unleased_read() {
+    let cancellation =
+        Cancellation::with_deadline(std::time::Instant::now() + Duration::from_secs(2)).unwrap();
+    let theory = Theory::new(
+        1,
+        zetesis_ferraris::FormulaParts::new(
+            vec![
+                zetesis_ferraris::Node::falsum(),
+                zetesis_ferraris::Node::atom(0),
+                zetesis_ferraris::Node::implies(1, 0),
+                zetesis_ferraris::Node::or_pair([1, 2]),
+            ],
+            vec![],
+        )
+        .unwrap(),
+        vec![3],
+        zetesis_ferraris::AdmissionLimits::default(),
+    )
+    .unwrap();
+    let shared = SharedBudget::new(
+        crate::SearchLimits {
+            max_work: 1,
+            ..Default::default()
+        },
+        SearchStatistics::default(),
+    );
+    let mut budget = Budget {
+        quota: shared.lease(&cancellation),
+        // Worker-local work is only a delta; the shared owner has the
+        // authoritative one-permit remainder of the whole search.
+        limits: crate::SearchLimits::default(),
+        cancellation: &cancellation,
+        statistics: SearchStatistics::default(),
+    };
+    let narrower = Narrower::new(&theory);
+    let mut entry = Entry::new(
+        Region::all_open(theory.atom_count()),
+        CandidateKnowledge::default(),
+    );
+    let mut counts = RegionCounts::default();
+    let result = super::super::regions::narrow(
+        super::super::regions::CandidateReading {
+            original: zetesis_ferraris::OriginalSubject::new(&theory, None),
+            narrower: &narrower,
+            arithmetic: None,
+        },
+        &Conditions::<(Theory, Narrower)>::default(),
+        &mut entry,
+        &mut zetesis_ferraris::NarrowingScratch::default(),
+        &mut budget,
+        &mut counts,
+        None,
+    );
+    assert!(matches!(result, Err(Incomplete::WorkLimit)));
+    assert_eq!(
+        counts.work, 1,
+        "the primitive must stop before a second read"
+    );
+    assert_eq!(budget.statistics.work, 1);
+    drop(budget);
+    let mut spent = SearchStatistics::default();
+    shared.record(&mut spent);
+    assert_eq!(spent.work, 1);
+}
+
+#[test]
+fn a_panicked_worker_keeps_coverage_incomplete() {
+    let cancellation =
+        Cancellation::with_deadline(std::time::Instant::now() + Duration::from_secs(2)).unwrap();
+    let theory = Theory::new(
+        0,
+        zetesis_ferraris::FormulaParts::new(vec![], vec![]).unwrap(),
+        vec![],
+        zetesis_ferraris::AdmissionLimits::default(),
+    )
+    .unwrap();
+    let limits = Limits::default();
+    let mut budget = Budget {
+        quota: crate::budget::LocalQuota,
+        limits: limits.search,
+        cancellation: &cancellation,
+        statistics: SearchStatistics::default(),
+    };
+    let mut search = ParallelRegions::new(
+        crate::ferraris::regions::open(
+            &theory,
+            limits.max_reduct_bytes,
+            limits.learning,
+            &mut budget,
+        )
+        .unwrap(),
+        NonZeroUsize::new(2).unwrap(),
+        Engagement::Immediate,
+        limits,
+        cancellation.clone(),
+        &mut budget,
+    )
+    .unwrap();
+    let setup = budget.statistics.work;
+    // Another worker waits for stealable work that never comes (the root is
+    // held here, outside the queues). The panic closes the run, and the
+    // waiter exits rather than hanging.
+    search.record = engaged(2);
+    let _root = search.shared.frontier.take_local(0).unwrap();
+    let idle_shared = Arc::clone(&search.shared);
+    let index = original(&theory);
+    // The waiter owns the only remaining sender, so the channel disconnects
+    // when it exits, letting the coordinator join and report the panic.
+    let sender = search.sender.take().unwrap();
+    search.handles.push(std::thread::spawn(move || {
+        contain_worker(&idle_shared, || worker(&idle_shared, &index, 0, &sender))
+    }));
+    let failed_shared = Arc::clone(&search.shared);
+    search.handles.push(std::thread::spawn(move || {
+        contain_worker(&failed_shared, || {
+            let mut lease = failed_shared.budget.lease(&failed_shared.cancellation);
+            let _reservation = lease.reserve(4).unwrap();
+            panic!("injected failure while a worker owns a kernel allowance");
+        })
+    }));
+    assert!(matches!(
+        search.propose(&original(&theory), None, false, &mut budget),
+        Err(Incomplete::WorkerPanicked),
+    ));
+    assert!(!search.exhausted);
+    assert_eq!(budget.statistics.work, setup + 4);
+}
+
+/// A walk that has engaged its workers, as the in-crate tests build one by
+/// hand: an engaged walk never begins again.
+fn engaged(launched: usize) -> WalkRecord {
+    WalkRecord::Engaged {
+        after: Duration::ZERO,
+        walking: Duration::ZERO,
+        launched,
+        spawn: Duration::ZERO,
+    }
+}
+
+#[test]
+fn a_refused_certificate_refunds_its_reserved_work() {
+    // Under `After(Duration::MAX)` the failing pull is the coordinator's,
+    // whose receipts are merged when its pull ends.
+    for engagement in [Engagement::Immediate, Engagement::After(Duration::MAX)] {
+        refused_certificate_refunds_its_reserved_work(engagement);
+    }
+}
+
+fn refused_certificate_refunds_its_reserved_work(engagement: Engagement) {
+    let cancellation =
+        Cancellation::with_deadline(std::time::Instant::now() + Duration::from_secs(2)).unwrap();
+    let theory = Theory::new(
+        1,
+        zetesis_ferraris::FormulaParts::new(vec![zetesis_ferraris::Node::atom(0)], vec![]).unwrap(),
+        vec![0],
+        zetesis_ferraris::AdmissionLimits::default(),
+    )
+    .unwrap();
+    let plan = zetesis_ferraris::TightPlan::compile(
+        &theory,
+        zetesis_ferraris::TightPlanLimits::default(),
+        &cancellation,
+    )
+    .unwrap();
+    // Inject a lowered checking-storage allowance after valid construction:
+    // the entered kernel refuses before consuming any of its reserved work.
+    let certificate = Arc::new(Certification::Tight {
+        plan: Arc::new(plan),
+        max_bytes: 0,
+    });
+    let limits = Limits::default();
+    let mut budget = Budget {
+        quota: crate::budget::LocalQuota,
+        limits: limits.search,
+        cancellation: &cancellation,
+        statistics: SearchStatistics::default(),
+    };
+    let mut search = ParallelRegions::new(
+        crate::ferraris::regions::open(
+            &theory,
+            limits.max_reduct_bytes,
+            limits.learning,
+            &mut budget,
+        )
+        .unwrap(),
+        NonZeroUsize::new(2).unwrap(),
+        engagement,
+        limits,
+        cancellation.clone(),
+        &mut budget,
+    )
+    .unwrap();
+    assert!(matches!(
+        search.propose(&original(&theory), Some(&certificate), false, &mut budget),
+        Err(Incomplete::Certificate(crate::CertificateError::Tight(
+            zetesis_ferraris::TightError::Limit(zetesis_ferraris::TightResource::Bytes),
+        ))),
+    ));
+    let checked = search.merged().certified.unwrap();
+    assert_eq!(
+        (checked.checks, checked.failed, checked.checking_work),
+        (1, 1, 0)
+    );
+    assert_eq!(budget.statistics.work, search.statistics().counts.work);
+    assert!(!search.exhausted);
+    // The route the claim was made on.
+    match engagement {
+        Engagement::Immediate => {
+            assert!(matches!(
+                search.record,
+                WalkRecord::Engaged { launched: 2, .. }
+            ));
+        }
+        _ => assert!(matches!(search.record, WalkRecord::Unengaged { .. })),
+    }
+}
+
+mod cancellation_tests;
+mod coordination_tests;
+mod engagement_tests;
+mod timing_tests;
+
+#[test]
+fn live_explanation_receipts_add_only_worker_deltas() {
+    let live = Live::default();
+    let first = SupportExplanationStatistics {
+        attempts: 2,
+        certified: 1,
+        matched: 3,
+        cut: 4,
+        forced: 2,
+        refuted: 1,
+        declined: 1,
+        work: 19,
+        peak_bytes: 17,
+    };
+    let second = SupportExplanationStatistics {
+        attempts: 5,
+        certified: 2,
+        matched: 8,
+        cut: 9,
+        forced: 7,
+        refuted: 2,
+        declined: 3,
+        work: 47,
+        peak_bytes: 23,
+    };
+    let other_worker = SupportExplanationStatistics {
+        attempts: 1,
+        certified: 1,
+        matched: 2,
+        cut: 3,
+        forced: 5,
+        refuted: 1,
+        declined: 0,
+        work: 13,
+        peak_bytes: 37,
+    };
+    let coordinator = SupportExplanationStatistics {
+        attempts: 1,
+        certified: 0,
+        matched: 1,
+        cut: 1,
+        forced: 3,
+        refuted: 0,
+        declined: 1,
+        work: 7,
+        peak_bytes: 29,
+    };
+    live.add_support_explanations(&SupportExplanationStatistics::default(), &first);
+    live.add_support_explanations(&first, &second);
+    live.add_support_explanations(&second, &second);
+    live.add_support_explanations(&SupportExplanationStatistics::default(), &other_worker);
+    let expected = SupportExplanationStatistics {
+        attempts: 7,
+        certified: 3,
+        matched: 11,
+        cut: 13,
+        forced: 15,
+        refuted: 3,
+        declined: 4,
+        work: 67,
+        peak_bytes: 37,
+    };
+    assert_eq!(live.support_explanations(&coordinator), expected);
+    assert_eq!(live.support_explanations(&coordinator), expected);
+}
+
+#[test]
+fn unchanged_explanation_counts_preserve_absolute_peaks() {
+    let live = Live::default();
+    let empty = SupportExplanationStatistics::default();
+    live.add_support_explanations(&empty, &empty);
+    assert_eq!(live.support_explanations(&empty), empty);
+
+    let retained = SupportExplanationStatistics {
+        peak_bytes: 37,
+        ..empty
+    };
+    live.add_support_explanations(&retained, &retained);
+    assert_eq!(live.support_explanations(&empty), retained);
+
+    let larger = SupportExplanationStatistics {
+        peak_bytes: 41,
+        ..retained
+    };
+    live.add_support_explanations(&retained, &larger);
+    assert_eq!(live.support_explanations(&empty), larger);
+}
+
+mod arithmetic_receipts;

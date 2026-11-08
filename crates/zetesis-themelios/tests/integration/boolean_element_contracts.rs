@@ -280,7 +280,7 @@ fn constants_do_not_certify_atom_count_plans() {
         let planned = prepared(source)
             .ground_with_count_plan(
                 CountPlanLimits::default(),
-                &zetesis_cpu::Cancellation::default(),
+                &zetesis_algebra::Cancellation::default(),
                 None,
             )
             .unwrap();
@@ -337,10 +337,10 @@ fn bundle_origins_do_not_multiply_activity() {
             AnalysisBasis::DependencyProjection
         );
         assert_eq!(admitted.atoms().len(), atom_count);
-        let mut search = zetesis_sat::StableModels::new(
+        let mut search = zetesis_stable::StableModels::new(
             admitted.theory(),
-            zetesis_sat::Limits::default(),
-            zetesis_cpu::Cancellation::default(),
+            zetesis_stable::Limits::default(),
+            zetesis_algebra::Cancellation::default(),
         )
         .unwrap();
         let complete: Vec<_> = search
@@ -397,10 +397,10 @@ fn reordered_bundle_rules_preserve_occurrences() {
     )
     .unwrap();
     assert_eq!(admitted.atoms().len(), 2);
-    let mut search = zetesis_sat::StableModels::new(
+    let mut search = zetesis_stable::StableModels::new(
         admitted.theory(),
-        zetesis_sat::Limits::default(),
-        zetesis_cpu::Cancellation::default(),
+        zetesis_stable::Limits::default(),
+        zetesis_algebra::Cancellation::default(),
     )
     .unwrap();
     let complete: Vec<_> = search
@@ -457,10 +457,10 @@ fn merged_bundle_rules_keep_original_multiplicity() {
         )
         .unwrap();
         assert!(admitted.atoms().is_empty());
-        let mut search = zetesis_sat::StableModels::new(
+        let mut search = zetesis_stable::StableModels::new(
             admitted.theory(),
-            zetesis_sat::Limits::default(),
-            zetesis_cpu::Cancellation::default(),
+            zetesis_stable::Limits::default(),
+            zetesis_algebra::Cancellation::default(),
         )
         .unwrap();
         assert!(search.next().is_none(), "{rules:?}");

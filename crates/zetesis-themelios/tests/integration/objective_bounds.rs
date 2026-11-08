@@ -5,12 +5,12 @@ use crate::support::objective_plans::exact as plan;
 use std::cmp::Ordering;
 use std::collections::BTreeSet;
 
+use zetesis_algebra::Cancellation;
 use zetesis_core::{Model, Term, Value};
-use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{Interpretation, models};
 use zetesis_objective::{ObjectiveProgram, ObjectiveTemplate, Score, evaluate};
 use zetesis_reference_support::{formula, resource_limits};
-use zetesis_sat::StableModels;
+use zetesis_stable::StableModels;
 use zetesis_themelios::AdmittedFormula;
 use zetesis_themelios::objective_bound::{
     ObjectiveBoundErrorKind, ObjectiveBoundLimits, ObjectiveBoundResource, ObjectivePlan,
@@ -166,7 +166,7 @@ fn candidate_restriction_preserves_original_reduct_and_every_optimal_tie() {
     );
     let mut baseline = StableModels::new(
         input.theory(),
-        zetesis_sat::Limits::default(),
+        zetesis_stable::Limits::default(),
         Cancellation::default(),
     )
     .expect("original search");
@@ -197,7 +197,7 @@ fn candidate_restriction_preserves_original_reduct_and_every_optimal_tie() {
         .expect("candidate bound");
     let mut restricted = StableModels::new(
         input.theory(),
-        zetesis_sat::Limits::default(),
+        zetesis_stable::Limits::default(),
         Cancellation::default(),
     )
     .expect("original search");

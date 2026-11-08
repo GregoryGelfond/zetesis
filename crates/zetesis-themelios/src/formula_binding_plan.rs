@@ -10,6 +10,8 @@ use themelios_program::program::Relation;
 use crate::formula_ir::{Compiler, Expression, LiteralIr, Operation, Variables};
 use crate::{ExpansionResource, FormulaFailure};
 
+pub(crate) mod expanded;
+
 #[derive(Clone, Copy)]
 enum Binding {
     Left(usize),

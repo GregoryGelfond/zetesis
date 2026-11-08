@@ -11,8 +11,10 @@ use std::sync::{
 ///
 /// Clones retain the same context. Primitives prepared from separate clones can
 /// retain their own subjects simultaneously; each operation takes a nonblocking
-/// exclusive execution lease. Overlap returns [`GpuErrorKind::Busy`] without
-/// submitting work or invalidating the context. This is serialized composition,
+/// exclusive execution lease; an overlapping check is one operation, whose lease
+/// also spans the production it runs while its submission is in flight. Overlap
+/// returns [`GpuErrorKind::Busy`] without submitting work or invalidating the
+/// context. This is serialized composition,
 /// not concurrent GPU scheduling.
 ///
 /// Device loss, scope/readback failure or panic unwinding during an operation
@@ -37,6 +39,7 @@ struct Resources {
     queue: wgpu::Queue,
     info: GpuInfo,
     limits: wgpu::Limits,
+    compute_timing: zetesis_backend::ComputeTimingStatus,
     lifecycle: Lifecycle,
 }
 
@@ -71,6 +74,39 @@ impl GpuContext {
         Ok(context)
     }
 
+    /// Select a device and request optional compute-pass timestamps when supported.
+    ///
+    /// Unsupported timing leaves solving available and is reported explicitly by
+    /// [`Self::compute_timing`]. Other constructors leave timestamps disabled.
+    /// A formula or tight-support oracle allocates its bounded timestamp storage
+    /// with its first admitted nonempty batch and keeps it until it clears its
+    /// residency or a failure follows one of its submissions. Batches add no submission or queue wait; reading the final
+    /// batch's interval takes one resolve-only submission, made only on request
+    /// (`flush_compute_time`).
+    ///
+    /// # Errors
+    /// Returns the same adapter, policy and device failures as [`Self::new_selected`].
+    pub fn new_selected_with_timing(
+        options: GpuOptions,
+        selection: GpuSelection,
+    ) -> Result<Self, GpuError> {
+        let context = pollster::block_on(Self::create_with_timing(
+            options,
+            selection,
+            "zetesis shared device",
+            |_| Ok(()),
+            true,
+        ))?;
+        context.check_health()?;
+        Ok(context)
+    }
+
+    /// Timestamp capability requested at creation; observation has no device effects.
+    #[must_use]
+    pub fn compute_timing(&self) -> zetesis_backend::ComputeTimingStatus {
+        self.resources.compute_timing
+    }
+
     /// Actual adapter metadata; observation performs no device operation.
     #[must_use]
     pub fn info(&self) -> &GpuInfo {
@@ -79,9 +115,10 @@ impl GpuContext {
 
     /// Optional wgpu features granted at device creation.
     ///
-    /// These can be a strict subset of [`GpuInfo::features`]. The current
-    /// constructors request no optional features; reporting adapter support
-    /// must not be mistaken for enabling an optimized kernel. Observation
+    /// These can be a strict subset of [`GpuInfo::features`]. Constructors request
+    /// supported subgroup and integer-64 instructions. Timestamps are requested
+    /// only by [`Self::new_selected_with_timing`]. Kernel configuration and row
+    /// certificates determine which granted instructions are actually used. Observation
     /// performs no submission and does not establish context health.
     #[must_use]
     pub fn features(&self) -> wgpu::Features {
@@ -130,12 +167,38 @@ impl GpuContext {
         label: &'static str,
         validate: fn(&wgpu::Limits) -> Result<(), GpuError>,
     ) -> Result<Self, GpuError> {
+        Self::create_with_timing(options, selection, label, validate, false).await
+    }
+
+    pub(crate) async fn create_with_timing(
+        options: GpuOptions,
+        selection: GpuSelection,
+        label: &'static str,
+        validate: fn(&wgpu::Limits) -> Result<(), GpuError>,
+        timing: bool,
+    ) -> Result<Self, GpuError> {
         let (adapter, info) = selection::select_adapter(options, selection, validate).await?;
+        Self::open(&adapter, info, label, validate, timing).await
+    }
+
+    /// Request `adapter`'s device with its full limits and the supported
+    /// optional features, check the granted limits with `validate`, and
+    /// register the fault callbacks: the device half of creation.
+    pub(crate) async fn open(
+        adapter: &wgpu::Adapter,
+        info: GpuInfo,
+        label: &'static str,
+        validate: fn(&wgpu::Limits) -> Result<(), GpuError>,
+        timing: bool,
+    ) -> Result<Self, GpuError> {
         let limits = adapter.limits();
+        let compute_timing = timing_status(timing, adapter.features());
+        let required_features = requested_features(adapter.features(), timing);
         let (device, queue) = adapter
             .request_device(&wgpu::DeviceDescriptor {
                 label: Some(label),
                 required_limits: limits,
+                required_features,
                 ..Default::default()
             })
             .await
@@ -149,6 +212,7 @@ impl GpuContext {
                 queue,
                 info,
                 limits,
+                compute_timing,
                 lifecycle: Lifecycle::new(faults),
             }),
         })
@@ -166,6 +230,9 @@ impl GpuContext {
     pub(crate) fn check_health(&self) -> Result<(), GpuError> {
         self.resources.lifecycle.check()
     }
+    /// Invalidate the shared context, as a device fault does, for tests of
+    /// the failure boundary.
+    #[cfg(test)]
     pub(crate) fn invalidate(&self) {
         self.resources.lifecycle.invalidate();
     }
@@ -179,6 +246,31 @@ impl GpuContext {
             .lifecycle
             .complete(validation, outcome, effects)
     }
+}
+
+fn timing_status(
+    requested: bool,
+    supported: wgpu::Features,
+) -> zetesis_backend::ComputeTimingStatus {
+    use zetesis_backend::ComputeTimingStatus;
+    if !requested {
+        ComputeTimingStatus::NotRequested
+    } else if supported.contains(wgpu::Features::TIMESTAMP_QUERY) {
+        ComputeTimingStatus::Enabled
+    } else {
+        ComputeTimingStatus::Unsupported
+    }
+}
+
+/// Request only optional capabilities with maintained integer kernel consumers.
+/// Unsupported capabilities leave the portable kernels available. Timestamp
+/// queries remain opt-in because instrumentation has its own runtime cost.
+fn requested_features(supported: wgpu::Features, timing: bool) -> wgpu::Features {
+    let mut features = supported & (wgpu::Features::SUBGROUP | wgpu::Features::SHADER_INT64);
+    if timing {
+        features |= supported & wgpu::Features::TIMESTAMP_QUERY;
+    }
+    features
 }
 
 struct Lifecycle {
@@ -288,7 +380,7 @@ impl Faults {
             && outcome.as_ref().is_err_and(|error| {
                 matches!(
                     error.interruption,
-                    Some(zetesis_cpu::Stop::Cancelled | zetesis_cpu::Stop::Deadline)
+                    Some(zetesis_algebra::Stop::Cancelled | zetesis_algebra::Stop::Deadline)
                 )
             });
         let result = validation.and(health).and(outcome);

@@ -1,10 +1,8 @@
 //! Read the retained eligibility DAG for one original-owner interpretation.
 
-use super::{
-    ObjectiveBoundError, ObjectiveBoundStatistics, ObjectivePlan, ObjectivePlanLimits, Work,
-};
+use super::{ObjectiveBoundError, ObjectivePlan, ObjectivePlanLimits, Work};
 use std::fmt;
-use zetesis_cpu::{Cancellation, Stop};
+use zetesis_algebra::{Cancellation, Stop};
 use zetesis_ferraris::{Interpretation, NodeView};
 use zetesis_objective::{Limits, Score};
 
@@ -97,15 +95,13 @@ impl ObjectivePlan {
         limits: Limits,
         cancellation: &Cancellation,
     ) -> Result<Option<ObjectiveScore>, ObjectiveScoreError> {
-        let mut work = Work {
-            cancellation,
-            limits: ObjectivePlanLimits {
+        let mut work = Work::new(
+            ObjectivePlanLimits {
                 max_work: limits.max_work,
                 ..ObjectivePlanLimits::default()
             },
-            template: None,
-            statistics: ObjectiveBoundStatistics::default(),
-        };
+            cancellation,
+        );
         work.charge(0).map_err(eligibility_error)?;
         if !self.original.same_instance(candidate.theory()) {
             return Err(ObjectiveScoreError {
@@ -174,15 +170,15 @@ impl ObjectivePlan {
                     .flatten()
                     .map(move |element| truth[element.condition].then_some(element.weight))
             },
-            limits.max_work - work.statistics.work,
+            limits.max_work - work.meter.charged(),
             cancellation,
         )
         .map_err(|error| ObjectiveScoreError {
-            work: work.statistics.work + error.statistics().work,
+            work: work.meter.charged() + error.statistics().work,
             kind: ObjectiveScoreErrorKind::Reduction(error),
         })?;
         Ok(Some(ObjectiveScore {
-            work: work.statistics.work + reduced.work(),
+            work: work.meter.charged() + reduced.work(),
             score: reduced.into_score(),
         }))
     }

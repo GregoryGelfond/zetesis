@@ -268,13 +268,6 @@ impl<'a> AtomKey<'a> {
         Ok(Ordering::Equal)
     }
 
-    /// Compare with a canonical or ingress atom view without materialization.
-    /// Predicate and argument contents determine order across independent stores.
-    #[must_use]
-    pub(crate) fn compare_ref(&self, atom: AtomRef<'_>) -> Ordering {
-        compare(self, &atom)
-    }
-
     /// Checked comparison with a borrowed atom view, in key-versus-atom order.
     /// Canonical storage/navigation work is charged before each operation.
     ///

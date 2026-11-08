@@ -3,11 +3,11 @@
 use std::num::NonZeroUsize;
 
 use crate::support::models::Family;
+use zetesis_algebra::Cancellation;
 use zetesis_core::{Model, Sign};
-use zetesis_cpu::Cancellation;
 use zetesis_solve::{
-    Backend, Completion, Grounder, Interruption, Oracle, PreparedInput, SemanticOutcome, Session,
-    SolveConfig, SolveError, Subject,
+    Backend, Completion, Grounder, Interruption, Oracle, Original, PreparedInput, SemanticOutcome,
+    Session, SolveConfig, SolveError,
 };
 use zetesis_test_support::programs::{signed as atom, unary as number};
 use zetesis_themelios::{
@@ -109,11 +109,11 @@ fn monotone_family() -> Family {
 #[test]
 fn hybrid_admits_the_retained_root_ceiling() {
     let core = eager(CORE, &limits()).unwrap();
-    // Six facts and six disjunctions contribute twelve ordinary roots. The
-    // facts retain six guards; each p(X)/q(X) pair shares one necessary d(X)
-    // condition, contributing six more guards. Eager constraints still add
-    // fifteen roots, exceeding 32; the hybrid retains only this complete core.
-    assert_eq!(core.theory().roots().len(), 12 + 6 + 6);
+    // Six facts and six disjunctions contribute twelve ordinary roots. After
+    // fact substitution each atom retains its own support guard: six facts
+    // and twelve alternatives. Eager constraints still add fifteen roots,
+    // exceeding 32; the hybrid retains only this complete core.
+    assert_eq!(core.theory().roots().len(), 12 + 6 + 12);
     let failure = eager(MONOTONE, &limits()).unwrap_err();
     assert!(matches!(
         failure,
@@ -134,6 +134,35 @@ fn hybrid_admits_the_retained_root_ceiling() {
     let (family, outcome) = capture(PreparedInput::hybrid(&admitted), configuration());
     assert_eq!(family, monotone_family());
     assert_eq!(outcome.completion(), Some(Completion::Exhausted));
+}
+
+#[test]
+fn the_ordinary_policy_grounds_fitting_constraints_in_the_core() {
+    // The ordinary resource policy grants the theory's node share, which holds
+    // these fifteen instances easily: none is streamed, and the core alone
+    // carries the source constraint.
+    let resources = zetesis_solve::Resources::new(SolveConfig::REFERENCE_MEMORY, NonZeroUsize::MIN);
+    let admitted = prepare_formula(
+        MONOTONE.into(),
+        resources.admission_options(),
+        resources.expansion_limits(),
+        resources.formula_limits(),
+    )
+    .unwrap()
+    .ground_hybrid()
+    .unwrap();
+    assert_eq!(admitted.streamed_templates(), 0);
+    assert_eq!(admitted.retained_templates(), 1);
+    let config = SolveConfig {
+        grounder: Grounder::Lazy,
+        ..configuration()
+    };
+    let (family, outcome) = capture(PreparedInput::hybrid(&admitted), config);
+    assert_eq!(family, monotone_family());
+    assert_eq!(outcome.completion(), Some(Completion::Exhausted));
+    let streamed = outcome.hybrid_execution().unwrap().streamed;
+    assert_eq!((streamed.templates, streamed.retained_templates), (0, 1));
+    assert_eq!(streamed.retained_instances, admitted.retained_instances());
 }
 
 #[test]
@@ -300,21 +329,21 @@ fn cloned_hybrid_subjects_share_only_their_owner() {
     let (_, separate) = capture(PreparedInput::hybrid(&other), configuration());
     assert!(
         first
-            .subject()
+            .original()
             .unwrap()
-            .same_instance(repeated.subject().unwrap())
+            .same_instance(repeated.original().unwrap())
     );
     assert!(
         !first
-            .subject()
+            .original()
             .unwrap()
-            .same_instance(separate.subject().unwrap())
+            .same_instance(separate.original().unwrap())
     );
     assert!(
         !first
-            .subject()
+            .original()
             .unwrap()
-            .same_instance(&Subject::Theory(original.core_theory().clone()))
+            .same_instance(&Original::Theory(original.core_theory().clone()))
     );
 }
 
@@ -372,9 +401,9 @@ fn checker_setup_refusal_retains_the_source_subject() {
     assert_eq!(error.statistics.work, 0);
     assert!(
         failure
-            .subject()
+            .original()
             .unwrap()
-            .same_instance(&Subject::Hybrid(admitted))
+            .same_instance(&Original::Hybrid(admitted))
     );
     assert!(failure.semantic().is_none());
 }
@@ -433,7 +462,10 @@ fn unfinished_region_check_never_yields_a_core_answer() {
 
 #[test]
 fn cancellation_preserves_only_the_verified_prefix() {
-    let admitted = hybrid("a|b. :-a,b.", &limits());
+    // The double negation keeps the constraint a stream that accepts the
+    // prefix: pair capture would move `:-a,b.` into the core.
+    let admitted = hybrid("a|b. :-a,not not b.", &limits());
+    assert_eq!(admitted.streamed_templates(), 1);
     let cancellation = Cancellation::default();
     let mut session = Session::builder(
         PreparedInput::hybrid(&admitted),
@@ -445,8 +477,8 @@ fn cancellation_preserves_only_the_verified_prefix() {
     let answer = session.next().unwrap().unwrap();
     assert!(
         answer
-            .subject()
-            .same_instance(&Subject::Hybrid(admitted.clone()))
+            .original()
+            .same_instance(&Original::Hybrid(admitted.clone()))
     );
     assert_eq!(answer.interpretation().atoms().len(), 1);
     cancellation.cancel();
@@ -456,7 +488,7 @@ fn cancellation_preserves_only_the_verified_prefix() {
     assert_eq!(
         outcome.interruption(),
         Some(Interruption::Countermodel(
-            zetesis_sat::Incomplete::Cancelled
+            zetesis_stable::Incomplete::Cancelled
         ))
     );
     assert_eq!(outcome.verified_models(), 1);
@@ -584,11 +616,16 @@ fn ordinary_hybrid_checks_a_wide_ready_body() {
         write!(source, "p{atom}").unwrap();
     }
     source.push('.');
+    // The ordinary policy would ground this one fitting constraint in the core;
+    // granting no share keeps it streamed, so the source check plans it.
     let admitted = prepare_formula(
         source,
         resources.admission_options(),
         resources.expansion_limits(),
-        resources.formula_limits(),
+        FormulaLimits {
+            max_retained_constraint_nodes: 0,
+            ..resources.formula_limits()
+        },
     )
     .unwrap()
     .ground_hybrid()

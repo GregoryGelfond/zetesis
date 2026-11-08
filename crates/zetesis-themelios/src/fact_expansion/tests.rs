@@ -3,8 +3,8 @@ use crate::{ExpansionLimits, ExpansionResource, StatementId};
 use themelios_program::program::{Arguments, Atom, Rule};
 use themelios_program::symbol::{Name, Sign, Symbol};
 use themelios_program::term::{EvalError, Term as SourceTerm, Variable};
-use zetesis_core::{AdmissionLimits, FactSegment, FactTables, Program, Value, ValueLimits};
-use zetesis_cpu::{Cancellation, Stop};
+use zetesis_algebra::{Cancellation, Stop};
+use zetesis_core::{AtomPattern, Term, Value};
 
 fn fact(lower: i32, upper: i32) -> WithProvenance<Statement> {
     WithProvenance::constructed(
@@ -104,43 +104,29 @@ fn range(lower: i32, upper: i32) -> SourceTerm {
     }
 }
 
-fn native(facts: &Facts) -> Program {
-    let mut tables = FactTables::default();
-    for product in facts.products() {
-        let columns = product
-            .columns()
-            .map(|column| {
-                column
-                    .map(|cell| match cell {
-                        Cell::Scalar(value) => FactSegment::Value(value.clone()),
-                        Cell::Interval(range) => FactSegment::Interval {
-                            first: *range.start(),
-                            last: *range.end(),
-                        },
-                    })
-                    .collect()
-            })
-            .collect();
-        tables
-            .push_product(0, product.predicate().clone(), columns)
-            .unwrap();
+fn rows(facts: Facts, budget: &Budget, location: ProgramSite) -> Vec<AtomPattern> {
+    let expected = facts.len();
+    let mut cursor = facts.into_rows();
+    let mut rows = Vec::new();
+    while let Some(head) = cursor.next(budget, location).unwrap() {
+        rows.push(head);
     }
-    Program::new(Vec::new(), tables, AdmissionLimits::default()).unwrap()
+    assert_eq!(rows.len(), expected);
+    rows
 }
 
 fn heads(source: &WithProvenance<Statement>, budget: &mut Budget) -> Vec<Vec<Value>> {
     let location = crate::test_support::location();
     let facts = facts(source, budget, location).unwrap().unwrap();
-    let program = native(&facts);
-    assert_eq!(program.facts().len(), facts.len());
-    program
-        .facts()
+    rows(facts, budget, location)
         .into_iter()
-        .map(|fact| {
-            fact.atom()
-                .values()
+        .map(|head| {
+            head.terms()
                 .iter()
-                .map(|value| value.to_value(ValueLimits::default()).unwrap())
+                .map(|term| match term {
+                    Term::Constant(value) => value.clone(),
+                    Term::Variable(_) => panic!("closed fact product contains a variable"),
+                })
                 .collect()
         })
         .collect()
@@ -348,43 +334,9 @@ fn copied_scalar_bytes_are_preflighted_once() {
         .unwrap();
     assert_eq!(budget.usage().scalar_bytes, 16);
     let accepted = budget.usage();
-    let program = native(&products);
-    assert_eq!(program.facts().len(), 4);
+    let emitted = rows(products, &budget, crate::test_support::location());
+    assert_eq!(emitted.len(), 4);
     assert_eq!(budget.usage(), accepted);
-}
-
-#[test]
-fn interrupted_fact_evidence_transfer_preserves_accepted_usage() {
-    let cancellation = Cancellation::default();
-    let mut budget = family_budget(usize::MAX).with_cancellation(Some(cancellation.clone()));
-    let location = crate::test_support::location();
-    let products = facts(&fact(1, 3), &mut budget, location).unwrap().unwrap();
-    let accepted = budget.usage();
-    let mut compiled = crate::compile::Compiled::default();
-    let mut visited = 0;
-    let error = compiled
-        .product(
-            products.products().next().unwrap().predicate().clone(),
-            vec![vec![FactSegment::Interval { first: 1, last: 3 }]],
-            &[location],
-            || {
-                visited += 1;
-                if visited == 2 {
-                    cancellation.cancel();
-                }
-                budget.poll(location)
-            },
-            |error| ExpansionFailure::from(crate::AdmissionFailure::Core { error, location }),
-        )
-        .unwrap_err();
-    assert!(matches!(error, ExpansionFailure::Interrupted {
-        reason: Stop::Cancelled, location: actual,
-    } if actual == location));
-    assert_eq!(visited, 2);
-    assert_eq!(compiled.fact_origins.len(), 1);
-    assert_eq!(budget.usage(), accepted);
-    // The enclosing compilation drops this incomplete owner on the error;
-    // program_relational's cancellation test covers that publication boundary.
 }
 
 fn alternatives(rows: Vec<Vec<SourceTerm>>) -> WithProvenance<Statement> {
@@ -409,11 +361,9 @@ fn alternative_arities_keep_their_product_order() {
     let mut budget = family_budget(usize::MAX);
     let products = facts(&source, &mut budget, location).unwrap().unwrap();
     assert_eq!(products.len(), 5);
-    let program = native(&products);
-    let arities = program
-        .facts()
+    let arities = rows(products, &budget, location)
         .into_iter()
-        .map(|fact| fact.atom().predicate().arity())
+        .map(|head| head.predicate().arity())
         .collect::<Vec<_>>();
     assert_eq!(arities, vec![1, 1, 2, 2, 0]);
     assert_eq!(
@@ -528,30 +478,6 @@ fn every_scalar_copy_limit_keeps_the_original_prefix() {
 }
 
 #[test]
-fn relational_admission_keeps_each_expanded_facts_evidence() {
-    let source = "p(1..2,3..4).";
-    let admitted = crate::admit_extended(
-        source.into(),
-        crate::AdmissionOptions::default(),
-        crate::ExpansionLimits::default(),
-    )
-    .unwrap();
-    assert_eq!(admitted.program().facts().len(), 4);
-    assert_eq!(admitted.fact_origins().len(), 4);
-    let first = &admitted.fact_origins()[0];
-    assert!(!first.is_empty());
-    assert!(
-        admitted
-            .fact_origins()
-            .iter()
-            .all(|origins| origins == first)
-    );
-    for origin in first {
-        assert_eq!(admitted.source().slice(origin.span).unwrap(), source);
-    }
-}
-
-#[test]
 fn formula_admission_keeps_expanded_analysis_and_root_evidence() {
     let source = "p(1..2,3..4).";
     let admitted = crate::test_support::formula(source);
@@ -559,7 +485,14 @@ fn formula_admission_keeps_expanded_analysis_and_root_evidence() {
     assert_eq!(admitted.atoms().len(), 4);
     assert_eq!(admitted.expansion_usage().templates, 4);
     assert_eq!(admitted.expansion_usage().values, 12);
-    assert!(!admitted.formula_origins().is_empty());
+    let first = admitted.formula_origins().first().unwrap();
+    assert!(!first.is_empty());
+    assert!(
+        admitted
+            .formula_origins()
+            .iter()
+            .all(|origins| origins == first)
+    );
     for origins in admitted.formula_origins() {
         assert!(!origins.is_empty());
         for origin in origins {

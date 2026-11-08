@@ -2,8 +2,8 @@
 
 use std::io::{self, Write};
 
+use zetesis_algebra::Cancellation;
 use zetesis_cli::{PublicationConfig, Report, RunError, RunFailure};
-use zetesis_cpu::Cancellation;
 use zetesis_test_support::io::BoundedWriter;
 
 fn options(maximum: usize) -> PublicationConfig {

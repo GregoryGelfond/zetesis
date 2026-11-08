@@ -1,20 +1,12 @@
-//! Bounded inspection of borrowed logical rules before relational compilation.
+//! Bounded borrowed-term inspection shared by logical formula validation.
 //!
-//! The cursor borrows themelios values; it does not reconstruct an AST. It keeps
-//! one remaining-siblings slice per open term or symbol, so retained traversal
-//! space is O(depth), including for a wide argument list. Every visited node is
-//! charged before its children are scheduled. Work is O(visited nodes); text is
-//! charged by byte length before the compiler can scan or copy it.
-//!
-//! This is a resource check, not capability admission. Head, body and argument
-//! shapes the shared compiler rejects without inspecting their children remain
-//! opaque. Every term shape is traversed, including unsupported operators: the
-//! compiler can evaluate a closed operand of unary negation, so its whole input
-//! must be bounded before evaluation.
+//! The cursor retains one remaining-siblings slice per open term or symbol,
+//! using O(depth) space. Node, depth and text charges precede child traversal.
 
 use std::fmt;
 
-use themelios_program::program::{Arguments, Atom, BodyElement, Head, Literal, LiteralInner, Rule};
+use zetesis_algebra::{Meter, MeterCountError};
+
 use themelios_program::symbol::Symbol;
 use themelios_program::term::{Term, Variable};
 
@@ -92,24 +84,6 @@ impl Budget {
         }
     }
 
-    pub(crate) fn check_rule(&mut self, rule: &Rule) -> Result<(), Limit> {
-        self.node(1)?;
-        self.head(rule.head().get(), 2)?;
-        self.node(2)?;
-        for (index, element) in rule.body().get().elements().enumerate() {
-            check(
-                Resource::BodyElements,
-                self.limits.body_elements,
-                index.saturating_add(1),
-            )?;
-            self.node(3)?;
-            if let BodyElement::Literal(literal) = element.get() {
-                self.literal(literal, 4)?;
-            }
-        }
-        Ok(())
-    }
-
     pub(crate) fn node(&mut self, depth: usize) -> Result<(), Limit> {
         check(Resource::Depth, self.limits.depth, depth)?;
         charge(&mut self.nodes, 1, Resource::Nodes, self.limits.nodes)
@@ -137,57 +111,6 @@ impl Budget {
 
     pub(crate) fn body_elements(&self, observed: usize) -> Result<(), Limit> {
         check(Resource::BodyElements, self.limits.body_elements, observed)
-    }
-
-    fn head(&mut self, head: &Head, depth: usize) -> Result<(), Limit> {
-        self.node(depth)?;
-        match head {
-            Head::Literal(literal) => self.literal(literal, depth + 1),
-            Head::Choice(choice) => {
-                if choice.left_guard().is_some() || choice.right_guard().is_some() {
-                    return Ok(());
-                }
-                let mut elements = choice.elements();
-                let Some(element) = elements.next() else {
-                    return Ok(());
-                };
-                if elements.next().is_some() || !element.get().condition().is_empty() {
-                    return Ok(());
-                }
-                self.node(depth + 1)?; // The single choice element.
-                self.node(depth + 2)?; // Its empty condition.
-                self.literal(element.get().literal(), depth + 2)
-            }
-            _ => Ok(()),
-        }
-    }
-
-    fn literal(&mut self, literal: &Literal, depth: usize) -> Result<(), Limit> {
-        self.node(depth)?;
-        match &literal.inner {
-            LiteralInner::Atom(atom) => self.atom(atom.get(), depth + 1),
-            LiteralInner::Comparison(comparison) => {
-                self.node(depth + 1)?;
-                let mut steps = comparison.get().steps();
-                let (_, right) = steps.next().expect("a comparison has at least one step");
-                if steps.next().is_some() {
-                    return Ok(());
-                }
-                self.values(Frame::Term(comparison.get().first(), depth + 2), |_| {})?;
-                self.values(Frame::Term(right, depth + 2), |_| {})
-            }
-            LiteralInner::True | LiteralInner::False => Ok(()),
-        }
-    }
-
-    fn atom(&mut self, atom: &Atom, depth: usize) -> Result<(), Limit> {
-        self.node(depth)?;
-        self.text(atom.name.as_str())?;
-        if let Arguments::Single(arguments) = &atom.arguments {
-            self.node(depth + 1)?;
-            self.values(Frame::Terms(arguments, depth + 2), |_| {})?;
-        }
-        Ok(())
     }
 
     fn values(&mut self, first: Frame<'_>, mut inspect: impl FnMut(&Term)) -> Result<(), Limit> {
@@ -269,24 +192,26 @@ enum Frame<'a> {
 }
 
 fn check(resource: Resource, limit: usize, observed: usize) -> Result<(), Limit> {
-    if observed > limit {
-        Err(Limit {
+    Meter::check_count(observed, 0, limit)
+        .map(|_| ())
+        .map_err(|_| Limit {
             resource,
             limit,
             observed,
         })
-    } else {
-        Ok(())
-    }
 }
 
 fn charge(used: &mut usize, amount: usize, resource: Resource, limit: usize) -> Result<(), Limit> {
-    let observed = used.checked_add(amount).ok_or(Limit {
+    *used = Meter::check_count(*used, amount, limit).map_err(|error| Limit {
         resource,
         limit,
-        observed: usize::MAX,
+        observed: match error {
+            MeterCountError::Limit { observed, .. } => observed,
+            MeterCountError::Overflow => usize::MAX,
+        },
     })?;
-    check(resource, limit, observed)?;
-    *used = observed;
     Ok(())
 }
+
+#[cfg(test)]
+mod tests;

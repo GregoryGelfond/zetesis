@@ -144,16 +144,14 @@ impl Preflight {
         observed: u128,
         limit: usize,
     ) -> Result<(), MetadataError> {
-        if observed > limit as u128 {
-            Err(MetadataError::Limit {
+        zetesis_algebra::Meter::check_wide_count(observed, 0, limit as u128)
+            .map(|_| ())
+            .map_err(|_| MetadataError::Limit {
                 resource,
                 observed,
                 limit,
                 location: self.location,
             })
-        } else {
-            Ok(())
-        }
     }
     fn unsupported(&self, feature: MetadataFeature) -> MetadataError {
         MetadataError::Unsupported {
@@ -337,7 +335,7 @@ impl SourceMetadata {
         let fallback = fallback.into();
         validate(program, limits, fallback)?;
         let mut metadata = super::Builder::new(limits.storage);
-        super::collect_profile_at(program, &mut metadata, true, fallback)
+        super::collect_profile_at(program, &mut metadata, fallback)
             .map_err(|error| MetadataError::Compilation(error.into()))?;
         let mut budget = crate::expansion::Budget::new(limits.expansion, 0);
         if !program.statements().any(|entry| {

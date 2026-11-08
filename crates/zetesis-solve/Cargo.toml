@@ -12,9 +12,9 @@ zetesis-telemetry.workspace = true
 zetesis-backend.workspace = true
 zetesis-core.workspace = true
 zetesis-themelios.workspace = true
-zetesis-cpu.workspace = true
+zetesis-algebra.workspace = true
 zetesis-ferraris.workspace = true
-zetesis-sat.workspace = true
+zetesis-stable.workspace = true
 zetesis-objective.workspace = true
 zetesis-wgpu = { workspace = true, optional = true }
 rayon.workspace = true
@@ -53,6 +53,10 @@ path = "../../docs/book/examples/selection.rs"
 [[example]]
 name = "book-projected-answers"
 path = "../../docs/book/examples/projected-answers.rs"
+
+[[example]]
+name = "book-world-view-questions"
+path = "../../docs/book/examples/world-view-questions.rs"
 
 [[example]]
 name = "book-observations"

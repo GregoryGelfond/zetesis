@@ -26,12 +26,11 @@ Neither asserts the same truth selection. Borrowed `Atoms::same_occurrences`
 and relation `Row::occurrence_in` identify an exact source occurrence mapping,
 including duplicate positions, without a semantic search.
 
-Admitted formula owners and eager `GroundProgram` values expose an `Atoms` view
-and shared `atom_catalog()`. Formula answers and decoded static words select
-these catalogs. Shared lazy rounds publish one catalog after their complete
-no-delta scan; all completed worlds select that owner. Scalar closure publishes
-its final truth over its workspace's canonical authority. Discovery and
-publication alone do not make an atom true.
+Admitted formula owners expose an `Atoms` view and shared `atom_catalog()`.
+Formula answers and decoded device words select positions in these catalogs.
+Hybrid grounding retains the producer core's catalog and checks the original
+streamed constraints before publishing an answer. Discovery and publication
+alone do not make an atom true.
 
 Cloning a model shares both the catalog and selected-position allocation. A
 retained model remains valid after its source, graph or session is dropped. It
@@ -290,13 +289,19 @@ once, in identity order, and packs the decisions into a `PredicateMask`, one bit
 per predicate. `mask.decision(predicate)` answers a canonical predicate of that
 vocabulary admitted before preparation; owned ingress, another vocabulary or a
 later predicate has no decision, so the caller keeps its general procedure.
-`AtomIdentityMap` records values by the owner-scoped identity of canonical atoms,
-for any number of atom owners: a lookup hashes the owner's identity and one
+`AtomIdentityMap` records values by the row-scoped identity of canonical atoms,
+for any number of atom owners: a lookup hashes the scope's identity and one
 identity word rather than the atom's structure, so its cost does not grow with
-the number of owners. `retain_held` drops the owners nothing outside the map
-still holds, whose atoms can no longer be presented. Equal atoms of different owners are different
-keys, and owned ingress or carrier atoms are never recorded; callers that need
-structural identity keep a structural index as the authority.
+the number of owners. An atom's scope is the owner whose rows name it. A row of a
+closed catalog is scoped by the writer that was closed, so the writer's own
+snapshots and every descendant of the closed catalog present it under one
+identity; any other atom is scoped by its own owner, so equal atoms of different
+owners are otherwise different keys. A value recorded through one presenter of a
+closed row is found through every other, so a caller's value must depend on the
+atom alone. `retain_held` drops the scopes nothing outside the map still holds,
+whose atoms can no longer be presented. Owned ingress or carrier atoms are never
+recorded; callers that need structural identity keep a structural index as the
+authority.
 The [`scoped metadata API`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-core/src/catalog/terms.rs)
 documents each frame's storage allowance and stopped-operation behavior.
 
@@ -426,7 +431,7 @@ in isolation; summing it does not account for sharing.
 Canonical identities outside an occurrence map are excluded from that measure,
 even when the catalog keeps their shared prefix alive. The measure also excludes
 spare vector/hash capacity, owner-index entries, Arc and allocator overhead,
-shared subject data and execution state. Replacement
+shared original input data and execution state. Replacement
 admits the new retained family, not transient overlap with the still-live old
 family. Successful reservations can leave capacity after an abandoned admission.
 It is not RSS. `AtomCatalog::capacity` exposes occurrence-map capacity and

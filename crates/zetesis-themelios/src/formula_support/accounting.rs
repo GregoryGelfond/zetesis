@@ -1,7 +1,7 @@
 //! Transferable source-check history, independent of transient observation.
 
 use std::mem;
-use zetesis_cpu::{Cancellation, Stop};
+use zetesis_algebra::{Cancellation, Stop};
 
 mod precedence;
 pub(crate) use precedence::StopPrecedence;
@@ -130,6 +130,20 @@ impl Accounting {
         })
     }
 
+    /// Move the sole charge history into a controlled scope without allocating
+    /// another workspace. The inaccessible placeholder retains only the same
+    /// workspace handle; `Active` restores the history on return or unwind.
+    fn take_for_control(&mut self) -> Self {
+        let placeholder = Self {
+            workspace: self.workspace.clone(),
+            work: 0,
+            substitutions: 0,
+            generated_values: None,
+            allowance: None,
+        };
+        mem::replace(self, placeholder)
+    }
+
     /// Run one synchronous operation under its sole control-bearing account.
     /// Entry and exit observe control; at exit only a resource refusal can be
     /// replaced, preserving its source site and original-program envelope.
@@ -145,7 +159,7 @@ impl Accounting {
         let control = AccountControl::new(cancellation);
         #[cfg(debug_assertions)]
         let _scope = Scope(std::rc::Rc::clone(&control.open));
-        let mut counters = Counters::resume(mem::take(self), observed);
+        let mut counters = Counters::resume(self.take_for_control(), observed);
         counters.control = Some(control);
         let mut active = Active {
             counters,
@@ -181,7 +195,7 @@ impl Accounting {
         action: impl FnOnce(&mut Counters) -> T,
     ) -> T {
         let mut active = Active {
-            counters: Counters::resume(mem::take(self), super::Work::default())
+            counters: Counters::resume(self.take_for_control(), super::Work::default())
                 .with_cancellation(Some(cancellation)),
             retained: self,
         };
@@ -234,7 +248,7 @@ impl AccountControl {
         if amount != 0 && (self.every_charge || EVERY_CHARGE.get()) {
             return self.observe();
         }
-        if zetesis_cpu::poll_due(charged, amount) {
+        if zetesis_algebra::poll_due(charged, amount) {
             self.observe()
         } else {
             Ok(())
@@ -273,12 +287,8 @@ impl Counters {
         location: crate::ProgramSite,
     ) -> Result<(), crate::FormulaFailure> {
         let before = self.accounting.work;
-        super::ceiling(
-            crate::FormulaResource::Work,
-            u128::from(before).saturating_add(amount),
-            u128::from(limits.max_work),
-            location,
-        )?;
+        zetesis_algebra::Meter::check_receipt(before, amount, limits.max_work)
+            .map_err(|error| super::work_failure(error, limits.max_work, location))?;
         let amount = u64::try_from(amount).expect("absorbed work fits its supplied allowance");
         self.count_work(amount);
         if let Some(control) = &self.control {

@@ -1,7 +1,7 @@
 //! Search completion and logical interruption.
 
 use std::fmt;
-use zetesis_cpu::Stop;
+use zetesis_algebra::Stop;
 
 /// Why a successful driver invocation stopped.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -61,7 +61,7 @@ impl SearchState {
 /// A cleanup failure still prevents exhaustion or a requested-count outcome.
 pub(crate) fn after_cleanup(
     state: Option<SearchState>,
-    cleanup: Result<(), zetesis_sat::Incomplete>,
+    cleanup: Result<(), zetesis_stable::Incomplete>,
 ) -> Option<SearchState> {
     if matches!(state, Some(SearchState::Interrupted(_))) {
         state
@@ -82,7 +82,7 @@ pub enum Interruption {
     /// Incremental candidate enumeration or a closure oracle stopped.
     Oracle(Stop),
     /// Reduct countermodel encoding, search or independent witness checking stopped.
-    Countermodel(zetesis_sat::Incomplete),
+    Countermodel(zetesis_stable::Incomplete),
     /// A streamed source constraint stopped before original-program membership.
     Constraint(Stop),
     /// Full-answer reconstruction stopped after verified base membership.
@@ -137,7 +137,7 @@ impl std::error::Error for Interruption {
 mod tests {
     use super::{Completion, Interruption, SearchState};
     use std::error::Error;
-    use zetesis_cpu::Stop;
+    use zetesis_algebra::Stop;
 
     #[test]
     fn interruption_retains_its_public_type_when_boxed() {
@@ -166,11 +166,11 @@ mod tests {
 
     #[test]
     fn countermodel_interruption_preserves_the_nested_error_chain() {
-        let native = zetesis_sat::Incomplete::Verification(Stop::Deadline);
+        let native = zetesis_stable::Incomplete::Verification(Stop::Deadline);
         let reason = Interruption::Countermodel(native);
         let source = reason.source().expect("the native countermodel cause");
         assert_eq!(
-            source.downcast_ref::<zetesis_sat::Incomplete>(),
+            source.downcast_ref::<zetesis_stable::Incomplete>(),
             Some(&native)
         );
         assert_eq!(
@@ -238,10 +238,10 @@ mod tests {
                 limit: 7,
             },
         ));
-        let cleanup = Err(zetesis_sat::Incomplete::RegionFilter);
+        let cleanup = Err(zetesis_stable::Incomplete::RegionFilter);
         assert_eq!(super::after_cleanup(Some(primary), cleanup), Some(primary));
         let secondary = Some(SearchState::Interrupted(Interruption::Countermodel(
-            zetesis_sat::Incomplete::RegionFilter,
+            zetesis_stable::Incomplete::RegionFilter,
         )));
         assert_eq!(
             super::after_cleanup(Some(SearchState::RequestedModels), cleanup),

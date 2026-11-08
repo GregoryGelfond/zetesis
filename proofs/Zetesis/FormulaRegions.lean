@@ -8,7 +8,7 @@ The formula route proposes candidates by a retained chronological search over
 the theory's atoms: each node of the search holds some atoms in and some out,
 propagation adds the atoms every classical model of the theory agrees on under
 those decisions, a conflict closes the node, and a complete assignment is
-handed to the reduct. Read as regions, a node is a cube, the propagated atoms
+handed to the reduct. Read as regions, a node is a region, the propagated atoms
 narrow it, a conflict refutes it and a complete assignment is a leaf; the
 reduct decides membership at the leaf and nowhere else, as on the closure
 route. This module states why the narrowing is sound for stable models: every
@@ -37,27 +37,27 @@ variable {α : Type u}
 
 /-- A classical consequence of the theory under a region holds in every stable
 model of the region. -/
-theorem classical_consequence_forces (T : Theory α) (c : Cube α) (a : α)
+theorem classical_consequence_forces (T : Theory α) (c : Region α) (a : α)
     (h : ∀ z, c.Contains z → Models z T → z a) :
     ∀ z, c.Contains z → Stable z T → z a :=
   fun z hz hs => h z hz hs.1
 
 /-- An atom no classical model of the region holds is in no stable model of
 the region. -/
-theorem classical_consequence_cuts (T : Theory α) (c : Cube α) (a : α)
+theorem classical_consequence_cuts (T : Theory α) (c : Region α) (a : α)
     (h : ∀ z, c.Contains z → Models z T → ¬ z a) :
     ∀ z, c.Contains z → Stable z T → ¬ z a :=
   fun z hz hs => h z hz hs.1
 
 /-- A region without a classical model holds no stable model. -/
-theorem no_model_refutes (T : Theory α) (c : Cube α)
+theorem no_model_refutes (T : Theory α) (c : Region α)
     (h : ∀ z, c.Contains z → ¬ Models z T) :
     ∀ z, c.Contains z → ¬ Stable z T :=
   fun z hz hs => h z hz hs.1
 
 /-- A restriction every stable model satisfies adds nothing a stable model
 lacks, so consequences of the theory with the restriction narrow soundly. -/
-theorem restricted_consequence_forces (T U : Theory α) (c : Cube α) (a : α)
+theorem restricted_consequence_forces (T U : Theory α) (c : Region α) (a : α)
     (hU : ∀ z, Stable z T → Models z U)
     (h : ∀ z, c.Contains z → Models z (T ++ U) → z a) :
     ∀ z, c.Contains z → Stable z T → z a := by
@@ -70,7 +70,7 @@ theorem restricted_consequence_forces (T U : Theory α) (c : Cube α) (a : α)
 
 /-- The narrowing node of the coverage tree, from the atoms one propagation
 forced in and cut out. -/
-def propagation_narrowed (T : Theory α) (c : Cube α) (lo hi : Atoms α)
+def propagation_narrowed (T : Theory α) (c : Region α) (lo hi : Atoms α)
     (forced : ∀ z, c.Contains z → Models z T → Sub lo z)
     (cut : ∀ z, c.Contains z → Models z T → Sub z hi)
     (child : CoverageTree (fun z => Stable z T) (c.narrow lo hi)) :
@@ -78,7 +78,7 @@ def propagation_narrowed (T : Theory α) (c : Cube α) (lo hi : Atoms α)
   .narrowed c lo hi (fun z hz hs => forced z hz hs.1) (fun z hz hs => cut z hz hs.1) child
 
 /-- The closed node of the coverage tree, from a conflict. -/
-def conflict_refuted (T : Theory α) (c : Cube α)
+def conflict_refuted (T : Theory α) (c : Region α)
     (h : ∀ z, c.Contains z → ¬ Models z T) :
     CoverageTree (fun z => Stable z T) c :=
   .refuted c (no_model_refutes T c h)

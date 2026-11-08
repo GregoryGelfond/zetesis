@@ -1,13 +1,14 @@
 //! Small generated prefix forests compare pending schedules with fresh closure.
 
 use proptest::prelude::*;
-use zetesis_cpu::Cancellation;
+use zetesis_algebra::Cancellation;
 
 use crate::{Interpretation, Limits, models};
 
 use super::{
-    AdmissionLimits, FormulaNodes, FormulaParts, Knowledge, Narrower, Narrowing, NarrowingScratch,
-    Node, NodeView, Region, Theory, Width, Work, assert_same_choice, finish_pending, narrow,
+    AdmissionLimits, FormulaNodes, FormulaParts, Knowledge, Meter, Narrower, Narrowing,
+    NarrowingScratch, Node, NodeView, Region, Theory, Width, assert_same_choice, finish_pending,
+    narrow,
 };
 
 #[derive(Debug)]
@@ -121,25 +122,27 @@ fn queue(
     promoted: Option<usize>,
 ) -> NarrowingScratch {
     let mut scratch = NarrowingScratch::default();
-    scratch.prepare(theory.atom_count());
+    scratch.common.prepare(theory.atom_count());
     scratch
+        .common
         .prepare_thresholds(index.thresholds.rows.len())
         .unwrap();
     if let Some(row) = promoted {
         scratch
+            .common
             .prepare_residuals(index.thresholds.rows.len())
             .unwrap();
-        scratch.queue_residual(row);
+        scratch.common.queue_residual(row);
     }
     for &row in order {
-        scratch.queue_threshold(row);
+        scratch.common.queue_threshold(row);
     }
     scratch
 }
 
 fn pop_order(mut scratch: NarrowingScratch) -> Vec<usize> {
     let mut rows = Vec::new();
-    while let Some(row) = scratch.next_threshold() {
+    while let Some(row) = scratch.common.next_threshold() {
         rows.push(row);
     }
     rows
@@ -178,8 +181,9 @@ fn branches(theory: &Theory, index: &Narrower, region: &Region, inherited: &Know
         .preferred_atom(
             region,
             &crate::ChoiceHeads::default(),
-            &mut Work::new(u64::MAX),
+            &mut Meter::local(u64::MAX),
         )
+        .map_err(zetesis_algebra::Failure::into_stop)
         .unwrap()
     else {
         return;

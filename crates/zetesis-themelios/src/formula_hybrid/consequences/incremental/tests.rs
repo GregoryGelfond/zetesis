@@ -6,11 +6,14 @@ mod retention;
 mod wakeups;
 
 use super::*;
-use crate::test_support::hybrid;
+// These tests exercise the streamed route, so their fixtures are grounded with
+// pairwise-exclusion capture off: capture would move a pairwise family whose
+// every component is complete into the core.
+use crate::test_support::streamed_hybrid as hybrid;
 use crate::{
     AdmissionOptions, ConstraintCheckLimits, ConstraintRegionPass, ExpansionLimits, HybridFormula,
 };
-use zetesis_cpu::Cancellation;
+use zetesis_algebra::Cancellation;
 
 fn atom(owner: &HybridFormula, text: &str) -> usize {
     owner
@@ -415,7 +418,7 @@ fn cancellation_retires_pending_consequences() {
         .unwrap_err();
     assert!(matches!(
         failure.cause,
-        crate::ConstraintCheckCause::Stopped(zetesis_cpu::Stop::Cancelled)
+        crate::ConstraintCheckCause::Stopped(zetesis_algebra::Stop::Cancelled)
     ));
     assert_eq!(failure.statistics, accepted);
     assert!(!state(&checker).valid);

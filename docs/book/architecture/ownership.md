@@ -12,15 +12,15 @@ which state those operations may share and when that state can be released.
 
 ## Three distinct lifetimes
 
-**The logical subject** is an immutable admitted program or theory. It supplies
+**The original input** is an immutable admitted program or theory. It supplies
 the meaning of atoms, rules and formulas. Source provenance and observations
 remain associated with their admitted owner. Borrowed prepared inputs let a
 caller reuse that owner without parsing or admitting it again.
 
-**Prepared execution data** describes that subject for a particular operation:
+**Prepared execution data** describes that input for a particular operation:
 a complete ground graph, typed relation columns, an indexed formula graph or a
-certified support plan. It may retain a shared subject handle and derived
-storage. Reusing it requires the same subject, compatible capabilities and a
+certified support plan. It may retain a shared input handle and derived
+storage. Reusing it requires the same original input, compatible capabilities and a
 valid physical owner. Sharing that storage alone does not establish that a
 candidate is an answer set; a semantic certificate has its own applicability
 and membership contract.
@@ -32,7 +32,7 @@ allocation must not reuse a previous search's truth, coverage or budget.
 
 | State | What makes reuse valid | When it is no longer needed |
 | --- | --- | --- |
-| Original program or theory | Exact immutable subject identity | After its readers and checked results release it |
+| Original program or theory | Exact immutable original-input identity | After its readers and checked results release it |
 | Construction indexes and support | The construction phase's atom and formula domains | After the final consumer has produced the retained representation |
 | Relation columns and postings | Exact source, tuple dictionary and row domain | After the last query against that snapshot |
 | Prepared reduct encoding | Exact immutable original theory | After its enumeration and borrowed queries release it |
@@ -47,32 +47,13 @@ construction cost and lifetimes should be explicit. Duplicating owned logical
 payload merely to index it requires a separate justification.
 
 Core construction descriptions (`Value`, `Atom`, `Template`) are distinct from
-admitted execution views. `Program` imports its constants and signed predicates
-into a frozen canonical vocabulary. Its template rows, explicit finite domain
-and signature order retain typed IDs and topology. Interned subterms are not
-thereby members of the substitution domain. `TemplateCatalog` supplies the same
-ordered component storage to rules and objectives without treating an objective
-as a synthetic rule or source of support.
+admitted execution views. `TemplateCatalog` imports typed components into one
+canonical vocabulary and retains their order and topology. Interned subterms
+are not thereby members of a substitution domain. Rules and objectives share
+component storage without treating an objective as a synthetic rule or source
+of support. Catalog presence denotes identity, not truth.
 
-Explicit `FactTables` input is consumed into one closed atom authority over that
-same vocabulary. Per-predicate relation catalogs retain row membership, equality
-columns and canonical order; an occurrence list retains original duplicates and
-anchors beside template order. Neither the catalogs nor occurrence positions own
-another `Value` or `Atom`. Admission charges its still-live imported-column IDs,
-canonical writer, relation metadata and close/publication overlap together, with
-the vocabulary counted once. Caller construction values follow the same exclusion
-as caller-supplied templates. After admission, formula/source evidence and core
-fact occurrences remain separate coordinates linked by their owning adapter.
-
-An oracle workspace descends from the program's closed store with a fresh atom
-scope and empty discovery. Bootstrap visits facts at their original positions;
-presence in shared storage never substitutes for that visit or seeds truth by
-itself. Per-workspace byte receipts include the shared base. The batch cache
-counts the closed rows and indexes once under exact program/preparation ownership;
-it leaves the existing vocabulary accounting in place. Other lazy-round and eager
-grounding catalogs still import each fact through their established paths.
-
-`TemplateRef`, `PatternRef`, `FilterRef` and `TemplateTerm` borrow that storage.
+`TemplateRow`, `PatternRef`, `FilterRef` and `TemplateTerm` borrow that storage.
 `ObjectiveTemplateRef` adds objective weight polarity, priority slot and closed
 condition metadata. Owned condition descriptions import into one objective tuple
 authority over the same vocabulary. Conditions already backed by a source catalog
@@ -80,14 +61,6 @@ retain that supplied authority. The objective's aggregate byte allowance counts
 exact shared owners once; different source prefixes can conservatively recount
 shared segments. This boundary does not establish one global authority for all
 source syntax, generated bindings and observation values.
-
-A Program's `CarrierAtom` retains signature and explicit-domain coordinates,
-sharing the canonical vocabulary. Sparse candidates do not enumerate or count
-the complete Cartesian carrier. A positional `GateAtom` additionally witnesses
-a checked rank for that exact Program. Equal logical atoms from separately
-admitted Programs are comparable semantically but cannot exchange applicability
-witnesses. Tuple writers created for the same Program share vocabulary identity
-while retaining independent atom-row scopes and candidate truth.
 
 Formula preparation accepts source text or a canonical logical program. Both
 retain the original canonical `Program` in an `Arc` through preparation and
@@ -155,7 +128,7 @@ owner or one memory allowance.
 
 ## Shared original narrowing index
 
-Region enumeration owns one `OriginalIndex` in `zetesis-sat`, the only place
+Region enumeration owns one `OriginalIndex` in `zetesis-stable`, the only place
 an immutable `IndexedTheory` can be constructed: the exact admitted `Theory`
 and its `Narrower` index, constructed together. The enumeration builds it when
 a region walk first needs it, before the walk's first step, on every route:
@@ -172,7 +145,7 @@ cache or public interchange of raw index handles.
 Only immutable indexing is shared. Each candidate region owns its knowledge;
 each reduct traversal starts with private knowledge under its candidate's mask.
 A narrowing's worklists belong to whoever walks: the scalar walk, each parallel
-worker and each producer round keep one `NarrowingScratch` for their candidate
+worker and each producer keep one `NarrowingScratch` for their candidate
 regions; each reduct workspace keeps one for its proper-subset queries, counted
 in its retained bytes; each proposer keeps one for its positive checks. Each
 narrowing empties the scratch it borrows before reading it, and no scratch is
@@ -217,80 +190,68 @@ its existing allocation boundary; the shared handle uses an infallible Arc
 allocation, as does Theory. These logical work and ownership facts do not
 establish a process RSS bound or a measured speedup.
 
-## Prepared formula queries
+## Formula reduct queries
 
-A formula enumeration under the clauses method (`--search clauses`) constructs
-its `PreparedReduct` lazily, when a candidate first needs exact subset
-checking; the regions method, the default, queries the reduct as a region tree
-over the original formulas under the candidate's mask and builds no encoding,
-as the [execution chapter](execution.md) describes. One immutable encoding represents
-the original theory's reduct for every candidate. The encoding separates the
-prospective subset's atom values from the candidate's membership and original
-implication truth. A successful `EvaluationWorkspace` operation authenticates
-that truth against the exact candidate and theory; an arbitrary external truth
-mask cannot parameterize the query.
+A formula enumeration queries the reduct as a region tree over the original
+formulas under the candidate's mask, as the [execution chapter](execution.md)
+describes, and builds no encoding. The enumeration's one original index, built
+when its walk first needs it, serves the candidate walk and every proper-subset
+query; a query borrows it and never builds one. A successful
+`EvaluationWorkspace` operation authenticates the candidate's original truth
+against the exact candidate and theory; an arbitrary external truth mask cannot
+drive the query.
 
-The coordinator owns this prepared encoding across batches and candidate
-restrictions. A scalar check reuses its `ReductWorkspace`; concurrent completion
-workers borrow the same encoding and own disjoint evaluation, parameter and
-search storage. Each worker reuses that storage within its batch; completion
-workers are currently created afresh for subsequent batches. Before each subset
-search, the worker clears candidate-dependent truth, decisions and ordering.
-It retains a complete watch index and a completed unconditional propagation
-prefix for the exact immutable encoding. These assignments follow from the
-encoded query's unit clauses before any candidate parameters are supplied;
-they need not be facts of the original ASP program. New authenticated parameters
-extend that prefix. A watch false in the prefix remains protected by another
-watch true there, so completed prefix events need not be replayed.
-
-An interrupted index construction cannot be reused. Interrupted unconditional
-propagation publishes no reusable prefix; a retry undoes it before recomputing.
-A completed unconditional conflict refutes every parameterization of this
-encoding, whereas a candidate conflict refutes only that query. A different
-owner invalidates both the index and the unconditional result.
+A scalar check reuses its reduct workspace; concurrent completion workers own
+disjoint workspaces. A workspace retains only capacity between queries: each
+query recomputes original truth and starts its region tree from fresh knowledge,
+so no candidate's knowledge reaches another candidate's query.
 
 Every returned subset is independently checked against the original frozen
 reduct. Candidate restrictions do not change the theory whose answer sets are
-being sought. Retained watch positions carry structural information, not a truth
-claim about a previous candidate.
+being sought.
 
-The original candidate encoding and the reduct encoding have independent
-dimension limits. Their work shares the enumeration's cumulative search budget.
-Cold preparation and each query's retained capacity also have an explicit byte
-ceiling. Parallel completion charges the shared prepared owner once, then adds
-the disjoint worker and result allowances. Allocation overhead and process RSS
-remain outside these named-storage accounts. Failed preparation publishes no
-owner; a later completion-capacity refusal can retain a successfully prepared
-owner for retry without discarding its charged work.
+Each query's retained workspace has an explicit byte ceiling, and its work
+shares the enumeration's cumulative search budget. Completion admits its ordered
+results, then measures each worker's workspace as it is created. Allocation
+overhead and process RSS remain outside these named-storage accounts.
 
-This architecture avoids rebuilding the reduct's structure for each candidate.
-The fixed encoding can be larger than a separately simplified reduct, so reuse
-alone establishes neither a time nor a memory improvement. The
-[parametric reduct law](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/guide/parametric-reduct.md) states the
-semantic preservation argument and its remaining implementation obligations.
+The removed clause search instead prepared one parametric encoding of the
+reduct, `PreparedReduct`, and parameterized it for every candidate; the
+[parametric reduct law](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/guide/parametric-reduct.md)
+states that encoding's semantic preservation argument.
 
 ## Candidate frontier observations
 
 `RegionSearchStatistics::frontier` records queued, inactive candidate regions in
-the parallel proposal executor. Its byte count includes allocated entry capacity
-and the owned decision and knowledge buffers of queued regions. An empty frontier
-can retain capacity. The count and byte peaks are maxima over frontier changes;
-they need not occur together.
+the parallel proposal executor's producer deques. Its byte count includes the
+deques' headers, allocated entry capacity and the owned decision and knowledge
+buffers of queued regions. An empty frontier can retain capacity. Each count is
+changed under the lock of the deque whose change causes it, so its history is a
+linearization of the deques' changes and its peak the maximum of that history;
+the count and byte peaks need not occur together.
 
-The observation excludes active regions, retired worker storage, temporary split copies, shared immutable
-indexes, candidate batches, thread stacks, allocator overhead and device storage.
-It is neither peak process memory nor a memory limit. Uninstrumented traversal
-routes report absence, not zero. The statistics JSON preserves that distinction
-in `search.candidate_regions.frontier`.
+The observation excludes the regions producers hold, at most one per producer
+and per hand, so a peak omits at most that many; it also excludes retired
+worker storage, temporary split copies, shared immutable indexes, candidate
+batches, thread stacks, allocator overhead and device storage. It is neither
+peak process memory nor a memory limit. Uninstrumented traversal routes report
+absence, not zero. The statistics JSON preserves that distinction in
+`search.candidate_regions.frontier`. Beside it, `frontier_order` reports whether
+the producers keep a deque each (`per_producer`) or share one (`shared`, an
+optimizing search's order), an order fixed before the stream's first proposal,
+and is `null` on routes without producers. With a shared deque the queued
+regions have no per-deque bound; the receipts still record their exact peak.
 
 ## Device resource scope
 
 [`GpuContext`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-wgpu/src/context.rs)
 owns a selected device, queue, granted capabilities and shared health. Each
-primitive retains its pipeline and prepared subject. Its `from_context`
+primitive retains its pipelines and prepared subject. Its `from_context`
 constructor shares these device resources; existing `new_selected`
 constructors create independent contexts. `GpuFormulaProfile` explicitly retains
-one compiled formula pipeline, its exact context and gate implementation.
+a validated formula shader, the pipeline of each workgroup size compiled for it,
+its exact context and gate implementation; a fitted size is compiled by the
+first check, from any oracle sharing the profile, that dispatches it.
 `GpuFormulaOracle::from_profile` checks Busy, health and granted formula
 capabilities, then starts fresh residency, epoch and batch accounting.
 `GpuFormulaProfile::same_instance` compares the compiled owner; equal shader or
@@ -300,9 +261,11 @@ answer-set claim or change the primitive's input subject.
 Advertised support and enabled use are distinct observations. `GpuInfo::features`
 reports the adapter's optional wgpu features; discovery creates no device.
 `GpuContext::features` reports the subset granted to the retained device, and
-`GpuContext::limits` exposes its granted limits. Current constructors request no
-optional features. These operations perform no submission and establish neither
-device health nor an optimized execution path. The device inventory reports
+`GpuContext::limits` exposes its granted limits. Current constructors request
+supported `SUBGROUP` and `SHADER_INT64` features; timestamp queries are requested
+only when timing is requested. Granted features permit a kernel specialization but
+do not establish that a particular primitive uses it. These observations perform
+no submission and establish neither device health nor an optimized execution path. The device inventory reports
 advertised features using wgpu's names; a later feature-specific kernel still
 needs explicit admission, an exact baseline and physical qualification.
 
@@ -315,7 +278,8 @@ frozen-reduct query. Reusing it requires fixed-cost checks and an owner clone;
 each live oracle's retained graph and transport remain separate costs.
 
 A primitive operation holds an exclusive context lease through submission,
-readback and error cleanup. Another operation receives `GpuErrorKind::Busy`
+readback and error cleanup; an overlapping check is one operation, whose lease
+also spans the production it runs while its submission is in flight. Another operation receives `GpuErrorKind::Busy`
 without entering a waiting queue. This is serialized composition of primitives;
 their internal GPU parallelism remains unchanged. Prepared data does not retain
 that execution lease. The
@@ -332,7 +296,9 @@ and device-health check succeeds. An interrupted submitted operation may still
 be live and invalidates the context. Controlled static, formula and lazy batch
 entry polls control and then checks shared health, including empty batches.
 Readback observes control between waits of at most 50 milliseconds and releases
-mapped access before returning. Driver calls, shader execution and scope
+mapped access before returning, except after a control stop during an overlapped
+check's production, when the finish observes the submission's completion without
+polling the control, within the submission's timeout. Driver calls, shader execution and scope
 settlement are not preempted. `GpuError::interruption()` retains the exact stop;
 ordinary solving reports incomplete work without an automatic backend retry.
 Candidate proposals remain accounted for even when no device result returns.
@@ -344,8 +310,13 @@ prepared objects sharing a context or include device infrastructure. There is no
 global context, pipeline registry or unbounded work queue. Ordinary sessions can
 share an explicitly supplied context through `ExecutionResources` and
 `Session::builder`. `ExecutionResources::with_formula_profile` additionally
-reuses the supplied compilation across ordinary formula sessions and derives
-its context from that profile, preventing mismatched context/profile pairs.
+shares the supplied profile's shader and pipelines across ordinary formula
+sessions and derives its context from that profile, preventing mismatched
+context/profile pairs. `ExecutionResources::discovering` instead retains an
+adapter enumeration begun before the session; the session's primitive selects
+over it as ordinary selection does and requests its own device. The enumeration
+is a snapshot of the adapters present when it began, as `GpuDiscovery`
+documents.
 Each session still owns its executor, subject residency, search, candidate queue,
 counters and incumbent. Context-only resources compile per session; neither
 form installs a global cache. Hard adapter policy is checked before profile
@@ -358,7 +329,13 @@ candidate-local truth and outcomes. An owned Rayon pool can execute those checks
 concurrently and return them in input order. Repeated equal candidates are still
 separate submitted occurrences.
 
-Within lazy grounding, source work may be shared across worlds. One batch-owned
+The former relational closure route shared source work across worlds. Its
+ownership argument remains relevant to the retained round laws, but this route
+was removed in 0.7.0. Current hybrid execution materializes a producer theory
+and checks streamed constraints on the host. The
+[grounding comparison](grounding-comparison.md) distinguishes the schedules.
+
+In the relational ownership model, one batch-owned
 atom catalog retains each demanded identity. Its committed prefix is immutable
 during a source scan; callbacks append to a disjoint pending tail. Canonically
 ordered local IDs select source rows by borrowing that prefix, so the Union and
@@ -411,100 +388,13 @@ avoid reallocation while increasing retained storage. An admission limit must
 account for the capacity actually retained, including simultaneously live
 packing, output and transport storage within its stated scope.
 
-Independent scalar closure construction has a per-candidate named-capacity
-allowance, `Limits::max_closure_bytes`. `BatchOracle` retains one preparation
-for its exact `Program` and reuses empty query workspaces across submissions.
-Scalar delta rows are derived ID selections over each predicate's sole tuple
-owner. Their live and spare capacities, headers and conservative replacement
-overlap enter the same per-candidate allowance. Cutoffs, cache keys and logical
-ID lengths are reset before reuse; stable insertion IDs belong to one candidate's
-catalog lifetime and do not become persistent truth across candidates. A dense
-relation's recorded discovery positions, kept for rows derived again, are
-identity metadata of the workspace's authority: they count in the same
-allowance, are skipped rather than refused when the work or byte allowance
-cannot hold them, and are discarded with a failed or foreign workspace.
-Before executing a batch it admits idle retained workspaces and the allowance
-for each assigned workspace against its collective limit. If `S` is spare slot
-capacity (zero once every reserved slot holds a workspace), `H` the separately
-allocated preparation header, `P` the prepared queries' retained bytes (including
-`H`), `R_i` a workspace's retained capacity, and `L` the
-per-candidate allowance, the required envelope is
-`H + S + sum(idle R_i) + sum(assigned max(R_i, L - P))`. Every assigned workspace
-requires `L >= P`. The other immutable preparation payload has its separate
-preparation ceiling. The cache's own header and Arc counters are bookkeeping
-outside this envelope, like allocator metadata. Since `H <= P`,
-`workers * L` remains the conservative setup allowance: CPU closure setup checks that product
-before allocating its pool, compiling static rules or initializing candidates.
-This conservative guard also covers eager and shared CPU closure execution;
-formula and device routes apply their own resource checks instead.
-`SolveConfig::validate` checks representation-independent policies. With valid
-policies, an already cancelled session stops before executor resource checks.
-The ordinary resource policy derives `L` as each worker's share of the
-collective capacity selected by `--memory`. At most
-`min(submitted candidates, worker count)` workspaces are
-assigned, each to a contiguous candidate range; candidates inside one range run
-sequentially. An empty batch admits only retained collective capacity and does
-not prepare a program. Returned models, input seeds, worker stacks and
-allocator overhead are separate owners.
-
-Ordinary sessions map `SolveConfig::max_source_work` to immutable preparation
-work and `max_closure_batch_bytes` to both preparation storage and the collective
-owner allowance. Candidate closure work retains its separate `max_work` counter.
-Bounded library callers can select these work ceilings. Ordinary command
-execution uses checked counter maxima without a selected work quota.
-A preparation stop is distinct from an individual candidate stop; neither
-establishes candidate exhaustion. A collective reservation refusal starts no
-candidate and releases the admission slot.
-
-`SemanticOutcome::query_execution()` retains the CPU producer's typed
-`QueryStatistics` snapshot for independent relational execution. Preparation
-builds and adoptions are cumulative; an adoption shares a compatible immutable
-owner supplied by candidate narrowing without reconstructing it. The retained
-receipt still describes that owner's original construction work. Active and
-reused workspace counts describe the latest
-independent attempt that acquired admission. They count assigned owners, not
-completed candidates. Retained bytes describe the current cache. Reserved bytes
-are the latest attempt's admitted envelope, or zero if it admitted none.
-Text statistics, JSON and failure
-reports use this same observation. If reading the snapshot fails, the original
-typed fault and any earlier successful snapshot remain distinguishable; checked
-models are retained without a coverage claim. Shared and device routes expose
-their own execution receipts instead.
-
-`SemanticOutcome::closure_execution()` is the other receipt of the independent
-routes, lazy and eager: the per-check counters of `Statistics` and
-`StaticStatistics`, summed over completed checks, with the number of stopped
-checks whose partial work no counter reports. Its peak closure envelope is the
-largest capacity a completed check admitted or reserved, in the same terms as
-`max_closure_bytes`; it is not an allocation peak.
-
 [`StorageOwners`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/StorageOwners.lean)
 proves the natural-number bound obtained by summing independently bounded
 owners. Its premise is admitted capacity: allocator slack can exceed a proposed
-reservation before the actual-capacity check refuses it. A scalar stop returns
-no completed statistics; a core catalog failure separately carries its capacity
-receipt. This is not a hard bound on transient allocator or process memory.
-Concrete capacity measurement, worker scheduling and checked arithmetic remain
-implementation obligations.
-
-The lazy coordinator's `max_host_bytes` is a mixed, explicitly scoped envelope.
-It includes actual committed/pending catalog, AVL/path and ordered-ID capacities,
-their named growth overlap and canonical payload, plus requested packed
-transport, source membership/workspace, instance-key scratch and final model
-positions. The final position allowance bounds logical selected slots; it
-excludes the extra capacity retained by `Model`'s geometrically growing Vec.
-Other allocator overhead and rounding outside the catalog/ordered-ID capacities,
-Arc envelopes, caller inputs and backend-private transport are also excluded.
-Source work includes initialization, identity lookup/insertion, canonical row
-selection and prefix commits; the quota is shared across the whole batch.
-
-The borrowed source reader has a separate `max_scan_bytes` allowance for its
-row-reference directory, join scratch and current instance-key buffer. It
-includes actual capacities and old/replacement overlap, while borrowing the
-Program and catalog payload. `max_instance_bytes` bounds one instance's logical
-referenced identity; it does not stand in for the scan workspace allowance.
-World masks and callback transport keep their existing accounts. These owners
-can be simultaneously live, so their separate admitted bounds must be composed.
+reservation before an actual-capacity check refuses it. Concrete capacity
+measurement, worker scheduling and checked arithmetic remain implementation
+obligations. The general law survives removal of the relational closure route;
+it does not establish a hard bound on transient allocator or process memory.
 
 Authored payload bounds exclude any costs their API says they exclude, such as
 allocator metadata or driver allocations. They are not process RSS. Dropping a

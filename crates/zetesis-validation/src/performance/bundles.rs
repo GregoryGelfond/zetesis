@@ -26,7 +26,7 @@ struct Case {
     files: Vec<matrix::BundleFile>,
 }
 
-/// Load 1..=94 explicitly sealed external workloads from a bounded JSON manifest.
+/// Load 1..=95 explicitly sealed external workloads from a bounded JSON manifest.
 ///
 /// Schema version 1 has `root` and `cases`; each case has `entry`, the existing
 /// typed `contract`, and `files`. Each file has `path`, lowercase `sha256` and
@@ -46,6 +46,23 @@ struct Case {
 /// Refuses invalid JSON/schema, empty or oversized selections, duplicate workload
 /// identities, changed files, invalid graphs/contracts and exceeded byte bounds.
 pub fn load(path: &Path, limits: matrix::WorkloadLimits) -> Result<Vec<matrix::Workload>, Error> {
+    load_inner(path, limits, None)
+}
+
+/// Admit the same bytes that match a maintained manifest's reviewed digest.
+pub(super) fn load_reviewed(
+    path: &Path,
+    limits: matrix::WorkloadLimits,
+    expected: &str,
+) -> Result<Vec<matrix::Workload>, Error> {
+    load_inner(path, limits, Some(expected))
+}
+
+fn load_inner(
+    path: &Path,
+    limits: matrix::WorkloadLimits,
+    expected: Option<&str>,
+) -> Result<Vec<matrix::Workload>, Error> {
     let seal = identity::seal(path, limits.metadata_bytes)?;
     let bytes = examples::Files::read(
         seal.requested(),
@@ -55,11 +72,18 @@ pub fn load(path: &Path, limits: matrix::WorkloadLimits) -> Result<Vec<matrix::W
     .map_err(Error::Corpus)?;
     examples::Files::digest("external workload manifest", &bytes, seal.sha256())
         .map_err(Error::Corpus)?;
+    if let Some(expected) = expected {
+        examples::Files::digest("reviewed workload manifest", &bytes, expected)
+            .map_err(Error::Corpus)?;
+    }
     let manifest: Manifest = serde_json::from_slice(&bytes)
         .map_err(|error| Error::Corpus(examples::Error::Json(error)))?;
-    if manifest.schema_version != 1 || manifest.cases.is_empty() || manifest.cases.len() > 94 {
+    if manifest.schema_version != 1
+        || manifest.cases.is_empty()
+        || manifest.cases.len() > super::MAX_CASES
+    {
         return Err(Error::Configuration(
-            "external workload manifest requires schema 1 and 1..=94 cases",
+            "external workload manifest requires schema 1 and 1..=95 cases",
         ));
     }
     let parent = seal.canonical().parent().ok_or(Error::Configuration(

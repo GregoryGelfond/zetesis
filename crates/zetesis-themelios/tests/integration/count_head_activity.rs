@@ -10,7 +10,7 @@ use std::fmt::Write as _;
 
 use cases::CASES;
 use reference::{Models, holds, native, values};
-use zetesis_cpu::Cancellation;
+use zetesis_algebra::Cancellation;
 use zetesis_themelios::{
     AdmissionOptions, CountPlanLimits, CountPlanStatus, ExpansionFailure, ExpansionResource,
     FormulaFailure, FormulaLimits, FormulaResource, admit_formula,

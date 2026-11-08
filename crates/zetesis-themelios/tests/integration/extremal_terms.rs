@@ -1,38 +1,30 @@
 //! Extremal symbols remain typed closed values across source consumers.
 
 use zetesis_clingo_support as oracle;
-use zetesis_core::{Term, Value};
+use zetesis_core::{Value, ValueLimits};
 use zetesis_reference_support as reference;
-use zetesis_reference_support::{canonical, exhaustive, normal_answer_sets};
+use zetesis_reference_support::exhaustive;
 use zetesis_test_support::records::Records;
-use zetesis_themelios::{AdmissionOptions, FormulaLimits, admit};
+use zetesis_themelios::FormulaLimits;
 
 #[test]
 fn extremal_atom_arguments_retain_typed_values() {
-    let input = admit(
-        "p(#inf,#sup,\"#inf\",\"#sup\").".into(),
-        AdmissionOptions::default(),
-    )
-    .unwrap();
+    let input =
+        reference::admit("p(#inf,#sup,\"#inf\",\"#sup\").", &FormulaLimits::default()).unwrap();
+    let atom = input
+        .atoms()
+        .at(0)
+        .unwrap()
+        .to_atom(ValueLimits::default())
+        .unwrap();
     assert_eq!(
-        input
-            .program()
-            .facts()
-            .at(0)
-            .unwrap()
-            .pattern()
-            .terms()
-            .iter()
-            .collect::<Vec<_>>(),
+        atom.values(),
         [
-            Term::Constant(Value::Infimum),
-            Term::Constant(Value::Supremum),
-            Term::Constant(Value::String("#inf".into())),
-            Term::Constant(Value::String("#sup".into()))
+            Value::Infimum,
+            Value::Supremum,
+            Value::String("#inf".into()),
+            Value::String("#sup".into()),
         ]
-        .iter()
-        .map(zetesis_core::TemplateTerm::from)
-        .collect::<Vec<_>>()
     );
 }
 
@@ -81,18 +73,6 @@ const FORMULA: &[(&str, &[&[&str]])] = &[
         &[&["p(#inf)", "p(#sup)", "q(#inf)", "r(#sup)"]],
     ),
 ];
-
-#[test]
-fn ordinary_extremal_sources_preserve_complete_models() {
-    for &(source, wanted) in ORDINARY {
-        let input = admit(source.into(), AdmissionOptions::default()).unwrap();
-        let mut actual = Records::new();
-        for model in normal_answer_sets(input.program()) {
-            assert!(actual.insert((model.atoms().iter().map(canonical).collect(), None)));
-        }
-        assert_eq!(actual, expected(wanted), "{source}");
-    }
-}
 
 #[test]
 fn formula_extremal_sources_preserve_complete_models() {

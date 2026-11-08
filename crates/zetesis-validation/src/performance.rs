@@ -15,9 +15,13 @@
 
 mod capture;
 mod config;
+
+/// Finite campaign population, separate from the pinned source catalog size.
+pub(super) const MAX_CASES: usize = 95;
 pub mod families;
 pub mod matrix;
 pub mod command;
+pub mod corpus;
 pub mod bundles;
 pub mod series;
 pub mod scalability;
@@ -84,8 +88,6 @@ pub struct Report {
     schedule: Schedule,
     #[serde(skip_serializing_if = "Option::is_none")]
     formula_joins: Option<crate::selected::FormulaJoins>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    search: Option<crate::selected::SearchMethod>,
     limits: Limits,
     started_unix_ns: u128,
     finished_unix_ns: Option<u128>,
@@ -235,7 +237,7 @@ pub fn run(request: &Request<'_>) -> Result<Report, Error> {
 /// qualification, warmup, timed and diagnostic calls retain their direct path.
 ///
 /// # Errors
-/// Returns the setup/publication refusals of [`run`], including missing helper
+/// Returns the setup/publication refusals of [`run()`], including missing helper
 /// identity. Resource-record failures remain retained observation failures.
 pub fn run_with_runner(request: &Request<'_>, runner: &Path) -> Result<Report, Error> {
     run::campaign(request, Some(runner))

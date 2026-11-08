@@ -9,15 +9,12 @@ use std::time::Duration;
 
 use crate::support::finite_bindings::Models;
 use serde_json::Value as Json;
+use zetesis_algebra::Cancellation;
 use zetesis_clingo_support as oracle;
 use zetesis_core::Model;
-use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{Interpretation, Limits as OracleLimits, models, models_reduct};
-use zetesis_sat::{Limits, StableModels};
-use zetesis_themelios::{
-    AdmissionFailure, AdmissionOptions, AdmittedFormula, ExpansionFailure, ExpansionLimits,
-    FormulaFailure, FormulaLimits, FormulaResource, ProfileFeature, admit_extended,
-};
+use zetesis_stable::{Limits, StableModels};
+use zetesis_themelios::{AdmittedFormula, FormulaFailure, FormulaLimits, FormulaResource};
 
 fn cases() -> Vec<Json> {
     serde_json::from_str::<Json>(include_str!("../fixtures/disjunction.json")).unwrap()["cases"]
@@ -252,23 +249,6 @@ fn unsafe_disjunct_variables_remain_located_refusals() {
             "{error}"
         );
     }
-}
-
-#[test]
-fn relational_admission_still_declines_disjunctions() {
-    let error = admit_extended(
-        "a | b.".to_owned(),
-        AdmissionOptions::default(),
-        ExpansionLimits::default(),
-    )
-    .unwrap_err();
-    assert!(matches!(
-        error,
-        ExpansionFailure::Admission(AdmissionFailure::Profile {
-            feature: ProfileFeature::Head,
-            ..
-        })
-    ));
 }
 
 #[test]

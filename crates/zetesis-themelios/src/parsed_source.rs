@@ -1,4 +1,4 @@
-//! One original source and parse, transferable between admission profiles.
+//! One original source and parse retained through formula preparation.
 
 use std::fmt;
 
@@ -9,8 +9,8 @@ use themelios_syntax::dialect::Dialect;
 use themelios_syntax::parse::{Parse, parse};
 
 use crate::{
-    AdmissionFailure, AdmissionOptions, Admitted, ExpansionFailure, ExpansionLimits,
-    FormulaFailure, FormulaLimits, InputLimit, PreparedFormula, SyntaxFailure, extended, formula,
+    AdmissionFailure, AdmissionOptions, ExpansionLimits, FormulaFailure, FormulaLimits, InputLimit,
+    PreparedFormula, SyntaxFailure, formula,
 };
 
 /// One syntax-checked input with fixed source-admission options.
@@ -22,18 +22,14 @@ use crate::{
 /// finite grounding, or existence of an answer set.
 ///
 /// Retaining this owner retains the source and upstream syntax tree, with
-/// O(source bytes + syntax nodes) space. Moving it between profile attempts
-/// neither clones the source nor reparses it. Explicit attempts perform their own
-/// checked raising and normalization. Automatic admission shares completed source
-/// checks and raising when the extended refusal permits formula preparation.
+/// O(source bytes + syntax nodes) space. Recovering it after a preparation
+/// refusal neither clones the source nor reparses it. Each explicit attempt
+/// performs its own checked raising and normalization.
 ///
 /// ```
 /// use zetesis_themelios::{AdmissionOptions, ExpansionLimits, FormulaLimits, ParsedSource};
 /// let source = ParsedSource::new("1{a;b}1.".into(), AdmissionOptions::default())?;
-/// let refused = source.admit_extended(ExpansionLimits::default()).unwrap_err();
-/// assert!(refused.error().needs_formula_admission());
-/// let prepared = refused.into_source()
-///     .prepare_formula(ExpansionLimits::default(), FormulaLimits::default())?;
+/// let prepared = source.prepare_formula(ExpansionLimits::default(), FormulaLimits::default())?;
 /// let admitted = prepared.ground()?;
 /// assert_eq!(admitted.atoms().len(), 2);
 /// # Ok::<(), Box<dyn std::error::Error>>(())
@@ -103,60 +99,6 @@ impl ParsedSource {
         self.options
     }
 
-    /// Admit relational templates through the extended source profile.
-    /// Costs and refusals are those of [`crate::admit_extended`] after parsing.
-    /// This computes no answer sets and performs no static grounding.
-    ///
-    /// # Errors
-    /// Retains this exact owner beside the typed expansion refusal. A caller
-    /// may explicitly recover it to attempt formula preparation; recovery does
-    /// not classify the error as eligible for that alternative profile.
-    pub fn admit_extended(
-        self,
-        limits: ExpansionLimits,
-    ) -> Result<Admitted, SourceFailure<ExpansionFailure>> {
-        extended::admit_parsed(self, limits, None)
-    }
-
-    /// Admit relational templates while sharing cancellation and deadline control.
-    /// Parsing and upstream profile/raising calls are bounded cooperative intervals;
-    /// expansion polls the same token at its existing checked work boundaries.
-    ///
-    /// # Errors
-    /// Retains this owner with ordinary admission failures or a typed interruption.
-    pub fn admit_extended_with_cancellation(
-        self,
-        limits: ExpansionLimits,
-        cancellation: &zetesis_cpu::Cancellation,
-    ) -> Result<Admitted, SourceFailure<ExpansionFailure>> {
-        extended::admit_parsed(self, limits, Some(cancellation.clone()))
-    }
-
-    /// Admit the extended relational profile, preparing formulas only after a
-    /// refusal explicitly eligible for that profile. A completed extended attempt
-    /// shares its profile traversal and raised program with formula preparation;
-    /// early refusals retain the ordinary formula checks and their order.
-    /// The returned formula preparation keeps domain analysis an explicit opt-in.
-    ///
-    /// # Errors
-    /// Retains this exact source beside the selected profile's first refusal.
-    /// Cancellation, resource limits and malformed input never trigger fallback.
-    /// The token remains shared through subsequent formula materialization.
-    pub fn admit_automatic_with_cancellation(
-        self,
-        expansion: ExpansionLimits,
-        limits: FormulaLimits,
-        cancellation: &zetesis_cpu::Cancellation,
-    ) -> Result<
-        crate::AutomaticAdmission<Admitted, PreparedFormula>,
-        crate::AutomaticAdmissionFailure<
-            SourceFailure<ExpansionFailure>,
-            SourceFailure<FormulaFailure>,
-        >,
-    > {
-        crate::automatic::admit_source(self, expansion, &limits, cancellation)
-    }
-
     /// Prepare the finite formula profile without reparsing original bytes.
     /// Costs and budgets are those of [`crate::prepare_formula`] after parsing.
     /// The returned preparation retains the original source until grounding.
@@ -183,7 +125,7 @@ impl ParsedSource {
         self,
         expansion: ExpansionLimits,
         limits: FormulaLimits,
-        cancellation: &zetesis_cpu::Cancellation,
+        cancellation: &zetesis_algebra::Cancellation,
     ) -> Result<PreparedFormula, SourceFailure<FormulaFailure>> {
         formula::prepare_parsed(self, expansion, &limits, Some(cancellation.clone()))
     }
@@ -270,130 +212,4 @@ impl<E: std::error::Error + 'static> std::error::Error for SourceFailure<E> {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn refusal_recovery_transfers_original_owners() {
-        struct Cause(Box<u8>);
-
-        let source = ParsedSource::new("p.".into(), AdmissionOptions::default()).unwrap();
-        let source_bytes = source.source().text().as_ptr();
-        let error = Cause(Box::new(7));
-        let error_payload = std::ptr::from_ref(error.0.as_ref());
-        let failure = SourceFailure::new(source, error);
-        assert_eq!(failure.source().source().text().as_ptr(), source_bytes);
-        assert_eq!(
-            std::ptr::from_ref(failure.error().0.as_ref()),
-            error_payload
-        );
-        let (source, error) = failure.into_parts();
-        assert_eq!(source.source().text().as_ptr(), source_bytes);
-        assert_eq!(std::ptr::from_ref(error.0.as_ref()), error_payload);
-        let error = SourceFailure::new(source, error).into_error();
-        assert_eq!(std::ptr::from_ref(error.0.as_ref()), error_payload);
-        assert_eq!(*error.0, 7);
-    }
-    #[test]
-    fn relational_control_retains_the_refused_source() {
-        let source = ParsedSource::new("p(1..3).".into(), AdmissionOptions::default()).unwrap();
-        let pointer = source.source().text().as_ptr();
-        let cancellation = zetesis_cpu::Cancellation::default();
-        cancellation.cancel();
-        let failure = source
-            .admit_extended_with_cancellation(ExpansionLimits::default(), &cancellation)
-            .unwrap_err();
-        assert!(matches!(
-            failure.error(),
-            ExpansionFailure::Interrupted {
-                reason: zetesis_cpu::Stop::Cancelled,
-                ..
-            }
-        ));
-        assert_eq!(failure.source().source().text().as_ptr(), pointer);
-    }
-
-    #[test]
-    fn formula_preparation_observes_its_supplied_control() {
-        let source = ParsedSource::new("a | b.".into(), AdmissionOptions::default()).unwrap();
-        let cancellation = zetesis_cpu::Cancellation::default();
-        cancellation.cancel();
-        let failure = source
-            .prepare_formula_with_cancellation(
-                ExpansionLimits::default(),
-                FormulaLimits::default(),
-                &cancellation,
-            )
-            .unwrap_err();
-        assert_eq!(
-            failure.error().interruption(),
-            Some(zetesis_cpu::Stop::Cancelled)
-        );
-    }
-
-    #[test]
-    fn formula_materialization_retains_preparation_control() {
-        let source = ParsedSource::new("a | b.".into(), AdmissionOptions::default()).unwrap();
-        let cancellation = zetesis_cpu::Cancellation::default();
-        let prepared = source
-            .prepare_formula_with_cancellation(
-                ExpansionLimits::default(),
-                FormulaLimits::default(),
-                &cancellation,
-            )
-            .unwrap();
-        cancellation.cancel();
-        let failure = prepared.ground().unwrap_err();
-        assert_eq!(failure.interruption(), Some(zetesis_cpu::Stop::Cancelled));
-    }
-
-    #[test]
-    fn bundle_relational_admission_observes_control() {
-        // The shared bundle fixture is built over this crate, so its unit tests write their own.
-        let directory = tempfile::tempdir().unwrap();
-        let path = directory.path().join("entry.lp");
-        std::fs::write(&path, "p(1..3).").unwrap();
-        let bundle = crate::SourceBundle::load(&path, crate::BundleLimits::default()).unwrap();
-        let cancellation = zetesis_cpu::Cancellation::default();
-        cancellation.cancel();
-        let failure = crate::admit_bundle_extended_with_cancellation(
-            bundle,
-            crate::BundleAdmissionOptions::default(),
-            ExpansionLimits::default(),
-            &cancellation,
-        )
-        .unwrap_err();
-        assert!(matches!(
-            failure.error(),
-            crate::BundleAdmissionError::Expansion(ExpansionFailure::Interrupted {
-                reason: zetesis_cpu::Stop::Cancelled,
-                ..
-            })
-        ));
-        assert_eq!(failure.bundle().sources().len(), 1);
-    }
-
-    #[test]
-    fn bundle_formula_materialization_retains_preparation_control() {
-        // The shared bundle fixture is built over this crate, so its unit tests write their own.
-        let directory = tempfile::tempdir().unwrap();
-        let path = directory.path().join("entry.lp");
-        std::fs::write(&path, "a | b.").unwrap();
-        let bundle = crate::SourceBundle::load(&path, crate::BundleLimits::default()).unwrap();
-        let cancellation = zetesis_cpu::Cancellation::default();
-        let prepared = crate::prepare_bundle_formula_with_cancellation(
-            bundle,
-            crate::BundleAdmissionOptions::default(),
-            ExpansionLimits::default(),
-            FormulaLimits::default(),
-            &cancellation,
-        )
-        .unwrap();
-        cancellation.cancel();
-        let failure = prepared.ground().unwrap_err();
-        assert_eq!(
-            failure.error().interruption(),
-            Some(zetesis_cpu::Stop::Cancelled)
-        );
-    }
-}
+mod tests;

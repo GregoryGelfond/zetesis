@@ -6,9 +6,9 @@
 
 use themelios_program::{Program, program::Statement, provenance::WithProvenance};
 use themelios_solve::{contract::Fault, outcome::Conclusion};
-use zetesis_cpu::Stop;
+use zetesis_algebra::Stop;
 use zetesis_solve::{Interruption, SearchState, SemanticOutcome, SolveError, SolveFailure};
-use zetesis_themelios::{FormulaFailure, ProgramSite, ProgramSubject, observation};
+use zetesis_themelios::{FormulaFailure, ProgramOriginal, ProgramSite, observation};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Class {
@@ -47,17 +47,17 @@ fn stop_class(stop: Stop) -> Class {
 fn fault(
     class: Class,
     message: String,
-    subject: Option<ProgramSubject<'_>>,
+    original_evidence: Option<ProgramOriginal<'_>>,
 ) -> Result<Conclusion, Fault> {
     match class {
         Class::Control(conclusion) => Ok(conclusion),
         Class::Resource => Err(Fault::resource(message)),
         Class::Engine => Err(Fault::engine(message)),
         Class::Adapter => Err(Fault::adapter_bug(message)),
-        Class::Program => Err(match subject {
-            Some(ProgramSubject::Statement(statement)) => Fault::program(message, statement),
-            Some(ProgramSubject::Part(part)) => Fault::program_part(message, part),
-            Some(ProgramSubject::Program) | None => Fault::adapter_bug(format!(
+        Class::Program => Err(match original_evidence {
+            Some(ProgramOriginal::Statement(statement)) => Fault::program(message, statement),
+            Some(ProgramOriginal::Part(part)) => Fault::program_part(message, part),
+            Some(ProgramOriginal::Program) | None => Fault::adapter_bug(format!(
                 "native statement refusal omitted its original subject: {message}"
             )),
         }),
@@ -139,7 +139,7 @@ pub(crate) fn observation(
     fault(
         observation_class(error.kind()),
         error.to_string(),
-        statement(original, Some(error.site())).map(ProgramSubject::Statement),
+        statement(original, Some(error.site())).map(ProgramOriginal::Statement),
     )
     .map_err(|fault| fault.caused_by(error))
 }
@@ -148,37 +148,23 @@ fn solve_class(error: &SolveError) -> Class {
     match error {
         SolveError::TerminalStatisticsOverflow
         | SolveError::HybridStatisticsOverflow
-        | SolveError::LazyStatisticsOverflow
-        | SolveError::ClosureStatisticsOverflow
         | SolveError::ModelStatisticsOverflow
-        | SolveError::ClosureReservation { .. }
         | SolveError::CompletionPool(_) => Class::Resource,
-        SolveError::Batch(error) => batch_class(error),
-        SolveError::QueryObservation(error) => batch_class(error),
-        SolveError::SharedCpu(error) => match error {
-            zetesis_cpu::lazy::shared::Cause::Source(stop)
-            | zetesis_cpu::lazy::shared::Cause::World { stop, .. } => stop_class(*stop),
-            zetesis_cpu::lazy::shared::Cause::InvalidOutput => Class::Engine,
-        },
-        SolveError::Static(error) => static_class(error),
-        SolveError::Words(zetesis_core::WordError::Model(error)) | SolveError::Model(error) => {
-            model_class(error)
-        }
-        SolveError::Reconstruction(zetesis_themelios::ReconstructionError::Model(
+        SolveError::Model(error)
+        | SolveError::Reconstruction(zetesis_themelios::ReconstructionError::Model(
             zetesis_core::ModelFailure::Model(error),
         )) => model_class(error),
         SolveError::ExecutionObservation(_)
         | SolveError::ConstraintFailureMissing
         | SolveError::Executor(_)
-        | SolveError::Words(_)
         | SolveError::Reconstruction(_)
         | SolveError::Constraint(_)
         | SolveError::CandidateStreamNotExhausted
         | SolveError::FormulaBatchShape { .. } => Class::Engine,
         // The remaining CPU variants concern an incompatible configured profile:
-        // Projection, BackendUnavailable, UnsupportedOracle,
-        // UnsupportedSourceBatching or PreparedInput. Cargo feature unification
-        // can also expose Gpu/LazyGpu errors without a matching adapter feature.
+        // Projection, BackendUnavailable, UnsupportedOracle or PreparedInput.
+        // Cargo feature unification can also expose Gpu errors without a
+        // matching adapter feature.
         // This closed CPU, unprojected profile admits none of those paths. Any
         // unclassified variant is a bridge configuration breach, never a clean
         // conclusion or a guessed engine/resource classification. Widening the
@@ -187,23 +173,13 @@ fn solve_class(error: &SolveError) -> Class {
     }
 }
 
-fn batch_class(error: &zetesis_cpu::BatchError) -> Class {
-    match error {
-        zetesis_cpu::BatchError::Preparation(stop) => stop_class(*stop),
-        zetesis_cpu::BatchError::ClosureStorage { .. }
-        | zetesis_cpu::BatchError::Capacity { .. }
-        | zetesis_cpu::BatchError::Pool(_) => Class::Resource,
-        zetesis_cpu::BatchError::Busy | zetesis_cpu::BatchError::Poisoned => Class::Engine,
-    }
-}
-
-fn sat_class(error: zetesis_sat::Incomplete) -> Class {
-    use zetesis_sat::Incomplete as E;
+fn sat_class(error: zetesis_stable::Incomplete) -> Class {
+    use zetesis_stable::Incomplete as E;
     match error {
         E::Cancelled => Class::Control(Conclusion::Interrupted),
         E::Deadline => Class::Control(Conclusion::Budget),
         E::Verification(stop) => stop_class(stop),
-        E::Admission(error) => sat_admission_class(error),
+        E::ArithmeticSource(error) => theory_class(error),
         E::Certificate(error) => certificate_class(error),
         E::WorkLimit
         | E::DecisionLimit
@@ -214,7 +190,6 @@ fn sat_class(error: zetesis_sat::Incomplete) -> Class {
         | E::NativeNarrowingStorage { .. }
         | E::BatchCandidateLimit
         | E::Allocation
-        | E::ProjectionLimit { .. }
         | E::CounterOverflow => Class::Resource,
         E::WorkerPanicked
         | E::PendingBatch
@@ -224,27 +199,21 @@ fn sat_class(error: zetesis_sat::Incomplete) -> Class {
         | E::LateCertificate
         | E::RegionFilter
         | E::InvalidRegionConsequence
-        | E::RegionFilterUnsupported
         | E::LateRegionFilter
+        | E::LateCandidateBounds
+        | E::CandidateBoundPlan
+        | E::CandidateBoundNotImproving
         | E::RegionFilterAlreadySet
+        | E::LateLearnedStore
+        | E::LearnedStoreAlreadySet
         | E::InvalidWitness => Class::Engine,
     }
 }
 
-fn sat_admission_class(error: zetesis_sat::AdmissionError) -> Class {
-    match error {
-        zetesis_sat::AdmissionError::Limit { .. }
-        | zetesis_sat::AdmissionError::Overflow
-        | zetesis_sat::AdmissionError::Allocation => Class::Resource,
-        zetesis_sat::AdmissionError::Variable { .. } => Class::Engine,
-    }
-}
-
-fn certificate_class(error: zetesis_sat::CertificateError) -> Class {
+fn certificate_class(error: zetesis_stable::CertificateError) -> Class {
     use zetesis_ferraris::{EvaluationError, PositiveError, StratifiedError, TightError};
-    use zetesis_sat::CertificateError;
+    use zetesis_stable::CertificateError;
     match error {
-        CertificateError::Restriction(error) => sat_admission_class(error),
         CertificateError::Evaluation(EvaluationError::Stopped(stop))
         | CertificateError::Tight(TightError::Stopped(stop))
         | CertificateError::Positive(PositiveError::Stopped(stop))
@@ -270,23 +239,6 @@ fn constraint_class(error: &zetesis_themelios::ConstraintCheckCause) -> Class {
             zetesis_core::AtomIndexError::Allocation,
         ) => Class::Resource,
         _ => Class::Engine,
-    }
-}
-
-fn static_class(error: &zetesis_core::StaticError) -> Class {
-    use zetesis_core::{CarrierError, StaticError};
-    match error {
-        StaticError::CountOverflow
-        | StaticError::DenseIdOverflow
-        | StaticError::LimitExceeded { .. }
-        | StaticError::Allocation
-        | StaticError::Carrier(CarrierError::Allocation | CarrierError::Bytes { .. }) => {
-            Class::Resource
-        }
-        StaticError::Catalog(error) => catalog_class(error),
-        StaticError::Carrier(CarrierError::Coordinates) | StaticError::InvalidAdmittedProgram => {
-            Class::Engine
-        }
     }
 }
 
@@ -348,7 +300,7 @@ fn observation_class(error: &observation::ErrorKind) -> Class {
 /// It has no cancellation or deadline effect; its classifier cannot return control.
 pub(crate) fn admission(error: zetesis_themelios::ProgramAdmissionFailure<'_>) -> Fault {
     let class = program_class(&error.kind);
-    fault(class, error.to_string(), Some(error.subject))
+    fault(class, error.to_string(), Some(error.original))
         .expect_err("structural admission has no runtime control")
         .caused_by(error.kind)
 }
@@ -358,19 +310,18 @@ pub(crate) fn formula(error: FormulaFailure, original: &Program) -> Result<Concl
 }
 
 fn formula_ref(error: &FormulaFailure, original: &Program) -> Result<Conclusion, Fault> {
-    let subject = error
-        .subject()
-        .or_else(|| statement(original, error.site()).map(ProgramSubject::Statement));
+    let original_evidence = error
+        .original()
+        .or_else(|| statement(original, error.site()).map(ProgramOriginal::Statement));
     // Whole-input validation limits are resource faults. A semantic refusal
     // must identify its actual statement or excluded program part; absent
     // evidence is an internal invariant failure, never a guessed subject.
-    fault(formula_class(error), error.to_string(), subject)
+    fault(formula_class(error), error.to_string(), original_evidence)
 }
 
 fn program_class(error: &zetesis_themelios::ProgramFailureKind) -> Class {
     match error {
         zetesis_themelios::ProgramFailureKind::Limit(_) => Class::Resource,
-        zetesis_themelios::ProgramFailureKind::Core(error) => core_admission_class(error),
         zetesis_themelios::ProgramFailureKind::Compilation(error) => match error {
             zetesis_themelios::CompilationFailure::Profile(_) => Class::Program,
             zetesis_themelios::CompilationFailure::Construction(error) => construction_class(error),
@@ -425,7 +376,6 @@ fn admission_class(error: &zetesis_themelios::AdmissionFailure) -> Class {
     match error {
         E::Limit { .. } | E::Source { .. } => Class::Resource,
         E::Metadata { error, .. } => metadata_class(error),
-        E::Core { error, .. } => core_admission_class(error),
         E::Construction { error, .. } => construction_class(error),
         E::Profile { .. } | E::ExtremumEndpoint { .. } => Class::Program,
         E::Syntax(_) | E::Raise(_) => Class::Adapter,
@@ -438,16 +388,6 @@ fn construction_class(error: &zetesis_core::ConstructionError) -> Class {
             zetesis_core::ValueError::Limit { .. } | zetesis_core::ValueError::Allocation,
         ) => Class::Resource,
         _ => Class::Program,
-    }
-}
-
-fn core_admission_class(error: &zetesis_core::AdmissionError) -> Class {
-    match error {
-        zetesis_core::AdmissionError::Canonical { error, .. } => catalog_class(error),
-        zetesis_core::AdmissionError::LimitExceeded { .. }
-        | zetesis_core::AdmissionError::FactLimitExceeded { .. } => Class::Resource,
-        zetesis_core::AdmissionError::UnsafeVariable { .. } => Class::Program,
-        zetesis_core::AdmissionError::NonDenseVariable { .. } => Class::Engine,
     }
 }
 
@@ -496,12 +436,12 @@ fn relation_class(error: &zetesis_core::relation::Failure) -> Class {
     }
 }
 
-fn table_class(error: &zetesis_cpu::table::Cause) -> Class {
+fn table_class(error: &zetesis_core::table::Cause) -> Class {
     match error {
-        zetesis_cpu::table::Cause::Interrupted(stop) => stop_class(*stop),
-        zetesis_cpu::table::Cause::Limit { .. }
-        | zetesis_cpu::table::Cause::Overflow
-        | zetesis_cpu::table::Cause::Allocation => Class::Resource,
+        zetesis_core::table::Cause::Interrupted(stop) => stop_class(*stop),
+        zetesis_core::table::Cause::Limit { .. }
+        | zetesis_core::table::Cause::Overflow
+        | zetesis_core::table::Cause::Allocation => Class::Resource,
         _ => Class::Engine,
     }
 }

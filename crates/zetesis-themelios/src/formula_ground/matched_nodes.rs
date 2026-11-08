@@ -17,7 +17,7 @@ use crate::formula_support::{Buffer, witnesses::WitnessRow};
 use crate::grounding_observer::Event;
 use crate::{FormulaFailure, ProgramSite};
 
-pub(super) struct MatchedNodes {
+pub(crate) struct MatchedNodes {
     nodes: Buffer<Option<usize>>,
     literal_depths: Option<Buffer<usize>>,
 }

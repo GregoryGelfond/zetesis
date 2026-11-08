@@ -160,7 +160,7 @@ fn available_leaf_clears_prior_unavailability() {
 #[test]
 fn cancelled_leaf_never_reads_its_variable() {
     Fixture::default().with(location(), |_, computation, counters| {
-        let cancellation = zetesis_cpu::Cancellation::default();
+        let cancellation = zetesis_algebra::Cancellation::default();
         cancellation.cancel();
         counters.attach_test_control(&cancellation);
         let mut evaluation = Evaluation::default();
@@ -175,7 +175,7 @@ fn cancelled_leaf_never_reads_its_variable() {
         assert!(matches!(
             result,
             Err(FormulaFailure::Interrupted {
-                reason: zetesis_cpu::Stop::Cancelled,
+                reason: zetesis_algebra::Stop::Cancelled,
                 ..
             })
         ));

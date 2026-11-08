@@ -212,12 +212,12 @@ fn cancelled_borrow_retains_the_preparation_for_retry() {
     with_preparation(
         |rule, _support, preparation, computation, counters, variant| {
             let limits = FormulaLimits::default();
-            let cancellation = zetesis_cpu::Cancellation::default();
+            let cancellation = zetesis_algebra::Cancellation::default();
             cancellation.cancel();
             counters.attach_test_control(&cancellation);
             assert!(matches!(
                 preparation.rows(variant, None, &mut testing::budget(), Context::new(computation, &limits, counters, rule.location)),
-                Err(FormulaFailure::Interrupted { reason: zetesis_cpu::Stop::Cancelled, location }) if location == rule.location
+                Err(FormulaFailure::Interrupted { reason: zetesis_algebra::Stop::Cancelled, location }) if location == rule.location
             ));
             counters.detach_test_control();
             let mut join = preparation
@@ -440,7 +440,7 @@ fn derive(source: &str, shared: bool) -> (BTreeSet<Atom>, u64) {
                 crate::formula_support::derive_variants(
                     rule,
                     &mut variants,
-                    None,
+                    (None, None),
                     support,
                     &mut budget,
                     Context::new(computation, &limits, counters, rule.location),

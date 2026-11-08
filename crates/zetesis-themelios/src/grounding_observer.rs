@@ -57,7 +57,9 @@ pub trait GroundingObserver {
     /// The default preserves existing diagnostic observers. Returning false
     /// skips these diagnostic requests and [`Self::domain_analysis`], including
     /// its [`DomainObservation::Disabled`] observation. It does not disable the shared numeric analysis
-    /// or finite-domain guards selected by `with_domain_analysis`.
+    /// or finite-domain guards and static scalar-totality selection requested by
+    /// `with_domain_analysis`. Optimizer certificate requests remain independent
+    /// of this diagnostic option.
     ///
     /// Sampled when each grounding profile is created, independently of
     /// [`Self::details_enabled`]. An absent observer requests no diagnostics. Diagnostic

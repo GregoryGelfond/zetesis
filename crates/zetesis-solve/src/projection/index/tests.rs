@@ -1,4 +1,4 @@
-use zetesis_cpu::{Cancellation, Stop};
+use zetesis_algebra::{Cancellation, Stop};
 
 use super::{History, Slot, first_slot, hash};
 use crate::projection::{
@@ -88,9 +88,24 @@ fn colliding_slots_preserve_complete_key_equality() {
         max_keys: 8,
         ..ProjectionLimits::default()
     };
+    let storage = (
+        history.keys.as_ptr(),
+        history.keys.capacity(),
+        history.slots.as_ptr(),
+        history.slots.capacity(),
+    );
     for key in &colliding {
         assert!(contains(&history, key));
         assert!(!insert(&mut history, key, full, &mut stats).unwrap());
+        assert_eq!(
+            (
+                history.keys.as_ptr(),
+                history.keys.capacity(),
+                history.slots.as_ptr(),
+                history.slots.capacity(),
+            ),
+            storage
+        );
     }
     assert_eq!(history.entries, 8);
     assert_eq!(history.keys.len(), 16);
@@ -284,4 +299,35 @@ fn cancellation_precedes_duplicate_lookup_and_work_refusal() {
     );
     assert_eq!(history.entries, 2);
     assert_eq!(stats.work, old_work);
+}
+
+#[test]
+fn new_key_count_refuses_before_storage_admission() {
+    let mut history = History::new(1);
+    let mut stats = statistics();
+    assert_eq!(
+        insert(
+            &mut history,
+            &[0],
+            ProjectionLimits {
+                max_keys: 0,
+                max_bytes: 0,
+                ..ProjectionLimits::default()
+            },
+            &mut stats,
+        ),
+        Err(ProjectionError::Limit {
+            resource: ProjectionResource::Keys,
+            observed: 1,
+            limit: 0,
+        })
+    );
+    assert_eq!(history.entries, 0);
+    assert!(history.keys.is_empty());
+    assert!(history.slots.is_empty());
+    assert_eq!(history.keys.capacity(), 0);
+    assert_eq!(history.slots.capacity(), 0);
+    assert_eq!(stats.retained_bytes, BASE);
+    assert_eq!(stats.peak_bytes, BASE);
+    assert!(stats.work > 0);
 }

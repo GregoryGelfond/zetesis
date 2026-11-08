@@ -1,4 +1,4 @@
-use zetesis_cpu::Cancellation;
+use zetesis_algebra::Cancellation;
 
 use super::lower::{Builder, Destination, transaction, validate};
 use super::{

@@ -99,7 +99,7 @@ fn normal_bodies_select_only_certified_complete_rows() {
 }
 
 #[test]
-fn generated_heads_remain_outside_body_totality() {
+fn body_totality_keeps_generated_head_obligations_separate() {
     let source =
         include_str!("../../../../../../tests/fixtures/column-totality/false-generated-head.lp");
     testing::with_completed_source(source, |program, support, computation, counters| {
@@ -119,10 +119,20 @@ fn generated_heads_remain_outside_body_totality() {
         )
         .unwrap();
         assert!(
-            !join
-                .select_total_body(rule, computation, &limits, counters)
+            join.select_total_body(rule, computation, &limits, counters)
                 .unwrap()
         );
-        assert!(!join.certified_total);
+        assert!(join.certified_total);
+        assert!(
+            !join
+                .projections
+                .total_family(
+                    rule,
+                    support,
+                    &mut Evaluation::default(),
+                    Context::new(computation, &limits, counters, rule.location),
+                )
+                .unwrap()
+        );
     });
 }

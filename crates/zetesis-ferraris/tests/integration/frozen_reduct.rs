@@ -3,7 +3,7 @@
 use std::time::Instant;
 
 use crate::support::worlds::interpretation;
-use zetesis_cpu::{Cancellation, Stop};
+use zetesis_algebra::{Cancellation, Stop};
 use zetesis_ferraris::{AdmissionLimits, FrozenReduct, Limits, Node, Theory, models_reduct};
 
 fn theory(nodes: Vec<Node>, roots: Vec<usize>) -> Theory {

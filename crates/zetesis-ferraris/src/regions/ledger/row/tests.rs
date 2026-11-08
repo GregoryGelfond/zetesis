@@ -1,0 +1,474 @@
+//! Packed matching obeys the scalar signed-condition law under every reading.
+
+use super::*;
+use crate::test_support::SinglePermits;
+
+fn explanation(conditions: &[(usize, bool)], outputs: &[usize]) -> Literals {
+    Literals {
+        conditions: conditions.to_vec(),
+        outputs: outputs.iter().map(|&atom| (atom, false)).collect(),
+    }
+}
+
+/// The reference classifies signed propositions before considering outputs;
+/// it does not use word grouping or the production scalar short-circuit loop.
+fn expected(row: &Literals, held: &[u64], cut: &[u64]) -> Deduction {
+    let undecided: Vec<_> = row
+        .conditions
+        .iter()
+        .copied()
+        .filter(|&(atom, value)| !bit(if value { held } else { cut }, atom))
+        .collect();
+    if undecided
+        .iter()
+        .any(|&(atom, value)| bit(if value { cut } else { held }, atom))
+    {
+        return Deduction::None;
+    }
+    match undecided.as_slice() {
+        [] => Deduction::ForceOutputs,
+        &[(atom, value)]
+            if row
+                .outputs
+                .iter()
+                .any(|&(output, present)| bit(if present { cut } else { held }, output)) =>
+        {
+            Deduction::Require {
+                atom,
+                value: !value,
+            }
+        }
+        _ => Deduction::None,
+    }
+}
+
+/// Force the representation for semantic tests even when a sparse fixture
+/// would correctly select the smaller scalar form in production.
+fn packed(row: &Literals) -> Row {
+    let mut words = Vec::new();
+    for &(atom, held) in &row.conditions {
+        append(&mut words, 0, atom, held);
+    }
+    let premise_words = words.len();
+    for &(atom, present) in &row.outputs {
+        append(&mut words, premise_words, atom, present);
+    }
+    Row::Packed {
+        words,
+        premise_words,
+        conditions: row.conditions.len(),
+        outputs: row.outputs.len(),
+    }
+}
+
+#[test]
+fn all_partial_readings_match_the_signed_condition_law() {
+    let premises = [0, 63, 64, 127];
+    for count in 0..=premises.len() {
+        for signs in 0..1 << count {
+            let conditions: Vec<_> = premises[..count]
+                .iter()
+                .enumerate()
+                .map(|(position, &atom)| (atom, signs & (1 << position) != 0))
+                .collect();
+            let source = explanation(&conditions, &[1, 128]);
+            let row = packed(&source);
+            assert!(matches!(row, Row::Packed { .. }));
+            let scalar = Row::Scalar(explanation(&conditions, &[1, 128]));
+            let atoms: Vec<_> = premises[..count].iter().copied().chain([1, 128]).collect();
+            for mut reading in 0..4_usize.pow(u32::try_from(atoms.len()).unwrap()) {
+                let mut held = [0_u64; 3];
+                let mut cut = [0_u64; 3];
+                for &atom in &atoms {
+                    let state = reading % 4;
+                    reading /= 4;
+                    if state & 1 != 0 {
+                        held[atom / 64] |= 1 << (atom % 64);
+                    }
+                    if state & 2 != 0 {
+                        cut[atom / 64] |= 1 << (atom % 64);
+                    }
+                }
+                let wanted = expected(&source, &held, &cut);
+                assert_eq!(
+                    row.deduction(&held, &cut, &mut Meter::local(u64::MAX))
+                        .map_err(zetesis_algebra::Failure::into_stop)
+                        .unwrap(),
+                    wanted
+                );
+                assert_eq!(
+                    scalar
+                        .deduction(&held, &cut, &mut Meter::local(u64::MAX))
+                        .map_err(zetesis_algebra::Failure::into_stop)
+                        .unwrap(),
+                    wanted
+                );
+            }
+        }
+    }
+}
+
+#[test]
+fn signed_outputs_obey_the_signed_condition_law() {
+    let conditions = [(0, true), (64, false)];
+    for outputs in [
+        vec![(1, true), (128, false)],
+        vec![(1, true), (128, true)],
+        vec![(1, false), (1, true)],
+    ] {
+        let source = Literals {
+            conditions: conditions.to_vec(),
+            outputs,
+        };
+        let rows = [
+            packed(&source),
+            Row::Scalar(Literals {
+                conditions: source.conditions.clone(),
+                outputs: source.outputs.clone(),
+            }),
+        ];
+        let mut atoms: Vec<_> = conditions
+            .iter()
+            .chain(&source.outputs)
+            .map(|&(atom, _)| atom)
+            .collect();
+        atoms.sort_unstable();
+        atoms.dedup();
+        for mut reading in 0..4_usize.pow(u32::try_from(atoms.len()).unwrap()) {
+            let mut held = [0_u64; 3];
+            let mut cut = [0_u64; 3];
+            for &atom in &atoms {
+                let state = reading % 4;
+                reading /= 4;
+                if state & 1 != 0 {
+                    held[atom / 64] |= 1 << (atom % 64);
+                }
+                if state & 2 != 0 {
+                    cut[atom / 64] |= 1 << (atom % 64);
+                }
+            }
+            let wanted = expected(&source, &held, &cut);
+            for row in &rows {
+                assert_eq!(
+                    row.deduction(&held, &cut, &mut Meter::local(u64::MAX))
+                        .map_err(zetesis_algebra::Failure::into_stop)
+                        .unwrap(),
+                    wanted
+                );
+            }
+        }
+    }
+}
+
+fn dense() -> Literals {
+    Literals {
+        conditions: (0..16).map(|atom| (atom, atom % 2 == 0)).collect(),
+        outputs: (16..80).map(|atom| (atom, false)).collect(),
+    }
+}
+
+fn prepared(source: Literals) -> Row {
+    let mut allowance = u64::MAX;
+    Row::prepare(source, &mut allowance, &mut Meter::local(u64::MAX), &mut 0)
+        .map_err(zetesis_algebra::Failure::into_stop)
+        .unwrap()
+        .unwrap()
+}
+
+#[test]
+fn packing_retains_less_storage_for_dense_rows() {
+    let source = dense();
+    let scalar_bytes = size_of::<Row>() as u128 + source.retained_bytes();
+    let row = prepared(source);
+    assert!(matches!(row, Row::Packed { .. }));
+    assert!(size_of::<Row>() as u128 + row.retained_bytes() < scalar_bytes);
+    assert_eq!(row.conditions().collect::<Vec<_>>(), dense().conditions);
+    assert_eq!(row.outputs().collect::<Vec<_>>(), dense().outputs);
+}
+
+#[test]
+fn dispersed_rows_keep_the_scalar_representation() {
+    let source = Literals {
+        conditions: (0..16).map(|atom| (atom * 64, atom % 2 == 0)).collect(),
+        outputs: (16..80).map(|atom| (atom * 64, false)).collect(),
+    };
+    let expected_bytes = source.retained_bytes();
+    let row = prepared(source);
+    assert!(matches!(row, Row::Scalar(_)));
+    assert_eq!(row.retained_bytes(), expected_bytes);
+    assert_eq!(
+        row.outputs().collect::<Vec<_>>(),
+        (16..80).map(|atom| (atom * 64, false)).collect::<Vec<_>>()
+    );
+}
+
+#[test]
+fn peak_storage_includes_both_conversion_buffers() {
+    let source = dense();
+    let scalar = source.retained_bytes();
+    let mut peak = 0;
+    let mut allowance = u64::MAX;
+    let row = Row::prepare(
+        source,
+        &mut allowance,
+        &mut Meter::local(u64::MAX),
+        &mut peak,
+    )
+    .map_err(zetesis_algebra::Failure::into_stop)
+    .unwrap()
+    .unwrap();
+    assert!(matches!(row, Row::Packed { .. }));
+    assert_eq!(
+        peak,
+        size_of::<Row>() as u128 + size_of::<Literals>() as u128 + scalar + row.retained_bytes()
+    );
+}
+
+#[test]
+fn equal_rows_and_distinct_signs_ignore_physical_form() {
+    let original = dense();
+    for row in [Row::Scalar(dense()), packed(&original)] {
+        let mut allowance = u64::MAX;
+        assert_eq!(
+            row.subsumes(&original, &mut allowance, &mut Meter::local(u64::MAX))
+                .map_err(zetesis_algebra::Failure::into_stop)
+                .unwrap(),
+            Some(true)
+        );
+        let mut opposite = dense();
+        opposite.conditions[7].1 = !opposite.conditions[7].1;
+        let mut allowance = u64::MAX;
+        assert_eq!(
+            row.subsumes(&opposite, &mut allowance, &mut Meter::local(u64::MAX))
+                .map_err(zetesis_algebra::Failure::into_stop)
+                .unwrap(),
+            Some(false)
+        );
+        let mut different = dense();
+        *different.outputs.last_mut().unwrap() = (80, false);
+        let mut allowance = u64::MAX;
+        assert_eq!(
+            row.subsumes(&different, &mut allowance, &mut Meter::local(u64::MAX))
+                .map_err(zetesis_algebra::Failure::into_stop)
+                .unwrap(),
+            Some(false)
+        );
+    }
+}
+
+#[test]
+fn output_cursors_preserve_ascending_atom_events() {
+    for row in [Row::Scalar(dense()), prepared(dense())] {
+        let mut cursor = OutputCursor::default();
+        for expected in 16..80 {
+            assert_eq!(row.next_output(&mut cursor), Some((expected, false)));
+        }
+        assert_eq!(row.next_output(&mut cursor), None);
+        assert_eq!(row.next_output(&mut cursor), None);
+        assert_eq!(row.output_count(), 64);
+    }
+}
+
+#[test]
+fn compact_matching_charges_word_reads_instead_of_atom_reads() {
+    let source = dense();
+    let row = prepared(dense());
+    let scalar = Row::Scalar(source);
+    // Exactly one open positive premise, with an output held in the second
+    // output word. Every earlier premise and output must actually be read.
+    let mut held = [0_u64; 2];
+    let mut cut = [0_u64; 2];
+    for atom in 1..16 {
+        if atom % 2 == 0 {
+            held[0] |= 1 << atom;
+        } else {
+            cut[0] |= 1 << atom;
+        }
+    }
+    held[1] = 1 << 15;
+    let mut packed_work = Meter::local(u64::MAX);
+    let mut scalar_work = Meter::local(u64::MAX);
+    let wanted = Deduction::Require {
+        atom: 0,
+        value: false,
+    };
+    assert_eq!(
+        row.deduction(&held, &cut, &mut packed_work)
+            .map_err(zetesis_algebra::Failure::into_stop)
+            .unwrap(),
+        wanted
+    );
+    assert_eq!(
+        scalar
+            .deduction(&held, &cut, &mut scalar_work)
+            .map_err(zetesis_algebra::Failure::into_stop)
+            .unwrap(),
+        wanted
+    );
+    assert_eq!(packed_work.charged(), 4);
+    assert_eq!(scalar_work.charged(), 81);
+}
+
+#[test]
+fn every_interrupted_conversion_prefix_returns_no_row() {
+    let mut complete = Meter::local(u64::MAX);
+    let mut allowance = u64::MAX;
+    let row = Row::prepare(dense(), &mut allowance, &mut complete, &mut 0)
+        .map_err(zetesis_algebra::Failure::into_stop)
+        .unwrap()
+        .unwrap();
+    assert!(matches!(row, Row::Packed { .. }));
+    for failure in [Stop::WorkLimit, Stop::Cancelled, Stop::Deadline] {
+        for prefix in 0..complete.charged() {
+            let mut permits = SinglePermits::new(prefix, failure);
+            let mut work = Meter::reserved(&mut permits);
+            let mut allowance = u64::MAX;
+            assert_eq!(
+                Row::prepare(dense(), &mut allowance, &mut work, &mut 0)
+                    .map_err(zetesis_algebra::Failure::into_stop),
+                Err(failure)
+            );
+            assert_eq!(work.charged(), prefix);
+        }
+    }
+}
+
+#[test]
+fn optional_conversion_exhaustion_returns_no_row() {
+    let mut complete = Meter::local(u64::MAX);
+    let mut allowance = u64::MAX;
+    Row::prepare(dense(), &mut allowance, &mut complete, &mut 0)
+        .map_err(zetesis_algebra::Failure::into_stop)
+        .unwrap()
+        .unwrap();
+    for allowance in 0..complete.charged() {
+        let mut remaining = allowance;
+        let mut work = Meter::local(u64::MAX);
+        assert_eq!(
+            Row::prepare(dense(), &mut remaining, &mut work, &mut 0)
+                .map_err(zetesis_algebra::Failure::into_stop)
+                .unwrap(),
+            None
+        );
+        assert_eq!(work.charged(), allowance);
+        assert_eq!(remaining, 0);
+    }
+}
+
+#[test]
+fn every_interrupted_word_match_preserves_its_stop() {
+    let source = explanation(&[(0, true), (64, false), (128, true)], &[1, 65, 129]);
+    let row = packed(&source);
+    let held = [0, 0, 3];
+    let cut = [0, 1, 0];
+    let mut measured = Meter::local(u64::MAX);
+    let wanted = row
+        .deduction(&held, &cut, &mut measured)
+        .map_err(zetesis_algebra::Failure::into_stop)
+        .unwrap();
+    assert_eq!(
+        wanted,
+        Deduction::Require {
+            atom: 0,
+            value: false
+        }
+    );
+    assert_eq!(measured.charged(), 7);
+    for failure in [Stop::WorkLimit, Stop::Cancelled, Stop::Deadline] {
+        for prefix in 0..measured.charged() {
+            let mut permits = SinglePermits::new(prefix, failure);
+            let mut work = Meter::reserved(&mut permits);
+            assert_eq!(
+                row.deduction(&held, &cut, &mut work)
+                    .map_err(zetesis_algebra::Failure::into_stop),
+                Err(failure)
+            );
+            assert_eq!(work.charged(), prefix);
+            assert_eq!(
+                row.deduction(&held, &cut, &mut Meter::local(u64::MAX))
+                    .map_err(zetesis_algebra::Failure::into_stop)
+                    .unwrap(),
+                wanted
+            );
+        }
+    }
+}
+
+#[test]
+fn a_subsumption_comparison_cannot_hide_a_stop() {
+    let original = dense();
+    let row = packed(&original);
+    let mut measured = Meter::local(u64::MAX);
+    let mut allowance = u64::MAX;
+    assert_eq!(
+        row.subsumes(&original, &mut allowance, &mut measured)
+            .map_err(zetesis_algebra::Failure::into_stop)
+            .unwrap(),
+        Some(true)
+    );
+    for failure in [Stop::WorkLimit, Stop::Cancelled, Stop::Deadline] {
+        for prefix in 0..measured.charged() {
+            let mut permits = SinglePermits::new(prefix, failure);
+            let mut work = Meter::reserved(&mut permits);
+            let mut allowance = u64::MAX;
+            assert_eq!(
+                row.subsumes(&original, &mut allowance, &mut work)
+                    .map_err(zetesis_algebra::Failure::into_stop),
+                Err(failure)
+            );
+            assert_eq!(work.charged(), prefix);
+        }
+    }
+    for prefix in 0..measured.charged() {
+        let mut allowance = prefix;
+        assert_eq!(
+            row.subsumes(&original, &mut allowance, &mut Meter::local(u64::MAX))
+                .map_err(zetesis_algebra::Failure::into_stop)
+                .unwrap(),
+            None
+        );
+    }
+}
+
+mod publication;
+mod subsumption;
+
+#[test]
+fn sparse_lanes_keep_the_original_inline_layout() {
+    use std::mem::offset_of;
+
+    struct OriginalWord {
+        index: usize,
+        held: u64,
+        cut: u64,
+    }
+    struct OriginalCursor {
+        next: usize,
+        word: usize,
+        present: u64,
+        absent: u64,
+    }
+    assert_eq!(size_of::<Word>(), size_of::<OriginalWord>());
+    assert_eq!(align_of::<Word>(), align_of::<OriginalWord>());
+    assert_eq!(offset_of!(Word, index), offset_of!(OriginalWord, index));
+    assert_eq!(offset_of!(Word, held), offset_of!(OriginalWord, held));
+    assert_eq!(offset_of!(Word, cut), offset_of!(OriginalWord, cut));
+    assert_eq!(size_of::<OutputCursor>(), size_of::<OriginalCursor>());
+    assert_eq!(align_of::<OutputCursor>(), align_of::<OriginalCursor>());
+    assert_eq!(
+        offset_of!(OutputCursor, next),
+        offset_of!(OriginalCursor, next)
+    );
+    assert_eq!(
+        offset_of!(OutputCursor, word),
+        offset_of!(OriginalCursor, word)
+    );
+    assert_eq!(
+        offset_of!(OutputCursor, present),
+        offset_of!(OriginalCursor, present)
+    );
+    assert_eq!(
+        offset_of!(OutputCursor, absent),
+        offset_of!(OriginalCursor, absent)
+    );
+}

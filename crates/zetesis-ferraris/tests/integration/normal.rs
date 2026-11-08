@@ -1,103 +1,105 @@
-//! Independent lazy closure and general subset-minimality agree after lowering.
+//! The normal-program definition, computed directly as the least model of the
+//! reduct, and general subset-minimality agree after lowering.
 
 use proptest::prelude::*;
-use zetesis_core::{
-    AtomPattern, GroundProgram, Model, Predicate, Program, SeedSelection, StaticLimits, Template,
-};
-use zetesis_cpu::Cancellation;
-use zetesis_ferraris::{
-    AdmissionError, AdmissionLimits, Interpretation, from_ground_program,
-    from_ground_program_supported,
-};
+use zetesis_algebra::Cancellation;
+use zetesis_ferraris::{Interpretation, Node, Theory};
 
-fn pattern(index: usize) -> AtomPattern {
-    AtomPattern::new(Predicate::new(["a", "b", "c"][index], 0).unwrap(), vec![]).unwrap()
-}
+const ATOMS: [&str; 3] = ["a", "b", "c"];
 
-fn patterns(mask: u8) -> Vec<AtomPattern> {
-    (0..3)
-        .filter(|index| mask & (1 << index) != 0)
-        .map(pattern)
-        .collect()
-}
+// Head 3 denotes a constraint; body masks select among a, b and c.
+type MaskRule = (u8, u8, u8, u8);
 
-fn program(rules: &[(u8, u8, u8, u8)]) -> Program {
-    let templates = rules
+/// Whether `mask` equals the least consequences of its frozen normal reduct
+/// and satisfies its constraints. This calculation reads only the rule masks,
+/// not the translated formula, its evaluator or its membership checker.
+/// Each changed scan adds an atom, so at most three changed scans are possible.
+fn least_model_of_reduct(rules: &[MaskRule], mask: u8) -> bool {
+    let kept: Vec<_> = rules
         .iter()
-        .map(|&(head, positive, gate_true, gate_false)| {
-            Template::new(
-                (head < 3).then(|| pattern(usize::from(head))),
-                patterns(positive),
-                patterns(gate_true),
-                patterns(gate_false),
-                vec![],
-            )
+        .copied()
+        .filter(|&(_, _, gate_true, gate_false)| {
+            mask & gate_true == gate_true && mask & gate_false == 0
         })
         .collect();
-    Program::new(
-        templates,
-        zetesis_core::FactTables::default(),
-        zetesis_core::AdmissionLimits::default(),
-    )
-    .unwrap()
+    let mut least = 0u8;
+    loop {
+        let before = least;
+        for &(head, positive, _, _) in &kept {
+            if head < 3 && least & positive == positive {
+                least |= 1 << head;
+            }
+        }
+        if least == before {
+            break;
+        }
+    }
+    least == mask
+        && kept
+            .iter()
+            .all(|&(head, positive, _, _)| head < 3 || mask & positive != positive)
 }
 
-fn compare(program: &Program) {
-    let ground = GroundProgram::compile(program, StaticLimits::default()).unwrap();
-    let theory = from_ground_program(&ground, AdmissionLimits::default()).unwrap();
-    let supported = from_ground_program_supported(&ground, AdmissionLimits::default()).unwrap();
-    assert_eq!(ground.atom_count(), theory.atom_count());
-    for mask in 0usize..(1 << ground.atom_count()) {
-        let model = Model::from_positions(
-            ground.atom_catalog(),
-            (0..ground.atom_count()).filter(|index| mask & (1 << index) != 0),
-        )
-        .unwrap();
-        let seed = SeedSelection::from_carrier_atoms(
-            program,
-            model
-                .atoms()
-                .iter()
-                .filter_map(|atom| program.locate_atom(atom, true).unwrap()),
-        )
-        .unwrap()
-        .to_seed();
-        let closure = zetesis_cpu::check(
-            program,
-            &seed,
-            zetesis_cpu::Limits::default(),
-            &Cancellation::default(),
-        )
-        .unwrap();
+/// The normalized-rule translation over a fixed three-atom vocabulary, even
+/// when some atoms never occur. True gates are doubly negated, false gates
+/// singly negated; positive body atoms stay positive. Conjunctions are folded
+/// in source order as in `NormalFerraris.rule`, independently of grounding.
+fn formula(rules: &[MaskRule]) -> Theory {
+    let mut nodes: Vec<_> = (0..ATOMS.len()).map(Node::atom).collect();
+    let falsum = nodes.len();
+    nodes.push(Node::falsum());
+    let truth = nodes.len();
+    nodes.push(Node::implies(falsum, falsum));
+    let mut roots = Vec::new();
+    for &(head, positive, gate_true, gate_false) in rules {
+        let mut body: Vec<_> = (0..ATOMS.len())
+            .filter(|atom| positive & (1 << atom) != 0)
+            .collect();
+        for atom in (0..ATOMS.len()).filter(|atom| gate_true & (1 << atom) != 0) {
+            let negative = nodes.len();
+            nodes.push(Node::implies(atom, falsum));
+            body.push(nodes.len());
+            nodes.push(Node::implies(negative, falsum));
+        }
+        for atom in (0..ATOMS.len()).filter(|atom| gate_false & (1 << atom) != 0) {
+            body.push(nodes.len());
+            nodes.push(Node::implies(atom, falsum));
+        }
+        let body = body
+            .into_iter()
+            .reduce(|left, right| {
+                let conjunction = nodes.len();
+                nodes.push(Node::and_pair([left, right]));
+                conjunction
+            })
+            .unwrap_or(truth);
+        let head = if head < 3 { usize::from(head) } else { falsum };
+        roots.push(nodes.len());
+        nodes.push(Node::implies(body, head));
+    }
+    zetesis_theory_support::theories::theory(ATOMS.len(), nodes, roots)
+}
+
+fn compare(rules: &[MaskRule]) {
+    let theory = formula(rules);
+    assert_eq!(theory.atom_count(), ATOMS.len());
+    for mask in 0u8..(1 << ATOMS.len()) {
         let candidate = Interpretation::new(
             &theory,
-            (0..ground.atom_count()).filter(|index| mask & (1 << index) != 0),
+            (0..ATOMS.len()).filter(|atom| mask & (1 << atom) != 0),
         )
         .unwrap();
-        let general = zetesis_ferraris::check(
+        let checked = zetesis_ferraris::check(
             &theory,
             &candidate,
             zetesis_ferraris::Limits::default(),
             &Cancellation::default(),
         )
         .unwrap();
-        let supported_candidate = Interpretation::new(&supported, candidate.atoms()).unwrap();
-        let guarded = zetesis_ferraris::check(
-            &supported,
-            &supported_candidate,
-            zetesis_ferraris::Limits::default(),
-            &Cancellation::default(),
-        )
-        .unwrap();
         assert_eq!(
-            guarded.accepted(),
-            general.accepted(),
-            "guarded translation: {program:?}, {model:?}"
-        );
-        assert_eq!(
-            general.accepted(),
-            closure.accepted() && closure.closure() == &model,
-            "program {program:?}, candidate {model:?}"
+            checked.accepted(),
+            least_model_of_reduct(rules, mask),
+            "rules {rules:?}, candidate {mask:03b}"
         );
     }
 }
@@ -116,102 +118,7 @@ fn choice_support_cycles_constraints_and_unused_atoms_keep_their_semantics() {
         vec![(0, 0, 1, 1)],               // Contradictory gates do not support a.
         vec![(0, 0, 0, 0), (2, 4, 0, 0)], // Unsupported carrier c.
     ] {
-        compare(&program(&rules));
-    }
-}
-
-#[test]
-fn exact_formula_dimensions_are_admitted_before_construction() {
-    let ground =
-        GroundProgram::compile(&program(&[(0, 0, 1, 0)]), StaticLimits::default()).unwrap();
-    let full = from_ground_program(&ground, AdmissionLimits::default()).unwrap();
-    let exact = AdmissionLimits {
-        max_atoms: full.atom_count(),
-        max_nodes: full.nodes().len(),
-        max_operands: full.parts().occurrences(),
-        max_roots: full.roots().len(),
-    };
-    assert!(from_ground_program(&ground, exact).is_ok());
-    for limits in [
-        AdmissionLimits {
-            max_atoms: exact.max_atoms - 1,
-            ..exact
-        },
-        AdmissionLimits {
-            max_nodes: exact.max_nodes - 1,
-            ..exact
-        },
-        AdmissionLimits {
-            max_roots: exact.max_roots - 1,
-            ..exact
-        },
-    ] {
-        assert!(matches!(
-            from_ground_program(&ground, limits),
-            Err(AdmissionError::Limit)
-        ));
-    }
-}
-
-#[test]
-fn supported_guards_obey_exact_admission_limits() {
-    let ground = GroundProgram::compile(
-        &program(&[(0, 0, 1, 0), (0, 2, 0, 0), (2, 4, 0, 0)]),
-        StaticLimits::default(),
-    )
-    .unwrap();
-    let full = from_ground_program_supported(&ground, AdmissionLimits::default()).unwrap();
-    let exact = AdmissionLimits {
-        max_atoms: full.atom_count(),
-        max_nodes: full.nodes().len(),
-        max_operands: full.parts().occurrences(),
-        max_roots: full.roots().len(),
-    };
-    assert!(from_ground_program_supported(&ground, exact).is_ok());
-    assert!(matches!(
-        from_ground_program_supported(
-            &ground,
-            AdmissionLimits {
-                max_nodes: exact.max_nodes - 1,
-                ..exact
-            }
-        ),
-        Err(AdmissionError::Limit)
-    ));
-    assert!(matches!(
-        from_ground_program_supported(
-            &ground,
-            AdmissionLimits {
-                max_roots: exact.max_roots - 1,
-                ..exact
-            }
-        ),
-        Err(AdmissionError::Limit)
-    ));
-}
-
-#[test]
-fn unsupported_classical_atoms_are_pruned_before_countermodel_search() {
-    let graph = GroundProgram::compile(&program(&[(0, 0, 0, 2)]), StaticLimits::default()).unwrap();
-    let plain = from_ground_program(&graph, AdmissionLimits::default()).unwrap();
-    let supported = from_ground_program_supported(&graph, AdmissionLimits::default()).unwrap();
-    let unused = graph
-        .atoms()
-        .iter()
-        .position(|atom| atom.predicate().name() == "b")
-        .unwrap();
-    for (theory, expected) in [(&plain, true), (&supported, false)] {
-        let candidate = Interpretation::new(theory, [unused]).unwrap();
-        assert_eq!(
-            zetesis_ferraris::models(
-                theory,
-                &candidate,
-                zetesis_ferraris::Limits::default(),
-                &Cancellation::default()
-            )
-            .unwrap(),
-            expected
-        );
+        compare(&rules);
     }
 }
 
@@ -220,6 +127,6 @@ proptest! {
     fn generated_three_atom_normal_programs_preserve_stability(
         rules in prop::collection::vec((0u8..4, 0u8..8, 0u8..8, 0u8..8), 0..12)
     ) {
-        compare(&program(&rules));
+        compare(&rules);
     }
 }

@@ -1,7 +1,7 @@
 # Consequences from original streamed constraints
 
 [`StreamedConsequences`](../Zetesis/StreamedConsequences.lean) uses the existing
-`Cube`, original Ferraris truth and model predicates. It is a mathematical
+`Region`, original Ferraris truth and model predicates. It is a mathematical
 library over admitted grounded occurrences, independent of Rust source cursors.
 
 A body records signed atom occurrences and a successfully evaluated scalar
@@ -70,7 +70,7 @@ scalar and unit tests. The theorem does not
 identify source rows or prove that a particular changed atom is now held.
 
 Positive cuts need a different argument from unchanged reads. In a consistent
-cube, `positive_cut_blocks_consequence` says that a cut positive occurrence
+region, `positive_cut_blocks_consequence` says that a cut positive occurrence
 cannot make the body sure or remain the fresh pivot of a unit witness.
 `completed_template_positive_cuts` therefore preserves a completed unproductive
 scan when every affected occurrence is positive and cut. The proof reuses change
@@ -125,6 +125,19 @@ premise of `completed_template_discharged` at the new scan's snapshot. Second,
 once every recorded pivot is falsified and all intervening changes only disable
 reads, that theorem gives a complete unproductive family. Exhausting an anchor
 cursor alone supplies neither the old coverage nor the discharge premise.
+
+The Rust cursor partitions that anchor union by the existing traversal order:
+changed atoms first, then original positive occurrence positions. A binding
+that reads a changed atom has a first matching pair in this finite order.
+Its anchor fixes that atom at that occurrence. Earlier changed atoms are
+excluded at every positive occurrence, and the current atom is excluded at
+earlier occurrences. Thus the first pair retains the binding and every later
+matching pair excludes it. This argument does not require distinct atom
+occurrences or a particular physical join order. It preserves the union while
+removing duplicate visits before binding and scalar evaluation. The existing
+totality eligibility remains required, and unmapped rows remain eligible.
+The semantic coverage laws above do not yet prove this concrete partition,
+its source-to-catalog mapping or its diagnostic and resource behavior.
 
 Discharge is a fact about current bounds, not delivery or queue position. A
 consumed prefix does not establish it for the complete emitted batch. A Rust

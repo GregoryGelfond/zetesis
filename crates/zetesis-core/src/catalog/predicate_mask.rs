@@ -2,6 +2,8 @@
 
 use std::{fmt, mem::size_of};
 
+use zetesis_algebra::words::Words;
+
 use super::{CatalogRead, Error, PredicateRef, storage};
 
 /// One prepared decision per predicate of a vocabulary's accessible prefix.
@@ -14,7 +16,7 @@ use super::{CatalogRead, Error, PredicateRef, storage};
 pub struct PredicateMask {
     scope: storage::VocabularyScope,
     len: usize,
-    words: Vec<u64>,
+    words: Words<u64>,
 }
 
 /// Preparation stopped at the caller or could not reserve its words; no
@@ -62,11 +64,12 @@ impl<'a> CatalogRead<'a> {
             .try_reserve_exact(len.div_ceil(64))
             .map_err(|_| PredicateMaskFailure::Storage(Error::Allocation))?;
         words.resize(len.div_ceil(64), 0);
+        let mut words = Words::<u64>::new(words);
         for id in ids {
             let predicate =
                 PredicateRef::new(self.0, id).expect("an identity below the prefix count resolves");
             if decide(predicate).map_err(PredicateMaskFailure::Stopped)? {
-                words[id.position() / 64] |= 1 << (id.position() % 64);
+                words.insert(id.position());
             }
         }
         Ok(PredicateMask {
@@ -85,7 +88,7 @@ impl PredicateMask {
         let (read, id) = predicate.canonical()?;
         let position = id.position();
         (position < self.len && read.accepts_vocabulary_scope(&self.scope))
-            .then(|| self.words[position / 64] & (1 << (position % 64)) != 0)
+            .then(|| self.words.contains(position))
     }
 
     /// Number of predicates decided at preparation.

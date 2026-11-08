@@ -19,6 +19,7 @@ serde_json.workspace = true
 sha2.workspace = true
 syn = { version = "2.0.119", features = ["full"] }
 regex = "1"
+zetesis-algebra.workspace = true
 zetesis-backend = { workspace = true, features = ["clap"] }
 zetesis-validation.workspace = true
 

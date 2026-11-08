@@ -1,12 +1,20 @@
 //! Pure bounded layout, canonical certificate packing and ordered result decoding.
 
-use super::{TightGpuCheck, TightGpuLimits, TightSupport, poll};
+use super::update::{
+    self, ROUTE_BEYOND_THRESHOLD, ROUTE_COMPLETE, ROUTE_DENSE, ROUTE_UPDATE, SEEDED,
+};
+use super::{
+    TightGpuCheck, TightGpuLimits, TightGpuRoutes, TightGpuUpdateUnavailable, TightSupport, poll,
+};
+use crate::formula_graph::dependency;
+use crate::runtime::Variant;
 use crate::{GpuError, GpuErrorKind};
-use zetesis_cpu::Cancellation;
+use zetesis_algebra::reduction::{CheckedSum, Reduction};
+use zetesis_algebra::{Cancellation, Meter, MeterBytes, words::Words};
 use zetesis_ferraris::{Interpretation, Theory, TightPlan, TightVerdict};
 
-pub(super) const PARAM_BYTES: u64 = 32;
-pub(super) const RESULT_WORDS: usize = 6;
+pub(super) const PARAM_BYTES: u64 = 64;
+pub(super) const RESULT_WORDS: usize = 9;
 pub(super) const RESULT_MAGIC: u32 = 0x5453_5031;
 pub(super) const RESULT_GROUPED_MAGIC: u32 = 0x5453_4731;
 
@@ -21,17 +29,31 @@ fn address(value: usize) -> Result<u32, GpuError> {
     u32::try_from(value).map_err(|_| capacity("tight dimension exceeds u32"))
 }
 fn sum(values: &[u64]) -> Result<u64, GpuError> {
-    values.iter().try_fold(0u64, |total, next| {
-        total
-            .checked_add(*next)
-            .ok_or_else(|| capacity("tight byte sum overflow"))
-    })
+    values
+        .iter()
+        .try_fold(0, |total, next| {
+            CheckedSum.combine(Some(total), Some(*next))
+        })
+        .ok_or_else(|| capacity("tight byte sum overflow"))
 }
+// This is a proposed device-work allowance, not a performed-work receipt.
+// Optional routes must fit both the authored ceiling and the unchanged wire word.
+fn extend_work(recorded: u32, extra: u32, ceiling: u64) -> Option<u32> {
+    Meter::check_receipt(
+        u64::from(recorded),
+        u128::from(extra),
+        ceiling.min(u64::from(u32::MAX)),
+    )
+    .ok()
+    .map(|work| u32::try_from(work).expect("optional work checked against u32 ceiling"))
+}
+
 fn buffer(bytes: u64, device: &wgpu::Limits) -> Result<(), GpuError> {
-    if bytes > device.max_buffer_size || bytes > device.max_storage_buffer_binding_size {
-        return Err(capacity("tight storage exceeds granted device limits"));
-    }
-    Ok(())
+    let ceiling = device
+        .max_buffer_size
+        .min(device.max_storage_buffer_binding_size);
+    MeterBytes::check(u128::from(bytes), u128::from(ceiling))
+        .map_err(|_| capacity("tight storage exceeds granted device limits"))
 }
 fn vector<T>(length: usize) -> Result<Vec<T>, GpuError> {
     let mut output = Vec::new();
@@ -69,6 +91,7 @@ pub(super) struct Packed {
 pub(super) struct Packing<'a> {
     pub(super) device: &'a wgpu::Limits,
     pub(super) support: TightSupport,
+    pub(super) workgroup_sizing: crate::GpuWorkgroupSizing,
 }
 
 pub(super) struct Graph {
@@ -77,9 +100,9 @@ pub(super) struct Graph {
     pub(super) nodes: u32,
     pub(super) roots: u32,
     pub(super) edges: u32,
-    scratch: usize,
-    map: usize,
-    temporary_bytes: u64,
+    pub(super) wide_words: u32,
+    pub(super) levels: u32,
+    pub(super) rows: crate::formula_graph::Rows,
     pub(super) producers: u32,
     pub(super) words: u32,
     pub(super) node_bytes: u64,
@@ -89,7 +112,32 @@ pub(super) struct Graph {
     /// Simultaneous host packing, including temporary grouped-write cursors.
     pub(super) packing_bytes: u64,
     pub(super) work: u32,
+    /// The complete scan's numeric-row units, a part of `work`.
+    pub(super) numeric_work: u32,
+    /// The owner column of the live numeric rows, retained with a schedule the
+    /// update route engages until its readers index is built or refused.
+    pub(super) owners: Vec<(u32, u32)>,
+    /// Host bytes the owner column holds or, before extraction, will hold.
+    pub(super) owner_bytes: u64,
+    /// The most producers of one head, counted while packing a schedule the
+    /// update route engages; it decides the update state's count width without
+    /// a later allocation.
+    pub(super) largest_producers: u32,
+    /// Dense evaluation's strided iterations over the level widths at the
+    /// dispatched workgroup size, `sum(ceil(width / W))`; zero when serial.
+    pub(super) strided_depth: u64,
+    /// The workgroup size this graph dispatches: the fixed size, or the size
+    /// its packed schedule fits.
+    pub(super) workgroup_size: crate::GpuWorkgroupSize,
+    /// Dense reuse's least critical path for one candidate at the dispatched
+    /// size by the guard's cost table, the runtime guard's measure of dense
+    /// evaluation; zero unless the update route engages the schedule.
+    pub(super) dense_path: u64,
+    /// Each invocation's share of an update's uniform scans and record at the
+    /// dispatched size; zero unless the update route engages the schedule.
+    pub(super) floor_path: u32,
     support: TightSupport,
+    workgroup_sizing: crate::GpuWorkgroupSizing,
 }
 impl Graph {
     const fn result_marker(&self) -> u32 {
@@ -101,24 +149,30 @@ impl Graph {
 
     #[cfg(test)]
     pub(super) fn new(certificate: &TightPlan, packing: Packing<'_>) -> Result<Self, GpuError> {
-        Self::with_control(certificate, packing, &Cancellation::default())
+        Self::with_control(certificate, packing, u64::MAX, &Cancellation::default())
     }
 
     pub(super) fn with_control(
         certificate: &TightPlan,
         packing: Packing<'_>,
+        max_staging_bytes: u64,
         cancellation: &Cancellation,
     ) -> Result<Self, GpuError> {
         let theory = certificate.theory();
         let atoms = address(theory.atom_count())?;
-        let graph =
-            crate::formula_graph::Shape::with_control(theory, packing.device, cancellation)?;
+        let graph = crate::formula_graph::Shape::with_control(
+            theory,
+            packing.device,
+            max_staging_bytes,
+            cancellation,
+        )?;
         let nodes = graph.nodes;
         let roots = address(theory.roots().len())?;
         let producers = address(certificate.producers().len())?;
+        // Reserve the maximum kernel stride after each loop's last valid address.
         if [atoms, nodes, roots, producers]
             .into_iter()
-            .any(|n| n > u32::MAX - 64)
+            .any(|n| !crate::kernel::fits_strided_loop(n))
         {
             return Err(capacity("tight strided loop increment exceeds u32"));
         }
@@ -133,7 +187,7 @@ impl Graph {
         let bytes = sum(&[node_bytes, root_bytes, producer_bytes])?;
         let packing_bytes = sum(&[
             bytes,
-            graph.temporary_bytes,
+            graph.rows.bytes()?,
             if grouped { u64::from(words) * 4 } else { 0 },
         ])?;
         let mut shape = Self {
@@ -142,9 +196,9 @@ impl Graph {
             nodes,
             roots,
             edges: graph.edges,
-            scratch: graph.scratch,
-            map: graph.map,
-            temporary_bytes: graph.temporary_bytes,
+            wide_words: graph.wide_words,
+            levels: 0,
+            rows: graph.rows,
             producers,
             words,
             node_bytes,
@@ -153,7 +207,16 @@ impl Graph {
             bytes,
             packing_bytes,
             work: 0,
+            numeric_work: graph.numeric_work,
+            owners: Vec::new(),
+            owner_bytes: 0,
+            largest_producers: 0,
+            strided_depth: 0,
+            workgroup_size: crate::kernel::base_size(packing.workgroup_sizing),
+            dense_path: 0,
+            floor_path: 0,
             support: packing.support,
+            workgroup_sizing: packing.workgroup_sizing,
         };
         shape.work = words
             .checked_mul(2)
@@ -161,15 +224,16 @@ impl Graph {
             .and_then(|n| n.checked_add(shape.edges))
             .and_then(|n| n.checked_add(roots))
             .and_then(|n| n.checked_add(producers))
+            .and_then(|n| n.checked_add(graph.numeric_work))
             .ok_or_else(|| capacity("tight complete-scan work exceeds u32"))?;
         Ok(shape)
     }
 
-    pub(super) fn pack(
+    fn pack_nodes(
         &self,
         certificate: &TightPlan,
         cancellation: &Cancellation,
-    ) -> Result<Packed, GpuError> {
+    ) -> Result<Vec<u32>, GpuError> {
         if !self.theory.same_instance(certificate.theory()) {
             return Err(GpuError::new(
                 GpuErrorKind::Seed,
@@ -177,28 +241,127 @@ impl Graph {
             ));
         }
         let mut nodes = words(self.node_bytes)?;
-        let mut map = vector(self.map)?;
-        let mut scratch = vector(self.scratch)?;
-        let temporary = (map.capacity() as u128 + scratch.capacity() as u128) * 4;
-        if temporary > u128::from(self.temporary_bytes) {
-            return Err(capacity("tight lowering capacity exceeds admitted staging"));
+        crate::formula_graph::pack(&self.theory, &self.rows, &mut nodes, cancellation)?;
+        Ok(nodes)
+    }
+
+    /// Complete an already-admitted serial shape. Optional level storage is
+    /// selected only when its complete cold layout and work also fit.
+    pub(super) fn prepare(
+        &mut self,
+        certificate: &TightPlan,
+        limits: TightGpuLimits,
+        device: &wgpu::Limits,
+        plan: &mut Plan,
+        cancellation: &Cancellation,
+    ) -> Result<Packed, GpuError> {
+        let mut nodes = self.pack_nodes(certificate, cancellation)?;
+        let depths =
+            dependency::label_depths(self.nodes, self.wide_words, &mut nodes, cancellation)?;
+        let levels = dependency::parallel_levels(self.nodes, depths);
+        if levels != 0 {
+            let serial = (self.root_bytes, self.bytes, self.packing_bytes);
+            let scheduled = (|| {
+                let root_bytes =
+                    u64::from(dependency::root_words(self.nodes, self.roots, levels)?) * 4;
+                buffer(root_bytes, device)?;
+                let added = root_bytes - self.root_bytes;
+                self.bytes = sum(&[self.bytes, added])?;
+                self.packing_bytes = sum(&[self.packing_bytes, added])?;
+                self.root_bytes = root_bytes;
+                self.levels = levels;
+                // Only a scheduled theory can update, so only it reserves the
+                // owner column of its live numeric rows and one transient word
+                // per atom for counting producers per head. Whether the route
+                // engages depends on the packed level widths; a narrow schedule
+                // releases both once packed.
+                self.owner_bytes = owner_bytes(self.rows.live_rows())?;
+                self.packing_bytes = sum(&[self.packing_bytes, u64::from(self.atoms) * 4])?;
+                Plan::new(self, plan.worlds as usize, limits, device, true, plan.epoch)
+            })();
+            match scheduled {
+                Ok(selected) if selected.levels != 0 => *plan = selected,
+                Ok(_) => {
+                    (self.root_bytes, self.bytes, self.packing_bytes) = serial;
+                    self.levels = 0;
+                    self.owner_bytes = 0;
+                }
+                Err(error) if error.kind() == GpuErrorKind::Capacity => {
+                    (self.root_bytes, self.bytes, self.packing_bytes) = serial;
+                    self.levels = 0;
+                    self.owner_bytes = 0;
+                }
+                Err(error) => return Err(error),
+            }
         }
-        crate::formula_graph::pack(
+        let packed = self.pack_columns(certificate, nodes, cancellation)?;
+        let widths = dependency::level_widths(&packed.roots, self.roots, self.levels)?;
+        self.workgroup_size =
+            crate::kernel::dispatch_size(self.workgroup_sizing, widths.clone(), device);
+        let size = self.workgroup_size.invocations();
+        self.strided_depth = widths.map(|width| u64::from(width.div_ceil(size))).sum();
+        // Only a schedule the update route engages needs its inputs, and the
+        // runtime guard's two paths at the size it dispatches. A narrow one
+        // releases what its admission reserved, and its plan, admitted with
+        // more bytes, accounts exactly what remains.
+        if update::engages(self.strided_depth, self.levels) {
+            self.owners = self.rows.owners(cancellation)?;
+            self.largest_producers = largest_producers(certificate, self.atoms, cancellation)?;
+            self.dense_path = update::dense_path(self, &packed, size, self.support, cancellation)?;
+            let offsets = &packed.roots[self.roots as usize..=(self.roots + self.levels) as usize];
+            self.floor_path = update::floor_path(self.words, offsets, size)
+                .ok_or_else(|| capacity("tight update floor path exceeds u32"))?;
+        } else if self.levels != 0 {
+            self.owner_bytes = 0;
+            self.packing_bytes -= u64::from(self.atoms) * 4;
+            *plan = Plan::new(self, plan.worlds as usize, limits, device, true, plan.epoch)?;
+        }
+        Ok(packed)
+    }
+
+    #[cfg(test)]
+    pub(super) fn pack(
+        &self,
+        certificate: &TightPlan,
+        cancellation: &Cancellation,
+    ) -> Result<Packed, GpuError> {
+        self.pack_columns(
+            certificate,
+            self.pack_nodes(certificate, cancellation)?,
+            cancellation,
+        )
+    }
+
+    fn pack_columns(
+        &self,
+        certificate: &TightPlan,
+        mut nodes: Vec<u32>,
+        cancellation: &Cancellation,
+    ) -> Result<Packed, GpuError> {
+        let mut roots = words(self.root_bytes)?;
+        dependency::pack(
             &self.theory,
-            &mut nodes,
-            &mut map,
-            &mut scratch,
+            self.nodes,
+            self.levels,
+            &nodes,
+            &mut roots,
             cancellation,
         )?;
-        let mut roots = words(self.root_bytes)?;
-        for &root in self.theory.roots() {
+        // Depths are preparation scratch. A scheduled theory's header word 3
+        // holds each node's position in the level order instead, which the
+        // update route's queued set is indexed by; a serial one holds zero.
+        for header in nodes.chunks_exact_mut(4).take(self.nodes as usize) {
             poll(cancellation)?;
-            roots.push(crate::formula_graph::translated(&map, root)?);
+            header[3] = 0;
         }
-        if roots.is_empty() {
-            roots.push(0);
+        if self.levels != 0 {
+            let order = (self.roots + self.levels + 1) as usize;
+            for (position, &node) in roots[order..order + self.nodes as usize].iter().enumerate() {
+                poll(cancellation)?;
+                nodes[node as usize * 4 + 3] = address(position)?;
+            }
         }
-        let producers = self.pack_producers(certificate, &map, cancellation)?;
+        let producers = self.pack_producers(certificate, cancellation)?;
         Ok(Packed {
             nodes,
             roots,
@@ -206,17 +369,16 @@ impl Graph {
         })
     }
 
-    fn pack_producers(
+    pub(super) fn pack_producers(
         &self,
         certificate: &TightPlan,
-        map: &[u32],
         cancellation: &Cancellation,
     ) -> Result<Vec<u32>, GpuError> {
         let mut output = words(self.producer_bytes)?;
         if self.support == TightSupport::Atomic {
             for producer in certificate.producers() {
                 poll(cancellation)?;
-                output.extend(producer_record(producer, map)?);
+                output.extend(producer_record(producer)?);
             }
             if output.is_empty() {
                 output.extend([0; 4]);
@@ -246,22 +408,76 @@ impl Graph {
             poll(cancellation)?;
             let cursor = &mut cursors[producer.head() / 32];
             let start = *cursor as usize * 4;
-            output[start..start + 4].copy_from_slice(&producer_record(producer, map)?);
+            output[start..start + 4].copy_from_slice(&producer_record(producer)?);
             *cursor += 1;
         }
         Ok(output)
     }
 }
 
-fn producer_record(
-    producer: &zetesis_ferraris::TightProducer,
-    map: &[u32],
-) -> Result<[u32; 4], GpuError> {
+/// The most producers of one head, with one transient counter per atom.
+fn largest_producers(
+    certificate: &TightPlan,
+    atoms: u32,
+    cancellation: &Cancellation,
+) -> Result<u32, GpuError> {
+    let mut heads = vector::<u32>(atoms as usize)?;
+    heads.resize(atoms as usize, 0);
+    let mut largest = 0;
+    for producer in certificate.producers() {
+        poll(cancellation)?;
+        let count = &mut heads[producer.head()];
+        *count = count
+            .checked_add(1)
+            .ok_or_else(|| capacity("tight producer count overflows"))?;
+        largest = largest.max(*count);
+    }
+    Ok(largest)
+}
+
+fn owner_bytes(rows: usize) -> Result<u64, GpuError> {
+    rows.checked_mul(size_of::<(u32, u32)>())
+        .and_then(|bytes| u64::try_from(bytes).ok())
+        .ok_or_else(|| capacity("tight owner column exceeds host"))
+}
+
+fn producer_record(producer: &zetesis_ferraris::TightProducer) -> Result<[u32; 4], GpuError> {
     let (body, present) = match producer.body() {
-        Some(body) => (crate::formula_graph::translated(map, body)?, 1),
+        Some(body) => (address(body)?, 1),
         None => (0, 0),
     };
     Ok([address(producer.head())?, body, present, 0])
+}
+
+/// The per-slot update state a plan lays out, and the index bytes it admits.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) struct StateLayout {
+    /// Words of each slot's state.
+    pub(super) slot_words: u32,
+    /// Resident index bytes not yet part of the graph: the bound of an index
+    /// this batch builds, zero once it is resident.
+    pub(super) index_bytes: u64,
+    /// Transient host bytes of building the index in this batch.
+    pub(super) build_bytes: u64,
+}
+
+/// The update route's per-batch parameters.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub(super) struct Route {
+    /// The update route may run, and the complete and dense routes seed the
+    /// state for it. Requires the state and a parallel schedule. The batch
+    /// runs the full kernel exactly when it is set (see [`Plan::variant`]).
+    pub(super) allowed: bool,
+    pub(super) threshold: u32,
+    pub(super) readers: u32,
+    pub(super) atom_nodes: u32,
+    pub(super) count_bits: u32,
+    pub(super) slot_words: u32,
+    /// The fewest operations an update performs.
+    pub(super) floor: u32,
+    /// The fewest operations of an update's critical path: each invocation's
+    /// share of the uniform scans and the record.
+    pub(super) floor_path: u32,
 }
 
 pub(super) struct Plan {
@@ -270,10 +486,20 @@ pub(super) struct Plan {
     pub(super) truth: u64,
     pub(super) support: u64,
     pub(super) results: u64,
+    /// The update state's bytes, or zero for a plan without state.
+    pub(super) state: u64,
     pub(super) transport: u64,
     pub(super) accounted: u64,
+    /// The complete or dense route's fixed charge per candidate, including the
+    /// state's writes when it is bound.
     pub(super) work: u32,
+    /// Work reserved per candidate: `work`, or the update route's worst case
+    /// when that is larger and slots may update.
+    pub(super) allowance: u32,
+    pub(super) levels: u32,
     pub(super) epoch: u32,
+    pub(super) original_truth_reused: bool,
+    pub(super) route: Route,
 }
 impl Plan {
     pub(super) fn new(
@@ -284,6 +510,20 @@ impl Plan {
         fresh: bool,
         epoch: u32,
     ) -> Result<Self, GpuError> {
+        Self::with_state(graph, worlds, limits, device, fresh, epoch, None)
+    }
+
+    /// Lay out a batch, with each slot's update state when `state` is given.
+    /// The state is part of the per-slot footprint the byte ceiling sees.
+    pub(super) fn with_state(
+        graph: &Graph,
+        worlds: usize,
+        limits: TightGpuLimits,
+        device: &wgpu::Limits,
+        fresh: bool,
+        epoch: u32,
+        state: Option<StateLayout>,
+    ) -> Result<Self, GpuError> {
         let count = address(worlds)?;
         crate::runtime::positive_timeout(limits.timeout)?;
         if worlds > limits.max_candidates || count > device.max_compute_workgroups_per_dimension {
@@ -292,6 +532,10 @@ impl Plan {
         if limits.max_work_per_candidate < u64::from(graph.work) || epoch == 0 {
             return Err(capacity("tight full-scan work or epoch exceeds limits"));
         }
+        // A resident schedule may be bypassed under a tighter work allowance.
+        // Its real retained storage is still charged below.
+        let (levels, work) = extend_work(graph.work, graph.levels, limits.max_work_per_candidate)
+            .map_or((0, graph.work), |work| (graph.levels, work));
         let array = |length: u32| -> Result<u64, GpuError> {
             let elements = u64::from(length) * u64::from(count);
             if elements > u64::from(u32::MAX) {
@@ -303,7 +547,11 @@ impl Plan {
         let truth = array(graph.nodes)?;
         let support = array(graph.words)?;
         let results = array(address(RESULT_WORDS)?)?;
-        for bytes in [seeds, truth, support, results] {
+        let state_bytes = match state {
+            Some(layout) => array(layout.slot_words)?,
+            None => 0,
+        };
+        for bytes in [seeds, truth, support, results, state_bytes] {
             buffer(bytes, device)?;
         }
         if device.max_uniform_buffer_binding_size < PARAM_BYTES
@@ -313,15 +561,28 @@ impl Plan {
                 "tight uniform buffer exceeds granted device limits",
             ));
         }
-        let transport = sum(&[PARAM_BYTES, seeds, truth, support, results, results])?;
+        let transport = sum(&[
+            PARAM_BYTES,
+            seeds,
+            truth,
+            support,
+            results,
+            results,
+            state_bytes,
+        ])?;
         let host_results = u64::from(count) * std::mem::size_of::<TightGpuCheck>() as u64;
+        let (index_bytes, build_bytes) =
+            state.map_or((0, 0), |layout| (layout.index_bytes, layout.build_bytes));
         let accounted = sum(&[
             graph.bytes,
+            index_bytes,
+            graph.owner_bytes,
             transport,
             PARAM_BYTES,
             seeds,
             host_results,
             if fresh { graph.packing_bytes } else { 0 },
+            build_bytes,
         ])?;
         if worlds != 0 && accounted > limits.max_batch_bytes {
             return Err(capacity("tight batch exceeds authored byte ceiling"));
@@ -332,23 +593,136 @@ impl Plan {
             truth,
             support,
             results,
+            state: state_bytes,
             transport,
             accounted,
-            work: graph.work,
+            work,
+            allowance: work,
+            levels,
             epoch,
+            original_truth_reused: false,
+            route: Route::default(),
         })
     }
 
-    pub(super) fn params(&self, graph: &Graph) -> [u32; 8] {
+    /// Keep the already-admitted complete scan when optional change detection
+    /// cannot fit. The bound includes a header decision, old-value comparisons,
+    /// changed-bit publication, and every operand-change inspection; dense
+    /// changes can still require the entire original reduction afterwards.
+    pub(super) fn reuse_original_truth(&mut self, graph: &Graph, ceiling: u64) {
+        let work = graph
+            .nodes
+            .checked_mul(2)
+            .and_then(|n| n.checked_add(graph.edges))
+            .and_then(|n| n.checked_add(4))
+            .and_then(|extra| extend_work(self.work, extra, ceiling));
+        if let Some(work) = work {
+            self.work = work;
+            self.allowance = work;
+            self.original_truth_reused = true;
+        }
+    }
+
+    /// Decide whether this plan, which binds the update state of `index`,
+    /// allows the update route, and charge the routes accordingly. Returns why
+    /// the route is not allowed, if it is not.
+    ///
+    /// The route is allowed when the schedule is parallel, its reservation
+    /// fits `ceiling` (the larger of the update's worst case and dense reuse
+    /// after a change count, with the state's writes), and then, last, the
+    /// runtime guard `allows` it. Allowed, the complete and dense routes write
+    /// the slot's retained candidate and clear its summary, `words + 1`
+    /// operations; dense reuse after a change count adds the count's `2 *
+    /// words`, and with reuse authority every slot may take either route or
+    /// update, so each reserves the largest. Not allowed, for either reason, no
+    /// route writes the state and every charge is the stateless one, while the
+    /// layout stays state-inclusive and the state allocated: the batch runs the
+    /// dense twin, which leaves the state unbound.
+    pub(super) fn bind_state(
+        &mut self,
+        graph: &Graph,
+        index: &update::Index,
+        ceiling: u64,
+        allows: bool,
+    ) -> Option<TightGpuUpdateUnavailable> {
+        let worst = update::worst_case(
+            graph,
+            self.levels,
+            index.count_bits,
+            index.entries,
+            index.atom_entries,
+        );
+        let dense = update::dense_after_count(graph, self.levels);
+        let fits = self.levels != 0
+            && worst.is_some_and(|worst| worst.max(dense) <= ceiling.min(u64::from(u32::MAX)));
+        let allowed = fits && allows;
+        self.route = Route {
+            allowed,
+            threshold: update::threshold(graph.atoms),
+            readers: index.readers,
+            atom_nodes: index.atom_nodes,
+            count_bits: index.count_bits,
+            slot_words: index.slot_words,
+            floor: u32::try_from(update::floor(graph, self.levels)).unwrap_or(u32::MAX),
+            floor_path: graph.floor_path,
+        };
+        if allowed {
+            // The gate bounds every charge below by `ceiling` within u32.
+            self.work += graph.words + 1;
+            self.allowance = if self.original_truth_reused {
+                let counted = self.work + 2 * graph.words;
+                counted.max(
+                    worst
+                        .and_then(|worst| u32::try_from(worst).ok())
+                        .unwrap_or(counted),
+                )
+            } else {
+                self.work
+            };
+        }
+        if !fits {
+            Some(TightGpuUpdateUnavailable::Work)
+        } else if !allows {
+            Some(TightGpuUpdateUnavailable::GuardDeclined)
+        } else {
+            None
+        }
+    }
+
+    /// The kernel this plan runs: the full kernel exactly when the update
+    /// route is allowed, and otherwise its dense twin, which binds no update
+    /// state and carries none of the route's code. A theory whose route is
+    /// declined for its residency, a batch whose route a limit declines and a
+    /// batch the runtime guard declines therefore all run the twin; a plan
+    /// that holds the state keeps it allocated and accounted, unbound.
+    pub(super) const fn variant(&self) -> Variant {
+        if self.route.allowed {
+            Variant::Full
+        } else {
+            Variant::Dense
+        }
+    }
+
+    /// The parameter block. Words 9 and 15 are reserved: the kernel a batch
+    /// runs, not a parameter, says whether its update route is allowed.
+    pub(super) fn params(&self, graph: &Graph) -> [u32; 16] {
         [
             graph.atoms,
             graph.nodes,
             graph.roots,
             graph.producers,
             graph.words,
-            self.worlds,
+            self.levels,
             self.work,
             self.epoch,
+            self.route.threshold,
+            0,
+            self.route.readers,
+            self.route.atom_nodes,
+            self.route.count_bits,
+            self.route.slot_words,
+            self.route.floor_path,
+            0,
         ]
     }
 
@@ -356,19 +730,59 @@ impl Plan {
         &self,
         graph: &Graph,
         candidates: &[Interpretation],
-        cancellation: &Cancellation,
-    ) -> Result<Vec<u32>, GpuError> {
+        staging: &mut crate::candidates::Staging,
+        ceiling: u64,
+        cancellation: &zetesis_algebra::Cancellation,
+    ) -> Result<u64, GpuError> {
         if candidates.len() != self.worlds as usize {
-            return Err(capacity("tight candidate count differs from plan"));
+            staging.release();
+            return Err(capacity("tight candidate count differs from admitted plan"));
         }
-        let mut output = words(self.seeds)?;
-        output.resize(
-            usize::try_from(self.seeds / 4).map_err(|_| capacity("tight seeds exceed host"))?,
-            0,
-        );
-        crate::candidates::pack(&graph.theory, candidates, &mut output, cancellation)?;
-        Ok(output)
+        staging.pack(
+            &graph.theory,
+            candidates,
+            self.seeds,
+            self.accounted,
+            ceiling,
+            cancellation,
+        )
     }
+}
+
+/// A batch's decoded checks with its route receipts.
+#[derive(Debug)]
+pub(super) struct Decoded {
+    pub(super) checks: Vec<TightGpuCheck>,
+    pub(super) routes: TightGpuRoutes,
+    pub(super) nodes_evaluated: u64,
+    /// The sum of the work each check reports performed.
+    pub(super) work: u64,
+    /// The largest path among the update slots; `None` without update slots.
+    pub(super) slowest_update_path: Option<u64>,
+}
+
+/// Validate every record against the batch and decode it in order.
+///
+/// A slot without reuse authority takes the complete route. With authority it
+/// takes dense reuse unless the update route is allowed; then a slot seeded by
+/// its previous record counts its change and updates, or takes dense reuse
+/// beyond the threshold. Complete and dense records charge the plan's fixed
+/// work, dense reuse beyond the threshold adds the count's `2 * words`, and none
+/// evaluates a node by update; an update charges at least its floor and at most
+/// the reservation, and evaluates at most every node. An update's path lies
+/// between the floor path and `path_ceiling`; every other route
+/// records a zero path. Every record is seeded exactly when the route was
+/// allowed, in the bit beside its route, and no other bit of that word is set.
+/// Any other record is an invalid readback.
+/// The largest path an update record that performed `performed` operations
+/// may carry: the floor path plus what the record counts beyond its floor.
+/// The path's phases are a subset of the work's: a summary counts in the work,
+/// and in the path only after the slot took dense reuse beyond the threshold;
+/// no phase's costliest invocation costs more than every invocation together;
+/// and no cost of the guard's table exceeds the work's charge for the same
+/// operation. Requires `performed` at least the floor.
+fn path_ceiling(route: &Route, performed: u32) -> u32 {
+    route.floor_path.saturating_add(performed - route.floor)
 }
 
 pub(super) fn decode(
@@ -377,7 +791,7 @@ pub(super) fn decode(
     plan: &Plan,
     seeds: &[u32],
     cancellation: &Cancellation,
-) -> Result<Vec<TightGpuCheck>, GpuError> {
+) -> Result<Decoded, GpuError> {
     let fail = || GpuError::new(GpuErrorKind::Readback, "invalid tight result record");
     if words.len() != plan.worlds as usize * RESULT_WORDS
         || u64::try_from(seeds.len())
@@ -387,14 +801,40 @@ pub(super) fn decode(
     {
         return Err(fail());
     }
-    let mut output = vector(plan.worlds as usize)?;
+    let mut checks = vector(plan.worlds as usize)?;
+    let mut routes = TightGpuRoutes::default();
+    let mut nodes_evaluated = 0_u64;
+    let mut work = 0_u64;
+    let mut slowest_update_path: Option<u64> = None;
     for (world, row) in words.chunks_exact(RESULT_WORDS).enumerate() {
         poll(cancellation)?;
-        if row[0] != plan.epoch
-            || row[1] as usize != world
-            || row[4] != plan.work
-            || row[5] != graph.result_marker()
-        {
+        if row[0] != plan.epoch || row[1] as usize != world || row[5] != graph.result_marker() {
+            return Err(fail());
+        }
+        let (performed, evaluated, path) = (row[4], row[7], row[8]);
+        let (route, seeded) = (row[6] & !SEEDED, row[6] & SEEDED != 0);
+        let reused = plan.original_truth_reused;
+        let updating = reused && plan.route.allowed;
+        let receipt = match route {
+            ROUTE_COMPLETE => !reused && performed == plan.work && evaluated == 0 && path == 0,
+            ROUTE_DENSE => reused && performed == plan.work && evaluated == 0 && path == 0,
+            ROUTE_BEYOND_THRESHOLD => {
+                updating
+                    && plan.work.checked_add(2 * graph.words) == Some(performed)
+                    && evaluated == 0
+                    && path == 0
+            }
+            ROUTE_UPDATE => {
+                updating
+                    && evaluated <= graph.nodes
+                    && plan.route.floor <= performed
+                    && performed <= plan.allowance
+                    && plan.route.floor_path <= path
+                    && path <= path_ceiling(&plan.route, performed)
+            }
+            _ => false,
+        };
+        if !receipt || seeded != plan.route.allowed {
             return Err(fail());
         }
         let verdict = match (row[2], row[3]) {
@@ -404,9 +844,8 @@ pub(super) fn decode(
             },
             (STATUS_RESIDUAL, atom)
                 if atom < graph.atoms
-                    && seeds[world * graph.words as usize + atom as usize / 32]
-                        & (1 << (atom % 32))
-                        != 0 =>
+                    && Words::<u32, _>::new(&seeds[world * graph.words as usize..])
+                        .contains(atom as usize) =>
             {
                 TightVerdict::Residual {
                     unsupported_atom: atom as usize,
@@ -414,12 +853,33 @@ pub(super) fn decode(
             }
             _ => return Err(fail()),
         };
-        output.push(TightGpuCheck {
+        match route {
+            ROUTE_COMPLETE => routes.complete += 1,
+            ROUTE_DENSE => routes.dense_reuse += 1,
+            ROUTE_BEYOND_THRESHOLD => {
+                routes.dense_reuse += 1;
+                routes.beyond_threshold += 1;
+            }
+            _ => routes.update += 1,
+        }
+        nodes_evaluated += u64::from(evaluated);
+        work += u64::from(performed);
+        if route == ROUTE_UPDATE {
+            slowest_update_path = slowest_update_path.max(Some(u64::from(path)));
+        }
+        checks.push(TightGpuCheck {
             verdict,
-            work: u64::from(plan.work),
+            work: u64::from(performed),
+            critical_path: u64::from(path),
         });
     }
-    Ok(output)
+    Ok(Decoded {
+        checks,
+        routes,
+        nodes_evaluated,
+        work,
+        slowest_update_path,
+    })
 }
 
 #[cfg(test)]

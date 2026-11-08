@@ -56,7 +56,7 @@ pub(super) fn classify(
     dependencies: &[usize],
     changes: &[Change],
     prepared: &PreparedConstraints<'_>,
-    region: &zetesis_cpu::regions::Region,
+    region: &zetesis_algebra::region::Region,
     counters: &mut Counters,
 ) -> Result<super::Scan, FormulaFailure> {
     let mut groups = dependencies.iter();

@@ -6,9 +6,8 @@ use std::fmt::Write as _;
 use crate::support::options::plain as options;
 use crate::support::prepared;
 use clap::Parser;
+use zetesis_algebra::Cancellation;
 use zetesis_cli::{Backend, Completion, Grounder, Options, Report, RunError, run_with_diagnostics};
-use zetesis_core::StaticError;
-use zetesis_cpu::{Cancellation, Stop};
 
 fn solve(source: &str, arguments: &[&str]) -> (Report, String, String) {
     let mut configured = options(arguments);
@@ -36,7 +35,7 @@ fn typed(
     config: &zetesis_cli::PublicationConfig,
 ) -> Result<(Report, String), RunError> {
     let mut output = Vec::new();
-    let result = prepared::relational(
+    let result = prepared::formula(
         source,
         config,
         &mut zetesis_cli::HumanRenderer::new(
@@ -110,49 +109,11 @@ fn eager_and_lazy_cpu_return_the_same_models_and_complete_coverage() {
         assert_eq!(eager.completion, lazy.completion, "{source}");
         assert_eq!((eager.models, eager.checked), (lazy.models, lazy.checked));
         assert_eq!(models(&eager_text), models(&lazy_text), "{source}");
-        assert!(diagnostics.contains("requested=eager, effective=eager"));
-        assert!(diagnostics.contains("static atoms="));
-        assert!(diagnostics.contains("eager static closure scans"));
-    }
-}
-
-#[test]
-fn lazy_ignores_static_lowering_caps() {
-    let mut config = prepared::config(&["--grounder", "lazy"]);
-    config.solve.max_ground_rules = 0;
-    config.solve.max_substitutions = 0;
-    let (report, output) = typed("{a}. {b}. {c}. {d}. {e}. {f}.", &config).unwrap();
-    assert_eq!(report.completion, Completion::Exhausted);
-    assert_eq!((report.models, report.checked), (64, 64));
-    assert_eq!(models(&output).len(), 64);
-    assert!(matches!(
-        report.closure_execution.unwrap().route,
-        zetesis_cli::ClosureRoute::Lazy(_)
-    ));
-}
-
-#[test]
-fn eager_cpu_enforces_every_static_lowering_cap() {
-    for resource in ["atoms", "ground rules", "substitutions"] {
-        let mut config = prepared::config(&["--grounder", "eager"]);
-        match resource {
-            "atoms" => config.solve.max_atoms = 0,
-            "ground rules" => config.solve.max_ground_rules = 0,
-            "substitutions" => config.solve.max_substitutions = 0,
-            _ => unreachable!(),
-        }
-        let error = typed("a.", &config).unwrap_err();
         assert!(
-            matches!(error, RunError::Static(StaticError::LimitExceeded { resource: actual, .. }) if actual == resource)
+            diagnostics.contains("grounder: eager (requested eager)"),
+            "{diagnostics}"
         );
     }
-}
-
-#[test]
-fn eager_auto_never_silently_substitutes_lazy_when_lowering_is_refused() {
-    let mut config = prepared::config(&["--grounder", "eager"]);
-    config.solve.max_ground_rules = 0;
-    assert!(matches!(typed("a.", &config), Err(RunError::Static(_))));
 }
 
 #[test]
@@ -194,9 +155,13 @@ fn both_cpu_modes_keep_work_and_candidate_stops_incomplete() {
         config.solve.max_work = 0;
         let (report, output) = typed("a.", &config).unwrap();
         assert_eq!(report.completion, Completion::Interrupted);
+        // Admission's source verification charges the solve's work and stops
+        // first.
         assert_eq!(
             report.interruption,
-            Some(zetesis_cli::Interruption::Oracle(Stop::WorkLimit))
+            Some(zetesis_cli::Interruption::Countermodel(
+                zetesis_stable::Incomplete::Verification(zetesis_algebra::Stop::WorkLimit)
+            ))
         );
         assert_eq!(report.models, 0);
         assert!(output.contains("Models: 0 (search incomplete)"));
@@ -207,7 +172,9 @@ fn both_cpu_modes_keep_work_and_candidate_stops_incomplete() {
         assert_eq!(report.completion, Completion::Interrupted);
         assert_eq!(
             report.interruption,
-            Some(zetesis_cli::Interruption::Oracle(Stop::CandidateLimit))
+            Some(zetesis_cli::Interruption::Countermodel(
+                zetesis_stable::Incomplete::CandidateLimit
+            ))
         );
         assert_eq!(report.models, 3);
         assert_eq!(models(&output).len(), 3);
@@ -222,9 +189,7 @@ fn eager_automatic_execution_retains_cpu() {
     assert_eq!(report.completion, Completion::Exhausted);
     assert_eq!((report.models, report.checked), (64, 64));
     assert_eq!(models(&output).len(), 64);
-    assert_eq!(
-        report.closure_execution.unwrap().route,
-        zetesis_cli::ClosureRoute::Eager
-    );
-    assert!(report.lazy_execution.is_none());
+    assert!(report.countermodel_statistics.is_some());
+    assert!(report.formula_execution.is_none());
+    assert!(report.hybrid_execution.is_none());
 }

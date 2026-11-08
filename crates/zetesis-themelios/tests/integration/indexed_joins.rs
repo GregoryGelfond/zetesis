@@ -7,9 +7,9 @@ use zetesis_test_support::thresholds::first_success;
 
 use zetesis_themelios::ProgramSite;
 
+use zetesis_algebra::Cancellation;
 use zetesis_core::Value;
-use zetesis_cpu::Cancellation;
-use zetesis_sat::{Limits, StableModels};
+use zetesis_stable::{Limits, StableModels};
 use zetesis_themelios::{
     AdmissionOptions, ExpansionLimits, FormulaFailure, FormulaLimits, FormulaResource,
     GroundingObserver, GroundingOutcome, GroundingPhase, GroundingWork, admit_formula,

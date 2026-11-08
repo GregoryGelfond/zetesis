@@ -1,4 +1,4 @@
-//! Bounded original-file loading and include graphs, separate from S0 admission.
+//! Bounded original-file loading and include graphs, separate from semantic admission.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
@@ -147,7 +147,7 @@ impl BundleSource {
         &self.source
     }
     /// Pinned themelios parse under the clingo dialect; all diagnostics were
-    /// checked at loading. This is not a claim that S0 admits its constructs.
+    /// checked at loading. Parsing does not establish solver support for its constructs.
     #[must_use]
     pub fn parsed(&self) -> &Parse<ast::Program> {
         &self.parsed
@@ -162,8 +162,8 @@ impl BundleSource {
 /// A faithfully parsed original include graph. Canonicalization deduplicates
 /// physical paths; a repeated include still has its own located edge. This
 /// graph records source structure, not the semantics of include evaluation,
-/// cross-file constants, or program-part composition. [`crate::admit`] remains
-/// the separate single-source S0 door.
+/// cross-file constants, or program-part composition. [`crate::admit_bundle_formula`]
+/// performs the separate semantic admission.
 #[derive(Debug)]
 pub struct SourceBundle {
     roots: Vec<BundleRoot>,

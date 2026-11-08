@@ -1,8 +1,9 @@
 #!/bin/sh
 # Build locked release binaries and install the tools an end user runs.
 # Precondition: one install at a time per Cargo target directory and per binary
-# directory. Both builds of zetesis write the same artifact, and Cargo
-# serializes builds but not the copies this script makes after them.
+# directory: Cargo serializes builds but not the copies this script makes after
+# them. The front is built in its own directory beneath the target directory,
+# so the default build's artifacts stay exactly as Cargo builds them.
 set -eu
 
 # The packages built and the tools installed from them. Every install line and
@@ -57,14 +58,19 @@ for package in $packages; do
     selected="$selected -p $package"
 done
 built=$target_dir/$host_target/release
+front_target=$target_dir/front
+front_built=$front_target/$host_target/release
 stage=$target_dir/install-stage
 
 # This installer produces runnable native binaries, overriding cross-build
 # defaults from CARGO_BUILD_TARGET or Cargo configuration deliberately. One
 # invocation unifies features, and no selected package enables GPU support in
 # another. The option and package lists are split into words deliberately.
+# $1 is the Cargo target directory the build writes.
 build() {
-    cargo build --locked --release --target "$host_target" --target-dir "$target_dir" "$@"
+    directory=$1
+    shift
+    cargo build --locked --release --target "$host_target" --target-dir "$directory" "$@"
 }
 
 # Copy $1 to $2 under a temporary name beside $2, then rename it into place, so
@@ -91,15 +97,15 @@ digest() {
 rm -rf -- "${stage:?}"
 mkdir -p -- "$stage"
 if [ "$cpu_only" = true ]; then
-    build --no-default-features $selected
+    build "$target_dir" --no-default-features $selected
     for tool in $tools; do
         cp -- "$built/$tool" "$stage/$tool"
     done
     report='CPU-only build'
 else
-    # The GPU-capable zetesis, set aside before the front's build reuses its
-    # artifact path; its content names the install.
-    build $selected
+    # The GPU-capable zetesis, Cargo's default build; its content names the
+    # install.
+    build "$target_dir" $selected
     mkdir -p -- "$stage/sibling"
     cp -- "$built/zetesis" "$stage/sibling/zetesis"
     cp -- "$built/zetesis-bench" "$stage/zetesis-bench"
@@ -107,15 +113,17 @@ else
     hash=$(digest "$stage/sibling/zetesis")
     identity=$version-$(printf '%s' "$hash" | cut -c 1-16)
     # The front: zetesis without the GPU stack, naming the sibling it hands GPU
-    # requests to. The identity is exported in a subshell: POSIX leaves it
-    # unspecified whether an assignment before a function call reaches the
-    # commands the function runs.
+    # requests to. It is built in its own target directory, so it never
+    # replaces the default build's zetesis, which keeps serving GPU requests
+    # itself when run from the build output. The identity is exported in a
+    # subshell: POSIX leaves it unspecified whether an assignment before a
+    # function call reaches the commands the function runs.
     (
         ZETESIS_SIBLING_IDENTITY=$identity
         export ZETESIS_SIBLING_IDENTITY
-        build --no-default-features --features front -p zetesis-cli
+        build "$front_target" --no-default-features --features front -p zetesis-cli
     )
-    cp -- "$built/zetesis" "$stage/zetesis"
+    cp -- "$front_built/zetesis" "$stage/zetesis"
     # The front exists so that CPU runs start without a graphics framework. On
     # macOS the load commands decide it: reading them is a value-dependent step
     # in this otherwise glue script, so the GPU build's are read first as its
@@ -193,4 +201,18 @@ printf 'Installed %s into %s (%s)\n' "$tools" "$install_dir" "$report"
 case ":$PATH:" in
     *":$install_dir:"*) ;;
     *) printf 'Add this directory to PATH: %s\n' "$install_dir" ;;
+esac
+# Another zetesis earlier on PATH, such as one in a Cargo build output, runs in
+# place of the one just installed. Directories are compared after resolving
+# links, so a linked binary directory is not mistaken for another.
+found=$(command -v zetesis 2>/dev/null) || found=
+case "$found" in
+    /*)
+        found_directory=$(CDPATH='' cd -P -- "$(dirname -- "$found")" 2>/dev/null && pwd) ||
+            found_directory=
+        installed_directory=$(CDPATH='' cd -P -- "$install_dir" && pwd)
+        if [ "$found_directory" != "$installed_directory" ]; then
+            printf 'The zetesis first on PATH is %s, not the one just installed; put %s before %s on PATH.\n' \
+                "$found" "$install_dir" "$(dirname -- "$found")"
+        fi ;;
 esac

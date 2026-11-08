@@ -74,7 +74,7 @@ fn independent_unsigned_groups_keep_count_plans() {
         let planned = prepared(source)
             .ground_with_count_plan(
                 CountPlanLimits::default(),
-                &zetesis_cpu::Cancellation::default(),
+                &zetesis_algebra::Cancellation::default(),
                 None,
             )
             .unwrap();

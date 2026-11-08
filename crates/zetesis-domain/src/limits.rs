@@ -110,13 +110,28 @@ pub struct Statistics {
 }
 
 pub(crate) fn check(resource: Resource, observed: u128, limit: u128) -> Result<(), Stop> {
-    if observed > limit {
-        Err(Stop {
+    zetesis_algebra::Meter::check_wide_count(observed, 0, limit)
+        .map(|_| ())
+        .map_err(|_| Stop {
             resource,
             limit,
             observed,
         })
-    } else {
-        Ok(())
-    }
+}
+
+/// Admit domain work without adding control polling or another stored counter.
+pub(crate) fn charge_work(accepted: &mut u64, amount: u64, limit: u64) -> Result<(), Stop> {
+    zetesis_algebra::Meter::charge_receipt(accepted, u128::from(amount), limit).map_err(|error| {
+        match error {
+            zetesis_algebra::MeterWorkError::Limit { observed, limit } => Stop {
+                resource: Resource::Work,
+                limit,
+                observed,
+            },
+            // The receipt and request are both u64, so their sum fits u128.
+            zetesis_algebra::MeterWorkError::Overflow => {
+                unreachable!("two u64 work values fit u128")
+            }
+        }
+    })
 }

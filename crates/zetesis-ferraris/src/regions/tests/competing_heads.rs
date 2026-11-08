@@ -1,14 +1,13 @@
 //! A singleton head has no competing support to wake.
 
-use zetesis_cpu::{Cancellation, Stop};
+use zetesis_algebra::{Cancellation, Stop};
 
 use crate::{
     AdmissionLimits, FormulaParts, Knowledge, Narrower, Narrowing, NarrowingAttempt,
-    NarrowingQuota, NarrowingScratch, Node, OriginalSubject, Producers, Region, RegionLimits,
-    Theory,
+    NarrowingScratch, Node, OriginalSubject, Producers, Region, RegionLimits, Theory,
 };
 
-use super::super::{Closure, SplitSelection, Step, Subject, Work};
+use super::super::{Closure, Context, Meter, SplitSelection, Step};
 use super::{
     compact_mut,
     counters::{native, same_knowledge},
@@ -77,25 +76,25 @@ struct Snapshot {
     scratch: NarrowingScratch,
 }
 
-fn narrow(
+fn narrow<Q: zetesis_algebra::Quota<Error = Stop> + ?Sized>(
     theory: &Theory,
     index: &Narrower,
     producers: &Producers,
     initial: (&Region, &Knowledge),
-    work: Work<'_>,
+    mut work: Meter<'_, Q>,
 ) -> Snapshot {
     let mut region = initial.0.clone();
     let mut knowledge = initial.1.clone();
     let mut scratch = NarrowingScratch::default();
-    let subject = Subject::from(OriginalSubject::new(theory, Some(producers)));
-    let attempt = index.narrow_with(
+    let subject = Context::from(OriginalSubject::new(theory, Some(producers)));
+    let attempt = crate::test_support::stop_narrowing(&index.narrow_with(
         (subject, SplitSelection::Choose),
         &mut region,
         &mut knowledge,
         &mut scratch,
-        work,
+        &mut work,
         &Cancellation::default(),
-    );
+    ));
     Snapshot {
         attempt,
         region,
@@ -109,10 +108,10 @@ fn same(left: &Snapshot, right: &Snapshot) {
     assert_eq!(left.attempt.statistics, right.attempt.statistics);
     assert_eq!(left.region, right.region);
     same_knowledge(&left.knowledge, &right.knowledge);
-    assert_eq!(left.scratch.learned, right.scratch.learned);
-    assert_eq!(left.scratch.nodes, right.scratch.nodes);
-    assert_eq!(left.scratch.heads, right.scratch.heads);
-    assert_eq!(left.scratch.pending, right.scratch.pending);
+    assert_eq!(left.scratch.common.learned, right.scratch.common.learned);
+    assert_eq!(left.scratch.common.nodes, right.scratch.common.nodes);
+    assert_eq!(left.scratch.common.heads, right.scratch.common.heads);
+    assert_eq!(left.scratch.common.pending, right.scratch.common.pending);
 }
 
 fn region(mut code: usize) -> Region {
@@ -146,14 +145,14 @@ fn single_head_guard_preserves_complete_closure() {
                     &index,
                     &producers,
                     (&region, &knowledge),
-                    Work::new(u64::MAX),
+                    Meter::local(u64::MAX),
                 ),
                 &narrow(
                     &theory,
                     &index,
                     &scanning,
                     (&region, &knowledge),
-                    Work::new(u64::MAX),
+                    Meter::local(u64::MAX),
                 ),
             );
         }
@@ -165,16 +164,17 @@ fn single_head_guard_preserves_inherited_children() {
     let theory = singleton_heads();
     let index = Narrower::new(&theory);
     let producers = extract(&theory);
-    let mut scanning = producers.clone();
-    scanning.has_competing_heads = true;
     let parent = narrow(
         &theory,
         &index,
         &producers,
         (&Region::all_open(3), &index.knowledge()),
-        Work::new(u64::MAX),
+        Meter::local(u64::MAX),
     );
     assert!(matches!(parent.attempt.result, Ok(Narrowing::Fixed { .. })));
+    // Both child routes inherit the parent's completed classification cache.
+    let mut scanning = producers.clone();
+    scanning.has_competing_heads = true;
     for held in [false, true] {
         let mut child = parent.region.clone();
         assert!(child.is_open(1));
@@ -185,14 +185,14 @@ fn single_head_guard_preserves_inherited_children() {
                 &index,
                 &producers,
                 (&child, &parent.knowledge),
-                Work::new(u64::MAX),
+                Meter::local(u64::MAX),
             ),
             &narrow(
                 &theory,
                 &index,
                 &scanning,
                 (&child, &parent.knowledge),
-                Work::new(u64::MAX),
+                Meter::local(u64::MAX),
             ),
         );
     }
@@ -205,7 +205,8 @@ struct Quota {
     refunded: u64,
 }
 
-impl NarrowingQuota for Quota {
+impl zetesis_algebra::Quota for Quota {
+    type Error = Stop;
     fn reserve(&mut self, wanted: u64) -> Result<u64, Stop> {
         self.requests.push(wanted);
         if self.remaining == 0 {
@@ -224,14 +225,13 @@ impl NarrowingQuota for Quota {
 fn single_head_guard_preserves_refused_prefixes() {
     let theory = singleton_heads();
     let index = Narrower::new(&theory);
-    let producers = extract(&theory);
-    let mut scanning = producers.clone();
-    scanning.has_competing_heads = true;
+    let cold_producers = extract(&theory);
+    let producers = cold_producers.clone();
     let mut region = Region::all_open(3);
     assert!(region.hold(1));
     let knowledge = index.knowledge();
     let initial = (&region, &knowledge);
-    let complete = narrow(&theory, &index, &producers, initial, Work::new(u64::MAX));
+    let complete = narrow(&theory, &index, &producers, initial, Meter::local(u64::MAX));
     assert!(matches!(
         complete.attempt.result,
         Ok(Narrowing::Fixed { .. })
@@ -240,6 +240,11 @@ fn single_head_guard_preserves_refused_prefixes() {
     assert!(required > 0);
     for stop in [Stop::WorkLimit, Stop::Cancelled, Stop::Deadline] {
         for limit in 0..=required {
+            // Both routes and the complete baseline start with an empty
+            // classification cache, so every exact refusal prefix agrees.
+            let producers = cold_producers.clone();
+            let mut scanning = cold_producers.clone();
+            scanning.has_competing_heads = true;
             let mut guarded = Quota {
                 remaining: limit,
                 stop,
@@ -257,14 +262,14 @@ fn single_head_guard_preserves_refused_prefixes() {
                 &index,
                 &producers,
                 initial,
-                Work::reserved(&mut guarded),
+                Meter::reserved(&mut guarded),
             );
             let expected = narrow(
                 &theory,
                 &index,
                 &scanning,
                 initial,
-                Work::reserved(&mut reference),
+                Meter::reserved(&mut reference),
             );
             same(&actual, &expected);
             assert_eq!(actual.attempt.statistics.work, limit);
@@ -288,13 +293,14 @@ fn multiple_heads_keep_ordered_competitor_wakeups() {
     assert!(producers.has_competing_heads);
     let mut knowledge = index.knowledge();
     let mut lists = NarrowingScratch::default();
-    lists.prepare(theory.atom_count());
-    let mut closure = Closure {
+    lists.common.prepare(theory.atom_count());
+    let mut closure = Closure::<_, zetesis_algebra::AnswerSetsSought> {
         known: compact_mut(&mut knowledge),
-        lists: &mut lists,
+        lists: &mut lists.common,
+        learning: &mut lists.learning,
     };
     assert!(matches!(closure.sure(0), Step::Changed));
-    let mut work = Work::new(0);
+    let mut work = Meter::local(0);
     assert!(matches!(
         closure
             .teach_operands(
@@ -303,6 +309,7 @@ fn multiple_heads_keep_ordered_competitor_wakeups() {
                 0,
                 &mut work,
             )
+            .map_err(zetesis_algebra::Failure::into_stop)
             .unwrap(),
         Step::Changed
     ));
@@ -311,6 +318,6 @@ fn multiple_heads_keep_ordered_competitor_wakeups() {
     assert_eq!(closure.lists.heads, [1, 0]);
     assert_eq!(closure.lists.nodes, [(0, true), (1, true)]);
     assert_eq!(closure.lists.learned, [0]);
-    assert_eq!(closure.lists.pending, [3]);
-    assert_eq!(work.spent, 0);
+    assert_eq!(&*closure.lists.pending, [3]);
+    assert_eq!(work.charged(), 0);
 }

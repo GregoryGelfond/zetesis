@@ -29,9 +29,8 @@ impl crate::GroundingObserver for Observer {
 }
 
 fn compile(source: &str, enabled: bool, hybrid: bool) -> (Compiled, GroundingWork, route::Visits) {
-    // Disable continuation factoring in both runs. Component factoring is
-    // unchanged: connected constraint scopes or nonnormal heads make these
-    // route fixtures decline it before reaching the complete rule traversal.
+    // Disable continuation factoring in both runs. Independent components and
+    // complete rule traversal share the same matched-row reference control.
     crate::formula_factor::testing::scoped(false, || {
         let observer = Observer::default();
         let (compiled, visits) = route::scoped(enabled, || {
@@ -209,12 +208,51 @@ fn two_predicate_variations_keep_exact_catalog_and_graph_order() {
 #[test]
 fn disconnected_component_factoring_keeps_its_catalog_and_graph() {
     let (work, visits) = pair("p(1;2;3). q(1;2). :- p(X),q(Y).", false);
-    assert_eq!(
-        work.row_atoms,
-        Some(0),
-        "component factoring retains its own route"
+    // Even though the first fact makes each disjunction true, every selected
+    // witness still names its atom. The existence preflight names none.
+    assert_eq!(work.row_atoms, Some(5));
+    assert_eq!(visits.literals.len(), 5);
+}
+
+#[test]
+fn arithmetic_components_name_their_selected_rows() {
+    let source = "{p(1,a);p(1,b);q(2,a);q(2,b);a}. \
+        h(X,X+1) :- p(X,_),q(X+1,_). h(1,9) :- a.";
+    let (work, _) = pair(source, false);
+    assert!(work.row_atoms.unwrap() > 0);
+}
+
+#[test]
+fn reordered_components_keep_their_literal_mapping() {
+    let source = "{p(1,a);p(1,b);q(1,c);q(1,d);r(a);s(c)}. \
+        h(X) :- p(X,Y),r(Y),q(X,Z),s(Z).";
+    let (work, visits) = pair(source, false);
+    assert!(work.row_atoms.unwrap() > 0);
+    assert!(
+        visits
+            .literals
+            .iter()
+            .any(|&(literal, depth, _)| literal != depth)
     );
-    assert!(visits.literals.is_empty());
+}
+
+#[test]
+fn rejected_component_rows_keep_subsequent_witnesses_current() {
+    let source = "{p(1);p(2);q(1);q(2);r(1);r(2)}. \
+        h :- p(X),q(Y),X!=Y,r(Z).";
+    let (work, _) = pair(source, false);
+    assert!(work.row_atoms.unwrap() > 0);
+}
+
+#[test]
+fn factored_negative_bodies_preserve_exact_nodes() {
+    for head in ["", "h"] {
+        for negative in ["not n(X)", "not not n(X)"] {
+            let source = format!("{{p(1);p(2);q(1);q(2);n(1)}}. {head} :- p(X),{negative},q(Y).");
+            let (work, _) = pair(&source, false);
+            assert!(work.row_atoms.unwrap() > 0, "{source}");
+        }
+    }
 }
 
 #[test]

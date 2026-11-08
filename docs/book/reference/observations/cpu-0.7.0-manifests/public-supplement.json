@@ -1,0 +1,1064 @@
+{
+  "schema_version": 1,
+  "root": "../../../../../examples",
+  "cases": [
+    {
+      "entry": "scalability/parity-chain/parity_chain.lp",
+      "contract": {
+        "satisfiability": "unsat",
+        "family": "all",
+        "model_count": 0,
+        "cost": null,
+        "witnesses": [],
+        "required_symbols": [],
+        "notes": [
+          "Two parity chains over the inputs x(1..5), the second in the order of the permutation (I + 1)^3 + 7 mod 5: 13 atoms and 34 constraints. Both chains compute the exclusive-or of every input, so their results cannot differ.",
+          "The constraints form a linear system over GF(2) that elimination refutes in polynomial time; resolution needs exponentially many steps as p grows."
+        ]
+      },
+      "files": [
+        {
+          "path": "scalability/parity-chain/parity_chain.lp",
+          "sha256": "3be3da465bf6270d2d01dd87b1bdb2b6c3196024daee692152cefbda54ffbfda",
+          "includes": []
+        }
+      ]
+    },
+    {
+      "entry": "scalability/parity-mixed/parity_mixed.lp",
+      "contract": {
+        "satisfiability": "sat",
+        "family": "all",
+        "model_count": 21,
+        "cost": null,
+        "witnesses": [
+          [
+            "on(1)",
+            "on(10)",
+            "on(12)",
+            "on(6)",
+            "on(7)",
+            "on(8)",
+            "on(9)"
+          ],
+          [
+            "on(1)",
+            "on(10)",
+            "on(2)",
+            "on(3)",
+            "on(4)",
+            "on(5)",
+            "on(6)",
+            "on(7)",
+            "on(8)",
+            "on(9)"
+          ],
+          [
+            "on(1)",
+            "on(11)",
+            "on(12)",
+            "on(13)",
+            "on(14)",
+            "on(15)",
+            "on(3)",
+            "on(5)",
+            "on(7)",
+            "on(9)"
+          ],
+          [
+            "on(1)",
+            "on(11)",
+            "on(12)",
+            "on(13)",
+            "on(14)",
+            "on(3)",
+            "on(6)",
+            "on(9)"
+          ],
+          [
+            "on(1)",
+            "on(11)",
+            "on(12)",
+            "on(13)",
+            "on(15)",
+            "on(3)",
+            "on(4)",
+            "on(6)",
+            "on(7)",
+            "on(9)"
+          ],
+          [
+            "on(1)",
+            "on(11)",
+            "on(12)",
+            "on(13)",
+            "on(3)",
+            "on(4)",
+            "on(5)",
+            "on(9)"
+          ],
+          [
+            "on(1)",
+            "on(11)",
+            "on(12)",
+            "on(6)",
+            "on(7)",
+            "on(8)"
+          ],
+          [
+            "on(1)",
+            "on(11)",
+            "on(13)",
+            "on(14)",
+            "on(2)",
+            "on(4)",
+            "on(5)",
+            "on(6)",
+            "on(9)"
+          ],
+          [
+            "on(1)",
+            "on(11)",
+            "on(15)",
+            "on(2)",
+            "on(3)",
+            "on(4)",
+            "on(8)"
+          ],
+          [
+            "on(1)",
+            "on(11)",
+            "on(2)",
+            "on(3)",
+            "on(4)",
+            "on(5)",
+            "on(6)",
+            "on(7)",
+            "on(8)"
+          ],
+          [
+            "on(10)",
+            "on(11)",
+            "on(12)",
+            "on(13)",
+            "on(2)",
+            "on(6)",
+            "on(7)",
+            "on(8)"
+          ],
+          [
+            "on(10)",
+            "on(11)",
+            "on(12)",
+            "on(14)",
+            "on(15)",
+            "on(2)",
+            "on(3)",
+            "on(5)",
+            "on(7)",
+            "on(9)"
+          ],
+          [
+            "on(10)",
+            "on(11)",
+            "on(12)",
+            "on(15)",
+            "on(2)",
+            "on(3)",
+            "on(4)",
+            "on(6)",
+            "on(7)",
+            "on(9)"
+          ],
+          [
+            "on(10)",
+            "on(11)",
+            "on(13)",
+            "on(15)",
+            "on(3)",
+            "on(4)",
+            "on(8)"
+          ],
+          [
+            "on(10)",
+            "on(11)",
+            "on(13)",
+            "on(3)",
+            "on(4)",
+            "on(5)",
+            "on(6)",
+            "on(7)",
+            "on(8)"
+          ],
+          [
+            "on(10)",
+            "on(11)",
+            "on(14)",
+            "on(15)",
+            "on(4)",
+            "on(7)",
+            "on(9)"
+          ],
+          [
+            "on(12)",
+            "on(13)",
+            "on(14)",
+            "on(15)",
+            "on(2)",
+            "on(4)",
+            "on(6)",
+            "on(8)",
+            "on(9)"
+          ],
+          [
+            "on(12)",
+            "on(13)",
+            "on(14)",
+            "on(2)",
+            "on(4)",
+            "on(5)",
+            "on(7)",
+            "on(8)",
+            "on(9)"
+          ],
+          [
+            "on(12)",
+            "on(13)",
+            "on(2)",
+            "on(6)",
+            "on(7)",
+            "on(8)",
+            "on(9)"
+          ],
+          [
+            "on(13)",
+            "on(15)",
+            "on(3)",
+            "on(4)",
+            "on(8)",
+            "on(9)"
+          ],
+          [
+            "on(13)",
+            "on(3)",
+            "on(4)",
+            "on(5)",
+            "on(6)",
+            "on(7)",
+            "on(8)",
+            "on(9)"
+          ]
+        ],
+        "required_symbols": [],
+        "notes": [
+          "Tseitin's parity formula with every vertex charged 0 on the 3-regular graph with p = 5, whose 64 solutions are the graph's even subgraphs, cut down to 21 by eight random three-literal clauses over the 15 edge atoms.",
+          "The parity constraints form a linear system over GF(2); the random clauses do not, so the even subgraphs the clauses allow must still be searched."
+        ]
+      },
+      "files": [
+        {
+          "path": "scalability/parity-mixed/parity_mixed.lp",
+          "sha256": "850168bb72c8068b6f9e067400a688293df88b5187409093c1be88754cbd80fe",
+          "includes": []
+        }
+      ]
+    },
+    {
+      "entry": "scalability/parity-tseitin/parity_tseitin.lp",
+      "contract": {
+        "satisfiability": "unsat",
+        "family": "all",
+        "model_count": 0,
+        "cost": null,
+        "witnesses": [],
+        "required_symbols": [],
+        "notes": [
+          "Tseitin's parity formula on the 3-regular graph with p = 5: 10 vertices, 15 edge atoms and 40 constraints, four per vertex, with an odd total charge. Summing the vertex equations counts every edge twice, so no choice of edges satisfies them.",
+          "The constraints form a linear system over GF(2) that elimination refutes in polynomial time; resolution needs exponentially many steps on expanding graphs as p grows."
+        ]
+      },
+      "files": [
+        {
+          "path": "scalability/parity-tseitin/parity_tseitin.lp",
+          "sha256": "4c22676741999506ad9074b7ee85c43d2e39d30cdd34ba44e5348a44abb7b142",
+          "includes": []
+        }
+      ]
+    },
+    {
+      "entry": "scalability/pigeonhole-clauses/pigeonhole_clauses.lp",
+      "contract": {
+        "satisfiability": "unsat",
+        "family": "all",
+        "model_count": 0,
+        "cost": null,
+        "witnesses": [],
+        "required_symbols": [],
+        "notes": [
+          "Five pigeons and four holes as clauses over 20 choice atoms: one constraint per pigeon that it occupies no hole and one per pair of pigeons sharing a hole, 45 in all.",
+          "Counting the incidences once by pigeon and once by hole refutes the conditions at once; resolution needs exponentially many steps as the holes grow."
+        ]
+      },
+      "files": [
+        {
+          "path": "scalability/pigeonhole-clauses/pigeonhole_clauses.lp",
+          "sha256": "f5d8004a9928415ecbc604c7f3c3ac8e697d54aeee15eb58bc1a85a668ebc6aa",
+          "includes": []
+        }
+      ]
+    },
+    {
+      "entry": "scalability/poker/draw_poker_tests.lp",
+      "contract": {
+        "satisfiability": "sat",
+        "family": "all",
+        "model_count": 36,
+        "cost": null,
+        "witnesses": [
+          [
+            "hand(hero,10,clubs)",
+            "hand(hero,11,clubs)",
+            "hand(hero,12,clubs)",
+            "hand(hero,13,clubs)",
+            "hand(hero,9,clubs)",
+            "top_hand(hero,9,9,13,na)"
+          ],
+          [
+            "hand(hero,10,clubs)",
+            "hand(hero,11,clubs)",
+            "hand(hero,12,clubs)",
+            "hand(hero,8,clubs)",
+            "hand(hero,9,clubs)",
+            "top_hand(hero,9,8,12,na)"
+          ],
+          [
+            "hand(hero,10,clubs)",
+            "hand(hero,11,clubs)",
+            "hand(hero,7,clubs)",
+            "hand(hero,8,clubs)",
+            "hand(hero,9,clubs)",
+            "top_hand(hero,9,7,11,na)"
+          ],
+          [
+            "hand(hero,10,clubs)",
+            "hand(hero,6,clubs)",
+            "hand(hero,7,clubs)",
+            "hand(hero,8,clubs)",
+            "hand(hero,9,clubs)",
+            "top_hand(hero,9,6,10,na)"
+          ],
+          [
+            "hand(hero,10,diamonds)",
+            "hand(hero,11,diamonds)",
+            "hand(hero,12,diamonds)",
+            "hand(hero,13,diamonds)",
+            "hand(hero,9,diamonds)",
+            "top_hand(hero,9,9,13,na)"
+          ],
+          [
+            "hand(hero,10,diamonds)",
+            "hand(hero,11,diamonds)",
+            "hand(hero,12,diamonds)",
+            "hand(hero,8,diamonds)",
+            "hand(hero,9,diamonds)",
+            "top_hand(hero,9,8,12,na)"
+          ],
+          [
+            "hand(hero,10,diamonds)",
+            "hand(hero,11,diamonds)",
+            "hand(hero,7,diamonds)",
+            "hand(hero,8,diamonds)",
+            "hand(hero,9,diamonds)",
+            "top_hand(hero,9,7,11,na)"
+          ],
+          [
+            "hand(hero,10,diamonds)",
+            "hand(hero,6,diamonds)",
+            "hand(hero,7,diamonds)",
+            "hand(hero,8,diamonds)",
+            "hand(hero,9,diamonds)",
+            "top_hand(hero,9,6,10,na)"
+          ],
+          [
+            "hand(hero,10,hearts)",
+            "hand(hero,11,hearts)",
+            "hand(hero,12,hearts)",
+            "hand(hero,13,hearts)",
+            "hand(hero,9,hearts)",
+            "top_hand(hero,9,9,13,na)"
+          ],
+          [
+            "hand(hero,10,hearts)",
+            "hand(hero,11,hearts)",
+            "hand(hero,12,hearts)",
+            "hand(hero,8,hearts)",
+            "hand(hero,9,hearts)",
+            "top_hand(hero,9,8,12,na)"
+          ],
+          [
+            "hand(hero,10,hearts)",
+            "hand(hero,11,hearts)",
+            "hand(hero,7,hearts)",
+            "hand(hero,8,hearts)",
+            "hand(hero,9,hearts)",
+            "top_hand(hero,9,7,11,na)"
+          ],
+          [
+            "hand(hero,10,hearts)",
+            "hand(hero,6,hearts)",
+            "hand(hero,7,hearts)",
+            "hand(hero,8,hearts)",
+            "hand(hero,9,hearts)",
+            "top_hand(hero,9,6,10,na)"
+          ],
+          [
+            "hand(hero,10,spades)",
+            "hand(hero,11,spades)",
+            "hand(hero,12,spades)",
+            "hand(hero,13,spades)",
+            "hand(hero,9,spades)",
+            "top_hand(hero,9,9,13,na)"
+          ],
+          [
+            "hand(hero,10,spades)",
+            "hand(hero,11,spades)",
+            "hand(hero,12,spades)",
+            "hand(hero,8,spades)",
+            "hand(hero,9,spades)",
+            "top_hand(hero,9,8,12,na)"
+          ],
+          [
+            "hand(hero,10,spades)",
+            "hand(hero,11,spades)",
+            "hand(hero,7,spades)",
+            "hand(hero,8,spades)",
+            "hand(hero,9,spades)",
+            "top_hand(hero,9,7,11,na)"
+          ],
+          [
+            "hand(hero,10,spades)",
+            "hand(hero,6,spades)",
+            "hand(hero,7,spades)",
+            "hand(hero,8,spades)",
+            "hand(hero,9,spades)",
+            "top_hand(hero,9,6,10,na)"
+          ],
+          [
+            "hand(hero,14,clubs)",
+            "hand(hero,2,clubs)",
+            "hand(hero,3,clubs)",
+            "hand(hero,4,clubs)",
+            "hand(hero,5,clubs)",
+            "top_hand(hero,9,1,5,na)"
+          ],
+          [
+            "hand(hero,14,diamonds)",
+            "hand(hero,2,diamonds)",
+            "hand(hero,3,diamonds)",
+            "hand(hero,4,diamonds)",
+            "hand(hero,5,diamonds)",
+            "top_hand(hero,9,1,5,na)"
+          ],
+          [
+            "hand(hero,14,hearts)",
+            "hand(hero,2,hearts)",
+            "hand(hero,3,hearts)",
+            "hand(hero,4,hearts)",
+            "hand(hero,5,hearts)",
+            "top_hand(hero,9,1,5,na)"
+          ],
+          [
+            "hand(hero,14,spades)",
+            "hand(hero,2,spades)",
+            "hand(hero,3,spades)",
+            "hand(hero,4,spades)",
+            "hand(hero,5,spades)",
+            "top_hand(hero,9,1,5,na)"
+          ],
+          [
+            "hand(hero,2,clubs)",
+            "hand(hero,3,clubs)",
+            "hand(hero,4,clubs)",
+            "hand(hero,5,clubs)",
+            "hand(hero,6,clubs)",
+            "top_hand(hero,9,2,6,na)"
+          ],
+          [
+            "hand(hero,2,diamonds)",
+            "hand(hero,3,diamonds)",
+            "hand(hero,4,diamonds)",
+            "hand(hero,5,diamonds)",
+            "hand(hero,6,diamonds)",
+            "top_hand(hero,9,2,6,na)"
+          ],
+          [
+            "hand(hero,2,hearts)",
+            "hand(hero,3,hearts)",
+            "hand(hero,4,hearts)",
+            "hand(hero,5,hearts)",
+            "hand(hero,6,hearts)",
+            "top_hand(hero,9,2,6,na)"
+          ],
+          [
+            "hand(hero,2,spades)",
+            "hand(hero,3,spades)",
+            "hand(hero,4,spades)",
+            "hand(hero,5,spades)",
+            "hand(hero,6,spades)",
+            "top_hand(hero,9,2,6,na)"
+          ],
+          [
+            "hand(hero,3,clubs)",
+            "hand(hero,4,clubs)",
+            "hand(hero,5,clubs)",
+            "hand(hero,6,clubs)",
+            "hand(hero,7,clubs)",
+            "top_hand(hero,9,3,7,na)"
+          ],
+          [
+            "hand(hero,3,diamonds)",
+            "hand(hero,4,diamonds)",
+            "hand(hero,5,diamonds)",
+            "hand(hero,6,diamonds)",
+            "hand(hero,7,diamonds)",
+            "top_hand(hero,9,3,7,na)"
+          ],
+          [
+            "hand(hero,3,hearts)",
+            "hand(hero,4,hearts)",
+            "hand(hero,5,hearts)",
+            "hand(hero,6,hearts)",
+            "hand(hero,7,hearts)",
+            "top_hand(hero,9,3,7,na)"
+          ],
+          [
+            "hand(hero,3,spades)",
+            "hand(hero,4,spades)",
+            "hand(hero,5,spades)",
+            "hand(hero,6,spades)",
+            "hand(hero,7,spades)",
+            "top_hand(hero,9,3,7,na)"
+          ],
+          [
+            "hand(hero,4,clubs)",
+            "hand(hero,5,clubs)",
+            "hand(hero,6,clubs)",
+            "hand(hero,7,clubs)",
+            "hand(hero,8,clubs)",
+            "top_hand(hero,9,4,8,na)"
+          ],
+          [
+            "hand(hero,4,diamonds)",
+            "hand(hero,5,diamonds)",
+            "hand(hero,6,diamonds)",
+            "hand(hero,7,diamonds)",
+            "hand(hero,8,diamonds)",
+            "top_hand(hero,9,4,8,na)"
+          ],
+          [
+            "hand(hero,4,hearts)",
+            "hand(hero,5,hearts)",
+            "hand(hero,6,hearts)",
+            "hand(hero,7,hearts)",
+            "hand(hero,8,hearts)",
+            "top_hand(hero,9,4,8,na)"
+          ],
+          [
+            "hand(hero,4,spades)",
+            "hand(hero,5,spades)",
+            "hand(hero,6,spades)",
+            "hand(hero,7,spades)",
+            "hand(hero,8,spades)",
+            "top_hand(hero,9,4,8,na)"
+          ],
+          [
+            "hand(hero,5,clubs)",
+            "hand(hero,6,clubs)",
+            "hand(hero,7,clubs)",
+            "hand(hero,8,clubs)",
+            "hand(hero,9,clubs)",
+            "top_hand(hero,9,5,9,na)"
+          ],
+          [
+            "hand(hero,5,diamonds)",
+            "hand(hero,6,diamonds)",
+            "hand(hero,7,diamonds)",
+            "hand(hero,8,diamonds)",
+            "hand(hero,9,diamonds)",
+            "top_hand(hero,9,5,9,na)"
+          ],
+          [
+            "hand(hero,5,hearts)",
+            "hand(hero,6,hearts)",
+            "hand(hero,7,hearts)",
+            "hand(hero,8,hearts)",
+            "hand(hero,9,hearts)",
+            "top_hand(hero,9,5,9,na)"
+          ],
+          [
+            "hand(hero,5,spades)",
+            "hand(hero,6,spades)",
+            "hand(hero,7,spades)",
+            "hand(hero,8,spades)",
+            "hand(hero,9,spades)",
+            "top_hand(hero,9,5,9,na)"
+          ]
+        ],
+        "required_symbols": [],
+        "notes": [
+          "All 36 nonroyal straight flushes: nine low ranks in each of four suits.",
+          "The ace-low hand has low rank 1, high rank 5, and card value 14 for the ace.",
+          "The manifest records every displayed answer; fresh clingo qualification remains required."
+        ]
+      },
+      "files": [
+        {
+          "path": "scalability/poker/draw_poker_tests.lp",
+          "sha256": "3d0f76216569de5dd65f789edfb354ce59b5c08ddea6a098cea2467b2628fc4a",
+          "includes": [
+            {
+              "spelling": "draw_poker.lp",
+              "target": "scalability/poker/draw_poker.lp"
+            }
+          ]
+        },
+        {
+          "path": "scalability/poker/draw_poker.lp",
+          "sha256": "fd7fda56bf940ece43621831c79a34a0db77648774d65e95692dc96ae2d52eef",
+          "includes": []
+        }
+      ]
+    },
+    {
+      "entry": "scalability/shifted-subset-sum/subset_sum.lp",
+      "contract": {
+        "satisfiability": "unsat",
+        "family": "all",
+        "model_count": 0,
+        "cost": null,
+        "witnesses": [],
+        "required_symbols": [],
+        "notes": [
+          "At n=8 the weights are 9..16. No singleton reaches 17 and the smallest pair weighs 19.",
+          "More generally target=2*n+1 is unattainable; target=2*n+3 selects exactly items 1 and 2 for n>=2."
+        ]
+      },
+      "files": [
+        {
+          "path": "scalability/shifted-subset-sum/subset_sum.lp",
+          "sha256": "366ed74d26e462b7f1fc02fc73bf4891daa1843b71a7351b01c8e5c137e627de",
+          "includes": []
+        }
+      ]
+    },
+    {
+      "entry": "scalability/strategic-companies/strategic_companies.lp",
+      "contract": {
+        "satisfiability": "sat",
+        "family": "all",
+        "model_count": 29,
+        "cost": null,
+        "witnesses": [
+          [
+            "strat(1)",
+            "strat(10)",
+            "strat(11)",
+            "strat(12)",
+            "strat(2)",
+            "strat(4)",
+            "strat(8)"
+          ],
+          [
+            "strat(1)",
+            "strat(10)",
+            "strat(11)",
+            "strat(12)",
+            "strat(2)",
+            "strat(6)",
+            "strat(9)"
+          ],
+          [
+            "strat(1)",
+            "strat(10)",
+            "strat(11)",
+            "strat(12)",
+            "strat(2)",
+            "strat(8)",
+            "strat(9)"
+          ],
+          [
+            "strat(1)",
+            "strat(10)",
+            "strat(11)",
+            "strat(12)",
+            "strat(4)",
+            "strat(6)",
+            "strat(8)"
+          ],
+          [
+            "strat(1)",
+            "strat(10)",
+            "strat(11)",
+            "strat(12)",
+            "strat(6)",
+            "strat(8)",
+            "strat(9)"
+          ],
+          [
+            "strat(1)",
+            "strat(10)",
+            "strat(12)",
+            "strat(4)",
+            "strat(6)",
+            "strat(7)",
+            "strat(8)"
+          ],
+          [
+            "strat(1)",
+            "strat(10)",
+            "strat(5)",
+            "strat(7)",
+            "strat(8)",
+            "strat(9)"
+          ],
+          [
+            "strat(1)",
+            "strat(10)",
+            "strat(6)",
+            "strat(7)",
+            "strat(8)",
+            "strat(9)"
+          ],
+          [
+            "strat(1)",
+            "strat(11)",
+            "strat(12)",
+            "strat(2)",
+            "strat(3)",
+            "strat(4)",
+            "strat(8)"
+          ],
+          [
+            "strat(1)",
+            "strat(11)",
+            "strat(12)",
+            "strat(2)",
+            "strat(3)",
+            "strat(8)",
+            "strat(9)"
+          ],
+          [
+            "strat(1)",
+            "strat(11)",
+            "strat(12)",
+            "strat(3)",
+            "strat(4)",
+            "strat(6)"
+          ],
+          [
+            "strat(1)",
+            "strat(11)",
+            "strat(12)",
+            "strat(3)",
+            "strat(6)",
+            "strat(9)"
+          ],
+          [
+            "strat(1)",
+            "strat(12)",
+            "strat(3)",
+            "strat(4)",
+            "strat(6)",
+            "strat(7)",
+            "strat(8)"
+          ],
+          [
+            "strat(10)",
+            "strat(11)",
+            "strat(12)",
+            "strat(2)",
+            "strat(4)",
+            "strat(7)"
+          ],
+          [
+            "strat(10)",
+            "strat(11)",
+            "strat(12)",
+            "strat(2)",
+            "strat(5)",
+            "strat(9)"
+          ],
+          [
+            "strat(10)",
+            "strat(11)",
+            "strat(2)",
+            "strat(7)",
+            "strat(9)"
+          ],
+          [
+            "strat(10)",
+            "strat(12)",
+            "strat(2)",
+            "strat(4)",
+            "strat(7)",
+            "strat(8)"
+          ],
+          [
+            "strat(10)",
+            "strat(12)",
+            "strat(6)",
+            "strat(7)",
+            "strat(8)",
+            "strat(9)"
+          ],
+          [
+            "strat(10)",
+            "strat(2)",
+            "strat(7)",
+            "strat(8)",
+            "strat(9)"
+          ],
+          [
+            "strat(11)",
+            "strat(12)",
+            "strat(2)",
+            "strat(3)",
+            "strat(4)",
+            "strat(7)"
+          ],
+          [
+            "strat(11)",
+            "strat(12)",
+            "strat(2)",
+            "strat(3)",
+            "strat(7)",
+            "strat(9)"
+          ],
+          [
+            "strat(11)",
+            "strat(12)",
+            "strat(3)",
+            "strat(5)",
+            "strat(9)"
+          ],
+          [
+            "strat(11)",
+            "strat(12)",
+            "strat(3)",
+            "strat(6)",
+            "strat(7)",
+            "strat(9)"
+          ],
+          [
+            "strat(12)",
+            "strat(2)",
+            "strat(3)",
+            "strat(4)",
+            "strat(7)",
+            "strat(8)"
+          ],
+          [
+            "strat(12)",
+            "strat(3)",
+            "strat(6)",
+            "strat(7)",
+            "strat(8)",
+            "strat(9)"
+          ],
+          [
+            "strat(12)",
+            "strat(4)",
+            "strat(5)",
+            "strat(8)"
+          ],
+          [
+            "strat(12)",
+            "strat(5)",
+            "strat(8)",
+            "strat(9)"
+          ],
+          [
+            "strat(2)",
+            "strat(3)",
+            "strat(7)",
+            "strat(8)",
+            "strat(9)"
+          ],
+          [
+            "strat(2)",
+            "strat(5)",
+            "strat(7)",
+            "strat(8)",
+            "strat(9)"
+          ]
+        ],
+        "required_symbols": [],
+        "notes": [
+          "Twelve companies and 24 products, each produced by four companies; one company in three jointly controlled by four others; seed 1. The 29 answer sets are the strategic sets.",
+          "Disjunctive heads with control rules through strategic companies: every candidate runs the proper-subset query over its frozen reduct."
+        ]
+      },
+      "files": [
+        {
+          "path": "scalability/strategic-companies/strategic_companies.lp",
+          "sha256": "cf562da040add78158e15760e7cdd2c2fa859bb9dd7e2c4f1194494a6cf8cc93",
+          "includes": []
+        }
+      ]
+    },
+    {
+      "entry": "scalability/two-qbf/two_qbf.lp",
+      "contract": {
+        "satisfiability": "sat",
+        "family": "all",
+        "model_count": 2,
+        "cost": null,
+        "witnesses": [
+          [
+            "nx(1)",
+            "nx(2)",
+            "nx(3)"
+          ],
+          [
+            "nx(3)",
+            "x(1)",
+            "x(2)"
+          ]
+        ],
+        "required_symbols": [],
+        "notes": [
+          "Three existential and eight universal variables; 68 terms, each one existential and three universal literals; seed 1. Two existential assignments make the formula hold for every universal assignment.",
+          "Every answer set is saturated, so membership needs the complete check that no universal assignment falsifies the formula: the frozen reduct's proper-subset query, which the frozen-positive certificate declines."
+        ]
+      },
+      "files": [
+        {
+          "path": "scalability/two-qbf/two_qbf.lp",
+          "sha256": "c9dc3cf1c650fae86a0d7fa5827c531a8b415eb3dfdcd200cfef47a8dbed7e44",
+          "includes": []
+        }
+      ]
+    },
+    {
+      "entry": "scalability/two-qbf-parity/two_qbf_parity.lp",
+      "contract": {
+        "satisfiability": "sat",
+        "family": "all",
+        "model_count": 1,
+        "cost": null,
+        "witnesses": [
+          [
+            "nx(1)",
+            "nx(2)"
+          ]
+        ],
+        "required_symbols": [],
+        "notes": [
+          "Two existential variables; the core is a parity contradiction over n=6 inputs, computed by two chains of three-variable exclusive-or gates (16 universal variables, 42 clauses); seed 1 orders the second chain. The first existential assignment gets the whole contradiction, the other three lose one clause each.",
+          "Every answer set is saturated, so membership needs the complete check that no universal assignment satisfies its core: the frozen reduct's proper-subset query. At n=16 the stable candidate's query walks about 131,000 regions."
+        ]
+      },
+      "files": [
+        {
+          "path": "scalability/two-qbf-parity/two_qbf_parity.lp",
+          "sha256": "2c3a862dabf858f0f017083a3c6753cf97fb33a7d69092817a451b78f98ff3ea",
+          "includes": []
+        }
+      ]
+    },
+    {
+      "entry": "scalability/two-qbf-pigeonhole/two_qbf_pigeonhole.lp",
+      "contract": {
+        "satisfiability": "sat",
+        "family": "all",
+        "model_count": 1,
+        "cost": null,
+        "witnesses": [
+          [
+            "nx(1)",
+            "nx(2)"
+          ]
+        ],
+        "required_symbols": [],
+        "notes": [
+          "Two existential variables; the core is the pigeonhole formula with 5 pigeons and 4 holes (20 universal variables, 45 clauses). The first existential assignment gets the whole contradiction, the other three lose one clause each.",
+          "Every candidate's minimality check carries work, since the satisfiable cores are hard to search too. At 6 holes the subset queries walk about 33,000 regions."
+        ]
+      },
+      "files": [
+        {
+          "path": "scalability/two-qbf-pigeonhole/two_qbf_pigeonhole.lp",
+          "sha256": "4de3da43035196cf7f37e5ba17222ceba22d019e223eb6e682c450a8dd6a0c7f",
+          "includes": []
+        }
+      ]
+    },
+    {
+      "entry": "scalability/two-qbf-tseitin/two_qbf_tseitin.lp",
+      "contract": {
+        "satisfiability": "sat",
+        "family": "all",
+        "model_count": 1,
+        "cost": null,
+        "witnesses": [
+          [
+            "nx(1)",
+            "nx(2)"
+          ]
+        ],
+        "required_symbols": [],
+        "notes": [
+          "Two existential variables; the core is Tseitin's parity formula on the committed 3-regular graph on 12 vertices (18 universal variables, 48 clauses) with an odd total charge. The first existential assignment gets the whole contradiction, the other three lose one clause each.",
+          "Every answer set is saturated, so membership needs the complete check that no universal assignment satisfies its core: the frozen reduct's proper-subset query. On 24 vertices the subset queries walk about 56,000 regions."
+        ]
+      },
+      "files": [
+        {
+          "path": "scalability/two-qbf-tseitin/two_qbf_tseitin.lp",
+          "sha256": "7c18fe0f648b6d74ba4979e691d5e73ecd2e4074365da199fdef0f8f0710ad5b",
+          "includes": []
+        }
+      ]
+    },
+    {
+      "entry": "wide-mastermind/68/mm-68-examples.lp",
+      "contract": {
+        "satisfiability": "sat",
+        "family": "all",
+        "model_count": 45832,
+        "cost": null,
+        "witnesses": [],
+        "required_symbols": [],
+        "notes": [
+          "Complete enumeration: all 45,832 codes consistent with the one active scored guess; each campaign requires fresh clingo qualification."
+        ]
+      },
+      "files": [
+        {
+          "path": "wide-mastermind/68/mm-68-examples.lp",
+          "sha256": "7d201478242b35de73ed5e671388738eeffebb108044fc297bf513e302b93000",
+          "includes": [
+            {
+              "spelling": "mm-68.lp",
+              "target": "wide-mastermind/68/mm-68.lp"
+            },
+            {
+              "spelling": "../mm-base.lp",
+              "target": "wide-mastermind/mm-base.lp"
+            }
+          ]
+        },
+        {
+          "path": "wide-mastermind/68/mm-68.lp",
+          "sha256": "2ec0d379cfcced3ff156c4ca87dbb4bf3ccaef5aeba9c50ad04fc7e621a66a43",
+          "includes": []
+        },
+        {
+          "path": "wide-mastermind/mm-base.lp",
+          "sha256": "176a1598c9f946d1952195cdabe752088f65575a45d8fafd5d16b385f1aafa52",
+          "includes": []
+        }
+      ]
+    }
+  ]
+}

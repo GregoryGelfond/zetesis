@@ -7,15 +7,14 @@ use crate::{
     AnswerSelection, Backend, ExecutionResources, Oracle, SolveConfig, SolveMeasurements,
     SolvePhase,
 };
-use zetesis_cpu::Cancellation;
+use zetesis_algebra::Cancellation;
 use zetesis_reference_support::formula;
-use zetesis_sat::{PhaseMeasurement, SearchPhaseTimings};
+use zetesis_stable::{PhaseMeasurement, SearchPhaseTimings};
 
-fn phases(timing: SearchPhaseTimings) -> [(SolvePhase, PhaseMeasurement); 5] {
+fn phases(timing: SearchPhaseTimings) -> [(SolvePhase, PhaseMeasurement); 4] {
     [
         (SolvePhase::CandidateGeneration, timing.candidates),
         (SolvePhase::OriginalValidation, timing.original_validation),
-        (SolvePhase::ReductPreparation, timing.reduct_preparation),
         (SolvePhase::ExactReductMembership, timing.reduct),
         (SolvePhase::CertifiedMembership, timing.certified),
     ]
@@ -46,10 +45,9 @@ fn interleaved_sessions_preserve_all_phase_attempts() {
         atoms: admitted.atom_catalog(),
         objectives: admitted.objectives(),
         required_choices: admitted.required_choices(),
-        gate_atoms: 0,
         keyed_constraints: 0,
         key_analysis: zetesis_themelios::KeyAnalysis::Complete,
-        certificate_order: zetesis_sat::CertificateOrder::TightFirst,
+        certificate_order: zetesis_stable::CertificateOrder::TightFirst,
     };
     let mut sessions = [(), ()].map(|()| {
         FormulaSession::with_selection(
@@ -58,6 +56,7 @@ fn interleaved_sessions_preserve_all_phase_attempts() {
                 &config,
                 &ExecutionResources::default(),
                 None,
+                &cancellation,
                 &mut observations,
             )
             .unwrap(),

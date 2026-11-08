@@ -39,7 +39,7 @@ positive signs use the same lower bound; their reduct behavior remains distinct.
 Proof outline: a finite conjunction is sure exactly when each conjunct is sure.
 The existing implication readings reduce the two negation signs to the stated
 lower/upper tests. Ground scalar filtering is already discharged before this body. -/
-theorem sure_antecedent_iff (c : Cube A) (r : Semantics.Rule A) :
+theorem sure_antecedent_iff (c : Region A) (r : Semantics.Rule A) :
     Sure c (NormalFerraris.antecedent r) ↔
       (∀ a ∈ r.positive, c.lower a) ∧
       (∀ a ∈ r.gateTrue, c.lower a) ∧
@@ -62,9 +62,9 @@ theorem sure_antecedent_iff (c : Cube A) (r : Semantics.Rule A) :
   simp [and_assoc]
 
 /-- Held/cut literals make the complete original body true in every interpretation
-between the bounds. `Cube.Contains` states precisely lower ⊆ candidate ⊆ upper;
+between the bounds. `Region.Contains` states precisely lower ⊆ candidate ⊆ upper;
 membership in completed possible support alone is not a lower-bound fact. -/
-theorem held_body_satisfied (c : Cube A) (r : Semantics.Rule A)
+theorem held_body_satisfied (c : Region A) (r : Semantics.Rule A)
     (positive : ∀ a ∈ r.positive, c.lower a)
     (doubleNegative : ∀ a ∈ r.gateTrue, c.lower a)
     (negative : ∀ a ∈ r.gateFalse, ¬ c.upper a)
@@ -80,7 +80,7 @@ law, not a refinement proof for a concrete join or its bounded execution.
 Proof outline: a filtered witness still belongs to the original source. Conversely,
 the necessary-condition premise retains each original sure witness unchanged. -/
 theorem necessary_selection_preserves_witness (source : List ι) (body : ι → Formula A)
-    (c : Cube A) (keep : ι → Bool)
+    (c : Region A) (keep : ι → Bool)
     (necessary : ∀ occurrence ∈ source, Sure c (body occurrence) → keep occurrence = true) :
     (∃ occurrence ∈ source.filter keep, Sure c (body occurrence)) ↔
       ∃ occurrence ∈ source, Sure c (body occurrence) := by
@@ -102,7 +102,7 @@ Proof outline: occurrence membership places its negated body in the appended
 original theory. The existing sure-body refutation law then excludes every
 answer set in the region, already by failure of original satisfaction. -/
 theorem sure_occurrence_refutes (P : Theory A) (source : List ι)
-    (body : ι → Formula A) (c : Cube A) (occurrence : ι)
+    (body : ι → Formula A) (c : Region A) (occurrence : ι)
     (member : occurrence ∈ source) (sure : Sure c (body occurrence)) :
     ∀ M, c.Contains M → ¬ Stable M (P ++ (source.map body).map Ferraris.Neg) := by
   have original : Ferraris.Neg (body occurrence) ∈ P ++ (source.map body).map Ferraris.Neg :=
@@ -119,7 +119,7 @@ true test. Pointwise test soundness supplies the sure reading; the original
 occurrence law excludes every answer set in the region. This is exactly the
 soundness premise of `CoverageTree.refuted`, with original stability as `valid`. -/
 theorem scan_refutes (P : Theory A) (source : List ι) (body : ι → Formula A)
-    (c : Cube A) (test : ι → Bool)
+    (c : Region A) (test : ι → Bool)
     (sound : ∀ occurrence ∈ source, test occurrence = true → Sure c (body occurrence))
     (fuel : Nat) (occurrence : ι)
     (refuted : StreamedConstraints.scan test fuel source = .violated occurrence) :
@@ -135,21 +135,21 @@ With one undecided atom the held-atom test is false, but the interpretation
 containing that atom violates its integrity constraint. Thus `NotRefuted` cannot
 replace the final original-satisfaction check, even after an exhaustive scan. -/
 theorem complete_scan_can_miss_violation :
-    let c : Cube Unit := ⟨Empty, Full⟩
+    let c : Region Unit := ⟨Empty, Full⟩
     StreamedConstraints.scan (fun _ : Unit => false) 2 [()] = .complete ∧
       ¬ Sure c (.atom ()) ∧ c.Contains Full ∧
       ¬ Models Full [Ferraris.Neg (.atom ())] := by
-  simp [StreamedConstraints.scan, Sure, FormulaBounds.read, Cube.Contains, Sub,
+  simp [StreamedConstraints.scan, Sure, FormulaBounds.read, Region.Contains, Sub,
     Empty, Full, Models, Ferraris.Neg, Satisfies]
 
 /-- An interrupted scan can coexist with an original answer set in its region.
 The empty interpretation satisfies `:- a` and has no proper subset. Therefore
 pending work cannot justify discarding this region as refuted. -/
 theorem pending_can_retain_answer :
-    let c : Cube Unit := ⟨Empty, Full⟩
+    let c : Region Unit := ⟨Empty, Full⟩
     StreamedConstraints.scan (fun _ : Unit => false) 0 [()] = .pending [()] ∧
       c.Contains Empty ∧ Stable Empty [Ferraris.Neg (.atom ())] := by
-  simp [StreamedConstraints.scan, Cube.Contains, Sub, Empty, Full,
+  simp [StreamedConstraints.scan, Region.Contains, Sub, Empty, Full,
     Stable, Models, Ferraris.Neg, Satisfies, ProperSub]
 
 end Zetesis.StreamedRegions

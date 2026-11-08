@@ -12,7 +12,7 @@ pub use count::CountRenderer;
 pub use human::HumanRenderer;
 pub use json::JsonRenderer;
 
-use zetesis_cpu::Cancellation;
+use zetesis_algebra::Cancellation;
 use zetesis_themelios::observation::{Limits, ModelView};
 
 use crate::{Publication, PublicationFailure, PublicationStop, RunError, SemanticOutcome};
@@ -166,15 +166,6 @@ impl<'a> PublicationView<'a> {
         match self.result {
             Ok(progress) => progress.phase_timings.as_ref(),
             Err(failure) => failure.phase_timings.as_deref(),
-        }
-    }
-
-    /// Relational source expansion accounting, when that admission route ran.
-    #[must_use]
-    pub fn expansion(self) -> Option<zetesis_themelios::ExpansionUsage> {
-        match self.result {
-            Ok(progress) => progress.expansion,
-            Err(failure) => failure.partial_report.as_ref().and_then(|p| p.expansion),
         }
     }
 }

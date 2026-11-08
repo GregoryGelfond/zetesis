@@ -11,9 +11,9 @@ publish = false
 themelios-program.workspace = true
 themelios-solve.workspace = true
 zetesis-core.workspace = true
-zetesis-cpu.workspace = true
+zetesis-algebra.workspace = true
 zetesis-ferraris.workspace = true
-zetesis-sat.workspace = true
+zetesis-stable.workspace = true
 zetesis-solve = { workspace = true, default-features = false }
 zetesis-themelios.workspace = true
 

@@ -156,25 +156,18 @@ eligible richer source through finite Ferraris countermodel checking. Syntax,
 arithmetic and resource failures are preserved. The
 [frontend guide](../zetesis-themelios/README.md) defines admitted source profiles.
 
-Advanced `--search clauses|regions` selects the formula route's search
-method, for proposing candidates and for the reduct's proper-subset query
-alike. Regions, the default, walk the region tree over the theory's atoms,
-narrowed by the theory's readings, for both: the leaves of the candidate
-tree are proposed, and the proper subsets of a candidate are searched as a
-second tree under the frozen reduct, so no clause form is built at all.
-Clauses is the classical search over a Tseitin encoding for both, exact
-exclusion of every candidate proposed and a clause query of the frozen
-reduct.
-The reduct decides membership either way, and a countermodel is validated
-independently of the method that found it; the flag changes which
-candidate is proposed next and the work charged, never whether one is
-accepted. `--stats` reports the regions visited, refuted and reached as
-leaves for the candidate tree and, under `--search regions`, for the reduct
-queries.
+The formula route walks the region tree over the theory's atoms, narrowed by
+the theory's readings: the leaves of the candidate tree are proposed, and the
+proper subsets of a candidate are searched as a second tree under the frozen
+reduct, so no clause form is built at all. The reduct decides membership, and a
+countermodel is validated independently of the search that found it. `--stats`
+reports the regions visited, refuted and reached as leaves for the candidate
+tree and for the reduct queries. The former `--search` option, which also
+offered a clause search, has been removed.
 
 `--threads auto|N` (`--workers` in existing scripts) defaults to the host's
 available parallelism, or one when availability is unknown. It sets the closure
-route's pool and, under `--search regions`, the region walkers. Native CPU region
+route's pool and the region walkers. Native CPU region
 workers decide the leaves they reach. Device region workers produce unchecked
 leaves in bounded rounds; all producers join before device membership checking
 and any exact CPU residual completion. The family of answer sets is the same as
@@ -297,26 +290,6 @@ coverage. The direct CPU scalar cursor does not consume the completion-batch
 allowance but still obeys the query workspace capacity. Optional class
 preparation and checking separately use the completion scratch capacity; their
 receipts do not establish a combined process-memory bound.
-
-Advanced `--source-batching independent|union|worlds` selects relational source
-sharing. Union/Worlds require lazy or automatic grounding with the CPU backend.
-Source and per-world work retain distinct receipts. A stopped world makes the
-whole batch incomplete. See [parallel execution](../../docs/book/rust/parallel.md).
-
-Independent relational CPU execution can adopt the compatible immutable query
-preparation retained by candidate narrowing; otherwise, the oracle prepares its
-own. It reuses that preparation and empty workspace capacities across batches,
-while each candidate keeps private truth state. Importing an owner retains its
-original preparation work and checks the oracle's preparation policy. The memory
-policy assigns each worker a share of the collective closure capacity. Collective
-admission includes preparation, idle retained workspaces and assigned candidate
-allowances. Explicit library configurations still reject an excessive or
-overflowing worker-capacity product before allocating the pool, compiling static
-rules or initializing candidates. This check also applies to eager and shared
-CPU closure routes; formula and device execution use their own resource checks.
-Source admission and policy checks can already have run. Preparation refusal and
-individual candidate refusal retain different interruption kinds. See the
-[ownership contract](../../docs/book/architecture/ownership.md#memory-contracts).
 
 Named reserved capacity, canonical or encoded payload, and original file bytes
 remain different quantities. Named capacity can include admitted allowances that
@@ -456,8 +429,7 @@ another solver argument appears, later `devices` arguments are file names.
 
 Maintained controls include [route selection](tests/integration/oracle_selection.rs),
 [source diagnostics](tests/integration/bundles.rs),
-[failure accounting](tests/integration/failure_reports.rs),
-[formula completion](tests/integration/formula_completion.rs) and
-[shared CPU execution](tests/integration/shared_cpu.rs).
+[failure accounting](tests/integration/failure_reports.rs) and
+[formula completion](tests/integration/formula_completion.rs).
 Portable regressions and actual physical-device tests have distinct purposes;
 [contributing guide](../../CONTRIBUTING.md#verification-and-review) describes their execution.

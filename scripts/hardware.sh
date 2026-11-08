@@ -71,10 +71,14 @@ while IFS='|' read -r group target expected names; do
 done <<EOT
 $table
 EOT
+groups_passed=0
+tests_passed=0
 while IFS='|' read -r group target expected names; do
     run_group "$group" "$target" "$names"
+    groups_passed=$((groups_passed + 1))
+    tests_passed=$((tests_passed + expected))
 done <<EOT
 $table
 EOT
 printf '%s\n' passed > "$hardware_dir/$backend-status.txt"
-printf '%s\n' "hardware qualification passed: $backend, 14 groups, 63 exact tests"
+printf '%s\n' "hardware qualification passed: $backend, $groups_passed groups, $tests_passed exact tests"

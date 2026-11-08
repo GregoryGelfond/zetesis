@@ -22,6 +22,7 @@ use crate::{
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::{collections::BTreeSet, path::Path};
+use zetesis_algebra::MeterBytes;
 
 const FIXED: [&str; 5] = [
     "Audit.lean",
@@ -72,12 +73,12 @@ pub fn verify_with_audit(
     live_audit: &[u8],
     limits: Limits,
 ) -> Result<Summary, Error> {
-    if live_audit.len() > limits.file_bytes {
-        return Err(Error::Limit {
+    MeterBytes::check(live_audit.len() as u128, limits.file_bytes as u128).map_err(|_| {
+        Error::Limit {
             resource: "live audit bytes",
             limit: limits.file_bytes,
-        });
-    }
+        }
+    })?;
     verify_record(root, record_name, limits, Some(live_audit))
 }
 

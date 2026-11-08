@@ -12,7 +12,7 @@ fn fitting_coefficient_ends_after_one_charged_term() {
     let mut region = Region::all_open(8);
     // The width is exactly 5. The lattice contains 20; reading one coefficient
     // proves intersection without a modulo test or visiting the other seven.
-    assert_eq!(closed_residual_work(&theory, &mut region), 2);
+    assert_eq!(closed_refutation_work(&theory, &mut region), 2);
     assert!((0..8).all(|atom| region.is_open(atom)));
 }
 
@@ -22,7 +22,7 @@ fn narrower_interval_retains_the_exact_progression_test() {
     let mut region = Region::all_open(8);
     // Width 4 does not satisfy the sufficient test, but 20 still lies inside
     // the interval. The existing charged remainder test supplies this witness.
-    assert_eq!(closed_residual_work(&theory, &mut region), 3);
+    assert_eq!(closed_refutation_work(&theory, &mut region), 3);
     assert!((0..8).all(|atom| region.is_open(atom)));
 }
 
@@ -92,7 +92,7 @@ fn the_first_open_coefficient_after_a_decided_tail_can_finish() {
         }
         // Charge the row, the decided unit, and one open coefficient. No
         // separate tail probe precedes this same ordered term traversal.
-        assert_eq!(closed_residual_work(&theory, &mut region), 3);
+        assert_eq!(closed_refutation_work(&theory, &mut region), 3);
         assert_eq!(region.decision(0), Some(value));
         assert!((1..9).all(|atom| region.is_open(atom)));
     }
@@ -130,7 +130,7 @@ fn fitting_grouped_coefficients_keep_i128_width() {
     let weight = 2 * i128::from(u64::MAX);
     let theory = interval(4, &terms, [weight + 1, 2 * weight + 1]);
     let mut region = Region::all_open(4);
-    assert_eq!(closed_residual_work(&theory, &mut region), 2);
+    assert_eq!(closed_refutation_work(&theory, &mut region), 2);
     assert!((0..4).all(|atom| region.is_open(atom)));
 }
 
@@ -141,7 +141,7 @@ fn negative_lower_requirements_remain_with_mandatory_closure() {
     // Nonnegative contributions already satisfy the negative lower bound.
     // The ordinary upper requirement excludes every weight-5 contribution;
     // arithmetic has no residual interval and visits no coefficient.
-    assert_eq!(closed_residual_work(&theory, &mut region), 1);
+    assert_eq!(closed_refutation_work(&theory, &mut region), 1);
     assert!((0..8).all(|atom| region.is_cut(atom)));
 }
 
@@ -165,27 +165,32 @@ fn a_stopped_width_witness_preserves_closed_state_and_can_retry() {
     let Width::Compact16(known) = &mut knowledge.width else {
         panic!("the small residual fixture uses compact counters");
     };
-    let closure = Closure {
+    let closure = Closure::<_, zetesis_algebra::AnswerSetsSought> {
         known: known.borrow(),
-        lists: &mut NarrowingScratch::default(),
+        lists: &mut crate::regions::CommonScratch::default(),
+        learning: &mut crate::regions::LearningScratch::default(),
     };
     let state = closure.known.thresholds[0];
     let masks = (closure.known.sure.to_vec(), closure.known.never.to_vec());
     for cutoff in 0..2 {
-        let mut work = Work::new(cutoff);
+        let mut work = Meter::local(cutoff);
         assert!(matches!(
-            closure.threshold_residual(&index, 0, &mut work),
+            closure
+                .threshold_residual_check(&index, 0, &mut work)
+                .map_err(zetesis_algebra::Failure::into_stop),
             Err(Stop::WorkLimit),
         ));
-        assert_eq!(work.spent, cutoff);
+        assert_eq!(work.charged(), cutoff);
         assert_eq!(closure.known.thresholds[0], state);
         assert_eq!(&*closure.known.sure, masks.0.as_slice());
         assert_eq!(&*closure.known.never, masks.1.as_slice());
     }
-    let mut work = Work::new(2);
+    let mut work = Meter::local(2);
     assert!(matches!(
-        closure.threshold_residual(&index, 0, &mut work),
+        closure
+            .threshold_residual_check(&index, 0, &mut work)
+            .map_err(zetesis_algebra::Failure::into_stop),
         Ok(Step::Unchanged),
     ));
-    assert_eq!(work.spent, 2);
+    assert_eq!(work.charged(), 2);
 }

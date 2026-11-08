@@ -2,9 +2,9 @@
 
 use std::mem::size_of;
 
-use super::{Chain, Connectives, Row, Work, anchor_keys};
+use super::{Chain, Connectives, Meter, Row, anchor_keys};
 use crate::Threshold;
-use zetesis_cpu::Stop;
+use zetesis_algebra::Stop;
 
 fn row(conditions: &[usize], weights: &[u64]) -> Row {
     Row::new(Threshold {
@@ -151,10 +151,16 @@ fn a_shared_parent_with_a_different_minimum_is_excluded() {
     )
     .unwrap()
     .unwrap();
-    let mut work = Work::new(u64::MAX);
+    let mut work = Meter::local(u64::MAX);
     // Both chains contain condition 1, but only the second may be an exact
     // prefix or extension. Exclusion occurs before exact_prefix is called.
-    assert_eq!(anchors.chains(1, &mut work).unwrap(), [1]);
+    assert_eq!(
+        anchors
+            .chains(1, &mut work)
+            .map_err(zetesis_algebra::Failure::into_stop)
+            .unwrap(),
+        [1]
+    );
     assert!(anchors.rows(0, &mut work).unwrap().is_empty());
     assert_eq!(anchors.rows(1, &mut work).unwrap(), [0]);
     assert_eq!(chains[0].ordinary_leaves(), [0, 2, 1]);
@@ -185,16 +191,34 @@ fn repeated_anchors_preserve_both_owner_orders() {
     )
     .unwrap()
     .unwrap();
-    let mut work = Work::new(u64::MAX);
+    let mut work = Meter::local(u64::MAX);
     assert_eq!(anchors.anchors, [3, 40]);
     assert_eq!(anchors.rows(0, &mut work).unwrap(), [1]);
     assert_eq!(anchors.rows(2, &mut work).unwrap(), [0, 2]);
     assert_eq!(anchors.rows(3, &mut work).unwrap(), [0, 2]);
-    assert_eq!(anchors.chains(3, &mut work).unwrap(), [0]);
-    assert_eq!(anchors.chains(40, &mut work).unwrap(), [2, 3]);
+    assert_eq!(
+        anchors
+            .chains(3, &mut work)
+            .map_err(zetesis_algebra::Failure::into_stop)
+            .unwrap(),
+        [0]
+    );
+    assert_eq!(
+        anchors
+            .chains(40, &mut work)
+            .map_err(zetesis_algebra::Failure::into_stop)
+            .unwrap(),
+        [2, 3]
+    );
     assert!(anchors.rows(1, &mut work).unwrap().is_empty());
     assert!(anchors.rows(4, &mut work).unwrap().is_empty());
-    assert!(anchors.chains(9, &mut work).unwrap().is_empty());
+    assert!(
+        anchors
+            .chains(9, &mut work)
+            .map_err(zetesis_algebra::Failure::into_stop)
+            .unwrap()
+            .is_empty()
+    );
 }
 
 #[test]
@@ -217,11 +241,35 @@ fn rebuilding_does_not_reuse_another_owners_chain_anchor() {
     )
     .unwrap()
     .unwrap();
-    let mut work = Work::new(u64::MAX);
-    assert_eq!(first.chains(3, &mut work).unwrap(), [0]);
-    assert!(first.chains(40, &mut work).unwrap().is_empty());
-    assert_eq!(second.chains(40, &mut work).unwrap(), [0]);
-    assert!(second.chains(3, &mut work).unwrap().is_empty());
+    let mut work = Meter::local(u64::MAX);
+    assert_eq!(
+        first
+            .chains(3, &mut work)
+            .map_err(zetesis_algebra::Failure::into_stop)
+            .unwrap(),
+        [0]
+    );
+    assert!(
+        first
+            .chains(40, &mut work)
+            .map_err(zetesis_algebra::Failure::into_stop)
+            .unwrap()
+            .is_empty()
+    );
+    assert_eq!(
+        second
+            .chains(40, &mut work)
+            .map_err(zetesis_algebra::Failure::into_stop)
+            .unwrap(),
+        [0]
+    );
+    assert!(
+        second
+            .chains(3, &mut work)
+            .map_err(zetesis_algebra::Failure::into_stop)
+            .unwrap()
+            .is_empty()
+    );
     assert_eq!(first.rows(0, &mut work).unwrap(), [0]);
     assert_eq!(second.rows(0, &mut work).unwrap(), [0]);
 }
@@ -241,22 +289,26 @@ fn sparse_lookup_charges_every_attempted_comparison() {
     .unwrap();
     for reverse in [false, true] {
         for key in 0..7 {
-            let query = |work: &mut Work<'_>| {
+            let query = |work: &mut Meter<'_>| {
                 if reverse {
-                    anchors.rows(key, work)
+                    anchors
+                        .rows(key, work)
+                        .map_err(zetesis_algebra::Failure::into_stop)
                 } else {
-                    anchors.chains(key, work)
+                    anchors
+                        .chains(key, work)
+                        .map_err(zetesis_algebra::Failure::into_stop)
                 }
             };
-            let mut full = Work::new(u64::MAX);
+            let mut full = Meter::local(u64::MAX);
             query(&mut full).unwrap();
-            assert!(full.spent > 0);
-            for limit in 0..full.spent {
-                let mut limited = Work::new(limit);
+            assert!(full.charged() > 0);
+            for limit in 0..full.charged() {
+                let mut limited = Meter::local(limit);
                 assert_eq!(query(&mut limited), Err(Stop::WorkLimit));
-                assert_eq!(limited.spent, limit);
+                assert_eq!(limited.charged(), limit);
             }
-            let mut exact = Work::new(full.spent);
+            let mut exact = Meter::local(full.charged());
             assert_eq!(query(&mut exact).unwrap(), query(&mut full).unwrap());
         }
     }
@@ -414,16 +466,19 @@ fn an_unanchored_chain_skips_connective_discovery() {
         assert!(witnesses::expands(&index, chain));
         let mut scratch = crate::NarrowingScratch::default();
         scratch
+            .common
             .prepare_thresholds(index.thresholds.rows.len())
             .unwrap();
-        let mut work = Work::new(u64::MAX);
-        let step = Closure {
+        let mut work = Meter::local(u64::MAX);
+        let step = Closure::<_, zetesis_algebra::AnswerSetsSought> {
             known: known.borrow(),
-            lists: &mut scratch,
+            lists: &mut scratch.common,
+            learning: &mut scratch.learning,
         }
         .threshold_connective(&index, chain, true, &mut work)
+        .map_err(zetesis_algebra::Failure::into_stop)
         .unwrap();
-        (step, work.spent)
+        (step, work.charged())
     };
     // The contrast: an anchored chain's discovery walks its cone and probes
     // anchors, charging work, though it finds nothing to transport here.

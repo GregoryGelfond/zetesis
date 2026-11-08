@@ -1,7 +1,7 @@
 //! Numeric reduction consumes established key eligibility without reconstructing evidence.
 
+use zetesis_algebra::Cancellation;
 use zetesis_core::{Term, Value};
-use zetesis_cpu::Cancellation;
 use zetesis_objective::{ErrorKind, ObjectiveProgram, ObjectiveTemplate, Stop, reduce_costs};
 
 fn program() -> ObjectiveProgram {
@@ -118,4 +118,35 @@ fn cancellation_prevents_reduction_publication() {
     .unwrap_err();
     assert_eq!(error.kind(), ErrorKind::Stopped(Stop::Cancelled));
     assert_eq!(error.statistics().work, 3);
+}
+
+#[test]
+fn cancellation_precedes_exhausted_reduction_allowance() {
+    let cancellation = Cancellation::default();
+    let visited = std::cell::Cell::new(0);
+    let error = reduce_costs(
+        &program(),
+        |_| {
+            std::iter::from_fn(|| {
+                visited.set(visited.get() + 1);
+                cancellation.cancel();
+                Some(Some(1))
+            })
+        },
+        3,
+        &cancellation,
+    )
+    .unwrap_err();
+    // Initialization, priority entry and the first key consume the allowance.
+    // The next tick must observe cancellation before refusing another key.
+    assert_eq!(error.kind(), ErrorKind::Stopped(Stop::Cancelled));
+    assert_eq!(visited.get(), 1);
+    assert_eq!(
+        error.statistics(),
+        zetesis_objective::Statistics {
+            work: 3,
+            ..Default::default()
+        }
+    );
+    assert_eq!(error.template_index(), None);
 }

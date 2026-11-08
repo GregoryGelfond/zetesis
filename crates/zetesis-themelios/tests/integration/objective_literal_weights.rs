@@ -6,9 +6,9 @@ mod sources;
 
 use sources::{DIRECTIONS, PROGRAM, WEIGHTS, cases, directive};
 use std::collections::BTreeSet;
+use zetesis_algebra::Cancellation;
 use zetesis_clingo_support as oracle;
 use zetesis_core::{Model, Value};
-use zetesis_cpu::Cancellation;
 use zetesis_objective::{AdmissionError, AdmissionResource};
 use zetesis_reference_support::{admit, exhaustive, resource_limits};
 use zetesis_test_support::records::Records;

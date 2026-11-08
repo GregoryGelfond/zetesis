@@ -123,6 +123,41 @@ def reduce : Connective → List Bool → Bool
   | .conj, values => values.all id
   | .disj, values => values.any id
 
+/-- Read only through the first false conjunct or true disjunct. Inputs are
+already computed child truths: this does not omit other nodes of a formula
+table or establish that unchecked child references are present. -/
+def reducePrefix : Connective → List Bool → Bool
+  | .conj, [] => true
+  | .disj, [] => false
+  | .conj, value :: rest => if value then reducePrefix .conj rest else false
+  | .disj, value :: rest => if value then true else reducePrefix .disj rest
+
+/-- A decisive prefix has exactly the full finite connective's truth, including
+empty rows and repeated occurrences. Thus its use preserves original or frozen
+truth whenever the supplied child truths are exact. -/
+theorem reduce_prefix_exact (kind : Connective) (values : List Bool) :
+    reducePrefix kind values = reduce kind values := by
+  induction values with
+  | nil => cases kind <;> rfl
+  | cons value rest inductionHypothesis =>
+    cases kind <;> cases value <;> simp_all [reducePrefix, reduce]
+
+/-- Number of child occurrences inspected by the decisive-prefix reduction.
+Node traversal, checked reads and cancellation remain implementation costs. -/
+def prefixReads : Connective → List Bool → Nat
+  | _, [] => 0
+  | .conj, value :: rest => 1 + if value then prefixReads .conj rest else 0
+  | .disj, value :: rest => 1 + if value then 0 else prefixReads .disj rest
+
+/-- Stopping at a decisive value never reads more occurrences than the full row.
+This bound counts occurrences, rather than distinct child identities. -/
+theorem prefix_reads_le (kind : Connective) (values : List Bool) :
+    prefixReads kind values ≤ values.length := by
+  induction values with
+  | nil => cases kind <;> simp [prefixReads]
+  | cons value rest inductionHypothesis =>
+    cases kind <;> cases value <;> simp_all [prefixReads] <;> omega
+
 /-- A finite disjunction uses its first operand directly, then appends the
 remaining operands on the left. No identity leaf is added to a nonempty group;
 in particular, a pair decodes to exactly the existing binary constructor. -/

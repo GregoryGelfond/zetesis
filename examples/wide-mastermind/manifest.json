@@ -1,0 +1,46 @@
+{
+  "schema_version": 1,
+  "root": "..",
+  "cases": [
+    {
+      "entry": "wide-mastermind/68/mm-68-examples.lp",
+      "contract": {
+        "satisfiability": "sat",
+        "family": "all",
+        "model_count": 45832,
+        "cost": null,
+        "witnesses": [],
+        "required_symbols": [],
+        "notes": [
+          "Complete enumeration: all 45,832 codes consistent with the one active scored guess; each campaign requires fresh clingo qualification."
+        ]
+      },
+      "files": [
+        {
+          "path": "wide-mastermind/68/mm-68-examples.lp",
+          "sha256": "7d201478242b35de73ed5e671388738eeffebb108044fc297bf513e302b93000",
+          "includes": [
+            {
+              "spelling": "mm-68.lp",
+              "target": "wide-mastermind/68/mm-68.lp"
+            },
+            {
+              "spelling": "../mm-base.lp",
+              "target": "wide-mastermind/mm-base.lp"
+            }
+          ]
+        },
+        {
+          "path": "wide-mastermind/68/mm-68.lp",
+          "sha256": "2ec0d379cfcced3ff156c4ca87dbb4bf3ccaef5aeba9c50ad04fc7e621a66a43",
+          "includes": []
+        },
+        {
+          "path": "wide-mastermind/mm-base.lp",
+          "sha256": "176a1598c9f946d1952195cdabe752088f65575a45d8fafd5d16b385f1aafa52",
+          "includes": []
+        }
+      ]
+    }
+  ]
+}

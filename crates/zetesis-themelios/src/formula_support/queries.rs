@@ -13,8 +13,8 @@ use std::ops::{Deref, Range};
 
 use crate::ProgramSite;
 use zetesis_core::catalog::TermRef;
+use zetesis_core::table::{self, Cause, Domain, Resource, Selection, Table};
 use zetesis_core::{AtomKey, BindingView, PatternRef, TemplateTerm};
-use zetesis_cpu::table::{self, Cause, Domain, Resource, Selection, Table};
 
 use super::relations::RelationRows;
 use super::{Counters, GroundingWork, PositivePattern, Relations};
@@ -24,7 +24,20 @@ use crate::{FormulaFailure, FormulaLimits, FormulaResource, JoinStrategy};
 
 mod domains;
 pub(super) mod expression_keys;
+mod hulls;
+mod signature;
 pub(crate) use domains::{Candidates, Guards};
+
+/// Numeric certificates kept between the rounds of one support completion:
+/// integer key indexes and column hulls. Support rows are only appended, so
+/// each later round extends them with its new rows instead of reading every
+/// row again. They hold no snapshot borrow; their bytes stay leased in the
+/// support workspace, under `max_support_bytes`, until completion drops them.
+#[derive(Default)]
+pub(super) struct Retained {
+    keys: expression_keys::Retained,
+    hulls: hulls::Retained,
+}
 
 /// Query state is separate from both the catalog and its immutable row views.
 /// A source builder or independent hybrid checker owns this workspace. Table
@@ -34,6 +47,9 @@ pub(crate) struct Support<'source> {
     relations: &'source Relations<'source>,
     tables: OnceCell<TableWorkspace<'source>>,
     expression_keys: expression_keys::Workspace<'source>,
+    /// Column hulls kept across support rounds: present only in a support
+    /// completion's snapshots, where rows grow between rounds.
+    hulls: Option<hulls::Workspace<'source>>,
     local_plans: OnceCell<super::local_plans::Table<'source>>,
     table_strategy: bool,
     live: Cell<usize>,
@@ -87,6 +103,38 @@ impl<'source> Support<'source> {
         Self::completed(relations, JoinStrategy::Indexed, limits, counters, location)
     }
 
+    /// An indexed query over one support round's snapshot that starts from the
+    /// certificates an earlier round of the same growing support kept. Their
+    /// bytes are already leased in the workspace this snapshot admits.
+    pub(super) fn indexed_retaining(
+        relations: &'source Relations<'source>,
+        retained: Retained,
+        limits: &FormulaLimits,
+        counters: &Counters,
+        location: ProgramSite,
+    ) -> Result<Self, FormulaFailure> {
+        let entries = relations
+            .entries
+            .checked_add(retained.keys.entries())
+            .ok_or_else(|| allocation(Cause::Overflow, location))?;
+        let mut support = Self::indexed(relations, limits, counters, location)?;
+        support.entries.set(entries);
+        support.expression_keys = retained.keys.into_workspace();
+        support.hulls = Some(retained.hulls.into_workspace());
+        Ok(support)
+    }
+
+    /// Keep this snapshot's certificates for the next support round.
+    pub(super) fn into_retained(self, location: ProgramSite) -> Result<Retained, FormulaFailure> {
+        Ok(Retained {
+            keys: self.expression_keys.retain(location)?,
+            hulls: match self.hulls {
+                Some(hulls) => hulls.retain(location)?,
+                None => hulls::Retained::default(),
+            },
+        })
+    }
+
     pub(super) fn completed(
         relations: &'source Relations<'source>,
         strategy: JoinStrategy,
@@ -113,6 +161,7 @@ impl<'source> Support<'source> {
             workspace: counters.accounting.workspace.clone(),
             tables: OnceCell::new(),
             expression_keys: expression_keys::Workspace::default(),
+            hulls: None,
             local_plans: OnceCell::new(),
             table_strategy: strategy == JoinStrategy::Table,
             live: Cell::new(bytes),

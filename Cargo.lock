@@ -1912,7 +1912,7 @@ dependencies = [
 
 [[package]]
 name = "zetesis"
-version = "0.6.0"
+version = "0.7.0"
 dependencies = [
  "themelios-analysis",
  "themelios-base",
@@ -1921,15 +1921,22 @@ dependencies = [
  "themelios-query",
  "themelios-solve",
  "themelios-syntax",
- "zetesis-cpu",
+ "zetesis-algebra",
  "zetesis-engine",
  "zetesis-solve",
  "zetesis-themelios",
 ]
 
 [[package]]
+name = "zetesis-algebra"
+version = "0.7.0"
+dependencies = [
+ "proptest",
+]
+
+[[package]]
 name = "zetesis-backend"
-version = "0.6.0"
+version = "0.7.0"
 dependencies = [
  "clap",
  "serde",
@@ -1938,7 +1945,7 @@ dependencies = [
 
 [[package]]
 name = "zetesis-bench"
-version = "0.6.0"
+version = "0.7.0"
 dependencies = [
  "clap",
  "serde_json",
@@ -1951,24 +1958,24 @@ dependencies = [
 
 [[package]]
 name = "zetesis-cli"
-version = "0.6.0"
+version = "0.7.0"
 dependencies = [
  "clap",
  "rayon",
  "serde",
  "serde_json",
  "tempfile",
+ "zetesis-algebra",
  "zetesis-backend",
  "zetesis-bench",
  "zetesis-clingo-support",
  "zetesis-core",
- "zetesis-cpu",
  "zetesis-ferraris",
  "zetesis-objective",
  "zetesis-presentation",
  "zetesis-reference-support",
- "zetesis-sat",
  "zetesis-solve",
+ "zetesis-stable",
  "zetesis-telemetry",
  "zetesis-test-support",
  "zetesis-themelios",
@@ -1978,7 +1985,7 @@ dependencies = [
 
 [[package]]
 name = "zetesis-clingo-support"
-version = "0.6.0"
+version = "0.7.0"
 dependencies = [
  "serde_json",
  "tempfile",
@@ -1988,46 +1995,39 @@ dependencies = [
 
 [[package]]
 name = "zetesis-core"
-version = "0.6.0"
+version = "0.7.0"
 dependencies = [
  "proptest",
- "zetesis-test-support",
-]
-
-[[package]]
-name = "zetesis-cpu"
-version = "0.6.0"
-dependencies = [
- "criterion",
  "rayon",
- "zetesis-core",
+ "zetesis-algebra",
  "zetesis-test-support",
 ]
 
 [[package]]
 name = "zetesis-domain"
-version = "0.6.0"
+version = "0.7.0"
 dependencies = [
  "proptest",
  "themelios-base",
  "themelios-program",
  "themelios-syntax",
+ "zetesis-algebra",
 ]
 
 [[package]]
 name = "zetesis-engine"
-version = "0.6.0"
+version = "0.7.0"
 dependencies = [
  "themelios-macros",
  "themelios-program",
  "themelios-query",
  "themelios-solve",
  "themelios-syntax",
+ "zetesis-algebra",
  "zetesis-core",
- "zetesis-cpu",
  "zetesis-ferraris",
- "zetesis-sat",
  "zetesis-solve",
+ "zetesis-stable",
  "zetesis-themelios",
 ]
 
@@ -2041,21 +2041,21 @@ dependencies = [
 
 [[package]]
 name = "zetesis-ferraris"
-version = "0.6.0"
+version = "0.7.0"
 dependencies = [
  "criterion",
  "proptest",
  "serde_json",
+ "zetesis-algebra",
  "zetesis-clingo-support",
  "zetesis-core",
- "zetesis-cpu",
  "zetesis-test-support",
  "zetesis-theory-support",
 ]
 
 [[package]]
 name = "zetesis-maintenance"
-version = "0.6.0"
+version = "0.7.0"
 dependencies = [
  "clap",
  "proc-macro2",
@@ -2065,6 +2065,7 @@ dependencies = [
  "sha2",
  "syn 2.0.119",
  "tempfile",
+ "zetesis-algebra",
  "zetesis-backend",
  "zetesis-test-support",
  "zetesis-validation",
@@ -2072,17 +2073,17 @@ dependencies = [
 
 [[package]]
 name = "zetesis-objective"
-version = "0.6.0"
+version = "0.7.0"
 dependencies = [
  "proptest",
+ "zetesis-algebra",
  "zetesis-core",
- "zetesis-cpu",
  "zetesis-test-support",
 ]
 
 [[package]]
 name = "zetesis-presentation"
-version = "0.6.0"
+version = "0.7.0"
 dependencies = [
  "clap",
  "unicode-width",
@@ -2090,46 +2091,31 @@ dependencies = [
 
 [[package]]
 name = "zetesis-reference-support"
-version = "0.6.0"
+version = "0.7.0"
 dependencies = [
  "serde_json",
  "tempfile",
+ "zetesis-algebra",
  "zetesis-core",
- "zetesis-cpu",
  "zetesis-ferraris",
  "zetesis-objective",
  "zetesis-test-support",
  "zetesis-themelios",
-]
-
-[[package]]
-name = "zetesis-sat"
-version = "0.6.0"
-dependencies = [
- "proptest",
- "rayon",
- "self_cell",
- "zetesis-cpu",
- "zetesis-ferraris",
- "zetesis-reference-support",
- "zetesis-test-support",
- "zetesis-themelios",
- "zetesis-theory-support",
 ]
 
 [[package]]
 name = "zetesis-solve"
-version = "0.6.0"
+version = "0.7.0"
 dependencies = [
  "rayon",
+ "zetesis-algebra",
  "zetesis-backend",
  "zetesis-clingo-support",
  "zetesis-core",
- "zetesis-cpu",
  "zetesis-ferraris",
  "zetesis-objective",
  "zetesis-reference-support",
- "zetesis-sat",
+ "zetesis-stable",
  "zetesis-telemetry",
  "zetesis-test-support",
  "zetesis-themelios",
@@ -2138,12 +2124,28 @@ dependencies = [
 ]
 
 [[package]]
+name = "zetesis-stable"
+version = "0.7.0"
+dependencies = [
+ "proptest",
+ "rayon",
+ "self_cell",
+ "zetesis-algebra",
+ "zetesis-ferraris",
+ "zetesis-objective",
+ "zetesis-reference-support",
+ "zetesis-test-support",
+ "zetesis-themelios",
+ "zetesis-theory-support",
+]
+
+[[package]]
 name = "zetesis-telemetry"
-version = "0.6.0"
+version = "0.7.0"
 
 [[package]]
 name = "zetesis-test-support"
-version = "0.6.0"
+version = "0.7.0"
 dependencies = [
  "serde_json",
  "zetesis-core",
@@ -2151,7 +2153,7 @@ dependencies = [
 
 [[package]]
 name = "zetesis-themelios"
-version = "0.6.0"
+version = "0.7.0"
 dependencies = [
  "hashbrown 0.17.1",
  "proptest",
@@ -2161,30 +2163,30 @@ dependencies = [
  "themelios-base",
  "themelios-program",
  "themelios-syntax",
+ "zetesis-algebra",
  "zetesis-clingo-support",
  "zetesis-core",
- "zetesis-cpu",
  "zetesis-domain",
  "zetesis-ferraris",
  "zetesis-objective",
  "zetesis-reference-support",
- "zetesis-sat",
+ "zetesis-stable",
  "zetesis-test-support",
  "zetesis-validation",
 ]
 
 [[package]]
 name = "zetesis-theory-support"
-version = "0.6.0"
+version = "0.7.0"
 dependencies = [
+ "zetesis-algebra",
  "zetesis-core",
- "zetesis-cpu",
  "zetesis-ferraris",
 ]
 
 [[package]]
 name = "zetesis-validation"
-version = "0.6.0"
+version = "0.7.0"
 dependencies = [
  "clap",
  "nix",
@@ -2197,6 +2199,7 @@ dependencies = [
  "tempfile",
  "themelios-program",
  "themelios-syntax",
+ "zetesis-algebra",
  "zetesis-backend",
  "zetesis-clingo-support",
  "zetesis-core",
@@ -2205,15 +2208,15 @@ dependencies = [
 
 [[package]]
 name = "zetesis-wgpu"
-version = "0.6.0"
+version = "0.7.0"
 dependencies = [
  "bytemuck",
  "naga",
  "pollster",
  "wgpu",
+ "zetesis-algebra",
  "zetesis-backend",
  "zetesis-core",
- "zetesis-cpu",
  "zetesis-ferraris",
  "zetesis-test-support",
  "zetesis-theory-support",

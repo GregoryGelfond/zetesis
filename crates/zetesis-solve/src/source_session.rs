@@ -3,8 +3,8 @@
 //! The evaluator establishes membership before ordinary bounded model
 //! construction. No candidate theory is substituted for the original source.
 
+use zetesis_algebra::Cancellation;
 use zetesis_core::Model;
-use zetesis_cpu::Cancellation;
 use zetesis_objective::Score;
 use zetesis_themelios::AcyclicSource;
 
@@ -96,23 +96,18 @@ impl<'a> SourceSession<'a> {
     pub(crate) fn outcome(&self) -> SemanticOutcome {
         SemanticOutcome {
             projection: None,
-            subject: Some(crate::Subject::Source(self.owner.clone())),
+            original: Some(crate::Original::Source(self.owner.clone())),
             selection: Some(AnswerSelection::All),
             verified: self.verified,
             scored: 0,
             retained: 0,
             search_state: self.state,
+            optimum_established: false,
             optimization: None,
             objective_work: 0,
             checked: self.checked,
-            gate_atoms: 0,
-            candidate_statistics: None,
             countermodel_statistics: None,
             formula_execution: None,
-            lazy_execution: None,
-            shared_execution: None,
-            closure_execution: None,
-            query_execution: None,
             hybrid_execution: None,
             terminal_execution: None,
             source_evaluation: Some(self.owner.statistics()),

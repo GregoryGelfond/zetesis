@@ -8,8 +8,8 @@ use zetesis_reference_support::{BundleFixture, resource_limits};
 
 use crate::support::human::before_timing;
 use crate::support::options::enumerating as options;
+use zetesis_algebra::Cancellation;
 use zetesis_cli::{Completion, RunError, run_bundle_with_diagnostics, run_with_diagnostics};
-use zetesis_cpu::Cancellation;
 use zetesis_themelios::{BundleResource, SourceBundle};
 
 const MALFORMED_CHOICE: &str = "{a,b :- q.\nq :- c.\n";
@@ -83,6 +83,48 @@ fn stdin_syntax_failure_renders_each_diagnostic_once() {
         assert!(text.contains("<input>:1:3"), "{text}");
         assert!(text.contains("1 | {a,b :- q."), "{text}");
         assert!(!text.contains("bytes "), "{text}");
+    }
+}
+
+// The GPU-enabled binary solves GPU requests itself; the CPU front hands them
+// to its sibling before reading any source.
+#[cfg(feature = "gpu")]
+#[test]
+fn a_gpu_backend_syntax_failure_reports_the_cpu_diagnostic() {
+    // A GPU solve begins its adapter enumeration once its configuration is
+    // validated, before reading its sources. A source that fails to parse never
+    // constructs a GPU primitive, so the solve reports the CPU diagnostic with
+    // the CPU status and output. The platform's loader may print lines of its
+    // own while it enumerates, for example a Vulkan loader on a host without a
+    // working driver, so the diagnostic's lines are matched in order among them.
+    let fixture = BundleFixture::new();
+    fixture.write("entry.lp", MALFORMED_CHOICE);
+    let solve = |backend: &str| {
+        Command::new(env!("CARGO_BIN_EXE_zetesis"))
+            .args(["--backend", backend, "--models", "0", "--color", "never"])
+            .arg(fixture.path("entry.lp"))
+            .stdin(Stdio::null())
+            .output()
+            .unwrap()
+    };
+    let cpu = solve("cpu");
+    let gpu = solve("gpu");
+    let diagnostic = String::from_utf8(cpu.stderr).unwrap();
+    assert_eq!(cpu.status.code(), Some(2));
+    assert_eq!(
+        diagnostic.matches("error[syntax::").count(),
+        3,
+        "{diagnostic}"
+    );
+    assert_eq!(gpu.status.code(), cpu.status.code());
+    assert_eq!(gpu.stdout, cpu.stdout);
+    let reported = String::from_utf8(gpu.stderr).unwrap();
+    let mut lines = reported.lines();
+    for expected in diagnostic.lines() {
+        assert!(
+            lines.any(|line| line == expected),
+            "{expected:?} missing, or out of order, in {reported}"
+        );
     }
 }
 
@@ -187,7 +229,9 @@ fn bundle_and_string_paths_share_exhaustive_solver_results() {
         "#const upper=lower+1. #include \"data.lp\". {pick(X)} :- d(X).",
     );
     fixture.write("data.lp", "#const lower=1. d(lower..upper).");
-    let mut options = options(&["--backend", "cpu", "--stats"]);
+    // One worker: parallel region workers publish in the schedule's order, and
+    // this test compares exact renderings across separate runs.
+    let mut options = options(&["--backend", "cpu", "--workers", "1", "--stats"]);
     options.statistics_view = zetesis_cli::StatisticsView::Records;
     let mut original = Vec::new();
     let mut diagnostics = Vec::new();
@@ -220,7 +264,7 @@ fn bundle_and_string_paths_share_exhaustive_solver_results() {
             .unwrap()
             .contains("2 original files")
     );
-    let process = process(&fixture, &[]);
+    let process = process(&fixture, &["--workers", "1"]);
     assert!(process.status.success());
     assert_eq!(
         before_timing(std::str::from_utf8(&process.stdout).unwrap()),
@@ -266,7 +310,7 @@ fn unsafe_included_rule_keeps_original_file_and_span_in_typed_failure() {
     )
     .unwrap_err();
     assert!(!std::str::from_utf8(&models).unwrap().contains("Answer:"));
-    let RunError::BundleAdmission(failure) = &error else {
+    let RunError::FormulaBundleAdmission(failure) = &error else {
         panic!("expected located semantic refusal: {error}");
     };
     assert_eq!(failure.bundle().sources().len(), 2);
@@ -288,23 +332,22 @@ fn combined_expansion_budget_applies_across_original_files() {
     let fixture = BundleFixture::new();
     fixture.write("entry.lp", "#include \"data.lp\". p(1..2).");
     fixture.write("data.lp", "q(1..2).");
-    let error = zetesis_themelios::admit_bundle_extended(
+    let error = zetesis_themelios::admit_bundle_formula(
         fixture.bundle(),
         zetesis_themelios::BundleAdmissionOptions::default(),
         zetesis_reference_support::resource_limits::expansion(
             zetesis_themelios::ExpansionResource::Templates,
             3,
         ),
+        zetesis_themelios::FormulaLimits::default(),
     )
     .unwrap_err();
     assert!(matches!(
         error.error(),
-        zetesis_themelios::BundleAdmissionError::Expansion(
-            zetesis_themelios::ExpansionFailure::Limit {
-                resource: zetesis_themelios::ExpansionResource::Templates,
-                ..
-            }
-        )
+        zetesis_themelios::FormulaFailure::Expansion(zetesis_themelios::ExpansionFailure::Limit {
+            resource: zetesis_themelios::ExpansionResource::Templates,
+            ..
+        })
     ));
     assert!(error.to_string().contains("Templates"));
 }

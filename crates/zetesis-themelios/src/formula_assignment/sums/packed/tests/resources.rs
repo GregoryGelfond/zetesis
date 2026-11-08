@@ -4,7 +4,7 @@ use crate::test_support::given_site;
 #[test]
 fn empty_value_refusal_precedes_input_and_other_limits() {
     Fixture::default().with(given_site(), |_, computation, counters| {
-        let cancellation = zetesis_cpu::Cancellation::default();
+        let cancellation = zetesis_algebra::Cancellation::default();
         cancellation.cancel();
         *counters = std::mem::take(counters).with_cancellation(Some(&cancellation));
         let before = (counters.accounting.work, counters.workspace_bytes());
@@ -63,7 +63,7 @@ fn every_packed_work_prefix_releases_storage_and_the_exact_budget_fits() {
 #[test]
 fn cancellation_between_packed_contributions_releases_storage() {
     Fixture::default().with(given_site(), |_, computation, counters| {
-        let cancellation = zetesis_cpu::Cancellation::default();
+        let cancellation = zetesis_algebra::Cancellation::default();
         *counters = std::mem::take(counters).with_cancellation(Some(&cancellation));
         let before = counters.workspace_bytes();
         let mut offered = 0;
@@ -83,7 +83,7 @@ fn cancellation_between_packed_contributions_releases_storage() {
                 given_site()
             ),
             Err(FormulaFailure::Interrupted {
-                reason: zetesis_cpu::Stop::Cancelled,
+                reason: zetesis_algebra::Stop::Cancelled,
                 ..
             })
         ));
@@ -145,6 +145,7 @@ fn retained_updates_need_no_new_header_or_payload_allowance() {
                 1
             };
             let before = counters.workspace_bytes();
+            let storage = (packed.words.slice().as_ptr(), packed.words.capacity());
             let limits = FormulaLimits {
                 max_support_bytes: live_bytes(computation, &defaults),
                 ..defaults
@@ -158,6 +159,10 @@ fn retained_updates_need_no_new_header_or_payload_allowance() {
             assert_eq!(packed.maximum, 32 + usize::try_from(weight).unwrap());
             assert_eq!(packed.count, packed.maximum + 1);
             assert_eq!(context.work.counters.workspace_bytes(), before);
+            assert_eq!(
+                (packed.words.slice().as_ptr(), packed.words.capacity()),
+                storage
+            );
         });
     }
 }

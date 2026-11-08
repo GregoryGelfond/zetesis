@@ -80,6 +80,12 @@ proved optimum; the limit then selects how many tied optima to display. An
 interrupted optimization may report verified incumbents whose optimality is
 unproved. `--all` requests all tied optima, rather than every nonoptimal model.
 
+For one answer, the default, each better answer bounds the search to strictly
+cheaper candidates. The search then proves the optimum without visiting its
+other ties, and `--stats` reports their number as unavailable. A larger limit,
+or `--all`, admits candidates as cheap as the best answer so far, and counts
+every optimal tie.
+
 Shown atoms and terms are a presentation of an answer set. Two full answer sets
 can have the same display. Parallel search can change answer order and which
 answers appear before a finite display limit; it preserves the complete family
@@ -98,8 +104,9 @@ zetesis solve program.lp --count
 
 Counting skips display-term evaluation and projection history. It streams
 ordinary answers and retains at most one optimal representative while counting
-all optimal ties. Resource limits still apply. An interrupted or failed search
-prints no count and reports the reason on stderr with a nonzero exit status.
+all optimal ties, under bounds that admit them. Resource limits still apply. An
+interrupted or failed search prints no count and reports the reason on stderr
+with a nonzero exit status.
 An output failure can occur after bytes have been written; consumers must check
 the exit status before accepting the total. `--count` cannot be combined with `--answers`, `--all`,
 `--models` or `--json`. `--stats` remains available on stderr.
@@ -110,7 +117,7 @@ the exit status before accepting the total. `--count` cannot be combined with `-
 | --- | --- |
 | `--backend cpu` | CPU execution, or `gpu`, which uses the platform's native API (Metal on macOS, Vulkan elsewhere). The full help also lists `metal` and `vulkan`, which name the API. A GPU request is honored or refused. |
 | `--threads auto` | The host's available parallelism; one if availability is unknown. |
-| `--grounder auto` | Prefer lazy source joins where admitted; formula admission can defer eligible terminal definitions and ground the remaining rules eagerly. |
+| `--grounder auto` | Prefer lazy source joins where admitted; formula admission can defer eligible terminal definitions and ground the remaining rules eagerly. It never streams integrity constraints. |
 | `--time-limit DURATION` | No deadline when omitted; accepts whole seconds or `s`, `m`, `h`. |
 | `--memory SIZE` | Allowance for named storage, derived from the host by default; accepts bytes or `B`, `KiB`, `MiB`, `GiB`, `TiB`. Listed under `--help-all`. |
 
@@ -121,8 +128,13 @@ definitions from each verified base answer. It returns full original answers;
 Explicit `--grounder eager` still requests complete materialization.
 
 For a formula input, explicit `--grounder lazy` selects hybrid grounding:
-the producer core is materialized, while eligible integrity constraints are
-checked from their admitted source families. Certified terminal definitions are
+the producer core is materialized with every eligible integrity constraint whose
+instances fit in the formula's share of the memory allowance, the share eager
+grounding has. Only constraints that do not fit are streamed: checked from their
+admitted source families during search. Streaming saves formula memory but
+re-joins the streamed bodies in every search region, which can cost many times
+eager grounding's time, so a smaller `--memory` allowance streams more
+constraints and trades time for memory. Certified terminal definitions are
 deferred too, and reconstructed from each accepted base answer, as automatic
 admission does over an eager base. The core uses the selected CPU or GPU backend;
 source joins and streamed constraint checks run on the host. Hybrid grounding
@@ -131,14 +143,14 @@ the core. Only answers that pass every original constraint enter scoring and
 optimal-tie retention.
 
 The three grounders: `eager` instantiates every rule before solving; `lazy`
-instantiates on demand wherever admitted — relational source joins, or the
-hybrid formula schedule with terminal definitions deferred; `auto` admits
-relational source joins where it can, and otherwise instantiates an eager base
-and defers certified terminal definitions. Relational lazy
-closure retains its existing CPU and device routes.
+grounds an eager producer core with the constraints that fit the formula's memory
+share, streams the rest and defers terminal definitions; `auto` instantiates an
+eager base and defers certified terminal definitions, and never streams
+constraints.
 
 Hybrid statistics distinguish retained-core models from original answers accepted
-after complete constraint checks. Checks observe the solve's cancellation token
+after complete constraint checks, and count the constraint templates and instances
+streamed and those grounded in the core. Checks observe the solve's cancellation token
 and memory policy. Work and substitution counts remain available in statistics.
 A stopped check is incomplete, never an accepted answer or an UNSAT result.
 
@@ -172,7 +184,10 @@ its memory, the allowance is two GiB.
 It determines named capacities for source loading, grounding, solving and
 output. These capacities do not cover every allocation and can overlap;
 the allowance is not a process RSS cap. Closure workers share a collective
-capacity, so increasing `--threads` reduces each worker's share.
+capacity, so increasing `--threads` reduces each worker's share. Device batches
+may each account a thirty-second of the allowance, except a GPU tight support
+batch, which may account a sixteenth so that its update route can engage under
+smaller allowances.
 
 Ordinary execution has no selected operation-count or grounding-round ceiling.
 Work counters remain available through `--stats`; counter overflow and storage
@@ -305,7 +320,7 @@ tight support, a general reduct query, and optimum ties. It compares the
 selected route with CPU execution and known full-model contracts. Actual route
 and work evidence is mandatory; a requested device name alone cannot pass a
 check. This small installed check is distinct from the repository's maintained
-63-test physical qualification suite.
+58-test physical qualification suite.
 
 Corpus and backend checks accept every backend: `--backend cpu` (the default),
 `gpu`, `metal` or `vulkan`. GPU corpus checks request the eager general formula

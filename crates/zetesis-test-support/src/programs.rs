@@ -1,22 +1,8 @@
-//! Builders of small test atoms and programs.
-
-pub mod fact_tables;
+//! Builders of small test atoms, values, models, and template descriptions.
 
 use zetesis_core::{
-    AdmissionLimits, Atom, AtomPattern, Model, Predicate, Program, RuleRef, Sign, Template,
-    TemplateRef, Term, Value, ValueLimits, ValueNode,
+    Atom, AtomPattern, Model, Predicate, Sign, Template, Term, Value, ValueLimits, ValueNode,
 };
-
-/// Every admitted rule in order, including closed facts, as borrowed templates.
-/// Tests comparing admission routes use the complete logical sequence even when
-/// one route stores facts separately from its explicit templates.
-#[must_use]
-pub fn rules(program: &Program) -> impl ExactSizeIterator<Item = TemplateRef<'_>> {
-    program.rules().map(|rule| match rule {
-        RuleRef::Template { template, .. } => template,
-        RuleRef::Fact(fact) => fact.as_template(),
-    })
-}
 
 /// The atom `name(values…)`, whose arity is the number of values.
 ///
@@ -146,20 +132,6 @@ pub fn fact(name: &str, values: Vec<Term>) -> Template {
     Template::new(Some(pattern(name, values)), vec![], vec![], vec![], vec![])
 }
 
-/// The program of `templates` under the default admission limits.
-///
-/// # Panics
-/// Panics if the templates are not a safe, finite program.
-#[must_use]
-pub fn program(templates: Vec<Template>) -> Program {
-    Program::new(
-        templates,
-        zetesis_core::FactTables::default(),
-        AdmissionLimits::default(),
-    )
-    .expect("safe finite test program")
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -229,11 +201,15 @@ mod tests {
     }
 
     #[test]
-    fn a_program_holds_the_facts_it_is_built_from() {
-        let built = program(vec![
-            fact("p", vec![number(1)]),
-            fact("q", vec![number(2), number(3)]),
-        ]);
-        assert_eq!(built.templates().len(), 2);
+    fn a_fact_preserves_its_head() {
+        let built = fact("q", vec![number(2), number(3)]);
+        assert_eq!(
+            built.head(),
+            Some(&pattern("q", vec![number(2), number(3)]))
+        );
+        assert!(built.positive().is_empty());
+        assert!(built.gate_true().is_empty());
+        assert!(built.gate_false().is_empty());
+        assert!(built.filters().is_empty());
     }
 }

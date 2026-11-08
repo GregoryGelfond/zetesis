@@ -1,0 +1,461 @@
+//! A secondary subject breaks degree ties without changing split coverage.
+
+use std::collections::BTreeSet;
+
+use crate::{
+    AdmissionLimits, ChoiceHeads, FormulaParts, Knowledge, Narrower, Narrowing, NarrowingScratch,
+    Node, OriginalSubject, Region, RegionLimits, Theory,
+};
+use zetesis_algebra::{
+    Cancellation, Stop,
+    walk::{Counting, Visit, Walk},
+};
+
+#[derive(Default)]
+struct Allowance {
+    remaining: u64,
+    spent: u64,
+}
+
+impl Allowance {
+    fn new(remaining: u64) -> Self {
+        Self {
+            remaining,
+            spent: 0,
+        }
+    }
+}
+
+impl zetesis_algebra::Quota for Allowance {
+    type Error = Stop;
+    fn reserve(&mut self, wanted: u64) -> Result<u64, Stop> {
+        let grant = self.remaining.min(wanted);
+        if grant == 0 {
+            return Err(Stop::WorkLimit);
+        }
+        self.remaining -= grant;
+        self.spent += grant;
+        Ok(grant)
+    }
+
+    fn refund(&mut self, unspent: u64) {
+        self.remaining += unspent;
+        self.spent -= unspent;
+    }
+}
+
+fn theory(atoms: usize, tail: Vec<Node>, roots: Vec<usize>) -> Theory {
+    let mut nodes: Vec<_> = (0..atoms).map(Node::atom).collect();
+    nodes.extend(tail);
+    Theory::new(
+        atoms,
+        FormulaParts::new(nodes, vec![]).unwrap(),
+        roots,
+        AdmissionLimits::default(),
+    )
+    .unwrap()
+}
+
+fn close(theory: &Theory, index: &Narrower, region: &mut Region, known: &mut Knowledge) {
+    let attempt = crate::test_support::stop_narrowing(&index.propagate_known_reserved(
+        OriginalSubject::new(theory, None),
+        region,
+        known,
+        &mut NarrowingScratch::default(),
+        &Cancellation::default(),
+        &mut zetesis_algebra::Meter::reserved(&mut Allowance::new(u64::MAX)),
+    ));
+    assert_ne!(attempt.result.unwrap(), Narrowing::Refuted);
+}
+
+fn closed(theory: &Theory) -> (Narrower, Region, Knowledge) {
+    let index = Narrower::new(theory);
+    let mut known = index.knowledge();
+    let mut region = Region::all_open(theory.atom_count());
+    close(theory, &index, &mut region, &mut known);
+    (index, region, known)
+}
+
+#[test]
+fn secondary_degree_only_breaks_primary_ties() {
+    let primary = theory(3, vec![], vec![]);
+    let secondary = theory(3, vec![Node::implies(1, 2)], vec![]);
+    let (_, region, primary) = closed(&primary);
+    let (_, _, secondary) = closed(&secondary);
+    let attempt =
+        crate::test_support::stop_preference(&primary.preferred_atom_with_secondary_reserved(
+            &region,
+            &ChoiceHeads::default(),
+            &secondary,
+            &Cancellation::default(),
+            &mut zetesis_algebra::Meter::reserved(&mut Allowance::new(u64::MAX)),
+        ));
+    assert_eq!(attempt.result, Ok(Some(1)));
+    assert_eq!(attempt.work, 6);
+}
+
+#[test]
+fn secondary_degree_cannot_overrule_primary_degree() {
+    let primary = theory(3, vec![Node::implies(0, 2)], vec![]);
+    let secondary = theory(3, vec![Node::implies(1, 1)], vec![]);
+    let (_, region, primary) = closed(&primary);
+    let (_, _, secondary) = closed(&secondary);
+    let attempt =
+        crate::test_support::stop_preference(&primary.preferred_atom_with_secondary_reserved(
+            &region,
+            &ChoiceHeads::default(),
+            &secondary,
+            &Cancellation::default(),
+            &mut zetesis_algebra::Meter::reserved(&mut Allowance::new(u64::MAX)),
+        ));
+    assert_eq!(attempt.result, Ok(Some(0)));
+    assert_eq!(
+        attempt.work, 5,
+        "the lower primary degree needs no secondary read"
+    );
+}
+
+#[test]
+fn secondary_degree_preserves_exact_quota_prefixes() {
+    let source = theory(3, vec![Node::implies(1, 2)], vec![]);
+    let (_, region, known) = closed(&source);
+    for limit in 0..=5 {
+        let mut quota = Allowance::new(limit);
+        let attempt =
+            crate::test_support::stop_preference(&known.preferred_atom_with_secondary_reserved(
+                &region,
+                &ChoiceHeads::default(),
+                &known,
+                &Cancellation::default(),
+                &mut zetesis_algebra::Meter::reserved(&mut quota),
+            ));
+        assert_eq!((attempt.work, quota.spent), (limit, limit));
+        assert_eq!(
+            attempt.result,
+            if limit == 5 {
+                Ok(Some(1))
+            } else {
+                Err(Stop::WorkLimit)
+            }
+        );
+    }
+}
+
+#[test]
+fn secondary_degree_accepts_different_counter_widths() {
+    let source = theory(3, vec![Node::implies(1, 2)], vec![]);
+    let (index, region, compact) = closed(&source);
+    let mut medium = Knowledge {
+        class: std::marker::PhantomData,
+        width: super::super::Width::Compact32(index.root_known::<u32>()),
+    };
+    let mut native = Knowledge {
+        class: std::marker::PhantomData,
+        width: super::super::Width::Native(index.root_known::<usize>()),
+    };
+    close(&source, &index, &mut region.clone(), &mut medium);
+    close(&source, &index, &mut region.clone(), &mut native);
+    for primary in [&compact, &medium, &native] {
+        for secondary in [&compact, &medium, &native] {
+            let attempt = crate::test_support::stop_preference(
+                &primary.preferred_atom_with_secondary_reserved(
+                    &region,
+                    &ChoiceHeads::default(),
+                    secondary,
+                    &Cancellation::default(),
+                    &mut zetesis_algebra::Meter::reserved(&mut Allowance::new(u64::MAX)),
+                ),
+            );
+            assert_eq!(attempt.result, Ok(Some(1)));
+            assert_eq!(attempt.work, 5);
+        }
+    }
+}
+
+#[test]
+fn cancelled_secondary_preference_never_reserves_work() {
+    let source = theory(3, vec![], vec![]);
+    let (_, region, known) = closed(&source);
+    let cancellation = Cancellation::default();
+    cancellation.cancel();
+    let mut quota = Allowance::new(u64::MAX);
+    let attempt =
+        crate::test_support::stop_preference(&known.preferred_atom_with_secondary_reserved(
+            &region,
+            &ChoiceHeads::default(),
+            &known,
+            &cancellation,
+            &mut zetesis_algebra::Meter::reserved(&mut quota),
+        ));
+    assert_eq!(attempt.result, Err(Stop::Cancelled));
+    assert_eq!((attempt.work, quota.spent), (0, 0));
+}
+
+#[test]
+fn quota_cancellation_retains_the_exact_read_prefix() {
+    struct CancelAfter(u64);
+
+    impl zetesis_algebra::Quota for CancelAfter {
+        type Error = Stop;
+        fn reserve(&mut self, _wanted: u64) -> Result<u64, Stop> {
+            if self.0 == 0 {
+                return Err(Stop::Cancelled);
+            }
+            self.0 -= 1;
+            Ok(1)
+        }
+
+        fn refund(&mut self, unspent: u64) {
+            self.0 += unspent;
+        }
+    }
+
+    let source = theory(3, vec![Node::implies(1, 2)], vec![]);
+    let (_, region, known) = closed(&source);
+    for limit in 0..5 {
+        let mut quota = CancelAfter(limit);
+        let attempt =
+            crate::test_support::stop_preference(&known.preferred_atom_with_secondary_reserved(
+                &region,
+                &ChoiceHeads::default(),
+                &known,
+                &Cancellation::default(),
+                &mut zetesis_algebra::Meter::reserved(&mut quota),
+            ));
+        assert_eq!(attempt.result, Err(Stop::Cancelled));
+        assert_eq!(attempt.work, limit);
+        assert_eq!(quota.0, 0);
+    }
+}
+
+#[test]
+fn choice_priority_precedes_both_degrees() {
+    let primary = theory(3, vec![Node::implies(0, 1)], vec![]);
+    let secondary = theory(3, vec![Node::implies(1, 1)], vec![]);
+    let original = theory(
+        3,
+        vec![Node::falsum(), Node::implies(2, 3), Node::or_pair([2, 4])],
+        vec![5],
+    );
+    let extraction =
+        crate::producers(&original, RegionLimits::default(), &Cancellation::default()).unwrap();
+    let (_, region, primary) = closed(&primary);
+    let (_, _, secondary) = closed(&secondary);
+    let attempt =
+        crate::test_support::stop_preference(&primary.preferred_atom_with_secondary_reserved(
+            &region,
+            &extraction.choice_heads,
+            &secondary,
+            &Cancellation::default(),
+            &mut zetesis_algebra::Meter::reserved(&mut Allowance::new(u64::MAX)),
+        ));
+    assert_eq!(attempt.result, Ok(Some(2)));
+    assert_eq!(
+        attempt.work, 1,
+        "the only eligible atom needs no tie breaker"
+    );
+}
+
+#[test]
+fn equal_secondary_degrees_prefer_the_lowest_open_atom() {
+    let source = theory(3, vec![], vec![]);
+    let (index, mut region, mut known) = closed(&source);
+    assert!(region.cut(0));
+    close(&source, &index, &mut region, &mut known);
+    let attempt =
+        crate::test_support::stop_preference(&known.preferred_atom_with_secondary_reserved(
+            &region,
+            &ChoiceHeads::default(),
+            &known,
+            &Cancellation::default(),
+            &mut zetesis_algebra::Meter::reserved(&mut Allowance::new(u64::MAX)),
+        ));
+    assert_eq!(attempt.result, Ok(Some(1)));
+    assert_eq!(attempt.work, 4);
+}
+
+#[test]
+fn secondary_preference_keeps_every_satisfying_assignment_once() {
+    let theory = theory(
+        4,
+        vec![Node::or_pair([1, 2]), Node::implies(0, 3)],
+        vec![4, 5],
+    );
+    let index = Narrower::new(&theory);
+    let mut walk = Walk::with_state(Region::all_open(4), Counting::Never, index.knowledge());
+    let mut actual = BTreeSet::new();
+    let mut scratch = NarrowingScratch::default();
+    while let Some(visit) = walk
+        .next(|entry| {
+            let (region, known) = entry.parts_mut();
+            let attempt = crate::test_support::stop_narrowing(&index.propagate_known_reserved(
+                OriginalSubject::new(&theory, None),
+                region,
+                known,
+                &mut scratch,
+                &Cancellation::default(),
+                &mut zetesis_algebra::Meter::reserved(&mut Allowance::new(u64::MAX)),
+            ));
+            let result = attempt.result?;
+            if result != Narrowing::Refuted {
+                let selected = crate::test_support::stop_preference(
+                    &known.preferred_atom_with_secondary_reserved(
+                        region,
+                        &ChoiceHeads::default(),
+                        known,
+                        &Cancellation::default(),
+                        &mut zetesis_algebra::Meter::reserved(&mut Allowance::new(u64::MAX)),
+                    ),
+                );
+                if let Some(atom) = selected.result? {
+                    entry.prefer(atom);
+                }
+            }
+            Ok::<_, Stop>(result)
+        })
+        .unwrap()
+    {
+        let Visit::Leaf(region, _) = visit else {
+            panic!("complete assignments are enumerated without subtree counting");
+        };
+        let mask = region.held().fold(0_u32, |mask, atom| mask | (1 << atom));
+        assert!(actual.insert(mask), "duplicate assignment {mask}");
+    }
+    let expected = (0_u32..16)
+        .filter(|mask| mask & 6 != 0 && (mask & 1 == 0 || mask & 8 != 0))
+        .collect::<BTreeSet<_>>();
+    assert_eq!(actual, expected);
+}
+
+/// Exercise the selection function independently of propagation: arbitrary
+/// count tables cover every weak ordering of three atom scores. The existing
+/// traversal test separately establishes the closed-knowledge integration.
+fn counts(values: [usize; 3]) -> Knowledge {
+    let mut unknown = super::super::Counters::<u16>::zeros(3);
+    for (atom, value) in values.into_iter().enumerate() {
+        unknown.add(atom, value);
+    }
+    Knowledge {
+        class: std::marker::PhantomData,
+        width: super::super::Width::Compact16(super::super::Known::empty(0, 0, unknown)),
+    }
+}
+
+fn digits(value: usize) -> [usize; 3] {
+    [value % 3, value / 3 % 3, value / 9]
+}
+
+fn scalar(
+    region: &Region,
+    choices: &ChoiceHeads,
+    primary: [usize; 3],
+    secondary: [usize; 3],
+) -> Option<usize> {
+    region.open().max_by_key(|&atom| {
+        (
+            choices.contains(atom),
+            primary[atom],
+            secondary[atom],
+            std::cmp::Reverse(atom),
+        )
+    })
+}
+
+#[test]
+fn filtered_rankings_match_all_small_score_orderings() {
+    for first in 0..27 {
+        let primary = digits(first);
+        let primary_known = counts(primary);
+        for second in 0..27 {
+            let secondary = digits(second);
+            let secondary_known = counts(secondary);
+            for state in 0..27 {
+                let mut region = Region::all_open(3);
+                for (atom, value) in digits(state).into_iter().enumerate() {
+                    match value {
+                        1 => assert!(region.hold(atom)),
+                        2 => assert!(region.cut(atom)),
+                        _ => {}
+                    }
+                }
+                for mask in 0_u64..8 {
+                    let choices = ChoiceHeads {
+                        words: vec![mask].into(),
+                    };
+                    let marked = region.open().filter(|&atom| choices.contains(atom)).count();
+                    let eligible = if marked == 0 {
+                        region.open().count()
+                    } else {
+                        marked
+                    };
+                    let eligible = u64::try_from(eligible).unwrap();
+                    let attempt = crate::test_support::stop_preference(
+                        &primary_known.preferred_atom_with_secondary_reserved(
+                            &region,
+                            &choices,
+                            &secondary_known,
+                            &Cancellation::default(),
+                            &mut zetesis_algebra::Meter::reserved(&mut Allowance::new(u64::MAX)),
+                        ),
+                    );
+                    assert_eq!(
+                        attempt.result,
+                        Ok(scalar(&region, &choices, primary, secondary))
+                    );
+                    assert!((eligible..=2 * eligible).contains(&attempt.work));
+                    if second == 0 {
+                        let attempt = crate::test_support::stop_preference(
+                            &primary_known.preferred_atom_reserved(
+                                &region,
+                                &choices,
+                                &Cancellation::default(),
+                                &mut zetesis_algebra::Meter::reserved(&mut Allowance::new(
+                                    u64::MAX,
+                                )),
+                            ),
+                        );
+                        assert_eq!(
+                            attempt.result,
+                            Ok(scalar(&region, &choices, primary, [0; 3]))
+                        );
+                        assert_eq!(attempt.work, eligible);
+                    }
+                }
+            }
+        }
+    }
+}
+
+#[test]
+fn increasing_primary_degrees_never_read_secondary_counts() {
+    let primary = counts([0, 1, 2]);
+    let secondary = counts([2, 1, 0]);
+    let region = Region::all_open(3);
+    let attempt =
+        crate::test_support::stop_preference(&primary.preferred_atom_with_secondary_reserved(
+            &region,
+            &ChoiceHeads::default(),
+            &secondary,
+            &Cancellation::default(),
+            &mut zetesis_algebra::Meter::reserved(&mut Allowance::new(u64::MAX)),
+        ));
+    assert_eq!(attempt.result, Ok(Some(2)));
+    assert_eq!(attempt.work, 3);
+}
+
+#[test]
+fn replacing_a_primary_winner_discards_its_cached_secondary() {
+    let primary = counts([0, 0, 1]);
+    let secondary = counts([0, 2, 0]);
+    let region = Region::all_open(3);
+    let attempt =
+        crate::test_support::stop_preference(&primary.preferred_atom_with_secondary_reserved(
+            &region,
+            &ChoiceHeads::default(),
+            &secondary,
+            &Cancellation::default(),
+            &mut zetesis_algebra::Meter::reserved(&mut Allowance::new(u64::MAX)),
+        ));
+    assert_eq!(attempt.result, Ok(Some(2)));
+    assert_eq!(attempt.work, 5);
+}

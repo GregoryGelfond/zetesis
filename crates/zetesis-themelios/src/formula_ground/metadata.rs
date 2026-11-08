@@ -35,6 +35,7 @@ struct Entry<T> {
 
 struct Atom {
     first_origin: NonZeroUsize,
+    fixed_fact: Option<bool>,
     producers: Chain,
     origins: Chain,
 }
@@ -66,6 +67,7 @@ impl Metadata {
         let first = append(&mut self.origins, location, None);
         self.atoms.push(Atom {
             first_origin: first,
+            fixed_fact: None,
             producers: Chain::default(),
             origins: Chain {
                 first: Some(first),
@@ -74,6 +76,14 @@ impl Metadata {
             },
         });
         Ok(())
+    }
+
+    pub(super) fn fixed_fact(&self, atom: usize) -> Option<bool> {
+        self.atoms[atom].fixed_fact
+    }
+
+    pub(super) fn record_fixed_fact(&mut self, atom: usize, fixed: bool) {
+        self.atoms[atom].fixed_fact = Some(fixed);
     }
 
     pub(super) fn location(&self, atom: usize) -> ProgramSite {

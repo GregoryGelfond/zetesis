@@ -3,8 +3,8 @@ use super::{
     RelationGpuMasks, RelationGpuStats, capacity, poll,
 };
 use crate::{GpuError, GpuErrorKind};
+use zetesis_algebra::{Cancellation, Meter, words::Words};
 use zetesis_core::relation::{Query, Relation};
-use zetesis_cpu::Cancellation;
 
 const CONTROL_INTERVAL: usize = 1024;
 
@@ -207,14 +207,13 @@ impl Plan {
             result_stride,
         };
         for query in queries {
-            plan.work = plan
-                .work
-                .checked_add(u64::from(plan.query_work(query)?))
-                .ok_or_else(|| capacity("relation work sum exceeds u64"))?;
+            let work = plan.query_work(query)?;
+            Meter::charge_receipt(&mut plan.work, u128::from(work), u64::MAX)
+                .map_err(|_| capacity("relation work sum exceeds u64"))?;
         }
-        if plan.work > limits.max_work {
-            return Err(capacity("relation full-scan work exceeds ceiling"));
-        }
+        // Finish all query-cost checks before the authored whole-plan ceiling.
+        Meter::charge_receipt(&mut plan.work, 0, limits.max_work)
+            .map_err(|_| capacity("relation full-scan work exceeds ceiling"))?;
         Ok(plan)
     }
 
@@ -293,7 +292,7 @@ impl Plan {
         };
         let mut records = allocate(0)?;
         let mut equalities = allocate(1)?;
-        let masks = allocate(2)?;
+        let masks = Words::new(allocate(2)?);
         self.accounted_bytes =
             accounted_bytes(self.column_bytes, self.transport_bytes, host, max_bytes)?;
         let mut offset = 0;
@@ -338,7 +337,7 @@ impl Plan {
         relation: &'owner Relation<'source>,
         queries: &[Query<'_, '_>],
         input: &[u32],
-        mut words: Vec<u32>,
+        mut words: Words<u32>,
         cancellation: &Cancellation,
     ) -> Result<RelationGpuMasks<'owner, 'source>, GpuError> {
         if queries.len() != self.queries as usize
@@ -390,13 +389,13 @@ impl Plan {
                     return Err(readback("relation tile receipt identity or work differs"));
                 }
             }
-            let mask = &record[receipts..];
+            let mask = Words::<u32, _>::new(&record[receipts..]);
             let tail = self.rows % BITS_PER_WORD;
             if tail != 0 && mask.last().is_some_and(|word| word >> tail != 0) {
                 return Err(readback("relation mask has nonzero unused tail bits"));
             }
             let start = index * self.words as usize;
-            words[start..start + mask.len()].copy_from_slice(mask);
+            words[start..start + mask.len()].copy_from_slice(&mask);
         }
         Ok(())
     }
@@ -405,7 +404,7 @@ impl Plan {
 pub(super) struct Packed {
     pub(super) records: Vec<u32>,
     pub(super) equalities: Vec<u32>,
-    pub(super) masks: Vec<u32>,
+    pub(super) masks: Words<u32>,
 }
 
 pub(super) fn workgroups(groups: [u32; 3], limit: u32) -> Result<u64, GpuError> {

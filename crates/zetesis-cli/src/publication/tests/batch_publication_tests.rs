@@ -9,7 +9,7 @@ use std::{
     io::{self, Write},
     num::NonZeroUsize,
 };
-use zetesis_cpu::Cancellation;
+use zetesis_algebra::Cancellation;
 use zetesis_test_support::io::{BoundedWriter, FAILED, FailAt};
 use zetesis_test_support::repository;
 
@@ -212,7 +212,8 @@ fn cancellation_prevents_queued_answer_publication() {
         cancellation: cancellation.clone(),
     };
     let captured = run(
-        "{a;b;c}. #show x.",
+        // Keep the displayed record independent of candidate visitation order.
+        "{a;b;c}. #show. #show x.",
         &options(),
         &cancellation,
         &mut output,
@@ -430,56 +431,79 @@ fn timing_failure_preserves_completed_answers() {
     }
 }
 
+/// One region walker returns the recorded answer sets, atom for atom, on
+/// every correctness case, through the batched route.
 #[test]
 fn cpu_batches_preserve_recorded_correctness_displays() {
-    every_correctness_case(crate::SearchMethod::Clauses, 1);
+    every_correctness_case(1, crate::OptimumSearch::DEFAULT);
 }
 
 /// Four workers walking the region tree return the recorded answer sets,
 /// atom for atom, on every correctness case, in whatever order they arrive.
 #[test]
 fn parallel_regions_preserve_recorded_correctness_displays() {
-    every_correctness_case(crate::SearchMethod::Regions, 4);
+    every_correctness_case(4, crate::OptimumSearch::DEFAULT);
 }
 
-/// The regions proposer returns the recorded answer sets, atom for atom, on
-/// every correctness case, through the same batched route.
+/// Strict incumbent bounds and a tie pass return the recorded answer sets on
+/// every correctness case, as the default's inclusive bounds do.
 #[test]
-fn cpu_batches_preserve_recorded_correctness_displays_under_regions() {
-    every_correctness_case(crate::SearchMethod::Regions, 1);
+fn a_tie_pass_after_strict_bounds_preserves_recorded_correctness_displays() {
+    every_correctness_case(1, crate::OptimumSearch::StrictWithTiePass);
 }
 
-fn every_correctness_case(search: crate::SearchMethod, workers: usize) {
+/// The same with four workers walking the region tree in each pass.
+#[test]
+fn parallel_regions_with_a_tie_pass_preserve_recorded_correctness_displays() {
+    every_correctness_case(4, crate::OptimumSearch::StrictWithTiePass);
+}
+
+/// One requested answer under the default's strict bound proves each
+/// recorded optimum and displays one of its recorded answers.
+#[test]
+fn one_answer_under_a_strict_bound_proves_each_recorded_optimum() {
+    for workers in [1, 4] {
+        let root = repository::correctness();
+        let mut optimizing = 0;
+        for case in correctness_cases() {
+            if case["answer"]["cost"].is_array() {
+                one_answer_case(&root, &case, workers);
+                optimizing += 1;
+            }
+        }
+        assert_eq!(optimizing, 72);
+    }
+}
+
+fn correctness_cases() -> Vec<serde_json::Value> {
     let fixture: serde_json::Value = serde_json::from_str(include_str!(
         "../../../tests/fixtures/correctness/complete-models.json"
     ))
     .unwrap();
-    let cases = fixture["cases"].as_array().unwrap();
+    let cases = fixture["cases"].as_array().unwrap().clone();
     assert_eq!(cases.len(), 94);
+    cases
+}
+
+fn every_correctness_case(workers: usize, optimum_search: crate::OptimumSearch) {
     let root = repository::correctness();
-    for case in cases {
-        correctness_case(&root, case, search, workers);
+    for case in correctness_cases() {
+        correctness_case(&root, &case, workers, optimum_search);
     }
 }
 
-fn correctness_case(
+/// The case's admitted bundle, published with `options` to `output`.
+fn publish_case(
     root: &std::path::Path,
-    case: &serde_json::Value,
-    search: crate::SearchMethod,
-    workers: usize,
-) {
-    let path = case["path"].as_str().unwrap();
-    let mut options = options();
-    options.config.solve.batch_size = NonZeroUsize::new(64).unwrap();
-    options.config.solve.search = search;
-    options.config.solve.workers = NonZeroUsize::new(workers).unwrap();
+    path: &str,
+    options: &crate::publication_fixture::FormulaCase,
+    output: &mut Vec<u8>,
+) -> crate::PublicationOutcome {
     let bundle = zetesis_themelios::SourceBundle::load(
         root.join(path),
         zetesis_themelios::BundleLimits::default(),
     )
     .unwrap();
-    let mut output = Vec::new();
-    let mut diagnostics = Vec::new();
     let admitted = zetesis_themelios::admit_bundle_formula(
         bundle,
         zetesis_themelios::BundleAdmissionOptions::default(),
@@ -487,15 +511,82 @@ fn correctness_case(
         zetesis_themelios::FormulaLimits::default(),
     )
     .unwrap();
-    let captured = crate::publication_fixture::with_diagnostics(
+    crate::publication_fixture::with_diagnostics(
         crate::PreparedInput::formula_bundle(&admitted),
         &options.config,
         &options.presentation,
-        &mut output,
-        &mut diagnostics,
+        output,
+        &mut Vec::new(),
         &Cancellation::default(),
     )
-    .unwrap();
+    .unwrap()
+}
+
+fn one_answer_case(root: &std::path::Path, case: &serde_json::Value, workers: usize) {
+    let path = case["path"].as_str().unwrap();
+    let mut options = options();
+    options.config.solve.batch_size = NonZeroUsize::new(64).unwrap();
+    options.config.solve.workers = NonZeroUsize::new(workers).unwrap();
+    options.config.solve.models = 1;
+    let mut output = Vec::new();
+    let captured = publish_case(root, path, &options, &mut output);
+    let expected = &case["answer"];
+    assert_eq!(
+        captured.report().unwrap().completion,
+        Completion::Exhausted,
+        "{path}"
+    );
+    let recorded: Vec<i64> = expected["cost"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|value| value.as_i64().unwrap())
+        .collect();
+    let best = captured.semantic().incumbent().unwrap();
+    assert_eq!(
+        best.score
+            .costs()
+            .iter()
+            .map(|(_, value)| *value)
+            .collect::<Vec<_>>(),
+        recorded,
+        "{path}"
+    );
+    assert!(best.ties_pruned, "{path}");
+    assert!(captured.semantic().optimum_proved(), "{path}");
+    let displayed = records(&output);
+    assert_eq!(displayed.len(), 1, "{path}");
+    let models: Vec<Vec<String>> = expected["models"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|row| {
+            let mut atoms: Vec<_> = row
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|atom| atom.as_str().unwrap().to_owned())
+                .collect();
+            atoms.sort();
+            atoms
+        })
+        .collect();
+    assert!(models.contains(&displayed[0]), "{path}");
+}
+
+fn correctness_case(
+    root: &std::path::Path,
+    case: &serde_json::Value,
+    workers: usize,
+    optimum_search: crate::OptimumSearch,
+) {
+    let path = case["path"].as_str().unwrap();
+    let mut options = options();
+    options.config.solve.batch_size = NonZeroUsize::new(64).unwrap();
+    options.config.solve.workers = NonZeroUsize::new(workers).unwrap();
+    options.config.solve.optimum_search = optimum_search;
+    let mut output = Vec::new();
+    let captured = publish_case(root, path, &options, &mut output);
     assert_eq!(
         captured.report().unwrap().completion,
         Completion::Exhausted,
