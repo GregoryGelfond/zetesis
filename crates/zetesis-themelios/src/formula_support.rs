@@ -498,8 +498,8 @@ impl Counters {
 /// Admit `amount` units before their effect: observe at a charged-range boundary
 /// or before a work refusal, check the ceiling, record the receipt, then count.
 /// Zero admits no units and never observes; use `Counters::poll` explicitly. Every charged unit runs
-/// on this path, so it inlines into its callers; the site is read only when a
-/// failure is built, on the cold path.
+/// on this path, so its admission inlines into its callers; the site is read
+/// only by the out-of-line decision that observes control or builds a failure.
 #[inline]
 fn charge_work(
     work: &mut u64,
@@ -520,8 +520,36 @@ fn charge_work(
 
 /// Check the charged range and ceiling. A refused charge observes first; an
 /// admitted range observes only when it contains a cadence boundary.
+///
+/// Nearly every charge is a machine-width amount that stays under the ceiling
+/// and whose range holds no cadence boundary. That charge is admitted with no
+/// observation and builds no failure, so it is decided here, inline in its
+/// caller, by one addition and two comparisons. Every other charge takes
+/// [`check_observed_work`], which decides all charges alike: the two agree
+/// wherever this test admits.
 #[inline]
 fn check_work(
+    work: u64,
+    control: Option<&accounting::AccountControl>,
+    amount: u128,
+    limits: &FormulaLimits,
+    location: ProgramSite,
+) -> Result<(), FormulaFailure> {
+    if let Ok(amount) = u64::try_from(amount)
+        && let Some(observed) = work.checked_add(amount)
+        && observed <= limits.max_work
+        && !accounting::charge_observes(control, work, amount)
+    {
+        return Ok(());
+    }
+    check_observed_work(work, control, amount, limits, location)
+}
+
+/// The complete decision of a charge: one that observes control, reaches the
+/// ceiling or needs the wide check. Kept out of line, so that its callers
+/// carry only the inline admission of [`check_work`].
+#[cold]
+fn check_observed_work(
     work: u64,
     control: Option<&accounting::AccountControl>,
     amount: u128,
