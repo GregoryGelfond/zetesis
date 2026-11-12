@@ -28,6 +28,11 @@ Notable changes by release. Versions follow Semantic Versioning.
   ties.
 - Frozen-reduct preparation reuses completed probe results within the same query
   and skips preparation for decided roots and ranking for unused splits.
+- Frozen-reduct preparation bounds pairwise constraints in both polarities. Pairs
+  no countermodel cuts together grow into cliques with a lower count bound, as
+  pairs none holds together already grow into cliques with an upper one
+  (`AlgebraicRows.lower_of_cover`), so a quantified pigeonhole core is decided at
+  the root whichever way its atoms are read.
 
 ### Fixed
 

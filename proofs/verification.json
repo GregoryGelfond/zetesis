@@ -2,11 +2,11 @@
   "assurance_tool": "zetesis-maintenance 0.7.0: retained record consistency; not Lean kernel execution",
   "audit_consistency": {
     "allowed_transitive_axioms_only": "PASS",
-    "indexed_theorems": 2269,
-    "printed_axiom_entries": 2269,
+    "indexed_theorems": 2271,
+    "printed_axiom_entries": 2271,
     "source_index_line_check": "PASS",
-    "source_theorem_declarations": 2269,
-    "unique_qualified_names": 2269
+    "source_theorem_declarations": 2271,
+    "unique_qualified_names": 2271
   },
   "capture_limits": {
     "cleanup_retry_seconds": 2,
@@ -28,11 +28,11 @@
         "--version"
       ],
       "cwd": "proofs",
-      "elapsed_seconds": 2.855451666,
+      "elapsed_seconds": 0.298104792,
       "exit_code": 0,
       "log": "verification/current/version.log",
       "result": "PASS",
-      "started_unix_seconds": 1794507871.364527,
+      "started_unix_seconds": 1794522117.887048,
       "stderr_bytes": 0,
       "stdout_bytes": 106,
       "stream_layout": "stdout_then_stderr"
@@ -43,11 +43,11 @@
         "clean"
       ],
       "cwd": "proofs",
-      "elapsed_seconds": 0.390367,
+      "elapsed_seconds": 0.362503791,
       "exit_code": 0,
       "log": "verification/current/clean.log",
       "result": "PASS",
-      "started_unix_seconds": 1794507874.221226,
+      "started_unix_seconds": 1794522118.186309,
       "stderr_bytes": 0,
       "stdout_bytes": 0,
       "stream_layout": "stdout_then_stderr"
@@ -58,13 +58,13 @@
         "build"
       ],
       "cwd": "proofs",
-      "elapsed_seconds": 16.671295125,
+      "elapsed_seconds": 16.631554083,
       "exit_code": 0,
       "log": "verification/current/build.log",
       "result": "PASS",
-      "started_unix_seconds": 1794507874.612209,
+      "started_unix_seconds": 1794522118.549368,
       "stderr_bytes": 0,
-      "stdout_bytes": 11391,
+      "stdout_bytes": 11379,
       "stream_layout": "stdout_then_stderr"
     },
     {
@@ -294,11 +294,11 @@
         "Zetesis/WorldViews.lean"
       ],
       "cwd": "proofs",
-      "elapsed_seconds": 133.64598325,
+      "elapsed_seconds": 116.6439285,
       "exit_code": 0,
       "log": "verification/current/strict-modules.log",
       "result": "PASS",
-      "started_unix_seconds": 1794507891.285287,
+      "started_unix_seconds": 1794522135.182495,
       "stderr_bytes": 0,
       "stdout_bytes": 0,
       "stream_layout": "stdout_then_stderr"
@@ -313,13 +313,13 @@
         "Audit.lean"
       ],
       "cwd": "proofs",
-      "elapsed_seconds": 0.669649125,
+      "elapsed_seconds": 0.574718083,
       "exit_code": 0,
       "log": "verification/current/audit.log",
       "result": "PASS",
-      "started_unix_seconds": 1794508024.936957,
+      "started_unix_seconds": 1794522251.826978,
       "stderr_bytes": 0,
-      "stdout_bytes": 209285,
+      "stdout_bytes": 209479,
       "stream_layout": "stdout_then_stderr"
     },
     {
@@ -328,11 +328,11 @@
         "--version"
       ],
       "cwd": ".",
-      "elapsed_seconds": 0.01232775,
+      "elapsed_seconds": 0.010330167,
       "exit_code": 0,
       "log": "verification/current/rustc-version.log",
       "result": "PASS",
-      "started_unix_seconds": 1794508025.617069,
+      "started_unix_seconds": 1794522252.410007,
       "stderr_bytes": 0,
       "stdout_bytes": 36,
       "stream_layout": "stdout_then_stderr"
@@ -343,11 +343,11 @@
         "--version"
       ],
       "cwd": ".",
-      "elapsed_seconds": 0.012395333,
+      "elapsed_seconds": 0.010247583,
       "exit_code": 0,
       "log": "verification/current/cargo-version.log",
       "result": "PASS",
-      "started_unix_seconds": 1794508025.63006,
+      "started_unix_seconds": 1794522252.420902,
       "stderr_bytes": 0,
       "stdout_bytes": 36,
       "stream_layout": "stdout_then_stderr"
@@ -366,12 +366,12 @@
         "proof_records::"
       ],
       "cwd": ".",
-      "elapsed_seconds": 3.041611333,
+      "elapsed_seconds": 2.927547583,
       "exit_code": 0,
       "log": "verification/current/record-regressions.json",
-      "raw_log_sha256": "b5be4972a2e168edfe9f3a98cd9a2bef937c269fee53c2cae58716046f82798b",
+      "raw_log_sha256": "b88f689c942a126152b2a982772f5133e28187abab6a92d4cbf06b2955da753b",
       "result": "PASS",
-      "started_unix_seconds": 1794508025.643282,
+      "started_unix_seconds": 1794522252.431767,
       "stderr_bytes": 0,
       "stdout_bytes": 150,
       "stream_layout": "json_stdout_and_stderr"
@@ -382,11 +382,11 @@
         "--version"
       ],
       "cwd": ".",
-      "elapsed_seconds": 0.231559583,
+      "elapsed_seconds": 0.005268458,
       "exit_code": 0,
       "log": "verification/current/maintenance-version.log",
       "result": "PASS",
-      "started_unix_seconds": 1794508028.685627,
+      "started_unix_seconds": 1794522255.359968,
       "stderr_bytes": 0,
       "stdout_bytes": 26,
       "stream_layout": "stdout_then_stderr"
@@ -395,8 +395,8 @@
   "external_packages": [],
   "generated_artifact_sha256": {
     "README.md": "072b33889d90d168e9632f0a3fd91f74bcd998c848d1e3c7e98a614ff3ea9b4c",
-    "axiom-audit.txt": "b19e7bd619276a2803179739b625f7e0a6caafdeb7a4a5358cc76b312fefef4b",
-    "theorems.json": "817ea6a1625d02d7a528c5063db4f0fe14fe8a6994470f09f4cb168a86263eba"
+    "axiom-audit.txt": "e1fd0fb8d94944e3b80a022b88bd8ad6ff3963ff640d14393ff4372c678cb02d",
+    "theorems.json": "97619f2e47856d18fb24a1187e9f5c945648f33bf8664390bb6db3f2ebe46077"
   },
   "inventory_observation": {
     "path": "verification/current/inventory.json",
@@ -421,7 +421,7 @@
   "schema_version": 1,
   "semantic_modules": 219,
   "source_sha256": {
-    "Audit.lean": "8defe4719fbee2435b805155aa4a3a7ede7a446ef5185b303aaa00abcc9b56a2",
+    "Audit.lean": "c8b290610cf2300897c9b47d1e87405476d77eef9c0a2c6b9e5836cc38283443",
     "Zetesis.lean": "4d3bff51f193e057d90436cfa57b46536eef0c40ef85afc58e817f7cf4c35eb7",
     "Zetesis/AcyclicEvaluation.lean": "1a9c77283876cf1f61cb92031da04780aada5d0b256f79db5b64bfb6b129d0dc",
     "Zetesis/AdjacencyRows.lean": "38a19b1c74483a157636321a56e95fea660a2192a04c77930d609e411c8d30d4",
@@ -434,8 +434,8 @@
     "Zetesis/AggregateOccurrenceReplay.lean": "0d78b9ee2517226927bb30e78b4a412ba504c3a46e8acc77936e6e779a19cc8d",
     "Zetesis/AggregateRanges.lean": "d19d56b57cd98e862e730f498441c5e94d41c679d170d187f0726897b7b4e64f",
     "Zetesis/AggregateReduct.lean": "c5901d211c3bd3fffe388d87fa77efd1b66a79c3024cdec6dd63b7e77521a556",
-    "Zetesis/Algebra.lean": "0499f7ac54c9bbd475a1aabd367e248a926670ceb4107eba3c30441fe1a2e2eb",
-    "Zetesis/AlgebraicRows.lean": "e012f27a47d3f9708c8b09414ecd2f8754da5e2114b9b0fd687d62706783c955",
+    "Zetesis/Algebra.lean": "02922bae042002835d77730fea9fdd1255e9d082e42153e25e56d4671dc89975",
+    "Zetesis/AlgebraicRows.lean": "957f5f68b53273d001c380e420dbcaf5617697b0b67d9653cee9bead27f48b63",
     "Zetesis/ArithmeticFamilies.lean": "b228302826c0d8f034c6b593e7cd1d85616a3bd41770822394c9059cb9079e15",
     "Zetesis/AssociativeWitnesses.lean": "6a964da8e22d66799054c2b02677ee5d8496807ca5a28637f9173c5d077aef37",
     "Zetesis/AtomCatalogs.lean": "2a90dd7c129290ffc3f9609f51378e6e45014a55f31b74cca9e7284a4e320eec",
@@ -647,13 +647,13 @@
     "lean-toolchain": "3aac669c7a910ec2389f4e4f921b605adf6ebf2d1e0c9b9cd0be4d33f3f5db71"
   },
   "status": "PASS",
-  "theorems_audited": 2269,
+  "theorems_audited": 2271,
   "tool_sha256": {
     "cargo": "7672ead309d505577c018fff2cafb3433601f073e38cbe87359ac1f7b944bbf5",
     "lake": "58261a1a2fa1a362376c71e02ca854a093e71cc5e6ea64b287a931cb2565273d",
     "lean": "1b370cfcbf44e80d1b004ab1b1ab9a4c73951f9f7c242140bcff9bc577576554",
     "rustc": "210df6794001b73ec3d453878707fa1e0bdcb63c427024a6e6574bbe5615a4da",
-    "zetesis-maintenance": "5b5cc624ca0da21d52916513b3b10f01b73bd1884413f064f702edee111a2507"
+    "zetesis-maintenance": "98cff19d65846de47c88354b7f75b191a7bbe27b8c9be7cda621dff3de394f58"
   },
   "transitive_axioms": [
     "Classical.choice",
@@ -661,13 +661,13 @@
     "propext"
   ],
   "verification_log_sha256": {
-    "verification/current/audit.log": "b19e7bd619276a2803179739b625f7e0a6caafdeb7a4a5358cc76b312fefef4b",
-    "verification/current/build.log": "0b6e6eea08a770d0f2de1709d20d5e26fbd805985970ba6bf2e6bf5c8b27b12b",
+    "verification/current/audit.log": "e1fd0fb8d94944e3b80a022b88bd8ad6ff3963ff640d14393ff4372c678cb02d",
+    "verification/current/build.log": "897a914ab904a04c061262db48813607ea176606aae003fe660dd066a0d07157",
     "verification/current/cargo-version.log": "1aedaa9cce116919d39b1eb303a58865771582bc24fc259aa8e26cb212e0f59e",
     "verification/current/clean.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-    "verification/current/inventory.json": "a9016f99ddd4be08d868323d6f30c8d0fba34ce360f822230a2e95c85081e435",
+    "verification/current/inventory.json": "74a5a190ee478491339d81ab393cb4e4d4465828d99992f23b6dd218271108cf",
     "verification/current/maintenance-version.log": "fd629dcbd2b7ce137dd9902fda35d2d9396222ea5e42c8e631f944e1111805aa",
-    "verification/current/record-regressions.json": "931d58b0631bd97c3f69c984ce51d128a0a4d27f3b64159711ce21de39dd48f3",
+    "verification/current/record-regressions.json": "af599f97e8cf429d9fc45296c03bed6c13b3b73764a46a5fa48d5a4f48cc3d1b",
     "verification/current/rustc-version.log": "4ad84f16acc2f3bdcfbc7b0788f1e74a4e649b962154a585b8f8d0b28eb0dd06",
     "verification/current/strict-modules.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
     "verification/current/version.log": "4762d596346ad354e28668de62b7eeae7de5d531b9a7b1c182ca59cfacd81bdd"

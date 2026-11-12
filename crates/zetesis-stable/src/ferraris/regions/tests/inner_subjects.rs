@@ -481,6 +481,60 @@ fn a_dropped_pigeon_candidate_finds_its_countermodel_in_few_regions() {
     assert_eq!(statistics.reduct.inner_preparation.bounds, 4 + 4 + 1);
 }
 
+/// The pigeonhole core read in the other polarity: the atom `p · holes + k`
+/// is held when pigeon `p` is not in hole `k`. Each pigeon's clause forbids
+/// holding all of its atoms, and each pair of pigeons in one hole forbids
+/// cutting both.
+fn complemented_pigeonhole(holes: usize) -> (usize, Vec<Vec<(usize, bool)>>) {
+    let (n, clauses) = pigeonhole(holes);
+    let complemented = clauses
+        .into_iter()
+        .map(|clause| {
+            clause
+                .into_iter()
+                .map(|(atom, held)| (atom, !held))
+                .collect()
+        })
+        .collect();
+    (n, complemented)
+}
+
+#[test]
+fn a_complemented_pigeonhole_core_is_decided_at_the_root() {
+    // Five pigeons over four holes in the other polarity: each hole's pairs
+    // forbid cutting both, so its covering clique holds four of five, and
+    // each pigeon's table holds three of four at most. The two partition the
+    // same atoms, sixteen at least against fifteen at most, and the double
+    // count refutes the root before any region is walked.
+    let (n, clauses) = complemented_pigeonhole(4);
+    let fixture = Saturation::build(n, &clauses);
+    let (check, statistics) = fixture.check();
+    assert!(matches!(check, crate::Check::Stable));
+    let regions = statistics.reduct.regions;
+    assert_eq!(
+        (regions.regions, regions.refuted, regions.leaves),
+        (1, 1, 0)
+    );
+    assert_eq!(statistics.reduct.inner_preparation.root_refuted, 1);
+}
+
+#[test]
+fn a_complemented_core_less_one_pair_keeps_its_countermodel() {
+    // Without the pair of pigeons 0 and 1 in hole 0 the core is satisfiable:
+    // both may be in that hole. No covering clique holds both their atoms,
+    // so the root stands and the walk still finds the countermodel.
+    let (n, mut clauses) = complemented_pigeonhole(4);
+    let position = clauses
+        .iter()
+        .position(|clause| clause == &vec![(0, false), (4, false)])
+        .unwrap();
+    clauses.remove(position);
+    let fixture = Saturation::build(n, &clauses);
+    let (check, statistics) = fixture.check();
+    assert!(matches!(check, crate::Check::NonMinimal(_)));
+    assert_eq!(statistics.reduct.inner_preparation.root_refuted, 0);
+}
+
 #[test]
 fn the_parity_tier_refutes_a_region_that_contradicts_a_basis_row() {
     let fixture = Saturation::build(4, &shared_inputs());

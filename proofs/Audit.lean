@@ -214,6 +214,8 @@ import Zetesis
 #print axioms Zetesis.AlgebraicRows.counting_fold_one
 #print axioms Zetesis.AlgebraicRows.count_of_none
 #print axioms Zetesis.AlgebraicRows.upper_of_clique
+#print axioms Zetesis.AlgebraicRows.count_of_all
+#print axioms Zetesis.AlgebraicRows.lower_of_cover
 #print axioms Zetesis.AlgebraicRows.bounds_of_allowed
 #print axioms Zetesis.AlgebraicRows.bounded_counting_fold
 #print axioms Zetesis.AlgebraicRows.bounded_counting_fold_one

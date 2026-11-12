@@ -516,7 +516,7 @@ candidate's inner subjects are prepared from that closed root: the guards
 whose holding reaches the candidate are cut as units; each clause group's
 patterns that a clause does not already forbid are probed, in at most two
 rounds, by narrowing a copy of the closed root with the guard and the pattern
-decided (a group of one clause cutting its whole support only in the second), and the allowed patterns' affine hull and least and greatest counts, with the cliques of pairwise exclusions
+decided (a group of one clause cutting its whole support only in the second), and the allowed patterns' affine hull and least and greatest counts, with the cliques of pairwise exclusions, at most one atom held, the cliques of covering pairs, at most one atom cut,
 and the trivial bounds completing a partition, supply rows and bounds to the
 parity and cardinality systems for this query. From then on every region of
 the query, inline or served, narrows through the one joint driver with the frozen

@@ -1378,6 +1378,143 @@ fn a_missing_pair_leaves_no_clique() {
     assert!(!preparation.root_refuted());
 }
 
+/// The pigeonhole core read in the other polarity: the atom `p · holes + k`
+/// is held when pigeon `p` is not in hole `k`. Each pigeon's clause then
+/// forbids holding all of its atoms, and each pair of pigeons in one hole
+/// forbids cutting both.
+fn complemented_pigeonhole(holes: usize) -> (usize, Vec<Vec<(usize, bool)>>) {
+    let (n, clauses) = pigeonhole(holes);
+    let complemented = clauses
+        .into_iter()
+        .map(|clause| {
+            clause
+                .into_iter()
+                .map(|(atom, held)| (atom, !held))
+                .collect()
+        })
+        .collect();
+    (n, complemented)
+}
+
+#[test]
+fn a_holes_covering_pairs_are_a_lower_bound() {
+    // In the other polarity the pairs of one hole each forbid cutting both.
+    // They grow into the hole's clique of four pigeons, of which at most one
+    // is cut: at least three are held.
+    let (n, clauses) = complemented_pigeonhole(3);
+    let fixture = Saturation::build(n, &clauses, &[]);
+    let attempt = fixture.prepared();
+    let preparation = attempt.result.unwrap().unwrap();
+    let holes: Vec<_> = count_bounds(&preparation)
+        .into_iter()
+        .filter(|bound| bound.0 == BoundSide::Lower && bound.3 == 4)
+        .collect();
+    assert_eq!(
+        holes,
+        (0..3)
+            .map(|hole| (
+                BoundSide::Lower,
+                (0..4).map(|pigeon| pigeon * 3 + hole).collect(),
+                3,
+                4
+            ))
+            .collect::<Vec<_>>()
+    );
+}
+
+#[test]
+fn the_double_count_refutes_the_complemented_root() {
+    // The holes' covering cliques, three held of four in each of three
+    // holes, and the pigeons' tables, two held of three for each of four
+    // pigeons, partition the same atoms: nine at least against eight at most.
+    // Less one pigeon's clause the counts no longer conflict.
+    let (n, mut clauses) = complemented_pigeonhole(3);
+    let fixture = Saturation::build(n, &clauses, &[]);
+    let attempt = fixture.prepared();
+    let preparation = attempt.result.unwrap().unwrap();
+    assert!(preparation.cardinality().unwrap().root_refuted());
+    assert!(attempt.statistics.root_refuted);
+    clauses.remove(3);
+    let fixture = Saturation::build(n, &clauses, &[]);
+    let attempt = fixture.prepared();
+    assert!(!attempt.result.unwrap().unwrap().root_refuted());
+}
+
+#[test]
+fn renaming_the_atoms_keeps_the_complemented_refutation() {
+    // The cliques are read from the pairs, not from the atoms' numbering:
+    // the same core under the reversed numbering refutes the root as well.
+    let (n, clauses) = complemented_pigeonhole(3);
+    let renamed: Vec<Vec<(usize, bool)>> = clauses
+        .into_iter()
+        .map(|clause| {
+            let mut clause: Vec<_> = clause
+                .into_iter()
+                .map(|(atom, held)| (n - 1 - atom, held))
+                .collect();
+            clause.sort_unstable();
+            clause
+        })
+        .collect();
+    let fixture = Saturation::build(n, &renamed, &[]);
+    let attempt = fixture.prepared();
+    assert!(attempt.result.unwrap().unwrap().root_refuted());
+}
+
+#[test]
+fn a_missing_covering_pair_leaves_no_clique() {
+    // Without the pair of pigeons 0 and 1 in hole 0, a countermodel may cut
+    // both their atoms there. No clique holds both, the hole's pairs grow
+    // into two cliques of three, and the root stands.
+    let (n, mut clauses) = complemented_pigeonhole(3);
+    let position = clauses
+        .iter()
+        .position(|clause| clause == &vec![(0, false), (3, false)])
+        .unwrap();
+    clauses.remove(position);
+    let fixture = Saturation::build(n, &clauses, &[]);
+    let attempt = fixture.prepared();
+    let preparation = attempt.result.unwrap().unwrap();
+    let lower: Vec<_> = count_bounds(&preparation)
+        .into_iter()
+        .filter(|bound| bound.0 == BoundSide::Lower)
+        .collect();
+    assert!(
+        lower
+            .iter()
+            .all(|bound| !(bound.1.contains(&0) && bound.1.contains(&3)))
+    );
+    assert!(lower.contains(&(BoundSide::Lower, vec![0, 6, 9], 2, 3)));
+    assert!(lower.contains(&(BoundSide::Lower, vec![3, 6, 9], 2, 3)));
+    assert!(!preparation.root_refuted());
+}
+
+#[test]
+fn a_lone_covering_pair_keeps_one_lower_bound() {
+    // Two clauses, each forbidding both of its own two atoms cut. Each
+    // table's least count already says that one of its pair is held, so the
+    // clique of that pair alone adds no second bound over it.
+    let fixture = Saturation::build(
+        4,
+        &[vec![(0, false), (1, false)], vec![(2, false), (3, false)]],
+        &[],
+    );
+    let attempt = fixture.prepared();
+    let preparation = attempt.result.unwrap().unwrap();
+    let lower: Vec<_> = count_bounds(&preparation)
+        .into_iter()
+        .filter(|bound| bound.0 == BoundSide::Lower)
+        .collect();
+    assert_eq!(
+        lower,
+        vec![
+            (BoundSide::Lower, vec![0, 1], 1, 2),
+            (BoundSide::Lower, vec![2, 3], 1, 2),
+        ]
+    );
+    assert_eq!(attempt.statistics.cardinality.lower, 2);
+}
+
 #[test]
 fn a_tables_greatest_allowed_count_is_an_upper_bound() {
     // Over three atoms, the clauses forbidding all held and none held leave

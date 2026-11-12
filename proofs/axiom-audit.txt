@@ -212,6 +212,8 @@
 'Zetesis.AlgebraicRows.counting_fold_one' depends on axioms: [propext]
 'Zetesis.AlgebraicRows.count_of_none' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.AlgebraicRows.upper_of_clique' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.AlgebraicRows.count_of_all' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.AlgebraicRows.lower_of_cover' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.AlgebraicRows.bounds_of_allowed' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.AlgebraicRows.bounded_counting_fold' depends on axioms: [propext, Quot.sound]
 'Zetesis.AlgebraicRows.bounded_counting_fold_one' depends on axioms: [propext, Quot.sound]

@@ -1070,69 +1070,79 @@
     "line": 1081
   },
   {
+    "name": "Zetesis.AlgebraicRows.count_of_all",
+    "file": "Zetesis/AlgebraicRows.lean",
+    "line": 1115
+  },
+  {
+    "name": "Zetesis.AlgebraicRows.lower_of_cover",
+    "file": "Zetesis/AlgebraicRows.lean",
+    "line": 1139
+  },
+  {
     "name": "Zetesis.AlgebraicRows.bounds_of_allowed",
-    "file": "Zetesis/AlgebraicRows.lean",
-    "line": 1121
-  },
-  {
-    "name": "Zetesis.AlgebraicRows.bounded_counting_fold",
-    "file": "Zetesis/AlgebraicRows.lean",
-    "line": 1156
-  },
-  {
-    "name": "Zetesis.AlgebraicRows.bounded_counting_fold_one",
-    "file": "Zetesis/AlgebraicRows.lean",
-    "line": 1171
-  },
-  {
-    "name": "Zetesis.AlgebraicRows.bounded_counting_overflow_iff",
     "file": "Zetesis/AlgebraicRows.lean",
     "line": 1184
   },
   {
+    "name": "Zetesis.AlgebraicRows.bounded_counting_fold",
+    "file": "Zetesis/AlgebraicRows.lean",
+    "line": 1219
+  },
+  {
+    "name": "Zetesis.AlgebraicRows.bounded_counting_fold_one",
+    "file": "Zetesis/AlgebraicRows.lean",
+    "line": 1234
+  },
+  {
+    "name": "Zetesis.AlgebraicRows.bounded_counting_overflow_iff",
+    "file": "Zetesis/AlgebraicRows.lean",
+    "line": 1247
+  },
+  {
     "name": "Zetesis.AlgebraicRows.parity_forces",
     "file": "Zetesis/AlgebraicRows.lean",
-    "line": 1194
+    "line": 1257
   },
   {
     "name": "Zetesis.AlgebraicRows.xor_definition",
     "file": "Zetesis/AlgebraicRows.lean",
-    "line": 1209
+    "line": 1272
   },
   {
     "name": "Zetesis.AlgebraicRows.threshold_measure",
     "file": "Zetesis/AlgebraicRows.lean",
-    "line": 1238
+    "line": 1301
   },
   {
     "name": "Zetesis.AlgebraicRows.lower_of_threshold",
     "file": "Zetesis/AlgebraicRows.lean",
-    "line": 1263
+    "line": 1326
   },
   {
     "name": "Zetesis.AlgebraicRows.upper_of_negated_threshold",
     "file": "Zetesis/AlgebraicRows.lean",
-    "line": 1271
+    "line": 1334
   },
   {
     "name": "Zetesis.AlgebraicRows.bounds_of_asserted_conjunction",
     "file": "Zetesis/AlgebraicRows.lean",
-    "line": 1289
+    "line": 1352
   },
   {
     "name": "Zetesis.AlgebraicRows.count_measure",
     "file": "Zetesis/AlgebraicRows.lean",
-    "line": 1310
+    "line": 1373
   },
   {
     "name": "Zetesis.AlgebraicRows.lower_of_clause",
     "file": "Zetesis/AlgebraicRows.lean",
-    "line": 1332
+    "line": 1395
   },
   {
     "name": "Zetesis.AlgebraicRows.double_count_groups",
     "file": "Zetesis/AlgebraicRows.lean",
-    "line": 1360
+    "line": 1423
   },
   {
     "name": "Zetesis.ArithmeticFamilies.empty_admissible",
