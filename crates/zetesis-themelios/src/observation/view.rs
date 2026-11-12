@@ -3,7 +3,7 @@
 use std::fmt;
 
 use themelios_program::symbol::{Sign as SymbolSign, Symbol};
-use zetesis_algebra::{Cancellation, Meter, MeterBytes, Stop};
+use zetesis_algebra::{Cancellation, CancellationPoll, Meter, MeterBytes, Stop};
 use zetesis_core::catalog::{AtomRef, TermRef};
 use zetesis_core::{Model, Sign, ValueNodeRef};
 use zetesis_objective::Score;
@@ -463,7 +463,7 @@ fn sign(value: Sign) -> &'static str {
 struct Buffer<'a> {
     text: String,
     limits: ViewLimits,
-    cancellation: &'a Cancellation,
+    cancellation: CancellationPoll<'a>,
     work: u64,
 }
 impl<'a> Buffer<'a> {
@@ -471,7 +471,7 @@ impl<'a> Buffer<'a> {
         Self {
             text: String::new(),
             limits,
-            cancellation,
+            cancellation: cancellation.polling(),
             work: 0,
         }
     }
