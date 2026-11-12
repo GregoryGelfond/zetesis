@@ -4717,7 +4717,7 @@ compact prefix entry to truth at its stored original atom coordinate. It does
 not identify that coordinate with the compact formula-node position.
 
 The Rust
-[`ObjectivePlan::new_projected`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/objective_bound/projected.rs)
+[`ObjectivePlan::new_projected`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/objective_bound.rs)
 receives an authenticated `ObjectiveSource` from one admitted source owner. Its
 selector must collect all positive-pattern and closed-condition signed predicates
 and arities, scan that owner's complete catalog, and retain increasing original

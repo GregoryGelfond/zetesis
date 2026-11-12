@@ -448,9 +448,9 @@ impl SourceEligibility {
             context.budget,
             context.counters,
         )?;
-        // This pass stages its results separately from the activity it reads.
-        // Keep immutable scoped families and their reductions only until this
-        // producer returns, before predicate publication or cyclic refinement.
+        // Retain immutable scoped families for this producer over completed
+        // support. Staged activity also reuses completed readings until this
+        // producer returns; direct exact publication requires fresh readings.
         let mut bodies = crate::formula_ground::SourceBodies::new(
             Context {
                 computation: context.computation,
@@ -520,7 +520,7 @@ impl SourceEligibility {
         Ok(())
     }
 
-    /// Choice elements read the same staged activity as their outer binding.
+    /// Choice elements share the producer's lowering and activity-reading policy.
     fn choice<'source>(
         &mut self,
         rule: &'source RuleIr,

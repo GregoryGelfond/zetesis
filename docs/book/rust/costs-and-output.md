@@ -73,12 +73,11 @@ shifts and copies to the same work allowance. `new_projected` returns an
 `ObjectiveProjectionAttempt`: `into_parts` separates the completed plan or small
 typed refusal from its `ObjectiveProjectionReceipt`. The receipt retains actual
 work and observed projection capacity on both success and refusal. Before
-consuming the attempt, `error()` provides the full `ObjectiveProjectionError`
-for typed observation; its kind, template, work and display are unchanged.
-Refusal leaves
-ordinary exact scoring available under its remaining allowance. Optional choice
-strengthening may still decline its full-universe limit while the exact
-projected plan remains usable.
+consuming the attempt, `error()` provides the typed refusal with its active
+objective template, performed-work statistics and observed projection peak.
+Refusal leaves ordinary exact scoring available under its remaining allowance.
+Optional choice strengthening may still decline its full-universe limit while
+the exact projected plan remains usable.
 Source-backed sessions attempt this preparation directly and retain its actual
 work on refusal. Custom sessions without an authenticated source retain the
 ordinary constructor. Neither route changes displayed projection or reduct

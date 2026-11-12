@@ -1,10 +1,11 @@
 //! Scoped lowering shared by one producer pass over completed support.
 //!
-//! A producer reads one immutable source-activity snapshot while its updates are
-//! staged elsewhere. Its bodies can therefore share the existing formula and
-//! aggregate owners, then reduce each appended node once. The owner dies before
-//! that snapshot is published or refined; neither roots nor local atom IDs escape
-//! into another builder. Ordinary bodies never initialize these scratch owners.
+//! A producer retains immutable formula and aggregate owners over completed
+//! support. When activity updates are staged, completed readings also remain
+//! reusable until the producer returns, before publication or refinement. Direct
+//! exact publication instead discards the readings before each evaluation while
+//! retaining the immutable lowering. Neither roots nor local atom IDs escape into
+//! another builder. Ordinary bodies never initialize these scratch owners.
 
 use super::activity::Evaluation;
 use super::{Builder, Purpose};

@@ -613,6 +613,24 @@ are zero. `preparation_bytes` is the maximum shared named storage request throug
 that stage, including a refused request, not process memory. Shared peaks are
 not additive.
 
+`statistics.search.root_images` separately reports the optional original-root
+image transaction. Its `preparation_work`, `copying_work` and `closure_work` are
+performed work already contained in candidate reading/search work, not additional
+totals to add to them. `peak_bytes` is the shared named-storage requirement
+high-water through this attempt, including earlier live owners and refused
+requirements; it is not incremental allocation, actual RSS or an additive peak.
+`completed_rounds` excludes an interrupted or absorbing partial round.
+`applied_cuts` includes decisions made in a private root that may later be
+discarded. Likewise, `root_refuted` records a completed semantic contradiction
+even if a later publication charge refuses. Consult this transaction's `status`
+and the enclosing preparation result to determine publication; neither field
+alone establishes a retained seed, exhaustive enumeration or solve completion.
+An absent receipt is unavailable, not a measured zero. A declined image attempt
+can coexist with an earlier complete parity/cardinality preparation. When
+candidate passes are combined, work, completed rounds and applied cuts accumulate
+with saturating addition, and the peak is their maximum; status, groups, pairs
+and `root_refuted` describe the latest pass.
+
 Root preparation can seed the candidate walk with proved units or refute its
 root. The default candidate walk skips per-region parity and cardinality
 inspections. Its `region_passes`, `refuted` and parity `forced` counters are

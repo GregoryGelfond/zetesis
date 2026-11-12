@@ -441,13 +441,28 @@ run once for each original candidate owner, before serial, parallel or device
 candidate scheduling; they are host preparation, not device kernels.
 
 Both systems share an optional allowance of 100,000,000 logical word operations
-and the inherited preparation-byte allowance. Exhausting an optional allowance
-discards the whole preparation and keeps ordinary candidate generation.
-Cancellation, global work refusal, allocation and invalid source reads remain
-typed failures. Only a completed preparation publishes rows or units. The default
-candidate walk uses the prepared root and skips further parity and cardinality
-inspections of candidate regions, even when preparation found a nonempty basis
-or a checked pair of counting families.
+and the inherited preparation-byte allowance. Exhausting that allowance during
+parity or cardinality preparation discards those preparations and keeps ordinary
+candidate generation. Cancellation, global work refusal, allocation and invalid
+source reads remain typed failures. Only a completed preparation publishes rows
+or units.
+
+An additional original-root image closure combines checked mandatory groups
+with independently read forbidden pairs. If every remaining member of a
+mandatory group excludes an atom, that atom can be cut; an empty mandatory group
+refutes the root. The closure keeps original atom coordinates and works on a
+private root copy. Only a completed result can replace the prior seed or publish
+a refutation. Its selection, pair index, copied root and closure share the same
+remaining work and byte allowances; they do not enter frozen-reduct membership.
+An optional refusal of this additional transaction retains the earlier complete
+preparation. Other typed failures still propagate. This retention choice is
+internal and is not exposed as an execution option. The
+[root-image observations](../rust/outcomes.md#views-and-failures) distinguish
+its private work from publication.
+
+The default candidate walk uses the prepared root and skips further parity and
+cardinality inspections of candidate regions, even when preparation found a
+nonempty basis or a checked pair of counting families.
 
 With an active restriction or without a prepared generator order, the existing
 preference applies. Open atoms that head an atomic choice root of the

@@ -2,12 +2,13 @@
 //!
 //! Scoped builders borrow complete Support and select the shared source
 //! authority while owning their node tables and aggregate caches. One source
-//! producer pass retains its builder until all bindings have been observed under
-//! the same activity snapshot; independent validation keeps transient builders.
+//! producer pass retains its immutable lowering over completed Support. Staged
+//! activity shares completed readings until publication; direct exact publication
+//! requires fresh readings. Independent validation keeps transient builders.
 //! Objective rows use their explicit scratch ceilings even when filters or
-//! numeric selection later discard them. Rejected
-//! rule rows with nested scopes or generators use the theory ceilings for
-//! their discarded validation scratch; flat rejected rows validate atom keys.
+//! numeric selection later discard them. Rejected rule rows with nested scopes
+//! or generators use the theory ceilings for their discarded validation scratch;
+//! flat rejected rows validate atom keys.
 //! Both share cumulative source work. Only final reachable objective Condition
 //! nodes consume the retained query ceiling. No roots, producers, coherence or
 //! support-guard completion from scratch reach the original program.
