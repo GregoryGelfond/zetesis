@@ -102,10 +102,13 @@ fn transported_width_covers_each_live_threshold_family() {
         let theory = Theory::new(2, nodes.into_parts(), roots, AdmissionLimits::default()).unwrap();
         let (shape, words) = packed(&theory);
         // Two live descriptors and guards share one row. Width changes only
-        // its stored contribution columns, not occurrence-based work receipts.
+        // its stored contribution columns. Original evaluation keeps its
+        // legacy occurrence tariff; the frozen owner scans this row once.
         let columns = 1 + width.min(2);
         assert_eq!(shape.wide_words, 2 * 5 + 3 + columns * 3 + 2);
         assert_eq!(shape.numeric_work, 2 * (3 * 48 + 32));
+        assert_eq!(shape.frozen_numeric_work, 3 * 48 + 32);
+        assert_eq!(shape.threshold_guard_work, 2 * 4 + 2 * 64 + 8);
         assert_eq!(words.len() as u64 * 4, shape.bytes);
         let exact_device = wgpu::Limits {
             max_buffer_size: shape.bytes,
@@ -198,6 +201,9 @@ fn packed_ordinal_columns_preserve_sentinel_boundaries() {
         .unwrap();
         let (shape, words) = packed(&theory);
         assert_eq!(shape.wide_words, 3 * 5 + 3 + (1 + width) * 3 + 3);
+        assert_eq!(shape.numeric_work, 3 * (3 * 24 + 16));
+        assert_eq!(shape.frozen_numeric_work, shape.numeric_work);
+        assert_eq!(shape.threshold_guard_work, 0);
         assert_eq!(words.len() as u64 * 4, shape.bytes);
         let tail = shape.nodes as usize * 4;
         for &root in theory.roots() {
@@ -322,4 +328,52 @@ fn constant_only_fallback_matches_prepared_summaries() {
         .unwrap();
         assert_eq!(actual, expected);
     }
+}
+
+#[test]
+fn frozen_tariff_preserves_distinct_rows_and_all_guard_checks() {
+    let (shape, _) = packed(&interleaved());
+    assert_eq!(shape.numeric_work, 3 * (3 * 48 + 32));
+    assert_eq!(shape.frozen_numeric_work, 2 * (3 * 48 + 32));
+    assert_eq!(shape.threshold_guard_work, (2 * 4 + 2 * 64 + 8) + 4);
+    assert!(shape.frozen_numeric_work <= shape.numeric_work);
+}
+
+#[test]
+fn constant_row_beside_live_row_has_no_frozen_scan_charge() {
+    let theory = Theory::new(
+        1,
+        FormulaParts::from_numeric_raw(
+            vec![Node::atom(0), Node::threshold(0), Node::threshold(1)],
+            vec![],
+            vec![0, 0],
+            vec![1, 2],
+            vec![
+                NumericRow {
+                    start: 0,
+                    length: 1,
+                    domain: NumericDomain::Weights,
+                },
+                NumericRow {
+                    start: 1,
+                    length: 1,
+                    domain: NumericDomain::Weights,
+                },
+            ],
+            vec![
+                ThresholdDescriptor { row: 0, bound: 2 },
+                ThresholdDescriptor { row: 1, bound: 1 },
+            ],
+            vec![],
+        )
+        .unwrap(),
+        vec![2],
+        AdmissionLimits::default(),
+    )
+    .unwrap();
+    let (shape, words) = packed(&theory);
+    assert_eq!(words[4], 0, "the first row is folded to false");
+    assert_eq!(shape.numeric_work, 48 + 32);
+    assert_eq!(shape.frozen_numeric_work, 48 + 32);
+    assert_eq!(shape.threshold_guard_work, 4);
 }

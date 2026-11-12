@@ -8,11 +8,14 @@
 //! expression of columns. The ordinary residual comparison remains in the join.
 //!
 //! Flat normal source bodies opt in during eager emission or possible-head
-//! production. Family evidence, hybrid capture/checks and direct-source exact
+//! production. Explicit aggregate consumers additionally admit flat positive
+//! local conditions with covered bare-variable comparisons. Joins marked as
+//! original source evidence, hybrid capture/checks and direct-source exact
 //! activity never opt in. Scalar assignments may opt in after a whole-body
 //! totality certificate over that same immutable snapshot; their selected DAG
 //! operands retain original literal identities. Structural and nested scopes
-//! retain their old traversal. Every round query uses the occurrence's first-new
+//! retain their old traversal unless the explicit local certificate applies.
+//! Every round query uses the occurrence's first-new
 //! interval against the one immutable snapshot index.
 
 use themelios_program::program::Relation;
@@ -65,6 +68,72 @@ impl<'a, 'source> Join<'a, 'source> {
         }
         self.expression_keys = comparison_found.then_some(Eligible);
         Ok(())
+    }
+
+    /// Select numeric postings for one explicitly consumed positive local join.
+    /// Every scalar operand is a bare variable supplied by this prefix or a
+    /// positive flat occurrence. Thus a defined false selected comparison can
+    /// remove only rows that would fail the same residual comparison; there is
+    /// no skipped local arithmetic, generator or nested-family diagnostic.
+    /// The existing probe separately certifies its complete integer column and
+    /// current bound, retaining source order and all ordinary alias checks.
+    /// Call once before traversal. This changes neither the plan nor the
+    /// source-family/coverage authority.
+    pub(crate) fn select_numeric_local(
+        &mut self,
+        mut context: Context<'_, &Computation<'_, '_>>,
+    ) -> Result<(), FormulaFailure> {
+        if self.source_evidence {
+            return Ok(());
+        }
+        let mut comparison_found = false;
+        for literal in self.literals.get() {
+            tick(&mut context)?;
+            match literal {
+                LiteralIr::Atom(themelios_program::program::DefaultNegation::None, _) => {}
+                LiteralIr::Compare(comparison) => {
+                    let ([left, right], relation) = comparison.operands();
+                    let ([Operation::Variable(left)], [Operation::Variable(right)]) =
+                        (left.nodes.as_slice(), right.nodes.as_slice())
+                    else {
+                        return Ok(());
+                    };
+                    if !self.local_numeric_input(*left, &mut context)?
+                        || !self.local_numeric_input(*right, &mut context)?
+                    {
+                        return Ok(());
+                    }
+                    comparison_found |= selected_relation(relation);
+                }
+                _ => return Ok(()),
+            }
+        }
+        self.expression_keys = comparison_found.then_some(Eligible);
+        Ok(())
+    }
+
+    fn local_numeric_input(
+        &self,
+        slot: usize,
+        context: &mut Context<'_, &Computation<'_, '_>>,
+    ) -> Result<bool, FormulaFailure> {
+        tick(context)?;
+        if slot >= self.values.len() {
+            return Ok(false);
+        }
+        if self.values.is_bound(slot, context.work.location)? {
+            return Ok(true);
+        }
+        for occurrence in &self.plan.patterns {
+            tick(context)?;
+            let PositivePattern::Flat(pattern) = occurrence.pattern else {
+                return Ok(false);
+            };
+            if column(pattern, slot, context)?.is_some() {
+                return Ok(true);
+            }
+        }
+        Ok(false)
     }
 
     pub(super) fn expression_key_probe(

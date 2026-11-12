@@ -17,6 +17,8 @@ import Zetesis.ParametricReduct
 import Zetesis.PositiveTheory
 import Zetesis.ConstrainedPositive
 import Zetesis.PairwiseExclusions
+import Zetesis.GroupedExclusionCoverage
+import Zetesis.GroupedWitnessExclusion
 import Zetesis.StreamedConstraints
 import Zetesis.StreamedRegions
 import Zetesis.StreamedConsequences
@@ -92,6 +94,7 @@ import Zetesis.JoinFrames
 import Zetesis.OuterNegativeConsumers
 import Zetesis.OuterRanges
 import Zetesis.AggregateDependencies
+import Zetesis.AggregateOccurrenceReplay
 import Zetesis.BinaryWatch
 import Zetesis.TernaryWatch
 import Zetesis.TightEvaluation
@@ -107,6 +110,7 @@ import Zetesis.CountHeadActivity
 import Zetesis.WeightedHeadActivity
 import Zetesis.ObjectiveTransport
 import Zetesis.ObjectiveConditions
+import Zetesis.ObjectiveProjection
 import Zetesis.ObjectiveConditionTable
 import Zetesis.ObjectiveEligibility
 import Zetesis.BooleanHeads
@@ -205,9 +209,14 @@ import Zetesis.FactRejection
 import Zetesis.StratifiedEvaluation
 import Zetesis.AcyclicEvaluation
 import Zetesis.RequiredChoiceCosts
+import Zetesis.ChoiceMinimumLayers
 
 import Zetesis.ThresholdPropagation
 import Zetesis.ThresholdOccurrence
 import Zetesis.ThresholdResidues
 
 import Zetesis.ChargeCadence
+import Zetesis.SourceActivityReuse
+
+import Zetesis.SharedRowCharges
+import Zetesis.OriginalRowCharges

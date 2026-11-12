@@ -19,6 +19,8 @@ pub(crate) struct Shape {
     pub(crate) nodes: u32,
     pub(crate) rows: Rows,
     pub(crate) numeric_work: u32,
+    pub(crate) original_discount: u32,
+    pub(crate) frozen_numeric_work: u32,
     pub(crate) threshold_guard_work: u32,
     pub(crate) edges: u32,
     pub(crate) wide_words: u32,
@@ -58,6 +60,7 @@ impl Shape {
         let mut wide_words = 0u32;
         let mut auxiliary = 0u32;
         let mut numeric_work = 0u32;
+        let mut frozen_extremum_work = 0u32;
         let mut rows = Rows::new(theory, max_staging_bytes, cancellation)?;
         cancellation.poll().map_err(GpuError::interrupted)?;
         for index in 0..theory.view().len() {
@@ -86,14 +89,18 @@ impl Shape {
                 NodeView::ExtremumCut(cut) => {
                     // Ranked witness reduction and at most one forcing scan.
                     let length = address(cut.row.conditions.len())?;
+                    let work = length
+                        .checked_mul(24)
+                        .and_then(|n| n.checked_add(16))
+                        .ok_or_else(|| capacity("ordinal row work overflows"))?;
                     numeric_work = numeric_work
-                        .checked_add(
-                            length
-                                .checked_mul(24)
-                                .and_then(|n| n.checked_add(16))
-                                .ok_or_else(|| capacity("ordinal row work overflows"))?,
-                        )
+                        .checked_add(work)
                         .ok_or_else(|| capacity("numeric formula work overflows"))?;
+                    // Frozen extrema do not share the guard-specific witness
+                    // and forcing scans, unlike weighted threshold families.
+                    frozen_extremum_work = frozen_extremum_work
+                        .checked_add(work)
+                        .ok_or_else(|| capacity("frozen ordinal work overflows"))?;
                     wide_words = wide_words
                         .checked_add(5)
                         .ok_or_else(|| capacity("numeric descriptors overflow"))?;
@@ -122,7 +129,11 @@ impl Shape {
                     .ok_or_else(|| capacity("formula wide operand count exceeds u32"))?;
             }
         }
-        let threshold_guard_work = rows.threshold_guard_work(cancellation)?;
+        let (weighted_work, threshold_guard_work, original_discount) =
+            rows.threshold_work(theory, cancellation)?;
+        let frozen_numeric_work = weighted_work
+            .checked_add(frozen_extremum_work)
+            .ok_or_else(|| capacity("frozen numeric work overflows"))?;
         rows.locate(theory, wide_words, cancellation)?;
         wide_words = rows.tail_words;
         let bytes = bytes(nodes, wide_words)?;
@@ -134,6 +145,8 @@ impl Shape {
             nodes,
             rows,
             numeric_work,
+            original_discount,
+            frozen_numeric_work,
             threshold_guard_work,
             edges,
             wide_words,

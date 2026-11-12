@@ -345,6 +345,46 @@
     "line": 119
   },
   {
+    "name": "Zetesis.AggregateOccurrenceReplay.simulate",
+    "file": "Zetesis/AggregateOccurrenceReplay.lean",
+    "line": 68
+  },
+  {
+    "name": "Zetesis.AggregateOccurrenceReplay.aligned_reads",
+    "file": "Zetesis/AggregateOccurrenceReplay.lean",
+    "line": 128
+  },
+  {
+    "name": "Zetesis.AggregateOccurrenceReplay.join_trace_exact",
+    "file": "Zetesis/AggregateOccurrenceReplay.lean",
+    "line": 139
+  },
+  {
+    "name": "Zetesis.AggregateOccurrenceReplay.projected_occurrences",
+    "file": "Zetesis/AggregateOccurrenceReplay.lean",
+    "line": 153
+  },
+  {
+    "name": "Zetesis.AggregateOccurrenceReplay.replay_exact",
+    "file": "Zetesis/AggregateOccurrenceReplay.lean",
+    "line": 189
+  },
+  {
+    "name": "Zetesis.AggregateOccurrenceReplay.foreign_declines",
+    "file": "Zetesis/AggregateOccurrenceReplay.lean",
+    "line": 208
+  },
+  {
+    "name": "Zetesis.AggregateOccurrenceReplay.consumer_exact",
+    "file": "Zetesis/AggregateOccurrenceReplay.lean",
+    "line": 218
+  },
+  {
+    "name": "Zetesis.AggregateOccurrenceReplay.reduction_exact",
+    "file": "Zetesis/AggregateOccurrenceReplay.lean",
+    "line": 231
+  },
+  {
     "name": "Zetesis.AggregateRanges.sublist_envelope",
     "file": "Zetesis/AggregateRanges.lean",
     "line": 45
@@ -2513,6 +2553,21 @@
     "name": "Zetesis.ChoiceIntervals.unrelated_head_does_not_meet_lower_bound",
     "file": "Zetesis/ChoiceIntervals.lean",
     "line": 602
+  },
+  {
+    "name": "Zetesis.ChoiceMinimumLayers.increments_le",
+    "file": "Zetesis/ChoiceMinimumLayers.lean",
+    "line": 30
+  },
+  {
+    "name": "Zetesis.ChoiceMinimumLayers.group_lower_le",
+    "file": "Zetesis/ChoiceMinimumLayers.lean",
+    "line": 56
+  },
+  {
+    "name": "Zetesis.ChoiceMinimumLayers.conjoin_necessary",
+    "file": "Zetesis/ChoiceMinimumLayers.lean",
+    "line": 85
   },
   {
     "name": "Zetesis.ClauseValidation.scan_empty",
@@ -4845,6 +4900,156 @@
     "line": 189
   },
   {
+    "name": "Zetesis.GroupedExclusionCoverage.coverage_from_exact_membership",
+    "file": "Zetesis/GroupedExclusionCoverage.lean",
+    "line": 30
+  },
+  {
+    "name": "Zetesis.GroupedExclusionCoverage.shared_guard_pair",
+    "file": "Zetesis/GroupedExclusionCoverage.lean",
+    "line": 42
+  },
+  {
+    "name": "Zetesis.GroupedExclusionCoverage.shared_guard_pair_frozen",
+    "file": "Zetesis/GroupedExclusionCoverage.lean",
+    "line": 57
+  },
+  {
+    "name": "Zetesis.GroupedExclusionCoverage.guarded_family",
+    "file": "Zetesis/GroupedExclusionCoverage.lean",
+    "line": 72
+  },
+  {
+    "name": "Zetesis.GroupedExclusionCoverage.grouped_original",
+    "file": "Zetesis/GroupedExclusionCoverage.lean",
+    "line": 92
+  },
+  {
+    "name": "Zetesis.GroupedExclusionCoverage.grouped_frozen",
+    "file": "Zetesis/GroupedExclusionCoverage.lean",
+    "line": 103
+  },
+  {
+    "name": "Zetesis.GroupedExclusionCoverage.grouped_stable_in_context",
+    "file": "Zetesis/GroupedExclusionCoverage.lean",
+    "line": 113
+  },
+  {
+    "name": "Zetesis.GroupedExclusionCoverage.constraints_by_fiber",
+    "file": "Zetesis/GroupedExclusionCoverage.lean",
+    "line": 129
+  },
+  {
+    "name": "Zetesis.GroupedExclusionCoverage.fibers_original",
+    "file": "Zetesis/GroupedExclusionCoverage.lean",
+    "line": 145
+  },
+  {
+    "name": "Zetesis.GroupedExclusionCoverage.fibers_frozen",
+    "file": "Zetesis/GroupedExclusionCoverage.lean",
+    "line": 169
+  },
+  {
+    "name": "Zetesis.GroupedExclusionCoverage.fibers_stable_in_context",
+    "file": "Zetesis/GroupedExclusionCoverage.lean",
+    "line": 185
+  },
+  {
+    "name": "Zetesis.GroupedExclusionCoverage.short_fiber_tautology",
+    "file": "Zetesis/GroupedExclusionCoverage.lean",
+    "line": 203
+  },
+  {
+    "name": "Zetesis.GroupedExclusionCoverage.duplicate_edge_witnesses_irrelevant",
+    "file": "Zetesis/GroupedExclusionCoverage.lean",
+    "line": 216
+  },
+  {
+    "name": "Zetesis.GroupedExclusionCoverage.formula_deduplication_is_unsound",
+    "file": "Zetesis/GroupedExclusionCoverage.lean",
+    "line": 232
+  },
+  {
+    "name": "Zetesis.GroupedExclusionCoverage.duplicate_binding_is_unsound",
+    "file": "Zetesis/GroupedExclusionCoverage.lean",
+    "line": 242
+  },
+  {
+    "name": "Zetesis.GroupedExclusionCoverage.dropping_shared_guard_is_unsound",
+    "file": "Zetesis/GroupedExclusionCoverage.lean",
+    "line": 252
+  },
+  {
+    "name": "Zetesis.GroupedExclusionCoverage.merging_fibers_is_unsound",
+    "file": "Zetesis/GroupedExclusionCoverage.lean",
+    "line": 261
+  },
+  {
+    "name": "Zetesis.GroupedExclusionCoverage.incomplete_pair_coverage_is_unsound",
+    "file": "Zetesis/GroupedExclusionCoverage.lean",
+    "line": 273
+  },
+  {
+    "name": "Zetesis.GroupedWitnessExclusion.lane_frozen",
+    "file": "Zetesis/GroupedWitnessExclusion.lean",
+    "line": 34
+  },
+  {
+    "name": "Zetesis.GroupedWitnessExclusion.witness_pair_requirement",
+    "file": "Zetesis/GroupedWitnessExclusion.lean",
+    "line": 39
+  },
+  {
+    "name": "Zetesis.GroupedWitnessExclusion.witness_pair_any",
+    "file": "Zetesis/GroupedWitnessExclusion.lean",
+    "line": 55
+  },
+  {
+    "name": "Zetesis.GroupedWitnessExclusion.witnessed_family_any",
+    "file": "Zetesis/GroupedWitnessExclusion.lean",
+    "line": 76
+  },
+  {
+    "name": "Zetesis.GroupedWitnessExclusion.guarded_pair_requirement",
+    "file": "Zetesis/GroupedWitnessExclusion.lean",
+    "line": 97
+  },
+  {
+    "name": "Zetesis.GroupedWitnessExclusion.guarded_native_original",
+    "file": "Zetesis/GroupedWitnessExclusion.lean",
+    "line": 108
+  },
+  {
+    "name": "Zetesis.GroupedWitnessExclusion.witnessed_group_original",
+    "file": "Zetesis/GroupedWitnessExclusion.lean",
+    "line": 125
+  },
+  {
+    "name": "Zetesis.GroupedWitnessExclusion.witnessed_group_frozen",
+    "file": "Zetesis/GroupedWitnessExclusion.lean",
+    "line": 134
+  },
+  {
+    "name": "Zetesis.GroupedWitnessExclusion.witnessed_group_stable",
+    "file": "Zetesis/GroupedWitnessExclusion.lean",
+    "line": 144
+  },
+  {
+    "name": "Zetesis.GroupedWitnessExclusion.witnessed_fibers_original",
+    "file": "Zetesis/GroupedWitnessExclusion.lean",
+    "line": 159
+  },
+  {
+    "name": "Zetesis.GroupedWitnessExclusion.witnessed_fibers_frozen",
+    "file": "Zetesis/GroupedWitnessExclusion.lean",
+    "line": 181
+  },
+  {
+    "name": "Zetesis.GroupedWitnessExclusion.witnessed_fibers_stable",
+    "file": "Zetesis/GroupedWitnessExclusion.lean",
+    "line": 194
+  },
+  {
     "name": "Zetesis.HeadContributions.neutral_values_are_zero",
     "file": "Zetesis/HeadContributions.lean",
     "line": 40
@@ -6095,6 +6300,26 @@
     "line": 188
   },
   {
+    "name": "Zetesis.ObjectiveProjection.query_read_locality",
+    "file": "Zetesis/ObjectiveProjection.lean",
+    "line": 50
+  },
+  {
+    "name": "Zetesis.ObjectiveProjection.query_predicate_projection",
+    "file": "Zetesis/ObjectiveProjection.lean",
+    "line": 92
+  },
+  {
+    "name": "Zetesis.ObjectiveProjection.requested_rows_preserved",
+    "file": "Zetesis/ObjectiveProjection.lean",
+    "line": 106
+  },
+  {
+    "name": "Zetesis.ObjectiveProjection.compact_prefix_read",
+    "file": "Zetesis/ObjectiveProjection.lean",
+    "line": 128
+  },
+  {
     "name": "Zetesis.ObjectiveTransport.present_transport",
     "file": "Zetesis/ObjectiveTransport.lean",
     "line": 37
@@ -6533,6 +6758,41 @@
     "name": "Zetesis.OrdinalExtrema.suffix_above",
     "file": "Zetesis/OrdinalExtrema.lean",
     "line": 168
+  },
+  {
+    "name": "Zetesis.OriginalRowCharges.empty",
+    "file": "Zetesis/OriginalRowCharges.lean",
+    "line": 39
+  },
+  {
+    "name": "Zetesis.OriginalRowCharges.bounded",
+    "file": "Zetesis/OriginalRowCharges.lean",
+    "line": 44
+  },
+  {
+    "name": "Zetesis.OriginalRowCharges.one_guard",
+    "file": "Zetesis/OriginalRowCharges.lean",
+    "line": 52
+  },
+  {
+    "name": "Zetesis.OriginalRowCharges.discount_conserves",
+    "file": "Zetesis/OriginalRowCharges.lean",
+    "line": 61
+  },
+  {
+    "name": "Zetesis.OriginalRowCharges.total_bounded",
+    "file": "Zetesis/OriginalRowCharges.lean",
+    "line": 71
+  },
+  {
+    "name": "Zetesis.OriginalRowCharges.total_conserves",
+    "file": "Zetesis/OriginalRowCharges.lean",
+    "line": 79
+  },
+  {
+    "name": "Zetesis.OriginalRowCharges.accepted_setup",
+    "file": "Zetesis/OriginalRowCharges.lean",
+    "line": 90
   },
   {
     "name": "Zetesis.Outcomes.completed_unsatisfiable_iff_empty",
@@ -8435,6 +8695,36 @@
     "line": 176
   },
   {
+    "name": "Zetesis.SharedRowCharges.empty_owner",
+    "file": "Zetesis/SharedRowCharges.lean",
+    "line": 37
+  },
+  {
+    "name": "Zetesis.SharedRowCharges.one_guard",
+    "file": "Zetesis/SharedRowCharges.lean",
+    "line": 42
+  },
+  {
+    "name": "Zetesis.SharedRowCharges.owner_le_occurrence",
+    "file": "Zetesis/SharedRowCharges.lean",
+    "line": 49
+  },
+  {
+    "name": "Zetesis.SharedRowCharges.total_owner_le",
+    "file": "Zetesis/SharedRowCharges.lean",
+    "line": 65
+  },
+  {
+    "name": "Zetesis.SharedRowCharges.common_terms_preserved",
+    "file": "Zetesis/SharedRowCharges.lean",
+    "line": 73
+  },
+  {
+    "name": "Zetesis.SharedRowCharges.accepted_prefix_stays_within",
+    "file": "Zetesis/SharedRowCharges.lean",
+    "line": 80
+  },
+  {
     "name": "Zetesis.SignedHeadElements.operand_original",
     "file": "Zetesis/SignedHeadElements.lean",
     "line": 62
@@ -8693,6 +8983,21 @@
     "name": "Zetesis.SingletonHeads.double_negative_singleton_has_no_producer",
     "file": "Zetesis/SingletonHeads.lean",
     "line": 78
+  },
+  {
+    "name": "Zetesis.SourceActivityReuse.activity_masks_compatible",
+    "file": "Zetesis/SourceActivityReuse.lean",
+    "line": 60
+  },
+  {
+    "name": "Zetesis.SourceActivityReuse.threshold_covers",
+    "file": "Zetesis/SourceActivityReuse.lean",
+    "line": 76
+  },
+  {
+    "name": "Zetesis.SourceActivityReuse.bounds_equal_of_occurrence_agreement",
+    "file": "Zetesis/SourceActivityReuse.lean",
+    "line": 109
   },
   {
     "name": "Zetesis.SourceContributions.chain_unique",

@@ -53,6 +53,12 @@ impl<'a, 'source> Computation<'a, 'source> {
         }
     }
 
+    /// The live query already borrowed by this computation. Shared final-family
+    /// owners retain this borrow; they never authenticate a recycled address.
+    pub(crate) fn query_support(&self) -> &'a Support<'source> {
+        self.support
+    }
+
     pub(crate) fn read(&self) -> CatalogRead<'_> {
         match &self.terms {
             Terms::Append(append) => append.read(),

@@ -64,6 +64,7 @@ fn terminal_outcomes_settle_workers_before_caching_receipts() {
                 theory: owner.theory(),
                 atoms: owner.atom_catalog(),
                 objectives: owner.objectives(),
+                objective_source: None,
                 required_choices: owner.required_choices(),
                 keyed_constraints: 0,
                 key_analysis: zetesis_themelios::KeyAnalysis::Complete,

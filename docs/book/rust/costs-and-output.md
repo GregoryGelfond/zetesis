@@ -48,6 +48,42 @@ objective presence and signed totals, without rebuilding joins or tuple keys.
 The caller must still establish complete catalog coverage and answer-set
 membership. Equal-looking theories are distinct owners.
 
+`AdmittedFormula`, `AdmittedFormulaBundle` and `StreamedCore` supply an
+`ObjectiveSource` borrow for `ObjectivePlan::new_projected`. The handle ties the
+original theory, complete atom catalog and objectives to the same admitted
+owner. Source interning and publication establish unique catalog coordinates;
+arbitrary catalogs cannot mint this handle. The ordinary `ObjectivePlan::new`
+remains available and retains its full-catalog atom limit and duplicate checks.
+
+Projected preparation collects the exact signed predicate signatures read by
+positive objective patterns and every atom in their closed condition graphs.
+It scans the complete catalog once, then builds the existing atom index over
+those selected positions. Only this constructor applies `max_atoms` to the
+selected rows. Eligibility formulas use a compact atom-node prefix whose
+payloads retain original positions; both relational bindings and closed queries
+translate through that prefix. Scoring and incumbent bounds still address the
+full original atom universe. No reduct atom is removed or reinterpreted.
+
+The caller's `max_projection_bytes` independently bounds read-set metadata,
+selected-position storage and the shared index's preparation storage. It counts
+headers, actual vector capacities and live replacement/sort overlap; existing
+limits still govern formula DAGs, joins, tuple keys and priority rows. It is not
+a total process-memory ceiling. Preparation charges scans, identity comparisons,
+shifts and copies to the same work allowance. `new_projected` returns an
+`ObjectiveProjectionAttempt`: `into_parts` separates the completed plan or small
+typed refusal from its `ObjectiveProjectionReceipt`. The receipt retains actual
+work and observed projection capacity on both success and refusal. Before
+consuming the attempt, `error()` provides the full `ObjectiveProjectionError`
+for typed observation; its kind, template, work and display are unchanged.
+Refusal leaves
+ordinary exact scoring available under its remaining allowance. Optional choice
+strengthening may still decline its full-universe limit while the exact
+projected plan remains usable.
+Source-backed sessions attempt this preparation directly and retain its actual
+work on refusal. Custom sessions without an authenticated source retain the
+ordinary constructor. Neither route changes displayed projection or reduct
+membership.
+
 The ordinary `evaluate` API remains the contribution-evidence path. Prepared
 scoring also declines to it when possible-population binding, key or byte counts
 cannot establish the requested per-model ceilings. That decline spends no work;
@@ -134,16 +170,37 @@ scoring. Equal-cost answers remain eligible. Preparation uses checked vector
 capacities under the candidate-memory allowance, with source premises counted
 once; this account excludes unrelated owners and allocator bookkeeping.
 The fixed activation closure is prepared once in the existing n-ary formula
-representation. Preparation also compiles each changed priority's residual
-weights and releases the temporary member-to-key allocation lists. Unchanged
-priorities borrow the exact objective; the retained lower objective contains
-only activation floors and nonzero residual contributions. Both inputs use the
-same checked priority ordering, weight normalization and lexicographic compiler.
+representation. Preparation compiles residual weights and retains the same
+checked group allocations, ordered by key weight, for a second necessary cost.
+It also retains the exact contributions of unallocated keys. Unchanged
+priorities borrow the exact objective.
+
+For an active group with distinct allocated weights `v0 < ... < vk`, the second
+cost starts at `v0`. Each later level adds `vi - v(i-1)` only when no cheaper
+allocated key is eligible. The compiler shares cumulative ORs of those cheaper
+eligibility conditions and gates every increment by the group's activation.
+In a total original model the active group has an eligible key, so this value
+is its cheapest eligible allocated weight and cannot exceed its exact cost.
+The [minimum-layer laws](../lean/theorems.md) state the necessary value bound.
+The residual and minimum-layer costs are each compared with the incumbent,
+then conjoined with the exact bound; their scores are never added. All three
+use the same priority order and strict or inclusive lexicographic comparison.
+This preserves the requested comparison, including every tie under an inclusive
+bound. It does not establish stronger propagation on every partial region.
+
 Each improved incumbent first constructs its exact bound. Optional strengthening
-copies that bound and the compact activation closure; it does not rescan unrelated
-original formulas or recompute the allocated minima. Exact score evaluation is
-unchanged. An optional bridge or bound failure leaves the ordinary exact bound
-available.
+copies that bound and the compact activation closure once for both lower costs;
+it does not rescan unrelated original formulas or recompute group membership.
+Exact score evaluation is unchanged. Retained key allocations, unallocated
+contributions and any previous complete choice preparation count against the
+existing preparation byte allowance. Ordering and extra graph construction use
+the existing work and node/operand limits. Bound construction has no separate
+byte ceiling; the preparation allowance is not an RSS limit for that later work.
+A preparation refusal publishes no partial choice owner and preserves an earlier
+complete one. A strengthening refusal keeps the completed exact bound and
+reports the optional failure and work already performed. The added work and
+storage can therefore decline optional strengthening at an unchanged tight
+allowance. Useful propagation and end-to-end cost require separate measurements.
 After an improved incumbent, that fallback still implies the preceding bound
 on original models: the required-choice lower cost never exceeds their exact
 cost. Interpretations violating the original theory need not obey that

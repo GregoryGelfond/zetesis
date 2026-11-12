@@ -10,9 +10,14 @@
 mod bound;
 mod choices;
 mod join;
+mod projected;
 mod score;
 #[cfg(test)]
 mod tests;
+pub use projected::{
+    ObjectiveProjectionAttempt, ObjectiveProjectionError, ObjectiveProjectionErrorKind,
+    ObjectiveProjectionReceipt, ObjectiveSource,
+};
 pub use score::{ObjectiveScore, ObjectiveScoreError, ObjectiveScoreErrorKind};
 
 use std::collections::BTreeMap;
@@ -28,7 +33,8 @@ use zetesis_objective::{ObjectiveProgram, PlanIdentity, Score};
 /// Inclusive construction limits; zero is a real ceiling.
 #[derive(Clone, Copy, Debug)]
 pub struct ObjectivePlanLimits {
-    /// Supplied original semantic atoms. Also bounds the requested lengths of
+    /// Supplied original semantic atoms for [`ObjectivePlan::new`], or selected
+    /// objective-readable atoms for [`ObjectivePlan::new_projected`]. Also bounds the requested lengths of
     /// two integer lookup orders and one reusable merge-scratch vector. Each
     /// reservation is fallible; allocator slack and atom payload are not a
     /// process memory ceiling.
@@ -90,7 +96,8 @@ impl Default for ObjectiveBoundLimits {
 /// Refused optional planning resource.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ObjectiveBoundResource {
-    /// Semantic atom count.
+    /// Semantic atom count under the selected constructor: the whole supplied
+    /// catalog for `new`, or objective-readable rows for `new_projected`.
     Atoms,
     /// Complete join rows.
     Bindings,
@@ -207,8 +214,10 @@ impl ObjectivePlan {
     /// Prepare necessary nonnegative choice costs without changing exact scores.
     ///
     /// A required group prepays its least certified objective weight under its
-    /// activation; allocated keys retain their excess over that weight. Groups
-    /// never share a coalesced objective key.
+    /// activation; allocated keys retain their excess over that weight. The same
+    /// checked allocation also supplies a minimum-layer cost that excludes cheaper
+    /// keys. Independent lower-cost comparisons are conjoined, never added.
+    /// Groups never share a coalesced objective key.
     /// Unsupported bridges remain unproved, not false. The result is optional:
     /// refusal preserves the exact plan and any preceding successful preparation.
     /// Success and error statistics count this attempt separately from [`Self::statistics`].
@@ -266,6 +275,35 @@ impl ObjectivePlan {
         cancellation: &Cancellation,
     ) -> Result<Self, ObjectiveBoundError> {
         join::compile(original, atoms, objectives, limits, cancellation)
+    }
+    /// Compile exact objective eligibility from an authenticated source owner.
+    ///
+    /// Preparation selects every signed predicate read by a positive objective
+    /// pattern or a closed condition, then reuses the ordinary compiler. The
+    /// selected atom ceiling applies to this read set, while formula atom nodes
+    /// retain original source positions and bounds retain the full universe.
+    /// Source admission establishes the complete catalog's unique identities;
+    /// this handle cannot be constructed from an arbitrary catalog.
+    ///
+    /// `max_projection_bytes` bounds simultaneous read-set, selected-position
+    /// and index/sort storage, including their headers and actual capacities.
+    /// It does not replace the existing eligibility, key or binding limits.
+    /// All scans, comparisons, shifts and materialization use `limits.max_work`
+    /// and poll cancellation. A refusal retains its performed-work receipt and
+    /// observed projection peak; no partially constructed plan is returned.
+    /// Optional choice strengthening remains a separate operation and may
+    /// decline its full-universe limit without discarding this exact plan.
+    ///
+    /// The returned attempt retains a receipt on success and refusal. Its small
+    /// typed outcome contains a completed plan, an existing compiler refusal or
+    /// a projection byte refusal. No partially prepared plan is published.
+    pub fn new_projected(
+        source: ObjectiveSource<'_>,
+        limits: ObjectivePlanLimits,
+        max_projection_bytes: u128,
+        cancellation: &Cancellation,
+    ) -> ObjectiveProjectionAttempt {
+        projected::compile(source, limits, max_projection_bytes, cancellation)
     }
     /// Original theory instance, unchanged by planning.
     #[must_use]

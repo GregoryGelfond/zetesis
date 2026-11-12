@@ -50,7 +50,8 @@ pub use config::{
 pub use invocation::NativeInvocation;
 pub use record::{
     Decision, DeviceWork, Execution, FormulaResidualStatistics, HybridStatistics, Observation,
-    Procedure, RegionChecks, Sample, SourceEvaluationStatistics, TerminalStatistics,
+    Procedure, RegionChecks, RootImageStatistics, Sample, SourceEvaluationStatistics,
+    TerminalStatistics,
 };
 pub(crate) use workload::workload_label;
 pub use workload::{

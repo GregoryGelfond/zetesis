@@ -147,7 +147,7 @@ pub struct RunOptions {
     /// Omitted, the whole suite is measured.
     #[arg(long = "case", value_name = "PATH")]
     pub cases: Vec<String>,
-    /// Source-bundle manifest for external programs; uses the explicit workload
+    /// Sealed bundle or typed-selection manifest; uses the explicit workload
     /// matrix and requires clingo. Conflicts with suite and case selection.
     #[arg(
         long,
@@ -609,7 +609,7 @@ fn campaign(
                 source_bytes: request.limits.corpus.source_bytes,
                 total_source_bytes: request.limits.corpus.total_source_bytes,
                 metadata_bytes: request.limits.corpus.manifest_bytes,
-                amendments: 0,
+                amendments: matrix::WorkloadLimits::default().amendments,
             },
         )?;
         matrix::run_workloads_with_cancellation(

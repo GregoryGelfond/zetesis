@@ -1,8 +1,11 @@
 //! Scoped body validation and original-model objective truth share formula lowering.
 //!
-//! A transient builder borrows complete Support and selects the shared source
-//! authority while owning its node table and aggregate cache. Objective rows use their explicit scratch
-//! ceilings even when filters or numeric selection later discard them. Rejected
+//! Scoped builders borrow complete Support and select the shared source
+//! authority while owning their node tables and aggregate caches. One source
+//! producer pass retains its builder until all bindings have been observed under
+//! the same activity snapshot; independent validation keeps transient builders.
+//! Objective rows use their explicit scratch ceilings even when filters or
+//! numeric selection later discard them. Rejected
 //! rule rows with nested scopes or generators use the theory ceilings for
 //! their discarded validation scratch; flat rejected rows validate atom keys.
 //! Both share cumulative source work. Only final reachable objective Condition
@@ -10,6 +13,10 @@
 //! support-guard completion from scratch reach the original program.
 
 mod threshold;
+mod activity;
+mod source;
+
+pub(crate) use source::SourceBodies;
 
 use crate::formula_binding::Binding;
 
@@ -34,19 +41,6 @@ pub(super) fn validate<'source>(
     context: &mut Context<'_, '_, 'source>,
 ) -> Result<ValidatedBody, FormulaFailure> {
     validate_with_purpose(literals, binding, support, context, Purpose::Objective)
-}
-
-/// Source activity uses the same complete scoped lowering as original-model
-/// queries, with theory scratch ceilings and no retained query publication.
-pub(crate) fn source_activity<'source>(
-    literals: &[LiteralIr],
-    binding: &Binding,
-    support: &Support<'source>,
-    eligibility: &SourceEligibility,
-    context: &mut Context<'_, '_, 'source>,
-) -> Result<Activity, FormulaFailure> {
-    validate_with_purpose(literals, binding, support, context, Purpose::Validation)?
-        .source_activity(eligibility, context)
 }
 
 pub(super) fn validate_with_purpose<'source>(
@@ -80,106 +74,20 @@ pub(super) fn validate_with_purpose<'source>(
 }
 
 impl ValidatedBody {
-    /// Fold independent source-atom possibilities over the lowered DAG. An
-    /// optional atom and its negation remain optional even when correlated;
-    /// this is neither satisfiability nor a frozen-reduct evaluation.
+    /// Independent callers evaluate their owned body against one fresh source
+    /// snapshot. Producer passes use `SourceBodies` to retain this same fold.
     pub(super) fn source_activity(
         &self,
         eligibility: &SourceEligibility,
         context: &mut Context<'_, '_, '_>,
     ) -> Result<Activity, FormulaFailure> {
-        let count = self.root + 1;
-        let mut values = Buffer::new(
-            context.computation,
-            context.limits,
-            context.counters,
-            context.location,
-        )?;
-        values.resize(
-            count,
-            Activity::Absent,
-            context.computation,
-            context.limits,
-            context.counters,
-            context.location,
-        )?;
-        for index in 0..count {
-            let node = self.nodes.view().node(index).expect("owned formula node");
-            context.counters.work(context.limits, context.location)?;
-            let activity = match node {
-                Node::False => Activity::Absent,
-                Node::Atom(atom) => {
-                    let source = self.atoms.source(
-                        atom,
-                        context.counters,
-                        context.limits,
-                        context.location,
-                    )?;
-                    eligibility.source_activity(&source, context)?
-                }
-                Node::And(row) | Node::Or(row) => {
-                    let conjunction = matches!(node, Node::And(_));
-                    let mut activity = if conjunction {
-                        Activity::Required
-                    } else {
-                        Activity::Absent
-                    };
-                    for &child in row {
-                        context.counters.work(context.limits, context.location)?;
-                        activity = if conjunction {
-                            activity.min(values.slice()[child])
-                        } else {
-                            activity.max(values.slice()[child])
-                        };
-                    }
-                    activity
-                }
-                Node::Threshold(row) => {
-                    let mut lower = 0_i128;
-                    let mut upper = 0_i128;
-                    for (&condition, &weight) in row.conditions.iter().zip(row.weights) {
-                        context.counters.work(context.limits, context.location)?;
-                        let activity = values.slice()[condition];
-                        if activity == Activity::Required {
-                            lower += i128::from(weight);
-                        }
-                        if activity != Activity::Absent {
-                            upper += i128::from(weight);
-                        }
-                    }
-                    if lower >= row.bound {
-                        Activity::Required
-                    } else if upper < row.bound {
-                        Activity::Absent
-                    } else {
-                        Activity::Optional
-                    }
-                }
-                Node::ExtremumCut(cut) => {
-                    let mut activity = match cut.endpoint_truth() {
-                        Some(true) => Activity::Required,
-                        Some(false) | None => Activity::Absent,
-                    };
-                    if cut.endpoint_truth().is_none() {
-                        for (&condition, &rank) in cut.row.conditions.iter().zip(cut.row.ranks) {
-                            context.counters.work(context.limits, context.location)?;
-                            if cut.qualifies(rank) {
-                                activity = activity.max(values.slice()[condition]);
-                            }
-                        }
-                    }
-                    activity
-                }
-                Node::Implies(left, right) => {
-                    context
-                        .counters
-                        .charge_work(2, context.limits, context.location)?;
-                    values.slice()[left].negate().max(values.slice()[right])
-                }
-            };
-            values.slice_mut()[index] = activity;
-        }
-        Ok(values.slice()[self.root])
+        activity::Evaluation::new(context)?.evaluate(
+            &self.nodes,
+            &self.atoms,
+            self.root,
+            eligibility,
+            context,
+        )
     }
 
     /// A canonical false body cannot contribute a source projection instance.

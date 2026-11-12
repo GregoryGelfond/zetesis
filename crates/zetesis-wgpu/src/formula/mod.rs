@@ -48,11 +48,17 @@ pub struct FormulaLimits {
     /// A sweep reserves `9*nodes+2*edges+atoms+65+levels` units, including eight possible gate
     /// truth-table rows per binary node, two native operand walks, the dependency-level walk and
     /// a constant 65 for one strict-subset reduction, merging the invocations' summaries and
-    /// applying one projection, whatever the workgroup size. Both setup and each sweep additionally reserve `48*n+32` for
-    /// each variable threshold and `24*n+16` for each variable extremum cut,
-    /// where `n` is its number of condition occurrences. These cover linear
-    /// condition visits and portable limb arithmetic; constant guards carry no
-    /// numeric row charge. These are policy units, not raw GPU instructions.
+    /// applying one projection, whatever the workgroup size. Let `T=48*n+32`
+    /// for a weighted row's `n` condition occurrences and let `g` count its live
+    /// guards. Fresh setup reserves `min(g*T, T+H)` once per such source row,
+    /// where `H=4*g+(64*g+8 if g>1, otherwise0)` is the existing guard allowance.
+    /// The original truth pass still executes; setup retains its legacy checked
+    /// overflow boundary before applying the row-sharing discount. Each sweep
+    /// reserves `T+H` once per live weighted source row.
+    /// Original and frozen extrema retain `24*n+16` per live guard. Repeated
+    /// conditions and every live guard retain their occurrences; only statically
+    /// constant guards carry no numeric row charge. These conservative four-limb
+    /// policy units are not raw GPU instructions.
     /// Inactive nodes still consume their allowance.
     /// Opt-in changed-dependency execution additionally charges `2*W` setup
     /// and `W+nodes+4*variables+6*incidences` per sweep, where `W` is the

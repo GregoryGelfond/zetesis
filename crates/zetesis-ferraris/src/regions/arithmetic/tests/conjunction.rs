@@ -1,5 +1,7 @@
 //! A borrowed entry saves its read without dropping occurrence evidence.
 
+mod outer;
+
 use zetesis_algebra::Meter;
 
 use zetesis_algebra::{Cancellation, Stop};

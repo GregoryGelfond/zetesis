@@ -10,7 +10,11 @@ use zetesis_ferraris::{Interpretation, Limits, RegionLimits, models, models_redu
 use crate::test_support::without_pair_exclusions as without;
 
 fn compile(source: &str) -> Compiled {
-    ground(testing::prepare(source), None, None).unwrap()
+    // This suite qualifies the pair collector, which still serves hybrid
+    // emission and complete pair families outside the grouped grammar.
+    super::super::grouped_exclusions::without_grouping(|| {
+        ground(testing::prepare(source), None, None).unwrap()
+    })
 }
 
 fn native_groups(compiled: &Compiled) -> Vec<Vec<usize>> {

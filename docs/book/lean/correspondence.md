@@ -99,6 +99,33 @@ barriers, atomic observations and resource receipts remain unproved executable
 correspondences. The retained extracted
 evaluator does not yet cover ordinal nodes.
 
+## Shared GPU row charges
+
+[`SharedRowCharges`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/SharedRowCharges.lean)
+proves that charging one live row owner plus all guard visits is no larger than
+charging a row traversal per live guard. The finite-sum and admitted-prefix laws
+retain every common term. In `zetesis-wgpu`'s formula graph, the frozen threshold
+sweep uses one shared row charge and the existing guard supplement; extrema
+retain their per-guard charge. Repeated condition occurrences and distinct
+source-row identities remain part of the authoritative inventory.
+
+[`OriginalRowCharges`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/OriginalRowCharges.lean)
+models the minimum of the legacy original-evaluation tariff and one row tariff
+plus the inherited guard supplement. Its discount and conservation laws justify
+subtracting the resulting bounded discount after the full legacy setup expression
+has passed its checked arithmetic. The original evaluation still runs; this
+change does not admit supplied truth or remove an execution phase. A row with
+no live guard contributes no row execution, and every live guard remains charged.
+
+Both laws require the Rust inventory to authenticate row ownership and retain
+all guard and condition occurrences. The inherited tariffs must dominate their
+shader operations independently before their minimum is conservative. Actual
+packing, owner selection, integer overflow checks, polling order, memory limits,
+shader traversal and hardware behavior remain implementation obligations. These
+are logical-work charges, not machine instruction counts. Smaller charges may
+admit additional sweeps under the same ceiling; that does not establish a timing
+improvement or eliminate exact CPU completion of residual regions.
+
 ## Ordinary resource policy
 
 `zetesis_solve::Resources` derives ordinary admission, execution and publication
@@ -1361,6 +1388,22 @@ callback lifetime; their buffers own metadata, not logical payload.
 `membership_identity` connects successful substitution to extensional tuple
 membership. Rust comparison/hash equivalence, index construction and binding
 lifetimes remain implementation obligations.
+
+The current formula join also uses a borrowed `AtomKey` at its indexed fallback
+when every argument of a flat pattern is bound. `AtomKeys.key_identity` and
+`membership_identity` identify the exact tuple; the catalog's unique insertion
+invariant supplies the premise of `AtomCatalogs.identity_determines_position`.
+`ColumnRelations.full_matches_preserved` and
+`TableBindings.indexed_matches_preserved` justify selecting that row before the
+unchanged matcher, and `TableBindings.join_family_preserved` lifts equal step
+families to the join. The lookup in `formula_support::queries::exact` retains
+original predicate-local row IDs, intersects the original occurrence's delta
+partition, and leaves downstream row filters and scalar checks in place. Its
+Rust obligations include complete binding validation, typed term comparison,
+snapshot ownership, route precedence, charged key scans and exact failure
+receipts. Canonical tests compare the point query with a full scan and compare
+grounded subjects with the shortcut disabled. These laws do not certify those
+implementation and resource boundaries.
 
 The removed closure route's dense relation stored a bounded predicate's rows as
 bits over the mixed-radix index of the arguments' ranks in their bounds. Its
@@ -3156,6 +3199,61 @@ invalidation, canonical value identity, dependency extraction, support lifetime,
 allocation, work charging or cancellation. Its finite output-step fuel is not a
 bound on those implementation costs.
 
+### Numeric selection in local joins
+
+The common
+[`Join::select_numeric_local`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/formula_support/expression_keys.rs)
+serves explicit aggregate and factored-component consumers. Its condition grammar
+is restricted to positive flat patterns and comparisons of bare variables. Every
+comparison read comes from the current prefix or a positive pattern in that join.
+It changes neither the plan's order nor its coverage or source-evidence authority.
+The numeric query separately authenticates the complete source-column certificate,
+current bound, source occurrence and original row interval.
+
+For each selected step, a complete passing continuation must satisfy the same
+comparison that selected its row. An omitted row therefore has no complete passing
+continuation. [`DomainBindings.guarded_continuations_exact`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/DomainBindings.lean)
+then preserves the exact ordered completion list, including repetitions;
+[`TableBindings.join_family_preserved`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/TableBindings.lean)
+composes equal ordered steps. This is a claim about successful continuations,
+not equality of all intermediate row visits or an equivalence of error prefixes.
+
+The Rust correspondence must establish that the admitted grammar has no skipped
+arithmetic or nested-family diagnostics, that required reads are present when
+used, and that numeric selection retains original source order and full matching.
+Aggregate tuple evaluation occurs only after a passing local row in both routes.
+Consequently the existing ordered-family replay obligation still requires the
+same current passing stream; equality of tuple sets alone is insufficient.
+Unsupported local syntax, mixed columns and unavailable current bounds retain
+the ordinary route. Original family-evidence joins remain separate.
+
+Fallible ownership checks, exact charged visits, temporary and retained capacity,
+atomic selector publication, refusal priority and cancellation cadence remain
+concrete Rust obligations. The named laws do not prove those operations or assert
+that every eligible source will run faster. The executable fixtures check actual
+aggregate/component selection, ordered native payloads and provenance, unsupported
+routes, and direct charged-prefix publication boundaries.
+
+### Ordered aggregate-family replay
+
+[`AggregateOccurrenceReplay`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/AggregateOccurrenceReplay.lean)
+adds an explicit ordered observation boundary. `simulate` and `join_trace_exact`
+require a relation between current producer and consumer states that preserves
+each observation, exhaustion and semantic failure. `replay_exact` then aligns
+retained coordinates with the actual fresh rows, including duplicate occurrences
+and requiredness. `reduction_exact` feeds that identical ordered list to the
+named `Reduction`; it does not appeal to set equality or commutativity.
+
+The step-correspondence premise remains explicit. Its Rust instantiation must
+cover derived local values and current control state as well as inherited
+family inputs. Compiler read extraction, immutable-plan and prefix evidence,
+exact source/support/vocabulary ownership, tuple decoding, stage publication,
+allocation, work and cancellation remain correspondence obligations. The laws
+preserve a completed observation or semantic failure, not an identical prefix
+under a tighter resource ceiling. Exact original and arbitrary frozen M/J tests
+check concrete emitted formulas; they do not discharge those obligations or
+establish a performance gain.
+
 The support producer's
 [`completed_with`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/formula_binding_cursor.rs)
 check has a different observation boundary: it can omit an already exhausted
@@ -3309,6 +3407,41 @@ storage/work and the retirement of exact original rule positions remain
 executable obligations. The Lean law does not verify these Rust operations or
 native threshold storage and propagation. The [compiler contract](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/docs/pairwise-exclusions.md)
 states their scope and resource boundary.
+
+[`GroupedExclusionCoverage`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/GroupedExclusionCoverage.lean)
+and [`GroupedWitnessExclusion`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/GroupedWitnessExclusion.lean)
+use distinct binding lanes inside each exact shared key. `witness_pair_any`
+reduces a complete product of condition witnesses to Any within each lane.
+`witnessed_fibers_original`, `witnessed_fibers_frozen` and
+`witnessed_fibers_stable` then replace the covered unequal pair family by a
+negated unit threshold under its original common guard. Equal formula values
+do not identify distinct lanes. Shared guards may be derived, and the frozen
+law does not assume a subset relation. The counterexample laws expose why
+merging lanes, dropping a guard, merging keys or omitting a pair is unsound.
+
+The Rust [grouped emitter](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/formula_ground/grouped_exclusions.rs)
+admits only the eager original-theory constraint grammar described in its
+[contract](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/docs/grouped-exclusions.md).
+`plan::Plan` partitions positive flat atom occurrences around exactly one bare
+variable disequality, checks occurrence-multiset symmetry, and retains all
+nonlane variable values in the key. No atom may correlate both lanes. Completed
+Support and the same immutable component plan delimit both fresh traversals.
+The first establishes distinct typed lane identities; the second constructs
+fresh original conditions and their Any folds. Native rows retain unit
+occurrences, including equal condition IDs, and retain the common guard outside
+the count. These concrete steps must establish source Cartesian coverage,
+typed term identity and native threshold meaning; the Lean statements do not
+prove those Rust operations.
+
+First-origin atom metadata is preserved by naming only groups with a partner;
+root origins still name the original rule. These locations follow canonical
+prepared-program emission order, not lexical statement order. Canonical
+end-to-end tests compare exact producer locations; a separate direct-Builder
+test exercises the constraint-before-producer boundary. Exact internal order, work receipts,
+substitution counts and tight-limit refusal points need not match the pair
+emitter. No error or partial group traversal establishes a successful theory.
+Canonical semantic, native-occurrence, per-atom provenance and resource tests
+exercise those obligations without claiming whole-implementation verification.
 
 [`DomainProducers`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/DomainProducers.lean)
 models possible argument values before binding enumeration. One producer
@@ -4450,6 +4583,29 @@ does not assert that a row can be realized in an answer set. Complete source
 bindings and a sound activity classification are premises, not consequences of
 the truth algebra. The source analysis still needs its own refinement.
 
+[`SourceActivityReuse`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/SourceActivityReuse.lean)
+connects that activity cover to a native weighted row. `activity_masks_compatible`
+supplies the existing threshold algebra's lower and upper truth readings;
+`threshold_covers` proves that their two sums classify every signed cut soundly.
+`bounds_equal_of_occurrence_agreement` permits reuse when every occurrence in the
+same immutable row has unchanged activity. Repeated conditions and correlated
+truths are allowed; optional activity still asserts no realizable answer.
+
+The Rust producer-scoped
+[`SourceBodies`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/formula_ground/scoped_body/source.rs)
+shares lowering through the existing aggregate identity and complete family-input
+key, while retaining each binding's remaining literals. Its activity reader
+memoizes bounds by the owned numeric-row identity and continues an initialized
+formula prefix. `EvaluationPrefix.evaluate_append` and `storage_preservation`
+provide the corresponding abstract prefix laws. Rust must establish immutable
+completed support, complete keys, stable atom/node/row identities, and unchanged
+activity throughout each retained prefix. The owner ends before staged activity
+is published or refined; an exact mutable snapshot discards its evaluation cache.
+A failed node must not advance the initialized prefix. Source tuple coalescing,
+signed-weight lowering, finite-width sums, allocation, work charges, cancellation
+and typed refusal order remain executable obligations. These laws neither change
+reduct membership nor establish GPU execution or performance.
+
 [`SourceSupport`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/SourceSupport.lean)
 connects completed producer closure to answer-set coverage under its explicit
 `ProjectionCompatible` premise. Restricting an original model to the closed
@@ -4550,6 +4706,37 @@ induction over the remaining nodes gives the complete table. Backward admission
 separately proves that all lookups succeed. The result is the last node, or true
 when the table is empty.
 
+[`ObjectiveProjection`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/ObjectiveProjection.lean)
+justifies preparing an objective from the atoms it reads. `query_read_locality`
+requires agreement on every atom occurrence, including those under negation and
+both Boolean branches. `query_predicate_projection` preserves the query when
+all those occurrences belong to requested predicates. `requested_rows_preserved`
+retains each requested predicate's complete ordered row family; it does not make
+an incomplete source catalog complete. `compact_prefix_read` connects a present
+compact prefix entry to truth at its stored original atom coordinate. It does
+not identify that coordinate with the compact formula-node position.
+
+The Rust
+[`ObjectivePlan::new_projected`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/objective_bound/projected.rs)
+receives an authenticated `ObjectiveSource` from one admitted source owner. Its
+selector must collect all positive-pattern and closed-condition signed predicates
+and arities, scan that owner's complete catalog, and retain increasing original
+positions. The shared selected `AtomIndex` keeps those original coordinates;
+`AtomPrefix::node` must translate them through the immutable compact atom-node
+prefix before either a positive join or a closed condition uses a formula node.
+The existing condition-table and cost-transport laws then apply to unchanged
+keys, priorities and scores once pointwise condition correspondence is established.
+
+Authentication, typed predicate equality, selection completeness, executable
+binary lookup, graph append correspondence and finite-width operations remain
+Rust obligations. The projection's explicit allowance covers its bookkeeping
+and simultaneously live index scratch; it is not a total objective-memory or
+process-memory ceiling. Actual capacities, work receipts, cancellation and typed
+fallback on refusal require executable checks. A later refusal of optional choice
+strengthening must retain a successful exact objective plan. These laws neither
+identify displayed answer projections with complete interpretations nor change
+the original theory, reduct membership or complete enumeration requirements.
+
 The Rust
 [`ObjectivePlan::score`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/objective_bound/score.rs)
 reuses the compiler's already coalesced eligibility DAG to read a score without
@@ -4583,6 +4770,38 @@ bound keeps and leaves the original theory's stability unchanged. The laws
 compare vectors of one fixed priority order. The fold's node construction, the
 zero for a priority absent from either side, the certified lower costs
 themselves and finite-width arithmetic remain implementation obligations.
+
+The second choice cost is compiled by
+[`objective_bound/choices/layers.rs`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/objective_bound/choices/layers.rs).
+The existing checked source implications allocate disjoint, coalesced objective
+keys. `layers::order` orders each retained allocation by weight; `append_group`
+emits its activated minimum and nonnegative differences between distinct weight
+levels. A difference is enabled only when the shared OR of all cheaper key
+eligibilities is false. Eligibility keeps its exact-plan coordinate, while both
+lower costs use the same copied activation coordinates. `layers::terms` adds
+exact unallocated contributions and borrows unchanged priorities.
+
+[`ChoiceMinimumLayers.increments_le` and `group_lower_le`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/ChoiceMinimumLayers.lean)
+prove the pointwise value bound. Their premises require ordered levels,
+nonnegative allocated weights, an eligible witness in each active group, and
+sound exclusion of cheaper eligible keys. They do not assume that a smaller
+value is useful to a particular narrowing implementation. Extending each group
+inequality to a priority requires the disjoint allocation and exact remaining-key
+partition; applying the existing `RequiredChoiceCosts` lexicographic laws then
+preserves the strict or inclusive comparison. `ChoiceMinimumLayers.conjoin_necessary`
+expresses the final composition: two necessary restrictions are conjoined,
+never added as scores. The original theory and membership reduct stay unchanged.
+
+Rust correspondence must establish the source witness, complete key partition,
+ordered cumulative-OR construction, activation/eligibility owner mapping and
+checked integer differences. The canonical layer tests exercise the shared
+`Minimum` value, exact total-model comparisons and tied costs. Actual partial
+narrowing, complete solver families and all optimal ties remain distinct
+qualification obligations. The value laws do not verify allocation, logical
+work tariffs, cancellation, refused prefixes or atomic publication. Those follow
+the existing `Work` and preparation `Storage` owners: replacement retains the
+previous complete choice owner on refusal, and incumbent strengthening retains
+the completed exact bound with its optional failure and performed-work receipt.
 
 For example, `atom a; neg 0; disj 0 1` shares the first node and computes the
 original truth of `a or not a`. This is a query-evaluation law, not permission to

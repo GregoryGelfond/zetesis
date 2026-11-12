@@ -511,7 +511,13 @@ check full costs, scope, required errors and independent limits.
 
 Transient rich producer and projection-condition validation instead apply
 `theory.max_atoms`, `theory.max_nodes` and `theory.max_operands` independently
-to each temporary builder. They do not add atoms or roots to the original theory.
+to each temporary builder. Rich producer activity reuses one such builder during
+a producer pass, so these ceilings bound the accumulated scratch for that pass;
+projection-condition validation retains its own temporary builder. This scratch
+does not add atoms or roots to the original theory. Cached aggregate families and
+activity readings use the existing source storage allowance. Reuse removes work
+that is no longer performed, but longer-lived scratch can refuse a tight storage
+limit earlier. Refusal remains a typed failure, never partial objective coverage.
 `max_objective_presence_entries` bounds shared source-activity planning slots,
 including predicate and scope traversal and simultaneous old/new activity
 tables, as well as objective-presence carriers. These limits count their stated

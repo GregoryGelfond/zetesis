@@ -377,6 +377,13 @@ impl StreamedCore {
         &self.0.compiled.objectives
     }
 
+    /// Authenticated source for bounded objective read-set projection.
+    /// The borrow retains this owner's complete catalog and original theory.
+    #[must_use]
+    pub fn objective_source(&self) -> crate::objective_bound::ObjectiveSource<'_> {
+        crate::objective_bound::ObjectiveSource::from_compiled(&self.0.compiled)
+    }
+
     /// Analysis of the program this core was admitted for.
     #[must_use]
     pub fn analysis(&self) -> &themelios_analysis::Analysis {

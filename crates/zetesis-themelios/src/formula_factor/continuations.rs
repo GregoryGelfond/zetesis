@@ -4,13 +4,13 @@ use crate::FormulaFailure;
 use crate::formula_binding::Binding;
 use crate::formula_ground::{Builder, FALSUM};
 use crate::formula_ir::{HeadIr, LiteralIr, RuleIr};
-use crate::formula_support::{Context, Continuations, Join, Row, Support};
+use crate::formula_support::{Context, Continuations, Ir, Join, Row, Support};
 use themelios_program::program::DefaultNegation;
 
-pub(crate) fn rule<'a, 'source>(
+pub(crate) fn rule<'source>(
     builder: &mut Builder<'_, '_, 'source>,
-    rule: &'a RuleIr,
-    join: &mut Join<'a, '_>,
+    rule: &'source RuleIr,
+    join: &mut Join<'_, 'source>,
     support: &Support<'source>,
 ) -> Result<bool, FormulaFailure> {
     #[cfg(test)]
@@ -71,10 +71,24 @@ pub(crate) fn rule<'a, 'source>(
             let conjunction = witness(builder, rule, support, &binding)?;
             alternatives = builder.or(alternatives, conjunction, rule.location)?;
         }
-        emit(builder, rule, support, &selected.values, alternatives)?;
+        emit(
+            builder,
+            rule,
+            support,
+            &selected.values,
+            alternatives,
+            rows.carriers(),
+        )?;
         drop(selected);
         while let Some(selected) = next_selected(builder, rule, support, &mut rows)? {
-            emit(builder, rule, support, &selected.values, alternatives)?;
+            emit(
+                builder,
+                rule,
+                support,
+                &selected.values,
+                alternatives,
+                rows.carriers(),
+            )?;
         }
     }
     Ok(true)
@@ -127,19 +141,25 @@ fn witness<'source>(
 
 fn emit<'source>(
     builder: &mut Builder<'_, '_, 'source>,
-    rule: &RuleIr,
+    rule: &'source RuleIr,
     support: &Support<'source>,
     binding: &Binding<'_>,
     alternatives: usize,
+    carriers: Option<&crate::formula_binding_cursor::Cursor<'_, 'source>>,
 ) -> Result<(), FormulaFailure> {
     #[cfg(test)]
     super::testing::record(super::testing::Point::Continuation);
     builder.work(rule.location)?;
-    let common = builder.body(
-        rule.body.iter().filter(|literal| !positive(literal)),
+    // This rule is the original source borrow supplied by instantiate_rule.
+    // Preserve that evidence through filtering; synthesized component bodies
+    // still enter the common body API as Temporary and cannot fill this table.
+    let literals = Ir::Source(rule.body.as_slice());
+    let common = builder.body_ir_with_carriers(
+        literals.iter().filter(|literal| !positive(literal.get())),
         &rule.body_binding(binding),
         rule.location,
         support,
+        carriers,
     )?;
     let body = builder.and(alternatives, common, rule.location)?;
     if body != FALSUM {

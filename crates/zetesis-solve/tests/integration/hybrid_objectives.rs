@@ -319,14 +319,14 @@ fn refused_retention_keeps_completed_scoring() {
 }
 
 #[derive(Default)]
-struct PlanRefusals(Vec<zetesis_themelios::objective_bound::ObjectiveBoundErrorKind>);
+struct PlanRefusals(Vec<zetesis_themelios::objective_bound::ObjectiveProjectionErrorKind>);
 
 impl ExecutionObserver for PlanRefusals {
     type Error = Infallible;
 
     fn observe(&mut self, event: ExecutionObservation<'_>) -> Result<(), Self::Error> {
-        if let ExecutionObservation::ObjectiveUnavailable(error) = event {
-            self.0.push(error.kind());
+        if let ExecutionObservation::ObjectiveProjectionUnavailable(error) = event {
+            self.0.push(*error.kind());
         }
         Ok(())
     }
@@ -334,7 +334,9 @@ impl ExecutionObserver for PlanRefusals {
 
 #[test]
 fn refused_preparation_preserves_lazy_scored_answers() {
-    use zetesis_themelios::objective_bound::{ObjectiveBoundErrorKind, ObjectiveBoundResource};
+    use zetesis_themelios::objective_bound::{
+        ObjectiveBoundErrorKind, ObjectiveBoundResource, ObjectiveProjectionErrorKind,
+    };
 
     let owner = hybrid(FALLBACK);
     let original = eager(FALLBACK);
@@ -385,7 +387,9 @@ fn refused_preparation_preserves_lazy_scored_answers() {
     }
     assert_eq!(
         observations.0,
-        [ObjectiveBoundErrorKind::Limit(ObjectiveBoundResource::Keys)]
+        [ObjectiveProjectionErrorKind::Existing(
+            ObjectiveBoundErrorKind::Limit(ObjectiveBoundResource::Keys)
+        )]
     );
     assert_eq!(actual, expected);
     let outcome = session.outcome().unwrap();

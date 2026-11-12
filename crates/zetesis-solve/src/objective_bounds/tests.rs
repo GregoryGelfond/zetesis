@@ -28,3 +28,4 @@ fn exact_search_limits(theory: &zetesis_ferraris::Theory) -> zetesis_stable::Lim
 
 mod prepared_scoring;
 mod choice_replacement;
+mod projected_preparation;

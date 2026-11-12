@@ -869,6 +869,20 @@ impl<'source> Relations<'source> {
         let Some(rows) = self.find_with(key.predicate(), limits, counters, location)? else {
             return Ok(false);
         };
+        self.lookup_key_at(rows, key, limits, counters, location)
+            .map(|row| row.is_some())
+    }
+
+    /// Borrowed complete-key counterpart of `lookup_at`, preserving the exact
+    /// source row without constructing or publishing an atom.
+    pub(super) fn lookup_key_at(
+        &self,
+        rows: &RelationRows<'_>,
+        key: &AtomKey<'_>,
+        limits: &FormulaLimits,
+        counters: &mut Counters,
+        location: ProgramSite,
+    ) -> Result<Option<usize>, FormulaFailure> {
         let owner_bytes = rows.catalog.retained_bytes();
         let mut checked = relation_limits(limits, counters, key.predicate().arity(), owner_bytes);
         checked.max_values = usize::MAX;
@@ -885,7 +899,7 @@ impl<'source> Relations<'source> {
                 )
             })?;
         counters.absorb(receipt.storage.construction_work, limits, location)?;
-        Ok(receipt.row.is_some())
+        Ok(receipt.row)
     }
 
     #[cfg(test)]

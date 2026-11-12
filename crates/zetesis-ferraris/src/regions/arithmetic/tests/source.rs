@@ -1,6 +1,7 @@
 use zetesis_algebra::Meter;
 
 mod conditioning;
+mod positive_pairs;
 mod views;
 
 use zetesis_algebra::Cancellation;

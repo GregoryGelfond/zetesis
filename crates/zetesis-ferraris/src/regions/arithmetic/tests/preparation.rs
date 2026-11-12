@@ -94,7 +94,11 @@ fn even_cycle_retains_one_owner_and_no_echelon_units() {
     assert_eq!(result.work, quota.held);
     assert_eq!(
         result.work,
-        result.parity.preparation_work + result.cardinality.preparation_work
+        result.parity.preparation_work
+            + result.cardinality.preparation_work
+            + result.images.preparation_work
+            + result.images.copying_work
+            + result.images.closure_work
     );
     assert_eq!(result.parity.phases.total(), result.parity.preparation_work);
     assert_eq!(
@@ -275,7 +279,11 @@ fn seeded_root_receipts_follow_actual_constructor_and_units() {
         assert_eq!(attempt.work, quota.held);
         assert_eq!(
             attempt.work,
-            attempt.parity.phases.total() + attempt.cardinality.phases.total()
+            attempt.parity.phases.total()
+                + attempt.cardinality.phases.total()
+                + attempt.images.preparation_work
+                + attempt.images.copying_work
+                + attempt.images.closure_work
         );
         assert_eq!(
             attempt.parity.retained_bytes,
@@ -302,6 +310,7 @@ fn seeded_root_receipts_follow_actual_constructor_and_units() {
                 .parity
                 .preparation_bytes
                 .max(attempt.cardinality.preparation_bytes)
+                .max(attempt.images.peak_bytes)
         );
         let seeded = prepared.take_seeded_root().unwrap();
         assert_eq!(seeded.held().collect::<Vec<_>>(), [0]);
@@ -333,7 +342,11 @@ fn absent_and_refuted_seeds_do_not_charge_a_constructor() {
         assert_eq!(attempt.work, quota.held);
         assert_eq!(
             attempt.work,
-            attempt.parity.phases.total() + attempt.cardinality.phases.total()
+            attempt.parity.phases.total()
+                + attempt.cardinality.phases.total()
+                + attempt.images.preparation_work
+                + attempt.images.copying_work
+                + attempt.images.closure_work
         );
     }
 }

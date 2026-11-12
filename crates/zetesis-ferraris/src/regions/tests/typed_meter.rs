@@ -216,3 +216,25 @@ fn learning_delivery_retains_owned_refusal_without_publication() {
     assert_eq!(scratch.learned_rows(), 1);
     assert_eq!(account.granted - account.refunded, 1);
 }
+
+#[test]
+fn frozen_probe_propagation_retains_the_owned_quota_error() {
+    let owner = super::implication_chain(4);
+    let index = Narrower::new(&owner);
+    // The all-held candidate satisfies each atom and implication.
+    let truth = vec![true; owner.nodes().len()];
+    let subject = crate::FrozenSubject::new(&owner, &truth);
+    let mut account = Account::new(3);
+    let attempt = index.propagate_frozen_known_reserved(
+        subject,
+        &mut Region::all_open(4),
+        &mut index.frozen_knowledge(),
+        &mut NarrowingScratch::default(),
+        &Cancellation::default(),
+        &mut Meter::reserved(&mut account),
+    );
+    assert_eq!(attempt.result, Err(exhausted(3)));
+    assert_eq!(attempt.statistics.work, 3);
+    assert_eq!(attempt.preferred, None);
+    assert_eq!(account.granted - account.refunded, 3);
+}

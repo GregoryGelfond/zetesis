@@ -21,7 +21,11 @@ fn arithmetic_refusal_retains_its_prefix_on_all_routes() {
     let full = StableModels::prepare(&owner, Limits::default(), Cancellation::default());
     assert!(full.result.is_ok());
     let regions = full.statistics.regions.unwrap();
-    let arithmetic = regions.parity.preparation_work + regions.cardinality.preparation_work;
+    let arithmetic = regions.parity.preparation_work
+        + regions.cardinality.preparation_work
+        + regions.images.preparation_work
+        + regions.images.copying_work
+        + regions.images.closure_work;
     assert!(arithmetic > 2);
     let extraction = full.statistics.search.work - arithmetic - regions.generator_order.work;
     let mut limits = Limits::default();
@@ -31,11 +35,17 @@ fn arithmetic_refusal_retains_its_prefix_on_all_routes() {
         let receipt = attempt.statistics.regions.unwrap();
         assert!(receipt.parity.preparation_work > 0);
         assert_eq!(receipt.parity.status, crate::PreparationStatus::Incomplete);
+        assert_eq!(receipt.images, crate::RootImageStatistics::default());
         assert_eq!(receipt.counts.regions, 0);
         assert_eq!(receipt.counts.work, attempt.statistics.search.work);
         assert_eq!(
             attempt.statistics.search.work,
-            extraction + receipt.parity.preparation_work + receipt.cardinality.preparation_work
+            extraction
+                + receipt.parity.preparation_work
+                + receipt.cardinality.preparation_work
+                + receipt.images.preparation_work
+                + receipt.images.copying_work
+                + receipt.images.closure_work
         );
         assert!(attempt.statistics.search.work <= limits.search.max_work);
         assert_eq!(

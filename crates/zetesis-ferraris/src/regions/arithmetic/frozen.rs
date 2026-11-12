@@ -674,6 +674,25 @@ fn known_refutations<Q: Quota + ?Sized>(
     Ok(known)
 }
 
+/// Retain complete tables from this same query in pending-group order. Each
+/// four-word replacement admits its whole charge before changing that slot;
+/// a refusal leaves that group and its suffix untouched. Prior completed
+/// groups remain charged. These slots already belong to the preparation.
+fn retain_refutations<Q: Quota + ?Sized>(
+    pending: &[usize],
+    tables: &[ProbedGroup],
+    known: &mut [probes::Table],
+    budget: &mut Budget<'_, '_, Q>,
+) -> Result<(), BudgetError<Q::Error>> {
+    for &index in pending {
+        budget.bounded(4, || {
+            known[index] = Words::new(*tables[index].forbidden.storage());
+            ((), 4)
+        })?;
+    }
+    Ok(())
+}
+
 /// The probing rounds a preparation may run: the first by the frozen reading
 /// alone, the second under the rows it established. A later round tightens
 /// a hull the round before left inexact, one probe per pattern of each such
@@ -704,7 +723,7 @@ fn probe_rounds<Q: Quota + ?Sized>(
     let groups = &admitted.groups[..];
     let mut parity: Option<ParitySystem> = None;
     let mut cardinality: Option<CardinalitySystem> = None;
-    let (mut tables, mut refuted, known, mut pending) =
+    let (mut tables, mut refuted, mut known, mut pending) =
         probing.with_budget(peak, |storage, budget| {
             let mut tables = storage.reserve_bytes(groups.len(), budget)?;
             tables.extend(groups.iter().map(|group| ProbedGroup {
@@ -719,13 +738,23 @@ fn probe_rounds<Q: Quota + ?Sized>(
             Ok((tables, refuted, known, pending))
         })?;
     while !pending.is_empty() && statistics.rounds < MAX_ROUNDS {
+        if statistics.rounds != 0 {
+            // Every earlier refutation belongs to this same group's ordered
+            // support and cut guard in this candidate's closed query. Adding
+            // its checked rows cannot make an excluded pattern possible.
+            // Retain those exact table entries before leasing later probes.
+            probing.with_budget(peak, |_, budget| {
+                retain_refutations(&pending, &tables, &mut known, budget)
+            })?;
+        }
         statistics.rounds += 1;
         // The first round leaves a group of one clause cutting its whole
         // support to that clause: its table bounds the support from below by
         // one, and only a later round's rows could refute more of it.
         let settled_by_clause =
             |index: usize| statistics.rounds == 1 && groups[index].patterns == [0];
-        // The probes this round runs: the patterns not known refuted.
+        // The probes this round runs: the patterns not already refuted by
+        // their clauses or a completed probe of this same group.
         let probes: u64 = pending
             .iter()
             .filter(|&&index| !settled_by_clause(index))

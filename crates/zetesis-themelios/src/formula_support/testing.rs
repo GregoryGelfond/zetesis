@@ -334,3 +334,8 @@ pub(crate) fn numbers(values: &[i32]) -> Vec<Value> {
 pub(crate) fn live_bytes(support: &Support<'_>) -> usize {
     support.live_bytes()
 }
+
+/// Exercise the existing owned-plan reference route without changing runtime policy.
+pub(crate) fn without_local_plans<T>(action: impl FnOnce() -> T) -> T {
+    super::local_plans::tests::without_cache(action)
+}

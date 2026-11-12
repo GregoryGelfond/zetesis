@@ -69,6 +69,8 @@ pub(crate) struct MatchedBinding<'row, 'source> {
     pub(crate) values: crate::formula_binding::Binding<'row>,
     pub(crate) passes: bool,
     pub(crate) witnesses: Option<WitnessRow<'row, 'source>>,
+    /// This join's still-owned generated carriers, valid only during this loan.
+    pub(crate) carriers: Option<&'row crate::formula_binding_cursor::Cursor<'row, 'source>>,
 }
 
 /// Only total flat positive bodies share this traversal. In particular, a
@@ -162,6 +164,7 @@ impl<'source> Join<'_, 'source> {
             values: row.frame.into_binding(&self.values),
             passes: row.passes,
             witnesses,
+            carriers: self.pending.as_ref(),
         }))
     }
 

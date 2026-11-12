@@ -2,6 +2,8 @@ mod budget;
 mod cardinality_source;
 mod completion;
 mod conjunction;
+mod domain_images;
+mod empty_pairs;
 mod hull;
 mod parity;
 mod preparation;

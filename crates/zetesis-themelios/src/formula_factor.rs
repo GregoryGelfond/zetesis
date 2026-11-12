@@ -93,8 +93,8 @@ impl Component {
         index: usize,
         prepared: Option<&'cursor mut ComponentPlans<'plan, 'source>>,
     ) -> Result<Join<'cursor, 'source>, FormulaFailure> {
-        if let Some(prepared) = prepared {
-            return prepared.join(
+        let mut join = if let Some(prepared) = prepared {
+            prepared.join(
                 index,
                 ComponentScope {
                     literals: &self.literals,
@@ -109,22 +109,33 @@ impl Component {
                     builder.counters,
                     rule.location,
                 ),
-            );
-        }
-        Join::component(
-            &self.literals,
-            rule.variables,
-            &self.used,
-            fixed,
-            support,
-            builder.budget,
-            Context::new(
-                &*builder.computation,
-                builder.limits,
-                builder.counters,
-                rule.location,
-            ),
-        )
+            )?
+        } else {
+            Join::component(
+                &self.literals,
+                rule.variables,
+                &self.used,
+                fixed,
+                support,
+                builder.budget,
+                Context::new(
+                    &*builder.computation,
+                    builder.limits,
+                    builder.counters,
+                    rule.location,
+                ),
+            )?
+        };
+        // Both constructors preserve the same plan and install the current
+        // fixed head values. The local selector certifies only the scalar
+        // conditions of this component; it grants no whole-rule coverage.
+        join.select_numeric_local(Context::new(
+            &*builder.computation,
+            builder.limits,
+            builder.counters,
+            rule.location,
+        ))?;
+        Ok(join)
     }
 }
 

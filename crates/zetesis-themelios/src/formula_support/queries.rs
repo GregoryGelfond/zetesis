@@ -23,6 +23,8 @@ use crate::grounding_observer::Event;
 use crate::{FormulaFailure, FormulaLimits, FormulaResource, JoinStrategy};
 
 mod domains;
+mod exact;
+pub(super) use exact::IndexedSelection;
 pub(super) mod expression_keys;
 mod hulls;
 mod signature;
@@ -190,6 +192,36 @@ impl<'source> Support<'source> {
         self.local_plans
             .get_or_init(|| super::local_plans::Table::new(&self.workspace))
             .plan(literals, prefix, variables, self, budget, context)
+    }
+
+    /// Validate the exact retained plan before a native family consumes any
+    /// tuple occurrence. This only reads the existing table: absence never
+    /// causes speculative preparation, and failures never become a decline.
+    pub(crate) fn certifies_local_plan(
+        &self,
+        certificate: &super::LocalPlanCertificate<'source>,
+        literals: &'source [crate::formula_ir::LiteralIr],
+        prefix: &crate::formula_binding::Binding,
+        variables: usize,
+        budget: &mut crate::expansion::Budget,
+        context: super::Context<'_, &super::Computation<'_, '_>>,
+    ) -> Result<bool, FormulaFailure> {
+        if !self.workspace().owns(&context.computation.lease()) {
+            return Err(crate::formula_binding::assignment(
+                zetesis_core::catalog::AssignmentError::Read(
+                    zetesis_core::catalog::ReadError::ForeignCatalog,
+                ),
+                context.work.location,
+            ));
+        }
+        context
+            .work
+            .counters
+            .work(context.work.limits, context.work.location)?;
+        let Some(plans) = self.local_plans.get() else {
+            return Ok(false);
+        };
+        plans.certifies(certificate, literals, prefix, variables, budget, context)
     }
 
     pub(crate) fn contains(

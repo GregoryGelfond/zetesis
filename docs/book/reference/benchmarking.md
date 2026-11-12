@@ -145,6 +145,33 @@ Library callers use `performance::bundles::load` and pass its sealed workloads
 to `matrix::run_workloads_with_cancellation`. The declared contracts remain
 expectations; the reference run supplies fresh qualification.
 
+The version 2 manifest selects typed constructions without exporting rewritten
+source files. Its `sources` list names authored inputs by `id`, `root`, `entry`,
+`sha256` and their original `contract`. Each ordered case has one `kind`:
+`authored` names a `source` and `amendments`; `corpus` names an `entry` and
+`amendments`; `generated` names an existing lowercase family and its `size`.
+An amendment contains `source_path`, `name`, `expected` and `replacement`.
+The optional `catalog` supplies the pinned correctness catalog for corpus
+amendments. It and authored roots resolve relative to the manifest. Before
+materialization, a corpus workload must also match the campaign's catalog
+identity, original contract and complete source closure.
+
+These selections use the same `Workload::authored`, `Workload::amended` and
+`Workload::generated` constructors as maintained suites. A changed constant
+retains the original contract as provenance but has no active answer contract;
+fresh clingo enumeration supplies its comparison. Generated inputs retain their
+family's existing contract. The new selection manifest seal is recorded and
+checked with other independent inputs, without changing workload identity.
+Source, amendment and unknown-field failures are admission errors, not solver
+outcomes. No private runner or report decoder is needed.
+
+Typed cases retain the default per-case ceilings (1 MiB for one source, 4 MiB
+for its admitted/derived closure, 64 KiB for metadata and 128 amendments),
+intersected with tighter caller limits. The selection separately shares the
+existing manifest/metadata and combined-source ceilings. The CLI supplies
+1 MiB and 4 MiB for those two selection totals. Schema 1 bundle behavior and
+all solver, timing, cancellation, output and comparison controls stay unchanged.
+
 Large complete families may require larger measurement capacities. The advanced
 `--native-atoms` and `--native-value-nodes` controls bound native report
 normalization across all model occurrences, including atoms reused through the

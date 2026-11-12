@@ -303,6 +303,9 @@ fn arithmetic_heads_keep_the_original_traversal() {
     }
 }
 
+mod certificates;
+mod local;
+mod components;
 mod ranges;
 mod rounds;
 

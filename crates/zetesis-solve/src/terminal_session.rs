@@ -110,6 +110,7 @@ impl<'a> TerminalSession<'a> {
                     theory,
                     atoms: owner.base_atom_catalog(),
                     objectives: owner.objectives(),
+                    objective_source: None,
                     required_choices: None,
                     keyed_constraints: owner.keyed_constraints(),
                     key_analysis: owner.key_analysis(),

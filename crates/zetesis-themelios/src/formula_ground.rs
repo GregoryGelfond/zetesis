@@ -3,12 +3,14 @@
 pub(crate) mod arithmetic;
 mod objectives;
 mod scoped_body;
-pub(crate) use scoped_body::source_activity;
+pub(crate) use scoped_body::SourceBodies;
 mod aggregate_guards;
 mod aggregate_order;
 mod appended;
 pub(crate) mod atoms;
 mod cache;
+pub(crate) mod families;
+mod family_replay;
 mod canonical_suffix;
 mod extremum_guards;
 mod fixed_facts;
@@ -17,6 +19,7 @@ mod metadata;
 use matched_nodes::MatchedNodes;
 mod nodes;
 mod pairwise_exclusions;
+mod grouped_exclusions;
 mod producer;
 mod projection;
 mod rejected;
@@ -36,8 +39,9 @@ use crate::formula_support::Ir;
 use crate::formula_support::family::Warnings;
 use crate::formula_support::{Context, GroundingWork};
 
-use cache::{Contexts, CoordinateMap};
+use cache::CoordinateMap;
 use std::borrow::Cow;
+use std::rc::Rc;
 use std::sync::Arc;
 
 use crate::ProgramSite;
@@ -568,6 +572,7 @@ fn emit<'source>(
             location,
         )?;
         builder.initialize(location)?;
+        builder.families.enable(queries, location)?;
         builder.collect_fixed_facts(prepared.items())?;
         Ok::<_, FormulaFailure>(builder)
     })?;
@@ -744,7 +749,7 @@ pub(super) struct Builder<'a, 'terms, 'source> {
     pub(super) limits: &'a FormulaLimits,
     pub(super) budget: &'a mut Budget,
     catalog: atoms::Catalog,
-    terms: TermTable,
+    families: Rc<families::Workspace<'terms, 'source>>,
     aggregate_atoms: formula_support::SourceSelection,
     fixed_facts: Option<formula_support::SourceSelection>,
     metadata: metadata::Metadata,
@@ -754,9 +759,6 @@ pub(super) struct Builder<'a, 'terms, 'source> {
     origins: Vec<Vec<ProgramSite>>,
     pub(super) counters: &'a mut Counters,
     origin_count: usize,
-    aggregate_cache: Contexts<CachedAggregate>,
-    cached_elements: usize,
-    cached_roots: usize,
     count_plan: Option<crate::formula_count_plan::Collector>,
     /// Streamable templates this builder grounded in the core.
     retained_constraints: crate::formula::RetainedConstraints,
@@ -896,6 +898,12 @@ impl<'source> Builder<'_, '_, 'source> {
             self.limits,
             self.budget,
             self.counters,
+        )?;
+        join.share_families(
+            Rc::clone(&self.families),
+            self.limits,
+            self.counters,
+            rule.location,
         )?;
         // The same complete-column attempt precedes frozen checker scans.
         // Admit even speculative successful values here: a covering column can
@@ -1059,6 +1067,12 @@ impl<'source> Builder<'_, '_, 'source> {
             self.budget,
             self.counters,
         )?;
+        join.share_families(
+            Rc::clone(&self.families),
+            self.limits,
+            self.counters,
+            rule.location,
+        )?;
         join.select_total_body(rule, self.computation, self.limits, self.counters)?;
         self.retain_matched_rows(&mut join, rule.location)?;
         let mut matched = None;
@@ -1076,7 +1090,13 @@ impl<'source> Builder<'_, '_, 'source> {
                 rule.body.len(),
                 rule.location,
             )?;
-            self.rule(rule, &row.values, support, matched.as_mut().zip(view))?;
+            self.rule(
+                rule,
+                &row.values,
+                support,
+                matched.as_mut().zip(view),
+                row.carriers,
+            )?;
         }
         debug_assert_eq!(self.catalog.len(), atoms, "capture retained every atom");
         Ok(())
@@ -1125,6 +1145,12 @@ impl<'source> Builder<'_, '_, 'source> {
         support: &Support<'source>,
         schedule: Schedule<'_>,
     ) -> Result<(), FormulaFailure> {
+        if matches!(self.purpose, Purpose::Theory)
+            && matches!(schedule, Schedule::Eager(_))
+            && grouped_exclusions::rule(self, rule, support)?
+        {
+            return Ok(());
+        }
         if crate::formula_factor::rule(self, rule, support)? {
             return Ok(());
         }
@@ -1151,6 +1177,12 @@ impl<'source> Builder<'_, '_, 'source> {
             self.limits,
             self.budget,
             self.counters,
+        )?;
+        outer.share_families(
+            Rc::clone(&self.families),
+            self.limits,
+            self.counters,
+            rule.location,
         )?;
         outer.select_total_body(rule, self.computation, self.limits, self.counters)?;
         if matches!(schedule, Schedule::Eager(_)) {
@@ -1180,7 +1212,13 @@ impl<'source> Builder<'_, '_, 'source> {
                 if let Some(exclusions) = &mut exclusions {
                     exclusions.row(self, rule, &row.values, matched.as_mut().zip(view))?;
                 } else {
-                    self.rule(rule, &row.values, support, matched.as_mut().zip(view))?;
+                    self.rule(
+                        rule,
+                        &row.values,
+                        support,
+                        matched.as_mut().zip(view),
+                        row.carriers,
+                    )?;
                 }
             } else {
                 self.validate_body(&rule.body, &row.values, support, rule.location)?;
@@ -1238,16 +1276,16 @@ impl<'source> Builder<'_, '_, 'source> {
         location: ProgramSite,
     ) -> Result<Builder<'a, 'terms, 'source>, FormulaFailure> {
         let catalog = atoms::Catalog::new(computation, counters, limits, location)?;
-        let terms = TermTable::new(computation, limits, counters, location)?;
+        let families =
+            families::Workspace::new(Context::new(&*computation, limits, counters, location))?;
         let aggregate_atoms =
             formula_support::SourceSelection::new(computation, limits, counters, location)?;
-        let aggregate_cache = Contexts::new(computation, limits, counters, location)?;
         Ok(Builder {
             computation,
             limits,
             budget,
             catalog,
-            terms,
+            families,
             aggregate_atoms,
             fixed_facts: None,
             metadata: metadata::Metadata::default(),
@@ -1257,9 +1295,6 @@ impl<'source> Builder<'_, '_, 'source> {
             origins: Vec::new(),
             counters,
             origin_count: 0,
-            aggregate_cache,
-            cached_elements: 0,
-            cached_roots: 0,
             count_plan,
             purpose,
             retained_constraints: crate::formula::RetainedConstraints::default(),
@@ -1668,6 +1703,19 @@ impl<'source> Builder<'_, '_, 'source> {
         )
     }
 
+    /// Emit the same body while borrowing this selected continuation's carriers.
+    /// The assignment-family consumer still checks exact IR, support and inputs.
+    pub(super) fn body_ir_with_carriers<'literal>(
+        &mut self,
+        literals: impl IntoIterator<Item = Ir<'literal, 'source, LiteralIr>>,
+        assignment: &Binding,
+        location: ProgramSite,
+        support: &Support<'source>,
+        carriers: Option<&crate::formula_binding_cursor::Cursor<'_, 'source>>,
+    ) -> Result<usize, FormulaFailure> {
+        self.body_matched(literals, assignment, location, support, None, carriers)
+    }
+
     /// Name a selected component row through the ordinary body implementation.
     /// The node owner belongs to this literal slice and this cursor alone;
     /// rejected rows must be skipped before calling. Borrowed positive rows
@@ -1688,6 +1736,7 @@ impl<'source> Builder<'_, '_, 'source> {
             location,
             support,
             nodes.as_mut().zip(view),
+            row.carriers,
         )
     }
 
@@ -1698,7 +1747,7 @@ impl<'source> Builder<'_, '_, 'source> {
         location: ProgramSite,
         support: &Support<'source>,
     ) -> Result<usize, FormulaFailure> {
-        self.body_matched(literals, assignment, location, support, None)
+        self.body_ir_with_carriers(literals, assignment, location, support, None)
     }
 
     fn body_matched<'literal>(
@@ -1711,6 +1760,7 @@ impl<'source> Builder<'_, '_, 'source> {
             &mut MatchedNodes,
             &formula_support::witnesses::WitnessRow<'_, 'source>,
         )>,
+        carriers: Option<&crate::formula_binding_cursor::Cursor<'_, 'source>>,
     ) -> Result<usize, FormulaFailure> {
         let mut result = VERUM;
         for (index, source_literal) in literals.into_iter().enumerate() {
@@ -1751,6 +1801,7 @@ impl<'source> Builder<'_, '_, 'source> {
                     assignment,
                     support,
                     location,
+                    carriers,
                 )?;
                 result = self.and(result, aggregate, location)?;
             } else if let LiteralIr::Conditional(_) = literal {
@@ -1822,6 +1873,12 @@ impl<'source> Builder<'_, '_, 'source> {
                     support,
                     self.budget,
                     Context::new(&*self.computation, self.limits, self.counters, location),
+                )?;
+                rows.share_families(
+                    Rc::clone(&self.families),
+                    self.limits,
+                    self.counters,
+                    location,
                 )?;
                 let mut result = FALSUM;
                 while let Some(row) = rows.next(
@@ -1903,6 +1960,7 @@ impl<'source> Builder<'_, '_, 'source> {
             &mut MatchedNodes,
             &formula_support::witnesses::WitnessRow<'_, 'source>,
         )>,
+        carriers: Option<&crate::formula_binding_cursor::Cursor<'_, 'source>>,
     ) -> Result<(), FormulaFailure> {
         self.work(rule.location)?;
         let body = self.body_matched(
@@ -1911,6 +1969,7 @@ impl<'source> Builder<'_, '_, 'source> {
             rule.location,
             support,
             matched,
+            carriers,
         )?;
         if body == FALSUM {
             return Ok(());
@@ -1939,6 +1998,12 @@ impl<'source> Builder<'_, '_, 'source> {
                             self.counters,
                             rule.location,
                         ),
+                    )?;
+                    local.share_families(
+                        Rc::clone(&self.families),
+                        self.limits,
+                        self.counters,
+                        rule.location,
                     )?;
                     while let Some(binding) = local.next(
                         self.computation,
@@ -2144,15 +2209,27 @@ impl<'source> Builder<'_, '_, 'source> {
             for entry in activity.iter() {
                 self.work(rule.location)?;
                 let (key, condition) = *entry;
-                if let Some(contribution) = crate::formula_head_aggregate::contribution(
-                    *measure,
-                    key.first(&self.terms, self.computation.read(), rule.location)?,
-                    rule.location,
-                )? {
+                let contribution = {
+                    let terms = self.families.terms(GroundingWork::new(
+                        self.limits,
+                        self.counters,
+                        rule.location,
+                    ))?;
+                    crate::formula_head_aggregate::contribution(
+                        *measure,
+                        key.first(&terms, self.computation.read(), rule.location)?,
+                        rule.location,
+                    )?
+                };
+                if let Some(contribution) = contribution {
                     selected.push(
                         contribution,
                         condition,
-                        &mut self.terms,
+                        &mut *self.families.terms_mut(GroundingWork::new(
+                            self.limits,
+                            self.counters,
+                            rule.location,
+                        ))?,
                         Context::new(
                             &*self.computation,
                             self.limits,
@@ -2268,6 +2345,12 @@ impl<'source> Builder<'_, '_, 'source> {
                     self.counters,
                     rule.location,
                 ),
+            )?;
+            local.share_families(
+                Rc::clone(&self.families),
+                self.limits,
+                self.counters,
+                rule.location,
             )?;
             while let Some(binding) = local.next(
                 self.computation,
@@ -2406,14 +2489,16 @@ impl<'source> Builder<'_, '_, 'source> {
     }
 
     fn term(&mut self, key: &TermKey, location: ProgramSite) -> Result<usize, FormulaFailure> {
-        self.terms.insert(
-            key,
-            None,
-            self.computation,
-            self.limits,
-            self.counters,
-            location,
-        )
+        self.families
+            .terms_mut(GroundingWork::new(self.limits, self.counters, location))?
+            .insert(
+                key,
+                None,
+                self.computation,
+                self.limits,
+                self.counters,
+                location,
+            )
     }
 
     fn choice_permissions(
@@ -2574,9 +2659,11 @@ impl<'source> Builder<'_, '_, 'source> {
         assignment: &Binding,
         support: &Support<'source>,
         location: ProgramSite,
+        carriers: Option<&crate::formula_binding_cursor::Cursor<'_, 'source>>,
     ) -> Result<usize, FormulaFailure> {
         if let Some(target) = aggregate.binding {
-            return self.assignment_aggregate(aggregate, target, assignment, support, location);
+            return self
+                .assignment_aggregate(aggregate, target, assignment, support, location, carriers);
         }
         let (elements, _) = self.aggregate_elements(aggregate, assignment, support, location)?;
         let mut result = self.aggregate_guards(
@@ -2602,48 +2689,161 @@ impl<'source> Builder<'_, '_, 'source> {
         support: &Support<'source>,
         location: ProgramSite,
     ) -> Result<usize, FormulaFailure> {
-        if let Some(slot) = self.aggregate_cache.find(
-            aggregate.id,
-            key,
-            self.computation,
-            self.limits,
-            self.counters,
-            location,
-        )? {
-            return Ok(slot);
+        self.work(location)?;
+        let (previous, produced) = {
+            let rows = self.families.rows.borrow();
+            let slot = rows.find(
+                aggregate.id,
+                key,
+                self.computation,
+                self.limits,
+                self.counters,
+                location,
+            )?;
+            let mut produced = None;
+            if let Some(slot) = slot {
+                let family = rows.get(slot).expect("published family");
+                let retained = match (aggregate, family.source) {
+                    (Ir::Source(source), Some(original)) => {
+                        if !std::ptr::eq(source, original) {
+                            return Err(FormulaFailure::SupportRelation {
+                                error: zetesis_core::relation::Failure::Owner,
+                                location,
+                            });
+                        }
+                        family.produced.as_ref()
+                    }
+                    _ => None,
+                };
+                if family.native.is_some() {
+                    return Ok(slot);
+                }
+                if let Some(retained) = retained {
+                    self.counters.work(self.limits, location)?;
+                    produced = Some(Rc::clone(retained));
+                }
+            }
+            (slot, produced)
+        };
+        if previous.is_none() {
+            ceiling(
+                FormulaResource::AggregateCacheRows,
+                self.families.rows.borrow().len() as u128 + 1,
+                self.limits.max_aggregate_cache_rows as u128,
+                location,
+            )?;
         }
-        ceiling(
-            FormulaResource::AggregateCacheRows,
-            self.aggregate_cache.len() as u128 + 1,
-            self.limits.max_aggregate_cache_rows as u128,
+        let (elements, required) = self.aggregate_family_elements(
+            aggregate,
+            assignment,
+            support,
+            produced.as_deref(),
             location,
         )?;
-        let (elements, required) =
-            self.aggregate_elements(aggregate, assignment, support, location)?;
         let required = required.expect("an assignment keeps its required tuples");
         ceiling(
             FormulaResource::AggregateCacheElements,
-            self.cached_elements as u128 + elements.len() as u128,
+            self.families.cached_elements.get() as u128 + elements.len() as u128,
             self.limits.max_aggregate_cache_elements as u128,
             location,
         )?;
+        self.publish_aggregate(aggregate, key, elements, required, location)
+    }
+
+    /// Publish only a complete native stage. Nested construction can already
+    /// have installed this family, so re-find it before replacing its cell and
+    /// commit the element count only with the new stage.
+    fn publish_aggregate(
+        &mut self,
+        aggregate: Ir<'_, 'source, AggregateIr>,
+        key: &Buffer<Option<usize>>,
+        elements: GroundAggregate,
+        required: Arc<Buffer<bool>>,
+        location: ProgramSite,
+    ) -> Result<usize, FormulaFailure> {
         self.work(location)?;
         let count = elements.len();
-        let next = self.aggregate_cache.len();
-        let slot = self.aggregate_cache.insert(
-            aggregate.id,
-            key,
-            CachedAggregate {
-                elements,
-                required,
-                roots: None,
-            },
-            Context::new(&*self.computation, self.limits, self.counters, location),
-        )?;
-        if slot == next {
-            self.cached_elements += count;
-        }
+        let native = CachedAggregate {
+            elements,
+            required,
+            roots: None,
+        };
+        let slot = {
+            let mut rows = self.families.rows.borrow_mut();
+            let current = rows.find(
+                aggregate.id,
+                key,
+                self.computation,
+                self.limits,
+                self.counters,
+                location,
+            )?;
+            if let Some(slot) = current
+                && rows.get(slot).expect("published family").native.is_some()
+            {
+                return Ok(slot);
+            }
+            if let Some(slot) = current {
+                // The complete old producer stage survives a refused native build.
+                // No cell borrow spanned its construction.
+                rows.get_mut(slot)
+                    .expect("completed producer family")
+                    .native = Some(native);
+                slot
+            } else {
+                let source = match aggregate {
+                    Ir::Source(source) => Some(source),
+                    Ir::Temporary(_) => None,
+                };
+                rows.insert(
+                    aggregate.id,
+                    key,
+                    families::Family {
+                        source,
+                        produced: None,
+                        native: Some(native),
+                    },
+                    Context::new(&*self.computation, self.limits, self.counters, location),
+                )?
+            }
+        };
+        self.families
+            .cached_elements
+            .set(self.families.cached_elements.get() + count);
         Ok(slot)
+    }
+    /// Construct the complete native stage after all tuple-plan evidence has
+    /// been checked. No registry borrow spans this operation; refusal leaves
+    /// any completed producer in its original row without partial native data.
+    fn aggregate_family_elements(
+        &mut self,
+        aggregate: Ir<'_, 'source, AggregateIr>,
+        assignment: &Binding,
+        support: &Support<'source>,
+        produced: Option<&families::Produced<'source>>,
+        location: ProgramSite,
+    ) -> Result<Coalesced, FormulaFailure> {
+        // A carrier hit alone does not authorize ordered tuple replay. Every
+        // source-plan segment must match before any fresh eligibility work.
+        let replay = match (aggregate, produced.and_then(|value| value.replay.as_ref())) {
+            (Ir::Source(source), Some(replay))
+                if replay.certifies(
+                    source,
+                    assignment,
+                    support,
+                    self.budget,
+                    Context::new(&*self.computation, self.limits, self.counters, location),
+                )? =>
+            {
+                Some(replay)
+            }
+            _ => None,
+        };
+        if let Some(replay) = replay {
+            self.replay_aggregate(aggregate, assignment, support, replay, location)
+        } else {
+            self.aggregate_elements(aggregate, assignment, support, location)
+        }
     }
     fn assignment_aggregate(
         &mut self,
@@ -2652,36 +2852,65 @@ impl<'source> Builder<'_, '_, 'source> {
         assignment: &Binding,
         support: &Support<'source>,
         location: ProgramSite,
+        carriers: Option<&crate::formula_binding_cursor::Cursor<'_, 'source>>,
     ) -> Result<usize, FormulaFailure> {
         let key = self.cache_key(&aggregate.family_inputs, assignment, location)?;
         let slot = self.cached_aggregate(aggregate, &key, assignment, support, location)?;
         self.work(location)?;
         let roots = self
-            .aggregate_cache
+            .families
+            .rows
+            .borrow()
             .get(slot)
+            .and_then(|family| family.native.as_ref())
             .and_then(|cached| cached.roots.as_ref().map(Arc::clone));
         let roots = if let Some(roots) = roots {
             roots
         } else {
             self.work(location)?;
-            let cached = self
-                .aggregate_cache
-                .get(slot)
-                .expect("cache lookup returned a published row");
-            let (elements, required) = (cached.elements.clone(), Arc::clone(&cached.required));
-            let roots =
-                self.assignment_family(aggregate.function, &elements, &required, location)?;
+            let (elements, required) = {
+                let rows = self.families.rows.borrow();
+                let cached = rows
+                    .get(slot)
+                    .and_then(|family| family.native.as_ref())
+                    .expect("cache lookup returned completed eligibility");
+                (cached.elements.clone(), Arc::clone(&cached.required))
+            };
+            let retained = carriers
+                .map(|cursor| {
+                    cursor.assignment_carrier(
+                        aggregate.get(),
+                        assignment,
+                        support,
+                        Context::new(&*self.computation, self.limits, self.counters, location),
+                    )
+                })
+                .transpose()?
+                .flatten();
+            let roots = self.assignment_family(
+                aggregate.function,
+                &elements,
+                &required,
+                location,
+                retained,
+            )?;
             self.work(location)?;
-            self.aggregate_cache
+            self.families
+                .rows
+                .borrow_mut()
                 .get_mut(slot)
+                .and_then(|family| family.native.as_mut())
                 .expect("eligibility cache was populated before family construction")
                 .roots = Some(Arc::clone(&roots));
-            self.cached_roots += roots.len();
+            self.families
+                .cached_roots
+                .set(self.families.cached_roots.get() + roots.len());
             roots
         };
         let target_value = assignment.key(target, location)?;
         let key = self
-            .terms
+            .families
+            .terms(GroundingWork::new(self.limits, self.counters, location))?
             .find(
                 &target_value,
                 self.computation,
@@ -2700,6 +2929,7 @@ impl<'source> Builder<'_, '_, 'source> {
         elements: &GroundAggregate,
         required: &Buffer<bool>,
         location: ProgramSite,
+        retained: Option<&Binding<'static>>,
     ) -> Result<Arc<CoordinateMap<usize, usize>>, FormulaFailure> {
         let elements = match (Kind::of(function), elements) {
             (Kind::Numeric(function), GroundAggregate::Numeric(elements)) => {
@@ -2710,10 +2940,19 @@ impl<'source> Builder<'_, '_, 'source> {
             }
             _ => unreachable!("an aggregate's elements are coalesced by its function's kind"),
         };
-        let values = self.aggregate_candidates(elements, required, location)?;
+        // The caller lends only a successful carrier for this exact source,
+        // support and input projection. Eligibility and full-tuple coalescing
+        // above still use the ordinary final-grounding path.
+        let rebuilt;
+        let values = if let Some(values) = retained {
+            values
+        } else {
+            rebuilt = self.aggregate_candidates(elements, required, location)?;
+            &rebuilt
+        };
         ceiling(
             FormulaResource::AggregateCacheRoots,
-            self.cached_roots as u128 + values.len() as u128,
+            self.families.cached_roots.get() as u128 + values.len() as u128,
             self.limits.max_aggregate_cache_roots as u128,
             location,
         )?;
@@ -2727,10 +2966,10 @@ impl<'source> Builder<'_, '_, 'source> {
         )?;
         match elements {
             AssignmentElements::Extrema(function, elements) => {
-                self.extremum_assignment_roots(elements, function, &values, &mut roots, location)?;
+                self.extremum_assignment_roots(elements, function, values, &mut roots, location)?;
             }
             AssignmentElements::Numeric(_, elements) => {
-                let guards = self.assignment_guards(&values, location)?;
+                let guards = self.assignment_guards(values, location)?;
                 let first = self.nodes.view().len();
                 let family = self.append_guard_family(
                     elements,
@@ -2830,7 +3069,10 @@ impl<'source> Builder<'_, '_, 'source> {
                 };
                 for (element, &required) in elements.iter().zip(flags.iter()) {
                     self.work(location)?;
-                    let key = self.terms.key(element.value, location)?;
+                    let key = self
+                        .families
+                        .terms(GroundingWork::new(self.limits, self.counters, location))?
+                        .key(element.value, location)?;
                     crate::formula_assignment::append(
                         firsts.side_mut(required),
                         &key,
@@ -2860,31 +3102,11 @@ impl<'source> Builder<'_, '_, 'source> {
         assignment: &Binding,
         location: ProgramSite,
     ) -> Result<Buffer<Option<usize>>, FormulaFailure> {
-        let count = inputs.len();
-        let mut outer = Buffer::new(self.computation, self.limits, self.counters, location)?;
-        outer.resize(
-            count,
-            None,
-            self.computation,
-            self.limits,
-            self.counters,
-            location,
-        )?;
-        // Equal projected coordinates give the same complete tuple set and
-        // the same eligibility formulas in this immutable completed support.
-        // Other proposals remain in the rule's original equality literals.
-        for (at, &slot) in inputs.iter().enumerate() {
-            self.work(location)?;
-            let key = assignment
-                .slots()
-                .key(slot)
-                .map_err(|error| crate::formula_binding::assignment(error, location))?;
-            outer.slice_mut()[at] = key
-                .as_ref()
-                .map(|key| self.term(key, location))
-                .transpose()?;
-        }
-        Ok(outer)
+        self.families.key(
+            inputs,
+            assignment,
+            Context::new(&*self.computation, self.limits, self.counters, location),
+        )
     }
     fn aggregate_elements(
         &mut self,
@@ -2928,6 +3150,18 @@ impl<'source> Builder<'_, '_, 'source> {
                 self.budget,
                 Context::new(&*self.computation, self.limits, self.counters, location),
             )?;
+            local.share_families(
+                Rc::clone(&self.families),
+                self.limits,
+                self.counters,
+                location,
+            )?;
+            local.select_numeric_local(Context::new(
+                &*self.computation,
+                self.limits,
+                self.counters,
+                location,
+            ))?;
             while let Some(binding) = local.next(
                 self.computation,
                 self.limits,
@@ -2987,7 +3221,8 @@ impl<'source> Builder<'_, '_, 'source> {
             (GroundKey::Tuple(tuple), Kind::Extremum(_)) => {
                 let read = self.computation.read();
                 let value = self
-                    .terms
+                    .families
+                    .terms(GroundingWork::new(self.limits, self.counters, location))?
                     .value(tuple, read, location)?
                     .child(0)
                     .expect("admitted nonempty extremum tuple");
@@ -3002,7 +3237,8 @@ impl<'source> Builder<'_, '_, 'source> {
             }
             (GroundKey::Tuple(tuple), Kind::Numeric(function)) => {
                 let value = self
-                    .terms
+                    .families
+                    .terms(GroundingWork::new(self.limits, self.counters, location))?
                     .value(tuple, self.computation.read(), location)?
                     .child(0);
                 let Some(weight) = crate::formula_assignment::contribution(function, value) else {
@@ -3024,7 +3260,9 @@ impl<'source> Builder<'_, '_, 'source> {
     ) -> Result<Coalesced, FormulaFailure> {
         let grouped = aggregate_order::ordered(
             grouped,
-            &self.terms,
+            &*self
+                .families
+                .terms(GroundingWork::new(self.limits, self.counters, location))?,
             &self.aggregate_atoms,
             Context::new(&*self.computation, self.limits, self.counters, location),
         )?;
@@ -3362,7 +3600,9 @@ impl Builder<'_, '_, '_> {
         crate::formula_assignment::endpoint_guard(bound, location)?;
         let first = self.nodes.view().len();
         let limits = self.aggregate_limits();
-        let terms = &self.terms;
+        let terms =
+            self.families
+                .terms(GroundingWork::new(self.limits, self.counters, location))?;
         let values = elements.iter().map(|element| ValueExtremumElement {
             value: terms
                 .value(element.value, read, location)
@@ -3387,6 +3627,7 @@ impl Builder<'_, '_, '_> {
             self.counters,
             location,
         )?;
+        drop(terms);
         let canonical = self.intern_appended(&appended.suffix, location)?;
         Ok(remap(build.root(), first, canonical.slice()))
     }

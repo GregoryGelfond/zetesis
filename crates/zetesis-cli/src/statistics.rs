@@ -461,6 +461,26 @@ fn countermodel(
     Ok(())
 }
 
+fn root_images(
+    sink: &mut impl Write,
+    images: &zetesis_stable::RootImageStatistics,
+) -> io::Result<()> {
+    writeln!(
+        sink,
+        "  candidate root images: status={}; groups={}; pairs={}; preparation work={}; copying work={}; closure work={}; peak bytes={}; completed rounds={}; applied cuts={}; root refuted={}",
+        images.status.label(),
+        images.groups,
+        images.pairs,
+        images.preparation_work,
+        images.copying_work,
+        images.closure_work,
+        images.peak_bytes,
+        images.completed_rounds,
+        images.applied_cuts,
+        images.root_refuted
+    )
+}
+
 fn candidate_regions(
     sink: &mut impl Write,
     regions: &zetesis_stable::RegionSearchStatistics,
@@ -509,6 +529,7 @@ fn candidate_regions(
         parity.preparation_work,
         parity.preparation_bytes,
     )?;
+    root_images(sink, &regions.images)?;
     let cardinality = regions.cardinality;
     writeln!(
         sink,

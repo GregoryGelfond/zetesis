@@ -154,15 +154,11 @@ fn finite_meets_avoid_real_prefixes_and_probes() {
         let after = *on.rules.borrow().last().unwrap();
         // The constant-key postings retain the a, b, c order: eight a/b
         // values, but only four occur in the corresponding c columns.
-        // Only 16 c probes have nonempty postings. Indexed offers one eight-row
-        // posting per probe, then checks the full row; Table intersects both
-        // equalities before offering its one row. A complete c match is not an
-        // Indexed offered-row count. Its guard rejects four marginal rows per
-        // posting; three other locally permitted rows still fail the matcher.
-        let (c_rows, c_rejected) = match strategy {
-            JoinStrategy::Indexed => (16 * 8, 16 * 4),
-            JoinStrategy::Table => (16, 0),
-        };
+        // Only 16 complete c keys are present. Indexed selects each exact row
+        // through existing membership; Table intersects both equalities. Both
+        // still check the offered row, with no marginal c rows for the guard
+        // to reject. The a/b prefixes and probes remain distinct above them.
+        let (c_rows, c_rejected) = (16, 0);
         assert_eq!(before.join_rows, Some(8 + 8 * 8 + c_rows));
         assert_eq!(after.join_rows, Some(8 + 4 * 8 + c_rows));
         assert_eq!(before.join_probes, Some(1 + 8 + 8 * 8));

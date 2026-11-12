@@ -853,6 +853,8 @@ fn search_statistics(
         out,
         stats.regions.as_ref().map(|regions| &regions.cardinality),
     )?;
+    out.text(",\"root_images\":")?;
+    arithmetic::root_images(out, stats.regions.as_ref().map(|regions| &regions.images))?;
     out.text(",\"candidate_regions\":")?;
     region_statistics(out, stats.regions.as_ref())?;
     out.text(",\"region_filter\":")?;

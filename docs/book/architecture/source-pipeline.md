@@ -52,8 +52,15 @@ possible atoms for enumeration identity, without creating source producers or
 program roots. This domain is distinct from the emitted theory's dense IDs.
 
 `GroundingOptions` selects the positive-join execution strategy before formula
-materialization. The default `Indexed` strategy probes the shortest applicable
-value posting. Explicit `Table` selection prepares reusable value-support masks
+materialization. At the indexed fallback, the existing value posting is resolved
+first. An empty or singleton posting keeps the ordinary matcher and delta selection.
+For a wider candidate domain, a fully bound flat pattern borrows a complete typed
+key and uses the relation's existing exact lookup. Its empty or singleton result
+keeps the original row identity and current delta partition; it allocates no tuple
+or new index. Both index operations belong to one logical join probe, with all
+performed work charged. Partial patterns retain the original value posting. Existing structural, domain and arithmetic selections retain their
+precedence, and all offered rows still pass the ordinary matcher and filters.
+Explicit `Table` selection prepares reusable value-support masks
 for flat positive patterns over completed eager support. Growth-round snapshots
 and structural patterns keep indexed probes. This changes the source of row
 positions, while the existing whole-row matcher, binding schedule and original
@@ -104,6 +111,7 @@ those instructions rather than interpreting the plan as new program semantics.
 | Complete joins and possible support | `formula_support`, `formula_pattern` | Transactional whole-tuple matching, snapshots, indexes and support completion |
 | Positive-row query strategy | `grounding_options`, `formula_support::queries`, CPU `table` | Explicit completed-support table indices and owned row masks; shared matcher and cumulative source budgets |
 | Formula emission | `formula_ground`, `formula_guard`, `formula_conditional` | Original implications, aggregate conditions and universal instances |
+| Completed aggregate families | `formula_ground::families`, `formula_binding_cursor` | One builder-owned coordinate/registry workspace, shared completed carriers and checked ordered occurrence replay |
 | Optional formula factoring | `formula_factor` | Independent body components over fixed heads, and shared continuations for equivalent existential witnesses; arithmetic components require full-carrier certification |
 | Optional count certificates | `formula_count_plan` | Capture, derivation and emitted correspondence to the original theory |
 | Source activity | `formula_source_activity` | Bounded absent/optional/required producer refinement over completed support, shared by objectives and projection; each fact row is a required producer |
@@ -149,6 +157,22 @@ connected component. A changing round resolves an optional entry; it never
 reclassifies an already known entry. The finite optional-entry count bounds the
 rounds. This abstraction does not decide correlations among optional atoms, and
 it does not replace original-model query evaluation or reduct satisfaction.
+
+Rich producer activity keeps scoped formula construction within one producer
+pass. Bindings that select different values from the same aggregate family reuse
+that family's native rows and equality roots. The existing aggregate identity
+and outer-binding key still distinguish different families; other body literals
+are lowered for their own bindings. Formula and atom coordinates never leave
+their owning scratch builder or become part of the original theory.
+
+Within an unchanged activity table, completed node readings can be reused as
+the scratch graph grows. Each native threshold row reduces its required and
+possible contributions once, then its bounds answer the row's individual cuts.
+The ordinary Boolean composition remains responsible for equality and other
+combined conditions. Reuse ends before a new activity table is published;
+direct publication requires fresh readings. This preserves the abstraction's
+independent treatment of optional atoms. Existing work and storage limits cover
+the retained scratch and actual operations, including interruption and refusal.
 
 Both scratch and retained formula construction begin with the same canonical
 constants: `FALSUM` represents bottom, and `VERUM` represents bottom implying

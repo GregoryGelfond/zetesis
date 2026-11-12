@@ -74,3 +74,44 @@ fn publication_failure_keeps_the_objective_receipt_in_a_later_summary() {
     let value: serde_json::Value = serde_json::from_slice(&document).unwrap();
     assert_eq!(value["statistics"]["objective_work"], expected);
 }
+
+#[test]
+fn projected_refusal_keeps_native_report_completion_and_work() {
+    let mut case = crate::publication_fixture::FormulaCase::new(options());
+    case.config.solve.max_objective_keys = 1;
+    let mut output = Vec::new();
+    let mut diagnostics = Vec::new();
+    let outcome = case
+        .run(
+            "{a;b}. :- a,b. #minimize {1,a:a;2,b:b}.",
+            &mut output,
+            &mut diagnostics,
+            &Cancellation::default(),
+        )
+        .unwrap();
+    let semantic = outcome.semantic();
+    assert_eq!(semantic.completion(), Some(crate::Completion::Exhausted));
+    assert!(semantic.optimum_proved());
+    assert_eq!(semantic.scored_models(), 3);
+    let text = std::str::from_utf8(&diagnostics).unwrap();
+    assert_eq!(text.matches("Objective projection unavailable:").count(), 1);
+    assert!(text.contains("detailed scoring is subject to the remaining objective allowance"));
+    assert!(!text.contains("Objective preparation unavailable:"));
+    let document: serde_json::Value = serde_json::from_slice(&output).unwrap();
+    assert_eq!(
+        document["statistics"]["objective_work"],
+        semantic.objective_work()
+    );
+    assert!(semantic.objective_work() > 0);
+    let checked = zetesis_validation::answers::native_json::parse(
+        &output,
+        zetesis_validation::answers::native_json::Limits::default(),
+    )
+    .unwrap();
+    let [optimum] = checked.records() else {
+        panic!("the unique optimum must be published")
+    };
+    assert!(optimum.full_model().is_empty());
+    assert_eq!(optimum.costs(), Some(&[(0, 0)][..]));
+    assert_eq!(checked.costs(), Some(&[(0, 0)][..]));
+}

@@ -48,7 +48,8 @@ pub struct ReductStatistics {
 #[non_exhaustive]
 pub struct InnerPreparationStatistics {
     /// Query roots prepared — the inline root, a served root or a residual
-    /// root — after a closure that did not refute them.
+    /// root — after a closure that left them open and unrefuted. A decided
+    /// root goes directly to the existing leaf check without preparation.
     pub attempts: u64,
     /// Preparations that installed units, rows or bounds.
     pub prepared: u64,

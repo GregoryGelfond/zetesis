@@ -62,7 +62,8 @@ pub use regions::{
     LearningOwner, LearningStore, NARROWING_BATCH, Narrower, NarrowingAttempt, NarrowingScratch,
     NarrowingStatistics, OriginalSubject, ParityStatistics, ParitySystem, PreferenceAttempt,
     PreparationAttempt, PreparationError, PreparationLimits, PreparationStatus, PreparationWork,
-    Producers, RegionLimits, RootPreparation, SupportExplanationStatistics, producers,
+    Producers, RegionLimits, RootImageStatistics, RootPreparation, SupportExplanationStatistics,
+    producers,
 };
 pub use slate::{SlateId, SlateRef};
 pub use theory::{

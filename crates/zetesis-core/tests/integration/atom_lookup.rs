@@ -2,6 +2,7 @@
 //! Refused construction/comparison exposes no partial index, range or membership.
 
 mod prepared;
+mod selected;
 
 use std::{cmp::Ordering, convert::Infallible};
 use zetesis_core::catalog::AtomRef;

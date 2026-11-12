@@ -448,31 +448,60 @@ impl SourceEligibility {
             context.budget,
             context.counters,
         )?;
-        while let Some(binding) = outer.next(
-            context.computation,
-            context.limits,
-            context.budget,
-            context.counters,
-            rule.location,
-        )? {
-            let body =
-                self.producer_activity(&rule.body, &rule.body_binding(&binding), support, context)?;
+        // This pass stages its results separately from the activity it reads.
+        // Keep immutable scoped families and their reductions only until this
+        // producer returns, before predicate publication or cyclic refinement.
+        let mut bodies = crate::formula_ground::SourceBodies::new(
+            Context {
+                computation: context.computation,
+                limits: context.limits,
+                budget: context.budget,
+                counters: context.counters,
+                location: rule.location,
+            },
+            support,
+        );
+        while let Some(binding) = {
+            let context = bodies.context(rule.location);
+            outer.next(
+                context.computation,
+                context.limits,
+                context.budget,
+                context.counters,
+                rule.location,
+            )?
+        } {
+            let body = self.producer_activity(
+                &rule.body,
+                &rule.body_binding(&binding),
+                &mut bodies,
+                rule.location,
+            )?;
             match &rule.head {
                 HeadIr::Normal(Some(head)) => {
-                    self.retain(*head, &binding, body, temporary, context)?;
+                    self.retain(
+                        *head,
+                        &binding,
+                        body,
+                        temporary,
+                        &mut bodies.context(rule.location),
+                    )?;
                 }
                 HeadIr::Disjunction(heads) => {
                     if heads.iter().any(|head| head.positive_atom().is_none()) {
                         return Err(refusal(rule.location));
                     }
                     for head in heads.iter().filter_map(|head| head.positive_atom()) {
-                        if context.pattern_matches(*head, predicate)? {
+                        if bodies
+                            .context(rule.location)
+                            .pattern_matches(*head, predicate)?
+                        {
                             self.retain(
                                 *head,
                                 &binding,
                                 body.min(Activity::Optional),
                                 temporary,
-                                context,
+                                &mut bodies.context(rule.location),
                             )?;
                         }
                     }
@@ -482,50 +511,77 @@ impl SourceEligibility {
                     // model truth remains with the exact original query.
                     return Err(refusal(rule.location));
                 }
-                HeadIr::Choice(group) => {
-                    for element in &group.elements {
-                        let Some(head) = element.head.positive_atom() else {
-                            continue;
-                        };
-                        if !context.pattern_matches(*head, predicate)? {
-                            continue;
-                        }
-                        let mut local = Join::element(
-                            Ir::Source(element),
-                            &binding,
-                            support,
-                            context.budget,
-                            crate::formula_support::Context::new(
-                                &*context.computation,
-                                context.limits,
-                                context.counters,
-                                rule.location,
-                            ),
-                        )?;
-                        while let Some(row) = local.next(
-                            context.computation,
-                            context.limits,
-                            context.budget,
-                            context.counters,
-                            rule.location,
-                        )? {
-                            let eligible = self.producer_activity(
-                                &element.condition,
-                                &element.body_binding(&row),
-                                support,
-                                context,
-                            )?;
-                            self.retain(
-                                *head,
-                                &row,
-                                body.min(eligible).min(Activity::Optional),
-                                temporary,
-                                context,
-                            )?;
-                        }
-                    }
+                HeadIr::Choice(_) => {
+                    self.choice(rule, predicate, &binding, body, temporary, &mut bodies)?;
                 }
                 HeadIr::Normal(None) => unreachable!("only producer heads selected"),
+            }
+        }
+        Ok(())
+    }
+
+    /// Choice elements read the same staged activity as their outer binding.
+    fn choice<'source>(
+        &mut self,
+        rule: &'source RuleIr,
+        predicate: &Signature,
+        binding: &Binding,
+        body: Activity,
+        temporary: usize,
+        bodies: &mut crate::formula_ground::SourceBodies<'_, '_, 'source, '_>,
+    ) -> Result<(), FormulaFailure> {
+        let HeadIr::Choice(group) = &rule.head else {
+            unreachable!("choice producer selected by the head dispatch")
+        };
+        let support = bodies.support();
+        for element in &group.elements {
+            let Some(head) = element.head.positive_atom() else {
+                continue;
+            };
+            if !bodies
+                .context(rule.location)
+                .pattern_matches(*head, predicate)?
+            {
+                continue;
+            }
+            let mut local = {
+                let context = bodies.context(rule.location);
+                Join::element(
+                    Ir::Source(element),
+                    binding,
+                    support,
+                    context.budget,
+                    crate::formula_support::Context::new(
+                        &*context.computation,
+                        context.limits,
+                        context.counters,
+                        rule.location,
+                    ),
+                )?
+            };
+            while let Some(row) = {
+                let context = bodies.context(rule.location);
+                local.next(
+                    context.computation,
+                    context.limits,
+                    context.budget,
+                    context.counters,
+                    rule.location,
+                )?
+            } {
+                let eligible = self.producer_activity(
+                    &element.condition,
+                    &element.body_binding(&row),
+                    bodies,
+                    rule.location,
+                )?;
+                self.retain(
+                    *head,
+                    &row,
+                    body.min(eligible).min(Activity::Optional),
+                    temporary,
+                    &mut bodies.context(rule.location),
+                )?;
             }
         }
         Ok(())
@@ -572,17 +628,17 @@ impl SourceEligibility {
         self.stage(&atom, activity, temporary, context)
     }
 
-    fn producer_activity<'source>(
+    fn producer_activity(
         &self,
         literals: &[LiteralIr],
         binding: &Binding,
-        support: &Support<'source>,
-        context: &mut Context<'_, '_, 'source>,
+        bodies: &mut crate::formula_ground::SourceBodies<'_, '_, '_, '_>,
+        location: ProgramSite,
     ) -> Result<Activity, FormulaFailure> {
         if ordinary(literals) {
-            self.activity(literals, binding, context)
+            self.activity(literals, binding, &mut bodies.context(location))
         } else {
-            crate::formula_ground::source_activity(literals, binding, support, self, context)
+            bodies.activity(literals, binding, self, !self.exact, location)
         }
     }
 

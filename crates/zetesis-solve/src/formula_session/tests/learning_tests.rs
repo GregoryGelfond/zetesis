@@ -61,6 +61,7 @@ fn enumerate<'a>(
             theory: program.theory(),
             atoms: program.atom_catalog(),
             objectives: program.objectives(),
+            objective_source: None,
             required_choices: program.required_choices(),
             keyed_constraints: 0,
             key_analysis: zetesis_themelios::KeyAnalysis::Complete,

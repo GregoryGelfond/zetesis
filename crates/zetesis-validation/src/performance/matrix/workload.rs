@@ -4,6 +4,7 @@
 mod constants;
 mod authored;
 mod bundle;
+mod manifest;
 pub use authored::AuthoredProgram;
 pub use bundle::{BundleFile, BundleInclude, BundleProgram};
 
@@ -89,6 +90,9 @@ pub struct Workload {
     /// Original external include graph, independent of corpus provenance.
     #[serde(skip_serializing_if = "Option::is_none")]
     bundle: Option<bundle::Bundle>,
+    /// Input selection seal, independent of workload identity and source kind.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    selection_manifest: Option<crate::selected::FileSeal>,
     pub(in crate::performance) metadata_bytes: usize,
     pub(in crate::performance) source_bytes: usize,
 }
@@ -265,6 +269,7 @@ impl Workload {
             generated: None,
             authored: None,
             bundle: None,
+            selection_manifest: None,
             metadata_bytes: budget.metadata,
             source_bytes: budget.sources,
         })
@@ -316,6 +321,7 @@ impl Workload {
             }),
             authored: None,
             bundle: None,
+            selection_manifest: None,
             metadata_bytes: budget.metadata,
             source_bytes: budget.sources,
         })
@@ -384,6 +390,7 @@ impl Workload {
         corpus: &examples::Corpus,
         limits: super::super::Limits,
     ) -> Result<(), Error> {
+        self.validate_selection_manifest(limits.corpus.manifest_bytes)?;
         if self.is_bundle() {
             return self.validate_bundle(limits);
         }

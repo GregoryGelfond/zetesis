@@ -72,8 +72,8 @@ mod rows;
 pub(crate) use factoring::Continuations;
 
 mod local_plans;
-pub(crate) use local_plans::Ir;
 use local_plans::Plan as JoinPlan;
+pub(crate) use local_plans::{Certificate as LocalPlanCertificate, Ir};
 
 use crate::ProgramSite;
 use components::Pattern as AtomPattern;
@@ -1231,6 +1231,7 @@ pub(crate) struct Join<'a, 'source> {
     /// Enabled only for a borrowed non-generated filtered binding; undo
     /// truncates it with that binding. No truth survives a cursor/check.
     positive_prefix: Option<rows::PositivePrefix>,
+    families: Option<std::rc::Rc<crate::formula_ground::families::Workspace<'a, 'source>>>,
     support: &'a Support<'source>,
     values: Binding<'static>,
     lease: StorageLease,
@@ -1944,6 +1945,25 @@ impl<'a, 'source> Join<'a, 'source> {
         }
         Ok(())
     }
+    /// Share the existing final Builder's family stages. This is installed
+    /// before traversal; the query borrow keeps the exact Support alive.
+    pub(crate) fn share_families(
+        &mut self,
+        families: std::rc::Rc<crate::formula_ground::families::Workspace<'a, 'source>>,
+        limits: &FormulaLimits,
+        counters: &mut Counters,
+        location: ProgramSite,
+    ) -> Result<(), FormulaFailure> {
+        families.authenticate(self.support, location)?;
+        counters.work(limits, location)?;
+        assert!(
+            self.pending.is_none() && self.pending_head.is_none(),
+            "family access is installed before cursor traversal"
+        );
+        self.families = Some(families);
+        Ok(())
+    }
+
     #[cfg_attr(test, track_caller)]
     pub(crate) fn local(
         literals: impl Into<Ir<'a, 'source, [LiteralIr]>>,
@@ -1953,6 +1973,34 @@ impl<'a, 'source> Join<'a, 'source> {
         budget: &mut Budget,
         context: Context<'_, &Computation<'_, '_>>,
     ) -> Result<Self, FormulaFailure> {
+        Self::local_inner::<false>(literals, prefix, variables, support, budget, context)
+            .map(|(join, _)| join)
+    }
+
+    /// The same local constructor, optionally lending its already selected
+    /// source plan to a completed-family occurrence certificate. Ordinary local
+    /// callers instantiate RETAIN=false and perform no extra Rc clone.
+    #[cfg_attr(test, track_caller)]
+    pub(crate) fn local_certified(
+        literals: impl Into<Ir<'a, 'source, [LiteralIr]>>,
+        prefix: &Binding,
+        variables: usize,
+        support: &'a Support<'source>,
+        budget: &mut Budget,
+        context: Context<'_, &Computation<'_, '_>>,
+    ) -> Result<(Self, Option<LocalPlanCertificate<'source>>), FormulaFailure> {
+        Self::local_inner::<true>(literals, prefix, variables, support, budget, context)
+    }
+
+    #[cfg_attr(test, track_caller)]
+    fn local_inner<const RETAIN: bool>(
+        literals: impl Into<Ir<'a, 'source, [LiteralIr]>>,
+        prefix: &Binding,
+        variables: usize,
+        support: &'a Support<'source>,
+        budget: &mut Budget,
+        context: Context<'_, &Computation<'_, '_>>,
+    ) -> Result<(Self, Option<LocalPlanCertificate<'source>>), FormulaFailure> {
         let literals = literals.into();
         let Context {
             computation,
@@ -1984,6 +2032,16 @@ impl<'a, 'source> Join<'a, 'source> {
         } else {
             None
         };
+        let certificate = if RETAIN {
+            if let Some(plan) = &shared {
+                counters.work(limits, location)?;
+                Some(LocalPlanCertificate::retain(plan))
+            } else {
+                None
+            }
+        } else {
+            None
+        };
         let mut join = if let Some(plan) = shared {
             Self::with_plan(
                 literals.get(),
@@ -2005,7 +2063,7 @@ impl<'a, 'source> Join<'a, 'source> {
             )?
         };
         join.literals = literals;
-        Ok(join)
+        Ok((join, certificate))
     }
 
     pub(crate) fn new(
@@ -2156,6 +2214,7 @@ impl<'a, 'source> Join<'a, 'source> {
             anchor: None,
             positive_prefix: None,
             support,
+            families: None,
             values,
             lease,
             trail_bytes: 0,
@@ -2613,14 +2672,18 @@ impl<'a, 'source> Join<'a, 'source> {
                 self.family.defined = true;
                 return Ok(Some(row));
             }
-            self.pending_head = Some(crate::formula_binding_cursor::Cursor::new(
+            let mut pending = crate::formula_binding_cursor::Cursor::new(
                 self.literals,
                 row.frame.into_owned(),
                 self.support,
                 self.bindings,
                 self.head_slots.clone(),
                 Context::new(computation, limits, counters, location),
-            )?);
+            )?;
+            if let Some(families) = &self.families {
+                pending.share_families(std::rc::Rc::clone(families), limits, counters, location)?;
+            }
+            self.pending_head = Some(pending);
             self.lease.observe(self.storage_bytes(), location)?;
         }
     }
@@ -2779,6 +2842,9 @@ impl<'a, 'source> Join<'a, 'source> {
                 0..self.head_slots.start,
                 Context::new(computation, limits, counters, location),
             )?;
+            if let Some(families) = &self.families {
+                pending.share_families(std::rc::Rc::clone(families), limits, counters, location)?;
+            }
             pending.select_range(self.range_selection);
             self.pending = Some(pending);
         }
@@ -2981,27 +3047,12 @@ impl<'a, 'source> Join<'a, 'source> {
         self.resolve_probe_source(pattern, GroundingWork::new(limits, counters, location))?;
         if self.probes[self.depth].is_none() {
             let source = self.resolutions[self.depth].rows();
-            if let Some(anchor) = &mut self.anchor
-                && anchor.occurrence == pattern.source
-            {
-                if matches!(anchor.row, rows::AnchorRow::Unresolved) {
-                    // Source/filter authentication above must complete before
-                    // an absent or singleton domain can be published.
-                    counters.work(limits, location)?;
-                    anchor.row = match source {
-                        Some(source) => self
-                            .support
-                            .lookup_at(source, anchor.atom, limits, counters, location)?
-                            .map_or(rows::AnchorRow::Absent, rows::AnchorRow::Present),
-                        None => rows::AnchorRow::Absent,
-                    };
-                }
-                let range = match anchor.row {
-                    rows::AnchorRow::Absent => 0..0,
-                    rows::AnchorRow::Present(row) => row..row + 1,
-                    rows::AnchorRow::Unresolved => unreachable!("resolved above"),
-                };
-                self.probes[self.depth] = Some(Probe::Indexed(delta::Rows::Interval(range)));
+            if let Some(probe) = self.anchored_probe(
+                source,
+                pattern.source,
+                GroundingWork::new(limits, counters, location),
+            )? {
+                self.probes[self.depth] = Some(probe);
                 return Ok(());
             }
             if let structural::Selection::Posting(posting) = self.structural_selection(
@@ -3057,19 +3108,66 @@ impl<'a, 'source> Join<'a, 'source> {
                 )? {
                     probe
                 } else {
-                    let posting = self.support.probe_at(
+                    match self.support.indexed_selection_at(
                         source,
-                        pattern.atom(),
+                        pattern.pattern,
                         binding,
-                        limits,
-                        counters,
-                        location,
-                    )?;
-                    self.indexed_probe(posting, source, pattern.source, limits, counters, location)?
+                        (self.delta, pattern.source),
+                        GroundingWork::new(limits, counters, location),
+                    )? {
+                        queries::IndexedSelection::Exact(range) => {
+                            Probe::Indexed(delta::Rows::Interval(range))
+                        }
+                        queries::IndexedSelection::Posting(posting) => self.indexed_probe(
+                            posting,
+                            source,
+                            pattern.source,
+                            limits,
+                            counters,
+                            location,
+                        )?,
+                    }
                 },
             );
         }
         Ok(())
+    }
+    /// Resolve an explicitly anchored occurrence after source/filter admission.
+    /// Its original row identity is retained across backtracking.
+    fn anchored_probe(
+        &mut self,
+        source: Option<&'source relations::RelationRows<'source>>,
+        occurrence: usize,
+        work: GroundingWork<'_>,
+    ) -> Result<Option<Probe<'a, 'source>>, FormulaFailure> {
+        let Some(anchor) = self
+            .anchor
+            .as_mut()
+            .filter(|anchor| anchor.occurrence == occurrence)
+        else {
+            return Ok(None);
+        };
+        let GroundingWork {
+            limits,
+            counters,
+            location,
+        } = work;
+        if matches!(anchor.row, rows::AnchorRow::Unresolved) {
+            counters.work(limits, location)?;
+            anchor.row = match source {
+                Some(source) => self
+                    .support
+                    .lookup_at(source, anchor.atom, limits, counters, location)?
+                    .map_or(rows::AnchorRow::Absent, rows::AnchorRow::Present),
+                None => rows::AnchorRow::Absent,
+            };
+        }
+        let range = match anchor.row {
+            rows::AnchorRow::Absent => 0..0,
+            rows::AnchorRow::Present(row) => row..row + 1,
+            rows::AnchorRow::Unresolved => unreachable!("resolved above"),
+        };
+        Ok(Some(Probe::Indexed(delta::Rows::Interval(range))))
     }
     fn indexed_probe(
         &self,

@@ -219,6 +219,9 @@ pub struct RegionSearchStatistics {
     pub parity: zetesis_ferraris::ParityStatistics,
     /// Checked original-answer counting preparation, including declined prefixes.
     pub cardinality: zetesis_ferraris::CardinalityStatistics,
+    /// Original-root image preparation; its work is already in `counts.work`.
+    /// Runtime snapshots preserve this receipt without adding it again.
+    pub images: zetesis_ferraris::RootImageStatistics,
     /// Frontier ownership measured by parallel candidate production. Other
     /// schedules do not currently measure it; absence does not mean zero bytes.
     pub frontier: Option<RegionFrontierStatistics>,
@@ -702,6 +705,7 @@ fn open_recording(
         .map(|published| published.map(subjects::PreparedArithmetic::root_only));
     statistics.parity = arithmetic.parity;
     statistics.cardinality = arithmetic.cardinality;
+    statistics.images = arithmetic.images;
     let mut arithmetic = prepared.map_err(|error| match error {
         PreparationError::Stopped(error) => meter_failure(error),
         PreparationError::Source(source) => Incomplete::ArithmeticSource(source),
@@ -852,6 +856,7 @@ impl RegionSearch {
             generator_order: self.statistics.generator_order,
             parity: self.statistics.parity,
             cardinality: self.statistics.cardinality,
+            images: self.statistics.images,
             frontier: None,
             workers: None,
             frontier_order: None,
@@ -1741,6 +1746,15 @@ fn prepare_at_root<Q: Quota>(
     limits: crate::Limits,
     working: Working<'_, '_, Q>,
 ) -> Result<(Option<Box<FrozenPreparation>>, Narrowing), Incomplete> {
+    // A decided root already has its one leaf. Let the existing walk either
+    // exclude the candidate itself or validate a proper-subset witness; no
+    // later narrowing subject can add another member to that singleton.
+    if matches!(
+        walk::inspect(entry, closed.narrowing, Counting::Never, true),
+        walk::Step::Leaf
+    ) {
+        return Ok((None, closed.narrowing));
+    }
     let Working {
         scratch,
         budget,

@@ -1,9 +1,10 @@
 //! Compile immutable allocated minima into the lower objective once.
 //!
-//! The proof's member/key lists are temporary. Retain only activation floors
-//! and nonzero residual contributions; unchanged priorities borrow the exact
-//! objective. A floor condition addresses the compact activation owner, whereas
-//! residual eligibility keeps its original objective-plan coordinate.
+//! Retain activation floors, nonzero residual contributions and exact unallocated
+//! terms. The checked group/key lists move into `Costs.layered` for the separate
+//! minimum-layer restriction; unchanged priorities borrow the exact objective.
+//! A floor condition addresses the compact activation owner, whereas residual
+//! eligibility keeps its original objective-plan coordinate.
 
 use std::ops::Range;
 
@@ -16,6 +17,8 @@ pub(super) struct Level {
     pub priority: i32,
     pub groups: Range<usize>,
     pub residuals: Vec<AggregateElement>,
+    /// Exact contributions of keys outside every allocated group.
+    pub layer_remainder: Vec<AggregateElement>,
 }
 
 pub(super) fn prepare(
@@ -59,8 +62,11 @@ pub(super) fn prepare(
         // Reuse the temporary minima for residual weights, then reserve only
         // the nonzero contributions that the compiled lower objective needs.
         let mut count = 0;
+        let mut unallocated = 0;
         for (element, weight) in original.iter().zip(&mut prepaid) {
             work.tick()?;
+            work.tick()?;
+            unallocated += usize::from(*weight == 0);
             *weight = element
                 .weight
                 .checked_sub(*weight)
@@ -68,8 +74,16 @@ pub(super) fn prepare(
             count += usize::from(*weight != 0);
         }
         let mut residuals = memory.reserve(count, work)?;
+        let mut layer_remainder = memory.reserve(unallocated, work)?;
         for (element, &weight) in original.iter().zip(&prepaid) {
             work.tick()?;
+            // Bridges allocates only strictly positive minima. An unchanged
+            // residual therefore denotes exactly an unallocated original key.
+            work.tick()?;
+            if weight == element.weight {
+                work.tick()?;
+                layer_remainder.push(*element);
+            }
             if weight != 0 {
                 residuals.push(AggregateElement {
                     weight,
@@ -81,6 +95,7 @@ pub(super) fn prepare(
             priority,
             groups: start..groups.len(),
             residuals,
+            layer_remainder,
         });
         memory.retire(&prepaid);
     }
@@ -88,5 +103,6 @@ pub(super) fn prepare(
         groups,
         levels,
         activations,
+        layered: Vec::new(),
     })
 }

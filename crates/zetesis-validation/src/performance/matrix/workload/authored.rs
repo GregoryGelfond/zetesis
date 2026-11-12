@@ -127,6 +127,7 @@ impl Workload {
             generated: None,
             authored: Some(Authored { source: seal }),
             bundle: None,
+            selection_manifest: None,
             metadata_bytes: budget.metadata,
             source_bytes: budget.sources,
         })

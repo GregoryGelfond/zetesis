@@ -136,6 +136,7 @@ mod scalar_order;
 mod signed_choices;
 mod signed_element_contracts;
 mod source_activity;
+mod source_activity_reuse;
 mod source_door_facts;
 mod strong_negation;
 mod structural_bindings;

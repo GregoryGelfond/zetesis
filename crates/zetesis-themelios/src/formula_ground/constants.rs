@@ -146,7 +146,7 @@ fn initialization_obeys_work_ceiling() {
     Fixture::default().with(location(), |_, computation, counters| {
         let before = counters.accounting.work;
         let limits = FormulaLimits {
-            max_work: before + 1,
+            max_work: before + 2,
             ..FormulaLimits::default()
         };
         let mut budget = Budget::new(ExpansionLimits::default(), 0);
@@ -160,6 +160,12 @@ fn initialization_obeys_work_ceiling() {
             location(),
         )
         .unwrap();
+        assert_eq!(
+            builder.counters.accounting.work - before,
+            1,
+            "shared owner allocation"
+        );
+        let before = builder.counters.accounting.work;
         let result = builder.initialize(location());
         assert!(matches!(result, Err(FormulaFailure::Limit {
             resource: FormulaResource::Work, limit, observed, ..
@@ -202,11 +208,11 @@ fn scoped_initialization_retains_spent_work() {
             ));
             assert_eq!(
                 counters.accounting.work - before,
-                (1 + 2) + (1 + 4),
-                "both node visits and their complete hashes remain spent"
+                1 + (1 + 2) + (1 + 4),
+                "shared owner allocation and both complete node visits remain spent"
             );
             counters.work(&limits, location()).unwrap();
-            assert_eq!(counters.accounting.work - before, 9);
+            assert_eq!(counters.accounting.work - before, 10);
         });
     }
 }
@@ -267,7 +273,7 @@ fn origin_insertion_obeys_the_work_ceiling() {
     });
     for allowance in [1, 2] {
         Fixture::default().with(location(), |_, computation, counters| {
-            let limits = FormulaLimits { max_work: counters.accounting.work + allowance, ..FormulaLimits::default() };
+            let limits = FormulaLimits { max_work: counters.accounting.work + 1 + allowance, ..FormulaLimits::default() };
             let mut budget = Budget::new(ExpansionLimits::default(), 0);
             let mut builder = Builder::empty(computation, &limits, &mut budget, counters,
                 Purpose::Theory, None, location()).unwrap();

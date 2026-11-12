@@ -519,13 +519,16 @@ fn unrestricted_scoring_spends_one_cumulative_budget() {
     .next()
     .unwrap()
     .unwrap();
-    let plan = zetesis_themelios::objective_bound::ObjectivePlan::new(
-        owner.theory(),
-        owner.atoms(),
-        owner.objectives(),
+    // Derive the exact boundary from the same source-backed constructor used
+    // by the session, then admit preparation and precisely one complete score.
+    let plan = zetesis_themelios::objective_bound::ObjectivePlan::new_projected(
+        owner.objective_source(),
         zetesis_themelios::objective_bound::ObjectivePlanLimits::default(),
+        config().max_candidate_bytes as u128,
         &Cancellation::default(),
     )
+    .into_parts()
+    .0
     .unwrap();
     let candidate = zetesis_ferraris::Interpretation::new(
         owner.theory(),

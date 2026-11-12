@@ -448,3 +448,164 @@ fn choice_storage_preserves_the_vector_layout() {
     assert!(!choices.contains(192));
     assert!(!choices.contains(usize::MAX));
 }
+
+/// Frozen propagation over an authenticated all-true candidate; the outer
+/// implication leaves every atom open, so a ranking has exactly three reads.
+fn frozen_probe_narrowing(
+    choose: bool,
+    allowance: u64,
+    cancellation: &Cancellation,
+) -> (crate::NarrowingAttempt, Region, u64) {
+    let owner = theory();
+    let narrower = Narrower::new(&owner);
+    // The interpretation holding all three atoms satisfies every node.
+    let truth = [true; 5];
+    let subject = crate::FrozenSubject::new(&owner, &truth);
+    let mut region = Region::all_open(owner.atom_count());
+    let mut known = narrower.frozen_knowledge();
+    let mut quota = Allowance::new(allowance);
+    let attempt = {
+        let mut meter = zetesis_algebra::Meter::reserved(&mut quota);
+        if choose {
+            narrower.narrow_frozen_known_reserved(
+                subject,
+                &mut region,
+                &mut known,
+                &mut NarrowingScratch::default(),
+                cancellation,
+                &mut meter,
+            )
+        } else {
+            narrower.propagate_frozen_known_reserved(
+                subject,
+                &mut region,
+                &mut known,
+                &mut NarrowingScratch::default(),
+                cancellation,
+                &mut meter,
+            )
+        }
+    };
+    (
+        crate::test_support::stop_narrowing(&attempt),
+        region,
+        quota.granted - quota.refunded,
+    )
+}
+
+#[test]
+fn frozen_probe_propagation_omits_only_unused_ranking() {
+    let cancellation = Cancellation::default();
+    let (ranked, expected, ranked_work) = frozen_probe_narrowing(true, u64::MAX, &cancellation);
+    let (deferred, actual, deferred_work) = frozen_probe_narrowing(false, u64::MAX, &cancellation);
+    assert_eq!(deferred.result, ranked.result);
+    assert_eq!(deferred.result, Ok(Narrowing::Fixed { changed: false }));
+    assert_eq!(actual, expected);
+    assert_eq!(ranked.preferred, Some(1));
+    assert_eq!(deferred.preferred, None);
+    assert_eq!(ranked_work, ranked.statistics.work);
+    assert_eq!(deferred_work, deferred.statistics.work);
+    assert_eq!(ranked_work - deferred_work, 3);
+    let mut expected_statistics = ranked.statistics;
+    expected_statistics.work -= 3;
+    assert_eq!(deferred.statistics, expected_statistics);
+}
+
+#[test]
+fn frozen_probe_propagation_preserves_every_refused_prefix() {
+    let cancellation = Cancellation::default();
+    let (complete, expected, total) = frozen_probe_narrowing(false, u64::MAX, &cancellation);
+    assert!(complete.result.is_ok());
+    for allowance in 0..total {
+        let (ranked, ranked_region, ranked_work) =
+            frozen_probe_narrowing(true, allowance, &cancellation);
+        let (deferred, actual, work) = frozen_probe_narrowing(false, allowance, &cancellation);
+        assert_eq!(deferred.result, Err(Stop::WorkLimit), "{allowance}");
+        assert_eq!(deferred.result, ranked.result, "{allowance}");
+        assert_eq!(deferred.statistics, ranked.statistics, "{allowance}");
+        assert_eq!(actual, ranked_region, "{allowance}");
+        assert_eq!(work, ranked_work, "{allowance}");
+        assert_eq!(work, allowance, "{allowance}");
+        assert_eq!(deferred.preferred, None, "{allowance}");
+    }
+    let (exact, actual, work) = frozen_probe_narrowing(false, total, &cancellation);
+    assert_eq!(exact.result, complete.result);
+    assert_eq!(actual, expected);
+    assert_eq!(work, total);
+    let (ranking_refused, _, work) = frozen_probe_narrowing(true, total, &cancellation);
+    assert_eq!(ranking_refused.result, Err(Stop::WorkLimit));
+    assert_eq!(work, total);
+}
+
+#[test]
+fn frozen_probe_propagation_honors_preexisting_cancellation() {
+    let cancellation = Cancellation::default();
+    cancellation.cancel();
+    for choose in [false, true] {
+        let (attempt, region, work) = frozen_probe_narrowing(choose, u64::MAX, &cancellation);
+        assert_eq!(attempt.result, Err(Stop::Cancelled));
+        assert_eq!(attempt.statistics.work, 0);
+        assert_eq!(attempt.preferred, None);
+        assert_eq!(region, Region::all_open(3));
+        assert_eq!(work, 0);
+    }
+}
+
+#[test]
+fn refuted_frozen_propagation_has_the_unchanged_receipt() {
+    let owner = theory();
+    let narrower = Narrower::new(&owner);
+    let truth = [true; 5];
+    let subject = crate::FrozenSubject::new(&owner, &truth);
+    let run = |choose, allowance| {
+        let mut region = Region::all_open(3);
+        assert!(region.cut(0));
+        assert!(region.hold(1));
+        assert!(region.hold(2));
+        let mut known = narrower.frozen_knowledge();
+        let mut quota = Allowance::new(allowance);
+        let attempt = {
+            let mut meter = zetesis_algebra::Meter::reserved(&mut quota);
+            if choose {
+                narrower.narrow_frozen_known_reserved(
+                    subject,
+                    &mut region,
+                    &mut known,
+                    &mut NarrowingScratch::default(),
+                    &Cancellation::default(),
+                    &mut meter,
+                )
+            } else {
+                narrower.propagate_frozen_known_reserved(
+                    subject,
+                    &mut region,
+                    &mut known,
+                    &mut NarrowingScratch::default(),
+                    &Cancellation::default(),
+                    &mut meter,
+                )
+            }
+        };
+        (attempt, region, quota.granted - quota.refunded)
+    };
+    let (complete, _, total) = run(false, u64::MAX);
+    assert_eq!(complete.result, Ok(Narrowing::Refuted));
+    for allowance in 0..=total {
+        let (ranked, expected, ranked_work) = run(true, allowance);
+        let (deferred, actual, work) = run(false, allowance);
+        assert_eq!(deferred.result, ranked.result, "{allowance}");
+        assert_eq!(deferred.statistics, ranked.statistics, "{allowance}");
+        assert_eq!(actual, expected, "{allowance}");
+        assert_eq!(work, ranked_work, "{allowance}");
+        assert_eq!(work, allowance, "{allowance}");
+        assert_eq!(deferred.preferred, None, "{allowance}");
+        if allowance == total {
+            assert_eq!(deferred.result, Ok(Narrowing::Refuted));
+        } else {
+            assert_eq!(
+                deferred.result,
+                Err(zetesis_algebra::Failure::Refused(Stop::WorkLimit))
+            );
+        }
+    }
+}

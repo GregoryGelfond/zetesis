@@ -4,6 +4,53 @@ Notable changes by release. Versions follow Semantic Versioning.
 
 ## Unreleased
 
+### Added
+
+- `zetesis-bench run --workloads` accepts typed selections of authored, corpus
+  and generated workloads, including bounded amendments. These selections use
+  the existing benchmark engine and complete answer-family checks. Reports
+  retain the selection manifest's provenance; existing bundle manifests remain
+  supported.
+
+### Changed
+
+- Grounding shares complete aggregate value families, term coordinates and tuple
+  discovery between compatible consumers. Reusable join-plan keys retain only
+  the inputs their planner inspects.
+- Aggregate and factored-component joins reuse numeric range indexes. Eligible
+  pairwise exclusions become guarded native cardinality constraints with their
+  original source provenance.
+- Original-root arithmetic preparation can combine certified mandatory groups
+  and exclusions to narrow candidate domains. Statistics distinguish its
+  preparation, copying, closure and published results.
+- Optional objective bounds use certified choice groups to account for
+  increasing minimum costs, preserving lexicographic priorities and all optimal
+  ties.
+- Frozen-reduct preparation reuses completed probe results within the same query
+  and skips preparation for decided roots and ranking for unused splits.
+
+### Fixed
+
+- Source-activity preparation reuses immutable aggregate families across a
+  producer's bindings and evaluates shared numeric rows once per activity
+  snapshot. This removes repeated grounding work in aggregate-dependent
+  objectives while preserving the original program, complete answers and
+  optimal ties. Retained scratch storage remains subject to the existing
+  limits; work receipts reflect the operations actually performed.
+- Fully bound flat joins refine wider value postings through the relation's
+  existing exact tuple lookup. Empty and singleton postings retain their
+  original query work. Selected rows keep their original identity and delta
+  partition, and still pass ordinary matching and filtering checks. Partial
+  queries retain indexed postings.
+- Source-backed objective bounds select the complete predicate families read
+  by the objectives before building their index. Unrelated atoms no longer
+  consume the optional plan's atom allowance. Original atom identities, exact
+  costs and optimal ties are preserved; declined preparation retains its work
+  receipt and falls back to exact scoring under the remaining allowance.
+- GPU setup and propagation accounting charges shared aggregate reductions once
+  per row, with separate per-guard costs. Admission uses the existing work and
+  memory limits; no device execution mode or shader is changed.
+
 ## 0.7.0 — 2026-11-08
 
 Zetesis 0.7.0 brings candidate search and reduct checking onto the same

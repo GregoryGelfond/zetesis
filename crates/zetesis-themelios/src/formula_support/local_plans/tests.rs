@@ -1,4 +1,6 @@
 //! Reference, owner/input identity, nested fill and admission checks.
+
+mod relevant;
 use super::*;
 use crate::formula_support::{Join, testing};
 use crate::{FormulaLimits, FormulaResource};
@@ -715,4 +717,9 @@ fn fixed_frame_owners_have_exact_transactional_work_boundaries() {
             }
         },
     );
+}
+
+/// Lend the existing owned-plan reference control to canonical cross-layer tests.
+pub(in crate::formula_support) fn without_cache<T>(action: impl FnOnce() -> T) -> T {
+    scoped(false, action).0
 }

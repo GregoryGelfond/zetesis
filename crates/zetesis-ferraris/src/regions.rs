@@ -62,7 +62,8 @@ pub use arithmetic::{
     ArithmeticAttempt, CardinalityKnowledge, CardinalityStatistics, CardinalitySystem, ClosedQuery,
     FrozenPreparation, FrozenPreparationAttempt, FrozenPreparationLimits,
     FrozenPreparationStatistics, ParityStatistics, ParitySystem, PreparationAttempt,
-    PreparationError, PreparationLimits, PreparationStatus, PreparationWork, RootPreparation,
+    PreparationError, PreparationLimits, PreparationStatus, PreparationWork, RootImageStatistics,
+    RootPreparation,
 };
 mod context;
 use context::{Context, LearningAccess, ReadingClass};
@@ -1401,6 +1402,29 @@ impl Narrower {
         let subject = Context::from(subject);
         self.narrow_with(
             (subject, SplitSelection::Choose),
+            region,
+            knowledge,
+            scratch,
+            work,
+            cancellation,
+        )
+    }
+
+    /// Propagate one frozen probe without ranking an unused split. This uses
+    /// the same closure, polling and typed failures as frozen narrowing; only
+    /// the final open-atom preference scan is omitted. The caller retains the
+    /// frozen-knowledge ownership preconditions of `narrow_frozen_known`.
+    pub(crate) fn propagate_frozen_known_reserved<Q: Quota + ?Sized>(
+        &self,
+        subject: FrozenSubject<'_>,
+        region: &mut Region,
+        knowledge: &mut Knowledge<Countermodels>,
+        scratch: &mut NarrowingScratch,
+        cancellation: &Cancellation,
+        work: &mut Meter<'_, Q>,
+    ) -> NarrowingAttempt<Failure<Q::Error>> {
+        self.narrow_with(
+            (Context::from(subject), SplitSelection::Defer),
             region,
             knowledge,
             scratch,

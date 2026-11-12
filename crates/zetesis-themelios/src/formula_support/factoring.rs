@@ -155,6 +155,13 @@ impl<'join, 'a, 'source> Continuations<'join, 'a, 'source> {
         }))
     }
 
+    /// Lend the current proposal's carriers while its selected owned row is
+    /// emitted. Witness lookahead changes only the independent base frame;
+    /// `next` or `start` cannot advance this cursor while the loan is held.
+    pub(crate) fn carriers(&self) -> Option<&crate::formula_binding_cursor::Cursor<'a, 'source>> {
+        self.join.pending.as_ref()
+    }
+
     /// Match every base row normally. Equal inputs lend the actual witness;
     /// a differing row remains in the base frame for the next continuation.
     pub(crate) fn witness(

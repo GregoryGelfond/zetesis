@@ -232,3 +232,167 @@ fn an_open_body_does_not_establish_a_particular_binary_head_in_a_residual() {
     assert!(witness.contains(branch_one) || witness.contains(branch_two));
     assert!(witness.contains(left) || witness.contains(right));
 }
+
+#[test]
+fn a_decided_candidate_root_skips_inner_preparation() {
+    let theory = positive();
+    let (check, statistics) = from_root(&theory, &[0, 1], Region::all_open(2), u64::MAX, None);
+    assert!(matches!(check, Ok(None)));
+    assert_eq!(statistics.reduct.regions.regions, 1);
+    assert_eq!(statistics.reduct.regions.leaves, 1);
+    assert_eq!(statistics.reduct.regions.refuted, 0);
+    assert_eq!(statistics.countermodels, 0);
+    assert_eq!(
+        statistics.reduct.inner_preparation,
+        crate::reduct::InnerPreparationStatistics::default()
+    );
+}
+
+#[test]
+fn a_decided_countermodel_skips_inner_preparation() {
+    let theory = zetesis_theory_support::theories::theory(
+        1,
+        vec![Node::atom(0), Node::implies(0, 0)],
+        vec![1],
+    );
+    let mut root = Region::all_open(1);
+    assert!(root.cut(0));
+    let (check, statistics) = from_root(&theory, &[0], root, u64::MAX, None);
+    let witness = check.unwrap().expect("the empty subset is a countermodel");
+    assert!(witness.theory().same_instance(&theory));
+    assert!(witness.atoms().next().is_none());
+    assert_eq!(statistics.countermodels, 1);
+    assert_eq!(statistics.reduct.regions.leaves, 1);
+    assert_eq!(
+        statistics.reduct.inner_preparation,
+        crate::reduct::InnerPreparationStatistics::default()
+    );
+}
+
+#[test]
+fn a_served_decided_root_skips_inner_preparation() {
+    let theory = positive();
+    let index = built(&theory);
+    let cancellation = Cancellation::default();
+    let candidate = Interpretation::new(&theory, [0, 1]).unwrap();
+    let mut evaluation = zetesis_ferraris::EvaluationWorkspace::default();
+    let evaluated = evaluation
+        .evaluate(
+            &candidate,
+            zetesis_ferraris::EvaluationLimits::default(),
+            &cancellation,
+        )
+        .result
+        .unwrap();
+    assert!(evaluated.is_model());
+    let (_, narrower) = index.subject(&theory).unwrap();
+    let mut entry = Entry::new(Region::all_open(2), CountermodelKnowledge::fresh(narrower));
+    let mut statistics = Statistics::default();
+    let mut query_budget = budget(&cancellation, u64::MAX);
+    let mut preparation = InnerPreparation::Pending;
+    let outcome = ReductQuery::new(&index)
+        .serve(
+            PublishedQuery {
+                truth: evaluated.truth(),
+                candidate: &candidate,
+                preparation: None,
+                prepare_root: true,
+            },
+            &mut entry,
+            Limits::default(),
+            &mut query_budget,
+            (&mut statistics, &mut NarrowingScratch::default()),
+            &mut preparation,
+        )
+        .unwrap();
+    assert!(matches!(outcome, Served::Empty));
+    assert!(matches!(preparation, InnerPreparation::Prepared(None)));
+    assert_eq!(statistics.reduct.regions.regions, 1);
+    assert_eq!(statistics.reduct.regions.leaves, 1);
+    assert_eq!(statistics.countermodels, 0);
+    assert_eq!(
+        statistics.reduct.inner_preparation,
+        crate::reduct::InnerPreparationStatistics::default()
+    );
+}
+
+fn positive_query_under_control(
+    work: u64,
+    cancelled: bool,
+) -> (Result<crate::Check, Incomplete>, Statistics, u64) {
+    let theory = positive();
+    let candidate = Interpretation::new(&theory, [0, 1]).unwrap();
+    let index = built(&theory);
+    let cancellation = Cancellation::default();
+    let mut evaluation = zetesis_ferraris::EvaluationWorkspace::default();
+    let evaluated = evaluation
+        .evaluate(
+            &candidate,
+            zetesis_ferraris::EvaluationLimits::default(),
+            &cancellation,
+        )
+        .result
+        .unwrap();
+    assert!(evaluated.is_model());
+    if cancelled {
+        cancellation.cancel();
+    }
+    let mut query_budget = budget(&cancellation, work);
+    let mut statistics = Statistics::default();
+    let result = ReductQuery::new(&index).check(
+        &evaluated,
+        Limits::default(),
+        &mut query_budget,
+        &mut statistics,
+        &mut NarrowingScratch::default(),
+    );
+    (result, statistics, query_budget.statistics.work)
+}
+
+#[test]
+fn a_cancelled_root_cannot_finish_as_a_leaf() {
+    let (result, statistics, work) = positive_query_under_control(u64::MAX, true);
+    assert!(matches!(result, Err(Incomplete::Cancelled)));
+    assert_eq!(work, 0);
+    assert_eq!(
+        statistics.reduct.inner_preparation,
+        crate::reduct::InnerPreparationStatistics::default()
+    );
+    assert_eq!(statistics.reduct.regions.regions, 0);
+    assert_eq!(statistics.reduct.regions.refuted, 0);
+    assert_eq!(statistics.reduct.regions.leaves, 0);
+    assert_eq!(statistics.countermodels, 0);
+}
+
+#[test]
+fn a_decided_root_requires_its_complete_narrowing_allowance() {
+    let (result, completed, total) = positive_query_under_control(u64::MAX, false);
+    assert!(matches!(result, Ok(crate::Check::Stable)));
+    assert_eq!(
+        completed.reduct.inner_preparation,
+        crate::reduct::InnerPreparationStatistics::default()
+    );
+    assert_eq!(total, completed.reduct.regions.work);
+    assert_eq!(total, 5);
+    for allowance in 0..total {
+        let (result, statistics, actual) = positive_query_under_control(allowance, false);
+        assert!(
+            matches!(result, Err(Incomplete::WorkLimit)),
+            "{allowance}: {result:?}"
+        );
+        assert!(actual <= allowance);
+        assert_eq!(actual, statistics.reduct.regions.work);
+        assert_eq!(
+            statistics.reduct.inner_preparation,
+            crate::reduct::InnerPreparationStatistics::default()
+        );
+        assert_eq!(statistics.reduct.regions.regions, 0);
+        assert_eq!(statistics.reduct.regions.refuted, 0);
+        assert_eq!(statistics.reduct.regions.leaves, 0);
+        assert_eq!(statistics.countermodels, 0);
+    }
+    let (result, exact, actual) = positive_query_under_control(total, false);
+    assert!(matches!(result, Ok(crate::Check::Stable)));
+    assert_eq!(actual, total);
+    assert_eq!(exact, completed);
+}

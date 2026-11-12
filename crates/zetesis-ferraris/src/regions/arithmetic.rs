@@ -12,22 +12,23 @@
 use zetesis_algebra::Quota;
 
 mod budget;
+mod cardinality;
+mod cardinality_runtime;
 mod cardinality_source;
 mod completion;
 mod conjunction;
 mod frozen;
 mod hull;
+mod images;
 mod parity;
 mod root_facts;
 mod rows;
+pub(super) mod runtime;
+mod snapshot;
 mod source;
 mod storage;
 mod uniform;
-mod cardinality;
-mod cardinality_runtime;
 mod work;
-pub(super) mod runtime;
-mod snapshot;
 
 pub use frozen::{
     ClosedQuery, FrozenPreparation, FrozenPreparationAttempt, FrozenPreparationLimits,
@@ -35,6 +36,7 @@ pub use frozen::{
 };
 
 pub use cardinality_runtime::CardinalityKnowledge;
+pub use images::RootImageStatistics;
 pub use parity::ParityKnowledge;
 pub use runtime::ArithmeticAttempt;
 pub use work::PreparationWork;
@@ -68,7 +70,7 @@ impl PreparationLimits {
     pub const DEFAULT_WORK: u64 = 100_000_000;
 }
 
-/// Whether a complete immutable preparation was published.
+/// Whether the observed preparation transaction completed and was published.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum PreparationStatus {
     /// The stage has not run, or ran and found nothing to publish: an earlier
@@ -77,9 +79,9 @@ pub enum PreparationStatus {
     NotPrepared,
     /// Complete checked rows and their root result are available.
     Prepared,
-    /// The shared optional effort allowance declined the entire preparation.
+    /// The shared optional effort allowance declined this transaction.
     WorkDeclined,
-    /// The named optional storage allowance declined the entire preparation.
+    /// The named optional storage allowance declined this transaction.
     StorageDeclined,
     /// A mandatory resource or source failure left the preparation incomplete.
     Incomplete,
@@ -324,13 +326,14 @@ impl CardinalitySystem {
     }
 }
 
-/// The two immutable original-answer preparations, sharing one optional budget.
+/// Checked original arithmetic systems and root consequences, sharing one optional budget.
 /// A parity refutation absorbs before cardinality preparation is necessary.
 #[derive(Debug)]
 pub struct RootPreparation {
     parity: ParitySystem,
     cardinality: Option<CardinalitySystem>,
     seeded_root: Option<Region>,
+    image_refuted: bool,
 }
 
 #[derive(Clone, Copy)]
@@ -352,6 +355,8 @@ pub struct PreparationAttempt<E = Stop> {
     pub parity: ParityStatistics,
     /// Counting-stage observations.
     pub cardinality: CardinalityStatistics,
+    /// Original-root image attempt, independently attributed to its transaction.
+    pub images: RootImageStatistics,
 }
 
 impl RootPreparation {
@@ -366,6 +371,24 @@ impl RootPreparation {
         limits: PreparationLimits,
         cancellation: &Cancellation,
         meter: &mut Meter<'_, Q>,
+    ) -> PreparationAttempt<Failure<Q::Error>> {
+        Self::prepare_with_image_policy(
+            theory,
+            producers,
+            limits,
+            cancellation,
+            meter,
+            images::POLICY,
+        )
+    }
+
+    fn prepare_with_image_policy<Q: Quota + ?Sized>(
+        theory: &Theory,
+        producers: Option<&Producers>,
+        limits: PreparationLimits,
+        cancellation: &Cancellation,
+        meter: &mut Meter<'_, Q>,
+        image_policy: images::Policy,
     ) -> PreparationAttempt<Failure<Q::Error>> {
         let mut budget = Budget::new(meter, limits.work, limits.bytes, cancellation);
         let mut parity = ParityStatistics::default();
@@ -431,6 +454,16 @@ impl RootPreparation {
                 }
             }
         };
+        let mut images = RootImageStatistics::default();
+        let result = images::apply(
+            result,
+            theory,
+            image_policy,
+            &mut parity,
+            &mut cardinality,
+            &mut images,
+            &mut budget,
+        );
         budget.finish();
         PreparationAttempt {
             result,
@@ -438,13 +471,15 @@ impl RootPreparation {
             peak_bytes: budget.peak_bytes(),
             parity,
             cardinality,
+            images,
         }
     }
 
-    /// Whether either checked preparation refuted the unconstrained root.
+    /// Whether any checked preparation refuted the unconstrained root.
     #[must_use]
     pub fn root_refuted(&self) -> bool {
-        self.parity.root_refuted()
+        self.image_refuted
+            || self.parity.root_refuted()
             || self
                 .cardinality
                 .as_ref()
@@ -473,7 +508,7 @@ impl RootPreparation {
                 .is_none_or(|system| system.belongs_to(theory))
     }
 
-    /// Transfer the root seeded by P0's unique one-atom rows, at most once.
+    /// Transfer checked original-root consequences, at most once.
     /// `None` means there were no units, preparation refuted the root, or the
     /// caller already took it. Check `root_refuted` before creating a walk.
     pub fn take_seeded_root(&mut self) -> Option<Region> {
@@ -520,6 +555,7 @@ fn build<Q: Quota + ?Sized>(
             parity,
             cardinality: None,
             seeded_root: None,
+            image_refuted: false,
         });
     }
     *stage = Stage::Cardinality;
@@ -560,6 +596,7 @@ fn build<Q: Quota + ?Sized>(
             parity,
             cardinality: Some(cardinality),
             seeded_root: None,
+            image_refuted: false,
         });
     }
     *stage = Stage::Seeding;
@@ -573,6 +610,7 @@ fn build<Q: Quota + ?Sized>(
         parity,
         cardinality: Some(cardinality),
         seeded_root,
+        image_refuted: false,
     })
 }
 

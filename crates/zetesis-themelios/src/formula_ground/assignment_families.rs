@@ -179,9 +179,12 @@ fn family_population<'source>(
     .unwrap();
     builder.initialize(location).unwrap();
     builder
-        .assignment_aggregate(aggregate.into(), target, &binding, support, location)
+        .assignment_aggregate(aggregate.into(), target, &binding, support, location, None)
         .unwrap();
-    (builder.cached_elements, builder.cached_roots)
+    (
+        builder.families.cached_elements.get(),
+        builder.families.cached_roots.get(),
+    )
 }
 
 #[test]
@@ -246,3 +249,129 @@ fn aggregate_families_do_not_cross_support_snapshots() {
     assert_eq!(before, (0, 1));
     assert_eq!(after, (1, 2));
 }
+
+/// Compare the borrowed proposal with an independent reconstruction from final
+/// coalesced tuples. This exercises the representation boundary, not merely a
+/// second call to the cursor's own proposal builder.
+fn borrowed_matches_final_carrier(source: &str) {
+    testing::with_completed_source(source, |prepared, support, computation, counters| {
+        let rule = prepared
+            .rules_without_facts()
+            .iter()
+            .find(|rule| rule.bindings.is_some())
+            .unwrap();
+        let limits = FormulaLimits::default();
+        let location = rule.location;
+        let mut budget = testing::budget();
+        let mut builder = Builder::empty(
+            computation,
+            &limits,
+            &mut budget,
+            counters,
+            Purpose::Validation,
+            None,
+            location,
+        )
+        .unwrap();
+        builder.initialize(location).unwrap();
+        let mut rows = Join::rule(
+            Ir::Source(rule),
+            support,
+            builder.computation,
+            &limits,
+            builder.budget,
+            builder.counters,
+        )
+        .unwrap();
+        let mut checks = 0;
+        while let Some(row) = rows
+            .next_matched_row(
+                builder.budget,
+                Context::new(builder.computation, &limits, builder.counters, location),
+            )
+            .unwrap()
+        {
+            if !row.passes {
+                continue;
+            }
+            let cursor = row.carriers.expect("assignment retains its live cursor");
+            for literal in &rule.body {
+                let LiteralIr::Aggregate(aggregate) = literal else {
+                    continue;
+                };
+                if aggregate.binding.is_none() {
+                    continue;
+                }
+                let retained = cursor
+                    .assignment_carrier(
+                        aggregate,
+                        &row.values,
+                        support,
+                        Context::new(builder.computation, &limits, builder.counters, location),
+                    )
+                    .unwrap()
+                    .expect("matching completed family");
+                let (elements, required) = builder
+                    .aggregate_elements(Ir::Source(aggregate), &row.values, support, location)
+                    .unwrap();
+                let required = required.expect("assignment required flags");
+                let elements = match (Kind::of(aggregate.function), &elements) {
+                    (Kind::Numeric(function), GroundAggregate::Numeric(elements)) => {
+                        AssignmentElements::Numeric(function, elements.slice())
+                    }
+                    (Kind::Extremum(function), GroundAggregate::Extrema(elements)) => {
+                        AssignmentElements::Extrema(function, elements.slice())
+                    }
+                    _ => unreachable!("one function kind"),
+                };
+                let rebuilt = builder
+                    .aggregate_candidates(elements, &required, location)
+                    .unwrap();
+                assert_eq!(retained.len(), rebuilt.len(), "{source}");
+                for slot in 0..retained.len() {
+                    let key = rebuilt.key(slot, location).unwrap();
+                    assert_eq!(
+                        retained.slots().compare_key(slot, &key).unwrap(),
+                        std::cmp::Ordering::Equal,
+                        "{source}, slot {slot}",
+                    );
+                }
+                checks += 1;
+            }
+        }
+        assert!(
+            checks > 0,
+            "the fixture must exercise a borrowed family: {source}"
+        );
+    });
+}
+
+#[test]
+fn borrowed_assignment_carriers_equal_final_tuple_reductions() {
+    for source in [
+        // Repeated full tuples collapse; equal weights on different tuples do not.
+        "{a;b}. q(N) :- N=#count{1:a;1:b;2:a}.",
+        "{a;b}. q(N) :- N=#sum{2,one:a;2,two:b;2,one:b;-1,three:a}.",
+        "{a;b}. q(N) :- N=#sum+{-2:a;0:b;2:a;3:b}.",
+        // Final coalescing keeps even FALSUM eligibility contributions. The
+        // carrier remains a possible-value family, never an extra truth filter.
+        "{p}. q(N) :- N=#sum{2:p,not p;3:p}.",
+        // Required tuple overlap and ignored nonnumeric sum weights.
+        "{a}. q(N) :- N=#sum{2;2:a;3:a;name:a}.",
+        // Empty extrema preserve the typed #sup/#inf values in the carrier.
+        "{a}. q(N) :- N=#min{4:a}.",
+        "{a}. q(N) :- N=#max{4:a}.",
+        "{a}. q(N) :- N=#min{4;2:a;7:a}.",
+        // Structured term order, explicit negation and default negation.
+        "{-p(f(a));p(a)}. q(N) :- N=#max{f(a): -p(f(a));a:not p(a)}.",
+        // Family inputs vary with an earlier proposal and a local witness.
+        "{a}. q(A,B) :- A=#count{1:a}, B=#sum{A:a;2,A:not a}.",
+        "d(0;1). p(1). {a}. q(X,N) :- d(X), N=#count{Y:p(Y),Y=X,not a}.",
+    ] {
+        borrowed_matches_final_carrier(source);
+    }
+}
+
+mod carrier_reuse;
+
+mod reuse;

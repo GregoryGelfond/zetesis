@@ -126,6 +126,22 @@ states the eligibility and costs; the
 [pairwise-exclusion laws](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/PairwiseExclusions.lean)
 prove original and frozen-reduct equivalence for a complete pair family.
 
+A symmetric positive source constraint can also be grouped before enumerating
+its unequal pair product. The eager emitter checks one `X != Y` comparison and
+matching positive flat atom occurrences under X/Y exchange. All other variables
+remain an exact typed shared key. Two fresh one-lane traversals first establish
+which keys have distinct partners, then construct conditions only for those
+keys. Witnesses combine with Any within a lane; different typed lanes remain
+separate unit occurrences even if their condition formulas coincide. The
+common guard stays outside the at-most-one count and is never inferred true
+from support. This route preserves semantic atom identity and source provenance
+while permitting different internal indices and search order. Its actual
+one-lane work, substitutions and live storage use the existing allowances.
+The [grouped source contract](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/docs/grouped-exclusions.md)
+states the exact grammar, failure and ordering boundaries; the
+[grouped witness laws](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/GroupedWitnessExclusion.lean)
+separate the mathematical equality from Rust correspondence obligations.
+
 ## Shared aggregate guards
 
 Multiple written bounds on one completed nonnegative tuple contribution set use
@@ -174,6 +190,40 @@ guards still select the appropriate formula in each rule instance. These
 families belong to one completed support snapshot; they never carry results
 across growing support rounds. Complete tuple identity and eligibility formulas
 remain unchanged, including their frozen-reduct meaning.
+
+One final builder owns the family's term coordinates and registry. A completed
+candidate-value carrier is its first stage; native tuple conditions and guard
+roots are later stages in the same entry. Independent cursors share the carrier
+but keep their own current frames and traversal positions. Only the explicit
+completed-query capability enables this retention. Growing support and other
+builders keep their existing construction paths, and no formula-node identity
+crosses builders.
+
+For eligible families, the completed producer also retains the ordered tuple
+occurrences, requiredness and local-plan evidence. Final emission still runs its
+joins against the current frame and constructs current eligibility formulas.
+Replay requires the same source, support, vocabulary and projected inputs, plus
+matching element geometry and an immutable local-plan certificate for each
+nonempty condition. Empty conditions have their explicit one-row case. Missing
+or incompatible evidence selects ordinary native construction; a resource or
+cancellation failure propagates instead of selecting a fallback. Matching tuple
+sets alone does not justify ordered replay.
+
+The row and key-byte ceilings apply when a completed family is first retained,
+including a carrier whose later filters emit no formula. Native element and
+guard-root ceilings retain their existing units and publication points. Support
+storage includes actual shared-owner headers and reference-count control words,
+carrier and occurrence buffers, and simultaneous scratch. A requested allocation
+is checked before it contributes to the observed capacity peak. A failed stage
+publishes no partial carrier or native stage; performed work and any already
+interned source coordinates remain accounted.
+
+This is common CPU-side source preparation for subsequent CPU or GPU solving.
+It adds no device-side grounding or parallel join policy. Applicability and
+end-to-end cost still require measurement; carrier reuse does not imply that
+all families can replay their occurrence streams. The [ordered correspondence
+boundary](../lean/correspondence.md#ordered-aggregate-family-replay) separates the
+Lean laws from the remaining concrete Rust obligations.
 
 Assignments coalesce complete tuple keys before constructing proposals, and
 split them into required keys, those with an occurrence from an element whose
@@ -751,12 +801,42 @@ that same substitution is excluded by the ordinary complete-row policy. Matching
 rows still reach every residual check and retain its failures. Tuple comparisons
 and default-negated atoms supply no additional exclusion premise.
 
-The gate covers flat normal bodies with atom, comparison and tuple comparison
-literals and no generated head arguments. Generated bindings and structural or
-nested scopes retain their existing traversal. Family evidence never enables
-numeric probes: it retains every false row. Direct-source exact activity,
-retained emission, hybrid capture and model checks also keep their previous
-traversal, though their support completion can use the support-round route above.
+The source-rule gate covers flat normal bodies with atom, comparison and tuple
+comparison literals and no generated head arguments. Generated bindings and
+structural or nested scopes retain their existing traversal unless an explicit
+consumer establishes the restricted local certificate below. Family evidence
+never enables numeric probes: it retains every false row. Outside those local
+consumers, direct-source exact activity, retained emission, hybrid capture and
+model checks keep their previous traversal, though their support completion can
+use the support-round route above.
+
+Assignment aggregate collection, final aggregate eligibility and ordered family
+replay share a separate local selector with factored rule components. A component
+installs its fixed prefix before selection; its prepared or fresh join order is
+unchanged. The exact local condition must contain only positive flat atoms and
+scalar comparisons whose operands are bare variables. Every comparison input
+must already be bound in that prefix or occur in a positive pattern in the same
+plan. Negative atoms, structural patterns, arithmetic expressions, assignments,
+generators and nested conditions decline this local certificate. A join marked
+as original source evidence cannot select it.
+
+This grammar check does not establish numeric type or a complete assignment.
+The existing query owner still checks the entire indexed source column and the
+current bound. A mixed column or unavailable bound retains ordinary traversal.
+Selected rows keep source order, repeated occurrences, aliases, the occurrence's
+delta interval and all residual comparisons. Aggregate tuple evaluation and fresh
+eligibility use the same passing rows; retained carriers do not replace those
+checks. These shared grounding operations apply before either CPU or GPU solving.
+
+Local admission allocates no new owner, but its inspected literals, input slots
+and pattern columns spend grounding work. Index construction, lookup, temporary
+selected rows and retained capacity use the existing work and storage limits.
+The selector is published only after its whole grammar check succeeds. A work,
+allocation, owner or cancellation failure remains a typed failure, with performed
+work retained; it is not a reason to retry the ordinary join. Different work and
+query costs can move refusal and cancellation boundaries. The
+[local correspondence obligations](../lean/correspondence.md#numeric-selection-in-local-joins)
+distinguish exact successful streams from these concrete execution obligations.
 The [numeric-domain design](https://github.com/GregoryGelfond/zetesis/blob/main/docs/design/numeric-argument-domains.md) states the
 failure inventory and deferred coverage.
 `numeric_index_builds` counts published certificates, `numeric_index_declines`
@@ -2067,7 +2147,8 @@ preserves its completed work and capacity receipts.
 and its current prefix, relation/equality metadata, postings, borrowed snapshot
 objects and query capacity, including scratch and named growth overlap. Terms
 and atoms are counted by that authority once; predicate relations and pending
-rounds retain scoped IDs. Allocator/tree/control-runtime overhead and unrelated
+rounds retain scoped IDs. Named shared-family headers and reference-count control
+words are included. Unmodelled allocator/tree/runtime overhead and unrelated
 grounding state remain separate. The independent cumulative source-expansion
 budget still applies, and this support limit is not RSS.
 

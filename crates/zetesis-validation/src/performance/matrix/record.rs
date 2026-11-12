@@ -209,6 +209,38 @@ pub struct Observation {
     /// older records. These charges are not repeated session search work.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub source_evaluation: Option<SourceEvaluationStatistics>,
+    /// Original-root image receipts; absence on historical binaries is unavailable.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub root_images: Option<RootImageStatistics>,
+}
+
+/// Original-root image preparation, independent of runtime region activity.
+/// Historical observations may omit this entire receipt. A present record
+/// retains all three disjoint work components, including a discarded prefix.
+/// Across optimizer passes, work, rounds and cuts accumulate, peaks take the
+/// maximum, and status, populations and refutation describe the latest pass.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, serde::Deserialize)]
+pub struct RootImageStatistics {
+    /// Latest transaction outcome; `not_prepared` can include eligibility work.
+    pub status: String,
+    /// Checked lower supports selected in the latest pass.
+    pub groups: usize,
+    /// Authenticated forbidden pairs retained in the latest pass.
+    pub pairs: usize,
+    /// Group selection, source checking and adjacency preparation work.
+    pub preparation_work: u64,
+    /// Actual transactional root copying work.
+    pub copying_work: u64,
+    /// Actual closure and publication work, including a stopped prefix.
+    pub closure_work: u64,
+    /// Cumulative named preparation requirement through this attempt, not RSS.
+    pub peak_bytes: u128,
+    /// Fully completed closure rounds; excludes an interrupted partial round.
+    pub completed_rounds: u64,
+    /// Mutations performed in the temporary root, even if later discarded.
+    pub applied_cuts: u64,
+    /// Latest pass proved a contradiction; not a claim of root publication.
+    pub root_refuted: bool,
 }
 
 /// Accepted admission charges for a completely evaluated acyclic source.
@@ -297,7 +329,7 @@ impl Observation {
     ) -> Result<Self, String> {
         super::telemetry::observe(document, stderr, request)
     }
-    /// Use the captured native JSON for exact wide handover integers when the
+    /// Use captured JSON for exact wide handover/root-image integers when the
     /// general-purpose Value parser could not retain their unsigned magnitude.
     pub(crate) fn from_capture(
         document: &serde_json::Value,

@@ -24,6 +24,45 @@ struct Compiler<'a> {
     nodes: FormulaNodes,
     keys: Vec<Key<'a>>,
     truth: usize,
+    prefix: AtomPrefix,
+}
+
+/// Dense legacy formulas reuse the original position; projected formulas retain
+/// sorted original positions in a compact atom-node prefix.
+#[derive(Clone, Copy)]
+pub(super) enum AtomPrefix {
+    Dense,
+    Selected(usize),
+}
+impl AtomPrefix {
+    fn node(
+        self,
+        nodes: &FormulaNodes,
+        original: usize,
+        work: &mut Work<'_>,
+    ) -> Result<usize, ObjectiveBoundError> {
+        let Self::Selected(mut end) = self else {
+            return Ok(original);
+        };
+        let mut start = 0;
+        while start < end {
+            work.tick()?;
+            let middle = start + (end - start) / 2;
+            let NodeView::Atom(position) = nodes
+                .view()
+                .node(middle)
+                .map_err(|_| work.error(Kind::AtomCatalog))?
+            else {
+                return Err(work.error(Kind::AtomCatalog));
+            };
+            match position.cmp(&original) {
+                Ordering::Less => start = middle + 1,
+                Ordering::Equal => return Ok(middle),
+                Ordering::Greater => end = middle,
+            }
+        }
+        Err(work.error(Kind::AtomCatalog))
+    }
 }
 
 pub(super) fn compile(
@@ -53,6 +92,18 @@ pub(super) fn compile(
     for index in 0..atoms.len() {
         work.node(&mut nodes, NodeView::Atom(index))?;
     }
+    complete(original, objectives, work, index, nodes, AtomPrefix::Dense)
+}
+
+// Both doors compile the same joins, keys, closed conditions and priority rows.
+pub(super) fn complete<'a>(
+    original: &Theory,
+    objectives: &'a ObjectiveProgram,
+    mut work: Work<'a>,
+    index: AtomIndex<'a>,
+    mut nodes: FormulaNodes,
+    prefix: AtomPrefix,
+) -> Result<ObjectivePlan, ObjectiveBoundError> {
     let falsum = work.node(&mut nodes, NodeView::False)?;
     let truth = work.node(&mut nodes, NodeView::Implies(falsum, falsum))?;
     let mut compiler = Compiler {
@@ -61,6 +112,7 @@ pub(super) fn compile(
         nodes,
         keys: Vec::new(),
         truth,
+        prefix,
     };
     for (index, template) in objectives.templates().iter().enumerate() {
         compiler.work.template = Some(index);
@@ -161,7 +213,7 @@ impl<'a> Compiler<'a> {
             )? {
                 continue;
             }
-            chosen[depth] = atom_index;
+            chosen[depth] = self.prefix.node(&self.nodes, atom_index, &mut self.work)?;
             if depth + 1 == template.positive().len() {
                 active(
                     &mut self.work,
@@ -264,7 +316,9 @@ impl<'a> Compiler<'a> {
 
     fn condition_atom(&mut self, query: AtomRef<'_>) -> Result<usize, ObjectiveBoundError> {
         if let Some(row) = self.index.lookup().get_with(query, || self.work.tick())? {
-            return Ok(row.position());
+            return self
+                .prefix
+                .node(&self.nodes, row.position(), &mut self.work);
         }
         // Atoms outside the caller's complete catalog are false in every
         // represented candidate. Querying one must not enlarge that catalog.

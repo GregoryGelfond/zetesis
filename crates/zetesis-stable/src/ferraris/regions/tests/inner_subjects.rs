@@ -318,9 +318,9 @@ fn a_theory_without_saturation_shape_walks_as_today() {
     // The counts the frozen walk alone produced on these fixtures before the
     // inner preparation entered the walk: a preparation that proposes nothing
     // changes neither the verdict nor a count.
-    for (theory, stable, counts) in [
-        (cycle(), false, (2, 0, 1, 4, 10)),
-        (positive(), true, (1, 0, 1, 3, 5)),
+    for (theory, stable, attempts, counts) in [
+        (cycle(), false, 1, (2, 0, 1, 4, 10)),
+        (positive(), true, 0, (1, 0, 1, 3, 5)),
     ] {
         let index = built(&theory);
         let cancellation = Cancellation::default();
@@ -355,7 +355,7 @@ fn a_theory_without_saturation_shape_walks_as_today() {
         );
         assert_eq!(regions.arithmetic, ArithmeticCounts::default());
         let preparation = statistics.reduct.inner_preparation;
-        assert_eq!((preparation.attempts, preparation.prepared), (1, 0));
+        assert_eq!((preparation.attempts, preparation.prepared), (attempts, 0));
     }
 }
 

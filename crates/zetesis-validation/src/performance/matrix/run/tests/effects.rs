@@ -1,5 +1,7 @@
 //! Synthetic complete producers exercise report lifecycle, not ASP correctness.
 
+mod typed;
+
 use super::*;
 use crate::performance::matrix::{Reference, ReferencePolicy, WorkloadLimits};
 use std::fs;

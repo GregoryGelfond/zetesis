@@ -582,12 +582,22 @@ Configure eager support storage through `FormulaLimits::max_support_bytes`
 before preparation. The default is 128 MiB for the support authority's canonical
 payload, identity indexes and current prefix, plus relation metadata, postings,
 borrowed snapshots, query capacity and construction scratch. Canonical support
-payload is counted by its authority once. Allocator/tree/control-runtime overhead
-and unrelated grounding state remain separate; this is not a total-memory bound.
+payload is counted by its authority once. Shared aggregate-family headers,
+reference-count control words and retained carrier/occurrence buffers are named
+support storage. Unmodelled allocator/tree/runtime overhead and unrelated
+grounding state remain separate; this is not a total-memory bound.
 For the ordinary resource policy, use `zetesis_solve::Resources` to derive
 admission, expansion, formula and session settings from one memory allowance
 and thread count. The CLI uses this same policy. `SolveConfig` alone applies
 after the formula owner has already been constructed.
+
+During final grounding, `max_aggregate_cache_rows` and
+`max_aggregate_cache_key_bytes` include completed candidate carriers before
+native aggregate emission. Later conditions and guard roots share that entry;
+their element/root limits keep their native units. A carrier may consume a row
+even when a later filter emits no instance, so a tight limit can refuse earlier.
+These are the same typed, cumulative source limits; refusal does not silently
+disable family retention or publish an incomplete stage.
 
 Choose positive joins separately through the preparation's
 `with_grounding_options(GroundingOptions { joins: JoinStrategy::Table })` method.
@@ -602,8 +612,8 @@ to it. The choice retains the preparation's source identity and remaining budget
 
 The private query workspace owns cached indices and accounts for simultaneous
 selected masks, scratch and cumulative work. These capacities compose with the
-same support authority's payload charge. Allocator/tree/control-runtime overhead
-and other grounding state remain separate; the limit is not RSS. An exhausted table operation returns
+same support authority's payload charge. Unmodelled allocator/tree/runtime
+overhead and other grounding state remain separate; the limit is not RSS. An exhausted table operation returns
 a located failure without silently choosing a different strategy. The existing
 matcher and required authored-body validation remain shared. Choosing table joins
 does not launch ordinary Rayon or GPU grounding; later answer-set execution has

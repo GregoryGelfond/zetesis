@@ -94,15 +94,20 @@ pub struct FormulaLimits {
     /// relation/equality metadata, postings, borrowed snapshot objects, reusable
     /// query-workspace/index capacity and simultaneous row masks, including
     /// named query frames, aggregate coordinate/cache buffers, contribution
-    /// buffers, operation scratch and growth overlap. The authority
-    /// counts canonical payload once. Allocator/tree/control-runtime overhead
-    /// and other grounding state remain separate; this is not a total-memory
-    /// or process RSS ceiling.
+    /// buffers, operation scratch and growth overlap. Shared aggregate-family
+    /// owners include their named headers, reference-count control words and
+    /// retained carrier/occurrence capacity. Canonical payload is counted once.
+    /// Unmodelled allocator/tree/runtime overhead and other grounding state
+    /// remain separate; this is not a total-memory or process RSS ceiling.
     pub max_support_bytes: usize,
-    /// Distinct aggregate/outer-binding entries retained during final grounding.
+    /// Distinct aggregate/input entries retained during final grounding.
+    /// A completed candidate carrier consumes one row before native conditions
+    /// or guard roots are emitted, even if later filters emit no formula.
+    /// Its native stage shares that row; incomplete stages are not published.
     pub max_aggregate_cache_rows: usize,
     /// Retained aggregate context rows, key-coordinate pool and lookup index
-    /// capacities. Canonical payload is shared with support; allocator overhead
+    /// capacities, including rows that retain a completed carrier before native
+    /// emission. Canonical payload is shared with support; allocator overhead
     /// is excluded. Replacement overlap is checked by `max_support_bytes`.
     pub max_aggregate_cache_key_bytes: usize,
     /// Total coalesced tuple conditions retained by the final grounding cache.
@@ -228,7 +233,8 @@ pub enum FormulaResource {
     SupportIndexEntries,
     /// Live authored support snapshot, membership-index and query capacity.
     SupportBytes,
-    /// Final-grounding aggregate binding cache entries.
+    /// Final-grounding aggregate/input entries, including completed carriers
+    /// whose native conditions and guard roots have not yet been emitted.
     AggregateCacheRows,
     /// Distinct owned elements in one unconditional disjunctive head.
     DisjunctionElements,
@@ -847,6 +853,13 @@ impl AdmittedFormula {
     pub fn objectives(&self) -> &zetesis_objective::ObjectiveProgram {
         &self.compiled.objectives
     }
+
+    /// Authenticated source for bounded objective read-set projection.
+    /// The borrow retains this owner's complete catalog and original theory.
+    #[must_use]
+    pub fn objective_source(&self) -> crate::objective_bound::ObjectiveSource<'_> {
+        crate::objective_bound::ObjectiveSource::from_compiled(&self.compiled)
+    }
     /// Original objective element origins, parallel to active objective templates.
     #[must_use]
     pub fn objective_origins(&self) -> &[Vec<ProgramSite>] {
@@ -1011,6 +1024,13 @@ impl AdmittedFormulaBundle {
     #[must_use]
     pub fn objectives(&self) -> &zetesis_objective::ObjectiveProgram {
         &self.compiled.objectives
+    }
+
+    /// Authenticated source for bounded objective read-set projection.
+    /// The borrow retains this owner's complete catalog and original theory.
+    #[must_use]
+    pub fn objective_source(&self) -> crate::objective_bound::ObjectiveSource<'_> {
+        crate::objective_bound::ObjectiveSource::from_compiled(&self.compiled)
     }
     /// Original objective element origins, parallel to active objective templates.
     #[must_use]

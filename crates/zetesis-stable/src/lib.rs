@@ -51,6 +51,7 @@ pub use ferraris::{
 pub use zetesis_algebra::Cancellation;
 pub use zetesis_ferraris::{
     CardinalityStatistics, ParityStatistics, PreparationStatus, PreparationWork,
+    RootImageStatistics,
 };
 
 pub use timing::{PhaseMeasurement, SearchPhaseTimings};

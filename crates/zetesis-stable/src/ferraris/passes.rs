@@ -138,6 +138,7 @@ fn regions(
     mut later: RegionSearchStatistics,
 ) -> RegionSearchStatistics {
     later.counts = counts(&earlier.counts, later.counts);
+    later.images = root_images(earlier.images, later.images);
     later.generator_order.work = earlier
         .generator_order
         .work
@@ -188,6 +189,27 @@ fn regions(
         };
     }
     later
+}
+
+/// Match the existing pass composition: actual work/activity accumulate; peak
+/// requirement is a maximum; status and populations describe the latest pass.
+fn root_images(
+    earlier: zetesis_ferraris::RootImageStatistics,
+    later: zetesis_ferraris::RootImageStatistics,
+) -> zetesis_ferraris::RootImageStatistics {
+    zetesis_ferraris::RootImageStatistics {
+        preparation_work: earlier
+            .preparation_work
+            .saturating_add(later.preparation_work),
+        copying_work: earlier.copying_work.saturating_add(later.copying_work),
+        closure_work: earlier.closure_work.saturating_add(later.closure_work),
+        peak_bytes: earlier.peak_bytes.max(later.peak_bytes),
+        completed_rounds: earlier
+            .completed_rounds
+            .saturating_add(later.completed_rounds),
+        applied_cuts: earlier.applied_cuts.saturating_add(later.applied_cuts),
+        ..later
+    }
 }
 
 fn preparation_work(

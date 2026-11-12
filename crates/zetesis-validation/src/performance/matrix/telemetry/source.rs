@@ -159,5 +159,6 @@ pub(super) fn observation(receipt: SourceEvaluationStatistics, timing: Diagnosti
         hybrid: None,
         terminal: None,
         source_evaluation: Some(receipt),
+        root_images: None,
     }
 }

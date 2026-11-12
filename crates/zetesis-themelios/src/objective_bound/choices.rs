@@ -9,6 +9,7 @@
 //! absence. The resulting restriction is only for original candidates.
 
 mod activations;
+mod layers;
 mod residuals;
 
 #[cfg(test)]
@@ -47,6 +48,8 @@ pub(super) struct Costs {
     /// Changed priorities only. Eligibility still addresses the exact plan.
     levels: Vec<residuals::Level>,
     activations: FormulaParts,
+    /// The same proved disjoint key allocations, ordered once for tier bounds.
+    layered: Vec<Group>,
 }
 
 pub(super) fn prepare(
@@ -126,13 +129,10 @@ pub(super) fn prepare(
     } else {
         let activations =
             activations::prepare(&plan.original, &mut groups, &mut memory, &mut work)?;
-        Some(residuals::prepare(
-            plan,
-            &groups,
-            activations,
-            &mut memory,
-            &mut work,
-        )?)
+        let mut costs = residuals::prepare(plan, &groups, activations, &mut memory, &mut work)?;
+        layers::order(plan, &mut groups, &mut work)?;
+        costs.layered = groups;
+        Some(costs)
     };
     Ok((costs, work.statistics()))
 }
@@ -783,7 +783,36 @@ fn combined(
             Ok(Cow::Owned(elements))
         },
     )?;
-    let root = work.node(&mut nodes, NodeView::And(&[exact.roots()[0], root]))?;
+    work.tick()?;
+    let root = if costs.layered.is_empty() {
+        root
+    } else {
+        let layer = layers::bound(
+            plan,
+            costs,
+            &mut nodes,
+            &copied,
+            layers::Request {
+                incumbent,
+                comparison,
+                limits,
+            },
+            work,
+        )?;
+        work.node(&mut nodes, NodeView::And(&[root, layer]))?
+    };
+    admit(plan, exact.roots()[0], root, nodes, limits, work)
+}
+
+fn admit(
+    plan: &ObjectivePlan,
+    exact: usize,
+    lower: usize,
+    mut nodes: FormulaNodes,
+    limits: ObjectiveBoundLimits,
+    work: &mut Work<'_>,
+) -> Result<Theory, ObjectiveBoundError> {
+    let root = work.node(&mut nodes, NodeView::And(&[exact, lower]))?;
     let admission = nodes.prepare_admission(
         plan.original.atom_count(),
         vec![root],
@@ -820,8 +849,13 @@ impl Storage {
             bytes += Self::vector_bytes(&previous.groups);
             bytes += previous.activations.retained_bytes();
             bytes += Self::vector_bytes(&previous.levels);
+            bytes += Self::vector_bytes(&previous.layered);
+            for group in &previous.layered {
+                bytes += Self::vector_bytes(&group.keys);
+            }
             for level in &previous.levels {
                 bytes += Self::vector_bytes(&level.residuals);
+                bytes += Self::vector_bytes(&level.layer_remainder);
             }
         }
         let result = Self { bytes, limit };
