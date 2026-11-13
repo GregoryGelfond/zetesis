@@ -286,8 +286,9 @@ fn outer_arithmetic_reuses_the_original_index() {
 }
 
 fn assert_single_index_work(outer_checks: bool) {
-    // The candidate walk builds one original index. Possible-founded closure
-    // cuts the positive cycle before membership, leaving the empty candidate.
+    // The candidate walk builds one original index. The support cut removes
+    // the two-atom cycle, both of whose rules are circular, before membership,
+    // leaving the empty candidate.
     // Its frozen-positive check shares that index and builds no subset regions.
     for (route, workers, producers) in ROUTES {
         let theory = cycle();
@@ -672,6 +673,117 @@ mod ordering;
 mod preference;
 mod typed_meter;
 
+/// A free choice `e` (atom 0) and atoms `a_1 … a_k`, each with the rule
+/// `a_i ← e` and the rule `a_i ← a_1 ∧ … ∧ a_k`, whose body is one node shared
+/// by all `k` rules: marking this inventory in full reads the body once for
+/// each rule.
+fn shared_body(k: usize) -> Theory {
+    let mut nodes: Vec<Node> = (0..=k).map(Node::atom).collect();
+    nodes.push(Node::falsum());
+    let falsum = nodes.len() - 1;
+    nodes.push(Node::implies(0, falsum));
+    nodes.push(Node::or_pair([0, nodes.len() - 1]));
+    let mut roots = vec![nodes.len() - 1];
+    nodes.push(Node::and_span(zetesis_ferraris::OperandSpan {
+        start: 0,
+        length: k,
+    }));
+    let body = nodes.len() - 1;
+    for head in 1..=k {
+        for source in [body, 0] {
+            nodes.push(Node::implies(source, head));
+            roots.push(nodes.len() - 1);
+        }
+    }
+    Theory::new(
+        k + 1,
+        FormulaParts::new(nodes, (1..=k).collect()).unwrap(),
+        roots,
+        AdmissionLimits::default(),
+    )
+    .unwrap()
+}
+
+/// The least work budget under which the opening extracts the producers of
+/// `theory` and charges them, whatever stops it afterwards.
+fn least_extracting_budget(theory: &Theory) -> u64 {
+    let cancellation = Cancellation::default();
+    let extracts = |work: u64| {
+        let mut budget = budget(&cancellation, work);
+        open_attempt(theory, u64::MAX, LearningLimits::DEFAULT, &mut budget)
+            .statistics
+            .producers
+    };
+    let mut refused = 0;
+    let mut admitted = 1;
+    while !extracts(admitted) {
+        refused = admitted;
+        admitted *= 2;
+    }
+    while admitted - refused > 1 {
+        let middle = refused + (admitted - refused) / 2;
+        if extracts(middle) {
+            admitted = middle;
+        } else {
+            refused = middle;
+        }
+    }
+    admitted
+}
+
+/// The least ceiling under which the producers of `theory` are extracted.
+fn least_extracting_ceiling(theory: &Theory) -> u64 {
+    let cancellation = Cancellation::default();
+    let extracts = |max_work: u64| {
+        zetesis_ferraris::producers(theory, RegionLimits { max_work }, &cancellation).is_ok()
+    };
+    let mut refused = 0;
+    let mut admitted = 1;
+    while !extracts(admitted) {
+        refused = admitted;
+        admitted *= 2;
+    }
+    while admitted - refused > 1 {
+        let middle = refused + (admitted - refused) / 2;
+        if extracts(middle) {
+            admitted = middle;
+        } else {
+            refused = middle;
+        }
+    }
+    admitted
+}
+
+#[test]
+fn the_opening_charges_an_extraction_wherever_its_ceiling_admits_it() {
+    // The extraction visits a few nodes for each rule; marking the shared
+    // body in full would take about one and a half times the square of the
+    // rule count. The opening charges the extraction's reported work to the
+    // budget its ceiling came from, so the least budget that gets past that
+    // charge is the least ceiling that extracts at all.
+    for rules in [128, 256] {
+        let theory = shared_body(rules);
+        assert_eq!(
+            least_extracting_budget(&theory),
+            least_extracting_ceiling(&theory),
+            "{rules} rules"
+        );
+    }
+}
+
+#[test]
+fn the_budget_that_extracts_a_shared_body_grows_with_its_rules() {
+    // Doubling the rules about doubles that budget; it does not quadruple it.
+    let (small, large) = (
+        least_extracting_budget(&shared_body(128)),
+        least_extracting_budget(&shared_body(256)),
+    );
+    assert!(
+        128 < small && small < large && large < 3 * small,
+        "{small} then {large}"
+    );
+}
+
 #[test]
 fn a_foreign_theory_has_no_walk_subject() {
     let cancellation = Cancellation::default();
@@ -686,8 +798,26 @@ fn a_foreign_theory_has_no_walk_subject() {
 #[test]
 fn the_walk_subject_learns_rows_of_its_theory() {
     // The root's possible-foundedness pass finds the loop unsupported; only a
-    // carrier captures that as a row.
-    let theory = cycle();
+    // carrier captures that as a row. The loop has three atoms, `a <- c`,
+    // `b <- a`, `c <- b`, because the support cut alone decides a loop of two.
+    let theory = Theory::new(
+        3,
+        zetesis_ferraris::FormulaParts::new(
+            vec![
+                Node::atom(0),
+                Node::atom(1),
+                Node::atom(2),
+                Node::implies(2, 0),
+                Node::implies(0, 1),
+                Node::implies(1, 2),
+            ],
+            vec![],
+        )
+        .unwrap(),
+        vec![3, 4, 5],
+        AdmissionLimits::default(),
+    )
+    .unwrap();
     let cancellation = Cancellation::default();
     let mut budget = budget(&cancellation, u64::MAX);
     let mut search = RegionSearch::new(

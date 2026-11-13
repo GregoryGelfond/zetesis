@@ -2,6 +2,8 @@
 //!
 //! A producer becomes unavailable when its body is known false or another
 //! ordinary head is held. Neither condition can disappear in a descendant.
+//! A circular producer ([`super::circular`]) is never available: no answer set
+//! rests on it, whatever its body's truth.
 //! Two positions retain exactly that eliminated coverage: everything before
 //! `first`, and strictly between `first` and `second`, is unavailable. Endpoints
 //! are rechecked against current knowledge. One possible producer ends the scan
@@ -121,13 +123,14 @@ impl Progress {
         let mut possible = |position: usize| -> Result<bool, Failure<Q::Error>> {
             work.tick()?;
             let producer = &producers.rules[rows[position]];
+            let circular = producers.circular(rows[position]);
             let body_impossible = producer.body.is_some_and(|body| bit(never, body));
             let other_held = !producer.choice
                 && producer
                     .heads
                     .iter()
                     .any(|&head| head != atom && bit(atom_sure, head));
-            Ok(!body_impossible && !other_held)
+            Ok(!circular && !body_impossible && !other_held)
         };
         // A fresh two-position scan has the same early exits as the ordinary
         // loop. Short rows need no retained state or preparation allocation.

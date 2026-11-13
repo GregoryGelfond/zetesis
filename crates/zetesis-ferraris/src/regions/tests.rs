@@ -20,6 +20,7 @@ fn compact_mut<C: zetesis_algebra::Class>(knowledge: &mut Knowledge<C>) -> Known
 mod body_wakeups;
 mod chain_links;
 mod chains;
+mod circular_support;
 mod cloning;
 mod competing_heads;
 mod contradictions;

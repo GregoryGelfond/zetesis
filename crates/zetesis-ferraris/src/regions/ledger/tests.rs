@@ -62,11 +62,14 @@ impl Program {
 
     fn of(theory: Theory) -> Self {
         let index = Narrower::new(&theory);
-        let producers =
-            crate::producers(&theory, RegionLimits::default(), &Cancellation::default())
-                .unwrap()
-                .producers
-                .unwrap();
+        let producers = crate::regions::unmarked_producers(
+            &theory,
+            RegionLimits::default(),
+            &Cancellation::default(),
+        )
+        .unwrap()
+        .producers
+        .unwrap();
         Self {
             owner: LearningOwner::theory(&theory, LearningLimits::default()),
             theory,

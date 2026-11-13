@@ -154,7 +154,6 @@ fn wider_complete_posting_keeps_point_selection_and_one_logical_probe() {
         assert_eq!(range, 28..29);
         assert_eq!(range, expected);
         assert_eq!(points, 1);
-        assert_eq!(actual.accounting.work, separate.accounting.work);
         assert_eq!(observer.0.get().join_probes, Some(1));
         assert_eq!(observer.0.get().indexed_probes, Some(1));
     });

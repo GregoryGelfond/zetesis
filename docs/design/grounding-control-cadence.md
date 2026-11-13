@@ -98,7 +98,9 @@ pub const fn poll_due(charged: u64, amount: u64) -> bool {
 **Three operations of the account.**
 - `Counters::charge_work(amount, limits, site)`: charge before perform; observes control when `poll_due` holds over the
   cumulative work already loaded for the ceiling check; on a refusal observes control first. Only its first statement
-  changes on the hot path.
+  changes on the hot path. The charge that neither observes nor reaches the ceiling, which nearly every charge is, is
+  admitted inline in its caller; every other charge takes the out-of-line complete decision, and the two agree wherever
+  the inline test admits.
 - `Counters::poll(site)`: an explicit observation that charges nothing, used before work with no control hook that is
   not bounded per element. No zero-unit charge is used as an observation any more.
 - `Counters::absorb(work, limits, site)`: counts work a nested operation already performed under the allowance it was

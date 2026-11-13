@@ -134,6 +134,38 @@ fn loop_beside_choices(choices: usize) -> Theory {
     .unwrap()
 }
 
+/// The positive loop `a0 <- a2. a1 <- a0. a2 <- a1.` beside `choices` atomic
+/// choices. Its three atoms keep it for the possible-foundedness pass, which
+/// the support cut spares a loop of two.
+fn loop_of_three_beside_choices(choices: usize) -> Theory {
+    let mut nodes = vec![
+        Node::atom(0),
+        Node::atom(1),
+        Node::atom(2),
+        Node::falsum(),
+        Node::implies(2, 0),
+        Node::implies(0, 1),
+        Node::implies(1, 2),
+    ];
+    let mut roots = vec![4, 5, 6];
+    for choice in 0..choices {
+        let index = nodes.len();
+        nodes.extend([
+            Node::atom(3 + choice),
+            Node::implies(index, 3),
+            Node::or_pair([index, index + 1]),
+        ]);
+        roots.push(index + 2);
+    }
+    Theory::new(
+        3 + choices,
+        FormulaParts::new(nodes, vec![]).unwrap(),
+        roots,
+        AdmissionLimits::default(),
+    )
+    .unwrap()
+}
+
 /// `loops` independent positive loops `a <- b. b <- a.`: a positive program
 /// whose one stable model is empty, and whose every other leaf is a
 /// classical model with a loop held true.
@@ -1251,7 +1283,7 @@ fn the_coordinator_delivers_its_rows_when_it_engages() {
     // The root's pass captures the loop's absence on the calling thread. The
     // workers inherit the loop cut, so they never capture it themselves: the
     // store can hold it only from the coordinator's handover.
-    let theory = loop_beside_choices(3);
+    let theory = loop_of_three_beside_choices(3);
     let (mut search, index) = walk(&theory, LATE);
     let store = Arc::new(crate::LearnedStore::new());
     search.set_learned_store(Arc::clone(&store)).unwrap();

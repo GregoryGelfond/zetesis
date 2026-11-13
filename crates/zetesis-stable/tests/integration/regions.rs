@@ -34,6 +34,155 @@ fn regions_return_the_stable_models_of_the_exhaustive_reference() {
     }
 }
 
+/// Free choices `e` and `f` (atoms 0 and 1) and the rules among `a`, `b` and
+/// `c` (atoms 2, 3 and 4) that `selected` marks, from a pool of alias pairs,
+/// a rule requiring its own head, longer loops and the rules founding them.
+fn loop_theory(selected: usize) -> Theory {
+    const E: usize = 0;
+    const F: usize = 1;
+    const A: usize = 2;
+    const B: usize = 3;
+    const C: usize = 4;
+    // Each rule's body, one atom or a conjunction of two, and its head.
+    const POOL: [(&[usize], usize); 11] = [
+        (&[E], A),
+        (&[A], B),
+        (&[B], A),
+        (&[B], C),
+        (&[C], B),
+        (&[A, E], A),
+        (&[F], C),
+        (&[A, F], B),
+        (&[C], A),
+        (&[A, B], C),
+        (&[F], B),
+    ];
+    let mut nodes: Vec<Node> = (0..5).map(Node::atom).collect();
+    nodes.push(Node::falsum());
+    let falsum = nodes.len() - 1;
+    let mut roots = Vec::new();
+    for choice in [E, F] {
+        nodes.push(Node::implies(choice, falsum));
+        nodes.push(Node::or_pair([choice, nodes.len() - 1]));
+        roots.push(nodes.len() - 1);
+    }
+    for (index, &(body, head)) in POOL.iter().enumerate() {
+        if selected & (1 << index) == 0 {
+            continue;
+        }
+        let body = match *body {
+            [atom] => atom,
+            [left, right] => {
+                nodes.push(Node::and_pair([left, right]));
+                nodes.len() - 1
+            }
+            _ => unreachable!("a pool body has one or two atoms"),
+        };
+        nodes.push(Node::implies(body, head));
+        roots.push(nodes.len() - 1);
+    }
+    zetesis_theory_support::theories::theory(5, nodes, roots)
+}
+
+#[test]
+fn regions_return_the_reference_for_every_selection_of_looping_rules() {
+    for selected in 0..1_usize << 11 {
+        let theory = loop_theory(selected);
+        let expected = stable_models(&theory);
+        let mut by_regions = regions(&theory, Limits::default());
+        let found: BTreeSet<Vec<usize>> = models(&mut by_regions).into_iter().collect();
+        assert!(by_regions.exhausted(), "rules {selected:#013b}");
+        assert_eq!(found, expected, "rules {selected:#013b}");
+    }
+}
+
+/// One more rule `head ← body` among the roots.
+fn rule(nodes: &mut Vec<Node>, roots: &mut Vec<usize>, body: usize, head: usize) {
+    nodes.push(Node::implies(body, head));
+    roots.push(nodes.len() - 1);
+}
+
+/// The same atoms with the rules `selected` marks in the shapes
+/// [`loop_theory`] lacks: a disjunctive body, a disjunctive head, a choice
+/// with a body, one body node shared by two producers and a nested
+/// conjunction, among plain rules that close loops through them.
+fn shaped_theory(selected: usize) -> Theory {
+    const E: usize = 0;
+    const F: usize = 1;
+    const A: usize = 2;
+    const B: usize = 3;
+    const C: usize = 4;
+    let picked = |index: usize| selected & (1 << index) != 0;
+    let mut nodes: Vec<Node> = (0..5).map(Node::atom).collect();
+    nodes.push(Node::falsum());
+    let falsum = nodes.len() - 1;
+    let mut roots = Vec::new();
+    for choice in [E, F] {
+        nodes.push(Node::implies(choice, falsum));
+        nodes.push(Node::or_pair([choice, nodes.len() - 1]));
+        roots.push(nodes.len() - 1);
+    }
+    for (index, (body, head)) in [(E, A), (A, B), (B, A), (C, A), (C, B), (F, B)]
+        .into_iter()
+        .enumerate()
+    {
+        if picked(index) {
+            rule(&mut nodes, &mut roots, body, head);
+        }
+    }
+    if picked(6) {
+        // c ← a ∨ b
+        nodes.push(Node::or_pair([A, B]));
+        let body = nodes.len() - 1;
+        rule(&mut nodes, &mut roots, body, C);
+    }
+    if picked(7) {
+        // a ∨ b ← f
+        nodes.push(Node::or_pair([A, B]));
+        let head = nodes.len() - 1;
+        rule(&mut nodes, &mut roots, F, head);
+    }
+    if picked(8) {
+        // {c} ← b
+        nodes.push(Node::implies(C, falsum));
+        nodes.push(Node::or_pair([C, nodes.len() - 1]));
+        let head = nodes.len() - 1;
+        rule(&mut nodes, &mut roots, B, head);
+    }
+    if picked(9) || picked(10) {
+        // a ← b ∧ e and c ← b ∧ e, on one body node
+        nodes.push(Node::and_pair([B, E]));
+        let body = nodes.len() - 1;
+        if picked(9) {
+            rule(&mut nodes, &mut roots, body, A);
+        }
+        if picked(10) {
+            rule(&mut nodes, &mut roots, body, C);
+        }
+    }
+    if picked(11) {
+        // c ← (a ∧ b) ∧ f
+        nodes.push(Node::and_pair([A, B]));
+        let inner = nodes.len() - 1;
+        nodes.push(Node::and_pair([inner, F]));
+        let body = nodes.len() - 1;
+        rule(&mut nodes, &mut roots, body, C);
+    }
+    zetesis_theory_support::theories::theory(5, nodes, roots)
+}
+
+#[test]
+fn regions_return_the_reference_for_every_selection_of_shaped_rules() {
+    for selected in 0..1_usize << 12 {
+        let theory = shaped_theory(selected);
+        let expected = stable_models(&theory);
+        let mut by_regions = regions(&theory, Limits::default());
+        let found: BTreeSet<Vec<usize>> = models(&mut by_regions).into_iter().collect();
+        assert!(by_regions.exhausted(), "rules {selected:#014b}");
+        assert_eq!(found, expected, "rules {selected:#014b}");
+    }
+}
+
 /// The mixed theory's models by regions, with the search's receipts.
 fn mixed_by_regions() -> (Vec<Vec<usize>>, zetesis_stable::Statistics) {
     let mut search = regions(&mixed(), Limits::default());

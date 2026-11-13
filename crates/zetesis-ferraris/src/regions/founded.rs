@@ -3,9 +3,17 @@
 //! Complete `Producers` coverage is mandatory. Relax a body by keeping its
 //! positive atoms and Boolean chains, replacing nodes already known false by
 //! falsum, and replacing other implications and aggregates by truth. Exact
-//! positive dependency components identify cyclic heads. Conceptually seed every
-//! other uncut atom, then derive cyclic heads to closure. A boundary Atom node
-//! reads that seed directly; no outside atom or its unrelated postings is queued.
+//! positive dependency components identify cyclic heads. A component whose
+//! every cycle passes through a circular producer ([`super::circular`]) is
+//! released: its atoms are seeds, and the support cut, which passes over those
+//! producers, decides them. Releasing only adds seeds, so the closure stays an
+//! upper bound. A component with a cycle that survives without the circular
+//! producers is kept whole and derived through every producer, circular ones
+//! included; only its seeds differ from an inventory without marks, by the
+//! atoms of released components. Conceptually
+//! seed every other uncut atom, then derive cyclic heads to closure. A boundary
+//! Atom node reads that seed directly; no outside atom or its unrelated
+//! postings is queued.
 //! Held cyclic atoms are not seeds. Disjunctive producers never exclude a head
 //! because another head is held.
 //!
@@ -28,6 +36,9 @@
 //! Node states, atom cursors, queue and body-node IDs supply the temporary DFS
 //! storage; the component pass retains no graph or component map. Body-node IDs
 //! temporarily hold at most A+B finishing entries, where B is the full body cone.
+//! With marked producers the preparation also holds, until it returns, a copy
+//! of the cyclic mask and at most A atoms of the component being classified;
+//! both are reserved fallibly and neither is retained.
 //! Their actual capacity remains charged after selecting the smaller cone. Owner
 //! publication authenticates the cyclic mask, selected cone and any completed
 //! incidence indexes. The first pass keeps original parent and producer rows. A later preparation
@@ -88,11 +99,21 @@
 //! component into the global least closure. A boundary dependency must come from
 //! an earlier component, or a return path would put it in that cyclic component.
 //! Thus the saturated restriction matches global closure, even when passes differ.
-//! This executable correspondence remains a proof obligation, tested against the
-//! same event engine with every atom forced to be a closure head.
+//! A released component takes the acyclic step of that induction: at the fixed
+//! point each of its uncut heads has a nonfalse producer that is not circular,
+//! and without the circular producers the component's own dependencies are
+//! acyclic, so that producer's inputs come from an earlier component or from an
+//! earlier head of the same one. The condensation order is that of the complete
+//! dependencies, which is why a kept component retains the atoms it holds only
+//! through a circular producer.
+//! This executable correspondence remains a proof obligation. Without marks it
+//! is tested against the same event engine with every atom forced to be a
+//! closure head; the released-component step is tested by comparing narrowing
+//! under a marked inventory with narrowing under one without marks.
 //!
-//! A cached Kahn pass over the relaxed positive dependencies skips all later
-//! foundedness work when they are acyclic. Local support already suffices there:
+//! A cached Kahn pass over the relaxed positive dependencies, circular
+//! producers left out, skips all later foundedness work when they are acyclic.
+//! Local support already suffices there:
 //! every nonfalse atom has a possible producer, whose positive inputs have lower
 //! dependency order and therefore enter P. The cycle test reuses exactly these
 //! immutable incidences and adds no graph. Its O(A + N + E + R + H) work is charged
@@ -270,9 +291,9 @@ impl Scratch {
             };
             self.states.push(State::Awaiting(degree));
         }
-        for producer in &producers.rules {
+        for (row, producer) in producers.rules.iter().enumerate() {
             work.tick()?;
-            if producer.body.is_some() {
+            if producer.body.is_some() && !producers.circular(row) {
                 for &head in &producer.heads {
                     work.tick()?;
                     self.dependencies[head] = self.dependencies[head]
@@ -316,6 +337,9 @@ impl Scratch {
             }
             for &producer in &producers.by_body[node] {
                 work.tick()?;
+                if producers.circular(producer) {
+                    continue;
+                }
                 for &head in &producers.rules[producer].heads {
                     work.tick()?;
                     self.dependencies[head] = self.dependencies[head]

@@ -1345,7 +1345,8 @@ proof from `entailed_by_refutations` or `saturation_unit`, over the frozen subje
 in the first probing round and, in a later round, over the frozen subject composed
 with the rows of the round before (`joint_sound`); and its count bounds, subjects
 through `doubleCount` and the guarded bounds, with `LowerOf` and `UpperOf` from
-`AlgebraicRows.bounds_of_allowed`, `upper_of_clique` and `lower_of_clause`.
+`AlgebraicRows.bounds_of_allowed`, `upper_of_clique`, `lower_of_cover` and
+`lower_of_clause`.
 It takes no supplied subject and no supplied root knowledge. That the Rust reduct
 query keeps to this construction, probing from the closed query root and never
 sharing a preparation across candidates, is an implementation obligation, a

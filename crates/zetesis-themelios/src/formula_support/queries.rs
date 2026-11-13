@@ -16,7 +16,7 @@ use zetesis_core::catalog::TermRef;
 use zetesis_core::table::{self, Cause, Domain, Resource, Selection, Table};
 use zetesis_core::{AtomKey, BindingView, PatternRef, TemplateTerm};
 
-use super::relations::RelationRows;
+use super::relations::{KeyIdentifiers, RelationRows};
 use super::{Counters, GroundingWork, PositivePattern, Relations};
 use crate::formula::ceiling;
 use crate::grounding_observer::Event;
@@ -287,6 +287,41 @@ impl<'source> Support<'source> {
         counters: &mut Counters,
         location: ProgramSite,
     ) -> Result<Option<&'source [usize]>, FormulaFailure> {
+        self.probe_with(
+            rows,
+            pattern,
+            values,
+            None,
+            GroundingWork::new(limits, counters, location),
+        )
+    }
+
+    /// The same probe, also recording the identifiers of its bound columns
+    /// in the caller's frame. Recording charges and retains nothing further.
+    fn probe_identifying_at(
+        &self,
+        rows: Option<&'source RelationRows<'source>>,
+        pattern: PatternRef<'_>,
+        values: BindingView<'_>,
+        key: &mut KeyIdentifiers,
+        work: GroundingWork<'_>,
+    ) -> Result<Option<&'source [usize]>, FormulaFailure> {
+        self.probe_with(rows, pattern, values, Some(key), work)
+    }
+
+    fn probe_with(
+        &self,
+        rows: Option<&'source RelationRows<'source>>,
+        pattern: PatternRef<'_>,
+        values: BindingView<'_>,
+        key: Option<&mut KeyIdentifiers>,
+        work: GroundingWork<'_>,
+    ) -> Result<Option<&'source [usize]>, FormulaFailure> {
+        let GroundingWork {
+            limits,
+            counters,
+            location,
+        } = work;
         Self::admit(self.live_bytes(), limits, counters, location)?;
         counters.record(Event::IndexedProbe);
         self.relations.probe_at(
@@ -295,6 +330,7 @@ impl<'source> Support<'source> {
             values,
             self.live_bytes() - self.relations.current_bytes(),
             GroundingWork::new(limits, counters, location),
+            key,
         )
     }
 

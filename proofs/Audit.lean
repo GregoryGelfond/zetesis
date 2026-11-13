@@ -214,6 +214,8 @@ import Zetesis
 #print axioms Zetesis.AlgebraicRows.counting_fold_one
 #print axioms Zetesis.AlgebraicRows.count_of_none
 #print axioms Zetesis.AlgebraicRows.upper_of_clique
+#print axioms Zetesis.AlgebraicRows.count_of_all
+#print axioms Zetesis.AlgebraicRows.lower_of_cover
 #print axioms Zetesis.AlgebraicRows.bounds_of_allowed
 #print axioms Zetesis.AlgebraicRows.bounded_counting_fold
 #print axioms Zetesis.AlgebraicRows.bounded_counting_fold_one
@@ -758,6 +760,14 @@ import Zetesis
 #print axioms Zetesis.Examples.missing_constraint_gate_not_carrier
 #print axioms Zetesis.Examples.Choices.candidate_closure
 #print axioms Zetesis.Examples.Choices.candidate_answer_set
+#print axioms Zetesis.ExternalSupport.required_of_reduct
+#print axioms Zetesis.ExternalSupport.producer_withdrawal
+#print axioms Zetesis.ExternalSupport.choice_withdrawal
+#print axioms Zetesis.ExternalSupport.answer_set_externally_supported
+#print axioms Zetesis.ExternalSupport.answer_set_noncircular_support
+#print axioms Zetesis.ExternalSupport.noncircular_unsupported_cut
+#print axioms Zetesis.ExternalSupport.noncircular_sole_rule_forces
+#print axioms Zetesis.ExternalSupport.noncircular_sole_choice_forces
 #print axioms Zetesis.ExtremumCandidates.choose_is_input
 #print axioms Zetesis.ExtremumCandidates.extreme_none_iff
 #print axioms Zetesis.ExtremumCandidates.extreme_some_mem

@@ -240,20 +240,32 @@ impl AccountControl {
             .map_or(Ok(()), Cancellation::poll)
     }
 
-    /// Observe a crossed boundary of the retained work account. A zero-sized
-    /// charge does not observe cancellation; explicit entry/exit polls do.
+    /// Observe a crossed boundary of the retained work account, as
+    /// [`charge_observes`] decides.
     #[inline]
     pub(super) fn observe_charge(&self, charged: u64, amount: u64) -> Result<(), Stop> {
-        #[cfg(test)]
-        if amount != 0 && (self.every_charge || EVERY_CHARGE.get()) {
-            return self.observe();
-        }
-        if zetesis_algebra::poll_due(charged, amount) {
+        if charge_observes(Some(self), charged, amount) {
             self.observe()
         } else {
             Ok(())
         }
     }
+}
+
+/// Whether admitting `amount` units after `charged` observes `control`. An
+/// account with control observes when the charged range holds a cadence
+/// boundary; an account without control never does. A zero-sized charge never
+/// observes; explicit entry/exit polls do.
+#[inline]
+pub(super) fn charge_observes(control: Option<&AccountControl>, charged: u64, amount: u64) -> bool {
+    if control.is_none() {
+        return false;
+    }
+    #[cfg(test)]
+    if amount != 0 && (control.is_some_and(|control| control.every_charge) || EVERY_CHARGE.get()) {
+        return true;
+    }
+    zetesis_algebra::poll_due(charged, amount)
 }
 
 #[cfg(debug_assertions)]
