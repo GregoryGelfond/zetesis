@@ -57,6 +57,7 @@ use crate::{FormulaView, NodeView, Theory};
 
 mod adjacency;
 mod arithmetic;
+mod circular;
 pub use arithmetic::ParityKnowledge;
 pub use arithmetic::{
     ArithmeticAttempt, CardinalityKnowledge, CardinalityStatistics, CardinalitySystem, ClosedQuery,
@@ -235,6 +236,10 @@ pub struct Producers {
     by_head: Adjacency,
     /// The producers whose body is this node.
     by_body: Adjacency,
+    /// One mark per producer that cannot support its head: see [`circular`].
+    circular: Words<u64>,
+    /// Some producer is marked circular.
+    any_circular: bool,
     /// Some extracted producer has at least two distinct heads. When false, holding a
     /// head cannot invalidate any other head's support.
     has_competing_heads: bool,
@@ -250,7 +255,57 @@ impl Producers {
     fn belongs_to(&self, theory: &Theory) -> bool {
         self.owner.same_instance(theory)
     }
+
+    /// Whether the support cut and the positive-dependency test leave this
+    /// producer out: its body requires its own sole head, or an atom derived
+    /// only through that head.
+    fn circular(&self, producer: usize) -> bool {
+        self.circular.contains(producer)
+    }
+
+    /// Whether any producer is marked circular. Without one, every reader of
+    /// the inventory behaves exactly as it does without marks.
+    const fn any_circular(&self) -> bool {
+        self.any_circular
+    }
+
+    /// Mark the circular producers within `allowance` visits and return the
+    /// visits charged, observing control at the meter's cadence. A marking
+    /// that exhausts its allowance leaves every producer unmarked, which is
+    /// the inventory as it was before producers were marked: sound, and only
+    /// weaker in what the support cut and the cycle test can skip.
+    ///
+    /// # Errors
+    /// A requested stop, or an allocation refusal of the marking's storage.
+    /// An exhausted allowance is not an error.
+    fn mark(
+        &mut self,
+        theory: &Theory,
+        allowance: u64,
+        cancellation: &Cancellation,
+    ) -> Result<u64, Stop> {
+        let metered = cancellation.metered(allowance, |work| {
+            circular::mark(theory, &self.rules, &self.by_head, &self.by_body, work)
+        });
+        match metered.result {
+            Ok((marks, any)) => {
+                self.circular = marks;
+                self.any_circular = any;
+            }
+            Err(failure) => match failure.into_stop() {
+                Stop::WorkLimit => {}
+                stop => return Err(stop),
+            },
+        }
+        Ok(metered.charged)
+    }
 }
+
+/// The marking pass may spend this many times the visits of the extraction
+/// it follows. On the measured inputs it spends between 0.6 and 1.0 times
+/// them; its worst case is not linear in the formula (see [`circular`]), and
+/// this share keeps an optional pass proportional to the mandatory one.
+const MARKING_SHARE: u64 = 4;
 
 /// The atoms that head an atomic choice root of a theory, `a ∨ ¬a` standing
 /// alone or as an implication's consequent. A mark records that the theory
@@ -301,7 +356,8 @@ pub struct Extraction {
     /// The heads of the theory's atomic choice roots, whether or not every
     /// root lies in the fragment.
     pub choice_heads: ChoiceHeads,
-    /// Charged node and root visits, the same for a declined extraction.
+    /// Charged node and root visits, the same for a declined extraction,
+    /// and the visits of the pass that marks circular producers.
     pub work: u64,
 }
 
@@ -312,23 +368,60 @@ pub struct Extraction {
 /// case the support rule does not apply. The heads of atomic choice roots are
 /// marked for every theory, in one more charged visit per root.
 ///
+/// The producers that cannot support their head, the circular ones, are
+/// then marked. That pass may spend what `limits.max_work` leaves after the
+/// extraction, and at most four times the extraction's own visits. A marking
+/// that would exceed either marks nothing: the inventory is complete without
+/// marks, and every reader then treats each producer as a possible support.
+/// The extraction therefore stops for want of work exactly where it would
+/// with no marking, and the reported work never exceeds `limits.max_work`.
+///
 /// # Errors
 /// Returns the stop when extraction exceeds `limits.max_work`, control stops,
-/// or compact-adjacency storage cannot be represented or reserved. Other
-/// extraction storage retains its existing infallible allocation behavior.
+/// before the extraction or during the marking, or compact-adjacency storage,
+/// the mark words or the marking's transient storage cannot be represented or
+/// reserved. Other extraction storage retains its existing infallible
+/// allocation behavior.
 pub fn producers(
     theory: &Theory,
     limits: RegionLimits,
     cancellation: &Cancellation,
 ) -> Result<Extraction, Stop> {
+    extraction(theory, limits, cancellation, true)
+}
+
+/// The same extraction with no producer marked circular: the inventory the
+/// founded closure's and the founded collector's own tests read, in which
+/// every producer may support its head and every positive loop stays a cycle.
+#[cfg(test)]
+pub(crate) fn unmarked_producers(
+    theory: &Theory,
+    limits: RegionLimits,
+    cancellation: &Cancellation,
+) -> Result<Extraction, Stop> {
+    extraction(theory, limits, cancellation, false)
+}
+
+fn extraction(
+    theory: &Theory,
+    limits: RegionLimits,
+    cancellation: &Cancellation,
+    marked: bool,
+) -> Result<Extraction, Stop> {
     cancellation.poll()?;
     let mut work = Meter::local(limits.max_work);
     let choice_heads = choice_heads(theory, &mut work).map_err(Failure::into_stop)?;
-    let producers = extract(theory, &mut work).map_err(Failure::into_stop)?;
+    let mut producers = extract(theory, &mut work).map_err(Failure::into_stop)?;
+    let mut charged = work.charged();
+    if marked && let Some(inventory) = producers.as_mut() {
+        let allowance = work.remaining().min(charged.saturating_mul(MARKING_SHARE));
+        // At most what the ceiling leaves, so the sum stays within it.
+        charged += inventory.mark(theory, allowance, cancellation)?;
+    }
     Ok(Extraction {
         producers,
         choice_heads,
-        work: work.charged(),
+        work: charged,
     })
 }
 
@@ -365,6 +458,7 @@ fn ordinary_operands<Q: Quota + ?Sized>(
     Ok(all)
 }
 
+/// The inventory with no producer marked.
 fn extract<Q: Quota + ?Sized>(
     theory: &Theory,
     work: &mut Meter<'_, Q>,
@@ -440,11 +534,14 @@ fn extract<Q: Quota + ?Sized>(
             .enumerate()
             .filter_map(|(index, producer)| producer.body.map(|body| (body, index))),
     )?;
+    let circular = circular::none(rules.len())?;
     Ok(Some(Producers {
         owner: theory.clone(),
         rules,
         by_head,
         by_body,
+        circular,
+        any_circular: false,
         has_competing_heads,
         has_choice_heads,
         founded_cycles: OnceLock::new(),
@@ -2905,11 +3002,14 @@ impl<W: Count, C: ReadingClass> Closure<'_, W, C> {
     /// An atom none of its producers can support is known to fail, and an
     /// atom known to hold with exactly one producer able to support it
     /// forces that producer's body (`unsupported_cut`,
-    /// `sole_support_forces`). A producer can support its atom when its
-    /// body is not known to fail and, unless it is a choice, no other of
-    /// its heads is known to hold. An open atom needs only one possible
-    /// supporter to remain open; a held atom with two cannot force a sole
-    /// body. Stop at those witnesses and charge only visited producers.
+    /// `sole_support_forces`; with circular producers passed over,
+    /// `noncircular_unsupported_cut`, `noncircular_sole_rule_forces` and
+    /// `noncircular_sole_choice_forces`). A producer can support its atom
+    /// when it is not circular, its body is not known to fail and, unless it
+    /// is a choice, no other of its heads is known to hold. An open atom
+    /// needs only one possible supporter to remain open; a held atom with
+    /// two cannot force a sole body. Stop at those witnesses and charge only
+    /// visited producers.
     /// Inherited positions skip only prefixes already proved unavailable in
     /// this region or an ancestor; zero or sole support still requires complete
     /// coverage. Later body failure, a competing held head or this atom becoming

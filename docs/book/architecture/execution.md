@@ -107,8 +107,40 @@ the existing infallible allocation contract. This trades bounded per-child
 storage for fewer repeated producer reads, without changing the original theory
 or the reduct check.
 
-When the complete producer inventory has positive cycles, narrowing also
-restricts candidates by possible founded support. The defining whole relaxation
+Some producers cannot support their head at all. A body requires the atoms
+that are its conjuncts, and an atom is derived only through `a` when it has
+producers and every one of them requires `a`. A producer whose one head is `a`
+is circular when its body requires `a` itself or an atom derived only through
+`a`, as `a ← b` is beside `b ← a` when nothing else produces `b`. Every atom of
+an answer set has a supporting producer that is not circular
+(`ExternalSupport.answer_set_noncircular_support`), so the support scan passes
+over circular producers (`noncircular_unsupported_cut`,
+`noncircular_sole_rule_forces`, `noncircular_sole_choice_forces`). Such an
+alias pair then needs no closure of possible founded support: when the other
+producers of `a` fail, the scan cuts `a` and then `b`, and holding `b` forces
+the one remaining producer of `a`. The marks are made once with the producer
+inventory. The pass reads each body's own operands once for every producer
+sharing the body and, for each head and each atom its body requires, that
+atom's producers up to the first that does not require the head. On the
+measured inputs that is between 0.6 and 1.0 times the extraction's own
+visits, but it is not linear: one large body shared by many rules is read
+once for each of them. The pass may therefore spend at most four times the
+extraction's visits, and never more than the extraction's work ceiling
+leaves. When it would exceed either it marks nothing, and narrowing proceeds
+as it did before producers were marked. The extraction's reported work stays
+within its ceiling, so it stops for want of work exactly where it did; under
+a finite work budget the marking's visits are spent like any others. Only
+producers with one head are marked, and only a body's own atom operands are
+read, so the restriction is used less often than the law allows. The roots
+themselves are unchanged and still propagate as implications.
+
+When some positive cycle of the complete producer inventory survives without
+the circular producers, narrowing also restricts candidates by possible
+founded support. A dependency component whose every cycle passes through a
+circular producer is left to the support scan; a component with a surviving
+cycle is closed whole and reads every producer, marked ones included. Its
+closure then differs from one without marks only in its seeds, which include
+the atoms of the components left to the scan. The defining whole relaxation
 starts empty, propagates possible bodies through positive conjunctions and
 disjunctions, and adds every permitted head of each enabled producer. Other body
 formulas remain possible unless already known false. Held atoms do not seed

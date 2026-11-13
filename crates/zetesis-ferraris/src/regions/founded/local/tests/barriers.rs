@@ -37,10 +37,14 @@ fn example(alternative: bool, padding: usize) -> (Example, usize) {
     }
     let owner = theory(9, nodes, roots);
     let index = Narrower::new(&owner);
-    let producers = crate::producers(&owner, RegionLimits::default(), &Cancellation::default())
-        .unwrap()
-        .producers
-        .unwrap();
+    let producers = crate::regions::unmarked_producers(
+        &owner,
+        RegionLimits::default(),
+        &Cancellation::default(),
+    )
+    .unwrap()
+    .producers
+    .unwrap();
     (
         Example {
             owner,

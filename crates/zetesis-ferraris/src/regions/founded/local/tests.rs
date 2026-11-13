@@ -62,10 +62,65 @@ impl Example {
         }
         let owner = theory(9, nodes, roots);
         let index = Narrower::new(&owner);
-        let producers = crate::producers(&owner, RegionLimits::default(), &Cancellation::default())
-            .unwrap()
-            .producers
-            .unwrap();
+        let producers = crate::regions::unmarked_producers(
+            &owner,
+            RegionLimits::default(),
+            &Cancellation::default(),
+        )
+        .unwrap()
+        .producers
+        .unwrap();
+        Self {
+            owner,
+            index,
+            producers,
+            seeds,
+        }
+    }
+
+    /// The same atoms, controls and seeds under a marked inventory. Atoms 0
+    /// and 1 form a cycle founded twice, and atom 2 hangs on it by `2 ← 0`
+    /// and the circular `0 ← 2`: their component keeps a cycle and is closed
+    /// whole. Atoms 3 and 4 form a pair founded once, whose `3 ← 4` is
+    /// circular: their component is released. `1 ← 4` lets the kept component
+    /// read a released atom, and atom 5 is an acyclic head of both.
+    fn marked() -> Self {
+        let mut nodes: Vec<_> = (0..9).map(Node::atom).collect();
+        nodes.push(Node::falsum());
+        let seeds = [10, 11, 12];
+        for control in 6..9 {
+            nodes.push(Node::implies(control, 9));
+        }
+        let mut roots = Vec::new();
+        for (control, seed) in (6..9).zip(seeds) {
+            roots.push(nodes.len());
+            nodes.push(Node::or_pair([control, seed]));
+        }
+        for (body, head) in [
+            (10, 0),
+            (10, 1),
+            (0, 1),
+            (1, 0),
+            (0, 2),
+            (2, 0),
+            (11, 3),
+            (3, 4),
+            (4, 3),
+            (4, 1),
+            (12, 5),
+            (2, 5),
+            (4, 5),
+        ] {
+            roots.push(nodes.len());
+            nodes.push(Node::implies(body, head));
+        }
+        let owner = theory(9, nodes, roots);
+        let index = Narrower::new(&owner);
+        let producers =
+            crate::regions::producers(&owner, RegionLimits::default(), &Cancellation::default())
+                .unwrap()
+                .producers
+                .unwrap();
         Self {
             owner,
             index,
@@ -104,6 +159,14 @@ impl Example {
     }
 
     fn prepared(&self) -> Scratch {
+        let scratch = self.prepared_unchecked();
+        assert_eq!(scratch.atoms[0] & 63, 63);
+        scratch
+    }
+
+    /// The prepared scratch after one full closure with nothing cut, whatever
+    /// that closure holds.
+    fn prepared_unchecked(&self) -> Scratch {
         let mut scratch = Scratch::default();
         for _ in 0..2 {
             scratch
@@ -119,7 +182,6 @@ impl Example {
         let (never, cuts) = self.masks(0, 0);
         self.complete(&mut scratch, &never, &cuts, &mut Meter::local(u64::MAX))
             .unwrap();
-        assert_eq!(scratch.atoms[0] & 63, 63);
         scratch
     }
 
@@ -162,6 +224,99 @@ fn all_tiny_cuts_match_full_closure() {
     }
     assert!(actual.local.passes > 0);
     assert!(actual.local.passes < 512);
+}
+
+#[test]
+fn replay_under_marked_producers_matches_full_closure() {
+    let example = Example::marked();
+    assert!(example.producers.any_circular());
+    let mut actual = example.prepared_unchecked();
+    // The component of atoms 0, 1 and 2 keeps the cycle between 0 and 1, and
+    // with it atom 2, held only through a circular producer; the pair of
+    // atoms 3 and 4 is released, and atom 5 was never on a cycle.
+    assert_eq!(actual.cyclic_atoms[0], 0b00_0111);
+    let mut expected = example.prepared_unchecked();
+    for false_seeds in 0..8 {
+        for cut_atoms in 0..64 {
+            let (never, cuts) = example.masks(false_seeds, cut_atoms);
+            example
+                .complete(&mut expected, &never, &cuts, &mut Meter::local(u64::MAX))
+                .unwrap();
+            example.start(&mut actual, &never);
+            example
+                .complete(&mut actual, &never, &cuts, &mut Meter::local(u64::MAX))
+                .unwrap();
+            assert_eq!(
+                actual.atoms, expected.atoms,
+                "seeds={false_seeds} cuts={cut_atoms}"
+            );
+            assert!(actual.local.touched.is_empty());
+        }
+    }
+    // Some of these closures were local replays, not full passes.
+    assert!(actual.local.passes > 0);
+    assert!(actual.local.passes < 512);
+}
+
+#[test]
+fn every_stopped_preparation_under_marked_producers_retries_cleanly() {
+    // The two component searches of a marked inventory, stopped after every
+    // prefix of their work, leave nothing a later preparation relies on.
+    let example = Example::marked();
+    assert!(example.producers.any_circular());
+    let expected = example.prepared_unchecked();
+    assert_eq!(expected.cyclic_atoms[0], 0b00_0111);
+    let mut measured = Scratch::default();
+    let mut completed = Meter::local(u64::MAX);
+    measured
+        .prepare_bodies(
+            &example.owner,
+            &example.index,
+            &example.producers,
+            &mut completed,
+        )
+        .map_err(zetesis_algebra::Failure::into_stop)
+        .unwrap();
+    for failure in [Stop::WorkLimit, Stop::Cancelled, Stop::Allocation] {
+        for ceiling in 0..completed.charged() {
+            let mut actual = Scratch::default();
+            let mut allowance = Allowance {
+                remaining: ceiling,
+                failure,
+            };
+            let mut work = Meter::reserved(&mut allowance);
+            assert_eq!(
+                actual
+                    .prepare_bodies(
+                        &example.owner,
+                        &example.index,
+                        &example.producers,
+                        &mut work
+                    )
+                    .map_err(zetesis_algebra::Failure::into_stop),
+                Err(failure)
+            );
+            work.refund();
+            assert!(actual.owner.is_none());
+            for _ in 0..2 {
+                actual
+                    .prepare_bodies(
+                        &example.owner,
+                        &example.index,
+                        &example.producers,
+                        &mut Meter::local(u64::MAX),
+                    )
+                    .map_err(zetesis_algebra::Failure::into_stop)
+                    .unwrap();
+            }
+            assert_eq!(actual.cyclic_atoms, expected.cyclic_atoms);
+            let (never, cuts) = example.masks(0, 0);
+            example
+                .complete(&mut actual, &never, &cuts, &mut Meter::local(u64::MAX))
+                .unwrap();
+            assert_eq!(actual.atoms, expected.atoms);
+        }
+    }
 }
 
 #[test]

@@ -3801,6 +3801,46 @@
       "name": "Zetesis.Examples.Choices.candidate_answer_set"
     },
     {
+      "file": "Zetesis/ExternalSupport.lean",
+      "line": 59,
+      "name": "Zetesis.ExternalSupport.required_of_reduct"
+    },
+    {
+      "file": "Zetesis/ExternalSupport.lean",
+      "line": 110,
+      "name": "Zetesis.ExternalSupport.producer_withdrawal"
+    },
+    {
+      "file": "Zetesis/ExternalSupport.lean",
+      "line": 152,
+      "name": "Zetesis.ExternalSupport.choice_withdrawal"
+    },
+    {
+      "file": "Zetesis/ExternalSupport.lean",
+      "line": 203,
+      "name": "Zetesis.ExternalSupport.answer_set_externally_supported"
+    },
+    {
+      "file": "Zetesis/ExternalSupport.lean",
+      "line": 252,
+      "name": "Zetesis.ExternalSupport.answer_set_noncircular_support"
+    },
+    {
+      "file": "Zetesis/ExternalSupport.lean",
+      "line": 288,
+      "name": "Zetesis.ExternalSupport.noncircular_unsupported_cut"
+    },
+    {
+      "file": "Zetesis/ExternalSupport.lean",
+      "line": 315,
+      "name": "Zetesis.ExternalSupport.noncircular_sole_rule_forces"
+    },
+    {
+      "file": "Zetesis/ExternalSupport.lean",
+      "line": 340,
+      "name": "Zetesis.ExternalSupport.noncircular_sole_choice_forces"
+    },
+    {
       "file": "Zetesis/ExtremumCandidates.lean",
       "line": 31,
       "name": "Zetesis.ExtremumCandidates.choose_is_input"
@@ -11425,6 +11465,7 @@
     "Zetesis/Events.lean",
     "Zetesis/Examples.lean",
     "Zetesis/Examples/Choices.lean",
+    "Zetesis/ExternalSupport.lean",
     "Zetesis/ExtremumCandidates.lean",
     "Zetesis/ExtremumHeadActivity.lean",
     "Zetesis/ExtremumPresence.lean",
@@ -11578,8 +11619,8 @@
     "Zetesis/WorldViews.lean"
   ],
   "source_sha256": {
-    "Audit.lean": "c8b290610cf2300897c9b47d1e87405476d77eef9c0a2c6b9e5836cc38283443",
-    "Zetesis.lean": "4d3bff51f193e057d90436cfa57b46536eef0c40ef85afc58e817f7cf4c35eb7",
+    "Audit.lean": "a321b20e23829e60ab3b8a60859c1257217b1aa6794975c26839c9730ff1c219",
+    "Zetesis.lean": "ad7bfd2e2068d861983e1e7fba7d79cf650f23c2c2f350a607302516a354e9ad",
     "Zetesis/AcyclicEvaluation.lean": "1a9c77283876cf1f61cb92031da04780aada5d0b256f79db5b64bfb6b129d0dc",
     "Zetesis/AdjacencyRows.lean": "38a19b1c74483a157636321a56e95fea660a2192a04c77930d609e411c8d30d4",
     "Zetesis/AggregateAssignment.lean": "def2eac0ae638f3801d35c11a3162afaa3e0b9e393601cf899952e449e309639",
@@ -11648,6 +11689,7 @@
     "Zetesis/Events.lean": "ca19932a7b9465055c0b660606bad522c02c2438a384e6d6762a852418c26ee6",
     "Zetesis/Examples.lean": "858524400af04e29312fdcfcc5127d38dd28ebf68f54d119cd6acafe7b4923dd",
     "Zetesis/Examples/Choices.lean": "4f71f191b451a8bbc3f5420df49b664dfaf01ccb183fb05ef2f4edf81f3712b9",
+    "Zetesis/ExternalSupport.lean": "483774ab8bbd77a3e4841234657d2384ce5f0e49aac70092eeccc830d745c0ed",
     "Zetesis/ExtremumCandidates.lean": "412cfbd3a4bdfc757dbb5be010c6c74c806d35bd268c7d87ba4ab50d8c0c8477",
     "Zetesis/ExtremumHeadActivity.lean": "2fbfd68e7f63d1860b667ab296e18c7a483f119be206e075ab443d208bd90681",
     "Zetesis/ExtremumPresence.lean": "03e419e744139ab81f1f89130cd187baa22f54fb50f9ddbc94b7e7dc9fac742e",

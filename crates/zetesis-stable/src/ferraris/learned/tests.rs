@@ -83,39 +83,45 @@ fn theory(atoms: usize, nodes: Vec<Node>, roots: Vec<usize>) -> Theory {
     .unwrap()
 }
 
-/// `a <- b`, `b <- a`: the root's possible-foundedness pass captures the
-/// loop's absence, and `{}` is the only answer set.
+/// `a <- c`, `b <- a`, `c <- b`: the root's possible-foundedness pass captures
+/// the loop's absence, and `{}` is the only answer set. A loop of two would
+/// not reach that pass: each of its rules requires an atom derived only
+/// through its own head, so the support cut alone decides it.
 fn cycle() -> Theory {
-    theory(
-        2,
-        vec![
-            Node::atom(0),
-            Node::atom(1),
-            Node::implies(0, 1),
-            Node::implies(1, 0),
-        ],
-        vec![2, 3],
-    )
-}
-
-/// `{x}`, `a <- b`, `b <- a`, `a <- x`, with x, a, b as atoms 0, 1, 2. The
-/// walk splits on x, holding it first: `{x, a, b}`, then the region without
-/// x, whose pass captures the loop's absence, then `{}`.
-fn choice_feeding_a_loop() -> Theory {
     theory(
         3,
         vec![
             Node::atom(0),
             Node::atom(1),
             Node::atom(2),
-            Node::falsum(),
-            Node::implies(0, 3),
-            Node::or_pair([0, 4]),
-            Node::implies(2, 1),
+            Node::implies(2, 0),
+            Node::implies(0, 1),
             Node::implies(1, 2),
+        ],
+        vec![3, 4, 5],
+    )
+}
+
+/// `{x}`, `a <- c`, `b <- a`, `c <- b`, `a <- x`, with x, a, b, c as atoms 0
+/// to 3. The walk splits on x, holding it first: `{x, a, b, c}`, then the
+/// region without x, whose pass captures the loop's absence, then `{}`.
+fn choice_feeding_a_loop() -> Theory {
+    theory(
+        4,
+        vec![
+            Node::atom(0),
+            Node::atom(1),
+            Node::atom(2),
+            Node::atom(3),
+            Node::falsum(),
+            Node::implies(0, 4),
+            Node::or_pair([0, 5]),
+            Node::implies(3, 1),
+            Node::implies(1, 2),
+            Node::implies(2, 3),
             Node::implies(0, 1),
         ],
-        vec![5, 6, 7, 8],
+        vec![6, 7, 8, 9, 10],
     )
 }
 

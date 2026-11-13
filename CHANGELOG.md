@@ -34,6 +34,18 @@ Notable changes by release. Versions follow Semantic Versioning.
   postings keep that lookup; both select the same row
   (`ColumnRelations.accepts_exact`). Reported grounding work counts the
   comparisons performed, so it changes where this selection applies.
+- Candidate narrowing no longer counts a producer as support when its body
+  requires its own head, or an atom that only that head can derive, as in the
+  alias pair `a :- b.` `b :- a.` with one other rule for `a`
+  (`ExternalSupport.answer_set_noncircular_support`). A loop whose every cycle
+  passes through such a producer is decided by the support cut and no longer
+  starts the closure of possible founded support, whose reported work falls to
+  its cycle test on programs with no other loop. A loop with another cycle is
+  still closed, reading every producer. Marking is charged with the producer
+  inventory, so reported search work rises by its visits, up to four times the
+  extraction's own and within the extraction's ceiling; beyond that nothing is
+  marked. A work budget within that margin of exhaustion is spent sooner. No
+  support explanation is learned for a loop the support cut now decides.
 - Frozen-reduct preparation bounds pairwise constraints in both polarities. Pairs
   no countermodel cuts together grow into cliques with a lower count bound, as
   pairs none holds together already grow into cliques with an upper one

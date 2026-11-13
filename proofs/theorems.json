@@ -3800,6 +3800,46 @@
     "line": 51
   },
   {
+    "name": "Zetesis.ExternalSupport.required_of_reduct",
+    "file": "Zetesis/ExternalSupport.lean",
+    "line": 59
+  },
+  {
+    "name": "Zetesis.ExternalSupport.producer_withdrawal",
+    "file": "Zetesis/ExternalSupport.lean",
+    "line": 110
+  },
+  {
+    "name": "Zetesis.ExternalSupport.choice_withdrawal",
+    "file": "Zetesis/ExternalSupport.lean",
+    "line": 152
+  },
+  {
+    "name": "Zetesis.ExternalSupport.answer_set_externally_supported",
+    "file": "Zetesis/ExternalSupport.lean",
+    "line": 203
+  },
+  {
+    "name": "Zetesis.ExternalSupport.answer_set_noncircular_support",
+    "file": "Zetesis/ExternalSupport.lean",
+    "line": 252
+  },
+  {
+    "name": "Zetesis.ExternalSupport.noncircular_unsupported_cut",
+    "file": "Zetesis/ExternalSupport.lean",
+    "line": 288
+  },
+  {
+    "name": "Zetesis.ExternalSupport.noncircular_sole_rule_forces",
+    "file": "Zetesis/ExternalSupport.lean",
+    "line": 315
+  },
+  {
+    "name": "Zetesis.ExternalSupport.noncircular_sole_choice_forces",
+    "file": "Zetesis/ExternalSupport.lean",
+    "line": 340
+  },
+  {
     "name": "Zetesis.ExtremumCandidates.choose_is_input",
     "file": "Zetesis/ExtremumCandidates.lean",
     "line": 31
