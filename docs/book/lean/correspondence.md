@@ -1405,6 +1405,30 @@ receipts. Canonical tests compare the point query with a full scan and compare
 grounded subjects with the shortcut disabled. These laws do not certify those
 implementation and resource boundaries.
 
+The same module settles a complete key among the candidates of a short posting
+without the ordered point query. The probe that chose the posting has already
+resolved one equality identifier per bound column, and the selection compares
+each candidate row's column identifiers with them.
+`ColumnRelations.source_posting_exact` makes the posting exactly the rows
+agreeing with the key on its own column, so the key's row is among the
+candidates; `accepts_exact` equates agreement of every identifier with typed
+equality of the whole tuple, and `selection_exact` makes the selected rows
+exactly the candidates that satisfy it. The catalog's unique insertion
+invariant leaves at most one, so the first agreeing candidate is the row the
+point query returns and an exhausted posting establishes absence.
+`full_matches_preserved` then keeps the unchanged matcher's rows. The route
+applies to flat patterns whose probe resolved every column, to at most
+`KeyIdentifiers::COLUMNS` columns and `IDENTIFIED_CANDIDATES` candidates; any
+other complete key keeps the point query, and both bounds choose a realization
+without changing the selected row. Each identifier comparison is charged as one
+unit of work and nothing is allocated. Its Rust obligations are the posting and
+column identifiers belonging to one immutable snapshot, the probe visiting each
+column once, the delta partition shared with the point query and exact failure
+receipts. Tests compare it with the point query on every key over typed values
+and every delta partition, state its charge for a located and an absent key,
+place both bounds, and compare grounded subjects through either route and with
+both disabled.
+
 The removed closure route's dense relation stored a bounded predicate's rows as
 bits over the mixed-radix index of the arguments' ranks in their bounds. Its
 round and block-step correspondence below is historical; the `RowSteps` laws

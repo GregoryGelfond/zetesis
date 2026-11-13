@@ -45,6 +45,49 @@ pub(super) enum Postings<'a> {
     Unindexed,
 }
 
+/// The equality identifiers one probe resolved for its pattern's columns.
+///
+/// The record names a complete key only when every column was bound to a value
+/// its dictionary holds. A probe that leaves a column unbound, meets an absent
+/// value or reads a pattern wider than [`Self::COLUMNS`] resolves fewer
+/// identifiers than the pattern has columns, and its reader keeps the ordered
+/// membership lookup. The record is a fixed frame of the probe's caller:
+/// recording allocates nothing, and identifiers are meaningful only in the
+/// relation the probe read.
+pub(super) struct KeyIdentifiers {
+    identifiers: [u32; Self::COLUMNS],
+    resolved: usize,
+}
+
+impl KeyIdentifiers {
+    /// The widest pattern recorded. This bounds the caller's frame, not the
+    /// arity a relation or a pattern may have.
+    pub(super) const COLUMNS: usize = 16;
+
+    pub(super) const fn new() -> Self {
+        Self {
+            identifiers: [0; Self::COLUMNS],
+            resolved: 0,
+        }
+    }
+
+    /// Record the identifier one column resolved. A probe visits each column
+    /// once, so the count reaches a pattern's arity only when every column
+    /// resolved one and the record holds them all.
+    fn record(&mut self, column: usize, identifier: u32) {
+        if let Some(recorded) = self.identifiers.get_mut(column) {
+            *recorded = identifier;
+            self.resolved += 1;
+        }
+    }
+
+    /// One identifier per column of an `arity`-column pattern, when the probe
+    /// resolved every one of them.
+    pub(super) fn complete(&self, arity: usize) -> Option<&[u32]> {
+        (self.resolved == arity).then(|| &self.identifiers[..arity])
+    }
+}
+
 /// Canonical payload has one evolving authority. Relations and pending rounds
 /// retain only metadata scoped to that authority; discovery positions never escape.
 pub(crate) struct SupportCatalog {
@@ -918,12 +961,14 @@ impl<'source> Relations<'source> {
             values.into(),
             0,
             GroundingWork::new(limits, counters, location),
+            None,
         )
     }
 
     /// The caller resolves this immutable snapshot's relation once, before its
     /// cursor visits rows. Equalities are folded immediately; no key or query
-    /// vector outlives an individual dictionary lookup.
+    /// vector outlives an individual dictionary lookup. A caller that can use
+    /// a complete key lends `key`, its own frame for the resolved identifiers.
     pub(super) fn probe_at<'rows>(
         &self,
         rows: Option<&'rows RelationRows<'source>>,
@@ -931,11 +976,17 @@ impl<'source> Relations<'source> {
         values: BindingView<'_>,
         outer_bytes: usize,
         work: GroundingWork<'_>,
+        key: Option<&mut KeyIdentifiers>,
     ) -> Result<Option<&'rows [usize]>, FormulaFailure> {
         let location = work.location;
         let selected =
-            self.probe_columns(rows, pattern, outer_bytes, work, |column| {
-                match pattern.terms().at(column).expect("checked pattern arity") {
+            self.probe_columns(
+                rows,
+                pattern,
+                outer_bytes,
+                work,
+                key,
+                |column| match pattern.terms().at(column).expect("checked pattern arity") {
                     TemplateTerm::Constant(value) => Ok(Some(value)),
                     TemplateTerm::Variable(variable) => {
                         if variable >= values.len() {
@@ -943,8 +994,8 @@ impl<'source> Relations<'source> {
                         }
                         Ok(values.get(variable))
                     }
-                }
-            })?;
+                },
+            )?;
         #[cfg(test)]
         if let Some(rows) = rows {
             super::postings::observe(rows, pattern, values, selected);
@@ -962,7 +1013,7 @@ impl<'source> Relations<'source> {
         outer_bytes: usize,
         work: GroundingWork<'_>,
     ) -> Result<Option<&'rows [usize]>, FormulaFailure> {
-        self.probe_columns(rows, pattern, outer_bytes, work, |column| {
+        self.probe_columns(rows, pattern, outer_bytes, work, None, |column| {
             Ok(arguments.get(column))
         })
     }
@@ -1038,6 +1089,7 @@ impl<'source> Relations<'source> {
         pattern: PatternRef<'_>,
         outer_bytes: usize,
         work: GroundingWork<'_>,
+        mut key: Option<&mut KeyIdentifiers>,
         mut value_at: impl FnMut(usize) -> Result<Option<TermRef<'value>>, FormulaFailure>,
     ) -> Result<Option<&'rows [usize]>, FormulaFailure> {
         let GroundingWork {
@@ -1062,6 +1114,7 @@ impl<'source> Relations<'source> {
         for column in 0..pattern.predicate().arity() {
             counters.work(limits, location)?;
             let value = value_at(column)?;
+            let mut identifier = None;
             if let Some(value) = value {
                 let equality = Self::column_equality(
                     rows,
@@ -1070,6 +1123,7 @@ impl<'source> Relations<'source> {
                     &memory,
                     GroundingWork::new(limits, counters, location),
                 )?;
+                identifier = equality.map(zetesis_core::relation::Equality::value_id);
                 if let Some(equality) = equality {
                     match rows.postings(equality.column()) {
                         Postings::Indexed(postings) => {
@@ -1097,6 +1151,9 @@ impl<'source> Relations<'source> {
                 } else {
                     possible = false;
                 }
+            }
+            if let (Some(key), Some(identifier)) = (key.as_deref_mut(), identifier) {
+                key.record(column, identifier);
             }
         }
         if !possible {

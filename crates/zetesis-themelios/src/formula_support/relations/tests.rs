@@ -946,3 +946,93 @@ fn publication_sessions_preserve_scalar_postings() {
         );
     }
 }
+
+/// The identifiers a probe of `row/2` records as a complete key, if any.
+fn recorded_key(support: &Relations<'_>, values: [Option<i32>; 2]) -> Option<Vec<u32>> {
+    let pattern = AtomPattern::new(
+        Predicate::new("row", 2).unwrap(),
+        vec![Term::Variable(0), Term::Variable(1)],
+    )
+    .unwrap();
+    let limits = FormulaLimits::default();
+    let mut counters = Counters::default();
+    let rows = support
+        .find_with(
+            pattern.predicate().into(),
+            &limits,
+            &mut counters,
+            location(),
+        )
+        .unwrap();
+    let values = values.map(|value| value.map(Value::Number));
+    let mut key = KeyIdentifiers::new();
+    support
+        .probe_at(
+            rows,
+            (&pattern).into(),
+            values.as_slice().into(),
+            0,
+            GroundingWork::new(&limits, &mut counters, location()),
+            Some(&mut key),
+        )
+        .unwrap();
+    key.complete(2).map(<[u32]>::to_vec)
+}
+
+/// Three rows of `row/2` in which each column holds two values.
+const KEYED_ROWS: [[i32; 2]; 3] = [[1, 2], [3, 2], [1, 4]];
+
+fn keyed_snapshot(run: impl FnOnce(&Relations<'_>)) {
+    let mut catalog = SupportCatalog::default();
+    for row in KEYED_ROWS {
+        insert(&mut catalog, &atom(&row));
+    }
+    let support = catalog
+        .snapshot(
+            &FormulaLimits::default(),
+            &mut Counters::default(),
+            location(),
+        )
+        .unwrap();
+    run(&support);
+}
+
+#[test]
+fn a_bound_probe_records_each_columns_stored_identifier() {
+    keyed_snapshot(|support| {
+        let rows = &support.rows[0];
+        // Every key over the held values, present as a row or not.
+        for first in [1, 3] {
+            for second in [2, 4] {
+                let key = recorded_key(support, [Some(first), Some(second)]).unwrap();
+                for (column, value) in [first, second].into_iter().enumerate() {
+                    let holder = KEYED_ROWS
+                        .iter()
+                        .position(|row| row[column] == value)
+                        .unwrap();
+                    assert_eq!(
+                        rows.relation.column(column).unwrap().get(holder),
+                        Some(key[column]),
+                        "({first}, {second}) column {column}"
+                    );
+                }
+            }
+        }
+    });
+}
+
+#[test]
+fn an_unbound_column_leaves_no_complete_key() {
+    keyed_snapshot(|support| {
+        assert_eq!(recorded_key(support, [Some(1), None]), None);
+        assert_eq!(recorded_key(support, [None, Some(2)]), None);
+    });
+}
+
+#[test]
+fn a_value_no_row_holds_leaves_no_complete_key() {
+    keyed_snapshot(|support| {
+        assert_eq!(recorded_key(support, [Some(1), Some(9)]), None);
+        assert_eq!(recorded_key(support, [Some(9), Some(2)]), None);
+    });
+}

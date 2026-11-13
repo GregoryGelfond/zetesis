@@ -28,6 +28,12 @@ Notable changes by release. Versions follow Semantic Versioning.
   ties.
 - Frozen-reduct preparation reuses completed probe results within the same query
   and skips preparation for decided roots and ranking for unused splits.
+- Grounding selects the row of a completely bound flat pattern among a short
+  posting's candidates by comparing the equality identifiers its probe already
+  resolved, instead of the ordered point lookup by term comparison. Longer
+  postings keep that lookup; both select the same row
+  (`ColumnRelations.accepts_exact`). Reported grounding work counts the
+  comparisons performed, so it changes where this selection applies.
 - Frozen-reduct preparation bounds pairwise constraints in both polarities. Pairs
   no countermodel cuts together grow into cliques with a lower count bound, as
   pairs none holds together already grow into cliques with an upper one
