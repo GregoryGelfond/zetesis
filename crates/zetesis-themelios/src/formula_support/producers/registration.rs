@@ -19,6 +19,7 @@
 //! heads' is instead traversed once, when those components reach their fixed
 //! point ([`components`]).
 
+mod certain;
 mod components;
 #[cfg(test)]
 mod tests;
@@ -36,6 +37,7 @@ use super::super::relations::Memory;
 use super::super::{Counters, Support};
 use super::invalid;
 use crate::formula_ir::{HeadIr, LiteralIr, RuleIr};
+use crate::formula_support::components::Pattern;
 use crate::grounding_observer::Event;
 use crate::{FormulaFailure, FormulaLimits, ProgramSite};
 use themelios_program::program::DefaultNegation;
@@ -89,50 +91,51 @@ impl<'source> Registration<'source> {
         let mut distinct: Vec<(PredicateRef<'_>, Occurrence)> = Vec::new();
         for rule in rules {
             counters.work(limits, rule.location)?;
-            let producer = match classify(rule, limits, counters)? {
-                Kind::Constraint => Producer::Constraint,
-                Kind::Certified(count) => {
-                    let start = inputs.len();
-                    memory.reserve(&mut inputs, count)?;
-                    inputs.extend(rule.body.iter().enumerate().filter_map(
-                        |(occurrence, literal)| positive(literal).then_some(occurrence),
-                    ));
-                    Producer::Certified(start..inputs.len())
-                }
-                Kind::Rich => {
-                    found.clear();
-                    let mut walk = Walk {
-                        found: &mut found,
-                        memory: &mut memory,
-                        limits,
-                        counters,
-                        location: rule.location,
-                    };
-                    occurrences::rule(rule, &mut walk)?;
-                    let start = reads.len();
-                    if let Some(view) = view {
-                        distinct.clear();
-                        memory.reserve(&mut distinct, found.len())?;
-                        for &occurrence in &found {
-                            insert(
-                                &mut distinct,
-                                occurrence,
-                                view,
-                                limits,
-                                counters,
-                                rule.location,
-                            )?;
-                        }
-                        memory.reserve(&mut reads, distinct.len())?;
-                        reads.extend(distinct.iter().map(|&(_, occurrence)| occurrence));
-                    } else {
-                        // No component view: keep every coordinate, a superset.
-                        memory.reserve(&mut reads, found.len())?;
-                        reads.extend_from_slice(&found);
+            let producer =
+                match classify(rule, limits, counters)? {
+                    Kind::Constraint => Producer::Constraint,
+                    Kind::Certified(count) => {
+                        let start = inputs.len();
+                        memory.reserve(&mut inputs, count)?;
+                        inputs.extend(rule.body.iter().enumerate().filter_map(
+                            |(occurrence, literal)| positive(literal).map(|_| occurrence),
+                        ));
+                        Producer::Certified(start..inputs.len())
                     }
-                    Producer::Rich(start..reads.len())
-                }
-            };
+                    Kind::Rich => {
+                        found.clear();
+                        let mut walk = Walk {
+                            found: &mut found,
+                            memory: &mut memory,
+                            limits,
+                            counters,
+                            location: rule.location,
+                        };
+                        occurrences::rule(rule, &mut walk)?;
+                        let start = reads.len();
+                        if let Some(view) = view {
+                            distinct.clear();
+                            memory.reserve(&mut distinct, found.len())?;
+                            for &occurrence in &found {
+                                insert(
+                                    &mut distinct,
+                                    occurrence,
+                                    view,
+                                    limits,
+                                    counters,
+                                    rule.location,
+                                )?;
+                            }
+                            memory.reserve(&mut reads, distinct.len())?;
+                            reads.extend(distinct.iter().map(|&(_, occurrence)| occurrence));
+                        } else {
+                            // No component view: keep every coordinate, a superset.
+                            memory.reserve(&mut reads, found.len())?;
+                            reads.extend_from_slice(&found);
+                        }
+                        Producer::Rich(start..reads.len())
+                    }
+                };
             producers.push(producer);
         }
         let scratch_bytes = found.capacity() * size_of::<Occurrence>()
@@ -331,12 +334,14 @@ fn classify(
     Ok(Kind::Certified(inputs))
 }
 
-/// A positive flat or structural body occurrence: an input of a certified rule.
-fn positive(literal: &LiteralIr) -> bool {
-    matches!(
-        literal,
-        LiteralIr::Atom(DefaultNegation::None, _) | LiteralIr::PatternAtom(_)
-    )
+/// The pattern of a positive flat or structural body occurrence: an input of
+/// a certified rule, and what a definite rule reads.
+fn positive(literal: &LiteralIr) -> Option<Pattern> {
+    match literal {
+        LiteralIr::Atom(DefaultNegation::None, atom) => Some(*atom),
+        LiteralIr::PatternAtom(pattern) => Some(pattern.atom),
+        _ => None,
+    }
 }
 
 /// Collects a rich rule's occurrences, charging one unit per literal visited.

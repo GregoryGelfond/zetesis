@@ -28,9 +28,10 @@ aggregate assignment publishes possible heads from its carrier,
 `{measure(S) | R ⊆ S ⊆ P}`, where `P` holds the tuples the completed support
 makes possible and `R` the required ones: a tuple is required when one of its
 elements' conditions consists only of comparisons, intervals and
-`#true`/`#false`, with no atom of either sign. This `R` under-approximates the
+`#true`/`#false`, with no atom of either sign, or of those and positive atoms of
+[certain predicates](#certain-predicates). This `R` under-approximates the
 tuples every interpretation contains: in `#count{1 : p; 1 : not p}` the tuple
-`1` is in every interpretation, but neither condition is atom-free, so it is not
+`1` is in every interpretation, but neither condition qualifies, so it is not
 required. Source validation checks the families that read those heads over the
 carrier's values; that is the definition of the proposal family (see the
 language reference's
@@ -133,14 +134,96 @@ remain an exact typed shared key. Two fresh one-lane traversals first establish
 which keys have distinct partners, then construct conditions only for those
 keys. Witnesses combine with Any within a lane; different typed lanes remain
 separate unit occurrences even if their condition formulas coincide. The
-common guard stays outside the at-most-one count and is never inferred true
-from support. This route preserves semantic atom identity and source provenance
+common guard stays outside the at-most-one count. Like any body it reads an
+explicit fact or an atom of a [certain predicate](#certain-predicates) as true,
+and nothing else from support. This route preserves semantic atom identity and source provenance
 while permitting different internal indices and search order. Its actual
 one-lane work, substitutions and live storage use the existing allowances.
 The [grouped source contract](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/docs/grouped-exclusions.md)
 states the exact grammar, failure and ordering boundaries; the
 [grouped witness laws](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/GroupedWitnessExclusion.lean)
 separate the mathematical equality from Rust correspondence obligations.
+
+### Certain predicates
+
+The substitution of explicit facts at the head of this section applies also to
+atoms the program derives from its facts alone. A rule is *definite* when it
+has one ordinary head atom and its body holds only positive atoms, comparisons,
+argument checks, guards, binders, intervals and the exact assignments defined
+below. A predicate is *certain* when every rule that can derive one of its
+atoms is definite and reads only certain predicates; a predicate only facts
+define is certain. A default negation, a projection, a conditional literal, any
+other aggregate, a head guard or any disjunctive, conditional or choice head
+removes the predicates the rule derives, and a predicate that reads a removed
+one is removed with it.
+
+The rules of the certain predicates are a definite program, and completed
+support derives a head from exactly the rows their positive atoms and
+comparisons admit. The supported atoms of a certain predicate are therefore
+that program's least model: each has a derivation from facts. The roots of those
+rules stay in the theory, so each such atom is forced into every original and
+reduct model, as a fact is, and a positive occurrence of it in a body becomes
+true
+([`CertainAtoms.derived_stable`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/CertainAtoms.lean)).
+In `c(1..3). d(X) :- c(X). {p}. q :- d(1), p.` the last rule is emitted as
+`q :- p`. The condition of a choice element or of a conditional disjunct is a
+body and is read the same way. Negative occurrences, heads and objective
+queries are emitted as written.
+
+An aggregate assignment reads certainty through its elements. A tuple that an
+element yields from certain atoms and comparisons alone is in every
+interpretation, so it is required. That is true of the completed support only:
+a relation that still grows would give too few required tuples. The requirement
+is therefore read only where the relations are complete: by a rule whose
+predicates all lie in dependency components before its heads', which support
+completion [traverses once](#completed-possible-support), after those
+components reached their fixed point, and by a constraint, which is grounded
+after completion. `c(1..3). n(N) :- N = #count{X : c(X)}.` supports `n(3)`
+alone, where a count over an uncertain condition supports each of `n(0)` to
+`n(3)`. An assignment is *exact* when every element of it is required in this
+way. Its one value is then the aggregate's value in every interpretation, the
+rule supports exactly the heads that hold, and its head predicate is certain as
+well: a rank `r(C,R) :- c(C), R = #count{D : c(D), D <= C}` over `n` facts
+supports `n` atoms and feeds certain predicates in turn. An objective's
+assignment is not read this way and substitutes every value its tuples allow.
+
+Certainty changes which atoms an assignment supports, and so which atoms and
+objective priorities a theory names. It changes the answer sets of no admitted
+program. A positive flat source has only certain predicates.
+
+It does decide which programs are admitted, because arithmetic is evaluated
+at the values an assignment can still take and no other (the
+[language reference](../reference/language.md) states the rule).
+`c(1..3). p(Y) :- N = #count{X : c(X)}, Y = 6/(N-3).` has the one instance
+`N = 3`, which divides by zero, so its family is entirely undefined and the
+program is refused; over an uncertain condition the counts 0 to 2 are defined
+and admit it with a warning. `Y = 2000000000 * (4 - N)` in its place is
+admitted with `p(2000000000)`; over an uncertain condition it overflows at the
+count 0 and is refused.
+
+The same follows wherever those values are read. The assignment's head has
+only the atoms its values support, so a rule, a constraint, a choice body, an
+aggregate element or a weak constraint that reads the head, directly or
+through other rules, has only those instances: after
+`n(N) :- N = #count{X : c(X)}.` the rule `z(Y) :- n(N), Y = 6/(N-3).` is
+refused too. An assignment need not be exact for this: when some of its tuples
+are required and others are not, it takes fewer values than it did, and a
+family undefined at each of them is refused.
+
+The substitution rests on the roots that derive each atom, so emission checks
+them on the theory it built rather than taking them from the analysis. Every
+instance that derives an atom of a certain predicate has one ordinary head and
+a body read as true, so each of its producers is an unconditional ordinary
+root; an explicit fact has at least its own. Once no further body will be read,
+emission requires exactly that of every atom it read as true, and publishes
+nothing otherwise. A choice, a disjunct, a negation or an atom left as written
+in any producer of a wrongly certain atom fails the check. It does not examine
+why an exact assignment was emitted as its one value, which rests on the
+listing of its required elements, nor a predicate no body reads. A constraint
+that a hybrid schedule grounds into the core once every producer is emitted
+reads certain atoms as any body does and is covered by the check. A constraint
+that stays streamed is checked against the source as written and reads no
+certain predicate.
 
 ## Shared aggregate guards
 
@@ -1332,7 +1415,9 @@ Formula grounding grows possible support by complete rounds. Each round uses an
 immutable snapshot, exhausts the admitted positive joins and binding proposals,
 and collects new positive head atoms. Aggregate and conditional truth remains in
 the emitted formulas; it does not prune possible producers. A proposed aggregate
-assignment value retains its original equality.
+assignment value retains its original equality, unless the assignment is
+[exact](#certain-predicates): it then proposes the one value it has, and that
+equality is emitted as true.
 
 An ordinary nonempty head with a checked aggregate binding plan can reuse a
 completed support continuation when the next positive binding agrees on every
@@ -1612,7 +1697,9 @@ source-to-reduct correspondence.
 Before formula emission, the builder records explicit ground facts in an
 owner-checked source selection. Every fact retains its original root, atom and
 provenance. Positive body occurrences are still named and validated, then those
-of recorded facts become true; merely possible support rows do not. The same
+of recorded facts and of supported atoms of
+[certain predicates](#certain-predicates) become true; other possible support
+rows do not. The same
 replacement applies inside shared positive producer groups. Negative occurrences,
 heads and objective queries keep their existing representation. Retained facts
 force their atoms into every original model and every tested reduct model, which
@@ -1623,8 +1710,10 @@ This preparation repeats fact identity reads without copying canonical atom
 payload or assigning formula IDs. It collects R fact occurrences, sorts their
 source IDs with O(R log R) metered work and deduplicates before publishing F
 distinct identities. Temporary and retained capacity is O(R). Each emitted atom
-needs at most one O(log(F + 1)) membership lookup, cached in its existing
-construction metadata; shared group nodes never repeat those lookups. Work and
+needs at most one O(log(F + 1)) membership lookup and, when it is no recorded
+fact, one lookup of its predicate among the P certain ones, O(log(P + 1))
+signature comparisons; both are cached in its existing
+construction metadata, and shared group nodes never repeat those lookups. Work and
 retained selection storage are charged to the existing grounding limits. Collection happens during formula initialization,
 so its located resource or allocation refusal can precede a later ordinary
 formula-emission refusal. Semantic fact admission already completed in support.

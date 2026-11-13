@@ -189,7 +189,8 @@ fn family_population<'source>(
 
 #[test]
 fn aggregate_families_do_not_cross_support_snapshots() {
-    let mut preparation = testing::prepare("p(1). n(N) :- N=#count{X:p(X)}.");
+    // A chosen atom: a fact's would be certain, and its tuple required.
+    let mut preparation = testing::prepare("{p(1)}. n(N) :- N=#count{X:p(X)}.");
     let aggregate = preparation
         .program
         .rules_without_facts()

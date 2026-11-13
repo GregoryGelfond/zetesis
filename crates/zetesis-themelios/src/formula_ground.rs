@@ -36,6 +36,7 @@ mod constants;
 mod fact_declines;
 
 use crate::formula_support::Ir;
+use crate::formula_support::certain::Certainty;
 use crate::formula_support::family::Warnings;
 use crate::formula_support::{Context, GroundingWork};
 
@@ -574,6 +575,7 @@ fn emit<'source>(
         builder.initialize(location)?;
         builder.families.enable(queries, location)?;
         builder.collect_fixed_facts(prepared.items())?;
+        builder.certainty = support.certainty();
         Ok::<_, FormulaFailure>(builder)
     })?;
     let mut streaming =
@@ -752,6 +754,9 @@ pub(super) struct Builder<'a, 'terms, 'source> {
     families: Rc<families::Workspace<'terms, 'source>>,
     aggregate_atoms: formula_support::SourceSelection,
     fixed_facts: Option<formula_support::SourceSelection>,
+    /// The certain predicates of the completed support, whose supported atoms
+    /// are fixed as the explicit facts are. Only the theory's builder reads it.
+    certainty: Option<&'source Certainty>,
     metadata: metadata::Metadata,
     nodes: FormulaNodes,
     node_indices: nodes::Index,
@@ -876,7 +881,7 @@ impl<'source> Builder<'_, '_, 'source> {
             let atom = self.atom_identity(&atom, location)?;
             let formula = self.node(Node::Implies(VERUM, atom), location)?;
             self.root_at(formula, Cow::Borrowed(row.evidence()), location)?;
-            self.producer_at(atom, VERUM, row.evidence(), location)?;
+            self.ordinary_producer_at(atom, VERUM, row.evidence(), location)?;
         }
         Ok(())
     }
@@ -1288,6 +1293,7 @@ impl<'source> Builder<'_, '_, 'source> {
             families,
             aggregate_atoms,
             fixed_facts: None,
+            certainty: None,
             metadata: metadata::Metadata::default(),
             nodes: FormulaNodes::default(),
             node_indices: nodes::Index::default(),
@@ -1354,9 +1360,11 @@ impl<'source> Builder<'_, '_, 'source> {
     /// Moving the emitted vectors preserves IDs, root order and source origins;
     /// cumulative budgets are never released with the discarded scratch.
     fn seal(
-        self,
+        mut self,
         location: ProgramSite,
     ) -> Result<Emission<formula_support::SourceSelection>, FormulaFailure> {
+        // Retained constraints read bodies too, so no body is read after this.
+        self.fixed_atoms_are_derived()?;
         // Preserve the sole owner's topology evidence. This consuming attempt
         // fixes the remaining scans before charging them; raw input still takes
         // the full route. Final atom bounds and roots are never inferred here.
@@ -1946,7 +1954,7 @@ impl<'source> Builder<'_, '_, 'source> {
         let formula = self.node(Node::Implies(body, head), rule.location)?;
         self.root(formula, rule)?;
         if head != FALSUM {
-            self.producer(head, body, rule)?;
+            self.ordinary_producer(head, body, rule)?;
         }
         Ok(())
     }
@@ -2120,21 +2128,54 @@ impl<'source> Builder<'_, '_, 'source> {
         rule: &RuleIr,
     ) -> Result<(), FormulaFailure> {
         self.producer_at(head, antecedent, &rule.origins, rule.location)
+            .map(|_| ())
     }
-    fn producer_at(
+
+    /// Record the producer of an ordinary root just published: one head atom
+    /// under `antecedent`. A true antecedent makes the root unconditional,
+    /// and it is counted with the roots that derive the atom
+    /// ([`Self::fixed_atoms_are_derived`]). A choice's or a disjunct's
+    /// permission is recorded through [`Self::producer`] and never counted.
+    pub(crate) fn ordinary_producer(
+        &mut self,
+        head: usize,
+        antecedent: usize,
+        rule: &RuleIr,
+    ) -> Result<(), FormulaFailure> {
+        self.ordinary_producer_at(head, antecedent, &rule.origins, rule.location)
+    }
+
+    fn ordinary_producer_at(
         &mut self,
         head: usize,
         antecedent: usize,
         origins: &[ProgramSite],
         location: ProgramSite,
     ) -> Result<(), FormulaFailure> {
+        let atom = self.producer_at(head, antecedent, origins, location)?;
+        if antecedent == VERUM {
+            self.metadata.record_root(atom);
+        }
+        Ok(())
+    }
+
+    /// Record a producer of `head` and its origins, and return the head's
+    /// atom.
+    fn producer_at(
+        &mut self,
+        head: usize,
+        antecedent: usize,
+        origins: &[ProgramSite],
+        location: ProgramSite,
+    ) -> Result<usize, FormulaFailure> {
         self.work(location)?;
         let Node::Atom(atom) = self.nodes.view().node(head).expect("owned node") else {
             unreachable!("head is an atom");
         };
         self.metadata
             .producer(atom, antecedent, self.counters, self.limits, location)?;
-        self.record_origins(atom, origins)
+        self.record_origins(atom, origins)?;
+        Ok(atom)
     }
     fn head_origins(&mut self, head: usize, rule: &RuleIr) -> Result<(), FormulaFailure> {
         let Node::Atom(atom) = self.nodes.view().node(head).expect("owned node") else {
@@ -2964,6 +3005,24 @@ impl<'source> Builder<'_, '_, 'source> {
             self.counters,
             location,
         )?;
+        // Every tuple is required: each is in every interpretation, so the one
+        // value the carrier holds is the aggregate's value in all of them and
+        // its equality is true. No element can change it, and no family is
+        // built to test one.
+        self.counters
+            .charge_work(1 + required.len() as u128, self.limits, location)?;
+        if values.len() == 1 && required.iter().all(|&required| required) {
+            let key = values.key(0, location)?;
+            let value = self.term(&key, location)?;
+            roots.insert(
+                value,
+                VERUM,
+                None,
+                Context::new(&*self.computation, self.limits, self.counters, location),
+            )?;
+            self.work(location)?;
+            return Ok(Arc::new(roots));
+        }
         match elements {
             AssignmentElements::Extrema(function, elements) => {
                 self.extremum_assignment_roots(elements, function, values, &mut roots, location)?;
@@ -3138,10 +3197,13 @@ impl<'source> Builder<'_, '_, 'source> {
                 )
             })
             .transpose()?;
-        for element in aggregate
+        let certainty = support.certainty();
+        for (position, element) in aggregate
             .map(|aggregate| aggregate.elements.as_slice())
             .iter()
+            .enumerate()
         {
+            let element_required = Certainty::requires(certainty, aggregate.id, position, &element);
             let mut local = Join::local(
                 element.map(|element| element.condition.as_slice()),
                 assignment,
@@ -3192,7 +3254,7 @@ impl<'source> Builder<'_, '_, 'source> {
                     )),
                     Context::new(&*self.computation, self.limits, self.counters, location),
                 )?;
-                if let Some(required) = required.as_mut().filter(|_| element.required) {
+                if let Some(required) = required.as_mut().filter(|_| element_required) {
                     required.insert(
                         key,
                         (),

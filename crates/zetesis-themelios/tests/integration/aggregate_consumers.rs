@@ -1,11 +1,11 @@
 //! Finite substitutions keep each aggregate equality; proposals are not truth.
 use crate::support::admission;
 use crate::support::finite_bindings as reference;
-use reference::{Models, exhaustive, holds, native, values};
+use reference::{Models, exhaustive, native};
 use std::collections::BTreeSet;
 use std::fmt::Write as _;
 use themelios_base::source::SourceId;
-use zetesis_reference_support::{canonical, resource_limits};
+use zetesis_reference_support::resource_limits;
 use zetesis_test_support::thresholds::first_success;
 use zetesis_themelios::{
     AdmissionOptions, AdmittedFormula, ExpansionFailure, ExpansionLimits, ExpansionResource,
@@ -224,48 +224,7 @@ fn stability_matches_subset_enumeration() {
 
 #[test]
 fn frozen_truth_matches_finite_substitutions() {
-    let mut pairs = 0;
-    for &(source, expanded) in CASES {
-        let left = input(source);
-        let right = input(expanded);
-        let names: Vec<_> = left.atoms().iter().map(canonical).collect();
-        let other: Vec<_> = right.atoms().iter().map(canonical).collect();
-        assert_eq!(
-            names.iter().collect::<BTreeSet<_>>(),
-            other.iter().collect(),
-            "{source}"
-        );
-        assert!(names.len() <= 7);
-        let remap = |mask: usize| {
-            names.iter().enumerate().fold(0, |result, (index, name)| {
-                result
-                    | (usize::from(mask & (1 << index) != 0)
-                        << other.iter().position(|other| other == name).unwrap())
-            })
-        };
-        for outer in 0..1 << names.len() {
-            let a = values(left.theory(), outer, None);
-            let b = values(right.theory(), remap(outer), None);
-            assert_eq!(
-                holds(left.theory(), &a),
-                holds(right.theory(), &b),
-                "{source}"
-            );
-            // All M/J pairs cover the required subset pairs and other contexts.
-            for inner in 0..1 << names.len() {
-                assert_eq!(
-                    holds(left.theory(), &values(left.theory(), inner, Some(&a))),
-                    holds(
-                        right.theory(),
-                        &values(right.theory(), remap(inner), Some(&b))
-                    ),
-                    "{source}: M={outer} J={inner}"
-                );
-                pairs += 1;
-            }
-        }
-    }
-    println!("source_pairs={} frozen_pairs={pairs}", CASES.len());
+    reference::frozen_truth_matches(CASES.iter().copied(), input);
 }
 
 #[test]

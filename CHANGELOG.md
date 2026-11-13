@@ -34,6 +34,43 @@ Notable changes by release. Versions follow Semantic Versioning.
   postings keep that lookup; both select the same row
   (`ColumnRelations.accepts_exact`). Reported grounding work counts the
   comparisons performed, so it changes where this selection applies.
+- Grounding reads the atoms a program derives from its facts alone as true.
+  A predicate is certain when every rule deriving it has one ordinary head over
+  positive atoms of certain predicates and comparisons; its supported atoms
+  hold in every answer set, so a positive occurrence in a body, or in the
+  condition of a choice element or conditional disjunct, is emitted as true,
+  as an explicit fact's already was (`CertainAtoms.derived_stable`). An
+  aggregate assignment over such atoms, in a constraint or in a rule whose
+  predicates all precede its head in dependency order, takes one value and
+  supports that value alone instead of every value from none to all: a rank
+  `r(C,R) :- c(C), R = #count{D : c(D), D <= C}` over `n` facts supports `n`
+  atoms where it supported about `n * n / 2`. An objective's assignment still
+  substitutes every value. No admitted program's answer sets change. See
+  [certain predicates](docs/book/architecture/grounding.md#certain-predicates).
+  Observable effects other than time:
+  - Admission changes in both directions, because arithmetic is evaluated
+    only at the values such an assignment can still take: one when every
+    tuple is required, fewer than before when some are. That holds for the
+    assignment's own rule and for whatever reads its head, directly or
+    through other rules: a rule, a constraint, a choice body, an aggregate
+    element or a weak constraint. A family that is undefined at each of those
+    values is refused as entirely undefined, where a value that could not
+    occur had admitted it with a warning; clingo omits the instance with an
+    informational message and answers. So
+    `c(1..3). n(N) :- N = #count{D : c(D)}. z(X) :- n(N), X = 6/(N-3).` is
+    refused, as is `X = 60/((N-3)*(N-4)*(N-5))` over a count that can be 3, 4
+    or 5. A family that overflowed only at values that could not occur is
+    admitted.
+  - A warning that only an unrealized value raised is no longer given.
+  - The atoms and nodes a theory reports change, as do the objective
+    priorities it retains: a priority only an unrealized value would open is
+    no longer reported with cost zero.
+  - Reported grounding work changes by the analysis, one predicate lookup for
+    each atom a body names that is no explicit fact, one unit for each atom
+    in the check below, and one unit for each tuple of an assignment family.
+  - Before a theory is published, emission checks that every atom it read as
+    true is derived by unconditional ordinary roots, and refuses with the
+    source-activity failure otherwise.
 - Candidate narrowing no longer counts a producer as support when its body
   requires its own head, or an atom that only that head can derive, as in the
   alias pair `a :- b.` `b :- a.` with one other rule for `a`

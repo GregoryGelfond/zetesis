@@ -2181,6 +2181,106 @@
       "name": "Zetesis.CarrierCoordinates.shared_vocabulary_does_not_identify_atoms"
     },
     {
+      "file": "Zetesis/CertainAtoms.lean",
+      "line": 49,
+      "name": "Zetesis.CertainAtoms.satisfies_top"
+    },
+    {
+      "file": "Zetesis/CertainAtoms.lean",
+      "line": 53,
+      "name": "Zetesis.CertainAtoms.reduct_top"
+    },
+    {
+      "file": "Zetesis/CertainAtoms.lean",
+      "line": 60,
+      "name": "Zetesis.CertainAtoms.reduct_conj"
+    },
+    {
+      "file": "Zetesis/CertainAtoms.lean",
+      "line": 66,
+      "name": "Zetesis.CertainAtoms.reduct_disj"
+    },
+    {
+      "file": "Zetesis/CertainAtoms.lean",
+      "line": 72,
+      "name": "Zetesis.CertainAtoms.reduct_imp"
+    },
+    {
+      "file": "Zetesis/CertainAtoms.lean",
+      "line": 78,
+      "name": "Zetesis.CertainAtoms.reduct_atom"
+    },
+    {
+      "file": "Zetesis/CertainAtoms.lean",
+      "line": 84,
+      "name": "Zetesis.CertainAtoms.reduct_unsatisfied"
+    },
+    {
+      "file": "Zetesis/CertainAtoms.lean",
+      "line": 119,
+      "name": "Zetesis.CertainAtoms.fixed_satisfies"
+    },
+    {
+      "file": "Zetesis/CertainAtoms.lean",
+      "line": 136,
+      "name": "Zetesis.CertainAtoms.fixed_reduct"
+    },
+    {
+      "file": "Zetesis/CertainAtoms.lean",
+      "line": 176,
+      "name": "Zetesis.CertainAtoms.top_conj"
+    },
+    {
+      "file": "Zetesis/CertainAtoms.lean",
+      "line": 189,
+      "name": "Zetesis.CertainAtoms.top_disj"
+    },
+    {
+      "file": "Zetesis/CertainAtoms.lean",
+      "line": 203,
+      "name": "Zetesis.CertainAtoms.models_cons"
+    },
+    {
+      "file": "Zetesis/CertainAtoms.lean",
+      "line": 215,
+      "name": "Zetesis.CertainAtoms.fixedTheory_models"
+    },
+    {
+      "file": "Zetesis/CertainAtoms.lean",
+      "line": 224,
+      "name": "Zetesis.CertainAtoms.fixedTheory_reduct"
+    },
+    {
+      "file": "Zetesis/CertainAtoms.lean",
+      "line": 240,
+      "name": "Zetesis.CertainAtoms.forces_model"
+    },
+    {
+      "file": "Zetesis/CertainAtoms.lean",
+      "line": 252,
+      "name": "Zetesis.CertainAtoms.fixed_stable"
+    },
+    {
+      "file": "Zetesis/CertainAtoms.lean",
+      "line": 284,
+      "name": "Zetesis.CertainAtoms.positive_reduct"
+    },
+    {
+      "file": "Zetesis/CertainAtoms.lean",
+      "line": 321,
+      "name": "Zetesis.CertainAtoms.derived_forced"
+    },
+    {
+      "file": "Zetesis/CertainAtoms.lean",
+      "line": 348,
+      "name": "Zetesis.CertainAtoms.derived_kept"
+    },
+    {
+      "file": "Zetesis/CertainAtoms.lean",
+      "line": 365,
+      "name": "Zetesis.CertainAtoms.derived_stable"
+    },
+    {
       "file": "Zetesis/CertifiedExecution.lean",
       "line": 42,
       "name": "Zetesis.CertifiedExecution.ranked_support_verdict_sound"
@@ -11428,6 +11528,7 @@
     "Zetesis/CanonicalCatalog.lean",
     "Zetesis/CanonicalTemplates.lean",
     "Zetesis/CarrierCoordinates.lean",
+    "Zetesis/CertainAtoms.lean",
     "Zetesis/CertifiedExecution.lean",
     "Zetesis/ChargeCadence.lean",
     "Zetesis/CheckedSignedReplay.lean",
@@ -11619,8 +11720,8 @@
     "Zetesis/WorldViews.lean"
   ],
   "source_sha256": {
-    "Audit.lean": "a321b20e23829e60ab3b8a60859c1257217b1aa6794975c26839c9730ff1c219",
-    "Zetesis.lean": "ad7bfd2e2068d861983e1e7fba7d79cf650f23c2c2f350a607302516a354e9ad",
+    "Audit.lean": "2287c24ba74d824041b42d272c26b87cd40dc3ad4fd0465e2cd67d24e55ed1ef",
+    "Zetesis.lean": "1713f09ed28b6885e8eb20ecbaf2463a35f956f529366118d6021bc366df5b82",
     "Zetesis/AcyclicEvaluation.lean": "1a9c77283876cf1f61cb92031da04780aada5d0b256f79db5b64bfb6b129d0dc",
     "Zetesis/AdjacencyRows.lean": "38a19b1c74483a157636321a56e95fea660a2192a04c77930d609e411c8d30d4",
     "Zetesis/AggregateAssignment.lean": "def2eac0ae638f3801d35c11a3162afaa3e0b9e393601cf899952e449e309639",
@@ -11652,6 +11753,7 @@
     "Zetesis/CanonicalCatalog.lean": "39c7a2f525f3f71d39e023d3dbcf8646a49d71b8740ebe5bc3184ac1478639cf",
     "Zetesis/CanonicalTemplates.lean": "9758c9b87550c7a528d62ea4aa1452635876de4cb6a53d9c8c6b3e97bbb8de9b",
     "Zetesis/CarrierCoordinates.lean": "f8084e6f7361cceed39895a8974cc2fc54bb13aa896b44dbee1eb4580ce8bced",
+    "Zetesis/CertainAtoms.lean": "22fcff88e73027aee4f329c67cf928c9bd71465bf8c9fa1b9ec6fd991ba7a872",
     "Zetesis/CertifiedExecution.lean": "693ec9dcd4542e70d21cd19b99dd13dc59ac375b9ac945c65ee1632ff7ccc3a0",
     "Zetesis/ChargeCadence.lean": "8713ecc3ad9db2b4fca581908895dde2c70f716c8b14490d8a900e736f7a7bbe",
     "Zetesis/CheckedSignedReplay.lean": "e05a44134513dc245d1ccaee46af8243294aa242e6f280b352c94a574c383262",

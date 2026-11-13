@@ -39,7 +39,7 @@ struct Plan {
 impl Builder<'_, '_, '_> {
     /// The guards read the atom metadata while they add nodes, so it is lent
     /// out for their duration and returned: constraints retained afterwards
-    /// still read its fixed facts.
+    /// still read which atoms it fixed.
     pub(super) fn support_guards(&mut self) -> Result<(), FormulaFailure> {
         let metadata = std::mem::take(&mut self.metadata);
         let guarded = self.guards(&metadata);

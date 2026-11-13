@@ -16,6 +16,7 @@ use crate::ProgramSite;
 use crate::expansion::Budget;
 use crate::formula_binding::Binding;
 use crate::formula_ir::{AggregateIr, AggregateKey};
+use crate::formula_support::certain::Certainty;
 use crate::formula_support::components::Term;
 use crate::formula_support::{
     Buffer, Computation, Context, Counters, GroundingWork, Ir, Join, Support, TermSelection,
@@ -30,8 +31,12 @@ use zetesis_ferraris::AggregateExtremum;
 /// The proposed values of the assignment `aggregate` under the outer
 /// `assignment`, in ascending term order: the carrier of the full tuples its
 /// elements' local joins yield over `support`, each coalesced once. A tuple is
-/// required when an element whose condition the join decides yields it, so no
-/// support changes the required tuples. Final grounding's assignment family is
+/// required when an element yields it whose condition the join decides, which
+/// no support changes, or whose condition holds certain atoms and decided
+/// literals where `support` lists the element (`formula_support::certain`).
+/// An element is listed only where it is read over complete relations, so
+/// later support changes its required tuples no more than the first kind's.
+/// Final grounding's assignment family is
 /// the carrier of the same required tuples over a support that contains this
 /// one, and a carrier only grows with its possible tuples, so the family has a
 /// root for every value proposed here. Charges work and storage as it reduces
@@ -164,12 +169,18 @@ pub(crate) fn collect<'a, 'source: 'a, O: TupleRows<'source>>(
     } = work;
     let mut tuples = TermSelection::new(computation, limits, counters, location)?;
     // The tuples with an occurrence from an element whose condition the local
-    // join decides: present in every interpretation for this binding.
+    // join decides, or whose condition holds certain atoms and decided literals
+    // only over relations that reached their fixed point
+    // (`formula_support::certain`): present in every interpretation for this
+    // binding.
     let mut required_tuples = TermSelection::new(computation, limits, counters, location)?;
-    for element in aggregate
+    let certainty = support.certainty();
+    for (position, element) in aggregate
         .map(|aggregate| aggregate.elements.as_slice())
         .iter()
+        .enumerate()
     {
+        let required = Certainty::requires(certainty, aggregate.id, position, &element);
         let retain = if O::RETAIN {
             counters.work(limits, location)?;
             observer.retaining()
@@ -220,7 +231,7 @@ pub(crate) fn collect<'a, 'source: 'a, O: TupleRows<'source>>(
                 limits.aggregate.max_elements,
                 Context::new(&*computation, limits, counters, location),
             )?;
-            if element.required {
+            if required {
                 required_tuples.insert(
                     &tuple,
                     FormulaResource::AggregateElements,

@@ -73,7 +73,7 @@ fn a_flat_normal_rule_is_certified_with_its_positive_occurrences() {
     let registration = registered(&preparation);
     let rule = &preparation.program.rules_without_facts()[0];
     let positive: Vec<_> = (0..rule.body.len())
-        .filter(|&occurrence| super::positive(&rule.body[occurrence]))
+        .filter(|&occurrence| super::positive(&rule.body[occurrence]).is_some())
         .collect();
     assert_eq!(positive.len(), 2);
     assert_eq!(registration.producers, [Producer::Certified(0..2)]);
@@ -328,14 +328,44 @@ fn equivalent(source: &str) -> u64 {
 /// The support, theory and atoms of `source` agree with the reference that
 /// traverses every rich producer in every round, which skips nothing. Returns
 /// the visits the schedule skipped.
+///
+/// The comparison runs as a solve does, with certainty, unless the source
+/// lists an assignment element. A deferred producer's assignment over certain
+/// atoms then proposes one value where the reference, which defers nothing
+/// and so lists nothing, proposes every value its tuples allow: the supports
+/// differ by design. For such a source both sides run without certainty, the
+/// shipped route is checked to support nothing the reference does not, and
+/// `formula_support::certain` compares the answer sets.
 fn agrees_with_reference(source: &str) -> u64 {
-    let (actual, published, skipped) = ground(source);
-    let (reference, expected, traversed) = testing::with_every_round_traversed(|| ground(source));
+    use crate::formula_support::certain::testing::without_certainty;
     let support = |rounds: Vec<Vec<String>>| {
         let mut atoms: Vec<String> = rounds.into_iter().flatten().collect();
         atoms.sort();
         atoms
     };
+    let every_round = || testing::with_every_round_traversed(|| ground(source));
+    let narrowed = crate::formula_support::testing::certainty(source)
+        .is_some_and(|certainty| !certainty.elements().is_empty());
+    if narrowed {
+        let (_, shipped, _) = ground(source);
+        let (_, reference, _) = every_round();
+        let allowed = support(reference);
+        assert!(
+            support(shipped)
+                .iter()
+                .all(|atom| allowed.binary_search(atom).is_ok()),
+            "certainty supports an atom the reference does not"
+        );
+    }
+    let configured = |run: &dyn Fn() -> (Compiled, Vec<Vec<String>>, u64)| {
+        if narrowed {
+            without_certainty(run)
+        } else {
+            run()
+        }
+    };
+    let (actual, published, skipped) = configured(&|| ground(source));
+    let (reference, expected, traversed) = configured(&every_round);
     assert_eq!(support(published), support(expected));
     let atoms = |compiled: &Compiled| {
         compiled

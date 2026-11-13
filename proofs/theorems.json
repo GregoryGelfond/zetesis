@@ -2180,6 +2180,106 @@
     "line": 150
   },
   {
+    "name": "Zetesis.CertainAtoms.satisfies_top",
+    "file": "Zetesis/CertainAtoms.lean",
+    "line": 49
+  },
+  {
+    "name": "Zetesis.CertainAtoms.reduct_top",
+    "file": "Zetesis/CertainAtoms.lean",
+    "line": 53
+  },
+  {
+    "name": "Zetesis.CertainAtoms.reduct_conj",
+    "file": "Zetesis/CertainAtoms.lean",
+    "line": 60
+  },
+  {
+    "name": "Zetesis.CertainAtoms.reduct_disj",
+    "file": "Zetesis/CertainAtoms.lean",
+    "line": 66
+  },
+  {
+    "name": "Zetesis.CertainAtoms.reduct_imp",
+    "file": "Zetesis/CertainAtoms.lean",
+    "line": 72
+  },
+  {
+    "name": "Zetesis.CertainAtoms.reduct_atom",
+    "file": "Zetesis/CertainAtoms.lean",
+    "line": 78
+  },
+  {
+    "name": "Zetesis.CertainAtoms.reduct_unsatisfied",
+    "file": "Zetesis/CertainAtoms.lean",
+    "line": 84
+  },
+  {
+    "name": "Zetesis.CertainAtoms.fixed_satisfies",
+    "file": "Zetesis/CertainAtoms.lean",
+    "line": 119
+  },
+  {
+    "name": "Zetesis.CertainAtoms.fixed_reduct",
+    "file": "Zetesis/CertainAtoms.lean",
+    "line": 136
+  },
+  {
+    "name": "Zetesis.CertainAtoms.top_conj",
+    "file": "Zetesis/CertainAtoms.lean",
+    "line": 176
+  },
+  {
+    "name": "Zetesis.CertainAtoms.top_disj",
+    "file": "Zetesis/CertainAtoms.lean",
+    "line": 189
+  },
+  {
+    "name": "Zetesis.CertainAtoms.models_cons",
+    "file": "Zetesis/CertainAtoms.lean",
+    "line": 203
+  },
+  {
+    "name": "Zetesis.CertainAtoms.fixedTheory_models",
+    "file": "Zetesis/CertainAtoms.lean",
+    "line": 215
+  },
+  {
+    "name": "Zetesis.CertainAtoms.fixedTheory_reduct",
+    "file": "Zetesis/CertainAtoms.lean",
+    "line": 224
+  },
+  {
+    "name": "Zetesis.CertainAtoms.forces_model",
+    "file": "Zetesis/CertainAtoms.lean",
+    "line": 240
+  },
+  {
+    "name": "Zetesis.CertainAtoms.fixed_stable",
+    "file": "Zetesis/CertainAtoms.lean",
+    "line": 252
+  },
+  {
+    "name": "Zetesis.CertainAtoms.positive_reduct",
+    "file": "Zetesis/CertainAtoms.lean",
+    "line": 284
+  },
+  {
+    "name": "Zetesis.CertainAtoms.derived_forced",
+    "file": "Zetesis/CertainAtoms.lean",
+    "line": 321
+  },
+  {
+    "name": "Zetesis.CertainAtoms.derived_kept",
+    "file": "Zetesis/CertainAtoms.lean",
+    "line": 348
+  },
+  {
+    "name": "Zetesis.CertainAtoms.derived_stable",
+    "file": "Zetesis/CertainAtoms.lean",
+    "line": 365
+  },
+  {
     "name": "Zetesis.CertifiedExecution.ranked_support_verdict_sound",
     "file": "Zetesis/CertifiedExecution.lean",
     "line": 42

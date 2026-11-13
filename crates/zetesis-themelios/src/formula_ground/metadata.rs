@@ -33,9 +33,32 @@ struct Entry<T> {
     next: Link,
 }
 
+/// How a positive body occurrence of an atom is emitted.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) enum Fixing {
+    /// As written.
+    Written,
+    /// As true, because the atom is an explicit fact.
+    Fact,
+    /// As true, because the atom's predicate is certain.
+    Certain,
+}
+
+impl Fixing {
+    /// Whether the occurrence is emitted as true.
+    pub(super) fn fixed(self) -> bool {
+        self != Self::Written
+    }
+}
+
 struct Atom {
     first_origin: NonZeroUsize,
-    fixed_fact: Option<bool>,
+    /// How a positive body occurrence of the atom is emitted; unknown until
+    /// its first such occurrence asks.
+    fixing: Option<Fixing>,
+    /// The ordinary roots that assert the atom under no condition, one for
+    /// each such producer recorded.
+    unconditional_roots: usize,
     producers: Chain,
     origins: Chain,
 }
@@ -67,7 +90,8 @@ impl Metadata {
         let first = append(&mut self.origins, location, None);
         self.atoms.push(Atom {
             first_origin: first,
-            fixed_fact: None,
+            fixing: None,
+            unconditional_roots: 0,
             producers: Chain::default(),
             origins: Chain {
                 first: Some(first),
@@ -78,12 +102,25 @@ impl Metadata {
         Ok(())
     }
 
-    pub(super) fn fixed_fact(&self, atom: usize) -> Option<bool> {
-        self.atoms[atom].fixed_fact
+    /// How `atom`'s positive body occurrences are emitted, once one has asked.
+    pub(super) fn fixing(&self, atom: usize) -> Option<Fixing> {
+        self.atoms[atom].fixing
     }
 
-    pub(super) fn record_fixed_fact(&mut self, atom: usize, fixed: bool) {
-        self.atoms[atom].fixed_fact = Some(fixed);
+    /// Keep the answer for `atom`'s later occurrences.
+    pub(super) fn record_fixing(&mut self, atom: usize, fixing: Fixing) {
+        self.atoms[atom].fixing = Some(fixing);
+    }
+
+    /// The ordinary roots that assert `atom` under no condition.
+    pub(super) fn unconditional_roots(&self, atom: usize) -> usize {
+        self.atoms[atom].unconditional_roots
+    }
+
+    /// An ordinary root with a true antecedent asserts `atom`. The count
+    /// cannot exceed the atom's producers, which are admitted entries.
+    pub(super) fn record_root(&mut self, atom: usize) {
+        self.atoms[atom].unconditional_roots += 1;
     }
 
     pub(super) fn location(&self, atom: usize) -> ProgramSite {

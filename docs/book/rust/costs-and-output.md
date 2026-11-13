@@ -254,6 +254,10 @@ An always-zero slot can differ from clingo's reported vector without changing
 objective ordering. For example, `a.a|b.#minimize{1:b}.` has the sole answer
 `{a}`. zetesis retains priority 0 with cost 0; clingo 5.8.2 reports no cost slot.
 Replacing a fact by an equivalent derivation can change clingo's retained slots.
+zetesis retains a slot for each priority that a value proposed by an aggregate
+assignment opens; an [exact](../architecture/grounding.md#certain-predicates)
+assignment proposes one value, so a slot only other values would open is not
+retained.
 Source activity therefore is not a certificate of an identical clingo display.
 Compare costs at identified priorities, distinguish an absent slot from a retained
 zero in reports, and establish that any extra slot is zero across all answers
