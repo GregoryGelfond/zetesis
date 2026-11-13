@@ -3,6 +3,11 @@
 //! This is forward elimination, not reduced row echelon form. Source fields
 //! describe each row's initial check; trusted addition establishes subsequent
 //! consequences of those checked premises. No region or owner is changed.
+//!
+//! The original theory's one-atom equations arrive as units and are no row
+//! ([`prepare_after_units`]). Each decides its atom, so it is added to every
+//! row over that atom before elimination: afterwards no row names a decided
+//! atom, and the units and the rows are independent parts of one system.
 
 mod runtime;
 pub use runtime::ParityKnowledge;
@@ -17,15 +22,9 @@ use zetesis_algebra::{Stop, words::Words};
 
 use super::{
     budget::{Budget, BudgetError},
-    rows::Equation,
+    rows::{Equation, Unit},
     storage::Storage,
 };
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(super) struct Unit {
-    pub atom: usize,
-    pub value: bool,
-}
 
 #[derive(Debug, Default)]
 pub(super) struct Counts {
@@ -38,6 +37,9 @@ pub(super) struct Counts {
 #[derive(Debug)]
 pub(super) struct Prepared {
     pub basis: Vec<usize>,
+    /// The atoms the system decides: the direct units, one for each atom
+    /// they name and in the order recognized, then the one-atom echelon rows
+    /// in basis order. No two name one atom. Empty when the root is refuted.
     pub units: Vec<Unit>,
     pub index: Option<Index>,
     pub root_refuted: bool,
@@ -45,6 +47,20 @@ pub(super) struct Prepared {
 }
 
 impl Prepared {
+    /// The units that were recognized as one-atom equations and are no row:
+    /// those before the `counts.units` collected from the echelon rows.
+    pub(super) fn direct(&self) -> &[Unit] {
+        let collected = usize::try_from(self.counts.units).expect("units were pushed");
+        &self.units[..self.units.len() - collected]
+    }
+
+    /// The rank of the checked system: its direct units and echelon pivots.
+    /// A refuted root has no unit, so this is the pivots retained before the
+    /// refutation.
+    pub(super) fn rank(&self) -> usize {
+        self.direct().len() + self.basis.len()
+    }
+
     /// The one retained record and actual payload capacities, with embedded
     /// vector/index headers already included in the record layout.
     pub(super) fn retained_bytes(&self) -> u128 {
@@ -129,9 +145,145 @@ pub(super) fn prepare<Q: Quota + ?Sized>(
     storage: &mut Storage,
     budget: &mut Budget<'_, '_, Q>,
 ) -> Result<Prepared, BudgetError<Q::Error>> {
+    eliminate(rows, None, atom_count, storage, budget)
+}
+
+/// Prepare `rows` after the one-atom equations `direct`, which are checked
+/// consequences of the same owner and whose vector `storage` already
+/// accounts.
+///
+/// The units are read in order into two masks of the rows' width: the atoms
+/// decided and, of those, the atoms held. A unit that repeats an earlier one
+/// is dropped; one that contradicts an earlier one refutes the root. Each
+/// row then has the units over its atoms added to it: its decided atoms are
+/// cleared and its constant takes the parity of those held, in one chunk of
+/// `W + 2`. That is the sum of checked equations, so the rows and the kept
+/// units have exactly the answer sets' consequences the rows and units given
+/// had. [`prepare`]'s elimination follows on rows that name no decided atom,
+/// so the units it collects from the echelon are over other atoms than the
+/// direct ones.
+///
+/// A refuted root publishes no unit, and its rank counts no unit either: the
+/// pivots retained before the refutation, and none when two units disagree.
+/// As in [`prepare`], a refutation is published in the chunk that proves it:
+/// the result's record is admitted before the first unit is read, and a
+/// unit's chunk covers the refutation it may prove.
+///
+/// Without a unit this is [`prepare`] after one test, less the units'
+/// header, which its reservation initialized. Otherwise the masks cost
+/// `2 * (3 + 2W)`, reading `u` units `13u` and adding them to `r` rows
+/// `r * (W + 2)`: the work grows with the units and with the rows, and no
+/// longer with the product of the units and the theory's width, as it did
+/// when each unit was a row.
+///
+/// On any error the caller must discard this preparation and `storage`.
+///
+/// # Panics
+/// Panics if a unit names an atom outside `atom_count`.
+pub(super) fn prepare_after_units<Q: Quota + ?Sized>(
+    direct: Vec<Unit>,
+    rows: &mut [Equation],
+    atom_count: usize,
+    storage: &mut Storage,
+    budget: &mut Budget<'_, '_, Q>,
+) -> Result<Prepared, BudgetError<Q::Error>> {
+    eliminate(rows, Some(direct), atom_count, storage, budget)
+}
+
+/// Read the direct units of `prepared` and add them to `rows`, as
+/// [`prepare_after_units`] describes. Returns whether the root survives: two
+/// units that disagree set `root_refuted` and leave no unit.
+fn read_units<Q: Quota + ?Sized>(
+    rows: &mut [Equation],
+    prepared: &mut Prepared,
+    atom_count: usize,
+    storage: &mut Storage,
+    budget: &mut Budget<'_, '_, Q>,
+) -> Result<bool, BudgetError<Q::Error>> {
+    budget.charge(1)?;
+    if prepared.units.is_empty() {
+        return Ok(true);
+    }
+    let width = atom_count.div_ceil(128) * 2;
+    let mut decided = Words::new(storage.filled(width, 0_u64, 1, budget)?);
+    let mut held = Words::new(storage.filled(width, 0_u64, 1, budget)?);
+    let mut kept = 0;
+    for position in 0..prepared.units.len() {
+        // One chunk a unit: read it; locate its atom; test the decided bit;
+        // then either compare the held bit and, when they disagree, publish
+        // the refutation with no unit, or set both bits and store the kept
+        // unit. The lengths the vector is cut to are part of the same chunk.
+        budget.charge(13)?;
+        let unit = prepared.units[position];
+        assert!(unit.atom < atom_count, "a unit names an admitted atom");
+        if decided.contains(unit.atom) {
+            if held.contains(unit.atom) != unit.value {
+                prepared.root_refuted = true;
+                prepared.units.clear();
+                storage.release(held.into_storage())?;
+                storage.release(decided.into_storage())?;
+                return Ok(false);
+            }
+            continue;
+        }
+        decided.insert(unit.atom);
+        if unit.value {
+            held.insert(unit.atom);
+        }
+        prepared.units[kept] = unit;
+        kept += 1;
+    }
+    prepared.units.truncate(kept);
+    for row in rows.iter_mut() {
+        add_units(row, &decided, &held, budget)?;
+    }
+    storage.release(held.into_storage())?;
+    storage.release(decided.into_storage())?;
+    Ok(true)
+}
+
+/// Add to a checked row every unit over one of its atoms: clear the row's
+/// decided atoms and add the parity of those held to its constant. One
+/// `W + 2` chunk covers every word's two ANDs and its parity, the constant
+/// and the chunk's admission, so a refusal leaves the row whole.
+fn add_units<Q: Quota + ?Sized>(
+    row: &mut Equation,
+    decided: &[u64],
+    held: &[u64],
+    budget: &mut Budget<'_, '_, Q>,
+) -> Result<(), BudgetError<Q::Error>> {
+    assert_eq!(
+        row.words.len(),
+        decided.len(),
+        "a row has the owner's width"
+    );
+    let width = u64::try_from(row.words.len()).expect("a row length fits a work word");
+    budget.charge(width + 2)?;
+    let mut odd = false;
+    for ((word, decided), held) in row.words.iter_mut().zip(decided).zip(held) {
+        odd ^= (*word & held).count_ones() & 1 == 1;
+        *word &= !decided;
+    }
+    row.constant ^= odd;
+    Ok(())
+}
+
+/// Forward elimination of `rows`. With `direct`, those units are read and
+/// added to the rows first and are published before the units the echelon
+/// yields; without it the units' vector is reserved here.
+fn eliminate<Q: Quota + ?Sized>(
+    rows: &mut [Equation],
+    direct: Option<Vec<Unit>>,
+    atom_count: usize,
+    storage: &mut Storage,
+    budget: &mut Budget<'_, '_, Q>,
+) -> Result<Prepared, BudgetError<Q::Error>> {
     let mut pivots = storage.filled(atom_count, 0usize, 1, budget)?;
     let basis = storage.reserve(rows.len().min(atom_count), budget)?;
-    let units = storage.reserve(0, budget)?;
+    let (units, given) = match direct {
+        Some(units) => (units, true),
+        None => (storage.reserve(0, budget)?, false),
+    };
     storage.admit_record(
         (size_of::<Prepared>() - size_of::<Vec<usize>>() - size_of::<Vec<Unit>>()) as u128,
         budget,
@@ -144,6 +296,10 @@ pub(super) fn prepare<Q: Quota + ?Sized>(
         root_refuted: false,
         counts: Counts::default(),
     };
+    if given && !read_units(rows, &mut prepared, atom_count, storage, budget)? {
+        storage.release(pivots)?;
+        return Ok(prepared);
+    }
     for target in 0..rows.len() {
         loop {
             let Some(atom) = words::first(&rows[target].words, &mut |work| budget.charge(work))?
@@ -158,6 +314,10 @@ pub(super) fn prepare<Q: Quota + ?Sized>(
                 })?;
                 if refuted {
                     storage.release(pivots)?;
+                    // A refuted root publishes no unit: the refutation's
+                    // chunk covers the length of the direct units' vector,
+                    // which keeps its capacity.
+                    prepared.units.clear();
                     return Ok(prepared);
                 }
                 break;

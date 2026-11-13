@@ -141,6 +141,7 @@ fn complete_definitions_force_a_fact_and_an_unsupported_atom() {
         (result.parity.rows, result.parity.one, result.parity.units),
         (2, 2, 2)
     );
+    assert_eq!(result.parity.rank, 2);
     assert_eq!(result.parity.phases.total(), result.parity.preparation_work);
     assert_eq!(
         result.cardinality.phases.total(),
@@ -151,6 +152,265 @@ fn complete_definitions_force_a_fact_and_an_unsupported_atom() {
     assert_eq!(seeded.held().collect::<Vec<_>>(), [0]);
     assert!(!seeded.is_open(1));
     assert!(prepared.take_seeded_root().is_none());
+}
+
+/// The preparation of `theory` with its extracted producers, under the
+/// default allowance and no byte limit.
+fn prepared_with_producers(
+    theory: &Theory,
+) -> super::super::PreparationAttempt<zetesis_algebra::Failure<Stop>> {
+    let cancellation = Cancellation::default();
+    let extracted = producers(theory, RegionLimits::default(), &cancellation).unwrap();
+    let mut quota = Quota {
+        ceiling: u64::MAX,
+        held: 0,
+    };
+    let attempt = RootPreparation::prepare_reserved(
+        theory,
+        extracted.producers.as_ref(),
+        limits(),
+        &cancellation,
+        &mut Meter::reserved(&mut quota),
+    );
+    assert_eq!(attempt.work, quota.held);
+    attempt
+}
+
+/// The constraint root forbidding `literal`, a node of `nodes`.
+fn forbid(nodes: &mut crate::FormulaTransaction<'_>, literal: usize) -> usize {
+    let falsum = push(nodes, NodeView::False);
+    push(nodes, NodeView::Implies(literal, falsum))
+}
+
+#[test]
+fn a_one_atom_equation_is_a_unit_and_writes_no_row() {
+    // Atom 0 is a fact and atom 1 has no rule: two definitions over one atom.
+    let theory = constructed_theory(2, |_| vec![0]);
+    let attempt = prepared_with_producers(&theory);
+    let prepared = attempt.result.unwrap().unwrap();
+    assert!(prepared.parity.recognized.equations.is_empty());
+    assert!(prepared.parity.prepared.basis.is_empty());
+    assert_eq!(prepared.parity.prepared.direct().len(), 2);
+    assert_eq!(
+        (attempt.parity.rows, attempt.parity.one, attempt.parity.rank),
+        (2, 2, 2)
+    );
+}
+
+#[test]
+fn a_one_atom_constraint_is_a_unit() {
+    // `:- a1` alone, read without producers: its clause is the only source.
+    let theory = constructed_theory(2, |nodes| vec![forbid(nodes, 1)]);
+    let mut quota = Quota {
+        ceiling: u64::MAX,
+        held: 0,
+    };
+    let attempt = RootPreparation::prepare_reserved(
+        &theory,
+        None,
+        limits(),
+        &Cancellation::default(),
+        &mut Meter::reserved(&mut quota),
+    );
+    let prepared = attempt.result.unwrap().unwrap();
+    assert_eq!(prepared.parity.units().collect::<Vec<_>>(), [(1, false)]);
+    assert!(prepared.parity.recognized.equations.is_empty());
+    assert_eq!((attempt.parity.rows, attempt.parity.one), (1, 1));
+}
+
+#[test]
+fn a_unit_names_the_atom_its_equation_is_over() {
+    // `:- a0, a1` and `:- not a0, a1` share the support of atoms 0 and 1 and
+    // leave `a1 = 0`: the unit is over the support's second atom.
+    let theory = constructed_theory(2, |nodes| {
+        let falsum = push(nodes, NodeView::False);
+        let absent = push(nodes, NodeView::Implies(0, falsum));
+        [[0, 1], [absent, 1]]
+            .iter()
+            .map(|terms| {
+                let body = push(nodes, NodeView::And(terms));
+                push(nodes, NodeView::Implies(body, falsum))
+            })
+            .collect()
+    });
+    let mut quota = Quota {
+        ceiling: u64::MAX,
+        held: 0,
+    };
+    let attempt = RootPreparation::prepare_reserved(
+        &theory,
+        None,
+        limits(),
+        &Cancellation::default(),
+        &mut Meter::reserved(&mut quota),
+    );
+    let prepared = attempt.result.unwrap().unwrap();
+    assert_eq!(prepared.parity.units().collect::<Vec<_>>(), [(1, false)]);
+    assert_eq!((attempt.parity.rows, attempt.parity.one), (1, 1));
+}
+
+#[test]
+fn a_unit_found_by_a_constraint_and_a_definition_is_kept_once() {
+    // `:- a0` and the definition of `a0`, which has no rule, both say `a0 = 0`.
+    let theory = constructed_theory(1, |nodes| vec![forbid(nodes, 0)]);
+    let attempt = prepared_with_producers(&theory);
+    let prepared = attempt.result.unwrap().unwrap();
+    assert!(!prepared.root_refuted());
+    assert_eq!(prepared.parity.units().collect::<Vec<_>>(), [(0, false)]);
+    assert_eq!(
+        (
+            attempt.parity.rows,
+            attempt.parity.one,
+            attempt.parity.units,
+            attempt.parity.rank
+        ),
+        (2, 2, 1, 1)
+    );
+}
+
+#[test]
+fn units_that_disagree_refute_the_root() {
+    // `:- not a0` says `a0 = 1`; the definition of `a0`, which has no rule,
+    // says `a0 = 0`.
+    let theory = constructed_theory(1, |nodes| {
+        let absent = forbid(nodes, 0);
+        vec![forbid(nodes, absent)]
+    });
+    let attempt = prepared_with_producers(&theory);
+    assert!(attempt.parity.root_refuted);
+    assert_eq!(attempt.parity.units, 0);
+    assert_eq!(attempt.cardinality.status, PreparationStatus::NotPrepared);
+    let mut prepared = attempt.result.unwrap().unwrap();
+    assert!(prepared.root_refuted());
+    assert_eq!(prepared.parity.units().count(), 0);
+    assert!(prepared.take_seeded_root().is_none());
+}
+
+#[test]
+fn a_unit_decides_the_rows_over_its_atom_at_the_root() {
+    // Exactly one of atoms 0 and 1 holds, and `:- a0`: the row `a0 + a1 = 1`
+    // has the unit added and decides atom 1 in the seeded root.
+    let theory = constructed_theory(2, |nodes| {
+        let falsum = push(nodes, NodeView::False);
+        let neither = [
+            push(nodes, NodeView::Implies(0, falsum)),
+            push(nodes, NodeView::Implies(1, falsum)),
+        ];
+        let mut roots: Vec<usize> = [[0, 1], neither]
+            .iter()
+            .map(|terms| {
+                let body = push(nodes, NodeView::And(terms));
+                push(nodes, NodeView::Implies(body, falsum))
+            })
+            .collect();
+        roots.push(push(nodes, NodeView::Implies(0, falsum)));
+        roots
+    });
+    let mut quota = Quota {
+        ceiling: u64::MAX,
+        held: 0,
+    };
+    let attempt = RootPreparation::prepare_reserved(
+        &theory,
+        None,
+        limits(),
+        &Cancellation::default(),
+        &mut Meter::reserved(&mut quota),
+    );
+    assert_eq!(
+        (
+            attempt.parity.rows,
+            attempt.parity.one,
+            attempt.parity.two,
+            attempt.parity.units,
+            attempt.parity.rank
+        ),
+        (2, 1, 1, 2, 2)
+    );
+    let mut prepared = attempt.result.unwrap().unwrap();
+    assert_eq!(
+        prepared.parity.units().collect::<Vec<_>>(),
+        [(0, false), (1, true)]
+    );
+    let seeded = prepared.take_seeded_root().unwrap();
+    assert_eq!(seeded.decision(0), Some(false));
+    assert_eq!(seeded.decision(1), Some(true));
+}
+
+#[test]
+fn facts_cost_parity_work_in_proportion_to_their_number() {
+    // Every atom a fact, at two sizes eight times apart. With a row of the
+    // theory's width for each fact the work grew sixty-four times, and the
+    // larger theory needed several times the default allowance.
+    let work = |atoms: usize| {
+        let theory = constructed_theory(atoms, |_| (0..atoms).collect());
+        let attempt = prepared_with_producers(&theory);
+        assert_eq!(attempt.parity.status, PreparationStatus::Prepared);
+        assert_eq!(attempt.parity.units, atoms);
+        (attempt.parity.preparation_work, attempt.peak_bytes)
+    };
+    let (small_work, small_bytes) = work(1 << 9);
+    let (large_work, large_bytes) = work(1 << 12);
+    assert!(
+        large_work <= 9 * small_work,
+        "small={small_work}, large={large_work}"
+    );
+    assert!(
+        large_bytes <= 9 * small_bytes,
+        "small={small_bytes}, large={large_bytes}"
+    );
+}
+
+#[test]
+fn a_declined_prefix_of_a_preparation_with_units_publishes_no_part_of_them() {
+    // Atom 0 is a fact and atom 1 has no rule: two units and no row. An
+    // allowance short of the whole either declines the preparation, with
+    // nothing retained, or declines only the later image step, which keeps
+    // the complete preparation: never a part of the units.
+    let theory = constructed_theory(2, |_| vec![0]);
+    let cancellation = Cancellation::default();
+    let extracted = producers(&theory, RegionLimits::default(), &cancellation).unwrap();
+    let attempt = |work: u64| {
+        let mut quota = Quota {
+            ceiling: u64::MAX,
+            held: 0,
+        };
+        let attempt = RootPreparation::prepare_reserved(
+            &theory,
+            extracted.producers.as_ref(),
+            PreparationLimits { work, ..limits() },
+            &cancellation,
+            &mut Meter::reserved(&mut quota),
+        );
+        assert_eq!(attempt.work, quota.held);
+        attempt
+    };
+    let full = attempt(PreparationLimits::DEFAULT_WORK);
+    let whole = full.work;
+    let units: Vec<_> = full.result.unwrap().unwrap().parity.units().collect();
+    assert_eq!(units, [(0, true), (1, false)]);
+    let (mut declined, mut kept) = (0, 0);
+    for work in 0..whole {
+        let attempt = attempt(work);
+        assert!(attempt.work <= work, "allowance {work}");
+        match attempt.result.unwrap() {
+            None => {
+                declined += 1;
+                assert_eq!(attempt.parity.status, PreparationStatus::WorkDeclined);
+                assert_eq!(attempt.parity.retained_bytes, 0, "allowance {work}");
+            }
+            Some(mut prepared) => {
+                kept += 1;
+                assert_eq!(attempt.images.status, PreparationStatus::WorkDeclined);
+                assert_eq!(prepared.parity.units().collect::<Vec<_>>(), units);
+                let seeded = prepared.take_seeded_root().unwrap();
+                assert_eq!(seeded.decision(0), Some(true), "allowance {work}");
+                assert_eq!(seeded.decision(1), Some(false), "allowance {work}");
+            }
+        }
+    }
+    assert!(declined > 0, "some allowance declines the units themselves");
+    assert_eq!(declined + kept, usize::try_from(whole).unwrap());
 }
 
 #[test]
@@ -351,13 +611,31 @@ fn absent_and_refuted_seeds_do_not_charge_a_constructor() {
     }
 }
 
+/// The theory over `atoms` atoms in which exactly one of the first and the
+/// last atom holds: one constraint forbids both and one forbids neither.
+fn first_or_last(atoms: usize) -> Theory {
+    constructed_theory(atoms, |nodes| {
+        let falsum = push(nodes, NodeView::False);
+        let last = atoms - 1;
+        let neither = [
+            push(nodes, NodeView::Implies(0, falsum)),
+            push(nodes, NodeView::Implies(last, falsum)),
+        ];
+        [[0, last], neither]
+            .iter()
+            .map(|terms| {
+                let body = push(nodes, NodeView::And(terms));
+                push(nodes, NodeView::Implies(body, falsum))
+            })
+            .collect()
+    })
+}
+
 #[test]
 fn prepared_equations_keep_padded_owned_words() {
-    for atoms in [1usize, 63, 64, 65, 127, 128, 129] {
-        let theory = constructed_theory(atoms, |nodes| {
-            let falsum = push(nodes, NodeView::False);
-            vec![push(nodes, NodeView::Implies(atoms - 1, falsum))]
-        });
+    // A row needs two atoms: an equation over one is a unit and has no row.
+    for atoms in [2usize, 63, 64, 65, 127, 128, 129] {
+        let theory = first_or_last(atoms);
         let mut quota = Quota {
             ceiling: u64::MAX,
             held: 0,
@@ -375,12 +653,13 @@ fn prepared_equations_keep_padded_owned_words() {
         let equation = &prepared.parity.recognized.equations[0];
         assert_eq!(equation.words.len(), atoms.div_ceil(128) * 2);
         for (word, &bits) in equation.words.iter().enumerate() {
-            let expected = if word == (atoms - 1) / 64 {
+            let first = u64::from(word == 0);
+            let last = if word == (atoms - 1) / 64 {
                 1 << ((atoms - 1) % 64)
             } else {
                 0
             };
-            assert_eq!(bits, expected, "atoms {atoms}, word {word}");
+            assert_eq!(bits, first | last, "atoms {atoms}, word {word}");
         }
         let allocation = (equation.words.as_ptr(), equation.words.capacity());
         let bytes = prepared.parity.retained_bytes();

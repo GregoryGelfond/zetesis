@@ -690,9 +690,10 @@ const PREPARATION_WORK_PER_READ: u64 = 256;
 /// decline the largest theories, where a completed preparation prunes the
 /// most. This one covers a pattern table for each node and occurrence.
 /// Checking and eliminating among the recognized rows grows with their number
-/// instead, and a theory that yields tens of thousands of rows can still
-/// exceed the allowance; the preparation is then declined and the walk runs
-/// without it.
+/// times the theory's width instead, and a theory that yields tens of
+/// thousands of equations over two or more atoms can still exceed the
+/// allowance; the preparation is then declined and the walk runs without it.
+/// An equation over one atom is a root decision and no row.
 ///
 /// The allowance is never less than [`PreparationLimits::DEFAULT_WORK`].
 /// Above that it is at most half of `remaining`: the preparation is optional,

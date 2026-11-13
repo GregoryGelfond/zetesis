@@ -7,7 +7,7 @@ use super::super::super::{
     ParitySystem,
     budget::Budget,
     parity, root_facts,
-    rows::{Counts, Equation, Recognized},
+    rows::{Counts, Equation, Recognized, Unit},
     storage::Storage,
 };
 use crate::{regions::NarrowingScratch, test_support::constructed_theory};
@@ -45,6 +45,124 @@ fn system(atoms: usize, specifications: &[(Vec<usize>, bool)]) -> ParitySystem {
         },
         prepared,
     }
+}
+
+/// As [`system`], after the direct units `units`, each `(atom, value)`.
+fn system_after(
+    atoms: usize,
+    units: &[(usize, bool)],
+    specifications: &[(Vec<usize>, bool)],
+) -> ParitySystem {
+    let theory = constructed_theory(atoms, |_| Vec::new());
+    let cancellation = Cancellation::default();
+    let mut work = Meter::local(u64::MAX);
+    let mut budget = Budget::new(&mut work, u64::MAX, usize::MAX, &cancellation);
+    let mut storage = Storage::default();
+    let facts = root_facts::build(&theory, &mut storage, &mut budget).unwrap();
+    let mut direct = storage.reserve(0, &mut budget).unwrap();
+    for &(atom, value) in units {
+        storage
+            .push(&mut direct, Unit { atom, value }, 2, &mut budget)
+            .unwrap();
+    }
+    let mut equations: Vec<_> = specifications
+        .iter()
+        .map(|(support, constant)| {
+            let mut words = vec![0; atoms.div_ceil(128) * 2];
+            for &atom in support {
+                words[atom / 64] |= 1 << (atom % 64);
+            }
+            Equation {
+                words: words.into(),
+                constant: *constant,
+            }
+        })
+        .collect();
+    let prepared =
+        parity::prepare_after_units(direct, &mut equations, atoms, &mut storage, &mut budget)
+            .unwrap();
+    ParitySystem {
+        recognized: Recognized {
+            facts,
+            clauses: Vec::new(),
+            equations,
+            counts: Counts::default(),
+        },
+        prepared,
+    }
+}
+
+/// Whether `system` is consistent in `region`, under an unbounded meter.
+fn consistent(system: &ParitySystem, region: &Region) -> bool {
+    system
+        .consistent_in_reserved(region, &mut Meter::local(u64::MAX))
+        .unwrap()
+}
+
+#[test]
+fn consistency_reads_every_direct_unit_against_the_region() {
+    // Units `a0 = 1` and `a65 = 0`, and the row `a1 + a2 = 1`, in every
+    // region that decides at most atoms 0, 1, 2 and 65.
+    let units = [(0, true), (65, false)];
+    let rows = [(vec![1, 2], true)];
+    let system = system_after(66, &units, &rows);
+    let decided = [0, 1, 2, 65];
+    for decisions in 0..3usize.pow(4) {
+        let mut region = Region::all_open(66);
+        let mut values = [None; 4];
+        let mut rest = decisions;
+        for (position, &atom) in decided.iter().enumerate() {
+            match rest % 3 {
+                1 => {
+                    assert!(region.hold(atom));
+                    values[position] = Some(true);
+                }
+                2 => {
+                    assert!(region.cut(atom));
+                    values[position] = Some(false);
+                }
+                _ => {}
+            }
+            rest /= 3;
+        }
+        let expected = values[0] != Some(false)
+            && values[3] != Some(true)
+            && !(values[1].is_some() && values[1] == values[2]);
+        assert_eq!(
+            consistent(&system, &region),
+            expected,
+            "decisions {values:?}"
+        );
+    }
+}
+
+#[test]
+fn consistency_leaves_atoms_beyond_a_narrower_region_open() {
+    // The system is over 66 atoms and its unit over atom 65; a region of ten
+    // atoms has one mask word and decides nothing about that atom.
+    let system = system_after(66, &[(65, false)], &[(vec![1, 2], true)]);
+    let mut region = Region::all_open(10);
+    assert!(consistent(&system, &region));
+    assert!(region.hold(1) && region.hold(2));
+    assert!(!consistent(&system, &region), "the row is still read");
+}
+
+#[test]
+fn an_inspection_reads_no_direct_unit() {
+    // The seeded root holds the direct units; a region without them is
+    // outside this system's use, and an inspection decides nothing in it.
+    let system = system_after(2, &[(0, true), (1, false)], &[]);
+    let mut region = Region::all_open(2);
+    let mut known = system.knowledge();
+    let attempt = system.inspect_reserved(
+        &mut region,
+        &mut known,
+        &mut NarrowingScratch::default(),
+        &Cancellation::default(),
+        &mut Meter::local(u64::MAX),
+    );
+    assert_eq!(attempt.result, Ok(SubjectStep::Unchanged));
+    assert!(region.is_open(0) && region.is_open(1));
 }
 
 fn chain(atoms: usize) -> ParitySystem {

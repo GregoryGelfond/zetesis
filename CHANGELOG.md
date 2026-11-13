@@ -105,6 +105,27 @@ Notable changes by release. Versions follow Semantic Versioning.
   may take up to that half where it took 100,000,000, and a walk that needs
   more than the remainder is then stopped by the limit. A preparation that
   exceeds its allowance is declined and the walk runs without it, as before.
+- The original-root arithmetic preparation keeps an equation over one atom as
+  a root decision and no longer writes a row of the theory's width for it: a
+  fact, an atom no rule defines and a constraint over one atom each give one.
+  It is checked against its source and decides its atom in the prepared root
+  as before, and it is added to the rows over its atom before elimination, so
+  two that disagree, or a row they contradict, still refute the root. The work
+  and storage of these equations now grow with their number, where they grew
+  with that number times the theory's atoms. A transitive closure over a chain
+  of 200 nodes, 20,099 derived facts, needed 103,734,645 operations and
+  104 MB, more than the default allowance, so its preparation was declined
+  after spending all of it; it now completes in 13,811,036 operations and
+  4 MB. No answer set changes. In the reported parity statistics `rank`
+  counts the atoms these equations decide with the echelon pivots of the
+  rest, `units` counts each decided atom once, a refuted root reports no
+  unit and counts none in its rank, and preparation work and peak bytes
+  fall. `ParitySystem::units` yields the recognized decisions first, then the
+  one-atom echelon rows. `ParitySystem::inspect_reserved` on an original
+  theory's system no longer forces the atom of a one-atom equation: such an
+  equation is no row, and the prepared root holds it, so a region that was
+  not narrowed from that root is not given it. `consistent_in_reserved` reads
+  these decisions against its region.
 - Candidate narrowing no longer counts a producer as support when its body
   requires its own head, or an atom that only that head can derive, as in the
   alias pair `a :- b.` `b :- a.` with one other rule for `a`

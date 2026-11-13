@@ -368,6 +368,81 @@ pub(super) fn check_clause_equation<Q: Quota + ?Sized>(
     let Some(coefficients) = local_coefficients(theory, support, words, budget)? else {
         return Ok(false);
     };
+    reread_clauses_imply(
+        theory,
+        facts,
+        roots,
+        support,
+        (coefficients, constant),
+        storage,
+        budget,
+    )
+}
+
+/// As [`check_clause_equation`], for the equation that gives `atom` the
+/// value `value`, which is kept as a unit and has no row. The unit's atom is
+/// read against `support`, as a row's words are: an atom the support lacks
+/// declines it. The facts' owner is authenticated where each clause is read
+/// again, and without a clause no unit follows.
+pub(super) fn check_clause_unit<Q: Quota + ?Sized>(
+    theory: &Theory,
+    facts: &CheckedRootFacts,
+    roots: &[Clause],
+    support: Support,
+    (atom, value): (usize, bool),
+    storage: &mut Storage,
+    budget: &mut Budget<'_, '_, Q>,
+) -> Result<bool, BudgetError<Q::Error>> {
+    let Some(coefficients) = unit_coefficients(support, atom, budget)? else {
+        return Ok(false);
+    };
+    reread_clauses_imply(
+        theory,
+        facts,
+        roots,
+        support,
+        (coefficients, value),
+        storage,
+        budget,
+    )
+}
+
+/// The coefficients over `support` of an equation whose one atom is `atom`:
+/// that atom's coordinate alone, and none when the support lacks the atom.
+/// A support's atoms are distinct, so the coordinate is the only one.
+pub(super) fn unit_coefficients<Q: Quota + ?Sized>(
+    support: Support,
+    atom: usize,
+    budget: &mut Budget<'_, '_, Q>,
+) -> Result<Option<u8>, BudgetError<Q::Error>> {
+    budget.charge(1)?;
+    if support.len > MAX_SUPPORT {
+        budget.charge(1)?;
+        return Ok(None);
+    }
+    for (coordinate, &known) in support.atoms[..support.len].iter().enumerate() {
+        budget.charge(1)?;
+        if known == atom {
+            budget.charge(2)?; // the shifted coefficient and the result tag
+            return Ok(Some(1 << coordinate));
+        }
+    }
+    budget.charge(1)?;
+    Ok(None)
+}
+
+/// Whether the clauses `roots`, read again and conditioned on the checked
+/// facts, each have the support `support` and together forbid every pattern
+/// at which the equation fails.
+fn reread_clauses_imply<Q: Quota + ?Sized>(
+    theory: &Theory,
+    facts: &CheckedRootFacts,
+    roots: &[Clause],
+    support: Support,
+    (coefficients, constant): (u8, bool),
+    storage: &mut Storage,
+    budget: &mut Budget<'_, '_, Q>,
+) -> Result<bool, BudgetError<Q::Error>> {
     budget.charge(4)?;
     let mut forbidden = Words::<u64, _>::new([0; 4]);
     for proposed in roots {

@@ -4080,7 +4080,13 @@ check each proposed equation before `arithmetic::parity` eliminates rows.
 `equation_of_agreement`, `parity_measure_odd` and `parity_equation_of_xor`
 connect the packed XOR representation to `equation_add`. Root units and
 contradictions use the consequences stated by `parity_forces`,
-`equation_excludes_given` and `excludes_region`.
+`equation_excludes_given` and `excludes_region`. An equation over one atom is
+kept as a root unit and has no row. Adding it to a row over its atom is
+`equation_add` of two checked equations; that the Rust reads each unit against
+its re-read source by the unit's own atom, drops a repeat, refutes on a
+disagreement and clears exactly the decided atoms of every row are Rust
+obligations, tested exhaustively on small systems placed within one mask word
+and across three.
 
 Completion tables compose packed intersections of signed atom columns, unions
 over all producers, and XOR with the head column. `AxisFolds.all_fold_true_iff`,

@@ -126,7 +126,9 @@ pub struct ParityStatistics {
     pub unsupported_definitions: u64,
     /// Proposals rejected by independent source checking.
     pub provenance_rejected: u64,
-    /// Retained echelon pivots.
+    /// The rank of the checked equations: the atoms their one-atom equations
+    /// decide, and the retained echelon pivots of the rest. A refuted root
+    /// reports the pivots retained before its refutation.
     pub rank: usize,
     /// Trusted row additions executed during elimination.
     pub row_additions: u64,
@@ -138,9 +140,11 @@ pub struct ParityStatistics {
     pub preparation_bytes: u128,
     /// Published system header and actual capacities, excluding source theory.
     pub retained_bytes: u128,
-    /// A checked zero row with constant one refuted the unconstrained root.
+    /// A checked zero row with constant one, or two one-atom equations that
+    /// disagree, refuted the unconstrained root.
     pub root_refuted: bool,
-    /// Echelon rows that force an original atom at the root.
+    /// Original atoms decided at the root: by a one-atom equation, or by an
+    /// echelon row that elimination left with one atom.
     pub units: usize,
     /// Completed runtime batches, including unchanged batches and absorbing
     /// refutations. Repeated batches on one region count separately; failed
@@ -255,7 +259,9 @@ impl ParitySystem {
         self.recognized.facts.belongs_to(theory)
     }
 
-    /// Original atom decisions from one-atom echelon rows, in basis order.
+    /// Original atom decisions, each atom once: from the one-atom equations
+    /// recognition found, in the order found, then from the one-atom echelon
+    /// rows, in basis order.
     pub fn units(&self) -> impl Iterator<Item = (usize, bool)> + '_ {
         self.prepared
             .units
@@ -263,7 +269,8 @@ impl ParitySystem {
             .map(|unit| (unit.atom, unit.value))
     }
 
-    /// Whether a checked row established the root contradiction `0 = 1`.
+    /// Whether the checked equations are contradictory at the root: a row
+    /// reads `0 = 1`, or two one-atom equations disagree.
     #[must_use]
     pub const fn root_refuted(&self) -> bool {
         self.prepared.root_refuted
@@ -536,11 +543,15 @@ fn build<Q: Quota + ?Sized>(
             - size_of::<parity::Prepared>()) as u128,
         budget,
     )?;
-    let mut recognized = budget.in_phase(Phase::Recognition, |budget| {
+    let rows::Recognition {
+        rows: mut recognized,
+        units,
+    } = budget.in_phase(Phase::Recognition, |budget| {
         rows::recognize(theory, producers, &mut storage, budget)
     })?;
     let prepared = budget.in_phase(Phase::Reduction, |budget| {
-        parity::prepare(
+        parity::prepare_after_units(
+            units,
             &mut recognized.equations,
             theory.atom_count(),
             &mut storage,
@@ -633,7 +644,7 @@ impl ParityStatistics {
             unsupported_clauses: recognized.counts.unsupported_clauses,
             unsupported_definitions: recognized.counts.unsupported_definitions,
             provenance_rejected: recognized.counts.provenance_rejected,
-            rank: prepared.basis.len(),
+            rank: prepared.rank(),
             row_additions: prepared.counts.additions,
             preparation_work: budget.work(),
             phases: budget.phases(),
@@ -653,7 +664,7 @@ impl ParityStatistics {
 }
 
 /// Root decisions are part of preparation: failure publishes no partial seed.
-/// The all-open masks are initialized once; every unit has a distinct pivot.
+/// The all-open masks are initialized once; every unit names a distinct atom.
 fn seed_root<Q: Quota + ?Sized>(
     theory: &Theory,
     parity: &ParitySystem,
@@ -681,7 +692,7 @@ fn seed_root<Q: Quota + ?Sized>(
     for unit in &parity.prepared.units {
         // Select the operation, then execute Region::decide's open-atom path:
         // bounds (1), locate (3), held/cut tests (4), polarity (1), OR (1),
-        // and successful result (1). Distinct echelon pivots remain open here.
+        // and successful result (1). Distinct atoms remain open here.
         budget.charge(1)?;
         let hold = unit.value;
         budget.charge(11)?;
@@ -690,7 +701,7 @@ fn seed_root<Q: Quota + ?Sized>(
         } else {
             root.cut(unit.atom)
         };
-        assert!(applied, "echelon units have distinct admitted pivots");
+        assert!(applied, "units name distinct admitted atoms");
     }
     budget.charge(1)?;
     Ok(Some(root))

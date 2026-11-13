@@ -483,11 +483,22 @@ discards a body falsified by a known negative leaf. The equation checker rereads
 that original clause using the same checked fact owner. Complete definitions
 and guarded counts retain their own source conditions.
 
-Root parity elimination uses packed row XOR. The counting preparation checks
+An equation over one atom decides that atom in every answer set: a fact, an
+atom no rule defines and a constraint over one atom each give one. The original
+theory's preparation keeps such an equation as a root decision and writes no
+row for it, after the same source check as any other. Two decisions that
+disagree refute the root. Each decision is added to the rows over its atom, so
+no row names a decided atom. A row is as wide as the theory has atoms; a
+decision is two words, so a theory's facts cost work and storage in proportion
+to their number and not to that number times the theory's width.
+
+Root parity elimination then uses packed row XOR on the rows over two or more
+atoms. The counting preparation checks
 that proposed lower and upper families are disjoint covers of the same atoms,
 then compares their totals. A guarded bound contributes its unconditional
 fallback while its guard remains open. A proved root contradiction starts no
-candidate walk; otherwise one-atom parity rows seed the root. The original
+candidate walk; otherwise the root decisions and the echelon rows that
+elimination left with one atom seed the root. The original
 theory and frozen-reduct membership checks are unchanged. These preparations
 run once for each original candidate owner, before serial, parallel or device
 candidate scheduling; they are host preparation, not device kernels.
@@ -499,8 +510,9 @@ patterns of the widest parity group, and never fewer than 100,000,000.
 Recognition reads the theory against its groups' patterns, so what it needs
 grows with the theory, and an allowance that did not would decline the largest
 theories, where a completed preparation prunes the most. Checking and
-eliminating among the rows recognized grows with their number instead; a theory
-that yields tens of thousands of rows can still exceed the allowance.
+eliminating among the rows recognized grows with their number times the
+theory's width instead; a theory that yields tens of thousands of equations
+over two or more atoms can still exceed the allowance.
 Exhausting it during
 parity or cardinality preparation discards those preparations and keeps ordinary
 candidate generation. The operations a preparation performs are charged to the
