@@ -2763,8 +2763,13 @@ preparation is built from the theory and the candidate, authenticated at every u
 consulted for another candidate; `add` is the only operation changing a parity row; and a stopped probe declines the
 whole preparation rather than marking a pattern. The affine hull of the allowed patterns and the clique search, over
 the pairs no allowed pattern holds together and over those none cuts together alike, are
-trusted computations whose results are checked against the retained pattern tables, not re-read from formulas; the
-proposal pass's reading of a clause, where it forbids a pattern without a probe, is a trusted computation beside them.
+trusted computations over the retained pattern tables, not re-read from formulas: the pairs are read once from each
+table's allowed patterns and a clique grows over the pairs so recorded. Each equation of the hull is checked against
+its table's forbidden patterns before it is retained; a clique's bound is not checked a second time and rests on its
+law. The double count authenticates only the two families' directions, the disjointness of each and their equal
+carriers, independently of how the families were found; the bound values it adds rest on the laws above.
+The proposal pass's reading of a clause, where it forbids a pattern without a probe, is a trusted computation beside
+them.
 
 The support cut (`FormulaBounds.unsupported_cut_with_choices`) and the objective
 bound's own lower-bound reasoning

@@ -13,14 +13,15 @@
 //! two a pairwise clause yields depends only on the polarity its base atoms
 //! were read in, so both are taken; a pair that only forbids holding one
 //! atom while cutting the other is neither, and grows no clique: these bounds
-//! count held atoms, not signed occurrences. A table keeps its own least count beside
-//! the covering cliques: a clique grown past a table's support no longer
-//! partitions the atoms as that support does. A clause too wide for a group
-//! whose pattern cuts its whole support bounds that support from below by
-//! one with no table (`lower_of_clause`): no countermodel in the root cuts
-//! it whole, by the static refutations' argument. Atoms one side covers and
-//! the other does not get the other side's trivial bound, nothing at least
-//! or everything at most, so that the families partition one atom set both
+//! count held atoms, not signed occurrences. A table keeps its own least
+//! count beside the covering cliques: a clique grown past a table's support
+//! no longer partitions the atoms as that support does. A clause too wide for
+//! a group whose pattern cuts its whole support bounds that support from
+//! below by one with no table (`lower_of_clause`): no countermodel in the
+//! root cuts it whole, by the static refutations' argument. A wide clause
+//! with any other pattern gives no bound. Atoms one side covers and the
+//! other does not get the other side's trivial bound, nothing at least or
+//! everything at most, so that the families partition one atom set both
 //! ways. The bounds carry no guard: a table's guard is cut at the closed
 //! root, by a saturation unit or already, which makes the bound a row of the
 //! class as the parity rows are.

@@ -49,8 +49,10 @@ Notable changes by release. Versions follow Semantic Versioning.
 - Frozen-reduct preparation bounds pairwise constraints in both polarities. Pairs
   no countermodel cuts together grow into cliques with a lower count bound, as
   pairs none holds together already grow into cliques with an upper one
-  (`AlgebraicRows.lower_of_cover`), so a quantified pigeonhole core is decided at
-  the root whichever way its atoms are read.
+  (`AlgebraicRows.lower_of_cover`), so a quantified pigeonhole core whose
+  clauses fit the eight-atom tables is decided at the root whichever way its
+  atoms are read. A wider clause still gives a bound only when it forbids
+  cutting all of its atoms.
 
 ### Fixed
 

@@ -499,7 +499,7 @@ impl Counters {
 /// or before a work refusal, check the ceiling, record the receipt, then count.
 /// Zero admits no units and never observes; use `Counters::poll` explicitly. Every charged unit runs
 /// on this path, so its admission inlines into its callers; the site is read
-/// only by the out-of-line decision that observes control or builds a failure.
+/// only by the cold decision that observes control or builds a failure.
 #[inline]
 fn charge_work(
     work: &mut u64,
@@ -546,8 +546,9 @@ fn check_work(
 }
 
 /// The complete decision of a charge: one that observes control, reaches the
-/// ceiling or needs the wide check. Kept out of line, so that its callers
-/// carry only the inline admission of [`check_work`].
+/// ceiling or needs the wide check. Marked cold, which keeps it off the fast
+/// path of callers that carry the inline admission of [`check_work`]; the
+/// attribute does not itself forbid inlining.
 #[cold]
 fn check_observed_work(
     work: u64,
