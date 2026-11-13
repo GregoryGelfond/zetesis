@@ -345,7 +345,8 @@ fn marks_never_weaken_a_narrowing_of_other_rule_shapes() {
 
 #[test]
 fn each_pool_marks_a_producer_in_an_eighth_of_its_selections() {
-    // The comparisons above are not mostly of two inventories without marks.
+    // The comparisons above include marked inventories in at least an eighth
+    // of each pool's selections.
     for pool in [pool as fn(usize) -> Theory, shaped] {
         let marked = (0..1_usize << RULES)
             .filter(|&selected| producers(&pool(selected)).any_circular())
@@ -440,11 +441,11 @@ fn measured() -> (Theory, u64, u64) {
     let unlimited = RegionLimits { max_work: u64::MAX };
     let plain = unmarked(&theory, unlimited).unwrap().work;
     let marked = super::super::producers(&theory, unlimited, &Cancellation::default()).unwrap();
+    // Marks under no ceiling to speak of: the marking completed within its
+    // share of the extraction, so only a ceiling's remainder can refuse it.
     assert!(marked.producers.unwrap().any_circular());
     let marking = marked.work - plain;
-    // The marking fits its share of the extraction, so only the ceiling's
-    // remainder can refuse it below.
-    assert!(0 < marking && marking <= 4 * plain);
+    assert!(marking > 0);
     (theory, plain, marking)
 }
 
@@ -570,7 +571,7 @@ fn a_marking_within_its_share_marks_every_rule_of_a_shared_body() {
 
 #[test]
 fn a_marking_beyond_its_share_of_the_extraction_marks_nothing() {
-    // The shared body is read once for each of its rules, about k * k / 2
+    // The shared body is read once for each of its rules, more than k * k
     // visits where the extraction spends a few for each rule. With no
     // ceiling to speak of, the marking stops at four times the extraction's
     // visits and leaves the inventory unmarked.
@@ -585,9 +586,94 @@ fn a_marking_beyond_its_share_of_the_extraction_marks_nothing() {
 }
 
 #[test]
-fn a_stop_requested_during_the_marking_is_not_taken_for_an_exhausted_allowance() {
-    // The marking observes control before its first visit. A requested stop
-    // ends the extraction; only an exhausted allowance leaves it unmarked.
+fn a_marking_beyond_its_share_stays_within_every_ceiling() {
+    // Where the share and the ceiling's remainder compete, the smaller one
+    // bounds the marking: under every ceiling the extraction stops where it
+    // does without marks, reports work within the ceiling and marks nothing.
+    let theory = shared_body(32);
+    let plain = unmarked(&theory, RegionLimits { max_work: u64::MAX })
+        .unwrap()
+        .work;
+    for ceiling in 0..=6 * plain {
+        let limits = RegionLimits { max_work: ceiling };
+        let with = super::super::producers(&theory, limits, &Cancellation::default());
+        if ceiling < plain {
+            assert!(matches!(with, Err(Stop::WorkLimit)), "ceiling {ceiling}");
+            continue;
+        }
+        let with = with.unwrap();
+        assert_eq!(with.work, ceiling.min(5 * plain), "ceiling {ceiling}");
+        assert!(!with.producers.unwrap().any_circular(), "ceiling {ceiling}");
+    }
+}
+
+/// A free choice `e` (atom 0) and atoms `a_1 … a_n` in a ring. Each has the
+/// rule `a_i ← e` and a rule whose body, a node of its own, holds the next
+/// `width - 1` atoms of the ring and then `a_i` itself: the rule requires its
+/// own head, which the marking meets at the body's last operand.
+fn ring(n: usize, width: usize) -> Theory {
+    let mut nodes: Vec<Node> = (0..=n).map(Node::atom).collect();
+    nodes.push(Node::falsum());
+    let falsum = nodes.len() - 1;
+    nodes.push(Node::implies(0, falsum));
+    nodes.push(Node::or_pair([0, nodes.len() - 1]));
+    let mut roots = vec![nodes.len() - 1];
+    let mut operands = Vec::new();
+    for head in 1..=n {
+        let start = operands.len();
+        operands.extend((1..width).map(|step| (head - 1 + step) % n + 1));
+        operands.push(head);
+        nodes.push(Node::and_span(crate::OperandSpan {
+            start,
+            length: width,
+        }));
+        let body = nodes.len() - 1;
+        rule(&mut nodes, &mut roots, body, head);
+        rule(&mut nodes, &mut roots, 0, head);
+    }
+    Theory::new(
+        n + 1,
+        crate::FormulaParts::new(nodes, operands).unwrap(),
+        roots,
+        crate::AdmissionLimits::default(),
+    )
+    .unwrap()
+}
+
+#[test]
+fn a_ring_of_seven_atom_bodies_is_marked_within_its_share() {
+    let theory = ring(64, 7);
+    let unlimited = RegionLimits { max_work: u64::MAX };
+    let plain = unmarked(&theory, unlimited).unwrap().work;
+    let marked = super::super::producers(&theory, unlimited, &Cancellation::default()).unwrap();
+    assert!(marked.work < 5 * plain);
+    // The choice of `e` comes first; the rules then alternate, each atom's
+    // circular rule before its `a_i ← e`.
+    let expected: Vec<bool> = std::iter::once(false)
+        .chain((0..128).map(|row| row % 2 == 0))
+        .collect();
+    assert_eq!(marks(&marked.producers.unwrap()), expected);
+}
+
+#[test]
+fn a_ring_of_eight_atom_bodies_exhausts_its_share() {
+    // Width alone, with no body shared: the marking reads every operand of
+    // every body and decides it for the head, where the extraction visited
+    // each conjunction once. One more atom in each body than the ring above,
+    // and the marking stops at four times the extraction's visits.
+    let theory = ring(64, 8);
+    let unlimited = RegionLimits { max_work: u64::MAX };
+    let plain = unmarked(&theory, unlimited).unwrap().work;
+    let marked = super::super::producers(&theory, unlimited, &Cancellation::default()).unwrap();
+    assert!(!marked.producers.unwrap().any_circular());
+    assert_eq!(marked.work, 5 * plain);
+}
+
+#[test]
+fn a_requested_stop_ends_the_marking_as_a_stop() {
+    // The marking observes control before its first visit and reports the
+    // stop; it does not take it for an exhausted allowance and return an
+    // unmarked inventory.
     let theory = pool((1 << RULES) - 1);
     let mut inventory = unmarked(&theory, RegionLimits { max_work: u64::MAX })
         .unwrap()

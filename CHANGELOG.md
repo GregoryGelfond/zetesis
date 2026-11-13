@@ -41,11 +41,15 @@ Notable changes by release. Versions follow Semantic Versioning.
   passes through such a producer is decided by the support cut and no longer
   starts the closure of possible founded support, whose reported work falls to
   its cycle test on programs with no other loop. A loop with another cycle is
-  still closed, reading every producer. Marking is charged with the producer
-  inventory, so reported search work rises by its visits, up to four times the
-  extraction's own and within the extraction's ceiling; beyond that nothing is
-  marked. A work budget within that margin of exhaustion is spent sooner. No
-  support explanation is learned for a loop the support cut now decides.
+  still closed, reading every producer, and its cycle test then searches the
+  dependencies twice, so that work rises there. Marking is charged with the
+  producer inventory, so reported search work rises by its visits, up to four
+  times the extraction's own and within the extraction's ceiling; beyond that
+  nothing is marked. A large body shared by many rules exceeds that share, and
+  so do rules with wide bodies: in a tested ring of rules, bodies of seven
+  atoms are marked and bodies of eight are not. A work budget within that
+  margin of exhaustion is spent sooner. No support explanation is learned for a
+  loop the support cut now decides.
 - Frozen-reduct preparation bounds pairwise constraints in both polarities. Pairs
   no countermodel cuts together grow into cliques with a lower count bound, as
   pairs none holds together already grow into cliques with an upper one

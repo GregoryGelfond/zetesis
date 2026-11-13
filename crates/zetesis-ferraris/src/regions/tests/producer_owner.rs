@@ -81,9 +81,9 @@ fn exhausted_extraction_never_publishes_an_inventory() {
     let cancellation = Cancellation::default();
     let complete = crate::producers(&owner, RegionLimits::default(), &cancellation).unwrap();
     assert!(complete.producers.unwrap().belongs_to(&owner));
-    // The extraction's own work. The marking pass that follows it has an
-    // allowance of its own and never stops it, so the reported work may be
-    // larger while the stop stays where it was.
+    // The extraction's own work. The marking pass that follows it spends only
+    // what the ceiling leaves and never stops it for want of work, so the
+    // reported work may be larger while the stop stays where it was.
     let own = crate::regions::unmarked_producers(&owner, RegionLimits::default(), &cancellation)
         .unwrap()
         .work;

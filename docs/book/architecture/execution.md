@@ -121,18 +121,27 @@ producers of `a` fail, the scan cuts `a` and then `b`, and holding `b` forces
 the one remaining producer of `a`. The marks are made once with the producer
 inventory. The pass reads each body's own operands once for every producer
 sharing the body and, for each head and each atom its body requires, that
-atom's producers up to the first that does not require the head. On the
-measured inputs that is between 0.6 and 1.0 times the extraction's own
-visits, but it is not linear: one large body shared by many rules is read
-once for each of them. The pass may therefore spend at most four times the
-extraction's visits, and never more than the extraction's work ceiling
-leaves. When it would exceed either it marks nothing, and narrowing proceeds
-as it did before producers were marked. The extraction's reported work stays
-within its ceiling, so it stops for want of work exactly where it did; under
-a finite work budget the marking's visits are spent like any others. Only
-producers with one head are marked, and only a body's own atom operands are
-read, so the restriction is used less often than the law allows. The roots
-themselves are unchanged and still propagate as implications.
+atom's producers up to the first that does not require the head. On the 288
+programs measured for this change that is between 0.4 and 1.4 times the
+extraction's own visits, with a median of 0.8. It is not proportional to
+them: the extraction visits a conjunction once, whatever its width, and one
+large body shared by many rules is read once for each of them. The pass may
+therefore spend at most four times the extraction's visits, and never more
+than the extraction's work ceiling leaves. When it would exceed either it
+marks nothing, and narrowing proceeds as it did before producers were
+marked. Width alone can exceed the share: in a ring where each atom has one
+rule requiring its own head after the next atoms of the ring, bodies of
+seven atoms are marked and bodies of eight are not. The extraction's
+reported work stays within its ceiling, so the walk's opening, which charges
+that work to the budget the ceiling came from, is never refused that charge.
+Under a finite work budget the marking's visits are otherwise spent like any
+others: the rest of the opening has that much less, and the standalone
+membership check, which extracts under a fixed ceiling and charges its own
+budget, can be refused the larger charge although its preparation reads no
+mark. Only producers with one head are marked, and only a body's own atom
+operands are read, so the restriction is used less often than the law
+allows. The roots themselves are unchanged and still propagate as
+implications.
 
 When some positive cycle of the complete producer inventory survives without
 the circular producers, narrowing also restricts candidates by possible
@@ -140,7 +149,10 @@ founded support. A dependency component whose every cycle passes through a
 circular producer is left to the support scan; a component with a surviving
 cycle is closed whole and reads every producer, marked ones included. Its
 closure then differs from one without marks only in its seeds, which include
-the atoms of the components left to the scan. The defining whole relaxation
+the atoms of the components left to the scan. Finding the surviving cycles
+takes a second component search when any producer is marked, over the
+supporting dependencies and then over all of them, and both are charged; an
+inventory without marks is searched once. The defining whole relaxation
 starts empty, propagates possible bodies through positive conjunctions and
 disjunctions, and adds every permitted head of each enabled producer. Other body
 formulas remain possible unless already known false. Held atoms do not seed

@@ -731,18 +731,57 @@ fn least_extracting_budget(theory: &Theory) -> u64 {
     admitted
 }
 
+/// The least ceiling under which the producers of `theory` are extracted.
+fn least_extracting_ceiling(theory: &Theory) -> u64 {
+    let cancellation = Cancellation::default();
+    let extracts = |max_work: u64| {
+        zetesis_ferraris::producers(theory, RegionLimits { max_work }, &cancellation).is_ok()
+    };
+    let mut refused = 0;
+    let mut admitted = 1;
+    while !extracts(admitted) {
+        refused = admitted;
+        admitted *= 2;
+    }
+    while admitted - refused > 1 {
+        let middle = refused + (admitted - refused) / 2;
+        if extracts(middle) {
+            admitted = middle;
+        } else {
+            refused = middle;
+        }
+    }
+    admitted
+}
+
+#[test]
+fn the_opening_charges_an_extraction_wherever_its_ceiling_admits_it() {
+    // The extraction visits a few nodes for each rule; marking the shared
+    // body in full would take about one and a half times the square of the
+    // rule count. The opening charges the extraction's reported work to the
+    // budget its ceiling came from, so the least budget that gets past that
+    // charge is the least ceiling that extracts at all.
+    for rules in [128, 256] {
+        let theory = shared_body(rules);
+        assert_eq!(
+            least_extracting_budget(&theory),
+            least_extracting_ceiling(&theory),
+            "{rules} rules"
+        );
+    }
+}
+
 #[test]
 fn the_budget_that_extracts_a_shared_body_grows_with_its_rules() {
-    // The extraction visits a few nodes for each rule; marking the shared
-    // body in full would take about k * k / 2 visits. The opening charges
-    // the extraction's reported work to the budget its ceiling came from, so
-    // the least budget that gets past that charge follows the extraction:
-    // doubling the rules about doubles it, and does not quadruple it.
+    // Doubling the rules about doubles that budget; it does not quadruple it.
     let (small, large) = (
         least_extracting_budget(&shared_body(128)),
         least_extracting_budget(&shared_body(256)),
     );
-    assert!(small > 128 && large < 3 * small, "{small} then {large}");
+    assert!(
+        128 < small && small < large && large < 3 * small,
+        "{small} then {large}"
+    );
 }
 
 #[test]

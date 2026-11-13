@@ -32,13 +32,13 @@
 //! the pairs in their adjacency and zeroing the stamp, memo and mark vectors
 //! are not charged, as the inventory's own adjacencies are not.
 //!
-//! The cost is not linear in the formula. A body's operands are read once
-//! for every producer sharing the body, so one conjunction of `m` atoms
-//! heading `k` rules costs `k * m` reads where the extraction spent `k + m`;
-//! and each head and required atom pair reads the atom's producers up to the
-//! first unstamped one. The extraction therefore gives the pass an allowance,
-//! a fixed multiple of its own visits within what its ceiling leaves, and
-//! keeps an unmarked inventory when the pass exhausts it
+//! The cost is not linear in the extraction's visits. The extraction visits
+//! a conjunction once, whatever its width; the pass reads its operands once
+//! for every producer of the body, `k * m` reads for `m` atoms under `k`
+//! rules, and each head and required atom pair reads the atom's producers up
+//! to the first unstamped one. The extraction therefore gives the pass an
+//! allowance, a fixed multiple of its own visits within what its ceiling
+//! leaves, and keeps an unmarked inventory when the pass exhausts it
 //! ([`super::Producers::mark`]). No mark is ever needed for soundness.
 
 use zetesis_algebra::words::Words;

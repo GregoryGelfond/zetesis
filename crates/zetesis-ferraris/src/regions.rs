@@ -276,8 +276,8 @@ impl Producers {
     /// weaker in what the support cut and the cycle test can skip.
     ///
     /// # Errors
-    /// A requested stop, or an allocation refusal of the marking's storage.
-    /// An exhausted allowance is not an error.
+    /// A requested stop, an allocation refusal of the marking's storage, or
+    /// an invalid node. An exhausted allowance is not an error.
     fn mark(
         &mut self,
         theory: &Theory,
@@ -302,9 +302,9 @@ impl Producers {
 }
 
 /// The marking pass may spend this many times the visits of the extraction
-/// it follows. On the measured inputs it spends between 0.6 and 1.0 times
-/// them; its worst case is not linear in the formula (see [`circular`]), and
-/// this share keeps an optional pass proportional to the mandatory one.
+/// it follows, which counts a conjunction once where the pass reads each
+/// operand: wide bodies and shared ones (see [`circular`]) exhaust the
+/// share. The 288 programs measured spent 0.4 to 1.4 times those visits.
 const MARKING_SHARE: u64 = 4;
 
 /// The atoms that head an atomic choice root of a theory, `a ∨ ¬a` standing
