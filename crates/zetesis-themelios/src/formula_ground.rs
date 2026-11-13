@@ -996,7 +996,8 @@ impl<'source> Builder<'_, '_, 'source> {
     /// program order, and leave the rest streamed. This runs once the producer
     /// core and its completion are built, so a retained template takes only
     /// room the rest of the program left, and it adds no atom: capture retained
-    /// every atom its instances read, and completion has guarded them. A
+    /// every atom its instances read, and completion has guarded those that
+    /// need a guard. A
     /// template fits when an upper bound on what its instances add stays within
     /// what remains of `max_retained_constraint_nodes` and of the theory's own
     /// ceilings, so retention never ends in a refusal. A template that does not
@@ -1348,7 +1349,8 @@ impl<'source> Builder<'_, '_, 'source> {
         }
     }
     /// Complete the semantic additions over the finished atom catalog: the
-    /// coherence of opposite atoms and every atom's support guards.
+    /// coherence of opposite atoms and the support guard of every atom that
+    /// needs one.
     fn complete(&mut self, profile: &Profile<'_>) -> Result<(), FormulaFailure> {
         profile.phase(GroundingPhase::Coherence, None, || self.coherence())?;
         profile.phase(GroundingPhase::SupportGuards, None, || {

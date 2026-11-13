@@ -126,6 +126,19 @@ Notable changes by release. Versions follow Semantic Versioning.
   equation is no row, and the prepared root holds it, so a region that was
   not narrowed from that root is not given it. `consistent_in_reserved` reads
   these decisions against its region.
+- A theory no longer carries a support guard for an atom with an
+  unconditional producer: a fact, an atom the program derives from its facts,
+  or the head of a choice or disjunction whose body is true. Such a guard
+  requires truth itself, so every interpretation satisfies it and every
+  reduct keeps it true (`SupportTransposition.unconditional_guards_omitted`).
+  No answer set changes. Each such atom has three nodes and one root fewer:
+  the transitive closure above goes from 100,497 nodes and 40,198 roots to
+  40,200 and 20,099. The reported formula sizes fall, and with them the
+  search work that reads the roots. The work allowance of the optional
+  original-root arithmetic preparation is proportional to the theory's size,
+  so it falls too, and a preparation that needed nearly all of it can now be
+  declined. Grounding work rises by one read for each producer of an atom
+  that keeps its guard.
 - Candidate narrowing no longer counts a producer as support when its body
   requires its own head, or an atom that only that head can derive, as in the
   alias pair `a :- b.` `b :- a.` with one other rule for `a`

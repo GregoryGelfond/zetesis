@@ -2163,6 +2163,7 @@
 'Zetesis.SupportTransposition.supplemental_original' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.SupportTransposition.supplemental_frozen' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.SupportTransposition.supplemental_answer_sets' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.SupportTransposition.unconditional_guards_omitted' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.TableBindings.flat_match_survives' depends on axioms: [propext, Quot.sound]
 'Zetesis.TableBindings.completed_selection_reused' depends on axioms: [propext]
 'Zetesis.TableBindings.selection_consumer_preserved' depends on axioms: [propext]

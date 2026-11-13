@@ -445,8 +445,9 @@ fn coherence_preserves_the_cumulative_root_limit() {
 
 #[test]
 fn support_guards_preserve_the_cumulative_root_limit() {
-    // A fact consumes the allowance before its necessary-support guard.
-    root_refusal("p.", 1, GroundingPhase::SupportGuards);
+    // A rule consumes the allowance before its head's necessary-support
+    // guard. The head needs one: its only producer has a condition.
+    root_refusal("p :- not p.", 1, GroundingPhase::SupportGuards);
 }
 
 #[test]

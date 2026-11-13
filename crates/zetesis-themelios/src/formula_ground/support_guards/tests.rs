@@ -66,6 +66,151 @@ fn scoped<T>(
     (result, STATE.with(|state| state.borrow().accepted))
 }
 
+thread_local! {
+    static VACUOUS: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+/// Whether this thread's reference construction publishes the guard of an
+/// atom with an unconditional producer, as every atom's once was.
+pub(super) fn vacuous_guards_kept() -> bool {
+    VACUOUS.with(std::cell::Cell::get)
+}
+/// Run `action` publishing every atom's guard; restored on unwind.
+fn with_vacuous_guards<T>(action: impl FnOnce() -> T) -> T {
+    struct Reset(bool);
+    impl Drop for Reset {
+        fn drop(&mut self) {
+            VACUOUS.with(|kept| kept.set(self.0));
+        }
+    }
+    let _reset = Reset(VACUOUS.with(|kept| kept.replace(true)));
+    action()
+}
+
+/// The atoms of `theory` with a guard of their own: a root that is the
+/// double negation of an implication whose premise is the atom.
+fn guarded(theory: &Theory) -> Vec<usize> {
+    let nodes = theory.view();
+    let negated = |node: usize| match nodes.node(node).unwrap() {
+        Node::Implies(inner, consequent) if consequent == FALSUM => Some(inner),
+        _ => None,
+    };
+    let mut atoms: Vec<usize> = theory
+        .roots()
+        .iter()
+        .filter_map(|&root| negated(root).and_then(negated))
+        .filter_map(|necessary| match nodes.node(necessary).unwrap() {
+            Node::Implies(premise, _) => match nodes.node(premise).unwrap() {
+                Node::Atom(atom) => Some(atom),
+                _ => None,
+            },
+            _ => None,
+        })
+        .collect();
+    atoms.sort_unstable();
+    atoms
+}
+
+/// The catalog index of the propositional atom `name`.
+fn atom(compiled: &crate::formula::Compiled, name: &str) -> usize {
+    compiled
+        .atoms
+        .atoms()
+        .iter()
+        .position(|atom| atom.predicate().name() == name)
+        .unwrap_or_else(|| panic!("the program names {name}"))
+}
+
+#[test]
+fn an_atom_with_an_unconditional_producer_has_no_guard() {
+    // `p` is a fact, `c` follows from it alone, `a` is chosen without a
+    // condition and `x`, `y` head an unconditional disjunction: each has a
+    // producer that needs nothing. `q` and `r` are derived under `a`.
+    let source = "p. c :- p. {a}. x | y. q :- a. r :- a, not q.";
+    let grounded = ground(testing::prepare(source), None, None).unwrap();
+    let expected = {
+        let mut atoms = vec![atom(&grounded, "q"), atom(&grounded, "r")];
+        atoms.sort_unstable();
+        atoms
+    };
+    assert_eq!(guarded(&grounded.theory), expected);
+    let reference = with_vacuous_guards(|| ground(testing::prepare(source), None, None).unwrap());
+    assert_eq!(
+        guarded(&reference.theory).len(),
+        reference.theory.atom_count()
+    );
+}
+
+#[test]
+fn leaving_out_vacuous_guards_changes_no_formula_truth() {
+    // The reference publishes a guard for every atom. Original truth, answer
+    // sets and every frozen reduct's truth agree; only the theory is smaller.
+    for source in [
+        "p.",
+        "p. c :- p.",
+        "{a}. p. q :- a.",
+        "{a;b}. p :- a. p :- b. p.",
+        "{a;b}. c. p :- a. p :- b. p :- c.",
+        "a | b.",
+        "{a}. b | c :- a.",
+        "{a;b}. x :- a, b. y :- not a. z.",
+        "{a}. {b} :- a. c :- not b.",
+        "p :- not q. q :- not p. r. s :- r, p.",
+    ] {
+        let grounded = ground(testing::prepare(source), None, None).unwrap();
+        let reference =
+            with_vacuous_guards(|| ground(testing::prepare(source), None, None).unwrap());
+        assert_eq!(grounded.atoms.atoms(), reference.atoms.atoms(), "{source}");
+        same_truth(&grounded.theory, &reference.theory);
+        assert!(
+            grounded.theory.roots().len() < reference.theory.roots().len(),
+            "{source}"
+        );
+    }
+}
+
+#[test]
+fn an_unconditional_producer_among_others_publishes_no_disjunction() {
+    // `p` has the producers `a`, `b` and, last, truth: `c` is a fact, so the
+    // third rule's body is. Its guard would be `p -> (a | b | true)`; neither
+    // it nor the disjunction of the first two producers is published.
+    let source = "{a;b}. c. p :- a. p :- b. p :- c.";
+    let grounded = ground(testing::prepare(source), None, None).unwrap();
+    let reference = with_vacuous_guards(|| ground(testing::prepare(source), None, None).unwrap());
+    let disjunctions = |theory: &Theory| {
+        (0..theory.nodes().len())
+            .filter(|&index| matches!(theory.view().node(index).unwrap(), Node::Or(_)))
+            .count()
+    };
+    // Each choice is a disjunction of its atom and the atom's negation.
+    assert_eq!(disjunctions(&grounded.theory), 2);
+    assert_eq!(disjunctions(&reference.theory), 3);
+    assert!(guarded(&grounded.theory).is_empty());
+}
+
+#[test]
+fn the_scan_for_an_unconditional_producer_is_charged_per_producer() {
+    // Unshared guards for the pair fixture: `a` and `b` have no producer and
+    // `h`, `i` and `j` one each, none unconditional. The scan reads those
+    // three producers; the reference construction publishes without it, and
+    // both publish the same theory.
+    let defaults = crate::FormulaLimits::default();
+    let (scanned, _) = scoped(false, None, || raw(&defaults, false, None));
+    let (reference, _) =
+        with_vacuous_guards(|| scoped(false, None, || raw(&defaults, false, None)));
+    assert_eq!(scanned.work, reference.work + 3);
+    let (scanned, reference) = (scanned.result.unwrap().0, reference.result.unwrap().0);
+    assert_eq!(scanned.nodes(), reference.nodes());
+    assert_eq!(scanned.roots(), reference.roots());
+}
+
+#[test]
+fn a_conditional_producer_alone_keeps_its_guard() {
+    // Without the fact, `p` holds only under `a` or `b`, and its guard says so.
+    let source = "{a;b}. p :- a. p :- b.";
+    let grounded = ground(testing::prepare(source), None, None).unwrap();
+    assert_eq!(guarded(&grounded.theory), [atom(&grounded, "p")]);
+}
+
 #[test]
 fn reference_control_restores_after_unwind() {
     let result = std::panic::catch_unwind(|| {

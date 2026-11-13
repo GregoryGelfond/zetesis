@@ -3390,6 +3390,10 @@ the whole guard family, with arbitrary outer and tested interpretations.
 `answer_sets_in_context` preserves membership in any unchanged surrounding
 theory. These laws replace equivalent guard families; they require neither a
 necessary-support entailment premise nor equivalence between individual roots.
+`unconditional_guards_omitted` leaves out the guards whose requirement is the
+canonical true formula; that the compiler omits a guard exactly when one of the
+atom's recorded producers is that formula is a Rust obligation, tested against
+a construction that publishes every guard.
 
 The Rust [guard builder](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/formula_ground/support_guards.rs)
 selects heads with exactly one recorded producer. A conjunction contributes its

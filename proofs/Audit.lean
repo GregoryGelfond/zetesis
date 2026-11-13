@@ -2062,6 +2062,7 @@ import Zetesis
 #print axioms Zetesis.SupportTransposition.supplemental_original
 #print axioms Zetesis.SupportTransposition.supplemental_frozen
 #print axioms Zetesis.SupportTransposition.supplemental_answer_sets
+#print axioms Zetesis.SupportTransposition.unconditional_guards_omitted
 #print axioms Zetesis.TableBindings.flat_match_survives
 #print axioms Zetesis.TableBindings.completed_selection_reused
 #print axioms Zetesis.TableBindings.selection_consumer_preserved

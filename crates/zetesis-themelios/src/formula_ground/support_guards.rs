@@ -1,4 +1,8 @@
-//! Transpose complete necessary-support incidences without flattening shared bodies.
+//! Necessary-support guards, and their transposition without flattening shared bodies.
+//!
+//! Each atom's guard requires one of its producers' conditions whenever the
+//! atom holds. An atom with an unconditional producer has no guard: its
+//! requirement is truth itself.
 //!
 //! A single recorded producer B supplies h -> B. For its direct conjunction
 //! children c, the family of double-negated guards is equivalent to one
@@ -81,7 +85,31 @@ impl Builder<'_, '_, '_> {
         Ok(())
     }
 
+    /// The guard of `atom`, unless one of its producers is unconditional.
+    ///
+    /// Such a producer makes the guard `atom -> true`. Every interpretation
+    /// satisfies that and its frozen form is true in every reduct, so it
+    /// would constrain no candidate and no subset of one: a fact, an atom a
+    /// program derives from its facts, and a head of an unconditional choice
+    /// or disjunction publish no guard, and no disjunction of their other
+    /// producers. The scan reads each producer once more than the guard
+    /// does, charged as the guard's reads are.
     fn support_guard(&mut self, metadata: &Metadata, atom: usize) -> Result<(), FormulaFailure> {
+        #[cfg(test)]
+        if tests::vacuous_guards_kept() {
+            return self.publish_guard(metadata, atom);
+        }
+        let location = metadata.location(atom);
+        for antecedent in metadata.producers(atom) {
+            self.work(location)?;
+            if antecedent == VERUM {
+                return Ok(());
+            }
+        }
+        self.publish_guard(metadata, atom)
+    }
+
+    fn publish_guard(&mut self, metadata: &Metadata, atom: usize) -> Result<(), FormulaFailure> {
         let location = metadata.location(atom);
         let mut supported = FALSUM;
         for antecedent in metadata.producers(atom) {

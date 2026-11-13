@@ -1804,6 +1804,15 @@ and node ceilings are checked before a new ID is published.
 Completed formula theories always include double-negated necessary support
 guards. These guards strengthen candidate checks while preserving reduct subset
 freedom; they are mathematically redundant, not a selectable construction option.
+An atom with an unconditional producer has none. A fact, an atom the program
+derives from its facts, and the head of a choice or disjunction whose body is
+true each have a producer that requires nothing, so their guard would require
+truth itself: every interpretation satisfies it and its frozen form holds in
+every reduct (`SupportTransposition.unconditional_guards_omitted`). Leaving it
+out removes three nodes and a root for each such atom and changes no answer
+set; a theory of facts and what follows from them is less than half the size.
+Finding such a producer reads each of an atom's producers once, before its
+guard does.
 Construction uses one
 [`Metadata` owner](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/formula_ground/metadata.rs)
 with flat atom headers and shared append arenas. Each header identifies its
@@ -1824,7 +1833,7 @@ Double negation freezes precisely that predicate for every tested interpretation
 so the conjunction of roots has the same original and arbitrary frozen truth.
 Ordinary roots and shared body prefixes are unchanged. No positive support is
 created by the guard disjunction. Multiple recorded producers, even duplicates,
-and constant or missing producers retain their per-atom guard construction.
+and a false or missing producer retain their per-atom guard construction.
 
 Complete singleton producers can also share a condition beneath several nested
 conjunctions. A second pass follows only conjunction edges and can append a
