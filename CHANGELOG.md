@@ -95,6 +95,16 @@ Notable changes by release. Versions follow Semantic Versioning.
   the former the region's closed `Knowledge`; see the
   [library map](docs/book/rust/libraries.md). See
   [shortened chains](docs/book/architecture/execution.md#shortened-chains).
+- The optional original-root arithmetic preparation's work allowance grows
+  with its theory: 256 operations for each node and each operand occurrence,
+  and never fewer than the 100,000,000 it was, which declined the preparation
+  of the largest theories, where its cuts decide the most. The operations
+  performed are charged to the search's work account as before. Under a work
+  limit the allowance above 100,000,000 is at most half of what the limit
+  leaves, so the optional preparation is exhausted before the limit is; it
+  may take up to that half where it took 100,000,000, and a walk that needs
+  more than the remainder is then stopped by the limit. A preparation that
+  exceeds its allowance is declined and the walk runs without it, as before.
 - Candidate narrowing no longer counts a producer as support when its body
   requires its own head, or an atom that only that head can derive, as in the
   alias pair `a :- b.` `b :- a.` with one other rule for `a`

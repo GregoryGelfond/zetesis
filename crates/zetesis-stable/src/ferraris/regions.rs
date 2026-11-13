@@ -676,6 +676,36 @@ pub(crate) fn open(
     open_attempt(theory, order_byte_limit, learning, budget).result
 }
 
+/// Word operations the optional root preparation may spend for each node and
+/// for each operand occurrence of its theory: one table of the patterns of
+/// the widest group its parity recognition admits, which has eight atoms.
+const PREPARATION_WORK_PER_READ: u64 = 256;
+
+/// The optional root preparation's work allowance for a theory of `nodes`
+/// nodes and `occurrences` operand occurrences, when the search's work limit
+/// leaves `remaining`.
+///
+/// Recognition reads the theory against the patterns of its groups, so what
+/// it needs grows with the theory, and an allowance that did not would
+/// decline the largest theories, where a completed preparation prunes the
+/// most. This one covers a pattern table for each node and occurrence.
+/// Checking and eliminating among the recognized rows grows with their number
+/// instead, and a theory that yields tens of thousands of rows can still
+/// exceed the allowance; the preparation is then declined and the walk runs
+/// without it.
+///
+/// The allowance is never less than [`PreparationLimits::DEFAULT_WORK`].
+/// Above that it is at most half of `remaining`: the preparation is optional,
+/// so under a work limit it leaves the walk at least what it may spend, and
+/// its own allowance is exhausted before the limit is. The product saturates.
+fn preparation_work(nodes: usize, occurrences: usize, remaining: u64) -> u64 {
+    let size = nodes as u128 + occurrences as u128;
+    u64::try_from(size * u128::from(PREPARATION_WORK_PER_READ))
+        .unwrap_or(u64::MAX)
+        .min(remaining / 2)
+        .max(PreparationLimits::DEFAULT_WORK)
+}
+
 fn open_recording(
     theory: &Theory,
     order_byte_limit: u64,
@@ -688,13 +718,18 @@ fn open_recording(
     budget.charge(extraction.work)?;
     statistics.producers = extraction.producers.is_some();
     let cancellation = budget.cancellation;
+    let allowance = preparation_work(
+        theory.nodes().len(),
+        theory.parts().occurrences(),
+        budget.remaining_work(),
+    );
     let mut quota = BudgetQuota { budget };
     let mut meter = Meter::reserved(&mut quota);
     let arithmetic = RootPreparation::prepare_reserved(
         theory,
         extraction.producers.as_ref(),
         PreparationLimits {
-            work: PreparationLimits::DEFAULT_WORK,
+            work: allowance,
             bytes: usize::try_from(order_byte_limit).unwrap_or(usize::MAX),
         },
         cancellation,

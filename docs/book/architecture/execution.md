@@ -492,10 +492,23 @@ theory and frozen-reduct membership checks are unchanged. These preparations
 run once for each original candidate owner, before serial, parallel or device
 candidate scheduling; they are host preparation, not device kernels.
 
-Both systems share an optional allowance of 100,000,000 logical word operations
-and the inherited preparation-byte allowance. Exhausting that allowance during
+Both systems share an optional allowance of logical word operations and the
+inherited preparation-byte allowance. The work allowance grows with the theory:
+256 operations for each node and each operand occurrence, one table of the
+patterns of the widest parity group, and never fewer than 100,000,000.
+Recognition reads the theory against its groups' patterns, so what it needs
+grows with the theory, and an allowance that did not would decline the largest
+theories, where a completed preparation prunes the most. Checking and
+eliminating among the rows recognized grows with their number instead; a theory
+that yields tens of thousands of rows can still exceed the allowance.
+Exhausting it during
 parity or cardinality preparation discards those preparations and keeps ordinary
-candidate generation. Cancellation, global work refusal, allocation and invalid
+candidate generation. The operations a preparation performs are charged to the
+search's work account whether or not it completes. Under a work limit the
+allowance above 100,000,000 is at most half of what the limit leaves, so the
+optional step is exhausted before the limit is and leaves the walk at least
+what it spent; a walk that needs more than that remainder is stopped by the
+limit. Cancellation, global work refusal, allocation and invalid
 source reads remain typed failures. Only a completed preparation publishes rows
 or units.
 

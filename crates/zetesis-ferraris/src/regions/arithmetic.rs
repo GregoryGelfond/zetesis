@@ -67,6 +67,8 @@ pub struct PreparationLimits {
 
 impl PreparationLimits {
     /// Ordinary optional effort allowance, shared by both arithmetic systems.
+    /// A caller that scales the allowance with its theory, as the solver's
+    /// opening does, grants no less than this.
     pub const DEFAULT_WORK: u64 = 100_000_000;
 }
 
