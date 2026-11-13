@@ -6,29 +6,45 @@
 //! preferred even if another producer derives it; an ordinary disjunctive head
 //! is preferred only when none of its producers has an ordinary singleton head.
 //!
+//! Two keys order the heads. A component's *choice depth* is the length of
+//! the longest path of components holding a generating head that it depends
+//! on: choices that depend on no other have depth zero, and where each step of
+//! a plan chooses from what the step before derived, a step's choices share a
+//! depth. Its *rank* is its position in one dependency order of the
+//! components, which also orders heads that do not depend on each other. The
+//! depth is what the dependencies say; among heads of one depth the rank is
+//! arbitrary, so there the region's own state decides first: the head for
+//! which the chains the region has shortened weigh the most
+//! ([`Narrower::shortened_weight`]), and the rank only among equals. A region
+//! that has shortened nothing splits by depth and rank alone.
+//!
 //! Dependency vertices are original atoms and formula nodes. Atoms precede their
 //! occurrences, every operand precedes its parent (including both implication
 //! operands and every native condition), and a producer body precedes all its
 //! heads. Facts have no incoming producer dependency; constraints create none.
-//! Two iterative graph passes assign components in topological order. Temporary
-//! compact incidence tables reuse `Adjacency`; only atom ranks and packed head
-//! marks survive. A component can contain arbitrary cycles: no shifting occurs.
+//! Two iterative graph passes assign components in topological order; the
+//! second also takes each component's depth from the components it reads,
+//! which precede it. Temporary compact incidence tables reuse `Adjacency`; only
+//! atom ranks, atom depths and packed head marks survive. A component can
+//! contain arbitrary cycles: no shifting occurs.
 //!
 //! Construction is O(A + N + E + H), including repeated original incidences;
 //! temporary storage is O(A + N + E + H), retained storage O(A). Every table
 //! pass, initialized cell, inspected vertex and edge is charged. Named headers
 //! and actual vector capacities are admitted before publication; borrowed theory
 //! payload, allocator metadata and other stack locals are excluded. Selection
-//! reads each eligible open atom once and has constant additional space.
+//! reads each eligible open atom once, and once more with the parents of each
+//! atom of least depth when the region has shortened a chain; it has constant
+//! additional space.
 
 use std::{fmt, mem::size_of};
 
 use zetesis_algebra::{
-    Cancellation, Failure, Meter, MeterBytes, POLL_INTERVAL, Quota, Stop, words::Words,
+    Cancellation, Class, Failure, Meter, MeterBytes, POLL_INTERVAL, Quota, Stop, words::Words,
 };
 
 use super::{
-    NodeView, OriginalSubject, PreferenceAttempt, Producers, Region, Theory,
+    Knowledge, Narrower, NodeView, OriginalSubject, PreferenceAttempt, Producers, Region, Theory,
     adjacency::{Adjacency, Construction},
     flag_words,
 };
@@ -101,7 +117,10 @@ pub struct GeneratorOrderAttempt<E = Stop> {
 pub struct GeneratorOrder {
     theory: Theory,
     heads: Words<u64>,
+    /// Per atom, its component's position in the dependency order.
     ranks: Vec<usize>,
+    /// Per atom, the longest chain of generating components it depends on.
+    depths: Vec<usize>,
 }
 
 impl GeneratorOrder {
@@ -205,17 +224,38 @@ impl GeneratorOrder {
     pub fn retained_bytes(&self) -> u128 {
         size_of::<Self>() as u128
             + self.heads.capacity() as u128 * size_of::<u64>() as u128
-            + self.ranks.capacity() as u128 * size_of::<usize>() as u128
+            + (self.ranks.capacity() + self.depths.capacity()) as u128 * size_of::<usize>() as u128
     }
 
-    /// Select the earliest component among open generating heads, or all open
-    /// atoms when none remain. Atom identity breaks component ties. The theory
-    /// is authenticated before reading the region; region atom coordinates must
-    /// belong to it. Both split children remain necessary for complete coverage.
-    pub fn preferred_atom_reserved<Q: Quota + ?Sized>(
+    /// Select among the open generating heads, or all open atoms when none
+    /// remain: an atom of least choice depth; among those, the one for which
+    /// the chains the region has shortened weigh the most, by the score
+    /// [`Knowledge::preferred_atom_reserved`] states; among equals the
+    /// earliest component, then the lowest atom. `narrower` and `knowledge`
+    /// must be the theory's own, and the knowledge closed for the region. The
+    /// theory is authenticated before reading the region; region atom
+    /// coordinates must belong to it, and an index of another atom count is
+    /// refused. Both split children remain necessary for complete coverage.
+    ///
+    /// One unit per eligible atom. A region that has shortened a chain reads
+    /// the eligible atoms once more, with one unit per parent of each atom of
+    /// least depth.
+    ///
+    /// # Errors
+    /// [`Stop::InvalidProgram`] for another theory, a region of another atom
+    /// count or an index of another atom count, with no unit charged; the
+    /// meter's refusal, with the units charged before it.
+    ///
+    /// # Panics
+    /// Panics if it reads a node or chain outside `knowledge`'s universe: a
+    /// knowledge of another theory, of any shape, is not detected, and their
+    /// correspondence is the caller's precondition.
+    pub fn preferred_atom_reserved<C: Class, Q: Quota + ?Sized>(
         &self,
+        narrower: &Narrower,
         theory: &Theory,
         region: &Region,
+        knowledge: &Knowledge<C>,
         cancellation: &Cancellation,
         work: &mut Meter<'_, Q>,
     ) -> PreferenceAttempt<Failure<Q::Error>> {
@@ -223,7 +263,7 @@ impl GeneratorOrder {
         let result = cancellation
             .poll()
             .map_err(Failure::from)
-            .and_then(|()| self.preferred(theory, region, work));
+            .and_then(|()| self.preferred(narrower, theory, region, knowledge, work));
         work.refund();
         PreferenceAttempt {
             result,
@@ -231,27 +271,55 @@ impl GeneratorOrder {
         }
     }
 
-    pub(super) fn preferred<Q: Quota + ?Sized>(
+    pub(super) fn preferred<C: Class, Q: Quota + ?Sized>(
         &self,
+        narrower: &Narrower,
         theory: &Theory,
         region: &Region,
+        knowledge: &Knowledge<C>,
         work: &mut Meter<'_, Q>,
     ) -> Result<Option<usize>, Failure<Q::Error>> {
-        if !self.belongs_to(theory) || region.len() != self.ranks.len() {
+        if !self.belongs_to(theory)
+            || region.len() != self.ranks.len()
+            || !narrower.indexes(self.ranks.len())
+        {
             return Err(Failure::Stopped(Stop::InvalidProgram));
         }
-        let mut marked = region.open_in(&self.heads).peekable();
-        let any_marked = marked.peek().is_some();
-        let eligible = marked.chain((!any_marked).then(|| region.open()).into_iter().flatten());
-        let mut best = None;
-        for atom in eligible {
+        let any_marked = region.open_in(&self.heads).next().is_some();
+        let eligible = || {
+            region
+                .open_in(&self.heads)
+                .chain((!any_marked).then(|| region.open()).into_iter().flatten())
+        };
+        let mut first = None;
+        for atom in eligible() {
             work.tick()?;
-            let key = (self.ranks[atom], atom);
-            if best.is_none_or(|old| key < old) {
-                best = Some(key);
+            let key = (self.depths[atom], self.ranks[atom], atom);
+            if first.is_none_or(|old| key < old) {
+                first = Some(key);
             }
         }
-        Ok(best.map(|(_, atom)| atom))
+        let Some((depth, rank, atom)) = first else {
+            return Ok(None);
+        };
+        if !knowledge.shortened() {
+            return Ok(Some(atom));
+        }
+        // No score is below zero, so from the first atom at zero the scan
+        // keeps the greatest score and, among equals, the least rank and atom.
+        let mut best = (0, rank, atom);
+        for atom in eligible() {
+            work.tick()?;
+            if self.depths[atom] != depth {
+                continue;
+            }
+            let score = narrower.shortened_weight(knowledge, atom, work)?;
+            let order = (self.ranks[atom], atom);
+            if score > best.0 || (score == best.0 && order < (best.1, best.2)) {
+                best = (score, order.0, order.1);
+            }
+        }
+        Ok(Some(best.2))
     }
 }
 
@@ -281,7 +349,8 @@ fn build<Q: Quota + ?Sized>(
     let headers = size_of::<GeneratorOrder>()
         + size_of::<Graph>()
         + size_of::<Vec<u8>>() * 2
-        + size_of::<Vec<usize>>() * 4
+        + size_of::<Vec<bool>>()
+        + size_of::<Vec<usize>>() * 6
         + size_of::<Vec<Frame>>();
     budget.observe(headers as u128)?;
     let GeneratorHeads { heads, any } = generator_heads(theory.atom_count(), producers, budget)?;
@@ -295,7 +364,16 @@ fn build<Q: Quota + ?Sized>(
     let (outgoing, incoming) = Adjacency::try_build_pair_in(vertices, incidences.map(Ok), budget)?;
     let graph = Graph { outgoing, incoming };
     let finished = finishing_order(&graph, vertices, budget)?;
-    let components = components(&graph, &finished, vertices, budget)?;
+    let Components {
+        of: components,
+        depths: component_depths,
+    } = components(
+        &graph,
+        &finished,
+        (vertices, theory.atom_count()),
+        &heads,
+        budget,
+    )?;
     // The graph walk's coordinates are checked before any order is published.
     for from in 0..vertices {
         budget.tick()?;
@@ -307,10 +385,13 @@ fn build<Q: Quota + ?Sized>(
         }
     }
     let mut ranks = budget.reserve(theory.atom_count())?;
+    let mut depths = budget.reserve(theory.atom_count())?;
     for &component in &components[..theory.atom_count()] {
         budget.tick()?;
         ranks.push(component);
+        depths.push(component_depths[component]);
     }
+    budget.release(component_depths)?;
     budget.release(components)?;
     budget.release(finished)?;
     graph.outgoing.release_in(budget)?;
@@ -319,6 +400,7 @@ fn build<Q: Quota + ?Sized>(
         theory: theory.clone(),
         heads,
         ranks,
+        depths,
     }))
 }
 
@@ -429,43 +511,68 @@ fn finishing_order<Q: Quota + ?Sized>(
     Ok(finished)
 }
 
+/// Each vertex's component, in dependency order, and each component's choice
+/// depth.
+struct Components {
+    of: Vec<usize>,
+    /// Per component, the longest chain of generating components it reads.
+    depths: Vec<usize>,
+}
+
+/// Assign components in dependency order, and with each its choice depth. A
+/// component is complete when its walk ends, and every component it reads was
+/// assigned before it, so each read finds a final depth. A component is
+/// generating when one of its atoms is a marked head; reading one adds a step.
 fn components<Q: Quota + ?Sized>(
     graph: &Graph,
     finished: &[usize],
-    vertices: usize,
+    (vertices, atoms): (usize, usize),
+    heads: &Words<u64>,
     budget: &mut Budget<'_, '_, Q>,
-) -> Result<Vec<usize>, GeneratorOrderError<Failure<Q::Error>>> {
+) -> Result<Components, GeneratorOrderError<Failure<Q::Error>>> {
     let mut assigned = budget.filled(vertices, 0_u8)?;
     let mut components = budget.filled(vertices, 0_usize)?;
     let mut queue = budget.reserve(vertices)?;
-    let mut component = 0;
+    let mut depths: Vec<usize> = budget.reserve(vertices)?;
+    let mut generating: Vec<bool> = budget.reserve(vertices)?;
     for &start in finished.iter().rev() {
         budget.tick()?;
         if assigned[start] != 0 {
             continue;
         }
+        let component = depths.len();
         queue.clear();
         queue.push(start);
         assigned[start] = 1;
         components[start] = component;
+        let (mut depth, mut generates) = (0, false);
         let mut next = 0;
         while let Some(&vertex) = queue.get(next) {
             budget.tick()?;
             next += 1;
+            generates |= vertex < atoms && heads.contains(vertex);
             for &source in &graph.incoming[vertex] {
                 budget.tick()?;
                 if assigned[source] == 0 {
                     assigned[source] = 1;
                     components[source] = component;
                     queue.push(source);
+                } else if components[source] != component {
+                    let read = components[source];
+                    depth = depth.max(depths[read] + usize::from(generating[read]));
                 }
             }
         }
-        component += 1;
+        depths.push(depth);
+        generating.push(generates);
     }
     budget.release(assigned)?;
     budget.release(queue)?;
-    Ok(components)
+    budget.release(generating)?;
+    Ok(Components {
+        of: components,
+        depths,
+    })
 }
 
 struct Budget<'a, 'q, Q: Quota + ?Sized> {

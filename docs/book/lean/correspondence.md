@@ -2532,10 +2532,12 @@ ranking the original theory's atomic choice heads first and then the unknown-par
 counts of the last subject: the active bound, latest permanent restriction, or
 original theory, in that precedence. With a restriction, the original theory's
 unknown-parent count breaks ties through `preferred_atom_with_secondary_reserved`;
-otherwise `preferred_atom_reserved` retains the original-only ranking. The two
+otherwise `preferred_atom_reserved` ranks by the original alone, and puts the
+weight of the chains its region has shortened before the counts. The two
 knowledge values must share atom identities and be closed for the same region.
 The ranking charges each inspected count, one per open atom without a
-restriction and two with one. It reads the choice mark in the primary charge,
+restriction and two with one, and each parent read for a shortened chain. It
+reads the choice mark in the primary charge,
 retains its charged prefix on refusal and installs no partial preference.
 Packed enumeration must exclude padding and preserve ascending ties. Selecting
 an open atom retains the split-partition obligation of `Search.CoverageTree`;
@@ -5391,10 +5393,14 @@ laws from the unproved transport, epoch and completion correspondences.
 formula, held/cut consequence, root-satisfaction test or frozen-reduct query.
 Complete `Producers` supply generator marks and body-to-head dependencies. Both
 signs of every formula operand participate in the temporary graph; its component
-order is a preference, not a foundedness or normal-program certificate. Every
+order and choice depths are a preference, not a foundedness or normal-program
+certificate. Among heads of one depth the order reads the region's closed
+knowledge for the chains the region has shortened; that read changes no
+knowledge and decides no atom. Every
 selected atom is checked against the region's open mask. The existing
 `Search.CoverageTree.split` and `Region.split_partition`/`Region.split_disjoint` laws
 therefore supply the semantic coverage obligation. Rust refinement separately
-owes exact theory ownership, valid graph incidences, correct component ordering,
-open-only selection and preservation of both children on every execution route.
+owes exact theory ownership, valid graph incidences, correct component ordering
+and depths, open-only selection and preservation of both children on every
+execution route.
 No Lean claim here certifies the component implementation or measured behavior.

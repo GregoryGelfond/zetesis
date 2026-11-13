@@ -34,6 +34,7 @@ fn copied_known<A: Count, B: Count>(known: &Known<A>) -> Known<B> {
         seeded: known.seeded,
         founded_closed: known.founded_closed,
         support_progress: known.support_progress.clone(),
+        shortened: known.shortened,
     }
 }
 

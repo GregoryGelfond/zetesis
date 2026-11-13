@@ -1045,13 +1045,19 @@ impl Drop for RegionSearch {
 /// share one allowance. Every source decision decreases the number of open atoms;
 /// no source clause is added to the theory or its frozen reduct.
 ///
-/// Select the split once after the joint fixed point. Original atomic choice
-/// heads rank first. The active bound, latest permanent restriction, or original
-/// theory supplies the primary unknown-parent count, in that precedence. The
-/// original count breaks restriction-count ties, followed by the lower atom.
-/// Selection borrows existing knowledge, charging two count reads per open atom
-/// when a restriction is active and one otherwise. A failed attempt installs no
-/// partial preference.
+/// Select the split once after the joint fixed point. With no restriction, a
+/// prepared generator order ranks its heads by choice depth, then by the
+/// chains the region has shortened, then by component; without one, original
+/// atomic choice heads rank first, then shortened chains, then the original's
+/// unknown-parent count. Under a restriction choice heads rank first and the
+/// active bound, or else the latest permanent restriction, supplies the
+/// primary unknown-parent count; the original count breaks its ties, followed
+/// by the lower atom. Selection borrows existing knowledge, charging two count
+/// reads per open atom when a restriction is active and one otherwise. Where
+/// the region has shortened a chain and no restriction is active, a generator
+/// order reads its eligible atoms a second time, and either ranking charges
+/// one more unit per parent of each atom it scores. A failed attempt installs
+/// no partial preference.
 pub(super) fn narrow<Q: Quota, R: std::borrow::Borrow<(Theory, Narrower)>>(
     reading: CandidateReading<'_>,
     restrictions: &Conditions<R>,
@@ -1090,7 +1096,14 @@ pub(super) fn narrow<Q: Quota, R: std::borrow::Borrow<(Theory, Narrower)>>(
     if result == Narrowing::Refuted {
         return Ok(result);
     }
-    let preferred = prefer_split(original, restrictions, region, knowledge, budget, counts)?;
+    let preferred = prefer_split(
+        (original, narrower),
+        restrictions,
+        region,
+        knowledge,
+        budget,
+        counts,
+    )?;
     if let Some(atom) = preferred {
         entry.prefer(atom);
     }
@@ -1099,9 +1112,10 @@ pub(super) fn narrow<Q: Quota, R: std::borrow::Borrow<(Theory, Narrower)>>(
 
 /// Rank open atoms only after all subjects agree on the current region. An
 /// active restriction keeps the primary degree; the original breaks its ties.
-/// Otherwise a prepared generator order takes precedence over the degree read.
+/// Otherwise a prepared generator order takes precedence over the degree read,
+/// and reads the original's closed knowledge for what the region shortened.
 fn prefer_split<Q: Quota, R>(
-    original: OriginalSubject<'_>,
+    (original, narrower): (OriginalSubject<'_>, &Narrower),
     conditions: &Conditions<R>,
     region: &Region,
     knowledge: &CandidateKnowledge,
@@ -1114,10 +1128,17 @@ fn prefer_split<Q: Quota, R>(
     let mut meter = Meter::reserved(&mut quota);
     let attempt = if conditions.permanent.is_empty() && conditions.bound.is_none() {
         match original.generator_order() {
-            Some(order) => {
-                order.preferred_atom_reserved(original.theory(), region, cancellation, &mut meter)
-            }
-            None => primary.preferred_atom_reserved(
+            Some(order) => order.preferred_atom_reserved(
+                narrower,
+                original.theory(),
+                region,
+                original_known,
+                cancellation,
+                &mut meter,
+            ),
+            // No condition is active, so the primary knowledge is the original's.
+            None => original_known.preferred_atom_reserved(
+                narrower,
                 region,
                 original.choices(),
                 cancellation,

@@ -71,6 +71,30 @@ Notable changes by release. Versions follow Semantic Versioning.
   - Before a theory is published, emission checks that every atom it read as
     true is derived by unconditional ordinary roots, and refuses with the
     source-activity failure otherwise.
+- A walk orders its splits by what its region has decided. A chain is a
+  conjunction or disjunction read over its operands; the region has shortened
+  it when an operand is settled without settling the chain and two or more of
+  its members, the open operands and its own truth while unknown, remain.
+  Under a prepared generator order a walk takes an open generating head of
+  least choice depth, the longest path of choosing components below the head,
+  and among those the head for which the shortened chains weigh the most; the
+  component order breaks ties as before. Walks without a generator order, the
+  countermodel walk of a frozen reduct among them, rank by shortened chains
+  before unknown-parent counts. Under a candidate restriction or an objective
+  bound the ranking is unchanged: its subject is the restriction's own
+  knowledge, so once an optimization holds an incumbent its splits are chosen
+  as before. Every answer set and every optimum is unchanged. The order in
+  which answers are found changes, and with it the regions visited and the
+  search work reported. Where a region has shortened a chain, a generator
+  order reads its eligible atoms a second time, and either ranking reads the
+  parents of the atoms it scores, one unit each. The generator order retains
+  one more word for each atom and its preparation holds nine more bytes for
+  each atom and node, so a theory at the edge of the preparation byte
+  allowance can now decline it. `GeneratorOrder::preferred_atom_reserved` and
+  `Knowledge::preferred_atom_reserved` now take the theory's `Narrower`, and
+  the former the region's closed `Knowledge`; see the
+  [library map](docs/book/rust/libraries.md). See
+  [shortened chains](docs/book/architecture/execution.md#shortened-chains).
 - Candidate narrowing no longer counts a producer as support when its body
   requires its own head, or an atom that only that head can derive, as in the
   alias pair `a :- b.` `b :- a.` with one other rule for `a`

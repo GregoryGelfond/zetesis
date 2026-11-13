@@ -474,7 +474,7 @@ fn a_dropped_pigeon_candidate_finds_its_countermodel_in_few_regions() {
     let regions = statistics.reduct.regions;
     assert_eq!(
         (regions.regions, regions.refuted, regions.leaves),
-        (55, 0, 1)
+        (53, 0, 1)
     );
     // Four pigeons' clauses, four holes' cliques, and the bound of nothing
     // completing the lower side over the dropped pigeon's.

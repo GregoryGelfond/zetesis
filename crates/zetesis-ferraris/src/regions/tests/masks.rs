@@ -216,6 +216,7 @@ fn known_view_keeps_the_original_borrowed_record_layout() {
         seeded: &'a mut bool,
         founded_closed: &'a mut bool,
         support_progress: &'a mut support::Progress,
+        shortened: &'a mut bool,
     }
     assert_eq!(size_of::<KnownMut<'_, u16>>(), size_of::<Original<'_>>());
     assert_eq!(align_of::<KnownMut<'_, u16>>(), align_of::<Original<'_>>());
@@ -239,4 +240,5 @@ fn known_view_keeps_the_original_borrowed_record_layout() {
     offset!(seeded);
     offset!(founded_closed);
     offset!(support_progress);
+    offset!(shortened);
 }
