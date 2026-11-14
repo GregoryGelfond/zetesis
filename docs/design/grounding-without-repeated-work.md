@@ -34,8 +34,9 @@ Measured sample shares, support / emission, at one worker before stage 1:
 
 1. **Rich producers re-traversed with unchanged inputs (stage 1).** A producer plan, which wakes only rules whose
    inputs changed, exists only for positive-flat programs without objectives (`formula_support/producers.rs`,
-   `formula_domains/positive.rs`). Every maintained eager encoding with a choice rule runs `Schedule::all`, which
-   visits every producer in every round. A *rich* producer (a choice, disjunctive or conditional head, or an
+   `formula_domains/positive.rs`). Every maintained eager encoding with a choice rule ran `Schedule::all`, which
+   visited every producer in every round; a registration has since come to wake its ordinary producers as the plan
+   does. A *rich* producer (a choice, disjunctive or conditional head, or an
    aggregate, conditional or projection in its body) took a full traversal on every visit, even when nothing it reads
    had changed: its body join, every per-binding element join and aggregate proposal, and every head, each already
    supported. Every visit also re-classified the rule (`delta::variants` scanned the body, about 0.9% of the TSP

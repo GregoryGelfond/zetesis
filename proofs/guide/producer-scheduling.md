@@ -52,12 +52,22 @@ that next round. A resource failure produces no completed support owner. An
 empty affected set still admits the final support round, while avoiding a new
 catalog/query snapshot. Full final formula emission is separate and unchanged.
 
-Richer source visits every producer each round, through the
+Richer source registers each producer, through the
 [producer registration](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/formula_support/producers/registration.rs).
-A rich producer registers its read set: every atom occurrence in its body and
-head element conditions, at every depth. After the first round it is traversed
-only when one of those predicates gained rows, which is the general law's
-selection.
+A producer whose body holds only positive, negated and scalar literals
+registers its positive occurrences as the plan does, with the same reverse
+postings and packed set. The first round visits every producer, which is the
+law's bootstrap; a later round visits such a producer only after a predicate of
+one of those occurrences gained rows. That is `selective_step_exact` again:
+the registration of positive inputs is complete, a default negation is no
+input, and the heads proposed earlier are published. A producer with an
+occurrence whose predicate the dependency graph does not name is outside those
+postings and is visited in every round.
+
+A rich producer is visited in every round and registers its read set: every
+atom occurrence in its body and head element conditions, at every depth. After
+the first round it is traversed only when one of those predicates gained rows,
+which is the general law's selection.
 
 A rich producer whose reads all lie in dependency components before its heads'
 is instead scheduled by component: it waits, unselected though affected, until

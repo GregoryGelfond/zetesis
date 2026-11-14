@@ -14,6 +14,26 @@ Notable changes by release. Versions follow Semantic Versioning.
 
 ### Changed
 
+- A support round visits the rules it can affect. Where a program has no
+  whole-program producer plan, which is every program with a choice, a
+  negation, an aggregate or an objective, each round of support completion
+  visited every rule. An ordinary rule is now visited in the first round and
+  afterwards only in a round that follows the publication of a new row of
+  one of its positive body predicates: its delta variants join new rows
+  alone, so any other visit had no variant and derived nothing. Rules with
+  aggregates, conditional literals or projections are still visited in every
+  round, where their registration decides whether they are traversed. An
+  ordinary rule that waits for the atoms it negates is visited like any
+  other, without a variant, until the schedule traverses it. A
+  program that grows for many rounds pays in each round for the rules that
+  round can affect: a transitive closure of 200 rounds beside 2,000 unrelated
+  rules grounds in 192 ms where it took 347 ms, and twenty recursive strata
+  chained by negation beside 5,000 rules, which the decided negations had
+  slowed from 314 ms to 2,289 ms, ground in 252 ms. No support, theory or
+  answer changes. `support_producer_visits` is lower, and reported
+  production and wake work change with it; `support_deferred_visits` is
+  lower for a rule that waits through rounds in which nothing it reads
+  grows.
 - Ordering a model's atoms costs less when they are already in order. The
   order of an answer's atoms is prepared by a stable merge sort over the
   whole atom catalog, which compared half the atoms in every pass whatever

@@ -127,16 +127,16 @@ fn atoms_read(rule: &RuleIr) -> impl Iterator<Item = Pattern> + '_ {
 }
 
 /// Resolves an atom pattern's predicate to its node in the dependency graph.
-struct Resolver<'a, 'source, 'view> {
-    nodes: &'a [Node<'source>],
-    view: TemplateComponentsRef<'view>,
-    limits: &'a FormulaLimits,
+pub(super) struct Resolver<'a, 'source, 'view> {
+    pub(super) nodes: &'a [Node<'source>],
+    pub(super) view: TemplateComponentsRef<'view>,
+    pub(super) limits: &'a FormulaLimits,
 }
 
 impl Resolver<'_, '_, '_> {
     /// The node of `pattern`'s predicate, or `None` when the graph does not
     /// name it. The pattern's read and the lookup charge their own units.
-    fn node(
+    pub(super) fn node(
         &self,
         pattern: Pattern,
         counters: &mut Counters,

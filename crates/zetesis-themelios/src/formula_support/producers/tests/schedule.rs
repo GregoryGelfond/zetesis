@@ -8,6 +8,7 @@ use std::fmt::Write;
 use super::{atom, location, plan, prepare};
 use crate::formula::Preparation;
 use crate::formula_ir::HeadIr;
+use crate::formula_support::producers::testing::with_every_round_traversed;
 use crate::formula_support::producers::{ProducerPlan, Producers};
 use crate::formula_support::{Counters, complete};
 use crate::grounding_observer::Profile;
@@ -139,7 +140,10 @@ fn affected_rounds_avoid_repeated_producer_visits() {
         )
         .unwrap();
     }
-    let reference = measure(&prepared, false, &FormulaLimits::default()).unwrap();
+    let reference = with_every_round_traversed(|| {
+        measure(&prepared, false, &FormulaLimits::default()).unwrap()
+    });
+    let registered = measure(&prepared, false, &FormulaLimits::default()).unwrap();
     let scheduled = measure(&prepared, true, &FormulaLimits::default()).unwrap();
     let mut expected: Vec<_> = (0..steps)
         .map(|start| atom("edge", Sign::Positive, &[start, start + 1]))
@@ -147,14 +151,19 @@ fn affected_rounds_avoid_repeated_producer_visits() {
         .collect();
     expected.sort();
     assert_eq!(scheduled.atoms, expected);
+    assert_eq!(scheduled.atoms, registered.atoms);
     assert_eq!(scheduled.atoms, reference.atoms);
     // The 65 facts enter the first round without a producer visit. The
     // recursive producer runs once per new reach row, including the final row
-    // without a successor. The disconnected cycles are never enabled. Full
-    // traversal instead visits all 19 rules in each of the 66 rounds.
+    // without a successor. The disconnected cycles are never enabled. A
+    // registration visits all 19 rules in the first round and then wakes
+    // the recursive producer the same way. Full traversal instead visits
+    // all 19 rules in each of the 66 rounds.
     assert_eq!(reference.operations.support_producer_visits, Some(1_254));
+    assert_eq!(registered.operations.support_producer_visits, Some(84));
     assert_eq!(scheduled.operations.support_producer_visits, Some(65));
     assert_eq!(reference.operations.support_rounds, Some(66));
+    assert_eq!(registered.operations.support_rounds, Some(66));
     assert_eq!(scheduled.operations.support_rounds, Some(66));
     assert_eq!(
         reference.operations.binding_snapshots,
@@ -264,6 +273,81 @@ fn reverse_postings_preserve_signed_predicate_identity() {
         }
         actual.sort_unstable();
         assert_eq!(actual, expected);
+    }
+}
+
+#[test]
+fn the_plan_refuses_a_published_predicate_it_does_not_name() {
+    // A plan certifies that every predicate a round can publish is one of
+    // its source's: an atom of another is not its catalog's.
+    let owner = prepare("p(1).a(X):-p(X).");
+    let prepared = &owner.program;
+    let mut plan = plan(prepared, &owner.catalog);
+    let foreign = AtomCatalog::new(vec![atom("zz", Sign::Positive, &[1])]).unwrap();
+    let result = plan.advance(
+        foreign.atoms().iter(),
+        &FormulaLimits::default(),
+        &mut Counters::default(),
+        location(prepared),
+    );
+    assert!(matches!(
+        result,
+        Err(FormulaFailure::SupportRelation {
+            error: zetesis_core::relation::Failure::Owner,
+            ..
+        })
+    ));
+}
+
+/// The rules the next round visits, in order.
+fn visited(producers: &Producers<'_>, location: crate::ProgramSite) -> Vec<usize> {
+    let mut schedule = producers.schedule();
+    let mut selected = Vec::new();
+    while let Some(rule) = schedule
+        .next(
+            &FormulaLimits::default(),
+            &mut Counters::default(),
+            location,
+        )
+        .unwrap()
+    {
+        selected.push(rule);
+    }
+    selected
+}
+
+#[test]
+fn a_registration_wakes_a_certified_producer_by_the_predicates_it_reads() {
+    // The choice keeps the source from a whole-program plan. Both rules are
+    // visited in the first round; afterwards the rule of `a` is visited
+    // only after `p` gained an atom, and the choice, which reads nothing,
+    // never again. A registration does not certify the predicates a round
+    // can publish, so an atom of one it does not name wakes no rule and is
+    // no failure.
+    let owner = prepare("p(1).{c}.a(X):-p(X).");
+    let prepared = &owner.program;
+    let limits = FormulaLimits::default();
+    let mut counters = Counters::default();
+    let site = location(prepared);
+    let mut producers =
+        Producers::registered(prepared, &owner.catalog, &limits, &mut counters, site).unwrap();
+    assert_eq!(visited(&producers, site), [0, 1]);
+    let reader = prepared
+        .rules_without_facts()
+        .iter()
+        .position(|rule| matches!(rule.head, HeadIr::Normal(Some(_))))
+        .unwrap();
+    for (published, expected) in [
+        (atom("zz", Sign::Positive, &[1]), vec![]),
+        (atom("p", Sign::Positive, &[2]), vec![reader]),
+        (atom("c", Sign::Positive, &[]), vec![]),
+        (atom("p", Sign::Negative, &[2]), vec![]),
+    ] {
+        let delta = AtomCatalog::new(vec![published]).unwrap();
+        producers
+            .advance(delta.atoms().iter(), &limits, &mut counters, site)
+            .unwrap();
+        assert_eq!(visited(&producers, site), expected);
     }
 }
 

@@ -741,7 +741,7 @@ fn complete(
             retained = support.into_retained(fallback)?;
             advance_round(
                 &mut delta,
-                producers.plan_mut(),
+                Some(&mut producers),
                 GroundingWork::new(limits, counters, fallback),
             )?
         };
@@ -832,7 +832,7 @@ fn produce<'source>(
 /// publication order. Refusal leaves private round metadata, never completion.
 fn advance_round(
     delta: &mut SupportAppend<'_>,
-    plan: Option<&mut producers::ProducerPlan<'_>>,
+    producers: Option<&mut producers::Producers<'_>>,
     work: GroundingWork<'_>,
 ) -> Result<bool, FormulaFailure> {
     let GroundingWork {
@@ -848,9 +848,9 @@ fn advance_round(
     })?;
     #[cfg(test)]
     facts::rounds::record(delta.atoms());
-    if let Some(plan) = plan {
+    if let Some(producers) = producers {
         counters.observe_work(Event::SupportWakeWork, |counters| {
-            plan.advance(delta.atoms(), limits, counters, location)
+            producers.advance(delta.atoms(), limits, counters, location)
         })?;
     }
     Ok(true)

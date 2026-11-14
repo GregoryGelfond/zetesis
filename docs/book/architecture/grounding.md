@@ -1700,6 +1700,23 @@ occurrences, and a rich producer with its read set, the distinct signed
 predicates of every atom occurrence in its body and its head elements'
 conditions, at every depth and of either sign.
 
+Every registered producer is visited in the first round, in rule order, so
+that a fact block still enters support at its position among the rules.
+After that an ordinary producer is visited only in a round that follows the
+publication of a new row of one of its positive occurrences' predicates. Its
+delta variants join the rows of the last publication alone, so in any other
+round it has no variant and a visit would derive nothing. The registration
+keeps the same reverse postings and packed active set the whole-program plan
+keeps. A rich producer is visited in every round, where its registration
+decides whether it is traversed, and so is an ordinary producer with an
+occurrence whose predicate the dependency graph does not name. An ordinary
+producer that the component schedule holds back is visited like any other:
+such a visit takes no variant and is counted as deferred, and the schedule
+traverses the producer outside the round's visits, whether or not the round
+visited it. A program that grows for many rounds therefore pays in each
+round for the rules that round can affect, and no longer for every rule it
+has.
+
 A rich producer whose reads all lie in dependency components before its heads'
 components is scheduled by component. Components come from the dependency
 graph's dependency-before-dependent order; a component depends on the
@@ -1789,7 +1806,9 @@ component-scheduled producer runs inside an ordinary round and adds none, though
 the heads it proposes, and so their consumers' rounds, can come later than on
 the per-change schedule. The
 [scheduling law](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/guide/producer-scheduling.md)
-covers both registrations.
+covers both registrations: its rule-level form the ordinary producers, which
+their positive occurrences wake, and its general form the rich producers'
+read sets.
 Structural occurrences use the original whole-row capture and the same nested
 constructor, constant, repeated-variable and anonymous-pattern checks. Bound
 structural postings intersect the old/new interval by actual relation row position.

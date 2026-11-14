@@ -1,12 +1,21 @@
 //! What each producer reads, prepared once per completion on the full schedule.
 //!
-//! Without a producer plan every rule is visited in every round. Its
-//! registration records once what a visit needs:
+//! Without a producer plan every rule is registered, and its registration
+//! records once what a visit needs:
 //! - a certified producer's positive body occurrences, flat and structural,
 //!   whose delta variants it takes;
 //! - a rich producer's read set: the distinct predicates of every atom
 //!   occurrence its frames hold, at any depth, of either sign
 //!   ([`occurrences::rule`]).
+//!
+//! Every producer is visited in the first round. Afterwards a certified
+//! producer is visited only in a round after a predicate of one of its
+//! positive occurrences gained rows ([`Visits`]): its delta variants join
+//! rows of the last publication alone, so any other visit has no variant. A
+//! rich producer is visited in every round. A certified producer the
+//! component schedule holds back is visited like any other: its visit takes
+//! no variant and is counted as deferred, and the schedule traverses it
+//! outside the round's visits, whether or not it was visited.
 //!
 //! After the first round, a rich producer none of whose read predicates gained
 //! rows is not traversed. Every relation it reads is then the one its last
@@ -40,6 +49,7 @@ use super::super::occurrences::{self, Occurrence};
 use super::super::relations::Memory;
 use super::super::{Counters, Support};
 use super::invalid;
+use super::wake::Wake;
 use crate::formula_ir::{HeadIr, LiteralIr, RuleIr};
 use crate::formula_support::components::Pattern;
 use crate::grounding_observer::Event;
@@ -56,7 +66,23 @@ pub(in crate::formula_support) struct Registration<'source> {
     /// reads or for the elements its assignments propose from, or some
     /// certified producer for the atoms it negates.
     schedule: Option<Box<components::Schedule<'source>>>,
+    /// Which producers each round visits, when the dependency graph names
+    /// the predicates they read ([`Self::wake`]).
+    wake: Option<Visits<'source>>,
     bytes: usize,
+}
+
+/// The producers a round visits. After the first round a certified producer
+/// is visited only when a predicate of one of its positive occurrences
+/// gained rows at the last publication: its delta variants join new rows
+/// alone, so without one it has no variant and a visit derives nothing.
+struct Visits<'source> {
+    /// The certified producers' positive occurrences, by predicate.
+    wake: Wake<'source>,
+    /// Visited in every round: each rich producer, whose registration
+    /// decides at the visit whether it is traversed, and each certified
+    /// producer with an occurrence whose predicate the graph does not name.
+    always: Vec<usize>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -155,6 +181,7 @@ impl<'source> Registration<'source> {
             inputs,
             reads,
             schedule: None,
+            wake: None,
             bytes: memory.bytes,
         })
     }
@@ -187,6 +214,138 @@ impl<'source> Registration<'source> {
         Ok(())
     }
 
+    /// Prepare the producers each round visits ([`Visits`]). Every producer
+    /// is visited in the first round, in rule order, so that a fact block
+    /// still enters support at its item position. The test-only reference
+    /// that traverses every rich producer in every round keeps visiting
+    /// every rule. The retained vectors are admitted beside the
+    /// registration's own bytes and `external`, and counted with them; the
+    /// graph's nodes are scratch. One unit per producer and per positive
+    /// occurrence, with each occurrence's resolution.
+    pub(in crate::formula_support) fn wake(
+        &mut self,
+        prepared: &'source crate::formula_ir::Prepared,
+        view: TemplateComponentsRef<'_>,
+        external: u128,
+        (limits, counters, location): (&FormulaLimits, &mut Counters, ProgramSite),
+    ) -> Result<(), FormulaFailure> {
+        if every_round_traversed() {
+            return Ok(());
+        }
+        let mut memory = Memory::new(
+            size_of::<Visits<'_>>(),
+            external + self.bytes as u128,
+            limits,
+            counters,
+            location,
+        );
+        memory.add(0)?;
+        let nodes = super::graph_nodes(prepared, &mut memory, limits, counters, location)?;
+        let resolver = certain::Resolver {
+            nodes: &nodes,
+            view,
+            limits,
+        };
+        let mut rules = Vec::new();
+        let mut predicates = Vec::new();
+        let mut always = Vec::new();
+        // The two scratch vectors' headers; the retained ones are fields.
+        memory.add(size_of::<Vec<Option<Range<usize>>>>() + size_of::<Vec<usize>>())?;
+        memory.reserve(&mut rules, self.producers.len())?;
+        for (index, producer) in self.producers.iter().enumerate() {
+            counters.work(limits, location)?;
+            let rule = &self.rules[index];
+            let start = predicates.len();
+            match producer {
+                Producer::Constraint => {
+                    rules.push(None);
+                    continue;
+                }
+                Producer::Rich(_) => {
+                    memory.reserve(&mut always, 1)?;
+                    always.push(index);
+                }
+                Producer::Certified(inputs) => {
+                    let mut named = true;
+                    for &occurrence in &self.inputs[inputs.clone()] {
+                        counters.work(limits, rule.location)?;
+                        let pattern = positive(&rule.body[occurrence])
+                            .expect("a registered input is a positive occurrence");
+                        if let Some(node) = resolver.node(pattern, counters, rule.location)? {
+                            memory.reserve(&mut predicates, 1)?;
+                            predicates.push(node);
+                        } else {
+                            named = false;
+                        }
+                    }
+                    if !named {
+                        predicates.truncate(start);
+                        memory.reserve(&mut always, 1)?;
+                        always.push(index);
+                    }
+                }
+            }
+            rules.push(Some(start..predicates.len()));
+        }
+        let mut wake = Wake::prepare(
+            &nodes,
+            (&rules, &predicates),
+            false,
+            &mut memory,
+            limits,
+            counters,
+            location,
+        )?;
+        for (index, inputs) in rules.iter().enumerate() {
+            if inputs.is_some() {
+                wake.mark(index, limits, counters, location)?;
+            }
+        }
+        let scratch_bytes = size_of::<Vec<super::Node<'_>>>()
+            + nodes.capacity() * size_of::<super::Node<'_>>()
+            + size_of::<Vec<Option<Range<usize>>>>()
+            + rules.capacity() * size_of::<Option<Range<usize>>>()
+            + size_of::<Vec<usize>>()
+            + predicates.capacity() * size_of::<usize>();
+        drop(rules);
+        drop(predicates);
+        drop(nodes);
+        memory.release(scratch_bytes);
+        self.wake = Some(Visits { wake, always });
+        self.bytes += memory.bytes;
+        Ok(())
+    }
+
+    /// This round's producers, in rule order: the ones [`Self::advance`]
+    /// selected, or every rule without a wake set.
+    pub(in crate::formula_support) fn round(&self) -> super::Schedule<'_> {
+        match &self.wake {
+            Some(visits) => visits.wake.schedule(),
+            None => super::Schedule::all(self.rules),
+        }
+    }
+
+    /// Select the next round's producers from this complete round's
+    /// proposed new atoms: the certified producers one of whose positive
+    /// occurrences' predicates gained an atom, and every producer visited in
+    /// every round. One unit per producer selected, beside the wake set's.
+    pub(in crate::formula_support) fn advance<'atoms>(
+        &mut self,
+        delta: impl Iterator<Item = zetesis_core::catalog::AtomRef<'atoms>>,
+        limits: &FormulaLimits,
+        counters: &mut Counters,
+        location: ProgramSite,
+    ) -> Result<(), FormulaFailure> {
+        let Some(visits) = &mut self.wake else {
+            return Ok(());
+        };
+        visits.wake.advance(delta, limits, counters, location)?;
+        for &producer in &visits.always {
+            visits.wake.mark(producer, limits, counters, location)?;
+        }
+        Ok(())
+    }
+
     /// See [`components::Schedule::mark_ready`].
     pub(in crate::formula_support) fn mark_ready(
         &self,
@@ -211,10 +370,6 @@ impl<'source> Registration<'source> {
         self.schedule
             .as_ref()
             .is_some_and(|schedule| schedule.pending())
-    }
-
-    pub(in crate::formula_support) fn rules(&self) -> &'source [RuleIr] {
-        self.rules
     }
 
     pub(in crate::formula_support) fn bytes(&self) -> usize {

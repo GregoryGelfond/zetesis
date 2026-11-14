@@ -38,9 +38,11 @@ use crate::formula_domains::PositiveSource;
 use crate::formula_ir::{HeadIr, LiteralIr, Prepared, RuleIr};
 use crate::{FormulaFailure, FormulaLimits};
 
-/// How a completion selects its producers and prepares their visits: the
-/// positive-flat plan wakes only the rules whose inputs changed; otherwise
-/// every rule is visited in every round, with its registration.
+/// How a completion selects its producers and prepares their visits. The
+/// positive-flat plan wakes only the rules whose inputs changed. A
+/// registration visits every rule in the first round and afterwards wakes
+/// its certified producers the same way, while every other producer is
+/// visited in every round.
 pub(super) enum Producers<'source> {
     Planned(ProducerPlan<'source>),
     Registered(Registration<'source>),
@@ -82,6 +84,7 @@ impl<'source> Producers<'source> {
         )?;
         if let Some(view) = view {
             registration.schedule(prepared, view, external, (limits, counters, location))?;
+            registration.wake(prepared, view, external, (limits, counters, location))?;
         }
         Ok(Self::Registered(registration))
     }
@@ -97,7 +100,7 @@ impl<'source> Producers<'source> {
     pub(super) fn schedule(&self) -> Schedule<'_> {
         match self {
             Self::Planned(plan) => plan.schedule(),
-            Self::Registered(registration) => Schedule::all(registration.rules()),
+            Self::Registered(registration) => registration.round(),
         }
     }
 
@@ -169,11 +172,21 @@ impl<'source> Producers<'source> {
         }
     }
 
-    /// The plan, whose wake set each round advances.
-    pub(super) fn plan_mut(&mut self) -> Option<&mut ProducerPlan<'source>> {
+    /// Build the next round's wake set from this complete round's proposed
+    /// new atoms. No consumer reads it until all corresponding catalog
+    /// insertions succeed.
+    pub(super) fn advance<'atoms>(
+        &mut self,
+        delta: impl Iterator<Item = AtomRef<'atoms>>,
+        limits: &FormulaLimits,
+        counters: &mut Counters,
+        location: ProgramSite,
+    ) -> Result<(), FormulaFailure> {
         match self {
-            Self::Planned(plan) => Some(plan),
-            Self::Registered(_) => None,
+            Self::Planned(plan) => plan.advance(delta, limits, counters, location),
+            Self::Registered(registration) => {
+                registration.advance(delta, limits, counters, location)
+            }
         }
     }
 
@@ -338,8 +351,8 @@ impl<'source> ProducerPlan<'source> {
         }
         let wake = Wake::prepare(
             &nodes,
-            &rules,
-            &input_predicates,
+            (&rules, &input_predicates),
+            true,
             &mut memory,
             limits,
             counters,

@@ -593,6 +593,52 @@ fn a_rule_negating_a_decided_atom_is_held_back_beside_an_undecided_one() {
 }
 
 #[test]
+fn a_held_certified_producer_is_visited_only_when_a_predicate_it_reads_grows() {
+    // `s` is certain and grows for four rounds, so the rule of `d` waits
+    // that long to decide its negation. Its one positive occurrence reads
+    // the fact `c`: the rule is visited in the first round and in the one
+    // after `c` entered, both times without a variant, and in no other
+    // round until the schedule traverses it, once. `s(9)` never holds, so
+    // no row is blocked and the support is the reference's.
+    let source = format!("{GROWING} c(9). d(X) :- c(X), not s(X).");
+    agrees_with_reference(&source);
+    let (traversals, deferred) = rich_visits(&source);
+    assert_eq!(traversals, 1);
+    assert_eq!(deferred, 2);
+}
+
+#[test]
+fn the_wake_set_is_counted_with_the_registration() {
+    // Three predicates, two rules and one positive occurrence: the wake set
+    // keeps its header, an entry for each predicate, one posting and one
+    // word of active rules. The graph's nodes and the occurrence lists it
+    // was prepared from are released.
+    let owner = prepare("p(1). {c}. a(X) :- p(X).");
+    let limits = FormulaLimits::default();
+    let mut counters = Counters::default();
+    let view = owner
+        .catalog
+        .component_view(&limits, &mut counters, owner.location)
+        .unwrap()
+        .unwrap();
+    let mut registration = registered(&owner);
+    let before = registration.bytes();
+    registration
+        .wake(
+            &owner.program,
+            view,
+            0,
+            (&limits, &mut counters, owner.location),
+        )
+        .unwrap();
+    let predicate = size_of::<usize>() + size_of::<std::ops::Range<usize>>();
+    assert_eq!(
+        registration.bytes() - before,
+        size_of::<super::Visits<'_>>() + 3 * predicate + size_of::<usize>() + size_of::<u64>()
+    );
+}
+
+#[test]
 fn the_readiness_test_charges_nothing_once_no_producer_waits() {
     // `m` waits for the fact's component. `q` is certified, so the schedule
     // never holds it, and it must not keep the test running.

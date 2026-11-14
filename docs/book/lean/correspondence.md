@@ -4720,9 +4720,18 @@ The general laws, `selective_step_exact_of_stable` and
 producers are stable; `stable_of_reads_only` gives stability to a producer whose
 proposals depend only on the carrier's atoms with registered predicates, when the
 carrier grows. The rule-level laws above are their corollaries. Without a
-whole-program plan, the Rust registration supplies the read set of each rich
-producer: every atom occurrence in its body and head element conditions, at
-every depth. The proposal function intended to instantiate `ReadsOnly` is
+whole-program plan, the Rust registration gives each producer whose body holds
+only positive, negated and scalar literals the plan's registration: its
+positive occurrences, signed-predicate reverse postings and a packed wake set.
+The first round visits every producer, which is the complete bootstrap, and a
+later round selects such a producer only after a predicate of one of those
+occurrences gained rows; a default negation is no input, as for the eager
+support scheduler above. A producer with an occurrence whose predicate the
+dependency graph does not name is not covered by the postings and is selected
+in every round. The registration supplies the read set of each rich
+producer, which is selected in every round: every atom occurrence in its body
+and head element conditions, at every depth. The proposal function intended
+to instantiate `ReadsOnly` is
 `Q(p, C)`, the possible heads of producer `p` over the fixed round snapshot `C`
 before pruning heads already supported. Equal registered relations must give
 equal `Q` values. The Rust traversal additionally reads published or pending
