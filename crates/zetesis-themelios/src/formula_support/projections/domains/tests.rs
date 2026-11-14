@@ -117,6 +117,21 @@ fn a_relation_past_the_table_bound_is_scanned() {
 }
 
 #[test]
+fn a_column_without_postings_counts_a_value_for_each_row() {
+    // No join binds the second column of `p`, so it has no postings to
+    // count and is taken to hold 3000 values: with the two of the first
+    // column that is far past the bound, and the relation is scanned.
+    with_join(
+        "p(1..2,1..1500).q(1). :-p(X,Z),q(Y),X/2=Y.",
+        |join, computation, counters, location| {
+            let (rows, work) = collect(join, computation, counters, location);
+            assert_eq!(rows.len(), 1500);
+            assert_eq!(work.table_preparations, Some(0));
+        },
+    );
+}
+
+#[test]
 fn additional_equalities_remain_residual_checks() {
     with_join(
         "p(1..6).q(2). :-p(X),q(Y),X/2=Y,X\\2=1.",
