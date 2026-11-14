@@ -604,7 +604,11 @@ Choose positive joins separately through the preparation's
 The default `Indexed` strategy probes existing value postings. After a flat
 constraint establishes finite arithmetic totality, a computed equality may
 supply a necessary input domain to the shared table selector under either
-strategy. Unrestricted probes still follow the requested strategy. `Table`
+strategy. Under `Indexed` the selector prepares a table only while its row
+masks are small, and leaves a larger relation to the ordinary probe and the
+residual comparison
+([source instances](../architecture/grounding.md#source-instances-as-a-composition)).
+Unrestricted probes still follow the requested strategy. `Table`
 reuses support masks for all applicable flat positive patterns over completed
 eager support; structural patterns and support-growth rounds keep indexed joins. The bundle
 preparation exposes the same method, and the CLI maps `--formula-joins table`

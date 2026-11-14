@@ -16,7 +16,7 @@ use zetesis_core::catalog::TermRef;
 use zetesis_core::table::{self, Cause, Domain, Resource, Selection, Table};
 use zetesis_core::{AtomKey, BindingView, PatternRef, TemplateTerm};
 
-use super::relations::{KeyIdentifiers, RelationRows};
+use super::relations::{KeyIdentifiers, Postings, RelationRows};
 use super::{Counters, GroundingWork, PositivePattern, Relations};
 use crate::formula::ceiling;
 use crate::grounding_observer::Event;
@@ -452,6 +452,12 @@ impl<'source> Support<'source> {
     /// restriction names one unbound variable present in this flat pattern;
     /// ordinary bound variables and constants retain their singleton domains.
     /// Ranges are borrowed for this call only; returned rows keep source IDs.
+    ///
+    /// Declines, with `None`, a structural pattern, an absent relation and,
+    /// when ordinary joins are indexed, a relation whose table is not yet
+    /// prepared and is not small ([`small_table`]). The
+    /// domains are necessary conditions the caller's residual checks state
+    /// again, so a declined selection loses no row and admits none.
     pub(super) fn select_domains_at<'value>(
         &self,
         rows: Option<&'source RelationRows<'source>>,
@@ -469,10 +475,11 @@ impl<'source> Support<'source> {
             counters.record(Event::TableInapplicableProbe);
             return Ok(None);
         };
-        let Some(relation) = rows.map(|rows| &rows.relation) else {
+        let Some(rows) = rows else {
             counters.record(Event::TableInapplicableProbe);
             return Ok(None);
         };
+        let relation = &rows.relation;
         Self::admit(self.live_bytes(), limits, counters, location)?;
         let mut scratch = Scratch::new(self, limits, counters, location)?;
         let bound = bind_domains(pattern, values, finite, &mut scratch, counters)?;
@@ -485,6 +492,13 @@ impl<'source> Support<'source> {
             counters.record(Event::TableReuse);
             index
         } else {
+            // Under the table strategy the caller asked for tables. Otherwise
+            // the table only narrows a probe the join can make without it.
+            if !self.table_strategy && !small_table(rows, &bound.scope, limits, counters, location)?
+            {
+                counters.record(Event::TableInapplicableProbe);
+                return Ok(None);
+            }
             self.reserve_tables(&mut tables, limits, counters, location)?;
             let outer = self.live_bytes() - relation.storage().retained_bytes;
             let table_limits = self.table_limits(limits, counters, outer, location)?;
@@ -824,6 +838,49 @@ fn bind_domains<'value>(
         }
     }
     Ok(BoundDomains { scope, domains })
+}
+
+/// The words of 32 bits a table's row masks may take when the table only
+/// narrows a probe: 256 KiB.
+const TABLE_MASK_WORDS: u128 = 1 << 16;
+
+/// Whether a table over `rows` under `scope` is small enough to prepare for
+/// a probe the join can make without it.
+///
+/// A table keeps one row mask for every distinct value of every labelled
+/// column (`zetesis_core::table`): `V` values over `R` rows cost `V` masks of
+/// `R` bits, so a column of distinct keys costs `R²` bits to hold and as
+/// much work to fill, where a scan of the relation reads `R` rows. The table
+/// is prepared while those masks take at most [`TABLE_MASK_WORDS`] words: a
+/// single column of distinct keys up to 1440 rows, and a larger relation
+/// only while its labelled columns hold few distinct values.
+///
+/// The count of a column's distinct values is its posting map's length. A
+/// column no join binds has no postings and is taken to hold a value for
+/// each row. One unit for each column.
+fn small_table(
+    rows: &RelationRows<'_>,
+    scope: &[usize],
+    limits: &FormulaLimits,
+    counters: &mut Counters,
+    location: ProgramSite,
+) -> Result<bool, FormulaFailure> {
+    let count = rows.relation.row_count() as u128;
+    let mut entries = 0_u128;
+    let mut labels = 0;
+    for (column, &label) in scope.iter().enumerate() {
+        counters.work(limits, location)?;
+        // A repeated label names a column the table has already indexed.
+        if label < labels {
+            continue;
+        }
+        labels = label + 1;
+        entries += match rows.postings(column) {
+            Postings::Indexed(values) => values.len() as u128,
+            Postings::Unindexed => count,
+        };
+    }
+    Ok(entries * count.div_ceil(u128::from(u32::BITS)) <= TABLE_MASK_WORDS)
 }
 
 fn find_table(

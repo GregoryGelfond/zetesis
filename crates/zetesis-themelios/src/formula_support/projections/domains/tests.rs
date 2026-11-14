@@ -85,6 +85,38 @@ fn computed_groups_keep_each_matching_input() {
 }
 
 #[test]
+fn a_relation_within_the_table_bound_is_selected_through_its_table() {
+    // 1000 distinct values over 1000 rows: 1000 masks of 32 words, within
+    // the 65536 words a table may take to narrow a probe.
+    with_join(
+        "p(1..1000).q(2). :-p(X),q(Y),X/2=Y.",
+        |join, computation, counters, location| {
+            let (rows, work) = collect(join, computation, counters, location);
+            assert_eq!(rows, vec![numbers(&[4, 2]), numbers(&[5, 2])]);
+            assert_eq!(work.table_preparations, Some(1));
+            assert_eq!(work.join_rows, Some(3));
+        },
+    );
+}
+
+#[test]
+fn a_relation_past_the_table_bound_is_scanned() {
+    // A table keeps a row mask for each value of each column: for the 3000
+    // distinct values of `p` that is 3000 masks of 94 words, far more than
+    // the relation itself. The selection is declined, the join scans the
+    // rows, and the equality still selects the same two.
+    with_join(
+        "p(1..3000).q(2). :-p(X),q(Y),X/2=Y.",
+        |join, computation, counters, location| {
+            let (rows, work) = collect(join, computation, counters, location);
+            assert_eq!(rows, vec![numbers(&[4, 2]), numbers(&[5, 2])]);
+            assert_eq!(work.table_preparations, Some(0));
+            assert_eq!(work.table_index_bytes, Some(0));
+        },
+    );
+}
+
+#[test]
 fn additional_equalities_remain_residual_checks() {
     with_join(
         "p(1..6).q(2). :-p(X),q(Y),X/2=Y,X\\2=1.",

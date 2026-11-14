@@ -1270,6 +1270,20 @@ one lazy table workspace. No table is prepared when every covered input remains
 allowed or the opposite operand is unavailable. An empty derived domain uses an
 empty probe directly.
 
+A table keeps one row mask for each distinct value of each of its columns, so
+a column of distinct keys over `R` rows costs `R²` bits to hold and as much
+work to fill, where a scan of the relation reads `R` rows. Under the indexed
+strategy the table is only a way to narrow a probe the join can make without
+it, so the selector prepares one only while it is small: its row masks may
+take 65536 words of 32 bits. That admits a single column of distinct keys up
+to 1440 rows, and a larger relation only while its columns hold few distinct
+values; a column no join binds has no postings to count and is taken to hold
+a value for each row. Past that bound the derived domain is not used: the
+ordinary probe offers its rows and the comparison, which remains a residual
+check, selects among them. `d(0..199999). q(X) :- d(X), X \ 2 = 0.` is
+grounded that way; its table would need about ten gigabytes. Under the table
+strategy the caller asked for tables, and the bound does not apply.
+
 Domain derivation scans the existing input/result coordinates, without another
 value dictionary or reverse-result cache. The first scan locates a rejected
 input before allocating a domain; the collector reuses its already-matched

@@ -4,7 +4,10 @@
 //! variable. Reversing that finite input/result mapping for one known equality
 //! operand therefore preserves every matching complete row. The maps remain
 //! the sole expression results; this operation owns only transient borrowed
-//! domain lists for the existing finite-table selector.
+//! domain lists for the existing finite-table selector. That selector may
+//! decline a relation whose table would not be small
+//! (`queries::small_table`); the probe then falls to the join's ordinary
+//! one, and the equality that supplied the domain is checked on each row.
 
 use std::ops::Range;
 

@@ -290,6 +290,18 @@ Notable changes by release. Versions follow Semantic Versioning.
 
 ### Fixed
 
+- A rule with an arithmetic equality over a large relation is grounded within
+  its memory. `d(0..199999). q(X) :- d(X), X \ 2 = 0.` was refused: the
+  equality selected the rows of `d` through a table that keeps a row mask for
+  each distinct value of each column, which for 200,000 distinct values needs
+  about ten gigabytes, over the default ceiling on support bytes. Where
+  ordinary joins are indexed, that selection is now made only while the table
+  is small (its masks may take 65536 words of 32 bits); past that the join
+  offers its rows and the equality is checked on each, as it always was. The
+  answer sets do not
+  change. `table_preparations` and `table_index_bytes` are lower for such a
+  rule, and its reported work changes with them. Under
+  `--formula-joins table` nothing changes.
 - An overflow or an invalid exponent in an assignment aggregate refuses
   whatever the rule's other arithmetic does. It was read as a zero divisor,
   and its instance omitted with a warning, when the last operation evaluated
