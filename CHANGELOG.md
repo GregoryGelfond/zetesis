@@ -195,6 +195,11 @@ Notable changes by release. Versions follow Semantic Versioning.
     condition holds a default negation. The
     [grounding chapter](docs/book/architecture/grounding.md#certain-predicates)
     states the rule and the rewrite that makes a seed required.
+- Support completion stops testing which dependency components reached their
+  fixed point once every rule it held back for them was traversed. The test
+  ran in every later round of a completion that also had a rule it never
+  holds. Support and the emitted theory are unchanged; reported support work
+  falls by the test's charge in those rounds.
 - Source-activity preparation reuses immutable aggregate families across a
   producer's bindings and evaluates shared numeric rows once per activity
   snapshot. This removes repeated grounding work in aggregate-dependent

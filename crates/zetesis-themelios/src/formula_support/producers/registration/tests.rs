@@ -552,6 +552,52 @@ fn a_reader_of_a_held_back_producers_head_waits_for_it() {
 }
 
 #[test]
+fn the_readiness_test_charges_nothing_once_no_producer_waits() {
+    // `m` waits for the fact's component. `q` is certified, so the schedule
+    // never holds it, and it must not keep the test running.
+    let mut owner = prepare("e(1). t(1). m(N) :- N = #count{X : e(X)}. q(X) :- t(X).");
+    let limits = FormulaLimits::default();
+    let mut counters = Counters::default();
+    let view = owner
+        .catalog
+        .component_view(&limits, &mut counters, owner.location)
+        .unwrap();
+    let mut registration = Registration::prepare(
+        owner.program.rules_without_facts(),
+        view,
+        0,
+        &limits,
+        &mut counters,
+        owner.location,
+    )
+    .unwrap();
+    registration
+        .schedule(
+            &owner.program,
+            view.unwrap(),
+            0,
+            (&limits, &mut counters, owner.location),
+        )
+        .unwrap();
+    let (_relations, delta) = owner
+        .catalog
+        .split(&limits, &mut counters, owner.location)
+        .unwrap();
+    // A round that derived nothing: every component passes and `m` is ready.
+    let ready = |counters: &mut Counters| {
+        registration
+            .mark_ready(&delta, &limits, counters, owner.location)
+            .unwrap()
+    };
+    assert!(ready(&mut counters));
+    assert_eq!(registration.take_ready(), Some(0));
+    assert!(!registration.pending());
+    let before = counters.accounting.work;
+    assert!(!ready(&mut counters));
+    assert_eq!(counters.accounting.work, before);
+}
+
+#[test]
 fn a_producer_past_its_gate_is_traversed_only_when_its_reads_change() {
     // `s` grows for eight rounds and the count's rule reads none of it: after
     // its first traversal and the one its own head causes, it is skipped

@@ -276,7 +276,14 @@ impl<'source> Schedule<'source> {
         counters: &mut Counters,
         location: ProgramSite,
     ) -> Result<bool, FormulaFailure> {
-        if !self.state.iter().any(|state| state.get() == State::Waiting) {
+        // Only a producer the schedule holds can become ready; every other
+        // producer's cell stays `Waiting` and is never read.
+        if !self
+            .state
+            .iter()
+            .zip(&self.waits)
+            .any(|(state, wait)| wait.is_some() && state.get() == State::Waiting)
+        {
             return Ok(false);
         }
         let mut changed = self.changed.borrow_mut();
