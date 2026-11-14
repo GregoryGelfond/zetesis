@@ -29,13 +29,32 @@
 //! *required*. That holds for the completed support only. Support membership
 //! grows between rounds, and a proposal made from an incomplete relation would
 //! count too few required tuples, so an element is listed here only where its
-//! tuples are read over complete relations: in a producer the component
-//! schedule traverses once, after every predicate it reads reached its fixed
-//! point (`producers::registration::components`), and in a constraint, which
-//! proposes nothing and is grounded after completion. Final grounding reads
-//! the same list over the completed support, so both sites propose from the
-//! same required tuples. An objective's condition is not listed: its
-//! assignments substitute every value its tuples allow.
+//! tuples are read over complete relations:
+//!
+//! - in a producer the component schedule traverses once, after every
+//!   predicate it reads reached its fixed point
+//!   (`producers::registration::components`);
+//! - in any other producer, for the elements the schedule holds it back for:
+//!   it is not traversed before the components those elements read reach
+//!   their fixed point, so each of its traversals counts the same required
+//!   tuples. With those fixed, its proposals only grow as the support it
+//!   reads grows;
+//! - in a constraint, which proposes nothing and is grounded after
+//!   completion.
+//!
+//! Final grounding reads the same list over the completed support, so both
+//! sites propose from the same required tuples. An objective's condition is
+//! not listed: its assignments substitute every value its tuples allow.
+//!
+//! The second case decides whether some recursive assignments reach a fixed
+//! point at all. In `f(3). {p(N)} :- N = #count{V : p(V); V : f(V)}.` the
+//! fact's tuple is required, so the count is at least one and its values end
+//! at 3, whose head adds no tuple. Were that tuple optional, 0 would be
+//! proposed, `p(0)` would add a tuple, and each round would propose one value
+//! more. A tuple is required through its element's predicates, never through
+//! one row: a fact of a predicate that another rule also derives through a
+//! choice or an assignment of its own leaves that predicate uncertain, and
+//! `p(1). {p(N)} :- N = #count{V : p(V)}.` still proposes without end.
 //!
 //! An assignment is *plain* when its keys are tuples and its conditions hold
 //! positive atoms and decided literals only; an assignment is unnegated and

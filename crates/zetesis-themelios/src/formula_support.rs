@@ -704,7 +704,7 @@ fn complete(
             let kept = std::mem::take(&mut retained);
             let support = Support::indexed_retaining(&relations, kept, limits, counters, fallback)?;
             counters.observe_work(Event::SupportProductionWork, |counters| {
-                while let Some((index, deferred)) = next_producer(
+                while let Some((index, scheduled)) = next_producer(
                     selected,
                     &mut facts,
                     (&producers, &mut delta, &support),
@@ -716,7 +716,7 @@ fn complete(
                     let rule = &prepared.rules_without_facts()[index];
                     counters.work(limits, rule.location)?;
                     counters.record(Event::SupportProducerVisit);
-                    let mut variants = if deferred {
+                    let mut variants = if scheduled {
                         counters.record(Event::SupportRichTraversal);
                         delta::traversal(rule, &support, true)
                     } else {
@@ -730,7 +730,7 @@ fn complete(
                         budget,
                         (limits, counters),
                     )?;
-                    if !deferred {
+                    if !scheduled {
                         selected = schedule.next(limits, counters, fallback)?;
                     }
                 }
@@ -746,11 +746,11 @@ fn complete(
             )?
         };
         if !changed {
-            // An unchanged round decides every component no deferred producer
+            // An unchanged round decides every component no waiting producer
             // still feeds, so the earliest waiting producer was traversed.
             debug_assert!(
                 !producers.pending(),
-                "a deferred producer was not traversed"
+                "a deferred or gated producer was not traversed"
             );
             return finish(
                 (catalog, producers, retained),
@@ -762,8 +762,9 @@ fn complete(
 }
 
 /// The round's next producer: the schedule's, then, once it is exhausted and
-/// the facts are in, each deferred rich producer whose read components reached
-/// their fixed point, flagged so its caller traverses it in full.
+/// the facts are in, each deferred or gated rich producer whose waited
+/// components reached their fixed point, flagged so its caller traverses it
+/// in full.
 fn next_producer<'source>(
     selected: Option<usize>,
     facts: &mut Option<facts::FirstRound<'_>>,

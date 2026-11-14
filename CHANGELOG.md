@@ -165,6 +165,36 @@ Notable changes by release. Versions follow Semantic Versioning.
 
 ### Fixed
 
+- Grounding finishes for a recursive assignment whose values a required tuple
+  bounds. `f(3). {p(N)} :- N = #count{V : p(V); V : f(V)}.` did not finish
+  grounding, and now has its one answer set, `f(3)`. A rule that reads the
+  predicate it derives proposed its assignment's values before the fact's
+  tuple was known to be required: it proposed 0, `p(0)` added a tuple, and
+  every round proposed one value more. Support completion now holds such a
+  rule back until the components its assignment's other elements read have
+  reached their fixed point, and reads their tuples as required when their
+  conditions hold certain atoms. No admitted program's answer sets change.
+  Observable effects:
+  - Such a rule takes fewer values, so admission changes in both directions,
+    as the entry on certain predicates above describes for a rule traversed
+    once; the same holds for whatever reads its head.
+    `f(3). {p(N+1)} :- N = #max{V : p(V); V : f(V)}, N < 6.` was refused at
+    `#inf + 1` and now has its answer set `f(3)`.
+    `f(3). {p(Y)} :- N = #count{V : p(V); V : f(V)}, N < 2, Y = 6/(N-1).`
+    answered `f(3)` with a warning, because the count 0 was defined; its one
+    value is now 1, which divides by zero, and it is refused as entirely
+    undefined, where clingo omits the instance and answers.
+  - Reported support work changes for these rules: their first traversal
+    comes later, and they propose fewer values.
+  - A tuple is required only through certain predicates, so these forms still
+    do not finish where clingo does: a seed that is a fact, or a consequence of
+    facts, of the recursive predicate itself
+    (`p(1). {p(N)} :- N = #count{V : p(V)}.`); an element over a predicate
+    that a choice also derives, or that the facts decide only through a
+    negation, a guard aggregate or a conditional literal; and an element whose
+    condition holds a default negation. The
+    [grounding chapter](docs/book/architecture/grounding.md#certain-predicates)
+    states the rule and the rewrite that makes a seed required.
 - Source-activity preparation reuses immutable aggregate families across a
   producer's bindings and evaluates shared numeric rows once per activity
   snapshot. This removes repeated grounding work in aggregate-dependent

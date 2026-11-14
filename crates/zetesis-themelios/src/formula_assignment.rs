@@ -34,7 +34,8 @@ use zetesis_ferraris::AggregateExtremum;
 /// required when an element yields it whose condition the join decides, which
 /// no support changes, or whose condition holds certain atoms and decided
 /// literals where `support` lists the element (`formula_support::certain`).
-/// An element is listed only where it is read over complete relations, so
+/// An element is listed only where it is read over complete relations, by a
+/// producer traversed once or by one held back until they are complete, so
 /// later support changes its required tuples no more than the first kind's.
 /// Final grounding's assignment family is
 /// the carrier of the same required tuples over a support that contains this

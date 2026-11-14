@@ -376,7 +376,14 @@ separate these concerns and state the required order and carrier assumptions.
 Within each rule, aggregate assignments may depend on earlier assignments
 through scalar and range values. The binding plan needs a finite dependency
 order. Recursive dependencies between producer rules are admitted when their
-possible-support construction completes within its bounds. A proposed value
+possible-support construction completes within its bounds. An assignment in a
+rule that reads the predicate it derives proposes only the measures of
+selections that contain its required tuples, when those come from elements
+over earlier certain predicates: a count proposes nothing below their number,
+a minimum nothing above their least value. The
+[grounding chapter](../architecture/grounding.md#certain-predicates)
+states when that makes such an assignment finite and when it does not. A
+proposed value
 remains guarded by the original aggregate equality, and support membership does
 not replace model-relative truth, with one exception described below: an
 assignment every tuple of which is required has one value, which holds in every

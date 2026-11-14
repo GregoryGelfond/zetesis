@@ -31,9 +31,31 @@
 //! among those still waiting reads only passed components, so completion never
 //! ends with a deferred producer untraversed.
 //!
+//! A rich producer that is not deferred reads its own component, a later one
+//! or one that is not decidable, or names a predicate without a component. It
+//! cannot wait for all it reads, but it can wait for part of it. An assignment
+//! aggregate proposes its values from the tuples its elements yield, and a
+//! tuple from an element whose condition holds certain atoms is required only
+//! once the relations of that condition are complete
+//! (`formula_support::certain`). A proposal made before then counts too few
+//! required tuples and so proposes values no later round and no final family
+//! has: `f(1). {p(N)} :- N = #count{V : p(V); V : f(V)}.` would propose 0
+//! before `f(1)` is supported, `p(0)` would add a tuple, and each round would
+//! then propose one value more, without end. Such a producer is *gated*: when
+//! one of its assignment elements has a tuple key and a condition of positive
+//! atoms and join-decided literals whose atoms all lie in decidable components
+//! before its heads, it is not traversed until the components those elements
+//! read reach their fixed point. It is then traversed in full, as a deferred
+//! producer is, and from the next round on whenever a predicate it reads gains
+//! rows, as any other rich producer. Its head components wait for that first
+//! traversal as they wait for a deferred producer's only one, so the argument
+//! above holds with gated producers among the waiting ones: a gate's
+//! components precede the producer's heads.
+//!
 //! Per round the test costs one visit per pending atom, a binary search for each
 //! run of atoms of one predicate, and one visit per component, dependency and
-//! deferred read. It is skipped once every deferred producer was traversed.
+//! waited read. It is skipped once every deferred and gated producer was
+//! traversed.
 
 use std::cell::{Cell, RefCell};
 use std::mem::size_of;
@@ -44,8 +66,8 @@ use zetesis_core::catalog::PredicateRef;
 
 use super::super::super::relations::{Memory, SupportAppend};
 use super::super::{Node, lookup};
-use super::{Producer, Registration, predicate};
-use crate::formula_ir::{HeadIr, LiteralIr, Prepared, RuleIr};
+use super::{Producer, Registration, positive, predicate};
+use crate::formula_ir::{AggregateKey, HeadIr, LiteralIr, Prepared, RuleIr, decided};
 use crate::{FormulaFailure, FormulaLimits, ProgramSite};
 
 use super::super::super::Counters;
@@ -57,8 +79,8 @@ pub(super) enum State {
     Traversed,
 }
 
-/// Which deferred producers wait for which components, and the scratch the
-/// per-round test fills.
+/// Which deferred and gated producers wait for which components, and the
+/// scratch the per-round test fills.
 pub(super) struct Schedule<'source> {
     nodes: Vec<Node<'source>>,
     decidable: Vec<bool>,
@@ -67,8 +89,15 @@ pub(super) struct Schedule<'source> {
     producers_of: Vec<usize>,
     producer_ranges: Vec<Range<usize>>,
     reads: Vec<usize>,
-    /// Per registered producer: its read components, when it is deferred.
-    deferred: Vec<Option<Range<usize>>>,
+    /// Per registered producer: the components it waits for, when it is
+    /// deferred or gated.
+    waits: Vec<Option<Range<usize>>>,
+    /// Per registered producer: whether it is gated, and so resumes the
+    /// per-change traversal after the one the schedule gives it.
+    resumes: Vec<bool>,
+    /// The assignment elements gated producers wait for, as sorted
+    /// `(aggregate, element)` coordinates.
+    elements: Vec<(usize, usize)>,
     state: Vec<Cell<State>>,
     changed: RefCell<Vec<bool>>,
     reached: RefCell<Vec<bool>>,
@@ -99,9 +128,15 @@ impl Scratch {
     }
 }
 
-/// Per registered producer its read components' range, when it is deferred,
-/// and the read components themselves.
-type Deferred = (Vec<Option<Range<usize>>>, Vec<usize>);
+/// Per registered producer the range of the components it waits for, when it
+/// is deferred or gated, with those components; per producer whether it is
+/// gated; and the assignment elements the gates wait for.
+struct Waiting {
+    waits: Vec<Option<Range<usize>>>,
+    reads: Vec<usize>,
+    resumes: Vec<bool>,
+    elements: Vec<(usize, usize)>,
+}
 
 /// A component's dependencies, as ranges into one list, and whether its fixed
 /// point can be decided in component order.
@@ -113,8 +148,8 @@ struct Dependencies {
 
 impl<'source> Schedule<'source> {
     /// The schedule of `registration`'s rich producers, or `None` when none
-    /// can be deferred. Retained vectors are admitted through `memory`; the
-    /// scratch is released before returning.
+    /// can be deferred or gated. Retained vectors are admitted through
+    /// `memory`; the scratch is released before returning.
     pub(super) fn prepare(
         registration: &Registration<'source>,
         prepared: &'source Prepared,
@@ -143,14 +178,19 @@ impl<'source> Schedule<'source> {
             (limits, counters, location),
         )?;
         let dependencies = dependencies(&mut scratch, count, memory, (limits, counters, location))?;
-        let (deferred, reads) = classify(
+        let Waiting {
+            waits,
+            reads,
+            resumes,
+            elements,
+        } = classify(
             inputs,
             &dependencies.decidable,
             &mut scratch,
             memory,
             (limits, counters, location),
         )?;
-        let (producers_of, producer_ranges) = if deferred.iter().any(Option::is_some) {
+        let (producers_of, producer_ranges) = if waits.iter().any(Option::is_some) {
             by_component(
                 &mut scratch.owners,
                 count,
@@ -162,12 +202,12 @@ impl<'source> Schedule<'source> {
         };
         memory.release(scratch.bytes());
         drop(scratch);
-        if deferred.iter().all(Option::is_none) {
+        if waits.iter().all(Option::is_none) {
             return Ok(None);
         }
         let mut state = Vec::new();
-        memory.reserve(&mut state, deferred.len())?;
-        state.extend(deferred.iter().map(|_| Cell::new(State::Waiting)));
+        memory.reserve(&mut state, waits.len())?;
+        state.extend(waits.iter().map(|_| Cell::new(State::Waiting)));
         let mut changed = Vec::new();
         let mut reached = Vec::new();
         memory.reserve(&mut changed, count)?;
@@ -182,27 +222,48 @@ impl<'source> Schedule<'source> {
             producers_of,
             producer_ranges,
             reads,
-            deferred,
+            waits,
+            resumes,
+            elements,
             state,
             changed: RefCell::new(changed),
             reached: RefCell::new(reached),
         }))
     }
 
-    /// The producer's state, when it is deferred.
+    /// The producer's state, when it is deferred or gated.
     pub(super) fn state(&self, index: usize) -> Option<State> {
-        self.deferred
+        self.waits
             .get(index)
             .and_then(Option::as_ref)
             .map(|_| self.state[index].get())
     }
 
-    /// Whether a deferred producer has not yet been traversed.
+    /// Whether the producer at `index` is gated: once the schedule traversed
+    /// it, it is traversed whenever a predicate it reads gains rows.
+    pub(super) fn resumes(&self, index: usize) -> bool {
+        self.resumes.get(index).copied().unwrap_or(false)
+    }
+
+    /// Whether the producer at `index`, in `state`, is a gated producer the
+    /// schedule already traversed: it is visited as any other rich producer.
+    pub(super) fn resumed(&self, index: usize, state: State) -> bool {
+        state == State::Traversed && self.resumes(index)
+    }
+
+    /// Whether a gated producer waits for the element at `position` of the
+    /// assignment aggregate `aggregate`: the components its condition reads
+    /// reached their fixed point before any traversal that reads it.
+    pub(super) fn waits_for(&self, aggregate: usize, position: usize) -> bool {
+        self.elements.binary_search(&(aggregate, position)).is_ok()
+    }
+
+    /// Whether a deferred or gated producer has not yet been traversed.
     pub(super) fn pending(&self) -> bool {
         self.state
             .iter()
-            .zip(&self.deferred)
-            .any(|(state, deferred)| deferred.is_some() && state.get() != State::Traversed)
+            .zip(&self.waits)
+            .any(|(state, wait)| wait.is_some() && state.get() != State::Traversed)
     }
 
     /// Mark ready every waiting producer whose read components reached their
@@ -261,7 +322,7 @@ impl<'source> Schedule<'source> {
                     .all(|&producer| self.state[producer].get() == State::Traversed);
         }
         let mut any = false;
-        for (index, reads) in self.deferred.iter().enumerate() {
+        for (index, reads) in self.waits.iter().enumerate() {
             let Some(reads) = reads else {
                 continue;
             };
@@ -370,22 +431,29 @@ fn dependencies(
 }
 
 /// The deferred producers: rich, with every read decidable and earlier than
-/// every head. Returns each producer's read range and the reads; records each
-/// deferred producer's (head, producer) pairs in the scratch.
+/// every head. A rich producer that is not deferred is gated when [`gate`]
+/// finds an assignment element it can wait for. Returns each such producer's
+/// range of waited components and those components, whether it is gated, and
+/// the gates' elements; records each producer's (head, producer) pairs in the
+/// scratch.
 fn classify(
     (registration, nodes, view): (&Registration<'_>, &[Node<'_>], TemplateComponentsRef<'_>),
     decidable: &[bool],
     scratch: &mut Scratch,
     memory: &mut Memory<'_>,
     (limits, counters, location): (&FormulaLimits, &mut Counters, ProgramSite),
-) -> Result<Deferred, FormulaFailure> {
-    let mut deferred = Vec::new();
+) -> Result<Waiting, FormulaFailure> {
+    let mut waits = Vec::new();
     let mut reads = Vec::new();
-    memory.reserve(&mut deferred, registration.producers.len())?;
+    let mut resumes = Vec::new();
+    let mut elements = Vec::new();
+    memory.reserve(&mut waits, registration.producers.len())?;
+    memory.reserve(&mut resumes, registration.producers.len())?;
     for (index, producer) in registration.producers.iter().enumerate() {
         counters.work(limits, location)?;
         let Producer::Rich(_) = producer else {
-            deferred.push(None);
+            waits.push(None);
+            resumes.push(false);
             continue;
         };
         let rule = &registration.rules[index];
@@ -400,30 +468,120 @@ fn classify(
             (&mut scratch.inputs, &mut scratch.heads, memory),
             (limits, counters, rule.location),
         )?;
-        let waits = scratch.known_producers[index]
-            && scratch.first_heads[index].is_some_and(|first| {
+        let first = scratch.first_heads[index];
+        let deferred = scratch.known_producers[index]
+            && first.is_some_and(|first| {
                 scratch
                     .inputs
                     .iter()
                     .all(|&read| read < first && decidable[read])
             });
-        if !waits {
-            deferred.push(None);
+        let start = reads.len();
+        if deferred {
+            memory.reserve(&mut reads, scratch.inputs.len())?;
+            reads.extend_from_slice(&scratch.inputs);
+        } else if let Some(first) = first {
+            gate(
+                rule,
+                first,
+                (nodes, view, decidable),
+                (&mut reads, &mut elements, memory),
+                (limits, counters, rule.location),
+            )?;
+        }
+        if !deferred && reads.len() == start {
+            waits.push(None);
+            resumes.push(false);
             continue;
         }
-        let start = reads.len();
-        memory.reserve(&mut reads, scratch.inputs.len())?;
-        reads.extend_from_slice(&scratch.inputs);
-        deferred.push(Some(start..reads.len()));
+        waits.push(Some(start..reads.len()));
+        resumes.push(!deferred);
         memory.reserve(&mut scratch.owners, scratch.heads.len())?;
         scratch
             .owners
             .extend(scratch.heads.iter().map(|&head| (head, index)));
     }
-    Ok((deferred, reads))
+    // Aggregates are numbered in rule order, so this confirms an order the
+    // elements already have.
+    counters.charge_work(1 + elements.len() as u128, limits, location)?;
+    elements.sort_unstable();
+    Ok(Waiting {
+        waits,
+        reads,
+        resumes,
+        elements,
+    })
 }
 
-/// The deferred producers of each component, as ranges into one list.
+/// The assignment elements of `rule` a gated producer waits for, appended to
+/// `elements`, with the components their conditions read, appended to
+/// `reads`. Such an element has a tuple key, is not required by its own
+/// condition, and holds positive atoms and join-decided literals only, each
+/// atom in a decidable component before `first`, the producer's first head.
+/// One unit per body literal, element and condition literal, with each
+/// atom's resolution.
+fn gate(
+    rule: &RuleIr,
+    first: usize,
+    (nodes, view, decidable): (&[Node<'_>], TemplateComponentsRef<'_>, &[bool]),
+    (reads, elements, memory): (&mut Vec<usize>, &mut Vec<(usize, usize)>, &mut Memory<'_>),
+    (limits, counters, location): (&FormulaLimits, &mut Counters, ProgramSite),
+) -> Result<(), FormulaFailure> {
+    for literal in &rule.body {
+        counters.work(limits, location)?;
+        let LiteralIr::Aggregate(aggregate) = literal else {
+            continue;
+        };
+        if aggregate.binding.is_none() {
+            continue;
+        }
+        for (position, element) in aggregate.elements.iter().enumerate() {
+            counters.work(limits, location)?;
+            if element.required || !matches!(element.key, AggregateKey::Tuple(_)) {
+                continue;
+            }
+            let start = reads.len();
+            let mut waits = true;
+            for literal in &element.condition {
+                counters.work(limits, location)?;
+                waits = match positive(literal) {
+                    Some(pattern) => {
+                        let predicate = pattern.get(view, limits, counters, location)?.predicate();
+                        let component = lookup(
+                            nodes.len(),
+                            |index| nodes[index].signature,
+                            predicate,
+                            limits,
+                            counters,
+                            location,
+                        )?
+                        .and_then(|index| nodes[index].component)
+                        .filter(|&component| component < first && decidable[component]);
+                        if let Some(component) = component {
+                            memory.reserve(reads, 1)?;
+                            reads.push(component);
+                        }
+                        component.is_some()
+                    }
+                    None => decided(literal),
+                };
+                if !waits {
+                    break;
+                }
+            }
+            // An element without an atom is required by its own condition.
+            if waits && reads.len() > start {
+                memory.reserve(elements, 1)?;
+                elements.push((aggregate.id, position));
+            } else {
+                reads.truncate(start);
+            }
+        }
+    }
+    Ok(())
+}
+
+/// The deferred and gated producers of each component, as ranges into one list.
 fn by_component(
     owners: &mut [(usize, usize)],
     count: usize,

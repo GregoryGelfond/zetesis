@@ -326,19 +326,144 @@ fn exact_assignments_agree_with_every_round_traversal() {
     }
 }
 
+/// `source` grounded within `rounds` support rounds.
+fn compile_within(source: &str, rounds: u64) -> Result<Compiled, crate::FormulaFailure> {
+    let mut preparation = testing::prepare(source);
+    preparation.limits.max_support_rounds = rounds;
+    ground(preparation, None, None)
+}
+
+/// Whether support completion refused for want of rounds.
+fn out_of_rounds(result: &Result<Compiled, crate::FormulaFailure>) -> bool {
+    matches!(
+        result,
+        Err(crate::FormulaFailure::Limit {
+            resource: crate::FormulaResource::SupportRounds,
+            ..
+        })
+    )
+}
+
+/// The atoms of `compiled` whose name starts with `prefix`.
+fn heads(compiled: &Compiled, prefix: &str) -> Vec<String> {
+    names(compiled)
+        .into_iter()
+        .filter(|name| name.starts_with(prefix))
+        .collect()
+}
+
+/// Rules that read the predicate they derive through an assignment, with an
+/// element over an earlier certain predicate. Each reaches a fixed point
+/// without certainty as well, so the answer sets can be compared.
+const HELD_BACK: &[&str] = &[
+    "f(1). {p(N)} :- N = #count { V : p(V); V : f(V) }, N < 3.",
+    "f(1). p(N) :- N = #count { V : p(V); V : f(V) }, N < 3.",
+    "g(1). f(X) :- g(X). {p(N)} :- N = #count { V : p(V); V : f(V) }, N < 3.",
+    "f(2). {p(N)} :- N = #sum { V : p(V); V : f(V) }.",
+    "f(2). {p(N)} :- N = #max { V : p(V); V : f(V) }.",
+    "f(2). {p(N)} :- N = #min { V : p(V); V : f(V) }.",
+    // A certain element beside an uncertain one from an earlier component.
+    "f(1). {q}. g(2) :- q. {p(N)} :- N = #count { V : p(V); V : f(V); V : g(V) }, N < 4.",
+    // The same rule read by another.
+    "f(1). {p(N)} :- N = #count { V : p(V); V : f(V) }, N < 3. r :- p(1).",
+];
+
+#[test]
+fn a_held_back_assignment_preserves_the_answer_sets() {
+    for source in HELD_BACK {
+        let expected = written_answer_sets(source);
+        assert!(!expected.is_empty(), "{source}");
+        assert_eq!(answer_sets(&compile(source)), expected, "{source}");
+    }
+}
+
+#[test]
+fn a_held_back_assignment_agrees_with_every_round_traversal() {
+    // The reference holds no producer back, lists nothing and proposes every
+    // value its tuples allow; the answer sets are the same.
+    use crate::formula_support::producers::testing::with_every_round_traversed;
+    for source in HELD_BACK {
+        let reference = with_every_round_traversed(|| compile(source));
+        assert_eq!(
+            answer_sets(&compile(source)),
+            answer_sets(&reference),
+            "{source}"
+        );
+    }
+}
+
+#[test]
+fn a_held_back_assignment_proposes_no_value_below_its_required_tuples() {
+    let source = "f(1). {p(N)} :- N = #count { V : p(V); V : f(V) }, N < 5.";
+    assert_eq!(heads(&compile(source), "p("), ["p(1)"]);
+    // Without certainty the fact's tuple is optional: none is proposed, its
+    // head adds a tuple, and every value up to the bound follows.
+    assert_eq!(heads(&without_certainty(|| compile(source)), "p(").len(), 5);
+}
+
+/// A count over the predicate its rule derives and over a fact. Its values
+/// are bounded only because the fact's tuple is required: 3 is the last
+/// value whose head adds no tuple.
+const BOUNDED_BY_A_FACT: &str = "f(3). {p(N)} :- N = #count { V : p(V); V : f(V) }.";
+
+#[test]
+fn a_count_bounded_by_a_required_tuple_reaches_its_fixed_point() {
+    let compiled = compile_within(BOUNDED_BY_A_FACT, 16).unwrap();
+    assert_eq!(heads(&compiled, "p("), ["p(1)", "p(2)", "p(3)"]);
+    // Choosing any `p(N)` raises the count past `N`.
+    assert_eq!(answer_sets(&compiled), sets(&["f(3)"]));
+}
+
+#[test]
+fn a_count_bounded_by_a_derived_certain_tuple_reaches_its_fixed_point() {
+    let source = "g(3). f(X) :- g(X). {p(N)} :- N = #count { V : p(V); V : f(V) }.";
+    let compiled = compile_within(source, 16).unwrap();
+    assert_eq!(heads(&compiled, "p("), ["p(1)", "p(2)", "p(3)"]);
+    assert_eq!(answer_sets(&compiled), sets(&["f(3) g(3)"]));
+}
+
+#[test]
+fn a_count_whose_required_tuple_is_its_own_value_reaches_its_fixed_point() {
+    let source = "f(1). {p(N)} :- N = #count { V : p(V); V : f(V) }.";
+    let compiled = compile_within(source, 16).unwrap();
+    assert_eq!(heads(&compiled, "p("), ["p(1)"]);
+    assert_eq!(answer_sets(&compiled), sets(&["f(1)", "f(1) p(1)"]));
+}
+
+#[test]
+fn a_held_back_assignment_counts_every_tuple_of_a_relation_that_grew() {
+    // `f` gains a row in each of four rounds. The count's rule waits for all
+    // four, so its least value is 4; a traversal over fewer would propose
+    // each of 1 to 3 on the way.
+    let source = "f(0). f(Y) :- f(X), X < 3, Y = X + 1. \
+                  {p(N)} :- N = #count { V : p(V); V : f(V) }, N < 6.";
+    assert_eq!(heads(&compile(source), "p("), ["p(4)", "p(5)"]);
+}
+
+#[test]
+fn the_same_count_without_its_required_tuple_never_reaches_one() {
+    use crate::formula_support::producers::testing::with_every_round_traversed;
+    // What the required tuple prevents: with the fact's tuple optional the
+    // count proposes 0, and each head it supports adds a tuple.
+    assert!(out_of_rounds(&without_certainty(|| compile_within(
+        BOUNDED_BY_A_FACT,
+        16
+    ))));
+    assert!(out_of_rounds(&with_every_round_traversed(|| {
+        compile_within(BOUNDED_BY_A_FACT, 16)
+    })));
+}
+
 #[test]
 fn an_exact_assignment_supports_only_its_value() {
     let source = "c(1..3). r(C,R) :- c(C), R = #count { D : c(D), D <= C }. {p}.";
-    let heads = |compiled: &Compiled| -> Vec<String> {
-        names(compiled)
-            .into_iter()
-            .filter(|name| name.starts_with("r("))
-            .collect()
-    };
-    assert_eq!(heads(&compile(source)), ["r(1,1)", "r(2,2)", "r(3,3)"]);
+    assert_eq!(
+        heads(&compile(source), "r("),
+        ["r(1,1)", "r(2,2)", "r(3,3)"]
+    );
     // Without certainty every count from none to all is proposed.
     assert_eq!(
-        heads(&without_certainty(|| compile(source))).len(),
+        heads(&without_certainty(|| compile(source)), "r(").len(),
         2 + 3 + 4
     );
 }
@@ -559,4 +684,37 @@ fn an_exact_assignment_admits_arithmetic_that_fails_only_at_unrealized_values() 
     let compiled = compile(source);
     assert!(names(&compiled).contains(&"p(2000000000)".to_owned()));
     assert!(without_certainty(|| ground(testing::prepare(source), None, None)).is_err());
+}
+
+// A rule held back for its required tuples takes fewer values too, so its
+// family and the families that read its head change with it, in both
+// directions.
+
+#[test]
+fn a_held_back_assignment_is_refused_where_its_remaining_value_is_undefined() {
+    // The fact's tuple is required, so the count below 2 is 1, where
+    // `6/(N-1)` divides by zero. With the tuple optional the count 0 is
+    // defined, and admits the rule with a warning.
+    let source = "f(3). {p(Y)} :- N = #count { V : p(V); V : f(V) }, N < 2, Y = 6/(N-1).";
+    assert!(refused_as_undefined(source));
+    assert_eq!(written_answer_sets(source), sets(&["f(3)"]));
+}
+
+#[test]
+fn a_rule_reading_a_held_back_head_is_refused_where_its_value_is_undefined() {
+    // Only `p(1)` is supported, so the reader's one instance divides by zero.
+    let source = "f(1). {p(N)} :- N = #count { V : p(V); V : f(V) }, N < 2. \
+        z(Y) :- p(N), Y = 6/(N-1).";
+    assert!(refused_as_undefined(source));
+    assert_eq!(written_answer_sets(source), sets(&["f(1)", "f(1) p(1)"]));
+}
+
+#[test]
+fn a_held_back_assignment_admits_what_only_an_unrequired_value_refused() {
+    // The fact's tuple is required, so the maximum is at least 3. With the
+    // tuple optional the empty maximum is proposed, and `#inf + 1` is
+    // arithmetic on a value that is no number.
+    let source = "f(3). {p(N+1)} :- N = #max { V : p(V); V : f(V) }, N < 6.";
+    assert_eq!(answer_sets(&compile(source)), sets(&["f(3)"]));
+    assert!(without_certainty(|| refused_as_undefined(source)));
 }

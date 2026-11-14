@@ -246,13 +246,50 @@ fn an_aggregate_reading_its_own_component_is_not_exact() {
 }
 
 #[test]
-fn a_producer_traversed_every_round_lists_no_element() {
-    // The count's condition holds certain atoms only, but its rule reads the
-    // predicate it derives, so the schedule traverses it in every round and
-    // it proposes from relations that may still grow.
+fn a_producer_reading_its_own_component_lists_the_elements_it_waits_for() {
+    // The rule reads the predicate it derives, so it is traversed whenever
+    // that predicate grows. Its count reads the earlier `c` alone, so the
+    // schedule holds the rule back until `c` is complete and every traversal
+    // counts the same required tuples.
     let certainty = certainty(&format!(
         "c(1..3). n(0). n(N) :- n(M), M < 2, N = #count {{ X : c(X) }}. {CHOICE}"
     ));
+    let predicates: Vec<_> = certainty.predicates().collect();
+    assert_eq!(predicates, [("c", 1)]);
+    assert_eq!(certainty.elements(), [(0, 0)]);
+}
+
+#[test]
+fn an_element_over_the_producers_own_component_is_not_listed() {
+    // The first element reads `a`, which the rule derives; only the second,
+    // over the fact `b`, is waited for. The names keep the elements in this
+    // order whether they are numbered as written or by their terms.
+    let certainty = certainty("b(1). {a(N)} :- N = #count { V : a(V); V : b(V) }, N < 3.");
+    let predicates: Vec<_> = certainty.predicates().collect();
+    assert_eq!(predicates, [("b", 1)]);
+    assert_eq!(certainty.elements(), [(0, 1)]);
+}
+
+#[test]
+fn an_element_waited_for_over_an_uncertain_predicate_is_not_listed() {
+    // The rule waits for `g`, a choice: its tuple may be absent.
+    let certainty =
+        certainty("d(1). {g(X) : d(X)}. {p(N)} :- N = #count { V : p(V); V : g(V) }, N < 3.");
+    let predicates: Vec<_> = certainty.predicates().collect();
+    assert_eq!(predicates, [("d", 1)]);
+    assert!(certainty.elements().is_empty());
+}
+
+#[test]
+fn a_producer_traversed_every_round_lists_no_element() {
+    // The reference schedule holds no producer back, so a rule that reads its
+    // own component proposes from relations that may still grow.
+    use crate::formula_support::producers::testing::with_every_round_traversed;
+    let certainty = with_every_round_traversed(|| {
+        certainty(&format!(
+            "c(1..3). n(0). n(N) :- n(M), M < 2, N = #count {{ X : c(X) }}. {CHOICE}"
+        ))
+    });
     let predicates: Vec<_> = certainty.predicates().collect();
     assert_eq!(predicates, [("c", 1)]);
     assert!(certainty.elements().is_empty());

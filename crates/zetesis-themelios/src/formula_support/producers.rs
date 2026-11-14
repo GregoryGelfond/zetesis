@@ -135,8 +135,9 @@ impl<'source> Producers<'source> {
         }
     }
 
-    /// Mark ready the deferred rich producers whose read components reached
-    /// their fixed point, given this round's pending atoms. A plan has none.
+    /// Mark ready the deferred and gated rich producers whose waited
+    /// components reached their fixed point, given this round's pending atoms.
+    /// A plan has none.
     pub(super) fn mark_ready(
         &self,
         delta: &SupportAppend<'_>,
@@ -152,7 +153,7 @@ impl<'source> Producers<'source> {
         }
     }
 
-    /// The next ready deferred producer, now marked traversed.
+    /// The next ready deferred or gated producer, now marked traversed.
     pub(super) fn take_ready(&self) -> Option<usize> {
         match self {
             Self::Planned(_) => None,
@@ -160,7 +161,7 @@ impl<'source> Producers<'source> {
         }
     }
 
-    /// Whether a deferred producer has not yet been traversed.
+    /// Whether a deferred or gated producer has not yet been traversed.
     pub(super) fn pending(&self) -> bool {
         match self {
             Self::Planned(_) => false,

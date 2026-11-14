@@ -70,6 +70,26 @@ then closes the upper with those inputs fixed. `completed_ordered_rounds`
 connects this result to finite scans whose results are known to be closed; it
 does not claim that arbitrary fuel completes them.
 
+A rich producer that is not scheduled by component is held back when one of its
+assignment aggregates has an element over earlier decidable components alone:
+it waits, unselected though affected, until the components those elements read
+reach their fixed point, is traversed in full in that round, and is selected by
+changed reads from then on. The wait restores monotonicity. An assignment
+proposes the measures of the selections that contain its required tuples, and
+a tuple is required when its element's condition holds certain atoms. Over a
+relation that still grows that set of required tuples grows too, and the
+proposals do not grow with it: a value below the final count of required
+tuples is proposed early and never again, so the inflationary step keeps a
+head no later traversal and no final family derives, and its tuple can feed
+the assignment without end. Equal registered relations still give equal
+proposals, so the selection law's premise holds with or without the wait.
+What fails without it is that the proposals grow with the carrier, which the
+component decomposition and the agreement with final grounding both assume.
+After the wait the required tuples are the same in every traversal, and with
+those fixed the proposals only grow as the support the rule reads grows. That
+each head component waits for the first traversal of its held-back producers
+is the same Rust obligation as for a producer traversed once.
+
 The actual schedule may begin upper work earlier. Its history obligation is
 separate: `completed_producers_closed` permits each producer its own last
 completed snapshot. Complete read registration, unchanged registered inputs

@@ -5,7 +5,9 @@
 //! classifies every rule and resolves what it derives and reads, a second
 //! removes predicates until none reads a removed one, and a third lists the
 //! assignment aggregate elements whose conditions hold certain atoms and
-//! decided literals only, in the rules that read their relations complete.
+//! decided literals only, in the rules whose every traversal reads those
+//! elements' relations complete: a deferred producer, a gated producer for
+//! the elements of its gate, and a constraint.
 //!
 //! A deferred producer may itself be definite through an exact assignment
 //! aggregate. The schedule traverses it once, after every predicate it reads
@@ -265,11 +267,21 @@ impl<'source> Registration<'source> {
     }
 
     /// Whether the component schedule traverses the producer at `index` once,
-    /// after every predicate it reads reached its fixed point.
+    /// after every predicate it reads reached its fixed point. A gated
+    /// producer is not: it is traversed again as its own component grows.
     fn deferred(&self, index: usize) -> bool {
         self.schedule
             .as_ref()
-            .is_some_and(|schedule| schedule.state(index).is_some())
+            .is_some_and(|schedule| schedule.state(index).is_some() && !schedule.resumes(index))
+    }
+
+    /// Whether the producer at `index` is gated, and waits for the element at
+    /// `position` of the assignment aggregate `aggregate`: every traversal of
+    /// the producer reads that element's condition over complete relations.
+    fn waits_for(&self, index: usize, aggregate: usize, position: usize) -> bool {
+        self.schedule.as_ref().is_some_and(|schedule| {
+            schedule.resumes(index) && schedule.waits_for(aggregate, position)
+        })
     }
 
     /// Whether the rule at `index` reads its relations complete: a deferred
@@ -280,10 +292,12 @@ impl<'source> Registration<'source> {
     }
 
     /// The assignment aggregate elements whose conditions hold certain atoms
-    /// and decided literals only, in the rules that read their relations
-    /// complete, as `(aggregate, element)` coordinates. A producer traversed
-    /// in every round proposes from relations that may still grow, and lists
-    /// nothing.
+    /// and decided literals only, where they are read over complete
+    /// relations, as `(aggregate, element)` coordinates: every such element
+    /// of a rule that reads its relations complete, and of a gated producer
+    /// the elements its gate waits for. Any other element of a producer
+    /// traversed in every round is read from relations that may still grow,
+    /// and is not listed.
     fn required_elements(
         &self,
         resolver: &Resolver<'_, '_, '_>,
@@ -295,7 +309,12 @@ impl<'source> Registration<'source> {
         let mut elements = Vec::new();
         for (index, rule) in self.rules.iter().enumerate() {
             counters.work(limits, rule.location)?;
-            if !self.reads_complete_relations(index) {
+            let complete = self.reads_complete_relations(index);
+            let gated = self
+                .schedule
+                .as_ref()
+                .is_some_and(|schedule| schedule.resumes(index));
+            if !complete && !gated {
                 continue;
             }
             for literal in &rule.body {
@@ -309,6 +328,9 @@ impl<'source> Registration<'source> {
                 for (position, element) in aggregate.elements.iter().enumerate() {
                     counters.work(limits, rule.location)?;
                     if element.required || !matches!(element.key, AggregateKey::Tuple(_)) {
+                        continue;
+                    }
+                    if !complete && !self.waits_for(index, aggregate.id, position) {
                         continue;
                     }
                     let mut holds = true;

@@ -42,8 +42,10 @@ ones measures to it. A tuple yielded from positive atoms of certain predicates
 is required: those atoms hold in every answer set
 ([CertainAtoms](../Zetesis/CertainAtoms.lean)), so the aggregate's value in an
 answer set is still the measure of such a selection, and the value it takes is
-still proposed. The proposal is made once, over the completed relations of the
-predicates the rule reads. Head permissions
+still proposed. A tuple is read as required only over the completed relations
+of its element's predicates: in a rule traversed once, after everything it
+reads is complete, and in a rule [held back](producer-scheduling.md) until the
+predicates of those elements are. Head permissions
 remain independent of measured contributions. The existing aggregate coverage
 laws are ingredients of this argument, not a verification of the Rust compiler.
 

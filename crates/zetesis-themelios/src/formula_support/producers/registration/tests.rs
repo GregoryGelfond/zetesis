@@ -490,6 +490,114 @@ fn a_producer_reading_its_own_component_keeps_traversing_on_change() {
     assert_eq!(deferred, 0);
 }
 
+/// A count over the predicate its rule derives and over the fact `f`, which
+/// an earlier component holds.
+const HELD_BACK: &str = "f(1). {p(N)} :- N = #count { V : p(V); V : f(V) }, N < 5.";
+
+#[test]
+fn the_visits_of_a_held_back_producer_follow_its_gate() {
+    // Round one: waiting, while the fact enters. Round two: still waiting at
+    // its own visit; `f` gained nothing, so the schedule traverses the rule
+    // after the round's other producers and it derives `p(1)`. Round three:
+    // `p` gained a row, so the rule is traversed as any rich producer is.
+    agrees_with_reference(HELD_BACK);
+    let (traversals, deferred) = rich_visits(HELD_BACK);
+    assert_eq!(traversals, 2);
+    assert_eq!(deferred, 2);
+}
+
+#[test]
+fn a_producer_held_back_is_first_traversed_when_its_element_is_complete() {
+    // `f` grows for four rounds. The count's rule is held back until then and
+    // is traversed once in full, deriving `p(4)` from the four required
+    // tuples, and then once for each head it derived, `p(4)` and `p(5)`:
+    // every change of `f` would otherwise traverse it as well.
+    let source = "f(0). f(Y) :- f(X), X < 3, Y = X + 1. \
+                  {p(N)} :- N = #count { V : p(V); V : f(V) }, N < 6.";
+    agrees_with_reference(source);
+    let (traversals, deferred) = rich_visits(source);
+    assert_eq!(traversals, 3);
+    assert!(deferred >= 4, "{deferred}");
+}
+
+#[test]
+fn a_producer_held_back_for_an_uncertain_element_supports_what_the_reference_does() {
+    // The element reads a choice, so nothing is required; the rule only
+    // waits, and derives the same heads later.
+    equivalent("d(1). {g(X) : d(X)}. {p(N)} :- N = #count { V : p(V); V : g(V) }, N < 3.");
+}
+
+#[test]
+fn a_reader_of_a_held_back_producers_head_waits_for_it() {
+    // `q` counts `p`. Its rule is deferred, and `p`'s component cannot reach
+    // its fixed point before the held-back rule has been traversed.
+    let source = format!("{HELD_BACK} q(M) :- M = #count {{ V : p(V) }}.");
+    agrees_with_reference(&source);
+    let (compiled, _, _) = ground(&source);
+    let counts: Vec<_> = compiled
+        .atoms
+        .atoms()
+        .iter()
+        .map(|atom| atom.to_atom(ValueLimits::default()).unwrap())
+        .filter(|atom| atom.predicate().name() == "q")
+        .map(|atom| atom.values().to_vec())
+        .collect();
+    assert_eq!(
+        counts,
+        [
+            vec![zetesis_core::Value::Number(0)],
+            vec![zetesis_core::Value::Number(1)]
+        ]
+    );
+}
+
+#[test]
+fn a_producer_past_its_gate_is_traversed_only_when_its_reads_change() {
+    // `s` grows for eight rounds and the count's rule reads none of it: after
+    // its first traversal and the one its own head causes, it is skipped
+    // while `s` keeps the completion going.
+    let source = format!("{HELD_BACK} s(0). s(Y) :- s(X), X < 7, Y = X + 1.");
+    agrees_with_reference(&source);
+    let (traversals, deferred) = rich_visits(&source);
+    assert_eq!(traversals, 2);
+    assert_eq!(deferred, 2);
+}
+
+#[test]
+fn an_element_reading_its_producers_own_component_holds_it_back_for_nothing() {
+    // The element reads the earlier `c` and `n`, which its rule derives: no
+    // fixed point of `c` makes its tuples final, so the rule is traversed
+    // from the first round.
+    let source = "c(1..3). n(0). n(N) :- n(M), M < 2, N = #count { X : c(X), n(X) }.";
+    agrees_with_reference(source);
+    let (traversals, deferred) = rich_visits(source);
+    assert!(traversals > 1, "{traversals}");
+    assert_eq!(deferred, 0);
+}
+
+#[test]
+fn an_element_with_a_default_negation_holds_no_producer_back() {
+    // The second element reads the earlier `d`, but also `g` under negation,
+    // which no relation's fixed point decides: the rule is traversed from the
+    // first round, as any rule that reads its own component.
+    let source = "d(1..2). {g(1)}. {p(N)} :- N = #count { V : p(V); V : d(V), not g(V) }, N < 4.";
+    agrees_with_reference(source);
+    let (traversals, deferred) = rich_visits(source);
+    assert!(traversals > 1, "{traversals}");
+    assert_eq!(deferred, 0);
+}
+
+#[test]
+fn a_guard_aggregate_holds_no_producer_back() {
+    // The count binds nothing, so it proposes no value and needs no tuple
+    // complete.
+    let source = "d(1..2). p(0). {p(N)} :- p(M), #count { V : d(V) } >= 2, N = M + 1, N < 3.";
+    agrees_with_reference(source);
+    let (traversals, deferred) = rich_visits(source);
+    assert!(traversals > 1, "{traversals}");
+    assert_eq!(deferred, 0);
+}
+
 /// A maintained scenario whose encoding its `#include` names, with the
 /// encoding's text where that line stood.
 fn scenario(instance: &str, include: &str, encoding: &str) -> String {
