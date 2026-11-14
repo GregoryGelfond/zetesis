@@ -141,10 +141,12 @@ impl Join<'_, '_> {
 }
 
 /// The zero divisor that `guard`, checked beside a row, meets under `binding`,
-/// if any. The guard is a consequent, not part of the row. Its fatal failure
-/// goes to `failure`, where it refuses as the row's own would and takes
-/// precedence over a zero divisor. Its zero divisor is returned apart: the
-/// row stays, and the consequent is read as false.
+/// if it leaves the guard undefined. The guard is a consequent, not part of
+/// the row, and is evaluated as its consumer evaluates it, so a chain that a
+/// false link decides is no zero divisor here either. Its fatal failure goes
+/// to `failure`, where it refuses as the row's own would and takes precedence
+/// over a zero divisor. Its zero divisor is returned apart: the row stays,
+/// and the consequent is read as false.
 fn consequent_zero(
     guard: Option<&crate::formula_guard::Guard>,
     evaluation: &mut Evaluation,
@@ -161,31 +163,22 @@ fn consequent_zero(
                 location,
             },
     } = context;
-    let mut undefined = None;
-    for expression in guard
-        .into_iter()
-        .flat_map(crate::formula_guard::Guard::expressions)
-    {
-        match evaluation.source_expression(
-            expression,
-            |variable| binding.key(variable, location),
-            computation,
-            limits,
-            counters,
-            location,
-        ) {
-            Ok(_) => {}
-            Err(FormulaFailure::Expansion(error @ ExpansionFailure::Evaluation { .. })) => {
-                if evaluation.zero_divisor() {
-                    undefined.get_or_insert(error);
-                } else if failure.as_ref().is_none_or(|(_, zero)| *zero) {
-                    *failure = Some((error, false));
-                }
+    let Some(guard) = guard else {
+        return Ok(None);
+    };
+    match guard.evaluate_in(binding, evaluation, computation, limits, counters, location) {
+        Ok(_) => Ok(None),
+        Err(FormulaFailure::Expansion(error @ ExpansionFailure::Evaluation { .. })) => {
+            if evaluation.zero_divisor() {
+                return Ok(Some(error));
             }
-            Err(error) => return Err(error),
+            if failure.as_ref().is_none_or(|(_, zero)| *zero) {
+                *failure = Some((error, false));
+            }
+            Ok(None)
         }
+        Err(error) => Err(error),
     }
-    Ok(undefined)
 }
 
 /// Available checks may exclude a failed generator. A failed check never

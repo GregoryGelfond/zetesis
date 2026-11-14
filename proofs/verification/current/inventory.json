@@ -1147,88 +1147,113 @@
     },
     {
       "file": "Zetesis/ArithmeticFamilies.lean",
-      "line": 62,
+      "line": 67,
       "name": "Zetesis.ArithmeticFamilies.empty_admissible"
     },
     {
       "file": "Zetesis/ArithmeticFamilies.lean",
-      "line": 66,
+      "line": 71,
       "name": "Zetesis.ArithmeticFamilies.empty_unwarned"
     },
     {
       "file": "Zetesis/ArithmeticFamilies.lean",
-      "line": 70,
+      "line": 75,
       "name": "Zetesis.ArithmeticFamilies.fatal_refused"
     },
     {
       "file": "Zetesis/ArithmeticFamilies.lean",
-      "line": 77,
+      "line": 82,
       "name": "Zetesis.ArithmeticFamilies.zero_divisor_admitted"
     },
     {
       "file": "Zetesis/ArithmeticFamilies.lean",
-      "line": 83,
+      "line": 88,
       "name": "Zetesis.ArithmeticFamilies.entirely_undefined_warned"
     },
     {
       "file": "Zetesis/ArithmeticFamilies.lean",
-      "line": 97,
+      "line": 102,
       "name": "Zetesis.ArithmeticFamilies.warning_ignores_defined"
     },
     {
       "file": "Zetesis/ArithmeticFamilies.lean",
-      "line": 106,
+      "line": 111,
       "name": "Zetesis.ArithmeticFamilies.admission_by_outcomes"
     },
     {
       "file": "Zetesis/ArithmeticFamilies.lean",
-      "line": 112,
+      "line": 117,
       "name": "Zetesis.ArithmeticFamilies.warning_by_outcomes"
     },
     {
       "file": "Zetesis/ArithmeticFamilies.lean",
-      "line": 121,
+      "line": 126,
       "name": "Zetesis.ArithmeticFamilies.admission_of_append"
     },
     {
       "file": "Zetesis/ArithmeticFamilies.lean",
-      "line": 127,
+      "line": 132,
       "name": "Zetesis.ArithmeticFamilies.refusal_from_prefix"
     },
     {
       "file": "Zetesis/ArithmeticFamilies.lean",
-      "line": 134,
+      "line": 139,
       "name": "Zetesis.ArithmeticFamilies.prefix_does_not_establish_admission"
     },
     {
       "file": "Zetesis/ArithmeticFamilies.lean",
-      "line": 140,
+      "line": 145,
       "name": "Zetesis.ArithmeticFamilies.warning_of_append"
     },
     {
       "file": "Zetesis/ArithmeticFamilies.lean",
-      "line": 153,
+      "line": 158,
       "name": "Zetesis.ArithmeticFamilies.undefined_consequent_false"
     },
     {
       "file": "Zetesis/ArithmeticFamilies.lean",
-      "line": 161,
+      "line": 166,
       "name": "Zetesis.ArithmeticFamilies.undefined_consequent_excludes_condition"
     },
     {
       "file": "Zetesis/ArithmeticFamilies.lean",
-      "line": 173,
+      "line": 178,
       "name": "Zetesis.ArithmeticFamilies.undefined_alternative_ignored"
     },
     {
       "file": "Zetesis/ArithmeticFamilies.lean",
-      "line": 183,
+      "line": 188,
       "name": "Zetesis.ArithmeticFamilies.undefined_head_true"
     },
     {
       "file": "Zetesis/ArithmeticFamilies.lean",
-      "line": 191,
+      "line": 196,
       "name": "Zetesis.ArithmeticFamilies.undefined_head_disjunct"
+    },
+    {
+      "file": "Zetesis/ArithmeticFamilies.lean",
+      "line": 218,
+      "name": "Zetesis.ArithmeticFamilies.false_link_decides"
+    },
+    {
+      "file": "Zetesis/ArithmeticFamilies.lean",
+      "line": 224,
+      "name": "Zetesis.ArithmeticFamilies.chain_undefined_iff"
+    },
+    {
+      "file": "Zetesis/ArithmeticFamilies.lean",
+      "line": 232,
+      "name": "Zetesis.ArithmeticFamilies.chain_holds_iff"
+    },
+    {
+      "file": "Zetesis/ArithmeticFamilies.lean",
+      "line": 257,
+      "name": "Zetesis.ArithmeticFamilies.chain_by_links"
+    },
+    {
+      "file": "Zetesis/ArithmeticFamilies.lean",
+      "line": 267,
+      "name": "Zetesis.ArithmeticFamilies.negated_false_link_holds"
     },
     {
       "file": "Zetesis/AssociativeWitnesses.lean",
@@ -11760,7 +11785,7 @@
     "Zetesis/WorldViews.lean"
   ],
   "source_sha256": {
-    "Audit.lean": "6c2938dde43081877e5edffa7268924983bc241a221c53c7c6c824b44528c1d7",
+    "Audit.lean": "7b52f16e8ffb7580ad8b6cb436f4924f6917409677c448120e210bf1b30d8944",
     "Zetesis.lean": "1713f09ed28b6885e8eb20ecbaf2463a35f956f529366118d6021bc366df5b82",
     "Zetesis/AcyclicEvaluation.lean": "1a9c77283876cf1f61cb92031da04780aada5d0b256f79db5b64bfb6b129d0dc",
     "Zetesis/AdjacencyRows.lean": "38a19b1c74483a157636321a56e95fea660a2192a04c77930d609e411c8d30d4",
@@ -11775,7 +11800,7 @@
     "Zetesis/AggregateReduct.lean": "c5901d211c3bd3fffe388d87fa77efd1b66a79c3024cdec6dd63b7e77521a556",
     "Zetesis/Algebra.lean": "02922bae042002835d77730fea9fdd1255e9d082e42153e25e56d4671dc89975",
     "Zetesis/AlgebraicRows.lean": "957f5f68b53273d001c380e420dbcaf5617697b0b67d9653cee9bead27f48b63",
-    "Zetesis/ArithmeticFamilies.lean": "20efa3f0fdc1f5c2934a35b696dfdf5e2662ae9fc161cc9abcbca0c4e420b5e2",
+    "Zetesis/ArithmeticFamilies.lean": "616bddc57527f87531e541756bf5baf56b027a00f76772e0234098a9fae5f02c",
     "Zetesis/AssociativeWitnesses.lean": "6a964da8e22d66799054c2b02677ee5d8496807ca5a28637f9173c5d077aef37",
     "Zetesis/AtomCatalogs.lean": "2a90dd7c129290ffc3f9609f51378e6e45014a55f31b74cca9e7284a4e320eec",
     "Zetesis/AtomKeys.lean": "0188ea220bf8484db130ea674d01bad0db3db80f62678cbb0fcd930403cf1ae0",

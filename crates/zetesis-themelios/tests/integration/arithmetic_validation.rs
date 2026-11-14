@@ -762,6 +762,97 @@ fn elements_over_one_condition_are_omitted_separately() {
     }
 }
 
+/// Chains with a link that divides by zero beside a link that is defined
+/// and false. The links are separate comparisons, so the false link decides
+/// the chain, whatever its sign and wherever it stands: nothing is omitted
+/// and no warning is kept.
+const DECIDED_CHAINS: &[(&str, &[&[&str]])] = &[
+    ("d(0).p:-d(X),not 2<1<1/X.", &[&["d(0)", "p"]]),
+    ("d(0).p:-d(X),not 1/X<2<1.", &[&["d(0)", "p"]]),
+    (
+        "d(0;3).p(X):-d(X),not 2<X<6/X.",
+        &[&["d(0)", "d(3)", "p(0)", "p(3)"]],
+    ),
+    ("d(0).p:-d(X),2<1<1/X.", &[&["d(0)"]]),
+    ("d(0).p:-d(X),not not 2<1<1/X.", &[&["d(0)"]]),
+    ("d(0).2<1<1/X:-d(X).", &[]),
+    ("d(0;1).1<=X<=5/X:-d(X).", &[]),
+    ("d(0).p:-2<1<1/X:d(X).", &[&["d(0)"]]),
+    ("d(0).p:-not 2<1<1/X:d(X).", &[&["d(0)", "p"]]),
+    (
+        "{d(0)}.d(1).p:-not 2<X<1/X:d(X).",
+        &[&["d(0)", "d(1)", "p"], &["d(1)", "p"]],
+    ),
+    (
+        "d(0..2).p(X):-d(X),1<=X<=2/X.",
+        &[&["d(0)", "d(1)", "d(2)", "p(1)"]],
+    ),
+    (
+        "d(0..2).q(N):-N=#count{X:d(X),not 1<X<2/X}.",
+        &[&["d(0)", "d(1)", "d(2)", "q(3)"]],
+    ),
+];
+
+/// Chains with a link that divides by zero and no false link: the chain is
+/// undefined, and its instance is omitted with the statement's warning. In a
+/// conditional literal the consequent is then false under its condition.
+const UNDEFINED_CHAINS: &[(&str, &str, &[&str])] = &[
+    ("d(0).", "p:-d(X),not 0<1<1/X.", &["d(0)"]),
+    ("d(0).", "0<1<1/X:-d(X).", &["d(0)"]),
+    ("d(0).", "p:-not 0<1<1/X:d(X).", &["d(0)"]),
+    (
+        "d(0;1).",
+        "p(X):-d(X),0<=X<=1/X.",
+        &["d(0)", "d(1)", "p(1)"],
+    ),
+];
+
+#[test]
+fn a_false_link_decides_a_chain_beside_an_undefined_one() {
+    for &(source, expected) in DECIDED_CHAINS {
+        assert_eq!(silent(source), answer_sets(expected), "{source}");
+    }
+}
+
+#[test]
+fn a_chain_with_no_false_link_is_undefined_where_a_link_is() {
+    for &(facts, statement, expected) in UNDEFINED_CHAINS {
+        assert_eq!(
+            omitting(&format!("{facts}{statement}"), statement),
+            family(expected),
+            "{statement}"
+        );
+    }
+}
+
+#[test]
+fn a_fatal_link_refuses_beside_a_false_one() {
+    // An overflow is no zero divisor: the false link 2<1 does not hide it,
+    // in either order.
+    for source in [
+        "d(1).p:-d(X),not 2<1<X+2147483647.",
+        "d(1).p:-d(X),not X+2147483647<2<1.",
+        "d(1).2<1<X+2147483647:-d(X).",
+    ] {
+        refused(source, &EvaluationError::Overflow);
+    }
+}
+
+#[test]
+#[ignore = "requires clingo: chains with an undefined link match clingo"]
+fn chains_with_an_undefined_link_match_clingo() {
+    for &(source, expected) in DECIDED_CHAINS {
+        assert_eq!(oracle::records(source), answer_sets(expected), "{source}");
+    }
+    for &(facts, statement, expected) in UNDEFINED_CHAINS {
+        assert_eq!(
+            oracle::records(&format!("{facts}{statement}")),
+            family(expected),
+            "{statement}"
+        );
+    }
+}
+
 #[test]
 fn fact_blocked_producers_preserve_downstream_overflow() {
     // Support is a source-admission carrier. The locally total h producer

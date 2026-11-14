@@ -305,6 +305,15 @@ impl Failures {
             None => Ok(()),
         }
     }
+    /// Return a fatal failure alone. A zero divisor is dropped: another
+    /// component has already decided the value these components make.
+    pub(crate) fn fatal(self, evaluation: &mut Evaluation) -> Result<(), FormulaFailure> {
+        evaluation.zero_divisor = false;
+        match self.fatal {
+            Some(error) => Err(error.into()),
+            None => Ok(()),
+        }
+    }
 }
 
 struct Context<'c, 'owner, 'source, V: Fn(usize) -> Input> {

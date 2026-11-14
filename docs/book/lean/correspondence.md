@@ -1078,6 +1078,16 @@ not that emission. `Head` is used at its empty case alone: a head that takes
 several values under one binding is emitted as separate disjuncts, not as
 their conjunction.
 
+`chain` gives the value of a comparison chain from its links, each defined
+with a truth value or undefined: `false_link_decides` says a false link
+decides it beside an undefined one, `chain_undefined_iff` that it is undefined
+exactly when no link is false and one is undefined, `chain_holds_iff` that it
+holds exactly when every link does, `chain_by_links` that order and repeats do
+not matter, and `negated_false_link_holds` that a negated chain with a false
+link holds. `formula_guard::Guard::evaluate_in` computes this value for links
+it has classified, after returning any fatal failure, which `chain` does not
+model.
+
 Rust must establish
 complete original-family coverage and correct zero-divisor classification. A
 warning belongs to its statement: normalized fragments must preserve their

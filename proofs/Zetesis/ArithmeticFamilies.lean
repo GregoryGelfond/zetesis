@@ -29,12 +29,17 @@ head the disjunct needs every value its head takes, so with none defined it
 holds wherever the condition does. A condition that divides by zero has no
 binding, and so no instance.
 
+The links of a comparison chain are separate comparisons. A link that is
+defined and false decides the chain even beside a link that divides by zero;
+a chain is undefined only when no link is false and one divides by zero.
+
 These laws specify admission and warning policy after complete classification,
-and the value an undefined consequent or head has. They do not establish Rust
-expression classification, checked arithmetic, evaluation order,
-source-family enumeration, formula emission, support completion or resource
-accounting. Fatal failures include overflow, nonnumeric arithmetic and invalid
-exponents; they are never represented by the zero-divisor alternative.
+the value an undefined consequent or head has, and the value of a chain from
+its links. They do not establish Rust expression classification, checked
+arithmetic, evaluation order, source-family enumeration, formula emission,
+support completion or resource accounting. Fatal failures include overflow,
+nonnumeric arithmetic and invalid exponents; they are never represented by the
+zero-divisor alternative, and a fatal link refuses whatever `chain` returns.
 -/
 
 namespace Zetesis.ArithmeticFamilies
@@ -195,5 +200,72 @@ theorem undefined_head_disjunct (condition : Prop) (instances : List (Option Pro
   · exact And.left
   · intro holds
     exact ⟨holds, undefined_head_true instances undefined⟩
+
+/-- A link of a comparison chain at one substitution: `some truth` when both
+sides are defined, `none` when a side divides by zero. -/
+abbrev Link := Option Bool
+
+/-- The value of a chain from its links, as clingo grounds them: separate
+comparisons, so that a link which is defined and false decides the chain
+even beside a link that divides by zero. `some truth` is a defined chain and
+`none` an undefined one, whose instance is omitted with a warning. -/
+def chain (links : List Link) : Option Bool :=
+  if some false ∈ links then some false
+  else if none ∈ links then none
+  else some true
+
+/-- A false link decides the chain, whatever its other links are. -/
+theorem false_link_decides (links : List Link) (failed : some false ∈ links) :
+    chain links = some false := by
+  simp [chain, failed]
+
+/-- A chain is undefined exactly when no link is false and one divides by
+zero. -/
+theorem chain_undefined_iff (links : List Link) :
+    chain links = none ↔ some false ∉ links ∧ none ∈ links := by
+  unfold chain
+  by_cases failed : some false ∈ links
+  · simp [failed]
+  · by_cases undefined : none ∈ links <;> simp [failed, undefined]
+
+/-- A chain holds exactly when every link is defined and holds. -/
+theorem chain_holds_iff (links : List Link) :
+    chain links = some true ↔ ∀ link ∈ links, link = some true := by
+  unfold chain
+  by_cases failed : some false ∈ links
+  · simp only [failed, if_true]
+    constructor
+    · intro impossible
+      cases impossible
+    · intro every
+      cases every (some false) failed
+  · by_cases undefined : none ∈ links
+    · simp only [failed, undefined, if_false, if_true]
+      constructor
+      · intro impossible
+        cases impossible
+      · intro every
+        cases every none undefined
+    · simp only [failed, undefined, if_false, true_iff]
+      intro link member
+      match link, member with
+      | some true, _ => rfl
+      | some false, member => exact absurd member failed
+      | none, member => exact absurd member undefined
+
+/-- The value does not depend on the order of the links or on repeats. -/
+theorem chain_by_links (before after : List Link)
+    (same : ∀ link, link ∈ before ↔ link ∈ after) :
+    chain before = chain after := by
+  simp only [chain, same]
+
+/-- A negated chain is the complement of a defined chain and undefined with
+it: `not` of a chain a false link decides holds. -/
+def negated (links : List Link) : Option Bool :=
+  (chain links).map not
+
+theorem negated_false_link_holds (links : List Link) (failed : some false ∈ links) :
+    negated links = some true := by
+  simp [negated, false_link_decides links failed]
 
 end Zetesis.ArithmeticFamilies

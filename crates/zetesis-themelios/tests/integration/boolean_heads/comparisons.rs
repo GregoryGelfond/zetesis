@@ -71,14 +71,22 @@ fn a_comparison_head_zero_divisor_warns_at_its_rule() {
 }
 
 #[test]
-fn a_chain_head_with_an_undefined_link_is_omitted_whole() {
-    // The link 1<1/X divides by zero at X = 0, so the chain is undefined
-    // there and the instance is omitted with the rule's warning, although
-    // the link 2<1 is false whatever X is. clingo 5.8.2 decides each link
-    // apart and keeps the false one as a violated requirement: it has no
-    // answer set here.
+fn a_false_link_decides_a_chain_head_beside_an_undefined_one() {
+    // The link 2<1 is false whatever X is, so the chain is false at X = 0
+    // although the link 1<1/X divides by zero there: the head is a violated
+    // requirement and no answer set remains. Nothing is omitted, so no
+    // warning is kept.
     let admitted = formula("d(0).2<1<1/X:-d(X).");
-    assert_eq!(omitted_statement(&admitted), "2<1<1/X:-d(X).");
+    assert!(admitted.warnings().is_empty());
+    assert_eq!(native(&admitted), expected(&[]));
+}
+
+#[test]
+fn a_chain_head_with_no_false_link_is_omitted_where_a_link_is_undefined() {
+    // The link 0<1 holds, so nothing decides the chain where 1<1/X divides
+    // by zero: the instance is omitted with the rule's warning.
+    let admitted = formula("d(0).0<1<1/X:-d(X).");
+    assert_eq!(omitted_statement(&admitted), "0<1<1/X:-d(X).");
     assert_eq!(native(&admitted), expected(&[&["d(0)"]]));
 }
 

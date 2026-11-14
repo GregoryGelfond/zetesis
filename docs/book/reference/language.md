@@ -864,15 +864,18 @@ an undefined operand is not evaluated. The same rule applies to independent
 fields of one source instance. Every arithmetic
 intermediate must fit the signed 32-bit carrier; values do not wrap. This differs
 deliberately from clingo 5.8.2's wrapping integer arithmetic. The zero-divisor
-policy is clingo's for every instance a substitution reaches, with two
-exceptions stated below: a closed term, and a comparison chain that holds a
-false link beside an undefined one.
+policy is clingo's for every instance a substitution reaches. A closed term is
+the exception, below.
 
-A comparison chain is one literal. When a link divides by zero the chain is
-undefined and its instance is omitted, even where another link is false.
-clingo decides each link apart, so `d(0). p :- d(X), not 2<1<1/X.` derives `p`
-there and not here, and `d(0). 2<1<1/X :- d(X).` has no answer set there and
-the answer set `d(0)` here.
+The links of a comparison chain are separate comparisons, as clingo grounds
+them. A link that is defined and false decides the chain, whatever the chain's
+sign and wherever the link stands, even beside a link that divides by zero:
+`d(0). p :- d(X), not 2<1<1/X.` derives `p`, and `d(0). 2<1<1/X :- d(X).` has
+no answer set, because its head is a violated requirement. Nothing is omitted
+there, so no warning is kept. A chain is undefined only when no link is false
+and one divides by zero: in `d(0). p :- d(X), not 0<1<1/X.` the instance is
+omitted with a warning. A fatal failure in any link still refuses, whatever
+the other links hold.
 
 A binder, interval check, tuple comparison, aggregate guard or comparison over
 a generated value does not provide the relational exclusion described above.

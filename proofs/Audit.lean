@@ -246,6 +246,11 @@ import Zetesis
 #print axioms Zetesis.ArithmeticFamilies.undefined_alternative_ignored
 #print axioms Zetesis.ArithmeticFamilies.undefined_head_true
 #print axioms Zetesis.ArithmeticFamilies.undefined_head_disjunct
+#print axioms Zetesis.ArithmeticFamilies.false_link_decides
+#print axioms Zetesis.ArithmeticFamilies.chain_undefined_iff
+#print axioms Zetesis.ArithmeticFamilies.chain_holds_iff
+#print axioms Zetesis.ArithmeticFamilies.chain_by_links
+#print axioms Zetesis.ArithmeticFamilies.negated_false_link_holds
 #print axioms Zetesis.AssociativeWitnesses.disjunction_truth
 #print axioms Zetesis.AssociativeWitnesses.conjunction_truth
 #print axioms Zetesis.AssociativeWitnesses.disjunction_unit

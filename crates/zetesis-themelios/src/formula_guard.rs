@@ -2,9 +2,13 @@
 //!
 //! A default-negated chain complements the conjunction of adjacent comparisons.
 //! These tests contain no semantic atoms. Complete evaluation therefore supplies
-//! the same constant in the original formula and every frozen reduct. Undefined
-//! arithmetic remains a located failure, including under negation or a false
-//! neighboring comparison; no intermediate truth result can conceal that failure.
+//! the same constant in the original formula and every frozen reduct.
+//!
+//! The links of a chain are separate comparisons, as clingo grounds them. A
+//! link that is defined and false decides the chain, whatever the chain's
+//! sign, even beside a link that divides by zero; a chain is undefined only
+//! when no link is false and one divides by zero. A fatal failure in any link
+//! is returned whatever the other links hold: no truth value conceals it.
 
 use crate::formula_binding::Binding;
 
@@ -150,7 +154,11 @@ impl Guard {
                 conjunction &= value;
             }
         }
-        failures.finish(evaluation)?;
+        if conjunction {
+            failures.finish(evaluation)?;
+        } else {
+            failures.fatal(evaluation)?;
+        }
         Ok(conjunction != (*negation == DefaultNegation::Not))
     }
 }

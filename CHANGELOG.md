@@ -90,6 +90,14 @@ Notable changes by release. Versions follow Semantic Versioning.
     `d(0;1). q(1). p :- q(1/X) : d(X).` derived `p` and no longer does;
     `d(0;1). p(1/X) : d(X).` derived `p(1)` and no longer does. The earlier
     answers disagreed with clingo.
+  - **So do those of admitted programs with a comparison chain** that holds
+    a link dividing by zero beside a link that is defined and false. The
+    links are separate comparisons, as clingo grounds them, so the false link
+    decides the chain; the chain was read as one literal and its instance
+    omitted. `d(0;3). p(X) :- d(X), not 2<X<6/X.` now derives `p(0)` as well
+    as `p(3)`, and `d(0;1). 1<=X<=5/X :- d(X).` has no answer set where it
+    had one. A chain with no false link is undefined where a link divides by
+    zero, as before, and a fatal failure in any link still refuses.
   - A source family's evidence records only whether a substitution divided
     by zero (`ArithmeticFamilies`).
 - A walk orders its splits by what its region has decided. A chain is a
